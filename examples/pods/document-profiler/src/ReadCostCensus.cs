@@ -182,13 +182,16 @@ public sealed class ReadCostCensus : PeScriptContainer
         if (top != null)
             using (var c = new FilteredElementCollector(p.Doc).OfCategoryId(new ElementId(top.CategoryId)).WhereElementIsNotElementType())
             foreach (var e in c) { budget.Check(); _ = e.Category; if (++walked == ProfilerSettings.CensusCategoryWalk) break; }
-        var walkKb = (PrivateBytes() - walkBefore) / 1024.0 / Math.Max(1, walked);
-        var kb = Math.Max(walkKb, sample.Kb);
+        var walkBytes = PrivateBytes() - walkBefore;
+        var walkKb = walkBytes / 1024.0 / Math.Max(1, walked);
+        // A route whose whole delta is under the noise floor projects nothing: a warm run's 1.8 MB of allocator noise over
+        // 1000 elements projected +550 MiB for a 309k-element host (Chadds, run 2, 2026-10-27).
+        var kb = Math.Max(walkBytes >= NoiseFloorBytes ? walkKb : 0, sample.Bytes >= NoiseFloorBytes ? sample.Kb : 0);
         var projected = kb > 0 ? (long?)(kb * 1024 * ids.Count) : null;
         var disagree = kb > 1 && kb > 3 * Math.Max(0.1, Math.Min(walkKb, sample.Kb));
         headlines.Add(p.Key + ": first touch " + kb.ToString("0.0") + " KB/element (category walk " + walkKb.ToString("0.0") + " over " + walked + " " + top?.Category +
             ", id-set " + sample.Kb.ToString("0.0") + " over " + p.Sample.Count + ", GetElement " + control.Kb.ToString("0.0") + "); full walk of " + ids.Count + " projected at least " +
-            (projected == null ? "n/a (slope not positive: noise or already warm)" : Mib(projected.Value)) + (disagree ? "; routes disagree by >3x" : ""));
+            (projected == null ? "n/a (no route above the " + Mib(NoiseFloorBytes) + " noise floor: cheap or already warm)" : Mib(projected.Value)) + (disagree ? "; routes disagree by >3x" : ""));
         return new { partition = p.Key, nonTypeElements = new { basis = "measured", count = ids.Count, idListPrivateBytesDelta = idListBytes },
             categoryWalk = new { basis = "sampled", route = "OfCategoryId(largest model category) collector walk, stopped at the cap", category = top?.Category, elements = walked,
                 seconds = walkClock.Elapsed.TotalSeconds, kbPerElement = walkKb },
@@ -197,7 +200,7 @@ public sealed class ReadCostCensus : PeScriptContainer
             control = new { basis = "sampled", route = "doc.GetElement + Category (did not reproduce a walk on Chadds; never projected from)", elements = control.Elements,
                 privateBytesDelta = control.Bytes, kbPerElement = control.Kb },
             fullWalk = new { basis = "projected-floor", privateBytes = projected, kbPerElement = kb, routesDisagree = disagree, seconds = walkClock.Elapsed.TotalSeconds / Math.Max(1, walked) * ids.Count,
-                note = "Larger slope times count; null when not positive. A floor: on Chadds random touches read ~30x under a full walk. Elements touched earlier in this process read as zero." } };
+                note = "Larger above-noise-floor slope times count; null when no route clears the floor. A floor: on Chadds random touches read ~30x under a full walk. Elements touched earlier in this process read as zero." } };
     }
 
     private (int Elements, long Bytes, double Kb, double Seconds, List<object> Chunks) Touch(Document d, List<ElementId> ids, bool collector)
@@ -506,6 +509,7 @@ public sealed class ReadCostCensus : PeScriptContainer
     }
 
     private static T Try<T>(Func<T> f) { try { return f(); } catch (Autodesk.Revit.Exceptions.ApplicationException) { return default(T); } catch (InvalidOperationException) { return default(T); } }
+    private const long NoiseFloorBytes = 8L * 1024 * 1024;
     private static long PrivateBytes() { using (var p = Process.GetCurrentProcess()) return p.PrivateMemorySize64; }
     private static string Mib(long bytes) => (bytes / 1048576.0).ToString("+0.0;-0.0") + " MiB";
 
