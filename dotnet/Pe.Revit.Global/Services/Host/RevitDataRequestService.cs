@@ -4,6 +4,7 @@ using Autodesk.Revit.DB.Electrical;
 using Pe.Revit.DocumentData.AgentContext;
 using Pe.Revit.DocumentData.Electrical;
 using Pe.Revit.DocumentData.Families.Loaded.Collectors;
+using Pe.Revit.DocumentData.Families.Extraction;
 using Pe.Revit.DocumentData.Glance;
 using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.Extensions.FamManager;
@@ -467,12 +468,28 @@ internal sealed class RevitDataRequestService {
     }
 
     [Op("revit.matrix.loaded-families", Does = "Read a matrix of loaded family snapshots (canonical family records: types, parameters with per-type values/formulas/scope, schedule membership) from the active document.", Title = "Get Loaded Families Matrix", Finds = ["loaded-families", "families", "matrix", "projection", "parameter-scope", "family-snapshot"], Cost = OpCost.Expensive, Example = "{ \"filter\": { \"categoryNames\": [\"Mechanical Equipment\"], \"familyNameContains\": \"VAV\", \"placementScope\": \"PlacedOnly\" }, \"budget\": { \"maxEntries\": 10, \"maxSamplesPerEntry\": 20 } }", UsesTransactions = true)]
-    private LoadedFamiliesMatrixData GetLoadedFamiliesMatrixCore(LoadedFamiliesMatrixRequest request, RevitDocument activeDocument) {
+    private LoadedFamiliesMatrixData GetLoadedFamiliesMatrixCore(LoadedFamiliesMatrixRequest request, RevitDocument activeDocument, CancellationToken cancellationToken) {
         var filter = ValidateMatrixFilter(request);
         var document = activeDocument.Value;
 
         try {
-            return ReadLoadedFamiliesMatrix(document, filter, request.Budget, request.IncludeTempPlacement, DocShadow.For(document));
+            var cache = DocShadow.For(document);
+            if (request.Phase == LoadedFamiliesReadPhase.Prepare)
+                return document.PrepareFamilyRead(filter, cache);
+            if (request.Phase == LoadedFamiliesReadPhase.Extract) {
+                if (request.FamilyId is not { } familyId)
+                    throw new ArgumentException("An Extract read requires familyId.");
+                var dialogs = new List<(bool IsError, string Message)>();
+                var extracted = RevitDialogs.NoModal(dialogs, () => document.ReadLoadedFamilySnapshot(familyId, cache));
+                // The record travels alone into the final matrix (possibly from a worker), so its dialogs ride on it.
+                return extracted with {
+                    Families = [.. extracted.Families.Select(record => record with { Issues = [.. record.Issues, .. DialogIssues(dialogs)] })]
+                };
+            }
+            return ReadLoadedFamiliesMatrix(document, filter, request.Budget, request.IncludeTempPlacement,
+                request.Snapshots is { } snapshots ? document.WithFamilySnapshots(snapshots, cache) : cache, cancellationToken);
+        } catch (OperationCanceledException) {
+            throw;
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "LoadedFamiliesMatrixException",
@@ -488,12 +505,16 @@ internal sealed class RevitDataRequestService {
     ///     answered dialog is a named matrix issue.
     /// </summary>
     internal static LoadedFamiliesMatrixData ReadLoadedFamiliesMatrix(Autodesk.Revit.DB.Document document, LoadedFamiliesFilter? filter,
-        RevitDataOutputBudget? budget, bool includeTempPlacement, Pe.Revit.DocumentData.Families.Extraction.IFamilySnapshotCache? snapshotCache) {
+        RevitDataOutputBudget? budget, bool includeTempPlacement, Pe.Revit.DocumentData.Families.Extraction.IFamilySnapshotCache? snapshotCache,
+        CancellationToken cancellationToken = default) {
         var dialogs = new List<(bool IsError, string Message)>();
         var data = RevitDialogs.NoModal(dialogs, () => LoadedFamiliesMatrixCollector.Collect(document, filter,
-            budget: budget, includeTempPlacement: includeTempPlacement, snapshotCache: snapshotCache));
-        return data with { Issues = [.. data.Issues, .. dialogs.Select(d => new RevitDataIssue("RevitDialogAnswered", RevitDataIssueSeverity.Warning, d.Message))] };
+            budget: budget, includeTempPlacement: includeTempPlacement, snapshotCache: snapshotCache, cancellationToken: cancellationToken));
+        return data with { Issues = [.. data.Issues, .. DialogIssues(dialogs)] };
     }
+
+    private static IEnumerable<RevitDataIssue> DialogIssues(IEnumerable<(bool IsError, string Message)> dialogs) =>
+        dialogs.Select(d => new RevitDataIssue("RevitDialogAnswered", RevitDataIssueSeverity.Warning, d.Message));
 
     [Op("data-table.apply", Does = "Upsert a synthetic data table in one host-owned transaction: a key schedule whose rows are freely user-editable and whose cells are shared parameters on stable row elements — ideal for arbitrary agent-authored tables like design conditions or install notes. Can also place the table on a sheet. Authored element schedules apply through schedule.apply.", Title = "Apply Data Table", Finds = ["schedules", "data-table", "key-schedule", "table", "apply", "create", "upsert", "rows", "sheet-placement", "mutation"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Example = "{ \"table\": { \"name\": \"ASHRAE Design Conditions\", \"columns\": [{ \"heading\": \"Condition\" }, { \"heading\": \"Value (°F)\", \"kind\": \"Number\" }], \"rows\": [{ \"key\": \"cooling-db\", \"values\": [\"Cooling Design DB\", \"94.1\"] }, { \"key\": \"heating-db\", \"values\": [\"Heating Design DB\", \"12.3\"] }] }, \"placement\": { \"sheet\": \"M-001\" } }")]
     private ScheduleApplyData ApplyScheduleCore(ScheduleApplyRequest request, RevitDocument activeDocument) {

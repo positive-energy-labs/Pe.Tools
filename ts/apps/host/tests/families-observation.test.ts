@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -78,7 +78,7 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
           ]
         : [],
     ),
-    invoke: (key: string) =>
+    invoke: (key: string, input: { phase?: string; familyId?: number }) =>
       Effect.promise(async () => {
         if (key === "host.ops.catalog")
           return {
@@ -93,8 +93,24 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
             },
           };
         if (key === "revit.matrix.loaded-families") {
-          matrixCalls++;
-          if (fail) throw Error("native failed");
+          if (input.phase === "Prepare") {
+            matrixCalls++;
+            if (fail) throw Error("native failed");
+            return {
+              value: {
+                families: [],
+                issues: [],
+                source: {
+                  families: result.families.map((f) => ({ ...f, typeCount: 1, types: [] })),
+                  revitVersion: "2025",
+                  version: "v1",
+                  copyRefusal: "Reading unsaved changes in this instance.",
+                },
+              },
+            };
+          }
+          if (input.phase === "Extract")
+            return { value: { families: result.families, issues: [], elapsedMs: 1 } };
           return { value: result };
         }
         throw Error(`Unexpected ${key}`);
@@ -122,7 +138,7 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
       new Request(url, {
         method: "POST",
         headers: { ...headers, "x-pe-open-document-id": document.openId },
-        body: JSON.stringify({ work, filter }),
+        body: JSON.stringify({ work, filter, readId: randomUUID() }),
       }),
     );
   const get = (captures: TakeoffCaptures) =>
@@ -242,10 +258,15 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
     expect(matrixCalls).toBe(1);
     connected = true;
     fail = true;
-    expect((await post(rebuilt)).status).toBe(409);
-    expect(await (await get(rebuilt)).json()).toEqual(saved);
+    const failed = await post(rebuilt);
+    expect(failed.status).toBe(200);
+    expect((await failed.json()).progress).toMatchObject({
+      state: "failed",
+      message: "native failed",
+    });
+    expect((await rebuilt.latestFamilies(work))?.id).toBe(saved.id);
     expect((await post(rebuilt, { ...target, openId: "other" })).status).toBe(409);
-    expect(await (await get(rebuilt)).json()).toEqual(saved);
+    expect((await rebuilt.latestFamilies(work))?.id).toBe(saved.id);
     expect(matrixCalls).toBe(2);
     await writeFile(join(dir, "families", `${legacy.id}.json`), "not JSON");
     expect(

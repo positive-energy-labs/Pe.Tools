@@ -41,6 +41,7 @@ export function FamiliesLease({
     facts: {
       ruleHelp: FAMILIES_QUERY_HELP,
       counts,
+      ...(lastReading?.progress ? { readProgress: lastReading.progress } : {}),
       ...(history
         ? {
             past: store.archive.list.map((read) => ({

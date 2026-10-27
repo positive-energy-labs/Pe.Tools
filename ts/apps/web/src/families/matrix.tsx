@@ -1,10 +1,29 @@
 import { FactChip } from "@pe/kit/lang/chip";
 import { EmptyState } from "@pe/kit/lang/empty";
-import { routeAddress } from "@pe/agent-contracts";
+import { routeAddress, type FamiliesReadProgress } from "@pe/agent-contracts";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { FamiliesPivot } from "#/families/pivot";
 import { filterWords, standingFilterProposal } from "#/families/scope-band";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
+
+function FamiliesReadStatus({ progress }: { progress: FamiliesReadProgress }) {
+  return (
+    <OutcomeLine
+      kind={
+        progress.state === "reading" ? "busy" : progress.state === "failed" ? "error" : "advisory"
+      }
+      label={`${progress.completed} of ${progress.total || "…"} families · ${progress.phase}`}
+      says={
+        progress.message ??
+        (progress.state === "reading"
+          ? `${progress.workers} worker${progress.workers === 1 ? "" : "s"}`
+          : progress.state === "cancelled"
+            ? "read stopped; completed families retained"
+            : progress.state)
+      }
+    />
+  );
+}
 
 export function FamiliesMatrix() {
   const {
@@ -18,6 +37,7 @@ export function FamiliesMatrix() {
     workUnreadable,
     matrixReading,
     matrixIssue,
+    readProgress,
   } = useFamiliesWorkspace();
   const scope = archived ? null : store.handle.work.doc?.scope;
   const proposed = scope ? standingFilterProposal(scope) : null;
@@ -72,6 +92,12 @@ export function FamiliesMatrix() {
     <OutcomeLine kind="busy" label="reading the matrix" says="the applied scope" />
   ) : matrixIssue ? (
     <OutcomeLine kind="error" label="matrix unread" says={matrixIssue.message} />
+  ) : readProgress && readProgress.state !== "complete" ? (
+    <OutcomeLine
+      kind="advisory"
+      label="no completed families"
+      says="read the scope again to finish"
+    />
   ) : rows.length === 0 ? (
     <EmptyState story="scope" exit="change the target picker and press “read families” again">
       the applied scope resolved to no families
@@ -86,6 +112,11 @@ export function FamiliesMatrix() {
       empty={empty}
       above={
         <>
+          {readProgress && readProgress.state !== "complete" && (
+            <div className="px-4 py-1">
+              <FamiliesReadStatus progress={readProgress} />
+            </div>
+          )}
           {/* I6: a mark plus a word, not a sentence; the why is the chip's hint. */}
           {fixture && (
             <p className="flex items-center gap-2 px-4 py-1 t-small">
