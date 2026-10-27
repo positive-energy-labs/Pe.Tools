@@ -52,7 +52,8 @@ public sealed class RailsGoldenTests {
             File.WriteAllLines(Expected, lines);
         }
         var want = lines.Select(l => l.Split(' ')).SingleOrDefault(p => p[0] == name)?[1];
-        if (want != hash) {
+        // PE_GOLDEN_DUMP=1 writes the keys even on a match, to diff a green run against a red one.
+        if (want != hash || Environment.GetEnvironmentVariable("PE_GOLDEN_DUMP") == "1") {
             var dir = Directory.CreateDirectory(Path.Combine(Here(), "..", "..", ".artifacts", "runs", "golden")).FullName;
             File.WriteAllText(Path.Combine(dir, name + ".txt"), keys.ToString());
             TestContext.Out.WriteLine($"keys written to {Path.Combine(dir, name + ".txt")}");
