@@ -67,6 +67,40 @@ async function setup(seed = family()) {
     );
   return { owner, parent, fetch };
 }
+test("seed observations publish once while browser edits cannot forge their basis", async () => {
+  const f = await setup();
+  const before = await (await f.fetch("/work")).json();
+  expect(before).toMatchObject({
+    revision: 1,
+    doc: { basis: { member: f.owner.member, rawContent: expect.any(String) } },
+  });
+  const forged = await (
+    await f.fetch(
+      "/work",
+      { revision: before.revision, patches: [{ path: ["basis"], value: null }] },
+      "PATCH",
+    )
+  ).json();
+  expect(forged).toMatchObject({ ok: false });
+  expect(JSON.stringify(forged)).toContain("Host observations cannot be changed by an edit");
+  expect(await (await f.fetch("/work")).json()).toEqual(before);
+
+  const edited = await (
+    await f.fetch(
+      "/work",
+      {
+        revision: before.revision,
+        patches: [{ path: ["fields", "/family/name", "edit"], value: { value: "Local edit" } }],
+      },
+      "PATCH",
+    )
+  ).json();
+  expect(edited).toMatchObject({ ok: true, revision: before.revision + 1 });
+  const after = await (await f.fetch("/work")).json();
+  expect(after.doc.basis).toEqual(before.doc.basis);
+  expect(after.doc.fields["/family/name"].edit).toMatchObject({ value: "Local edit", by: "human" });
+});
+
 test("admitted demo launch uses only its labelled leaf and rejects escape or real IO fallback", async () => {
   const f = await setup();
   const submit = async (suffix: string, key: string, path: string) => {

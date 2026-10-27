@@ -18,6 +18,7 @@ import {
   settingsRouteState,
   takeoffsRouteState,
   familiesRouteState,
+  familyDraftRouteState,
   parameterLinksRouteState,
   scheduleGridRouteState,
   type WorkKey,
@@ -161,6 +162,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         settingsRouteState,
         takeoffsRouteState,
         familiesRouteState,
+        familyDraftRouteState,
         parameterLinksRouteState,
         scheduleGridRouteState,
       ].map((spec) => ({
@@ -255,10 +257,11 @@ export async function createDemoOwner(parent: string, raw: unknown) {
             },
           }
         : seed.work.candidate;
-    const initial = await work.apply(
+    // The isolated owner imports validated supplied state, including its observation basis.
+    // Browser/Pea edit doors below remain subject to the normal host-fact guard.
+    const initial = await work.publish(
       scope,
       route,
-      "human",
       Object.entries(candidate).map(([key, value]) => ({ path: [key], value })),
       0,
     );
@@ -931,7 +934,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
                 "human",
                 [
                   {
-                    path: ["fields", "/family/name", "staged"],
+                    path: ["fields", "/family/name", "edit"],
                     value: { value: "Later local edit" },
                   },
                 ],
@@ -1013,7 +1016,11 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         value.target === null &&
         value.work !== undefined &&
         scheduleWork.has(value.work));
-    const routes = new Set([route, scheduleGridRouteState.route]);
+    const routes = new Set([
+      route,
+      ...(seed.route === "family" ? [familyDraftRouteState.route] : []),
+      scheduleGridRouteState.route,
+    ]);
     const observe: ResourceObserver = (request, publish) => {
       const targetMatches = (ref: typeof target) =>
         ref.session === id && ref.openId === target.openId;
@@ -1219,6 +1226,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         if (request.method === "POST") {
           const body = (await request.json()) as {
             work: WorkKey;
+            expectedRevision?: number;
             filter: {
               categoryNames: string[];
               familyNames: string[];
@@ -1236,24 +1244,34 @@ export async function createDemoOwner(parent: string, raw: unknown) {
                 !body.filter.familyNames.length ||
                 body.filter.familyNames.includes(family.familyName),
             );
-          return json(
-            await captures.saveFamilies({
-              work: body.work,
-              document: target,
-              documentTitle: "Isolated demo (simulated)",
-              filter: body.filter,
-              capturedAt: new Date().toISOString(),
-              result: {
-                families,
-                issues: [],
-                page: {
-                  totalCount: families.length,
-                  returnedCount: families.length,
-                  isTruncated: false,
-                },
+          const saved = await captures.saveFamilies({
+            work: body.work,
+            document: target,
+            documentTitle: "Isolated demo (simulated)",
+            filter: body.filter,
+            capturedAt: new Date().toISOString(),
+            result: {
+              families,
+              issues: [],
+              page: {
+                totalCount: families.length,
+                returnedCount: families.length,
+                isTruncated: false,
               },
-            }),
+            },
+          });
+          if (body.expectedRevision === undefined) return json(saved);
+          const publication = await work.publish(
+            body.work,
+            familiesRouteState.route,
+            [{ path: ["takenAt"], value: saved.capturedAt }],
+            body.expectedRevision,
           );
+          if (!publication.ok) return json({ error: refusalText(publication) }, 409);
+          return json({
+            ...saved,
+            envelope: { version: 1, revision: publication.revision, doc: publication.doc },
+          });
         }
       }
       // The browser's declared Work writes, fenced to this owner.
