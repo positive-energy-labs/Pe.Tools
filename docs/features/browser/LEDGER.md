@@ -2,6 +2,8 @@
 
 ## Decided
 
+- 2026-10-27: Page capture is confined (`capturePage` in `ts/apps/host/src/page-publication.ts`): a fresh Edge reaches the network only through a deny proxy with `--proxy-bypass-list=<-loopback>`, page `Fetch` serves authored HTML and allowlisted public libraries only, `Page.windowOpen` is a capture failure, and only self-contained workers may start (`worker-src blob: data:`). Caller auth never reaches the capture browser. Kept from `t3/browser-cutover-surface`; `a7142e50` implements it.
+- 2026-10-27: One URL adapter per contract route (`routeUrlPages` in `ts/apps/web/src/route/url.ts`). Family refreshes its manifest when a capture lands; a new adapter then re-subscribed `useUrlPage` and restored the old address over the pending landing. Regression: `address-page.test.tsx` "a capture landing survives a refreshed Family manifest and still restores Back and Forward".
 - 2026-10-25: The user endorsed one small required typed product-browser case with fixed local data, real controls, multiple-system selection and reload/Back persistence. Make the normal gate reject a deliberate behavior regression before expanding browser coverage; keep the longer visible chaos journey separate.
 - 2026-10-24: Use `@pe/browser` direct CDP as the common library and `pe-browser` CLI foundation; retain dynamic raw commands and derive help from the connected Chrome schema.
 - 2026-10-24: Owned headless and visible sessions, retained profiles, and consented attachment are required. Google sign-in and daily Chrome connection consent remain human actions; fixture attachment cannot prove either checkpoint.
@@ -21,6 +23,7 @@
 
 ## Tried & rejected
 
+- 2026-10-25: Escape does not dismiss the focus-expanded table query fold. A demo-lane actor leaves it through the pane title (`[data-slot="pane-title"]`) before the next grid edit (`t3/browser-cutover-surface`, `c19f5a64`).
 - 2026-10-24: Playwright runtime/MCP and Python launchers are excluded from this port; the user requires direct CDP and real browser/process acceptance.
 - 2026-10-24: Closing the Windows Job Object without joining process exits let immediate retained-profile reopen race surviving Chrome children. The joined shutdown barrier replaced that behavior.
 - 2026-10-24: A remembered numeric PID cannot authorize a leak claim or termination. The original rescued PID 69796's identity remains unknown; reproduced PID reuse falsified that census without establishing a production keeper leak.
@@ -28,6 +31,9 @@
 
 ## Owed
 
+- Move the last `playwright-core` consumers to `@pe/browser`, then drop the dependency from `ts/apps/host/package.json` and `ts/packages/kit/package.json`. `ts/apps/host/tests/demo-lane.scenario.test.ts` was ported and passed 7/7 on `0b40c293` (`16813184` on `port/browser-cutover-owed` before its rebase), but main then rewrote its `/family` and `/families` journeys for shared Apply, so it must be redone on main's tests. Keep the port's lessons: one browser context per test, side-effect-free reads, `fill` by focus (as Playwright did, no hit test), and the pane-title fold exit. `ts/packages/kit/tests/browser.mjs` needs a Revit-backed hosted Page (downloads, offline `file://` blocking); the branch draft is `c1a71a85`.
+- Attack the page capture with hostile popup, iframe, redirect and failed-font pages (`page-capture.test.ts` covers http, CONNECT, WebSocket and worker egress only). Keep the deliberate self-contained worker policy.
+- Prove the packaged host's browser worker (`dispatchBrowserWorker`, `--pe-browser-worker`) launches, drives and closes a page from the SEA executable. Source worker tests pass; no packaged or installed proof exists.
 - Retire inactive owned proof directory `C:/Users/kaitp/AppData/Local/Temp/pea-browser-artifact-EvrHyb`; automatic approval review rejected recursive removal with "blocked by policy" after all eight sessions and both fixtures were closed. [Cleanup audit](../../../.artifacts/runs/browser-discovery-20261025/cleanup-audit.json).
 - Human Google checkpoint: launch an explicitly retained automation profile visibly, sign in through Google's native UI, close/reopen that profile, and confirm the rendered account state. Automation must not receive credentials or read credential stores.
 - Helium and non-Windows lifecycle behavior remain unverified; exercise them before claiming support.

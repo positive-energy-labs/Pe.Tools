@@ -1011,6 +1011,11 @@ export async function createDemoOwner(parent: string, raw: unknown) {
     );
     const localScope = (value: WorkKey) =>
       workKey(value) === workKey(scope) ||
+      (seed.route === "family" &&
+        value.route === familyDraftRouteState.route &&
+        value.binding === "workspace" &&
+        scope.binding === "workspace" &&
+        value.work === scope.work) ||
       value.target === at ||
       (value.route === scheduleGridRouteState.route &&
         value.target === null &&

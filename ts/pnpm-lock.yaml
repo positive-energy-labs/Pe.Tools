@@ -295,6 +295,9 @@ importers:
         specifier: 4.3.6
         version: 4.3.6
     devDependencies:
+      '@pe/browser':
+        specifier: workspace:*
+        version: link:../../packages/browser
       '@tailwindcss/typography':
         specifier: ^0.5.16
         version: 0.5.20(tailwindcss@4.3.1)

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { useMemo } from "react";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -11,9 +12,10 @@ import { afterEach, expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { routeAddress } from "@pe/agent-contracts";
 import { routeFile, useAddressPage } from "./address-page";
-import { createRouteOwner, makeAtomRegistry } from "./route-owner";
+import { createRouteOwner, makeAtomRegistry, useOwned } from "./route-owner";
 import { createViewOwner } from "./view-owner";
-import { urlPage } from "./url";
+import { urlPage, useUrlPage } from "./url";
+import { familyManifest } from "#/family/manifest";
 import { manifest as families } from "#/families/manifest";
 import { bindDuctsManifest } from "#/ducts/manifest";
 import { defineRoute } from "./manifest";
@@ -68,6 +70,62 @@ test("a pick pushes an entry, a receipt replaces, and Back restores the pick", a
   expect(page()).toBe("revit.b|a1");
   act(() => history.back());
   await waitFor(() => expect(page()).toBe("revit.a|"));
+});
+
+test("a capture landing survives a refreshed Family manifest and still restores Back and Forward", async () => {
+  const manifest = familyManifest();
+  const base = createRouteOwner("family", makeAtomRegistry());
+  const owner = createViewOwner(
+    base,
+    manifest.page,
+    { pod: "p" },
+    {
+      address: "family",
+      transition: manifest.transition,
+    },
+  );
+  const path = "settings/family/captured.json";
+  function Probe() {
+    const snapshot = useOwned(base.registry, owner.state)!;
+    // Family refreshes its action facts when the captured member changes.
+    const dynamicManifest = useMemo(() => familyManifest(), [snapshot.page.path]);
+    const url = useMemo(() => urlPage(dynamicManifest), [dynamicManifest]);
+    useUrlPage(url, owner);
+    return (
+      <>
+        <output aria-label="path">{snapshot.page.path}</output>
+        <button onClick={() => owner.move({ path }, {}, "action", owner.read())}>capture</button>
+      </>
+    );
+  }
+  const root = createRootRoute();
+  const family = createRoute({
+    getParentRoute: () => root,
+    path: "/family",
+    ...routeFile("family"),
+    component: Probe,
+  });
+  const history = createMemoryHistory({ initialEntries: ["/family?pod=p"] });
+  const router = createRouter({ routeTree: root.addChildren([family]), history });
+  await router.load();
+  const view = render(<RouterProvider router={router} />);
+  const at = () => routeAddress("family").read(router.state.location.search).page.path;
+  try {
+    await waitFor(() => expect(view.getByLabelText("path")).toBeTruthy());
+    fireEvent.click(view.getByText("capture"));
+    await waitFor(() => expect(at()).toBe(path));
+    expect(owner.read().page.path).toBe(path);
+    act(() => history.back());
+    await waitFor(() => expect(owner.read().page.path).toBe(""));
+    expect(at()).toBe("");
+    act(() => history.forward());
+    await waitFor(() => expect(owner.read().page.path).toBe(path));
+    expect(at()).toBe(path);
+  } finally {
+    view.unmount();
+    owner.dispose();
+    base.dispose();
+  }
 });
 
 test("restoring Families spec B after planning A closes A's confirmation in one publication", () => {
