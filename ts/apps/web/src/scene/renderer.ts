@@ -527,6 +527,37 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
   // highlight once like any subject": composited before the context pass, stacked context
   // (5+ faces) muted the selection ring to invisible (proto-3d-20261026 after-sa19-*-selected).
   // Kept: the highlight still obeys subject depth (`seedOccluders`); context never occludes it.
+  const glass = (depthWrite: boolean) => {
+    material.depthWrite = depthWrite;
+    caps.forEach((cap) => {
+      cap.material.depthWrite = depthWrite;
+    });
+  };
+  /** Glass only: the allocated target, sized to the drawing buffer; null until first glass frame. */
+  let contextDepth: THREE.WebGLRenderTarget | null = null;
+  /** Context-only depth into `contextDepth` under the current viewport, then arms the fill's compare. */
+  const drawContextDepth = (shown: THREE.Camera) => {
+    const ratio = renderer.getPixelRatio();
+    const buffer = renderer.getDrawingBufferSize(new THREE.Vector2());
+    if (!contextDepth) {
+      contextDepth = new THREE.WebGLRenderTarget(buffer.x, buffer.y, {
+        depthTexture: new THREE.DepthTexture(buffer.x, buffer.y, THREE.UnsignedIntType),
+      });
+    } else if (contextDepth.width !== buffer.x || contextDepth.height !== buffer.y) {
+      contextDepth.setSize(buffer.x, buffer.y);
+    }
+    // The pass must land where the fill will: the live viewport (thumbnails use a corner of it).
+    contextDepth.viewport.copy(renderer.getViewport(new THREE.Vector4())).multiplyScalar(ratio);
+    const target = renderer.getRenderTarget();
+    veil.contextDepthSize.value.set(0, 0);
+    glass(true);
+    renderer.setRenderTarget(contextDepth);
+    renderer.clear();
+    renderer.render(scene, shown);
+    renderer.setRenderTarget(target);
+    veil.contextDepth.value = contextDepth.depthTexture;
+    veil.contextDepthSize.value.set(buffer.x, buffer.y);
+  };
   const drawScene = (shown: THREE.Camera, overlay?: () => void) => {
     const mask = shown.layers.mask;
     const autoClear = renderer.autoClear;
@@ -555,17 +586,13 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     renderer.render(scene, shown);
     material.depthFunc = THREE.LessEqualDepth;
     shown.layers.mask = mask;
-    const glass = (depthWrite: boolean) => {
-      material.depthWrite = depthWrite;
-      caps.forEach((cap) => {
-        cap.material.depthWrite = depthWrite;
-      });
-    };
-    // 2026-10-26 glass, sort path: envelopes first, then context as the nearest-surface pane,
-    // drawn after every subject, stub, line and hull. Depth write is on and instances draw front
-    // to back, so a second sheet behind a nearer one fails its depth test and never stacks; the
-    // subject's own depth already hides context behind it, so context tints only from in front.
-    // Sort is per instance (bounding-sphere centre), so crossing walls can still double up.
+    // 2026-10-27 glass, depth path: envelopes first, then context as the nearest-surface pane,
+    // drawn after every subject, stub, line and hull. A context-only depth pre-pass (same camera,
+    // same viewport) records the nearest context surface; the fill discards anything behind it, so
+    // crossing sheets never stack whatever their draw order. The fill still depth-tests the main
+    // buffer, so context behind a subject is hidden and context in front tints it. The main buffer
+    // never takes context depth (walls would hide ducts), so there is no sort. The sort-by-centre
+    // attempt (2026-10-26) double-stacked crossing roof and chimney on Chadds.
     // EXCEPTION to the one-sorted-translucent-pass rule: context behind an equipment envelope
     // draws over it; equipment owns no depth and that ordering is unruled.
     glass(false);
@@ -574,15 +601,14 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       veil.scenePass.value = 4;
       renderer.render(scene, shown);
     }
-    const glassBatch = batch.translucent?.mesh;
-    if (hasContext && contextMode === "glass" && glassBatch) {
+    if (hasContext && contextMode === "glass" && batch.translucent) {
       shown.layers.set(CONTEXT_LAYER);
       veil.scenePass.value = 5;
+      drawContextDepth(shown);
       glass(true);
-      glassBatch.customSort = (list) => list.sort((a, b) => a.z - b.z);
       renderer.render(scene, shown);
-      glassBatch.customSort = null;
       glass(false);
+      veil.contextDepthSize.value.set(0, 0);
     }
     shown.layers.mask = mask;
     veil.scenePass.value = 1;
@@ -1796,6 +1822,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       batch.disposeExcept();
       material.dispose();
       veil.veilField.value.dispose();
+      contextDepth?.dispose();
       disposeTree(scene);
       scene.clear();
       glow.dispose();

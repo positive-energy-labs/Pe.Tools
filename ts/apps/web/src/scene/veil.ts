@@ -33,6 +33,9 @@ export function veilUniforms() {
     veilCurve: { value: 1 },
     veilFill: { value: 1 },
     scenePass: { value: 1 },
+    /** Nearest context depth (the glass pre-pass) and its pixel size; a zero size is off. */
+    contextDepth: { value: null as THREE.Texture | null },
+    contextDepthSize: { value: new THREE.Vector2() },
     subjectRim: { value: 0 },
     stubFadeFt: { value: 10 },
     stubEndAlpha: { value: 0.06 },
@@ -67,6 +70,8 @@ uniform vec3 veilSize;
 uniform float veilCell, veilReach, veilNear, veilFar, veilCurve, veilFill;
 #ifdef VEIL_TIER
 uniform int scenePass;
+uniform sampler2D contextDepth;
+uniform vec2 contextDepthSize;
 uniform float subjectRim;
 uniform float stubFadeFt, stubEndAlpha;
 varying vec3 sceneNormal, sceneView;
@@ -88,6 +93,16 @@ void veil(inout vec4 c) {
     // Lines and glass share one ramp (falloff squared); past the reach it is zero.
     c.a = veilFill * t;
     if (c.a < 0.004) discard;
+    // Glass: only the nearest context surface at this pixel draws, so sheets never stack. The
+    // pre-pass ran this same vertex path, so equal surfaces match to depth-buffer precision; the
+    // slack is a few 24-bit ulps. No fwidth term: its slope widens the tolerance at grazing
+    // angles, so parallel roof layers (deck, insulation, ceiling) all pass and stack
+    // (2026-10-27 Chadds). MSAA is harmless here: the fill's fragments run once per pixel centre,
+    // and the pre-pass samples that same centre from a single-sample target.
+    if (contextDepthSize.x > 0.0) {
+      float nearest = texture(contextDepth, gl_FragCoord.xy / contextDepthSize).r;
+      if (gl_FragCoord.z > nearest + 8.0 / 16777216.0) discard;
+    }
   } else {
     // Negative batch alpha carries the stub tier without spending another vertex attribute.
     if (c.a < 0.0) {

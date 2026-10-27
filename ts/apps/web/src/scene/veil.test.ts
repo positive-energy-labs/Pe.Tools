@@ -84,3 +84,9 @@ it("samples a linear texture at cell centres and clamps at its boundaries", () =
   expect(veilDistance(field, [1, 0, 0])).toBe(31.5);
   expect(veilDistance(field, [100, 0, 0])).toBe(VEIL_REACH_FT);
 });
+
+it("starts with the glass compare off: a zero depth size never discards", () => {
+  const u = veilUniforms();
+  expect(u.contextDepthSize.value.toArray()).toEqual([0, 0]);
+  expect(u.contextDepth.value).toBeNull();
+});
