@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vite-plus/test";
-import { createMeshPicker } from "./picking";
+import { contextPickable, createMeshPicker } from "./picking";
 import type { Pick, SceneInstance } from "./types";
 
 function fixture() {
@@ -98,5 +98,17 @@ describe("nearest kept mesh picking", () => {
     expect(hit?.instance).toBe(byId[2]);
     expect(hit?.point[2]).toBeCloseTo(batch.position.z + 5.5, 9);
     batch.dispose();
+  });
+});
+
+describe("context pick rule", () => {
+  const look = { near: 1, far: 10, curve: 2, fill: 1 };
+  it("picks a context pane only in glass mode, inside the far edge, where it is drawn", () => {
+    expect(contextPickable("glass", 0.5, look)).toBe(true);
+    expect(contextPickable("lines", 0.5, look)).toBe(false);
+    expect(contextPickable("off", 0.5, look)).toBe(false);
+    expect(contextPickable("glass", 10, look)).toBe(false);
+    // Linear falloff with curve 2: just inside the far edge the alpha is ~0 and must not hover.
+    expect(contextPickable("glass", 9.9, look)).toBe(false);
   });
 });

@@ -27,7 +27,6 @@ import {
   type Look,
 } from "./grounds";
 import {
-  falloff,
   setVeilField,
   setVeilLook,
   veilMaterial,
@@ -42,7 +41,7 @@ import {
   wheelPixels,
   wheelPlane,
 } from "./gestures";
-import { createFacePicker } from "./picking";
+import { contextPickable, createFacePicker } from "./picking";
 import { FaceBatches, prepareFaceBatches, uploadFaceBatches } from "./face-batches";
 import { contextVisible } from "./context";
 import { clipContains, rebaseCaps, rebaseClip, sectionPlanes, type Section } from "./section";
@@ -1431,16 +1430,17 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     pick(ray: THREE.Ray, clip?: (hit: Pick) => boolean) {
       const kept = (hit: Pick) => {
         if (!clipContains(clipVolume, hit.point, origin.toArray())) return false;
-        if (paintOf(hit.instance, paintBy).tier === "context") {
-          // Only the glass pane is a surface the pointer can meet; creases are not pickable.
-          if (contextMode !== "glass") return false;
-          const distance = veilDistance(field, hit.point);
-          if (distance >= veil.veilFar.value) return false;
-          const opacity =
-            veil.veilFill.value *
-            falloff(distance, veil.veilNear.value, veil.veilFar.value, veil.veilCurve.value);
-          if (opacity < 0.004) return false;
-        }
+        // Only the glass pane the picture draws is pickable; creases and faded panes are not.
+        if (
+          paintOf(hit.instance, paintBy).tier === "context" &&
+          !contextPickable(contextMode, veilDistance(field, hit.point), {
+            near: veil.veilNear.value,
+            far: veil.veilFar.value,
+            curve: veil.veilCurve.value,
+            fill: veil.veilFill.value,
+          })
+        )
+          return false;
         return clip?.(hit) ?? true;
       };
       let hit = pick(ray, kept);

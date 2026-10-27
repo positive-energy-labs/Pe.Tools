@@ -2,6 +2,7 @@
 import * as THREE from "three";
 import type { SceneRenderer } from "./renderer";
 import type { Pick, SceneInstance } from "./types";
+import { falloff } from "./veil-field";
 import type { FaceBatches } from "./face-batches";
 
 const CLICK_PX = 5;
@@ -113,4 +114,17 @@ export function pickAt(
   );
   ray.setFromCamera(pointer, r.active());
   return r.pick(ray.ray, clip);
+}
+
+/** The context pane is pickable only where the picture draws it: glass mode, inside the far edge,
+ * and at or above the pass's discard threshold (`veil.ts` discards context alpha below 0.004).
+ * Creases in lines mode are never a surface the pointer can meet. Same rule as the shader. */
+export const CONTEXT_DRAW_ALPHA = 0.004;
+export function contextPickable(
+  mode: string,
+  distance: number,
+  look: { near: number; far: number; curve: number; fill: number },
+): boolean {
+  if (mode !== "glass" || distance >= look.far) return false;
+  return look.fill * falloff(distance, look.near, look.far, look.curve) >= CONTEXT_DRAW_ALPHA;
 }
