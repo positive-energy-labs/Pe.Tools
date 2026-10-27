@@ -1284,10 +1284,11 @@ export const DUCT_CASES: readonly DuctCase[] = [
   {
     number: 57,
     group: "H",
-    title: "Pea proposals with no document",
-    case: "Pea proposals made with no document bound land where no page reads them.",
-    whatWeDo: "Not yet addressed.",
-    why: "A proposal nobody can see.",
+    title: "Work without an exact document destination",
+    case: "Edits or suggestions with no saved address or exact open lifetime remain unbound Work that no document page can resume.",
+    whatWeDo:
+      "Name the exact Work destination. Thread targets supply context and default inputs; they grant no write capability.",
+    why: "A document page needs a durable destination to resume its Work.",
     status: "owed",
     code: "suggestion",
     kinds: [],

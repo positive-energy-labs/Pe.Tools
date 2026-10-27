@@ -340,7 +340,7 @@ export const takeoffObservationStatusSchema = z.discriminatedUnion("kind", [
 ]);
 export type TakeoffObservationStatus = z.infer<typeof takeoffObservationStatusSchema>;
 
-/** A room's staged edit as the host consumes it: the baseline beside, the staged values as `next`. */
+/** A room's current edit as the host consumes it: the baseline beside, edited values as `next`. */
 export const stagedRoomEditSchema = z.object({
   roomId: z.string(),
   base: roomEditSchema,
@@ -396,8 +396,8 @@ export type AdoptChoice = z.infer<typeof adoptChoiceSchema>;
 const verdictSchema = z.enum(["accept", "dismiss"]);
 
 /**
- * Every authored takeoff judgment is a cell (co-sign rules 1-3): Pea proposes, a person stages,
- * and hosts read `staged` only. `bases` holds each edited room's immutable baseline beside the
+ * Every authored takeoff judgment is a shared cell: either author edits or suggests,
+ * and hosts consume the current `edit`. `bases` holds each edited room's immutable baseline beside the
  * cells, never inside a value. Strict, so pre-cells Work fails closed rather than lose its values.
  */
 const takeoffsDocumentSchema = z
@@ -407,7 +407,7 @@ const takeoffsDocumentSchema = z
     /** Keyed by candidate (`<view>:<elementId>`). */
     adopt: z.record(z.string(), draftCellSchema(adoptChoiceSchema)).default({}),
     decisions: z.record(keyed(2, "decision"), draftCellSchema(verdictSchema)).default({}),
-    /** A flag has no commit verb: the staged set is the durable judgment and the export. */
+    /** A flag has no commit verb: the edited set is the durable judgment and the export. */
     reviewFlags: z.record(keyed(2, "review flag"), draftCellSchema(z.literal(true))).default({}),
   })
   .superRefine((doc, ctx) => {
@@ -437,7 +437,7 @@ const stagedOf = <V>(cells: Record<string, CellLike>) =>
     cell.edit?.value !== undefined ? [[key, cell.edit.value as V] as const] : [],
   );
 
-/** The person's staged room edits, one per room: what sync consumes. Proposals never appear. */
+/** Current room edits, one per room: what sync consumes. Optional suggestions never appear. */
 export function stagedTakeoffEdits(doc: TakeoffsRouteDocument): Record<string, StagedRoomEdit> {
   const rooms: Record<string, StagedRoomEdit> = {};
   for (const [key, value] of stagedOf<string | number>(doc.edits)) {
@@ -449,10 +449,10 @@ export function stagedTakeoffEdits(doc: TakeoffsRouteDocument): Record<string, S
 }
 export const stagedAdoptChoices = (doc: TakeoffsRouteDocument): Record<string, AdoptChoice> =>
   Object.fromEntries(stagedOf<AdoptChoice>(doc.adopt));
-/** The person's staged flag verdicts, keyed by `takeoffDecisionKey`. */
+/** Current flag verdict edits, keyed by `takeoffDecisionKey`. */
 export const stagedDecisions = (doc: TakeoffsRouteDocument): Record<string, "accept" | "dismiss"> =>
   Object.fromEntries(stagedOf<"accept" | "dismiss">(doc.decisions));
-/** The person's staged review flags per zone. */
+/** Current review flag edits per zone. */
 export function stagedReviewFlags(doc: TakeoffsRouteDocument): Record<string, string[]> {
   const zones: Record<string, string[]> = {};
   for (const [key] of stagedOf<true>(doc.reviewFlags)) {
@@ -462,13 +462,13 @@ export function stagedReviewFlags(doc: TakeoffsRouteDocument): Record<string, st
   return zones;
 }
 
-/** A person discards every staged room edit: each staged edit cell unstages; proposals stay. */
+/** Either author clears every current room edit; optional suggestions stay. */
 export const takeoffDiscardEdits = (doc: TakeoffsRouteDocument): RouteStatePatch[] =>
   Object.entries(doc.edits).flatMap(([key, cell]) =>
     cell.edit ? transitionPatches(["edits"], key, cell, { kind: "clear" }) : [],
   );
 
-/** A person flags a review shape, or unflags it: unflag unstages the shape's cell. */
+/** Either author flags or unflags a review shape; unflag clears the shape's current edit. */
 export function takeoffFlagToggle(
   doc: TakeoffsRouteDocument,
   zoneKey: string,
@@ -485,8 +485,8 @@ export function takeoffFlagToggle(
 }
 
 /**
- * A person stages a room's next values: each field stages against the room's baseline (equal to
- * the baseline stages nothing), and a field the edit no longer carries unstages. The baseline is
+ * Either author edits a room's next values against its baseline. A field equal to the baseline
+ * has no edit, and an omitted field clears its current edit. The baseline is
  * recorded beside the cells the first time the room is edited.
  */
 export function takeoffEditPatches(

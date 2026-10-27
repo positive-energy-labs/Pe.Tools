@@ -1,7 +1,7 @@
 /**
  * What the tree rows and the rules pane read, derived and never stored: the resolved value of each
- * input a person can stage (terminal flow and drop, a unit's flow, ESP and role) with the rung it
- * came from, a group's name from its system and root units, and a rule's fan-out before staging.
+ * input either author can edit (terminal flow and drop, a unit's flow, ESP and role) with its source,
+ * a group's name from its system and root units, and a rule's fan-out before editing.
  */
 import type { FlowSource } from "@pe/ducts-domain/terminal-flows";
 import { slotWord } from "./airflow";
@@ -99,7 +99,7 @@ export function equipmentInputs(
   return {
     flow: {
       value: flow?.cfm ?? null,
-      // A derived flow is the route's reading, never written unless a person stages it.
+      // A derived flow is a reading; writing it requires an explicit edit and host command.
       word:
         flow?.source === "derived"
           ? `sum of ${flow.grilles} grille${flow.grilles === 1 ? "" : "s"}`
@@ -123,7 +123,7 @@ const fanOutCache = new WeakMap<
 >();
 
 /**
- * What staging a rule's table would move, before it is edit: the instances the rule prices (from
+ * What editing a rule's table would move, before the edit is made: the instances the rule prices (from
  * the priced rows, `ruleOf`), the systems they sit in, and every terminal downstream of any one of
  * them, since each of those grilles' paths carries the fitting.
  */

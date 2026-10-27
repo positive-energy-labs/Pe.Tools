@@ -1,6 +1,6 @@
 /**
  * /rooms Work: the seven room fields plus type on each Room Region, one cell per [guid, field];
- * feedback marks as trichotomy cells (Pea proposes, a person stages); and rungless notes.
+ * feedback marks as shared cells with edits and optional suggestions; and notes from either author.
  * Region and op shapes are the generated host catalog's (`@pe/host-contracts/generated`).
  */
 import { z } from "zod";
@@ -91,7 +91,7 @@ export const roomsDocumentSchema = z
   });
 export type RoomsRouteDocument = z.infer<typeof roomsDocumentSchema>;
 
-/** One `rooms.write` region per guid with staged cells: the staged values only, never proposals. */
+/** One `rooms.write` region per guid with edited cells: current edits only, never suggestions. */
 export function stagedRoomWrites(doc: RoomsRouteDocument): ({ guid: string } & RoomEdit)[] {
   const regions = new Map<string, { guid: string } & RoomEdit>();
   for (const [key, cell] of Object.entries(doc.edits)) {
@@ -107,7 +107,7 @@ export const roomsRouteState = {
   route: "rooms",
   title: "Rooms",
   description:
-    "Shared edited room fields (name, type, ceiling, people, lighting, equipment, ventilation), one cell per [region guid, field]. Either author may edit or suggest, and rooms.write reads staged values only. Feedback marks (merge, reject, wall, split) are cells keyed by id with a model-feet anchor and the run they were drawn against: Either author edits these cells. Notes are rungless anchored text either may write. Regions and geometry are read from rooms.snapshot.",
+    "Shared edited room fields (name, type, ceiling, people, lighting, equipment, ventilation), one cell per [region guid, field]. Either author may edit or suggest, and rooms.write reads current edits only. Feedback marks (merge, reject, wall, split) are cells keyed by id with a model-feet anchor and the run they were drawn against: Either author edits these cells. Notes are anchored text either may write. Regions and geometry are read from rooms.snapshot.",
   schema: roomsDocumentSchema,
 
   commands: {},

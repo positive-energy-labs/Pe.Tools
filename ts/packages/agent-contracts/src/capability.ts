@@ -155,7 +155,7 @@ export const capabilityCatalogSchema = z.object({
 });
 export type CapabilityCatalog = z.infer<typeof capabilityCatalogSchema>;
 
-/** `route:families.propose` → `{ route: "families", member: "propose" }`; `route:families` → member undefined. */
+/** `route:families.edit` → `{ route: "families", member: "edit" }`; `route:families` → member undefined. */
 export function parseRouteKey(key: string): { route: string; member?: string } | null {
   if (!key.startsWith("route:")) return null;
   const rest = key.slice("route:".length);

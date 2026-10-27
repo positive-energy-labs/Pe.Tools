@@ -294,15 +294,15 @@ export type FamilyExclusions = Record<string, { by: z.infer<typeof exclusionAuth
 
 /**
  * The Families route document is authored Work and nothing else. The spec is the page's member
- * (one address, sent as `source`) or the members plan generates from staged cells;
- * plans and receipts are results. This document holds only the scope, keyed proposal/staged cells,
+ * (one address, sent as `source`) or the members plan generates from edited cells;
+ * plans and receipts are results. This document holds only the scope, edits and optional suggestions,
  * and what a human or pea held back.
  */
 const familiesDocumentSchema = z
   .object({
     /**
-     * The audited scope is a cell (F-J1-10): Pea proposes one, only the person stages it, and plan
-     * reads the staged one. A bare filter is old Work, so it fails closed.
+     * The audited scope is a shared cell: either author edits or suggests it, and plan reads the
+     * current edit. A bare filter is old Work, so it fails closed.
      */
     scope: familyFilterCellSchema.default({}),
     /**
@@ -316,18 +316,18 @@ const familiesDocumentSchema = z
       )
       .default({}),
     cells: z.record(familyCellKeySchema, familyCellStateSchema).default({}),
-    /** One reviewed native FF patch source, beside per-type cell edits. Only one lane may be staged. */
+    /** One reviewed native FF patch source, beside per-type cell edits. Only one source may have edits. */
     patch: familiesPatchCellSchema.default({}),
     executionOptions: familyExecutionOptionsSchema.optional(),
-    /** The pod the person plans the draft in and saves it to (F-B-5b). The person's choice; Pea never writes it. */
+    /** The pod either author plans the draft in and saves it to. */
     pod: z.string().min(1).optional(),
-    /** When the Reading these staged rungs rest on was taken, on the host's clock. The change mark compares against this. */
+    /** When the Reading these edits rest on was taken, on the host's clock. The change mark compares against this. */
     takenAt: z.string().nullable().default(null),
   })
   .strict();
 export type FamiliesRouteDocument = z.infer<typeof familiesDocumentSchema>;
 
-/** The scope the person edit: the only one the matrix audits and plan resolves. */
+/** The current scope edit: the only one the matrix audits and plan resolves. */
 export const stagedFilter = (doc: FamiliesRouteDocument): AppliedFilter | null =>
   doc.scope.edit?.value ?? null;
 
@@ -389,7 +389,7 @@ export const familiesRouteState = {
   commands: {},
   // Old Work held exclusions by element id (`excludedIds`, then id-keyed `excluded`), then by name;
   // the page resolves ids to current names and re-excludes by name. Its scope was a bare filter
-  // (or `plan.scope` before that): offered back, it is staged only by the person's press.
+  // (or `plan.scope` before that): offered back, either author may restore it as an edit.
   salvage: (raw): FamiliesSalvage => {
     const doc = isRecord(raw) ? raw : {};
     const keys = isRecord(doc.excluded) ? Object.keys(doc.excluded) : [];

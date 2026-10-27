@@ -136,7 +136,7 @@ export const stagedParameterProfile = (work: ParameterLinksDocument): ParameterL
 
 /**
  * The exact profile an observation was taken against. Identical on the client and the server.
- * A proposal preview names the proposal, so it can never equal a staged basis and arm apply.
+ * An optional suggestion preview has a distinct basis from the current edit consumed by Apply.
  */
 export const parameterLinksBasis = (
   work: ParameterLinksDocument,
@@ -166,11 +166,11 @@ export const parameterLinksRouteState = {
   route: "parameter-links",
   title: "Parameter Links",
   description:
-    "A person stages a model-owned parameter linkage profile, evaluates it, and reconciles it. Pea may propose a profile; its preview is labelled and never arms apply.",
+    "Either author edits a model-owned parameter linkage profile, evaluates it, and reconciles it through the host. Optional suggestion previews are labelled separately from the current edit used by Apply.",
   schema: parameterLinksDocumentSchema,
-  // Pea proposes; the staged profile is a person's, and it is what evaluate and apply consume.
+  // Evaluate and Apply consume the shared current edit; suggestions remain optional review content.
 
   // Reading and applying are host ports, not route commands: an observation of Revit can
-  // never be written into the draft a human is editing.
+  // never be written into authored Work.
   commands: {},
 } satisfies RouteStateSpec<typeof parameterLinksDocumentSchema>;

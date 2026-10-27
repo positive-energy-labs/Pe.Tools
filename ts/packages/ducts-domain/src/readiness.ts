@@ -1,5 +1,5 @@
 /**
- * How far each duct group can be solved under a person's assumptions. Derived on every render
+ * How far each duct group can be solved under shared Work assumptions. Derived on every render
  * and never stored: the facts and issues come from `ducts.snapshot`, the assumptions from Work.
  * - walkable: one root, no loop, every open end capped or ignored, every terminal with a flow
  *   (or ignored). A pass-1 walk from the root reaches every terminal.
@@ -25,7 +25,7 @@ export interface GroupReadiness {
   budget: string[];
 }
 
-/** The edit value at a key; proposals never count until a person stages them. */
+/** The current edit at a key; optional suggestions do not affect readiness. */
 const edit = (doc: DuctsRouteDocument | null, key: string): DuctAssumption | undefined =>
   doc?.assumptions[key]?.edit?.value;
 

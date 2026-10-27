@@ -1,8 +1,8 @@
 /**
  * The fitting-loss rules, as data: type plus geometry condition -> ASHRAE table, the candidate
- * tables a person may stage instead, and how a fitting's facts become that table's inputs.
+ * tables either author may edit instead, and how a fitting's facts become that table's inputs.
  * Ported from `.artifacts/pdrop/sa26/ctable.py` and the protoui `build_data2.py`. A rule key is
- * the unit a person stages a table against; every instance matching it follows.
+ * the unit either author assigns a table to; every instance matching it follows.
  *
  * Pv basis (C x Pv): elbow and damper use their own (inlet) Pv; a transition the downstream
  * (outlet) Pv; a tap's branch leg Cb the branch Pv; its straight leg Cs the main's downstream Pv.
@@ -258,7 +258,7 @@ export const LOSS_RULES: readonly LossRule[] = [
     options: ["CD9-1"],
     basis: "Pv of the damper",
     // Only a plain damper family is the fully open CD9-1 damper; a fire or smoke damper, a flex
-    // connector or any other accessory has no rule and is stated or assigned by a person.
+    // connector or any other accessory has no rule and needs an authored value or assignment.
     when: (f) => f.kind === "accessory" && isPlainDamper(f.family),
     input: () => ({ res: "Co", x: 0, y: 1 }),
     basisOf: inletBasis,

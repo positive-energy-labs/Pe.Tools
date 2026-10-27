@@ -35,7 +35,7 @@ export interface DuctsResidency {
 }
 
 export const DUCTS_SUMMARY =
-  "The Ducts tool reads every duct network in the document from Revit's connectors, repairs what it safely can, prices each grille's path from its fan, and writes the inputs it used back into the model so they travel with it. The result is a design-grade number with its assumptions listed. It is not a certification. The engineer sees the number per grille and what it rests on, Pea proposes and previews, and the engineer rules on anything the model cannot settle.";
+  "The Ducts tool reads every duct network in the document from Revit's connectors, repairs what it safely can, prices each grille's path from its fan, and writes the inputs it used back into the model so they travel with it. The result is a design-grade number with its assumptions listed. It is not a certification. The engineer sees the number per grille and what it rests on, and rules on anything the model cannot settle. Pea edits shared Work and uses the same preview and Apply commands within that engineering intent.";
 
 export const DUCTS_WALK: readonly DuctsWalkStep[] = [
   {
@@ -45,12 +45,12 @@ export const DUCTS_WALK: readonly DuctsWalkStep[] = [
   },
   {
     step: "Heal the model",
-    who: "The tool proposes, engineer approves, Pea or engineer applies",
+    who: "Engineer or Pea, through the host",
     body: "Pe builds the network from Revit's connectors, not from the system name. Gaps under about 2 in and near-miss taps are bridged for the calculation and listed as diagnostics. Dangling ends get a cap, touching ends get connected, and small same-size gaps get a union. These are written into Revit after a preview. Anything harder appears as a Fix row that names the repair and selects the element in Revit.",
   },
   {
     step: "Point at the airflow",
-    who: "Engineer",
+    who: "Engineer or Pea",
     body: "In the Settings popover in the top bar, under Ducts (or from the Set row that asks), choose which parameter holds each grille's and each unit's design airflow on this project (a firm parameter, the family's own Flow, or whatever the drafter used). The tool lists every grille's value and its source. A grille with no value becomes a Set row. A fan's flow is the sum of its grilles. Only a side-stream unit such as a dehumidifier needs a typed flow.",
   },
   {
@@ -65,32 +65,32 @@ export const DUCTS_WALK: readonly DuctsWalkStep[] = [
   },
   {
     step: "Review and write",
-    who: "Engineer",
-    body: "Every pending change is listed as old and new before anything is written: airflow slot, rulings, roles, flows, ESP. A refused change says why. Write can run whenever something is staged. Only the ESP value waits for a calculation with no open Fix row.",
+    who: "Engineer or Pea",
+    body: "Every pending change is listed as old and new before anything is written: airflow slot, rulings, roles, flows, ESP. A refused change says why. Write can run whenever there are current edits. Only the ESP value waits for a calculation with no open Fix row.",
   },
 ];
 
 /** Why the walk is not one click, and what Pea does inside it. */
 export const DUCTS_NOT_ONE_CLICK =
-  "It is not one click. Three things need a person on most models: which parameter holds the design airflow, the joins the evidence argues against, and approval of each write. The rest is automatic, and Pea can do the walking.";
+  "The model alone cannot settle design intent: which parameter holds the design airflow, the joins the evidence argues against, and which repairs belong in the design. The engineer owns those decisions. Either author edits Work and applies through the host. Pea's first consequential write uses the host's turn-wide countdown, with Allow now and Stop writes.";
 
-/** What Pea does in the tool, as object rights. */
+/** How Pea works within the engineer's intent and shared host contracts. */
 export const DUCTS_PEA_DOES: readonly string[] = [
   "Opens the tool on the system the engineer names, or moves it there.",
   "Reads every fact and finding the tool shows, including Diagnostics.",
-  "Proposes a value on any cell and any blocking row, with its evidence in the note.",
-  "Presses survey, previews heals, and applies a heal once the engineer approves it.",
-  "Previews making a unit the fan of its system, and shows the outcome.",
-  "Walks the inbox in order, Fix, Set, Check, Write, and reports in the tool's words: system, finding, required ESP now and staged.",
+  "Edits shared cells or leaves optional suggestions on blocking rows, with evidence in the note.",
+  "Presses survey, previews supported heals, and applies through the host within the agreed intent.",
+  "Previews or applies making a unit the fan of its system, and reads back the outcome.",
+  "Walks the inbox in order, Fix, Set, Check, Write, and reports in the tool's words: system, finding, required ESP now and edited.",
 ];
 
 /** What Pea never does in the tool. */
 export const DUCTS_PEA_NEVER: readonly string[] = [
-  "Stages a ruling or an airflow slot; typing is the engineer's decision.",
-  "Writes an ESP or presses the loss write.",
-  "Applies the fan assignment; it previews and the engineer presses it.",
+  "Treats an optional suggestion as the current edit or a model fact.",
+  "Presents a preview as a completed Revit write.",
+  "Bypasses the host consent decision or continues pending writes after Stop writes.",
   "Computes a pressure drop of its own, by script or by hand; the tool's number is the number.",
-  "Edits geometry by script; transitions, takeoffs, long gaps and anything joining two systems are the engineer's, in Revit.",
+  "Chooses repairs outside the agreed engineering intent or reports geometry changes without native readback.",
 ];
 
 export const DUCTS_RESIDENCY: readonly DuctsResidency[] = [
@@ -106,35 +106,35 @@ export const DUCTS_RESIDENCY: readonly DuctsResidency[] = [
     livesIn: "Revit parameters on the element, through named slots",
     survivesSave: "Yes, with the model",
     whoSees: "Everyone in Revit, with or without Pe",
-    whoWrites: "The engineer types it; Write puts it in Revit",
+    whoWrites: "Either author edits Work; host Apply puts it in Revit",
   },
   {
     value: "Which parameter is the airflow slot",
     livesIn: "The model's Project Information (a hidden text parameter, _PE_DuctLosses)",
     survivesSave: "Yes, with the model",
     whoSees: "Everyone with Pe, after sync",
-    whoWrites: "The engineer picks it; Write stores it",
+    whoWrites: "Either author edits the slot; host Apply stores it",
   },
   {
     value: "Rulings: ignore this open end, object to this join, this unit is passive",
     livesIn: "The same Project Information parameter",
     survivesSave: "Yes, with the model",
     whoSees: "Everyone with Pe, after sync",
-    whoWrites: "The engineer rules; Write stores it; a take-back is a staged delete",
+    whoWrites: "Either author edits the ruling; host Apply stores it; a take-back is a delete edit",
   },
   {
     value: "Caps and connections made by the heal",
     livesIn: "Real fittings and connections in the model",
     survivesSave: "Yes, with the model",
     whoSees: "Everyone, in Revit and in every other tool",
-    whoWrites: "The engineer approves; Pea or the engineer applies",
+    whoWrites: "Either author applies a supported heal through the host",
   },
   {
-    value: "Edits typed but not written, and Pea's proposals",
+    value: "Current edits and optional suggestions from either author",
     livesIn: "Pe Work on the local computer, keyed by document",
-    survivesSave: "No. Cleared by Start fresh, never saved with the model",
+    survivesSave: "Retained locally across model close and host restart; separate from model save",
     whoSees: "Only this computer",
-    whoWrites: "The engineer, or Pea as a proposal",
+    whoWrites: "The engineer and Pea share editable Work",
   },
   {
     value: "Firm rules (which ASHRAE table a fitting family uses), slot names, catalogs",
@@ -148,12 +148,12 @@ export const DUCTS_RESIDENCY: readonly DuctsResidency[] = [
     livesIn: "Tool settings (the top bar Settings popover, Ducts section)",
     survivesSave: "Yes, in local settings",
     whoSees: "Only this computer",
-    whoWrites: "The engineer",
+    whoWrites: "Engineer or Pea",
   },
 ];
 
 export const DUCTS_RESIDENCY_RULE =
-  "Anything that affects the pressure is stored in the model, so another person or another tool sees the same thing. The only state Pe keeps for itself is what has been typed and not yet written.";
+  "Applied parameters and rulings travel with the model. Pending edits and optional suggestions stay in local Work.";
 
 /** What an engineer has to decide; the tool cannot settle these from the model alone. */
 export const DUCTS_ENGINEER_DECIDES: readonly string[] = [
@@ -164,7 +164,7 @@ export const DUCTS_ENGINEER_DECIDES: readonly string[] = [
   "A unit's role when the rule guesses wrong (a filter chassis alone in its network reads as a fan).",
   "Whether a modelled loop was intended. It is priced as a tree and flagged.",
   "Which ASHRAE table a fitting rule uses when the family does not name its tested shape.",
-  "Approval of each heal and each write. Pea proposes and previews; the engineer writes.",
+  "The engineering intent for repairs and writes. Either author applies through the host; one consent decision covers Pea's consequential writes in the task turn and its delegated descendants.",
 ];
 
 export const DUCTS_LIMITS: readonly string[] = [
