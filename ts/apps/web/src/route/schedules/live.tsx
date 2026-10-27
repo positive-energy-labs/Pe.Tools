@@ -354,6 +354,9 @@ export function LiveScheduleGridWorkspace({
         fixture={demo ? DEMO_SPEC : undefined}
         url={url}
         wire={scheduleCellWire(state)}
+        // Grouped Work: apply stays a verb in the row and the lines get the log's room (ruling 39).
+        commitIn="verbs"
+        log="narrow"
         work={(_, sentence) => (
           <>
             {sentence}
