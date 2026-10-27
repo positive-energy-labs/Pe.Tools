@@ -119,6 +119,10 @@ export type ColourMode = "firm" | "mono";
 /** Optional translucent faces share a pass after the subject has established occlusion depth. */
 const CONTEXT_LAYER = 5;
 const SHELL_LAYER = 6;
+/** Stub fragments of the subject batch: depth-only pre-pass, then the once-per-pixel fill. */
+const STUB_LAYER = 7;
+/** Stub seams draw after the stub fill, so they sit on top of it and never tint through it. */
+const STUB_SEAM_LAYER = 8;
 /** Points per axis polygon the shader reads; `space/state.ts` packs its cuts against it. */
 export const CLIP_POINTS = 64;
 
@@ -508,9 +512,13 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
    * context and envelopes discard in this pass, so translucent context never occludes a mark. */
   const seedOccluders = (shown: THREE.Camera) => {
     const layers = shown.layers.mask;
+    material.colorWrite = false;
+    material.depthWrite = true;
+    shown.layers.set(STUB_LAYER);
+    veil.scenePass.value = 6;
+    renderer.render(scene, shown);
     shown.layers.set(OCCLUDER_LAYER);
     veil.scenePass.value = 1;
-    material.colorWrite = false;
     renderer.render(scene, shown);
     material.colorWrite = true;
     shown.layers.mask = layers;
@@ -524,12 +532,29 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     const autoClear = renderer.autoClear;
     renderer.clear();
     renderer.autoClear = false;
-    veil.scenePass.value = 1;
     material.depthWrite = true;
     caps.forEach((cap) => {
       cap.material.depthWrite = true;
     });
+    // Stub depth pre-pass: each pixel records its nearest stub surface, colour withheld.
+    shown.layers.set(STUB_LAYER);
+    veil.scenePass.value = 6;
+    material.colorWrite = false;
     renderer.render(scene, shown);
+    material.colorWrite = true;
+    shown.layers.mask = mask;
+    veil.scenePass.value = 1;
+    renderer.render(scene, shown);
+    // Stub fill: only the pixel's nearest stub passes EQUAL, so overlapping translucent pieces
+    // blend once. Stub seams follow on their own layer, above the fill.
+    shown.layers.set(STUB_LAYER);
+    shown.layers.enable(STUB_SEAM_LAYER);
+    veil.scenePass.value = 2;
+    material.depthWrite = false;
+    material.depthFunc = THREE.EqualDepth;
+    renderer.render(scene, shown);
+    material.depthFunc = THREE.LessEqualDepth;
+    shown.layers.mask = mask;
     const glass = (depthWrite: boolean) => {
       material.depthWrite = depthWrite;
       caps.forEach((cap) => {
@@ -961,7 +986,11 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
   let routeStamp = "";
   const rebuildRoutes = () => {
     const ids = byId.flatMap((_, id) =>
-      paints[id]!.tier === "subject" && batch.getVisibleAt(id) ? [id] : [],
+      paints[id]!.tier === "subject" || paints[id]!.tier === "stub"
+        ? batch.getVisibleAt(id)
+          ? [id]
+          : []
+        : [],
     );
     const stamp = JSON.stringify([
       ids.map((id) => [id, paints[id]]),
@@ -976,22 +1005,24 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       routes.remove(child);
       disposeTree(child);
     }
-    const groups = new Map<number, number[]>();
+    // One draw per (tier, ink): stub seams live on their own layer, drawn above the stub fill.
+    const groups = new Map<string, { hex: number; stub: boolean; positions: number[] }>();
     for (const id of ids) {
       const p = paints[id]!;
-      const colour = routeColour(subjectHue(p), p, isDark(), subjectL(p));
-      const key = colour.getHex();
-      const positions = groups.get(key) ?? [];
-      for (const n of edgesOf(byId[id]!, look.routes.edgeAngle)) positions.push(n);
-      groups.set(key, positions);
+      const hex = routeColour(subjectHue(p), p, isDark(), subjectL(p)).getHex();
+      const stub = p.tier === "stub";
+      const key = `${stub}|${hex}`;
+      const group = groups.get(key) ?? { hex, stub, positions: [] };
+      for (const n of edgesOf(byId[id]!, look.routes.edgeAngle)) group.positions.push(n);
+      groups.set(key, group);
     }
-    for (const [hex, positions] of groups)
-      for (const hidden of [false, true]) {
-        const lines = routeLines(positions, new THREE.Color(hex), look, hidden);
-        applyClip(lines.material);
-        fitLines(lines);
-        routes.add(lines);
-      }
+    for (const { hex, stub, positions } of groups.values()) {
+      const lines = routeLines(positions, new THREE.Color(hex), look);
+      if (stub) lines.layers.set(STUB_SEAM_LAYER);
+      applyClip(lines.material);
+      fitLines(lines);
+      routes.add(lines);
+    }
   };
   const contextLines = new THREE.LineSegments(new THREE.BufferGeometry(), contextMaterial);
   contextLines.frustumCulled = false;
@@ -1345,6 +1376,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
           // Each part enters only the passes that keep its fragments: every pass submits and
           // sorts a whole batch, and the discarded half used to cost as much as the drawn one.
           batch.depth?.mesh.layers.enable(OCCLUDER_LAYER);
+          batch.depth?.mesh.layers.enable(STUB_LAYER);
           batch.translucent?.mesh.layers.set(CONTEXT_LAYER);
           batch.translucent?.mesh.layers.enable(SHELL_LAYER);
           batch.addTo(scene);
