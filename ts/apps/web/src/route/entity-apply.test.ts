@@ -14,16 +14,22 @@ const ROW: PlanEntry = {
 };
 
 /** An entity route over a saved spec whose plan lane is `read`/`apply` alone: no host reach. */
-function route(confirm: boolean, entries: readonly PlanEntry[] = [ROW]) {
+function route(confirm: boolean, entries: readonly PlanEntry[] = [ROW], composed = false) {
   const read = vi.fn(async () => ({ entries }));
   const apply = vi.fn(async () => {});
+  const direct = vi.fn(async () => {});
   const def: EntityRouteDef<unknown, never, object> = {
     key: "family",
     name: "Demo",
     entity: "demo",
     schema: SCHEMA,
     apply: "family.apply",
-    plan: { read, apply, ...(confirm ? { confirm: true as const } : {}) },
+    plan: {
+      read,
+      apply,
+      ...(composed ? { direct } : {}),
+      ...(confirm ? { confirm: true as const } : {}),
+    },
   };
   const manifest = entityRoute(def, {
     address: "family",
@@ -50,7 +56,14 @@ function route(confirm: boolean, entries: readonly PlanEntry[] = [ROW]) {
     note: vi.fn(),
   };
   const action = manifest.actions!.apply;
-  return { run: () => action.run(ctx as never, undefined as never), read, apply, setPage };
+  return {
+    run: () => action.run(ctx as never, undefined as never),
+    preview: () => manifest.actions!.preview.run(ctx as never, undefined as never),
+    read,
+    direct,
+    apply,
+    setPage,
+  };
 }
 
 describe("entity apply (MAP ruling 52)", () => {
@@ -80,4 +93,26 @@ describe("entity apply (MAP ruling 52)", () => {
       ["stage", "pod", "path"],
     );
   });
+});
+
+test("a composed Apply submits once without a browser planning round trip", async () => {
+  const { run, read, direct, apply, setPage } = route(false, [ROW], true);
+  expect(await run()).toBeNull();
+  expect(direct).toHaveBeenCalledOnce();
+  expect(direct).toHaveBeenCalledWith(expect.anything(), { pod: "p", path: "a.json", sha256: "s" });
+  expect(read).not.toHaveBeenCalled();
+  expect(apply).not.toHaveBeenCalled();
+  expect(setPage).not.toHaveBeenCalled();
+});
+
+test("explicit Preview opens included rows and never invokes the composed Apply", async () => {
+  const { preview, read, direct, apply, setPage } = route(false, [ROW], true);
+  await preview();
+  expect(read).toHaveBeenCalledOnce();
+  expect(direct).not.toHaveBeenCalled();
+  expect(apply).not.toHaveBeenCalled();
+  expect(setPage).toHaveBeenCalledWith(
+    expect.objectContaining({ confirming: true, sheet: { entries: [ROW] } }),
+    ["stage", "pod", "path"],
+  );
 });

@@ -99,7 +99,7 @@ test("old-shape saved Work reaches the Situation as the host's sentence, not a b
   expect(document.body.textContent).not.toContain("press “read families”");
   expect(document.body.textContent).toContain("the saved Work cannot be read");
 
-  // F-R4-1 in the Situation (fixture look 12): the unresolved and staged lines live in one fixed,
+  // F-R4-1 in the Situation (fixture look 12): the unresolved and edit lines live in one fixed,
   // self-scrolling slot, so a refusal or a first stage never grows the head over the grid.
   const slot = document.querySelector<HTMLElement>("[data-slot='situation-band']");
   expect(slot?.className).toMatch(/(^|\s)h-\S+/);

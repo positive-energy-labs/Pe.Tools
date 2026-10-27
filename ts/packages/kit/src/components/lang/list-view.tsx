@@ -274,7 +274,7 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
               <ChevronRight aria-hidden />
               <span>{section.label}</span>
               <span className="face-mono">{section.count}</span>
-              {section.staged ? <span className="face-mono">{section.staged} staged</span> : null}
+              {section.edit ? <span className="face-mono">{section.edit} edit</span> : null}
               <span data-slot="rule" aria-hidden />
             </button>
           ) : null}

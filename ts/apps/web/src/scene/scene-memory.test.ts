@@ -12,7 +12,7 @@ describe("scene ownership accounting", () => {
     };
     const first = memory.acquire("decoded", decoded);
     const second = memory.acquire("prepared", decoded);
-    const staged = memory.acquire("staging", {
+    const edit = memory.acquire("staging", {
       buffers: [backing, backing],
       gpu: [
         { key: gpu, bytes: 64 },
@@ -36,7 +36,7 @@ describe("scene ownership accounting", () => {
     second.release();
     expect(memory.snapshot().owned.jsBufferBytes).toBe(1024);
     expect(memory.snapshot().owned.jsHeapEstimateBytes).toBe(0);
-    staged.release();
+    edit.release();
     uploaded.release();
     uploaded.release();
     expect(memory.snapshot().ownedAndReservedBytes).toBe(0);

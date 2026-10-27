@@ -248,9 +248,6 @@ export function ActionBoard({
                 <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 t-small face-mono text-ink-mute">
                   {spec ? (
                     <>
-                      {action.actor === "human" ? (
-                        <Noun title="a person runs this verb; Pea may only propose it">human</Noun>
-                      ) : null}
                       needs
                       <Noun title={`the target this verb needs bound: ${action.needs}`}>
                         {action.needs}

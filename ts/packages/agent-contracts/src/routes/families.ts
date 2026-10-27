@@ -19,6 +19,6 @@ export const familiesAddress = {
   agent: {
     finds: ["history", "past read", "rules", "query", "columns"],
     policy:
-      "Change the visible Families view: stage, the Work lines tab (pea, yours, all), the query line, sort (`-key` descending), hidden columns, and in History the past read (an id from facts; empty = newest). Facts give the rule help, the visible reading and its counts, and the past reads. The opened spec (pod, path) is the person's: read it. A view change never reads the matrix, writes Work or touches Revit.",
+      "Change the visible Families view: stage, the Work lines tab (suggestions, edits, all), the query line, sort (`-key` descending), hidden columns, and in History the past read (an id from facts; empty = newest). Facts give the rule help, the visible reading and its counts, and the past reads. The opened spec (pod, path) is the person's: read it. A view change never reads the matrix, writes Work or touches Revit.",
   },
 } satisfies RouteDeclaration;

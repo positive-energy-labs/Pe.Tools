@@ -638,7 +638,7 @@ function Canvas({
                 {run ? (
                   <RunDetail
                     run={run}
-                    designRate={priced?.staged.designFriction ?? DEFAULT_DESIGN_FRICTION_RATE}
+                    designRate={priced?.edit.designFriction ?? DEFAULT_DESIGN_FRICTION_RATE}
                     nameOf={nameOf}
                   />
                 ) : null}

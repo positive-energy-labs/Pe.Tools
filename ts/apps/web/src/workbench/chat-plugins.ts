@@ -46,7 +46,7 @@ const parsed = (value: unknown): unknown => {
 export interface ProposedRecord {
   route: ChatPluginRoute;
   /** Distinct cells (or fields) the call proposed on, not patches: several rungs of one cell's
-   * proposal are one change. */
+   * suggestion are one change. */
   changes: number;
   /** The document (or named workspace) the call recorded; null when it recorded none. */
   subject: string | null;
@@ -151,14 +151,14 @@ export function proposedRecord(
   const request = isRecord(args) ? args : {};
   const input = parsed(request.input);
   const patches = isRecord(input) && Array.isArray(input.patches) ? input.patches : [];
-  // Pea's mask admits `cells/<key>/proposal…`, `fields/<pointer>/proposal…` and a root cell's
-  // `<cell>/proposal…` (families' `scope`, F-H6-5).
+  // Pea's mask admits `cells/<key>/suggestion…`, `fields/<pointer>/suggestion…` and a root cell's
+  // `<cell>/suggestion…` (families' `scope`, F-H6-5).
   const cells = new Set(
     patches.flatMap((patch) => {
       const path = isRecord(patch) && Array.isArray(patch.path) ? patch.path : [];
       if ((path[0] === "cells" || path[0] === "fields") && path[1] !== undefined)
         return [`${path[0]}/${String(path[1])}`];
-      return path[1] === "proposal" ? [String(path[0])] : [];
+      return path[1] === "suggestion" ? [String(path[0])] : [];
     }),
   );
   const target = isRecord(outer.target) ? outer.target : {};

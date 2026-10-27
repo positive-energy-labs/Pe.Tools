@@ -14,7 +14,7 @@ const row = (key: string) => PARAM_ROWS.find((item) => item.key === key)!;
 const ORDER_SPECIMENS: readonly StateCellProps[] = [
   { value: "26 in", fresh: "unverified" },
   { value: "84 in", cap: "locked" },
-  { value: "36 in", stage: "staged" },
+  { value: "36 in", stage: "edit" },
   { value: "24 in" },
   { value: "1.75 in", agree: "drift", modelValue: "1.375 in" },
   { value: "2 hr", stage: "proposed" },
@@ -89,7 +89,7 @@ export function StructureLaws({ owner }: { owner: (name: string) => string }) {
         </div>
         <CounterExample why="alphabetical order hides the states that need action">
           <span className="t-small face-mono text-ink-2">
-            clean · drift · locked · proposed · stale · staged · unverified
+            clean · drift · locked · proposed · stale · edit · unverified
           </span>
         </CounterExample>
       </Law>

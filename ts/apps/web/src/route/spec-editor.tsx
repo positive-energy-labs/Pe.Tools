@@ -3,11 +3,11 @@
  * the form cannot render stays raw, byte for byte. Offline the host answers schema issues only;
  * with a Revit session attached it adds the composed preview and the library's semantic issues.
  * Beside the draft sits the member's Settings Work (`memberWork`): Pea's field proposals and the
- * fields a person staged, reviewed card by card. Every route that opens a member (`/pods`,
+ * fields a person edit, reviewed card by card. Every route that opens a member (`/pods`,
  * `/family`, the product routes' spec pane) shows the same lane.
  *
- * One save per member. While the Work holds proposals or staged fields, the draft is the Work's
- * root raw edit, staged fields apply on top of it, and save is `settings.write`. With a clean Work,
+ * One save per member. While the Work holds proposals or edit fields, the draft is the Work's
+ * root raw edit, edit fields apply on top of it, and save is `settings.write`. With a clean Work,
  * save is `pod.member.save` of the exact bytes, and the Work re-opens on them. `save as new`
  * files a sibling member.
  */
@@ -19,7 +19,6 @@ import {
   podMemberSchema,
   settingsCandidate,
   settingsRouteState,
-  settingsBasisSchema,
   type PodMember,
   type SettingsFieldState,
   type SettingsRouteDocument,
@@ -39,6 +38,7 @@ import { inventoryOf, previousOf, useHostStatusSlice, useInventory } from "#/rea
 import { schemaFormModel } from "#/settings/schema-form";
 import {
   actionResult,
+  runSemanticAction,
   saveSettingsAction,
 } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
@@ -52,7 +52,7 @@ import { useRoute } from "./use-route";
 import type { RouteHandle } from "./handle";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
-/** The demo lane's member: no host is asked for anything. `fields` seeds its proposal lane. */
+/** The demo lane's member: no host is asked for anything. `fields` seeds its suggestion lane. */
 export interface DemoSpec {
   content: string;
   schema: string;
@@ -106,58 +106,34 @@ const memberWorkManifest = (seed?: SettingsRouteDocument, demo?: string | null) 
         label: "open",
         says: "adopts the member's saved bytes as the Work basis; refuses while edits are pending",
         needs: "host",
-        actor: "any",
         input: openInput as never,
         dirties: [],
         ready: () => null,
         run: async (ctx, { member }: z.infer<typeof openInput>) => {
-          const doc = ctx.work.doc;
-          const reading = await podHost.read(member);
-          const basis = settingsBasisSchema.parse({
-            member,
-            rawContent: reading.content,
-            sha256: reading.sha256,
-          });
-          if (
-            doc?.basis?.member.pod === member.pod &&
-            doc.basis.member.path === member.path &&
-            doc.basis.sha256 === basis.sha256
-          )
-            return;
-          if (Object.values(doc?.fields ?? {}).some((field) => field.staged || field.proposal))
-            throw Error(
-              "Pending work retains its original basis. Review the new reading and explicitly adopt it, discarding old edits.",
-            );
-          return ctx.write([
-            { path: ["basis"], value: basis },
-            { path: ["fields"], value: {} },
-          ]);
+          actionResult(
+            await runSemanticAction("settings.observe", { member }, undefined, {
+              work: { key: ctx.work.key, revision: ctx.work.revision ?? 0 },
+            }),
+          );
         },
       },
       adopt: {
         label: "adopt disk bytes",
-        says: "adopts the member as it is on disk now and discards the old proposals and staged fields",
+        says: "adopts the member as it is on disk now and discards the old proposals and edit fields",
         needs: "host",
-        actor: "human",
         input: adoptInput as never,
         dirties: [],
         ready: (ctx) => (ctx.work.doc?.basis ? null : "open a pod member first"),
         run: async (ctx, input: z.infer<typeof adoptInput>) => {
           const member = ctx.work.doc!.basis!.member;
-          const reading = await podHost.read(member);
-          if (reading.sha256 !== input.sha256)
-            throw Error("The member changed after review. Refresh and review again.");
-          return ctx.write([
-            {
-              path: ["basis"],
-              value: settingsBasisSchema.parse({
-                member,
-                rawContent: reading.content,
-                sha256: reading.sha256,
-              }),
-            },
-            { path: ["fields"], value: {} },
-          ]);
+          actionResult(
+            await runSemanticAction(
+              "settings.observe",
+              { member, sha256: input.sha256, replaceEdits: true },
+              undefined,
+              { work: { key: ctx.work.key, revision: ctx.work.revision ?? 0 } },
+            ),
+          );
         },
       },
       save: {
@@ -181,7 +157,7 @@ const memberWorkManifest = (seed?: SettingsRouteDocument, demo?: string | null) 
             | undefined;
           if (result?.kind === "conflict")
             throw Error(
-              "The member changed on disk. Adopt the disk bytes after reviewing; staged fields were kept until then.",
+              "The member changed on disk. Adopt the disk bytes after reviewing; edit fields were kept until then.",
             );
         },
       },
@@ -189,7 +165,7 @@ const memberWorkManifest = (seed?: SettingsRouteDocument, demo?: string | null) 
     seeds: (seed && demo
       ? {
           [demo]: {
-            title: "a member with Pea's proposal lane",
+            title: "a member with Pea's suggestion lane",
             work: seed,
             readings: {},
             page: {},
@@ -367,11 +343,11 @@ export function SpecEditor({
   // A `settings.write` moves the basis; the draft re-reads the bytes it wrote.
   const workSha = work.work.doc?.basis?.sha256 ?? null;
   const fields = work.work.doc?.fields ?? {};
-  const rootEdit = fields[""]?.staged?.value as string | undefined;
+  const rootEdit = fields[""]?.edit?.value as string | undefined;
   const workBytes = rootEdit ?? work.work.doc?.basis?.rawContent ?? null;
-  // A Work with proposals or staged fields owns the member: the draft is its root raw edit.
-  const viaWork = !fixture && Object.values(fields).some((field) => field.staged || field.proposal);
-  const staged = Object.values(fields).some((field) => field.staged);
+  // A Work with proposals or edit fields owns the member: the draft is its root raw edit.
+  const viaWork = !fixture && Object.values(fields).some((field) => field.edit || field.suggestion);
+  const edit = Object.values(fields).some((field) => field.edit);
   const draft = typed ?? (viaWork ? workBytes : null) ?? basis ?? "";
   const synced = !viaWork || typed === null || typed === workBytes;
 
@@ -400,7 +376,7 @@ export function SpecEditor({
         void writeWork(
           typed === basisBytes
             ? [{ path: ["fields", ""] }]
-            : [{ path: ["fields", ""], value: { proposal: null, staged: { value: typed } } }],
+            : [{ path: ["fields", ""], value: { suggestion: null, edit: { value: typed } } }],
         ),
       400,
     );
@@ -449,9 +425,9 @@ export function SpecEditor({
       </EmptyState>
     );
 
-  const dirty = viaWork ? staged : basis !== null && draft !== basis;
+  const dirty = viaWork ? edit : basis !== null && draft !== basis;
   /**
-   * Save writes the Work (draft plus staged fields) or, with a clean Work, overwrites only the bytes
+   * Save writes the Work (draft plus edit fields) or, with a clean Work, overwrites only the bytes
    * this editor read. Save as new files the same content as a sibling member.
    */
   const save = (asNew: boolean) =>
@@ -461,7 +437,7 @@ export function SpecEditor({
         if (asNew) {
           const content =
             viaWork && basisBytes !== undefined
-              ? settingsCandidate(basisBytes, { ...fields, "": { staged: { value: draft } } })
+              ? settingsCandidate(basisBytes, { ...fields, "": { edit: { value: draft } } })
               : draft;
           await podHost.write(ref, content);
         } else if (viaWork) {
@@ -488,7 +464,7 @@ export function SpecEditor({
     : parsed.error
       ? `The draft is not JSON: ${parsed.error}`
       : !synced
-        ? "The draft is still being staged on the member."
+        ? "The draft is still being edit on the member."
         : !dirty
           ? "Nothing to save."
           : composed?.draft !== draft
@@ -499,7 +475,7 @@ export function SpecEditor({
   const saveWhy =
     saveReason ??
     (viaWork
-      ? "Write the draft with the staged fields on top; refuses if the member changed on disk."
+      ? "Write the draft with the edit fields on top; refuses if the member changed on disk."
       : "Overwrite this member; refuses if it changed on disk since it was read.");
   const saveAsWhy =
     saveReason ?? "File the draft as a new member beside this one; apply reads saved members only.";

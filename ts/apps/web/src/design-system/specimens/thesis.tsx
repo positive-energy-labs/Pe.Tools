@@ -8,7 +8,7 @@ export function ThesisSpecimen() {
       </h1>
       <p className="max-w-[74ch] t-prose text-ink-2">
         Pea proposes; you decide; the model may disagree. Every Pe.Tools surface must say those
-        three things at a glance. The language uses the same marks for a table value, a proposal
+        three things at a glance. The language uses the same marks for a table value, a suggestion
         card, and the write that leaves the page. Colour is spent only where hue changes meaning;
         type carries the rest.
       </p>

@@ -73,6 +73,7 @@ type ArmingStripProps = Reason & {
   onCommit: () => void;
   /** Disarms — nothing is written. */
   onCancel: () => void;
+  cancelLabel?: string;
   busy?: boolean;
   /** Present, the commit refuses with it (the Work is unread, a fixture). */
   refusal?: string | null;
@@ -95,6 +96,7 @@ export function ArmingStrip({
   state,
   onCommit,
   onCancel,
+  cancelLabel = "cancel",
   busy,
   refusal,
   alternatives,
@@ -185,11 +187,11 @@ export function ArmingStrip({
           {armed ? (
             <Button
               kind="framed"
-              label="cancel"
+              label={cancelLabel}
               onClick={onCancel}
               reason="Disarms — nothing is written"
             >
-              cancel
+              {cancelLabel}
             </Button>
           ) : null}
           {armed && planHash ? (

@@ -162,9 +162,9 @@ const loads = {
   ],
 };
 const trees = (s: DuctSnapshot) => s.groups.map((g) => groupTree(s, g.id));
-const run = (area31: number | null, staged = {}) => {
+const run = (area31: number | null, edit = {}) => {
   const s = snapshot(area31);
-  const { flows, findings } = terminalFlows(s, loads, staged, trees(s));
+  const { flows, findings } = terminalFlows(s, loads, edit, trees(s));
   return { flows: Object.fromEntries(flows), findings };
 };
 
@@ -190,7 +190,7 @@ describe("terminalFlows", () => {
     expect(flows[31]!.cfm).toBe(300);
   });
 
-  it("takes a rooms flow after a staged one and before the load preview and Revit", () => {
+  it("takes a rooms flow after a edit one and before the load preview and Revit", () => {
     const s = snapshot(0.7854);
     const rooms = new Map([
       [30, { cfm: 111, source: "room 101" }],
@@ -205,7 +205,7 @@ describe("terminalFlows", () => {
 });
 
 describe("a group with no air mover", () => {
-  it("prices nothing and raises one blocking no-fan finding; a staged passive root is no fan", () => {
+  it("prices nothing and raises one blocking no-fan finding; a edit passive root is no fan", () => {
     const s = snapshot(0.7854);
     // Units 1 and 2 are the base equipment of the systems their groups carry: proposed fans.
     s.groups[0]!.systemNames = ["SA 1"];
@@ -226,7 +226,7 @@ describe("a group with no air mover", () => {
     expect(result.paths[30]).toBeDefined();
     // Staging unit 1 passive leaves g10 with no fan too.
     const passive = ductsDocumentSchema.parse({
-      roles: { "1": { staged: { value: { role: "passive" } } } },
+      roles: { "1": { edit: { value: { role: "passive" } } } },
     });
     const again = survey(s, passive).findings.filter((f) => f.kind === "no-fan");
     expect(again.map((f) => f.groupId)).toEqual(["g10", "g40"]);

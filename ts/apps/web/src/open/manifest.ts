@@ -3,7 +3,7 @@
  * where Revits come FROM, so it declares no `needs`: it renders with nothing attached. Its
  * Readings are the host's one `Machine` (years, sessions, documents) and the SDK recents across
  * every installed year; its one route-level action is the refresh that reacquires both. Open holds
- * no authored Work (ADR 0016): a launch is one `instances.open` action, never a staged value. The
+ * no authored Work (ADR 0016): a launch is one `instances.open` action, never a edit value. The
  * lifecycle verbs (start, open, hr, stop) stay with the launcher and the Running list. The internal
  * `instances` key and capability ids outlive the retired URL.
  */
@@ -34,7 +34,6 @@ export const openManifest = defineRoute({
       label: "refresh",
       says: "reacquire the machine reading and the recents without changing Work",
       needs: "host",
-      actor: "any",
       input: z.void() as unknown as z.ZodType<never>,
       dirties: ["machine", "recents"],
       rereads: "machine",

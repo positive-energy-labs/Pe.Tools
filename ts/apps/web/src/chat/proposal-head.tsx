@@ -3,7 +3,7 @@
  *  transitions. Every exit opens the route in Chat's plugin pane; it never lists cells. */
 import { useMemo, useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
-import { fanOut, type CellGroup, type TrichotomyCellLike } from "@pe/agent-contracts";
+import { fanOut, type CellGroup, type CellLike } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
 import {
   fanOutWord,
@@ -22,7 +22,7 @@ export interface HeadWork {
   route: string;
   /** The Work's entity, or the document name for a document-wide route. */
   subject: string;
-  cells: Record<string, TrichotomyCellLike>;
+  cells: Record<string, CellLike>;
   /** How the cells are written; bound kinds carry `wire.revision`, the rendered revision. */
   wire: CellWire;
   /** The route's full group path for a key; the head reads depth 1. */
@@ -49,7 +49,7 @@ const GROUP_ROWS = 5;
 const EXAMPLES = 2;
 const COMMIT_REASON =
   "Open the plan in the pane — staging is not applying; the confirmation lists every change before Revit changes";
-const pending = (cell: TrichotomyCellLike) => cell.proposal != null || cell.staged != null;
+const pending = (cell: CellLike) => cell.suggestion != null || cell.edit != null;
 const showDefault = (value: unknown) => (typeof value === "string" ? value : JSON.stringify(value));
 /** Depth-1 groups, contested first, then by pending size, then label. */
 function headGroups(work: Pick<HeadWork, "cells" | "groupOf" | "wire">): CellGroup[] {
@@ -64,8 +64,8 @@ function headGroups(work: Pick<HeadWork, "cells" | "groupOf" | "wire">): CellGro
       String(a.path[0]).localeCompare(String(b.path[0])),
   );
 }
-/** `{P} proposed · {S} staged · {C} contested`, zeros omitted. */
-function Counts({ proposed, staged, contested }: ReturnType<typeof tally>) {
+/** `{P} proposed · {S} edit · {C} contested`, zeros omitted. */
+function Counts({ proposed, edit, contested }: ReturnType<typeof tally>) {
   const parts: ReactNode[] = [];
   if (proposed)
     parts.push(
@@ -73,7 +73,7 @@ function Counts({ proposed, staged, contested }: ReturnType<typeof tally>) {
         {proposed} proposed
       </span>,
     );
-  if (staged) parts.push(<span key="s">{staged} staged</span>);
+  if (edit) parts.push(<span key="s">{edit} edit</span>);
   if (contested)
     parts.push(
       <span key="c" data-tone="caution">
@@ -122,7 +122,7 @@ export function ProposalHead({ asks, works }: { asks: readonly ReactNode[]; work
         <Button kind="framed" label="Show the remaining routes" onClick={() => setAll(true)}>
           {[
             `+${rest.length} more route${rest.length === 1 ? "" : "s"} with changes`,
-            ...(["proposed", "staged"] as const).flatMap((field) => {
+            ...(["proposed", "edit"] as const).flatMap((field) => {
               const n = rest.reduce((total, counts) => total + counts[field], 0);
               return n ? [`${n} ${field}`] : [];
             }),
@@ -133,7 +133,7 @@ export function ProposalHead({ asks, works }: { asks: readonly ReactNode[]; work
   );
 }
 /** One line per Work, read left to right (chat polish round 2, 2026-10-12): the review toggle names
- *  what is staged and how much in words · where, with the revision as the one machine value · the
+ *  what is edit and how much in words · where, with the revision as the one machine value · the
  *  one commit. Narrow, the line wraps rather than truncates, and the subject is the last thing to
  *  give way; the commit carries the route's refusal, which `ProposalHead` says once per route. */
 function WorkLine({ parts }: { parts: HeadWork[] }) {
@@ -147,7 +147,7 @@ function WorkLine({ parts }: { parts: HeadWork[] }) {
         <Button
           kind="framed"
           aria-expanded={open}
-          // The e2e journeys press this by name (`review ▾`); the face says what is staged.
+          // The e2e journeys press this by name (`review ▾`); the face says what is edit.
           label={`review ${open ? "▴" : "▾"}`}
           reason="Show the changes by group"
           onClick={() => setOpen(!open)}
@@ -182,7 +182,7 @@ function WorkLine({ parts }: { parts: HeadWork[] }) {
             kind="framed"
             label={work.commit.word}
             reason={COMMIT_REASON}
-            refusal={work.refusal ?? (counts.staged ? null : "nothing staged")}
+            refusal={work.refusal ?? (counts.edit ? null : "nothing edit")}
             onClick={work.commit.run}
           >
             {work.commit.word}
@@ -263,8 +263,8 @@ function GroupRow({
       lockOf,
     };
     return {
-      acceptK: fanOut(work.cells, keys, "accept", ctx).covered.length,
-      denyK: fanOut(work.cells, keys, "deny", ctx).covered.length,
+      acceptK: fanOut(work.cells, keys, "take", ctx).covered.length,
+      denyK: fanOut(work.cells, keys, "unsuggest", ctx).covered.length,
     };
   }, [work.cells, keys, segment, lockOf]);
   const to = (value: unknown) => (value === null ? "delete" : show(value));
@@ -277,8 +277,8 @@ function GroupRow({
     const seen = new Set<string>();
     for (const key of keys) {
       const cell = work.cells[key];
-      if (!cell?.proposal || cell.staged != null || lockOf?.(key)) continue;
-      seen.add(to(cell.proposal.delete === true ? null : cell.proposal.value));
+      if (!cell?.suggestion || cell.edit != null || lockOf?.(key)) continue;
+      seen.add(to(cell.suggestion.delete === true ? null : cell.suggestion.value));
     }
     return [...seen];
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- `to` is `show`, the Work's own formatter
@@ -297,8 +297,8 @@ function GroupRow({
               : [
                   ...new Set(
                     keys.flatMap((key) => {
-                      const staged = work.cells[key]?.staged;
-                      return staged ? [to(staged.delete === true ? null : staged.value)] : [];
+                      const edit = work.cells[key]?.edit;
+                      return edit ? [to(edit.delete === true ? null : edit.value)] : [];
                     }),
                   ),
                 ]
@@ -310,7 +310,7 @@ function GroupRow({
     group.locked ? `${group.locked} locked` : null,
   ].filter(Boolean);
   const verbs = group.proposed > 0;
-  const act = (kind: "accept" | "deny") =>
+  const act = (kind: "take" | "unsuggest") =>
     void runFanOut(work.wire, work.cells, keys, kind).then(done);
   return (
     <div className="flex flex-col" data-group={label}>
@@ -332,16 +332,20 @@ function GroupRow({
         <span className="flex items-center gap-1">
           {verbs && acceptK ? (
             <TooltipHint
-              content={`Stage Pea's proposal on ${acceptK} cells in one write; contested and locked cells are skipped`}
+              content={`Stage Pea's suggestion on ${acceptK} cells in one write; contested and locked cells are skipped`}
             >
-              <Verdict kind="accept" aria-label={`accept ${acceptK}`} onClick={() => act("accept")}>
+              <Verdict kind="take" aria-label={`accept ${acceptK}`} onClick={() => act("take")}>
                 {acceptK}
               </Verdict>
             </TooltipHint>
           ) : null}
           {verbs && denyK ? (
-            <TooltipHint content={`Clear Pea's proposal on ${denyK} cells in one write`}>
-              <Verdict kind="deny" aria-label={`deny ${denyK}`} onClick={() => act("deny")}>
+            <TooltipHint content={`Clear Pea's suggestion on ${denyK} cells in one write`}>
+              <Verdict
+                kind="unsuggest"
+                aria-label={`deny ${denyK}`}
+                onClick={() => act("unsuggest")}
+              >
                 {denyK}
               </Verdict>
             </TooltipHint>

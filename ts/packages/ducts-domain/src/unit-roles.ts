@@ -1,11 +1,11 @@
 /**
  * Every unit's role, `fan` or `passive`, with why (pressure-drop ledger, 2026-10-21, multi-fan
- * spike). A ruling wins: a role the model's store holds (`ruled`) or one Work stages (`staged`).
- * Without one the role is proposed, automatically and never staged, from Revit's own state first
+ * spike). A ruling wins: a role the model's store holds (`ruled`) or one Work stages (`edit`).
+ * Without one the role is proposed, automatically and never edit, from Revit's own state first
  * (Pe manages Revit state):
  * 1. a unit that is the base equipment of a Revit system its own groups carry is a `fan`
  *    ("base equipment of SA 19");
- * 2. else a unit that states a design flow (`equipmentFlows`: staged, else the FanFlow slot) is a
+ * 2. else a unit that states a design flow (`equipmentFlows`: edit, else the FanFlow slot) is a
  *    `fan` ("airflow in <slot>");
  * 3. else `passive` when PASSIVE_MIN_PORTS or more duct ports all carry one classification: a
  *    through-flow device (filter chassis, silencer; "air passes straight through (all ports Return
@@ -20,12 +20,12 @@ import type { EquipmentFlow } from "./terminal-flows.ts";
 import type { DuctSnapshot } from "./types.ts";
 
 type Role = DuctUnitRole["role"];
-export type UnitRoleWhy = "ruled" | "staged" | "proposed";
+export type UnitRoleWhy = "ruled" | "edit" | "proposed";
 
 export interface UnitRole {
   role: Role;
   why: UnitRoleWhy;
-  /** The proposal's ground in a person's words; a ruling names who ruled. */
+  /** The suggestion's ground in a person's words; a ruling names who ruled. */
   reason: string;
 }
 
@@ -39,14 +39,14 @@ const classWord = (c: string) => c.replace(/([a-z])([A-Z])/g, "$1 $2");
 export const NO_FLOW_CFM = 0;
 
 /**
- * The role of every unit that roots a group. `staged` is Work's roles as every reader sees them
+ * The role of every unit that roots a group. `edit` is Work's roles as every reader sees them
  * (`withStoredRulings`: the store's rulings under Work's own), `store` tells a ruling from a pending one.
  */
 export function unitRoles(
   snapshot: Pick<DuctSnapshot, "groups" | "nodes" | "store" | "slots"> &
     Partial<Pick<DuctSnapshot, "systems">>,
   flows: ReadonlyMap<number, EquipmentFlow>,
-  staged: Readonly<Record<string, { role: Role }>>,
+  edit: Readonly<Record<string, { role: Role }>>,
 ): Map<number, UnitRole> {
   const nodes = new Map(snapshot.nodes.map((n) => [n.id, n]));
   // The system names each unit's own groups carry: a base-equipment claim counts only there.
@@ -62,14 +62,14 @@ export function unitRoles(
       baseOf.set(sys.baseEquipmentId, [...(baseOf.get(sys.baseEquipmentId) ?? []), sys.name]);
   const out = new Map<number, UnitRole>();
   for (const id of [...served.keys()].sort((a, b) => a - b)) {
-    const ruling = staged[String(id)]?.role;
+    const ruling = edit[String(id)]?.role;
     if (ruling) {
       const stored = snapshot.store?.roles?.[String(id)]?.role;
       out.set(
         id,
         stored === ruling
           ? { role: ruling, why: "ruled", reason: "ruled in the model" }
-          : { role: ruling, why: "staged", reason: "staged, not yet written" },
+          : { role: ruling, why: "edit", reason: "edit, not yet written" },
       );
       continue;
     }
@@ -86,7 +86,7 @@ export function unitRoles(
     if (flow?.cfm != null && flow.cfm > NO_FLOW_CFM) {
       const slot =
         flow.source === "override"
-          ? "a staged unit flow"
+          ? "a edit unit flow"
           : (nodes.get(id)?.flowParameter ?? snapshot.slots?.fanFlow ?? "the FanFlow slot");
       out.set(id, { role: "fan", why: "proposed", reason: `airflow in ${slot} (${flow.cfm} cfm)` });
       continue;
@@ -118,7 +118,7 @@ export function unitRoles(
 /**
  * A through-flow unit proposed passive stays a fan when nothing else moves air in the network its
  * ports join (an inline fan has one class on both ports, like a filter): proposing it passive would
- * leave that network with no fan, and a proposal never makes the route price less than before.
+ * leave that network with no fan, and a suggestion never makes the route price less than before.
  */
 function keepTheOnlyMover(groups: DuctSnapshot["groups"], out: Map<number, UnitRole>) {
   const proposedPassive = (id: number) =>

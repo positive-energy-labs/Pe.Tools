@@ -15,9 +15,8 @@
  * The rows carry the crucibles the round asked for and nothing else:
  *   · proposed + drift on one cell (`connectedLoad`) — two marks at once, the composition the
  *     precedence order asserts and no fixture had ever forced.
- *   · staged by YOU and staged by PEA on two cells — the square's colour is the only difference,
- *     which is the one thing the state model still cannot supply: staging has no author. Here it
- *     is a fixture field; in production it is inferred from the wrong fact.
+ *   · edit by YOU and edit by PEA on two cells — the square's colour is the only difference,
+ *     which comes from host-stamped attribution in production and an explicit author here.
  *   · both capability refusals that render differently: locked (reason carries which) · nohome.
  *   · a value long enough to prove the footline clamp and the no-icons-in-cells ruling.
  */
@@ -37,8 +36,8 @@ export interface ParamRow {
   ageMin?: number;
   fresh: "fresh" | "stale" | "unverified" | "never";
   agree: "agree" | "drift";
-  stage: "clean" | "proposed" | "staged";
-  stagedBy?: "pea" | "you";
+  stage: "clean" | "proposed" | "edit";
+  author?: "pea" | "human" | "unknown";
   cap: "editable" | "locked" | "nohome";
   capReason?: string;
   grounding?: { doc: string; page: number };
@@ -80,8 +79,8 @@ export const PARAM_ROWS: readonly ParamRow[] = [
     ageMin: 0,
     fresh: "fresh",
     agree: "agree",
-    stage: "staged",
-    stagedBy: "you",
+    stage: "edit",
+    author: "human",
     cap: "editable",
   },
   {
@@ -92,8 +91,8 @@ export const PARAM_ROWS: readonly ParamRow[] = [
     ageMin: 0,
     fresh: "fresh",
     agree: "agree",
-    stage: "staged",
-    stagedBy: "pea",
+    stage: "edit",
+    author: "pea",
     cap: "editable",
     note: "accepted from pea's card, not yet written",
   },
@@ -204,7 +203,7 @@ export const PARAM_ROWS: readonly ParamRow[] = [
   },
   {
     /* THE CRUCIBLE the round never forced: pea proposes a value AND the model disagrees with what
-       is shown. Precedence says the proposal owns the body and drift owns the squiggle slot; this
+       is shown. Precedence says the suggestion owns the body and drift owns the squiggle slot; this
        row is the only proof that assertion has. */
     key: "connectedLoad",
     param: "Connected Load",
@@ -232,7 +231,7 @@ export function cellProps(row: ParamRow): StateCellProps {
     fresh: row.fresh,
     agree: row.agree,
     stage: row.stage,
-    stagedBy: row.stagedBy,
+    author: row.author,
     cap: row.cap,
     capReason: row.capReason,
     grounding: row.grounding,

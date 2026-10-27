@@ -491,7 +491,7 @@ export function componentFlows(g: Graph): ComponentFlow[] {
         boundaries.push({
           port: k,
           injectionCfm: value,
-          source: t?.source ?? "Terminal role/flow/sense not staged",
+          source: t?.source ?? "Terminal role/flow/sense not edit",
         });
       } else if (!p.connectedTo && e.kind !== "cap") {
         injection.set(k, null);
@@ -746,7 +746,7 @@ export function componentFlows(g: Graph): ComponentFlow[] {
           issue(
             "foreign-component-flow",
             null,
-            `${name}: no current component matches this staged design scope`,
+            `${name}: no current component matches this edit design scope`,
           ),
         );
       }

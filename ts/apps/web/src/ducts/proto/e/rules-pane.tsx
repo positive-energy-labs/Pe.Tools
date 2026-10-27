@@ -27,7 +27,7 @@ type RuleNode =
   | { kind: "rule"; key: string; ids: number[] }
   | { kind: "override"; key: string; id: number };
 
-/** Each fitting id's rule key, over every priced path (applied first, then staged). */
+/** Each fitting id's rule key, over every priced path (applied first, then edit). */
 const ruleKey = (rule: string): SubjectKey => `rule:${rule}`;
 const familyKey = (n: { family: string | null; ids: ReadonlySet<number> }): SubjectKey =>
   `family:${n.family ?? `#${[...n.ids][0]}`}`;
@@ -81,7 +81,7 @@ export const RulesTree = memo(function RulesTree({
     const ids = new Map<string, Set<number>>();
     for (const [id, key] of ruleOf)
       if (inScope(id)) (ids.get(key) ?? ids.set(key, new Set()).get(key)!).add(id);
-    const overrides = Object.keys(priced.staged.componentDrops).map(Number).filter(inScope);
+    const overrides = Object.keys(priced.edit.componentDrops).map(Number).filter(inScope);
     const rules = [...ids]
       .sort(([, a], [, b]) => b.size - a.size)
       .flatMap(([key, set]): RuleNode[] => [
@@ -99,7 +99,7 @@ export const RulesTree = memo(function RulesTree({
     ];
   }, [priced, ruleOf, groupOf, groups, wide]);
 
-  // What staging each rule's table would move, known before anything is staged: the grilles
+  // What staging each rule's table would move, known before anything is edit: the grilles
   // downstream of its instances and the systems they sit in, document-wide whatever `wide` says.
   const fanOuts = useMemo(() => {
     const trees = new Map();
@@ -123,7 +123,7 @@ export const RulesTree = memo(function RulesTree({
           at.ids.add(row.id);
           byFamily.set(key, at);
         }
-    for (const family of Object.keys(priced.staged.ruleAssignments))
+    for (const family of Object.keys(priced.edit.ruleAssignments))
       if (!byFamily.has(family)) byFamily.set(family, { family, ids: new Set() });
     return [...byFamily.values()].sort((a, b) => b.ids.size - a.ids.size);
   }, [priced, groupOf, groups, wide]);
@@ -213,7 +213,7 @@ export const RulesTree = memo(function RulesTree({
               const { family, ids } = n;
               const first = [...ids][0];
               const picked = family
-                ? work.doc?.ruleAssignments?.[family]?.staged?.value?.rule
+                ? work.doc?.ruleAssignments?.[family]?.edit?.value?.rule
                 : undefined;
               return {
                 label: family ?? nameOf(first!),

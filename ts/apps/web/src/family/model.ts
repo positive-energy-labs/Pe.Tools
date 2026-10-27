@@ -37,7 +37,7 @@ import {
 interface ProseConstituent {
   slug: string;
   kind: "solid" | "connector" | "nested";
-  /** The Work pointer of Pea's proposal when the reading has no such constituent yet. */
+  /** The Work pointer of Pea's suggestion when the reading has no such constituent yet. */
   proposed?: string;
   /** Pea's proposals about one property of a constituent the reading does hold (`/connectors/c1/on`). */
   proposedProps?: { id: string; property: string; text: string }[];
@@ -223,9 +223,9 @@ const AGREEMENT_RANK: Agreement[] = [
 // ── draft state ─────────────────────────────────────────────────────────────────────────────────
 
 /**
- * PEA'S PROPOSAL AT ONE CELL, contract-shaped (`agent-contracts/src/trichotomy.ts`), so the shared
+ * PEA'S PROPOSAL AT ONE CELL, contract-shaped (`agent-contracts/src/draft.ts`), so the shared
  * reader can turn it into `StateCellProps` without family re-deriving the mapping. `source` is
- * family's grounding EXTENSION of the core proposal — which spec block the reading came from —
+ * family's grounding EXTENSION of the core suggestion — which spec block the reading came from —
  * exactly as the contract says domain provenance rides (a per-route extension, not core).
  */
 export interface FamilyProposal {
@@ -237,24 +237,24 @@ export interface FamilyProposal {
 }
 
 /**
- * THE TRICHOTOMY AT ONE COORDINATE (ruled 2026-08-31, proposal-state demiurge). Pea's still-
- * standing proposal, and what the draft has staged there — the two rungs, and there are no others.
+ * THE TRICHOTOMY AT ONE COORDINATE (ruled 2026-08-31, suggestion-state demiurge). Pea's still-
+ * standing suggestion, and what the draft has edit there — the two rungs, and there are no others.
  *
- * There is no `denied` and no `superseded`: denying CLEARS the proposal and typing your own value
- * clears it too, and a cleared proposal is simply absent, so the cell shows the real value again.
+ * There is no `denied` and no `superseded`: denying CLEARS the suggestion and typing your own value
+ * clears it too, and a cleared suggestion is simply absent, so the cell shows the real value again.
  * There is no `accepted` either — accepting stages pea's value, and the reader derives `pea` for
- * the square from `staged.value === proposal.value`. Every one of those was a fact this page used
+ * the square from `edit.value === suggestion.value`. Every one of those was a fact this page used
  * to remember; all of them are now read off the two rungs.
  */
 export function proposalCell(
   proposals: ProtoProposal[],
   stagedValue: string | null,
-): { proposal: FamilyProposal | null; staged: { value: string } | null } {
-  // A cell may be argued about twice; the FIRST standing proposal owns the cell's one slot and
+): { suggestion: FamilyProposal | null; edit: { value: string } | null } {
+  // A cell may be argued about twice; the FIRST standing suggestion owns the cell's one slot and
   // the rail says how many there are. Ranking them is a decision nothing on this page can make.
   const first = proposals[0];
   return {
-    proposal: first
+    suggestion: first
       ? {
           value: first.proposed,
           by: "pea",
@@ -263,7 +263,7 @@ export function proposalCell(
           source: first,
         }
       : null,
-    staged: stagedValue === null ? null : { value: stagedValue },
+    edit: stagedValue === null ? null : { value: stagedValue },
   };
 }
 
@@ -283,7 +283,7 @@ export interface Draft {
   live: Record<string, Record<string, ProtoLiveValue>>;
   /**
    * PROPOSAL IDS YOUR OWN EDIT BEAT, until the buffered deny lands in Work. Not a verdict and not
-   * a cell state: a cleared proposal is absent, and the cell it aimed at shows the real value.
+   * a cell state: a cleared suggestion is absent, and the cell it aimed at shows the real value.
    */
   cleared: string[];
   /**
@@ -323,7 +323,7 @@ export function initialDraft(world: FamilyPageModel): Draft {
 /**
  * THE PSEUDO-DIMENSION, as a page-state toggle (SURFACE-PHILOSOPHY §2).
  *
- * `draft` is the staged document you edit. The other two are READINGS of the same cells against a
+ * `draft` is the edit document you edit. The other two are READINGS of the same cells against a
  * different substrate, shown in place: they replace the value and change nothing else, which is
  * what makes flipping between them a comparison rather than a navigation.
  */
@@ -337,7 +337,7 @@ export const OVERLAY_LABEL: Record<Overlay, string> = {
 
 export const OVERLAY_TITLE: Record<Overlay, string> = {
   draft:
-    "The staged document — the page-state values, editable, and the only overlay in which they are. Every mark you see here (pea's proposal folds, grounded underlines, the caution unsaved squares) is a fact about the cell and survives the other two overlays unchanged.",
+    "The edit document — the page-state values, editable, and the only overlay in which they are. Every mark you see here (pea's suggestion folds, grounded underlines, the caution unsaved squares) is a fact about the cell and survives the other two overlays unchanged.",
   live: "Swap every value cell to what REVIT carries, in place. Read-only: editing a live number is not a thing that exists — apply is the write path, and its bulk verbs light up in this overlay because this is the only view where you can see what you would be overwriting. The alarm marks every cell where Revit disagrees with the draft; a muted dot means that parameter was not reported by the last read, which is UNKNOWN rather than absent.",
   saved:
     "Swap every value cell to what is ON DISK, in place. Read-only, because the file is not an editor. Caution marks every cell the draft would overwrite — read it as 'what save will write', which is the question the header's dirty fact can only answer with a yes or a no.",
@@ -491,7 +491,7 @@ export function rowAgreement(world: FamilyPageModel, draft: Draft, row: PRow): A
 // FUNCTION and nothing else. That is why the swap costs no layout: the cell asks a different
 // question of the same coordinates and renders in the same box.
 
-/** What the staged document resolves to here — a ghost's literal, or the type's effective value. */
+/** What the edit document resolves to here — a ghost's literal, or the type's effective value. */
 export function draftValueAt(
   world: FamilyPageModel,
   draft: Draft,
@@ -522,7 +522,7 @@ export function isUnsavedAt(
   typeName: string,
 ): boolean {
   if (row.kind === "live-only") return false;
-  // A row only Pea's proposals draw has nothing of the draft's in it until something is staged.
+  // A row only Pea's proposals draw has nothing of the draft's in it until something is edit.
   if (
     row.proposed &&
     !(row.name in draft.authored) &&

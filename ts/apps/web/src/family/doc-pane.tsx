@@ -1,4 +1,4 @@
-import type { TrichotomyCellLike } from "@pe/agent-contracts";
+import type { CellLike } from "@pe/agent-contracts";
 import { token } from "@pe/kit/lib/token";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
@@ -133,11 +133,11 @@ export function SpecSheet({
 }
 
 /**
- * One pea proposal beside the spec text that justifies it. Its verbs are the cell's own: the card
+ * One pea suggestion beside the spec text that justifies it. Its verbs are the cell's own: the card
  * draws the same Work field as a `ReviewRow`, so accepting here is the table cell's accept.
  */
 export function ProposalCard({
-  proposal,
+  suggestion,
   wire,
   cell,
   focused,
@@ -146,10 +146,10 @@ export function ProposalCard({
   onHover,
   register,
 }: {
-  proposal: ProtoProposal;
+  suggestion: ProtoProposal;
   wire: CellWire;
-  /** The Work field the proposal stands on. */
-  cell: TrichotomyCellLike;
+  /** The Work field the suggestion stands on. */
+  cell: CellLike;
   /** Named so the citation line can say WHICH document it read from. */
   specFileName?: string | null;
   focused: boolean;
@@ -157,15 +157,15 @@ export function ProposalCard({
   onHover: (on: boolean) => void;
   register: (node: HTMLDivElement | null) => void;
 }) {
-  const target = proposal.constituent
-    ? `${proposal.constituent.section} · ${proposal.constituent.slug}${
-        proposal.constituent.property ? ` · ${proposal.constituent.property}` : ""
+  const target = suggestion.constituent
+    ? `${suggestion.constituent.section} · ${suggestion.constituent.slug}${
+        suggestion.constituent.property ? ` · ${suggestion.constituent.property}` : ""
       }`
-    : proposal.property
-      ? `${proposal.param} · ${proposal.property}`
-      : proposal.typeName
-        ? `${proposal.param} · ${proposal.typeName}`
-        : `${proposal.param} · family value`;
+    : suggestion.property
+      ? `${suggestion.param} · ${suggestion.property}`
+      : suggestion.typeName
+        ? `${suggestion.param} · ${suggestion.typeName}`
+        : `${suggestion.param} · family value`;
   return (
     <div
       ref={register}
@@ -179,7 +179,7 @@ export function ProposalCard({
         if (!event.currentTarget.contains(event.relatedTarget)) onHover(false);
       }}
       tabIndex={0}
-      data-proposal-id={proposal.id}
+      data-suggestion-id={suggestion.id}
       className="hairline-b mb-1 py-1 pl-2 last:mb-0 last:border-b-0"
       /* Pea's identity, never the commit colour: the card edge is a MARK (`--pe-pea`, the display
          rung) and the focus wash is mixed from pea's ink. */
@@ -193,21 +193,21 @@ export function ProposalCard({
     >
       <ReviewRow
         wire={wire}
-        address={proposal.id}
+        address={suggestion.id}
         label={<span className="t-small face-mono text-ink-2">{target}</span>}
         cell={cell}
         // The note is the card's paragraph below; the cell keeps its facts on hover.
         facts={{
-          value: proposal.proposed,
-          ...(proposal.current != null ? { currentValue: proposal.current } : {}),
+          value: suggestion.proposed,
+          ...(suggestion.current != null ? { currentValue: suggestion.current } : {}),
           foot: "hover",
         }}
         mark={false}
       />
-      <p className="mt-0.5 text-ink">{proposal.note}</p>
+      <p className="mt-0.5 text-ink">{suggestion.note}</p>
       {blockMd && (
         <TooltipHint
-          content={`Read from ${proposal.sourceBlockId} of ${specFileName ?? "the spec"} — the source text verbatim, so the claim is checkable without leaving the page.`}
+          content={`Read from ${suggestion.sourceBlockId} of ${specFileName ?? "the spec"} — the source text verbatim, so the claim is checkable without leaving the page.`}
         >
           <p className="hairline-l mt-1 max-h-[3lh] overflow-hidden pl-1.5 whitespace-pre-line t-small face-mono text-ink-2">
             {blockMd}

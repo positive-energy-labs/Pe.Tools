@@ -51,8 +51,8 @@ const COMMANDS: readonly Command[] = [
   {
     id: "hcb-approval",
     group: "Needs you",
-    label: "Review HCB family proposal",
-    search: "hcb proposal family 12 changes approval",
+    label: "Review HCB family suggestion",
+    search: "hcb suggestion family 12 changes approval",
     state: "12 changes",
     verb: "review",
     icon: FileCheck2,

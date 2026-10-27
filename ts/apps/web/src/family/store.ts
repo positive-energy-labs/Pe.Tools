@@ -44,7 +44,7 @@ import {
   type FamilyPage,
 } from "#/family/manifest";
 import { previousOf, useReading } from "#/readings";
-import { useRoute, type EntityPage } from "#/route";
+import { workflow, useRoute, type EntityPage } from "#/route";
 import type { PageMove } from "#/route/manifest";
 import { openMember } from "#/route/spec-editor";
 import { displaySpec } from "#/family/spec";
@@ -238,10 +238,10 @@ export function useFamilyStore(options: {
   const flush = edits.flush;
   const fields = (draftDoc?.cells ?? {}) as Record<string, FieldState>;
   const draftSnapshot = useCallback(
-    (staged: boolean): FamilySnapshot | null => {
+    (edit: boolean): FamilySnapshot | null => {
       if (draftDoc?.reading == null) return null;
       try {
-        const rawContent = staged
+        const rawContent = edit
           ? settingsCandidate(draftDoc.reading, draftDoc.cells)
           : draftDoc.reading;
         return {
@@ -308,7 +308,7 @@ export function useFamilyStore(options: {
             initialDraft(authoredLane.world),
           ).length
         : 0,
-      stagedCount: Object.values(fields).filter((field) => field.staged != null).length,
+      stagedCount: Object.values(fields).filter((field) => field.edit != null).length,
       current: handle.work.current,
     }),
     [authoredLane, authoredDraft, fields, snapshot?.validation, handle.work.current],
@@ -448,7 +448,7 @@ export function useFamilyStore(options: {
 
   const actions = useMemo(
     () => ({
-      /** Authored edits are staged into the settings Work; a pointer field refuses locally. */
+      /** Authored edits are edit into the settings Work; a pointer field refuses locally. */
       setDraft: (value: Setter<Draft>): string | void => {
         const previous = edits.getSnapshot().draft ?? draft;
         const nextDraft = next(value, previous);
@@ -459,7 +459,7 @@ export function useFamilyStore(options: {
             const pointer = String(entry.path[1]);
             const directives = settingsFieldDirectives(authored, settingsFieldSegments(pointer));
             if (directives) {
-              const text = `Edit the shared source for ${pointer}. The profile contains a pointer; no local edit was staged.`;
+              const text = `Edit the shared source for ${pointer}. The profile contains a pointer; no local edit was edit.`;
               patch({
                 sharedEdit: { pointer, directives },
                 receipt: { verb: "page", text, at: Date.now() },
@@ -470,10 +470,10 @@ export function useFamilyStore(options: {
         }
         if (!lane.document) return "Read the family before editing fields.";
         const patches = draftToPatches(lane.document.model, nextDraft, previous);
-        // A cleared proposal is a deny: the edit buffer binds it to the revision it was seen at.
+        // A cleared suggestion is a deny: the edit buffer binds it to the revision it was seen at.
         for (const id of nextDraft.cleared.filter((id) => !previous.cleared.includes(id)))
           patches.push(
-            ...transitionPatches([FAMILY_CELLS], id, fields[id] ?? {}, { kind: "deny" }),
+            ...transitionPatches([FAMILY_CELLS], id, fields[id] ?? {}, { kind: "unsuggest" }),
           );
         if (draftRevision == null) return "Wait for the draft to finish loading.";
         if (patches.length) setPage({ buildReview: null });
@@ -539,9 +539,14 @@ export function useFamilyStore(options: {
       /** Opening a saved member puts its bytes in the draft as the reading; the page names it. */
       async open(next: PodMember) {
         await flush();
-        const { rawContent } = await openMember(next);
-        // not a cell: reading
-        await handle.work.write([{ path: ["reading"], value: rawContent }]);
+        const source = await openMember(next);
+        if (handle.resolution.kind !== "resolved") throw Error("pick a document");
+        await workflow(
+          "family.observe",
+          { source: { ...next, sha256: source.sha256 } },
+          { target: handle.resolution.target },
+          { work: { key: handle.work.key, revision: handle.work.revision ?? 0 } },
+        );
         setPage({ pod: next.pod, path: next.path, buildReview: null });
       },
       /** Capture files a new member (the kernel lands the page on it) and returns its evidence. */

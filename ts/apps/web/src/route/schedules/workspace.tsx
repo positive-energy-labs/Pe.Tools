@@ -67,7 +67,7 @@ export interface ScheduleGridState {
 
 /**
  * The schedule cell's write doors, shared by the grid and the review list: one wire bound to the
- * rendered revision, the stage that severs a standing proposal, and the measured parse.
+ * rendered revision, the stage that severs a standing suggestion, and the measured parse.
  */
 const bindingOf = (snapshot: ScheduleGridState["snapshot"], key: string) => {
   const { rowNumber, columnNumber } = splitScheduleCellKey(key);
@@ -120,13 +120,15 @@ export function useScheduleCellWrites({
     return parse(bindingAt(key)?.displayUnit, text);
   };
 
-  /** Typing stages; it also severs a standing proposal, so the typed value is not contested. */
+  /** Typing stages; it also severs a standing suggestion, so the typed value is not contested. */
   const stageEdit = async (key: string, value: string | MeasuredValue): Promise<string | void> => {
     const cell = cells[key] ?? {};
     const refusal = await apply(
       [
-        ...transitionPatches(["cells"], key, cell, { kind: "stage", rung: { value } }),
-        ...(cell.proposal != null ? transitionPatches(["cells"], key, cell, { kind: "deny" }) : []),
+        ...transitionPatches(["cells"], key, cell, { kind: "set", rung: { value } }),
+        ...(cell.suggestion != null
+          ? transitionPatches(["cells"], key, cell, { kind: "unsuggest" })
+          : []),
       ],
       revision ?? undefined,
     );
@@ -234,11 +236,11 @@ export function ScheduleGridWorkspace({
             const decided = readMeasuredText(text, binding.displayUnit);
             if (decided.kind === "refuse")
               return onRefused(`row ${row.rowNumber}, ${column}: ${decided.reason}`);
-            if (decided.kind === "stage") value = decided.staged;
+            if (decided.kind === "set") value = decided.edit;
             else {
               const parsed = await parseMeasured(key, decided.text);
               if (parsed == null)
-                return onRefused("The schedule changed while parsing; nothing was staged.");
+                return onRefused("The schedule changed while parsing; nothing was edit.");
               if ("refusal" in parsed)
                 return onRefused(`row ${row.rowNumber}, ${column}: ${parsed.refusal}`);
               value = parsed;
@@ -246,9 +248,9 @@ export function ScheduleGridWorkspace({
           }
           const cell = cells[key] ?? {};
           patches.push(
-            ...transitionPatches(["cells"], key, cell, { kind: "stage", rung: { value } }),
-            ...(cell.proposal != null
-              ? transitionPatches(["cells"], key, cell, { kind: "deny" })
+            ...transitionPatches(["cells"], key, cell, { kind: "set", rung: { value } }),
+            ...(cell.suggestion != null
+              ? transitionPatches(["cells"], key, cell, { kind: "unsuggest" })
               : []),
           );
         }
@@ -309,7 +311,7 @@ export function ScheduleGridWorkspace({
                   actions={facts}
                 >
                   <Table
-                    // I2: a row Revit refused, or one moved under a staged value, blocks the push.
+                    // I2: a row Revit refused, or one moved under a edit value, blocks the push.
                     rows={snapshot.rows.map((row) => {
                       const keys = snapshot.columns.map((column) =>
                         scheduleCellKey(row.rowNumber, column.columnNumber),
@@ -334,14 +336,14 @@ export function ScheduleGridWorkspace({
                     gutter={(row) => {
                       const owed = snapshot.columns.filter(
                         (column) =>
-                          cells[scheduleCellKey(row.rowNumber, column.columnNumber)]?.proposal !=
+                          cells[scheduleCellKey(row.rowNumber, column.columnNumber)]?.suggestion !=
                           null,
                       ).length;
                       return owed > 0
                         ? {
                             count: owed,
                             tone: "caution" as const,
-                            title: `${owed} pea proposal${owed === 1 ? "" : "s"} on this row await${owed === 1 ? "s" : ""} a verdict — accept stages, deny clears`,
+                            title: `${owed} pea suggestion${owed === 1 ? "" : "s"} on this row await${owed === 1 ? "s" : ""} a verdict — accept stages, deny clears`,
                           }
                         : null;
                     }}

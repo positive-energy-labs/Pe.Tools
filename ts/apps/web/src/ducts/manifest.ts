@@ -3,7 +3,7 @@
  * stage the assumptions that make it solvable, then price its losses and write them to Revit.
  * Readings: `ducts` (`ducts.snapshot`) and `tables` (`ducts.tables`), both read by the route
  * (`host.ts`) and provided to the verbs. Readiness and losses are derived (`readiness.ts`,
- * `pricing.ts`), never stored. `preview` asks Revit what the staged cells would write; `apply`
+ * `pricing.ts`), never stored. `preview` asks Revit what the edit cells would write; `apply`
  * sends the same request for real, armed only while the preview matches the Work revision and the
  * snapshot it was built on. Rulings, slots and flows write any time; the ESP number waits for a
  * clean calc (no Fix or Set row standing) and is left out of the request until then.
@@ -57,7 +57,7 @@ import { espWaits, fanRefusal, fanWords, holding, triage } from "./inbox-rows";
 import { activeSystem, capped, DUCTS_MULTI } from "./selection";
 import { neighboursOf } from "@pe/ducts-domain/neighbours";
 
-/** What Revit said the staged cells would write, and the Work and snapshot it was asked over. */
+/** What Revit said the edit cells would write, and the Work and snapshot it was asked over. */
 interface DuctsEvaluation {
   revision: number;
   epoch: number;
@@ -320,7 +320,7 @@ const standing = (ctx: DuctsCtx) => {
   return { fix: holding(fix), set: set.length };
 };
 
-/** Why the ESP waits (Fix or Set rows stand), or null when none is staged or it writes now. */
+/** Why the ESP waits (Fix or Set rows stand), or null when none is edit or it writes now. */
 const espHeld = (ctx: DuctsCtx) =>
   stagedEsp(ctx.work.doc) ? espWaits(standing(ctx) ?? { fix: 0, set: 0 }) : null;
 
@@ -330,7 +330,7 @@ const requestOf = (ctx: DuctsCtx) => {
   return espHeld(ctx) ? { ...request, equipment: [] } : request;
 };
 
-/** The request from the staged cells, the snapshot and the grids the route read; throws why not. */
+/** The request from the edit cells, the snapshot and the grids the route read; throws why not. */
 const built = (ctx: DuctsCtx) => {
   const snapshot = observed<DuctSnapshot>(ctx, "ducts");
   const grids = observed<Grids>(ctx, "tables");
@@ -654,7 +654,6 @@ export const manifest = defineRoute<
       label: "refresh",
       says: "Reads the duct snapshot of the document again",
       needs: "project",
-      actor: "any",
       input: z.void() as unknown as z.ZodType<never>,
       dirties: [],
       rereads: "ducts",
@@ -669,7 +668,7 @@ export const manifest = defineRoute<
       waitSeconds: NATIVE_APPLY_WAIT_S,
       requires: { work: true },
       count: (ctx) => pendingOf(ctx) || null,
-      ready: (ctx) => (pendingOf(ctx) ? requestReady(ctx) : "Nothing staged"),
+      ready: (ctx) => (pendingOf(ctx) ? requestReady(ctx) : "Nothing edit"),
       run: async (ctx) => {
         const response = await dispatch(ctx, "ducts.preview-losses", requestOf(ctx));
         ctx.setPage({
@@ -692,24 +691,24 @@ export const manifest = defineRoute<
       dirties: [],
       waitSeconds: NATIVE_APPLY_WAIT_S,
       requires: { work: true },
-      // Armed while something is staged and the preview matches this Work and snapshot. Fix and Set
+      // Armed while something is edit and the preview matches this Work and snapshot. Fix and Set
       // rows hold back only the ESP (`requestOf`); a write of nothing but held ESP is refused.
       ready: (ctx) => {
         const pending = pendingOf(ctx);
-        if (!pending) return "Nothing staged";
+        if (!pending) return "Nothing edit";
         const pricing = why(() => currentPricing(ctx));
         if (pricing) return pricing;
         const held = espHeld(ctx);
-        if (held && pending === stagedEsp(ctx.work.doc)) return `Only the ESP is staged: ${held}`;
+        if (held && pending === stagedEsp(ctx.work.doc)) return `Only the ESP is edit: ${held}`;
         return ctx.page.evaluation === null
           ? "Preview first"
           : !previewFresh(ctx.page, ctx.work.revision)
-            ? "The staged Work or the snapshot changed since the preview; preview again"
+            ? "The edit Work or the snapshot changed since the preview; preview again"
             : null;
       },
       run: async (ctx) => {
         const held = espHeld(ctx) !== null;
-        // A held ESP stays staged: it was not in the request.
+        // A held ESP stays edit: it was not in the request.
         const applied = stagedCells(ctx.work.doc).filter(
           (cell) =>
             cell.segment !== "catalogs" &&
@@ -722,9 +721,9 @@ export const manifest = defineRoute<
         ).map(({ segment, key }) => ({ segment, key, cell: ctx.work.doc![segment][key]! }));
         const response = await dispatch(ctx, "ducts.apply-losses", requestOf(ctx));
         ctx.note("apply", outcomeWords(response), response.counts.refused > 0);
-        // The staged cells are in Revit now and the rulings in its store; the snapshot is their home.
+        // The edit cells are in Revit now and the rulings in its store; the snapshot is their home.
         const patches: RouteStatePatch[] = [...applied, ...rulings].flatMap(
-          ({ segment, key, cell }) => transitionPatches([segment], key, cell, { kind: "unstage" }),
+          ({ segment, key, cell }) => transitionPatches([segment], key, cell, { kind: "clear" }),
         );
         const refusal = await ctx.write(patches);
         ctx.setPage({ epoch: ctx.page.epoch + 1, evaluation: null });
@@ -826,7 +825,7 @@ export const manifest = defineRoute<
       },
     },
     // Revit's Duct Systems > Select Equipment (pressure-drop ledger 2026-10-21): make a unit the
-    // base equipment of a system, the first rung of the fan proposal. Preview runs Pe's guards, the
+    // base equipment of a system, the first rung of the fan suggestion. Preview runs Pe's guards, the
     // write and its read back in Revit and rolls it back; apply is armed by that preview only.
     // Run bare (the head), both act on the chosen system's offered fan (`offeredFan`).
     "fan-preview": {

@@ -90,12 +90,10 @@ const noop = () => {};
 const seeded = (seed: Seed): ProvidersState =>
   ({
     list: seed.providers,
-    access: { guarded: true },
     error: undefined,
     login: seed.login ?? {},
     probe: noop,
     openLogin: noop,
-    setAccess: noop,
     add: noop,
     remove: noop,
   }) as unknown as ProvidersState;

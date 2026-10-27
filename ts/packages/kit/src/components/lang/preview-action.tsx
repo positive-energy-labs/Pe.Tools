@@ -112,7 +112,7 @@ export function PreviewAction({
             icon={icon}
             label={word}
             reason={armed ? `${says}. Previewed; press to see it again` : reason}
-            // A refused preview (no document, nothing staged) still leaves a held one to look at.
+            // A refused preview (no document, nothing edit) still leaves a held one to look at.
             refusal={armed ? null : refusal}
             busy={busy || phase === "previewing"}
             pressed={armed}

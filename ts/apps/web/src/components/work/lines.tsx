@@ -1,7 +1,7 @@
 /** Pending cells grouped by column and author tab. Row verbs fan out as one bound write;
  * cell chips locate their grid cells. The route owns the tab, and apply remains separate. */
 import { useState, type ReactNode } from "react";
-import type { TrichotomyCellLike } from "@pe/agent-contracts";
+import type { CellLike } from "@pe/agent-contracts";
 import { useList } from "@pe/kit/lang/collection";
 import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
 import { Scroll } from "@pe/kit/lang/scroll";
@@ -26,24 +26,24 @@ export interface WorkCell {
   column: string;
   /** The grid row in the person's words: the schedule's key column value, a family type. */
   row: string;
-  /** The value the cell shows (staged, else proposed), for grouping and counting. */
+  /** The value the cell shows (edit, else proposed), for grouping and counting. */
   value: string;
-  /** The grid's read-only drawing of this cell (`cellFromTrichotomy`). */
+  /** The grid's read-only drawing of this cell (`cellFromDraft`). */
   look: StateCellProps;
   /** Put the grid's focus on this cell; absent = the grid cannot be told where to look. */
   locate?: () => void;
 }
 
-/** Open proposals (contested included) are Pea's tab; staged values are the other. */
-export type WorkTab = "pea" | "yours";
+/** Open proposals (contested included) are Pea's tab; edit values are the other. */
+export type WorkTab = "suggestions" | "edits";
 const tabOf = (look: StateCellProps): WorkTab =>
-  look.stage === "proposed" || look.counterValue != null ? "pea" : "yours";
+  look.stage === "proposed" || look.counterValue != null ? "suggestions" : "edits";
 
 interface WorkLine {
   column: string;
   tab: WorkTab;
-  /** Who put the values there: Pea (proposed, or staged by accepting it), you, or both. */
-  by: "pea" | "you" | "pea+you";
+  /** Who put the values there: Pea (proposed, or edit by accepting it), you, or both. */
+  by: "pea" | "human" | "unknown" | "mixed";
   cells: WorkCell[];
   /** Distinct values, most frequent first. */
   values: { value: string; count: number; look: StateCellProps }[];
@@ -54,10 +54,10 @@ export function workLines(cells: readonly WorkCell[]): WorkLine[] {
   const lines = new Map<string, WorkLine>();
   for (const cell of cells) {
     const tab = tabOf(cell.look);
-    const by = tab === "pea" || cell.look.stagedBy === "pea" ? "pea" : "you";
+    const by = cell.look.author ?? "unknown";
     const id = JSON.stringify([cell.column, tab]);
     const line = lines.get(id) ?? { column: cell.column, tab, by, cells: [], values: [] };
-    if (line.by !== by) line.by = "pea+you";
+    if (line.by !== by) line.by = "mixed";
     line.cells.push(cell);
     const seen = line.values.find((entry) => entry.value === cell.value);
     if (seen) seen.count++;
@@ -81,7 +81,7 @@ export function WorkLines({
 }: {
   cells: readonly WorkCell[];
   /** The Work's cells by key: the lines' fanOut writes read them. */
-  store: Record<string, TrichotomyCellLike>;
+  store: Record<string, CellLike>;
   wire: CellWire;
   /** The route's `lines` field; absent = Pea's tab while it has lines, else yours. */
   tab: WorkTab | "all" | undefined;
@@ -91,7 +91,7 @@ export function WorkLines({
 }) {
   const lines = workLines(cells);
   const has = (tab: WorkTab) => lines.some((line) => line.tab === tab);
-  const tab = picked ?? (has("pea") || !has("yours") ? "pea" : "yours");
+  const tab = picked ?? (has("suggestions") || !has("edits") ? "suggestions" : "edits");
   const [outcome, setOutcome] = useState<FanOutOutcome | null>(null);
   const shown = lines.filter((line) => tab === "all" || line.tab === tab);
   const keys = shown.flatMap((line) => line.cells.map((cell) => cell.key));
@@ -105,12 +105,12 @@ export function WorkLines({
     search: (line) => ({
       text: [line.column, line.by, ...line.cells.flatMap((cell) => [cell.row, cell.value])],
     }),
-    stageOf: (line) => (line.tab === "pea" ? "proposed" : "staged"),
+    stageOf: (line) => (line.tab === "suggestions" ? "proposed" : "edit"),
     select: "single",
     onPick: (line) => line.cells[0]?.locate?.(),
   });
   if (!cells.length && !above) return null;
-  const run = (over: readonly string[], kind: "accept" | "deny") =>
+  const run = (over: readonly string[], kind: "take" | "unsuggest") =>
     void runFanOut(wire, store, over, kind).then(setOutcome);
   return (
     <section aria-label="pending cells" className="flex min-w-0 flex-col">
@@ -123,8 +123,12 @@ export function WorkLines({
             setOutcome(null);
           }}
           options={[
-            { value: "pea", label: `pea ${count("pea")}`, title: "Pea's open proposals" },
-            { value: "yours", label: `yours ${count("yours")}`, title: "staged values" },
+            {
+              value: "suggestions",
+              label: `suggestions ${count("suggestions")}`,
+              title: "Optional suggestions from either author",
+            },
+            { value: "edits", label: `edits ${count("edits")}`, title: "edit values" },
             { value: "all", label: `all ${count("all")}`, title: "every pending cell" },
           ]}
         />
@@ -138,15 +142,15 @@ export function WorkLines({
           </span>
         ) : null}
         <span className="ml-auto flex items-center gap-1">
-          {shown.some((line) => line.tab === "pea") ? (
+          {shown.some((line) => line.tab === "suggestions") ? (
             <>
-              <TooltipHint content="Accept every proposal shown, in one write. Nothing reaches Revit until apply.">
-                <Verdict kind="accept" onClick={() => run(keys, "accept")}>
+              <TooltipHint content="Accept every suggestion shown, in one write. Nothing reaches Revit until apply.">
+                <Verdict kind="take" onClick={() => run(keys, "take")}>
                   all
                 </Verdict>
               </TooltipHint>
-              <TooltipHint content="Clear every proposal shown, in one write">
-                <Verdict kind="deny" onClick={() => run(keys, "deny")}>
+              <TooltipHint content="Clear every suggestion shown, in one write">
+                <Verdict kind="unsuggest" onClick={() => run(keys, "unsuggest")}>
                   all
                 </Verdict>
               </TooltipHint>
@@ -177,21 +181,21 @@ export function WorkLines({
 
 function lineParts(
   line: WorkLine,
-  store: Record<string, TrichotomyCellLike>,
+  store: Record<string, CellLike>,
   wire: CellWire,
   done: (outcome: FanOutOutcome) => void,
 ): ListRowParts {
   const keys = line.cells.map((cell) => cell.key);
   const n = line.cells.length;
-  const run = (kind: "accept" | "deny") => void runFanOut(wire, store, keys, kind).then(done);
+  const run = (kind: "take" | "unsuggest") => void runFanOut(wire, store, keys, kind).then(done);
   const more = line.values.length - 2;
   // Staged over a value Revit has since changed: marked on the line; apply's popover answers it.
   const drift = line.cells.filter((cell) => cell.look.agree === "drift").length;
   return {
     label: line.column,
     lines: 2,
-    stage: line.tab === "pea" ? "proposed" : "staged",
-    stagedBy: line.by === "pea+you" ? undefined : line.by,
+    stage: line.tab === "suggestions" ? "proposed" : "edit",
+    author: line.by === "mixed" ? undefined : line.by,
     meta: (
       <>
         <span data-tone={line.by === "pea" ? "pea" : undefined}>{line.by}</span>
@@ -232,7 +236,7 @@ function lineParts(
           {n > CHIPS ? <span className="t-small text-ink-2">+{n - CHIPS}</span> : null}
         </span>
         {drift ? (
-          <TooltipHint content="Revit changed these cells after you staged them; apply's popover overwrites or keeps Revit's">
+          <TooltipHint content="Revit changed these cells after you edit them; apply's popover overwrites or keeps Revit's">
             <span className="t-small" data-tone="alarm">
               {drift} changed in Revit
             </span>
@@ -242,15 +246,17 @@ function lineParts(
     ),
     actions: (
       <span className="flex shrink-0 items-center gap-1">
-        {line.tab === "pea" ? (
+        {line.tab === "suggestions" ? (
           <>
-            <TooltipHint content={`Stage Pea's value in these ${plural(n, "cell")}, in one write`}>
-              <Verdict kind="accept" onClick={() => run("accept")} />
+            <TooltipHint
+              content={`Stage the suggested value in these ${plural(n, "cell")}, in one write`}
+            >
+              <Verdict kind="take" onClick={() => run("take")} />
             </TooltipHint>
             <TooltipHint
-              content={`Clear Pea's proposal on these ${plural(n, "cell")}, in one write`}
+              content={`Clear the suggestion on these ${plural(n, "cell")}, in one write`}
             >
-              <Verdict kind="deny" onClick={() => run("deny")} />
+              <Verdict kind="unsuggest" onClick={() => run("unsuggest")} />
             </TooltipHint>
           </>
         ) : null}

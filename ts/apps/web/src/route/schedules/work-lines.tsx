@@ -1,5 +1,5 @@
 import { showCellValue, splitScheduleCellKey } from "@pe/agent-contracts";
-import { cellFromTrichotomy } from "@pe/kit/lang/cell";
+import { cellFromDraft } from "@pe/kit/lang/cell";
 import { WorkLines, type WorkCell, type WorkTab } from "#/components/work/lines";
 import { STALE_NOTE } from "./columns";
 import { useScheduleCellWrites, type ScheduleGridState } from "./workspace";
@@ -22,12 +22,12 @@ export function ScheduleWorkLines({
   const snapshot = state.snapshot;
   if (!snapshot) return null;
   const pending: WorkCell[] = Object.entries(cells).flatMap(([key, cell]) => {
-    if (cell.proposal == null && cell.staged == null) return [];
+    if (cell.suggestion == null && cell.edit == null) return [];
     const { rowNumber, columnNumber } = splitScheduleCellKey(key);
-    const value = showCellValue(cell.staged != null ? cell.staged.value : cell.proposal?.value);
+    const value = showCellValue(cell.edit != null ? cell.edit.value : cell.suggestion?.value);
     const row = snapshot.rows.find((candidate) => candidate.rowNumber === rowNumber);
     // Staged over a value a re-read moved: drift against what Revit holds now, as on its grid cell.
-    const staleAt = cell.staged != null ? stale.find((s) => s.key === key) : undefined;
+    const staleAt = cell.edit != null ? stale.find((s) => s.key === key) : undefined;
     return [
       {
         key,
@@ -36,7 +36,7 @@ export function ScheduleWorkLines({
           `col ${columnNumber}`,
         row: row?.values[0] || `r${rowNumber}`,
         value,
-        look: cellFromTrichotomy(
+        look: cellFromDraft(
           cell,
           staleAt
             ? {

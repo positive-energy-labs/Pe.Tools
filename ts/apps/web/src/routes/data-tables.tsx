@@ -86,7 +86,6 @@ const dataTablesManifest = (draft: Draft | null, setDraft: (next: Draft | null) 
         label: "new table",
         says: "Starts a blank draft; nothing exists in Revit until apply",
         needs: "project",
-        actor: "any",
         input: z.void() as unknown as z.ZodType<never>,
         dirties: [],
         ready: () => null,
@@ -101,7 +100,7 @@ const dataTablesManifest = (draft: Draft | null, setDraft: (next: Draft | null) 
         does: () => ({
           says: "Upserts the draft into the sentence's document by table name and row key; rows the draft no longer carries are pruned",
           needs: "project-document",
-          actor: "human",
+          effect: "command",
         }),
         input: z.void() as unknown as z.ZodType<never>,
         dirties: [],

@@ -34,6 +34,14 @@ export interface NoticeContext {
   ): { readonly threadId: string; readonly body: string; readonly act: Act } | undefined;
   /** Pea's final response for a turn receipt, in Markdown. */
   said(receipt: Receipt): string | undefined;
+  /** Durable command outcomes and exact Work addresses for this completed root turn. */
+  completed?(receipt: Receipt):
+    | {
+        readonly running: number;
+        readonly completed: number;
+        readonly work: readonly { title: string; href: string }[];
+      }
+    | undefined;
 }
 
 /** The receipts a card can come from: nothing else is read. */
@@ -50,7 +58,12 @@ function noticeOf(r: Receipt, context: NoticeContext): MachineNotice | null {
     case "action": {
       // Revit lifecycle verbs announce their end only; every other action stays quiet.
       const value = body.value;
-      if (!value.key.startsWith("instances.") || value.state === "running") return null;
+      if (
+        !value.key.startsWith("instances.") ||
+        value.state === "waiting" ||
+        value.state === "running"
+      )
+        return null;
       return {
         ...base,
         title: `Revit ${value.key.slice("instances.".length)} ${value.state}`,
@@ -62,11 +75,31 @@ function noticeOf(r: Receipt, context: NoticeContext): MachineNotice | null {
       const thread = r.join.threadId ? context.thread(r.join.threadId) : undefined;
       const title = thread?.title ?? "a thread";
       const finished = body.phase === "finished";
+      const completion = context.completed?.(r);
+      const work = completion?.work ?? [];
+      const outcome = completion
+        ? [
+            completion.completed
+              ? `${completion.completed} command${completion.completed === 1 ? "" : "s"} completed.`
+              : "",
+            completion.running
+              ? `${completion.running} command${completion.running === 1 ? " is" : "s are"} still running; writes have not finished.`
+              : "",
+            ...work.map(
+              ({ title, href }) =>
+                `Work ready for review: [${title.replaceAll("[", "\\[").replaceAll("]", "\\]")}](${href}).`,
+            ),
+          ]
+            .filter(Boolean)
+            .join("\n\n")
+        : "";
       return {
         ...base,
         title: finished ? title : `Pea stopped · ${title}`,
-        body: context.said(r) || (finished ? "The turn ended." : "The turn ended with an error."),
-        href: chatHref(thread?.id),
+        body:
+          [context.said(r), outcome].filter(Boolean).join("\n\n") ||
+          (finished ? "The turn ended." : "The turn ended with an error."),
+        href: work[0]?.href ?? chatHref(thread?.id),
         ...(thread ? { act: { kind: "reply" as const, threadId: thread.id } } : {}),
       };
     }

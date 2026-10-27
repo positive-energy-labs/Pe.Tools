@@ -39,7 +39,7 @@ vi.mock("./chat-plugins", () => ({
     title === "apply" ? { id: "receipt-1", key: "schedule.apply" } : null,
 }));
 vi.mock("./record-lines", () => ({
-  ProposedLine: () => <div data-proposed="schedules">2 changes · open proposal</div>,
+  ProposedLine: () => <div data-proposed="schedules">2 changes · open suggestion</div>,
   ActionLine: () => <div data-action="receipt-1">action receipt · inspect</div>,
 }));
 vi.mock("./thumbnail", () => ({
@@ -111,7 +111,7 @@ test("folding leaves images, diagrams, proposals, receipts and waiting records v
   };
   const screen = show([
     message("a", [image, diagram]),
-    message("b", [call("proposal", "propose"), call("receipt", "apply"), pending]),
+    message("b", [call("suggestion", "propose"), call("receipt", "apply"), pending]),
   ]);
   const details = screen.container.querySelector("details")!;
   expect(screen.container.querySelectorAll("details")).toHaveLength(1);
@@ -120,7 +120,7 @@ test("folding leaves images, diagrams, proposals, receipts and waiting records v
   for (const node of [
     screen.getByAltText("capture"),
     screen.getByLabelText("Inspect diagram"),
-    screen.getByText("2 changes · open proposal"),
+    screen.getByText("2 changes · open suggestion"),
     ...screen.getAllByText("action receipt · inspect"),
     screen.getByText("waiting"),
   ]) {

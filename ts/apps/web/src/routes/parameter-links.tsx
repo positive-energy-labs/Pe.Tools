@@ -111,18 +111,18 @@ export function ParameterLinksRouteContent({ thread }: { thread?: string } = {})
 
   const document = route.work.doc;
   const savedDraft = document ? stagedParameterProfile(document) : null;
-  // Pea's proposed profile, drawn in the band grammar while it differs from what is staged
-  // (accepted, it stays as authorship evidence of the staged value: nothing left to review).
+  // Pea's proposed profile, drawn in the band grammar while it differs from what is edit
+  // (accepted, it stays as authorship evidence of the edit value: nothing left to review).
   const profileCell = document?.profile ?? {};
   const reviewingProposal =
-    profileCell.proposal != null && !sameValue(profileCell.proposal, profileCell.staged);
+    profileCell.suggestion != null && !sameValue(profileCell.suggestion, profileCell.edit);
   const profileWire: CellWire = {
     segment: null,
     write: route.work.write,
     revision: route.work.revision,
   };
-  /** The evaluation shown is a labelled preview of Pea's proposal, never the staged profile's. */
-  const previewingProposal = reading?.subject === "proposal";
+  /** The evaluation shown is a labelled preview of Pea's suggestion, never the edit profile's. */
+  const previewingProposal = reading?.subject === "suggestion";
   const evaluation = reading?.evaluated ? (reading.evaluation ?? null) : null;
   const status = reading?.status ?? null;
 
@@ -164,7 +164,7 @@ export function ParameterLinksRouteContent({ thread }: { thread?: string } = {})
   const saveDraft = useCallback(
     async (profile: ParameterLinkProfile): Promise<boolean> => {
       const refusal = await route.work.write(
-        transitionPatches([], "profile", {}, { kind: "stage", rung: { value: profile } }),
+        transitionPatches([], "profile", {}, { kind: "set", rung: { value: profile } }),
         draftBasis ?? undefined,
       );
       if (refusal) {
@@ -321,7 +321,7 @@ export function ParameterLinksRouteContent({ thread }: { thread?: string } = {})
                       cell={profileCell}
                       facts={{
                         value: profileSummary(
-                          (profileCell.staged ?? profileCell.proposal)?.value as
+                          (profileCell.edit ?? profileCell.suggestion)?.value as
                             | ParameterLinkProfile
                             | undefined,
                         ),
@@ -333,8 +333,8 @@ export function ParameterLinksRouteContent({ thread }: { thread?: string } = {})
                   {reviewingProposal ? (
                     <ProfileChanges
                       changes={profileDiff(
-                        profileCell.staged?.value as ParameterLinkProfile | undefined,
-                        profileCell.proposal?.value as ParameterLinkProfile | undefined,
+                        profileCell.edit?.value as ParameterLinkProfile | undefined,
+                        profileCell.suggestion?.value as ParameterLinkProfile | undefined,
                       )}
                     />
                   ) : null}
@@ -402,8 +402,8 @@ export function ParameterLinksRouteContent({ thread }: { thread?: string } = {})
                 {previewingProposal ? (
                   <OutcomeLine
                     kind="advisory"
-                    label="preview of Pea's proposal — not staged"
-                    says="accept it to stage it, then preview the staged profile before apply"
+                    label="preview of Pea's suggestion — not edit"
+                    says="accept it to stage it, then preview the edit profile before apply"
                   />
                 ) : null}
                 <NativeObservationScope
@@ -422,7 +422,7 @@ export function ParameterLinksRouteContent({ thread }: { thread?: string } = {})
   );
 }
 
-/** Pea's proposal against staged, item by item: what accept would change, not just its counts. */
+/** Pea's suggestion against edit, item by item: what accept would change, not just its counts. */
 function ProfileChanges({ changes }: { changes: ProfileChange[] }) {
   const list = useList({
     items: changes,
@@ -439,14 +439,14 @@ function ProfileChanges({ changes }: { changes: ProfileChange[] }) {
   });
   return (
     <ActivityDisclosure
-      label="changes against staged"
-      summary={`${changes.length} change${changes.length === 1 ? "" : "s"} against staged`}
+      label="changes against edit"
+      summary={`${changes.length} change${changes.length === 1 ? "" : "s"} against edit`}
     >
       <ListView
         list={list}
-        aria-label="changes against staged"
+        aria-label="changes against edit"
         empty={{
-          message: "No changes against staged",
+          message: "No changes against edit",
           exit: "Propose a profile change to compare it",
         }}
         row={(change) => ({

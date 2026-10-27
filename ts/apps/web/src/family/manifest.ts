@@ -61,7 +61,7 @@ const modelSchema = () =>
 /** The route's Work is the family draft: the live reading and the proposals on it. */
 type FamilyRouteDocument = FamilyDraft;
 
-/** The baseline with staged cells laid on it: what save files and plan plans. */
+/** The baseline with edit cells laid on it: what save files and plan plans. */
 const draftSpec = (draft: FamilyDraft): string | null =>
   draft.reading === null ? null : settingsCandidate(draft.reading, draft.cells);
 
@@ -113,7 +113,7 @@ export const familySpec: EntityRouteDef<FamilyRouteDocument, FamilyReadingKey, F
   needs: "document",
   // The audit is the live draft; a saved member is opened into it, never required to look.
   specPicker: "apply",
-  // Opening a member puts its bytes in the draft, so staged cells are edits over it.
+  // Opening a member puts its bytes in the draft, so edit cells are edits over it.
   specIsDraft: true,
   // Capture saves the draft as a new member when one was read; with none, it reads Revit and files that.
   captureInput: (ctx) => {
@@ -128,8 +128,31 @@ export const familySpec: EntityRouteDef<FamilyRouteDocument, FamilyReadingKey, F
    * Accepted proposals are the spec: plan sends the draft's bytes (filed nowhere; the page's pod
    * only holds the run), and apply names that plan. Saving the draft is capture's job.
    */
-  staged: {
+  edit: {
     cells: (ctx) => ctx.work.doc?.cells ?? {},
+    direct: async (ctx) => {
+      const spec = ctx.work.doc ? draftSpec(ctx.work.doc) : null;
+      if (!spec || ctx.work.revision === null) throw Error("read the family first");
+      const { $schema: _, ...model } = JSON.parse(spec) as {
+        $schema?: unknown;
+        family?: { name?: string };
+      };
+      const name = (model.family?.name ?? "family").replace(/[^\w.-]+/g, "-");
+      await workflow(
+        "family.apply",
+        {
+          rows: {
+            source: {
+              path: `edit/${name}.json`,
+              content: `${JSON.stringify({ $schema: modelSchema(), ...model }, null, 2)}\n`,
+            },
+            include: "all",
+          },
+        },
+        ctx,
+        { work: { key: ctx.work.key, revision: ctx.work.revision } },
+      );
+    },
     plan: async (ctx) => {
       const spec = ctx.work.doc ? draftSpec(ctx.work.doc) : null;
       if (!spec) throw Error("read the family first");
@@ -138,12 +161,12 @@ export const familySpec: EntityRouteDef<FamilyRouteDocument, FamilyReadingKey, F
         family?: { name?: string };
       };
       const name = (model.family?.name ?? "family").replace(/[^\w.-]+/g, "-");
-      // Bound to the reviewed draft: the host consumes its staged cells only if these bytes are it.
+      // Bound to the reviewed draft: the host consumes its edit cells only if these bytes are it.
       const result = await workflow(
         "family.plan",
         {
           source: {
-            path: `staged/${name}.json`,
+            path: `edit/${name}.json`,
             content: `${JSON.stringify({ $schema: modelSchema(), ...model }, null, 2)}\n`,
           },
         },
@@ -157,7 +180,7 @@ export const familySpec: EntityRouteDef<FamilyRouteDocument, FamilyReadingKey, F
       };
     },
     apply: async (ctx, included) => {
-      for (const input of byPlan(included)) await workflow("family.apply", input, ctx);
+      for (const input of byPlan(included)) await workflow("family.apply", { rows: input }, ctx);
     },
   },
   docs: "Audit a captured family draft baseline with no pod: propose and stage keyed cells, plan and apply the live draft, save it into a pod as a member, open a saved member into the draft, or build a saved member to an .rfa.",
@@ -269,22 +292,22 @@ const emptyInventory = { sessions: [] } satisfies {
 };
 
 /**
- * The demo lane's proposal lane on a family fixture: its first Length parameter staged, its
+ * The demo lane's suggestion lane on a family fixture: its first Length parameter edit, its
  * second proposed by Pea. Real pointers of the fixture's bytes; the values are fixture.
  */
 export function familyDemoFields(raw: string): Record<string, SettingsFieldState> {
   const parameters = (JSON.parse(raw) as { parameters?: Record<string, { dataType?: string }> })
     .parameters;
-  const [staged, proposed] = Object.entries(parameters ?? {})
+  const [edit, proposed] = Object.entries(parameters ?? {})
     .filter(([, spec]) => spec.dataType === "Length")
     .map(([name]) => settingsFieldPointer(["parameters", name, "value"]));
   return {
-    ...(staged ? { [staged]: { proposal: null, staged: { value: "5in" } } } : {}),
+    ...(edit ? { [edit]: { suggestion: null, edit: { value: "5in" } } } : {}),
     ...(proposed
       ? {
           [proposed]: {
-            proposal: { value: "6in", note: "office standard", confidence: "low" },
-            staged: null,
+            suggestion: { value: "6in", note: "office standard", confidence: "low" },
+            edit: null,
           },
         }
       : {}),
@@ -357,7 +380,7 @@ const familySeed = (
   page: {
     buildReview: null,
     stage,
-    // No sheet: `/family` applies in one press (ruling 52); the staged edits are the preview.
+    // No sheet: `/family` applies in one press (ruling 52); the edit edits are the preview.
     ...(saved ? { pod: DEMO_POD, path: demoPath(name) } : {}),
   },
 });
@@ -417,7 +440,6 @@ export const familyManifest = (authoring = absentAuthoringFacts) =>
         label: "attach PDF",
         says: "Parse and file a portable cut sheet beside the captured family.",
         needs: "nothing",
-        actor: "any",
         input: familyDraftRouteState.commands.attach_spec.input,
         dirties: [],
         rereads: "work",
@@ -434,7 +456,6 @@ export const familyManifest = (authoring = absentAuthoringFacts) =>
         label: "read family",
         says: "Read the open family's spec from Revit into the draft; files nothing. Proposals stay.",
         needs: "family",
-        actor: "any",
         input: z.void(),
         dirties: [],
         rereads: "work",
@@ -442,11 +463,9 @@ export const familyManifest = (authoring = absentAuthoringFacts) =>
         ready: () => null,
         run: async (ctx: Ctx) => {
           const read = await workflow("family.capture", {}, ctx);
-          // not a cell: reading, and when it was taken on the host's clock
-          await ctx.write([
-            { path: ["reading"], value: read.spec },
-            { path: ["takenAt"], value: read.capturedAt },
-          ]);
+          await workflow("family.observe", { readingId: String(read.id) }, ctx, {
+            work: { key: ctx.work.key, revision: ctx.work.revision ?? 0 },
+          });
         },
       },
       // Ruling 45: press 1 reviews the exact saved profile (build's flag draws it), press 2 builds.

@@ -105,7 +105,7 @@ export function clipContains(
   return true;
 }
 
-/** Polygon coordinates are capture-local; staged focus and full context can have different origins. */
+/** Polygon coordinates are capture-local; edit focus and full context can have different origins. */
 export function rebaseClip(
   volume: ClipVolume | null | undefined,
   from: readonly number[],

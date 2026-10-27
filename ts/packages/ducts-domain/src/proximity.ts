@@ -3,7 +3,7 @@
  * person would otherwise heal in Revit becomes a recorded graph assumption. `inferJoints` finds
  * them; `tolerate` rewrites the snapshot as if they were real reciprocal joints, so
  * `physicalGraph`, `groupTree` and the loss walk need no notion of inference. Points are model
- * feet (DuctContracts.cs); `tolIn` is inches. A staged `ignore` verdict on a finding id withholds
+ * feet (DuctContracts.cs); `tolIn` is inches. A edit `ignore` verdict on a finding id withholds
  * that one inference. Nothing here is stored and nothing reaches Revit.
  * A duct landing on a duct's side and a duct landing on an end cap are one rule (kaitpw
  * 2026-10-19), and so is a duct landing on an open connector's mouth off its centre (Project A SA 19
@@ -17,7 +17,7 @@
  * An inference is never correct, only likely (kaitpw 2026-10-19): every joint and tap is a
  * warning a person rules on. Ends whose air classifications differ (supply, return, exhaust)
  * never join silently: the would-be join is a `near-miss-across-classifications` warning, and a
- * staged `connect` verdict on its id joins it anyway.
+ * edit `connect` verdict on its id joins it anyway.
  * An accessory or fitting lying inside one duct's body, aligned with it, neither end connected
  * (Project A damper 13568060 inside duct 11275610), is inline on that duct (kaitpw 2026-10-19):
  * `tolerate` splices it into the duct where it sits, so its loss prices, and it is a warning too.
@@ -26,8 +26,8 @@
  * Inference may compute, never conclude (kaitpw 2026-10-19): every join carries a `grade` measured
  * from its geometry (`DUCT_INFERENCE_GRADES`); near-miss and stretched joins are bridged and final (ruling 5,
  * `bins.ts`), and a path resting on an anomalous one is provisional
- * (`losses.ts`), and only a person's staged `connect` (confirm) or `ignore` (break) rules on
- * it; a Pea proposal never does. A terminal whose open connector sits in a duct's open end but
+ * (`losses.ts`), and only a person's edit `connect` (confirm) or `ignore` (break) rules on
+ * it; a Pea suggestion never does. A terminal whose open connector sits in a duct's open end but
  * faces the wrong way (a stand-in family; Project A grilles 10922066, 10922068 in their plenums) joins
  * that end anyway, always `anomalous`, its note naming the reversed connector and the repair.
  */
@@ -433,11 +433,11 @@ function land(face: Face, p: number[], axis: number[]): { d: number; onto: Onto 
 }
 
 /**
- * The staged verdict on a finding id, if any: `ignore` withholds it, `connect` confirms it (and
- * joins it across classifications). Staged only: a proposal is Pea's and never rules.
+ * The edit verdict on a finding id, if any: `ignore` withholds it, `connect` confirms it (and
+ * joins it across classifications). Staged only: a suggestion is Pea's and never rules.
  */
 export const verdictOf = (work: DuctsRouteDocument | null, id: string) => {
-  const value = work?.assumptions[id]?.staged?.value;
+  const value = work?.assumptions[id]?.edit?.value;
   return value?.kind === "verdict" ? value.verdict : null;
 };
 const differ = (a: string | null, b: string | null) => a != null && b != null && a !== b;
@@ -476,7 +476,7 @@ function components(elements: Element[], equipment: ReadonlySet<number>) {
  * first, joins what owns it: a duct's side or an end a cap closes (the cap counted as the duct's)
  * is tapped where it lands; an open connector's mouth (terminal, equipment, duct, fitting) is
  * joined, off-centre or not, and several ends may land on one face. Either way, ends whose
- * classifications differ do not join without a staged `connect` verdict: each such near miss is a
+ * classifications differ do not join without a edit `connect` verdict: each such near miss is a
  * `near-miss-across-classifications` finding, and (b) goes on to the next face whose classes agree.
  * Each inference is a finding; one that joins two elements already in one component is also a
  * `loop-by-inference`.
@@ -485,7 +485,7 @@ export const topologyRulingsKey = (work: DuctsRouteDocument | null) =>
   JSON.stringify(
     Object.entries(work?.assumptions ?? {})
       .flatMap(([key, cell]) => {
-        const value = cell.staged?.value;
+        const value = cell.edit?.value;
         return value?.kind === "verdict" ? [[key, value.verdict]] : [];
       })
       .sort(([a], [b]) => a!.localeCompare(b!)),
@@ -493,7 +493,7 @@ export const topologyRulingsKey = (work: DuctsRouteDocument | null) =>
 
 const inferences = new WeakMap<DuctSnapshot, { key: string; value: Inference }>();
 
-/** One immutable inference per snapshot, tolerance and staged verdict set; flow edits cannot move it. */
+/** One immutable inference per snapshot, tolerance and edit verdict set; flow edits cannot move it. */
 export function rememberInference(
   snapshot: DuctSnapshot,
   tolIn: number,
@@ -857,7 +857,7 @@ export interface InferredLink {
   id: string;
   between: readonly [number, number];
   grade: DuctInferenceGrade;
-  /** A person staged `connect` on it: confirmed, so it no longer makes a path provisional. */
+  /** A person edit `connect` on it: confirmed, so it no longer makes a path provisional. */
   ruled: boolean;
 }
 

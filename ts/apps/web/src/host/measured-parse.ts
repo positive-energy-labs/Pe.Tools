@@ -10,7 +10,7 @@ export type MeasuredAnswer = MeasuredValue | { refusal: string } | null;
 /**
  * The measured cell's one call, owned by the Reading it was typed against. `basis` is whatever
  * identifies that Reading: when it changes — a re-read — every parse still in flight is aborted and
- * answers null, so a value read against the old Reading can never be staged against the new one.
+ * answers null, so a value read against the old Reading can never be edit against the new one.
  * The typed text is never kept; Revit's unrounded value in the requested unit comes back.
  */
 export function useMeasuredParse(basis: unknown, scope?: HostCallOptions) {
@@ -30,7 +30,7 @@ export function useMeasuredParse(basis: unknown, scope?: HostCallOptions) {
       if (!displayUnit?.typeId || word === null)
         return {
           refusal:
-            "Revit did not report this measured parameter's display unit, so this cell cannot be staged.",
+            "Revit did not report this measured parameter's display unit, so this cell cannot be edit.",
         };
       const signal = running.current.signal;
       const answer = await callHostRpc(

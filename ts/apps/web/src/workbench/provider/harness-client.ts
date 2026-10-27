@@ -5,7 +5,6 @@ import { hostFetch } from "#/host/runtime";
  * web never talks to a harness: it reads the host's event log and posts the user's verbs.
  */
 import type {
-  Access,
   AddProviderRequest,
   HarnessEvent,
   HarnessThreadSummary,
@@ -31,8 +30,6 @@ export function harnessClient(origin: string) {
     removeProvider: (id: string) => client.call("provider.remove", { params: { id } }),
     probe: (id: string) => client.call("provider.probe", { params: { id } }),
     openLogin: (id: string) => client.call("provider.login", { params: { id } }),
-    access: () => client.call("access.get", {}),
-    setAccess: (body: Access) => client.call("access.set", { body }),
     threads: () => client.call("threads.list", {}),
     create: (providerId: string) => client.call("threads.create", { body: { providerId } }),
     body: (id: string, signal?: AbortSignal) =>

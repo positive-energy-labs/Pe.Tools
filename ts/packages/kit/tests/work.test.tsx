@@ -15,7 +15,7 @@ it("ignores domain work ids and derives the Suspense read until it settles", asy
   });
   function Reading() {
     use(read);
-    return <div data-work="proposal-id">ready</div>;
+    return <div data-work="suggestion-id">ready</div>;
   }
   await act(async () => {
     render(

@@ -118,7 +118,7 @@ function TakeoffHead({ store }: { store: TakeoffsController }) {
           {store.stage === "adopt" ? <AdoptRegions store={store} /> : null}
         </>
       )}
-      // A staged room edit carries its room's base; the controller's wire writes it.
+      // A edit room edit carries its room's base; the controller's wire writes it.
       wire={store.wires.edits}
       ledger={[
         [

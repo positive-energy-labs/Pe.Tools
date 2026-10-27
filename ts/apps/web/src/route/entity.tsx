@@ -118,7 +118,7 @@ export function EntityRouteView({
   const specs = pod?.members.filter((member) => isSpecOf(member.schema, def.schema)) ?? [];
   const member = pod?.members.find((row) => row.path === page.path);
   const outcome = handle.outcome;
-  const confirming = Boolean((def.plan || def.staged) && page.confirming);
+  const confirming = Boolean((def.plan || def.edit) && page.confirming);
   const view = confirming
     ? sheetOf(def, { work: handle.work, readings: handle.readings, page } as never)
     : null;
@@ -130,7 +130,7 @@ export function EntityRouteView({
     setReplanning(false);
     void handle.actions.apply.run();
   }, [replanning, page.confirming]); // eslint-disable-line react-hooks/exhaustive-deps
-  // A sheet over no spec (the staged cells') draws no spec absence lines (F-B-6).
+  // A sheet over no spec (the edit cells') draws no spec absence lines (F-B-6).
   const specless = confirming && !page.path;
   // TODO: hide this pane (Pane `hidden`) instead of unmounting it, so it keeps what was typed —
   // SpecEditor works while it renders, and a hidden pre-render of it never settles.

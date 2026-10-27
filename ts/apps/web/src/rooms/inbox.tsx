@@ -155,17 +155,17 @@ export function cardMoves(
   if (!cell) return [remove];
   const move = (kind: TransitionKind) =>
     writeKind(wire, kind, transitionPatches(["marks"], card.id, cell, { kind } as never));
-  if (!cell.staged)
+  if (!cell.edit)
     return [
       {
-        word: "accept",
-        title: `proposed → accepted: stage Pea's mark (writes ${at}/staged)`,
-        run: () => move("accept"),
+        word: "take",
+        title: `proposed → accepted: stage Pea's mark (writes ${at}/edit)`,
+        run: () => move("take"),
       },
       {
         word: "reject",
-        title: `proposed → removed: drop Pea's proposal (clears ${at}/proposal)`,
-        run: () => move("deny"),
+        title: `proposed → removed: drop Pea's suggestion (clears ${at}/suggestion)`,
+        run: () => move("unsuggest"),
       },
     ];
   return [
@@ -179,12 +179,12 @@ export function cardMoves(
           },
         ]
       : []),
-    ...(cell.proposal
+    ...(cell.suggestion
       ? [
           {
             word: "reopen",
-            title: `${card.state} → proposed: unstage; Pea's proposal stands (clears ${at}/staged)`,
-            run: () => move("unstage"),
+            title: `${card.state} → proposed: unstage; Pea's suggestion stands (clears ${at}/edit)`,
+            run: () => move("clear"),
           },
         ]
       : []),

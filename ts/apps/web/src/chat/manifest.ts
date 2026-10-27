@@ -77,7 +77,6 @@ export const chatManifest = (
         label: "send",
         says: "sends this prompt under the thread target; while Pea answers, it stops that turn first",
         needs: "host",
-        actor: "human",
         input: promptInput as unknown as z.ZodType<never>,
         dirties: ["head", "receipts"],
         ready: (ctx, input) => {
@@ -110,7 +109,6 @@ export const chatManifest = (
         label: "stop",
         says: "stops the running turn; its open permission asks expire, unanswered",
         needs: "host",
-        actor: "human",
         input: z.void() as unknown as z.ZodType<never>,
         dirties: ["receipts"],
         ready: () =>
@@ -121,7 +119,6 @@ export const chatManifest = (
         label: "new",
         says: "opens an empty draft; the first send creates its thread on the head's provider",
         needs: "host",
-        actor: "human",
         input: z.void() as unknown as z.ZodType<never>,
         dirties: ["head"],
         ready: () => (deps.newThread ? null : "Chat is not ready"),
@@ -131,7 +128,6 @@ export const chatManifest = (
         label: "fork",
         says: "copies this thread into a new one on the same provider, model context included, and opens it",
         needs: "host",
-        actor: "human",
         input: z.void() as unknown as z.ZodType<never>,
         dirties: ["head"],
         ready: () =>

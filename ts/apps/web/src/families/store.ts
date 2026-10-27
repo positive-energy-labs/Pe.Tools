@@ -360,7 +360,7 @@ export function useFamiliesStore(
       startedFresh: () => setPage({ carryOver: true }),
       dismissCarryOver: () => setPage({ carryOver: false }),
       /**
-       * The person's one press, one human write: the old scope staged again (when it had one), and
+       * The person's one press, one human write: the old scope edit again (when it had one), and
        * the old exclusions that still name a family held back again, as theirs (authority's ruling).
        */
       restore: async ({ rows, scope }: Salvaged) => {
@@ -372,9 +372,9 @@ export function useFamiliesStore(
           ),
         ];
         const patches = [
-          ...(scope ? [{ path: ["scope", "staged"], value: { value: scope } }] : []),
+          ...(scope ? [{ path: ["scope", "edit"], value: { value: scope } }] : []),
           // not a cell: excluded
-          ...names.map((name) => ({ path: ["excluded", name], value: { by: "person" } })),
+          ...names.map((name) => ({ path: ["excluded", name], value: { by: "human" } })),
         ];
         const refusal = patches.length ? await handle.work.write(patches) : null;
         if (!refusal) setPage({ carryOver: false });
@@ -395,13 +395,13 @@ export function useFamiliesStore(
       /**
        * A typed value stages, an emptied one included: empty is a value, so a person can clear a
        * parameter. Equal to the family's current value, it stages nothing. Pea's standing
-       * proposal remains as a counter.
+       * suggestion remains as a counter.
        */
       propose: (address: FamilyCellAddress, value: FamilyCellValue, current: string) => {
         const key = familyCellKey(address);
         return handle.work.write(
           transitionPatches(["cells"], key, cellsRef.current[key] ?? {}, {
-            kind: "stage",
+            kind: "set",
             rung: { value },
             baseline: { value: { value: current, storageType: value.storageType } },
           }),
@@ -414,10 +414,10 @@ export function useFamiliesStore(
         handle.work.write([
           Object.hasOwn(excluded, familyName)
             ? { path: ["excluded", familyName] }
-            : { path: ["excluded", familyName], value: { by: "person" } },
+            : { path: ["excluded", familyName], value: { by: "human" } },
         ]),
     }),
-    // `cells` rides a ref: a staged keystroke must not mint a new `propose`, or every column
+    // `cells` rides a ref: a edit keystroke must not mint a new `propose`, or every column
     // def and every drawn cell (511 × 435) rebuilds behind it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [handle.work, draft, setPage, excluded, target, documentScope],

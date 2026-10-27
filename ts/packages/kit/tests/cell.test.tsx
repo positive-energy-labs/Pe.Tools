@@ -3,7 +3,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
-import { StateCell, type CellTransition } from "@pe/kit/lang/cell";
+import { cellFromDraft, StateCell, type CellTransition } from "@pe/kit/lang/cell";
 import { Table } from "@pe/kit/table/table";
 
 afterEach(cleanup);
@@ -28,9 +28,9 @@ const inTable = (node: React.ReactNode) => {
 const gridcell = () => document.querySelector<HTMLElement>('td[role="gridcell"]')!;
 
 test("a refused run keeps the value and says why beside the cell", async () => {
-  const deny = t("deny", { code: "stale-revision", message: "another writer landed first" });
+  const deny = t("unsuggest", { code: "stale-revision", message: "another writer landed first" });
   const { cell } = inTable(<StateCell value="10in" scale="row" transitions={[deny]} />);
-  await act(async () => fireEvent.click(cell.getByRole("button", { name: "deny" })));
+  await act(async () => fireEvent.click(cell.getByRole("button", { name: "unsuggest" })));
   expect(deny.run).toHaveBeenCalledOnce();
   expect(screen.getByText("another writer landed first").className).toBe("dl-refuse");
   expect(screen.getByText("10in")).toBeTruthy();
@@ -39,21 +39,21 @@ test("a refused run keeps the value and says why beside the cell", async () => {
 test("a run in flight marks the cell busy and inerts its verbs", async () => {
   let land!: () => void;
   const accept: CellTransition = {
-    kind: "accept",
+    kind: "take",
     run: () => new Promise<void>((resolve) => (land = resolve)),
   };
   const { container, cell } = inTable(
     <StateCell value="10in" scale="row" transitions={[accept]} />,
   );
-  await act(async () => fireEvent.click(cell.getByRole("button", { name: "accept" })));
+  await act(async () => fireEvent.click(cell.getByRole("button", { name: "take" })));
   expect(container.querySelector(".dl-cell")!.getAttribute("aria-busy")).toBe("true");
-  expect(cell.getByRole("button", { name: "accept" }).hasAttribute("disabled")).toBe(true);
+  expect(cell.getByRole("button", { name: "take" }).hasAttribute("disabled")).toBe(true);
   await act(async () => land());
   expect(container.querySelector(".dl-cell")!.getAttribute("aria-busy")).toBeNull();
 });
 
 test("Escape in the input restores the value and hands focus back to the td, where a accepts", async () => {
-  const accept = t("accept");
+  const accept = t("take");
   const commit = vi.fn();
   const { container } = inTable(
     <StateCell value="10in" scale="row" onCommit={commit} transitions={[accept]} />,
@@ -70,15 +70,15 @@ test("Escape in the input restores the value and hands focus back to the td, whe
   expect(commit).not.toHaveBeenCalled();
 });
 
-test("a staged empty value draws the empty mark, never the baseline text, at both scales", () => {
+test("a edit empty value draws the empty mark, never the baseline text, at both scales", () => {
   for (const scale of ["row", "card"] as const)
     for (const onCommit of [undefined, () => {}]) {
       const { container, unmount } = render(
         <StateCell
           scale={scale}
           value=""
-          stage="staged"
-          stagedBy="you"
+          stage="edit"
+          author="human"
           placeholder="Old value"
           onCommit={onCommit}
         />,
@@ -106,7 +106,7 @@ test("25 item 3: a commit refused LATER (an async write) puts the cell back and 
   await act(async () => fireEvent.keyDown(input, { key: "Enter" }));
   expect(onCommit).toHaveBeenCalledWith("12in");
   await act(async () => refuse("that family isn't in this page's scope"));
-  // The typed text is not left looking staged: the drawn value is back, and the refusal is said.
+  // The typed text is not left looking edit: the drawn value is back, and the refusal is said.
   expect(input.value).toBe("10in");
   expect(document.body.textContent).toContain("that family isn't in this page's scope");
 });
@@ -133,4 +133,23 @@ test("a unit-bearing cell draws its unit inside the box, empty or filled, and ke
     fireEvent.blur(input);
   });
   expect(onCommit).toHaveBeenCalledWith("0.5");
+});
+
+test("cell authorship comes from host provenance even when values match", () => {
+  const same = { value: "250" };
+  expect(
+    cellFromDraft(
+      { edit: { ...same, by: "human" }, suggestion: { ...same, by: "pea" } },
+      { value: "250" },
+    ).author,
+  ).toBe("human");
+  expect(
+    cellFromDraft(
+      { edit: { ...same, by: "pea" }, suggestion: { ...same, by: "human" } },
+      { value: "250" },
+    ).author,
+  ).toBe("pea");
+  expect(cellFromDraft({ edit: { ...same, by: "unknown" } }, { value: "250" }).author).toBe(
+    "unknown",
+  );
 });

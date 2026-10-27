@@ -4,7 +4,7 @@
  * states every surface says, so the chip, the Update group, the scrim and the tray cannot disagree.
  *
  * The SDK's `update apply` downloads, closes Revit, installs, reopens documents and relaunches in
- * one receipt, so a download is the first leg of an admitted apply, not a staged step before it:
+ * one receipt, so a download is the first leg of an admitted apply, not a edit step before it:
  * `ready` means one press from installing, with nothing left to resolve.
  */
 import type { Machine } from "@pe/agent-contracts";

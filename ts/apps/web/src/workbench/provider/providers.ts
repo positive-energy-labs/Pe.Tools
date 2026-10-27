@@ -73,13 +73,11 @@ export function useProviders(origin: string, enabled = true, snapshot?: Machine)
       const machine = snapshot ?? machineOf(reading);
       return {
         list: machine?.providers,
-        access: machine?.access ?? undefined,
-        error: machine?.legs.providers?.error ?? machine?.access?.readError,
+        error: machine?.legs.providers?.error,
       };
     },
   );
   const list = useMemo(() => (observed.list ? [...observed.list] : undefined), [observed.list]);
-  const access = observed.access;
   const [error, setError] = useState<string>();
   const [login, setLogin] = useState<Record<string, Login>>({});
   const run = useCallback(async (work: () => Promise<unknown>) => {
@@ -95,7 +93,6 @@ export function useProviders(origin: string, enabled = true, snapshot?: Machine)
   const probe = (id: string) => run(() => client.probe(id));
   return {
     list,
-    access,
     error: error ?? observed.error,
     probe,
     login,
@@ -113,7 +110,6 @@ export function useProviders(origin: string, enabled = true, snapshot?: Machine)
         dirty({ kind: "machine" });
       }
     },
-    setAccess: (guarded: boolean) => run(() => client.setAccess({ guarded })),
     /** Throws the host's `{step, message}` refusal as its words, for the form to say inline. */
     add: async (input: AddProviderRequest) => {
       try {

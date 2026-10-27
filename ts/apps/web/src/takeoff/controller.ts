@@ -106,8 +106,8 @@ export interface AdoptDraft {
 const EMPTY_WORLD: TakeoffModel = { docName: "", r10Path: null, lanes: [], zones: [], systems: [] };
 
 /**
- * An edit's staged rung needs its room's base (what sync compares against), which only a person
- * writes. Staging an edit cell — typing, or accepting Pea's proposal — carries the base when the
+ * An edit's edit rung needs its room's base (what sync compares against), which only a person
+ * writes. Staging an edit cell — typing, or accepting Pea's suggestion — carries the base when the
  * room has none yet, read from the authoritative world.
  */
 function withEditBases(
@@ -117,7 +117,7 @@ function withEditBases(
 ): RouteStatePatch[] {
   const rooms = new Set(
     patches
-      .filter((patch) => patch.path[0] === "edits" && patch.path[2] === "staged")
+      .filter((patch) => patch.path[0] === "edits" && patch.path[2] === "edit")
       .map((patch) => takeoffEditAddress(String(patch.path[1])).roomId),
   );
   const bases = [...rooms].flatMap((roomId) => {
@@ -191,16 +191,16 @@ export const ATLAS_COLUMN_SEMANTICS = {
   },
 } as const satisfies Readonly<Record<string, AtlasColumnSemantics>>;
 
-/** Authority geometry plus the staged room edits the Work doc carries. */
+/** Authority geometry plus the edit room edits the Work doc carries. */
 function stagedModel(
   authority: TakeoffModel,
-  staged: Readonly<Record<string, StagedRoomEdit>>,
+  edit: Readonly<Record<string, StagedRoomEdit>>,
 ): TakeoffModel {
   return {
     ...authority,
     zones: authority.zones.map((zone) => ({
       ...zone,
-      rooms: zone.rooms.map((room) => applyEdit(room, staged[room.guid]?.next)),
+      rooms: zone.rooms.map((room) => applyEdit(room, edit[room.guid]?.next)),
     })),
   };
 }
@@ -327,13 +327,13 @@ export function useTakeoffsController(options: {
     }),
     [handle.demo, capture, nativeCapture, authority],
   );
-  // The person's staged cells only; Pea's proposals are not drawn here yet (interaction's cutover).
-  const staged = useMemo(
+  // The person's edit cells only; Pea's proposals are not drawn here yet (interaction's cutover).
+  const edit = useMemo(
     (): Record<string, StagedRoomEdit> =>
       handle.work.doc ? stagedTakeoffEdits(handle.work.doc) : {},
     [handle.work.doc],
   );
-  const world = useMemo(() => stagedModel(authority, staged), [authority, staged]);
+  const world = useMemo(() => stagedModel(authority, edit), [authority, edit]);
   /*
    * The adopt pane's one source: the host's `takeoffs.candidates` (every filled region on each
    * chosen view, stamped or not). `snapshot.zoneFrs` holds only regions already stamped, so it can
@@ -367,8 +367,8 @@ export function useTakeoffsController(options: {
   );
   const rows = useMemo(() => atlasRows(world, decisions), [world, decisions]);
   const plan = useMemo(
-    () => syncPlan(authority, page.zones, staged, decisions),
-    [authority, page.zones, staged, decisions],
+    () => syncPlan(authority, page.zones, edit, decisions),
+    [authority, page.zones, edit, decisions],
   );
   const review = useMemo(() => {
     const zoneKey = navigation.zone;
@@ -385,20 +385,20 @@ export function useTakeoffsController(options: {
 
   const entity = useCallback(
     (id: string) => {
-      const edit = staged[id];
+      const pendingEdit = edit[id];
       const room = authority.zones.flatMap((zone) => zone.rooms).find((r) => r.guid === id);
       return {
         bound: room?.elementId !== null && room !== undefined,
         decided: Object.keys(decisions).some((key) => takeoffDecisionAddress(key).roomGuid === id),
-        staged: edit ?? null,
-        dirty: edit !== undefined,
+        edit: pendingEdit ?? null,
+        dirty: pendingEdit !== undefined,
         conflict:
-          edit !== undefined &&
+          pendingEdit !== undefined &&
           room !== undefined &&
-          JSON.stringify(edit.base) !== JSON.stringify(roomEdit(room)),
+          JSON.stringify(pendingEdit.base) !== JSON.stringify(roomEdit(room)),
       };
     },
-    [staged, authority, decisions],
+    [edit, authority, decisions],
   );
 
   const stageEdit = useCallback(
@@ -482,7 +482,7 @@ export function useTakeoffsController(options: {
             `${view}:${elementId}`,
             {},
             {
-              kind: "stage",
+              kind: "set",
               rung: { value: { ...adoptPatches[`${view}:${elementId}`], ...draft, ...next } },
             },
           ),
@@ -496,7 +496,7 @@ export function useTakeoffsController(options: {
             takeoffDecisionKey(room.guid, flag),
             {},
             {
-              kind: "stage",
+              kind: "set",
               rung: { value: verdict },
             },
           ),
@@ -523,9 +523,9 @@ export function useTakeoffsController(options: {
   );
 
   // THE FOUR CELL FAMILIES (the takeoffs cutover): each a trichotomy cell record, drawn through
-  // the kit with the contract's transitions. An edit's staged rung needs its room's base (what
+  // the kit with the contract's transitions. An edit's edit rung needs its room's base (what
   // sync compares against), which only a person writes: a stage of an edit cell (typing, or
-  // accepting Pea's proposal) carries the base when the room has none yet.
+  // accepting Pea's suggestion) carries the base when the room has none yet.
   const doc = handle.work.doc;
   const cells = {
     edits: doc?.edits ?? {},
@@ -572,7 +572,7 @@ export function useTakeoffsController(options: {
     syncPlan: plan,
     review,
     entity,
-    staged,
+    edit,
     busy: handle.busy,
     failure: handle.failure,
     // Page state, flattened: every view reads one route-owned name.

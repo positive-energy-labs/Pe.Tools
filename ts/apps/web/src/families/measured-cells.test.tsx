@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * `/families` reads the PROJECT, so a measured cell there shows and stages the project's unit. A
- * family value is written in the unit grammar ("300 CFM"), so that literal IS what is staged.
+ * family value is written in the unit grammar ("300 CFM"), so that literal IS what is edit.
  */
 import { type FamilyCellState } from "@pe/agent-contracts";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -126,7 +126,7 @@ test("a measured parameter with no reported display unit is locked with a reason
   expect(input).toBeNull();
   expect(propose).not.toHaveBeenCalled();
   fireEvent.mouseEnter(view.container.querySelector("tbody [data-base-ui-tooltip-trigger]")!);
-  expect((await screen.findByRole("tooltip")).textContent).toContain("cannot be staged");
+  expect((await screen.findByRole("tooltip")).textContent).toContain("cannot be edit");
 });
 
 test("the row's unit and Yes/No kind win over another family's shared column", async () => {

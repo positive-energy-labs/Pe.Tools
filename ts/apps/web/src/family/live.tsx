@@ -46,7 +46,7 @@ export function FamilyRouteView({
       types: world.typeNames,
       parts: world.geom.map((part) => part.slug),
       parameters: world.params.map((param) => param.name),
-      staged: store.buildFacts.stagedCount,
+      edit: store.buildFacts.stagedCount,
     },
   });
   const readReady = store.handle.actions.read.refusal === null;

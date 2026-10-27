@@ -63,7 +63,7 @@ type Hit = {
 
 const ROUTES: { id: Route; label: string; icon: LucideIcon; first: string }[] = [
   { id: "inbox", label: "Inbox", icon: Inbox, first: "finished" },
-  { id: "work", label: "Work", icon: Wrench, first: "proposal" },
+  { id: "work", label: "Work", icon: Wrench, first: "suggestion" },
   { id: "revit", label: "Revit", icon: Laptop, first: "session-2025" },
 ];
 

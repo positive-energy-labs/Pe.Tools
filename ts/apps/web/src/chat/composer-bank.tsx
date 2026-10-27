@@ -22,7 +22,7 @@ export function ComposerBank({
   pickers: ReactNode;
   /** The run's state beside them (`ComposerState`). */
   state: ReactNode;
-  /** The box's top section: live asks and staged Work (`ComposerWork`). */
+  /** The box's top section: live asks and edit Work (`ComposerWork`). */
   work: ReactNode;
   refusal?: string | null;
 }) {

@@ -1,6 +1,6 @@
 /**
  * Duct pressure drop per terminal path, pure and deterministic: `ducts.snapshot` + ASHRAE grids +
- * staged table choices (+ typed overrides) in, rows out. Nothing is stored.
+ * edit table choices (+ typed overrides) in, rows out. Nothing is stored.
  * - A path runs from the group root (`topology.ts`) to one terminal and sums friction rows,
  *   fitting rows (C x Pv, rules in loss-rules.ts) and the terminal catalog total pressure.
  * - A tapped duct is split at each tap along its centerline: the part up to a tap carries the
@@ -216,7 +216,7 @@ export interface LossResult {
       /** The worst fan's unit (the group's lone fan when one roots it); null with no air mover. */
       criticalFan: number | null;
       revitCritical: number | null;
-      /** Whether the group has an air mover (a root that is not staged passive); without one nothing is priced. */
+      /** Whether the group has an air mover (a root that is not edit passive); without one nothing is priced. */
       hasAirMover: boolean;
       /** Element ids of the implausible fitting rows on this group's priced runs; any makes the group's fan a partial sum, not a price. */
       implausible: number[];

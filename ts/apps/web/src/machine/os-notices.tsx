@@ -90,11 +90,12 @@ export function OsNotices() {
     let tray = false;
     let ledger: NoticeLedger = loadLedger(window.localStorage);
     const keep = (change: (l: NoticeLedger) => NoticeLedger) => {
-      ledger = change(ledger);
+      ledger = change(loadLedger(window.localStorage));
       saveLedger(window.localStorage, ledger);
     };
-    const raise = (notice: MachineNotice) => {
+    const deliver = (notice: MachineNotice) => {
       if (tray) return;
+      ledger = loadLedger(window.localStorage);
       const verdict = admit(ledger, notice, currentView(), Date.now());
       if (verdict === "looking") return keep((l) => acknowledge(l, notice));
       if (verdict !== "show") return;
@@ -108,6 +109,13 @@ export function OsNotices() {
         os.close();
       };
       keep((l) => acknowledge(l, notice));
+    };
+    const raise = (notice: MachineNotice) => {
+      // A shared cursor cannot arbitrate two windows that already received the same event.
+      // Web Locks serializes delivery, and each winner rereads the durable acknowledgement.
+      if (navigator.locks)
+        void navigator.locks.request(`pe.notice.${notice.id}`, () => deliver(notice));
+      else deliver(notice);
     };
     const stored = window.localStorage.getItem(CURSOR);
     const stop = followNotices({

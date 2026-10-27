@@ -243,7 +243,7 @@ interface Item {
   name: string;
   kind: string;
   loss: number;
-  stage: "clean" | "staged";
+  stage: "clean" | "edit";
   children: Item[];
 }
 const items: Item[] = Array.from({ length: 355 }, (_, i) => ({
@@ -251,7 +251,7 @@ const items: Item[] = Array.from({ length: 355 }, (_, i) => ({
   name: `System ${i}`,
   kind: i % 2 ? "Return" : "Supply",
   loss: i,
-  stage: i % 13 ? "clean" : "staged",
+  stage: i % 13 ? "clean" : "edit",
   children: [],
 }));
 const options: ListOptions<Item, "loss" | "name"> = {
@@ -410,16 +410,14 @@ test("new equality replaces the field in place and candidate counts retain other
   const { result } = renderHook(() =>
     useList({
       ...options,
-      initialState: { search: search("System", { kind: "Supply", change: "staged" }) },
+      initialState: { search: search("System", { kind: "Supply", change: "edit" }) },
     }),
   );
   act(() => result.current.pickPill("kind", "Return"));
-  expect(result.current.state.search).toEqual(
-    search("System", { kind: "Return", change: "staged" }),
-  );
+  expect(result.current.state.search).toEqual(search("System", { kind: "Return", change: "edit" }));
   expect(result.current.valuesFor("kind").map((each) => each.count)).toEqual([14, 14]);
   act(() => result.current.removePill("kind"));
-  expect(result.current.state.search).toEqual(search("System", { change: "staged" }));
+  expect(result.current.state.search).toEqual(search("System", { change: "edit" }));
 });
 
 test("unknown versions, fields and operators refuse instead of broadening", () => {

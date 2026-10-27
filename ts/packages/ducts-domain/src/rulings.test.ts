@@ -23,33 +23,33 @@ const store = {
 } satisfies NonNullable<DuctSnapshot["store"]>;
 const doc = (raw: unknown) => ductsDocumentSchema.parse(raw);
 
-it("reads the stored rulings as staged cells, and Work's own over them", () => {
-  const work = doc({ roles: { "901": { staged: { value: { role: "passive" } } } } });
+it("reads the stored rulings as edit cells, and Work's own over them", () => {
+  const work = doc({ roles: { "901": { edit: { value: { role: "passive" } } } } });
   const seen = withStoredRulings(work, store)!;
-  const staged = stagedDucts(seen);
+  const edit = stagedDucts(seen);
 
-  expect(staged.assumptions["open-end:101:1"]).toEqual({ kind: "verdict", verdict: "ignore" });
-  expect(staged.roles).toEqual({ "900": { role: "passive" }, "901": { role: "passive" } });
+  expect(edit.assumptions["open-end:101:1"]).toEqual({ kind: "verdict", verdict: "ignore" });
+  expect(edit.roles).toEqual({ "900": { role: "passive" }, "901": { role: "passive" } });
   expect(withStoredRulings(work, store)).toBe(seen);
   expect(pendingRulings(work, store)).toEqual([
     { segment: "roles", key: "901", from: null, to: "passive" },
   ]);
 });
 
-it("takes a stored verdict back with a staged delete, and a stored passive is ruled fan", () => {
+it("takes a stored verdict back with a edit delete, and a stored passive is ruled fan", () => {
   const work = doc({
-    assumptions: { "open-end:101:1": { staged: { delete: true } } },
-    roles: { "900": { staged: { value: { role: "fan" } } } },
+    assumptions: { "open-end:101:1": { edit: { delete: true } } },
+    roles: { "900": { edit: { value: { role: "fan" } } } },
   });
-  const staged = stagedDucts(withStoredRulings(work, store));
+  const edit = stagedDucts(withStoredRulings(work, store));
 
-  expect(staged.assumptions).toEqual({});
-  expect(staged.roles).toEqual({ "900": { role: "fan" } });
+  expect(edit.assumptions).toEqual({});
+  expect(edit.roles).toEqual({ "900": { role: "fan" } });
   expect(pendingRulings(work, store)).toEqual([
     { segment: "assumptions", key: "open-end:101:1", from: "ignore", to: null },
     { segment: "roles", key: "900", from: "passive", to: "fan" },
   ]);
-  expect(storeRulings(staged, store, "later")).toEqual({
+  expect(storeRulings(edit, store, "later")).toEqual({
     verdicts: {},
     roles: { "900": { role: "fan", ruledAt: "later" } },
   });
@@ -58,13 +58,13 @@ it("takes a stored verdict back with a staged delete, and a stored passive is ru
 it("writes the stored rulings with their own time and new ones with the write's", () => {
   const work = doc({
     assumptions: {
-      "proximity:12:0|34:1": { staged: { value: { kind: "verdict", verdict: "ignore" } } },
-      "flex-roughness:Flex": { staged: { value: { kind: "flex-roughness", ft: 0.003 } } },
+      "proximity:12:0|34:1": { edit: { value: { kind: "verdict", verdict: "ignore" } } },
+      "flex-roughness:Flex": { edit: { value: { kind: "flex-roughness", ft: 0.003 } } },
     },
   });
-  const staged = stagedDucts(withStoredRulings(work, store));
+  const edit = stagedDucts(withStoredRulings(work, store));
 
-  expect(storeRulings(staged, store, "later")).toEqual({
+  expect(storeRulings(edit, store, "later")).toEqual({
     verdicts: {
       "open-end:101:1": { verdict: "ignore", ruledAt: AT },
       "proximity:12:0|34:1": { verdict: "ignore", ruledAt: "later" },

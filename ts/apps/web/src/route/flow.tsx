@@ -59,12 +59,7 @@ export function FlowMatrix({ handle }: { handle: RouteHandle<any, any, any, any>
         <span className="t-small t-upper text-ink-mute">needs</span>
         {actions.map(([name, action]) => (
           <Fragment key={name}>
-            <span className="text-ink">
-              {action.label}
-              {handle.actions[name].actor === "human" ? (
-                <span className="t-small face-mono text-ink-mute"> human</span>
-              ) : null}
-            </span>
+            <span className="text-ink">{action.label}</span>
             {readingKeys.map((key) => {
               const hit = action.dirties.includes(key);
               return (

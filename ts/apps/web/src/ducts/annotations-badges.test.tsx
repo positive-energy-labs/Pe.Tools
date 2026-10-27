@@ -186,7 +186,7 @@ it("one gap repair has one row, two named subjects, two pins and one evidence se
     equipmentFlows: new Map(),
     doc: null,
     claims: [],
-    write: { staged: 0, hasPreview: false, fresh: false, planned: null, refused: null, esp: 0 },
+    write: { edit: 0, hasPreview: false, fresh: false, planned: null, refused: null, esp: 0 },
   };
   const rows = inboxRows(input);
   expect(rows.fix).toHaveLength(1);

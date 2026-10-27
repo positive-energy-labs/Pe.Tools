@@ -25,10 +25,10 @@ export const targetNeed = (need: ActionNeed): TargetNeed => targetNeeds[need];
 export interface ActionFacts {
   says: string;
   needs: TargetNeed;
-  actor: "any" | "human";
+  effect?: "query" | "command";
 }
 /** The slice of a host action record a browser verb projects. */
-export type HostRecord = Pick<ActionDefinition, "says" | "needs" | "actor">;
+export type HostRecord = Pick<ActionDefinition, "says" | "needs" | "effect">;
 
 /**
  * What a verb is. A host verb names its record by key, or picks it at press time (Ops picks the
@@ -40,7 +40,7 @@ export type ActionIdentity<W, R extends string, P> =
       does: HostActionKey | ((ctx: Ctx<W, R, P>) => HostRecord);
       says?: never;
       needs?: never;
-      actor?: never;
+      effect?: never;
     }
   | ({ does?: never } & ActionFacts);
 
@@ -50,9 +50,9 @@ export const actionFacts = <W, R extends string, P>(
   ctx: Ctx<W, R, P>,
 ): ActionFacts => {
   if (action.does === undefined)
-    return { says: action.says, needs: action.needs, actor: action.actor };
+    return { says: action.says, needs: action.needs, effect: action.effect };
   const record = typeof action.does === "string" ? hostActions[action.does] : action.does(ctx);
-  return { says: record.says, needs: targetNeed(record.needs), actor: record.actor };
+  return { says: record.says, needs: targetNeed(record.needs), effect: record.effect };
 };
 
 /** The target need known before any press; undefined when the verb picks its record at press time. */

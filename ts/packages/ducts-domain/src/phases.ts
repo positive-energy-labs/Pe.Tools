@@ -2,7 +2,7 @@
  * Phase anomalies (kaitpw 2026-10-19): an MEP firm models what its views show, so an element in a
  * phase its views do not show is often forgotten junk (Project A duct 11621952 on Future inside duct
  * 12089962 while the views show Existing; FC-23's duplicate 8732550 on Future). Work's
- * `workingPhase` (staged, else proposed) names the phase. `phased` drops every element that does
+ * `workingPhase` (edit, else proposed) names the phase. `phased` drops every element that does
  * not exist in it by the snapshot's phase order (created after it, or demolished at or before it)
  * before any network or proximity reads the snapshot, and each dropped element that connects to,
  * meets by proximity, or sits inside a kept one is an `out-of-phase` warning a person rules on.

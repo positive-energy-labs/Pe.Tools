@@ -23,7 +23,7 @@ type OpsCtx = Ctx<never, OpsReading, Record<string, never>>;
  */
 const opRecord = (op?: HostOperationCatalogEntry): HostRecord => ({
   says: "runs the selected operation on the target the sentence names",
-  actor: "human",
+  effect: op?.intent === "Read" ? "query" : "command",
   needs:
     !op || isTsOnlyOperationKey(op.key) ? "nothing" : op.needs === "nothing" ? "session" : op.needs,
 });

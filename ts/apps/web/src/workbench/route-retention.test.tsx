@@ -38,7 +38,6 @@ const manifest = defineRoute({
       label: "native",
       says: "native",
       needs: "host",
-      actor: "any",
       input: z.void() as unknown as z.ZodType<never>,
       dirties: [],
       ready: () => null,

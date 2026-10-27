@@ -32,13 +32,13 @@ export const manifest = defineRoute<
       groupOf: (key) => [takeoffEditAddress(key).roomId],
       nouns: ["room"],
       noun: "room edits",
-      // A room edit's staged rung needs its room's base, read from the world in the route: the
+      // A room edit's edit rung needs its room's base, read from the world in the route: the
       // head counts edits but does not stage one whose room has no base.
       admit: (doc, patches) =>
         patches.some(
           (patch) =>
             patch.path[0] === "edits" &&
-            patch.path[2] === "staged" &&
+            patch.path[2] === "edit" &&
             !doc.bases[takeoffEditAddress(String(patch.path[1])).roomId],
         )
           ? {

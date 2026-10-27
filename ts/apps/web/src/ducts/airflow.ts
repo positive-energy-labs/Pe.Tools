@@ -104,7 +104,7 @@ export const airflowPatches = (
 ): RouteStatePatch[] => {
   const key = of === "unit" ? "fanFlow" : "terminalFlow";
   return transitionPatches(["parameters"], key, doc?.parameters?.[key] ?? {}, {
-    kind: "stage",
+    kind: "set",
     rung: { value: slot },
   });
 };

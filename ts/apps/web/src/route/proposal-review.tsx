@@ -21,8 +21,8 @@ const display = (rung: { value?: unknown; delete?: true } | null | undefined) =>
         : JSON.stringify(rung.value);
 
 /**
- * Pea's proposals and the staged fields on the open member, on the Work band: accept stages, deny
- * clears, unstage clears the staged value, and save writes every staged field. It stays out of the
+ * Pea's proposals and the edit fields on the open member, on the Work band: accept stages, deny
+ * clears, unstage clears the edit value, and save writes every edit field. It stays out of the
  * way while the Work is clean.
  */
 export function ProposalReview({
@@ -57,10 +57,10 @@ export function ProposalReview({
               label="adopt disk bytes"
               refusal={
                 busy
-                  ? "The member changed on disk after these proposals were made. Adopting discards them and the staged fields."
+                  ? "The member changed on disk after these proposals were made. Adopting discards them and the edit fields."
                   : null
               }
-              reason="The member changed on disk after these proposals were made. Adopting discards them and the staged fields."
+              reason="The member changed on disk after these proposals were made. Adopting discards them and the edit fields."
               onClick={() => void work.actions.adopt.run({ sha256: readSha } as never)}
             >
               adopt disk bytes
@@ -80,10 +80,10 @@ export function ProposalReview({
               label="save"
               refusal={
                 work.actions.save.refusal != null || busy
-                  ? (work.actions.save.refusal ?? "Write every staged field to the member")
+                  ? (work.actions.save.refusal ?? "Write every edit field to the member")
                   : null
               }
-              reason="Write every staged field to the member"
+              reason="Write every edit field to the member"
               onClick={() => void work.actions.save.run().catch(() => undefined)}
             >
               save
@@ -102,7 +102,7 @@ export function ProposalReview({
             address={path}
             label={<span className="face-mono">{path}</span>}
             cell={cell}
-            facts={{ value: display(cell.staged ?? cell.proposal) }}
+            facts={{ value: display(cell.edit ?? cell.suggestion) }}
           />
         ))}
       </div>

@@ -63,8 +63,8 @@ function useFamiliesWorkspaceModel(
       ? store.applied
       : (visibleReading?.filter ?? null);
   const cells = archived ? NO_CELLS : store.cells;
-  const staged = useMemo(
-    () => familyCellEntries(cells).filter((entry) => entry.cell.staged != null),
+  const edit = useMemo(
+    () => familyCellEntries(cells).filter((entry) => entry.cell.edit != null),
     [cells],
   );
   const plan = archived ? null : store.plan;
@@ -205,10 +205,7 @@ function useFamiliesWorkspaceModel(
   const patch = archived ? undefined : store.handle.work.doc?.patch;
   const overlay = useMemo(() => projectPatch(patch ?? {}, rows, params), [patch, rows, params]);
 
-  const stagedFamilies = useMemo(
-    () => new Set(staged.map((entry) => entry.familyName)).size,
-    [staged],
-  );
+  const stagedFamilies = useMemo(() => new Set(edit.map((entry) => entry.familyName)).size, [edit]);
 
   const chips = useTableChips({
     categories:
@@ -226,16 +223,16 @@ function useFamiliesWorkspaceModel(
           }
         : null,
     // Staged cells are what plan will generate: countable here, removable in one press.
-    staged:
-      !archived && staged.length > 0
+    edit:
+      !archived && edit.length > 0
         ? {
-            label: `staged · ${staged.length} cell${staged.length === 1 ? "" : "s"} · ${stagedFamilies} famil${stagedFamilies === 1 ? "y" : "ies"}`,
+            label: `edit · ${edit.length} cell${edit.length === 1 ? "" : "s"} · ${stagedFamilies} famil${stagedFamilies === 1 ? "y" : "ies"}`,
             onClear: () =>
               void runFanOut(
                 wire,
                 cells,
-                staged.map((entry) => entry.key),
-                "unstage",
+                edit.map((entry) => entry.key),
+                "clear",
               ),
           }
         : null,

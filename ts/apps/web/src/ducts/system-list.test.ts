@@ -14,7 +14,7 @@ test("two systems sharing a fan retain their own pressure and breakdown terminal
   snapshot.systems.push({ ...snapshot.systems[0]!, id: 501, name: "SA 2" });
   for (const e of [...snapshot.nodes, ...snapshot.segments])
     if ([12, 22, 31].includes(e.id)) e.systemName = "SA 2";
-  const cell = (inWg: number) => ({ staged: { value: { inWg } } });
+  const cell = (inWg: number) => ({ edit: { value: { inWg } } });
   const work = ductsRouteState.schema.parse({
     terminalDrops: { 30: cell(0.05), 31: cell(0.35) },
     componentDrops: { 21: cell(0.01), 22: cell(0.01) },

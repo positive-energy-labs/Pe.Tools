@@ -40,7 +40,7 @@ export default function Variant() {
       {open.c && (
         <Win width={360} bottom={12}>
           <div className="flex flex-col gap-1.5 p-3" style={{ height: hC - 2 }}>
-            <Who what="proposal ready" onClose={() => hide("c")} />
+            <Who what="suggestion ready" onClose={() => hide("c")} />
             <div className="t-prose">HCB-48 family: 22 changes</div>
             <div className="mt-auto flex gap-1.5">
               <Button kind="commit" label="Review" onClick={() => hide("c")}>

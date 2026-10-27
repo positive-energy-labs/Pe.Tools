@@ -27,7 +27,7 @@ export const rowRecipe = tv({
 
 export interface RowState {
   stage?: StateCellProps["stage"];
-  stagedBy?: StateCellProps["stagedBy"];
+  author?: StateCellProps["author"];
   /** Where the keyboard is. Not the selection. */
   cursor?: boolean;
   /** In the selected set. */
@@ -110,7 +110,7 @@ export type RowProps = RowState & {
 
 const rowStateProps = (state: RowState) => ({
   "data-stage": state.stage,
-  "data-staged-by": state.stage && state.stage !== "clean" ? (state.stagedBy ?? "pea") : undefined,
+  "data-edit-by": state.stage && state.stage !== "clean" ? (state.author ?? "unknown") : undefined,
   "data-cursor": state.cursor ? "" : undefined,
   "data-selected": state.selected ? "" : undefined,
   "data-active": state.active ? "" : undefined,

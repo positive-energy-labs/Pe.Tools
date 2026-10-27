@@ -273,10 +273,10 @@ it("runs the whole pipeline over W1's synthetic snapshot", () => {
   expect(computeLosses(snap, {}).errors.length).toBeGreaterThan(0);
 });
 
-it("prices under the table a person staged in the Work document", () => {
-  // The staged cell goes through the route contract, then becomes the solver's choices.
+it("prices under the table a person edit in the Work document", () => {
+  // The edit cell goes through the route contract, then becomes the solver's choices.
   const doc = ductsRouteState.schema.parse({
-    rules: { "elbow-1d-gt10": { staged: { value: { table: "CD3-2" } } } },
+    rules: { "elbow-1d-gt10": { edit: { value: { table: "CD3-2" } } } },
   });
   const choices = Object.fromEntries(
     Object.entries(stagedDucts(doc).rules).map(([key, v]) => [key, v.table]),
@@ -450,7 +450,7 @@ const lifted = (facing?: number[]) => {
   return broken;
 };
 const JOIN = "proximity:11:2|30:1";
-const verdictDoc = (rung: "staged" | "proposal") =>
+const verdictDoc = (rung: "edit" | "suggestion") =>
   ductsRouteState.schema.parse({
     assumptions: { [JOIN]: { [rung]: { value: { kind: "verdict", verdict: "connect" } } } },
   });
@@ -480,13 +480,13 @@ it("only an anomalous join makes a path provisional; a near miss and a stretched
   expect(anomalous.next.provisional).toEqual(provisional);
 });
 
-it("only a person's staged connect confirms an anomalous join; Pea's proposed connect leaves it provisional", () => {
+it("only a person's edit connect confirms an anomalous join; Pea's proposed connect leaves it provisional", () => {
   const broken = lifted([0, 1, 0]);
-  const staged = price(broken, grids, verdictDoc("staged"));
+  const edit = price(broken, grids, verdictDoc("edit"));
   // The leftover: a confirmed same-class join no longer counts on the path.
-  expect(staged.next.paths[30]).toMatchObject({ inferred: [], provisional: null });
-  expect(staged.next.byGroup.g10!.provisional).toBeNull();
-  expect(price(broken, grids, verdictDoc("proposal")).next.paths[30]!.provisional).toMatchObject({
+  expect(edit.next.paths[30]).toMatchObject({ inferred: [], provisional: null });
+  expect(edit.next.byGroup.g10!.provisional).toBeNull();
+  expect(price(broken, grids, verdictDoc("suggestion")).next.paths[30]!.provisional).toMatchObject({
     worst: "anomalous",
     findingIds: [JOIN],
   });

@@ -53,9 +53,9 @@ function errorIssueCount(evaluation: ParameterLinkEvaluation | null | undefined)
 }
 
 /** One refusal string, so the strip and the verb can never disagree about why. */
-/** The host's refusal for applying a proposal preview (`family-actions.ts`), word for word. */
+/** The host's refusal for applying a suggestion preview (`family-actions.ts`), word for word. */
 const PROPOSAL_PREVIEW_REFUSAL =
-  "The reviewed reading is a proposal preview; stage the profile and preview again";
+  "The reviewed reading is a suggestion preview; stage the profile and preview again";
 
 /** A profile said as one line: how much it links. */
 export const profileSummary = (profile: ParameterLinkProfile | null | undefined) =>
@@ -67,8 +67,8 @@ export function applyRefusal(
   document: ParameterLinksDocument | null,
   reading: ParameterLinksReading | null,
 ): string | null {
-  // A preview of Pea's proposal never arms apply: the host's words, said on the web first.
-  if (reading?.subject === "proposal") return PROPOSAL_PREVIEW_REFUSAL;
+  // A preview of Pea's suggestion never arms apply: the host's words, said on the web first.
+  if (reading?.subject === "suggestion") return PROPOSAL_PREVIEW_REFUSAL;
   if (!document || !stagedParameterProfile(document)) return "Author a draft profile first.";
   if (!evaluationIsCurrent(document, reading)) return "Preview this draft before applying.";
   if (errorIssueCount(reading?.evaluation) > 0)
@@ -160,13 +160,13 @@ export interface ProfileChange {
   fields: string[];
 }
 
-/** What accepting `proposed` would change against `staged`, matched by id; unchanged items are left out. */
+/** What accepting `proposed` would change against `edit`, matched by id; unchanged items are left out. */
 export function profileDiff(
-  staged: ParameterLinkProfile | null | undefined,
+  edit: ParameterLinkProfile | null | undefined,
   proposed: ParameterLinkProfile | null | undefined,
 ): ProfileChange[] {
   const definitions = new Map(
-    [...(staged?.definitions ?? []), ...(proposed?.definitions ?? [])].map((d) => [d.id, d]),
+    [...(edit?.definitions ?? []), ...(proposed?.definitions ?? [])].map((d) => [d.id, d]),
   );
   const nameOf = (item: { id: string; definitionId?: string }) =>
     definitionName(definitions.get(item.definitionId ?? item.id));
@@ -197,7 +197,7 @@ export function profileDiff(
     return changes;
   };
   return [
-    ...side("definition", staged?.definitions ?? [], proposed?.definitions ?? []),
-    ...side("assignment", staged?.assignments ?? [], proposed?.assignments ?? []),
+    ...side("definition", edit?.definitions ?? [], proposed?.definitions ?? []),
+    ...side("assignment", edit?.assignments ?? [], proposed?.assignments ?? []),
   ];
 }

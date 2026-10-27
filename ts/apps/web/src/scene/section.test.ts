@@ -116,7 +116,7 @@ test("compound presets filter context only and never remove an opened system or 
   ).toBe(false);
 });
 
-test("staged focus preserves every polygon plane and world section across different capture origins", () => {
+test("edit focus preserves every polygon plane and world section across different capture origins", () => {
   const data = new Float32Array(384);
   for (let axis = 0; axis < 3; axis++) data.set([-2, -2, 2, -2, 2, 2, -2, 2], axis * 128);
   const volume = {

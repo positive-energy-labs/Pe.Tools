@@ -110,11 +110,11 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
     cardRefs.current[located.id]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [located, docMode]);
 
-  /** A proposal STANDS until it is cleared. Accepting does not clear it: the reader wants it
-   * behind the staged value, because that is the only evidence that the square is pea's ink. */
+  /** A suggestion STANDS until it is cleared. Accepting does not clear it: the reader wants it
+   * behind the edit value, because that is the only evidence that the square is pea's ink. */
   const stands = (entry: ProtoProposal): boolean => !draft.cleared.includes(entry.id);
 
-  /** Every standing proposal aimed at exactly one cell: a type override, or the family-level
+  /** Every standing suggestion aimed at exactly one cell: a type override, or the family-level
    * value. A list, not a single one — a cell may be argued about twice, and hiding the second
    * would be the surface lying about how much is outstanding. */
   const proposalsAt = (param: string, typeName: string | null): ProtoProposal[] =>
@@ -126,25 +126,25 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
         stands(entry),
     );
 
-  /** Every standing proposal about one PROPERTY of a parameter (isInstance, formula, group). */
+  /** Every standing suggestion about one PROPERTY of a parameter (isInstance, formula, group). */
   const propertyProposalsAt = (param: string): ProtoProposal[] =>
     world.proposals.filter(
       (entry) => entry.param === param && entry.property !== undefined && stands(entry),
     );
 
-  /** Every standing proposal anywhere on a parameter's row — what the RAIL counts. */
+  /** Every standing suggestion anywhere on a parameter's row — what the RAIL counts. */
   const proposalsOn = (param: string): ProtoProposal[] =>
     world.proposals.filter((entry) => entry.param === param && stands(entry));
 
   const openProposals = world.proposals.filter((entry) => stands(entry));
 
-  /** Locate: point the sidebar at a proposal without deciding anything about it. */
-  const locate = (proposal: ProtoProposal) => {
-    setFocusedProposal(proposal.id);
-    setPinnedParam(proposal.param);
+  /** Locate: point the sidebar at a suggestion without deciding anything about it. */
+  const locate = (suggestion: ProtoProposal) => {
+    setFocusedProposal(suggestion.id);
+    setPinnedParam(suggestion.param);
     setLocated((last) => ({
-      id: proposal.id,
-      block: proposal.sourceBlockId,
+      id: suggestion.id,
+      block: suggestion.sourceBlockId,
       n: (last?.n ?? 0) + 1,
     }));
   };
@@ -212,10 +212,10 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
     reviewTransitions(store.wire, key, store.fields[key] ?? {});
 
   /**
-   * TYPING BEATS PROPOSING. Committing your own value into a cell CLEARS every proposal aimed at
+   * TYPING BEATS PROPOSING. Committing your own value into a cell CLEARS every suggestion aimed at
    * that exact cell — including an empty commit, which hands the type back to inheriting and is
    * just as much a decision. `superseded` was a fourth state for this, and it is deleted: pea
-   * argued for a number and you wrote a different one, so the proposal is simply gone, exactly as
+   * argued for a number and you wrote a different one, so the suggestion is simply gone, exactly as
    * a denial leaves it. The card says which of the two happened; the cell has nothing to say.
    */
   const sever = (next: Draft, param: string, typeName: string | null) => {
@@ -230,7 +230,7 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
   /**
    * The FAMILY-LEVEL value. The type columns show it only as a grey placeholder they inherit, and
    * a placeholder is not an editor; it lives in the inspector, which is also the only place a
-   * formula can be typed at a comfortable width. Committing here severs a family-level proposal
+   * formula can be typed at a comfortable width. Committing here severs a family-level suggestion
    * exactly as typing in a type cell severs a per-type one — the law does not care which level you
    * beat pea to.
    */
@@ -321,7 +321,7 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
    * and the saved overlay stops differing anywhere — the visible proof that save wrote what the
    * marks said it would.
    *
-   * LIVE: the draft is diffed into staged field patches, staged onto `route:settings`, and the
+   * LIVE: the draft is diffed into edit field patches, edit onto `route:settings`, and the
    * host's own `save` writes them under the version token captured at open. Nothing is folded in
    * here on success: the snapshot comes back over SSE with a new token, the lane re-projects, and
    * the store's version-token guard rebuilds the draft from what actually landed. That is the difference
@@ -461,8 +461,8 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
     const set = new Set<string>();
     for (const param of focusedParams) for (const id of world.grounding[param] ?? []) set.add(id);
     if (focusedProposal) {
-      const proposal = world.proposals.find((entry) => entry.id === focusedProposal);
-      if (proposal) set.add(proposal.sourceBlockId);
+      const suggestion = world.proposals.find((entry) => entry.id === focusedProposal);
+      if (suggestion) set.add(suggestion.sourceBlockId);
     }
     return set;
   }, [world, focusedParams, focusedProposal]);

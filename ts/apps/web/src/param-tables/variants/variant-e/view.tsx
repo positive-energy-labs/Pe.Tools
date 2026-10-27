@@ -179,9 +179,9 @@ export function VariantE({ useLens }: { useLens: UseLens }) {
       return {
         scale: "row",
         value: fmtNum(fact.value, 1),
-        stage: "staged",
-        stagedBy: "you",
-        note: `staged from authored ${fact.label} — model holds ${fmtNum(cur, 1)}; commits with the type (${group.rows.length} rows)`,
+        stage: "edit",
+        author: "human",
+        note: `edit from authored ${fact.label} — model holds ${fmtNum(cur, 1)}; commits with the type (${group.rows.length} rows)`,
       };
     }
     if (cur !== fact.committed) {
@@ -218,8 +218,8 @@ export function VariantE({ useLens }: { useLens: UseLens }) {
       <StateCell
         scale="row"
         value={fmtNum(fact.value, 1)}
-        stage={fact.value !== fact.committed ? "staged" : "clean"}
-        stagedBy="you"
+        stage={fact.value !== fact.committed ? "edit" : "clean"}
+        author="human"
         numeric={{ digits: 1 }}
         onCommit={(text) => {
           setFactValue(key, Number(text));
@@ -275,24 +275,24 @@ export function VariantE({ useLens }: { useLens: UseLens }) {
                   </FactChip>
                   <Button
                     kind="commit"
-                    label="Apply staged writes"
+                    label="Apply edit writes"
                     onClick={apply}
                     refusal={
                       applicable.length === 0
                         ? refusals.length > 0
-                          ? "every staged write refuses — the edited fact only targets formula-owned types"
-                          : "nothing is staged — edit a design fact in the authored lane first"
+                          ? "every edit write refuses — the edited fact only targets formula-owned types"
+                          : "nothing is edit — edit a design fact in the authored lane first"
                         : null
                     }
                     reason={
                       applicable.length > 0
                         ? `Writes ${applicable.length} type parameter${applicable.length === 1 ? "" : "s"} (${stagedRows} rows) in ProjectA_Clone_Aug_11${refusals.length > 0 ? ` — ${refusals.length} target${refusals.length === 1 ? "" : "s"} will refuse (formula-owned)` : ""} · mock, in-memory`
                         : refusals.length > 0
-                          ? "every staged write refuses — the edited fact only targets formula-owned types"
-                          : "nothing is staged — edit a design fact in the authored lane first"
+                          ? "every edit write refuses — the edited fact only targets formula-owned types"
+                          : "nothing is edit — edit a design fact in the authored lane first"
                     }
                   >
-                    Apply staged writes
+                    Apply edit writes
                   </Button>
                 </span>
               </span>
@@ -323,7 +323,7 @@ export function VariantE({ useLens }: { useLens: UseLens }) {
                     </span>
                   </TooltipHint>
                 ) : (
-                  <span style={muted}>no staged writes</span>
+                  <span style={muted}>no edit writes</span>
                 )}
                 {driftRows > 0 ? (
                   <TooltipHint content="the model disagrees with a committed authored fact on these rows">

@@ -134,6 +134,6 @@ export const FLAG_MEANING: Record<string, string> = {
   "low-evidence-boundary": "boundary placed on weak wall evidence",
   "orphaned-region": "an existing region no room in this run claims",
   "materialize-failed": "Revit refused the loop — dropped whole rather than bent to fit",
-  "unhomed-proposal":
+  "unhomed-suggestion":
     "this rerun found a room with no materialized region yet — accept to materialize it, or dismiss to drop it",
 };

@@ -12,7 +12,7 @@ export function assignFamilyRule(work: RuleWork, family: string, rule: string) {
       ["ruleAssignments"],
       family,
       work.doc?.ruleAssignments?.[family] ?? {},
-      rule ? { kind: "stage", rung: { value: { rule } } } : { kind: "unstage" },
+      rule ? { kind: "set", rung: { value: { rule } } } : { kind: "clear" },
     ),
   );
 }
@@ -29,7 +29,7 @@ export function RuleAssignment({ family, work }: { family: string; work: RuleWor
         className="dl-control t-small max-w-full"
         onClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => event.stopPropagation()}
-        value={cell.staged?.value.rule ?? ""}
+        value={cell.edit?.value.rule ?? ""}
         disabled={pending}
         onChange={async (event) => {
           setPending(true);

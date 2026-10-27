@@ -174,16 +174,16 @@ export function ductsPaneState({
   treeCollapsed,
   priority,
   toRule,
-  staged,
+  edit,
 }: {
   width: number;
   inboxOpen: boolean | null;
   treeCollapsed: boolean | null;
   priority: "sidebar" | "inbox";
   toRule: number;
-  staged: number;
+  edit: number;
 }) {
-  const open = inboxOpen ?? ((width === 0 || width >= 1100) && (toRule > 0 || staged > 0));
+  const open = inboxOpen ?? ((width === 0 || width >= 1100) && (toRule > 0 || edit > 0));
   const sidebarWanted = !(treeCollapsed ?? (width > 0 && width < TIGHT_PX));
   const cramped =
     width > 0 &&

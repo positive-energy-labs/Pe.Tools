@@ -130,8 +130,8 @@ function SchemaCell({
   const issues = field.errors.map((issue) => issue.message).join("; ") || undefined;
   const facts = {
     value: text,
-    stage: changed ? ("staged" as const) : ("clean" as const),
-    stagedBy: "you" as const,
+    stage: changed ? ("edit" as const) : ("clean" as const),
+    author: "human" as const,
     scale: "row" as const,
   };
   if (!suggestions) return <StateCell {...facts} refused={issues} onCommit={onChange} />;

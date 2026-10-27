@@ -4,7 +4,7 @@ import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import * as Reactivity from "effect/unstable/reactivity/Reactivity";
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
-import type { ExecutionTarget, TrichotomyCellLike } from "@pe/agent-contracts";
+import type { ExecutionTarget, CellLike } from "@pe/agent-contracts";
 import { Layer } from "effect";
 import { inspectAtomRegistry, type OwnerReferences } from "#/state/atom-inspect";
 import { causeRefusal, refuse, type Refusal } from "./refusal";
@@ -424,20 +424,20 @@ export function routeSearch(search: Record<string, unknown>): {
 }
 
 /** Staged and proposed cell counts: what a Work revision changed, when the route has cells. */
-type CellTally = { staged: number; proposed: number };
+type CellTally = { edit: number; proposed: number };
 
 const cells = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /** What one Work revision did to its cells, as the person would say it. */
 function workWords(was: CellTally | null, now: CellTally | null, revision: number) {
   if (!was || !now) return `loaded Work r${revision}`;
-  const staged = now.staged - was.staged;
+  const edit = now.edit - was.edit;
   const proposed = now.proposed - was.proposed;
-  if (staged > 0 && proposed < 0) return `accepted ${cells(staged, "proposal")}`;
-  if (staged > 0) return `staged ${cells(staged, "cell")}`;
-  if (staged < 0) return `unstaged ${cells(-staged, "cell")}`;
+  if (edit > 0 && proposed < 0) return `accepted ${cells(edit, "suggestion")}`;
+  if (edit > 0) return `edit ${cells(edit, "cell")}`;
+  if (edit < 0) return `unstaged ${cells(-edit, "cell")}`;
   if (proposed > 0) return `Pea proposed ${cells(proposed, "cell")}`;
-  if (proposed < 0) return `cleared ${cells(-proposed, "proposal")}`;
+  if (proposed < 0) return `cleared ${cells(-proposed, "suggestion")}`;
   return `changed Work r${revision}`;
 }
 
@@ -461,14 +461,12 @@ export function usePageLogNotes(
   const { segment } = now.work;
   const cells = segment
     ? Object.values(
-        ((now.work.slice?.doc ?? {}) as Record<string, Record<string, TrichotomyCellLike>>)[
-          segment
-        ] ?? {},
+        ((now.work.slice?.doc ?? {}) as Record<string, Record<string, CellLike>>)[segment] ?? {},
       )
     : null;
-  const staged = cells?.filter((cell) => cell.staged != null).length ?? null;
+  const edit = cells?.filter((cell) => cell.edit != null).length ?? null;
   const proposed =
-    cells?.filter((cell) => cell.proposal != null && cell.staged == null).length ?? null;
+    cells?.filter((cell) => cell.suggestion != null && cell.edit == null).length ?? null;
   const lostKey = lost ? `${lost.ref.session}/${lost.ref.openId}` : null;
   const seen = useRef({
     target,
@@ -478,7 +476,7 @@ export function usePageLogNotes(
     lost: null as string | null,
   });
   useEffect(() => {
-    const tally = staged === null || proposed === null ? null : { staged, proposed };
+    const tally = edit === null || proposed === null ? null : { edit, proposed };
     if (seen.current.target !== target) {
       seen.current.target = target;
       const bound = JSON.parse(target) as { session: string; openId: string } | null;
@@ -504,5 +502,5 @@ export function usePageLogNotes(
         owner.note("work", workWords(seen.current.tally, tally, revision), `r${revision}`);
       seen.current.tally = tally;
     }
-  }, [owner, target, stage, revision, staged, proposed, lostKey, lost]);
+  }, [owner, target, stage, revision, edit, proposed, lostKey, lost]);
 }

@@ -82,7 +82,7 @@ const snapshot = {
 
 it("a group climbs from blocked to walkable to budgetable as a person stages assumptions", () => {
   const stage = (doc: DuctsRouteDocument, key: string, value: unknown) => {
-    const patches = transitionPatches(["assumptions"], key, {}, { kind: "stage", rung: { value } });
+    const patches = transitionPatches(["assumptions"], key, {}, { kind: "set", rung: { value } });
     const landed = applyPatches(
       ductsRouteState,
       { version: 1, revision: 0, doc },
@@ -101,12 +101,12 @@ it("a group climbs from blocked to walkable to budgetable as a person stages ass
   });
   doc = stage(doc, "open-end:g1:2:1", { kind: "verdict", verdict: "capped" });
   expect(readiness(snapshot, doc).g1?.level).toBe("walkable");
-  // A proposal is not an assumption until a person stages it.
+  // A suggestion is not an assumption until a person stages it.
   const proposed = ductsRouteState.schema.parse({
     ...doc,
     assumptions: {
       ...doc.assumptions,
-      "fan-static:9": { proposal: { value: { kind: "fan-static", inWg: 0.5 } } },
+      "fan-static:9": { suggestion: { value: { kind: "fan-static", inWg: 0.5 } } },
     },
   });
   expect(readiness(snapshot, proposed).g1?.level).toBe("walkable");

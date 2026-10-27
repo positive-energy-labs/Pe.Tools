@@ -18,7 +18,6 @@ import {
 import { RevitGroup } from "./revit";
 import { HostGroup } from "./host";
 import { ProviderSetup } from "./pea";
-import { AccessSwitch } from "#/chat/first-open";
 import { useProviders } from "#/workbench/provider/providers";
 import { SettingsProjection } from "#/settings/options";
 import { SettingsActions } from "#/settings/options-actions";
@@ -71,7 +70,6 @@ function PeaSettings({ machine, fixture }: { machine: Machine; fixture: boolean 
   return (
     <div className="flex flex-col gap-3">
       <ProviderSetup providers={providers} />
-      <AccessSwitch providers={providers} />
     </div>
   );
 }

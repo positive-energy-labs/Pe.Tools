@@ -33,7 +33,7 @@ export const healOf = (
   return found;
 };
 
-/** Pe's ESP of a group now (the largest path total with the staged cells), with what finds it again. */
+/** Pe's ESP of a group now (the largest path total with the edit cells), with what finds it again. */
 export const espBefore = (
   snapshot: DuctSnapshot,
   doc: DuctsRouteDocument | null,

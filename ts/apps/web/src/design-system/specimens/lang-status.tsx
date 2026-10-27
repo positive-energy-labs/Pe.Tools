@@ -29,7 +29,7 @@ export function LangStatusSpecimens() {
             <CoverageBar
               segments={[
                 { label: "grounded", count: 34, viz: 2 },
-                { label: "staged", count: 11, viz: 1 },
+                { label: "edit", count: 11, viz: 1 },
                 { label: "unread", count: 6, viz: 6 },
               ]}
               total={60}

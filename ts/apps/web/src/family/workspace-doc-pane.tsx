@@ -11,7 +11,7 @@ import { Button } from "@pe/kit/lang/button";
 import { Pane } from "@pe/kit/lang/pane";
 import { SpecSheet, SpecText, ProposalCard } from "#/family/doc-pane";
 import { NavStateCell } from "#/family/marks";
-import { cellFromTrichotomy } from "@pe/kit/lang/cell";
+import { cellFromDraft } from "@pe/kit/lang/cell";
 import {
   authoredText,
   bindingOf,
@@ -148,7 +148,7 @@ export function FamilyWorkspaceDocPane() {
     const blocks = world.grounding[name] ?? [];
     const family = proposalsAt(name, null);
     const model = lane.document?.model;
-    // The field the family value stands on: pea's proposal, else where typing would stage it.
+    // The field the family value stands on: pea's suggestion, else where typing would stage it.
     const familyKey =
       family[0]?.id ??
       (model
@@ -180,11 +180,11 @@ export function FamilyWorkspaceDocPane() {
             </TooltipHint>
           </p>
           {/* THE FAMILY-LEVEL VALUE CELL, on the editable `StateCell` (R8, families #6): pea's
-              open family-level proposal takes the body (fold + wash), your unwritten edit takes
-              the staged square + bold, and a refused empty commit is the cell's own restore +
+              open family-level suggestion takes the body (fold + wash), your unwritten edit takes
+              the edit square + bold, and a refused empty commit is the cell's own restore +
               caution note — the route's refusal paragraph this replaced is deleted. */}
           <NavStateCell
-            {...cellFromTrichotomy(
+            {...cellFromDraft(
               proposalCell(
                 family,
                 (authoredText(saved.authored[name]) ?? null) !== authored ? authored : null,
@@ -206,7 +206,7 @@ export function FamilyWorkspaceDocPane() {
                   measured: {
                     displayUnit: world.live.units[name]!,
                     parse: (text: string) => parse(world.live!.units![name]!, text),
-                    stage: (staged: MeasuredValue) => editAuthored(name, staged),
+                    stage: (edit: MeasuredValue) => editAuthored(name, edit),
                   },
                 }
               : { onCommit: (next: string) => editAuthored(name, next) })}
@@ -214,7 +214,7 @@ export function FamilyWorkspaceDocPane() {
           {family.length > 0 && (
             <p className="t-small face-mono mt-1" data-tone="pea">
               pea proposes {family[0]!.proposed} here — click the cell to bring the card into view;
-              typing your own value clears the proposal instead.
+              typing your own value clears the suggestion instead.
             </p>
           )}
         </div>
@@ -249,7 +249,7 @@ export function FamilyWorkspaceDocPane() {
         </div>
 
         <div className="hairline-t pt-1.5">
-          <TooltipHint content="Where this number came from. Grounding is its own fact, independent of any proposal — accepting or denying pea's reading never erases the citation.">
+          <TooltipHint content="Where this number came from. Grounding is its own fact, independent of any suggestion — accepting or denying pea's reading never erases the citation.">
             <p className="t-small t-upper mb-0.5 text-ink-2">grounding</p>
           </TooltipHint>
           {blocks.length === 0 ? (
@@ -313,19 +313,19 @@ export function FamilyWorkspaceDocPane() {
   const docPane = (
     <Pane
       flush
-      // The proposal stack and camera scroll independently: locating a citation keeps its card visible.
+      // The suggestion stack and camera scroll independently: locating a citation keeps its card visible.
       scroll="clip"
       // The pane is a COLUMN: the spec and its proposals scroll in the upper half, the inspector
       // docks under them. Neither displaces the other — an inspector that replaced the spec would
       // take away the evidence at the exact moment you edit the number it justifies.
       title="doc"
       meta={world.spec ? `${world.spec.fileName} · ${world.spec.blocks.length} blocks` : "no spec"}
-      help="The source document this profile cites. Citations resolve into its blocks, so what is attached here decides what a proposal can point at."
+      help="The source document this profile cites. Citations resolve into its blocks, so what is attached here decides what a suggestion can point at."
       actions={
         <>
           <FactChip
             tone="pea"
-            title="Pea's readings still STANDING on this page — open, or accepted and now staged. They are ephemeral: page-scoped, never written, gone on reload. Accepting stages the value; denying clears the proposal and the cell shows its real value again."
+            title="Pea's readings still STANDING on this page — open, or accepted and now edit. They are ephemeral: page-scoped, never written, gone on reload. Accepting stages the value; denying clears the suggestion and the cell shows its real value again."
           >
             {openProposals.length} standing
           </FactChip>
@@ -344,7 +344,7 @@ export function FamilyWorkspaceDocPane() {
                 value: "sheet",
                 label: "sheet",
                 title:
-                  "Show the rendered pages with measured block boxes. Focusing a proposal locates its citation on the sheet.",
+                  "Show the rendered pages with measured block boxes. Focusing a suggestion locates its citation on the sheet.",
               },
             ]}
           />
@@ -390,7 +390,7 @@ export function FamilyWorkspaceDocPane() {
           className="hairline-b shrink-0 max-h-1/3 overflow-y-auto px-2 py-1.5"
           data-surface="page"
         >
-          <TooltipHint content="Pea's reading of the spec, aimed at named cells. Accepting moves the value into the table where you can see it land; the citation stays lit either way, because the grounding is a separate fact from the proposal.">
+          <TooltipHint content="Pea's reading of the spec, aimed at named cells. Accepting moves the value into the table where you can see it land; the citation stays lit either way, because the grounding is a separate fact from the suggestion.">
             <div className="mb-1 flex items-baseline gap-2">
               <span className="t-small t-upper" data-tone="pea">
                 pea
@@ -405,33 +405,33 @@ export function FamilyWorkspaceDocPane() {
               no proposals — pea has not read this spec against the profile
             </EmptyState>
           ) : (
-            world.proposals.map((proposal) => (
+            world.proposals.map((suggestion) => (
               <ProposalCard
-                key={proposal.id}
-                proposal={proposal}
+                key={suggestion.id}
+                suggestion={suggestion}
                 wire={wire}
-                cell={fields[proposal.id] ?? {}}
+                cell={fields[suggestion.id] ?? {}}
                 // A card lights either because it is the one you located, or because its whole ROW
-                // is the one you located — the two-proposal case has to light both cards or the
+                // is the one you located — the two-suggestion case has to light both cards or the
                 // count on the rail would be pointing at something the sidebar refuses to show.
-                focused={focusedProposal === proposal.id || pinnedParam === proposal.param}
+                focused={focusedProposal === suggestion.id || pinnedParam === suggestion.param}
                 blockMd={
-                  world.spec?.blocks.find((block) => block.id === proposal.sourceBlockId)?.md ??
+                  world.spec?.blocks.find((block) => block.id === suggestion.sourceBlockId)?.md ??
                   null
                 }
                 specFileName={world.spec?.fileName ?? null}
                 onHover={(on) => {
                   setFocus(
                     on
-                      ? proposal.constituent
-                        ? { kind: "part", id: proposal.constituent.slug }
-                        : { kind: "param", id: proposal.param }
+                      ? suggestion.constituent
+                        ? { kind: "part", id: suggestion.constituent.slug }
+                        : { kind: "param", id: suggestion.param }
                       : null,
                   );
-                  setFocusedProposal(on ? proposal.id : null);
+                  setFocusedProposal(on ? suggestion.id : null);
                 }}
                 register={(node) => {
-                  cardRefs.current[proposal.id] = node;
+                  cardRefs.current[suggestion.id] = node;
                 }}
               />
             ))

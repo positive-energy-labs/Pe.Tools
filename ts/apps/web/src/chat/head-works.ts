@@ -4,13 +4,7 @@
  * cell head with pending cells. Every exit opens that route in the plugin pane.
  */
 import { useState, useSyncExternalStore, useMemo } from "react";
-import type {
-  Address,
-  DocumentRef,
-  RouteStatePatch,
-  TrichotomyCellLike,
-  WorkKey,
-} from "@pe/agent-contracts";
+import type { Address, DocumentRef, RouteStatePatch, CellLike, WorkKey } from "@pe/agent-contracts";
 
 import type { Cells } from "#/route/cells";
 import type { RouteManifest } from "#/route/manifest";
@@ -50,8 +44,8 @@ const keyOf = (
       }
     : null);
 
-const pending = (cell: TrichotomyCellLike | undefined) =>
-  cell != null && (cell.proposal != null || cell.staged != null);
+const pending = (cell: CellLike | undefined) =>
+  cell != null && (cell.suggestion != null || cell.edit != null);
 
 export function useHeadWorks(
   address: Address | null,
@@ -115,7 +109,7 @@ export function useHeadWorks(
     return heads.flatMap((head: Cells<Doc>): HeadWork[] => {
       const cells = (
         head.segment === null ? { [head.key!]: doc[head.key!] } : (doc[head.segment] ?? {})
-      ) as Record<string, TrichotomyCellLike | undefined>;
+      ) as Record<string, CellLike | undefined>;
       if (!Object.values(cells).some(pending)) return [];
       const plan = head.commit === "plan";
       return [
@@ -123,7 +117,7 @@ export function useHeadWorks(
           id: `${JSON.stringify(key)}:${head.segment ?? head.key}`,
           route: chatPluginTitle(route),
           subject: head.noun ?? subject,
-          cells: cells as Record<string, TrichotomyCellLike>,
+          cells: cells as Record<string, CellLike>,
           wire: {
             segment: head.segment,
             revision: work.revision,

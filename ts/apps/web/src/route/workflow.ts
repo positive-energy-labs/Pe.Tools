@@ -61,6 +61,10 @@ export const admissionPlan = <W, R extends string, P>(
     return { input: authored(doc), bases: { work: { key: key as WorkKey, revision } } };
   };
   return {
+    direct: async (ctx, source) => {
+      const { input, bases } = workOf(ctx);
+      await workflow(keys.apply, { rows: { source, include: "all", ...input } }, ctx, bases);
+    },
     read: async (ctx, source) => {
       const { input, bases } = workOf(ctx);
       const result = await workflow(keys.plan, { source, ...input }, ctx, bases);
@@ -72,7 +76,7 @@ export const admissionPlan = <W, R extends string, P>(
     },
     // The plan sealed the source and options; apply names that plan and the hashes it confirms.
     apply: async (ctx, included) => {
-      for (const input of byPlan(included)) await workflow(keys.apply, input, ctx);
+      for (const input of byPlan(included)) await workflow(keys.apply, { rows: input }, ctx);
     },
   };
 };

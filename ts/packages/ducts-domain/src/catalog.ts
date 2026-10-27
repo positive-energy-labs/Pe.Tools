@@ -92,7 +92,7 @@ export const catalogLinkKey = (
   family: string | null | undefined,
   type: string | null | undefined,
 ) => JSON.stringify([family ?? "", type ?? ""]);
-/** The staged link for this family/type, else for the whole family (key with an empty type). */
+/** The edit link for this family/type, else for the whole family (key with an empty type). */
 export const stagedLink = <V>(
   links: Readonly<Record<string, V>>,
   node: { family?: string | null; type?: string | null },
@@ -151,7 +151,7 @@ export function catalogLoss(
   if (!table)
     return bad(
       "catalog-missing-link",
-      "No Pe_Catalog type parameter or staged family/type catalog link",
+      "No Pe_Catalog type parameter or edit family/type catalog link",
     );
   if (!t) return bad("catalog-missing-table", `Catalog table ${table} is not loaded`);
   const connectors = node.connectors.filter((c) => c.kind === "end");

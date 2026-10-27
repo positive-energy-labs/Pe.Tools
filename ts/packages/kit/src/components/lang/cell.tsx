@@ -2,7 +2,7 @@ import { reachProps } from "./reach";
 import { useWork } from "./pane";
 /**
  * The cell: one grammar for a value at any scale (table td, card line, key specimen).
- * Body fill is only a pea proposal or locked; bold is only unsaved; one squiggle wins; icons
+ * Body fill is only a pea suggestion or locked; bold is only unsaved; one squiggle wins; icons
  * never go inside a data cell. Precedence is the cascade order in cell.css.
  */
 import {
@@ -58,7 +58,7 @@ import { TooltipHint } from "./tooltip";
 export {
   CELL_STATE_ORDER,
   cellFactsText,
-  cellFromTrichotomy,
+  cellFromDraft,
   cellStateLabel,
   fmtNum,
   readMeasuredText,
@@ -75,9 +75,9 @@ import { focusQuiet } from "../../lib/utils";
 
 /** Each kind's glyph, key and plain sentence. The caller's `reason` overrides the sentence. */
 const TRANSITION: Record<CellTransitionKind, { key: string; says: string }> = {
-  accept: { key: "a", says: "Stage the agent's proposal" },
-  deny: { key: "d", says: "Clear the agent's proposal" },
-  unstage: { key: "u", says: "Clear the staged value" },
+  take: { key: "a", says: "Stage the agent's suggestion" },
+  unsuggest: { key: "d", says: "Clear the agent's suggestion" },
+  clear: { key: "u", says: "Clear the edit value" },
 };
 
 /**
@@ -127,9 +127,9 @@ export function StateCell(props: StateCellProps) {
   const { value, modelValue, capReason, grounding, confidence, note, counterValue } = props;
   const read = readCell(props);
   const reviewed = read.unsettled === "drift" && props.reviewed !== undefined && modelValue != null;
-  // An emptied value IS a value (F-J4-1): a staged or proposed "" draws the empty mark, never the
+  // An emptied value IS a value (F-J4-1): a edit or proposed "" draws the empty mark, never the
   // caller's placeholder, which would read as the old value still standing.
-  const emptied = value === "" && (props.stage === "staged" || props.stage === "proposed");
+  const emptied = value === "" && (props.stage === "edit" || props.stage === "proposed");
   const shown = emptied ? EMPTY_MARK : value;
   // Refusal machinery lives here so hooks run unconditionally; it only ever fires on an
   // editable row-scale cell. A refused edit restores the input's value IMPERATIVELY (the same
@@ -262,7 +262,7 @@ export function StateCell(props: StateCellProps) {
           submitted.current = null;
           el.value = initial.current;
           setRefusal({ message: decided.reason });
-        } else if (decided.kind === "stage") send(measured.stage(decided.staged));
+        } else if (decided.kind === "set") send(measured.stage(decided.edit));
         else
           void measured.parse(decided.text).then((answer) => {
             if (version !== editVersion.current) return;
@@ -307,11 +307,21 @@ export function StateCell(props: StateCellProps) {
           aria-busy={pending || undefined}
           onClick={locate}
           data-body={read.body ?? undefined}
+          data-author={props.author}
+          data-suggestion-author={props.suggestionAuthor}
           data-damage={props.damage || undefined}
           data-seam={read.seam ? "" : undefined}
           data-contest={read.contested ? "" : undefined}
           data-never={read.never ? "" : undefined}
-          data-unsaved={read.unsaved === "pea" ? "pea" : read.unsaved === "you" ? "" : undefined}
+          data-unsaved={
+            read.unsaved === "pea"
+              ? "pea"
+              : read.unsaved === "human"
+                ? "human"
+                : read.unsaved === "unknown"
+                  ? "unknown"
+                  : undefined
+          }
           data-locate={props.onLocate != null ? "" : undefined}
         >
           {editable ? (
@@ -468,11 +478,21 @@ export function StateCell(props: StateCellProps) {
             {...reachProps()}
             className={slots.base()}
             data-body={read.body ?? undefined}
+            data-author={props.author}
+            data-suggestion-author={props.suggestionAuthor}
             data-damage={props.damage || undefined}
             data-seam={read.seam ? "" : undefined}
             data-contest={read.contested ? "" : undefined}
             data-never={read.never ? "" : undefined}
-            data-unsaved={read.unsaved === "pea" ? "pea" : read.unsaved === "you" ? "" : undefined}
+            data-unsaved={
+              read.unsaved === "pea"
+                ? "pea"
+                : read.unsaved === "human"
+                  ? "human"
+                  : read.unsaved === "unknown"
+                    ? "unknown"
+                    : undefined
+            }
             data-locate={props.onLocate != null ? "" : undefined}
           >
             {read.unsettled != null ? (
@@ -555,8 +575,8 @@ const AXES: readonly KeyAxis[] = [
         specimen: <StateCell value="2 hr" stage="proposed" />,
       },
       {
-        label: "you staged — bold + your square",
-        specimen: <StateCell value="36 in" stage="staged" />,
+        label: "you edit — bold + your square",
+        specimen: <StateCell value="36 in" stage="edit" />,
       },
     ],
   },

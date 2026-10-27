@@ -130,16 +130,16 @@ export interface ProtoLive {
 
 export type ProtoSpec = import("@pe/agent-contracts").ParsedDocView;
 
-/** Pea's proposal — EPHEMERAL, page-scoped. Links a profile cell to the spec text it came from. */
+/** Pea's suggestion — EPHEMERAL, page-scoped. Links a profile cell to the spec text it came from. */
 export interface ProtoProposal {
   id: string;
   /** paramName, plus typeName when it targets a type override */
   param: string;
   typeName?: string;
-  /** A proposal for a constituent (`/nested|connectors|forms/<slug>`): `param` is empty, and the
+  /** A suggestion for a constituent (`/nested|connectors|forms/<slug>`): `param` is empty, and the
    * constituents list, not the parameters grid, draws it. */
   constituent?: { section: "nested" | "connectors" | "forms"; slug: string; property?: string };
-  /** `/parameters/<name>/<property>` (isInstance, formula, propertiesGroup...): a proposal about
+  /** `/parameters/<name>/<property>` (isInstance, formula, propertiesGroup...): a suggestion about
    * that property of the parameter, never about its family-level value. */
   property?: string;
   /** What the reading holds at the pointer, when it holds anything: the cell's tooltip says it. */
@@ -158,7 +158,7 @@ export interface FamilySpecModel {
   spec: ProtoSpec | null;
   proposals: ProtoProposal[];
   /** ROUND 2: param → spec block ids. The grounding LINK TABLE, independent of proposals —
-   * a citation survives its proposal being accepted, and grounded-but-unproposed is real. */
+   * a citation survives its suggestion being accepted, and grounded-but-unproposed is real. */
   grounding?: Record<string, string[]>;
   /** ROUND 2: unsaved-draft fact for the profile document. */
   profileDirty?: boolean;

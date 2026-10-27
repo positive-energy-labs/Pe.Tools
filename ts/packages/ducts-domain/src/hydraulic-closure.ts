@@ -557,7 +557,7 @@ export function prescribedHydraulics(g: Graph, components: ComponentFlow[]): Com
       reasons.push({
         code: "hydraulic-flow-not-unique",
         elementId: null,
-        message: "Whole-component unique prescribed flow and exact staged witness are required",
+        message: "Whole-component unique prescribed flow and exact edit witness are required",
       });
     const physicalPorts = [...new Set(scope.flatMap((c) => [...componentPorts.get(c.id)!]))];
     let coveredParts = 0;

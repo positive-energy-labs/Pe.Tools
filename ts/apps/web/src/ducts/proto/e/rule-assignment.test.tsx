@@ -25,15 +25,15 @@ test("family choices show a refused or failed write and allow the person to retr
   expect(write).toHaveBeenCalledTimes(3);
 });
 
-test("unstaging a family rule keeps its proposal", async () => {
-  const proposal = { value: { rule: "elbow-mitered-vaned" } };
+test("unstaging a family rule keeps its suggestion", async () => {
+  const suggestion = { value: { rule: "elbow-mitered-vaned" } };
   const doc = ductsDocumentSchema.parse({
-    ruleAssignments: { Radius: { proposal, staged: { value: { rule: "elbow-mitered" } } } },
+    ruleAssignments: { Radius: { suggestion, edit: { value: { rule: "elbow-mitered" } } } },
   });
   const write = vi.fn(async (_patches: RouteStatePatch[]) => null);
   await assignFamilyRule({ doc, write }, "Radius", "");
   expect(write.mock.calls[0]?.[0]).toEqual([
-    { path: ["ruleAssignments", "Radius", "staged"], value: null },
+    { path: ["ruleAssignments", "Radius", "edit"], value: null },
   ]);
-  expect(doc.ruleAssignments.Radius?.proposal).toEqual(proposal);
+  expect(doc.ruleAssignments.Radius?.suggestion).toEqual(suggestion);
 });

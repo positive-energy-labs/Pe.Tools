@@ -1,4 +1,4 @@
-/** /design-system/band — one proposal language over a Families matrix: every verb is the cell's. */
+/** /design-system/band — one suggestion language over a Families matrix: every verb is the cell's. */
 import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Button } from "@pe/kit/lang/button";
@@ -55,7 +55,7 @@ function BandRoute() {
     state: tableState,
     onStateChange: setTableState,
   };
-  const staged = Object.values(cells).filter((cell) => cell.staged != null).length;
+  const edit = Object.values(cells).filter((cell) => cell.edit != null).length;
   const row = MATRIX.find((r) => r.key === picked) ?? MATRIX[0]!;
 
   return (
@@ -95,8 +95,8 @@ function BandRoute() {
                   <Button
                     kind="framed"
                     label="plan · SIMULATED"
-                    reason="Plan the staged cells; the fixture writes nothing"
-                    onClick={() => say(`SIMULATED · plan of ${staged} staged cells`)}
+                    reason="Plan the edit cells; the fixture writes nothing"
+                    onClick={() => say(`SIMULATED · plan of ${edit} edit cells`)}
                   >
                     plan · SIMULATED
                   </Button>
@@ -110,7 +110,7 @@ function BandRoute() {
                     <Button
                       kind="framed"
                       label="accept all · Voltage"
-                      reason="Accept every standing Voltage proposal in one write; your own staged values are skipped"
+                      reason="Accept every standing Voltage suggestion in one write; your own edit values are skipped"
                       onClick={() => aggregate(acceptVoltage(matrix))}
                     >
                       accept all · Voltage

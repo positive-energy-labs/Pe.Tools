@@ -177,8 +177,8 @@ export function RealTable() {
                       title: "the model disagrees — a person must pick the real value",
                       tone: "alarm",
                     }
-                  : r.stage === "staged"
-                    ? { count: 1, title: "staged and unsaved — commit or discard before leaving" }
+                  : r.stage === "edit"
+                    ? { count: 1, title: "edit and unsaved — commit or discard before leaving" }
                     : null
               }
             />
@@ -196,7 +196,7 @@ export function RealTable() {
           <strong>the clause&apos;s residue.</strong> The cell-state clause (ruled 2026-08-16)
           discharged renderer identity, selection-as-hue, the hover law and the two-palette chrome —
           but <code>CellStateKey</code> still cannot derive its axes from the rows on screen, and a
-          row holding a proposal is still marked through <code>rowClassName</code>, which knows
+          row holding a suggestion is still marked through <code>rowClassName</code>, which knows
           nothing about the grammar. Row-level state is the clause&apos;s unfinished half.
         </Gap>
         <Gap>
@@ -221,7 +221,7 @@ export function RealTable() {
         <Gap>
           <strong>no footline row.</strong> A receipt has nowhere in the grid: outcomes can only sit
           in the frame foot, outside the columns, so a partial write cannot align its &ldquo;4
-          staged&rdquo; to the four rows it means.
+          edit&rdquo; to the four rows it means.
         </Gap>
       </div>
     </Section>

@@ -111,7 +111,7 @@ export function createChatPageStore(deps: {
         return tabs?.open(route, page, carry, false, keep) ?? Promise.resolve(false);
       },
       /**
-       * The head's commit verb (K3): open the route's pane UNSCOPED (plan consumes the whole staged
+       * The head's commit verb (K3): open the route's pane UNSCOPED (plan consumes the whole edit
        * set, so no group filter may hide part of it) and ask its Situation to run its own commit
        * once. Posts nothing to the thread; it is a route action, never a message.
        */

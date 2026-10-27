@@ -2,7 +2,6 @@ import { z } from "zod";
 import {
   routeAddress,
   canonicalRouteInput,
-  rebindScheduleWork,
   scheduleGridRouteState,
   scheduleReadingSchema,
   scheduleReads,
@@ -50,7 +49,7 @@ export type ScheduleGridPage = z.output<typeof scheduleGridPage>;
 type Ctx = RouteCtx<ScheduleGridDocument, ScheduleGridReading, ScheduleGridPage>;
 
 const REFUSAL_WORD: Record<string, string> = {
-  "stale-staged-cell": "stale",
+  "stale-edit-cell": "stale",
   "target-evidence-stale": "stale",
 };
 /** A refused cell's note: its code's word, or the error's first clause when it carries no code. */
@@ -79,7 +78,7 @@ const basisOf = (ctx: Ctx) => {
 };
 /** F-H5-1: a Work bound to a closed document lifetime; the way out is a re-read, which rebinds. */
 const REOPENED =
-  "Re-opened in Revit since this was staged: read the schedule again. Changed cells come back marked stale.";
+  "Re-opened in Revit since this was edit: read the schedule again. Changed cells come back marked stale.";
 const reopened = (ctx: Ctx) => {
   const basis = basisOf(ctx);
   return (
@@ -92,7 +91,7 @@ const reopened = (ctx: Ctx) => {
 const statuses = (ctx: Ctx): ActionStatus[] =>
   (previousOf(ctx.readings.receipts) as ActionStatus[] | undefined) ?? [];
 
-/** Apply over staged cells (ruling 41): `schedule.grid.push`, its readback, and the rebind. */
+/** Apply over edit cells (ruling 41): `schedule.grid.push`, its readback, and the rebind. */
 async function pushStaged(ctx: Ctx) {
   ctx.setPage({ refused: {} });
   // The run lands in the pod the route has bound; with none, in the action receipt.
@@ -138,7 +137,7 @@ async function pushStaged(ctx: Ctx) {
   };
 }
 
-/** `/schedules`, declared once: the grid is the audit; `apply` writes staged cells, else a spec. */
+/** `/schedules`, declared once: the grid is the audit; `apply` writes edit cells, else a spec. */
 export const scheduleSpec: EntityRouteDef<
   ScheduleGridDocument,
   ScheduleGridReading,
@@ -151,7 +150,7 @@ export const scheduleSpec: EntityRouteDef<
   capture: "schedule.capture",
   apply: "schedule.apply",
   applies: ["catalog", "work", "saved", "receipts"],
-  staged: {
+  edit: {
     cells: (ctx) => ctx.work.doc?.cells ?? {},
     ready: (ctx) =>
       statuses(ctx).some((row) => ["running", "unknown", "incomplete"].includes(row.state))
@@ -171,7 +170,7 @@ export const scheduleSpec: EntityRouteDef<
       ? "open a schedule in the grid first"
       : { scheduleId: scheduleReadingSchema.parse(reading).snapshot.scheduleId };
   },
-  docs: "Audit a project schedule as a grid, apply staged cell values to Revit, capture its definition into a pod as a spec, or apply a saved spec as a new schedule.",
+  docs: "Audit a project schedule as a grid, apply edit cell values to Revit, capture its definition into a pod as a spec, or apply a saved spec as a new schedule.",
 };
 
 export const schedulesManifest = () =>
@@ -221,7 +220,6 @@ export const schedulesManifest = () =>
           says: "reads the selected schedule from Revit into a fresh capture",
           visible: false,
           needs: "document",
-          actor: "human",
           input: scheduleReads["schedule.grid.snapshot"].input.prefault(
             {},
           ) as unknown as z.ZodType<never>,
@@ -242,19 +240,12 @@ export const schedulesManifest = () =>
                 targetOf(ctx),
               ),
             );
-            // Only the person runs route actions; Pea reads through op:schedule.grid.snapshot, which
-            // never writes Work. So the rebind below is always the person's (ruling Q4).
-            const doc = ctx.work.doc;
-            if (doc?.basis && reading.workspaceId === ctx.page.workspaceId) {
-              const basis =
-                basisOf(ctx) ??
-                (await readScheduleCapture("schedule.grid.saved", { id: doc.basis.captureId }).then(
-                  (value) => scheduleReadingSchema.parse(value),
-                  () => null,
-                ));
-              const patches = rebindScheduleWork(doc, basis, reading);
-              if (patches.length) await ctx.write(patches);
-            }
+            if (ctx.work.doc?.basis && reading.workspaceId === ctx.page.workspaceId)
+              await readScheduleCapture(
+                "schedule.grid.bind",
+                { readingId: reading.id, expectedRevision: ctx.work.revision ?? 0 },
+                targetOf(ctx),
+              );
             ctx.setPage({
               workspaceId: reading.workspaceId,
               captureId: reading.id,
@@ -306,20 +297,20 @@ const DEMO_CATALOG = {
   ],
 };
 
-const demoSeed = (title: string, page: Record<string, unknown>, staged = true) => ({
+const demoSeed = (title: string, page: Record<string, unknown>, edit = true) => ({
   title,
   target: { kind: "document", ref: DEMO_TARGET },
   work: {
     basis: { captureId: DEMO_CAPTURE },
-    cells: staged ? { "3::1": { proposal: null, staged: { value: "R-454B" } } } : {},
+    cells: edit ? { "3::1": { suggestion: null, edit: { value: "R-454B" } } } : {},
   },
   readings: { catalog: DEMO_CATALOG, work: DEMO_READING, saved: DEMO_READING, pods: DEMO_PODS },
   page: { workspaceId: "demo-schedule", captureId: DEMO_CAPTURE, target: DEMO_TARGET, ...page },
 });
 
-/** `?demo=capture` audits the grid with a staged cell; `?demo=apply` opens a saved spec beside it. */
+/** `?demo=capture` audits the grid with a edit cell; `?demo=apply` opens a saved spec beside it. */
 export const SCHEDULE_SEEDS = {
-  capture: demoSeed("a schedule in the grid with one staged cell", { stage: "audit" }),
+  capture: demoSeed("a schedule in the grid with one edit cell", { stage: "audit" }),
   apply: demoSeed(
     "a saved schedule spec beside the grid",
     { stage: "apply", pod: "mech-standards", path: DEMO_SPEC_PATH },

@@ -1,6 +1,6 @@
 import type { RouteStatePatch } from "@pe/agent-contracts";
 
-/** One family of trichotomy cells in a route's Work, as the Situation and the Chat head read it. */
+/** One family of shared cell cells in a route's Work, as the Situation and the Chat head read it. */
 export interface Cells<W> {
   /** The Work segment holding the keyed cells; null = one root cell at `key` (`scope`, `launch`). */
   segment: string | null;

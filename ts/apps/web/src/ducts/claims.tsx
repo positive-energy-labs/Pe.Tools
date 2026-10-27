@@ -25,7 +25,7 @@ export const verdictPatches = (
   now: Date = new Date(),
 ): RouteStatePatch[] =>
   transitionPatches(["claims"], claim.id, doc?.claims[claim.id] ?? {}, {
-    kind: "stage",
+    kind: "set",
     rung: {
       value: {
         title: claim.title,

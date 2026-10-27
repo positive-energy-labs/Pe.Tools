@@ -1,8 +1,8 @@
 /**
  * Proximity inference, deterministic: a small gap joins, a wide one does not, a branch end landing
  * on a duct's face (a side, off-center or shared, or an end a cap closes) taps it, one alongside
- * does not, a staged ignore verdict withholds the inference, and an inference that closes a ring
- * is also a loop finding. Ends of different air classifications never join without a staged
+ * does not, a edit ignore verdict withholds the inference, and an inference that closes a ring
+ * is also a loop finding. Ends of different air classifications never join without a edit
  * connect verdict, an end anywhere inside a duct's body taps it, and every inference is a finding
  * a person clears (kaitpw 2026-10-19). Points are model feet; the tolerance is inches.
  */
@@ -117,7 +117,7 @@ const snap = (segments: Segment[], nodes: Node[] = []): DuctSnapshot => {
 };
 const staging = (id: string, verdict: "ignore" | "connect"): DuctsRouteDocument =>
   ductsDocumentSchema.parse({
-    assumptions: { [id]: { staged: { value: { kind: "verdict", verdict } } } },
+    assumptions: { [id]: { edit: { value: { kind: "verdict", verdict } } } },
   });
 const ignoring = (id: string) => staging(id, "ignore");
 
@@ -268,7 +268,7 @@ it("a branch end 0.3 in off a main's side becomes a virtual tap on the main", ()
   expect(tree.parent.get(2)).toBe(-1);
 });
 
-it("a staged ignore verdict on the finding id withholds that inference", () => {
+it("a edit ignore verdict on the finding id withholds that inference", () => {
   const before = snap([
     duct(1, [0, 0, 0], [10, 0, 0], "g1"),
     duct(2, [10 + 0.4 * IN, 0, 0], [20, 0, 0], "g2"),
@@ -480,7 +480,7 @@ const pair = (gapIn: number, lateralIn = 0, deg = 0) => {
   ];
 };
 
-it("a staged connect confirms an inference on its link; a proposal does not", () => {
+it("a edit connect confirms an inference on its link; a suggestion does not", () => {
   const before = snap(pair(0.3, 0.6));
   const id = "proximity:1:2|2:1";
   expect(tolerate(before).links).toEqual([
@@ -488,7 +488,7 @@ it("a staged connect confirms an inference on its link; a proposal does not", ()
   ]);
   expect(tolerate(before, staging(id, "connect")).links[0]!.ruled).toBe(true);
   const proposed = ductsDocumentSchema.parse({
-    assumptions: { [id]: { proposal: { value: { kind: "verdict", verdict: "connect" } } } },
+    assumptions: { [id]: { suggestion: { value: { kind: "verdict", verdict: "connect" } } } },
   });
   expect(tolerate(before, proposed).links[0]!.ruled).toBe(false);
 });

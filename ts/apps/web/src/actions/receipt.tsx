@@ -12,10 +12,22 @@ import { outputRenderers } from "#/ops/renderers";
  * The one word for an action's state. An operation's success is a reply received, never a
  * certified mutation; every surface that names an action's state reads it from here.
  */
-const stateWord = (row: Pick<ActionReceipt, "kind" | "state">): string =>
-  row.kind === "operation" && row.state === "succeeded" ? "reply received" : row.state;
+export const commandStateWord = (
+  row: Pick<ActionReceipt, "kind" | "state" | "preparation" | "steps">,
+): string => {
+  if (row.state === "waiting") return "waiting for turn consent";
+  if (row.state === "running") {
+    if (row.preparation.state === "unprepared") return "preparing";
+    return row.steps.some((step) => step.dispatchedAt !== undefined)
+      ? "running"
+      : "authorized and queued";
+  }
+  return row.kind === "operation" && row.state === "succeeded" ? "reply received" : row.state;
+};
+const stateWord = commandStateWord;
 
 const OUTCOME_OF: Record<ActionReceipt["state"], OutcomeKind> = {
+  waiting: "busy",
   running: "busy",
   succeeded: "receipt",
   failed: "error",
@@ -65,7 +77,7 @@ const CONTROL_REACHES: Record<ActionControlKey, (state: string | undefined) => b
   "action.recover": (state) => state === "unknown",
   "action.resume": (state) => state === "unknown" || state === "incomplete",
   // Only a running action has an in-flight request to signal.
-  "action.cancel": (state) => state === "running",
+  "action.cancel": (state) => state === "waiting" || state === "running",
 };
 
 export function ActionReceiptView({
@@ -144,7 +156,8 @@ export function ActionReceiptView({
             {row.steps.map((step) => (
               <div key={step.id} className="min-w-0 face-mono text-ink-2">
                 <span className="truncate">
-                  {step.kind} / {step.key} / {stateWord({ kind: row.kind, state: step.state })}
+                  {step.kind} / {step.key} /{" "}
+                  {step.state === "running" && !step.dispatchedAt ? "queued" : step.state}
                 </span>{" "}
                 <code>{step.id}</code>
                 {"error" in step && (

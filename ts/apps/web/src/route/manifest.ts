@@ -37,7 +37,7 @@ export const semanticActionInput = (
 /** What a Reading key names: a fixed subject, or one selected by the route's current Page. */
 export type ReadingSpec<P> = ReadingRequest | ((page: P, work: WorkKey) => ReadingRequest | null);
 
-/** What Work a route owns: the route-state spec that already carries schema, mask and commands. */
+/** What Work a route owns: the route-state spec that already carries schema and commands. */
 type WorkSpec<W> = RouteStateSpec<z.ZodType<W>>;
 
 /** A call bound to a resolved ExecutionTarget. */
@@ -60,7 +60,7 @@ export interface Ctx<W, R extends string, P> {
   readonly page: P;
   readonly call: HostCaller;
   /** The patch lane on the Work document. Throws the refusal; the runner reports it. */
-  readonly write: (patch: RouteStatePatch[]) => Promise<Refusal | null>;
+  readonly write: (patch: RouteStatePatch[], expectedRevision?: number) => Promise<Refusal | null>;
   /** The command lane on the Work document, one of the Work spec's own commands. */
   readonly command: (name: string, input?: unknown) => Promise<Refusal | null>;
   /** Publishes action progress only while its original Target, Work, and user Page remain current. */
@@ -138,7 +138,7 @@ export interface RouteManifest<W, R extends string, P, A extends string> {
   work?: WorkSpec<W>;
   /** The Chat head's Work key: absent = the thread document's Address, null = none it can name. */
   workKey?: WorkKey | null;
-  /** The Work's trichotomy cell families; the Situation reads the first keyed, the head all. */
+  /** The Work's shared cell cell families; the Situation reads the first keyed, the head all. */
   cells?: readonly Cells<W>[];
   /** What its verbs produce, by kind, and how each opens; `member`, `receipt` and `capture` are built in (`inspect.tsx`). */
   inspectables?: Readonly<Record<string, Inspectable>>;

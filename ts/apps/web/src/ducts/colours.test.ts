@@ -5,10 +5,10 @@ import { NAVIGATION_FIXTURE } from "./navigation.fixture";
 import { paintOfDucts } from "./selection";
 import type { SceneInstance } from "#/scene/types";
 
-test("the staged palette persists with Work, supplies instance ink and never enters Revit apply", () => {
+test("the edit palette persists with Work, supplies instance ink and never enters Revit apply", () => {
   const palette = { ...FIRM_COLOURS, supply: "#123456" };
   const saved = JSON.stringify(
-    ductsDocumentSchema.parse({ systemColours: { staged: { value: palette } } }),
+    ductsDocumentSchema.parse({ systemColours: { edit: { value: palette } } }),
   );
   const doc = ductsDocumentSchema.parse(JSON.parse(saved));
   expect(coloursOf(doc)).toEqual(palette);

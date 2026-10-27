@@ -53,7 +53,7 @@ export function inboxWriteRows(write: WriteVerbs) {
         {/* The handle's own words, so the button reads as the Situation's does. */}
         <PreviewAction
           label={write.preview.label}
-          says="Ask Revit what the staged cells would write"
+          says="Ask Revit what the edit cells would write"
           refusal={write.preview.refusal}
           busy={write.busy}
           held={write.held && { ...write.held, lines: <PreviewLines lines={write.held.lines} /> }}
@@ -61,7 +61,7 @@ export function inboxWriteRows(write: WriteVerbs) {
           preview={() => write.preview.run()}
           commit={{
             label: write.apply.label,
-            says: "Write the staged cells to Revit",
+            says: "Write the edit cells to Revit",
             refusal: write.apply.refusal,
             run: () => write.apply.run(),
             done: "written to Revit",

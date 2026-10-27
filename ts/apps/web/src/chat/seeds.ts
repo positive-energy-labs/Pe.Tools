@@ -467,6 +467,7 @@ function row(
     title,
     description,
     needs: kind === "op" || kind === "script" ? "document" : "nothing",
+    effect: kind === "route-command" || kind === "script" ? "command" : "query",
     mutates: kind === "route-command" || kind === "script",
     principal: ["human", "pea", "page", "external-mcp"],
     input: {},

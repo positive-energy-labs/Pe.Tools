@@ -1,6 +1,6 @@
 /**
  * The losses view's model, pure: what Revit holds now (the applied tables), what the person
- * staged on top, the two solves, and the `ducts.apply` request built from the staged cells.
+ * edit on top, the two solves, and the `ducts.apply` request built from the edit cells.
  * The solver is W2's (`losses.ts`); nothing here looks a coefficient up itself.
  */
 import {
@@ -163,14 +163,14 @@ export function guardFindings(result: LossResult): DuctFinding[] {
 export interface Priced extends Survey {
   applied: Choices;
   catalogs: Catalogs;
-  /** Applied plus staged: what apply would leave in Revit. */
+  /** Applied plus edit: what apply would leave in Revit. */
   choices: Choices;
   overrides: Overrides;
   /** The solve as Revit holds it now. */
   now: LossResult;
-  /** The solve with every staged cell landed. */
+  /** The solve with every edit cell landed. */
   next: LossResult;
-  staged: ReturnType<typeof stagedDucts>;
+  edit: ReturnType<typeof stagedDucts>;
 }
 
 const completed = new WeakMap<
@@ -196,7 +196,7 @@ export function rememberPrice(
 
 /**
  * What depends on (snapshot, grids) alone, kept so a Work change re-solves only `next`: the
- * applied solve, the last priced Work, and each staged rule's fanout.
+ * applied solve, the last priced Work, and each edit rule's fanout.
  */
 interface Solved {
   applied: Choices;
@@ -249,8 +249,8 @@ export function price(
   const entry = solvedFor(snapshot, grids, catalogs, surveyed.inferred, units);
   if (entry.last?.doc === doc) return entry.last.priced;
   // The model's stored rulings under Work's pending ones (`rulings.ts`), as the survey read them.
-  const staged = stagedDucts(withStoredRulings(doc, raw.store));
-  const rate = staged.designFriction ?? DEFAULT_DESIGN_FRICTION_RATE;
+  const edit = stagedDucts(withStoredRulings(doc, raw.store));
+  const rate = edit.designFriction ?? DEFAULT_DESIGN_FRICTION_RATE;
   if (entry.rate !== rate) {
     entry.now = computeLosses(
       snapshot,
@@ -266,7 +266,7 @@ export function price(
   const { applied, now } = entry;
   const choices = {
     ...applied,
-    ...Object.fromEntries(Object.entries(staged.rules).map(([key, { table }]) => [key, table])),
+    ...Object.fromEntries(Object.entries(edit.rules).map(([key, { table }]) => [key, table])),
   };
   const overrides: Overrides = {
     terminalCfm: Object.fromEntries(
@@ -274,24 +274,24 @@ export function price(
         f.cfm != null && f.source !== "revit" ? [[id, f.cfm]] : [],
       ),
     ),
-    catalogLinks: staged.catalogs,
+    catalogLinks: edit.catalogs,
     ruleAssignment: Object.fromEntries(
-      Object.entries(staged.ruleAssignments).map(([family, { rule }]) => [family, rule]),
+      Object.entries(edit.ruleAssignments).map(([family, { rule }]) => [family, rule]),
     ),
-    terminalPs: byId(staged.terminalDrops, (drop) => drop.inWg),
-    componentDrop: byId(staged.componentDrops, (drop) => drop.inWg),
+    terminalPs: byId(edit.terminalDrops, (drop) => drop.inWg),
+    componentDrop: byId(edit.componentDrops, (drop) => drop.inWg),
     ...unitOverrides(surveyed.roles, surveyed.equipmentFlows),
     designFrictionRate: rate,
   };
   const same =
-    Object.keys(staged.catalogs).length === 0 &&
-    Object.keys(staged.ruleAssignments).length === 0 &&
-    Object.keys(staged.rules).length === 0 &&
-    !hasDrops(staged) &&
+    Object.keys(edit.catalogs).length === 0 &&
+    Object.keys(edit.ruleAssignments).length === 0 &&
+    Object.keys(edit.rules).length === 0 &&
+    !hasDrops(edit) &&
     !Object.keys(overrides.terminalCfm!).length &&
-    !Object.keys(staged.roles).length &&
-    !Object.keys(staged.equipmentFlows).length &&
-    !Object.keys(staged.calculation).length;
+    !Object.keys(edit.roles).length &&
+    !Object.keys(edit.equipmentFlows).length &&
+    !Object.keys(edit.calculation).length;
   const next = same
     ? now
     : computeLosses(
@@ -299,7 +299,7 @@ export function price(
         grids,
         choices,
         overrides,
-        staged.calculation,
+        edit.calculation,
         catalogs,
         surveyed.inferred,
       );
@@ -312,16 +312,16 @@ export function price(
     overrides,
     now,
     next,
-    staged,
+    edit,
   };
   entry.last = { doc, priced };
   rememberPrice(raw, grids, doc, catalogs, priced);
   return priced;
 }
-const hasDrops = (staged: Priced["staged"]) =>
-  Object.keys(staged.terminalDrops).length + Object.keys(staged.componentDrops).length > 0;
+const hasDrops = (edit: Priced["edit"]) =>
+  Object.keys(edit.terminalDrops).length + Object.keys(edit.componentDrops).length > 0;
 
-/** The table a rule is looked up under: staged, else applied, else its default. */
+/** The table a rule is looked up under: edit, else applied, else its default. */
 export const tableOf = (priced: Pick<Priced, "choices">, key: string) =>
   (priced.choices[key] ?? ruleByKey(key)?.table ?? "").toUpperCase();
 
@@ -332,7 +332,7 @@ export function stagedFanout(
   priced: Priced,
   key: string,
 ): Fanout | null {
-  const table = priced.staged.rules[key]?.table;
+  const table = priced.edit.rules[key]?.table;
   const rule = ruleByKey(key);
   if (!table || !rule?.options.includes(table.toUpperCase())) return null;
   // Depends on the applied state and the one rule, never on the rest of the Work.
@@ -401,7 +401,7 @@ export function unitOf(snapshot: DuctSnapshot, result: LossResult, group: Group)
 }
 
 /**
- * Legacy classification arithmetic, not physical fan certification. Explicit staged fan/passive
+ * Legacy classification arithmetic, not physical fan certification. Explicit edit fan/passive
  * roles suppress this unit scalar; physical circuit pressure is retained separately.
  */
 export function proposedStatic(snapshot: DuctSnapshot, result: LossResult, unit: number) {
@@ -430,11 +430,11 @@ export function proposedStatic(snapshot: DuctSnapshot, result: LossResult, unit:
 }
 
 /**
- * The native `ducts.apply` request (less `previewOnly`) from the staged cells only: every instance of a staged rule under
+ * The native `ducts.apply` request (less `previewOnly`) from the edit cells only: every instance of a edit rule under
  * its chosen table (instances the table cannot price are left out, and the band says so), every
- * staged drop, the staged parameter slots, the staged `esp`, the resolved flow of every terminal in a
+ * edit drop, the edit parameter slots, the edit `esp`, the resolved flow of every terminal in a
  * priced group (a group with an air mover; every precedence rung, so Revit's own value is carried
- * with its source) and the staged `equipmentFlows`. `groups` scopes the instances, drops, flows and
+ * with its source) and the edit `equipmentFlows`. `groups` scopes the instances, drops, flows and
  * units to those groups (a system's: every group it is in, `system-scope.ts`); empty is every
  * group. The rules' chosen tables stay document-wide.
  */
@@ -447,7 +447,7 @@ export function applyRequest(
   const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
   const scoped = new Set(groups);
   const inScope = (id: number) => !scoped.size || scoped.has(nodes.get(id)?.groupId ?? "");
-  const fittings = Object.keys(priced.staged.rules)
+  const fittings = Object.keys(priced.edit.rules)
     .sort()
     .flatMap((ruleKey) =>
       [...instancesOf(priced.next, ruleKey).values()]
@@ -464,12 +464,12 @@ export function applyRequest(
         })),
     )
     .sort((a, b) => a.id - b.id);
-  const drops = (cells: Priced["staged"]["terminalDrops"]) =>
+  const drops = (cells: Priced["edit"]["terminalDrops"]) =>
     Object.entries(cells)
       .filter(([id]) => inScope(Number(id)))
       .map(([id, drop]) => ({ id: Number(id), inWg: drop.inWg, source: drop.source ?? null }))
       .sort((a, b) => a.id - b.id);
-  // A staged link authorizes result writes, not a write to the family type's Pe_Catalog.
+  // A edit link authorizes result writes, not a write to the family type's Pe_Catalog.
   const linked = Object.values(priced.next.paths).flatMap((path) =>
     path.rows.flatMap((row) => {
       const node = nodes.get(row.id);
@@ -479,7 +479,7 @@ export function applyRequest(
         !row.source ||
         !node ||
         !inScope(row.id) ||
-        !stagedLink(priced.staged.catalogs, node)
+        !stagedLink(priced.edit.catalogs, node)
       )
         return [];
       return [
@@ -492,9 +492,9 @@ export function applyRequest(
     }),
   );
   const terminals = [
-    ...new Map([...linked, ...drops(priced.staged.terminalDrops)].map((t) => [t.id, t])).values(),
+    ...new Map([...linked, ...drops(priced.edit.terminalDrops)].map((t) => [t.id, t])).values(),
   ].sort((a, b) => a.id - b.id);
-  const components = drops(priced.staged.componentDrops);
+  const components = drops(priced.edit.componentDrops);
   const flowWrite = (id: number, cfm: number, source: string | null) => ({ id, cfm, source });
   const terminalFlows = snapshot.nodes
     .filter(
@@ -506,7 +506,7 @@ export function applyRequest(
     .flatMap((node) => {
       const flow = priced.flows.get(node.id);
       if (flow?.cfm == null) return [];
-      const stated = priced.staged.flows[String(node.id)]?.source;
+      const stated = priced.edit.flows[String(node.id)]?.source;
       return [
         flowWrite(
           node.id,
@@ -517,17 +517,17 @@ export function applyRequest(
     })
     .sort((a, b) => a.id - b.id);
   const roots = new Set(snapshot.groups.filter((g) => scoped.has(g.id)).flatMap((g) => g.rootIds));
-  const equipmentFlows = Object.entries(priced.staged.equipmentFlows)
+  const equipmentFlows = Object.entries(priced.edit.equipmentFlows)
     .map(([id, flow]) => flowWrite(Number(id), flow.cfm, flow.source ?? null))
-    // Any unit rooted in the group, not the baseline's one pick (it is blind to a staged passive role).
+    // Any unit rooted in the group, not the baseline's one pick (it is blind to a edit passive role).
     .filter(({ id }) => !scoped.size || roots.has(id))
     .sort((a, b) => a.id - b.id);
   const calculationOwners = new Set(
-    Object.values(priced.staged.calculation).flatMap((e) =>
+    Object.values(priced.edit.calculation).flatMap((e) =>
       e.kind === "fan" || e.kind === "passive" ? [e.element.id] : [],
     ),
   );
-  if (Object.keys(priced.staged.esp).some((id) => calculationOwners.has(Number(id))))
+  if (Object.keys(priced.edit.esp).some((id) => calculationOwners.has(Number(id))))
     throw Error(
       "Physical fan circuits have no admitted manufacturer scalar ESP mapping; clear the esp cell. Circuit evidence is calculation-only.",
     );
@@ -539,13 +539,13 @@ export function applyRequest(
         : [],
     ),
   );
-  const equipment = Object.entries(priced.staged.esp)
+  const equipment = Object.entries(priced.edit.esp)
     .map(([id, { inWg }]) => ({ id: Number(id), externalStaticInWg: inWg }))
     .filter(({ id }) => !blockedUnits.has(id))
-    // Any unit rooted in the group, not the baseline's one pick (it is blind to a staged passive role).
+    // Any unit rooted in the group, not the baseline's one pick (it is blind to a edit passive role).
     .filter(({ id }) => !scoped.size || roots.has(id))
     .sort((a, b) => a.id - b.id);
-  const slots = priced.staged.parameters;
+  const slots = priced.edit.parameters;
   const stored = snapshot.store;
   return {
     slots,
@@ -594,13 +594,13 @@ export function applyRequest(
         Object.entries({ ...snapshot.slots, ...slots }).filter(([, name]) => !!name),
       ),
       // Document-wide: the stored rulings Work leaves standing and its pending ones (`rulings.ts`).
-      ...storeRulings(priced.staged, stored, appliedAt),
+      ...storeRulings(priced.edit, stored, appliedAt),
       workRevision: stored?.workRevision ?? 0,
       appliedAt,
     },
   };
 }
 
-/** Rule instances a staged table cannot price: left out of the write, named in the band. */
+/** Rule instances a edit table cannot price: left out of the write, named in the band. */
 export const unpriced = (priced: Priced, key: string) =>
   [...instancesOf(priced.next, key).values()].filter((row) => row.c == null || row.error).length;

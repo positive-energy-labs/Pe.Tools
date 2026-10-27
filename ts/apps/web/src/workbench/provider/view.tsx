@@ -62,21 +62,10 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
           const rule = move
             ? null
             : pea.history(before, { ...before, ...partial } as typeof before);
-          // A thread move opens its conversation with the tools collapsed: only the sidebar's
-          // own fields follow it, never a tool's Page, target or Work.
+          // Conversations are independent of the active tool, its Work and document.
           return navigate({
-            to: move ? pea.path : ".",
-            search: (previous: Record<string, unknown>) =>
-              !move
-                ? { ...previous, ...partial }
-                : {
-                    threadSearch: previous.threadSearch,
-                    threadSort: previous.threadSort,
-                    demo: previous.demo,
-                    target: undefined,
-                    work: undefined,
-                    ...partial,
-                  },
+            to: ".",
+            search: (previous: Record<string, unknown>) => ({ ...previous, ...partial }),
             replace: replace || rule === "replace",
           });
         },

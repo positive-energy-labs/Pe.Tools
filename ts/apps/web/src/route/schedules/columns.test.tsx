@@ -105,7 +105,7 @@ test("millwork in Model AND Count > 1, through the query box, the header, and it
   fireEvent.change(box, { target: { value: "" } });
   expect(shown()).toBe(4);
 
-  // A half-typed field name is a proposal, not a search that empties the grid.
+  // A half-typed field name is a suggestion, not a search that empties the grid.
   box.focus();
   fireEvent.change(box, { target: { value: "mod" } });
   expect(shown()).toBe(4);
@@ -117,7 +117,7 @@ test("millwork in Model AND Count > 1, through the query box, the header, and it
   fireEvent.change(box, { target: { value: "" } });
   expect(within(screen.getByRole("listbox")).queryByText("#")).toBeNull();
   expect(screen.queryByRole("button", { name: "filter #" })).toBeNull();
-  // A multi-word field name typed across a space is still a proposal, and picking it quotes it
+  // A multi-word field name typed across a space is still a suggestion, and picking it quotes it
   // and leaves no stray search word behind.
   for (const value of ["Room", "Room ", "Room Na"]) fireEvent.change(box, { target: { value } });
   expect(shown()).toBe(4);
@@ -215,8 +215,8 @@ const snapshot = scheduleGridSnapshotSchema.parse({
   ],
 });
 const cells: ScheduleGridDocument["cells"] = {
-  "1::1": { proposal: { value: "180 VA" } },
-  "1::2": { proposal: { value: "190 VA" } },
+  "1::1": { suggestion: { value: "180 VA" } },
+  "1::2": { suggestion: { value: "190 VA" } },
 };
 
 test("a grid cell draws the contract's transitions and accept writes at the rendered revision", async () => {
@@ -251,17 +251,19 @@ test("a grid cell draws the contract's transitions and accept writes at the rend
 
   // Stage is typing: the cell's input, not a button.
   expect(verbs(cellAt("180 VA"))).toEqual(
-    availableTransitions(cells["1::1"]!, "human", { lock: null }).filter((k) => k !== "stage"),
+    availableTransitions(cells["1::1"]!, "human", { lock: null }).filter(
+      (k) => k !== "set" && k !== "suggest",
+    ),
   );
   expect(cellAt("180 VA").querySelector("input")).not.toBeNull();
-  // Pinned: a lock leaves only deny, which clears a stray proposal.
-  expect(verbs(cellAt("190 VA"))).toEqual(["deny"]);
+  // Pinned: a lock leaves only deny, which clears a stray suggestion.
+  expect(verbs(cellAt("190 VA"))).toEqual(["unsuggest"]);
 
   await act(async () =>
-    fireEvent.click(within(cellAt("180 VA")).getByRole("button", { name: "accept" })),
+    fireEvent.click(within(cellAt("180 VA")).getByRole("button", { name: "take" })),
   );
   expect(calls).toEqual([
-    [transitionPatches(["cells"], "1::1", cells["1::1"]!, { kind: "accept" }), 7],
+    [transitionPatches(["cells"], "1::1", cells["1::1"]!, { kind: "take" }), 7],
   ]);
   calls.length = 0;
   const editor = cellAt("180 VA").querySelector("input")!;

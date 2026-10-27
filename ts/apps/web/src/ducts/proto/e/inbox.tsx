@@ -275,7 +275,7 @@ export function Inbox({
           const kind = verb.move;
           return make(
             `s${i}${kind}`,
-            kind === "accept" ? Check : X,
+            kind === "take" ? Check : X,
             verb.label,
             verb.says,
             () =>
@@ -360,8 +360,8 @@ export function Inbox({
         statusText: item.status,
         label: <SubjectText document={heading} owner={item.key} />,
         title,
-        stage: item.kind === "proposal" ? "proposed" : undefined,
-        stagedBy: item.kind === "proposal" ? "pea" : undefined,
+        stage: item.kind === "suggestion" ? "proposed" : undefined,
+        author: item.kind === "suggestion" ? "pea" : undefined,
         // The closed row gives the label the width: the status in its compact words.
         damage,
         meta: damage ? undefined : status,

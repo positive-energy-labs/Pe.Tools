@@ -153,7 +153,7 @@ export function assessDucts(
     return (
       node.terminalDrop?.catalogDropInWg != null ||
       (row?.dp != null &&
-        (!!row.source || work?.terminalDrops[String(node.id)]?.staged?.value !== undefined))
+        (!!row.source || work?.terminalDrops[String(node.id)]?.edit?.value !== undefined))
     );
   };
   const priced = reached.filter(
@@ -210,7 +210,7 @@ export function assessDucts(
   );
   reason(
     "staged-assumptions-not-physical",
-    Object.values(work?.assumptions ?? {}).filter((cell) => cell.staged != null).length,
+    Object.values(work?.assumptions ?? {}).filter((cell) => cell.edit != null).length,
     "Staged assumptions affect readiness but are not all consumed by the numerical solver",
   );
   reason(
@@ -220,7 +220,7 @@ export function assessDucts(
         node.kind === "accessory" &&
         node.facts.some((fact) => fact.key === "pressureDrop" && fact.value != null),
     ).length,
-    "Shared arithmetic prices accessories by table or staged drop; native own-drop precedence is not verified",
+    "Shared arithmetic prices accessories by table or edit drop; native own-drop precedence is not verified",
   );
   reason(
     "native-negative-coefficient-parity",
@@ -264,7 +264,7 @@ export function assessDucts(
   );
   const calculationOwners = new Set(
     Object.values(work?.calculation ?? {}).flatMap((cell) => {
-      const e = cell.staged?.value;
+      const e = cell.edit?.value;
       return e?.kind === "fan" || e?.kind === "passive" ? [e.element.id] : [];
     }),
   );
@@ -294,7 +294,7 @@ export function assessDucts(
     reason(
       "conditional-design-scenario",
       circuits.filter((c) => c.status === "complete-for-declared-design").length,
-      "Complete only for the staged balanced-design scenario; not an actual operating-point or manufacturer scalar ESP certification",
+      "Complete only for the edit balanced-design scenario; not an actual operating-point or manufacturer scalar ESP certification",
     );
   }
   const equipment = ownEquipment.map((unit) => ({

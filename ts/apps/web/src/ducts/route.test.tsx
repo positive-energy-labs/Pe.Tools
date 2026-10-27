@@ -681,12 +681,12 @@ test("a native tree selection keeps the camera and address pose; F frames and Es
   expect(picture.current!.orbit.read()).toEqual(framed);
 });
 
-test("a staged subject and plural claim select the whole row without framing; a verdict stages the claim", async () => {
+test("a edit subject and plural claim select the whole row without framing; a verdict stages the claim", async () => {
   work = ductsRouteState.schema.parse({
-    subject: { g1: { staged: { value: [100, 1, 2, 3, 4] } } },
+    subject: { g1: { edit: { value: [100, 1, 2, 3, 4] } } },
     claims: {
       c1: {
-        staged: {
+        edit: {
           value: {
             title: "Open ends",
             text: "Open ends at 1 and 3.",
@@ -696,7 +696,7 @@ test("a staged subject and plural claim select the whole row without framing; a 
         },
       },
     },
-    labelParameter: { staged: { value: "Unit Tag" } },
+    labelParameter: { edit: { value: "Unit Tag" } },
   });
   reply = async () =>
     Response.json({
@@ -704,7 +704,7 @@ test("a staged subject and plural claim select the whole row without framing; a 
       nodes: snapshot.nodes.map((node) => (node.id === 100 ? { ...node, label: "AHU-9" } : node)),
     });
   await mount();
-  // The staged labelParameter rides the snapshot request.
+  // The edit labelParameter rides the snapshot request.
   await waitFor(() => expect(requests.at(-1)?.request).toEqual({ labelParameter: "Unit Tag" }));
   // A person reveals the folded pane before acting on its evidence.
   fireEvent.click(await screen.findByRole("button", { name: /^Expand Rulings/ }));
@@ -728,12 +728,12 @@ test("a staged subject and plural claim select the whole row without framing; a 
   await waitFor(() => expect(drawing.latest!.page.viewport).not.toBeNull());
   expect(drawing.latest!.page.selected).toBe("1");
   fireEvent.click(await screen.findByRole("button", { name: "yes" }));
-  await waitFor(() => expect(work.claims.c1?.staged?.value?.verdict).toBe("yes"));
-  expect(work.claims.c1?.staged?.value).toMatchObject({
+  await waitFor(() => expect(work.claims.c1?.edit?.value?.verdict).toBe("yes"));
+  expect(work.claims.c1?.edit?.value).toMatchObject({
     title: "Open ends",
     text: "Open ends at 1 and 3.",
     ids: [1, 3],
     verdictBy: "person",
   });
-  expect(Date.parse(work.claims.c1!.staged!.value!.verdictAt!)).not.toBeNaN();
+  expect(Date.parse(work.claims.c1!.edit!.value!.verdictAt!)).not.toBeNaN();
 }, 20000);

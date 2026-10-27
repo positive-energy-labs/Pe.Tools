@@ -27,11 +27,13 @@ const raw = JSON.stringify({
 const TYPE = "/types/Wide/Width";
 const FAMILY = "/parameters/Height/value";
 const fields: Record<string, FieldState> = {
-  [TYPE]: { proposal: { value: "40in" } },
-  [FAMILY]: { proposal: { value: "10in" } },
+  [TYPE]: { suggestion: { value: "40in" } },
+  [FAMILY]: { suggestion: { value: "10in" } },
 };
 const drawn = (key: string, lock: string | null = null) =>
-  availableTransitions(fields[key]!, "human", { lock }).filter((kind) => kind !== "stage");
+  availableTransitions(fields[key]!, "human", { lock }).filter(
+    (kind) => kind !== "set" && kind !== "suggest",
+  );
 
 /** The real core and its real cells over a Family Work, with the store's plumbing stubbed. */
 function Harness({ wire }: { wire: CellWire }) {
@@ -81,7 +83,7 @@ const verbs = (scope: HTMLElement) =>
   within(scope)
     .queryAllByRole("button")
     .map((button) => button.getAttribute("aria-label") ?? button.textContent)
-    .filter((name) => name === "accept" || name === "deny" || name === "unstage");
+    .filter((name) => name === "take" || name === "unsuggest" || name === "clear");
 
 test("a Family table cell and a doc-pane field draw exactly the contract's transitions", async () => {
   const write = vi.fn(async () => null);
@@ -95,9 +97,9 @@ test("a Family table cell and a doc-pane field draw exactly the contract's trans
   const card = screen.getByText("Width · Wide").closest<HTMLElement>(".grid")!;
   expect(verbs(card)).toEqual(drawn(TYPE));
 
-  await act(async () => fireEvent.click(within(table).getByRole("button", { name: "accept" })));
+  await act(async () => fireEvent.click(within(table).getByRole("button", { name: "take" })));
   expect(write).toHaveBeenCalledWith(
-    transitionPatches(["cells"], TYPE, fields[TYPE]!, { kind: "accept" }),
+    transitionPatches(["cells"], TYPE, fields[TYPE]!, { kind: "take" }),
     3,
   );
 });
@@ -113,7 +115,7 @@ test("a locked Family cell draws deny only, and a shared-source pointer is such 
       }}
     />,
   );
-  expect(verbs(screen.getByRole("region", { name: "table" }))).toEqual(["deny"]);
+  expect(verbs(screen.getByRole("region", { name: "table" }))).toEqual(["unsuggest"]);
   const shared = { parameters: { $preset: "@local/_params/width" } } as unknown as FamilyDraft;
   expect(familyLockOf(shared)(FAMILY)).toContain("shared source");
   expect(familyLockOf(JSON.parse(raw))(FAMILY)).toBeNull();

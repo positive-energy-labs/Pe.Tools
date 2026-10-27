@@ -8,7 +8,7 @@ import {
 import type { ScheduleGridDocument } from "@pe/agent-contracts";
 import { reviewTransitions, type CellWire } from "#/components/work/band";
 import type { CellTransition, StateCellProps } from "@pe/kit/lang/cell";
-import { cellFromTrichotomy, StateCell } from "@pe/kit/lang/cell";
+import { cellFromDraft, StateCell } from "@pe/kit/lang/cell";
 import type { Column } from "@pe/kit/table/model";
 import { parseConditionNumber } from "@pe/kit/table/view";
 import type { ScheduleGridSnapshot as Snapshot } from "@pe/agent-contracts";
@@ -30,7 +30,7 @@ export function scheduleShownText(
   cells: ScheduleGridDocument["cells"],
 ): string {
   const cell = cells[scheduleCellKey(row.rowNumber, columnNumber)];
-  const authored = cell?.staged ?? cell?.proposal;
+  const authored = cell?.edit ?? cell?.suggestion;
   return authored
     ? showCellValue(authored.value)
     : (row.bindings.find((binding) => binding.columnNumber === columnNumber)?.displayValue ??
@@ -49,11 +49,11 @@ export const scheduleLock = (binding: Binding | undefined): string | null =>
         : "read-only — this parameter cannot be written from a schedule";
 
 /** A stale key's note (`basis.stale`), in the grid and the pending strip alike. */
-export const STALE_NOTE = "stale: Revit changed under your staged value · accept to stage it again";
+export const STALE_NOTE = "stale: Revit changed under your edit value · accept to stage it again";
 
 type GridCell = NonNullable<ScheduleGridDocument["cells"][string]>;
 
-/** A staged key a re-read moved under, with A, the value the person reviewed against. */
+/** A edit key a re-read moved under, with A, the value the person reviewed against. */
 export type StaleCell = NonNullable<NonNullable<ScheduleGridDocument["basis"]>["stale"]>[number];
 
 /**
@@ -61,12 +61,12 @@ export type StaleCell = NonNullable<NonNullable<ScheduleGridDocument["basis"]>["
  * mine"); deny unstages ("take Revit's"). Neither pushes. The cell's verbs and the aggregate
  * (`StaleResolve`) both write these, through the same wire.
  */
-export const staleAnswer = (key: string, cell: GridCell, kind: "accept" | "deny") =>
+export const staleAnswer = (key: string, cell: GridCell, kind: "take" | "unsuggest") =>
   transitionPatches(
     ["cells"],
     key,
     cell,
-    kind === "accept" ? { kind: "stage", rung: cell.staged! } : { kind: "unstage" },
+    kind === "take" ? { kind: "set", rung: cell.edit! } : { kind: "clear" },
   );
 
 /**
@@ -79,16 +79,20 @@ function scheduleTransitions(
   cell: GridCell,
   stale: readonly StaleCell[],
 ): CellTransition[] {
-  if (cell.staged == null || !stale.some((s) => s.key === key))
+  if (cell.edit == null || !stale.some((s) => s.key === key))
     return reviewTransitions(wire, key, cell);
-  const run = (kind: "accept" | "deny") => () =>
+  const run = (kind: "take" | "unsuggest") => () =>
     wire.write(staleAnswer(key, cell, kind), wire.revision ?? undefined);
   return [
-    { kind: "deny", reason: "Drop your stale value; the Revit value stands.", run: run("deny") },
     {
-      kind: "accept",
+      kind: "unsuggest",
+      reason: "Drop your stale value; the Revit value stands.",
+      run: run("unsuggest"),
+    },
+    {
+      kind: "take",
       reason: "Accept to stage it again over what Revit holds now.",
-      run: run("accept"),
+      run: run("take"),
     },
   ];
 }
@@ -105,7 +109,7 @@ export interface ScheduleCellWrites {
 
 /**
  * One schedule cell's full state: value, marks, note, verbs and its edit door. The grid's column
- * draws it, and the review list draws the SAME cell, so a staged value is refined where it is
+ * draws it, and the review list draws the SAME cell, so a edit value is refined where it is
  * reviewed.
  */
 function scheduleCellState(
@@ -117,16 +121,16 @@ function scheduleCellState(
   const key = scheduleCellKey(row.rowNumber, columnNumber);
   const binding = row.bindings.find((candidate) => candidate.columnNumber === columnNumber);
   const cell = cells[key] ?? {};
-  const isStaged = cell.staged != null;
-  const isProposal = !isStaged && cell.proposal != null;
+  const isStaged = cell.edit != null;
+  const isProposal = !isStaged && cell.suggestion != null;
   // Staged over a value a re-read moved (`basis.stale`): drift against what Revit holds now.
   const staleAt = isStaged ? stale.find((s) => s.key === key) : undefined;
   const isStale = staleAt != null;
   const current = binding?.displayValue ?? row.values[columnIndex] ?? "";
   const shown = isStaged
-    ? showCellValue(cell.staged?.value)
+    ? showCellValue(cell.edit?.value)
     : isProposal
-      ? showCellValue(cell.proposal?.value)
+      ? showCellValue(cell.suggestion?.value)
       : current;
   const lock = scheduleLock(binding);
   const note =
@@ -134,8 +138,8 @@ function scheduleCellState(
       isStale ? STALE_NOTE : null,
       !isStale && (isStaged || isProposal) && shown !== current ? `was ${current || "—"}` : null,
       isProposal
-        ? cell.proposal?.note
-          ? `pea: ${cell.proposal.note}`
+        ? cell.suggestion?.note
+          ? `pea: ${cell.suggestion.note}`
           : "pea proposed this"
         : null,
       binding?.isTypeParameter ? "type parameter — shared across every row of this type" : null,
@@ -147,7 +151,7 @@ function scheduleCellState(
       .filter(Boolean)
       .join(" · ") || undefined;
   return {
-    ...cellFromTrichotomy(cell, {
+    ...cellFromDraft(cell, {
       value: shown,
       currentValue: current || "(blank)",
       ...(isStale ? { agree: "drift" as const, modelValue: current, reviewed: staleAt.was } : {}),
@@ -166,7 +170,7 @@ function scheduleCellState(
               parse: (text: string) => parseMeasured(key, text),
               // The schedule stages `{ value, unit }` itself: Revit's number and the
               // unit it was read in go to the apply apart, never as one string.
-              stage: (staged: MeasuredValue) => stageEdit(key, staged),
+              stage: (edit: MeasuredValue) => stageEdit(key, edit),
             },
           }
         : {

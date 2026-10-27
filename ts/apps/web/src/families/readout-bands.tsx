@@ -13,7 +13,7 @@ import { familyCellEntries } from "#/families/staged";
 import type { SalvagedExclusion } from "#/families/store";
 import { filterWords } from "#/families/scope-band";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
-import { cellFromTrichotomy } from "@pe/kit/lang/cell";
+import { cellFromDraft } from "@pe/kit/lang/cell";
 import { WorkLines, type WorkCell } from "#/components/work/lines";
 import { ARTIFACT } from "#/families/manifest";
 import { Inspect } from "#/route/inspect";
@@ -127,12 +127,12 @@ export function FamiliesReceipts() {
 /**
  * THE FAMILIES WORK SLOT — the native patch as one row, then every pending cell as `WorkLines`, one
  * line per parameter aggregated across families (`PE_G___Model → FXMQ20 ×12 · … · pea · 15 cells ✓
- * ✕`, MAP ruling 60). Its tab is the route's `lines` field. Plan reads staged cells.
+ * ✕`, MAP ruling 60). Its tab is the route's `lines` field. Plan reads edit cells.
  */
 export function FamiliesProposalsBand() {
   const { cells, wire, plan, store, locator } = useFamiliesWorkspace();
   const patch = store.handle.work.doc?.patch ?? ({} as FamiliesPatchCell);
-  const patchSource = (patch.staged ?? patch.proposal)?.value;
+  const patchSource = (patch.edit ?? patch.suggestion)?.value;
   // A plan row with no resolved id (no `hashKey`) is a name the host refused, in its own words.
   const orphans = (plan?.entries ?? []).flatMap((entry) =>
     entry.hashKey === undefined && entry.flag ? [[entry.id, entry.flag] as const] : [],
@@ -140,15 +140,15 @@ export function FamiliesProposalsBand() {
   // Each chip lands on its parameter × type cell in the grid (N4).
   const pending: WorkCell[] = familyCellEntries(cells).flatMap(
     ({ key, cell, parameter, familyName, typeName }) => {
-      if (cell.proposal == null && cell.staged == null) return [];
-      const value = showFamilyCell((cell.staged ?? cell.proposal)?.value ?? { value: "" });
+      if (cell.suggestion == null && cell.edit == null) return [];
+      const value = showFamilyCell((cell.edit ?? cell.suggestion)?.value ?? { value: "" });
       return [
         {
           key,
           column: parameter,
           row: `${familyName} · ${typeName}`,
           value,
-          look: cellFromTrichotomy(cell, { value }, showFamilyCell),
+          look: cellFromDraft(cell, { value }, showFamilyCell),
           locate: () => locator.locate(key),
         },
       ];
@@ -167,7 +167,7 @@ export function FamiliesProposalsBand() {
           `${(value as PodDraftSource).path} · different patch bytes; inspect proposed source below`
         }
       />
-      {(["proposal", "staged"] as const).map((rung) =>
+      {(["suggestion", "edit"] as const).map((rung) =>
         patch[rung] ? (
           <details key={rung} className="t-small">
             <summary>
@@ -179,10 +179,10 @@ export function FamiliesProposalsBand() {
           </details>
         ) : null,
       )}
-      {patch.staged != null && pending.some(({ look }) => look.stage === "staged") ? (
+      {patch.edit != null && pending.some(({ look }) => look.stage === "edit") ? (
         <OutcomeLine
           kind="refused"
-          label="choose one staged edit lane"
+          label="choose one edit edit lane"
           says="Unstage the native patch or the per-type cells before planning."
         />
       ) : null}

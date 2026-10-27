@@ -14,10 +14,10 @@ export function TypeLaws({ owner }: { owner: (name: string) => string }) {
       <Law
         name="bold = unsaved"
         owner={owner("bold = unsaved")}
-        ruling="Weight is reserved for a person's unsaved edit. A proposal already has Pea's wash and does not spend the axis twice."
+        ruling="Weight is reserved for a person's unsaved edit. A suggestion already has Pea's wash and does not spend the axis twice."
       >
         <div className="flex flex-wrap items-baseline gap-4">
-          <StateCell value="36 in" stage="staged" stagedBy="you" />
+          <StateCell value="36 in" stage="edit" author="human" />
           <StateCell value="2 hr" stage="proposed" />
         </div>
         <CounterExample why="freshness is a fact, so weight must remain available for unsaved work">

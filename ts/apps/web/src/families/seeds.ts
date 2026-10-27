@@ -100,7 +100,7 @@ const entry = (
 
 const work: FamiliesRouteDocument = familiesRouteState.schema.parse({
   scope: {
-    staged: {
+    edit: {
       value: {
         categoryNames: ["Mechanical Equipment"],
         familyNames: [],
@@ -108,7 +108,7 @@ const work: FamiliesRouteDocument = familiesRouteState.schema.parse({
       },
     },
   },
-  excluded: { "Heat Pump - Split": { by: "person" } },
+  excluded: { "Heat Pump - Split": { by: "human" } },
 });
 
 const plan = [
@@ -144,9 +144,9 @@ const seed = (
 });
 
 /**
- * The editable table in the proposal language: Pea proposed one cell and a person staged it; a
- * person proposed another that nobody has staged yet. Nothing has reached Revit and no file
- * exists — plan generates one patch member per family from the staged cell only.
+ * The editable table in the suggestion language: Pea proposed one cell and a person edit it; a
+ * person proposed another that nobody has edit yet. Nothing has reached Revit and no file
+ * exists — plan generates one patch member per family from the edit cell only.
  */
 const peaModel = {
   familyName: "Fan Coil Unit - Ducted",
@@ -154,9 +154,9 @@ const peaModel = {
   parameter: "PE_G___Model",
   value: "FXMQ20",
 } as const;
-const staged: FamiliesRouteDocument = familiesRouteState.schema.parse({
+const edit: FamiliesRouteDocument = familiesRouteState.schema.parse({
   scope: {
-    staged: {
+    edit: {
       value: {
         categoryNames: ["Mechanical Equipment"],
         familyNames: [],
@@ -166,22 +166,22 @@ const staged: FamiliesRouteDocument = familiesRouteState.schema.parse({
   },
   cells: {
     [familyCellKey(peaModel)]: {
-      proposal: { value: { value: peaModel.value, storageType: "String" } },
-      staged: { value: { value: peaModel.value, storageType: "String" } },
+      suggestion: { value: { value: peaModel.value, storageType: "String" } },
+      edit: { value: { value: peaModel.value, storageType: "String" } },
     },
     [familyCellKey({
       familyName: "Heat Pump - Split",
       typeName: "HP-1",
       parameter: "PE_G___Manufacturer",
     })]: {
-      proposal: { value: { value: "Mitsubishi", storageType: "String" } },
-      staged: null,
+      suggestion: { value: { value: "Mitsubishi", storageType: "String" } },
+      edit: null,
     },
   },
   // Pea's native patch: a new alias parameter, a tooltip, and one explicit type cell. It projects
   // onto the param rows and the minimap; accept and deny sit on its review row.
   patch: {
-    proposal: {
+    suggestion: {
       value: {
         path: "patches/model-code.json",
         content: JSON.stringify({
@@ -216,9 +216,9 @@ export const FAMILIES_SEEDS = {
     sheet: { entries: plan.map((row) => ({ ...ffPlanRow(row), plan: "demo-plan" })) },
   }),
   edit: seed(
-    "two cell proposals across two families, one staged, and a native patch proposal; plan generates the spec from the staged one",
+    "two cell proposals across two families, one edit, and a native patch suggestion; plan generates the spec from the edit one",
     { stage: "apply" },
     {},
-    staged,
+    edit,
   ),
 };

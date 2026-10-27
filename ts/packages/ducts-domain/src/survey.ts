@@ -3,7 +3,7 @@
  * read in Work's working phase (`phases.ts`) and tolerated (`proximity.ts`), every terminal's design flow resolved (`terminal-flows.ts`), and
  * the findings of both beside the snapshot's own issues, each naming who clears it. Cached per
  * snapshot for the last Work, so `price` and `assessDucts` share one survey; the tolerated
- * snapshot is cached per proximity verdict set, so a staged number re-solves only `next`.
+ * snapshot is cached per proximity verdict set, so a edit number re-solves only `next`.
  */
 import {
   stagedDucts,
@@ -33,7 +33,7 @@ import type { DuctSnapshot } from "./types.ts";
 export interface Survey {
   snapshot: DuctSnapshot;
   flows: Map<number, TerminalFlow>;
-  /** Every unit's design flow: staged `equipmentFlows`, else Revit's `fanFlow` fact, else (a fan) the sum of the terminal flows it serves, `derived`. */
+  /** Every unit's design flow: edit `equipmentFlows`, else Revit's `fanFlow` fact, else (a fan) the sum of the terminal flows it serves, `derived`. */
   equipmentFlows: Map<number, EquipmentFlow>;
   /**
    * Each group's fans with the flow the solve prices them at there (`groupFans`): stated, else the
@@ -41,7 +41,7 @@ export interface Survey {
    * system through `unitFlowIn`, never `equipmentFlows`' largest-over-every-group reading.
    */
   fanFlows: Map<string, Map<number, EquipmentFlow>>;
-  /** Every root unit's role: ruled, staged, else proposed from its design flow (`unit-roles.ts`). */
+  /** Every root unit's role: ruled, edit, else proposed from its design flow (`unit-roles.ts`). */
   roles: Map<number, UnitRole>;
   findings: DuctFinding[];
   /** The element pairs only a proximity inference joins; a path stepping across one rests on it. */
@@ -132,11 +132,11 @@ const flowFinding = (f: FlowFinding): DuctFinding => {
   }
 };
 
-/** The staged verdicts proximity reads (ignore withholds, connect joins across classifications) and the working phase. */
+/** The edit verdicts proximity reads (ignore withholds, connect joins across classifications) and the working phase. */
 const verdictKey = (work: DuctsRouteDocument | null) =>
   Object.entries(work?.assumptions ?? {})
     .flatMap(([key, cell]) => {
-      const v = cell.staged?.value;
+      const v = cell.edit?.value;
       return key.startsWith("proximity:") && v?.kind === "verdict" ? [`${key}=${v.verdict}`] : [];
     })
     .sort()
@@ -177,7 +177,7 @@ export function series(snapshot: DuctSnapshot, tags: Set<string>) {
 
 const cache = new WeakMap<DuctSnapshot, Map<string, ReturnType<typeof tolerate>>>();
 /**
- * `tolerate` over the snapshot in Work's working phase, under Work's staged proximity verdicts,
+ * `tolerate` over the snapshot in Work's working phase, under Work's edit proximity verdicts,
  * the `out-of-phase` findings first; cached per snapshot, verdict set and phase.
  */
 export function tolerated(snapshot: DuctSnapshot, work: DuctsRouteDocument | null) {
@@ -207,22 +207,22 @@ export function survey(
   const hit = last.get(snapshot);
   if (!roomFlows && hit && hit.work === work) return hit.survey;
   const t = tolerated(snapshot, work);
-  const staged = stagedDucts(work);
-  const tags = (staged.loads.preview?.systems ?? []).flatMap((x) => (x.tag ? [x.tag] : [])).sort();
+  const edit = stagedDucts(work);
+  const tags = (edit.loads.preview?.systems ?? []).flatMap((x) => (x.tag ? [x.tag] : [])).sort();
   const bySeries = inSeries.get(t.snapshot) ?? inSeries.set(t.snapshot, new Map()).get(t.snapshot)!;
   const s =
     bySeries.get(tags.join("|")) ??
     bySeries.set(tags.join("|"), series(t.snapshot, new Set(tags))).get(tags.join("|"))!;
   // Roles are proposed on the groups as Revit cuts them; then a passive unit passes air through.
-  const units = equipmentFlows(s.snapshot, staged.equipmentFlows);
-  const roles = unitRoles(s.snapshot, units, staged.roles);
+  const units = equipmentFlows(s.snapshot, edit.equipmentFlows);
+  const roles = unitRoles(s.snapshot, units, edit.roles);
   const passive = passiveOf(roles);
   const key = [...passive].join(",");
   const byPassive = inline.get(s.snapshot) ?? inline.set(s.snapshot, new Map()).get(s.snapshot)!;
   const p = byPassive.get(key) ?? byPassive.set(key, passThrough(s.snapshot, passive)).get(key)!;
   const m = p.snapshot;
   const trees = m.groups.map((g) => groupTree(m, g.id));
-  const flows = terminalFlows(m, staged.loads.preview, staged.flows, trees, roomFlows);
+  const flows = terminalFlows(m, edit.loads.preview, edit.flows, trees, roomFlows);
   const noFan = noFanFindings(m, passive);
   const fanless = new Set(noFan.map((f) => f.groupId));
   const rootsOf = (groupId: string) => m.groups.find((g) => g.id === groupId)?.rootIds ?? [];

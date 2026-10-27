@@ -4,7 +4,7 @@ import { SvgTip } from "@pe/kit/lang/tooltip";
 /**
  * The plan's feedback layer (V6 calm): a tools bar with two marks and a note, the drawn marks,
  * one count badge per region with cards, and the card projected beside its room. A draft is
- * client-local until it drops; on drop it is staged. Escape cancels, `v` returns to look.
+ * client-local until it drops; on drop it is edit. Escape cancels, `v` returns to look.
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
@@ -42,7 +42,7 @@ const TOOLS: { value: Tool; label: string; title: string }[] = [
   {
     value: "note",
     label: "✎ note",
-    title: "click a place, then type: writes a note, never staged",
+    title: "click a place, then type: writes a note, never edit",
   },
 ];
 /** RDP tolerance and the smallest lasso that is a mark (model feet, square feet). */

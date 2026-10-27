@@ -95,7 +95,7 @@ test.skipIf(process.env.PE_DEMO_JET !== "1")(
       expect(nativeLinks).toHaveLength(1);
       const after = await readRhvacFixture(path);
       expect(after.rooms.some((room) => room.name === "Reviewed demo room")).toBe(true);
-      // The consumed staged edit retired; nothing staged remains.
+      // The consumed edit edit retired; nothing edit remains.
       expect(
         stagedTakeoffEdits(
           takeoffsRouteState.schema.parse((await owner.work.read(owner.scope, "takeoffs"))!.doc),

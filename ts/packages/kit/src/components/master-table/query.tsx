@@ -182,7 +182,7 @@ export function QueryBox({
     fields.find(
       (each) => (each.kind || each.sort) && each.label.toLowerCase() === label.toLowerCase(),
     );
-  // A draft that may still become a field or a rule is a proposal, not yet a search word.
+  // A draft that may still become a field or a rule is a suggestion, not yet a search word.
   const naming = (text: string) => {
     const lower = text.replace(/^!?"?/, "").replace(/"$/, "").toLowerCase();
     return (

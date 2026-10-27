@@ -82,7 +82,7 @@ test("a bare number in a column with no display unit refuses at the cell", () =>
   const input = inputOf(container);
   type(input, "300");
   expect(stage).not.toHaveBeenCalled();
-  expect(container.textContent).toContain("cannot be staged");
+  expect(container.textContent).toContain("cannot be edit");
 });
 
 test("Escape cancels a pending parse and an Enter blur does not submit twice", async () => {
@@ -147,9 +147,9 @@ test("a later edit wins when two parses answer out of order", async () => {
 });
 
 test("the cell stages Revit's unrounded length instead of its rounded display text", async () => {
-  const staged: MeasuredValue[] = [];
+  const edit: MeasuredValue[] = [];
   callHostRpc.mockResolvedValueOnce({ ok: true, value: 0.4921259842519685, text: "0' - 6\"" });
-  const { container } = inTable(<ParsedCell stage={(value) => staged.push(value)} />);
+  const { container } = inTable(<ParsedCell stage={(value) => edit.push(value)} />);
   type(inputOf(container), "150 mm");
   await act(async () => {});
   expect(callHostRpc).toHaveBeenCalledWith(
@@ -161,16 +161,16 @@ test("the cell stages Revit's unrounded length instead of its rounded display te
     },
     expect.anything(),
   );
-  expect(staged).toEqual([{ value: "0.4921259842519685", unit: "'" }]);
+  expect(edit).toEqual([{ value: "0.4921259842519685", unit: "'" }]);
 });
 
 test("a host failure appears on the cell and stages nothing", async () => {
-  const staged: MeasuredValue[] = [];
+  const edit: MeasuredValue[] = [];
   callHostRpc.mockRejectedValueOnce(new Error("bridge unavailable"));
-  const { container } = inTable(<ParsedCell stage={(value) => staged.push(value)} />);
+  const { container } = inTable(<ParsedCell stage={(value) => edit.push(value)} />);
   type(inputOf(container), "150 mm");
   await act(async () => {});
-  expect(staged).toEqual([]);
+  expect(edit).toEqual([]);
   expect(container.textContent).toContain("bridge unavailable");
   expect(inputOf(container).value).toBe("12'");
 });

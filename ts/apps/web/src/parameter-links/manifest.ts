@@ -33,10 +33,10 @@ const targetOf = (ctx: Ctx) => {
   return ctx.target.ref;
 };
 
-const read = async (ctx: Ctx, evaluate: boolean, subject: "staged" | "proposal" = "staged") => {
+const read = async (ctx: Ctx, evaluate: boolean, subject: "edit" | "suggestion" = "edit") => {
   await readFamilyCapture(
     "parameter-links.read",
-    { evaluate, ...(subject === "proposal" ? { subject } : {}) },
+    { evaluate, ...(subject === "suggestion" ? { subject } : {}) },
     ctx.work.key,
     targetOf(ctx),
   );
@@ -65,7 +65,6 @@ export const manifest = defineRoute<
       label: "refresh",
       says: "Read the stored parameter links of the bound project without evaluating the draft.",
       needs: "project",
-      actor: "any",
       input: z.void() as never,
       dirties: ["links"],
       rereads: "links",
@@ -76,7 +75,6 @@ export const manifest = defineRoute<
       label: "preview",
       says: "Evaluate the shared draft and project its exact target writes.",
       needs: "project",
-      actor: "any",
       input: z.void() as never,
       dirties: ["links"],
       requires: { work: true },
@@ -85,15 +83,15 @@ export const manifest = defineRoute<
       run: (ctx: Ctx) => read(ctx, true),
     },
     previewProposal: {
-      label: "preview Pea's proposal",
+      label: "preview Pea's suggestion",
       says: "Evaluate Pea's proposed profile — a labelled preview that never arms apply.",
       needs: "project",
-      actor: "any",
       input: z.void() as never,
       dirties: ["links"],
       requires: { work: true },
-      ready: (ctx: Ctx) => (ctx.work.doc?.profile.proposal ? null : "Pea has proposed no profile"),
-      run: (ctx: Ctx) => read(ctx, true, "proposal"),
+      ready: (ctx: Ctx) =>
+        ctx.work.doc?.profile.suggestion ? null : "Pea has proposed no profile",
+      run: (ctx: Ctx) => read(ctx, true, "suggestion"),
     },
     apply: {
       label: "apply links",

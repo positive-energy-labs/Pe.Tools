@@ -94,7 +94,7 @@ const base = {
   equipmentFlows: new Map<number, { cfm: number | null }>([[1, { cfm: null }]]),
   doc: null,
   claims: [] as Claim[],
-  write: { staged: 0, hasPreview: false, fresh: false, planned: null, refused: null, esp: 0 },
+  write: { edit: 0, hasPreview: false, fresh: false, planned: null, refused: null, esp: 0 },
 };
 
 describe("the ducts inbox", () => {

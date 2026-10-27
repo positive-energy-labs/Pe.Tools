@@ -35,7 +35,6 @@ const labManifest = (
       label: "refresh",
       says: "re-run every dep of this glance against the live host",
       needs: "session",
-      actor: "any",
       input: z.void() as unknown as z.ZodType<never>,
       dirties: [],
       rereads: "inventory",

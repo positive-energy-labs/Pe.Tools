@@ -213,7 +213,7 @@ export function Directory({ page: address }: { page: AddressPage<"home"> }) {
             </p>
             <p>
               {item.work.reason ??
-                "Opens this Work's explicit destination; does not apply its staged changes."}
+                "Opens this Work's explicit destination; does not apply its edit changes."}
             </p>
           </Information>
         ),
@@ -237,7 +237,7 @@ export function Directory({ page: address }: { page: AddressPage<"home"> }) {
         <Information label={`${tool.title} information`} icon={Info}>
           <p>{tool.description}</p>
           <p>
-            {tool.to} / {tool.exposure} exposure proposal; maturity unverified.
+            {tool.to} / {tool.exposure} exposure suggestion; maturity unverified.
           </p>
           <p>Runtime requirement (source-derived): {tool.runtimeNeed}.</p>
           <p>
@@ -259,13 +259,13 @@ export function Directory({ page: address }: { page: AddressPage<"home"> }) {
         <PrimaryRouteControls route="index">
           <RouteHelpButton
             name="Tool directory"
-            docs="Find a tool by task or description. Main, Preview and Archive are provisional exposure choices, not quality certification. Saved Works stay under the tool that owns them; unavailable destinations explain why they cannot resume. Ctrl Shift K searches tools, saved Works and Pea threads. Search and Home open explicit destinations; route-owned guards retain control of staged changes."
+            docs="Find a tool by task or description. Main, Preview and Archive are provisional exposure choices, not quality certification. Saved Works stay under the tool that owns them; unavailable destinations explain why they cannot resume. Ctrl Shift K searches tools, saved Works and Pea threads. Search and Home open explicit destinations; route-owned guards retain control of edit changes."
           />
         </PrimaryRouteControls>
         {/* L1/I6: the why (exposure, saved Works) is the route help above, one press away. */}
         <h1 className="t-title mb-3">Find a tool</h1>
         <div className="mb-4 flex flex-wrap items-center gap-2">
-          <span className="text-ink-2">Exposure proposal:</span>
+          <span className="text-ink-2">Exposure suggestion:</span>
           {(["All", "Main", "Preview", "Archive"] as const).map((value) => (
             <Button
               key={value}

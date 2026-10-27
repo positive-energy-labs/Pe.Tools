@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { readScheduleCapture } from "../../../../../packages/mcps/src/shared/schedule-client";
 import { frozenDemo } from "#/host/demo-client";
 import {
-  unstale,
   scheduleCatalogSchema,
   scheduleReadingSchema,
   scheduleGridDocumentSchema,
@@ -104,7 +104,7 @@ export function LiveScheduleGridWorkspace({
     if (!page.workspaceId && retained?.workspaceId) setPage({ workspaceId: retained.workspaceId });
   }, [page.workspaceId, retained?.workspaceId, setPage]);
   const receipts = (previousOf(handle.readings.receipts) as ActionStatus[] | undefined) ?? [];
-  const hasWork = Object.values(work.doc?.cells ?? {}).some((cell) => cell.staged || cell.proposal);
+  const hasWork = Object.values(work.doc?.cells ?? {}).some((cell) => cell.edit || cell.suggestion);
   const basisId = work.doc?.basis?.captureId;
 
   // Held while an action runs: a push's readback rebinds the basis mid-action, and a page move here
@@ -117,7 +117,7 @@ export function LiveScheduleGridWorkspace({
 
   // Staged cells are keyed by the basis reading's rows. A later reading (a push's readback) is
   // drawn only while its rows are the same elements in the same positions: written cells then show
-  // what Revit now holds, and a still-staged cell overlays the row it was staged on (F-S-1).
+  // what Revit now holds, and a still-edit cell overlays the row it was edit on (F-S-1).
   const shown =
     hasWork && basisId
       ? retained && saved && retained.id !== basisId && sameRows(saved, retained)
@@ -156,31 +156,30 @@ export function LiveScheduleGridWorkspace({
   const apply = async (patches: RouteStatePatch[], expectedRevision?: number) => {
     if (!shown) return refuse("not-ready", "Read the schedule before editing: Select a schedule");
     const history = historyRef.current!;
-    const before =
-      history.pending.at(-1)?.after ?? work.doc ?? scheduleGridDocumentSchema.parse({});
-    const hasPendingWork = Object.values(before.cells).some((cell) => cell.staged || cell.proposal);
-    const writing = patches.some((patch) => patch.value !== undefined);
-    // Staging or unstaging a stale key is the person's answer to it: the key leaves `basis.stale`.
-    const restaged = patches.flatMap(({ path: [cells, key, rung] }) =>
-      cells === "cells" && rung === "staged" ? [String(key)] : [],
-    );
-    const next: RouteStatePatch[] =
-      writing && (!hasPendingWork || !before.basis)
-        ? // not a cell: basis, and when that read was taken
-          [
-            { path: ["basis"], value: { captureId: shown.id } },
-            { path: ["takenAt"], value: shown.capturedAt },
-            ...patches,
-          ]
-        : [...patches, ...unstale(before, restaged)];
+    let before = history.pending.at(-1)?.after ?? work.doc ?? scheduleGridDocumentSchema.parse({});
+    let revision = expectedRevision ?? work.revision ?? 0;
+    const hasPendingWork = Object.values(before.cells).some((cell) => cell.edit || cell.suggestion);
+    if (!hasPendingWork && before.basis?.captureId !== shown.id) {
+      const bound = await readScheduleCapture(
+        "schedule.grid.bind",
+        { readingId: shown.id, expectedRevision: revision },
+        target,
+      );
+      const envelope = bound.envelope;
+      before = scheduleGridDocumentSchema.parse(envelope.doc);
+      revision = envelope.revision;
+      history.revision = revision;
+    }
+    // Binding and stale reconciliation are host facts. This edit carries authored cells only.
+    const next = patches;
     const step = scheduleHistoryStep(before, next);
     if (step && sameScheduleDoc(before, step.after)) return null;
     if (!step || history.replay) {
       clearHistory();
-      return work.write(next, expectedRevision ?? work.revision ?? undefined);
+      return work.write(next, revision);
     }
     history.pending.push(step);
-    const refusal = await work.write(next, expectedRevision ?? work.revision ?? undefined);
+    const refusal = await work.write(next, revision);
     if (refusal) clearHistory();
     return refusal;
   };
@@ -297,7 +296,7 @@ export function LiveScheduleGridWorkspace({
     />
   );
   // Stale resolve is apply's question (ruling 39): it stands on apply's flag while it has one.
-  const staleStaged = (work.doc?.basis?.stale ?? []).some((s) => work.doc?.cells[s.key]?.staged);
+  const staleStaged = (work.doc?.basis?.stale ?? []).some((s) => work.doc?.cells[s.key]?.edit);
   const auditRef = useRef<HTMLDivElement | null>(null);
   // The Work slot: one line per column (ruling 60); its tab is the route's `lines` field.
   const lines = (
@@ -379,9 +378,9 @@ function ScheduleHistoryKeys({
 }) {
   useScopeKeys(
     [
-      { hotkey: "Mod+Z", callback: undo, label: "undo staged schedule edit" },
-      { hotkey: "Mod+Shift+Z", callback: redo, label: "redo staged schedule edit" },
-      { hotkey: "Mod+Y", callback: redo, label: "redo staged schedule edit" },
+      { hotkey: "Mod+Z", callback: undo, label: "undo edit schedule edit" },
+      { hotkey: "Mod+Shift+Z", callback: redo, label: "redo edit schedule edit" },
+      { hotkey: "Mod+Y", callback: redo, label: "redo edit schedule edit" },
     ],
     region,
   );

@@ -53,12 +53,12 @@ const mark = (kind: Mark["kind"], polygon: [number, number][], guids: string[]):
   run: "r1",
   guids,
 });
-const proposal = mark("merge", [...square(0, 0, 20)], ["a", "b"]);
+const suggestion = mark("merge", [...square(0, 0, 20)], ["a", "b"]);
 const doc = roomsRouteState.schema.parse({
   marks: {
-    p1: { proposal: { value: proposal } },
-    s2: { staged: { value: mark("merge", square(0, 0, 20), ["a", "b"]) } },
-    s1: { staged: { value: mark("reject", square(30, 0, 10), ["c"]) } },
+    p1: { suggestion: { value: suggestion } },
+    s2: { edit: { value: mark("merge", square(0, 0, 20), ["a", "b"]) } },
+    s1: { edit: { value: mark("reject", square(30, 0, 10), ["c"]) } },
   },
   notes: {
     n1: {
@@ -72,7 +72,7 @@ const doc = roomsRouteState.schema.parse({
 const cards = inboxCards(doc, snapshot, VIEW);
 
 test("a rerun rechurns every guid; a card still finds its regions by the anchor's geometry", () => {
-  // The reject staged on run r1's face, then the rerun held it under a new id.
+  // The reject edit on run r1's face, then the rerun held it under a new id.
   const rerun = {
     ...snapshot,
     regions: [
@@ -82,13 +82,13 @@ test("a rerun rechurns every guid; a card still finds its regions by the anchor'
     ],
   };
   const work = roomsRouteState.schema.parse({
-    marks: { m1: { staged: { value: mark("reject", square(30, 0, 10), ["c"]) } } },
+    marks: { m1: { edit: { value: mark("reject", square(30, 0, 10), ["c"]) } } },
   });
   expect(inboxCards(work, snapshot, VIEW)[0]!.guids).toEqual(["c"]);
   expect(inboxCards(work, rerun, VIEW)[0]!.guids).toEqual(["c2"]);
 });
 
-test("accept on Pea's card writes marks/p1/staged through the wire, bound to the revision", async () => {
+test("accept on Pea's card writes marks/p1/edit through the wire, bound to the revision", async () => {
   const wrote: [RouteStatePatch[], number | undefined][] = [];
   const write = async (patches: RouteStatePatch[], revision?: number) => {
     wrote.push([patches, revision]);
@@ -97,18 +97,24 @@ test("accept on Pea's card writes marks/p1/staged through the wire, bound to the
   const apply = { refusal: () => null, run: async () => null };
   const p1 = cards[0]!;
   const verbs = cardMoves(p1, { write, revision: 7 }, apply);
-  expect(verbs.map((verb) => verb.word)).toEqual(["accept", "reject"]);
+  expect(verbs.map((verb) => verb.word)).toEqual(["take", "reject"]);
   render(<FeedbackCard card={p1} line="" regions={snapshot.regions} verbs={verbs} />);
-  fireEvent.click(screen.getByText("accept"));
+  fireEvent.click(screen.getByText("take"));
   await waitFor(() => expect(wrote.length).toBe(1));
-  expect(wrote[0]).toEqual([[{ path: ["marks", "p1", "staged"], value: { value: proposal } }], 7]);
+  expect(wrote[0]).toEqual([
+    [
+      { path: ["marks", "p1", "edit"], value: { value: suggestion } },
+      { path: ["marks", "p1", "suggestion"], value: null },
+    ],
+    7,
+  ]);
   // The written Work still parses, and now reads as accepted.
   const next = roomsRouteState.schema.parse({
     ...doc,
-    marks: { ...doc.marks, p1: { ...doc.marks.p1, staged: { value: proposal } } },
+    marks: { ...doc.marks, p1: { ...doc.marks.p1, edit: { value: suggestion } } },
   });
   expect(inboxCards(next, snapshot, VIEW).find((card) => card.id === "p1")?.state).toBe("accepted");
-  // The staged cards carry their own verbs: a person's merge applies or deletes; a note deletes.
+  // The edit cards carry their own verbs: a person's merge applies or deletes; a note deletes.
   expect(cardMoves(cards[2]!, { write, revision: 7 }, apply).map((v) => v.word)).toEqual([
     "apply",
     "delete",

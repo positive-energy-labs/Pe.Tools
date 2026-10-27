@@ -593,7 +593,7 @@ function RulePick({ row, work, priced }: { row: BarRow; work: LossesWork; priced
   const [family, setFamily] = useState(row.families[0] ?? "");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const staged = work.doc?.ruleAssignments?.[family]?.staged?.value.rule;
+  const edit = work.doc?.ruleAssignments?.[family]?.edit?.value.rule;
   const pick = async (rule: string) => {
     setPending(true);
     setError(null);
@@ -647,12 +647,9 @@ function RulePick({ row, work, priced }: { row: BarRow; work: LossesWork; priced
             Every fitting in the family {family} uses this rule, across all systems. An assignment
             overrides automatic geometry matching.
           </p>
-          {staged ? (
-            <div
-              className="flex flex-wrap items-center gap-2 mb-2"
-              data-e-staged-assignment={family}
-            >
-              <strong>staged: {staged}</strong>
+          {edit ? (
+            <div className="flex flex-wrap items-center gap-2 mb-2" data-e-edit-assignment={family}>
+              <strong>edit: {edit}</strong>
               <Button label="Unstage family rule" busy={pending} onClick={() => void pick("")}>
                 unstage
               </Button>
@@ -665,8 +662,8 @@ function RulePick({ row, work, priced }: { row: BarRow; work: LossesWork; priced
             empty={{ message: "No applicable rules", exit: "Choose another family" }}
             row={(rule) => {
               const condition = ruleConditions(rule, row);
-              const active = staged
-                ? staged === rule.key
+              const active = edit
+                ? edit === rule.key
                 : row.rules.some((current) => current.key === rule.key);
               return {
                 label: `${priced ? tableOf(priced, rule.key) : rule.table} · ${rule.family}${active ? " · current" : ""}`,

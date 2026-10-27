@@ -35,7 +35,7 @@ test("D18 requires a short claim title and keeps its sentence in the Evidence hi
     flows: new Map(),
     equipmentFlows: new Map(),
     claims: [claim],
-    write: { staged: 0, hasPreview: false, fresh: false, planned: null, refused: null, esp: 0 },
+    write: { edit: 0, hasPreview: false, fresh: false, planned: null, refused: null, esp: 0 },
   });
   mount({ check, focused: "claim:c1" });
   const row = document.querySelector<HTMLElement>('[data-key="claim:c1"]')!;
@@ -266,7 +266,7 @@ test("the Write row is one preview button; its popover lists the changes and wri
   expect(within(idleGroup).getByRole("button", { name: "preview" })).toBeTruthy();
   cleanup();
   // Fix and Set rows standing hold back only the ESP: apply stays armed and the row says what waits.
-  const held = "1 staged ESP left out of this write: 1 to fix before the ESP writes";
+  const held = "1 edit ESP left out of this write: 1 to fix before the ESP writes";
   const armed = mount({ held, previewed: true });
   const group = armed.container.querySelector('[aria-label="Write"]') as HTMLElement;
   fireEvent.click(screen.getByText("Write to Revit"));
@@ -328,11 +328,11 @@ test("taking back a stored ignore stages a delete over it", () => {
   const detail = container.querySelector('[data-inbox-detail="open-end:2:1"]') as HTMLElement;
   fireEvent.click(within(detail).getByRole("button", { name: "take back" }));
   expect(write).toHaveBeenCalledWith([
-    { path: ["assumptions", "open-end:2:1", "staged"], value: { delete: true } },
+    { path: ["assumptions", "open-end:2:1", "edit"], value: { delete: true } },
   ]);
 });
 
-// The chat head's "→ review" on a staged cell: the cell family's `focus` writes `issue`, the screen
+// The chat head's "→ review" on a edit cell: the cell family's `focus` writes `issue`, the screen
 // resolves it with `focusRow` against the inbox's rows, and the Inbox opens and selects that row.
 const reviewPage = (segment: string, key: string) => {
   const family = manifest.cells!.find((one) => one.segment === segment)!;
@@ -348,7 +348,7 @@ const rowKeysOf = (over: NonNullable<Parameters<typeof mount>[0]>) =>
     ...(over.check ?? []).map((i) => i.key),
   ]);
 
-test("review on a staged rule with no row of its own lands on the Write row", () => {
+test("review on a edit rule with no row of its own lands on the Write row", () => {
   const { issue } = reviewPage("rules", "elbow-1d-le10") as { issue: string };
   const focused = focusRow(issue, rowKeysOf({}));
   expect(focused).toBe("write");
@@ -363,7 +363,7 @@ test("review on a proposed rule lands on that cell's own row, opened", () => {
     item({
       key: "rules:elbow-1d-le10",
       group: "check",
-      kind: "proposal",
+      kind: "suggestion",
       title: "Rule · Round Elbow : 1 D",
       verbs: [],
     }),
@@ -380,7 +380,7 @@ test("review on a proposed rule lands on that cell's own row, opened", () => {
 test("an issue id that names no Work cell lands nowhere extra", () => {
   expect(focusRow("open-end:2:1", new Set(["f1"]))).toBeNull();
   expect(focusRow("", new Set(["f1"]))).toBeNull();
-  // A staged verdict's cell is keyed by its issue id; its row is the issue's own.
+  // A edit verdict's cell is keyed by its issue id; its row is the issue's own.
   expect(focusRow("assumptions:open-end:2:1", new Set(["open-end:2:1"]))).toBe("open-end:2:1");
 });
 
@@ -410,7 +410,7 @@ test("Rulings use explicit pills and stage marks without replacing an excluding 
   const { container } = mount({
     focused: "rules:one",
     check: [
-      item({ key: "rules:one", group: "check", kind: "proposal", title: "Proposed elbow rule" }),
+      item({ key: "rules:one", group: "check", kind: "suggestion", title: "Proposed elbow rule" }),
     ],
     address: { search: search("", { kind: "heal" }), sort: "name", onChange },
   });
@@ -420,12 +420,12 @@ test("Rulings use explicit pills and stage marks without replacing an excluding 
   fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
   expect(onChange).toHaveBeenCalledWith(search(), "name");
   cleanup();
-  const staged = mount({
+  const edit = mount({
     check: [
-      item({ key: "rules:one", group: "check", kind: "proposal", title: "Proposed elbow rule" }),
+      item({ key: "rules:one", group: "check", kind: "suggestion", title: "Proposed elbow rule" }),
     ],
   });
-  expect(staged.container.querySelector('[data-key="rules:one"]')?.getAttribute("data-stage")).toBe(
+  expect(edit.container.querySelector('[data-key="rules:one"]')?.getAttribute("data-stage")).toBe(
     "proposed",
   );
 });
@@ -501,19 +501,19 @@ test("a no-rule row stages a family-wide price-as choice through Work", async ()
   expect(view.write).toHaveBeenCalledWith(
     expect.arrayContaining([
       expect.objectContaining({
-        path: ["ruleAssignments", family, "staged"],
+        path: ["ruleAssignments", family, "edit"],
         value: { value: { rule: "elbow-1d-le10" } },
       }),
     ]),
   );
 });
 
-test("taking back a family assignment clears only its staged rung", async () => {
+test("taking back a family assignment clears only its edit rung", async () => {
   const family = "Radius Elbow";
-  const proposal = { value: { rule: "elbow-mitered-vaned" }, note: "check the vanes" };
+  const suggestion = { value: { rule: "elbow-mitered-vaned" }, note: "check the vanes" };
   const doc = ductsDocumentSchema.parse({
     ruleAssignments: {
-      [family]: { proposal, staged: { value: { rule: "elbow-mitered" } } },
+      [family]: { suggestion, edit: { value: { rule: "elbow-mitered" } } },
     },
   });
   const view = mount({
@@ -527,9 +527,9 @@ test("taking back a family assignment clears only its staged rung", async () => 
     }),
   );
   expect(view.write).toHaveBeenCalledWith([
-    { path: ["ruleAssignments", family, "staged"], value: null },
+    { path: ["ruleAssignments", family, "edit"], value: null },
   ]);
-  expect(doc.ruleAssignments[family]?.proposal).toEqual(proposal);
+  expect(doc.ruleAssignments[family]?.suggestion).toEqual(suggestion);
 });
 
 test("blocking input rows carry damage while diagnostic rows stay calm", () => {

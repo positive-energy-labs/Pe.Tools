@@ -170,7 +170,7 @@ export const EMPTY_DRAFT: LaunchDraft = {
   links: "refuse",
 };
 
-/** The one action a press runs, with the input it takes (ADR 0016: nothing is staged first). */
+/** The one action a press runs, with the input it takes (ADR 0016: nothing is edit first). */
 type PlannedLaunch =
   | { readonly key: "instances.open"; readonly input: InstancesLaunch }
   | { readonly key: "instances.start"; readonly input: InstancesStart };

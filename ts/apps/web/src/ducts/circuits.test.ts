@@ -168,17 +168,17 @@ function evidence(s: DuctSnapshot): Record<string, DuctCalculation> {
     },
   };
 }
-const work = (values: Record<string, DuctCalculation>, staged = true) =>
+const work = (values: Record<string, DuctCalculation>, edit = true) =>
   ductsRouteState.schema.parse({
     calculation: Object.fromEntries(
       Object.entries(values).map(([key, value]) => [
         key,
-        staged ? { staged: { value } } : { proposal: { value } },
+        edit ? { edit: { value } } : { suggestion: { value } },
       ]),
     ),
   });
 
-it("charges a staged passive once on the actual fan circuit while retaining legacy arithmetic", () => {
+it("charges a edit passive once on the actual fan circuit while retaining legacy arithmetic", () => {
   const s = fixture(),
     baseline = price(s, {}, null);
   expect(proposedStatic(s, baseline.now, 100)).toBeNull();
@@ -260,7 +260,7 @@ it("keeps contradictory native fan direction and repeated passive ports unadmitt
   }
 });
 
-it("uses generic Work proposal/staging guards and refuses lossy scalar unit writes", () => {
+it("both authors share revision-fenced Work edits and refuses lossy scalar unit writes", () => {
   const s = fixture(),
     value = evidence(s).filter!;
   const env = { version: 1 as const, revision: 3, doc: ductsRouteState.schema.parse({}) };
@@ -268,38 +268,30 @@ it("uses generic Work proposal/staging guards and refuses lossy scalar unit writ
     ["calculation"],
     "filter",
     {},
-    { kind: "propose", rung: { value } },
+    { kind: "suggest", rung: { value } },
   );
   expect(applyPatches(ductsRouteState, env, "agent", propose, 3)).toMatchObject({ ok: true });
-  const stage = transitionPatches(
-    ["calculation"],
-    "filter",
-    {},
-    { kind: "stage", rung: { value } },
-  );
-  expect(applyPatches(ductsRouteState, env, "agent", stage, 3)).toMatchObject({
-    ok: false,
-    kind: "refused",
-  });
+  const stage = transitionPatches(["calculation"], "filter", {}, { kind: "set", rung: { value } });
+  expect(applyPatches(ductsRouteState, env, "agent", stage, 3)).toMatchObject({ ok: true });
   expect(applyPatches(ductsRouteState, env, "human", stage, 3)).toMatchObject({ ok: true });
   expect(applyPatches(ductsRouteState, env, "human", stage, 2)).toMatchObject({ ok: false });
   const doc = work(evidence(s));
-  doc.esp["100"] = { staged: { value: { inWg: 0.2 } } };
+  doc.esp["100"] = { edit: { value: { inWg: 0.2 } } };
   expect(() => applyRequest(s, price(s, {}, doc), "purpose-time", [])).toThrow(
     "no admitted manufacturer scalar ESP mapping",
   );
   delete doc.esp["100"];
-  doc.esp["200"] = { staged: { value: { inWg: 0.2 } } };
+  doc.esp["200"] = { edit: { value: { inWg: 0.2 } } };
   expect(() => applyRequest(s, price(s, {}, structuredClone(doc)), "purpose-time", [])).toThrow(
     "no admitted manufacturer scalar ESP mapping",
   );
 });
 
-it("writes a staged unit flow for any unit rooted in the group, not only the baseline's pick", () => {
+it("writes a edit unit flow for any unit rooted in the group, not only the baseline's pick", () => {
   const s = fixture();
   const doc = work(evidence(s));
-  doc.equipmentFlows["200"] = { staged: { value: { cfm: 825 } } };
-  doc.equipmentFlows["100"] = { staged: { value: { cfm: 400 } } };
+  doc.equipmentFlows["200"] = { edit: { value: { cfm: 825 } } };
+  doc.equipmentFlows["100"] = { edit: { value: { cfm: 400 } } };
   const ids = applyRequest(s, price(s, {}, doc), "purpose-time", ["upstream"]).equipmentFlows.map(
     (f) => f.id,
   );
@@ -633,12 +625,12 @@ it("admits sourced cycle allocation by conservation while pressure and KVL remai
   expect(c.edges).toHaveLength(before.edges.length);
   expect(d.circuits[0]!.requiredExternalTotalPressureInWg).toBeNull();
   expect(d.circuits[0]!.reasons.some((r) => r.code === "mesh-not-solved")).toBe(true);
-  const staged = work(e);
+  const edit = work(e);
   s.document.readAt = "2099-01-01";
-  expect(price(s, {}, staged).next.design.componentFlows[0]!.status).toBe("unique");
+  expect(price(s, {}, edit).next.design.componentFlows[0]!.status).toBe("unique");
   s.segments[0]!.lengthFt = 6;
   expect(
-    price(s, {}, staged).next.design.componentFlows[0]!.reasons.some(
+    price(s, {}, edit).next.design.componentFlows[0]!.reasons.some(
       (r) => r.code === "stale-component-flow",
     ),
   ).toBe(true);
@@ -1146,11 +1138,11 @@ it.each([undefined, "rounded-3", "foreign"])(
 it("refuses malformed/nonfinite geometry and unsupported curve length", () => {
   for (const mutation of ["nonfinite", "malformed", "curve"]) {
     const { s, e } = sharedStationFixture();
-    const staged = work(e);
+    const edit = work(e);
     if (mutation === "nonfinite") s.segments[0]!.connectors[2]!.point[0] = Infinity;
     if (mutation === "malformed") s.segments[0]!.polyline[0] = [1, 2];
     if (mutation === "curve") s.segments[0]!.lengthFt = 12;
-    const cs = price(s, {}, staged).next.design.componentFlows;
+    const cs = price(s, {}, edit).next.design.componentFlows;
     expect(cs.every((c) => c.status !== "unique")).toBe(true);
     expect(cs.flatMap((c) => c.reasons).some((r) => r.code === "flow-subrun-geometry")).toBe(true);
   }
@@ -2112,7 +2104,7 @@ it("keeps component joint constraints connected-only while admitting exact open 
     ductsRouteState.schema.parse({
       calculation: {
         bad: {
-          staged: {
+          edit: {
             value: {
               kind: "component-flow",
               componentWitness,

@@ -68,7 +68,7 @@ export interface BuildFacts {
   validation: { isValid: boolean; issues: unknown[] } | null;
   /** Page-draft values that are not on disk. */
   unsavedCount: number;
-  /** Fields staged onto `route:settings` but not yet written. */
+  /** Fields edit onto `route:settings` but not yet written. */
   stagedCount: number;
   /** The bound Revit session, "" when nothing is bound. */
   boundTarget: string;
@@ -165,7 +165,7 @@ function describeUnsaved(facts: BuildFacts): string {
   if (facts.unsavedCount > 0)
     parts.push(`${facts.unsavedCount} draft value${facts.unsavedCount === 1 ? "" : "s"}`);
   if (facts.stagedCount > 0)
-    parts.push(`${facts.stagedCount} staged field${facts.stagedCount === 1 ? "" : "s"}`);
+    parts.push(`${facts.stagedCount} edit field${facts.stagedCount === 1 ? "" : "s"}`);
   return `${parts.join(" and ")} that`;
 }
 

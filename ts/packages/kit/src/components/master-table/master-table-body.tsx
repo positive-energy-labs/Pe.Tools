@@ -144,7 +144,7 @@ const MasterRow = memo(
     previous.onSelect === next.onSelect &&
     previous.onRowHover === next.onRowHover &&
     // Cell state often lives in the columns (a route's Work), not the row: without this, a
-    // stable row skipped every Work change and a staged cell never showed its mark.
+    // stable row skipped every Work change and a edit cell never showed its mark.
     previous.columns === next.columns &&
     previous.entry === next.entry &&
     previous.draft === next.draft,

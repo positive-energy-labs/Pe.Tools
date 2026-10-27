@@ -18,7 +18,7 @@ export function CatalogueWorkflow() {
     <>
       <Demo
         label="ArtifactFrame"
-        consumers="Table, proposal cards, and ArmingStrip"
+        consumers="Table, suggestion cards, and ArmingStrip"
         spec="The language's one enclosure is a ground shift and quiet inset hairline. Head and foot bands carry the object's identity, facts, receipts, and commit verb."
       >
         <div className="max-w-lg">
@@ -40,7 +40,7 @@ export function CatalogueWorkflow() {
                   label="save profile"
                   icon={Save}
                   onClick={noop}
-                  reason="Writes both staged values into the family profile"
+                  reason="Writes both edit values into the family profile"
                 >
                   save profile
                 </Button>
@@ -49,7 +49,7 @@ export function CatalogueWorkflow() {
           >
             <div className="flex flex-col gap-2 px-3 py-3">
               <StateCell value="2 hr" stage="proposed" note="matches the UL listing" />
-              <StateCell value="36 in" stage="staged" stagedBy="you" />
+              <StateCell value="36 in" stage="edit" author="human" />
             </div>
           </ArtifactFrame>
         </div>

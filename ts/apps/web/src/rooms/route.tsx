@@ -411,7 +411,7 @@ function RoomsBody({
     };
     const id = newId("m");
     const refused = await wire.write(
-      transitionPatches(["marks"], id, {}, { kind: "stage", rung: { value: mark } }),
+      transitionPatches(["marks"], id, {}, { kind: "set", rung: { value: mark } }),
     );
     if (!refused) setPinned(id);
     return refused?.message ?? null;
@@ -428,7 +428,7 @@ function RoomsBody({
   const apply = {
     refusal: (id: string) =>
       applyMark.refusal ??
-      ((doc?.marks[id]?.staged?.value?.guids?.length ?? 0) < 2
+      ((doc?.marks[id]?.edit?.value?.guids?.length ?? 0) < 2
         ? "the mark covers fewer than two regions"
         : null),
     run: async (id: string) => {

@@ -1176,7 +1176,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       accountGeometry();
     },
     frameBounds: () => bounds,
-    /** Camera zoom belongs to the caller's picture, independently of staged geometry bounds. */
+    /** Camera zoom belongs to the caller's picture, independently of edit geometry bounds. */
     setFrameBounds(next: typeof bounds) {
       if (bounds === next) return;
       bounds = next;

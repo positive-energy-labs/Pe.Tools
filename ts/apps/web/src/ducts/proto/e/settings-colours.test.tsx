@@ -26,7 +26,7 @@ test("the compact colour picker stages one validated Work palette and survives r
   expect(view.container.querySelectorAll('input[type="color"]')).toHaveLength(5);
   fireEvent.change(screen.getByLabelText("Supply air colour"), { target: { value: "#123456" } });
   await waitFor(() =>
-    expect(doc.systemColours.staged?.value).toEqual({ ...FIRM_COLOURS, supply: "#123456" }),
+    expect(doc.systemColours.edit?.value).toEqual({ ...FIRM_COLOURS, supply: "#123456" }),
   );
   view.unmount();
   render(<SystemColours work={{ ...work, doc }} />);

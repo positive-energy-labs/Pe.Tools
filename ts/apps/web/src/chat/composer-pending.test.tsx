@@ -178,3 +178,52 @@ test("question choices use radio navigation and Enter submits the focused choice
   expect(submit).not.toHaveBeenCalled();
   await act(async () => finish());
 });
+
+test("root-turn write consent stays visible, counts down and sends the host option ids", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(Date.parse("2026-10-26T12:00:00Z"));
+  try {
+    const resolveApproval = vi.fn(async () => {});
+    const hold: Approval = {
+      requestId: "run-approval",
+      toolCallId: "run-write",
+      toolName: "write",
+      scope: "run",
+      deadline: "2026-10-26T12:01:00Z",
+      options: [
+        { optionId: "allow_now", name: "Allow now", kind: "allow_once" },
+        { optionId: "stop_writes", name: "Stop writes for this turn", kind: "reject_once" },
+      ],
+    };
+    const screen = render(
+      <ComposerPending
+        approvals={[hold]}
+        questions={[]}
+        calls={[]}
+        resolveApproval={resolveApproval}
+        answerQuestion={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /request needs you/ })).toBeNull();
+    expect(screen.getByRole("timer").textContent).toBe("60s");
+    await act(async () => {
+      vi.advanceTimersByTime(18_000);
+    });
+    expect(screen.getByRole("timer").textContent).toBe("42s");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Allow now" }));
+    });
+    expect(resolveApproval).toHaveBeenLastCalledWith("run-approval", "allow_now");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Stop writes for this turn" }));
+    });
+    expect(resolveApproval).toHaveBeenLastCalledWith("run-approval", "stop_writes");
+    await act(async () => {
+      vi.advanceTimersByTime(60_000);
+    });
+    expect(screen.getByRole("timer").textContent).toBe("0s");
+    expect(resolveApproval).toHaveBeenCalledTimes(2); // The host alone owns deadline approval.
+  } finally {
+    vi.useRealTimers();
+  }
+});

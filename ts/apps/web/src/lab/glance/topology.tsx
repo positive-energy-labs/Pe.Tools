@@ -260,8 +260,8 @@ function SessionTopologyView({ results, observedAtMs }: SyntheticViewProps) {
           : observedAtMs
             ? new Date(observedAtMs).toLocaleTimeString()
             : "—"}{" "}
-        (host clock) · documents staged per session via revit.context.document-session · {fetched}{" "}
-        of {connectedIds.length} connected sessions queried (bound {DOC_FETCH_BOUND}) · disconnected
+        (host clock) · documents edit per session via revit.context.document-session · {fetched} of{" "}
+        {connectedIds.length} connected sessions queried (bound {DOC_FETCH_BOUND}) · disconnected
         sessions shown from last bridge summary, not re-queried
       </Provenance>
     </div>
@@ -274,7 +274,7 @@ export const topologyOps: SyntheticOp[] = [
     displayName: "The operator's map",
     blurb: "what machinery is alive right now and who talks to whom?",
     contractNote:
-      "host.topology landed (ADR 0003): host identity + sessions in one snapshot. Still client-staged: per-session documents (1 + N calls) — the contract doesn't carry them yet, nor the host's own port/baseUrl.",
+      "host.topology landed (ADR 0003): host identity + sessions in one snapshot. Still client-edit: per-session documents (1 + N calls) — the contract doesn't carry them yet, nor the host's own port/baseUrl.",
     deps: [{ key: "host.topology" }],
     View: SessionTopologyView,
   },

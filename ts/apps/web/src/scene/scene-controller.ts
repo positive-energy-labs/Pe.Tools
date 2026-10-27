@@ -103,7 +103,7 @@ export class SceneController {
     let sourceLease: SceneMemoryLease | undefined = sceneMemory.acquire("decoded", {
       buffers: [job.plan.meshes.positions.buffer, job.focus.positions.buffer],
     });
-    let staged: Awaited<ReturnType<SceneRenderer["stage"]>> | undefined;
+    let edit: Awaited<ReturnType<SceneRenderer["stage"]>> | undefined;
     try {
       // Expose the accepted exact focus before beginning optional context work.
       if (preserve)
@@ -126,9 +126,9 @@ export class SceneController {
       prepared = await prepareScene(job.plan, signal);
       signal.throwIfAborted();
       mark("prepare-ready", job.plan.meshes.instances.length);
-      staged = await renderer.stage(job.plan, prepared.geometry, signal, preserve);
+      edit = await renderer.stage(job.plan, prepared.geometry, signal, preserve);
       signal.throwIfAborted();
-      staged.commit(this.wanted?.appearance);
+      edit.commit(this.wanted?.appearance);
       this.appearance = this.wanted?.appearance;
       this.displayLease?.release();
       this.displayLease = sourceLease;
@@ -147,7 +147,7 @@ export class SceneController {
         error: `Scene preparation failed: ${String(error)}`,
       });
     } finally {
-      staged?.release();
+      edit?.release();
       prepared?.release();
       sourceLease?.release();
     }

@@ -1,6 +1,6 @@
 /**
  * The profiler tree E2 reads: system -> runs (fan to terminal) -> legs (`legsOf` over the run's path) -> elements.
- * Loss comes only from `priced.next` (the model plus the staged cells, what the person is looking at):
+ * Loss comes only from `priced.next` (the model plus the edit cells, what the person is looking at):
  * an element's self is the sum of its rows' dp on that path, its total the running sum from the fan.
  * Each run is drawn on the path it was priced on, from the fan whose section holds it; a smaller
  * fan whose worst run crosses its junction gets that run drawn too, so the critical ◆ (the worst

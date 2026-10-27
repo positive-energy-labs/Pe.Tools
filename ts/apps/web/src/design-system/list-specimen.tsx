@@ -474,8 +474,8 @@ interface CoreItem {
   kind: string;
   shelf: string;
   loss: number;
-  stage: "clean" | "proposed" | "staged";
-  stagedBy: "pea" | "you";
+  stage: "clean" | "proposed" | "edit";
+  author: "pea" | "human";
   children: CoreItem[];
 }
 
@@ -488,8 +488,8 @@ const CORE_ITEMS: CoreItem[] = Array.from({ length: 5 }, (_, shelf) => {
     kind: index % 3 === 0 ? "Return" : "Supply",
     shelf: shelf < 3 ? "Active" : "Settled",
     loss: Math.round((355 - index) * 1.37) / 100,
-    stage: index % 17 === 0 ? "proposed" : index % 13 === 0 ? "staged" : "clean",
-    stagedBy: index % 2 === 0 ? "pea" : "you",
+    stage: index % 17 === 0 ? "proposed" : index % 13 === 0 ? "edit" : "clean",
+    author: index % 2 === 0 ? "pea" : "human",
     children: [],
   });
   return {
@@ -590,9 +590,9 @@ export function CoreListPanel({
                   label: item.name,
                   aside: item.kind,
                   meta: <span className="face-mono">{item.loss.toFixed(2)} Pa</span>,
-                  sub: `${item.stage} · ${item.stagedBy === "you" ? "person" : "Pea"}`,
+                  sub: `${item.stage} · ${item.author === "human" ? "person" : "Pea"}`,
                   lines: 2,
-                  stagedBy: item.stagedBy,
+                  author: item.author,
                   band:
                     item.stage !== "clean" ? (
                       <div className="hairline-b" aria-label="Unsaved row band" />
@@ -603,7 +603,7 @@ export function CoreListPanel({
                     <span>{item.name} · synthetic detail · no model writes</span>
                     <span>
                       Current stage: {item.stage}; author:{" "}
-                      {item.stagedBy === "you" ? "person" : "Pea"}.
+                      {item.author === "human" ? "person" : "Pea"}.
                     </span>
                     <span>
                       Expanding this content changes the measured row height inside its section.
@@ -628,7 +628,7 @@ export function CoreListPanel({
                   <dt>Stage</dt>
                   <dd>{subject.stage}</dd>
                   <dt>Author</dt>
-                  <dd>{subject.stagedBy === "you" ? "Person" : "Pea"}</dd>
+                  <dd>{subject.author === "human" ? "Person" : "Pea"}</dd>
                 </dl>
               ) : (
                 <p>Select a system to inspect it here.</p>

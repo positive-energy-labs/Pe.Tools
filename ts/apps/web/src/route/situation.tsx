@@ -1,8 +1,8 @@
 /** Route-owned Situation: the primary lamp and controls join the global bar; the neutral page
  * body lives in its mounted drawer. Hosted and standalone routes keep the same body locally.
- * Sentence, staged Work, commit, verbs and log still project the existing owner exactly once. */
+ * Sentence, edit Work, commit, verbs and log still project the existing owner exactly once. */
 import { useMemo, type ReactNode } from "react";
-import type { TrichotomyCellLike } from "@pe/agent-contracts";
+import type { CellLike } from "@pe/agent-contracts";
 import { PrimaryRouteControls } from "#/navigation/route-controls";
 import {
   WorkSentence,
@@ -47,7 +47,7 @@ export interface SituationProps {
   /**
    * The Work slot, given the cells' summary and the default sentence (`WorkSentence`, with the
    * aggregates and the commit verb). Absent, the sentence alone. A route with cells keeps the
-   * sentence and adds beside it: while cells are staged the commit is drawn nowhere else.
+   * sentence and adds beside it: while cells are edit the commit is drawn nowhere else.
    */
   work?: WorkRender;
   /** How the default's aggregates write; absent = the Work's own write at the manifest's segment. */
@@ -65,14 +65,14 @@ export interface SituationProps {
   palette?: () => void;
 }
 
-const NO_CELLS: Record<string, TrichotomyCellLike> = {};
+const NO_CELLS: Record<string, CellLike> = {};
 
 type WorkDraw = (summary: WorkSummary, sentence: ReactNode) => ReactNode;
 /**
  * The Work slot: the draw alone, or the draw plus display-only cells the summary counts and no
  * aggregate writes (a native patch projected onto the cells it would write, ruling 14).
  */
-type WorkRender = WorkDraw | { draw: WorkDraw; counted: Record<string, TrichotomyCellLike> };
+type WorkRender = WorkDraw | { draw: WorkDraw; counted: Record<string, CellLike> };
 
 export function Situation({
   handle,
@@ -102,7 +102,7 @@ export function Situation({
   const stage = archived ? "history" : typeof page.stage === "string" ? page.stage : null;
   const word = stages.find((item) => item.key === stage)?.word ?? handle.manifest.name;
   const spec = situationCells(handle.manifest.cells);
-  const doc = handle.work.doc as Record<string, Record<string, TrichotomyCellLike>> | null;
+  const doc = handle.work.doc as Record<string, Record<string, CellLike>> | null;
   const cells = (spec && doc?.[spec.segment]) || NO_CELLS;
   const wire: CellWire = routeWire ?? {
     segment: spec?.segment ?? null,
@@ -126,8 +126,8 @@ export function Situation({
       (declaredVerbs ? declaredVerbs.includes(name) : !action.stage || action.stage === stage) &&
       (handle.manifest.actions as Record<string, { visible?: false }> | undefined)?.[name]
         ?.visible !== false &&
-      // The commit verb is drawn once: in the Work sentence while something is staged, else here.
-      !(name === commit && summary.staged > 0),
+      // The commit verb is drawn once: in the Work sentence while something is edit, else here.
+      !(name === commit && summary.edit > 0),
   ) as [string, ActionHandle][];
   const commitAction = !inspection && commit ? handle.actions[commit] : undefined;
   const workLine = (

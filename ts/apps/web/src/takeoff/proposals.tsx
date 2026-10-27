@@ -1,19 +1,14 @@
 /**
  * PEA'S TAKEOFF PROPOSALS, in the band grammar (the takeoffs cutover). Every family — room edits,
- * adoption choices, flag verdicts, review flags — is a record of trichotomy cells; a proposal is
+ * adoption choices, flag verdicts, review flags — is a record of trichotomy cells; a suggestion is
  * drawn through the kit (`ReviewRow` / `StateCell`, verbs from `availableTransitions`), so accept
  * stages it and deny clears it exactly as on every other route. No second grammar.
  */
-import {
-  sameValue,
-  takeoffEditKey,
-  type RoomEditField,
-  type TrichotomyCellLike,
-} from "@pe/agent-contracts";
+import { sameValue, takeoffEditKey, type RoomEditField, type CellLike } from "@pe/agent-contracts";
 import type { ReactNode } from "react";
 
 import { ReviewRow, reviewTransitions, type CellWire } from "#/components/work/band";
-import { cellFromTrichotomy, fmtNum, StateCell } from "@pe/kit/lang/cell";
+import { cellFromDraft, fmtNum, StateCell } from "@pe/kit/lang/cell";
 import { useCellNavigation } from "@pe/kit/table/cell-navigation";
 
 /** An adoption choice said as the person reads it. */
@@ -32,9 +27,9 @@ export const showAdopt = (value: unknown) => {
 export const flagShape = (key: string) => (JSON.parse(key) as [string, string])[1];
 export const flagZone = (key: string) => (JSON.parse(key) as [string, string])[0];
 
-/** A cell Pea is arguing for: a proposal that is not what is staged. */
-const proposing = (cell: TrichotomyCellLike | undefined) =>
-  cell?.proposal != null && !sameValue(cell.proposal, cell.staged);
+/** A cell Pea is arguing for: a suggestion that is not what is edit. */
+const proposing = (cell: CellLike | undefined) =>
+  cell?.suggestion != null && !sameValue(cell.suggestion, cell.edit);
 
 /** One review row per proposing cell whose key passes `keep`; nothing when none. */
 export function TakeoffProposalRows({
@@ -44,7 +39,7 @@ export function TakeoffProposalRows({
   label,
   show,
 }: {
-  cells: Readonly<Record<string, TrichotomyCellLike>>;
+  cells: Readonly<Record<string, CellLike>>;
   wire: CellWire;
   keep?: (key: string) => boolean;
   /** The row's label for a key ("name", "flag seedless", "shape 3"). */
@@ -62,7 +57,7 @@ export function TakeoffProposalRows({
           address={key}
           label={<span className="t-small face-mono text-ink-2">pea proposes · {label(key)}</span>}
           cell={cell}
-          facts={{ value: show((cell.staged ?? cell.proposal)?.value), scale: "row" }}
+          facts={{ value: show((cell.edit ?? cell.suggestion)?.value), scale: "row" }}
           show={show}
         />
       ))}
@@ -71,7 +66,7 @@ export function TakeoffProposalRows({
 }
 
 /**
- * One room field as a trichotomy cell: the staged world's value, or Pea's proposed value with its
+ * One room field as a trichotomy cell: the edit world's value, or Pea's proposed value with its
  * fold while only proposed; its verbs are the contract's; typing stages (through `onPatch`).
  */
 export function TakeoffEditCell({
@@ -89,7 +84,7 @@ export function TakeoffEditCell({
   value: number;
   digits: number;
   integer?: boolean;
-  cell: TrichotomyCellLike | undefined;
+  cell: CellLike | undefined;
   wire: CellWire;
   onPatch: (value: number) => void;
 }) {
@@ -97,11 +92,11 @@ export function TakeoffEditCell({
   const key = takeoffEditKey(roomId, field);
   const show = (raw: unknown) => fmtNum(Number(raw), digits);
   const shown =
-    cell?.staged == null && cell?.proposal != null ? Number(cell.proposal.value) : value;
+    cell?.edit == null && cell?.suggestion != null ? Number(cell.suggestion.value) : value;
   return (
     <StateCell
-      {...cellFromTrichotomy(
-        cell ?? { proposal: null, staged: null },
+      {...cellFromDraft(
+        cell ?? { suggestion: null, edit: null },
         {
           value: show(shown),
           currentValue: show(value),

@@ -68,7 +68,7 @@ const projectSeed = (): DemoSeed => ({
     revision: 0,
     candidate: {
       scope: {
-        staged: {
+        edit: {
           value: {
             categoryNames: ["Mechanical Equipment"],
             familyNames: FAMILIES,

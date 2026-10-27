@@ -15,15 +15,15 @@ export const meta: VariantMeta = {
   kind: "toasts",
 };
 
-type Item = { id: number; kind: "final" | "approval" | "proposal"; title: string };
+type Item = { id: number; kind: "final" | "approval" | "suggestion"; title: string };
 const SEED: Item[] = [
   { id: 1, kind: "final", title: "Final response" },
   { id: 2, kind: "approval", title: "Approval" },
-  { id: 3, kind: "proposal", title: "Proposal" },
+  { id: 3, kind: "suggestion", title: "Proposal" },
 ];
 const LATE: Item[] = [
   { id: 4, kind: "approval", title: "Approval" },
-  { id: 5, kind: "proposal", title: "Proposal" },
+  { id: 5, kind: "suggestion", title: "Proposal" },
 ];
 const DRAIN_MS = 8000;
 
@@ -181,7 +181,7 @@ export default function Variant() {
                 </pre>
               </>
             )}
-            {item.kind === "proposal" && (
+            {item.kind === "suggestion" && (
               <>
                 <div className="t-prose mb-1">
                   HCB-48 family <span className="face-mono text-ink-2">22 changes</span>

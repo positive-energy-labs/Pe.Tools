@@ -21,7 +21,7 @@ export interface Run {
   ids: readonly number[];
   claims: readonly Claim[];
   onVerdict: (claim: Claim, verdict: NonNullable<Claim["verdict"]>) => void;
-  /** The Work whose staged ignore verdicts the cut's proximity inferences honor; null honors none. */
+  /** The Work whose edit ignore verdicts the cut's proximity inferences honor; null honors none. */
   work?: DuctsRouteDocument | null;
 }
 

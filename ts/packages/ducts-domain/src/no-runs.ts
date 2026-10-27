@@ -23,7 +23,7 @@ export interface NoRunBranch {
 /**
  * Uses the solve's actual paths, including smaller fans' stretches. A missing pressure lookup
  * does not erase a run; a flowless or foreign terminal and a classification stop do.
- * The snapshot and flows must be the survey used by this solve, so staged flow is respected.
+ * The snapshot and flows must be the survey used by this solve, so edit flow is respected.
  */
 export function noRunBranches(
   snapshot: DuctSnapshot,

@@ -63,8 +63,8 @@ export function useScheduleLease(
           header: column.headerText,
         })) ?? [],
       rows: shown?.snapshot.rows.length ?? 0,
-      staged: cells.filter((cell) => cell.staged).length,
-      proposals: cells.filter((cell) => cell.proposal != null).length,
+      edit: cells.filter((cell) => cell.edit).length,
+      proposals: cells.filter((cell) => cell.suggestion != null).length,
       freshness,
     },
   });

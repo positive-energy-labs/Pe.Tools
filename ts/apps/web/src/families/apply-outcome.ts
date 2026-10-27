@@ -1,5 +1,5 @@
 /**
- * THE STAGED APPLY'S OUTCOME (F-J3-3 / F-J3-4, exec-draft's web meaning). A staged sheet applies
+ * THE STAGED APPLY'S OUTCOME (F-J3-3 / F-J3-4, exec-draft's web meaning). A edit sheet applies
  * as one `families.apply` action per plan. The verb's outcome counts per-family receipts across
  * all of them and names each failed family with its reason; one action's reason never stands for
  * the verb. A proven non-dispatch is a refusal, not a failure.

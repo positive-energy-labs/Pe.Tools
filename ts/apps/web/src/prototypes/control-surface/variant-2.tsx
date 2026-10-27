@@ -84,7 +84,7 @@ const THREADS: Thread[] = [
 ];
 
 const PROPOSALS = [
-  { id: "proposal", title: "HCB diffuser migration", target: "HCB-48 · 3 changes", age: "12m" },
+  { id: "suggestion", title: "HCB diffuser migration", target: "HCB-48 · 3 changes", age: "12m" },
   { id: "rtu", title: "Rooftop unit cleanup", target: "RTU-07 · 6 changes", age: "1h" },
 ];
 
@@ -202,17 +202,17 @@ function MiddlePane({
       <>
         <PaneHead meta="2 open">Work</PaneHead>
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {PROPOSALS.map((proposal) => (
+          {PROPOSALS.map((suggestion) => (
             <Row
-              key={proposal.id}
+              key={suggestion.id}
               role="button"
               tabIndex={0}
-              active={selected === proposal.id}
+              active={selected === suggestion.id}
               lead={<Wrench aria-hidden className="size-3.5" />}
-              label={proposal.title}
-              aside={proposal.target}
-              meta={proposal.age}
-              onClick={() => onSelect(proposal.id)}
+              label={suggestion.title}
+              aside={suggestion.target}
+              meta={suggestion.age}
+              onClick={() => onSelect(suggestion.id)}
             />
           ))}
         </div>
@@ -530,7 +530,7 @@ export default function Variant() {
   }, [place, selected]);
   const pickPlace = (next: Place) => {
     setPlace(next);
-    setSelected(next === "inbox" ? "finished" : next === "work" ? "proposal" : next);
+    setSelected(next === "inbox" ? "finished" : next === "work" ? "suggestion" : next);
   };
   return (
     <div data-surface="page" className="flex size-full flex-col overflow-hidden text-ink">

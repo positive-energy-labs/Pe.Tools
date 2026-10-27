@@ -81,7 +81,7 @@ export const ductsDocs = (
       ],
       [
         "Rules and findings",
-        "Each rule pairs a fitting family and type with a geometry condition. Choosing its table reprices every matching instance. Unassigned families have no pricing rule; the engineer can assign a rule to the family or enter a stated drop for an individual fitting. An override replaces the table lookup for that fitting. None staged means no rule, drop, catalog link, flow, role or unit ESP is waiting to be applied.",
+        "Each rule pairs a fitting family and type with a geometry condition. Choosing its table reprices every matching instance. Unassigned families have no pricing rule; the engineer can assign a rule to the family or enter a stated drop for an individual fitting. An override replaces the table lookup for that fitting. None edit means no rule, drop, catalog link, flow, role or unit ESP is waiting to be applied.",
         "Findings are grouped into Fix, Set, Check and Diagnostics. Opening a row exposes its actions. Evidence help holds the full finding, its subjects and the reason for its status. Hovering a named subject in that help lights the same subject on the picture. Heal preview checks repairs in Revit and rolls them back. Apply commits the passing repairs in one transaction; a failed check refuses and rolls back that repair. A ruling on an open end or an inferred join changes the route calculation without changing Revit.",
       ],
     ].map(([title, ...paragraphs]) => (

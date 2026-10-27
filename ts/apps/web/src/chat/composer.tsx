@@ -50,7 +50,7 @@ function parseCatalog(raw: unknown): CapabilityCatalog | undefined {
 }
 
 /** The route handle's Enter runs Send scoped to this draft; `work` is the box's top section (live
- * asks, staged Work), `pickers` the provider and document pickers, `state` the run's. */
+ * asks, edit Work), `pickers` the provider and document pickers, `state` the run's. */
 export function ThreadComposer({
   handle,
   pickers,

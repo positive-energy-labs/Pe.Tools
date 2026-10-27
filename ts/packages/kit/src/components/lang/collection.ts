@@ -790,7 +790,7 @@ export function listModel<T, Sort extends string>(
     fields.set("change", {
       kind: "text",
       read: (item) => options.stageOf!(item) ?? "clean",
-      values: ["clean", "proposed", "staged"],
+      values: ["clean", "proposed", "edit"],
     });
   const sortKey = state.sort;
   const refusal = listSearchRefusal(state.search, [...fields.keys()]);
@@ -855,7 +855,7 @@ export function listModel<T, Sort extends string>(
         key,
         label: key,
         count: members.length,
-        staged: members.filter((row) => options.stageOf?.(row.item) === "staged").length,
+        edit: members.filter((row) => options.stageOf?.(row.item) === "edit").length,
         collapsible:
           !!options.groups &&
           (!options.groups.collapsible || options.groups.collapsible.includes(key)),

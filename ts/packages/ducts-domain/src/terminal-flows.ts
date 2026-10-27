@@ -1,11 +1,11 @@
 /**
  * The design flow at every air terminal (pressure-drop ledger, 2026-10-16 "terminal design flow",
- * ruling 5 of 2026-10-20): a staged override first; else the rooms seam (`roomFlows`); else the Load
+ * ruling 5 of 2026-10-20): a edit override first; else the rooms seam (`roomFlows`); else the Load
  * Preview system whose tag is the equipment's Mark, split across the terminals of each tree rooted
  * at that equipment by neck area (even when an area is missing); else Revit's own terminal flow when
- * positive; else nothing, and a finding says so. A unit's flow: a staged `equipmentFlows` cell, else
+ * positive; else nothing, and a finding says so. A unit's flow: a edit `equipmentFlows` cell, else
  * Revit's `fanFlow` slot fact (`equipmentFlows`).
- * Pure on the snapshot, the staged cells and the group trees; nothing here is stored or written.
+ * Pure on the snapshot, the edit cells and the group trees; nothing here is stored or written.
  */
 import type { DuctFlow, DuctLoadPreview } from "@pe/agent-contracts";
 
@@ -130,16 +130,16 @@ export interface EquipmentFlow {
   grilles?: number;
 }
 
-/** A unit's design flow: a staged `equipmentFlows` cell, else Revit's `fanFlow` slot fact when positive. */
+/** A unit's design flow: a edit `equipmentFlows` cell, else Revit's `fanFlow` slot fact when positive. */
 export function equipmentFlows(
   snapshot: DuctSnapshot,
-  staged: Record<string, DuctFlow>,
+  edit: Record<string, DuctFlow>,
 ): Map<number, EquipmentFlow> {
   return new Map(
     snapshot.nodes
       .filter((n) => n.kind === "equipment")
       .map((node) => {
-        const override = staged[String(node.id)];
+        const override = edit[String(node.id)];
         const revit = node.facts.find((f) => f.key === "fanFlow")?.value ?? null;
         const flow: EquipmentFlow = override
           ? { cfm: override.cfm, source: "override" }

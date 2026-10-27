@@ -143,7 +143,7 @@ export default function Variant() {
   const head =
     [
       waiting ? `${waiting} thread${waiting > 1 ? "s" : ""} wait on you` : null,
-      `${PROPOSALS.length} proposal${PROPOSALS.length > 1 ? "s" : ""} to review`,
+      `${PROPOSALS.length} suggestion${PROPOSALS.length > 1 ? "s" : ""} to review`,
     ]
       .filter(Boolean)
       .join(" · ") || "Nothing waits on you.";
@@ -278,7 +278,7 @@ export default function Variant() {
             lines={2}
             lead={<FileDiff aria-hidden className="size-3.5" />}
             label={`${p.ref} · ${p.what}`}
-            meta={<span className="face-mono t-small text-ink-2">proposal</span>}
+            meta={<span className="face-mono t-small text-ink-2">suggestion</span>}
             sub={
               <span className="flex items-center gap-1.5 text-ink-2">
                 <span className="min-w-0 flex-1 truncate">{p.target}</span>

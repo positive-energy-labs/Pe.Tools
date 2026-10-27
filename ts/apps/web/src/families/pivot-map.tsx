@@ -62,7 +62,7 @@ export function usePivotMap(
       const ink = canvasColor(ctx, "ink");
       const blank = canvasColor(ctx, "line-2");
       const proposed = canvasColor(ctx, "pea");
-      const staged = canvasColor(ctx, "caution");
+      const edit = canvasColor(ctx, "caution");
       ctx.fillStyle = recess;
       ctx.fillRect(0, 0, identityWidth * scale, field.height * scale);
       ctx.fillRect(0, 0, field.width * scale, GRID.header * scale);
@@ -79,8 +79,8 @@ export function usePivotMap(
           const scope = type.scopes[row.key];
           if (!cell && (!scope || scope === "Unresolved")) return;
           ctx.fillStyle = cell
-            ? cell.staged
-              ? staged
+            ? cell.edit
+              ? edit
               : proposed
             : filledValue(type.values[row.key])
               ? ink

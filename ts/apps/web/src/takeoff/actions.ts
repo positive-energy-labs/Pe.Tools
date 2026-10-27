@@ -193,7 +193,7 @@ export const takeoffReadingHealth = (reading: Reading<TakeoffSnapshot>): string 
       ? takeoffHealth(reading.observation)
       : null;
 /**
- * What `adopt` stamps: each staged ticked choice on a chosen view (a tick stages the row's whole
+ * What `adopt` stamps: each edit ticked choice on a chosen view (a tick stages the row's whole
  * draft, so an unstamped candidate needs nothing from `zoneFrs`, which holds only stamped regions),
  * plus each stamped region nobody touched, re-adopted in place (29).
  */
@@ -246,7 +246,7 @@ export interface SyncPlan {
 export function syncPlan(
   world: TakeoffModel,
   selectedZones: readonly string[],
-  staged: Readonly<Record<string, StagedRoomEdit>> = {},
+  edit: Readonly<Record<string, StagedRoomEdit>> = {},
   decisions: Readonly<Record<string, "accept" | "dismiss">> = {},
 ): SyncPlan {
   const selected = new Set(selectedZones);
@@ -254,7 +254,7 @@ export function syncPlan(
     .filter((zone) => selected.size === 0 || selected.has(zone.zone.guid))
     .map((zone) => ({
       ...zone,
-      rooms: zone.rooms.map((room) => applyEdit(room, staged[room.guid]?.next)),
+      rooms: zone.rooms.map((room) => applyEdit(room, edit[room.guid]?.next)),
     }));
   const blockedZones = inScope.filter(
     (zone) =>
@@ -280,7 +280,7 @@ export function syncPlan(
     inScope,
     linkedUpdates: inScope
       .flatMap((zone) => zone.rooms)
-      .filter((room) => room.r10 && staged[room.guid]).length,
+      .filter((room) => room.r10 && edit[room.guid]).length,
     blockedZones,
     inserts,
     untagged: inserts.filter(({ zone }) => zone.tags.length === 0).length,
@@ -325,7 +325,7 @@ const syncRefusal = (ctx: Ctx): string | null => {
     return `${plan.blockedZones.length} selected zones are not ready to sync`;
   if (plan.untagged) return "Tag the eligible zones before syncing";
   if (!plan.inserts.length && !plan.linkedUpdates)
-    return "No eligible inserts or linked staged updates";
+    return "No eligible inserts or linked edit updates";
   return null;
 };
 
@@ -399,7 +399,6 @@ export const takeoffActions = {
     label: "refresh",
     says: "Read the selected document again.",
     needs: "document",
-    actor: "any",
     input: z.void() as never,
     dirties: ["snapshot"],
     rereads: "snapshot",
@@ -414,7 +413,6 @@ export const takeoffActions = {
     label: "review sync",
     says: "Review the room changes before syncing them into RHVAC.",
     needs: "project",
-    actor: "human",
     input: z.void() as never,
     dirties: [],
     requires: { work: true, readings: ["snapshot", "rhvacVersion"] },
@@ -471,7 +469,6 @@ export const takeoffActions = {
     label: "open in RHVAC",
     says: "Open the bound .r10 file in RHVAC.",
     needs: "host",
-    actor: "human",
     input: z.void() as never,
     dirties: [],
     stage: "sync",
@@ -484,7 +481,6 @@ export const takeoffActions = {
     label: "retry .r10",
     says: "Read the bound .r10 file again after a failed read.",
     needs: "host",
-    actor: "any",
     input: z.void() as never,
     dirties: ["rhvacVersion"],
     stage: "sync",

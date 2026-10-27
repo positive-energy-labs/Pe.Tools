@@ -40,7 +40,6 @@ const capturesManifest = (
       label: "refresh",
       says: "re-read the kept captures from the host",
       needs: "host",
-      actor: "any",
       input: z.void() as unknown as z.ZodType<never>,
       dirties: [],
       rereads: "work",

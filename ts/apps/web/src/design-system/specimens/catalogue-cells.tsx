@@ -22,8 +22,8 @@ const CELL_KEYS = [
 
 const CELL_NOTES: Record<(typeof CELL_KEYS)[number], string> = {
   fireRating: "Pea proposes: the body wash and Pea mark travel together.",
-  sillHeight: "You staged: bold and the caution square are reserved for unsaved work.",
-  operatorType: "Pea staged: the square keeps its shape and changes authorship colour.",
+  sillHeight: "You edit: bold and the caution square are reserved for unsaved work.",
+  operatorType: "Pea edit: the square keeps its shape and changes authorship colour.",
   panelThickness: "Drift: the one alarm and the model's value as a struck ghost.",
   frameDepth: "Stale read: squiggle priority two.",
   roughWidth: "Never checked: the quietest squiggle.",
@@ -53,8 +53,8 @@ export function CatalogueCells() {
       <ChipCatalogue />
       <Demo
         label="StateCell"
-        consumers="Table cells, proposal cards, and CellStateKey"
-        spec="One grammar carries proposal, authorship, freshness, disagreement, capability, and provenance without making the row taller."
+        consumers="Table cells, suggestion cards, and CellStateKey"
+        spec="One grammar carries suggestion, authorship, freshness, disagreement, capability, and provenance without making the row taller."
       >
         <div className="flex flex-col">
           {MATRIX.map(({ row, note }) => (
@@ -70,7 +70,7 @@ export function CatalogueCells() {
             </div>
           ))}
         </div>
-        <CounterExample why="a proposal on a locked cell is swallowed, and the caller receives no refusal">
+        <CounterExample why="a suggestion on a locked cell is swallowed, and the caller receives no refusal">
           <StateCell value="84 in" cap="locked" capReason="driven by formula" stage="proposed" />
         </CounterExample>
       </Demo>

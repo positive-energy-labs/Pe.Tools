@@ -56,7 +56,7 @@ export function createViewOwner<P>(
   let intent: {
     refusal: Refusal | null;
     attempted: boolean;
-    staged: PageSnapshot<P> | null;
+    edit: PageSnapshot<P> | null;
   } | null = null;
   const reject = (refusal: Refusal) => {
     if (intent) intent.refusal = refusal;
@@ -141,7 +141,7 @@ export function createViewOwner<P>(
       origin: source,
       history: options.history,
     };
-    if (intent) intent.staged = after;
+    if (intent) intent.edit = after;
     else commit(after);
     return null;
   };
@@ -161,7 +161,7 @@ export function createViewOwner<P>(
       const attempt = {
         refusal: null as Refusal | null,
         attempted: false,
-        staged: null as PageSnapshot<P> | null,
+        edit: null as PageSnapshot<P> | null,
       };
       intent = attempt;
       try {
@@ -174,7 +174,7 @@ export function createViewOwner<P>(
       if (attempt.refusal) return { ok: false, refusal: attempt.refusal };
       if (disposed)
         return { ok: false, refusal: refuse("not-ready", "This Page is no longer mounted") };
-      if (!attempt.staged)
+      if (!attempt.edit)
         return {
           ok: true,
           moved: false,
@@ -183,7 +183,7 @@ export function createViewOwner<P>(
             rendered: (value) => value === before.page,
           },
         };
-      const accepted = attempt.staged;
+      const accepted = attempt.edit;
       commit(accepted);
       return {
         ok: true,

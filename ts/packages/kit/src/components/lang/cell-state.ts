@@ -2,7 +2,7 @@ import {
   type MeasuredDisplayUnit,
   type MeasuredValue,
   sameValue,
-  type TrichotomyCellLike,
+  type CellLike,
 } from "@pe/agent-contracts";
 import type React from "react";
 
@@ -30,7 +30,7 @@ interface StateCellBase {
    */
   modelValue?: string;
   /**
-   * A stale staged cell's A: the value the person reviewed against before Revit
+   * A stale edit cell's A: the value the person reviewed against before Revit
    * moved under it (`basis.stale[].was`; null when unread). Present on drift, the cell reads in
    * words: "you reviewed A · Revit now C · yours B", C being `modelValue` and B the value.
    */
@@ -46,26 +46,21 @@ interface StateCellBase {
   /** A blocking value: damage stays on the cell at either scale. */
   damage?: string | null;
   /** Whose unsaved event, if any, is sitting on this cell. */
-  stage?: "clean" | "proposed" | "staged";
+  stage?: "clean" | "proposed" | "edit";
+  /** Host-stamped author. Equal values do not establish who wrote an edit. */
+  author?: "pea" | "human" | "unknown";
+  suggestionAuthor?: "pea" | "human" | "unknown";
   /**
-   * Who staged it — pea's square is pea's ink, yours is caution and carries the bold.
-   * A qualifier of staging, not a fifth axis: it only reads when `stage` is not clean.
-   * Only Pea proposes, so `cellFromTrichotomy` reads a staged value equal to the standing
-   * proposal as Pea's (accepted verbatim) and anything else as yours; hand-written callers
-   * that have no proposal behind the staging pass "you".
-   */
-  stagedBy?: "pea" | "you";
-  /**
-   * The counter-proposal: pea's standing proposed value when
-   * it is not what the cell shows — proposal and staged both present, values differing. Draws the
+   * The counter-suggestion: pea's standing proposed value when
+   * it is not what the cell shows — suggestion and edit both present, values differing. Draws the
    * fold alone (no body wash — the shown value is not pea's) and rides the facts/footline. This
-   * is pea's in-cell voice against a staged value; its other channel is chat.
+   * is pea's in-cell voice against a edit value; its other channel is chat.
    */
   counterValue?: string;
   /**
    * The original: a proposed cell draws Pea's value, so what the model
    * holds under it rides here — the row-scale title and the card footline say "currently X".
-   * `cellFromTrichotomy` fills it from the value the caller passed, which is the current one.
+   * `cellFromDraft` fills it from the value the caller passed, which is the current one.
    */
   currentValue?: string;
   /**
@@ -111,7 +106,7 @@ interface StateCellBase {
   placeholder?: string;
   /**
    * Locate what this cell describes: a click on the cell body when not editing. An editable
-   * cell's input swallows its clicks, so the proposal fold and the unsaved square (outside the
+   * cell's input swallows its clicks, so the suggestion fold and the unsaved square (outside the
    * input) are the locate target there. A cell with `onLocate` and no mark locates on its body.
    */
   onLocate?: () => void;
@@ -146,7 +141,7 @@ export type StateCellProps = StateCellBase &
          * An async commit (a Work write) may return a promise of that refusal: it restores the same
          * way when the refusal arrives, so typed text is never left looking accepted.
          *
-         * A measured cell never has one — its staged value is an object, so it has its own
+         * A measured cell never has one — its edit value is an object, so it has its own
          * `measured.stage`; the type makes the two doors exclusive.
          */
         onCommit?: CellCommit;
@@ -156,9 +151,9 @@ export type StateCellProps = StateCellBase &
         /**
          * The measured cell, one kind beside `numeric`. A bare number stages at once
          * with the column's display unit and never calls Revit, so the cell reads "300 CFM" the moment
-         * it is staged and what is reviewed is what is applied. Text carrying a unit shows as typed
+         * it is edit and what is reviewed is what is applied. Text carrying a unit shows as typed
          * until commit, then ONE read-only host parse answers with Revit's unrounded value,
-         * which is what gets staged; a re-read of the Reading cancels it (`parse` resolves null). A
+         * which is what gets edit; a re-read of the Reading cancels it (`parse` resolves null). A
          * refusal is cell-local, carries Revit's reason, and stages nothing. A measured column with no
          * display unit refuses at the cell; the unit is always the Reading's own evidence, never a
          * web guess. A caller with no display unit locks the cell because the parse needs one.
@@ -169,20 +164,20 @@ export type StateCellProps = StateCellBase &
           parse: (text: string) => Promise<MeasuredValue | { refusal: string } | null>;
           /** Where `{ value, unit }` goes — this kind's `onCommit`, and the only door the object takes. */
           stage: (
-            staged: MeasuredValue,
+            edit: MeasuredValue,
           ) => string | void | Promise<string | CellRefusal | null | void>;
         };
         onCommit?: never;
       }
   );
 
-/** The word a display unit is drawn and staged under: its symbol when it has one, else its label. */
+/** The word a display unit is drawn and edit under: its symbol when it has one, else its label. */
 export const unitWord = (unit: MeasuredDisplayUnit): string | null =>
   unit.symbol || unit.label || null;
 
 /** What one commit into a measured cell does — decided before anything is called. */
 type MeasuredCommit =
-  | { kind: "stage"; staged: MeasuredValue }
+  | { kind: "set"; edit: MeasuredValue }
   | { kind: "parse"; text: string }
   | { kind: "refuse"; reason: string };
 
@@ -205,15 +200,15 @@ export function readMeasuredText(
   if (!BARE_NUMBER.test(typed)) return { kind: "parse", text: typed };
   const unit = displayUnit ? unitWord(displayUnit) : null;
   return unit
-    ? { kind: "stage", staged: { value: typed, unit } }
+    ? { kind: "set", edit: { value: typed, unit } }
     : {
         kind: "refuse",
         reason:
-          "Revit did not report this measured parameter's display unit, so this cell cannot be staged.",
+          "Revit did not report this measured parameter's display unit, so this cell cannot be edit.",
       };
 }
 
-export type CellTransitionKind = "accept" | "deny" | "unstage";
+export type CellTransitionKind = "take" | "unsuggest" | "clear";
 
 export interface CellTransition {
   kind: CellTransitionKind;
@@ -226,40 +221,26 @@ export interface CellTransition {
 /** The default counter word: a string as written, anything else as JSON — never `[object Object]`. */
 const showJson = (value: unknown) => (typeof value === "string" ? value : JSON.stringify(value));
 
-/**
- * The one reader. A trichotomy cell —
- * `agent-contracts/src/trichotomy.ts`, proposal → staged → committed — plus the caller's own
- * facts (the shown value, agreement, freshness, capability) becomes `StateCellProps` HERE, so no
- * route re-derives the mapping and no two surfaces can disagree about what a proposal looks like.
- *
- * What the trichotomy does NOT have, on purpose:
- * - no `denied`: a denial CLEARS the proposal upstream and the cell shows the real value again.
- * - no `written`: a commit CLEARS `staged`; saved/unsaved and fresh/stale carry that signal.
- */
-
-export function cellFromTrichotomy(
-  cell: Pick<TrichotomyCellLike, "proposal" | "staged">,
+/** Shared Work plus measured facts becomes one cell drawing. Attribution is host stamped. */
+export function cellFromDraft(
+  cell: Pick<CellLike, "suggestion" | "edit">,
   facts: StateCellBase,
   /** The caller's word for a counter-proposed value; domain values are the caller's to format. */
   show: (value: unknown) => string = showJson,
 ): StateCellBase {
-  const { proposal, staged } = cell;
-  // Staging is the later rung, so it wins the stage slot; a proposal still standing behind a
-  // staged value is authorship evidence, not a second state.
-  const stage = staged != null ? "staged" : proposal != null ? "proposed" : "clean";
-  const stagedBy = sameValue(staged, proposal) ? "pea" : "you";
-  // Pea arguing against a staged value: both rungs stand and disagree. The fold draws; see
-  // `counterValue` on StateCellProps.
+  const { suggestion, edit } = cell;
+  const stage = edit != null ? "edit" : suggestion != null ? "proposed" : "clean";
+  const author = edit?.by ?? suggestion?.by ?? "unknown";
   const contested =
-    staged != null && proposal != null && !sameValue(proposal, staged)
-      ? proposal.delete === true
+    edit != null && suggestion != null && !sameValue(suggestion, edit)
+      ? suggestion.delete === true
         ? "delete"
-        : show(proposal.value)
+        : show(suggestion.value)
       : undefined;
-  // A standing proposal is what the cell DRAWS; the caller's value, which is
+  // A standing suggestion is what the cell DRAWS; the caller's value, which is
   // the current one, moves to `currentValue` and the tooltip. A deletion draws the empty mark.
   const proposedText =
-    stage === "proposed" ? (proposal?.delete === true ? "" : show(proposal?.value)) : undefined;
+    stage === "proposed" ? (suggestion?.delete === true ? "" : show(suggestion?.value)) : undefined;
   const callerText =
     typeof facts.value === "string" || typeof facts.value === "number"
       ? String(facts.value)
@@ -272,10 +253,11 @@ export function cellFromTrichotomy(
       ? { currentValue: callerText === "" ? "(blank)" : callerText }
       : {}),
     stage,
-    ...(stage === "staged" ? { stagedBy } : {}),
+    author,
+    suggestionAuthor: suggestion?.by ?? "unknown",
     ...(contested != null ? { counterValue: contested } : {}),
-    confidence: facts.confidence ?? proposal?.confidence ?? undefined,
-    note: facts.note ?? proposal?.note ?? undefined,
+    confidence: facts.confidence ?? suggestion?.confidence ?? undefined,
+    note: facts.note ?? suggestion?.note ?? undefined,
   };
 }
 
@@ -298,7 +280,7 @@ export function parseCell(
 interface CellRead {
   /** The only two things allowed to own the cell BODY. */
   body: "proposed" | "locked" | null;
-  /** Pea's fold without the body: a standing proposal against the shown/staged value. */
+  /** Pea's fold without the body: a standing suggestion against the shown/edit value. */
   contested: boolean;
   /** No real element behind it — the reserved dashed seam edge. */
   seam: boolean;
@@ -307,7 +289,7 @@ interface CellRead {
   /** Nothing was ever attempted here — muted value, no squiggle, no marks. */
   never: boolean;
   /** Your unsaved edit (bold + caution square), pea's (pea square, no bold), or none. */
-  unsaved: "you" | "pea" | null;
+  unsaved: "human" | "pea" | "unknown" | null;
 }
 
 /**
@@ -331,13 +313,13 @@ export function readCell(p: StateCellProps): CellRead {
             ? "unverified"
             : null,
     never: p.fresh === "never",
-    // An open proposal is unsaved too, but its square is drawn off `body: "proposed"` (cell.css). This slot is only for a STAGED value, whose author is the open question.
-    unsaved: !locked && stage === "staged" ? (p.stagedBy ?? "you") : null,
+    // An open suggestion is unsaved too, but its square is drawn off `body: "proposed"` (cell.css). This slot is only for a STAGED value, whose author is the open question.
+    unsaved: !locked && stage === "edit" ? (p.author ?? "unknown") : null,
   };
 }
 
 /**
- * Cell state, in the order attention is owed: fix drift, review the proposal, commit the staged,
+ * Cell state, in the order attention is owed: fix drift, review the suggestion, commit the edit,
  * re-read the stale, check the unverified, leave clean alone, and locked last — nothing to do.
  * A state column with no explicit `sort` orders by this, not alphabetically.
  */
@@ -345,7 +327,7 @@ export const CELL_STATE_ORDER = [
   "damage",
   "drift",
   "proposed",
-  "staged",
+  "edit",
   "stale",
   "unverified",
   "never",
@@ -364,7 +346,7 @@ export function cellStateLabel(p: StateCellProps): CellStateName {
   if (read.body === "locked") return "locked";
   if (read.unsettled === "drift") return "drift";
   if (read.body === "proposed") return "proposed";
-  if (read.unsaved != null) return "staged";
+  if (read.unsaved != null) return "edit";
   if (read.unsettled != null) return read.unsettled;
   if (read.never) return "never";
   return "clean";
@@ -384,9 +366,11 @@ export function cellFactsText(p: StateCellProps): string | null {
         ? `you reviewed ${p.reviewed ?? "—"} · Revit now ${p.modelValue} · yours`
         : `model holds ${p.modelValue}`,
     );
-  if (p.counterValue != null) parts.push(`agent proposes ${p.counterValue}`);
-  // The proposal is what the cell draws; the original and the author ride the tooltip.
-  if (p.stage === "proposed") parts.push("proposed by the agent");
+  if (p.counterValue != null)
+    parts.push(`suggestion by ${p.suggestionAuthor ?? "unknown"}: ${p.counterValue}`);
+  // The suggestion is what the cell draws; the original and the author ride the tooltip.
+  if (p.stage === "proposed")
+    parts.push(`suggested by ${p.suggestionAuthor ?? p.author ?? "unknown"}`);
   if (p.currentValue != null && p.stage === "proposed") parts.push(`currently ${p.currentValue}`);
   if (p.capReason != null) parts.push(p.capReason);
   if (p.note != null)

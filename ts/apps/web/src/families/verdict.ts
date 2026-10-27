@@ -60,7 +60,7 @@ export function familyVerdicts(
         }
       : {
           /* Queued actions are UNSAVED work: nothing has left the page, and caution is the
-                 language's staged rank. Deliberately NOT the commit blue — that is the verb's,
+                 language's edit rank. Deliberately NOT the commit blue — that is the verb's,
                  and a state dot wearing it would spend the one filled blue on a readout. */
           word: "included",
           tone: "caution",

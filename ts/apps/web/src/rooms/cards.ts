@@ -35,12 +35,12 @@ export const CARD_META: Record<
   proposed: {
     glyph: "◆",
     tone: "pea",
-    says: "proposed · Pea's mark, not staged. Next: accept stages it, reject drops it.",
+    says: "proposed · Pea's mark, not edit. Next: accept stages it, reject drops it.",
   },
   accepted: {
     glyph: "●",
     tone: null,
-    says: "accepted · staged against the newest run. Next: a rerun honours it or not.",
+    says: "accepted · edit against the newest run. Next: a rerun honours it or not.",
   },
   pass: { glyph: "✓", tone: "done", says: "passing · the newest run honours it. Nothing to do." },
   fail: {
@@ -61,7 +61,7 @@ export const CARD_META: Record<
   note: {
     glyph: "✎",
     tone: null,
-    says: "note · text on a place, never staged. Next: delete it once read.",
+    says: "note · text on a place, never edit. Next: delete it once read.",
   },
 };
 /** The run id Revit stamps on hand-drawn regions: never a partition run. */
@@ -129,7 +129,7 @@ function iou(polygon: Loop, region: Pick<Region, "outer" | "holes">): number {
 
 /** A mark's glyph: its rungs, then its anchor's overlap with the newest run on its view. */
 function markState(cell: MarkCell, snapshot: Snapshot): MarkState {
-  const mark = cell.staged?.value;
+  const mark = cell.edit?.value;
   if (!mark) return "proposed";
   const newest = newestRun(snapshot, mark.anchor.view);
   if (newest === null || newest === mark.run) return "accepted";
@@ -173,7 +173,7 @@ export function cardsMarkdown(doc: RoomsRouteDocument, snapshot: Snapshot): stri
   };
   const lines: { view: string; rank: number; id: string; text: string }[] = [];
   for (const [id, cell] of Object.entries(doc.marks)) {
-    const mark: Mark | undefined = cell.staged?.value ?? cell.proposal?.value;
+    const mark: Mark | undefined = cell.edit?.value ?? cell.suggestion?.value;
     if (!mark) continue;
     const state = markState(cell, snapshot);
     const labels = (mark.guids ?? []).map(label).filter((name) => name !== null);
@@ -216,7 +216,7 @@ export function cardsMarkdown(doc: RoomsRouteDocument, snapshot: Snapshot): stri
 export interface Card {
   id: string;
   state: CardState;
-  /** Pea (a mark with a proposal rung, a note by Pea) or a person. */
+  /** Pea (a mark with a suggestion rung, a note by Pea) or a person. */
   by: "pea" | "person";
   kind: Mark["kind"] | "note";
   polygon: Loop;
@@ -242,13 +242,13 @@ export function inboxCards(doc: RoomsRouteDocument, snapshot: Snapshot, view: st
   };
   const cards: Card[] = [];
   for (const [id, cell] of Object.entries(doc.marks)) {
-    const mark = cell.staged?.value ?? cell.proposal?.value;
+    const mark = cell.edit?.value ?? cell.suggestion?.value;
     if (!mark || mark.anchor.view !== view) continue;
     const polygon = mark.anchor.polygon;
     cards.push({
       id,
       state: markState(cell, snapshot),
-      by: cell.proposal ? "pea" : "person",
+      by: cell.suggestion ? "pea" : "person",
       kind: mark.kind,
       polygon,
       guids: concerns(polygon),

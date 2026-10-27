@@ -76,11 +76,11 @@ export function PlanSheetView({
   cancel: () => void;
   /** Stop the apply that is running now. Absent = this sheet has no running verb to stop. */
   stop?: { readonly label: string; readonly run: () => void };
-  /** The plan verb, in its words now: the staged draft or the saved spec. */
+  /** The plan verb, in its words now: the edit draft or the saved spec. */
   replan: { readonly says: string; readonly run: () => void };
   /** Why apply is refused, in the operator's words; null = it can run. */
   refusal: string | null;
-  /** The staged cells moved since this plan: said before the press, in the host's words. */
+  /** The edit cells moved since this plan: said before the press, in the host's words. */
   stale?: boolean;
   busy: boolean;
 }) {
@@ -159,7 +159,8 @@ export function PlanSheetView({
         {stale ? <OutcomeLine kind="refused" label="stale plan" says={STALE_PLAN} /> : null}
         {sheet.held?.map((row) => (
           <p key={row.name} className="t-small text-ink-2">
-            excluded by {row.by === "pea" ? "Pea" : "you"}: {row.name}
+            excluded by {row.by === "pea" ? "Pea" : row.by === "human" ? "you" : "unknown author"}:{" "}
+            {row.name}
           </p>
         ))}
         {sheet.entries.flatMap((entry) =>

@@ -156,3 +156,48 @@ test("the thread the window is showing and focused on raises nothing", async () 
   item("n1");
   expect(raised).toEqual([]);
 });
+
+test("two windows serialize delivery and reread the shared acknowledgement", async () => {
+  const queues = new Map<string, Promise<unknown>>();
+  const request = vi.fn((name: string, callback: () => unknown) => {
+    const next = (queues.get(name) ?? Promise.resolve()).then(callback);
+    queues.set(name, next);
+    return next;
+  });
+  Object.defineProperty(navigator, "locks", { configurable: true, value: { request } });
+  try {
+    render(
+      <>
+        <OsNotices />
+        <OsNotices />
+      </>,
+    );
+    await act(async () => {
+      await setOsNotices(true);
+    });
+    expect(streams).toHaveLength(2);
+    await act(async () => {
+      for (const stream of streams)
+        stream.onmessage?.(
+          new MessageEvent("message", {
+            data: JSON.stringify({ kind: "event", key: "k", value: notice("same-turn"), id: 1 }),
+          }),
+        );
+      await Promise.all([...queues.values()]);
+    });
+    expect(raised).toHaveLength(1);
+    // Reconnect deliveries and another local subscriber cannot announce that revision again.
+    await act(async () => {
+      for (const stream of streams)
+        stream.onmessage?.(
+          new MessageEvent("message", {
+            data: JSON.stringify({ kind: "event", key: "k", value: notice("same-turn"), id: 2 }),
+          }),
+        );
+      await Promise.all([...queues.values()]);
+    });
+    expect(raised).toHaveLength(1);
+  } finally {
+    Object.defineProperty(navigator, "locks", { configurable: true, value: undefined });
+  }
+});

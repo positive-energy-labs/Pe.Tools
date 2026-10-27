@@ -140,7 +140,7 @@ export const parameterText = (value: unknown): string =>
           ? ""
           : JSON.stringify(value);
 
-/** THE value trichotomy: type override → formula (resolved) → family value → missing. */
+/** THE value shared cell: type override → formula (resolved) → family value → missing. */
 function resolveParam(
   model: FamilyModel,
   typeName: string,

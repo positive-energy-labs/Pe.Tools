@@ -11,8 +11,8 @@ const entry = (
 ): { address: FamilyCellAddress; cell: FamilyCellState } => ({
   address: { familyName, typeName, parameter },
   cell: {
-    proposal: null,
-    staged: {
+    suggestion: null,
+    edit: {
       value: { value, storageType: parameter === "PE_G___Capacity" ? "Double" : "String" },
     },
   } satisfies FamilyCellState,
@@ -20,13 +20,13 @@ const entry = (
 const cells = (...entries: ReturnType<typeof entry>[]): Record<string, FamilyCellState> =>
   Object.fromEntries(entries.map(({ address, cell }) => [familyCellKey(address), cell]));
 
-describe("staged family cells", () => {
-  it("generates one patch draft per family from staged cells only", () => {
+describe("edit family cells", () => {
+  it("generates one patch draft per family from edit cells only", () => {
     const open: ReturnType<typeof entry> = {
       address: { familyName: "Open", typeName: "O-1", parameter: "PE_G___Model" },
       cell: {
-        proposal: { value: { value: "ignored", storageType: "String" } },
-        staged: null,
+        suggestion: { value: { value: "ignored", storageType: "String" } },
+        edit: null,
       },
     };
     const members = stagedDrafts(
@@ -41,7 +41,7 @@ describe("staged family cells", () => {
     });
   });
 
-  it("collects every staged cell of one family into that family's draft", () => {
+  it("collects every edit cell of one family into that family's draft", () => {
     const members = stagedDrafts(
       cells(
         entry("Fan Coil", "FCU-1", "FXMQ20"),

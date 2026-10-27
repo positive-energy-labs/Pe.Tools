@@ -82,7 +82,7 @@ const THREADS: HarnessThreadSummary[] = [
   ),
   mk(B, "t-free", "Draft a naming standard", { state: "idle", lastSeq: 9, message: "" }, null),
 ];
-/** Local fixture: Work (a proposal) bound to Pea's 2025 job. */
+/** Local fixture: Work (a suggestion) bound to Pea's 2025 job. */
 const WORK = [
   {
     id: "w1",

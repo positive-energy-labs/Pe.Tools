@@ -35,7 +35,7 @@ export interface TerminalInputs {
 }
 
 /**
- * A terminal's resolved flow (precedence in `terminalFlows`) and drop (staged, else the priced
+ * A terminal's resolved flow (precedence in `terminalFlows`) and drop (edit, else the priced
  * row's). A flow read from Revit names the parameter it came from (the airflow slot, `airflow.ts`).
  */
 export function terminalInputs(
@@ -44,7 +44,7 @@ export function terminalInputs(
   from: string | null = null,
 ): TerminalInputs {
   const flow = priced.flows.get(id);
-  const staged = priced.staged.terminalDrops[String(id)];
+  const edit = priced.edit.terminalDrops[String(id)];
   const row = priced.next.paths[id]?.rows.find((r) => r.id === id && r.kind === "terminal");
   return {
     flow: {
@@ -52,8 +52,8 @@ export function terminalInputs(
       word:
         flow?.source === "revit" && from ? slotWord(from) : flowSourceWord(flow?.source ?? null),
     },
-    drop: staged
-      ? { value: staged.inWg, word: "override" }
+    drop: edit
+      ? { value: edit.inWg, word: "override" }
       : row?.dp != null
         ? { value: row.dp, word: row.source ? "catalog" : row.leg === "ps" ? "Revit" : "Pe" }
         : { value: null, word: null },
@@ -67,24 +67,23 @@ export interface EquipmentInputs {
 }
 
 /**
- * A unit's role as the cell says it: `ruled` (the model's store), `override` (staged), `proposed`
+ * A unit's role as the cell says it: `ruled` (the model's store), `override` (edit), `proposed`
  * from its design flow with the reason (`unit-roles.ts`), else the `default` fan.
  */
 function unitRoleInput(
   priced: Priced,
   id: number,
-  staged: { role: "fan" | "passive" } | undefined,
+  edit: { role: "fan" | "passive" } | undefined,
 ): Resolved<"fan" | "passive"> & { reason?: string } {
   const r = priced.roles.get(id);
-  if (!r)
-    return staged ? { value: staged.role, word: "override" } : { value: "fan", word: "default" };
-  const word = r.why === "staged" ? "override" : r.why;
+  if (!r) return edit ? { value: edit.role, word: "override" } : { value: "fan", word: "default" };
+  const word = r.why === "edit" ? "override" : r.why;
   return { value: r.role, word, reason: r.reason };
 }
 
 /**
- * A unit's resolved flow, external static (staged, else the fan Pe computes) and role (ruled,
- * staged, else proposed). The flow is the one `groups` (the open system's) price it at
+ * A unit's resolved flow, external static (edit, else the fan Pe computes) and role (ruled,
+ * edit, else proposed). The flow is the one `groups` (the open system's) price it at
  * (`unitFlowIn`): a derived flow sums the grilles it serves there, never another system's.
  */
 export function equipmentInputs(
@@ -94,8 +93,8 @@ export function equipmentInputs(
   groups: readonly string[] | null = null,
 ): EquipmentInputs {
   const flow = unitFlowIn(priced, id, groups);
-  const esp = priced.staged.esp[String(id)];
-  const role = priced.staged.roles[String(id)];
+  const esp = priced.edit.esp[String(id)];
+  const role = priced.edit.roles[String(id)];
   const computed = esp ? null : proposedStatic(snapshot, priced.next, id);
   return {
     flow: {
@@ -124,7 +123,7 @@ const fanOutCache = new WeakMap<
 >();
 
 /**
- * What staging a rule's table would move, before it is staged: the instances the rule prices (from
+ * What staging a rule's table would move, before it is edit: the instances the rule prices (from
  * the priced rows, `ruleOf`), the systems they sit in, and every terminal downstream of any one of
  * them, since each of those grilles' paths carries the fitting.
  */

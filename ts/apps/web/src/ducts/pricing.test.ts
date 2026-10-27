@@ -57,7 +57,7 @@ test("worker result has full solve/readiness parity through structured clone, in
   for (const [id, doc] of [
     original.doc,
     ductsRouteState.schema.parse({
-      equipmentFlows: { "14107111": { staged: { value: { cfm: 176 } } } },
+      equipmentFlows: { "14107111": { edit: { value: { cfm: 176 } } } },
     }),
     ductsRouteState.schema.parse({}),
   ].entries()) {
@@ -127,11 +127,11 @@ test("deltas preserve untouched identities, Map keys/deletions, arrays, and non-
   expect(Object.getPrototypeOf(restoredKey)).toBe(Object.prototype);
 });
 
-test("unit-flow edits reuse topology; staged verdicts invalidate it", () => {
+test("unit-flow edits reuse topology; edit verdicts invalidate it", () => {
   const snapshot = SCENE_FIXTURE.snapshot;
   const before = ductsRouteState.schema.parse({});
   const after = ductsRouteState.schema.parse({
-    equipmentFlows: { "14107111": { staged: { value: { cfm: 176 } } } },
+    equipmentFlows: { "14107111": { edit: { value: { cfm: 176 } } } },
   });
   const inference = inferJoints(snapshot, 1, before);
   const heal = healPlan(snapshot, before);
@@ -139,7 +139,7 @@ test("unit-flow edits reuse topology; staged verdicts invalidate it", () => {
   expect(healPlan(snapshot, after)).toBe(heal);
   const ruled = ductsRouteState.schema.parse({
     assumptions: {
-      "proximity:1:0|2:0": { staged: { value: { kind: "verdict", verdict: "ignore" } } },
+      "proximity:1:0|2:0": { edit: { value: { kind: "verdict", verdict: "ignore" } } },
     },
   });
   expect(inferJoints(snapshot, 1, ruled)).not.toBe(inference);

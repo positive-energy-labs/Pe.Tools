@@ -1,7 +1,7 @@
 /**
  * /family — the ONE cell wrapper this route still owns: navigation wiring, and nothing else.
  *
- * ═══ WHAT DIED HERE (2026-08-31, proposal-state demiurge + per-cell grounding) ═══════════════
+ * ═══ WHAT DIED HERE (2026-08-31, suggestion-state demiurge + per-cell grounding) ═══════════════
  * `ProposedCell` and its `ProposalNotch` are deleted. They existed for exactly two gaps in the
  * grammar, and the consolidation closed both:
  *
@@ -9,11 +9,11 @@
  *      with no override can show the family value as the inheritance showing through, honestly,
  *      inside the editable slot.
  *   2. THE FOLD AS A LOCATOR (#14). `StateCellProps.onLocate` exists — a click on the cell BODY
- *      brings the proposal card into the doc sidebar — so the 24px icon-press improvised inside a
+ *      brings the suggestion card into the doc sidebar — so the 24px icon-press improvised inside a
  *      20px row has nothing left to do.
  *
  * The migration was a deletion, exactly as this file's old note predicted. The cells now build
- * their props through `cellFromTrichotomy`, so no reading of a proposal is written here twice.
+ * their props through `cellFromDraft`, so no reading of a suggestion is written here twice.
  */
 import { StateCell, type StateCellProps } from "@pe/kit/lang/cell";
 import { useCellNavigation } from "@pe/kit/table/cell-navigation";

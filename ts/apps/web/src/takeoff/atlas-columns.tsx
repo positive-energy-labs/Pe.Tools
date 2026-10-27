@@ -49,7 +49,7 @@ function RoomNameCell({
   const state = [
     attention.hovered.has(key) ? "hovered" : null,
     attention.selected.has(key) ? "table selection" : null,
-    entity.dirty ? "staged" : null,
+    entity.dirty ? "edit" : null,
     entity.conflict ? "authority changed" : null,
   ].filter(Boolean);
   return (
@@ -67,11 +67,11 @@ function RoomNameCell({
             tone={entity.conflict ? "caution" : undefined}
             title={
               entity.conflict
-                ? "Authority changed after this edit was staged."
-                : "This room has a staged edit."
+                ? "Authority changed after this edit was edit."
+                : "This room has a edit edit."
             }
           >
-            {entity.conflict ? "conflict" : "staged"}
+            {entity.conflict ? "conflict" : "edit"}
           </FactChip>
         )}
       </div>
@@ -289,7 +289,7 @@ export function useAtlasColumns({
         word: (row) => (row.room.r10 ? cellStateLabel(r10State(row)) : "not exported"),
       },
     ],
-    // The cells and their wire change with the Work: a landed stage or proposal redraws its cell.
+    // The cells and their wire change with the Work: a landed stage or suggestion redraws its cell.
     [actions, flagVocabulary, fieldsMode, store.cells.edits, store.wires.edits],
   );
 }

@@ -1,7 +1,7 @@
 /**
  * Where "make FC-17 the fan of SA 19" is offered (pressure-drop ledger, 2026-10-21): Revit's Duct
  * Systems > Select Equipment as a Pe verb, `ducts.assign-fan`. Base equipment is the first rung of
- * the fan proposal (`unit-roles.ts`), so naming it makes the proposal Revit's own state. Offered for
+ * the fan suggestion (`unit-roles.ts`), so naming it makes the suggestion Revit's own state. Offered for
  * a system the unit's own groups carry, of a classification one of its ports has, that has no base
  * equipment yet (the op refuses a swap: it drops the old base from the members). The op re-checks
  * all of it against the model (the port must be in that system or on its ducts); this only decides

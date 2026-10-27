@@ -17,14 +17,14 @@
  *   THE DOC PANE IS A SIDEBAR ON THE TABLE, like takeoff's. One pane, two modes: the OCR'd text
  *   blocks, or a stand-in for the real page camera. Proposals dock on top of it as annotation
  *   cards. Hovering a grounded row lights its citation in whichever mode is showing; the citation
- *   comes from WORLD.grounding, so it survives its proposal being accepted.
+ *   comes from WORLD.grounding, so it survives its suggestion being accepted.
  *
  *   THE ANATOMY IS A COLLAPSIBLE VISUAL PANE over the table, drawn from the profile's own
  *   parameter values. Hovering a solid lights the parameters it consumes and vice versa — one
  *   focus, two views, never two independent highlights.
  *
  *   RAIL = SCANNABLE. A narrow gutter left of every row. Blank when nothing is proposed; one dot
- *   in pea's ink when one proposal lands on the row; a counted chip when several do. It answers
+ *   in pea's ink when one suggestion lands on the row; a counted chip when several do. It answers
  *   exactly one question, top to bottom, without reading a single value: WHERE do proposals live.
  *
  *   CELLS = LOCATABLE. Each proposed cell wears a small corner fold in pea's ink. The rail says
@@ -38,13 +38,13 @@
  *   and points; it decides nothing.
  *
  *   ONE LIFECYCLE, TWO RUNGS (ruled 2026-08-31). A cell holds pea's PROPOSAL and the draft's
- *   STAGED value, and nothing else. Accept stages pea's value and leaves the proposal standing
- *   behind it, which is how the square is known to be pea's ink. Deny CLEARS the proposal — there
+ *   STAGED value, and nothing else. Accept stages pea's value and leaves the suggestion standing
+ *   behind it, which is how the square is known to be pea's ink. Deny CLEARS the suggestion — there
  *   is no denied state to draw, the cell simply shows the real value again.
  *
  *   TYPING BEATS PROPOSING. A proposed cell is an ordinary editable cell. The moment you commit
- *   your own value into it the proposal is CLEARED — the same outcome as a denial, because the
- *   proposal has nothing left to argue for. `superseded` was a fourth state for that and it is
+ *   your own value into it the suggestion is CLEARED — the same outcome as a denial, because the
+ *   suggestion has nothing left to argue for. `superseded` was a fourth state for that and it is
  *   deleted. Grounding is untouched: a citation is a fact about where a number came from, not a
  *   fact about pea.
  *
@@ -82,7 +82,7 @@
  *   swaps them to what is on disk, read-only, caution where it differs. Nothing moves: the row
  *   set, the column set, and every row height are identical in all three.
  *
- *   THE MARKS SURVIVE THE OVERLAY. A proposal's fold and a grounded cell's hairline underline are
+ *   THE MARKS SURVIVE THE OVERLAY. A suggestion's fold and a grounded cell's hairline underline are
  *   facts about the CELL, not about which reading is showing, so they persist across all three.
  *
  *   THE LIVE OVERLAY IS THE RECONCILE ROOM. capture-all and apply-all are dark in `draft` and lit
@@ -312,7 +312,7 @@ export function familyFacts(store: FamilyStore) {
       ? [
           [
             "shared",
-            `${sharedEdit.pointer} · no local edit was staged; open the referenced source below`,
+            `${sharedEdit.pointer} · no local edit was edit; open the referenced source below`,
           ] as const,
         ]
       : []),

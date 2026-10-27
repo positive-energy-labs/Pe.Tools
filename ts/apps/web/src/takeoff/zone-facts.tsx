@@ -11,7 +11,7 @@ import { STAGE_BLURB, type RoomState } from "#/takeoff/room-state";
 
 /**
  * The selected zone in the plan's readout (the fixed top-left home, SURFACE-PHILOSOPHY I4): its
- * rooms, area and stage, its closure, its systems and its staged state. The zone's picture is the
+ * rooms, area and stage, its closure, its systems and its edit state. The zone's picture is the
  * plan itself (F frames it); partition is the Situation's verb, never a button here (P2).
  */
 export function ZoneFacts({
@@ -72,11 +72,11 @@ export function ZoneFacts({
             tone={entity.conflict ? "alarm" : undefined}
             title={
               entity.conflict
-                ? "Authority changed since this edit was staged"
-                : "This zone has staged edits"
+                ? "Authority changed since this edit was edit"
+                : "This zone has edit edits"
             }
           >
-            {entity.conflict ? "edit conflict" : "staged edit"}
+            {entity.conflict ? "edit conflict" : "edit edit"}
           </FactChip>
         )}
       </div>

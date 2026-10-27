@@ -65,7 +65,7 @@ export function LangCellSpecimens() {
               <StateCell
                 value="36 in"
                 scale={row ? "row" : "card"}
-                stage="staged"
+                stage="edit"
                 onLocate={locate}
               />
             </div>

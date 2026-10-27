@@ -18,7 +18,7 @@ import {
 } from "@pe/agent-contracts";
 
 import { reviewTransitions, type CellWire } from "#/components/work/band";
-import { cellFromTrichotomy, type StateCellProps } from "@pe/kit/lang/cell";
+import { cellFromDraft, type StateCellProps } from "@pe/kit/lang/cell";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { CellListSelect } from "@pe/kit/lang/list-popup";
 import type { Column, Verdict } from "@pe/kit/table/model";
@@ -89,7 +89,7 @@ const stagePatches = (
   // A designation no person chose has no baseline: staging the same role confirms it as a person's.
   const held = field === "role" && region.designation !== "person" ? undefined : region[field];
   return transitionPatches(["edits"], key, cells[key] ?? {}, {
-    kind: "stage",
+    kind: "set",
     rung: { value },
     ...(held === null || held === undefined || held === "" ? {} : { baseline: { value: held } }),
   });
@@ -147,9 +147,9 @@ export function RoomsTable({
       const key = roomEditKey(row.region.guid, field);
       const cell = cells[key] ?? {};
       const held = shown(row.region[field]);
-      const authored = cell.staged ?? cell.proposal;
+      const authored = cell.edit ?? cell.suggestion;
       return {
-        ...cellFromTrichotomy(cell, {
+        ...cellFromDraft(cell, {
           value: authored ? shown(authored.value) : held,
           currentValue: held || "(blank)",
           cap: "editable",
@@ -204,15 +204,15 @@ export function RoomsTable({
             return <span className="block px-(--item-pad-x)">held</span>;
           const key = roomEditKey(row.region.guid, "role");
           const cell = cells[key];
-          const value = shown(cell?.staged?.value ?? row.region.role);
+          const value = shown(cell?.edit?.value ?? row.region.role);
           return (
             <CellListSelect<Role>
               aria-label={`${row.label} role`}
               value={value}
-              display={cell?.staged ? <b>{value}</b> : value}
+              display={cell?.edit ? <b>{value}</b> : value}
               title={
-                cell?.staged
-                  ? `staged · Revit holds ${row.region.role}`
+                cell?.edit
+                  ? `edit · Revit holds ${row.region.role}`
                   : `${row.region.designation ?? "machine"} designation`
               }
               items={ROLES}
@@ -236,15 +236,13 @@ export function RoomsTable({
         cell: (row) => {
           const key = roomEditKey(row.region.guid, "type");
           const cell = cells[key];
-          const value = shown(cell?.staged?.value ?? row.region.type);
+          const value = shown(cell?.edit?.value ?? row.region.type);
           return (
             <CellListSelect<RoomType>
               aria-label={`${row.label} type`}
               value={value}
-              display={cell?.staged ? <b>{value}</b> : value || "—"}
-              title={
-                cell?.staged ? `staged · Revit holds ${row.region.type || "nothing"}` : undefined
-              }
+              display={cell?.edit ? <b>{value}</b> : value || "—"}
+              title={cell?.edit ? `edit · Revit holds ${row.region.type || "nothing"}` : undefined}
               items={ROOM_TYPES}
               keyOf={(type) => type}
               labelOf={(type) => type}

@@ -17,7 +17,7 @@ import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
 import type { SystemScope } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { cellFromTrichotomy, StateCell } from "@pe/kit/lang/cell";
+import { cellFromDraft, StateCell } from "@pe/kit/lang/cell";
 import { reviewTransitions, type CellWire } from "#/components/work/band";
 import { PrimaryRouteControls } from "#/navigation/route-controls";
 
@@ -71,7 +71,7 @@ export function DuctSettings({
               aria-label="design friction rate"
             >
               <StateCell
-                {...cellFromTrichotomy(cell, { value: String(rate), cap: "editable" }, String)}
+                {...cellFromDraft(cell, { value: String(rate), cap: "editable" }, String)}
                 scale="row"
                 numeric={{ min: 0, digits: 3 }}
                 placeholder={String(DEFAULT_DESIGN_FRICTION_RATE)}
@@ -79,7 +79,7 @@ export function DuctSettings({
                   work
                     .write(
                       transitionPatches([], KEY, cell, {
-                        kind: "stage",
+                        kind: "set",
                         rung: { value: Number(text) },
                       }),
                     )
@@ -89,9 +89,9 @@ export function DuctSettings({
               />
               <span
                 className="t-small text-ink-2"
-                data-e-source={cell.staged ? "override" : "default"}
+                data-e-source={cell.edit ? "override" : "default"}
               >
-                in-wg/100 ft · {cell.staged ? "yours" : "default"}
+                in-wg/100 ft · {cell.edit ? "yours" : "default"}
               </span>
             </span>
           </TooltipHint>
@@ -129,7 +129,7 @@ export function SystemColours({ work }: { work: LossesWork }) {
     try {
       const result = await work.write(
         transitionPatches([], "systemColours", cell, {
-          kind: "stage",
+          kind: "set",
           rung: { value: { ...colours, [type]: ink } },
         }),
       );
@@ -146,7 +146,7 @@ export function SystemColours({ work }: { work: LossesWork }) {
     >
       <div className="flex items-baseline justify-between gap-2">
         <h3 className="t-small">System colours</h3>
-        <span className="t-small text-ink-2">{cell.staged ? "yours" : "unproven defaults"}</span>
+        <span className="t-small text-ink-2">{cell.edit ? "yours" : "unproven defaults"}</span>
       </div>
       <div className={LINES}>
         {DUCT_AIR_TYPES.map((type) => (

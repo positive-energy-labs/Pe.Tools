@@ -12,7 +12,7 @@ import {
   type CellWire,
   type FanOutOutcome,
 } from "#/components/work/band";
-import { cellFromTrichotomy, StateCell, type StateCellProps } from "@pe/kit/lang/cell";
+import { cellFromDraft, StateCell, type StateCellProps } from "@pe/kit/lang/cell";
 import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
 import { Section } from "@pe/kit/lang/section";
 import { ReadCell } from "@pe/kit/table/cells";
@@ -54,7 +54,7 @@ function cellState({ cells, wire, outcome }: Matrix, key: string): StateCellProp
   const cell = cells[key] ?? {};
   const lock = LOCKS[key] ?? null;
   return {
-    ...cellFromTrichotomy(cell, {
+    ...cellFromDraft(cell, {
       value: shownOf(key, cell),
       cap: lock ? "locked" : "editable",
       capReason: lock ?? undefined,
@@ -107,7 +107,7 @@ export const acceptVoltage = ({ cells, wire }: Matrix) =>
     wire,
     cells,
     MATRIX.map((row) => cellKey(row.key, "Voltage")),
-    "accept",
+    "take",
   );
 
 /** A spec-editor field per parameter of one type: the same cell, at card scale. */

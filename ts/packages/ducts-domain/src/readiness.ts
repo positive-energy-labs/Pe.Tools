@@ -25,9 +25,9 @@ export interface GroupReadiness {
   budget: string[];
 }
 
-/** The staged value at a key; proposals never count until a person stages them. */
-const staged = (doc: DuctsRouteDocument | null, key: string): DuctAssumption | undefined =>
-  doc?.assumptions[key]?.staged?.value;
+/** The edit value at a key; proposals never count until a person stages them. */
+const edit = (doc: DuctsRouteDocument | null, key: string): DuctAssumption | undefined =>
+  doc?.assumptions[key]?.edit?.value;
 
 interface ById {
   issues: Map<string, DuctIssue>;
@@ -60,15 +60,15 @@ export function readiness(
   let surveyed: Set<string> | null = null;
   const standing = () => (surveyed ??= new Set(survey(snapshot, work).findings.map((f) => f.id)));
   const verdict = (issue: DuctIssue) => {
-    const value = staged(doc, issue.id);
+    const value = edit(doc, issue.id);
     return value?.kind === "verdict" ? value.verdict : null;
   };
   const override = (
     kind: Parameters<typeof ductOverrideKey>[0],
     subject: string | number | null | undefined,
-  ) => subject != null && staged(doc, ductOverrideKey(kind, subject)) !== undefined;
+  ) => subject != null && edit(doc, ductOverrideKey(kind, subject)) !== undefined;
 
-  /** Whether a staged assumption answers the issue. What an issue blocks is `ISSUE_KINDS`'. */
+  /** Whether a edit assumption answers the issue. What an issue blocks is `ISSUE_KINDS`'. */
   const resolved = (issue: DuctIssue) => {
     const element = issue.elementId ?? null;
     switch (issue.kind) {

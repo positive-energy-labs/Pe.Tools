@@ -47,7 +47,7 @@ export interface RouteHandle<W, R extends string, P, A extends string> {
     readonly revision: number | null;
     /** Whether the authoritative Work reading is current, including a current absent document. */
     readonly current: boolean;
-    /** Revit changed the Work's document after the read its staged rungs rest on (`takenAt`). */
+    /** Revit changed the Work's document after the read its edit rungs rest on (`takenAt`). */
     readonly changed: boolean;
     /** `expectedRevision` binds the write; `null` binds it to nothing rendered and refuses. */
     readonly write: (

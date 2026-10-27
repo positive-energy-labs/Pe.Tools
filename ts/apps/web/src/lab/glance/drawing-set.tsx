@@ -258,7 +258,7 @@ export const drawingSetOps: SyntheticOp[] = [
     displayName: "The drawing set",
     blurb: "what this project's deliverable looks like — the wall of sheets pinned up by series",
     contractNote:
-      "wants revit.catalog.sheets: flat sheet list with series grouping + per-sheet anchor thumbnails in one bounded call; today it takes project-index (Sheets) + a staged N-sheet detail.sheets batch",
+      "wants revit.catalog.sheets: flat sheet list with series grouping + per-sheet anchor thumbnails in one bounded call; today it takes project-index (Sheets) + a edit N-sheet detail.sheets batch",
     deps: [
       {
         key: "revit.catalog.project-index",

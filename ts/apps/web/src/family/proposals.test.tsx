@@ -39,12 +39,12 @@ const NESTED = "/nested/pump";
 const CONNECTOR = "/connectors/c1";
 const FORM = "/forms/body";
 const fields: Record<string, FieldState> = {
-  [SPEC]: { proposal: { value: { dataType: "Number", value: "2" }, note: "from the cut sheet" } },
-  [OVERRIDE]: { proposal: { value: "4" } },
-  [NESTED]: { proposal: { value: { family: "Pump", type: "Std", host: "Level" } } },
-  [CONNECTOR]: { proposal: { value: { domain: "Duct", shape: "Round" } } },
-  [FORM]: { proposal: { value: { kind: "Prism" } } },
-  "/types/HCB 04/Width": { proposal: { value: "36in" } },
+  [SPEC]: { suggestion: { value: { dataType: "Number", value: "2" }, note: "from the cut sheet" } },
+  [OVERRIDE]: { suggestion: { value: "4" } },
+  [NESTED]: { suggestion: { value: { family: "Pump", type: "Std", host: "Level" } } },
+  [CONNECTOR]: { suggestion: { value: { domain: "Duct", shape: "Round" } } },
+  [FORM]: { suggestion: { value: { kind: "Prism" } } },
+  "/types/HCB 04/Width": { suggestion: { value: "36in" } },
 };
 
 /** The real core over a Family Work, the store's plumbing stubbed. */
@@ -104,17 +104,17 @@ const verbs = (scope: HTMLElement) =>
   within(scope)
     .queryAllByRole("button")
     .map((button) => button.getAttribute("aria-label") ?? button.textContent)
-    .filter((name) => name === "accept" || name === "deny");
+    .filter((name) => name === "take" || name === "unsuggest");
 
-test("a proposal on a parameter the reading lacks draws in its row, and accept writes it", async () => {
+test("a suggestion on a parameter the reading lacks draws in its row, and accept writes it", async () => {
   const write = vi.fn(async () => null);
   render(<Harness wire={{ segment: "cells", revision: 3, write }} />);
   const override = screen.getByRole("region", { name: "override" });
   expect(within(override).getByDisplayValue("4")).toBeTruthy();
-  expect(verbs(override)).toEqual(["accept", "deny"]);
-  await act(async () => fireEvent.click(within(override).getByRole("button", { name: "accept" })));
+  expect(verbs(override)).toEqual(["unsuggest", "take"]);
+  await act(async () => fireEvent.click(within(override).getByRole("button", { name: "take" })));
   expect(write).toHaveBeenCalledWith(
-    transitionPatches(["cells"], OVERRIDE, fields[OVERRIDE]!, { kind: "accept" }),
+    transitionPatches(["cells"], OVERRIDE, fields[OVERRIDE]!, { kind: "take" }),
     3,
   );
 });
@@ -192,7 +192,7 @@ test.each([
 ])(
   "%s is a proposed property of its row, never the family-level value",
   async (pointer, value, words) => {
-    const wired: Record<string, FieldState> = { [pointer]: { proposal: { value } } };
+    const wired: Record<string, FieldState> = { [pointer]: { suggestion: { value } } };
     const write = vi.fn(async () => null);
     const { world } = familySource(held, null, wired);
     expect(world.proposals).toMatchObject([{ param: "Width", property: pointer.split("/")[3] }]);
@@ -200,15 +200,13 @@ test.each([
     const identity = screen.getByRole("region", { name: "identity" });
     const cell = within(identity).getByText(words).closest<HTMLElement>(".dl-cell")!;
     expect(cell.dataset.body).toBe("proposed");
-    expect(verbs(identity)).toEqual(["accept", "deny"]);
-    // the type cell on the row owns no fold: the proposal is not about its value
+    expect(verbs(identity)).toEqual(["unsuggest", "take"]);
+    // the type cell on the row owns no fold: the suggestion is not about its value
     const standard = screen.getByRole("region", { name: "standard" });
     expect(standard.querySelector("[data-body=proposed]")).toBeNull();
-    await act(async () =>
-      fireEvent.click(within(identity).getByRole("button", { name: "accept" })),
-    );
+    await act(async () => fireEvent.click(within(identity).getByRole("button", { name: "take" })));
     expect(write).toHaveBeenCalledWith(
-      transitionPatches(["cells"], pointer, wired[pointer]!, { kind: "accept" }),
+      transitionPatches(["cells"], pointer, wired[pointer]!, { kind: "take" }),
       3,
     );
   },
@@ -216,7 +214,7 @@ test.each([
 
 test("/connectors/c1/on is a proposed property of the held constituent", async () => {
   const pointer = "/connectors/c1/on";
-  const wired: Record<string, FieldState> = { [pointer]: { proposal: { value: "Back" } } };
+  const wired: Record<string, FieldState> = { [pointer]: { suggestion: { value: "Back" } } };
   const write = vi.fn(async () => null);
   const { world } = familySource(held, null, wired);
   expect(world.constituents.filter((part) => part.slug === "c1")).toHaveLength(1);
@@ -226,9 +224,9 @@ test("/connectors/c1/on is a proposed property of the held constituent", async (
   render(<PropertyHarness fields={wired} wire={{ segment: "cells", revision: 3, write }} />);
   const list = screen.getByRole("region", { name: "constituents" });
   expect(within(list).getByText("on Back")).toBeTruthy();
-  await act(async () => fireEvent.click(within(list).getByRole("button", { name: "accept" })));
+  await act(async () => fireEvent.click(within(list).getByRole("button", { name: "take" })));
   expect(write).toHaveBeenCalledWith(
-    transitionPatches(["cells"], pointer, wired[pointer]!, { kind: "accept" }),
+    transitionPatches(["cells"], pointer, wired[pointer]!, { kind: "take" }),
     3,
   );
 });

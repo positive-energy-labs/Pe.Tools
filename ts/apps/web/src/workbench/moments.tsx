@@ -61,7 +61,7 @@ import { useTurnSubjects, type TurnSubjects } from "./turn-names";
 
 type RegisterMoment = (id: string, el: HTMLElement | null) => void;
 
-/** What a call shows without being opened: its captures, its drawing, its proposal or action
+/** What a call shows without being opened: its captures, its drawing, its suggestion or action
  *  record. Folding hides machinery, never these. */
 function callRecords(call: ToolCall) {
   const result = call.status === "failed" ? (call.result ?? call.error) : call.result;

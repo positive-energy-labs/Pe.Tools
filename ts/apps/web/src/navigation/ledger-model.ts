@@ -182,7 +182,7 @@ export function ledgerRows(sources: LedgerSources, now: number): LedgerRow[] {
         verb: "review",
         what: work.label,
         where: work.context,
-        says: `${work.proposals} Pea proposal${work.proposals === 1 ? "" : "s"} to review`,
+        says: `${work.proposals} Pea suggestion${work.proposals === 1 ? "" : "s"} to review`,
         at: null,
         url: work.url,
         refusal: work.url ? undefined : (work.reason ?? "No resumable destination"),

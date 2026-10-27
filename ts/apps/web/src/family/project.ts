@@ -7,10 +7,10 @@
  *
  *   FORWARD   `projectFamilyModel` — document + Revit evidence → the page world.
  *   REVERSE   `draftToPatches`     — the page's draft, diffed against the last-saved draft, into
- *                                    staged `route:settings` field patches addressed by JSON
+ *                                    edit `route:settings` field patches addressed by JSON
  *                                    Pointer into the document's own paths.
  *
- * THE REVERSE PATH DIFFS, IT DOES NOT DUMP. A save that staged every value would rewrite lines
+ * THE REVERSE PATH DIFFS, IT DOES NOT DUMP. A save that edit every value would rewrite lines
  * nobody touched and make the version-token guard fire on documents two people are editing. So
  * every patch here corresponds to a cell that actually MOVED, and a draft equal to its baseline
  * produces exactly zero patches — which is also what makes "nothing to save" an honest refusal
@@ -355,7 +355,7 @@ function projectEvidence(
 /**
  * The DRAFT laid over the parsed document — what the anatomy triptych actually draws.
  *
- * The page's live truth is the draft: edits staged but not yet saved. `buildSheet` reads a
+ * The page's live truth is the draft: edits edit but not yet saved. `buildSheet` reads a
  * `FamilyModel`, so without this composition the drawing would show the DISK while the table
  * shows your keystroke — two truths on one page. The mapping is deliberately the same one the
  * reverse projection stages (`draftToPatches` → `dimSegments`/`metaSegments`): a value the save
@@ -426,7 +426,7 @@ export function draftedModel(
   return next;
 }
 
-/* ── reverse: draft → staged field patches ───────────────────────────────── */
+/* ── reverse: draft → edit field patches ───────────────────────────────── */
 
 /** The `/family` Work's cell segment: every draft patch is built under it by the contract. */
 export const FAMILY_CELLS = "cells";
@@ -440,14 +440,14 @@ function stage(segments: string[], value: AuthoredValue | undefined): RouteState
     settingsFieldPointer(segments),
     {},
     {
-      kind: "stage",
+      kind: "set",
       rung: value === undefined ? { delete: true } : { value },
     },
   )[0]!;
 }
 
 /**
- * Every cell the draft moved, as staged `route:settings` field patches.
+ * Every cell the draft moved, as edit `route:settings` field patches.
  *
  * `savedDraft` is the draft as the last-read snapshot seeded it — the page's record of the DISK.
  * Diffing against it (rather than against the model) is what makes a save after a save write
@@ -475,7 +475,7 @@ export function draftToPatches(
           settingsFieldPointer(["parameters", name]),
           {},
           {
-            kind: "stage",
+            kind: "set",
             rung: {
               value: {
                 dataType: seed?.dataType ?? FALLBACK_LENGTH_TYPE,

@@ -1,4 +1,4 @@
-/** What the Work has staged for a write, counted from the document alone. */
+/** What the Work has edit for a write, counted from the document alone. */
 import type { DuctsRouteDocument } from "@pe/agent-contracts";
 
 import { pendingRulings } from "./rulings.ts";
@@ -21,14 +21,14 @@ export const WRITTEN = [
 export const stagedCells = (doc: DuctsRouteDocument | null) =>
   ([...WRITTEN, "catalogs", "ruleAssignments"] as const).flatMap((segment) =>
     Object.entries(doc?.[segment] ?? {}).flatMap(([key, cell]) =>
-      cell?.staged ? [{ segment, key, cell }] : [],
+      cell?.edit ? [{ segment, key, cell }] : [],
     ),
   );
 
-/** How many changes a write would carry: staged cells, and rulings that differ from the store's. */
+/** How many changes a write would carry: edit cells, and rulings that differ from the store's. */
 export const pendingCount = (doc: DuctsRouteDocument | null, store: DuctSnapshot["store"]) =>
   stagedCells(doc).length + pendingRulings(doc, store).length;
 
 /** Staged ESP cells: the one write that waits for a clean calc. */
 export const stagedEsp = (doc: DuctsRouteDocument | null) =>
-  Object.values(doc?.esp ?? {}).filter((cell) => cell?.staged).length;
+  Object.values(doc?.esp ?? {}).filter((cell) => cell?.edit).length;

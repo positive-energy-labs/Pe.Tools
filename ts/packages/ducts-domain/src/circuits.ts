@@ -201,7 +201,7 @@ export function designCircuits(
           reason(
             "missing-terminal-evidence",
             id,
-            "Terminal role and pressure boundary are not staged",
+            "Terminal role and pressure boundary are not edit",
           ),
         );
       const flow = t
@@ -251,9 +251,9 @@ export function designCircuits(
     if (scenarios.length !== 1)
       circuitReasons.push(
         reason(
-          "balanced-design-not-staged",
+          "balanced-design-not-edit",
           fan.element.id,
-          "Exactly one sourced balanced-design scenario must be staged",
+          "Exactly one sourced balanced-design scenario must be edit",
         ),
       );
     const totals = [inlet, outlet]
@@ -403,7 +403,7 @@ export function designCircuits(
             reason(
               "contradictory-design-direction",
               part,
-              "Native connector direction contradicts the staged physical fan path",
+              "Native connector direction contradicts the edit physical fan path",
             ),
           );
         const segment = segments.get(part);
@@ -663,7 +663,7 @@ export function designCircuits(
       reason(
         "no-admitted-fan-circuits",
         null,
-        "No staged physical fan evidence; legacy group totals remain separate partial arithmetic",
+        "No edit physical fan evidence; legacy group totals remain separate partial arithmetic",
       ),
     );
   const equipment = snapshot.nodes.filter((n) => n.kind === "equipment");

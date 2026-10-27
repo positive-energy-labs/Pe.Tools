@@ -23,6 +23,7 @@ export interface FamiliesObservation {
   filter: AppliedFilter;
   capturedAt: string;
   completedAt: string;
+  envelope?: { revision: number };
   readback?: { sourceId: string; verifiedFamilies: { name: string; at: string }[] };
   result: RevitMatrixLoadedFamilies.Res.Response;
 }
@@ -37,6 +38,7 @@ export async function readFamiliesObservation(
   work: WorkKey,
   document: DocumentRef,
   filter: AppliedFilter,
+  expectedRevision?: number,
 ): Promise<FamiliesObservation> {
   const response = await hostFetch(hostUrl("/families/readings"), {
     method: "POST",
@@ -45,7 +47,7 @@ export async function readFamiliesObservation(
       [HOST_RPC_BRIDGE_SESSION_HEADER]: document.session,
       [HOST_RPC_DOCUMENT_HEADER]: document.openId,
     },
-    body: JSON.stringify({ work, filter }),
+    body: JSON.stringify({ work, filter, expectedRevision }),
   });
   const body = await response.json();
   if (!response.ok)

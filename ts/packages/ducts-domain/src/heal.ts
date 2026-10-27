@@ -108,7 +108,7 @@ export function rememberHealPlan(
   plans.set(snapshot, { key: topologyRulingsKey(withStoredRulings(work, snapshot.store)), plan });
 }
 
-/** Only staged topology verdicts affect healing; a unit-flow edit cannot rebuild it. */
+/** Only edit topology verdicts affect healing; a unit-flow edit cannot rebuild it. */
 export function healPlan(snapshot: DuctSnapshot, work: DuctsRouteDocument | null = null): HealPlan {
   const key = topologyRulingsKey(withStoredRulings(work, snapshot.store));
   const hit = plans.get(snapshot);
@@ -119,7 +119,7 @@ export function healPlan(snapshot: DuctSnapshot, work: DuctsRouteDocument | null
 }
 
 function build(snapshot: DuctSnapshot, raw: DuctsRouteDocument | null): HealPlan {
-  // A stored ruling (an end left out) holds like a staged one (`rulings.ts`).
+  // A stored ruling (an end left out) holds like a edit one (`rulings.ts`).
   const work = withStoredRulings(raw, snapshot.store);
   const tolerated = tolerate(snapshot, work);
   const groupOf = new Map(

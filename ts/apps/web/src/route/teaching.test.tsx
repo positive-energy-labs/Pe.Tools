@@ -25,7 +25,7 @@ test("Ducts support folds retain the current width and last-focused priority pol
     treeCollapsed: null,
     priority: "sidebar" as const,
     toRule: 1,
-    staged: 0,
+    edit: 0,
   };
   expect(ductsPaneState({ ...state, width: 1400 })).toEqual({
     sidebarCollapsed: false,

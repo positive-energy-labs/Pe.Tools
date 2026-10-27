@@ -29,7 +29,7 @@ export const rulingPatches = (
     [segment],
     key,
     cell,
-    rung === "unstage" ? { kind: "unstage" } : { kind: "stage", rung },
+    rung === "unstage" ? { kind: "clear" } : { kind: "set", rung },
   );
 };
 

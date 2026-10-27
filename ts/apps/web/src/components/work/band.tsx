@@ -4,18 +4,17 @@ import {
   availableTransitions,
   fanOut,
   summarize,
-  transitionBinding,
   transitionPatches,
   type CellGroup,
   type FanOutKind,
   type RouteStatePatch,
   type SkipReason,
   type TransitionKind,
-  type TrichotomyCellLike,
+  type CellLike,
 } from "@pe/agent-contracts";
 
 import {
-  cellFromTrichotomy,
+  cellFromDraft,
   StateCell,
   type CellTransition,
   type CellTransitionKind,
@@ -83,11 +82,11 @@ export function WorkStanding({
   );
 }
 
-/** Proposed, staged and contested cells over a set of groups. */
+/** Proposed, edit and contested cells over a set of groups. */
 export const tally = (groups: readonly Pick<CellGroup, "proposed" | "staged" | "contested">[]) => {
   const sum = (field: "proposed" | "staged" | "contested") =>
     groups.reduce((total, group) => total + group[field], 0);
-  return { proposed: sum("proposed"), staged: sum("staged"), contested: sum("contested") };
+  return { proposed: sum("proposed"), edit: sum("staged"), contested: sum("contested") };
 };
 
 /** A Work's cells at head scale: the tally, the contract's groups, and how many at each named depth. */
@@ -97,9 +96,9 @@ export interface WorkSummary extends ReturnType<typeof tally> {
   spans: { noun: string; count: number }[];
 }
 
-/** The one summary the Situation's Work slot and Chat's proposal head read (ruling 14). */
+/** The one summary the Situation's Work slot and Chat's suggestion head read (ruling 14). */
 export function workSummary(
-  cells: Record<string, TrichotomyCellLike>,
+  cells: Record<string, CellLike>,
   ctx: Pick<CellWire, "baselineOf" | "lockOf"> & { groupOf: (key: string) => string[] },
   nouns: readonly string[] = [],
 ): WorkSummary {
@@ -138,38 +137,27 @@ export interface CellWire {
 /** Where a wire's cells sit in its Work: under its segment, or at the root. */
 const cellsPath = (wire: CellWire) => (wire.segment === null ? [] : [wire.segment]);
 
-const DRAWN = new Set<string>(["accept", "deny", "unstage"] satisfies CellTransitionKind[]);
+const DRAWN = new Set<string>(["take", "unsuggest", "clear"] satisfies CellTransitionKind[]);
 
-/**
- * One write of a transition's patches. A bound kind (accept, deny) carries the rendered revision;
- * with nothing rendered to bind to it refuses and writes nothing, never an unbound write.
- */
-const writeKind = (wire: CellWire, kind: TransitionKind, patches: RouteStatePatch[]) =>
-  transitionBinding(kind) !== "bound"
-    ? wire.write(patches)
-    : wire.revision === null
-      ? Promise.resolve({
-          code: "not-ready",
-          message: "Work has not been read yet; nothing on screen to act on",
-        })
-      : wire.write(patches, wire.revision);
+/** Every cell command carries the Work revision the person saw. */
+const writeKind = (wire: CellWire, _kind: TransitionKind, patches: RouteStatePatch[]) =>
+  wire.revision === null
+    ? Promise.resolve({
+        code: "not-ready",
+        message: "Work has not been read yet; nothing on screen to act on",
+      })
+    : wire.write(patches, wire.revision);
 
 /** The cell's verbs: exactly what the contract makes available to a person on it. */
-export function reviewTransitions(
-  wire: CellWire,
-  key: string,
-  cell: TrichotomyCellLike,
-): CellTransition[] {
-  // Wording only: the reader says whether Pea is arguing against a staged value.
-  const counter = cellFromTrichotomy(cell, { value: null }).counterValue != null;
+export function reviewTransitions(wire: CellWire, key: string, cell: CellLike): CellTransition[] {
+  // Wording only: the reader says whether Pea is arguing against a edit value.
+  const counter = cellFromDraft(cell, { value: null }).counterValue != null;
   const reason: Record<CellTransitionKind, string> = {
-    accept: counter
-      ? "Stage Pea's counter-proposal in place of your staged value"
-      : "Stage Pea's proposal",
-    deny: counter
-      ? "Clear Pea's counter-proposal; your staged value stays"
-      : "Clear Pea's proposal",
-    unstage: "Clear the staged value; restore the standing proposal or baseline",
+    take: counter
+      ? "Use the suggestion in place of the current edit"
+      : "Use this suggestion as the edit",
+    unsuggest: counter ? "Clear the suggestion; the current edit stays" : "Clear this suggestion",
+    clear: "Clear the edit value; restore the standing suggestion or baseline",
   };
   return availableTransitions(cell, "human", { lock: wire.lockOf?.(key) ?? null })
     .filter((kind): kind is CellTransitionKind => DRAWN.has(kind))
@@ -193,7 +181,7 @@ export interface FanOutOutcome {
  */
 export async function runFanOut(
   wire: CellWire,
-  cells: Record<string, TrichotomyCellLike>,
+  cells: Record<string, CellLike>,
   keys: readonly string[],
   kind: FanOutKind,
 ): Promise<FanOutOutcome> {
@@ -207,15 +195,14 @@ export async function runFanOut(
 }
 
 const PAST: Record<FanOutKind, string> = {
-  accept: "accepted",
-  deny: "denied",
-  withdraw: "withdrawn",
-  unstage: "unstaged",
+  take: "accepted",
+  unsuggest: "denied",
+  clear: "unstaged",
 };
 
 /**
  * An aggregate's outcome in words, from counts only: `accepted 11 · skipped 7 (contested: 1,
- * no-proposal: 6)`. A refused write wrote nothing and says the write's own refusal verbatim.
+ * no-suggestion: 6)`. A refused write wrote nothing and says the write's own refusal verbatim.
  */
 export function fanOutWord({ kind, covered, skipped, refusal }: FanOutOutcome): string {
   if (refusal) return refusal.message;
@@ -244,7 +231,7 @@ export function ReviewRow({
   wire: CellWire;
   address: string;
   label: ReactNode;
-  cell: TrichotomyCellLike;
+  cell: CellLike;
   facts: StateCellProps;
   /** The caller's word for a counter-proposed value. */
   show?: (value: unknown) => string;
@@ -252,7 +239,7 @@ export function ReviewRow({
   transitions?: readonly CellTransition[];
   /**
    * The table's own cell for this address, editable: drawn in place of the read-only value so a
-   * staged value is refined where it is reviewed. Its verbs are its own.
+   * edit value is refined where it is reviewed. Its verbs are its own.
    */
   editor?: ReactNode;
   /**
@@ -261,9 +248,9 @@ export function ReviewRow({
    */
   mark?: boolean;
 }) {
-  const props = cellFromTrichotomy(cell, facts, show);
+  const props = cellFromDraft(cell, facts, show);
   const verbs = transitions ?? reviewTransitions(wire, address, cell);
-  const by = props.stage === "staged" ? props.stagedBy : "pea";
+  const by = props.stage === "edit" ? props.author : "pea";
   return (
     <div
       className={`dl-review my-px grid h-(--item-h) items-center gap-2 ${
@@ -287,17 +274,17 @@ export function ReviewRow({
   );
 }
 
-/** The addresses a reviewer draws: every cell carrying a proposal or a staged value. */
-export const reviewAddresses = <C extends TrichotomyCellLike>(cells: Record<string, C>) =>
-  Object.entries(cells).filter(([, cell]) => cell.proposal != null || cell.staged != null);
+/** The addresses a reviewer draws: every cell carrying a suggestion or a edit value. */
+export const reviewAddresses = <C extends CellLike>(cells: Record<string, C>) =>
+  Object.entries(cells).filter(([, cell]) => cell.suggestion != null || cell.edit != null);
 
 /** How long the unstage confirm waits for its second press. */
 const CONFIRM_MS = 4000;
 
 /**
- * BULK UNSTAGE (F-J1-8): one `unstage` fanOut over the staged cells among `keys`, where the
+ * BULK UNSTAGE (F-J1-8): one `unstage` fanOut over the edit cells among `keys`, where the
  * aggregate accept/deny live. It removes the person's own work, so it asks on the SAME control:
- * the first press arms it ("unstage N staged? press again") for about 4 s, Escape cancels, and only
+ * the first press arms it ("unstage N edit? press again") for about 4 s, Escape cancels, and only
  * the second press writes. The unstage transition's own rule decides what it covers; Pea's
  * proposals on those cells stay.
  */
@@ -309,15 +296,15 @@ export function UnstageAll({
   compact,
 }: {
   wire: CellWire;
-  cells: Record<string, TrichotomyCellLike>;
+  cells: Record<string, CellLike>;
   keys: readonly string[];
   done: (outcome: FanOutOutcome) => void;
   /** A framed revert button with its count, for a one-line row; the words move to the title. */
   compact?: boolean;
 }) {
-  const staged = useMemo(
+  const edit = useMemo(
     () =>
-      fanOut(cells, keys, "unstage", {
+      fanOut(cells, keys, "clear", {
         cellsPath: cellsPath(wire),
         actor: "human",
         lockOf: wire.lockOf,
@@ -343,29 +330,23 @@ export function UnstageAll({
         ]
       : [],
   );
-  if (!staged) return null;
+  if (!edit) return null;
   const title = armed
-    ? `Press again to clear your ${staged} staged values in one write; Escape cancels`
-    : `Clear your ${staged} staged values in one write (asks first); Pea's proposals stay`;
+    ? `Press again to clear your ${edit} edit values in one write; Escape cancels`
+    : `Clear your ${edit} edit values in one write (asks first); Pea's proposals stay`;
   const press = () => {
     if (!armed) return setArmed(true);
     setArmed(false);
-    void runFanOut(wire, cells, keys, "unstage").then(done);
+    void runFanOut(wire, cells, keys, "clear").then(done);
   };
   return compact ? (
-    <Button
-      kind="framed"
-      icon={Undo2}
-      label={`Revert ${staged} staged`}
-      reason={title}
-      onClick={press}
-    >
-      <span className="face-mono">{armed ? `${staged}? again` : staged}</span>
+    <Button kind="framed" icon={Undo2} label={`Revert ${edit} edit`} reason={title} onClick={press}>
+      <span className="face-mono">{armed ? `${edit}? again` : edit}</span>
     </Button>
   ) : (
     <TooltipHint content={title}>
-      <Verdict kind="unstage" onClick={press}>
-        {armed ? `unstage ${staged} staged? press again` : `unstage all (${staged})`}
+      <Verdict kind="clear" onClick={press}>
+        {armed ? `unstage ${edit} edit? press again` : `unstage all (${edit})`}
       </Verdict>
     </TooltipHint>
   );
@@ -425,7 +406,7 @@ export const plural = (n: number, noun: string) =>
   `${n} ${n === 1 ? noun : noun.endsWith("y") ? `${noun.slice(0, -1)}ies` : `${noun}s`}`;
 
 /**
- * The Work slot's default render (ruling 14): one sentence of what you staged and Pea proposed, on
+ * The Work slot's default render (ruling 14): one sentence of what you edit and Pea proposed, on
  * how many of each group the route names, then the aggregates. Accept and deny all are one
  * `runFanOut` over every cell; unstage all is the discard. Nothing pending draws nothing.
  */
@@ -436,23 +417,22 @@ export function WorkSentence({
   commit,
 }: {
   summary: WorkSummary;
-  cells: Record<string, TrichotomyCellLike>;
+  cells: Record<string, CellLike>;
   wire: CellWire;
-  /** The consumer's commit verb, drawn while something is staged. */
+  /** The consumer's commit verb, drawn while something is edit. */
   commit?: ReactNode;
 }) {
   const [outcome, setOutcome] = useState<FanOutOutcome | null>(null);
-  const { staged, proposed, contested, spans } = summary;
-  if (!staged && !proposed) return null;
+  const { edit, proposed, contested, spans } = summary;
+  if (!edit && !proposed) return null;
   const keys = Object.keys(cells);
-  const all = (kind: "accept" | "deny") => void runFanOut(wire, cells, keys, kind).then(setOutcome);
+  const all = (kind: "take" | "unsuggest") =>
+    void runFanOut(wire, cells, keys, kind).then(setOutcome);
   return (
     <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 t-prose">
       <span className="text-ink-2">
-        {staged ? (
-          <b className="font-semibold text-ink">{plural(staged, "cell")} staged by you</b>
-        ) : null}
-        {staged && proposed ? ", " : null}
+        {edit ? <b className="font-semibold text-ink">{plural(edit, "cell")} edit by you</b> : null}
+        {edit && proposed ? ", " : null}
         {proposed ? <span data-tone="pea">{proposed} proposed by Pea</span> : null}
         {contested ? <span data-tone="caution"> · {contested} contested</span> : null}
         {spans.map((span) => ` · ${plural(span.count, span.noun)}`)}
@@ -465,20 +445,20 @@ export function WorkSentence({
       <span className="ml-auto flex items-baseline gap-1">
         {proposed ? (
           <>
-            <TooltipHint content="Accept every open proposal in one write; cells you staged are skipped. Nothing reaches Revit until apply.">
-              <Verdict kind="accept" onClick={() => all("accept")}>
+            <TooltipHint content="Accept every open suggestion in one write; cells you edit are skipped. Nothing reaches Revit until apply.">
+              <Verdict kind="take" onClick={() => all("take")}>
                 accept all
               </Verdict>
             </TooltipHint>
-            <TooltipHint content="Clear every open proposal in one write. Staged values stay.">
-              <Verdict kind="deny" onClick={() => all("deny")}>
+            <TooltipHint content="Clear every open suggestion in one write. Staged values stay.">
+              <Verdict kind="unsuggest" onClick={() => all("unsuggest")}>
                 deny all
               </Verdict>
             </TooltipHint>
           </>
         ) : null}
         <UnstageAll wire={wire} cells={cells} keys={keys} done={setOutcome} />
-        {staged ? commit : null}
+        {edit ? commit : null}
       </span>
     </div>
   );

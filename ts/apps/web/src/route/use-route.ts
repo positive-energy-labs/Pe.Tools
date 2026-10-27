@@ -352,7 +352,7 @@ export function useRoute<W, R extends string, P, A extends string>(
       const target = targetRefusal(actionFacts(action, ctx as never).needs);
       if (target) return target;
       // Read and absent is a state of the world, not a loading one: say it (F-X-2). The first
-      // authored write (a selection, a staged cell) initializes the Work.
+      // authored write (a selection, a edit cell) initializes the Work.
       if (action.requires?.work && workCurrent && doc?.doc === null)
         return "nothing authored here yet";
       if (action.requires?.work && (!doc || doc.doc === null))
@@ -382,9 +382,11 @@ export function useRoute<W, R extends string, P, A extends string>(
         ),
       // Bound to the action's snapshot, through the queue: it follows this owner's own landed
       // writes past that snapshot, and a foreign write still refuses it.
-      write: async (patches: RouteStatePatch[]) => {
+      write: async (patches: RouteStatePatch[], expectedRevision?: number) => {
         const refusal =
-          actionRevision === null ? notHydrated : await writeWork(patches, actionRevision, true);
+          actionRevision === null
+            ? notHydrated
+            : await writeWork(patches, expectedRevision ?? actionRevision, true);
         if (refusal) throw new ActionRefusal(refusal);
         return null;
       },

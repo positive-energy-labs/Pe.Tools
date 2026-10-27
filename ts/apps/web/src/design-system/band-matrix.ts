@@ -2,14 +2,10 @@
  * The band specimen's Families matrix: 6 families × 3 types × 8 parameters, grown from the
  * Families demo seeds (`families/seeds.ts`). A stand-in for a live `families` matrix reading; the
  * proposals are shaped like real Pea work — one uniform group (with one contested cell in it), one diverse
- * group, one contested cell, one locked cell with a stray proposal. Writes go through the same
+ * group, one contested cell, one locked cell with a stray suggestion. Writes go through the same
  * `RouteStatePatch`es a route document takes, applied locally.
  */
-import {
-  transitionPatches,
-  type RouteStatePatch,
-  type TrichotomyCellLike,
-} from "@pe/agent-contracts";
+import { transitionPatches, type RouteStatePatch, type CellLike } from "@pe/agent-contracts";
 
 import { DEMO_FAMILIES } from "#/families/seeds";
 
@@ -32,8 +28,8 @@ export interface MatrixRow {
   baseline: Record<Parameter, string>;
 }
 
-type Proposal = NonNullable<TrichotomyCellLike["proposal"]>;
-export type MatrixCells = Record<string, TrichotomyCellLike>;
+type Proposal = NonNullable<CellLike["suggestion"]>;
+export type MatrixCells = Record<string, CellLike>;
 
 const seedModel = (family: number, type: string) =>
   DEMO_FAMILIES[family]?.parameters.find((p) => p.definition.identity.name === "PE_G___Model")
@@ -157,7 +153,7 @@ export const baselineOf = (key: string) => {
 
 const pea = (value: string, note?: string): Proposal => ({ value, note });
 
-/** Why a cell refuses writes. The locked cell still carries a stray Pea proposal: deny only. */
+/** Why a cell refuses writes. The locked cell still carries a stray Pea suggestion: deny only. */
 export const LOCKS: Readonly<Record<string, string>> = {
   [cellKey("AHU-1", "MCA")]: "driven by a formula in the host project",
 };
@@ -167,7 +163,7 @@ export const MATRIX_CELLS: MatrixCells = {
   ...Object.fromEntries(
     MATRIX.filter((row) => row.baseline.Voltage === "230V").map((row) => [
       cellKey(row.key, "Voltage"),
-      { proposal: pea("208V", "service is 208V/3ph per E-001"), staged: null },
+      { suggestion: pea("208V", "service is 208V/3ph per E-001"), edit: null },
     ]),
   ),
   // diverse: nine different airflows read off the air schedule
@@ -186,29 +182,29 @@ export const MATRIX_CELLS: MatrixCells = {
       ] as const
     ).map(([row, value]) => [
       cellKey(row, "Airflow"),
-      { proposal: pea(value, "M-401 air schedule"), staged: null },
+      { suggestion: pea(value, "M-401 air schedule"), edit: null },
     ]),
   ),
-  // contested inside the uniform group: you staged 240V before Pea said 208V
+  // contested inside the uniform group: you edit 240V before Pea said 208V
   [cellKey("FCU-2", "Voltage")]: {
-    proposal: pea("208V", "service is 208V/3ph per E-001"),
-    staged: { value: "240V" },
+    suggestion: pea("208V", "service is 208V/3ph per E-001"),
+    edit: { value: "240V" },
   },
-  // contested: you staged 30A, Pea argues 25A
+  // contested: you edit 30A, Pea argues 25A
   [cellKey("HP-2", "MOCP")]: {
-    proposal: pea("25A", "nameplate MOCP is 25A"),
-    staged: { value: "30A" },
+    suggestion: pea("25A", "nameplate MOCP is 25A"),
+    edit: { value: "30A" },
   },
-  // locked, with a stray proposal Pea should not have made
-  [cellKey("AHU-1", "MCA")]: { proposal: pea("38A"), staged: null },
+  // locked, with a stray suggestion Pea should not have made
+  [cellKey("AHU-1", "MCA")]: { suggestion: pea("38A"), edit: null },
 };
 
 /** Apply route-document patches (`["cells", key, rung]`, no value = clear) to the local cells. */
 export function applyPatches(cells: MatrixCells, patches: readonly RouteStatePatch[]): MatrixCells {
   const next = { ...cells };
   for (const { path, value } of patches) {
-    const [, key, rung] = path as [string, string, "proposal" | "staged"];
-    next[key] = { proposal: null, staged: null, ...next[key], [rung]: value ?? null };
+    const [, key, rung] = path as [string, string, "suggestion" | "edit"];
+    next[key] = { suggestion: null, edit: null, ...next[key], [rung]: value ?? null };
   }
   return next;
 }
@@ -216,13 +212,13 @@ export function applyPatches(cells: MatrixCells, patches: readonly RouteStatePat
 /** A typed edit is the contract's `stage`: the exact value, nothing when it equals the baseline. */
 export const stagePatches = (cells: MatrixCells, key: string, text: string) =>
   transitionPatches(["cells"], key, cells[key] ?? {}, {
-    kind: "stage",
+    kind: "set",
     rung: { value: text },
     baseline: { value: baselineOf(key) },
   });
 
-/** The value the cell shows: staged, else the proposal, else the baseline. */
-export const shownOf = (key: string, cell: TrichotomyCellLike | undefined) => {
-  const rung = cell?.staged ?? cell?.proposal;
+/** The value the cell shows: edit, else the suggestion, else the baseline. */
+export const shownOf = (key: string, cell: CellLike | undefined) => {
+  const rung = cell?.edit ?? cell?.suggestion;
   return rung?.delete ? "DELETE" : rung ? String(rung.value) : (baselineOf(key) ?? "—");
 };

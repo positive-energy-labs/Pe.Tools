@@ -1,6 +1,6 @@
 /**
  * The static /rooms contract: split one level's plan view into Room Regions, stage their fields
- * into Work, write the staged cells to Revit. Behavior is here; the page draws it (`route.tsx`).
+ * into Work, write the edit cells to Revit. Behavior is here; the page draws it (`route.tsx`).
  */
 import { z } from "zod";
 import type { RoomsMerge, RoomsPartition } from "@pe/host-contracts/generated";
@@ -52,7 +52,7 @@ const dispatch = async (
 };
 
 const stagedKeys = (ctx: RoomsCtx) =>
-  Object.entries(ctx.work.doc?.edits ?? {}).filter(([, cell]) => cell.staged != null);
+  Object.entries(ctx.work.doc?.edits ?? {}).filter(([, cell]) => cell.edit != null);
 const bump = (ctx: RoomsCtx) => ctx.setPage({ epoch: ctx.page.epoch + 1 });
 const none = z.void() as unknown as z.ZodType<never>;
 
@@ -96,7 +96,7 @@ export const manifest = defineRoute<
         // The action's result is the op's response, as the generated catalog declares it.
         // A person's standing rejections ride every partition of their view.
         const rejected = Object.values(ctx.work.doc?.marks ?? {})
-          .map((cell) => cell.staged?.value)
+          .map((cell) => cell.edit?.value)
           .filter((mark) => mark?.kind === "reject" && mark.anchor.view === ctx.page.view)
           .map((mark) => mark!.anchor.polygon);
         const result = (await dispatch(ctx, "rooms.partition", {
@@ -124,16 +124,16 @@ export const manifest = defineRoute<
       waitSeconds: NATIVE_APPLY_WAIT_S,
       requires: { work: true },
       count: (ctx) => stagedKeys(ctx).length || null,
-      ready: (ctx) => (stagedKeys(ctx).length ? null : "Nothing staged"),
+      ready: (ctx) => (stagedKeys(ctx).length ? null : "Nothing edit"),
       run: async (ctx) => {
         const doc = ctx.work.doc;
         if (!doc) throw Error("the Work is not read yet");
         const written = stagedKeys(ctx);
         await dispatch(ctx, "rooms.write", { regions: stagedRoomWrites(doc) });
-        // The staged cells are in Revit now; the snapshot is their home.
+        // The edit cells are in Revit now; the snapshot is their home.
         const refusal = await ctx.write(
           written.flatMap(([key, cell]) =>
-            transitionPatches(["edits"], key, cell, { kind: "unstage" }),
+            transitionPatches(["edits"], key, cell, { kind: "clear" }),
           ),
         );
         bump(ctx);
@@ -178,16 +178,16 @@ export const manifest = defineRoute<
       ready: (ctx, input) => {
         const id = (input as { id: string } | undefined)?.id;
         if (id === undefined) return null;
-        const mark = ctx.work.doc?.marks[id]?.staged?.value;
+        const mark = ctx.work.doc?.marks[id]?.edit?.value;
         return mark?.kind !== "merge"
-          ? "Not a staged merge mark"
+          ? "Not a edit merge mark"
           : (mark.guids?.length ?? 0) < 2
             ? "The mark covers fewer than two regions"
             : null;
       },
       run: async (ctx, input) => {
         const { id } = input as { id: string };
-        const mark = ctx.work.doc!.marks[id]!.staged!.value!;
+        const mark = ctx.work.doc!.marks[id]!.edit!.value!;
         const result = (await dispatch(ctx, "rooms.merge", {
           view: mark.anchor.view,
           guids: mark.guids,
@@ -203,7 +203,6 @@ export const manifest = defineRoute<
       label: "refresh",
       says: "Reads the rooms snapshot again",
       needs: "project",
-      actor: "any",
       input: none,
       dirties: [],
       rereads: "work",

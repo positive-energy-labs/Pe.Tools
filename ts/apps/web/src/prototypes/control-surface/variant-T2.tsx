@@ -26,7 +26,7 @@ export default function Variant() {
       {open.c && (
         <Win width={420} bottom={12}>
           <div className="flex flex-col gap-2 p-3" style={{ height: hC }}>
-            <Who what="proposal ready" onClose={() => hide("c")} />
+            <Who what="suggestion ready" onClose={() => hide("c")} />
             <div className="t-prose">
               HCB-48 family <span className="face-mono text-ink-2">22 changes</span>
             </div>

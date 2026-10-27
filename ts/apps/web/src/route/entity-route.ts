@@ -10,7 +10,7 @@ import { z } from "zod";
 import {
   hostActions,
   sameValue,
-  stagedEntries,
+  editedEntries,
   type Reading,
   type Rung,
   type RouteKey,
@@ -40,7 +40,7 @@ export type PodRow = PodList["pods"][number];
 
 /** Every entity route's stages (rulings 34-40): Auditing, Applying, History (inspection only; MAP ruling 58). */
 export type EntityStage = EntityFields["stage"];
-export type EntityAction = "capture" | "apply";
+export type EntityAction = "capture" | "preview" | "apply";
 const ENTITY_STAGES = [
   { key: "audit", word: "Auditing" },
   { key: "apply", word: "Applying" },
@@ -73,21 +73,21 @@ export interface PlanEntry {
 export interface PlanSheet {
   entries: readonly PlanEntry[];
   /**
-   * The staged value at each cell a staged plan read, as it was when planned: the plan's own
+   * The edit value at each cell a edit plan read, as it was when planned: the plan's own
    * evidence. A cell that no longer holds it makes the sheet stale, the host's refusal rule.
    */
-  staged?: Readonly<Record<string, Rung>>;
+  edit?: Readonly<Record<string, Rung>>;
   /** The rows the plan says were held back, and who held each: the host's words, by name. */
   held?: readonly HeldRow[];
 }
 
 export interface HeldRow {
   name: string;
-  by: "person" | "pea";
+  by: "human" | "pea" | "unknown";
 }
 
-/** The host's words for a plan whose staged cells moved; the sheet says them before the press. */
-export const STALE_PLAN = "The staged cells changed since this plan; plan again";
+/** The host's words for a plan whose edit cells moved; the sheet says them before the press. */
+export const STALE_PLAN = "The edit cells changed since this plan; plan again";
 
 /**
  * The fields every entity route's contract declares (agent-contracts `routes/entity.ts`): stage,
@@ -124,6 +124,8 @@ interface MemberSource extends MemberRef {
  */
 export interface ApplyPlan<W, R extends string, P> {
   read: (ctx: ECtx<W, R, P>, source: MemberSource) => Promise<PlanSheet>;
+  /** One host command owns planning, checks, apply and readback. */
+  direct?: (ctx: ECtx<W, R, P>, source: MemberSource) => Promise<void>;
   /** Rows held back from apply; the route holds them where its host checks them. */
   excluded?: (view: EntityView<W, R, P>) => readonly string[];
   apply: (ctx: ECtx<W, R, P>, rows: readonly PlanEntry[], source: MemberSource) => Promise<void>;
@@ -158,18 +160,19 @@ export interface EntityRouteDef<W, R extends string, P> {
   plan?: ApplyPlan<W, R, P>; // present = apply is a confirmation over this plan
   /** `explicit`: the route keeps a drawn `read` verb (ruling 42); otherwise its `read` is hidden. */
   read?: "explicit";
-  /** An opened spec loads into the audit's draft (`/family`), so staged cells over it may apply. */
+  /** An opened spec loads into the audit's draft (`/family`), so edit cells over it may apply. */
   specIsDraft?: true;
   /**
    * Present = the audit stages edits of its own, and apply takes them before any opened member: a
    * plan lane generates the spec from them at that moment (dogma law 10), or they write directly.
    */
-  staged?: {
-    /** The audit's keyed cells; the staged ones are what plan generates the spec from. */
-    cells: (ctx: ECtx<W, R, P>) => Readonly<Record<string, { staged?: Rung | null }>>;
-    /** Absent = apply writes the staged cells in one press, with no sheet (`/schedules`). */
+  edit?: {
+    /** The audit's keyed cells; the edit ones are what plan generates the spec from. */
+    cells: (ctx: ECtx<W, R, P>) => Readonly<Record<string, { edit?: Rung | null }>>;
+    /** Absent = apply writes the edit cells in one press, with no sheet (`/schedules`). */
     plan?: (ctx: ECtx<W, R, P>) => Promise<PlanSheet>;
-    /** Why the staged cells cannot be written now, beyond the kernel's checks; null = they can. */
+    direct?: (ctx: ECtx<W, R, P>) => Promise<Refusal | null | void>;
+    /** Why the edit cells cannot be written now, beyond the kernel's checks; null = they can. */
     ready?: (ctx: ECtx<W, R, P>) => string | null;
     /** Resolves to the apply's own outcome when it has one (partial, refused, failed). */
     apply: (ctx: ECtx<W, R, P>, included: readonly PlanEntry[]) => Promise<Refusal | null | void>;
@@ -216,20 +219,20 @@ export function sheetOf<W, R extends string, P>(
   const sheet = view.page.sheet;
   if (!sheet) return null;
   const excluded = new Set(def.plan?.excluded?.(view) ?? []);
-  const now = sheet.staged && def.staged ? def.staged.cells(view as never) : {};
+  const now = sheet.edit && def.edit ? def.edit.cells(view as never) : {};
   return {
     sheet,
     excluded,
     included: sheet.entries.filter((entry) => !entry.flag && !excluded.has(entry.id)),
-    stale: Object.entries(sheet.staged ?? {}).some(
-      ([cell, rung]) => !sameValue(now[cell]?.staged, rung),
+    stale: Object.entries(sheet.edit ?? {}).some(
+      ([cell, rung]) => !sameValue(now[cell]?.edit, rung),
     ),
   };
 }
 
 /**
  * The one entity route (rulings 34-45): stages Auditing, Applying, History; `capture` (Auditing)
- * files the audit as a spec; `apply` (Applying) takes the staged cells, else the opened spec, and
+ * files the audit as a spec; `apply` (Applying) takes the edit cells, else the opened spec, and
  * with a plan lane press 1 plans and opens the sheet, press 2 sends it. The audit's own verbs ride
  * in `audit`; its `read` is drawn only when the def declares `read: "explicit"`.
  */
@@ -255,10 +258,10 @@ export function entityRoute<W, const R extends string, P extends object, const A
   },
 ): RouteManifest<W, R | EntityReading, P & EntityPage, A | EntityAction> {
   const plan = def.plan as ApplyPlan<unknown, string, object> | undefined;
-  const staged = def.staged as EntityRouteDef<unknown, string, object>["staged"];
-  /** How many edits the audit has staged; 0 = apply reads the page's saved member instead. */
+  const edit = def.edit as EntityRouteDef<unknown, string, object>["edit"];
+  /** How many edits the audit has edit; 0 = apply reads the page's saved member instead. */
   const stagedCells = (ctx: EntityCtx) =>
-    stagedEntries(staged?.cells(ctx as never) ?? {}) as [string, { staged: Rung }][];
+    editedEntries(edit?.cells(ctx as never) ?? {}) as [string, { edit: Rung }][];
   const stagedCount = (ctx: EntityCtx) => stagedCells(ctx).length;
   const sourceOf = (ctx: EntityCtx): MemberSource => {
     const member = memberOf(ctx);
@@ -273,13 +276,13 @@ export function entityRoute<W, const R extends string, P extends object, const A
     return isSpecOf(member.schema, def.schema) ? null : `the member is not a ${def.entity} spec`;
   };
   const inHistory = (ctx: EntityCtx) => (ctx.page.stage === "history" ? HISTORY : null);
-  /** What apply takes now: the staged cells, else the opened spec. */
+  /** What apply takes now: the edit cells, else the opened spec. */
   const objectOf = (ctx: EntityCtx) => (stagedCount(ctx) ? "cells" : ctx.page.path ? "spec" : null);
-  const lane = (ctx: EntityCtx) => (objectOf(ctx) === "cells" ? staged?.plan : plan);
+  const lane = (ctx: EntityCtx) => (objectOf(ctx) === "cells" ? edit?.plan : plan);
   /** The open sheet press 2 sends: current, and planned from what apply takes now. */
   const sending = (ctx: EntityCtx) => {
     const view = ctx.page.confirming ? sheetOf(def as never, ctx as never) : null;
-    return view && !view.stale && Boolean(view.sheet.staged) === (objectOf(ctx) === "cells")
+    return view && !view.stale && Boolean(view.sheet.edit) === (objectOf(ctx) === "cells")
       ? view
       : null;
   };
@@ -322,11 +325,11 @@ export function entityRoute<W, const R extends string, P extends object, const A
     does: def.apply,
     saysNow: (ctx) =>
       planning(ctx)
-        ? `plans ${objectOf(ctx) === "cells" ? "the staged cells (filed nowhere)" : `the saved ${def.entity} spec`} and opens the confirmation sheet; changes nothing. Press again to apply.`
-        : objectOf(ctx) === "cells" && !staged?.plan
-          ? "writes the staged cells to Revit, then reads them back"
+        ? `plans ${objectOf(ctx) === "cells" ? "the edit cells (filed nowhere)" : `the saved ${def.entity} spec`} and opens the confirmation sheet; changes nothing. Press again to apply.`
+        : objectOf(ctx) === "cells" && !edit?.plan
+          ? "writes the edit cells to Revit, then reads them back"
           : lane(ctx) && !confirm
-            ? `plans and applies ${objectOf(ctx) === "cells" ? "the staged cells" : `the saved ${def.entity} spec`} in one press; stops if the plan refuses a row`
+            ? `plans and applies ${objectOf(ctx) === "cells" ? "the edit cells" : `the saved ${def.entity} spec`} in one press; stops if the plan refuses a row`
             : hostActions[def.apply].says,
     plans: planning,
     input: z.void() as unknown as z.ZodType<never>,
@@ -337,13 +340,13 @@ export function entityRoute<W, const R extends string, P extends object, const A
       if (refusal) return refusal;
       const object = objectOf(ctx);
       if (object === "cells") {
-        if (ctx.page.path && !def.specIsDraft) return "unstage or apply the staged cells first";
-        const cells = staged?.ready?.(ctx as never);
+        if (ctx.page.path && !def.specIsDraft) return "unstage or apply the edit cells first";
+        const cells = edit?.ready?.(ctx as never);
         if (cells) return cells;
       } else if (object === "spec") {
         const missing = savedSpec(ctx);
         if (missing) return missing;
-      } else return staged ? "stage a cell or open a saved spec first" : "open a saved spec first";
+      } else return edit ? "stage a cell or open a saved spec first" : "open a saved spec first";
       if (!lane(ctx)) return null;
       // Press 1 plans; press 2 sends the open sheet's included rows.
       const view = sending(ctx);
@@ -351,27 +354,30 @@ export function entityRoute<W, const R extends string, P extends object, const A
     },
     run: async (ctx) => {
       const cells = objectOf(ctx) === "cells";
+      if (!sending(ctx) && (cells ? edit?.direct : plan?.direct)) {
+        if (cells) return (await edit!.direct!(ctx as never)) ?? null;
+        await plan!.direct!(ctx as never, sourceOf(ctx));
+        return null;
+      }
       if (!lane(ctx)) {
         // One press: the route writes its cells, or the host applies the saved bytes it checks.
-        if (cells) return (await staged!.apply(ctx as never, [])) ?? null;
+        if (cells) return (await edit!.apply(ctx as never, [])) ?? null;
         await workflow(def.apply, { source: sourceOf(ctx) }, ctx);
         return null;
       }
       let view = sending(ctx);
       if (!view) {
-        // What the plan reads, taken before it reads it: the sheet's staged evidence.
-        const was = Object.fromEntries(
-          stagedCells(ctx).map(([cell, { staged }]) => [cell, staged]),
-        );
+        // What the plan reads, taken before it reads it: the sheet's edit evidence.
+        const was = Object.fromEntries(stagedCells(ctx).map(([cell, { edit }]) => [cell, edit]));
         const sheet = cells
-          ? { ...(await staged!.plan!(ctx as never)), staged: was }
+          ? { ...(await edit!.plan!(ctx as never)), edit: was }
           : await plan!.read(ctx as never, sourceOf(ctx));
         if (confirm) {
           // The sheet opens over whatever stage the person is in (F-B-8).
           ctx.setPage({ confirming: true, sheet }, ["stage", "pod", "path"]);
           return null;
         }
-        // One press (ruling 52): the staged edits were the preview; a refused row stops it.
+        // One press (ruling 52): the edit edits were the preview; a refused row stops it.
         const flagged = sheet.entries.find((entry) => entry.flag);
         if (flagged || !sheet.entries.length)
           return refuse(
@@ -380,12 +386,35 @@ export function entityRoute<W, const R extends string, P extends object, const A
           );
         view = { sheet, excluded: new Set(), included: sheet.entries, stale: false };
       }
-      // A staged apply may report its own outcome (applied X of N, refused, failed in Revit).
+      // A edit apply may report its own outcome (applied X of N, refused, failed in Revit).
       const outcome = cells
-        ? await staged!.apply(ctx as never, view.included)
+        ? await edit!.apply(ctx as never, view.included)
         : await plan!.apply(ctx as never, view.included, sourceOf(ctx));
       ctx.setPage({ confirming: false, sheet: null }, ["sheet", "stage", "pod", "path"]);
       return outcome ?? null;
+    },
+  };
+  const preview: RouteAction<unknown, string, EntityPage, never> = {
+    label: "preview",
+    says: "Plan the current edits or saved spec and open its included rows for review.",
+    effect: "query",
+    needs: def.needs ?? "project",
+    input: z.void() as unknown as z.ZodType<never>,
+    dirties: [],
+    stage: "apply",
+    ready: (ctx) =>
+      inHistory(ctx) ??
+      def.targetReady?.(ctx as never) ??
+      (!lane(ctx) ? "no preview for this input" : objectOf(ctx) === "spec" ? savedSpec(ctx) : null),
+    run: async (ctx) => {
+      const cells = objectOf(ctx) === "cells";
+      const sheet = cells
+        ? {
+            ...(await edit!.plan!(ctx as never)),
+            edit: Object.fromEntries(stagedCells(ctx).map(([key, cell]) => [key, cell.edit])),
+          }
+        : await plan!.read(ctx as never, sourceOf(ctx));
+      ctx.setPage({ confirming: true, sheet }, ["stage", "pod", "path"]);
     },
   };
   // Only a def that declares its read explicit draws it; any other `read` runs hidden (ruling 42).
@@ -424,6 +453,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
       ...audit.actions,
       ...(read && def.read !== "explicit" ? { read: { ...read, visible: false } } : {}),
       ...(def.capture ? { capture } : {}),
+      ...(def.plan || def.edit?.plan ? { preview } : {}),
       apply,
     } as never,
     runs: audit.runs,

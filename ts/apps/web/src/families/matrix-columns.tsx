@@ -10,12 +10,7 @@ import {
 import { reviewTransitions, type CellWire } from "#/components/work/band";
 import { ReadCell } from "@pe/kit/table/cells";
 import { useCellNavigation } from "@pe/kit/table/cell-navigation";
-import {
-  cellFromTrichotomy,
-  StateCell,
-  type CellRefusal,
-  type CellTransition,
-} from "@pe/kit/lang/cell";
+import { cellFromDraft, StateCell, type CellRefusal, type CellTransition } from "@pe/kit/lang/cell";
 import type { MeasuredAnswer } from "#/host/measured-parse";
 import { CellListSelect } from "@pe/kit/lang/list-popup";
 import { Button } from "@pe/kit/lang/button";
@@ -63,7 +58,7 @@ const YES_NO = ["Yes", "No"] as const;
 const unitLock = (unit: MeasuredDisplayUnit | null | undefined): string | null =>
   unit && (!unit.typeId || unit.refusal)
     ? (unit.refusal ??
-      "Revit did not report this measured parameter's display unit, so this cell cannot be staged.")
+      "Revit did not report this measured parameter's display unit, so this cell cannot be edit.")
     : null;
 
 /**
@@ -116,7 +111,7 @@ function cellReason(row: TypeRow, key: string, instance: boolean): string {
     ? `the INSTANCE DEFAULT this type hands every instance placed from it`
     : `this type's authored value`;
   const observed = row.values[key] ? ` — ${row.values[key]}` : " — blank";
-  return `Type "${row.typeName}" of ${row.familyName}: ${what}${observed} currently. Type to stage your value; Pea's proposal waits for stage or deny in Review edits. Plan generates the spec from staged values only.`;
+  return `Type "${row.typeName}" of ${row.familyName}: ${what}${observed} currently. Type to stage your value; Pea's suggestion waits for stage or deny in Review edits. Plan generates the spec from edit values only.`;
 }
 
 /**
@@ -172,7 +167,7 @@ export function ParamCell({
   const value = row.values[col.key] ?? "";
   const unresolved = !scopeOf || scopeOf === "Unresolved";
   const reason = cellReason(row, col.key, col.isInstance);
-  // Every drawn trichotomy cell carries exactly the contract's transitions. A Pea proposal
+  // Every drawn shared cell cell carries exactly the contract's transitions. A Pea suggestion
   // on a cell a patch cannot write draws locked, where the contract leaves deny only.
   const transitions = cell ? reviewTransitions(live.wire, key, cell) : undefined;
   const yesNo = row.yesNos ? row.yesNos[col.key] : col.yesNo;
@@ -244,7 +239,7 @@ export function ParamCell({
       />
     );
   }
-  if (cell?.proposal != null || cell?.staged != null)
+  if (cell?.suggestion != null || cell?.edit != null)
     return (
       <ProposalCell
         current={value}
@@ -287,7 +282,7 @@ function YesNoCell({
   onPick: (choice: string) => ReturnType<FamiliesStore["actions"]["propose"]>;
 }) {
   const [refused, setRefused] = useState<string | undefined>();
-  const rung = cell?.staged ?? cell?.proposal;
+  const rung = cell?.edit ?? cell?.suggestion;
   const shown = rung ? showFamilyCell(rung.value) : current;
   return (
     <span className="relative block w-full min-w-0">
@@ -297,8 +292,8 @@ function YesNoCell({
         invalid={refused != null}
         display={
           <StateCell
-            {...cellFromTrichotomy(
-              cell ?? { proposal: null, staged: null },
+            {...cellFromDraft(
+              cell ?? { suggestion: null, edit: null },
               { value: shown, currentValue: current || "(blank)", note: reason, scale: "row" },
               showFamilyCell,
             )}
@@ -343,9 +338,9 @@ function YesNoCell({
 }
 
 /**
- * One editable parameter cell in the house proposal language: the proposal on the cell is the
- * trichotomy's `proposal` (Pea's or a person's, told apart by `by`) and the person's accept is
- * its `staged`, read through the one reader `cellFromTrichotomy`. At row scale the prior value and
+ * One editable parameter cell in the house suggestion language: the suggestion on the cell is the
+ * shared cell's `suggestion` (Pea's or a person's, told apart by `by`) and the person's accept is
+ * its `edit`, read through the one reader `cellFromDraft`. At row scale the prior value and
  * the author ride the title; accept and deny sit in Review edits beside the table.
  */
 function ProposalCell({
@@ -373,34 +368,34 @@ function ProposalCell({
   measured?: { displayUnit: MeasuredDisplayUnit; parse: (text: string) => Promise<MeasuredAnswer> };
 }) {
   const move = useCellNavigation();
-  const proposal = cell?.proposal;
-  const staged = cell?.staged;
-  const stagedText = staged ? showFamilyCell(staged.value) : undefined;
-  const proposedText = proposal ? showFamilyCell(proposal.value) : undefined;
+  const suggestion = cell?.suggestion;
+  const edit = cell?.edit;
+  const stagedText = edit ? showFamilyCell(edit.value) : undefined;
+  const proposedText = suggestion ? showFamilyCell(suggestion.value) : undefined;
   const shown = stagedText ?? proposedText ?? current;
-  const note = proposal
+  const note = suggestion
     ? `Pea proposed ${current || "(blank)"} → ${proposedText}${
         stagedText === proposedText
-          ? "; staged — plan will include it"
-          : staged
-            ? `; you staged ${stagedText}, so Pea's value is a counter-proposal`
+          ? "; edit — plan will include it"
+          : edit
+            ? `; you edit ${stagedText}, so Pea's value is a counter-suggestion`
             : "; open — accept (a) or deny (d) it on this cell"
       }. Nothing has reached Revit.`
-    : staged
-      ? `You staged ${current || "(blank)"} → ${stagedText}. Nothing has reached Revit.`
+    : edit
+      ? `You edit ${current || "(blank)"} → ${stagedText}. Nothing has reached Revit.`
       : reason;
   return (
-    <span data-proposal={proposal ? "pea" : undefined} data-staged={staged ? "" : undefined}>
+    <span data-suggestion={suggestion ? "pea" : undefined} data-edit={edit ? "" : undefined}>
       <StateCell
-        {...cellFromTrichotomy(
-          cell ?? { proposal: null, staged: null },
+        {...cellFromDraft(
+          cell ?? { suggestion: null, edit: null },
           { value: shown, currentValue: current || "(blank)", note, scale: "row" },
           showFamilyCell,
         )}
         cap={lock ? "locked" : "editable"}
         capReason={lock}
         transitions={transitions}
-        placeholder={proposal || staged ? current : undefined}
+        placeholder={suggestion || edit ? current : undefined}
         {...(lock || !onCommit
           ? {}
           : measured

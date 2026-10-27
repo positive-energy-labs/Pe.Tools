@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { TrichotomyCellLike } from "@pe/agent-contracts";
+import type { CellLike } from "@pe/agent-contracts";
 import { Save } from "lucide-react";
 
 import { ArmingStrip, armingStripRecipe } from "@pe/kit/lang/arming-strip";
@@ -36,14 +36,14 @@ const LEGEND_SPECIMEN: readonly LegendKey[] = [
   { keys: ["Esc"], does: "clear the selection" },
 ];
 
-/** Open, contested and Pea-agreed staged: the three verb sets the reviewer draws. */
-const REVIEW_SPECIMEN: Record<string, TrichotomyCellLike> = {
-  "Neck Width": { proposal: { value: "10in", confidence: "high" }, staged: null },
+/** Open, contested and Pea-agreed edit: the three verb sets the reviewer draws. */
+const REVIEW_SPECIMEN: Record<string, CellLike> = {
+  "Neck Width": { suggestion: { value: "10in", confidence: "high" }, edit: null },
   "Face Width": {
-    proposal: { value: "Neck Width + 5in" },
-    staged: { value: "Neck Width + 6in" },
+    suggestion: { value: "Neck Width + 5in" },
+    edit: { value: "Neck Width + 6in" },
   },
-  "Neck Height": { proposal: { value: "10in" }, staged: { value: "10in" } },
+  "Neck Height": { suggestion: { value: "10in" }, edit: { value: "10in" } },
 };
 const wire: CellWire = { segment: "fields", write: async () => null, revision: 4 };
 
@@ -104,27 +104,27 @@ export function LangWorkflowSpecimens() {
       </SpecimenFrame>
       <SpecimenFrame name="Verdict" importPath="@pe/kit/lang/verdict">
         <div className="flex items-center gap-1">
-          <TooltipHint content="Stage Pea's proposal">
-            <Verdict kind="accept" onClick={noop} />
+          <TooltipHint content="Stage Pea's suggestion">
+            <Verdict kind="take" onClick={noop} />
           </TooltipHint>
-          <TooltipHint content="Clear Pea's proposal">
-            <Verdict kind="deny" onClick={noop} />
+          <TooltipHint content="Clear Pea's suggestion">
+            <Verdict kind="unsuggest" onClick={noop} />
           </TooltipHint>
-          <TooltipHint content="Clear the staged value">
-            <Verdict kind="unstage" onClick={noop} />
+          <TooltipHint content="Clear the edit value">
+            <Verdict kind="clear" onClick={noop} />
           </TooltipHint>
-          <TooltipHint content="Stage Pea's proposal on 3 cells">
-            <Verdict kind="accept" onClick={noop}>
+          <TooltipHint content="Stage Pea's suggestion on 3 cells">
+            <Verdict kind="take" onClick={noop}>
               3
             </Verdict>
           </TooltipHint>
           <TooltipHint content="Refuse this call">
-            <Verdict kind="deny" onClick={noop}>
+            <Verdict kind="unsuggest" onClick={noop}>
               deny
             </Verdict>
           </TooltipHint>
           <TooltipHint content="in flight">
-            <Verdict kind="accept" disabled onClick={noop}>
+            <Verdict kind="take" disabled onClick={noop}>
               accept
             </Verdict>
           </TooltipHint>
@@ -139,7 +139,7 @@ export function LangWorkflowSpecimens() {
           cells={REVIEW_SPECIMEN}
           wire={wire}
           commit={
-            <Button kind="framed" label="save" reason="Write every staged field" onClick={noop}>
+            <Button kind="framed" label="save" reason="Write every edit field" onClick={noop}>
               save
             </Button>
           }
@@ -152,7 +152,7 @@ export function LangWorkflowSpecimens() {
             address={address}
             label={address}
             cell={cell}
-            facts={{ value: String((cell.staged ?? cell.proposal)?.value) }}
+            facts={{ value: String((cell.edit ?? cell.suggestion)?.value) }}
           />
         ))}
         <WorkStanding
@@ -187,7 +187,7 @@ export function LangWorkflowSpecimens() {
         >
           <div className="grid grid-cols-2 gap-3 px-3 py-3">
             <StateCell value="24 in" />
-            <StateCell value="36 in" stage="staged" />
+            <StateCell value="36 in" stage="edit" />
           </div>
         </ArtifactFrame>
       </SpecimenFrame>

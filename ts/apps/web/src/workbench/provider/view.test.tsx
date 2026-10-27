@@ -55,10 +55,12 @@ vi.mock("#/host/pe-client", () => ({ peClient: { call } }));
 afterEach(cleanup);
 
 let send: ((text: string) => Promise<void>) | null = null;
+let openThread: ((id: string) => void) | null = null;
 function Probe() {
   useRouteTabs();
   const context = useContext(WorkbenchContext)!;
   send = (text) => context.sendPrompt({ text } as never);
+  openThread = context.openThread;
   return null;
 }
 
@@ -128,4 +130,11 @@ test("first Send from /ducts?target=… creates one chat with no targets and kee
   expect(router.state.location.search).toMatchObject({ thread: "NEW" });
   expect((screen.getByLabelText("draft") as HTMLInputElement).value).toBe("unsent words");
   expect(client.create).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    openThread!("OTHER");
+  });
+  await waitFor(() => expect(router.state.location.search.thread).toBe("OTHER"));
+  expect(router.state.location.pathname).toBe("/ducts");
+  expect(router.state.location.search.target).toBe("C:/Models/Office.rvt");
+  expect((screen.getByLabelText("draft") as HTMLInputElement).value).toBe("unsent words");
 });

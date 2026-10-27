@@ -73,6 +73,6 @@ export interface ProtoProps {
     fan: ActionHandle;
     busy: boolean;
   };
-  /** How many changes a write would carry: staged cells and pending rulings. */
-  staged: number;
+  /** How many changes a write would carry: edit cells and pending rulings. */
+  edit: number;
 }

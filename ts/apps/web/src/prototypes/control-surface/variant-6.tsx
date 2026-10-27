@@ -29,7 +29,7 @@ export const meta: VariantMeta = {
 type Ticket = {
   thread: HarnessThreadSummary;
   message: string;
-  kind: "proposal" | "approval" | "finished" | "failed";
+  kind: "suggestion" | "approval" | "finished" | "failed";
   reply?: string;
   decision?: string;
 };
@@ -40,7 +40,7 @@ const tickets: Ticket[] = [
       title: "HCB family · connector repair",
       activity: { state: "waiting", pending: 1, lastSeq: 120, message: null },
     },
-    kind: "proposal",
+    kind: "suggestion",
     message:
       "The return connector was pointing into the casing. I prepared **3 changes** for `HCB-450.rfa`. Review them here before I touch the family.",
   },
@@ -293,10 +293,10 @@ export default function Variant() {
                       <ConversationBody role="assistant">
                         <Markdown text={item.message} />
                       </ConversationBody>
-                      {item.kind === "proposal" && (
+                      {item.kind === "suggestion" && (
                         <div className="my-3 p-3 hairline-t hairline-b" data-surface="document">
                           <div className="mb-2 flex justify-between t-small">
-                            <span>Family proposal</span>
+                            <span>Family suggestion</span>
                             <span className="face-mono text-ink-2">3 changes</span>
                           </div>
                           {[
@@ -321,7 +321,7 @@ export default function Variant() {
                                 Accept 3 changes
                               </Button>
                               <Button
-                                label="Reject proposal"
+                                label="Reject suggestion"
                                 onClick={() =>
                                   decide(item.thread.id, "Proposal rejected · fixture only")
                                 }

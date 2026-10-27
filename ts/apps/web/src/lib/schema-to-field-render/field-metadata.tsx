@@ -114,7 +114,7 @@ function FieldChangeBadge({ path, compact = false }: { path?: string; compact?: 
   return (
     <HoverCard>
       <HoverCardTrigger aria-label="View change details" className={compact ? "px-1" : "px-1.5"}>
-        <FactChip tone="caution" title="Open the saved and staged values.">
+        <FactChip tone="caution" title="Open the saved and edit values.">
           {label}
         </FactChip>
       </HoverCardTrigger>

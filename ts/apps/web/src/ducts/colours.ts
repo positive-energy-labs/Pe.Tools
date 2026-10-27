@@ -11,4 +11,4 @@ export const FIRM_COLOURS: Readonly<DuctSystemColours> = Object.freeze({
 });
 
 export const coloursOf = (doc: DuctsRouteDocument | null): Readonly<DuctSystemColours> =>
-  doc?.systemColours?.staged?.value ?? FIRM_COLOURS;
+  doc?.systemColours?.edit?.value ?? FIRM_COLOURS;

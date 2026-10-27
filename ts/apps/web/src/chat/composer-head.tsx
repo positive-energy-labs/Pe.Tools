@@ -1,13 +1,12 @@
 /** Chat's whole Situation, drawn in the composer: Work and live asks at the top of the box, the
  *  next turn's provider, traits and document targets as marks in the lane beside Send. A thread
  *  targets a set of documents (ADR 0021): a pick toggles one in the set (`PUT /scope/:thread`), and
- *  a `?target` pin seeds a document-less thread once. The targeted names are the visible consent. */
+ *  a `?target` pin seeds a document-less thread once. The targeted names are context for Pea, never write authority. */
 import { useEffect, useRef, type SVGProps } from "react";
 import {
   resolveCallTarget,
   machineInventory,
   headRequests,
-  machineAttachments,
   targetKey,
   type DocumentRequest,
   type TargetResolution,
@@ -110,12 +109,6 @@ const pinnedRef = (inventory: ReturnType<typeof machineInventory>, target?: stri
   return refs.length === 1 ? refs[0]! : null;
 };
 
-/** Whose an open document is, as Machine projects it; null when unread. */
-const accessIn = (machine: Machine | null | undefined, ref: { session: string; openId: string }) =>
-  (machine ? machineAttachments(machine) : [])
-    .find((attachment) => attachment.session === ref.session)
-    ?.documents?.find((doc) => doc.openId === ref.openId)?.access.kind ?? null;
-
 /** The bound document's Address, which keys document-owned Work. */
 const documentAddress = (
   inventory: ReturnType<typeof machineInventory>,
@@ -182,20 +175,6 @@ export function useChatSituation(handle: ChatHandle) {
   // The inventory is the authority; a saved target is a request, shown as missing when gone.
   const closed = requests.some((request) => targetClosure(request, inventory));
   const closedWord = closed ? `${targetLabel({ head })} · closed` : null;
-  // Pea may write every targeted document: the access switch is Full, or each is Pea's own or one
-  // a human added (ADR 0021). The tone says so; nothing else draws write authority.
-  const writes =
-    targets.length > 0 &&
-    (machine?.access?.guarded === false ||
-      targets.every((ref) => {
-        const held = head.targets.find(
-          (target) =>
-            target.request.kind === "open" &&
-            target.request.ref.session === ref.session &&
-            target.request.ref.openId === ref.openId,
-        );
-        return held?.admission != null || accessIn(machine, ref) === "pea";
-      }));
   // A thread the host does not know names nothing: the transcript says "no such thread".
   const threadLabel = missingThread
     ? ""
@@ -204,7 +183,6 @@ export function useChatSituation(handle: ChatHandle) {
       currentThreadId;
   return {
     head,
-    writes,
     inventory,
     bound,
     ladder,
@@ -397,7 +375,7 @@ export function ComposerPickers({
           <Ladder
             face="icon"
             header={header}
-            mark={<RevitMark data-tone={situation.writes ? "done" : undefined} />}
+            mark={<RevitMark />}
             levels={levels}
             caution={Boolean(health)}
             disabled={targetDisabled}
@@ -424,7 +402,7 @@ export function ComposerState(_: { situation: ChatSituation }) {
 export type ComposerStatus = { text: string; caution: boolean; detail?: string };
 
 /** Pea's live asks, then the Work the bound document holds: the top of the composer box, so
- *  approve and reject have one location and the draft sits under what is staged. */
+ *  approve and reject have one location and the draft sits under what is edit. */
 export function ComposerWork({ situation }: { situation: ChatSituation }) {
   const { chat, resolveApproval, answerQuestion, store } = useWorkbench();
   const { inventory, bound, ladder } = situation;

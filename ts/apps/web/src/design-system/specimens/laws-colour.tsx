@@ -24,7 +24,7 @@ export function ColourLaws({ owner }: { owner: (name: string) => string }) {
       <Law
         name="pea is never blue"
         owner={owner("pea is never blue")}
-        ruling="Pea's proposals wear Pea green. Blue means a write leaves the page, so a blue proposal would read as committed."
+        ruling="Pea's proposals wear Pea green. Blue means a write leaves the page, so a blue suggestion would read as committed."
       >
         <StateCell value="2 hr" stage="proposed" />
         <CounterExample why="asking Pea is an agent action, not a committed write">

@@ -1,7 +1,7 @@
 import { settingsFieldPointer, type MeasuredValue } from "@pe/agent-contracts";
 import type { Column } from "@pe/kit/table/model";
 import { ReadCell } from "@pe/kit/table/cells";
-import { cellFromTrichotomy, type StateCellProps } from "@pe/kit/lang/cell";
+import { cellFromDraft, type StateCellProps } from "@pe/kit/lang/cell";
 import { PressContent } from "@pe/kit/anatomy/press-content";
 import { Button } from "@pe/kit/lang/button";
 import { NavStateCell } from "#/family/marks";
@@ -112,15 +112,15 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
             />
           );
         // THE EDITABLE CELL (R8, families #6 discharged here): the grammar draws the caution
-        // square + bold for the unsaved staged value and carries the refusal itself — returning
+        // square + bold for the unsaved edit value and carries the refusal itself — returning
         // the reason from `editLiteral` restores the literal and shows the dismissible note,
         // without the row growing a pixel. The route-drawn RefusalNote this replaced is deleted.
         return (
           <NavStateCell
-            {...cellFromTrichotomy(
-              // A ghost has no proposal — pea cannot argue about a number nothing can reach — so
-              // the reader draws it from the staged rung alone, exactly as it draws every other
-              // cell. The hand-assembled `stage`/`stagedBy` pair this replaced was the same
+            {...cellFromDraft(
+              // A ghost has no suggestion — pea cannot argue about a number nothing can reach — so
+              // the reader draws it from the edit rung alone, exactly as it draws every other
+              // cell. The hand-assembled `stage`/`author` pair this replaced was the same
               // derivation written a second time.
               proposalCell([], isUnsavedAt(world, draft, saved, row, typeName) ? literal : null),
               { value: literal },
@@ -168,14 +168,14 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
 
       /**
        * THE TRICHOTOMY AT THIS COORDINATE, read ONCE through the shared reader (ruled 2026-08-31)
-       * — pea's standing proposal and the draft's unsaved value in, `StateCellProps` out. Every
+       * — pea's standing suggestion and the draft's unsaved value in, `StateCellProps` out. Every
        * branch below supplies only what is its own: which substrate's number it is showing, the
        * prose that explains it, and whether it can be typed into.
        *
        * The STAGED rung is a draft fact, so it only reads under the draft overlay: under ⇄ live
        * and ⇄ saved the number shown is not the draft's, and a caution square beside it would be
-       * pointing at a value that is not there. The proposal FOLD survives every overlay, because
-       * a proposal is a fact about the cell rather than about which reading is showing.
+       * pointing at a value that is not there. The suggestion FOLD survives every overlay, because
+       * a suggestion is a fact about the cell rather than about which reading is showing.
        *
        * `onLocate` is the cell's own: click the body and the card comes into the doc sidebar.
        * RESOLVED 2026-08-31 (was TODO(core-reader), critic verdict 14): on an editable cell the
@@ -186,7 +186,7 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
        * critic measured was `--item-pad-x` on read-only cells, not this one.
        */
       const cell = (facts: StateCellProps) => {
-        const read = cellFromTrichotomy(
+        const read = cellFromDraft(
           proposalCell(proposals, overlay === "draft" && unsaved ? draftValue : null),
           facts,
           parameterText,
@@ -247,9 +247,9 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
         });
       }
 
-      // ── DRAFT: the staged document, editable ────────────────────────────────────────────────
+      // ── DRAFT: the edit document, editable ────────────────────────────────────────────────
       //
-      // MIGRATED onto the editable `StateCell` (2026-08-31, proposal-state demiurge). The two
+      // MIGRATED onto the editable `StateCell` (2026-08-31, suggestion-state demiurge). The two
       // reasons this cell stayed on `ProposedCell` + `TextCell` are both closed: the grammar's
       // editable slot HAS a placeholder now, so the inheritance can show through honestly, and
       // the fold LOCATES through the cell's own `onLocate` instead of a button improvised beside
@@ -265,7 +265,7 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
       const displayUnit = world.live?.units?.[row.name];
       return cell({
         value: override ?? "",
-        // What the type holds today, for the tooltip when Pea's proposal is what the cell draws.
+        // What the type holds today, for the tooltip when Pea's suggestion is what the cell draws.
         currentValue:
           override !== undefined
             ? override || "(blank)"
@@ -275,7 +275,7 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
         placeholder: authored,
         note: `${
           proposals.length > 0
-            ? `Pea proposes ${proposals[0]!.proposed} here. Accept or deny it on the cell, or type your own value and the proposal is CLEARED on the spot. ${override === undefined ? `Until then the type inherits ${authored || "nothing"}.` : `The type currently overrides with ${override}.`}${groundedNote}`
+            ? `Pea proposes ${proposals[0]!.proposed} here. Accept or deny it on the cell, or type your own value and the suggestion is CLEARED on the spot. ${override === undefined ? `Until then the type inherits ${authored || "nothing"}.` : `The type currently overrides with ${override}.`}${groundedNote}`
             : override === undefined
               ? `"${typeName}" inherits ${authored || "nothing"} from the family — the grey number is the inheritance showing through, not a value this type holds. Type here to make it differ.${drifted ? ` The alarm underline says Revit disagrees; switch to ⇄ live to read its number in place.` : ""}${groundedNote}`
               : `"${typeName}" overrides the family value ${authored} with ${override}. Clear the cell to go back to inheriting.${drifted ? ` The alarm underline says Revit disagrees; switch to ⇄ live to read its number in place.` : ""}${groundedNote}`
@@ -287,7 +287,7 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
               measured: {
                 displayUnit,
                 parse: (text: string) => parse(displayUnit, text),
-                stage: (staged: MeasuredValue) => editOverride(row.name, typeName, staged),
+                stage: (edit: MeasuredValue) => editOverride(row.name, typeName, edit),
               },
             }
           : { onCommit: (next: string) => editOverride(row.name, typeName, next) }),

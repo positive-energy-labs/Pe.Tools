@@ -1,7 +1,7 @@
 /**
  * The entity routes' demo world: one pod and one run. The schedule member's bytes and schema are
  * captured live on 2026-08-17 (`seed-schedule-*.ts`); the pod, its folder, hashes, the receipt
- * and the Pea proposal lane on the schedule member are fixture, on real pointers of those bytes.
+ * and the Pea suggestion lane on the schedule member are fixture, on real pointers of those bytes.
  */
 import type { SettingsFieldState } from "@pe/agent-contracts";
 
@@ -103,22 +103,22 @@ const SCHEDULE_SEED_SCHEMA = SCHEDULE_SEED_CAPTURED_SCHEMA.replace(
 const SCHEDULE_SEED_RAW = SCHEDULE_SEED_BYTES;
 
 /**
- * One of each thing a reviewer must see on the schedule member: an open Pea proposal (note and
- * confidence), a staged value, and a staged value long enough to trip the column-header budget.
+ * One of each thing a reviewer must see on the schedule member: an open Pea suggestion (note and
+ * confidence), a edit value, and a edit value long enough to trip the column-header budget.
  */
 const SCHEDULE_SEED_FIELDS: Record<string, SettingsFieldState> = {
   "/ViewTemplateName": {
-    proposal: {
+    suggestion: {
       value: "Schedule - PE Standard v2",
       note: "office template register lists v2 as current for performance schedules",
       confidence: "high",
     },
-    staged: null,
+    edit: null,
   },
-  "/IsItemized": { proposal: null, staged: { value: false } },
+  "/IsItemized": { suggestion: null, edit: { value: false } },
   "/Fields/1/ColumnHeaderOverride": {
-    proposal: null,
-    staged: { value: "REFRIGERANT TYPE (FULL DESIGNATION)" },
+    suggestion: null,
+    edit: { value: "REFRIGERANT TYPE (FULL DESIGNATION)" },
   },
 };
 

@@ -23,7 +23,7 @@ export const entityFields = {
  * The Work slot's tab on a route that draws its Work as lines (MAP ruling 60): Pea's proposals,
  * your staged values, or all; absent = Pea's while it has any.
  */
-export const workLinesField = field(z.enum(["pea", "yours", "all"]).optional(), {
+export const workLinesField = field(z.enum(["suggestions", "edits", "all"]).optional(), {
   url: "replace",
   agent: "set",
 });

@@ -6,13 +6,13 @@ import { elementKey, type SubjectKey } from "@pe/kit/lang/attention";
  * system tree over the loss Rules, the drawing, the inbox. The sentence names the document, the
  * subject system (a Revit system name, read across every group it is in) and the level. The page
  * is the manifest's `url` keys, so a link lands on the same
- * place. The snapshot is one `ducts.snapshot` read keyed on the target, the staged parameter slots
+ * place. The snapshot is one `ducts.snapshot` read keyed on the target, the edit parameter slots
  * and `page.epoch`; targeting a document reads it again with no press, choosing a system does not.
  * The ASHRAE tables are always read; the snapshot, tables and catalogs are provided to the verbs so
  * `preview` and `apply` build their request from what is drawn.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { stagedDucts, type DuctClaim, type TrichotomyCellLike } from "@pe/agent-contracts";
+import { stagedDucts, type DuctClaim, type CellLike } from "@pe/agent-contracts";
 import type { Reading, OrbitViewport } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { EMPTY_CATALOGS } from "@pe/ducts-domain/catalog";
@@ -50,20 +50,20 @@ import type { ActionHandle } from "#/route/handle";
 function useBodyAction(action: ActionHandle): ActionHandle {
   const latest = useRef(action);
   latest.current = action;
-  const { label, says, needs, actor, chord, refusal, stage, count } = action;
+  const { label, says, needs, effect, chord, refusal, stage, count } = action;
   return useMemo(
     () => ({
       label,
       says,
       needs,
-      actor,
+      effect,
       chord,
       refusal,
       stage,
       count,
       run: (input) => latest.current.run(input),
     }),
-    [label, says, needs, actor, chord, refusal, stage, count],
+    [label, says, needs, effect, chord, refusal, stage, count],
   );
 }
 
@@ -78,7 +78,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
   const [chosen] = useChooseTarget();
   const thread = useRouteThread();
   // `?demo=scene` mounts the makeup-air fixture, snapshot included, and no host is read; its
-  // subject and claims have the staged cells' shapes, and a verdict press stays in this page.
+  // subject and claims have the edit cells' shapes, and a verdict press stays in this page.
   const demoName = useMemo(frozenDemo, []);
   const demo =
     demoName === "navigation"
@@ -132,13 +132,8 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
       ? handle.resolution.target.ref
       : null;
   const documentKey = doc ? `${doc.session}/${doc.openId}` : null;
-  const staged = useMemo(() => stagedDucts(handle.work.doc), [handle.work.doc]);
-  const read = useDuctSnapshot(
-    demo ? null : doc,
-    page.epoch,
-    staged.parameters,
-    staged.labelParameter,
-  );
+  const edit = useMemo(() => stagedDucts(handle.work.doc), [handle.work.doc]);
+  const read = useDuctSnapshot(demo ? null : doc, page.epoch, edit.parameters, edit.labelParameter);
   const snapshot = demo?.snapshot ?? read.snapshot;
   const snapshotCurrent = demo !== null || read.current;
   // useDuctSnapshot fences responses by the exact request generation before exposing data.
@@ -172,12 +167,12 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     () => (snapshot ? (scopeOf(snapshot, page.system)?.groups ?? []) : []),
     [snapshot, page.system],
   );
-  // The subject scene is the person's staged subject, else Pea's proposal, of the system's first
+  // The subject scene is the person's edit subject, else Pea's suggestion, of the system's first
   // group that has one; null until one exists.
   const subjectIds = demo
     ? demo.subject
     : systemGroups
-        .map((g) => staged.subject[g] ?? handle.work.doc?.subject?.[g]?.proposal?.value)
+        .map((g) => edit.subject[g] ?? handle.work.doc?.subject?.[g]?.suggestion?.value)
         .find((ids) => ids != null);
   const onVerdict = useCallback(
     (claim: Claim, verdict: NonNullable<Claim["verdict"]>) => {
@@ -197,7 +192,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
         ? demoClaims
         : Object.fromEntries(
             Object.entries(handle.work.doc?.claims ?? {}).flatMap(([id, cell]) => {
-              const value = cell.staged?.value ?? cell.proposal?.value;
+              const value = cell.edit?.value ?? cell.suggestion?.value;
               return value ? [[id, value] as const] : [];
             }),
           ),
@@ -340,7 +335,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
           : "this document has no duct networks";
   const busy = handle.busy !== null;
   // The system's fan static: its worst fan's, over the runs that price its terminals in every group
-  // it is in (a shared group's other runs are other systems'), as staged (`next`, the solve the
+  // it is in (a shared group's other runs are other systems'), as edit (`next`, the solve the
   // sidebar reads); Revit's own critical path beside it.
   const solved = useMemo(() => {
     if (!system || !priced) return null;
@@ -394,7 +389,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
       Object.fromEntries(
         WRITTEN.flatMap((segment) =>
           Object.entries(handle.work.doc?.[segment] ?? {}).map(
-            ([key, cell]) => [`${segment}:${key}`, cell as TrichotomyCellLike] as const,
+            ([key, cell]) => [`${segment}:${key}`, cell as CellLike] as const,
           ),
         ),
       ),
@@ -565,7 +560,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
       refreshing: !!held || (!snapshotCurrent && !!snapshot),
     },
     actions,
-    staged: pendingCount(handle.work.doc, snapshot?.store),
+    edit: pendingCount(handle.work.doc, snapshot?.store),
   };
 
   return (

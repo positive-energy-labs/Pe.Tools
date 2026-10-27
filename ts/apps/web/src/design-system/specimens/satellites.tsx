@@ -7,7 +7,7 @@ const SATELLITES: readonly { to: string; name: string; purpose: string }[] = [
     to: "/design-system/band",
     name: "band",
     purpose:
-      "one proposal language over a Families matrix: the table cell, a form field and the Chat head all draw the cell's own contract transitions, and every aggregate is a fanOut of the same kinds.",
+      "one suggestion language over a Families matrix: the table cell, a form field and the Chat head all draw the cell's own contract transitions, and every aggregate is a fanOut of the same kinds.",
   },
   {
     to: "/design-system/arming",

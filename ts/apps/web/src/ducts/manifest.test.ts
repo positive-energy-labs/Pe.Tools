@@ -148,15 +148,15 @@ beforeEach(() => {
   page = (manifest.page as z.ZodType<Page>).parse({ system: ["SA"] });
 });
 
-const esp = { esp: { "100": { staged: { value: { inWg: 0.5 } } } } };
-const flow = { flows: { "4": { staged: { value: { cfm: 100 } } } } };
+const esp = { esp: { "100": { edit: { value: { inWg: 0.5 } } } } };
+const flow = { flows: { "4": { edit: { value: { cfm: 100 } } } } };
 
 test("Set rows standing hold back the ESP only: apply arms on a fresh preview, and neither verb sends the ESP", async () => {
   const onlyEsp = ductsRouteState.schema.parse(esp);
   expect(stagedEsp(onlyEsp)).toBe(1);
   // Terminal 6 has no flow: its Set row stands, so a write of nothing but the ESP is refused.
   expect(verb("apply").ready(ctxOf(onlyEsp) as never)).toMatch(
-    /^Only the ESP is staged: \d+ to set before the ESP writes$/,
+    /^Only the ESP is edit: \d+ to set before the ESP writes$/,
   );
 
   const doc = ductsRouteState.schema.parse({ ...esp, ...flow });
@@ -178,10 +178,10 @@ test("with nothing standing the ESP rides the write", async () => {
   const doc = ductsRouteState.schema.parse({
     ...esp,
     flows: {
-      "4": { staged: { value: { cfm: 100 } } },
-      "6": { staged: { value: { cfm: 100 } } },
+      "4": { edit: { value: { cfm: 100 } } },
+      "6": { edit: { value: { cfm: 100 } } },
     },
-    equipmentFlows: { "100": { staged: { value: { cfm: 200 } } } },
+    equipmentFlows: { "100": { edit: { value: { cfm: 200 } } } },
   });
   answer.value = { counts: { planned: 3, refused: 0 }, items: [] };
   await verb("preview").run(ctxOf(doc) as never);

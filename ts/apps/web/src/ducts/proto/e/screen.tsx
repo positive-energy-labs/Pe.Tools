@@ -340,7 +340,7 @@ function LoadedScreenBody({
             fan: { run: page.fan, epoch: page.epoch },
             claims: props.claims,
             write: {
-              staged: props.staged,
+              edit: props.edit,
               hasPreview: page.evaluation !== null,
               fresh: previewFresh(page, props.work.revision),
               planned: preview?.counts.planned ?? null,
@@ -361,7 +361,7 @@ function LoadedScreenBody({
       heal,
       healRun,
       props.claims,
-      props.staged,
+      props.edit,
       props.work.revision,
       preview,
     ],
@@ -545,7 +545,7 @@ function LoadedScreenBody({
   // model marks Pe's only when the group solve names one; a provisional solve can leave it
   // unnamed, so the largest total stands in). Only the runs that price the system count: a shared
   // group's other runs never lead. Header, tree and fan rows read one solve, `next`: the model
-  // plus the staged cells, what the person is looking at while staging.
+  // plus the edit cells, what the person is looking at while staging.
   const critical =
     tree
       ?.flatMap((t) => t.children)
@@ -570,7 +570,7 @@ function LoadedScreenBody({
     treeCollapsed,
     priority: panePriority,
     toRule,
-    staged: props.staged,
+    edit: props.edit,
   });
   // A cell outside the system (a Set row on the whole document) moves the page to its system.
   const focusCell = useCallback(
@@ -636,7 +636,7 @@ function LoadedScreenBody({
     setRuleFocus(key);
     pick("right");
   };
-  const designRate = priced?.staged.designFriction ?? DEFAULT_DESIGN_FRICTION_RATE;
+  const designRate = priced?.edit.designFriction ?? DEFAULT_DESIGN_FRICTION_RATE;
   // The 2026-10-24 open-system chips supersede the 2026-10-23 no-header ruling. The header
   // carries scope and exits only; selected element facts remain in the picture.
   const treePane = useMemo(

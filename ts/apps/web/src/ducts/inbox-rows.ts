@@ -72,7 +72,7 @@ const COMPACT: Record<string, string> = {
   "no design flow": "no flow",
   "fix in Revit": "in Revit",
   "blocks the path": "blocks",
-  "nothing staged": "none staged",
+  "nothing edit": "none edit",
   [STALE_WORDS]: "changed",
 };
 
@@ -105,7 +105,7 @@ export type RowVerb =
       kind: "stage";
       segment: string;
       key: string;
-      move: "accept" | "deny";
+      move: "take" | "unsuggest";
       label: string;
       says: string;
     }
@@ -322,11 +322,11 @@ function healRow(
 }
 
 const verdictOf = (doc: DuctsRouteDocument | null, key: string) => {
-  const value = doc?.assumptions[key]?.staged?.value;
+  const value = doc?.assumptions[key]?.edit?.value;
   return value?.kind === "verdict" ? value.verdict : null;
 };
 const roleOf = (doc: DuctsRouteDocument | null, id: number) =>
-  doc?.roles[String(id)]?.staged?.value.role ?? null;
+  doc?.roles[String(id)]?.edit?.value.role ?? null;
 
 const select = (ids: readonly number[]): RowVerb => ({ kind: "select", ids });
 const verdict = (
@@ -353,9 +353,9 @@ const proximityIds = (key: string) =>
 
 export function triage(input: TriageInput) {
   const { snapshot, scope, findings, flows, equipmentFlows, doc } = input;
-  // The role a unit plays now: the survey's (ruled, staged, else proposed), else Work's staged one.
+  // The role a unit plays now: the survey's (ruled, edit, else proposed), else Work's edit one.
   const roleNow = (id: number) => input.roles?.get(id)?.role ?? roleOf(doc, id);
-  const ruled = (id: number) => ["ruled", "staged"].includes(input.roles?.get(id)?.why ?? "");
+  const ruled = (id: number) => ["ruled", "edit"].includes(input.roles?.get(id)?.why ?? "");
   const name = (id: number) => subjectName("unnamed element", input.nameOf?.(id));
   const label = input.groupLabel ?? ((id: string) => id);
   const nodes = new Map(snapshot.nodes.map((n) => [n.id, n]));
@@ -685,13 +685,13 @@ export function triage(input: TriageInput) {
         break;
       }
       case "multi-root": {
-        // Two or more fans after the proposal: a person confirms each fan (the group then prices
+        // Two or more fans after the suggestion: a person confirms each fan (the group then prices
         // per fan) or rules the inline gear passive.
         const active = f.elementIds.filter((id) => roleNow(id) !== "passive");
         const why = f.elementIds
           .map(
             (id) =>
-              `${name(id)}: ${roleNow(id) ?? "fan"}, ${input.roles?.get(id)?.reason ?? "staged"}`,
+              `${name(id)}: ${roleNow(id) ?? "fan"}, ${input.roles?.get(id)?.reason ?? "edit"}`,
           )
           .join("; ");
         toFix({
@@ -749,8 +749,8 @@ export function triage(input: TriageInput) {
   // A join a person objected to is withheld, so its finding is gone. The objection is a person's
   // ruling, not a blocker: it sits in Diagnostics so it can be taken back, and never holds the ESP.
   for (const [key, cell] of Object.entries(doc?.assumptions ?? {})) {
-    if (!key.startsWith("proximity:") || cell.staged?.value?.kind !== "verdict") continue;
-    if (cell.staged.value.verdict !== "ignore") continue;
+    if (!key.startsWith("proximity:") || cell.edit?.value?.kind !== "verdict") continue;
+    if (cell.edit.value.verdict !== "ignore") continue;
     const ids = proximityIds(key);
     if (scope && !ids.some((id) => scope.members.has(id))) continue;
     diagnostics.push({
@@ -858,7 +858,7 @@ export function triage(input: TriageInput) {
         title: name(id),
         status: "no design flow",
         ids: [id],
-        note: "Revit holds no fan flow for this unit and none is staged; apply writes the staged one.",
+        note: "Revit holds no fan flow for this unit and none is edit; apply writes the edit one.",
         verbs: [
           {
             kind: "focus",
@@ -939,17 +939,17 @@ function checks(input: TriageInput & { claims: readonly Claim[] }): InboxItem[] 
       verbs: [{ kind: "claim", claim }, select(claim.at)],
     }));
   const awaiting = (
-    cells: Record<string, { proposal?: { value?: unknown }; staged?: unknown }> | undefined,
-  ) => Object.entries(cells ?? {}).filter(([, cell]) => cell.proposal && !cell.staged);
+    cells: Record<string, { suggestion?: { value?: unknown }; edit?: unknown }> | undefined,
+  ) => Object.entries(cells ?? {}).filter(([, cell]) => cell.suggestion && !cell.edit);
   const segments = doc as unknown as Record<
     string,
-    Record<string, { proposal?: { value?: unknown }; staged?: unknown }> | undefined
+    Record<string, { suggestion?: { value?: unknown }; edit?: unknown }> | undefined
   > | null;
-  const proposal = (segment: string, key: string, title: string, value: unknown, ids: number[]) =>
+  const suggestion = (segment: string, key: string, title: string, value: unknown, ids: number[]) =>
     items.push({
       key: `${segment}:${key}`,
       group: "check",
-      kind: "proposal",
+      kind: "suggestion",
       title,
       status: `Pea proposes ${valueWord(segment, value)}`,
       tone: "pea",
@@ -960,17 +960,17 @@ function checks(input: TriageInput & { claims: readonly Claim[] }): InboxItem[] 
           kind: "stage",
           segment,
           key,
-          move: "accept",
+          move: "take",
           label: "accept",
-          says: "Stage Pea's proposal",
+          says: "Stage Pea's suggestion",
         },
         {
           kind: "stage",
           segment,
           key,
-          move: "deny",
+          move: "unsuggest",
           label: "reject",
-          says: "Clear Pea's proposal",
+          says: "Clear Pea's suggestion",
         },
         ...(FOCUSABLE.has(segment) && ids[0] != null
           ? [
@@ -989,25 +989,27 @@ function checks(input: TriageInput & { claims: readonly Claim[] }): InboxItem[] 
     for (const [key, cell] of awaiting(segments?.[segment])) {
       const id = Number(key);
       if (scope && !scope.members.has(id)) continue;
-      proposal(segment, key, `${ELEMENT_WORD[segment]} · ${name(id)}`, cell.proposal!.value, [id]);
+      suggestion(segment, key, `${ELEMENT_WORD[segment]} · ${name(id)}`, cell.suggestion!.value, [
+        id,
+      ]);
     }
   for (const [key, cell] of awaiting(segments?.rules)) {
     const rule = ruleByKey(key);
-    proposal(
+    suggestion(
       "rules",
       key,
       rule ? `Rule · ${rule.family} : ${rule.type}` : `Rule · ${key}`,
-      cell.proposal!.value,
+      cell.suggestion!.value,
       [],
     );
   }
   for (const [key, cell] of awaiting(segments?.catalogs))
-    proposal("catalogs", key, `Catalog link · ${key}`, cell.proposal!.value, []);
+    suggestion("catalogs", key, `Catalog link · ${key}`, cell.suggestion!.value, []);
   const shown = new Set(findings.map((f) => f.id));
   for (const [key, cell] of awaiting(segments?.assumptions)) {
     if (!shown.has(key)) continue;
     const f = findings.find((x) => x.id === key)!;
-    proposal("assumptions", key, `Ruling · ${f.note.slice(0, 60)}`, cell.proposal!.value, [
+    suggestion("assumptions", key, `Ruling · ${f.note.slice(0, 60)}`, cell.suggestion!.value, [
       ...f.elementIds,
     ]);
   }
@@ -1015,7 +1017,7 @@ function checks(input: TriageInput & { claims: readonly Claim[] }): InboxItem[] 
 }
 
 export interface WriteState {
-  staged: number;
+  edit: number;
   hasPreview: boolean;
   fresh: boolean;
   planned: number | null;
@@ -1041,15 +1043,15 @@ function writeRow(left: { fix: number; set: number }, write: WriteState): WriteR
   return {
     title: write.fresh && write.planned ? `Write ${write.planned} to Revit` : "Write to Revit",
     status: `${
-      !write.staged
-        ? "nothing staged"
+      !write.edit
+        ? "nothing edit"
         : !write.hasPreview
           ? "not previewed"
           : !write.fresh
             ? "preview out of date"
             : `${write.planned ?? 0} planned · ${write.refused ?? 0} refused`
     }${waits ? " · ESP held" : ""}`,
-    held: waits ? `${plural(write.esp, "staged ESP")} left out of this write: ${waits}` : null,
+    held: waits ? `${plural(write.esp, "edit ESP")} left out of this write: ${waits}` : null,
   };
 }
 

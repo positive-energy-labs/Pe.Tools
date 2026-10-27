@@ -6,7 +6,7 @@ import {
 } from "@pe/agent-contracts";
 
 import { Button } from "@pe/kit/lang/button";
-import { cellFromTrichotomy } from "@pe/kit/lang/cell";
+import { cellFromDraft } from "@pe/kit/lang/cell";
 import { Section } from "@pe/kit/lang/section";
 import { reviewAddresses } from "#/components/work/band";
 import { WorkLines, type WorkTab } from "#/components/work/lines";
@@ -15,12 +15,12 @@ import { StaleResolve } from "#/route/schedules/stale-resolve";
 /** Ask A on the band: the real `StaleResolve` over three stale LOAD cells. */
 export function StaleSection({ say }: { say: (text: string) => void }) {
   return (
-    <Section label="02 · a stale cell · Revit moved under what you staged">
+    <Section label="02 · a stale cell · Revit moved under what you edit">
       <p className="t-prose text-ink-2">
         A push refused three LOAD cells: Revit changed them after you reviewed. Each reads what you
-        reviewed, what Revit holds now, and yours. Accept keeps yours staged, deny takes
-        Revit&apos;s; neither pushes. The aggregate runs the cells&apos; own answers in one write,
-        then pushes. r3 is contested: Pea proposed beside it, so it is skipped.
+        reviewed, what Revit holds now, and yours. Accept keeps yours edit, deny takes Revit&apos;s;
+        neither pushes. The aggregate runs the cells&apos; own answers in one write, then pushes. r3
+        is contested: Pea proposed beside it, so it is skipped.
       </p>
       <StaleSpecimen say={say} />
     </Section>
@@ -38,9 +38,9 @@ const STALE_DOC: ScheduleGridDocument = {
     ],
   },
   cells: {
-    "1::2": { staged: { value: "150 VA" } },
-    "2::2": { staged: { value: "95 VA" } },
-    "3::2": { staged: { value: "75 VA" }, proposal: { value: "72 VA", note: "panel schedule" } },
+    "1::2": { edit: { value: "150 VA" } },
+    "2::2": { edit: { value: "95 VA" } },
+    "3::2": { edit: { value: "75 VA" }, suggestion: { value: "72 VA", note: "panel schedule" } },
   },
   takenAt: null,
 } as ScheduleGridDocument;
@@ -56,8 +56,8 @@ function StaleSpecimen({ say }: { say: (text: string) => void }) {
       const cells = { ...current.cells };
       for (const { path, value } of patches) {
         const key = String(path[1]);
-        const { staged: _, ...rest } = cells[key] ?? {};
-        cells[key] = value == null ? rest : { ...rest, staged: value as { value: string } };
+        const { edit: _, ...rest } = cells[key] ?? {};
+        cells[key] = value == null ? rest : { ...rest, edit: value as { value: string } };
       }
       const stale = (current.basis?.stale ?? []).filter((c) => !keys.includes(c.key));
       return {
@@ -76,19 +76,19 @@ function StaleSpecimen({ say }: { say: (text: string) => void }) {
         doc={doc}
         write={write}
         revision={revision}
-        push={async () => say("SIMULATED · push of the re-staged cells")}
+        push={async () => say("SIMULATED · push of the re-edit cells")}
         unread={0}
         readAgain={async () => {}}
       />
       <WorkLines
         cells={reviewAddresses(doc.cells).map(([key, cell]) => {
-          const value = showCellValue((cell.staged ?? cell.proposal)?.value);
+          const value = showCellValue((cell.edit ?? cell.suggestion)?.value);
           return {
             key,
             column: "LOAD",
             row: `r${key.split("::")[0]} (Revit now ${STALE_NOW[key] ?? "?"})`,
             value,
-            look: cellFromTrichotomy(cell, { value }, showCellValue),
+            look: cellFromDraft(cell, { value }, showCellValue),
             locate: () => say(`locate ${key}`),
           };
         })}

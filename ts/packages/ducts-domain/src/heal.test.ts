@@ -217,7 +217,7 @@ it("caps a dangling fitting end, never one a person ignored", () => {
   expect(items(snap([], [tee]))).toMatchObject([{ kind: "cap", end: "50:0" }]);
   const work = ductsDocumentSchema.parse({
     assumptions: {
-      "open-end:g50:50:0": { staged: { value: { kind: "verdict", verdict: "ignore" } } },
+      "open-end:g50:50:0": { edit: { value: { kind: "verdict", verdict: "ignore" } } },
     },
   });
   expect(healPlan(snap([], [tee]), work).groups).toEqual([]);

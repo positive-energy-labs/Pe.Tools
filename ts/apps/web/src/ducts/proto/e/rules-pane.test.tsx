@@ -30,7 +30,7 @@ test("rule rows keep native ids and editable cells keep their arrow and Enter ke
     snapshot,
     now: result,
     next: result,
-    staged: { componentDrops: { 30: {} }, ruleAssignments: {} },
+    edit: { componentDrops: { 30: {} }, ruleAssignments: {} },
   } as unknown as Priced;
   render(
     <RulesTree

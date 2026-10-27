@@ -1,15 +1,15 @@
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * The inputs that live on the system tree: a terminal's flow and drop, a unit's flow, ESP and role.
- * Each is one kit trichotomy `StateCell` over its Work cell: a person's edit stages, Pea's proposal
+ * Each is one kit trichotomy `StateCell` over its Work cell: a person's edit stages, Pea's suggestion
  * shows as the proposed state with accept and reject, and the value drawn is the one Pe resolved
- * (its rung named beside it in quiet text) until one is staged.
+ * (its rung named beside it in quiet text) until one is edit.
  */
 import { DUCT_UNIT_ROLES, transitionPatches } from "@pe/agent-contracts";
 import { storedRuling } from "@pe/ducts-domain/rulings";
 import type { Priced } from "@pe/ducts-domain/pricing";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { cellFromTrichotomy, StateCell } from "@pe/kit/lang/cell";
+import { cellFromDraft, StateCell } from "@pe/kit/lang/cell";
 import { reviewTransitions, type CellWire } from "#/components/work/band";
 
 import { rulingPatches } from "../../assumptions";
@@ -71,7 +71,7 @@ const SPECS = {
   },
 } satisfies Record<string, CellSpec>;
 
-/** A segment's cell key and the quiet rung word: staged, Pea's proposal, or the resolved rung's. */
+/** A segment's cell key and the quiet rung word: edit, Pea's suggestion, or the resolved rung's. */
 function InputCell({
   spec,
   id,
@@ -89,9 +89,9 @@ function InputCell({
 }) {
   const key = String(id);
   const cell = work.doc?.[spec.segment][key] ?? {};
-  const standing = (cell.staged ?? cell.proposal)?.value as Rung | undefined;
+  const standing = (cell.edit ?? cell.suggestion)?.value as Rung | undefined;
   const wire: CellWire = { segment: spec.segment, revision: work.revision, write: work.write };
-  const word = cell.staged ? "override" : cell.proposal ? "Pea proposes" : resolved.word;
+  const word = cell.edit ? "override" : cell.suggestion ? "Pea proposes" : resolved.word;
   const value = spec.text(standing) ?? (resolved.value == null ? "" : String(resolved.value));
   return (
     <span
@@ -101,7 +101,7 @@ function InputCell({
       onClick={(event) => event.stopPropagation()}
     >
       <StateCell
-        {...cellFromTrichotomy(
+        {...cellFromDraft(
           cell,
           {
             value,
@@ -117,7 +117,7 @@ function InputCell({
           work
             .write(
               transitionPatches([spec.segment], key, cell, {
-                kind: "stage",
+                kind: "set",
                 rung: { value: spec.rung(text, standing) },
               }),
             )
@@ -153,15 +153,15 @@ function RoleCell({
 }) {
   const key = String(id);
   const cell = work.doc?.roles[key] ?? {};
-  const standing = (cell.staged ?? cell.proposal)?.value;
+  const standing = (cell.edit ?? cell.suggestion)?.value;
   const wire: CellWire = { segment: "roles", revision: work.revision, write: work.write };
   const stored = storedRuling(store, "roles", key);
   const word =
-    cell.staged && stored === cell.staged.value.role
+    cell.edit && stored === cell.edit.value.role
       ? "ruled"
-      : cell.staged
+      : cell.edit
         ? "override"
-        : cell.proposal
+        : cell.suggestion
           ? "Pea proposes"
           : resolved.word;
   return (
@@ -172,7 +172,7 @@ function RoleCell({
       onClick={(event) => event.stopPropagation()}
     >
       <StateCell
-        {...cellFromTrichotomy(
+        {...cellFromDraft(
           cell,
           { value: standing?.role ?? resolved.value ?? "fan", cap: "editable" },
           (value) => (value as { role?: string } | undefined)?.role ?? "",
@@ -192,7 +192,7 @@ function RoleCell({
       <TooltipHint content={resolved.reason}>
         <span className="dl-cells-note t-small" data-e-source={word ?? ""}>
           role{word ? ` · ${word}` : ""}
-          {!cell.staged && !cell.proposal && resolved.reason ? ` (${resolved.reason})` : ""}
+          {!cell.edit && !cell.suggestion && resolved.reason ? ` (${resolved.reason})` : ""}
         </span>
       </TooltipHint>
     </span>

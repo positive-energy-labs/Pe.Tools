@@ -1,4 +1,4 @@
-/** Keyed `/families` cells and the Family Foundry drafts staged cells generate. */
+/** Keyed `/families` cells and the Family Foundry drafts edit cells generate. */
 import {
   familyCellAddress,
   familyStagedPatch,
@@ -29,21 +29,21 @@ export interface StagedDraft {
   content: string;
 }
 
-/** Family Foundry patch drafts, one per family with staged cells, in family-name order. */
+/** Family Foundry patch drafts, one per family with edit cells, in family-name order. */
 export function stagedDrafts(
   cells: Record<string, FamilyCellState>,
   schema: string = FF_SPEC_SCHEMA,
 ): StagedDraft[] {
   const names = [
-    ...new Set(familyCellEntries(cells).flatMap((e) => (e.cell.staged ? [e.familyName] : []))),
+    ...new Set(familyCellEntries(cells).flatMap((e) => (e.cell.edit ? [e.familyName] : []))),
   ];
   return names
     .map((familyName) => {
       const { spec } = familyStagedPatch(cells, familyName)!;
       return {
         familyName,
-        path: `staged/${familyName.replace(/[^\w.-]+/g, "-")}.json`,
-        // The host proves these captured bytes are exactly the staged cells before the plan may retire them.
+        path: `edit/${familyName.replace(/[^\w.-]+/g, "-")}.json`,
+        // The host proves these captured bytes are exactly the edit cells before the plan may retire them.
         content: `${JSON.stringify({ $schema: schema, ...spec }, null, 2)}\n`,
       };
     })

@@ -6,7 +6,7 @@ import { ProposalHead, type HeadWork } from "./proposal-head";
 
 afterEach(cleanup);
 
-const stagedRule = { staged: { value: { table: "CD3-2" } } } as never;
+const stagedRule = { edit: { value: { table: "CD3-2" } } } as never;
 
 function work(over: Partial<HeadWork> = {}): HeadWork {
   return {
@@ -22,7 +22,7 @@ function work(over: Partial<HeadWork> = {}): HeadWork {
   };
 }
 
-test("review on a staged cell opens the route on that cell and the group reads in words", () => {
+test("review on a edit cell opens the route on that cell and the group reads in words", () => {
   const open = vi.fn();
   render(
     <ProposalHead

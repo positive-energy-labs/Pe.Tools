@@ -51,7 +51,7 @@ it("leaves the fan-to-terminal trunk clear and groups the open and capped side b
   expect(result.get(7)?.reasons.map((r) => r.kind)).toEqual(["capped"]);
 });
 
-it("a zero-flow terminal is no run, and staged positive flow restores its run", () => {
+it("a zero-flow terminal is no run, and edit positive flow restores its run", () => {
   const scope = systemScope(snapshot, "SA 1");
   const result = noRunBranches(snapshot, solved, scope, new Map([[3, { cfm: 0 }]]));
   expect(result.has(2)).toBe(true);

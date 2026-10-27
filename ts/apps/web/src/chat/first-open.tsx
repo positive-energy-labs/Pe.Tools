@@ -5,42 +5,10 @@
  */
 import { useState } from "react";
 import { Button } from "@pe/kit/lang/button";
-import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { LoginLine, ProviderSetup } from "#/machine/pea";
 import type { Provider } from "@pe/agent-contracts";
-import { Switch } from "@pe/kit/lang/switch";
 import { Switcher } from "@pe/kit/lang/switcher";
 import { repairWord, type ProvidersState } from "#/workbench/provider/providers";
-
-/**
- * The one access switch (ADR 0021): it chooses the harness mode for new sessions and governs
- * Pea's writes to the open Revit documents. HTTP and MCP access are separate.
- */
-export function AccessSwitch({ providers }: { providers: ProvidersState }) {
-  const guarded = providers.access?.guarded;
-  return (
-    <label className="flex items-center gap-2 t-small">
-      <Switch
-        checked={guarded ?? true}
-        disabled={guarded === undefined || providers.access?.readError !== undefined}
-        onCheckedChange={(next) => void providers.setAccess(next)}
-      />
-      <span>Agent approvals</span>
-      {/* I6: the switch says one word; what that word means is the hover. */}
-      <TooltipHint
-        content={
-          guarded === false
-            ? "Shell and file tools run without asking (new sessions); Pea may write any open Revit document"
-            : "Shell and file tools ask first (new sessions); Pea writes only its own documents and the ones you add to a thread"
-        }
-      >
-        <span className="text-ink-2">
-          {guarded === undefined ? "reading…" : guarded ? "Guarded" : "Full"}
-        </span>
-      </TooltipHint>
-    </label>
-  );
-}
 
 export function FirstOpenCard({
   providers,
@@ -71,7 +39,6 @@ export function FirstOpenCard({
       {door === "here" ? (
         <>
           <ProviderSetup providers={providers} />
-          <AccessSwitch providers={providers} />
         </>
       ) : (
         <OwnAppDoor host={origin} />

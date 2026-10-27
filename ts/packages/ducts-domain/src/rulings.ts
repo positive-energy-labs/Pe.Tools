@@ -3,11 +3,11 @@
  * (leave an open end out, object to an inferred join, keep a default) and a unit's role, `fan` or
  * `passive` (a ruling over the role proposed from its design flow, `unit-roles.ts`).
  * They persist in the model's `_PE_DuctLosses` store (v2 `verdicts`, `roles`), so two people on
- * one model see the same network; Work holds only pending deltas over them. A staged value is a
- * delta, and a staged `{ delete: true }` on an assumption takes a stored verdict back.
+ * one model see the same network; Work holds only pending deltas over them. A edit value is a
+ * delta, and a edit `{ delete: true }` on an assumption takes a stored verdict back.
  *
  * `withStoredRulings` is the one view every reader prices and triages: the stored rulings as
- * staged cells under Work's own, delete rungs gone. `pendingRulings` names what a write would
+ * edit cells under Work's own, delete rungs gone. `pendingRulings` names what a write would
  * change in the store; `storeRulings` is the whole ruling set the write sends; `rulingRung` is
  * what a person's choice stages.
  */
@@ -30,7 +30,7 @@ export interface RulingDelta {
   to: string | null;
 }
 
-/** The verdicts the store keeps: `ignore` only. Any other staged verdict stays Work's. */
+/** The verdicts the store keeps: `ignore` only. Any other edit verdict stays Work's. */
 export const STORED_VERDICTS = ["ignore"] as const;
 /** The roles the store keeps: both, since a role is proposed and a ruling may confirm either. */
 const isRole = (role: string | undefined | null): role is "fan" | "passive" =>
@@ -54,7 +54,7 @@ export function withStoredRulings(
 ): DuctsRouteDocument | null {
   const verdicts = Object.entries(store?.verdicts ?? {});
   const roles = Object.entries(store?.roles ?? {});
-  const deletes = Object.values(doc?.assumptions ?? {}).some((cell) => cell.staged?.delete);
+  const deletes = Object.values(doc?.assumptions ?? {}).some((cell) => cell.edit?.delete);
   if (!verdicts.length && !roles.length && !deletes) return doc;
   const base = doc ?? EMPTY;
   const byStore = memo.get(base) ?? memo.set(base, new WeakMap()).get(base)!;
@@ -63,32 +63,32 @@ export function withStoredRulings(
   const assumptions = Object.fromEntries(
     Object.entries(base.assumptions).map(([key, cell]) => [
       key,
-      cell.staged?.delete ? { ...cell, staged: null } : cell,
+      cell.edit?.delete ? { ...cell, edit: null } : cell,
     ]),
   );
   for (const [key, { verdict }] of verdicts)
-    if (keeps(verdict) && !base.assumptions[key]?.staged)
+    if (keeps(verdict) && !base.assumptions[key]?.edit)
       assumptions[key] = {
         ...base.assumptions[key],
-        staged: { value: { kind: "verdict", verdict: verdict as "ignore" } },
+        edit: { value: { kind: "verdict", verdict: verdict as "ignore" } },
       };
   const rolesOut = { ...base.roles };
   for (const [id, { role }] of roles)
-    if (isRole(role) && !base.roles[id]?.staged)
-      rolesOut[id] = { ...base.roles[id], staged: { value: { role } } };
+    if (isRole(role) && !base.roles[id]?.edit)
+      rolesOut[id] = { ...base.roles[id], edit: { value: { role } } };
   const effective = { ...base, assumptions, roles: rolesOut } as DuctsRouteDocument;
   byStore.set(store ?? NO_STORE, effective);
   return effective;
 }
 
-/** What a write would change in the store's rulings: Work's staged deltas that differ from it. */
+/** What a write would change in the store's rulings: Work's edit deltas that differ from it. */
 export function pendingRulings(doc: DuctsRouteDocument | null, store: Store): RulingDelta[] {
   const out: RulingDelta[] = [];
   for (const [key, cell] of Object.entries(doc?.assumptions ?? {})) {
-    if (!cell.staged) continue;
+    if (!cell.edit) continue;
     const from = storedRuling(store, "assumptions", key);
-    const value = cell.staged.value;
-    const to = cell.staged.delete
+    const value = cell.edit.value;
+    const to = cell.edit.delete
       ? null
       : value?.kind === "verdict" && keeps(value.verdict)
         ? value.verdict
@@ -99,21 +99,21 @@ export function pendingRulings(doc: DuctsRouteDocument | null, store: Store): Ru
     if (to !== from) out.push({ segment: "assumptions", key, from, to });
   }
   for (const [key, cell] of Object.entries(doc?.roles ?? {})) {
-    if (!cell.staged) continue;
+    if (!cell.edit) continue;
     const from = roleOf(storedRuling(store, "roles", key));
-    const to = roleOf(cell.staged.value.role);
+    const to = roleOf(cell.edit.value.role);
     if (to !== from) out.push({ segment: "roles", key, from, to });
   }
   return out.sort((a, b) => a.segment.localeCompare(b.segment) || a.key.localeCompare(b.key));
 }
 
 /**
- * The store's whole ruling set after a write, from the staged cells of the Work as read
+ * The store's whole ruling set after a write, from the edit cells of the Work as read
  * (`withStoredRulings`): every `ignore` verdict and every role, stamped `at` unless the store
  * already holds that same ruling, which keeps its own time.
  */
 export function storeRulings(
-  staged: {
+  edit: {
     assumptions: Record<string, DuctAssumption>;
     roles: Record<string, { role: string }>;
   },
@@ -121,7 +121,7 @@ export function storeRulings(
   at: string,
 ) {
   const verdicts = Object.fromEntries(
-    Object.entries(staged.assumptions).flatMap(([key, value]) =>
+    Object.entries(edit.assumptions).flatMap(([key, value]) =>
       value.kind === "verdict" && keeps(value.verdict)
         ? [
             [
@@ -139,7 +139,7 @@ export function storeRulings(
     ),
   );
   const roles = Object.fromEntries(
-    Object.entries(staged.roles).flatMap(([id, { role }]) =>
+    Object.entries(edit.roles).flatMap(([id, { role }]) =>
       isRole(role)
         ? [
             [

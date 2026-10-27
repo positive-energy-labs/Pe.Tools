@@ -39,7 +39,7 @@ const noop = () => {};
 /** The live instance's own phase. `armed` is not stored — the strip derives it from the reason,
  *  which is the ruling: arming is driven by supplying the reason, so there is no separate "arm"
  *  press to forget. */
-/* `landed` NOT `written`: the cell grammar rules that no proposal state is called `written`
+/* `landed` NOT `written`: the cell grammar rules that no suggestion state is called `written`
  * (ledger 2026-08-31), and a literal `written` phase in the executable design authority would be
  * read as that state. This is the arming ceremony's own phase — the write went through. */
 type Phase = "arming" | "refused" | "landed";

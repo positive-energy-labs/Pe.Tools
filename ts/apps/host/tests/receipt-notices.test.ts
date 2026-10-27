@@ -90,7 +90,7 @@ const question = (phase: "asked" | "resolved", id = uid(8), revision = 1): Recei
 const dirs: string[] = [];
 afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
 
-function harness(bufferMs = 0) {
+function harness(bufferMs = 0, noticeContext = context) {
   const dir = mkdtempSync(join(tmpdir(), "notices-"));
   dirs.push(dir);
   const log = new HostLog(dir);
@@ -101,7 +101,7 @@ function harness(bufferMs = 0) {
       return () => consumers.delete(consume);
     },
   };
-  const notices = createNotices({ source, context, log, bufferMs });
+  const notices = createNotices({ source, context: noticeContext, log, bufferMs });
   /** A follower: the frames it is handed, as the stream would carry them. */
   function follow(after: number | null = null, request: ReadingRequest = { kind: "notices" }) {
     const frames: ReadingFrame[] = [];
@@ -185,4 +185,34 @@ test("an ask answered while the follower was away is not replayed", () => {
   h.deliver(permission("resolved", uid(3), 2));
   expect(h.follow(cursor).ids()).toEqual([`${uid(2)}:1`]);
   h.close();
+});
+
+test("turn completion links exact shared Work and reports accepted commands still running", () => {
+  const h = harness(0, {
+    ...context,
+    completed: () => ({
+      completed: 2,
+      running: 1,
+      work: [
+        { title: "Ducts ? Office", href: "/ducts?target=C%3A%2FOffice.rvt&thread=t1" },
+        { title: "Family ? Door", href: "/family?target=C%3A%2FDoor.rfa&thread=t1" },
+      ],
+    }),
+  });
+  try {
+    const reader = h.follow();
+    h.deliver(turn("started"));
+    expect(reader.items()).toHaveLength(0);
+    h.deliver(turn("finished"));
+    const [notice] = reader.items();
+    expect(notice?.body).toContain("2 commands completed.");
+    expect(notice?.body).toContain("1 command is still running; writes have not finished.");
+    expect(notice?.body).toContain("[Ducts ? Office](/ducts?target=C%3A%2FOffice.rvt&thread=t1)");
+    expect(notice?.body).toContain("[Family ? Door](/family?target=C%3A%2FDoor.rfa&thread=t1)");
+    expect(notice?.href).toBe("/ducts?target=C%3A%2FOffice.rvt&thread=t1");
+    h.deliver(turn("finished"));
+    expect(reader.items()).toHaveLength(1);
+  } finally {
+    h.close();
+  }
 });

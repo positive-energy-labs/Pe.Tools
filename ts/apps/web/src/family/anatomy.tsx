@@ -24,7 +24,7 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
  * parameter's row exactly as a dim chip would. A plane the evaluator cannot place (formula-driven,
  * no resolvable offset) is NAMED in words under the drawing, never drawn at a guess.
  *
- * GHOSTS: every OTHER type is drawn behind the staged one as a thin outline at the same fixed
+ * GHOSTS: every OTHER type is drawn behind the edit one as a thin outline at the same fixed
  * scale, so a type comparison needs no second drawing. Fixed scale is the law here — a taller
  * type draws TALLER rather than being refitted to the box. On the live lane the scale comes from
  * `sheetBounds` INCLUDING ghosts, so it holds still while you stage different types.
@@ -37,8 +37,8 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
  * ruling. FOCUS is page vocabulary, not drawing vocabulary: a `--pe-select` fill and
  * an ink stroke, exactly as the table's focused row does.
  */
-import type { TrichotomyCellLike } from "@pe/agent-contracts";
-import { cellFromTrichotomy, StateCell, type CellTransition } from "@pe/kit/lang/cell";
+import type { CellLike } from "@pe/agent-contracts";
+import { cellFromDraft, StateCell, type CellTransition } from "@pe/kit/lang/cell";
 
 import type { FamilyModel } from "#/family/family-model";
 import { bindingOf, type Draft, type Focus, type FamilyPageModel } from "#/family/model";
@@ -76,7 +76,7 @@ export function AnatomyDrawing({
   onInspect: (slug: string) => void;
   inspecting: string | null;
   /** The Work's cells: a constituent only Pea proposes draws its own proposed cell from these. */
-  fields: Record<string, TrichotomyCellLike>;
+  fields: Record<string, CellLike>;
   transitionsAt: (key: string) => readonly CellTransition[];
 }) {
   const views =
@@ -160,7 +160,7 @@ export function AnatomyDrawing({
               meta: part.proposed ? (
                 // The reading has none: Pea's object is a cell of its own, accept and deny on it.
                 <StateCell
-                  {...cellFromTrichotomy(
+                  {...cellFromDraft(
                     fields[part.proposed] ?? {},
                     { value: part.text },
                     () => part.text,
@@ -173,7 +173,7 @@ export function AnatomyDrawing({
                   {part.proposedProps!.map((entry) => (
                     <StateCell
                       key={entry.id}
-                      {...cellFromTrichotomy(
+                      {...cellFromDraft(
                         fields[entry.id] ?? {},
                         { value: `${entry.property} ${entry.text}` },
                         () => `${entry.property} ${entry.text}`,

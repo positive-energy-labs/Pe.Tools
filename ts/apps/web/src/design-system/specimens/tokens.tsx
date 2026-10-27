@@ -91,7 +91,7 @@ const TOKEN_GROUPS: readonly { group: string; asks: string; tokens: readonly Tok
     tokens: [
       {
         token: "--pe-pea",
-        means: "pea's MARK: proposal ring, corner fold, card edge",
+        means: "pea's MARK: suggestion ring, corner fold, card edge",
         modes: "the display rung — band lightness stepped 0.08 toward its ground",
       },
       {

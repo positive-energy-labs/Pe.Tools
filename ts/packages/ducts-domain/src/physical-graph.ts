@@ -27,7 +27,7 @@ const reason = (code: string, elementId: number | null, message: string): Circui
   elementId,
   message,
 });
-/** Retains every physical port and joint. Internal equipment continuity requires staged evidence. */
+/** Retains every physical port and joint. Internal equipment continuity requires edit evidence. */
 export function physicalGraph(
   snapshot: DuctSnapshot,
   evidence: Readonly<Record<string, DuctCalculation>>,
@@ -122,7 +122,7 @@ export function physicalGraph(
         reason(
           "contradictory-fan-direction",
           e.element.id,
-          `${id}: staged inlet/outlet contradicts an explicit native connector direction`,
+          `${id}: edit inlet/outlet contradicts an explicit native connector direction`,
         ),
       );
       continue;

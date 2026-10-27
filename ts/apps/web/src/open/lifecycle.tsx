@@ -3,7 +3,7 @@
  * returns the verbs (hr only when the SDK says `shape.reload === "hot"`, and Stop) and the
  * `ArmingStrip` the armed verb opens, as two slots a `SessionRow` or `SessionCard` places. Every
  * verb is an `instances.*` semantic action; the SDK resolves the Revit from the selection (pid for
- * an icon-started Revit, id otherwise). Nothing is staged first (ADR 0016).
+ * an icon-started Revit, id otherwise). Nothing is edit first (ADR 0016).
  *
  * Stop always passes `--unsaved keep` for a lay user; discard is offered only for a checkout
  * session (host ledger 2026-10-09 ruling 9). hr restarts and discards, so it arms first too.

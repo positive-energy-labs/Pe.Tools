@@ -108,7 +108,6 @@ export function makePodRoute(row: PodRouteDescriptor, bundle: PodRouteBundle) {
         ),
         says: "Execute the requested Pod action on this route's exact target.",
         needs: "document",
-        actor: "human",
         dirties: [],
         requires: { work: true },
         ready: () => null,

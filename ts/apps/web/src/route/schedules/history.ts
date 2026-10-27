@@ -21,11 +21,13 @@ export interface ScheduleHistory {
   replay: { step: ScheduleHistoryStep; direction: "undo" | "redo" } | null;
 }
 
-/** Restore only the cells and basis metadata this batch touched. */
+/** Undo authored cells; a local buffer cannot restore host observations. */
 export function scheduleHistoryStep(
   before: ScheduleGridDocument,
   patches: RouteStatePatch[],
 ): ScheduleHistoryStep | null {
+  patches = patches.filter((patch) => patch.path[0] === "cells");
+  if (!patches.length) return null;
   const projected = applyPatches(
     scheduleGridRouteState,
     { version: 1, revision: 0, doc: before },
@@ -50,8 +52,24 @@ export function scheduleHistoryStep(
   return { before, after: projected.envelope.doc, forward: patches, inverse };
 }
 
+const authoredSnapshot = (doc: ScheduleGridDocument) =>
+  JSON.stringify({
+    ...doc,
+    cells: Object.fromEntries(
+      Object.entries(doc.cells).map(([key, cell]) => [
+        key,
+        Object.fromEntries(
+          Object.entries(cell).map(([slot, change]) => {
+            if (!change || (slot !== "edit" && slot !== "suggestion")) return [slot, change];
+            const { by: _, at: _at, base: _base, ...authored } = change;
+            return [slot, authored];
+          }),
+        ),
+      ]),
+    ),
+  });
 export const sameScheduleDoc = (a: ScheduleGridDocument | null, b: ScheduleGridDocument) =>
-  a != null && JSON.stringify(a) === JSON.stringify(b);
+  a != null && authoredSnapshot(a) === authoredSnapshot(b);
 
 /** False means another writer or basis change moved Work; discard local history. */
 export function advanceScheduleHistory(

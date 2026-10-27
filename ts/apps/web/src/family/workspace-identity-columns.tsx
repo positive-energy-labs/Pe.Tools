@@ -2,7 +2,7 @@ import type { Column, TableState } from "@pe/kit/table/model";
 import { token } from "@pe/kit/lib/token";
 import { PressContent } from "@pe/kit/anatomy/press-content";
 import { Button } from "@pe/kit/lang/button";
-import { cellFromTrichotomy } from "@pe/kit/lang/cell";
+import { cellFromDraft } from "@pe/kit/lang/cell";
 import { parameterText } from "#/family/family-model";
 import { NavStateCell } from "#/family/marks";
 import {
@@ -49,7 +49,7 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
     group: "",
     width: "w-6",
     title:
-      "The proposal rail — the page's answer to 'where has pea read', readable top to bottom without reading a single value. A dot means one proposal on this row; a number means several. It decides nothing and locates nothing: click the CELL that wears the fold to bring its card into the sidebar, because that is the cell the proposal is about.",
+      "The suggestion rail — the page's answer to 'where has pea read', readable top to bottom without reading a single value. A dot means one suggestion on this row; a number means several. It decides nothing and locates nothing: click the CELL that wears the fold to bring its card into the sidebar, because that is the cell the suggestion is about.",
     cell: (row) => {
       const standing = proposalsOn(row.name);
       if (standing.length === 0) return null;
@@ -63,7 +63,7 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
         <TooltipHint
           content={
             standing.length === 1
-              ? `One proposal standing on ${row.name} — ${where}. Click the cell that wears the fold to bring its card into the doc sidebar, where accept and deny sit beside the spec text.`
+              ? `One suggestion standing on ${row.name} — ${where}. Click the cell that wears the fold to bring its card into the doc sidebar, where accept and deny sit beside the spec text.`
               : `${standing.length} proposals standing on ${row.name}, at different types — ${where}. The row is contested more than once; the folds in the cells say WHICH cells, and clicking one brings its card into view.`
           }
         >
@@ -81,7 +81,7 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
   /**
    * The parameter's identity — and, since the family-value COLUMN is gone, the only place the
    * family level shows itself: a formula renders as a second line here, and a family-level
-   * proposal wears its fold here. That is honest about where the value lives, where a fourth
+   * suggestion wears its fold here. That is honest about where the value lives, where a fourth
    * value column pretending to be a fourth type was not.
    */
   const identityColumn = (state: TableState): Column<PRow> => ({
@@ -131,7 +131,7 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
       const propertyCell = (entry: (typeof properties)[number]) => (
         <span key={entry.id} className="ml-1 inline-block w-44 align-middle">
           <NavStateCell
-            {...cellFromTrichotomy(
+            {...cellFromDraft(
               proposalCell([entry], null),
               {
                 value: `${entry.property} ${entry.proposed}`,
@@ -165,7 +165,7 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
             ? " No direct form or connector dimension binding. Other declarations and formulas may still use this parameter."
             : ""
       }`;
-      // TODO(core-reader): a FAMILY-LEVEL proposal has no value cell of its own — the family-value
+      // TODO(core-reader): a FAMILY-LEVEL suggestion has no value cell of its own — the family-value
       // column is gone, and this identity cell is two lines, so it cannot be a row-scale
       // `StateCell`. It therefore draws the fold and takes the locate click itself, with the
       // grammar's own guard (a click on an inner Press belongs to that Press). The reader has no
@@ -235,10 +235,10 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
           </TooltipHint>
           {row.proposed && family[0] ? (
             // The reading has no such parameter: Pea's declaration of it is a cell of its own,
-            // with the same accept and deny every other proposal has.
+            // with the same accept and deny every other suggestion has.
             <span className="w-44 shrink-0">
               <NavStateCell
-                {...cellFromTrichotomy(
+                {...cellFromDraft(
                   proposalCell(family, null),
                   { value: "", currentValue: "(not in the reading)" },
                   parameterText,
