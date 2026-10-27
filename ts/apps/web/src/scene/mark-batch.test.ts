@@ -34,10 +34,16 @@ it("batches semantic strokes, keeps transforms and dash origins, and only rebuil
   expect(first.children.every((child) => !child.visible)).toBe(true);
   markFrame(first, { seconds: 0, reducedMotion: true, state: "hover", landed: Infinity });
   expect(batch.sync()).toBe(true);
-  expect(batch.group.children).toHaveLength(4);
+  // first: casing, ink and its occluded twin (now lit); second: casing and ink, unchanged.
+  expect(batch.group.children).toHaveLength(5);
   expect(
-    (batch.group.children as LineSegments2[]).filter((line) => !line.material.depthTest),
-  ).toHaveLength(2);
+    (batch.group.children as LineSegments2[]).filter(
+      (line) => line.material.depthFunc === THREE.GreaterDepth,
+    ),
+  ).toHaveLength(1);
+  expect((batch.group.children as LineSegments2[]).every((line) => line.material.depthTest)).toBe(
+    true,
+  );
   batch.dispose();
   expect(batch.group.children).toHaveLength(0);
   expect(first.children.every((child) => child.visible)).toBe(true);

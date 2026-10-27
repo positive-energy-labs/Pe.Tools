@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { SCENE_PRESETS } from "@pe/agent-contracts";
 import { bool, choice, colour, defineKnobs, num, set } from "#/knobs/knobs";
 import { inkOf } from "./ink";
-import type { Bounds, IssueState, LayerFrame, Paint, PaintOf, SceneInstance } from "./types";
+import type { IssueState, LayerFrame, Paint, PaintOf, SceneInstance } from "./types";
 
 export const WHITE = Object.freeze(new THREE.Color(1, 1, 1));
 export const BLACK = Object.freeze(new THREE.Color(0, 0, 0));
@@ -36,18 +36,20 @@ const SYSTEM_PALETTE = ["viz-1", "viz-2", "viz-3", "viz-4", "viz-5", "viz-6"] as
 export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
   subject: {
     colour: colour("Subject ink", "theme"),
+    // X-ray is this value lowered: it also caps the stub opacity (was depth.everythingTranslucent).
     opacity: num("Subject opacity", 0.98, [0.05, 1, 0.01]),
     bySystem: bool("Colour by system", true),
     stubOpacity: num("Stub opacity", 0.16, [0.05, 1, 0.01]),
     stubGroundMix: num("Stub mix toward ground", 0.45, [0, 1, 0.01]),
-    stubFadeFt: num("Stub fade reach", 10, [1, 50, 0.5], "live", "ft"),
     stubEndAlpha: num("Stub fade floor × opacity", 0.06, [0, 1, 0.01]),
     darkLift: num("Dark-stage colour lift", 0.16, [0, 0.3, 0.01]),
   },
   depth: {
-    everythingTranslucent: bool("Everything translucent", false),
-    translucentOpacity: num("Translucent duct opacity", 0.45, [0.05, 0.99, 0.01]),
     rim: num("Duct rim contrast", 0.18, [0, 0.8, 0.01]),
+    // One rule for selected, lit, hover and damage: behind real subject geometry, a highlight
+    // keeps its hue at this alpha and width, constant however many layers are in front.
+    occludedAlpha: num("Occluded highlight alpha", 0.35, [0, 1, 0.01]),
+    occludedWidth: num("Occluded highlight width ×", 0.6, [0.2, 1, 0.05]),
   },
   shell: {
     colour: colour("Envelope ink", "ink-2"),
@@ -81,6 +83,9 @@ export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
     zoomOutFactor: num("Zoom-out × subject diagonal", 2, [1, 5, 0.1]),
     panMargin: num("Pan margin × subject diagonal", 0.25, [0, 1, 0.05]),
     returnMs: num("Camera return", 380, [100, 1000, 10], "live", "ms"),
+    wiggleDeg: num("Wiggle cone radius", 6, [1, 15, 0.5], "live", "deg"),
+    wiggleMs: num("Wiggle loop", 1200, [500, 3000, 50], "live", "ms"),
+    wiggleLoops: num("Wiggle loops", 2, [1, 4, 1]),
   },
   palette: Object.fromEntries(
     SYSTEM_PALETTE.map((role, i) => [`s${i + 1}`, colour(`System ink ${i + 1}`, role)]),
@@ -94,19 +99,17 @@ export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
     colour: colour("Context ink", "theme"),
     themeGroundMix: num("Context mix toward ground", 0, [0, 1, 0.01]),
     nearFt: num("Full within", 0, [0, 20, 0.25], "live", "ft"),
-    farFt: num("Far distance", 8, [1, 64, 0.5], "live", "ft"),
     curve: num("Curve exponent", 4, [0.25, 8, 0.05]),
     maxOpacity: num("Opacity at subject", 0.23, [0.01, CONTEXT_OPACITY_LIMIT, 0.01]),
     interior: num("Context face fill", 0.67, [0, 1, 0.01]),
     silhouettePower: num("Context silhouette exponent", 3, [0.5, 12, 0.5]),
-    minOpacity: num("Opacity far", 0.004, [0, CONTEXT_OPACITY_LIMIT, 0.001]),
+    // The reach (veil far = stub fade) is the page's Nearby radius, else VEIL_DEFAULT_REACH_FT.
+    minOpacity: num("Opacity at reach edge", 0.004, [0, CONTEXT_OPACITY_LIMIT, 0.001]),
     desaturate: num("Desaturate far", 0, [0, 1, 0.01]),
     fog: num("Fog to ground far", 0, [0, 1, 0.01]),
     brightness: num("Brightness near ducts", 0, [0, 1, 0.01]),
-  },
-  fog: {
-    depth: bool("Camera-depth fog", false),
-    density: num("Depth fog × diagonal", 0.45, [0, 3, 0.05]),
+    // A/B for kaitpw (2026-10-26): only the nearest context surface per pixel, no stacking.
+    singleLayer: bool("Single-layer context", false),
   },
   lights: {
     sky: colour("Hemisphere sky", "#fff8ee"),
@@ -216,7 +219,3 @@ export function sceneGrounds(mount: Element, look: Look) {
     },
   };
 }
-
-/** Exponential squared falloff is invariant under a uniform change of model units/size. */
-export const fogDensity = (b: Bounds, k = LOOK.defaults.fog.density) =>
-  k / Math.max(Math.hypot(b.maxX - b.minX, b.maxY - b.minY, b.maxZ - b.minZ), 1e-6);

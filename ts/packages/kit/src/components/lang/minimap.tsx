@@ -231,10 +231,13 @@ export function OrbitMinimap({
   orbit,
   lines,
   litLines,
+  children,
 }: {
   orbit: LiveOrbit;
   lines?: readonly (readonly (readonly number[])[])[];
   litLines?: readonly (readonly (readonly number[])[])[];
+  /** The camera's own verbs (projection, wiggle): one row in the globe's free lower corners. */
+  children?: ReactNode;
 }) {
   const svg = useRef<SVGSVGElement>(null);
   const live = useRef(orbit);
@@ -430,7 +433,11 @@ export function OrbitMinimap({
     </>
   ));
 
-  return (
+  const box = {
+    width: `var(--floater-content-w, ${SIZE}px)`,
+    height: `var(--floater-content-h, ${SIZE}px)`,
+  };
+  const globe = (
     <svg
       ref={svg}
       width={SIZE}
@@ -440,10 +447,7 @@ export function OrbitMinimap({
       aria-label="orbit globe"
       data-minimap="orbit"
       className="block cursor-grab touch-none select-none overflow-visible"
-      style={{
-        width: `var(--floater-content-w, ${SIZE}px)`,
-        height: `var(--floater-content-h, ${SIZE}px)`,
-      }}
+      style={children ? { width: "100%", height: "100%" } : box}
       onPointerDown={(event) => {
         if (event.button !== 0) return;
         // A drag turns the globe; it never starts a text selection in the pane.
@@ -498,5 +502,18 @@ export function OrbitMinimap({
     >
       {drawing}
     </svg>
+  );
+  return children ? (
+    <div className="relative" style={box}>
+      {globe}
+      <div
+        data-orbit-controls=""
+        className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between gap-1 *:pointer-events-auto"
+      >
+        {children}
+      </div>
+    </div>
+  ) : (
+    globe
   );
 }

@@ -3,11 +3,14 @@ import { CONTEXT_OPACITY_LIMIT } from "./grounds";
 import { VEIL_REACH_FT, type VeilField } from "./veil-field";
 export { bakeVeil, falloff, veilDistance, VEIL_REACH_FT, type VeilField } from "./veil-field";
 
+/** The reach when no page supplies a Nearby radius; matches the Ducts contract's default
+ * (`routes/ducts.ts` contextRadiusFt). One number: the veil's far edge and the stub fade. */
+export const VEIL_DEFAULT_REACH_FT = 10;
+
 export type VeilLook = {
   interior?: number;
   silhouettePower?: number;
   nearFt: number;
-  farFt: number;
   curve: number;
   minOpacity: number;
   maxOpacity: number;
@@ -67,9 +70,15 @@ export function setVeilField(u: VeilUniforms, field: VeilField) {
 }
 
 /** `ground` is the stage colour already in the output colour space, as three's own fog uniform. */
-export function setVeilLook(u: VeilUniforms, look: VeilLook, ground: THREE.Color) {
-  u.veilNear.value = look.nearFt;
-  u.veilFar.value = Math.min(look.farFt, VEIL_REACH_FT);
+export function setVeilLook(
+  u: VeilUniforms,
+  look: VeilLook,
+  ground: THREE.Color,
+  reachFt = VEIL_DEFAULT_REACH_FT,
+) {
+  u.veilFar.value = Math.min(reachFt, VEIL_REACH_FT);
+  u.veilNear.value = Math.min(look.nearFt, u.veilFar.value);
+  u.stubFadeFt.value = u.veilFar.value;
   u.veilCurve.value = look.curve;
   // Even crossed knobs cannot make far context stronger or context fully opaque.
   u.veilMaxOpacity.value = Math.max(0, Math.min(look.maxOpacity, CONTEXT_OPACITY_LIMIT));
@@ -106,12 +115,14 @@ void veil(inout vec4 c) {
 #ifdef VEIL_TIER
   bool context = c.a == 0.0;
   bool shell = c.a > 1.0;
-  if ((context || shell) ? scenePass != 3 : scenePass != 1) discard;
+  // 1 subject; 3 context and envelopes in one sorted pass; 4 envelopes alone; 5 context alone.
+  if (context ? (scenePass != 3 && scenePass != 5) : shell ? (scenePass != 3 && scenePass != 4) : scenePass != 1) discard;
   float facing = abs(dot(normalize(sceneNormal), normalize(sceneView)));
   if (shell) c.a -= 1.0;
   if (context) {
     if (veilHalo && d >= veilFar) discard;
-    c.a = veilHalo ? veilMaxOpacity * t : mix(veilMinOpacity, veilMaxOpacity, t);
+    // Halo and all context share one ramp; halo only drops what lies past the reach.
+    c.a = mix(veilMinOpacity, veilMaxOpacity, t);
     c.a *= mix(veilInterior, 1.0, pow(1.0 - facing, veilSilhouettePower));
     c.rgb = mix(c.rgb, vec3(dot(c.rgb, vec3(0.2126, 0.7152, 0.0722))), veilDesaturate * (1.0 - t));
     c.rgb *= 1.0 + veilBrightness * t;
