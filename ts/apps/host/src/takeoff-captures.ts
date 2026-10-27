@@ -24,6 +24,7 @@ import {
   familiesReadProgressSchema,
   type FamiliesReadProgress,
   type FamilyCapture,
+  type HistoryRow,
   type WorkKey,
 } from "@pe/agent-contracts";
 import { createHash, randomUUID } from "node:crypto";
@@ -388,22 +389,31 @@ export class TakeoffCaptures {
     return parsed.data;
   }
   /** The latest reading of one Work subject; other subjects' readings are never parsed as readings. */
-  async scheduleWork(workspaceId: string): Promise<ScheduleReading> {
-    const names = await readdir(join(this.directory, "schedules"));
+  /** Every retained reading of one Work subject, newest first: its History (ruling 57). */
+  async scheduleHistory(workspaceId: string): Promise<HistoryRow[]> {
+    const names = await readdir(join(this.directory, "schedules")).catch(
+      (error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return [];
+        throw error;
+      },
+    );
     const stamps = await Promise.all(
       names
         .filter((name) => /^[a-f0-9]{64}\.json$/.test(name))
         .map(async (name) => {
           const id = name.slice(0, -5);
           const stamp = retainedStamp(await this.storedSchedule(id));
-          return stamp ? { id, ...stamp } : null;
+          return stamp?.workspaceId === workspaceId
+            ? [{ id, at: stamp.capturedAt, label: "grid read" }]
+            : [];
         }),
     );
-    const latest = stamps
-      .filter((stamp) => stamp?.workspaceId === workspaceId)
-      .sort((a, b) => b!.capturedAt.localeCompare(a!.capturedAt))[0];
-    if (!latest) throw Error("No retained reading for this Schedule Work");
-    return this.schedule(latest.id);
+    return stamps.flat().sort((a, b) => b.at.localeCompare(a.at));
+  }
+  /** The Work's latest retained reading; null when the host holds none (a catalog pick, unread). */
+  async scheduleWork(workspaceId: string): Promise<ScheduleReading | null> {
+    const latest = (await this.scheduleHistory(workspaceId))[0];
+    return latest ? this.schedule(latest.id) : null;
   }
   private async storedSchedule(id: string): Promise<unknown> {
     return JSON.parse(await readFile(join(this.directory, "schedules", `${id}.json`), "utf8"));

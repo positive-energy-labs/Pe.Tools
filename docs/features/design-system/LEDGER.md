@@ -890,7 +890,12 @@ These rows are byte-for-byte text from `34bd5e17`. The searchable comment preser
   - Contract: admit app-owned address fields such as `?inspect` with access policy; export entity field types rather than borrowing Schedules' Page type.
   - Kit: one TableState adapter for query/sort/hidden/selection instead of store-specific projections (`schedules/lease.ts`, `families/store.ts`, `family/store.ts`, Takeoffs); declare plane orientation; resolve the `ducts-domain` dependency preventing duct constants leaving the route contract.
   - Guard: reject raw `navigate({ search })` writes that bypass Page ownership. The removed entity History/view/selection copies demonstrate why it is needed.
-- Entity-wave-c's unported obligations remain open: History Readings on Schedules and Family (rulings 57-58, host `history`); catalog Work identity (51); Pea planning Families (50, actor policy); `commitIn="verbs"` and narrow log (V14-V16); pivot cell focus; and the Cite inspector. Branch presence is not delivery.
+- Entity-wave-c, ported on branch `port/entity-wave-c` (2026-10-26; deterministic and compile proof, plus the demo-lane browser scenario for a schedule pick that reads once then captures; no Revit, and no browser look at History, cell focus or the verb row): Schedules History (`schedule.grid.history`), catalog Work identity (51), Family's Chat cell head, exact Schedules cell focus with a hidden-target log row, and `commitIn="verbs"` with the narrow log on Families and Schedules (39). Still owed:
+  - Family History (57-58): `family.capture` receipts carry only the lifetime ref (`executionContext`), not the document Address, so exact provenance needs the host to stamp the Address on the receipt first; then a History Reading and a read-only member draw in `FamilyWorkspace` (branch `PastMember`).
+  - The Cite inspector: blocked on the contract line above (app-owned `?inspect` with access policy); then RunsList, Family build/plan sheets, chat record lines, parameter links and instance output open artifacts in-app. Today Family readings still open raw JSON (`inspectables.reading`, `kind: "href"`).
+  - Families pivot: a locate the query hides says nothing; give it the kit `onActiveHidden` refusal Schedules now uses.
+  - Needs the user: `families.plan.actor = "any"` (ruling 50, Pea plans while a human still owns apply). The contract stays `human`.
+  - Needs the user: hiding the ordinary Families capture verb until capture moves to parameter metadata (49/56). `families/manifest.ts` still exposes it.
 
 ### Language and primitive gaps (single owner)
 

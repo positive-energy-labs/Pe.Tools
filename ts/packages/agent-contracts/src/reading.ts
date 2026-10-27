@@ -241,8 +241,8 @@ export const readingRequestSchema = z.discriminatedUnion("kind", [
   z.strictObject({
     kind: z.literal("schedule-reading"),
     target: documentRefSchema.optional(),
-    subject: z.enum(["catalog", "work", "saved"]),
-    /** The workspace id for `work`, the basis id for `saved`. */
+    subject: z.enum(["catalog", "work", "history", "saved"]),
+    /** The workspace id for `work` and `history`, the basis id for `saved`. */
     id: z.string().min(1).optional(),
   }),
   /** An immutable saved takeoff capture by id, or every capture of one document. */
@@ -254,6 +254,12 @@ export const readingRequestSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 export type ReadingRequest = z.infer<typeof readingRequestSchema>;
+
+/** One row of a History list: what one retained read produced, and when. */
+export const historyRowsSchema = z.array(
+  z.object({ id: z.string(), at: z.string(), label: z.string() }),
+);
+export type HistoryRow = z.infer<typeof historyRowsSchema>[number];
 
 export const READING_MAX_KEYS = 32;
 export const READING_MAX_REQUEST_BYTES = 16 * 1024;

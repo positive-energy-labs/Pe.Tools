@@ -84,3 +84,32 @@ test("multirow headers mount without measuring row geometry", () => {
     measure.mockRestore();
   }
 });
+
+test("a cell named from elsewhere takes focus; one the query hides is said, not dropped", () => {
+  const hidden = vi.fn();
+  const rows = [
+    { id: "one", note: "Alpha" },
+    { id: "two", note: "Beta" },
+  ];
+  const columns = [
+    { key: "id", label: "ID", cell: (row: (typeof rows)[number]) => row.id },
+    { key: "note", label: "Note", cell: (row: (typeof rows)[number]) => row.note },
+  ];
+  const draw = (activeKey: string, state?: { query: string }) => (
+    <Table
+      rows={rows}
+      rowKey={(row) => row.id}
+      label="Located table"
+      columns={columns}
+      activeKey={activeKey}
+      activeColumn="note"
+      onActiveHidden={hidden}
+      {...(state ? { state: { ...state, sorts: [], hiddenColumns: [] } as never } : {})}
+    />
+  );
+  const { rerender } = render(draw("two"));
+  expect(document.activeElement?.textContent).toBe("Beta");
+  expect(hidden).not.toHaveBeenCalled();
+  rerender(draw("one", { query: "Beta" }));
+  expect(hidden).toHaveBeenCalledWith("its row is hidden by the query");
+});
