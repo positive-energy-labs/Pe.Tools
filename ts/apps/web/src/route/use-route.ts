@@ -19,11 +19,13 @@ import {
 import {
   changedInRevit,
   dirty,
+  inFlight,
   readingAtom,
   peReadings,
   previousOf,
   targetInventory,
 } from "#/readings";
+import { useWork } from "@pe/kit/lang/work";
 import { situationCells } from "./cells";
 import { DEFAULT_WAIT_S, type PageMove, type RouteManifest } from "./manifest";
 import { urlPage, useInitialUrlPage, useUrlPage } from "./url";
@@ -245,6 +247,13 @@ export function useRoute<W, R extends string, P, A extends string>(
       (seededReadings ?? { ...liveReadings, ...providedReadings }) as Record<R, Reading<unknown>>,
     [seededReadings, liveReadings, providedReadings],
   );
+  // The route's readings and its running verb are its work, owned by the nearest work owner.
+  const reading = Object.entries<Reading<unknown>>(readings)
+    .filter(([, value]) => inFlight(value))
+    .map(([name]) => name);
+  useWork(reading.length > 0, `reading ${reading.join(", ")}…`);
+  const running = busy ? manifest.actions?.[busy.key] : undefined;
+  useWork(busy !== null, `${running?.label ?? "working"}…`);
 
   const writer = useMemo(
     () =>

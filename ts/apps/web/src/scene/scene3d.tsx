@@ -1,5 +1,5 @@
 import { viewportCodec } from "@pe/agent-contracts";
-import { useWork } from "@pe/kit/lang/pane";
+import { useWork } from "@pe/kit/lang/work";
 import { RevitTarget } from "@pe/kit/lang/revit-target";
 /**
  * The one 3D renderer in the web app. The route's viewport (a Page key of kind `orbit`) owns the

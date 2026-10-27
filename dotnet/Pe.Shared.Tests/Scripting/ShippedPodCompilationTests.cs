@@ -15,6 +15,11 @@ public sealed class ShippedPodCompilationTests {
     // first-boot shipped entrypoint, not an inferred property of its source text.
     private static readonly IReadOnlyDictionary<(string Pod, string Entrypoint), ScriptPermissionMode> EntrypointPolicies =
         new Dictionary<(string Pod, string Entrypoint), ScriptPermissionMode> {
+            [("document-profiler", "src/MechanicalPlanCensus.cs")] = ScriptPermissionMode.ReadOnly,
+            [("document-profiler", "src/Profile.cs")] = ScriptPermissionMode.ReadOnly,
+            [("document-profiler", "src/DeletionExperiment.cs")] = ScriptPermissionMode.NoTransaction,
+            [("document-profiler", "src/SaveVariant.cs")] = ScriptPermissionMode.NoTransaction,
+            [("document-profiler", "src/ViewOpenProbe.cs")] = ScriptPermissionMode.NoTransaction,
             [("snowdon-circuits", "src/Census.cs")] = ScriptPermissionMode.ReadOnly,
             [("snowdon-circuits", "src/InspectRun.cs")] = ScriptPermissionMode.ReadOnly,
             [("snowdon-ducts", "src/Census.cs")] = ScriptPermissionMode.ReadOnly,
@@ -23,15 +28,23 @@ public sealed class ShippedPodCompilationTests {
         };
 
     [Test]
-    public void Every_first_boot_shipped_pod_entrypoint_compiles_under_its_shipped_policy() {
+    public void Every_first_boot_shipped_pod_entrypoint_compiles_under_its_shipped_policy() => CompilePods(null);
+
+    [Test]
+    public void Document_profiler_entrypoints_compile_under_explicit_policies() => CompilePods("document-profiler");
+
+    private static void CompilePods(string? selectedPod) {
         var root = FindRepositoryRoot();
         var examples = Path.Combine(root, "examples", "pods");
+        if (selectedPod is not null)
+            Assert.That(Directory.Exists(Path.Combine(examples, selectedPod)), Is.True, "Selected shipped Pod is absent.");
         var references = MetadataReferences();
         var projectUsings = Array.Empty<string>();
         var compiler = new ScriptCompilationService(ScriptFileTemplates.DefaultUsings);
         var policy = ScriptPolicyAnalyzer.CreateDefault();
 
         foreach (var folder in Directory.EnumerateDirectories(examples).OrderBy(path => path, StringComparer.Ordinal)) {
+            if (selectedPod is not null && Path.GetFileName(folder) != selectedPod) continue;
             var bundle = Capture(folder);
             var manifest = PodManifestValidator.ValidateJson(File.ReadAllText(Path.Combine(folder, "pod.json"))).Manifest
                 ?? throw new AssertionException($"Shipped Pod '{folder}' has an invalid manifest.");

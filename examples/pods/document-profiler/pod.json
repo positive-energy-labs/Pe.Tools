@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 2,
+  "id": "document-profiler",
+  "name": "Document profiler",
+  "version": "0.1.0",
+  "description": "Inventory deletion hypotheses and measure explicit interventions on disposable document copies. Counts are inventory, never estimated RAM or cost.",
+  "entrypoints": [
+    { "sourcePath": "src/MechanicalPlanCensus.cs", "name": "Find unsheeted mechanical plans", "description": "Read-only metadata: non-template mechanical plans, actual sheet placements and primary/dependent relationships. Keeps directly unsheeted parents whose dependents are sheeted. No activation or geometry." },
+    { "sourcePath": "src/Profile.cs", "name": "Profile document", "description": "Read-only bounded census and repeated API workloads. Writes machine-readable evidence; does not rank counts as cost." },
+    { "sourcePath": "src/DeletionExperiment.cs", "name": "Compare deletion interventions", "description": "Opt-in, disposable copy only, NoTransaction. Repeats sham/deletion/rollback controls; does not measure rendered UI or reclaimed RAM." },
+    { "sourcePath": "src/SaveVariant.cs", "name": "Save deletion variant", "description": "Opt-in, disposable copy only, NoTransaction. Commits one configured intervention and saves a NEW variant for external fresh-process comparisons." },
+    { "sourcePath": "src/ViewOpenProbe.cs", "name": "Measure view-opening calls", "description": "Opt-in, foreground disposable copy only, NoTransaction. Measures activation, refresh and supported zoom calls, then verifies view/tab/zoom restoration. Does not measure pixels or FPS." }
+  ]
+}

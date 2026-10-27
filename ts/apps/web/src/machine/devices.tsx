@@ -14,6 +14,7 @@ import QRCode from "qrcode";
 import type { DeviceListing, Pairing } from "@pe/host-contracts/pe-api";
 import { peClient } from "#/host/pe-client";
 import { LoadingContext } from "#/route/loading-context";
+import { HOST_READ_WAIT_S } from "#/route/waits";
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 const LocalDevice = createContext(true);
@@ -410,10 +411,19 @@ export function RemoteDeviceGate({
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let current = true;
+    // Unanswered past the host-read wait, the gate says so and offers Retry, never an endless wait.
     void peClient
-      .call("device.environment", {})
+      .call("device.environment", {}, { signal: AbortSignal.timeout(HOST_READ_WAIT_S * 1000) })
       .then((next) => current && setState(next))
-      .catch((error) => current && setError(message(error)));
+      .catch(
+        (error) =>
+          current &&
+          setError(
+            error instanceof DOMException && error.name === "TimeoutError"
+              ? `No answer from this host after ${HOST_READ_WAIT_S}s.`
+              : message(error),
+          ),
+      );
     return () => {
       current = false;
     };

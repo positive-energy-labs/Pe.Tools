@@ -292,7 +292,7 @@ export function ScheduleGridWorkspace({
           if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onFocus.grid();
         }}
       >
-        <Pane flush scroll="clip">
+        <Pane id="schedule" flush scroll="clip">
           <section className="flex min-h-0 min-w-0 flex-1 flex-col">
             <div className="flex min-h-0 flex-1 flex-col">
               {snapshot ? (

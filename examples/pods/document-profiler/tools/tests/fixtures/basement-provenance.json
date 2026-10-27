@@ -1,0 +1,13 @@
+{
+  "sourceJournalBasename": "journal.4175.txt",
+  "sourceFirstLine": 17425,
+  "sourceLastLine": 17606,
+  "build": "2025.4.6 per retained research evidence",
+  "transformation": "URL tokens redacted; UTF-8 decoding used replacement on invalid input. Other selected text retained.",
+  "expected": {
+    "createNewCViewReportedSeconds": 7.594,
+    "drawingReportedSeconds": 12.604445,
+    "browserToFirstJournalIdleSeconds": 21.065,
+    "targetViewId": 1444670
+  }
+}

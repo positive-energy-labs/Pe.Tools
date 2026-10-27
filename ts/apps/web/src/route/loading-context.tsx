@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { workAttributes } from "@pe/kit/lang/work";
 
 export function LoadingContext({
   name,
@@ -16,7 +17,8 @@ export function LoadingContext({
   return (
     <section
       aria-label={`${name} loading`}
-      aria-busy={busy && !error}
+      // A static owner: it renders before effects and in prerender, so it states its own work.
+      {...workAttributes("page", busy && !error ? [name] : [])}
       className="flex flex-col gap-4 p-6 overflow-auto"
     >
       <header className="flex flex-col gap-2">

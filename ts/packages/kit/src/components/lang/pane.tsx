@@ -36,22 +36,7 @@ import { SubjectBox } from "./popover";
 import "./lang.css";
 import "./pane.css";
 import { TeachPane, TeachRegion, teachText, useTeach } from "./use-teach";
-
-const WorkContext = createContext<((key: object, label: string) => () => void) | null>(null);
-/** Context preserves pane ownership across arbitrary portals, which DOM ancestry cannot do. */
-export function useWork(pending?: boolean, label = "reading…") {
-  const register = useContext(WorkContext);
-  const key = useRef({});
-  useEffect(
-    () => (pending ? register?.(key.current, label) : undefined),
-    [pending, label, register],
-  );
-}
-/** Use inside the pane when the state owner also renders that pane. */
-export function PaneWork({ pending = true, label }: { pending?: boolean; label?: string }) {
-  useWork(pending, label);
-  return null;
-}
+import { Work, WorkContext, useWorkOwner, workAttributes } from "./work";
 
 /** The renderer supplies geometry; the pane never knows a camera or a domain identity. */
 export const PictureContext = createContext<{
@@ -249,22 +234,13 @@ export function Pane({
 }: PicturePaneProps) {
   const teachId = useTeach({
     kind: "region",
-    label: teachText(title) || "pane",
+    // A title-less pane teaches by its id ("composer"), never the anonymous word "pane".
+    label: teachText(title) || id || "pane",
     purpose: teachText(help) || undefined,
   });
   const { root, body, field: fieldClass } = paneRecipe({ scroll, flush });
   const rootRef = useRef<HTMLElement>(null);
-  const [registered, setRegistered] = useState(new Map<object, string>());
-  const registerWork = useCallback((key: object, entry: string) => {
-    setRegistered((old) => new Map(old).set(key, entry));
-    return () =>
-      setRegistered((old) => {
-        const next = new Map(old);
-        next.delete(key);
-        return next;
-      });
-  }, []);
-  const work = [...registered.values()];
+  const { register: registerWork, labels: work } = useWorkOwner();
   const stage = useContext(PictureContext);
   const attentionDoc = useContext(AttentionDocument) ?? "";
   const registry = useContext(RegistryContext);
@@ -340,7 +316,7 @@ export function Pane({
   const guarded = (
     <PaneErrorBoundary key={boundaryKey} what={title} onRetry={onRetry}>
       <Suspense
-        fallback={<PaneWork label={typeof title === "string" ? `loading ${title}…` : "loading…"} />}
+        fallback={<Work label={typeof title === "string" ? `loading ${title}…` : "loading…"} />}
       >
         {children}
       </Suspense>
@@ -370,6 +346,7 @@ export function Pane({
                   data-picture={picture || undefined}
                   data-pane-id={id}
                   data-surface={ground}
+                  {...workAttributes("pane", work)}
                   aria-label={typeof title === "string" ? title : undefined}
                   tabIndex={-1}
                   // A click on inert content focuses the pane, so its scope's keys bind.
@@ -407,7 +384,6 @@ export function Pane({
                     <div
                       ref={setField}
                       data-slot="pane-field"
-                      data-working={work.length > 0 || undefined}
                       className="relative flex min-h-0 min-w-0 flex-1 flex-col"
                     >
                       {paneBody}
@@ -422,7 +398,7 @@ export function Pane({
                       <PaneGestureLegend host={rootRef}>{legend}</PaneGestureLegend>
                       {work.length > 0 && (
                         <div data-slot="pane-work" role="status" className="t-small">
-                          {[...new Set(work)].join(" · ")}
+                          {work.join(" · ")}
                         </div>
                       )}
                     </div>

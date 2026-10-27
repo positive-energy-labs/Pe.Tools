@@ -289,7 +289,6 @@ export function PodsRouteContent({
               groupOf={({ pod }) => `${pod.name} · ${pod.version}`}
               filter="substring"
               searchPlaceholder="Filter members…"
-              status={live.state === "absent" && !demo ? "pending" : "ready"}
               empty="No pods installed."
               onPick={({ pod, member: m }) => select({ pod: pod.id, path: m.path })}
               row={({ pod, member: m }) => ({

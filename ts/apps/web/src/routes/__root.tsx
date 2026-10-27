@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { WorkOwner } from "@pe/kit/lang/work";
 import { TeachPage, TeachReference, TeachTarget } from "@pe/kit/lang/use-teach";
 import { HelpWorld } from "#/route/help";
 import { referenceTeaching, STARTUP_TEACHING, SHELL_REGIONS } from "#/route/teaching";
@@ -126,7 +127,14 @@ function SurfaceOutlet({ children }: { children?: React.ReactNode }) {
   const scope = useRouteActivity();
   const pathname = scope?.pathname ?? pathnameNow;
   if (host.shell.routes === "all" || appRouteMount(pathname, host.surface))
-    return <TeachPage value={pathname}>{children ?? <Outlet />}</TeachPage>;
+    return (
+      <TeachPage value={pathname}>
+        {/* The route's work owner: a flex column, so a route root that fills by `flex-1` still fills. */}
+        <WorkOwner owner="surface" className="flex size-full min-h-0 min-w-0 flex-col">
+          {children ?? <Outlet />}
+        </WorkOwner>
+      </TeachPage>
+    );
   return (
     <div className="flex flex-col gap-3 p-3">
       <p>{appRouteByPath(pathname)?.label ?? "This tool"} opens in a full window.</p>
@@ -152,25 +160,27 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       <body>
         <RegistryContext.Provider value={appAtomRegistry}>
           <PaneFaultProvider onFault={(error) => reportFault({ code: "pane.failed" }, error)}>
-            {card ? (
-              <TooltipProvider>{children}</TooltipProvider>
-            ) : (
-              <SurfaceHostProvider>
-                <TooltipProvider>
-                  <TeachTarget value={pathname}>
-                    <TeachReference value={reference}>
-                      <RemoteDeviceGate
-                        name="Positive Energy Tools"
-                        guidance={<HelpWorld facts={reference} />}
-                      >
-                        {children}
-                        <AppUtilities />
-                      </RemoteDeviceGate>
-                    </TeachReference>
-                  </TeachTarget>
-                </TooltipProvider>
-              </SurfaceHostProvider>
-            )}
+            <WorkOwner owner="root" className="contents">
+              {card ? (
+                <TooltipProvider>{children}</TooltipProvider>
+              ) : (
+                <SurfaceHostProvider>
+                  <TooltipProvider>
+                    <TeachTarget value={pathname}>
+                      <TeachReference value={reference}>
+                        <RemoteDeviceGate
+                          name="Positive Energy Tools"
+                          guidance={<HelpWorld facts={reference} />}
+                        >
+                          {children}
+                          <AppUtilities />
+                        </RemoteDeviceGate>
+                      </TeachReference>
+                    </TeachTarget>
+                  </TooltipProvider>
+                </SurfaceHostProvider>
+              )}
+            </WorkOwner>
           </PaneFaultProvider>
         </RegistryContext.Provider>
         {KnobsFloater && (

@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import "./lang.css";
 import { Button } from "./button";
 import { Rail } from "./rail";
@@ -29,7 +30,12 @@ export function PageMap({
       role="group"
       aria-label="Page regions"
       data-page-map=""
-      style={{ aspectRatio: `${picture.width} / ${picture.height}` }}
+      style={
+        {
+          aspectRatio: `${picture.width} / ${picture.height}`,
+          "--map-aspect": picture.width / picture.height,
+        } as CSSProperties
+      }
     >
       {picture.regions.map((region, index) => (
         <Button

@@ -1,6 +1,6 @@
 import { RegistryContext } from "@effect/atom-react";
 import { holdCitation } from "@pe/kit/lang/attention";
-import { useWork } from "@pe/kit/lang/pane";
+import { useWork } from "@pe/kit/lang/work";
 /** The subject's real meshes and annotations. Camera policy belongs to useStage. */
 import { emptyListSearch } from "@pe/agent-contracts";
 import {
