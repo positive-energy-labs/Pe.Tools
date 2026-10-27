@@ -88,8 +88,7 @@ export async function readCapabilityIntent(
     );
   return {
     door: selected.intent === "Read" && key !== "scripting.execute" ? "call" : "command",
-    needs:
-      selected.needs === "nothing" && !isTsOnlyOperationKey(key) ? "session" : selected.needs,
+    needs: selected.needs === "nothing" && !isTsOnlyOperationKey(key) ? "session" : selected.needs,
     mutates: selected.intent !== "Read" || key === "scripting.execute",
     session: catalog?.bridgeSessionId,
   };
