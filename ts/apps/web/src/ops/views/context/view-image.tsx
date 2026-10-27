@@ -21,7 +21,9 @@ export function ViewImageView({ data }: OpViewProps) {
       label={res.view.label ?? "view"}
       aside={
         <>
-          <FactChip title="The largest image dimension Revit exported.">{res.pixelSize}px</FactChip>
+          <FactChip title="The delivered PNG's measured width and height.">
+            {res.width} × {res.height}px
+          </FactChip>
           {res.viewScale ? <FactChip title="The view's scale.">1:{res.viewScale}</FactChip> : null}
           {res.sheetNumber ? (
             <FactChip title="The sheet the picture was taken from.">{res.sheetNumber}</FactChip>
