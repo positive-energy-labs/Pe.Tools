@@ -243,3 +243,83 @@ test.each([4, 6])(
     }
   },
 );
+
+// Redacted from a shipped v5 journal (59/59 action receipts): the v5 schema declared
+// `footprint: footprintSchema.default([])`, and its earlier writers had no field at all.
+test("v5 actions written without a footprint import with no effects instead of crashing boot", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pe-v5-footprintless-"));
+  try {
+    const path = join(dir, "journal.jsonl");
+    const ref = { session: "session-redacted", openId: "open-redacted" };
+    const common = {
+      kind: "operation",
+      key: "scripting.execute",
+      caller: { kind: "human", via: "cli" },
+      basis: { kind: "human" },
+      destination: { kind: "document", ref },
+      request: { scriptContent: "redacted", workspaceKey: "default" },
+      bases: {},
+      recovery: [],
+      startedAt: "2026-10-26T00:00:00Z",
+      publication: { state: "unrequested" },
+    };
+    const rows = [
+      {
+        ...common,
+        id: "v5-running",
+        steps: [],
+        preparation: { state: "unprepared" },
+        state: "running",
+      },
+      {
+        ...common,
+        id: "v5-succeeded",
+        steps: [
+          {
+            id: randomUUID(),
+            key: "scripting.execute",
+            kind: "native",
+            input: { scriptContent: "redacted" },
+            state: "succeeded",
+            result: { status: "Succeeded" },
+          },
+        ],
+        preparation: { state: "ready", value: { kind: "native-leaf", actor: "any" } },
+        state: "succeeded",
+        result: { status: "Succeeded" },
+      },
+    ];
+    const lines = [JSON.stringify({ version: 5 })];
+    for (const row of rows) {
+      const actionId = randomUUID(),
+        requestId = randomUUID();
+      lines.push(
+        JSON.stringify({ mapping: [JSON.stringify(["action", row.id]), actionId] }),
+        JSON.stringify({ mapping: [JSON.stringify(["action-request", row.id]), requestId] }),
+        JSON.stringify({
+          receipt: {
+            schema: 1,
+            id: randomUUID(),
+            revision: 1,
+            at: row.startedAt,
+            stamp: null,
+            join: { actionId, requestId },
+            body: { kind: "action", value: row },
+          },
+        }),
+      );
+    }
+    await writeFile(path, `${lines.join("\n")}\n`);
+    const imported = await new ActionJournal(path).list();
+    expect(imported.map((row) => [row.id, row.state, row.effects])).toEqual([
+      ["v5-running", "unknown", []],
+      ["v5-succeeded", "succeeded", []],
+    ]);
+    expect(imported[0]).toMatchObject({
+      target: { kind: "document", ref },
+      refusal: { code: "historical-schema" },
+    });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

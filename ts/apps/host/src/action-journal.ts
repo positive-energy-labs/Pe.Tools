@@ -1076,123 +1076,139 @@ export class ActionJournal implements ReceiptReader {
     const portable = commands[admission.key as keyof typeof commands];
     if (portable)
       admission.input = portable.input.parse(admission.input) as Record<string, unknown>;
-    return this.serial(async () => {
-      const prior = this.rows.get(admission.id);
-      if (prior && !sameCaller(prior.caller, crossing.caller))
-        throw Error("Command id belongs to another authenticated caller");
-      if (prior) {
-        const identity = { id: prior.id, key: prior.key, target: prior.target, input: prior.input };
-        if (canonicalRouteInput(identity) !== canonicalRouteInput(admission))
-          throw new CommandRejected({
-            kind: "domain",
-            code: "id-conflict",
-            message: `request id '${admission.id}' conflicts with its admitted intent or target`,
-          });
-        if (!resume || (prior.state !== "unknown" && prior.state !== "incomplete"))
-          return structuredClone(prior);
-        if (prior.refusal?.kind === "domain" && prior.refusal.code === "historical-schema")
-          throw Error(
-            "Historical schema cannot authorize resumed execution; inspect its archived journal",
-          );
-        if (prior.prepared.state !== "ready")
-          throw Error("Original consumed values were not frozen; cannot resume this attempt");
-        if (prior.steps.some((step) => step.state === "unknown" || step.state === "running"))
-          throw Error("Recover every uncertain step before resuming the original action");
-        const reconciliation = [...this.rows.values()].find(
-          (other) =>
-            other.id !== prior.id &&
-            this.claimsOf(other).some(
-              (claim) => claim.kind === "reconciliation" && claim.id === prior.id,
-            ),
+    await this.loadOnce();
+    const prior = this.rows.get(admission.id);
+    if (prior && !sameCaller(prior.caller, crossing.caller))
+      throw Error("Command id belongs to another authenticated caller");
+    if (prior) {
+      const identity = { id: prior.id, key: prior.key, target: prior.target, input: prior.input };
+      if (canonicalRouteInput(identity) !== canonicalRouteInput(admission))
+        throw new CommandRejected({
+          kind: "domain",
+          code: "id-conflict",
+          message: `request id '${admission.id}' conflicts with its admitted intent or target`,
+        });
+      if (!resume || (prior.state !== "unknown" && prior.state !== "incomplete"))
+        return structuredClone(prior);
+      if (prior.refusal?.kind === "domain" && prior.refusal.code === "historical-schema")
+        throw Error(
+          "Historical schema cannot authorize resumed execution; inspect its archived journal",
         );
-        if (reconciliation)
+      if (prior.prepared.state !== "ready")
+        throw Error("Original consumed values were not frozen; cannot resume this attempt");
+      if (prior.steps.some((step) => step.state === "unknown" || step.state === "running"))
+        throw Error("Recover every uncertain step before resuming the original action");
+    }
+    const context = this.context(admission, crossing, prior?.consumes ?? []);
+    let executor!: CommandExecutor;
+    let definition!: Command;
+    let binding: CommandBinding | undefined;
+    let row: ActionReceipt = {
+      id: admission.id,
+      key: admission.key,
+      caller: crossing.caller,
+      basis: crossing.basis,
+      target: structuredClone(admission.target),
+      input: structuredClone(admission.input),
+      consumes: prior?.consumes ?? [],
+      claims: prior?.claims ?? [],
+      effects: prior?.effects ?? [],
+      consent: null,
+      steps: prior?.steps ?? [],
+      prepared: prior?.prepared ?? { state: "unprepared" },
+      recovery: prior?.recovery ?? [],
+      startedAt: prior?.startedAt ?? new Date().toISOString(),
+      state: "running",
+    };
+    // Invariant: a `serial` body never awaits the bridge, an executor, or a resource probe. The
+    // bridge journals a queue receipt before every dispatch and dispatch evidence for owned steps,
+    // both through `serial`; a lock held across a bridge read waits on itself (4f3b0d24: a cold
+    // catalog read in `definition`). Admission observes unlocked, then decides and commits under
+    // the lock against the same committed row.
+    let observed: { error: unknown } | undefined;
+    try {
+      if (!this.environment) throw Error("Command environment is unavailable");
+      executor = this.environment.resolve(admission.key);
+      definition =
+        typeof executor.definition === "function"
+          ? await executor.definition(context)
+          : executor.definition;
+      admission.input = definition.input.parse(admission.input) as Record<string, unknown>;
+      if (
+        definition.principal &&
+        !definition.principal.some((principal) => principal === crossing.caller.kind)
+      )
+        throw refused("This caller lacks the command's required capability", "caller.ineligible");
+      const expectedTarget = definition.target?.(admission.input);
+      if (
+        expectedTarget &&
+        canonicalRouteInput(expectedTarget) !== canonicalRouteInput(admission.target)
+      )
+        throw new CommandRejected({
+          kind: "domain",
+          code: "target.mismatch",
+          message: "Target differs from this command's explicit selection",
+        });
+      if (
+        !expectedTarget &&
+        (definition.needs === "nothing"
+          ? admission.target.kind !== "host"
+          : definition.needs === "session"
+            ? admission.target.kind !== "session"
+            : admission.target.kind !== "document")
+      )
+        throw new CommandRejected({
+          kind: "domain",
+          code: "target.required",
+          message: "Target does not match the command contract",
+        });
+      await this.environment?.target?.(admission.target, definition.needs);
+      if (prior?.prepared.state === "ready") executor.prepared.parse(prior.prepared.value);
+      row = { ...row, input: structuredClone(admission.input) };
+      if (!prior) {
+        binding = await executor.bind(context);
+        const effects = await Promise.all(
+          binding.effects.map(async (effect) =>
+            effect.kind === "member" && !effect.location && this.environment?.effectPath
+              ? { ...effect, location: await this.environment.effectPath(effect) }
+              : effect,
+          ),
+        );
+        row = {
+          ...row,
+          consumes: structuredClone([...context.consumed, ...(binding.consumes ?? [])]),
+          claims: structuredClone(binding.claims ?? []),
+          effects: structuredClone(effects),
+          ...(binding.basis === undefined ? {} : { basis: binding.basis }),
+        };
+        context.consumed = structuredClone(row.consumes);
+        context.basis = row.basis;
+      }
+      await this.gate(row, "admit");
+    } catch (error) {
+      observed = { error };
+    }
+    const admitted = await this.serial(async (): Promise<ActionReceipt | undefined> => {
+      // Another admission committed this id while this one observed: re-admit against that row.
+      if (this.rows.get(admission.id) !== prior) return undefined;
+      try {
+        if (observed) throw observed.error;
+        this.activeCallers.set(row.id, crossing.caller);
+        const reconciliation =
+          prior &&
+          [...this.rows.values()].find(
+            (other) =>
+              other.id !== prior.id &&
+              this.claimsOf(other).some(
+                (claim) => claim.kind === "reconciliation" && claim.id === prior.id,
+              ),
+          );
+        if (prior && reconciliation)
           throw new CommandRejected({
             kind: "claimed",
             claim: { kind: "reconciliation", id: prior.id },
             by: reconciliation.id,
           });
-      }
-      const context = this.context(admission, crossing, prior?.consumes ?? []);
-      let executor!: CommandExecutor;
-      let definition!: Command;
-      let binding: CommandBinding | undefined;
-      let row: ActionReceipt = {
-        id: admission.id,
-        key: admission.key,
-        caller: crossing.caller,
-        basis: crossing.basis,
-        target: structuredClone(admission.target),
-        input: structuredClone(admission.input),
-        consumes: prior?.consumes ?? [],
-        claims: prior?.claims ?? [],
-        effects: prior?.effects ?? [],
-        consent: null,
-        steps: prior?.steps ?? [],
-        prepared: prior?.prepared ?? { state: "unprepared" },
-        recovery: prior?.recovery ?? [],
-        startedAt: prior?.startedAt ?? new Date().toISOString(),
-        state: "running",
-      };
-      try {
-        if (!this.environment) throw Error("Command environment is unavailable");
-        executor = this.environment.resolve(admission.key);
-        definition =
-          typeof executor.definition === "function"
-            ? await executor.definition(context)
-            : executor.definition;
-        admission.input = definition.input.parse(admission.input) as Record<string, unknown>;
-        if (
-          definition.principal &&
-          !definition.principal.some((principal) => principal === crossing.caller.kind)
-        )
-          throw refused("This caller lacks the command's required capability", "caller.ineligible");
-        const expectedTarget = definition.target?.(admission.input);
-        if (
-          expectedTarget &&
-          canonicalRouteInput(expectedTarget) !== canonicalRouteInput(admission.target)
-        )
-          throw new CommandRejected({
-            kind: "domain",
-            code: "target.mismatch",
-            message: "Target differs from this command's explicit selection",
-          });
-        if (
-          !expectedTarget &&
-          (definition.needs === "nothing"
-            ? admission.target.kind !== "host"
-            : definition.needs === "session"
-              ? admission.target.kind !== "session"
-              : admission.target.kind !== "document")
-        )
-          throw new CommandRejected({
-            kind: "domain",
-            code: "target.required",
-            message: "Target does not match the command contract",
-          });
-        await this.environment?.target?.(admission.target, definition.needs);
-        if (prior?.prepared.state === "ready") executor.prepared.parse(prior.prepared.value);
-        row = { ...row, input: structuredClone(admission.input) };
-        if (!prior) {
-          binding = await executor.bind(context);
-          const effects = await Promise.all(
-            binding.effects.map(async (effect) =>
-              effect.kind === "member" && !effect.location && this.environment?.effectPath
-                ? { ...effect, location: await this.environment.effectPath(effect) }
-                : effect,
-            ),
-          );
-          row = {
-            ...row,
-            consumes: structuredClone([...context.consumed, ...(binding.consumes ?? [])]),
-            claims: structuredClone(binding.claims ?? []),
-            effects: structuredClone(effects),
-            ...(binding.basis === undefined ? {} : { basis: binding.basis }),
-          };
-          context.consumed = structuredClone(row.consumes);
-          context.basis = row.basis;
-        }
-        this.activeCallers.set(row.id, crossing.caller);
-        await this.gate(row, "admit");
         for (const claim of row.claims) {
           if (claim.kind !== "reconciliation") continue;
           const original = this.rows.get(claim.id);
@@ -1663,6 +1679,7 @@ export class ActionJournal implements ReceiptReader {
       void completion.catch(() => undefined);
       return structuredClone(row);
     });
+    return admitted ?? this.invoke(raw, crossing, resume);
   }
   /**
    * Signal the running action's in-flight bridge request. `signal` is given the step id, which IS
@@ -1796,6 +1813,7 @@ export class ActionJournal implements ReceiptReader {
       return structuredClone(nextRow);
     });
   }
+  /** The journal's one write lock. Never await the bridge inside it: the bridge journals through it. */
   private serial<A>(work: () => Promise<A>): Promise<A> {
     const next = this.tail
       .catch(() => undefined)

@@ -1,0 +1,85 @@
+# Reading Revit: cost and truth
+
+This doc is the authority for every Pe.* read of Revit geometry: Space, Ducts context, Pea's spatial verbs, Takeoff and clash detection. The decision is [ADR 0025](../../adr/0025-accurate-geometry-first.md). Open work lives in the [spatial ledger](LEDGER.md). Source: `.artifacts/accept/revit-read-lessons-20261027/MINED.md`. The R, U and M ids below point into it. Written 2026-10-27.
+
+**Scope warning.** Every number here comes from one model, Chadds (`MEP_YoramLePairArchitects_ChaddsFord`, Revit 2025, one loaded IFC-derived RVT link). UNPROVEN[generality to other models, link types, Revit versions and cloud-linked sources]. project-c has native walls in an RVT link and 86 link Rooms. It is the named second-project falsifier.
+
+## Truth rules (kaitpw)
+
+1. Accurate geometry is the top requirement, above memory. "accurate geometry is the biggest requirement by far. I assumed that was implicit" (cfdbb202, 2026-10-27 17:14Z). If a gate omits accuracy, it selects an inaccurate answer.
+2. Never draw an element at an angle as an axis-aligned box. "any and every diagonal element needs to not just be simplified to a box, that is like the biggest form of our ui lying" (same message). On 2,942 rotated Chadds instances, the world box is a median 2.17 times the family-local box volume (P2).
+3. Orient each element by its own frame, never by its link or document. Chadds has an axis-aligned wing and a wing at 45 degrees.
+4. Partial rendering is harmful. "if we only render some stuff, thats actually harmful. this is not a case where best effort is ok" (6e8d2a25, 2026-10-25 04:41Z).
+5. Meshes are first-class. "full data meshes are something i still need for my future dreams of running and visualizing clash detection on the same substrate" (cfdbb202, 2026-10-27 17:14Z).
+6. Context includes other MEP. "we absolutely should not exclude other MEP from the proximity or context. if anything these are actually the most important types of context" (cfdbb202, 2026-10-27 06:19Z).
+
+## Cost model as measured
+
+All values are deltas of Revit private bytes in MiB. Unless a row says otherwise, the lane is session dev, SDK-controlled `pe.app-25`, Chadds, 2026-10-27. Cold means the first read in a fresh process. Evidence: `.artifacts/accept/space-focus-mesh-20261027/REPORT.md` (S2, S3, P2, P3) and `.artifacts/accept/space-memory-night-20261027/REPORT.md` (night).
+
+| Work | Measured | Per element | Stamp |
+|---|---|---:|---|
+| First touch, IFC link (collector iteration, no bounding box) | 84,585 el, +1,125, 13.4 s | ≈13.6 KB | PROVEN[session dev, PID 52708, `41508321`, 12:33 CDT] |
+| Same, other process | 71,731 el, +698.8, 10.7 s | ≈10 KB | PROVEN[session dev, PID 32756, `fbf76dbe`, ≈12:55 CDT] |
+| First touch, host | 53,473 el, +39.1 | ≈0.7 KB | PID 52708 |
+| Host `get_BoundingBox` | 34,123 el, +112.7 | ≈3.4 KB | PID 52708 |
+| Link `get_BoundingBox` after first touch | 84,573 el, +48.2 | ≈0.6 KB | PID 52708 |
+| Focus meshes, SA 7, cold | 283 meshes of 501 focus elements, 56,592 tri, +68 | | PROVEN[session dev, PID 72212, `2c6c1565`, 12:59 CDT] (P4) |
+| Focus meshes, whole building, host MEP | 5,224 meshes + 4,082 runs, 1.1 M tri, +191 private (≈105 native), 7.4 s | ≈0.1 to 0.2 KB per tri | PROVEN[session dev, PID 51772, `41508321`, 12:13 CDT] |
+| Near-field Medium context meshes, 10 ft around SA 7, cold | 29,107 el (17,266 IFC Structural Framing, 1,717 Generic Models with 637k tri), 2.2 M tri, +2,395 total, ≈430 s | ≈0.5 to 0.7 KB per tri (estimate) | PROVEN[session dev, PID 72212, `2c6c1565`, 12:59 to 13:22 CDT] (P4) |
+| Near-field repeats, same scope | ≈0 MiB, ≈405 s each | | P4: Medium context has no cache, so `Triangulate` runs again |
+| Near-field, 10 ft around EX 7, after SA 7 | 7,803 el, 740k tri, +540 | ≈67 KB | P4 |
+| Route (a) symbol bounds, no `Triangulate` | 200 rotated fittings, +16.1 | ≈82 KB | P2, PID 32756 |
+| Medium mesh | 200 rotated fittings, +21.0 | ≈107 KB | P2, PID 32756 |
+| Coarse context, whole building after five reads | +5,971 against boxes +1,068 | ≈40 KB | PROVEN[session dev, scripts, `660a3888`, night] for the deltas. The per-element value is arithmetic (R2) |
+| Repeat of the same read, same process | ≈0 | | S2, S3 |
+| PSC1 publish | +38 to +364 of managed heap commit, −465 after GC | | S2: transient .NET heap |
+| Revit alone, native default 3D at Medium | 3.10 GB after open, 15.48 GB after the 3D view opens, 20.10 GB after 31.7 s API rotation, 17.78 GB idle later | | PROVEN[session dev, PID 76216, `660a3888`, 07:22Z]. Script compile raised the baseline to 3.63 GB first. API refresh is a proxy for mouse orbit. The command dirtied the model |
+
+What the table supports:
+- Cost follows the elements walked. The loaded IFC link is the cost: first touch of its elements is ≈1.12 GiB of a ≈1.88 GiB cold whole-building read, before any geometry call. Radius, triangle budget and detail level do not bound it. On 2026-10-26, cold 10 ft context took 84.25 s and 15 ft took 86.67 s.
+- Focus meshes are cheap on Chadds: +68 MiB cold for SA 7 and ≈105 MiB native at whole-building scale. Focus is mostly duct runs, which draw without a mesh, plus modest fittings.
+- Near-field context meshes are not cheap on Chadds. The 10 ft reach around SA 7 pulls in 29,107 elements, which is 39 times the focus triangle count. It costs +2,395 MiB cold and ≈7 minutes on every read, repeats included. P4 did not separate expansion from tessellation. From S3, expansion is at most ≈1.2 GiB, so tessellation of the near field is at least ≈1.1 GiB. The probe used an axis-aligned 10 ft rule and coarse quick filters, which materialized 81,968 candidates. That is a superset of the product's triangle-distance proximity.
+- A repeat costs no memory. It still costs time when no cache holds the triangles.
+- An exact oriented box from symbol `GetBoundingBox` costs ≈82 KB per element, against ≈107 KB for the Medium mesh. Geometry generation is the cost, not `Triangulate`. So the exact box is a fidelity tool, not a memory lever.
+
+**UNRESOLVED: cost per triangle.** Host MEP focus costs ≈0.1 to 0.2 KB per triangle. Near-field context, dominated by IFC-link Structural Framing and Generic Models, costs ≈0.5 to 0.7 KB per triangle. That is about 4 times more, and the second value is an estimate after the expansion share is subtracted. P2 fittings gave ≈0.6 KB per triangle. Per element, the measures range from ≈40 KB (night Coarse, near-field SA 7) to ≈67 KB (EX 7) to ≈107 KB (P2). Hypothesis: MEP fittings share family-symbol geometry, so its generation amortizes across instances (S2 focus holds 2,599 elbows), but IFC-derived elements carry unique heavy geometry. UNPROVEN. The P2 fittings at ≈0.6 KB per triangle do not fit this hypothesis cleanly. Detail level and private against native accounting are also not excluded. The instrument is census items M4 and M5, which measure the per-category slope at three scopes. Until they run, no design may assume a per-element or per-triangle mesh cost.
+
+## What passes as geometry but is not
+
+Unless stated: PROVEN[session dev, SDK-controlled `pe.app-25` PID 19948, Chadds, `d3e739f9`, 2026-10-27 12:23 CDT, read-only census]. `Ingest.Allowed` (`dotnet/Pe.Revit.Space/Ingest.cs:44`) checks only `CategoryType.Model` and a deny list, so the first three items reach context today.
+
+- **MEP centre-line helper elements.** Categories `OST_DuctCurvesCenterLine`, `OST_DuctFittingCenterLine`, `OST_PipeCurvesCenterLine`, `OST_PipeFittingCenterLine` and `OST_FlexDuctCurvesCenterLine`. Class `Element`, no type, no `Location`, 15,193 in the document. Revit uses them to draw the "Center line" subcategory. Exclude them. UNPROVEN that they map 1:1 to ducts and fittings.
+- **CAD links.** `ImportInstance` with `IsLinked = true`: 15 are model-level, and 6 reached EX 7 context (two site plans, attic and roof DWGs, two `.3dm`). The mechanical 3D view hides them, but the scene ignores view visibility. Eight more are view-specific drafting DWGs. The boxes path does not check `ViewSpecific`. That is a code-path observation; UNPROVEN that one enters on Chadds. Ruling: CAD is an opt-in toggle in the 3D viewer and leaves Ducts context.
+- **Insulation elements.** 4,298 duct and 3,267 pipe insulations. Draw insulation from the host plus `RBS_REFERENCE_INSULATION_THICKNESS`. On 4,294 of 4,294 hosted duct insulations, that value equals the insulation's own Thickness (PROVEN for the data, PID 51772). Pipe insulation is not checked: UNPROVEN. When insulation and equipment were drawn as their own context boxes, they enclosed all 74 EX 7 focus runs. That fed the grey active-system bug (testimony, look-rule thread, `.artifacts/tmp/greyprobe`).
+- **Levels** are `CategoryType.Annotation`: 8 of 8 host Levels. They never enter context. The "level planes" seen in context were the attic and roof DWG links.
+- **Stray level `PE-CLOSE-PROBE-190704`** is at 1,352.0 ft elevation (1,004.0 ft project elevation). A past probe probably left it. Origin UNPROVEN. Exclude it before drawing levels.
+
+## Method rules
+
+1. **Run the control first.** Before you attribute cost to our code, remove our code and measure (M1). The control was possible on 2026-10-21 and ran on 2026-10-27 (R1).
+2. **Put every top requirement in the gate.** A gate on repeat memory alone selected axis-aligned boxes (R3).
+3. **A falsified premise reopens the decision before more code,** also when the user ordered the work. Name the departure at the site (R4).
+4. **Read the ledger before you design** (M16). It already held the IFC link's 92% of tessellation time, 644 MiB per resident world, and the capsule over-report (R2, R4, R3).
+5. **Screenshots, counts, API timings and stand-ins are testimony.** A stamp names the missing input: links, walls, the 45 degree wing, meshes (R8, R9).
+6. **Cost follows the elements walked.** Measure per element and per category before you choose a lever (R11, U1).
+7. **A silent bound is a defect.** The triangle budget limited export, not extraction, and hid elements for six days (R6). A bound states what it removes.
+8. **Time the probe, and take the baseline after compile.** A memory counter in the loop took 112.79 s where the read took 0.76 s. Script compile added ≈0.5 GB (R7).
+9. **Keep the proof lane quiet.** Check the `pea` shim target and the host URL. The `4f3b0d24` catalog deadlock is fixed; no catalog warm-up is needed. Close Ducts tabs that read automatically before a control. Do not use Computer Use.
+10. **Keep one canonical statement per lever.** When a finding supersedes a ledger line, rebuild the line. Never leave PROVEN and FALSIFIED lines on the same lever.
+
+## Open doubts (UNPROVEN, and code or decisions lean on them)
+
+- **U1, cost per triangle** (above). Near-field meshes, the near-field radius, and any mesh level of detail depend on it.
+- **U2, oriented boxes without tessellation.** Route (a) is exact on 800 Chadds instances, but it still pays ≈82 KB per element, so it is a fidelity tool only. `LocationCurve` covers all host MEP runs but none of the 71,688 IFC framing members, which have no `Location`. UNPROVEN on nested or multi-instance families and on direct solids.
+- **U3, first touch.** Two processes gave ≈13.6 and ≈10 KB per IFC element. UNPROVEN whether `ToElementIds()` plus a bounds source that does not expand elements exists. Every known per-element bounding box needs `GetElement`, which expands. This decides whether a bounds cache keyed by link version saves memory or only time.
+- **U7, control against the user's footprint.** The control proves that Revit's 3D display alone reaches 15 to 20 GB on Chadds. UNPROVEN that the user's 10 to 12 GB came from it, because no record shows that a 3D view was open.
+- **U5, Pea's spatial verbs.** Since `8c01f759`, `SpaceWorld.Prepare` tessellates the whole model on each call. Nobody has measured its latency or memory since then.
+- **U6, `LinkedGeometryStore`.** No proof exists for cloud links, reload, unload or workset changes. `Prune` is untested.
+- **U15, IFC Solid against Mesh.** The census sampled 4,138 of 4,143 solids with volume, but elements 1422648 and 1341401 tessellate to Mesh only.
+- **The 2026-10-21 "saved Chadds copy without links".** The record does not name the file. The only detached Chadds copy is `.artifacts/revit/detached/MEP_YoramLePairArchitects_ChaddsFord_R25_standalone_20261019.rvt` (2026-10-19), so it is probably that file. UNPROVEN. Nobody re-checked that it has no links.
+- **U16.** Chadds is the only model measured.
+
+## Instrument
+
+The "Revit read cost census" entrypoint in the [`document-profiler` Pod](../../../examples/pods/document-profiler/) is the instrument for census items M1 to M7, M14 and M18 (MINED §5). Another agent is building it (2026-10-27); this doc has not verified it. Run it on a second project before you use any number here outside Chadds.

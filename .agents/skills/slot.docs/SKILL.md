@@ -79,6 +79,7 @@ Current registry:
 - `docs/design/SURFACE-PHILOSOPHY.md`, what UI surfaces are for and how they behave
 - `docs/features/agent/PHILOSOPHY.md`, agent design
 - `docs/features/host/EFFECT-V4-PATTERNS.md`, Effect v4 idioms for the host (v3 reflexes produce wrong code)
+- `docs/features/spatial/READING-REVIT.md`, what a Revit geometry read costs and what passes as geometry but is not
 - `docs/ARCHITECTURE.md`, `docs/BUILD.md`, `docs/OBSERVABILITY.md`, repo-wide authority
 
 Creation bar: only after wide-breadth synthesis work that should rarely be repeated. New authority docs live where their scope lives and must be added to this registry.
