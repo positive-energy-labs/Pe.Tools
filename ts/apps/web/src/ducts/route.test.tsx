@@ -621,25 +621,19 @@ test("a changed document fences a pending read after changing targets and return
   // Two document-picker transitions and a fenced read exceed 15 s on a busy test machine.
 }, 30_000);
 
-test("picture layers choose the shared context mode and remove system colour keys", async () => {
+test("picture layers choose the Context and Colour dials", async () => {
   const instance = { revitId: 1 } as SceneInstance;
   await mount();
-  await waitFor(() => expect(picture.current?.contextMode).toBe("halo"));
-  expect(picture.current!.paintOf!(instance)).toEqual({
-    tier: "subject",
-    key: "supply",
-    ink: "#0569a5",
-  });
+  await waitFor(() => expect(picture.current?.contextMode).toBe("lines"));
+  expect(picture.current!.paintOf!(instance)).toEqual({ tier: "subject", kind: "supply" });
+  expect(picture.current?.colour).toBe("firm");
+  expect(picture.current?.kinds.supply).toBe("#0569a5");
   act(() => drawing.latest!.setPage({ layers: ["meshes", "halo", "context"] }));
-  await waitFor(() => expect(picture.current?.contextMode).toBe("all"));
-  expect(picture.current!.paintOf!(instance)).toEqual({ tier: "subject" });
+  await waitFor(() => expect(picture.current?.contextMode).toBe("glass"));
+  expect(picture.current?.colour).toBe("mono");
   act(() => drawing.latest!.setPage({ layers: ["meshes", "halo", "system-colours"] }));
-  await waitFor(() => expect(picture.current?.contextMode).toBe("halo"));
-  expect(picture.current!.paintOf!(instance)).toEqual({
-    tier: "subject",
-    key: "supply",
-    ink: "#0569a5",
-  });
+  await waitFor(() => expect(picture.current?.contextMode).toBe("lines"));
+  expect(picture.current?.colour).toBe("firm");
   // Scope mutation cannot depend on rendering an animation frame.
   const frame = vi.spyOn(window, "requestAnimationFrame").mockImplementation(() => 0);
   try {

@@ -22,6 +22,7 @@ import {
 import type { Psc1Metadata } from "#/scene/psc1";
 import { useLiveOrbit } from "@pe/kit/lang/live-orbit";
 import { Scene3D } from "#/scene/scene3d";
+import type { Kinds, PaintOf } from "#/scene/types";
 import type { Layer3D, Pick, SceneMeshes } from "#/scene/types";
 
 import { CutOverlay, type Framed } from "./cuts";
@@ -33,6 +34,9 @@ import { useRouteLease } from "#/route/view-bridge";
 import { spaceElementKey, toggleLayer } from "@pe/agent-contracts";
 
 type SetPage = (next: Partial<SpacePage>, move?: PageMove<SpacePage>) => void;
+/** The /space kinds table: the focused element is the subject; everything else stays context. */
+const SPACE_KINDS: Kinds = { element: "#0569a5", unknown: "#808080" };
+const spacePaint: PaintOf = (i) => (i.focus ? { kind: "element", tier: "subject" } : undefined);
 const MODE_LABEL = { "3d": "3D", top: "Top", north: "North", east: "East" } as const;
 const THUMB = { width: 176, height: 112 } as const;
 const push = { history: "push" } as const;
@@ -400,6 +404,8 @@ export function SpacePicture({
                   readout={readout}
                   className="size-full"
                   meshes={meshes}
+                  kinds={SPACE_KINDS}
+                  paintOf={spacePaint}
                   orbit={orbit}
                   orbitPivot={orbitPivot}
                   wheelHost={host}

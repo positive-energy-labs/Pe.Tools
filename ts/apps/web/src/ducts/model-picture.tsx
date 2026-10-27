@@ -30,11 +30,12 @@ import { PaneOverlay } from "@pe/kit/lang/pane";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Scene3D } from "#/scene/scene3d";
 import type { SceneRead } from "#/scene/use-scene";
-import type { Bounds, Layer3D, PaintOf, SceneMeshes } from "#/scene/types";
+import type { Bounds, Kinds, Layer3D, PaintOf, SceneMeshes } from "#/scene/types";
 
 import { CaptionBounds } from "./subject-labels";
 import { equipmentPaint, equipmentPorts } from "./paint";
 import { portLayer } from "#/scene/ports";
+import type { ColourMode, ContextMode } from "#/scene/renderer";
 import { systemPaint } from "#/scene/surfaces";
 import { Annotations, type Label, type Ruling } from "./annotations";
 import type { Encoding } from "./encoding";
@@ -101,6 +102,8 @@ export function ModelPicture({
   paintOf: routePaint,
   contextMode,
   contextRadiusFt,
+  kinds,
+  colour,
   sceneView,
   hovered,
   labels,
@@ -127,8 +130,11 @@ export function ModelPicture({
   selected: ReadonlySet<number>;
   lit: ReadonlySet<number>;
   paintOf?: PaintOf;
-  contextMode?: "halo" | "all";
+  contextMode?: ContextMode;
   contextRadiusFt?: number;
+  /** Kind to hue and the Colour dial: the two inputs of the paint seam. */
+  kinds: Kinds;
+  colour: ColourMode;
   sceneView: SceneView;
   hovered: number | null;
   labels: readonly Label[];
@@ -176,9 +182,9 @@ export function ModelPicture({
   const pictureLayers = useMemo(
     () =>
       meshes
-        ? [...findings3d, portLayer(equipmentPorts(graph, meshes, paintOf), look)]
+        ? [...findings3d, portLayer(equipmentPorts(graph, meshes, paintOf), colour === "firm" ? kinds : {}, look)]
         : findings3d,
-    [graph, meshes, paintOf, findings3d, look],
+    [graph, meshes, paintOf, findings3d, look, kinds, colour],
   );
   const preset = look.layers.preset === "page" ? sceneView.preset : look.layers.preset;
   const [sectionDraft, setSectionDraft] = useState<Section | undefined>();
@@ -322,7 +328,9 @@ export function ModelPicture({
         selected={selectedKeys}
         lit={litKeys}
         paintOf={paintOf}
-        contextMode={preset === "nearby-structure" ? "halo" : contextMode}
+        contextMode={preset === "nearby-structure" ? "lines" : contextMode}
+        kinds={kinds}
+        colour={colour}
         contextRadiusFt={contextRadiusFt}
         preset={preset}
         clipVolume={clipVolume}

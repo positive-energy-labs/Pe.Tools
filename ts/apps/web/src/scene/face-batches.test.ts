@@ -33,7 +33,7 @@ function fixture(context = false, shifted = false) {
       i === 0
         ? { tier: "subject" }
         : i === 1
-          ? { tier: "subject", surface: "shell" }
+          ? { tier: "envelope" }
           : { tier: "context" },
     );
   }
@@ -105,7 +105,7 @@ test("superseded preparation cannot dispose the still-published depth owner", as
 test("tier changes require a new pass owner, while colours keep the partition", async () => {
   const f = fixture(true),
     first = await build(f);
-  f.paints[0] = { tier: "subject", surface: "shell" };
+  f.paints[0] = { tier: "envelope" };
   const next = await build(f, first);
   expect(next.depth).toBeUndefined();
   expect(next.translucent!.instances.map((i) => i.key)).toEqual(["0", "1", "2"]);

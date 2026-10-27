@@ -3,7 +3,8 @@ import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
 import { LOOK, type Look } from "./grounds";
-import type { Layer3D, Paint } from "./types";
+import { kindHue } from "./kinds";
+import type { Kinds, Layer3D, Paint } from "./types";
 import { routeColour } from "./surfaces";
 
 /** Facts only: the renderer neither discovers connections nor joins ports inside a shell. */
@@ -58,7 +59,7 @@ export function portSegments(port: SurfacePort, look: Look) {
   ];
 }
 
-export function portLayer(ports: readonly SurfacePort[], look = LOOK.read()): Layer3D {
+export function portLayer(ports: readonly SurfacePort[], kinds: Kinds, look = LOOK.read()): Layer3D {
   type Batch = {
     line: LineSegments2;
     ports: readonly SurfacePort[];
@@ -79,9 +80,8 @@ export function portLayer(ports: readonly SurfacePort[], look = LOOK.read()): La
       if (!batch.shown[i]) return;
       const segments = batch.segments[i]!;
       positions.push(...segments);
-      const colour = port.paint.ink
-        ? routeColour(new THREE.Color(port.paint.ink), port.paint, look)
-        : (ink ?? new THREE.Color());
+      const hue = kindHue(kinds, port.paint.kind);
+      const colour = hue ? routeColour(hue, port.paint, look) : (ink ?? new THREE.Color());
       for (let n = 0; n < segments.length; n += 3) colours.push(colour.r, colour.g, colour.b);
     });
     return new LineSegmentsGeometry().setPositions(positions).setColors(colours);

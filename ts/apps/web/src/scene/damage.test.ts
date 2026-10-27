@@ -11,7 +11,7 @@ import {
 } from "./damage";
 import { createDamageBatch } from "./damage-batch";
 import { landing, markFrame, markLines } from "./marks";
-import { BLACK, WHITE, paintOf, GROUND_MATERIAL, keySlot } from "./grounds";
+import { BLACK, WHITE, paintOf, GROUND_MATERIAL } from "./grounds";
 import { SceneMeshes, type LayerFrame, type SceneInstance } from "./types";
 
 const instance: SceneInstance = {
@@ -170,9 +170,6 @@ it("grounds retain captured tiers and translucent defaults, with scale-invariant
     key: "SA 7",
   });
   expect(paintOf(instance, () => undefined)).toEqual({ tier: "subject" });
-  expect(keySlot("SA 7", 6)).toBe(keySlot("SA 7", 6));
-  expect(keySlot("SA 7", 6)).toBeGreaterThanOrEqual(0);
-  expect(keySlot("SA 7", 6)).toBeLessThan(6);
   expect(GROUND_MATERIAL).toMatchObject({ depthTest: true, depthWrite: false });
 });
 

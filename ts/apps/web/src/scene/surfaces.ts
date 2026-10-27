@@ -10,12 +10,12 @@ import type { Paint, PaintOf, SceneInstance, SceneMeshes } from "./types";
 export function systemPaint(meshes: SceneMeshes, base: PaintOf): PaintOf {
   const paints = new Map(meshes.instances.map((i) => [i.key, paintOf(i, base)]));
   const classes = new Map<string, Set<string>>();
-  const colourClass = (p: Paint) => p.ink ?? p.key;
+  const colourClass = (p: Paint) => p.kind;
   for (const p of paints.values()) {
     const key = colourClass(p);
-    if (p.tier !== "subject" || p.surface === "shell" || !p.system || key === undefined) continue;
+    if (p.tier !== "subject" || !p.key || key === undefined) continue;
     const names = classes.get(key) ?? new Set<string>();
-    names.add(p.system);
+    names.add(p.key);
     classes.set(key, names);
   }
   const variants = new Map<string, Map<string, number>>();
@@ -30,8 +30,8 @@ export function systemPaint(meshes: SceneMeshes, base: PaintOf): PaintOf {
     );
   return (i) => {
     const p = paints.get(i.key) ?? paintOf(i, base);
-    const variant = variants.get(colourClass(p) ?? "")?.get(p.system ?? "");
-    return variant && p.tier !== "context" && p.surface !== "shell" ? { ...p, variant } : p;
+    const variant = variants.get(colourClass(p) ?? "")?.get(p.key ?? "");
+    return variant && p.tier !== "context" && p.tier !== "envelope" ? { ...p, variant } : p;
   };
 }
 
@@ -48,7 +48,7 @@ export function routeColour(colour: THREE.Color, paint: Paint, look: Look) {
 /** Batch alpha encodes the pass: zero context, negative stub, >1 envelope, else subject. */
 export function surfaceAlpha(paint: Paint, look: Look) {
   if (paint.tier === "context") return 0;
-  if (paint.surface === "shell") return 1 + look.shell.opacity;
+  if (paint.tier === "envelope") return 1 + look.shell.opacity;
   return paint.tier === "stub"
     ? -Math.min(look.subject.stubOpacity, look.subject.opacity)
     : look.subject.opacity;

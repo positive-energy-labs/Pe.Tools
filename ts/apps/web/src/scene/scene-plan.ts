@@ -2,7 +2,7 @@ import { paintOf, type Look } from "./grounds";
 import type { Paint, PaintOf, SceneMeshes } from "./types";
 
 /** Only these values can change prepared geometry or its render-pass partition. */
-export type SceneStructure = Pick<Paint, "tier" | "surface">;
+export type SceneStructure = Pick<Paint, "tier">;
 export type SceneAppearance = Omit<Paint, keyof SceneStructure>;
 export type ScenePlan = {
   meshes: SceneMeshes;
@@ -14,13 +14,12 @@ export type ScenePlan = {
 };
 export function scenePlan(meshes: SceneMeshes, of: PaintOf | undefined, look: Look): ScenePlan {
   const roles = meshes.instances.map((i) => {
-    const { tier, surface } = paintOf(i, of);
-    return { tier, surface };
+    return { tier: paintOf(i, of).tier };
   });
   const angles = roles.map((p) =>
     p.tier === "context"
       ? null
-      : p.surface === "shell"
+      : p.tier === "envelope"
         ? look.shell.edgeAngle
         : p.tier === "subject"
           ? look.routes.edgeAngle

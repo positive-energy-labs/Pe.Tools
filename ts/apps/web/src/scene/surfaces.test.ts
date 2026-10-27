@@ -6,11 +6,11 @@ import { SceneMeshes, type Paint, type SceneInstance } from "./types";
 
 test("same-type opened systems get distinct values in natural order; stubs and shells cannot reshuffle them", () => {
   const paints: Paint[] = [
-    { tier: "subject", ink: "#1cbcd5", system: "FA 32" },
-    { tier: "subject", ink: "#1cbcd5", system: "FA 24" },
-    { tier: "stub", ink: "#1cbcd5", system: "FA 1" },
-    { tier: "subject", ink: "#1cbcd5", system: "FA 2", surface: "shell" },
-    { tier: "subject", ink: "#0569a5", system: "SA 71" },
+    { tier: "subject", kind: "fresh", key: "FA 32" },
+    { tier: "subject", kind: "fresh", key: "FA 24" },
+    { tier: "stub", kind: "fresh", key: "FA 1" },
+    { tier: "envelope", kind: "fresh", key: "FA 2" },
+    { tier: "subject", kind: "supply", key: "SA 71" },
   ];
   const instances = paints.map((_, n) => ({ key: String(n) }) as SceneInstance);
   const meshes = new SceneMeshes(

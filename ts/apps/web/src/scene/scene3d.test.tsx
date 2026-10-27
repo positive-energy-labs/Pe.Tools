@@ -12,6 +12,7 @@ import { usePictureRead } from "#/ducts/scene-read";
 import type { SceneRead } from "./use-scene";
 import { Row } from "@pe/kit/lang/row";
 import type { Pick, PaintOf } from "./types";
+import type { ContextMode } from "./renderer";
 
 const picking = vi.hoisted(() => ({ current: null as Pick | null }));
 vi.mock("./picking", async (original) => ({
@@ -64,7 +65,7 @@ it("keeps camera gestures local and the viewport mounted across membership and n
     limitViewport: (v: OrbitViewport) => v,
     recoverViewport: vi.fn(),
     ...Object.fromEntries(
-      "setOrbitPivot setOnFrame reportFrame setPlane setThumbs paint setLayers lightIssue reach hoverElement setClip setLook setAppearance setContextMode clear"
+      "setOrbitPivot setOnFrame reportFrame setPlane setThumbs paint setLayers lightIssue reach hoverElement setClip setLook setAppearance setContextMode setHues clear"
         .split(" ")
         .map((name) => [name, vi.fn()]),
     ),
@@ -94,7 +95,7 @@ it("keeps camera gestures local and the viewport mounted across membership and n
   const orbit = createLiveOrbit(initial, onViewport);
   const draw = (
     pivot?: readonly number[],
-    contextMode?: "halo" | "all",
+    contextMode?: ContextMode,
     shown = meshes,
     pickingEnabled = true,
     paintOf?: PaintOf,
@@ -188,11 +189,11 @@ it("keeps camera gestures local and the viewport mounted across membership and n
   expect(orbit.read()).toBe(beforeSelection);
   expect(setViewport).not.toHaveBeenCalled();
   const canvas = renderer.current.canvas;
-  view.rerender(<TestAttention registry={registry}>{draw([10, 20, 30], "halo")}</TestAttention>);
-  expect(renderer.current.setContextMode).toHaveBeenLastCalledWith("halo");
+  view.rerender(<TestAttention registry={registry}>{draw([10, 20, 30], "lines")}</TestAttention>);
+  expect(renderer.current.setContextMode).toHaveBeenLastCalledWith("lines");
   expect(renderer.current.canvas).toBe(canvas);
-  view.rerender(<TestAttention registry={registry}>{draw([10, 20, 30], "all")}</TestAttention>);
-  expect(renderer.current.setContextMode).toHaveBeenLastCalledWith("all");
+  view.rerender(<TestAttention registry={registry}>{draw([10, 20, 30], "glass")}</TestAttention>);
+  expect(renderer.current.setContextMode).toHaveBeenLastCalledWith("glass");
   fireEvent(canvas, new MouseEvent("pointerdown", { button: 0, clientX: 10, clientY: 10 }));
   onViewport.mockClear();
   act(() => {
@@ -210,7 +211,7 @@ it("keeps camera gestures local and the viewport mounted across membership and n
   fireEvent.click(canvas, { button: 0, clientX: 10, clientY: 10 });
   expect(onPick).toHaveBeenCalledExactlyOnceWith(null, expect.any(MouseEvent));
   view.rerender(
-    <TestAttention registry={registry}>{draw(undefined, "all", meshes, false)}</TestAttention>,
+    <TestAttention registry={registry}>{draw(undefined, "glass", meshes, false)}</TestAttention>,
   );
   fireEvent.click(canvas, { button: 0, clientX: 10, clientY: 10 });
   expect(onPick).toHaveBeenCalledTimes(1);
@@ -238,7 +239,7 @@ it("keeps camera gestures local and the viewport mounted across membership and n
     meshes.instances,
   );
   view.rerender(
-    <TestAttention registry={registry}>{draw(undefined, "all", biggerCapture)}</TestAttention>,
+    <TestAttention registry={registry}>{draw(undefined, "glass", biggerCapture)}</TestAttention>,
   );
   await act(async () => {});
   expect(renderer.current.meshes()).toBe(biggerCapture);

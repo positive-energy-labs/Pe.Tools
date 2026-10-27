@@ -18,7 +18,6 @@ import { createMarkBatch } from "./mark-batch";
 import { createOutline, OUTLINE_LAYER } from "./outline";
 import {
   GROUND_MATERIAL,
-  keySlot,
   LOOK,
   OUTLINE_CHANNEL,
   paintOf,
@@ -83,12 +82,14 @@ import {
   type Size,
 } from "./projection";
 import { setDamageHue } from "./damage";
+import { kindHue } from "./kinds";
 import { routeColour, routeLines, surfaceEdges, shellLines, surfaceAlpha } from "./surfaces";
 import type {
   IssueState,
   IssueTarget,
   Layer3D,
   LayerFrame,
+  Kinds,
   Paint as InstancePaint,
   PaintOf,
   Pick,
@@ -111,7 +112,8 @@ export type ClipVolume = {
   section?: Section;
   preview?: boolean;
 };
-export type ContextMode = "halo" | "all";
+export type ContextMode = "off" | "lines" | "glass";
+export type ColourMode = "firm" | "mono";
 /** Optional translucent faces share a pass after the subject has established occlusion depth. */
 const CONTEXT_LAYER = 5;
 const SHELL_LAYER = 6;
@@ -404,26 +406,28 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
   const byId: SceneInstance[] = [];
   let paintBy: PaintOf | undefined;
   const paints: InstancePaint[] = [];
+  /** Kind picks the hue; "mono" or a table without the kind or `unknown` is the subject ink. */
+  let kinds: Kinds = {};
+  let colourMode: ColourMode = "firm";
+  let huesStamp = "";
+  const subjectHue = (p: InstancePaint) =>
+    (colourMode === "firm" ? kindHue(kinds, p.kind) : undefined) ?? grounds.subject;
   const tint = (id: number, mark: Mark | null = null) => {
     const paint = paints[id]!;
     // Highlighting changes ink only. Promoting a floor to subject made it fully opaque.
     const { tier } = paint;
     const color = routeColour(
-      paint.surface === "shell"
+      tier === "envelope"
         ? grounds.shell
-        : paint.ink
-          ? new THREE.Color(paint.ink)
-          : tier === "context"
-            ? grounds.context
-            : look.subject.bySystem && paint.key !== undefined
-              ? grounds.palette[keySlot(paint.key, grounds.palette.length)]!
-              : grounds.subject,
+        : tier === "context"
+          ? grounds.context
+          : subjectHue(paint),
       paint,
       look,
     );
     if (tier !== "context" && ground.getHSL({ h: 0, s: 0, l: 0 }).l < 0.5)
       color.offsetHSL(0, 0, look.subject.darkLift);
-    if (tier === "stub" && paint.surface !== "shell")
+    if (tier === "stub")
       color.lerp(ground, look.subject.stubGroundMix);
     if (mark) color.lerp(ink, look.fill[mark]);
     const alpha = surfaceAlpha(paint, look);
@@ -949,7 +953,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
   let routeStamp = "";
   const rebuildRoutes = () => {
     const ids = byId.flatMap((_, id) =>
-      paints[id]!.tier === "subject" && paints[id]!.surface !== "shell" && batch.getVisibleAt(id)
+      paints[id]!.tier === "subject" && batch.getVisibleAt(id)
         ? [id]
         : [],
     );
@@ -957,7 +961,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       ids.map((id) => [id, paints[id]]),
       look.routes,
       grounds.subject.getHex(),
-      grounds.palette.map((c) => c.getHex()),
+      huesStamp,
     ]);
     if (stamp === routeStamp) return;
     routeStamp = stamp;
@@ -970,11 +974,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     for (const id of ids) {
       const p = paints[id]!;
       const colour = routeColour(
-        p.ink
-          ? new THREE.Color(p.ink)
-          : look.subject.bySystem && p.key !== undefined
-            ? grounds.palette[keySlot(p.key, grounds.palette.length)]!
-            : grounds.subject,
+        subjectHue(p),
         p,
         look,
       );
@@ -995,7 +995,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
   let envelopeStamp = "";
   const rebuildEnvelopes = () => {
     const ids = byId.flatMap((_, id) =>
-      paints[id]!.surface === "shell" && paints[id]!.tier !== "context" && batch.getVisibleAt(id)
+      paints[id]!.tier === "envelope" && batch.getVisibleAt(id)
         ? [id]
         : [],
     );
@@ -1045,7 +1045,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
         routeGeometryDirty = true;
       }
       hasContext ||= shown && paints[id]!.tier === "context";
-      hasShell ||= shown && paints[id]!.tier !== "context" && paints[id]!.surface === "shell";
+      hasShell ||= shown && paints[id]!.tier === "envelope";
       const cap = caps.get(id);
       if (cap) cap.visible = shown && !clipVolume?.preview;
       const mark: Mark | null = !shown
@@ -1168,7 +1168,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       cap.position.copy(origin);
       cap.visible = batch.getVisibleAt(id);
       if (paints[id]!.tier === "context") cap.layers.set(CONTEXT_LAYER);
-      else if (paints[id]!.surface === "shell") cap.layers.set(SHELL_LAYER);
+      else if (paints[id]!.tier === "envelope") cap.layers.set(SHELL_LAYER);
       scene.add(cap);
       caps.set(id, cap);
       tint(id, marked.get(id) ?? null);
@@ -1565,10 +1565,22 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       if (changedBounds) returnInside();
     },
     /** Purely visual: no capture or distance-field bake when a context layer changes. */
-    setContextMode(mode: ContextMode = "all", radiusFt?: number) {
+    setContextMode(mode: ContextMode = "glass", radiusFt?: number) {
       contextRadiusFt = radiusFt;
-      veil.veilHalo.value = mode === "halo";
+      // OWED at merge with look/rule-20261026: "off" hides context and "glass" turns the pane on
+      // (look.veil.glass); until then lines and off both draw the old halo, glass the old "all".
+      veil.veilHalo.value = mode !== "glass";
       setVeilLook(veil, look.veil, ground, contextRadiusFt);
+      thumbsStale = true;
+      render();
+    },
+    /** Hue table and Colour dial: retint only, no capture or bake. */
+    setHues(next: Kinds, mode: ColourMode) {
+      kinds = next;
+      colourMode = mode;
+      huesStamp = JSON.stringify([next, mode]);
+      routeGeometryDirty = true;
+      byId.forEach((_, id) => tint(id, marked.get(id) ?? null));
       thumbsStale = true;
       render();
     },
@@ -1585,7 +1597,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
         cap.layers.set(
           paints[id]!.tier === "context"
             ? CONTEXT_LAYER
-            : paints[id]!.surface === "shell"
+            : paints[id]!.tier === "envelope"
               ? SHELL_LAYER
               : 0,
         ),

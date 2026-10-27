@@ -1,6 +1,6 @@
 import type { DuctGraph } from "@pe/ducts-domain/drawn-graph";
 import { paintOf as resolvePaint } from "#/scene/grounds";
-import type { PaintOf, SceneMeshes } from "#/scene/types";
+import type { Paint, PaintOf, SceneMeshes } from "#/scene/types";
 import type { SurfacePort } from "#/scene/ports";
 
 /** Autodesk BuiltInCategory.OST_MechanicalEquipment; PSC1 keeps this stable numeric identity. */
@@ -12,9 +12,9 @@ export function equipmentPaint(graph: DuctGraph, base?: PaintOf): PaintOf {
     graph.nodes.filter((node) => node.kind === "equipment").map((node) => node.id),
   );
   return (instance) => {
-    const paint = {
+    const paint: Paint = {
       ...resolvePaint(instance, base),
-      system: instance.revitId === null ? undefined : (systems.get(instance.revitId) ?? undefined),
+      key: instance.revitId === null ? undefined : (systems.get(instance.revitId) ?? undefined),
     };
     // Saved PSC1 predates numeric categories. Its exact English category is a visual fallback
     // only; port identity still requires the supplied domain graph. Other labels stay unknown.
@@ -23,7 +23,7 @@ export function equipmentPaint(graph: DuctGraph, base?: PaintOf): PaintOf {
     return (instance.revitId !== null && ids.has(instance.revitId)) ||
       instance.categoryId === EQUIPMENT_CATEGORY_ID ||
       savedEquipment
-      ? { ...paint, surface: "shell" }
+      ? { ...paint, tier: paint.tier === "context" ? "context" : "envelope" }
       : paint;
   };
 }
@@ -79,7 +79,7 @@ export function equipmentPorts(
         )
           return [];
         const routePaint = resolvePaint(route, paint);
-        if (routePaint.tier === "context" || routePaint.surface === "shell") return [];
+        if (routePaint.tier === "context" || routePaint.tier === "envelope") return [];
         const width = c.shape === "round" ? c.diameterIn : c.widthIn;
         const height = c.shape === "round" ? c.diameterIn : c.heightIn;
         return [

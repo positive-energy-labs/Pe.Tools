@@ -60,14 +60,14 @@ const graphOf = (s: Pick<Scene, "nodes">) => ({
 });
 const base: PaintOf = (i) => ({
   tier: i.revitId === 3 ? "context" : i.revitId === 2 ? "stub" : "subject",
-  ink: "#12aabb",
+  kind: "supply",
 });
 
 it("uses typed equipment identity and admits only explicit references to drawn subject/stub routes", () => {
   const paint = equipmentPaint(graphOf(scene), base);
-  expect(paint(meshes.instances[0]!)?.surface).toBe("shell");
-  expect(paint(meshes.instances[3]!)?.surface).toBeUndefined();
-  expect(paint({ ...instance(88), categoryId: -2001140 })?.surface).toBe("shell");
+  expect(paint(meshes.instances[0]!)?.tier).toBe("envelope");
+  expect(paint(meshes.instances[3]!)?.tier).toBe("subject");
+  expect(paint({ ...instance(88), categoryId: -2001140 })?.tier).toBe("envelope");
   const ports = equipmentPorts(graphOf(scene), meshes, paint);
   expect(ports.map((p) => p.key)).toEqual(["1:0>2:7"]);
   expect(ports[0]).toMatchObject({
@@ -75,7 +75,7 @@ it("uses typed equipment identity and admits only explicit references to drawn s
     route: "2",
     widthFt: 1,
     heightFt: 2,
-    paint: { tier: "stub", ink: "#12aabb" },
+    paint: { tier: "stub", kind: "supply" },
   });
   expect(equipmentPorts(graphOf(scene), meshes, () => ({ tier: "context" }))).toEqual([]);
 });
@@ -83,12 +83,10 @@ it("uses typed equipment identity and admits only explicit references to drawn s
 it("uses retained equipment category metadata only for shell treatment when numeric identity is absent", () => {
   const graph = { nodes: [], segments: [] };
   const paint = equipmentPaint(graph, base);
-  expect(paint(instance(99, "Mechanical Equipment"))?.surface).toBe("shell");
-  expect(paint({ ...instance(99), categoryId: -2001140 })?.surface).toBe("shell");
-  expect(
-    paint({ ...instance(99, "Mechanical Equipment"), categoryId: -1 })?.surface,
-  ).toBeUndefined();
-  expect(paint(instance(99, "Mechanical Equipment copy"))?.surface).toBeUndefined();
+  expect(paint(instance(99, "Mechanical Equipment"))?.tier).toBe("envelope");
+  expect(paint({ ...instance(99), categoryId: -2001140 })?.tier).toBe("envelope");
+  expect(paint({ ...instance(99, "Mechanical Equipment"), categoryId: -1 })?.tier).toBe("subject");
+  expect(paint(instance(99, "Mechanical Equipment copy"))?.tier).toBe("subject");
   expect(equipmentPorts({ nodes: [], segments: [] }, meshes, paint)).toEqual([]);
 });
 
@@ -113,7 +111,7 @@ it("refuses missing/invalid connector frames and equipment-to-equipment paths", 
 
 it("removes the entire port when its anchor or either drawn instance is clipped/hidden", () => {
   const ports = equipmentPorts(graphOf(scene), meshes, base),
-    layer = portLayer(ports),
+    layer = portLayer(ports, {}),
     group = new THREE.Group();
   layer.build(group);
   const at: LayerFrame = {
@@ -151,11 +149,11 @@ it("keeps the connector ring in its frame and encodes envelopes independently of
   const positions = portSegments(port, LOOK.defaults);
   expect(positions.slice(0, 6)).toEqual([-0.5, -1, 0, 0.5, -1, 0]);
   expect(positions.slice(-3)).toEqual([0, 0, LOOK.defaults.ports.tickFt]);
-  expect(surfaceAlpha({ tier: "subject", surface: "shell" }, LOOK.defaults)).toBe(
+  expect(surfaceAlpha({ tier: "envelope" }, LOOK.defaults)).toBe(
     1 + LOOK.defaults.shell.opacity,
   );
   expect(surfaceAlpha({ tier: "stub" }, LOOK.defaults)).toBeLessThan(0);
-  expect(surfaceAlpha({ tier: "context", surface: "shell" }, LOOK.defaults)).toBe(0);
+  expect(surfaceAlpha({ tier: "context" }, LOOK.defaults)).toBe(0);
   const edges = surfaceEdges(meshes);
   expect(edges(meshes.instances[0]!, 35)).toBe(edges(meshes.instances[0]!, 35));
 });
@@ -168,9 +166,9 @@ it("draws hundreds of individually gated ports in two stable material batches", 
     owner: `owner-${i}`,
     route: `route-${i}`,
     at: [i * 2, 0, 0],
-    paint: { tier: i % 3 ? "subject" : "stub", ink: i % 2 ? "#ff0000" : "#0000ff" },
+    paint: { tier: i % 3 ? "subject" : "stub", kind: i % 2 ? "red" : "blue" },
   }));
-  const layer = portLayer(ports, LOOK.defaults);
+  const layer = portLayer(ports, { red: "#ff0000", blue: "#0000ff" }, LOOK.defaults);
   const group = new THREE.Group();
   layer.build(group);
   const lines = group.children as LineSegments2[];
