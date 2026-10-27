@@ -16,7 +16,11 @@ import { Pane } from "@pe/kit/lang/pane";
 import { ScopeKeys, type ScopeKey } from "@pe/kit/keys";
 import { useWorkbench } from "#/workbench/provider";
 import { EMPTY_CHAT_DRAFT, type ChatDraft } from "#/workbench/prompt";
-import { selectRunStatus, selectSkillCommands } from "@pe/agent-contracts/chat-state";
+import {
+  selectMessages,
+  selectRunStatus,
+  selectSkillCommands,
+} from "@pe/agent-contracts/chat-state";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import { useSend, type ChatHandle } from "#/chat/composer-head";
 import { SituationAction } from "#/route/situation-verbs";
@@ -25,6 +29,7 @@ import { Button } from "@pe/kit/lang/button";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { MentionChip } from "@pe/kit/lang/chip";
 import { previousOf } from "#/readings";
+import { AssetReel, referModel } from "./asset-reel";
 import { AttachmentChip } from "./attachment-chip";
 import { useAttachments } from "./use-attachments";
 import { useSlashMenu, type SlashCommand } from "./use-slash-menu";
@@ -86,6 +91,7 @@ export function ThreadComposer({
   const files = useAttachments(draft, setDraft);
   const refusedSend = handle.outcome?.key === "send" ? handle.outcome.refusal?.message : null;
   const commands = useMemo<SlashCommand[]>(() => selectSkillCommands(chat), [chat]);
+  const messages = useMemo(() => selectMessages(chat), [chat]);
   const slash = useSlashMenu(draft.text, commands);
   const [area, setArea] = useState<HTMLTextAreaElement | null>(null);
   const form = area?.form ?? null;
@@ -305,6 +311,13 @@ export function ThreadComposer({
           }}
           onSelect={(event) => mentions.onCaret(event.currentTarget.selectionStart)}
           onPaste={files.pasteHandler}
+        />
+        <AssetReel
+          messages={messages}
+          onMention={(mention) => {
+            setDraft((previous) => referModel(previous, mention));
+            area?.focus();
+          }}
         />
       </ComposerFrame>
     </Pane>

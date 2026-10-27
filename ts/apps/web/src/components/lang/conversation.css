@@ -253,3 +253,84 @@
     transition: none;
   }
 }
+/* The asset reel under the composer (chat/asset-reel.tsx): filters stacked at the left set its
+   height; tiles fill it, no ground, a hairline edge. What you added wears a commit underline. */
+.dl-asset-reel {
+  display: flex;
+  align-items: stretch;
+  gap: var(--gutter);
+  margin-top: 6px;
+}
+.dl-asset-filters {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  flex-shrink: 0;
+  padding-block: 2px;
+  font-size: var(--type-small-size);
+  color: var(--pe-ink-2);
+}
+.dl-asset-filters > button {
+  display: inline-flex;
+  gap: 6px;
+  line-height: 18px;
+  text-align: left;
+}
+.dl-asset-filters > button:hover,
+.dl-asset-filters > button[aria-pressed="true"] {
+  color: var(--pe-ink);
+}
+.dl-asset-filters > button[aria-pressed="true"] {
+  text-decoration: underline;
+}
+.dl-asset-filters .face-mono {
+  min-width: 1.5ch;
+  text-align: right;
+}
+.dl-asset-tiles {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  overflow-x: auto;
+}
+.dl-asset-turn {
+  flex-shrink: 0;
+  align-self: center;
+  padding-inline: 4px;
+  font-size: var(--type-small-size);
+  color: var(--pe-ink-mute);
+}
+.dl-asset-turn:hover {
+  color: var(--pe-ink);
+}
+.dl-asset-tile {
+  display: flex;
+  border: 1px solid var(--pe-line);
+  opacity: 0.85;
+}
+.dl-asset-tile:hover,
+.dl-asset-tile:focus-visible {
+  opacity: 1;
+}
+.dl-asset-tile[data-from="you"] {
+  box-shadow: inset 0 -2px 0 var(--pe-commit);
+}
+.dl-asset-tile img {
+  height: 100%;
+  width: auto;
+  max-width: 104px;
+  object-fit: cover;
+}
+.dl-asset-glyph {
+  display: grid;
+  height: 100%;
+  aspect-ratio: 1;
+  place-content: center;
+  color: var(--pe-ink-2);
+}
+/* The message a hovered asset came from. */
+[data-annotation="moment"][data-reel-lit] {
+  background: var(--pe-veil);
+}

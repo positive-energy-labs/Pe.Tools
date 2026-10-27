@@ -496,7 +496,7 @@ function PlanChip({ tasks }: { tasks: readonly PlanTask[] }) {
 }
 
 /** The document control's glyph: Revit's tile, a square with its R cut through, in currentColor. */
-function RevitMark(props: SVGProps<SVGSVGElement>) {
+export function RevitMark(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="2 2 20 20" fill="currentColor" aria-hidden="true" {...props}>
       <path
