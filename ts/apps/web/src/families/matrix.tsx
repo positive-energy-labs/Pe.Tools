@@ -6,7 +6,7 @@ import { FamiliesPivot } from "#/families/pivot";
 import { filterWords, standingFilterProposal } from "#/families/scope-band";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
 
-export function FamiliesReadStatus({ progress }: { progress: FamiliesReadProgress }) {
+function FamiliesReadStatus({ progress }: { progress: FamiliesReadProgress }) {
   return (
     <OutcomeLine
       kind={
