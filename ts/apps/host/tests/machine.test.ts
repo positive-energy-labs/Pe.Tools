@@ -190,17 +190,17 @@ function acquiring(
       ? { id: key, kind: "native", key, input: {}, state: "succeeded", result }
       : { id: key, kind: "native", key, input: {}, state: "running" };
   return {
-    kind: "workflow",
     id: "launch",
     key: `instances.${verb}`,
     caller: { kind: "human", via: "local" },
     basis: { kind: "human" },
-    footprint: [],
+    effects: [],
+    consumes: [],
+    claims: [],
     consent: { by: "press" },
     state,
-    destination: { kind: "host" },
-    request: verb === "start" ? start : { source: "C:/Tower.rvt", into: { start } },
-    bases: {},
+    target: { kind: "host" },
+    input: verb === "start" ? start : { source: "C:/Tower.rvt", into: { start } },
     steps:
       verb === "start"
         ? [step("instances.start", { session: { process } })]
@@ -208,10 +208,9 @@ function acquiring(
             step("instances.open.start", { session: { process } }),
             step("instances.open", { document: { openId, path: work } }),
           ],
-    preparation: { state: "ready", value: { target: null, acquisition: intent } },
+    prepared: { state: "ready", value: { target: null, acquisition: intent } },
     recovery: [],
     startedAt: row.observedAtUtc,
-    publication: { state: "unrequested" },
     ...(state === "succeeded" ? { result: null } : {}),
     ...(state === "failed" ? { error: "failed", status: 409 } : {}),
   } as ActionReceipt;

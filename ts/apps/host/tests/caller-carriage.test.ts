@@ -1,3 +1,4 @@
+import { invokeCommand } from "./command-fixture.ts";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
@@ -104,17 +105,12 @@ test("no door reads its caller after a suspension", () => {
 test("/actions sees each principal's real carriage through the real HTTP server", async () => {
   const host = await bootHost();
   try {
-    const destination = {
-      kind: "document",
-      ref: { session: "session-carriage", openId: "carriage-open-id" },
-    };
     const post = async (headers: Record<string, string>) => {
       const answer = await send(`${host.base}/actions`, "POST", headers, {
         id: randomUUID(),
-        kind: "operation",
-        key: "revit.apply.parameter-values",
-        destination,
-        input: { edits: [{ elementId: 1, parameterName: "View Name" }], dryRun: true },
+        key: "pod.member.write",
+        target: { kind: "host" },
+        input: { pod: "carriage", path: "settings/carriage.json", content: "{}" },
       });
       return answer.code ?? `admitted:${answer.status}`;
     };
@@ -325,14 +321,13 @@ test("/call attributes a view-image capture to the caller it was carried by", as
 test("action controls and the Families reading judge their real caller", async () => {
   const dir = mkdtempSync(join(tmpdir(), "pe-host-carriage-controls-"));
   const owner = new ActionJournal(join(dir, "attempts.json"));
-  const admitted = await owner.admit(
+  const admitted = await invokeCommand(
+    owner,
     {
       id: "carriage-original",
-      kind: "operation",
       key: "revit.context.view-image",
-      destination: { kind: "document", ref: { session: "bridge-a", openId: "open-a" } },
+      target: { kind: "document", ref: { session: "bridge-a", openId: "open-a" } },
       input: {},
-      bases: {},
       ...crossingOf("human"),
     },
     async () => ({}),

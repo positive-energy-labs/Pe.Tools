@@ -1,3 +1,4 @@
+import { invokeCommand } from "./command-fixture.ts";
 import { expect, test } from "vite-plus/test";
 import { createPluginRuntime } from "@pe/agent-contracts";
 import { observePluginOperations } from "../src/plugin-receipts.ts";
@@ -49,16 +50,15 @@ test("operation hooks observe the committed action result, never an uncommitted 
       },
     });
     const stop = observePluginOperations(journal, runtime.emit);
-    const row = await journal.admit(
+    const row = await invokeCommand(
+      journal,
       {
         id: randomUUID(),
-        kind: "workflow",
         key: "sample.read",
-        destination: { kind: "host" },
+        target: { kind: "host" },
         input: {},
-        bases: {},
         ...crossingOf("human"),
-        footprint: [],
+        effects: [],
       },
       async () => ({}),
       async () => ({ value: 42, nested: { kept: true } }),

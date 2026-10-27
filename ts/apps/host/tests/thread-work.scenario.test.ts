@@ -259,7 +259,7 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
         await app.workspace.apply(
           scope,
           "ducts",
-          "agent",
+          "pea",
           [
             {
               path: ["flows", "1002", "suggestion"],
@@ -531,7 +531,7 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
         await app.workspace.apply(
           unsaved,
           "ducts",
-          "agent",
+          "pea",
           [
             {
               path: ["flows", "12", "suggestion"],

@@ -36,10 +36,7 @@ const registration = (route = "family"): RouteWorkspaceRegistration => ({
     title: route === "family" ? "Family Foundry" : route,
     description: "Navigation proof",
     schema: z.object({ secret: z.string().default("") }).prefault({}),
-
-    commands: {},
   },
-  handlers: {},
 });
 const envelope = { version: 1, revision: 3, doc: { secret: "PRIVATE-RAW-WORK" } };
 const filename = (targetKey: string, route: string) =>

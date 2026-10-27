@@ -1,3 +1,4 @@
+import { invokeCommand } from "./command-fixture.ts";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -91,10 +92,11 @@ test.each(["guarded", "removed", "unchanged"] as const)(
             const sent = yield* Queue.take(outgoing);
             const intent = fixture.intent(randomUUID());
             const caller = approvedPea();
-            const basis = admitCrossing(caller, intent.destination, "/actions");
+            const basis = admitCrossing(caller, intent.target, "/actions");
             const action = yield* Effect.promise(() =>
-              owner.admit(
-                { ...intent, caller, basis },
+              invokeCommand(
+                owner,
+                { ...intent, key: "test.queued-authority", caller, basis },
                 async () => null,
                 async (execution) =>
                   execution.step("native", op, {}, async (id) => {
@@ -116,7 +118,7 @@ test.each(["guarded", "removed", "unchanged"] as const)(
             yield* answer(next.request!.requestId);
             const settled = yield* Effect.promise(() => owner.wait(action.id));
             expect(settled.state).toBe("succeeded");
-            expect(admitCrossing(caller, intent.destination, "/actions")).toBeNull();
+            expect(admitCrossing(caller, intent.target, "/actions")).toBeNull();
             expect(yield* Queue.size(outgoing)).toBe(0);
             expect(
               yield* Effect.promise(() => fixture.workspace.read(fixture.scope, "takeoffs")),

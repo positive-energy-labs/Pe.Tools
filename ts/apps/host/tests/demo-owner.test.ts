@@ -107,11 +107,9 @@ test("admitted demo launch uses only its labelled leaf and rejects escape or rea
     const id = `${f.owner.id}:${suffix}`;
     const response = await f.fetch("/actions", {
       id,
-      kind: "operation",
       key,
-      destination: { kind: "host" },
+      target: { kind: "host" },
       input: { path },
-      bases: {},
     });
     expect(response.ok).toBe(true);
     return f.owner.journal.wait(id);
@@ -157,7 +155,7 @@ test("same HTTP router separates production Work and two demo resource owners; r
     work: "production",
   };
   const production = new RouteWorkspace({
-    registrations: [{ spec: settingsRouteState, handlers: {} }],
+    registrations: [{ spec: settingsRouteState }],
     store: {
       getState: async () => {
         try {

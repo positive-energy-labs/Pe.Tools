@@ -10,7 +10,7 @@ import {
   routeBindingsSchema,
   takeoffsRouteState,
   threadHeadSchema,
-  ductsRouteState,
+  tools,
   bindWork,
   workKey,
   type ThreadHead,
@@ -62,7 +62,7 @@ test("HTTP Work shares edits independently of thread targets and refuses forged 
   });
   const store = fileRouteDocumentStore(join(directory, "work"));
   const app = createPeRoutes({
-    registrations: [{ spec: ductsRouteState, handlers: {} }],
+    registrations: [{ spec: tools.ducts.work }],
     store,
     heads: { observe: () => () => {} },
     navigation: { documents: async () => documents, threads: async () => [] },
@@ -133,7 +133,7 @@ test("HTTP Work shares edits independently of thread targets and refuses forged 
         headers: { "content-type": "application/json", "x-test-author": caller.kind },
         body: JSON.stringify({ command: "not-a-command", input: {}, expectedRevision: 0 }),
       });
-      expect(command.status).toBe(403);
+      expect(command.status).toBe(404);
     }
     expect(await (await request(query(), proposed)).json()).toMatchObject({
       ok: true,
@@ -230,7 +230,7 @@ test("HTTP Work shares edits independently of thread targets and refuses forged 
     // Both authors inspect retained Work; recreation reads the same authored bytes.
     expect(await (await request(query(), undefined, 0, human)).json()).toMatchObject(before!);
     const restarted = new RouteWorkspace({
-      registrations: [{ spec: ductsRouteState, handlers: {} }],
+      registrations: [{ spec: tools.ducts.work }],
       store,
     });
     expect(await restarted.readRaw(key, "ducts")).toEqual(before);
@@ -254,9 +254,7 @@ const registrations = [
       schema: takeoffsRouteState.schema.extend({
         count: threadHeadSchema.shape.revision.default(0),
       }),
-      commands: {},
     },
-    handlers: {},
   },
 ];
 const open = {
@@ -439,8 +437,6 @@ test("HTTP authored writes enforce short local revision checks", async () => {
       count: z.number().int().default(0),
     })
     .prefault({});
-  let externalCalls = 0;
-  const external = async () => (externalCalls++, { mutated: true });
   const catalogReads: unknown[] = [];
   const catalogRead = async (session?: unknown) => (
     catalogReads.push(session),
@@ -460,22 +456,9 @@ test("HTTP authored writes enforce short local revision checks", async () => {
           title: "Test Route",
           description: "A test collaborative route.",
           schema,
-          commands: {
-            increment: { description: "Increment.", effect: "command", input: z.object({}) },
-            external: { description: "External.", effect: "command", input: z.object({}) },
-          },
-        },
-        handlers: {
-          increment: async (_input: unknown, context: any) => {
-            const doc = context.getDoc();
-            doc.count++;
-            await context.setDoc(doc);
-            return { count: doc.count };
-          },
-          external,
         },
       },
-    ] as unknown as RouteWorkspaceRegistration[],
+    ],
     store: (() => {
       const state = new Map<string, unknown>();
       return {
@@ -555,14 +538,14 @@ test("HTTP authored writes enforce short local revision checks", async () => {
   expect(
     await (await post("/pe/route-state/test-route/apply", { patches: [] }, pea())).json(),
   ).toMatchObject({ error: expect.stringMatching(/^invalid body at expectedRevision: /) });
-  const command = { command: "increment", input: {}, expectedRevision: 1 };
-  expect(await (await post("/pe/route-state/test-route/command", command)).json()).toMatchObject({
+  const edit = { patches: [{ path: ["count"], value: 1 }], expectedRevision: 1 };
+  expect(await (await post("/pe/route-state/test-route/apply", edit)).json()).toMatchObject({
     ok: true,
     revision: 2,
   });
   expect(
     await (
-      await post("/pe/route-state/test-route/command", { ...command, expectedRevision: 99 })
+      await post("/pe/route-state/test-route/apply", { ...edit, expectedRevision: 99 })
     ).json(),
   ).toMatchObject({ ok: false, code: "stale_revision" });
   // Both authors share recovery; readable Work has nothing to set aside.
@@ -580,5 +563,8 @@ test("HTTP authored writes enforce short local revision checks", async () => {
     );
   expect((await salvage(human)).status).toBe(404);
   expect((await salvage(pea())).status).toBe(404);
-  expect(externalCalls).toBe(0);
+  // Work has no execution endpoint; consequential commands belong to the journal door.
+  expect(
+    (await post("/pe/route-state/test-route/command", { command: "external", input: {} })).status,
+  ).toBe(404);
 });

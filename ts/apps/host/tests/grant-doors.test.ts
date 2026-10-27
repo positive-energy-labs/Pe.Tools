@@ -1,3 +1,4 @@
+import { invokeCommand } from "./command-fixture.ts";
 /**
  * HTTP-level falsifiers for doors 1-3 (WAVE1-PLAN §2): the route is production code, the caller is
  * minted the way the identity middleware would, and every refusal is read off the wire. Each test
@@ -20,7 +21,7 @@ import { withInvocationContext } from "@pe/runtime/context";
 import { ActionJournal } from "../src/action-journal.ts";
 import { RevitBridge } from "../src/bridge.ts";
 import { makeCallRoute } from "../src/call-route.ts";
-import { bindControl } from "../src/control.ts";
+import { admitCrossing, bindControl } from "../src/control.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 import { human, pea } from "./callers.ts";
@@ -94,13 +95,17 @@ const send = (
 
 const admission = (ref: DocumentRef = docA, id = "door-2") => ({
   id,
-  kind: "workflow",
   // A human-only key would answer human.only first for a Pea caller; this one is open to both.
   key: "scripting.execute",
-  destination: { kind: "document", ref },
+  target: { kind: "document" as const, ref },
   // A ReadOnly script is a read for Pea (items 9, 10); the grant doors judge a write.
   input: { permissionMode: "WriteTransaction" },
-  bases: {},
+});
+const hostWrite = () => ({
+  id: "causal-host-write",
+  key: "pod.member.write",
+  target: { kind: "host" },
+  input: { pod: "doors", path: "settings/door.json", content: "{}" },
 });
 
 /** A door refusal on the wire: 403, never dispatched, the typed code, and the sentence. */
@@ -136,20 +141,16 @@ test("door 1: a read is free for every caller, anonymous included; a mutation is
   }
 });
 
-test("door 2: a thread targets documents, never a session", async () => {
+test("door 2: Pea session crossings do not inherit thread grants; writes still need a causal run", async () => {
   heads.t1 = headWith(docA);
-  refused(
-    await send(pea("t1"), "/actions", {
-      ...admission(),
-      destination: { kind: "session", session: "S1" },
-    }),
-    "run.none",
-  );
+  expect(admitCrossing(pea("t1"), { kind: "session", session: "S1" }, "/actions")).toBeNull();
+  refused(await send(pea("t1"), "/actions", hostWrite()), "run.none");
 });
 
 test("door 2: a thread target cannot substitute for causal run identity", async () => {
   heads.t1 = headWith(docB);
-  refused(await send(pea("t1"), "/actions", admission(docA)), "run.none");
+  expect(admitCrossing(pea("t1"), { kind: "document", ref: docA }, "/actions")).toBeNull();
+  refused(await send(pea("t1"), "/actions", hostWrite()), "run.none");
 });
 
 test("door 2: an unpaired external MCP client cannot write your document", async () => {
@@ -160,13 +161,13 @@ test("door 2: an unpaired external MCP client cannot write your document", async
 
 /** A receipt a human admitted, settled, ready to be controlled by someone else. */
 async function humanReceipt(id: string) {
-  await journal.admit(
+  await invokeCommand(
+    journal,
     {
       ...admission(docA, id),
-      kind: "workflow" as const,
       caller: human,
       basis: { kind: "human" },
-    } as never,
+    },
     async () => ({}),
     async () => ({}),
   );

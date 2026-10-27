@@ -71,7 +71,6 @@ test("the first command names every effect; other documents share the original d
     { kind: "member", pod: "tools", path: "settings/design.json" },
     { kind: "directory", path: "C:/installation" },
     { kind: "publication", page: "page:@pages/report" },
-    { kind: "receipt", pod: "tools", path: "runs/receipt.json" },
   ]);
   const second = runs.authorize(origin(run), "second", [
     { kind: "document", ref: { session: "revit-2", openId: "doc-2" } },
