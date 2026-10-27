@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { scheduleWorkId } from "./schedule-actions.ts";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -9,7 +10,6 @@ import { Context, Effect, Layer } from "effect";
 import { HttpEffect, HttpRouter } from "effect/unstable/http";
 import {
   address,
-  canonicalRouteInput,
   readingKey,
   demoSeedSchema,
   exportSeed,
@@ -679,9 +679,13 @@ export async function createDemoOwner(parent: string, raw: unknown) {
               };
               value = { ...answer, simulated: true };
             } else if (key === "revit.catalog.schedules" && project) {
+              // The catalog names each schedule's Work, so a pick opens it before any read.
+              for (const row of DEMO_SCHEDULES)
+                scheduleWork.add(scheduleWorkId(at, `demo-schedule-${row.scheduleId}`));
               value = {
                 entries: DEMO_SCHEDULES.map((row) => ({
                   ...row,
+                  scheduleUniqueId: `demo-schedule-${row.scheduleId}`,
                   isTemplate: false,
                   visibleBodyRowCount: DEMO_ROWS.length,
                   isPlacedOnSheet: true,
@@ -693,11 +697,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
               const schedule =
                 DEMO_SCHEDULES.find((row) => row.scheduleId === query.scheduleIds?.[0]) ??
                 DEMO_SCHEDULES[0]!;
-              scheduleWork.add(
-                `schedule:${createHash("sha256")
-                  .update(canonicalRouteInput([at, `demo-schedule-${schedule.scheduleId}`]))
-                  .digest("hex")}`,
-              );
+              scheduleWork.add(scheduleWorkId(at, `demo-schedule-${schedule.scheduleId}`));
               value = {
                 documentTitle: "Isolated demo (simulated)",
                 entries: [

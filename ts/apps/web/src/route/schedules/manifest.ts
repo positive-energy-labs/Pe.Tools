@@ -167,7 +167,8 @@ export const scheduleSpec: EntityRouteDef<
   },
   captureInput: (ctx) => {
     const reading = previousOf(ctx.readings.work);
-    return reading === undefined
+    // Null: the host holds no reading of this Work yet (a catalog pick before its first read).
+    return reading == null
       ? "open a schedule in the grid first"
       : { scheduleId: scheduleReadingSchema.parse(reading).snapshot.scheduleId };
   },

@@ -48,7 +48,7 @@ import {
 } from "./family-actions.ts";
 
 /** A schedule's Work key: its document's address and its Revit UniqueId, never a capture. */
-const scheduleWorkId = (document: Address, scheduleUniqueId: string) =>
+export const scheduleWorkId = (document: Address, scheduleUniqueId: string) =>
   `schedule:${createHash("sha256")
     .update(canonicalRouteInput([document, scheduleUniqueId]))
     .digest("hex")}`;
@@ -131,7 +131,8 @@ export async function readSchedule(
         .filter((e) => !e.isTemplate)
         .map((e) => ({
           scheduleId: e.scheduleId,
-          workspaceId: address ? scheduleWorkId(address, e.scheduleUniqueId) : null,
+          workspaceId:
+            address && e.scheduleUniqueId ? scheduleWorkId(address, e.scheduleUniqueId) : null,
           name: e.name,
           categoryName: e.categoryName,
           rowCount: e.visibleBodyRowCount,
