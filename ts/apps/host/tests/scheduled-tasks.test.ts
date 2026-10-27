@@ -58,6 +58,8 @@ const action = (thread: string, actionId: string): Receipt => ({
       id: actionId,
       key: "arbitrary",
       caller: { kind: "pea", context: "c", thread },
+      footprint: [],
+      consent: null,
       basis: null,
       destination: { kind: "host" },
       request: {},

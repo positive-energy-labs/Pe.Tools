@@ -40,6 +40,7 @@ function toContent(tool: McpTool, result: unknown): { content: Content[]; isErro
 }
 
 export async function createPeaMcpServer(context: InvocationContext): Promise<McpServer> {
+  const bound = { ...context, headers: Object.freeze({ ...context.headers }) };
   const server = new McpServer(
     { name: "pea", version: "0.0.0" },
     { instructions: peaAgentInstructions },
@@ -51,7 +52,7 @@ export async function createPeaMcpServer(context: InvocationContext): Promise<Mc
       { description: tool.description, inputSchema: tool.inputSchema as never },
       (async (input: unknown, extra: unknown) => {
         try {
-          await context.beforeTool?.(tool.id);
+          await bound.beforeTool?.(tool.id);
           const requestId = (extra as { requestId: string | number }).requestId;
           let id = calls.get(requestId);
           if (!id) {
@@ -60,7 +61,7 @@ export async function createPeaMcpServer(context: InvocationContext): Promise<Mc
           }
           return toContent(
             tool,
-            await withInvocationContext(context, () =>
+            await withInvocationContext(bound, () =>
               tool.execute(input as never, {
                 agent: { toolCallId: id },
                 mcp: { extra },

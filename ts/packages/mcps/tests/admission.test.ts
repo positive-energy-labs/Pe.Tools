@@ -149,14 +149,13 @@ test("pe_do admits native operations and workflows with exact identity, target a
   for (const post of posts) expect(post).not.toHaveProperty("actor");
 });
 
-test("pe_read refuses mutations; pe_do refuses human, unknown and missing or closed targets before admission", async () => {
+test("pe_read refuses mutations; pe_do refuses unknown and missing or closed targets before admission", async () => {
   const { posts } = host();
   expect(await call(peRead, { key: "op:scripting.execute", target })).toMatchObject({
     isError: true,
     content: expect.stringContaining("pe_do"),
   });
   for (const input of [
-    { key: "workflow:families.apply", target },
     { key: "op:missing", target },
     { key: "op:scripting.execute" },
     {

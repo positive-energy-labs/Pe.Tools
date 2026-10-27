@@ -28,11 +28,10 @@ test("Pea enumerates Pod members and proposes revision-checked Work without rout
     });
     const scope = { binding: "workspace", route: "pods", target: null, work: "member-a" } as const;
     const member = { pod: "demo", path: "settings/a.json" };
-    // The browser opens a member through the public generic Work write contract.
-    await runtime.apply(
+    // The host owns observed member bytes; authors can only change shared Work.
+    await runtime.publish(
       scope,
       "pods",
-      "human",
       [{ path: ["basis"], value: { member, rawContent: '{"x":1}', sha256: "v1" } }],
       0,
     );
@@ -88,23 +87,23 @@ test("Pea enumerates Pod members and proposes revision-checked Work without rout
       ok: true,
       result: { revision: 1, doc: { basis: { member } } },
     });
-    const proposal = {
-      key: "route:pods.propose",
+    const suggestion = {
+      key: "route:pods.edit",
       workspaceId: "member-a",
       expectedRevision: 1,
-      input: { patches: [{ path: ["fields", "/x", "proposal"], value: { value: 2 } }] },
+      input: { patches: [{ path: ["fields", "/x", "suggestion"], value: { value: 2 } }] },
     };
-    expect(await run(peDo, proposal)).toMatchObject({ ok: true });
-    expect(await run(peDo, proposal)).toMatchObject({ ok: false });
+    expect(await run(peDo, suggestion)).toMatchObject({ ok: true });
+    expect(await run(peDo, suggestion)).toMatchObject({ ok: false });
     expect(
       await run(peDo, {
-        ...proposal,
+        ...suggestion,
         expectedRevision: 2,
         input: { patches: [{ path: ["basis"], value: null }] },
       }),
     ).toMatchObject({ ok: false });
     expect(await run(peRead, { key: "route:pods", workspaceId: "member-a" })).toMatchObject({
-      result: { doc: { basis: { sha256: "v1" }, fields: { "/x": { proposal: { value: 2 } } } } },
+      result: { doc: { basis: { sha256: "v1" }, fields: { "/x": { suggestion: { value: 2 } } } } },
     });
     expect(registrations.every((row) => Object.keys(row.handlers).length === 0)).toBe(true);
     expect(settingsRouteState.commands).toEqual({});

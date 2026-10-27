@@ -3,6 +3,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createPeaMcpServer } from "../src/server.ts";
 import { peDo, peRead } from "../src/pea/capability-tools.ts";
+import { bodyText } from "./body-text.ts";
 
 const input = {
   kind: "page",
@@ -33,7 +34,7 @@ it("serializes publication as a real MCP PNG block without scope/catalog scans",
   vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
     calls.push(String(url));
     expect(new URL(url).pathname).toBe("/pe/pages/publish");
-    expect(JSON.parse(String(init.body))).toEqual(input);
+    expect(JSON.parse(await bodyText(init))).toEqual(input);
     return Response.json({
       ok: true,
       kind: "page",

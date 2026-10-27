@@ -70,7 +70,15 @@ import {
 import { productPagesRootPath, productPodsRootPath } from "./product-paths.ts";
 import { exportPage } from "./page-export.ts";
 import { CaptureStore, hostCaptures } from "./captures-route.ts";
-import { escapeHtml, publishPage, withPageKey } from "./page-publication.ts";
+import {
+  escapeHtml,
+  preparePagePublication,
+  commitPagePublication,
+  pageVersion,
+  withPageKey,
+} from "./page-publication.ts";
+import { hostActionJournal } from "./gateway-owner.ts";
+import type { ActionJournal } from "./action-journal.ts";
 import { PAGE_MEDIA, readJson } from "./page-artifacts.ts";
 
 /**
@@ -371,6 +379,7 @@ export function createPagesHandler(
   pods?: string,
   live: PageLive = noLive,
   captures = new CaptureStore(join(root, ".captures")),
+  journal?: ActionJournal,
 ) {
   /**
    * Where a slug's folder is: `<root>/<slug>`, or for `<id>--<page>` the folder of the one admitted
@@ -779,8 +788,44 @@ export function createPagesHandler(
       const input = peRoutes["page.publish"].body.safeParse(await request.json());
       if (!input.success) return problem(400, input.error.message);
       try {
-        const result = await publishPage(root, input.data, url.origin, pageLibrary, captures);
-        return json(result, 201);
+        const owner = journal ?? hostActionJournal();
+        const id = request.headers.get("x-pe-command-id") ?? randomUUID();
+        const prior = (await owner.list(undefined, id))[0];
+        const version = prior
+          ? prior.bases.fileVersion === "absent"
+            ? null
+            : String(prior.bases.fileVersion)
+          : await pageVersion(root, input.data.slug);
+        await owner.admit(
+          {
+            id,
+            kind: "workflow",
+            key: "page.publish",
+            destination: { kind: "host" },
+            input: input.data,
+            bases: { fileVersion: version ?? "absent" },
+            caller,
+            basis: null,
+            footprint: [{ kind: "publication", page: `page:@pages/${input.data.slug}` }],
+            frozen: { input: input.data, fileVersion: version },
+          },
+          () => preparePagePublication(root, input.data, url.origin, pageLibrary, captures),
+          async (execution) =>
+            execution.step("publication", "page.publish", { slug: input.data.slug }, () =>
+              commitPagePublication(
+                root,
+                execution.prepared as Awaited<ReturnType<typeof preparePagePublication>>,
+                version,
+              ),
+            ),
+        );
+        const row = await owner.wait(id);
+        if (row.state !== "succeeded")
+          return json(
+            { error: "Page publication did not complete", action: row },
+            row.state === "cancelled" ? 409 : 422,
+          );
+        return json(row.result, 201);
       } catch (error) {
         return problem(422, error instanceof Error ? error.message : String(error));
       }

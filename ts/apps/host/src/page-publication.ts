@@ -1,5 +1,7 @@
+import { BridgeError } from "./bridge.ts";
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { lstat, readdir } from "node:fs/promises";
+import { lstat, readdir, readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { createServer } from "node:net";
 import { connectCdp, openBrowser, type BrowserSession, type CdpClient } from "@pe/browser";
@@ -316,7 +318,7 @@ async function capturePage(
 }
 
 /** Keep the exact authored HTML and existing .state; candidate capture precedes atomic replacement. */
-export async function publishPage(
+export async function preparePagePublication(
   root: string,
   raw: unknown,
   origin: string,
@@ -338,9 +340,31 @@ export async function publishPage(
   const captured = await capturePage(input, origin, library);
   const sha256 = await captures.adopt(Buffer.from(captured.data, "base64"));
   const capture = { ...captured, sha256, url: `${origin}/captures/${sha256}.png` };
-  // Recheck after the browser yields: another writer must not redirect the publication.
+  return { input, capture, origin };
+}
+
+/** The frozen version is checked at the actual file effect, after consent and capture. */
+export async function pageVersion(root: string, slug: string): Promise<string | null> {
+  const index = join(resolve(root), slug, "index.html");
   await ordinaryPath(index);
-  await writeArtifact(root, index, input.html, true);
+  const bytes = await readFile(index).catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== "ENOENT") throw error;
+    return null;
+  });
+  return bytes === null ? null : createHash("sha256").update(bytes).digest("hex");
+}
+
+export async function commitPagePublication(
+  root: string,
+  prepared: Awaited<ReturnType<typeof preparePagePublication>>,
+  expectedVersion: string | null,
+) {
+  const { input, capture, origin } = prepared;
+  if ((await pageVersion(root, input.slug)) !== expectedVersion)
+    throw new BridgeError("Page changed after submission; read it and submit a new command", 409, {
+      notDispatched: true,
+    });
+  await writeArtifact(root, join(resolve(root), input.slug, "index.html"), input.html, true);
   return {
     ok: true as const,
     kind: "page" as const,
@@ -350,4 +374,21 @@ export async function publishPage(
     openUrl: `${origin}/pages/${input.slug}/`,
     capture,
   };
+}
+
+/** The standalone publisher uses the same prepare and commit as the journal adapter. */
+export async function publishPage(
+  root: string,
+  raw: unknown,
+  origin: string,
+  library: (path: string) => string | null,
+  captures: Pick<CaptureStore, "adopt">,
+) {
+  const input = pagePublicationSchema.parse(raw);
+  const version = await pageVersion(root, input.slug);
+  return commitPagePublication(
+    root,
+    await preparePagePublication(root, input, origin, library, captures),
+    version,
+  );
 }

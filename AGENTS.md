@@ -66,7 +66,7 @@ Among other things, this requires Pe.Tools packages to expose good "public" apis
 - Keep document-owned, DA-safe behavior separate from `UIApplication` and session behavior. Desktop and DA are sibling shells.
 - Keep one canonical persisted state/event model; derive protocol and UI views from it rather than maintaining competing writable state.
 - Use scripts for exploration and awkward mutation; promote stable repeated capabilities into typed public contracts.
-- Default to safe, inspectable action. Agents propose; users retain approval, edit, staging, and rejection control. Full mutation is explicit.
+- Default to safe, inspectable action. Human and Pea share editable Work and semantic commands. Consequential Pea writes use root-run consent; users retain edit, Stop and cancellation control. Host evidence remains host-owned.
 - Treat Revit metadata, wrapper identity, and positional correspondence as untrusted until real behavior proves them. Treat project models as adversarial input; preserve coordinate frames and stable identities.
 - Surface provenance and uncertainty explicitly. Spatial/model claims need inspectable, freshness-aware visual or behavioral evidence; plausible counts are not proof.
 

@@ -3,7 +3,7 @@ import { createPeaMcpServer } from "./server.ts";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { HOST_CONTEXT_VARIABLE } from "@pe/host-contracts/contracts";
+import { HOST_CONTEXT_HEADER, HOST_CONTEXT_VARIABLE } from "@pe/host-contracts/contracts";
 import { resolveHostBaseUrl } from "./shared/host-config.ts";
 import { contextFetch } from "@pe/runtime/context";
 
@@ -12,6 +12,8 @@ export async function startPeaMcp(hostBaseUrl?: string) {
   if (!process.env[HOST_CONTEXT_VARIABLE]?.trim()) return startExternalMcp(hostBaseUrl);
   const server = await createPeaMcpServer({
     hostBaseUrl,
+    // This MCP process belongs to one turn. Never ask the host for its current turn.
+    headers: { [HOST_CONTEXT_HEADER]: process.env[HOST_CONTEXT_VARIABLE]!.trim() },
     admissions: new Map(),
     running: new Map(),
   });

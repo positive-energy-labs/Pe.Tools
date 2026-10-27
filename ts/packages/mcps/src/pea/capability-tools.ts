@@ -52,7 +52,6 @@ import {
   documentRequestSchema,
   resolveCallTarget,
   addressSchema,
-  sameAddress,
   findCapabilities,
   mentionOf,
   message,
@@ -202,10 +201,7 @@ const targetQuery = (target: Target): string => {
  * Resolve route Work like the browser: Address when saved, exact open lifetime when unsaved.
  * Carry the lifetime beside an Address for Save As migration; a closed lifetime refuses (E2E-J1).
  */
-async function routeWorkScope(
-  target: Target,
-  allowed?: readonly DocumentRequest[],
-): Promise<{ query: string; target: ResolvedTarget }> {
+async function routeWorkScope(target: Target): Promise<{ query: string; target: ResolvedTarget }> {
   if (target?.kind !== "open") return { query: targetQuery(target), target: namedTarget(target) };
   const { sessions } = await new HostRpcCaller({ hostBaseUrl: base(), timeoutMs: 30_000 }).call(
     "bridge.sessions.list",
@@ -221,19 +217,6 @@ async function routeWorkScope(
       "The Chat's document is no longer open in its session; ask the person to pick an open document again.",
     );
   const address = addressSchema.safeParse(document.address).data ?? null;
-  if (
-    allowed &&
-    !allowed.some((held) =>
-      held.kind === "open"
-        ? held.ref.session === target.ref.session && held.ref.openId === target.ref.openId
-        : held.session === target.ref.session &&
-          address !== null &&
-          sameAddress(held.address, address),
-    )
-  )
-    throw Error(
-      "Route Work target must be one of this thread's documents; add it in the composer first.",
-    );
   const query = new URLSearchParams({ open: `${target.ref.session}/${target.ref.openId}` });
   if (address) query.set("target", address);
   return {
@@ -245,7 +228,7 @@ async function routeWorkScope(
 export const peFind = createTool({
   id: "pe_find",
   description:
-    "Find a capability. No query returns the map: connected Revit sessions with their active document and custody, counts per kind, top rows per kind, and which sources answered. A query ranks rows across host operations (op:), the collaborative route documents you co-edit with the user and their commands (route:), packaged scripts (script:@), Pages (page:@), skills (skill:@), and read-only members (member:@), documents open in Revit (doc:<session>/<openId>, the same pointer the user @-mentions), and Revit's recent documents, not open (recent:<path> or recent:cloud:<region>/<project>/<model>). Filter with kind, needs, mutates. Every row you may run is visible; nothing is tiered, and human-only rows (the person's presses) are not offered. Then pe_read a non-mutating row or pe_do any row.",
+    "Find a capability. No query returns the map: connected Revit sessions with their active document and custody, counts per kind, top rows per kind, and which sources answered. A query ranks rows across host operations (op:), the collaborative route documents you co-edit with the user and their commands (route:), packaged scripts (script:@), Pages (page:@), skills (skill:@), and read-only members (member:@), documents open in Revit (doc:<session>/<openId>, the same pointer the user @-mentions), and Revit's recent documents, not open (recent:<path> or recent:cloud:<region>/<project>/<model>). Filter with kind, needs, mutates. Every row you may run is visible; nothing is tiered, and human and Pea share semantic commands. Each row declares effect query or command; pe_read runs queries and pe_do runs either.",
   inputSchema: z.object({
     query: z.string().optional().describe("Keywords describing what you need."),
     kind: capabilityKindSchema.optional(),
@@ -282,7 +265,7 @@ export const peFind = createTool({
         source: peSourceTree(),
         diagnostics: catalog.diagnostics,
         map: capabilityMap(offered),
-        hint: "Query pe_find for rows. pe_read runs a row that does not mutate; pe_do runs authorized actions through the host's write admission. Native reads need an exact target: pe_read of a non-mutating op may name any open document, and Pea's ReadOnly scripting.execute needs read consent for its exact target. Native writes follow the user's access setting: under Full, Pea writes any open document; under Guarded, Pea writes its own documents and the documents the user added to this thread in the composer. Document-owned route Work overrides select only this thread's documents, even under Full; proposing Work does not grant native execution authority. targets lists this thread's documents; with exactly one, calls use it (defaultDocument); with several, a call names one by exact per-call target. Any script, including ReadOnly, refuses while another open document in its Revit is one the caller may not write. Unpaired external MCP clients cannot run scripts; paired external clients still need write authority on the target. targets is read live per call. Op target overrides affect one call only. Session work accepts SDK id-or-pid selection; host work needs no document. target_set adds or removes only Pea's own documents.",
+        hint: "Query pe_find for rows. pe_read runs queries; pe_do runs commands and queries. Thread targets are defaults, never write authority. Pass an exact open target for document-owned Work or commands. The first consequential write in a root turn opens one 60-second intervention countdown covering later writes and delegated descendants. Draft edits and receipts remain immediate. Human presses supply consent directly. External MCP and Page callers retain their separate trust boundaries. Unknown effects refuse. Scripts can reach sibling documents and must declare their complete footprint.",
       };
     const rows = findCapabilities(offered, input);
     return {
@@ -320,7 +303,7 @@ const runInputSchema = z.object({
     .union([sdkSessionSelectionSchema, documentRequestSchema.options[0]])
     .optional()
     .describe(
-      "Op calls take SDK selection {id: name} or {pid: number} for session work, or {kind: open, ref: {session, openId}} for an exact product document. Document-owned route Work also accepts an exact open target from this thread's documents. Overrides only this call; omission uses the thread's one target and refuses when it has several. Native reads (non-mutating ops and Pea ReadOnly scripts) may name any open document; native writes follow the user's access setting (Full: any open document; Guarded: Pea's own documents and the ones the user added to this thread).",
+      "Op calls take SDK selection {id: name} or {pid: number} for session work, or {kind: open, ref: {session, openId}} for an exact product document. Document-owned Work accepts any exact open target. Overrides affect this call; omitted target uses the thread default and refuses ambiguity. Consequential writes use the root turn countdown, independent of thread targets.",
     ),
   expectedRevision: z
     .number()
@@ -328,7 +311,7 @@ const runInputSchema = z.object({
     .nonnegative()
     .optional()
     .describe(
-      "Route rows only: the revision from the route read. Required for route:<name>.propose; a command omits it to run against the current revision.",
+      "Route rows only: expectedRevision from the route read is required for route:<name>.edit; commands use their declared revision contract.",
     ),
   timeoutSeconds: z.number().min(5).max(900).default(300),
 });
@@ -363,7 +346,7 @@ export const peRead = createTool({
   inputSchema: runInputSchema,
   execute: (input, context) =>
     executeTool(input, context, (row) =>
-      row.mutates
+      row.effect === "command"
         ? `'${row.key}' mutates; run it with pe_do under the host's write admission.`
         : null,
     ),
@@ -372,7 +355,7 @@ export const peRead = createTool({
 export const peDo = createTool({
   id: "pe_do",
   description:
-    "Publish an authored HTML Page directly with {kind: 'page', slug, title, html, width?}; no target or discovery call is needed. Returns its canonical Page key, absolute openUrl and a real PNG image. HTML must be a valid document with a doctype; inline JavaScript is validated and preview errors preserve the prior Page. pe.js and pe.kit are optional. For corrections or updates, resubmit complete HTML through this same Page arm with the same slug; do not edit Page files through terminal tools. Or do one authorized capability by key from pe_find. Native writes follow the user's access setting: under Full, Pea writes any open document; under Guarded, Pea writes its own documents and the documents the user added to this thread in the composer. Document-owned route Work overrides select only this thread's documents, even under Full; proposing Work does not grant native execution authority. A thread may target several documents; a write names one with an exact per-call target unless the thread has exactly one. For Pea, op:scripting.execute with permissionMode ReadOnly needs read consent for its exact target; every sibling open document still needs write authority. Unpaired external MCP clients cannot run scripts, including ReadOnly. Paired external clients still need write authority on the target. External MCP clients can read documents with non-script read operations. Use pe_read for rows that do not mutate. Human-only rows refuse. Op calls accept an exact per-call target override; omission uses the thread's one target. The result separately names Scope revision and actual target. For Takeoffs actions, retain input.actionId from the first result to recover the same attempt; never mint another ID after an uncertain outcome.",
+    "Publish a Page with {kind: 'page', slug, title, html, width?}, or run a capability from pe_find. Human and Pea share editable Work and semantic commands. The first consequential write in this root turn opens one host countdown; Allow now or its 60-second deadline permits remaining writes, including delegated descendants. Stop writes ends the root's remaining unstarted writes. Work edits and internal receipts stay immediate. Target overrides select any exact open document; thread targets supply defaults only. Publication and user file writes use the same turn consent. External devices and Pages retain separate admission. For retries retain the original actionId and read its receipt; never mint a replacement for an uncertain native outcome.",
   inputSchema: peDoInputSchema,
   toModelOutput: (output) => {
     const parsed = pagePublicationResultSchema.safeParse(output);
@@ -400,9 +383,13 @@ export const peDo = createTool({
   },
   execute: async (input, context) => {
     if (input.kind === "page")
-      return createPeClient(base(), fetch).call("page.publish", {
-        body: pagePublicationSchema.parse(input),
-      });
+      return createPeClient(base(), fetch).call(
+        "page.publish",
+        {
+          body: pagePublicationSchema.parse(input),
+        },
+        { headers: { "x-pe-command-id": requestIdentity(context) } },
+      );
     return executeTool(
       runInputSchema.parse(input),
       context,
@@ -621,7 +608,7 @@ async function dispatch(
       const caller = new HostRpcCaller({
         hostBaseUrl: base(),
         ...target,
-        requestId: row.mutates ? requestId : undefined,
+        requestId: row.effect === "command" ? requestId : undefined,
         timeoutMs: input.timeoutSeconds * 1000,
       });
       const key = row.key.replace(/^(op|workflow):/, "");
@@ -665,7 +652,7 @@ async function dispatch(
           {
             kind: "workflow",
             needs: semanticActions[key as SemanticActionKey].needs,
-            mutates: true,
+            mutates: semanticActions[key as SemanticActionKey].effect === "command",
           },
         )) as ActionReceipt | DetachedAction;
         return {
@@ -993,7 +980,7 @@ async function dispatch(
             throw Error(
               "Route Work requires an exact open document target, not an SDK session selector.",
             );
-          await routeWorkScope(input.target, targets);
+          await routeWorkScope(input.target);
           workTarget = input.target;
         } else if (targets.length > 1) {
           throw Error(
@@ -1016,12 +1003,12 @@ async function dispatch(
         if (parsed.route !== familiesRouteState.route || "isError" in result)
           return { ok: !("isError" in result), target: scope.target, result };
         const document = familiesRouteState.schema.safeParse(result.doc).data;
-        const familyScope = document?.scope.staged?.value ?? document?.scope.proposal?.value;
+        const familyScope = document?.scope.edit?.value ?? document?.scope.suggestion?.value;
         if (!familyScope)
           return {
             ok: true,
             target: scope.target,
-            result: { ...result, hint: "Propose scope.proposal first." },
+            result: { ...result, hint: "Set scope.edit first." },
           };
         try {
           const catalogRow = catalog?.capabilities.find(
@@ -1061,7 +1048,7 @@ async function dispatch(
         // Ducts Work is keyed by document: an unbound write lands in Work no page reads (wave 3, 2026-10-19).
         if (parsed.route === "ducts" && !workspaceId && !workTarget)
           throw new Error(
-            "route:ducts.propose needs this thread's one document, and none (or several) is targeted: Ducts Work belongs to one document, so this proposal would land where no page reads it. Ask the person to add the open document to this thread in the composer, or target_set one of your own open documents; then read route:ducts again and propose.",
+            "route:ducts.edit needs an exact document. Pass target {kind: open, ref: {session, openId}} or set a thread default, then read its Work revision before editing.",
           );
         // Ducts: a raw Load Preview paste is parsed here and proposed as loads/preview.
         const loads =
@@ -1071,7 +1058,7 @@ async function dispatch(
                 "preview",
                 {},
                 {
-                  kind: "propose",
+                  kind: "set",
                   rung: { value: { systems: parseLoadPreview(payload.loadsText).systems } },
                 },
               )

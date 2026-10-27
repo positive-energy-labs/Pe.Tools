@@ -17,7 +17,7 @@ import { createRouteRegistrations } from "../src/pea/routes.ts";
 import { bundledPeaSkills } from "../src/pea/skills.ts";
 import { skillSnapshot } from "../src/pea/skill-publication.ts";
 import type { PackageProjection } from "@pe/agent-contracts";
-import { peDo, peFind, peRead } from "../src/pea/capability-tools.ts";
+import { peDo, peRead } from "../src/pea/capability-tools.ts";
 
 import { fakeRuntimeHost } from "./runtime-host-fixture.ts";
 import { createServer } from "node:http";
@@ -59,7 +59,7 @@ const ops = [
     description: "Human verb over loaded families.",
     needs: "project-document" as const,
     intent: "Read" as const,
-    actor: "human" as const,
+    actor: "any" as const,
   })),
 ];
 
@@ -458,7 +458,9 @@ test.each(["http", "stdio"])(
             ...(ref ? { target: { kind: "open", ref } } : {}),
           },
         });
-      expect(JSON.stringify(await chatCall(other))).toContain("grant.required");
+      expect(
+        JSON.parse(((await chatCall(other)).content as Array<{ text: string }>)[0]!.text),
+      ).toMatchObject({ ok: true });
       expect(
         JSON.parse(((await chatCall()).content as Array<{ text: string }>)[0]!.text),
       ).toMatchObject({ ok: true, revision: 7 });
@@ -466,7 +468,10 @@ test.each(["http", "stdio"])(
         JSON.parse(((await chatCall(own)).content as Array<{ text: string }>)[0]!.text),
       ).toMatchObject({ ok: true });
       expect(head.targets.map((target) => target.request)).toEqual([{ kind: "open", ref: user }]);
-      expect(writes[0]).toMatchObject({ basis: { kind: "grant", thread: "chat", lifetime: user } });
+      expect(writes[0]).toMatchObject({
+        basis: null,
+        destination: { kind: "document", ref: other },
+      });
     } finally {
       for (const client of clients) await client.close();
       await door.close();
@@ -510,37 +515,25 @@ test("a cached catalog still reads the open documents fresh: a closed one is gon
   expect(opsReads).toBe(1);
 });
 
-test("F-H6-3: plan and capture over loaded families are human verbs; Pea never finds or runs them", async () => {
+test("human and Pea discover the same plan, capture and apply commands with explicit effects", () => {
   const rows = catalog().capabilities;
-  const verbs = ["families.plan", "families.capture"].flatMap((key) => [
-    `op:${key}`,
-    `workflow:${key}`,
-  ]);
-  for (const key of verbs)
-    expect(rows.find((row) => row.key === key)?.principal).toEqual(["human"]);
-  fakeRuntimeHost("http://127.0.0.1:9");
-  vi.stubGlobal("fetch", async () => Response.json(catalog()));
-  try {
-    const found = (await run(peFind, { query: "plan capture loaded families", limit: 50 })) as {
-      matches: Array<{ key: string }>;
-    };
-    expect(found.matches.length).toBeGreaterThan(0);
-    for (const key of verbs) expect(found.matches.map((row) => row.key)).not.toContain(key);
-    const map = (await run(peFind, {})) as { map: { total: number } };
-    expect(map.map.total).toBe(rows.filter((row) => row.principal.includes("pea")).length);
-    for (const key of verbs)
-      for (const tool of [peDo, peRead]) {
-        const refused = (await run(tool, { key, timeoutSeconds: 30 })) as {
-          isError: boolean;
-          content: string;
-        };
-        expect(refused).toMatchObject({ isError: true, key });
-        expect(refused.content).toContain(`'${key}' is human-only`);
-      }
-  } finally {
-    vi.unstubAllGlobals();
-    vi.unstubAllEnvs();
-  }
+  for (const key of [
+    "families.plan",
+    "families.capture",
+    "families.apply",
+    "family.apply",
+    "settings.write",
+  ])
+    expect(rows.find((row) => row.key === `workflow:${key}`)?.principal).toEqual(
+      expect.arrayContaining(["human", "pea"]),
+    );
+  expect(rows.find((row) => row.key === "workflow:families.plan")?.effect).toBe("query");
+  expect(rows.find((row) => row.key === "workflow:families.capture")?.effect).toBe("command");
+  expect(rows.find((row) => row.key === "workflow:family.apply")?.effect).toBe("command");
+  expect(rows.find((row) => row.key === "route:families.edit")?.principal).toEqual(
+    expect.arrayContaining(["human", "pea"]),
+  );
+  expect(rows.some((row) => row.key === "route:families.propose")).toBe(false);
 });
 
 type ExecutableTool = { execute?: (input: never, context: never) => Promise<unknown> };
@@ -619,7 +612,7 @@ test("an exact-open turn Target reads and writes route Work under its document's
     const proposed = (await run(
       peDo,
       {
-        key: "route:families.propose",
+        key: "route:families.edit",
         input: { patches: [{ path: ["intent"], value: "x" }] },
         expectedRevision: 2,
         timeoutSeconds: 30,
@@ -719,21 +712,33 @@ test("ADR 0021: a thread with several targets refuses a call with no override; a
         peDo,
         {
           ...route,
-          key: "route:families.propose",
+          key: "route:families.edit",
           target,
           expectedRevision: 3,
-          input: { patches: [{ path: ["scope", "proposal"], value: {} }] },
+          input: { patches: [{ path: ["scope", "suggestion"], value: {} }] },
         },
         head,
       ),
     ).toMatchObject({ ok: true, revision: 2 });
-    for (const openId of ["outside", "closed"]) {
+    expect(
+      await run(
+        peDo,
+        {
+          ...route,
+          key: "route:families.edit",
+          expectedRevision: 3,
+          target: { kind: "open", ref: { session: "b1", openId: "outside" } },
+        },
+        head,
+      ),
+    ).toMatchObject({ ok: true });
+    for (const openId of ["closed"]) {
       expect(
         await run(
           peDo,
           {
             ...route,
-            key: "route:families.propose",
+            key: "route:families.edit",
             expectedRevision: 3,
             target: { kind: "open", ref: { session: "b1", openId } },
           },
@@ -749,8 +754,9 @@ test("ADR 0021: a thread with several targets refuses a call with no override; a
     ).toEqual([
       ["C:\\Models\\B.rvt", "b1/b"],
       ["C:\\Models\\B.rvt", "b1/b"],
+      ["C:\\Models\\Other.rvt", "b1/outside"],
     ]);
-    expect(workWrites).toMatchObject([{ expectedRevision: 3 }]);
+    expect(workWrites).toMatchObject([{ expectedRevision: 3 }, { expectedRevision: 3 }]);
     expect(head.targets.map((entry) => entry.request)).toEqual(
       ["a", "b"].map((openId) => ({ kind: "open", ref: { session: "b1", openId } })),
     );
@@ -759,7 +765,7 @@ test("ADR 0021: a thread with several targets refuses a call with no override; a
       ok: false,
       content: expect.stringContaining("disconnected"),
     });
-    expect(work).toHaveLength(2);
+    expect(work).toHaveLength(3);
   } finally {
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();

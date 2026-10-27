@@ -20,7 +20,7 @@ test("the bundled ducts skill is projected from DUCTS_GUIDE and keeps the operat
     "workflow:ducts.preview-heal",
     "workflow:ducts.apply-heal",
     "workflow:ducts.preview-assign-fan",
-    "route:ducts.propose",
+    "route:ducts.edit",
     "route:ducts.guide",
   ])
     expect(skill).toContain(key);

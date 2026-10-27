@@ -10,9 +10,9 @@ const scope = { binding: "address" as const, route: "families", target: at };
 // One loaded family, "Casework", with one type. Its element id changes on every reload; its name does not.
 const loaded = [{ familyId: 3573700, familyName: "Casework", types: [{ typeName: "12 X 4" }] }];
 
-// The person staged the Casework scope; cell keys are checked against it (M13-2).
+// The person edit the Casework scope; cell keys are checked against it (M13-2).
 function workspace() {
-  const staged = { version: 1, revision: 0, doc: { scope: { staged: { value: casework([]) } } } };
+  const edit = { version: 1, revision: 0, doc: { scope: { edit: { value: casework([]) } } } };
   const saved = new Map<string, unknown>();
   const reads: unknown[] = [];
   return {
@@ -26,7 +26,7 @@ function workspace() {
         },
       }),
       store: {
-        getState: async ({ targetKey, route }) => saved.get(`${targetKey}\0${route}`) ?? staged,
+        getState: async ({ targetKey, route }) => saved.get(`${targetKey}\0${route}`) ?? edit,
         setState: async ({ targetKey, route, value }) => {
           saved.set(`${targetKey}\0${route}`, value);
         },
@@ -38,7 +38,7 @@ const propose = (familyName: string, typeName = "12 X 4") => ({
   path: [
     "cells",
     familyCellKey({ familyName, typeName, parameter: "View Description" }),
-    "proposal",
+    "suggestion",
   ],
   value: { value: { value: "Base", storageType: "String" } },
 });
@@ -119,7 +119,7 @@ function ProjectAWork(familyNames: string[], categoryNames = ["Air Terminals"]) 
         at,
         "families",
         "human",
-        [{ path: ["scope", "staged"], value: { value: scoped } }],
+        [{ path: ["scope", "edit"], value: { value: scoped } }],
         0,
       ),
   };
@@ -143,7 +143,7 @@ test("F-J1-12: the live catalog loopback admits a key for a type past the tenth,
             typeName: "extra 3",
             parameter: "Mech Equip Model Number",
           }),
-          "staged",
+          "edit",
         ],
         value: { value: { value: "", storageType: "String" } },
       },
@@ -159,33 +159,40 @@ const casework = (familyNames: string[]) => ({
   placementScope: "AllLoaded",
 });
 
-test("F-J1-10: Pea proposes a scope and the person's staged scope is untouched", async () => {
+test("both authors share editable family scope and optional suggestions", async () => {
   const { work } = workspace();
-  const staged = await work.apply(
-    scope,
-    "families",
-    "human",
-    [{ path: ["scope", "staged"], value: { value: casework(["Casework"]) } }],
-    0,
-  );
-  expect(staged).toMatchObject({ ok: true, revision: 1 });
-  const proposed = await work.apply(
-    scope,
-    "families",
-    "agent",
-    [{ path: ["scope", "proposal"], value: { value: casework([]), note: "all casework" } }],
-    1,
-  );
-  expect(proposed).toMatchObject({ ok: true, revision: 2 });
-  for (const path of [["scope"], ["scope", "staged"]])
-    expect(await work.apply(scope, "families", "agent", [{ path, value: null }], 2)).toMatchObject({
-      ok: false,
-    });
+  expect(
+    await work.apply(
+      scope,
+      "families",
+      "human",
+      [{ path: ["scope", "edit"], value: { value: casework(["Casework"]) } }],
+      0,
+    ),
+  ).toMatchObject({ ok: true, revision: 1 });
+  expect(
+    await work.apply(
+      scope,
+      "families",
+      "agent",
+      [{ path: ["scope", "suggestion"], value: { value: casework([]), note: "all casework" } }],
+      1,
+    ),
+  ).toMatchObject({ ok: true, revision: 2 });
+  expect(
+    await work.apply(
+      scope,
+      "families",
+      "agent",
+      [{ path: ["scope", "edit"], value: { value: casework([]) } }],
+      2,
+    ),
+  ).toMatchObject({ ok: true, revision: 3 });
   const { scope: cell } = familiesRouteState.schema.parse(
     (await work.view(scope, "families"))!.doc,
   );
-  expect(cell.staged).toEqual({ value: casework(["Casework"]) });
-  expect(cell.proposal).toMatchObject({ value: casework([]) });
+  expect(cell.edit).toMatchObject({ value: casework([]), by: "pea", base: 2 });
+  expect(cell.suggestion).toMatchObject({ value: casework([]), by: "pea", base: 1 });
 });
 
 // M13-1: a stale rung never blocks its own correction. project-a loads only "Price LBP15A Exhaust";
@@ -217,13 +224,13 @@ const exhaustScope = {
   placementScope: "AllLoaded",
 };
 
-test("M13-2 (d): Pea proposes a scope, then cells in it, with nothing staged; the catalog read carries the proposed filter", async () => {
+test("M13-2 (d): Pea proposes a scope, then cells in it, with nothing edit; the catalog read carries the proposed filter", async () => {
   const { work, at, calls } = seededWork({});
   const scoped = await work.apply(
     at,
     "families",
     "agent",
-    [{ path: ["scope", "proposal"], value: { value: exhaustScope } }],
+    [{ path: ["scope", "suggestion"], value: { value: exhaustScope } }],
     1,
   );
   expect(scoped).toMatchObject({ ok: true, revision: 2 });
@@ -240,7 +247,7 @@ test("M13-2 (d): Pea proposes a scope, then cells in it, with nothing staged; th
       "families",
       "agent",
       [
-        { path: ["scope", "proposal"], value: { value: exhaustScope } },
+        { path: ["scope", "suggestion"], value: { value: exhaustScope } },
         propose("Price LBP15A Exhaust"),
       ],
       1,
@@ -258,37 +265,10 @@ const catalogOf = (families: unknown[], truncated = false) =>
     key === "revit.catalog.loaded-families" ? { summary: { truncated }, families } : undefined,
   );
 const exhaustCell = propose("Price LBP15A Exhaust");
-const stagedExhaust = { scope: { staged: { value: exhaustScope } } };
+const stagedExhaust = { scope: { edit: { value: exhaustScope } } };
 
 test("item 3: every door refusal names its code and its structured parts, and keeps the prose for Pea", async () => {
   const cases: [string, () => Promise<unknown>, Record<string, unknown>][] = [
-    [
-      "exclusion-held",
-      async () => {
-        const { work } = workspace();
-        await work.apply(
-          scope,
-          "families",
-          "human",
-          [{ path: ["excluded", "Casework"], value: { by: "person" } }],
-          0,
-        );
-        return work.apply(scope, "families", "agent", [{ path: ["excluded", "Casework"] }], 1);
-      },
-      { families: ["Casework"] },
-    ],
-    [
-      "exclusion-author",
-      () =>
-        workspace().work.apply(
-          scope,
-          "families",
-          "agent",
-          [{ path: ["excluded", "Casework"], value: { by: "person" } }],
-          0,
-        ),
-      { families: ["Casework"] },
-    ],
     [
       "unknown-family",
       () =>
@@ -298,7 +278,7 @@ test("item 3: every door refusal names its code and its structured parts, and ke
           "human",
           [
             {
-              path: ["scope", "staged"],
+              path: ["scope", "edit"],
               value: { value: casework(["Casework", "Price LBPH15A Exhaust"]) },
             },
           ],
@@ -321,7 +301,7 @@ test("item 3: every door refusal names its code and its structured parts, and ke
       () => {
         const { work, at } = seededWork({
           scope: {
-            staged: { value: { ...exhaustScope, categoryNames: ["Walls"], familyNames: [] } },
+            edit: { value: { ...exhaustScope, categoryNames: ["Walls"], familyNames: [] } },
           },
         });
         return work.apply(at, "families", "agent", [exhaustCell], 1);

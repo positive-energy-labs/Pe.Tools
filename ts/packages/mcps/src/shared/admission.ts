@@ -119,7 +119,7 @@ export async function readCapabilityIntent(
     return {
       kind: "workflow",
       needs: semanticActions[key as SemanticActionKey].needs,
-      mutates: true,
+      mutates: semanticActions[key as SemanticActionKey].effect === "command",
     };
   if (Object.hasOwn(scheduleReads, key))
     return {
@@ -190,12 +190,6 @@ export async function runCapability(
       context.openDocumentId ? exactDocument(context) : undefined,
       context.hostBaseUrl,
     );
-  if (!intent.mutates)
-    // A NoRequest op is called with no request; `{}` is a different body.
-    return caller({ ...context, bridgeSessionId: intent.session ?? context.bridgeSessionId }).call(
-      key as never,
-      (Object.keys(input).length ? input : undefined) as never,
-    );
   if (intent.kind === "workflow" && !intent.prior) {
     // A lifecycle action names its own session; the head lifetime is not its destination.
     if (intent.needs !== "nothing" && instancesSessionSelection(input) === null)
@@ -214,6 +208,12 @@ export async function runCapability(
     );
     return context.receipt ? action : actionResult(action);
   }
+  if (!intent.mutates)
+    // A NoRequest op is called with no request; `{}` is a different body.
+    return caller({ ...context, bridgeSessionId: intent.session ?? context.bridgeSessionId }).call(
+      key as never,
+      (Object.keys(input).length ? input : undefined) as never,
+    );
   const admission = actionAdmissionSchema.parse({
     id: context.actionId ?? crypto.randomUUID(),
     kind: intent.kind,

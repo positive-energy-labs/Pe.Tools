@@ -79,6 +79,7 @@ export function documentRows(catalog: { machine: MentionMachine }): Capability[]
       description:
         `${document.isFamilyDocument ? "Family" : "Project"} document open in Revit ${catalog.machine.revit.sessions?.find((row) => row.attachment?.session === sessionId)?.row.year ?? ""}`.trim(),
       needs: "nothing" as const,
+      effect: "query" as const,
       mutates: false,
       principal: capabilityPrincipals(false),
       input: {},
@@ -166,6 +167,7 @@ export function recentRows(catalog: {
         finds: recent.isCloud ? recentSegments(recent) : [],
         description: `Recent ${recent.isCloud ? "cloud model" : /\.rfa$/i.test(recent.path) ? "family file" : "local file"} from Revit ${recent.year}'s recent list; ${inventoryKnown(catalog.machine) ? "not open" : "open state unknown"}. pe_read it for openWith, then resolve an open lifetime before an op can target it.`,
         needs: "nothing" as const,
+        effect: "query" as const,
         mutates: false,
         principal: capabilityPrincipals(false),
         input: {},

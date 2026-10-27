@@ -238,7 +238,7 @@ export const actionControls = {
     says: "Stop the running action at the operation's next checkpoint. Work already written to Revit stands.",
     dirties: ["receipts"],
     needs: "nothing",
-    effect: "query",
+    effect: "command",
     input: z.object({ id: z.string().min(1) }),
   },
 } as const satisfies Record<string, ActionDefinition>;

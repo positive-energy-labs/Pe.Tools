@@ -59,37 +59,17 @@ const refuse = (
  * The Families door. An exclusion is stamped with its writer: every one a write adds or changes
  * says `by` the writer, and Pea never changes or lifts the person's. F-J1-7: a written cell whose
  * key names no type of a family loaded in the Work's scope is refused, whoever writes it. Clearing
- * a cell never asks Revit, so a bad key can always be withdrawn, denied or unstaged.
+ * a cell never asks Revit, so a bad key can always be withdrawn, denied or unedit.
  */
 export function familiesAdmission(loadedFamilies: LoadedFamilies): RouteWriteAdmission {
-  return async (doc, patches, { scope: work, actor, prior }) => {
+  return async (doc, patches, { scope: work, prior }) => {
     const parsed = familiesRouteState.schema.parse(doc);
-    const { cells, excluded } = parsed;
-    const before = familiesRouteState.schema.parse(prior).excluded;
-    const by = actor === "agent" ? "pea" : "person";
-    for (const id of new Set([...Object.keys(before), ...Object.keys(excluded)])) {
-      // `id` is a family name; it stays the key across reloads, which replace the element id.
-      if (before[id]?.by === excluded[id]?.by) continue;
-      if (actor === "agent" && before[id]?.by === "person")
-        return refuse(
-          "exclusion-held",
-          `family "${id}" was held back by the person; Pea cannot change or lift that exclusion`,
-          "Nothing was written. Ask the person to include it again.",
-          { families: [id] },
-        );
-      if (excluded[id] && excluded[id].by !== by)
-        return refuse(
-          "exclusion-author",
-          `an exclusion is stamped with its writer: excluded[${JSON.stringify(id)}] must be { by: "${by}" }`,
-          "Nothing was written.",
-          { families: [id] },
-        );
-    }
+    const { cells } = parsed;
     // F-J1-10: every scope rung a write changes names only families loaded under its own
     // categories and placement; an unknown name refuses by name. M13-1: only the rung(s) this write
     // changes, so a stale rung never blocks its own correction.
     const was = familiesRouteState.schema.parse(prior).scope;
-    const scopes = (["proposal", "staged"] as const).flatMap((rung) => {
+    const scopes = (["suggestion", "edit"] as const).flatMap((rung) => {
       const written = parsed.scope[rung];
       return written?.value.familyNames.length && !sameValue(written, was[rung])
         ? [written.value]
@@ -127,11 +107,11 @@ export function familiesAdmission(loadedFamilies: LoadedFamilies): RouteWriteAdm
       ),
     );
     const written = [...touched].filter(
-      (key) => cells[key]?.proposal != null || cells[key]?.staged != null,
+      (key) => cells[key]?.suggestion != null || cells[key]?.edit != null,
     );
     if (!written.length) return null;
-    // M13-2: a cell belongs to a scope someone named: the staged one, else the proposed one.
-    const keyed = stagedFilter(parsed) ?? parsed.scope.proposal?.value;
+    // M13-2: a cell belongs to a scope someone named: the edit one, else the proposed one.
+    const keyed = stagedFilter(parsed) ?? parsed.scope.suggestion?.value;
     if (!keyed)
       return refuse(
         "no-scope",

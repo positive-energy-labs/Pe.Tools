@@ -57,6 +57,8 @@ export const capabilitySchema = z
     /** Routing text — the only place capability prose lives. */
     description: z.string(),
     needs: capabilityNeedsSchema,
+    effect: z.enum(["query", "command"]),
+    /** Search projection; effect is the execution classification. */
     mutates: z.boolean(),
     principal: z.array(principalSchema).min(1),
     /** JSON Schema of the row's input. */

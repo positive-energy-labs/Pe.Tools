@@ -119,7 +119,7 @@ export async function runSemanticAction(
     // A retained admission that already settled is history, not a conflict: discard it and admit
     // the new input. Only a STILL RUNNING one refuses, and it names the control that ends it.
     const live = await readAction(prior.id, base).catch(() => undefined);
-    if (live?.state === "running")
+    if (live?.state === "running" || live?.state === "waiting")
       throw Error(`Action '${prior.id}' is still running; stop it before changing its input`);
     retain(storageKey);
     prior = undefined;
@@ -157,7 +157,12 @@ export async function runSemanticAction(
     if (typeof id !== "string") retain(storageKey, admission);
   }
   const row = await submitAction(admission, base, waitMs);
-  if (row.state !== "running" && row.state !== "unknown" && row.state !== "detached")
+  if (
+    row.state !== "waiting" &&
+    row.state !== "running" &&
+    row.state !== "unknown" &&
+    row.state !== "detached"
+  )
     retain(storageKey);
   return row;
 }
@@ -224,7 +229,7 @@ export async function submitAction(
       canonicalRouteInput(row.bases) !== canonicalRouteInput(admission.bases)
     )
       throw Error(`Action '${admission.id}' receipt conflicts with the requested intent`);
-    while (row.state === "running") {
+    while (row.state === "waiting" || row.state === "running") {
       if (Date.now() >= deadline) return detached("admitted");
       await new Promise((resolve) => setTimeout(resolve, 250));
       const next = await readAction(admission.id, base, signal()).catch((error) => {

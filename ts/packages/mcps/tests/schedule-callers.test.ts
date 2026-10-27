@@ -47,8 +47,6 @@ test("Gunshi Schedule read and human apply use exact HTTP action and frozen Work
         "B",
         "--open-document-id",
         "open-B",
-        "--actor",
-        "human",
         "--action-id",
         "cli-schedule-original",
         "--request-file",
@@ -60,13 +58,13 @@ test("Gunshi Schedule read and human apply use exact HTTP action and frozen Work
     // The admission builder returns the succeeded receipt's result; a failure names the id.
     expect(JSON.parse(output.mock.calls.at(-1)![0])).toMatchObject({ applied: 1, failures: [] });
     expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(1);
-    expect((await f.view()).doc.cells["1::2"].staged).toBeUndefined();
+    expect((await f.view()).doc.cells["1::2"].edit).toBeUndefined();
   } finally {
     output.mockRestore();
   }
 });
 
-test("Pea Schedule A/B/A reads honor the thread head and cannot perform human-only apply", async () => {
+test("Schedule A/B/A reads use thread defaults; apply requires matching Work and target", async () => {
   const f = await setup();
   fakeRuntimeHost();
   // A harness child's call: its context names the thread and the host answers `/pe/scope/self`.

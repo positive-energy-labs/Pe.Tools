@@ -11,6 +11,10 @@ restated here.
 
 ## Decided
 
+- 2026-10-26, kaitpw authorized the [Astra/Fable foundation](AUTONOMOUS-TOOLS-FABLE.md): human and Pea share Work and semantic commands; thread targets supply context only; one 60-second root-run consent covers consequential writes. [ADR 0024](../../adr/0024-root-run-consent-and-shared-work.md) replaces prior Pea grants, actor-only commands and compulsory proposal staging.
+- 2026-10-26, kaitpw accepted root consent and Stop for descendants explicitly delegated within the same task; independently started or scheduled tasks receive separate approval. The future escape from sharing is deferred.
+- 2026-10-26, kaitpw provisionally accepted the same approval for Pod source, settings, other user files and publication, and requested end-of-turn notices with exact proposed Work links. Countdown provides an intervention opportunity, not proof that content was understood.
+
 - 2026-10-25, kaitpw: tool entry and Work entry must not choose or create a conversation. Work presses preserve the selected chat. Browser Places and explicit Work references follow [ADR 0022](../../adr/0022-independent-tools-work-and-conversations.md); native authority remains independent.
 - 2026-10-24, kaitpw: bare element ids in chat resolve only within the turn's exact pinned document lifetimes; ambiguous or unresolved ids stay plain. Persist each observation with the prompt provenance so old prose cannot silently acquire another element's name after a reopen.
 
@@ -172,6 +176,10 @@ restated here.
 - 2026-08-25 — One object-valued `page/lens-intent` atom for `inspectKey` and `following`: the `Lens` controller wrote fresh identities during its subscribed effect and caused an unbounded React notification loop. Replaced by primitive atoms.
 
 ## Owed
+
+- Revisit shared approval for non-Revit resource writes against understandable change summaries and the real resource lifecycle. Typical users cannot read JSON; beta editors may never cover every resource type and have incomplete routing and resource management.
+- Design the deferred escape from sharing root approval and Stop with explicitly delegated descendants. The accepted default remains shared consent.
+- Prove real-provider native file/shell confinement and the SDK-controlled Revit cases in the workshop S3. Deterministic journal and adapter tests do not establish an OS sandbox, native preview isolation, sibling script effects or actual Stop-after-dispatch outcomes.
 
 - Build Attention (see the 2026-10-26 Decided line). Proposed budget is 512 tokens per turn, 1,024 at most; this is not measured yet. The cause of the 7333e689 "no mounted ducts view" answer is UNPROVEN: `RouteViewStore` selects by thread and freshness, and the browser publishes only when visible with a thread (`ts/apps/web/src/route/view-bridge.ts`).
 - 2026-10-24, remove the dependency residue at `C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-8cbc72a5` after automatic approval review permits cleanup. Git retirement removed its registration but left files. The cleanup action was rejected without a reason. Child handoffs and SSR custody evidence are copied to `.artifacts/handoffs/turn-names-child-evidence/` in the conversation-work checkout; no child process remains.

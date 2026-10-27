@@ -6,7 +6,9 @@ import { documentRefSchema } from "./target.ts";
 export const runRefSchema = z.strictObject({ thread: z.string().min(1), turn: z.string().min(1) });
 export type RunRef = z.infer<typeof runRefSchema>;
 export const allowDecisionSchema = z.strictObject({
-  id: z.string().min(1), by: z.enum(["human", "deadline"]), at: z.string(),
+  id: z.string().min(1),
+  by: z.enum(["human", "deadline"]),
+  at: z.string(),
 });
 export type AllowDecision = z.infer<typeof allowDecisionSchema>;
 export const originSchema = z.strictObject({
@@ -36,4 +38,9 @@ export type RunConsent =
   | { state: "idle" }
   | { state: "waiting"; requestId: string; deadline: string; commands: string[] }
   | { state: "allowed"; decision: AllowDecision }
-  | { state: "closed"; reason: "completed" | "stopped" | "restart"; decision: AllowDecision | null; at: string };
+  | {
+      state: "closed";
+      reason: "completed" | "stopped" | "restart";
+      decision: AllowDecision | null;
+      at: string;
+    };

@@ -151,7 +151,7 @@ The user asked to learn, not to be told. The master corrects the hand and never 
     name: "write-revit-csharp-script",
     content: String.raw`---
 name: write-revit-csharp-script
-description: Write and run a C# Revit script when code is the clearest way to inspect, mutate, or experiment against a connected model. Use for one-off probes, gaps in host operations, and durable multi-step work. Covers inline snippets, workspace files, and Pod rules. Not for changing values a route shows (family or type parameters, schedule cells, takeoffs, parameter links); propose those with propose-changes, even under Trusted.
+description: Write and run a C# Revit script when code is the clearest way to inspect, mutate, or experiment against a connected model. Use for one-off probes, gaps in host operations, and durable multi-step work. Covers inline snippets, workspace files, and Pod rules. Not for changing values a route shows (family or type parameters, schedule cells, takeoffs, parameter links); edit those with edit-shared-work and use their semantic apply command.
 ---
 
 # Write Revit C# Script
@@ -297,35 +297,21 @@ When more than a sentence is needed, report what the Pod does in the user's word
 `,
   },
   {
-    name: "propose-changes",
+    name: "edit-shared-work",
     content: String.raw`---
-name: propose-changes
-description: Propose value changes on a route. Use when the user asks to change, set, fill in, fix, rename, or adjust values on something a route shows - "set <parameter> on every type of <families>", family parameters, bulk families, schedule cells, a pod member or spec, takeoff rooms, parameter links - or has such a route open. You propose; the person stages and commits.
+name: edit-shared-work
+description: Edit shared tool Work and apply it through the same semantic commands the person uses. Use for parameter values, families, schedules, takeoffs, parameter links, and pod members.
 ---
 
-# Propose Changes
+# Edit shared Work
 
-Every route works the same way. You write proposals; the person stages them, and staging is their approval; a separate verb commits what is staged.
-
-## Method
-
-1. Read first: pe_read key=route:<route>. It returns the document, its revision, the schema, the agent write mask, and the commands. The mask is the truth about what you may write: only the proposal rungs it names.
-2. Keys come from the route read. On a route keyed by what Revit has loaded (families), new cell keys come from the route read's scopeTypes. Family names for a scope still come from the catalog read (revit.catalog.loaded-families). Copy names exactly; never compose them from ids. The door refuses an unknown key by name.
-3. Write only proposals: pe_do key=route:<route>.propose with patches to proposal rungs and expectedRevision from your read. A patch path is an array of segments, e.g. ["cells","<key>","proposal"] or ["scope","proposal"], never pointer strings. Never write staged. If a route has no proposal rung, describe the change in chat and let the person make it.
-4. Propose even when the harness runs tools without asking. A change the person could review on a route goes through that route; do not reach the same values through a script, an op, or a file edit. A tool that runs unasked does not skip the person's review.
-5. What the person sees: each proposal sits on its own cell next to the current value, with accept and deny on that cell. The Chat head shows a compact summary and opens the route inside Chat. A staged value beside a different proposal of yours is a counter-proposal; do not overwrite it.
-6. Commit is the person's. Plan, apply, save, push, and sync are human verbs; do not press them or ask to. Say which verb to press and what it consumes: the staged values at the current revision, never open proposals. Opening and starting Revit are not proposals: run workflow:instances.open or workflow:instances.start yourself when the work needs a Revit, preferring owner pea and a copy over the person's own session.
-7. A proposal is not a permission request. When the harness asks the person to allow a tool call, that ask lives only as long as your turn and approves the call, not your proposal; a proposal waits in the route as Work and survives reload. For a decision only the person can make, ask in chat.
-
-## Families
-
-Propose scope.proposal first (exact loaded family names), then the cells in the next propose call against that proposed scope. Do not wait for the person to stage the scope. A cell key is the JSON string of [family name, type name, parameter] as the catalog spells them; values are {"value": ...}.
-
-## Pod members
-
-Enumerate members with pe_read key=op:pod.list. Propose fields through route:pods.propose against the member Work opened in the editor. Validate candidate content with pe_read key=op:pod.member.compose, passing pod, path, and content; repair the first diagnostic and revalidate. Keep authored intent, generated output, and runtime proof distinct. Edit a member file directly only when no route binds it, and say so before you do.
-
-Report what you proposed (route, count, and one line of what changes) and what the person must stage and which verb commits it.
+1. Discover the tool and read route:<tool> with an exact target or workspaceId. Thread targets supply defaults only.
+2. Read the revision and schema. Call route:<tool>.edit with expectedRevision and patches to edit or suggestion. A patch path is an array, such as ["cells", "<key>", "edit"]. Set {value: ...}; clear with null. Host stamps the author, time and base revision. Never patch observation, basis, readback, consent or receipts.
+3. Either author may knowingly replace the current edit. A stale revision refuses; reread and submit a new explicit edit. Suggestions are optional review content, available to either author.
+4. For Families, set scope.edit with exact loaded family names before writing its cells. Keys are JSON arrays of [family, type, parameter]. The host validates those identities against Revit.
+5. Run the semantic apply/save/push/sync command yourself when the user authorized execution. Family apply accepts rows {source, include: "all"} or a prior preview plan with expectedPlanHashes. The host plans, checks freshness, applies, reads back and retires only unchanged consumed edits. Preview is optional inspection, never an actor gate.
+6. The first consequential write in this root turn opens one 60-second countdown. Allow now or its deadline permits remaining writes and explicitly delegated descendants; Stop writes cancels pending and unstarted mutations. Work edits and internal evidence remain immediate. Keep the original actionId through retries, and inspect uncertain native outcomes instead of submitting a replacement.
+7. Report completed work and exact tool/Work links. If accepted commands still run, say so. External devices and Pages keep their own trust adapter.
 `,
   },
   {
@@ -448,6 +434,7 @@ For interactive nudging or diagnosing a single leg, use the fluent session (Star
 // Skill directories this product once bundled and no longer does. Materialization removes exactly
 // these on upgrade; every other directory under the skills root is the user's and is never touched.
 export const retiredPeaSkillNames: readonly string[] = [
+  "propose-changes",
   "audit-visible-revit-equipment",
   "inspect-active-revit-document",
   "author-family-foundry-profile",
