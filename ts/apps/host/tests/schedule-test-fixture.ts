@@ -46,6 +46,7 @@ async function readScheduleCapture(
   });
   const value = await response.json();
   if (!response.ok) throw Error((value as { error?: string }).error ?? `${response.status}`);
+  if (key === "schedule.grid.bind") return value;
   return key === "schedule.grid.catalog"
     ? scheduleCatalogSchema.parse(value)
     : scheduleReadingSchema.parse(value);
@@ -309,11 +310,10 @@ export async function setup() {
       as = human;
     }
   };
+  await readScheduleCapture("schedule.grid.bind",{readingId:reading.id,expectedRevision:0});
   expect(
     await patch([
-      { path: ["basis"], value: { captureId: reading.id } },
-      { path: ["takenAt"], value: reading.capturedAt },
-      { path: ["cells", "1::2"], value: { staged: { value: "150 VA" } } },
+      { path: ["cells", "1::2"], value: { edit: { value: "150 VA" } } },
     ]),
   ).toMatchObject({ ok: true });
   const admission = async (id = crypto.randomUUID()): Promise<ActionAdmission> => ({
@@ -349,6 +349,7 @@ export async function setup() {
     view,
     patch,
     read,
+    bind: async (reading:ScheduleReading) => readScheduleCapture("schedule.grid.bind",{readingId:reading.id,expectedRevision:(await view()).revision}),
     post,
     submit,
     admission,

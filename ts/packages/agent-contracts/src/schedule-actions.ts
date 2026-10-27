@@ -44,7 +44,7 @@ export function rebindScheduleWork(
   };
   const already = new Map((doc.basis.stale ?? []).map((cell) => [cell.key, cell.was]));
   const stale = Object.entries(doc.cells).flatMap(([key, cell]) => {
-    if (!cell.staged) return [];
+    if (!cell.edit) return [];
     if (already.has(key)) return [{ key, was: already.get(key)! }];
     const before = binding(basis, key),
       after = binding(reading, key);
@@ -96,6 +96,11 @@ export const scheduleActions = {
   },
 } as const;
 export const scheduleReads = {
+  "schedule.grid.bind": {
+    says: "Bind immutable host schedule evidence to shared Work at an expected revision; retain authored cells and mark changed native bindings stale.",
+    needs: "nothing", effect: "query", dirties: [],
+    input: z.object({readingId:z.string().min(1),expectedRevision:z.number().int().nonnegative()}),
+  },
   "schedule.grid.catalog": {
     says: "Read schedules from the exact selected document without changing authored Work.",
     dirties: [],

@@ -38,7 +38,7 @@ test("instance discovery validates actual persisted Work and never reads, create
           title: "Family",
           description: "Test",
           schema: z.object({ authored: z.string().default("") }),
-          agentWriteMask: [],
+
           commands: {},
         },
         handlers: {},

@@ -11,7 +11,6 @@ import {
 import { routeBindingsSchema } from "./route-state.ts";
 import type { RouteStateSpec } from "./route-state.ts";
 import { settingsFieldStateSchema } from "./settings.ts";
-import { trichotomyAgentMask } from "./trichotomy.ts";
 
 /** `/family` Work: an immutable capture baseline plus keyed JSON-pointer cells. */
 export const familyDraftSchema = z
@@ -33,14 +32,15 @@ export const familyDraftRouteState = {
   route: "family",
   title: "Family",
   description:
-    "A captured family draft baseline with cells keyed by JSON pointer. Propose through cells.*.proposal; a person stages reviewed values before plan or apply.",
+    "A captured family draft baseline with cells keyed by JSON pointer. Either author writes cells.*.edit at the expected Work revision; cells.*.suggestion is optional review content.",
   schema: familyDraftSchema,
-  agentWriteMask: trichotomyAgentMask(),
+
   commands: {
     attach_spec: {
+      effect: "command",
       description:
         "Parse a PDF path, URL, or uploaded bytes and attach its portable pages and blocks beside a captured family member.",
-      actor: "any",
+
       input: z
         .object({
           member: z.object({ pod: z.string().min(1), path: z.string().min(1) }),

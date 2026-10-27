@@ -44,7 +44,7 @@ test("actual HTTP Work + journal consumes fanout only after positive acknowledgm
       },
     },
   });
-  expect((await f.view()).doc.cells["1::2"].staged).toBeUndefined();
+  expect((await f.view()).doc.cells["1::2"].edit).toBeUndefined();
   expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(1);
   expect(f.sent.every((s) => s.session === "B" && s.openId === "open-B")).toBe(true);
   // Initial read and actual post-effect readback; the domain compares bindings inside its transaction.
@@ -98,7 +98,7 @@ test.each([
   f.setResponse(response);
   const result = await f.submit();
   expect(result.result.applied).toBe(0);
-  expect((await f.view()).doc.cells["1::2"].staged.value).toBe("150 VA");
+  expect((await f.view()).doc.cells["1::2"].edit.value).toBe("150 VA");
 });
 
 test("staged cells over the generated cap refuse before dispatch and keep every cell", async () => {
@@ -118,21 +118,20 @@ test("staged cells over the generated cap refuse before dispatch and keep every 
   }));
   f.setDetail(detail);
   const reading = await f.read();
+  await f.bind(reading);
   await f.patch([
-    { path: ["basis"], value: { captureId: reading.id } },
-    { path: ["takenAt"], value: reading.capturedAt },
     {
       path: ["cells"],
       value: Object.fromEntries(
         Array.from({ length: over }, (_, index) => [
           `${index}::2`,
-          { staged: { value: "150 VA" } },
+          { edit: { value: "150 VA" } },
         ]),
       ),
     },
   ]);
   expect(await f.submit()).toMatchObject({ state: "failed", notDispatched: true });
-  expect(Object.values((await f.view()).doc.cells).filter((c) => c.staged)).toHaveLength(over);
+  expect(Object.values((await f.view()).doc.cells).filter((c) => c.edit)).toHaveLength(over);
   expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(0);
 });
 
@@ -148,10 +147,9 @@ test("partial native outcome clears only a completely acknowledged cell and keep
   });
   f.setDetail(detail);
   const reading = await f.read();
+  await f.bind(reading);
   await f.patch([
-    { path: ["basis"], value: { captureId: reading.id } },
-    { path: ["takenAt"], value: reading.capturedAt },
-    { path: ["cells", "2::2"], value: { staged: { value: "200 VA" } } },
+    { path: ["cells", "2::2"], value: { edit: { value: "200 VA" } } },
   ]);
   f.setResponse(
     cellsApplied([
@@ -174,8 +172,8 @@ test("partial native outcome clears only a completely acknowledged cell and keep
       },
     },
   });
-  expect((await f.view()).doc.cells["1::2"].staged).toBeUndefined();
-  expect((await f.view()).doc.cells["2::2"].staged.value).toBe("200 VA");
+  expect((await f.view()).doc.cells["1::2"].edit).toBeUndefined();
+  expect((await f.view()).doc.cells["2::2"].edit.value).toBe("200 VA");
 });
 
 test("Work edits finish while native execution waits and settlement preserves later staged/proposed values", async () => {
@@ -186,15 +184,15 @@ test("Work edits finish while native execution waits and settlement preserves la
   await vi.waitFor(() => expect(f.sent.some((s) => s.key === "schedule.cells.apply")).toBe(true));
   expect(
     await f.patch([
-      { path: ["cells", "1::2", "staged"], value: { value: "200 VA" } },
-      { path: ["cells", "1::2", "proposal"], value: { value: "220 VA", by: "pea" } },
+      { path: ["cells", "1::2", "edit"], value: { value: "200 VA" } },
+      { path: ["cells", "1::2", "suggestion"], value: { value: "220 VA", by: "pea" } },
     ]),
   ).toMatchObject({ ok: true });
   f.release();
   await f.owner().wait(admission.id);
   expect((await f.view()).doc.cells["1::2"]).toMatchObject({
-    staged: { value: "200 VA" },
-    proposal: { value: "220 VA" },
+    edit: { value: "200 VA" },
+    suggestion: { value: "220 VA" },
   });
 });
 
@@ -218,7 +216,7 @@ test("lost native outcome remains staged, original receipt recovers without a fr
   f.unknown();
   const original = await f.admission();
   expect(await f.submit(original)).toMatchObject({ state: "unknown" });
-  expect((await f.view()).doc.cells["1::2"].staged).toBeTruthy();
+  expect((await f.view()).doc.cells["1::2"].edit).toBeTruthy();
   expect((await f.post("/actions", await f.admission())).status).toBe(409);
   await f.restart();
   await controlAction("action.recover", { id: original.id }, "");
@@ -239,7 +237,7 @@ test("same document in A/B has exact independent lifetimes; subject change and r
   other.entries[0].scheduleUniqueId = "uid-99";
   f.setDetail(other);
   expect((await f.read()).workspaceId).not.toBe(f.scope.work);
-  expect((await f.view()).doc.cells["1::2"].staged).toBeTruthy();
+  expect((await f.view()).doc.cells["1::2"].edit).toBeTruthy();
   f.setDetail(detailResponse());
   f.reopen();
   expect(await f.submit()).toMatchObject({ state: "failed", notDispatched: true });
@@ -269,7 +267,7 @@ test("stale Work and agent admission refuse before dispatch; a stale binding is 
   const f = await setup();
   const original = await f.admission();
   expect((await f.post("/actions", { ...original, actor: "agent" })).status).toBe(409);
-  await f.patch([{ path: ["cells", "1::2", "staged"], value: { value: "175 VA" } }]);
+  await f.patch([{ path: ["cells", "1::2", "edit"], value: { value: "175 VA" } }]);
   expect(await f.submit(original)).toMatchObject({ state: "failed", notDispatched: true });
   expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(0);
   f.setResponse(cellsApplied([[1, 2, false, "Reviewed schedule cell evidence is stale."]]));
@@ -279,7 +277,7 @@ test("stale Work and agent admission refuse before dispatch; a stale binding is 
       failures: [{ key: "1::2", error: "Reviewed schedule cell evidence is stale." }],
     },
   });
-  expect((await f.view()).doc.cells["1::2"].staged.value).toBe("175 VA");
+  expect((await f.view()).doc.cells["1::2"].edit.value).toBe("175 VA");
   // One dispatch, never a retry through another parameter path.
   expect(f.sent.map((s) => s.key).filter((k) => k !== "revit.detail.schedules")).toEqual([
     "schedule.cells.apply",
@@ -295,7 +293,7 @@ test("missing acknowledgments recover the same native receipt before original re
   await controlAction("action.recover", { id: original.id }, "");
   await controlAction("action.resume", { id: original.id }, "");
   expect(await f.owner().wait(original.id)).toMatchObject({ state: "succeeded" });
-  expect((await f.view()).doc.cells["1::2"].staged).toBeUndefined();
+  expect((await f.view()).doc.cells["1::2"].edit).toBeUndefined();
   expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(1);
 });
 
@@ -316,7 +314,7 @@ test("a stored reading without targets refuses with 're-read the schedule' and n
   expect(refused).toMatchObject({ state: "failed", notDispatched: true });
   expect(String(refused.error)).toContain("re-read the schedule");
   expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(0);
-  expect((await f.view()).doc.cells["1::2"].staged.value).toBe("150 VA");
+  expect((await f.view()).doc.cells["1::2"].edit.value).toBe("150 VA");
   for (const [key, input] of [
     ["schedule.grid.saved", { id: f.reading.id }],
     ["schedule.grid.work", { workspaceId: f.scope.work }],
@@ -359,10 +357,9 @@ test("F-H5-1: a dead-lifetime push names its exit; a re-read rebinds and marks a
   // Two cells under one basis: Mark (1::1) and Load (1::2, staged by setup).
   f.setDetail(withMark());
   const old = await f.read();
+  await f.bind(old);
   await f.patch([
-    { path: ["basis"], value: { captureId: old.id } },
-    { path: ["takenAt"], value: old.capturedAt },
-    { path: ["cells", "1::1"], value: { staged: { value: "P-9" } } },
+    { path: ["cells", "1::1"], value: { edit: { value: "P-9" } } },
   ]);
   f.reopen();
   const live = { session: "B", openId: "reopened-B" };
@@ -383,13 +380,11 @@ test("F-H5-1: a dead-lifetime push names its exit; a re-read rebinds and marks a
   const fresh = await f.read(live);
   expect(await f.view()).toEqual(untouched);
   // One human write: the live basis, with the changed staged cell marked stale. Cells untouched.
-  expect(
-    await f.patch(rebindScheduleWork((await f.view()).doc as never, old, fresh)),
-  ).toMatchObject({ ok: true });
+  expect(await f.bind(fresh)).toHaveProperty("envelope");
   const doc = (await f.view()).doc;
   expect(doc.basis).toEqual({ captureId: fresh.id, stale: [{ key: "1::2", was: "100 VA" }] });
-  expect(doc.cells["1::1"].staged).toEqual({ value: "P-9" });
-  expect(doc.cells["1::2"].staged).toEqual({ value: "150 VA" });
+  expect(doc.cells["1::1"].edit).toMatchObject({ value: "P-9" });
+  expect(doc.cells["1::2"].edit).toMatchObject({ value: "150 VA" });
   // The stale cell refuses per cell, by code, before dispatch; the other cell pushes live.
   f.setResponse(cellsApplied([[1, 1, true]]));
   expect(await f.submit(await at())).toMatchObject({
@@ -405,17 +400,16 @@ test("F-H5-1: a dead-lifetime push names its exit; a re-read rebinds and marks a
     openId: "reopened-B",
     input: { edits: [{ rowNumber: 1, columnNumber: 1, value: "P-9" }] },
   });
-  expect((await f.view()).doc.cells["1::2"].staged).toEqual({ value: "150 VA" });
+  expect((await f.view()).doc.cells["1::2"].edit).toMatchObject({ value: "150 VA" });
 });
 
 test("ask A: a push refused on moved evidence rebinds on its readback; the refused cell is stale with what was reviewed, and accept then push lands it", async () => {
   const f = await setup();
   f.setDetail(withMark());
   const old = await f.read();
+  await f.bind(old);
   await f.patch([
-    { path: ["basis"], value: { captureId: old.id } },
-    { path: ["takenAt"], value: old.capturedAt },
-    { path: ["cells", "1::1"], value: { staged: { value: "P-9" } } },
+    { path: ["cells", "1::1"], value: { edit: { value: "P-9" } } },
   ]);
   // Revit moves Load (1::2) after the review; the domain refuses that cell on its evidence.
   f.setDetail(withMark("120"));
@@ -440,12 +434,11 @@ test("ask A: a push refused on moved evidence rebinds on its readback; the refus
   // The readback rebinds in the push: basis = the readback, and the refused cell names A.
   let doc = (await f.view()).doc;
   expect(doc.basis).toEqual({ captureId: readback.id, stale: [{ key: "1::2", was: "100 VA" }] });
-  expect(doc.cells["1::1"]?.staged).toBeUndefined();
-  expect(doc.cells["1::2"].staged).toEqual({ value: "150 VA" });
+  expect(doc.cells["1::1"]?.edit).toBeUndefined();
+  expect(doc.cells["1::2"].edit).toMatchObject({ value: "150 VA" });
   // Accept: restage B over C. The key leaves `basis.stale`; the push sends C as the evidence.
   await f.patch([
-    { path: ["cells", "1::2", "staged"], value: { value: "150 VA" } },
-    { path: ["basis", "stale"] },
+    { path: ["cells", "1::2", "edit"], value: { value: "150 VA" } },
   ]);
   f.setResponse(cellsApplied([[1, 2, true]]));
   expect(await f.submit()).toMatchObject({
@@ -463,6 +456,6 @@ test("ask A: a push refused on moved evidence rebinds on its readback; the refus
     }),
   ]);
   doc = (await f.view()).doc;
-  expect(doc.cells["1::2"]?.staged).toBeUndefined();
+  expect(doc.cells["1::2"]?.edit).toBeUndefined();
   expect(doc.basis).toEqual({ captureId: expect.any(String) });
 });

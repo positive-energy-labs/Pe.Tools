@@ -1,23 +1,15 @@
-/**
- * Route state — the declarative contract for a collaborative route workspace.
- *
- * A route that wants pea + human co-editing declares a zod document schema,
- * a declarative agent write mask (which paths pea may propose to — everything else is human-only),
- * and named commands that read or change that Work document. External effects use semantic actions
- * and ActionJournal instead. No per-route server code beyond the schema, mask, and Work command
- * handlers: RouteWorkspace (packages/runtime) owns document persistence, ordering, validation, and commands; the
- * pea doors (`pe_read route:<name>`, `pe_do route:<name>.propose|<command>`) are thin
- * HTTP clients to its endpoints; the browser writes the same scoped document as `actor:"human"`
- * (unmasked) and receives document snapshots through its route-specific event stream.
+/** Shared Work schemas and semantic commands. The host stamps authorship and checks revisions.
+ * Authored edits and optional suggestions use one model for human and Pea. External effects
+ * belong to ActionJournal; observations and readback use trusted host publication contracts.
  */
 import { z } from "zod";
 import { addressSchema, documentRefSchema, type Address } from "./target.ts";
 
-/** A named Work command a route exposes. `actor:"human"` commands reject pea. */
+/** A named Work command with explicit effect classification. */
 export interface RouteStateCommandSpec {
   description: string;
+  effect: "query" | "command";
   input: z.ZodType;
-  actor: "any" | "human";
 }
 
 export interface RouteStateSpec<TSchema extends z.ZodType> {
@@ -26,16 +18,12 @@ export interface RouteStateSpec<TSchema extends z.ZodType> {
   /** Human-facing discovery metadata; adapters should not duplicate this. */
   title: string;
   description: string;
-  /** Search words for this route's propose door. */
+  /** Search words for this route's edit door. */
   finds?: readonly string[];
   schema: TSchema;
-  /**
-   * Segment-array patterns authorizing agent writes. `"*"` matches exactly one segment;
-   * a pattern authorizes its whole subtree. Default-deny: a patch whose path matches no
-   * pattern is rejected. Human writes bypass the mask entirely.
-   */
-  agentWriteMask: string[][];
   commands: Record<string, RouteStateCommandSpec>;
+  /** Domain-derived bookkeeping after an authored edit, before validation. */
+  reconcileEdit?: (next: unknown, patches: readonly RouteStatePatch[]) => unknown;
   /**
    * What a person may carry over from Work this schema can no longer read (before or after start
    * fresh), read tolerantly from the old document. Never throws, never parses into Work.
@@ -44,7 +32,7 @@ export interface RouteStateSpec<TSchema extends z.ZodType> {
 }
 
 /**
- * A registration's check on a write the schema and mask already admitted, run before it lands, for
+ * A registration's check on a write the schema already admitted, run before it lands, for
  * truth only the host can read (Families: the family types a cell key names). Null admits.
  */
 export type RouteWriteAdmission = (
@@ -112,7 +100,7 @@ export type RouteDocOf<TSpec> =
 /** A single segment-array patch. Omit `value` to delete the key. */
 export const routeStatePatchSchema = z.object({
   path: z.array(z.union([z.string(), z.number()]), {
-    error: 'must be a segment array, e.g. ["scope","proposal"]',
+    error: 'must be a segment array, e.g. ["scope","suggestion"]',
   }),
   value: z.unknown().optional(),
 });

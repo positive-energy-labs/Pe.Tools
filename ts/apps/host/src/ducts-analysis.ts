@@ -454,12 +454,12 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
     const priced = price(input.snapshot, toGrids(input.tables), work, input.catalogs);
     if (
       ![
-        priced.staged.rules,
-        priced.staged.catalogs,
-        priced.staged.terminalDrops,
-        priced.staged.componentDrops,
-        priced.staged.esp,
-        priced.staged.parameters,
+        priced.edit.rules,
+        priced.edit.catalogs,
+        priced.edit.terminalDrops,
+        priced.edit.componentDrops,
+        priced.edit.esp,
+        priced.edit.parameters,
       ].some((cells) => Object.keys(cells).length)
     )
       throw Error(
@@ -482,7 +482,7 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
       applyRequest(input.snapshot, priced, createdAt, group ? [group] : []),
     );
     const payloadJson = JSON.stringify(payload);
-    const unpriced = Object.keys(priced.staged.rules)
+    const unpriced = Object.keys(priced.edit.rules)
       .sort()
       .flatMap((ruleKey) =>
         [...instancesOf(priced.next, ruleKey).values()]

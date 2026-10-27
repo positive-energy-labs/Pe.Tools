@@ -49,20 +49,13 @@ export function applyPatches<S extends z.ZodType>(
   actor: RouteActor,
   patches: readonly RouteStatePatch[],
   expectedRevision: number,
+  trusted = false,
 ): RouteLanded<z.infer<S>> | RouteRefusal {
   const stale = checkRevision(envelope, expectedRevision);
   if (stale) return stale;
-  if (actor === "agent") {
-    const forbidden = patches.find((patch) => !isMaskAllowed(spec.agentWriteMask, patch.path));
-    if (forbidden)
-      return refuse(
-        "refused",
-        `patch path ${formatPath(forbidden.path)} is not agent-writable`,
-        `the agent write mask allows only ${spec.agentWriteMask
-          .map(formatPath)
-          .join(", ")} (and their subtrees); everything else is human-only.`,
-      );
-  }
+  const observed = new Set(["basis", "reading", "snapshot", "takenAt", "readback", "consent"]);
+  if (!trusted && patches.some((patch) => observed.has(String(patch.path[0]))))
+    return refuse("refused", "Host observations cannot be changed by an edit", "Use the route's read or capture command.");
 
   const draft = structuredClone(envelope.doc) as Record<string, unknown>;
   try {
@@ -70,7 +63,7 @@ export function applyPatches<S extends z.ZodType>(
   } catch (error) {
     return refuse("error", message(error), "patch paths must address plain document keys.");
   }
-  return commitDoc(spec, envelope, draft);
+  return commitDoc(spec, envelope, stampChanges(spec.reconcileEdit?.(draft, patches) ?? draft, envelope.doc, actor, expectedRevision));
 }
 
 export function checkRevision(
@@ -108,12 +101,6 @@ export function guardCommand<S extends z.ZodType>(
       `unknown command '${name}'`,
       `available commands: ${Object.keys(spec.commands).join(", ") || "(none)"}.`,
     );
-  if (command.actor === "human" && actor !== "human")
-    return refuse(
-      "refused",
-      `command '${name}' is human-only`,
-      "a human must run this command from the browser UI.",
-    );
   const parsed = command.input.safeParse(input ?? {});
   if (!parsed.success)
     return refuse("error", `invalid input for command '${name}'`, formatZodError(parsed.error));
@@ -139,13 +126,6 @@ export function commitDoc<S extends z.ZodType>(
   };
 }
 
-function isMaskAllowed(mask: string[][], path: (string | number)[]): boolean {
-  return mask.some(
-    (pattern) =>
-      path.length >= pattern.length &&
-      pattern.every((segment, index) => segment === "*" || segment === String(path[index])),
-  );
-}
 
 function applyPatch(root: Record<string, unknown>, patch: RouteStatePatch): void {
   if (patch.path.length === 0) return;
@@ -194,4 +174,26 @@ function sortJson(value: unknown): unknown {
       .sort()
       .map((key) => [key, sortJson(value[key])]),
   );
+}
+
+/** Clients author values; the runtime stamps provenance for every changed slot. */
+export function stampChanges(next: unknown, prior: unknown, actor: RouteActor, base: number, at = new Date().toISOString(), depth = 0): unknown {
+  if (Array.isArray(next)) return next.map((value, index) => stampChanges(value, Array.isArray(prior) ? prior[index] : undefined, actor, base, at, depth + 1));
+  if (!isRecord(next)) return next;
+  const old = isRecord(prior) ? prior : {};
+  return Object.fromEntries(Object.entries(next).map(([key, value]) => {
+    if (depth === 0 && ["basis", "reading", "snapshot", "source", "evidence", "spec"].includes(key)) return [key, value];
+    if (depth === 0 && key === "excluded" && isRecord(value)) {
+      const was = isRecord(old[key]) ? old[key] : {};
+      return [key, Object.fromEntries(Object.entries(value).map(([name, exclusion]) => [name,
+        canonicalRouteInput(exclusion) === canonicalRouteInput(was[name]) ? exclusion :
+          isRecord(exclusion) ? { ...exclusion, by: actor === "agent" ? "pea" : "human" } : exclusion,
+      ]))];
+    }
+    if ((key === "edit" || key === "suggestion") && isRecord(value) && (Object.hasOwn(value, "value") || value.delete === true)) {
+      if (canonicalRouteInput(value) === canonicalRouteInput(old[key])) return [key, value];
+      return [key, { ...value, by: actor === "agent" ? "pea" : "human", at, base }];
+    }
+    return [key, stampChanges(value, old[key], actor, base, at, depth + 1)];
+  }));
 }

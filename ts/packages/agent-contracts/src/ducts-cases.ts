@@ -1289,7 +1289,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     whatWeDo: "Not yet addressed.",
     why: "A proposal nobody can see.",
     status: "owed",
-    code: "proposal",
+    code: "suggestion",
     kinds: [],
     ids: "no link: not a model case",
     examples: [],

@@ -4,6 +4,8 @@ import { Effect } from "effect";
 import {
   actionAdmissionSchema,
   canonicalRouteInput,
+  sameValue,
+  refusalText,
   documentRefSchema,
   addressSchema,
   scheduleActions,
@@ -37,7 +39,6 @@ import type { PodMemberWritten } from "@pe/host-contracts/operation-types";
 import type { ScheduleCapture } from "@pe/host-contracts/generated";
 import { composedSpec, podFolder, writeRun } from "./settings.ts";
 import {
-  capturePath,
   lifetime,
   podContext,
   runPods,
@@ -93,6 +94,23 @@ export async function readSchedule(
     return captures.schedule(scheduleReads[key].input.parse(raw.input).id);
   if (key === "schedule.grid.work")
     return captures.scheduleWork(scheduleReads[key].input.parse(raw.input).workspaceId);
+  if (key === "schedule.grid.bind") {
+    const input=scheduleReads[key].input.parse(raw.input);
+    const reading=await captures.schedule(input.readingId);
+    const work=deps.workspace ?? actionWorkspace();
+    if (!work) throw refused("Schedule Work is unavailable");
+    const scope={binding:"workspace" as const,route:"schedules",target:null,work:reading.workspaceId};
+    const view=await work.view(scope,"schedules");
+    if (!view || view.revision !== input.expectedRevision) throw refused("Schedule Work changed; read it and bind again");
+    const document=scheduleGridDocumentSchema.parse(view.doc);
+    const previous=document.basis ? await captures.schedule(document.basis.captureId).catch(()=>null) : null;
+    const patches=document.basis ? rebindScheduleWork(document,previous,reading) : [{path:["basis"],value:{captureId:reading.id}},{path:["takenAt"],value:reading.capturedAt}];
+    if (patches.length) {
+      const result=await work.publish(scope,"schedules",patches,input.expectedRevision);
+      if (!result.ok) throw refused(refusalText(result));
+    }
+    return {envelope:await work.read(scope,"schedules")};
+  }
   const target = documentRefSchema.parse(raw.target);
   await resolveSdkSession(
     bridge,
@@ -195,7 +213,7 @@ function expand(document: ScheduleGridDocument, reading: ScheduleReading) {
   const failures: CellFailure[] = [];
   const stale = new Set((document.basis?.stale ?? []).map((cell) => cell.key));
   for (const [key, cell] of Object.entries(document.cells)) {
-    if (!cell.staged) continue;
+    if (!cell.edit) continue;
     // Staged over a value a re-read moved: refused here, never sent, until the person restages it.
     if (stale.has(key)) {
       failures.push({
@@ -219,9 +237,9 @@ function expand(document: ScheduleGridDocument, reading: ScheduleReading) {
         expectedBinding: binding as ScheduleCellsApply.Req.ScheduleCellBinding,
         // A measured cell staged its unit with its value; the domain still refuses a bare number,
         // and nothing here ever fills a unit the person did not review.
-        ...(typeof cell.staged.value === "string"
-          ? { value: cell.staged.value }
-          : { value: cell.staged.value.value, unit: cell.staged.value.unit }),
+        ...(typeof cell.edit.value === "string"
+          ? { value: cell.edit.value }
+          : { value: cell.edit.value.value, unit: cell.edit.value.unit }),
       });
   }
   return { edits, failures };
@@ -287,22 +305,39 @@ export async function admitScheduleAction(
   if (admission.kind !== "workflow" || !Object.hasOwn(scheduleActions, admission.key))
     throw refused("Unknown schedule action");
   const key = admission.key as keyof typeof scheduleActions;
-  requireEligibleCaller({ key, actor: scheduleActions[key].actor }, crossing.caller, "/actions");
+  requireEligibleCaller({ key }, crossing.caller, "/actions");
   admission.input = scheduleActions[key].input.parse(admission.input);
   if (admission.destination.kind !== "document") throw refused("Exact document target required");
   const target = admission.destination.ref;
   if (key !== "schedule.grid.push")
     return admitScheduleSpec(key, { ...admission, ...crossing }, owner, bridge, deps);
   const { pod } = scheduleActions["schedule.grid.push"].input.parse(admission.input);
+  if (!resume && (await owner.list(undefined,admission.id)).length) return owner.admit({...admission,...crossing}, async()=>null, async()=>null);
   const work = deps.workspace ?? actionWorkspace();
   const base = admission.bases.work;
   if (!work || !base) throw refused("Reviewed Work address and revision required");
+  const submitted = await work.read(base.key,scheduleGridRouteState.route);
+  if (!resume && (!submitted || submitted.revision !== base.revision)) return owner.admit({...admission,...crossing,footprint:[]},async()=>{throw refused("Work changed before submission");},async()=>null);
+  const original = resume ? (await owner.list(undefined,admission.id))[0] : undefined;
+  const originalDocument = original?.preparation.state === "ready" ? (original.preparation.value as {document?:unknown}).document : undefined;
+  const frozenDocument = scheduleGridDocumentSchema.parse(originalDocument ?? submitted?.doc);
+  let written = false;
+  const validate = async () => {
+    await crossing.validate?.();
+    if (written) return;
+    const latest = await work.read(base.key,scheduleGridRouteState.route);
+    const doc = scheduleGridDocumentSchema.parse(latest?.doc);
+    for (const [key,cell] of Object.entries(frozenDocument.cells)) if (cell.edit && !sameValue(cell.edit,doc.cells[key]?.edit)) throw refused("Consumed schedule edit changed before dispatch");
+    if (canonicalRouteInput(doc.basis) !== canonicalRouteInput(frozenDocument.basis)) throw refused("Schedule binding changed before dispatch");
+    assertFresh(documentMarks(bridge),target,frozenDocument.takenAt);
+  };
+
   return owner.admit(
-    { ...admission, ...crossing },
+    { ...admission, ...crossing, footprint:[{kind:"document",ref:target}], frozen:{work:submitted}, validate },
     async () => {
       const view = await work.read(base.key, scheduleGridRouteState.route);
       if (!view || view.revision !== base.revision) throw refused("Work changed");
-      const document = scheduleGridDocumentSchema.parse(view.doc);
+      const document = frozenDocument;
       if (!document.basis) throw refused("Select a binding reading before staging edits");
       const reading = await captures.schedule(document.basis.captureId).catch((error) => {
         throw error instanceof StaleScheduleReading ? refused(error.message) : error;
@@ -365,6 +400,7 @@ export async function admitScheduleAction(
             diagnostics: [],
           };
       const outcome = acknowledge(native, edits);
+      written = true;
       const failures = [...prepared.failures, ...outcome.failures];
       let publication: unknown;
       // Compare-and-swap only unchanged consumed cells; a conflict re-reads Work, never re-executes Revit.
@@ -375,20 +411,17 @@ export async function admitScheduleAction(
         const latest = scheduleGridDocumentSchema.parse(view.doc);
         const patches = same(latest.basis, document.basis)
           ? outcome.successes.flatMap((key) => {
-              if (!same(latest.cells[key]?.staged, document.cells[key]?.staged)) return [];
+              if (!same(latest.cells[key]?.edit, document.cells[key]?.edit)) return [];
               return [
-                { path: ["cells", key, "staged"] },
-                ...(same(latest.cells[key]?.proposal, document.cells[key]?.proposal)
-                  ? [{ path: ["cells", key, "proposal"] }]
+                { path: ["cells", key, "edit"] },
+                ...(same(latest.cells[key]?.suggestion, document.cells[key]?.suggestion)
+                  ? [{ path: ["cells", key, "suggestion"] }]
                   : []),
               ];
             })
           : [];
         const result = patches.length
-          ? await work.apply(
-              base.key,
-              scheduleGridRouteState.route,
-              "human",
+          ? await work.publish(base.key, scheduleGridRouteState.route,
               patches,
               view.revision,
             )
@@ -445,10 +478,7 @@ export async function admitScheduleAction(
           if (!patches.length) rebind = "skipped:unchanged";
           else if (
             (
-              await work.apply(
-                base.key,
-                scheduleGridRouteState.route,
-                "human",
+              await work.publish(base.key, scheduleGridRouteState.route,
                 patches,
                 view.revision,
               )
@@ -566,7 +596,7 @@ function pushReceipt(
   };
 }
 /** Capture writes a new member into the route's pod; apply composes a saved spec and creates a schedule. */
-function admitScheduleSpec(
+async function admitScheduleSpec(
   key: "schedule.capture" | "schedule.apply",
   admission: ReturnType<typeof actionAdmissionSchema.parse> & Crossing,
   owner: ActionJournal,
@@ -576,8 +606,13 @@ function admitScheduleSpec(
   if (admission.destination.kind !== "document") throw refused("Exact document target required");
   const target = admission.destination.ref;
   const pods = podContext(deps, bridge, target);
+  if ((await owner.list(undefined,admission.id)).length) return owner.admit(admission,async()=>null,async()=>null);
+  const frozenSpec = key === "schedule.apply" ? await runPods(deps,composedSpec(scheduleActions[key].input.parse(admission.input).source,pods)) : null;
+  const capture = key === "schedule.capture" ? scheduleActions[key].input.parse(admission.input) : null;
+  const path = capture ? capture.path ?? `captures/schedule-${capture.scheduleId}-${createHash("sha256").update(admission.id).digest("hex").slice(0,24)}.json` : null;
+  const footprint: import("@pe/agent-contracts").Footprint = [{kind:"document",ref:target}, ...(capture ? [{kind:"member" as const,pod:capture.pod,path:path!}] : [])];
   return owner.admit(
-    admission,
+    {...admission,footprint,frozen:{source:frozenSpec,path}},
     async () => {
       const { process } = await lifetime(bridge, target, "project", deps);
       if (key === "schedule.capture") {
@@ -590,12 +625,10 @@ function admitScheduleSpec(
           input: { scheduleId: input.scheduleId },
           pod: input.pod,
           at,
-          path:
-            input.path ?? capturePath("schedules", `schedule-${input.scheduleId}`, new Date(at)),
+          path: path!,
         };
       }
-      const member = scheduleActions[key].input.parse(admission.input).source;
-      const { spec, source, dependencies } = await runPods(deps, composedSpec(member, pods));
+      const { spec, source, dependencies } = frozenSpec!;
       return {
         process,
         nativeKey: key,

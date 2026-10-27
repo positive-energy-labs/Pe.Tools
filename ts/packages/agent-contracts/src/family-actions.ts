@@ -33,7 +33,21 @@ const captureInto = { pod: z.string().min(1), path: z.string().min(1).optional()
  * stripping.
  */
 const planSourceSchema = z.union([podMemberSourceSchema.strict(), podDraftSourceSchema.strict()]);
+const sourceRowsSchema = z.object({ source: planSourceSchema, include: z.union([z.literal("all"), z.array(z.string()).min(1)]).default("all"), familyNames: z.array(z.string()).optional(), executionOptions: familyExecutionOptionsSchema.optional() }).strict();
+const previewRowsSchema = z.object({ plan: z.string().min(1), expectedPlanHashes: z.record(z.string(), z.string().min(1)) }).strict();
+const applyRowsSchema = z.union([sourceRowsSchema, previewRowsSchema, z.object({ sources: z.array(sourceRowsSchema.omit({include:true})).min(1), include: z.union([z.literal("all"), z.array(z.string()).min(1)]).default("all") }).strict()]);
+const applyInputSchema = z.object({ rows: applyRowsSchema, familyNames: z.array(z.string()).optional(), executionOptions: familyExecutionOptionsSchema.optional() }).strict();
 export const familyActions = {
+  "family.observe": {
+    says: "Adopt a verified capture receipt or exact saved source as the Family Work baseline; edits stay editable.",
+    needs: "family-document", effect: "query", dirties: [],
+    input: z.union([z.object({readingId:z.string().min(1)}),z.object({source:podMemberSourceSchema})]),
+  },
+  "settings.observe": {
+    says: "Adopt verified saved member bytes as the shared Work baseline; replacing pending edits requires explicit intent.",
+    needs:"nothing",effect:"command",dirties:[],
+    input:z.object({member:podMemberSchema,sha256:z.string().optional(),replaceEdits:z.boolean().default(false)}),
+  },
   "settings.write": {
     says: "Save reviewed member Work, or create exact raw bytes, through the host pod member writer.",
     needs: "nothing",
@@ -68,14 +82,7 @@ export const familyActions = {
     needs: "family-document",
     effect: "command",
     dirties: ["family", "pods"],
-    input: z.object({
-      /** The succeeded `family.plan` action this applies; its sealed preparation is the input. */
-      plan: z.string().min(1),
-      // The families shape; a family document plans exactly one family.
-      expectedPlanHashes: z
-        .record(z.string(), z.string().min(1))
-        .refine((hashes) => Object.keys(hashes).length === 1, "Send exactly one family plan hash"),
-    }),
+    input: applyInputSchema,
   },
   "families.capture": {
     says: "Capture loaded families as new spec members in the route's pod, one member per family; returns the members and what the capture saw per family.",
@@ -107,18 +114,14 @@ export const familyActions = {
     needs: "project-document",
     effect: "command",
     dirties: ["families", "pods"],
-    input: z.object({
-      /** The succeeded `families.plan` action this applies; its sealed preparation is the input. */
-      plan: z.string().min(1),
-      expectedPlanHashes: z.record(z.string(), z.string()),
-    }),
+    input: applyInputSchema,
   },
   "parameter-links.apply": {
     says: "Store the reviewed parameter-link draft and reconcile exactly the evaluated writes the human approved.",
     needs: "project-document",
     effect: "command",
     dirties: ["parameter-links"],
-    input: z.object({ readingId: z.string().regex(/^[a-f0-9]{64}$/) }),
+    input: z.object({ readingId: z.string().regex(/^[a-f0-9]{64}$/).optional() }),
   },
   "family.build": {
     says: "Build a saved composed family spec to an admitted output path. The target is execution context, not the new family.",
@@ -148,7 +151,7 @@ export const familyReads = {
     input: z.object({
       evaluate: z.boolean().default(false),
       /** A proposal evaluation is a labelled preview; only the staged profile can arm apply. */
-      subject: z.enum(["staged", "proposal"]).default("staged"),
+      subject: z.enum(["edit", "suggestion"]).default("edit"),
     }),
   },
 } as const satisfies Record<string, ActionDefinition>;

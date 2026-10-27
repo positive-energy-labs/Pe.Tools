@@ -26,7 +26,7 @@ const family = (
   work: {
     key: { binding: "workspace" as const, route: "family", target: null, work: "production" },
     revision: 12,
-    candidate: { basis: null, fields: { "/family/name": { staged: { value: "Saved Demo" } } } },
+    candidate: { basis: null, fields: { "/family/name": { edit: { value: "Saved Demo" } } } },
   },
   readings: {
     captures: [],
@@ -142,7 +142,7 @@ test("same HTTP router separates production Work and two demo resource owners; r
     scope,
     settingsRouteState.route,
     "human",
-    [{ path: ["fields"], value: { "/private": { staged: { value: "production sentinel" } } } }],
+    [{ path: ["fields"], value: { "/private": { edit: { value: "production sentinel" } } } }],
     0,
   );
   const before = await readFile(productionFile, "utf8");

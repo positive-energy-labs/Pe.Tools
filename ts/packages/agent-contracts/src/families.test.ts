@@ -15,7 +15,7 @@ describe("familiesRouteState", () => {
     const doc = familiesRouteState.schema.parse(
       JSON.parse(
         JSON.stringify({
-          cells: { [key]: { staged: { value: { value: "3", storageType: "String" } } } },
+          cells: { [key]: { edit: { value: { value: "3", storageType: "String" } } } },
         }),
       ),
     );
@@ -23,7 +23,7 @@ describe("familiesRouteState", () => {
     expect(patch.patch.types.T.Text).toBe("3");
     expect(
       familiesRouteState.schema.safeParse({
-        cells: { [key]: { staged: { value: { value: "3" } } } },
+        cells: { [key]: { edit: { value: { value: "3" } } } },
       }).success,
     ).toBe(false);
   });
@@ -58,12 +58,12 @@ describe("familiesRouteState", () => {
     };
     expect(familiesIncluded(plan, { f2: { by: "pea" } })).toEqual({ "1": "h1" });
     expect(familiesIncluded(plan, {})).toEqual({ "1": "h1", "2": "h2" });
-    expect(familiesExcluded(plan, { f2: { by: "pea" }, f9: { by: "person" } })).toEqual([
+    expect(familiesExcluded(plan, { f2: { by: "pea" }, f9: { by: "human" } })).toEqual([
       { familyName: "f2", by: "pea" },
     ]);
     // An exclusion names a family, so it still excludes after an apply reloads it under a new id.
     const reloaded = { entries: [entry(7, "h7", { familyName: "f2" })] };
-    expect(familiesIncluded(reloaded, { f2: { by: "person" } })).toEqual({});
+    expect(familiesIncluded(reloaded, { f2: { by: "human" } })).toEqual({});
     // An id-keyed exclusion is old Work: it fails closed rather than naming a family "2".
     expect(familiesRouteState.schema.safeParse({ excluded: { "2": { by: "pea" } } }).success).toBe(
       false,
@@ -77,9 +77,9 @@ describe("familyStagedPatch", () => {
   it("stages a measured cell as { value, unit } and the patch carries the object", () => {
     const key = familyCellKey({ familyName: "AHU", typeName: "A", parameter: "Airflow" });
     const cell = familyCellStateSchema.parse({
-      staged: { value: { value: "300", unit: "CFM", storageType: "Double" } },
+      edit: { value: { value: "300", unit: "CFM", storageType: "Double" } },
     });
-    expect(cell.staged?.value).toEqual({ value: "300", unit: "CFM", storageType: "Double" });
+    expect(cell.edit?.value).toEqual({ value: "300", unit: "CFM", storageType: "Double" });
     expect(familyStagedPatch({ [key]: cell }, "AHU")?.spec.patch.types).toEqual({
       A: { Airflow: { value: "300", unit: "CFM" } },
     });

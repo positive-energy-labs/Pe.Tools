@@ -1,19 +1,11 @@
-/**
- * Member document — collaborative state for authoring one schema-backed pod member.
- *
- * Third instance of the proposal → staged → committed trichotomy (after parameter-links
- * cells and parameter-links draft/preview/apply). Fields are addressed by RFC 6901
- * JSON Pointers into the member's parsed raw content (e.g.
- * "/revit/units/length") — pointer escaping means property names may contain periods
- * and slashes (spec-sheet values like "M.2 Depth" address cleanly).
- * Pea proposes field values; the human stages them; the human-only `settings.write` action
- * splices staged values into the raw content and writes through `pod.member.write`
- * with the member sha256 explicitly adopted as its edit basis.
+/** Shared authoring Work for one schema-backed pod member, keyed by JSON Pointer.
+ * Either author edits or suggests values. settings.write consumes exact edits against
+ * the member hash; settings.observe adopts host-read bytes through a trusted contract.
  */
 import { z } from "zod";
 import { contributionKey, packageIdSchema, packageMemberPathSchema } from "./contribution.ts";
 import { type RouteStateSpec } from "./route-state.ts";
-import { trichotomyAgentMask, trichotomyCellSchema } from "./trichotomy.ts";
+import { draftCellSchema } from "./draft.ts";
 
 /* ── Field trichotomy — the shared cell over any JSON value.
    A staged `{ value }` assigns JSON; `{ delete: true }` removes the property. ── */
@@ -28,9 +20,9 @@ const settingsProposalSourceSchema = z.object({
   note: z.string().nullish(),
 });
 /** The one cell over any JSON value. Deletable: `/family` and the pods reviewer stage deletes. */
-export const settingsFieldStateSchema = trichotomyCellSchema(z.unknown(), {
+export const settingsFieldStateSchema = draftCellSchema(z.unknown(), {
   deletable: true,
-  proposal: {
+  suggestion: {
     /** Multi-citation: one value may be grounded by several regions (a table
      * cell AND a figure). Order is presentation order. */
     sources: z.array(settingsProposalSourceSchema).nullish(),
@@ -112,7 +104,7 @@ export const settingsRouteState = {
   title: "Pods",
   description: "Review, validate, and save proposed changes to one pod member.",
   schema: settingsRouteDocumentSchema,
-  agentWriteMask: trichotomyAgentMask("fields"),
+
   commands: {},
 } satisfies RouteStateSpec<typeof settingsRouteDocumentSchema>;
 
@@ -176,11 +168,11 @@ export function settingsCandidate(
   includeProposals = false,
 ): string {
   const edits = Object.entries(fields).filter(
-    ([, field]) => field.staged || (includeProposals && field.proposal),
+    ([, field]) => field.edit || (includeProposals && field.suggestion),
   );
   // A root edit is the person's raw text: it replaces the basis, and pointer edits apply on top.
   const raw = edits.find(([pointer]) => pointer === "")?.[1];
-  const rootEdit = raw ? (raw.staged ?? raw.proposal!) : null;
+  const rootEdit = raw ? (raw.edit ?? raw.suggestion!) : null;
   if (rootEdit && (rootEdit.delete || typeof rootEdit.value !== "string"))
     throw new Error("The root edit must contain exact raw text.");
   const base = rootEdit ? (rootEdit.value as string) : rawContent;
@@ -209,7 +201,7 @@ export function settingsCandidate(
       throw new Error("A field edit must address a safe non-root JSON pointer.");
     if (settingsFieldDirectives(root, segments))
       throw new Error("This value belongs to a shared fragment. Open that fragment to edit it.");
-    const edit = field.staged ?? field.proposal!;
+    const edit = field.edit ?? field.suggestion!;
     let cursor = root as Record<string, unknown>;
     for (const key of segments.slice(0, -1)) {
       if (Array.isArray(cursor) && (!/^(0|[1-9][0-9]*)$/.test(key) || Number(key) >= cursor.length))

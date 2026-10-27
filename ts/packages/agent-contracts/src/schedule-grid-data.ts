@@ -10,7 +10,7 @@
  */
 import { z } from "zod";
 import type { RouteStateSpec } from "./route-state.ts";
-import { trichotomyAgentMask, trichotomyCellSchema } from "./trichotomy.ts";
+import { draftCellSchema } from "./draft.ts";
 
 /**
  * A measured cell's staged rung: the number as Revit rendered it in the column's display unit, and
@@ -33,7 +33,7 @@ export const showCellValue = (value: unknown): string => {
 };
 
 /** Trichotomy cell — no provenance extension (schedule cells have no PDF source). */
-export const scheduleGridCellSchema = trichotomyCellSchema(scheduleCellValueSchema);
+export const scheduleGridCellSchema = draftCellSchema(scheduleCellValueSchema);
 export type ScheduleGridCell = z.infer<typeof scheduleGridCellSchema>;
 
 /* ── Catalog (revit.catalog.schedules, Summary) — every schedule in the document ── */
@@ -167,9 +167,18 @@ export const scheduleGridRouteState = {
   route: "schedules",
   title: "Schedule Grid",
   description:
-    "Review schedule cell edits. Read op:schedule.grid.snapshot for the subject Work address and binding basis; only humans apply.",
+    "Review schedule cell edits. Read op:schedule.grid.snapshot for the subject Work address and binding basis; both authors apply.",
   schema: scheduleGridDocumentSchema,
-  agentWriteMask: trichotomyAgentMask(),
+  reconcileEdit: (next, patches) => {
+    const parsed = scheduleGridDocumentSchema.safeParse(next);
+    if (!parsed.success) return next;
+    const doc = parsed.data;
+    if (!doc.basis?.stale) return doc;
+    const edited = new Set(patches.filter((patch) => patch.path[0] === "cells").flatMap((patch) => patch.path.length === 1 ? Object.keys(doc.cells) : [String(patch.path[1])]));
+    const stale = doc.basis.stale.filter((cell) => !edited.has(cell.key));
+    return { ...doc, basis: { ...doc.basis, stale: stale.length ? stale : undefined } };
+  },
+
   commands: {},
 } satisfies RouteStateSpec<typeof scheduleGridDocumentSchema>;
 

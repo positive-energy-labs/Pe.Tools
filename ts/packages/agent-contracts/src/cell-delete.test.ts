@@ -11,7 +11,7 @@ import { familiesRouteState, familyCellKey } from "./families.ts";
 import { familyDraftRouteState } from "./family.ts";
 import { scheduleGridRouteState } from "./schedule-grid-data.ts";
 import { settingsRouteState } from "./settings.ts";
-import { transitionPatches, type Rung } from "./trichotomy.ts";
+import { transitionPatches, type Rung } from "./draft.ts";
 
 const familyKey = familyCellKey({ familyName: "F", typeName: "T", parameter: "P" });
 type Route = [string, RouteStateSpec<z.ZodType>, string, string, Rung];
@@ -32,7 +32,7 @@ const stage = ([, spec, container, cell]: Route, rung: Rung) =>
     spec,
     { version: 1, revision: 0, doc: spec.schema.parse({}) } as RouteEnvelope<unknown>,
     "human",
-    transitionPatches([container], cell, {}, { kind: "stage", rung }),
+    transitionPatches([container], cell, {}, { kind: "set", rung }),
     0,
   );
 
@@ -43,7 +43,7 @@ describe("an empty value is a value", () => {
       expect(landed).toMatchObject({ ok: true });
       const doc = (landed as { envelope: { doc: Record<string, Record<string, unknown>> } })
         .envelope.doc;
-      expect(doc[route[2]]![route[3]]).toMatchObject({ staged: route[4] });
+      expect(doc[route[2]]![route[3]]).toMatchObject({ edit: route[4] });
     });
 });
 
@@ -56,7 +56,7 @@ describe("a delete stages only where a shipped consumer stages one", () => {
       if (deletable) {
         const doc = (landed as { envelope: { doc: Record<string, Record<string, unknown>> } })
           .envelope.doc;
-        expect(doc[route[2]]![route[3]]).toMatchObject({ staged: { delete: true } });
+        expect(doc[route[2]]![route[3]]).toMatchObject({ edit: { delete: true } });
         expect(route[1].schema.parse(JSON.parse(JSON.stringify(doc)))).toEqual(doc);
       }
     });

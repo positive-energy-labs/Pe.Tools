@@ -36,7 +36,7 @@ const registration = (route = "family"): RouteWorkspaceRegistration => ({
     title: route === "family" ? "Family Foundry" : route,
     description: "Navigation proof",
     schema: z.object({ secret: z.string().default("") }).prefault({}),
-    agentWriteMask: [["secret"]],
+
     commands: {},
   },
   handlers: {},
@@ -102,7 +102,7 @@ test("saved Ducts Work resumes only its unique current document and survives mis
     "human",
     [
       {
-        path: ["flows", "1100", "staged"],
+        path: ["flows", "1100", "edit"],
         value: { value: { cfm: 250, source: "Reviewed office supply flow" } },
       },
     ],
@@ -160,7 +160,7 @@ test("saved Ducts Work resumes only its unique current document and survives mis
   ]);
   expect(await bytes(directory)).toEqual(before);
   expect((await workspace.read(scope, "ducts"))?.doc).toMatchObject({
-    flows: { "1100": { staged: { value: { cfm: 250, source: "Reviewed office supply flow" } } } },
+    flows: { "1100": { edit: { value: { cfm: 250, source: "Reviewed office supply flow" } } } },
   });
 });
 

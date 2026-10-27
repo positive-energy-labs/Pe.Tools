@@ -12,7 +12,7 @@ import {
   takeoffsRouteState,
   type TakeoffsRouteDocument,
 } from "./takeoffs.ts";
-import { transitionPatches } from "./trichotomy.ts";
+import { transitionPatches } from "./draft.ts";
 import type { z } from "zod";
 
 const spec = takeoffsRouteState as unknown as RouteStateSpec<z.ZodType>;
@@ -41,13 +41,13 @@ describe("takeoffsRouteState", () => {
         ["decisions"],
         decision,
         {},
-        { kind: "propose", rung: { value: "dismiss" } },
+        { kind: "suggest", rung: { value: "dismiss" } },
       ),
       ...transitionPatches(
         ["adopt"],
         "v:1",
         {},
-        { kind: "propose", rung: { value: { checked: true } } },
+        { kind: "suggest", rung: { value: { checked: true } } },
       ),
     ]);
     expect(stagedDecisions(proposed)).toEqual({});
@@ -60,7 +60,7 @@ describe("takeoffsRouteState", () => {
           ["decisions"],
           decision,
           {},
-          { kind: "stage", rung: { value: "dismiss" } },
+          { kind: "set", rung: { value: "dismiss" } },
         ),
         0,
       ),
@@ -107,13 +107,13 @@ describe("takeoffsRouteState", () => {
         takeoffEditKey("r", "people"),
         {},
         {
-          kind: "propose",
+          kind: "suggest",
           rung: { value: 4 },
         },
       ),
     );
     const discarded = land(proposed, "human", takeoffDiscardEdits(proposed));
     expect(stagedTakeoffEdits(discarded)).toEqual({});
-    expect(discarded.edits[takeoffEditKey("r", "people")]?.proposal).toMatchObject({ value: 4 });
+    expect(discarded.edits[takeoffEditKey("r", "people")]?.suggestion).toMatchObject({ value: 4 });
   });
 });

@@ -1,6 +1,6 @@
 import {
   bindWork,
-  pendingProposals,
+  pendingSuggestions,
   unfinishedCells,
   workKey,
   workKeySchema,
@@ -10,6 +10,7 @@ import { z } from "zod";
 import { OwnerReads, type OwnerValue } from "./owner-read.ts";
 import {
   applyPatches,
+  stampChanges,
   checkRevision,
   commitDoc,
   guardCommand,
@@ -133,7 +134,7 @@ export class RouteWorkspace {
           try {
             const envelope = parseEnvelope(record.value, spec);
             revision = envelope.revision;
-            proposals = pendingProposals(envelope.doc);
+            proposals = pendingSuggestions(envelope.doc);
             unfinished = unfinishedCells(envelope.doc);
             state = "ready";
           } catch {
@@ -204,7 +205,6 @@ export class RouteWorkspace {
       doc: structuredClone(envelope.doc),
       revision: envelope.revision,
       schema: toJsonSchema(spec.schema),
-      agentWriteMask: spec.agentWriteMask,
       commands: describeCommands(spec),
     };
   }
@@ -215,6 +215,7 @@ export class RouteWorkspace {
     actor: RouteActor,
     patches: RouteStatePatch[],
     expectedRevision: number,
+    trusted = false,
   ): Promise<RouteStateWriteResult> {
     const registration = this.#registry.get(route);
     if (!registration) return unknownRoute(route);
@@ -224,7 +225,7 @@ export class RouteWorkspace {
         this.#publish({ type: "route_workspace", scope, route, actor, ...event });
       const envelope = await this.#load(scope, registration.spec).catch(unreadable);
       if ("ok" in envelope) return envelope;
-      const applied = applyPatches(registration.spec, envelope, actor, patches, expectedRevision);
+      const applied = applyPatches(registration.spec, envelope, actor, patches, expectedRevision, trusted);
       const landed =
         (applied.ok &&
           (await registration.admit?.(applied.envelope.doc, patches, {
@@ -259,6 +260,11 @@ export class RouteWorkspace {
         doc: structuredClone(landed.envelope.doc),
       };
     });
+  }
+
+  /** Observations and conditional retirement are host facts, never raw client edits. */
+  publish(scope: WorkKey, route: string, patches: RouteStatePatch[], expectedRevision: number) {
+    return this.apply(scope, route, "human", patches, expectedRevision, true);
   }
 
   async command(
@@ -310,7 +316,7 @@ export class RouteWorkspace {
           work: scope.work,
           getDoc: () => structuredClone(committed?.doc ?? envelope.doc),
           setDoc: async (candidate) => {
-            const landed = commitDoc(spec, envelope, candidate);
+            const landed = commitDoc(spec, envelope, stampChanges(candidate, envelope.doc, actor, expectedRevision));
             if (!landed.ok) throw Error(`${landed.error}: ${landed.hint}`);
             committed = landed.envelope;
           },
@@ -537,7 +543,8 @@ const aside = (route: string, slot: number) => `${route}${START_FRESH_ASIDE}${sl
 function parseEnvelope(raw: unknown, spec: RouteStateSpec<z.ZodType>): RouteEnvelope<unknown> {
   const parsed = envelopeSchema.safeParse(raw);
   if (!parsed.success) throw new Error(UNREADABLE_WORK);
-  const doc = spec.schema.safeParse(parsed.data.doc);
+  const schema = spec.schema instanceof z.ZodObject ? spec.schema.strict() : spec.schema;
+  const doc = schema.safeParse(parsed.data.doc);
   if (!doc.success) throw new Error(UNREADABLE_WORK);
   return {
     version: ENVELOPE_VERSION,
@@ -561,7 +568,7 @@ function describeCommands(spec: RouteStateSpec<z.ZodType>) {
   return Object.entries(spec.commands).map(([name, command]) => ({
     name,
     description: command.description,
-    actor: command.actor,
+    effect: command.effect,
     input: toJsonSchema(command.input),
   }));
 }

@@ -7,7 +7,7 @@ import { z } from "zod";
 
 import { type RouteStateSpec } from "./route-state.ts";
 import { roomEditSchema, type RoomEdit, type RoomEditField } from "./takeoffs.ts";
-import { trichotomyCellSchema, type TrichotomyCellLike } from "./trichotomy.ts";
+import { draftCellSchema, type CellLike } from "./draft.ts";
 
 /** One canonical JSON tuple per cell address: `[guid, field]`. */
 export const roomEditKey = (guid: string, field: RoomEditField) => JSON.stringify([guid, field]);
@@ -48,7 +48,7 @@ export const markSchema = z.strictObject({
 });
 export type Mark = z.infer<typeof markSchema>;
 
-/** A note is not a proposal: no rungs, writable by Pea and a person, never accepted or denied. */
+/** A note is not a suggestion: no rungs, writable by Pea and a person, never accepted or denied. */
 export const noteSchema = z.strictObject({
   anchor: anchorSchema(1),
   text: z.string(),
@@ -64,10 +64,10 @@ export const roomsDocumentSchema = z
         z.string().refine((key) => addressOf(key) !== null, {
           error: "a rooms edit cell key must be a canonical JSON [guid, field] tuple",
         }),
-        trichotomyCellSchema(z.union([z.string(), z.number()])),
+        draftCellSchema(z.union([z.string(), z.number()])),
       )
       .default({}),
-    marks: z.record(z.string(), trichotomyCellSchema(markSchema)).default({}),
+    marks: z.record(z.string(), draftCellSchema(markSchema)).default({}),
     notes: z.record(z.string(), noteSchema).default({}),
   })
   .superRefine((doc, ctx) => {
@@ -78,8 +78,8 @@ export const roomsDocumentSchema = z
         ctx.addIssue({ code: "custom", path: ["edits", key], message: `no room field '${field}'` });
         continue;
       }
-      for (const rung of ["proposal", "staged"] as const) {
-        const value = (cell as TrichotomyCellLike)[rung]?.value;
+      for (const rung of ["suggestion", "edit"] as const) {
+        const value = (cell as CellLike)[rung]?.value;
         if (value !== undefined && !schema.unwrap().safeParse(value).success)
           ctx.addIssue({
             code: "custom",
@@ -95,10 +95,10 @@ export type RoomsRouteDocument = z.infer<typeof roomsDocumentSchema>;
 export function stagedRoomWrites(doc: RoomsRouteDocument): ({ guid: string } & RoomEdit)[] {
   const regions = new Map<string, { guid: string } & RoomEdit>();
   for (const [key, cell] of Object.entries(doc.edits)) {
-    if (cell.staged?.value === undefined) continue;
+    if (cell.edit?.value === undefined) continue;
     const { guid, field } = roomEditAddress(key);
     const region = regions.get(guid) ?? regions.set(guid, { guid }).get(guid)!;
-    (region as Record<string, unknown>)[field] = cell.staged.value;
+    (region as Record<string, unknown>)[field] = cell.edit.value;
   }
   return [...regions.values()];
 }
@@ -107,12 +107,8 @@ export const roomsRouteState = {
   route: "rooms",
   title: "Rooms",
   description:
-    "A person's staged room fields (name, type, ceiling, people, lighting, equipment, ventilation), one cell per [region guid, field]. Pea may propose; a person stages, and rooms.write reads staged values only. Feedback marks (merge, reject, wall, split) are cells keyed by id with a model-feet anchor and the run they were drawn against: Pea proposes, a person stages. Notes are rungless anchored text either may write. Regions and geometry are read from rooms.snapshot.",
+    "Shared edited room fields (name, type, ceiling, people, lighting, equipment, ventilation), one cell per [region guid, field]. Either author may edit or suggest, and rooms.write reads staged values only. Feedback marks (merge, reject, wall, split) are cells keyed by id with a model-feet anchor and the run they were drawn against: Either author edits these cells. Notes are rungless anchored text either may write. Regions and geometry are read from rooms.snapshot.",
   schema: roomsDocumentSchema,
-  agentWriteMask: [
-    ["edits", "*", "proposal"],
-    ["marks", "*", "proposal"],
-    ["notes", "*"],
-  ],
+
   commands: {},
 } satisfies RouteStateSpec<typeof roomsDocumentSchema>;

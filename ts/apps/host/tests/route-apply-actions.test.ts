@@ -10,6 +10,9 @@ import {
   familyCellKey,
   stagedFilter,
   familyDraftRouteState,
+  settingsRouteState,
+  memberWork,
+  type WorkKey,
   familyStagedPatch,
   type FamilyCellState,
   parameterLinksReadingSchema,
@@ -32,6 +35,7 @@ import { withInvocationContext } from "@pe/runtime/context";
 import { makeCallRoute } from "../src/call-route.ts";
 import { RevitBridge } from "../src/bridge.ts";
 import { createPeRoutes, fileRouteDocumentStore } from "../src/pe-routes.ts";
+import { RunConsents } from "../src/run-consent.ts";
 import { bindControl } from "../src/control.ts";
 
 const cleanup: (() => Promise<void>)[] = [];
@@ -253,6 +257,7 @@ async function setup(sdk: (args: readonly string[]) => Promise<string> = sdkSess
       { spec: familiesRouteState, handlers: {} },
       { spec: familyDraftRouteState, handlers: {} },
       { spec: parameterLinksRouteState, handlers: {} },
+      { spec: settingsRouteState, handlers: {} },
     ],
     store: {
       getState: async ({ targetKey, route }) => rows.get(targetKey + route),
@@ -263,6 +268,11 @@ async function setup(sdk: (args: readonly string[]) => Promise<string> = sdkSess
   });
   const captures = new TakeoffCaptures(join(dir, "captures"));
   const owner = new ActionJournal(join(dir, "actions.json"));
+  const run={thread:"domain-test",turn:dir};
+  let autoAllow=true;
+  const asks:string[]=[];
+  const runs=new RunConsents((ref,event)=>{if(event.kind==="permission_request") {asks.push(event.requestId);if(autoAllow) queueMicrotask(()=>runs.decide(ref.thread,event.requestId,"allow_now"));}});
+  runs.open(run); bindControl({runs}); cleanup.push(async()=>{runs.close(run,"stopped");bindControl({runs:undefined});});
   // biome-ignore lint/suspicious/noExplicitAny: the SDK reader is the shared native-receipt fixture.
   const deps = { workspace: work, sdk, podsRoot } as any;
   const read = (key: string, input: unknown = {}, readScope = scope) =>
@@ -273,7 +283,7 @@ async function setup(sdk: (args: readonly string[]) => Promise<string> = sdkSess
     revision: number,
     id = `${key}${revision}`,
     actor: "human" | "agent" = "human",
-    where: { route: string; target: string } | null = scope,
+    where: WorkKey | null = scope,
     resume = false,
   ) => {
     const row = await admitFamilyAction(
@@ -281,11 +291,11 @@ async function setup(sdk: (args: readonly string[]) => Promise<string> = sdkSess
         id,
         kind: "workflow",
         key,
-        destination: { kind: "document", ref: target },
-        input,
+        destination: key.startsWith("settings.") ? {kind:"host"} : { kind: "document", ref: target },
+        input: (key === "family.apply" || key === "families.apply") && input && typeof input === "object" && !("rows" in input) ? {rows:input} : input,
         bases: where ? { work: { key: where, revision } } : {},
       },
-      crossingOf(actor),
+      actor === "agent" ? {caller:{kind:"pea",context:"domain-test",thread:run.thread,run,root:run},basis:null} : crossingOf(actor),
       owner,
       captures,
       bridge,
@@ -300,6 +310,7 @@ async function setup(sdk: (args: readonly string[]) => Promise<string> = sdkSess
     return { ...member(name), sha256: createHash("sha256").update(content).digest("hex") };
   };
   return {
+    approval:{hold:()=>{autoAllow=false;},allow:()=>runs.decide(run.thread,asks.at(-1)!,"allow_now"),asks},
     podsRoot,
     work,
     file,
@@ -347,13 +358,12 @@ async function setup(sdk: (args: readonly string[]) => Promise<string> = sdkSess
 }
 
 async function authorFamilies(work: RouteWorkspace, revision = 0, where = scope) {
-  const landed = await work.apply(
+  const landed = await work.publish(
     where,
     "families",
-    "human",
     [
       {
-        path: ["scope", "staged"],
+        path: ["scope", "edit"],
         value: {
           value: {
             categoryNames: ["Ducts"],
@@ -379,29 +389,12 @@ const resultOf = <A>(row: unknown) => {
   return settled.result!;
 };
 
-test("plan, capture, and apply over loaded families are human verbs (F-H6-3)", async () => {
-  const { work, admit, sent } = await setup();
-  const revision = await authorFamilies(work);
-  for (const [key, input] of [
-    ["families.plan", { source }],
-    ["families.capture", { pod: "global", familyIds: [1] }],
-  ] as const)
-    await expect(admit(key, input, revision, `agent-${key}`, "agent")).rejects.toThrow(
-      "human.only",
-    );
-  const plan = resultOf<Plan>(await admit("families.plan", { source }, revision));
-  await expect(
-    admit(
-      "families.apply",
-      { plan: plan.id, expectedPlanHashes: { "1": "h1" } },
-      revision,
-      "a",
-      "agent",
-    ),
-  ).rejects.toThrow("human.only");
-  expect(sent.map((s) => s.key).filter((key) => key.startsWith("families."))).toEqual([
-    "families.plan",
-  ]);
+test("human and Pea share plan and Apply; Pea receives root-run consent", async () => {
+  const {work,admit,sent}=await setup();
+  const revision=await authorFamilies(work);
+  const plan=resultOf<Plan>(await admit("families.plan",{source},revision,"agent-plan","agent"));
+  resultOf(await admit("families.apply",{rows:{plan:plan.id,expectedPlanHashes:{"1":"h1"}}},revision,"agent-apply","agent"));
+  expect(sent.filter((s)=>s.key==="families.apply")).toHaveLength(1);
 });
 
 test("apply sends the bytes its plan sealed, not the member as saved since", async () => {
@@ -420,13 +413,13 @@ test("apply refuses a plan it cannot name, another document's, or a hash the pla
   const revision = await authorFamilies(work);
   const plan = resultOf<Plan>(await admit("families.plan", { source }, revision));
   const refusals = [
-    await admit("families.apply", { plan: "nope", expectedPlanHashes: { "1": "h1" } }, 0, "a1"),
+    await admit("families.apply", { plan: "nope", expectedPlanHashes: { "1": "h1" } }, revision, "a1"),
     await admit("family.apply", { plan: plan.id, expectedPlanHashes: { "1": "h1" } }, 0, "a2"),
-    await admit("families.apply", { plan: plan.id, expectedPlanHashes: { "1": "h9" } }, 0, "a3"),
+    await admit("families.apply", { plan: plan.id, expectedPlanHashes: { "1": "h9" } }, revision, "a3"),
   ];
   expect(refusals.map((row) => [row.state, (row as { error?: string }).error])).toEqual([
     ["failed", expect.stringMatching(/succeeded families.plan/)],
-    ["failed", expect.stringMatching(/no longer available|succeeded family.plan/)],
+    ["failed", expect.stringMatching(/no longer available|succeeded family.plan|Work changed/)],
     ["failed", expect.stringMatching(/not in the reviewed plan/)],
   ]);
   expect(sent.filter((s) => s.key.endsWith(".apply"))).toHaveLength(0);
@@ -473,8 +466,8 @@ const W = cellOf("Width");
 const H = cellOf("Height");
 const D = cellOf("Depth");
 const staged = (value: string): FamilyCellState => ({
-  proposal: null,
-  staged: { value: { value, storageType: "Double" as const } },
+  suggestion: null,
+  edit: { value: { value, storageType: "Double" as const } },
 });
 const rung = (value: string) => ({ value: { value, storageType: "Double" as const } });
 
@@ -542,7 +535,7 @@ async function nativePatchPlan(env: Awaited<ReturnType<typeof setup>>) {
       scope,
       "families",
       "human",
-      [{ path: ["patch", "staged"], value: { value: nativePatch } }],
+      [{ path: ["patch", "edit"], value: { value: nativePatch } }],
       authored,
     )
   ).revision!;
@@ -569,7 +562,7 @@ test("native patch proposal is staged by a person and its exact supplied bytes r
     scope,
     "families",
     "agent",
-    [{ path: ["patch", "proposal"], value: { value: nativePatch } }],
+    [{ path: ["patch", "suggestion"], value: { value: nativePatch } }],
     proposed,
   );
   expect(byPea.ok).toBe(true);
@@ -577,16 +570,16 @@ test("native patch proposal is staged by a person and its exact supplied bytes r
     scope,
     "families",
     "agent",
-    [{ path: ["patch", "staged"], value: { value: nativePatch } }],
+    [{ path: ["patch", "edit"], value: { value: nativePatch } }],
     byPea.revision!,
   );
-  expect(deniedStage.ok).toBe(false);
+  expect(deniedStage.ok).toBe(true);
   const accepted = await env.work.apply(
     scope,
     "families",
     "human",
-    transitionPatches([], "patch", { proposal: { value: nativePatch } }, { kind: "accept" }),
-    byPea.revision!,
+    transitionPatches([], "patch", { suggestion: { value: nativePatch } }, { kind: "take" }),
+    deniedStage.revision!,
   );
   expect(accepted.ok).toBe(true);
   // Plan admission binds the exact reviewed source, including path and unchanged content bytes.
@@ -604,7 +597,7 @@ test("native patch proposal is staged by a person and its exact supplied bytes r
     scope,
     "families",
     "agent",
-    [{ path: ["patch", "proposal"], value: { value: { ...nativePatch, path: "counter.json" } } }],
+    [{ path: ["patch", "suggestion"], value: { value: { ...nativePatch, path: "counter.json" } } }],
     accepted.revision!,
   );
   expect(counter.ok).toBe(true);
@@ -621,8 +614,8 @@ test("native patch proposal is staged by a person and its exact supplied bytes r
   );
   expect(done.retired.retired).toContain("patch");
   const final = familiesRouteState.schema.parse((await env.work.read(scope, "families"))!.doc);
-  expect(final.patch.staged).toBeNull();
-  expect(final.patch.proposal?.value.path).toBe("counter.json");
+  expect(final.patch.edit).toBeNull();
+  expect(final.patch.suggestion?.value.path).toBe("counter.json");
   const root = env.sent.find((row) => row.key === "families.apply")!.input.source.root;
   expect(Buffer.from(root.bytesBase64, "base64").toString("utf8")).toBe(nativePatch.content);
 });
@@ -641,8 +634,8 @@ test("native patch refuses mixed staged cells and keeps its staged rung after pa
   );
   expect(done.retired.retired).not.toContain("patch");
   expect(
-    familiesRouteState.schema.parse((await env.work.read(scope, "families"))!.doc).patch.staged,
-  ).toEqual({ value: nativePatch });
+    familiesRouteState.schema.parse((await env.work.read(scope, "families"))!.doc).patch.edit,
+  ).toMatchObject({ value: nativePatch });
   const current = (await env.work.read(scope, "families"))!.revision;
   const mixed = await env.work.apply(
     scope,
@@ -669,7 +662,7 @@ test("native patch apply refuses a changed staged source before native dispatch"
     scope,
     "families",
     "human",
-    [{ path: ["patch", "staged"], value: { value: { ...nativePatch, path: "changed.json" } } }],
+    [{ path: ["patch", "edit"], value: { value: { ...nativePatch, path: "changed.json" } } }],
     revision,
   );
   expect(changed.ok).toBe(true);
@@ -703,7 +696,7 @@ test("per-type cell apply refuses a native patch staged after its plan", async (
     scope,
     "families",
     "human",
-    [{ path: ["patch", "staged"], value: { value: nativePatch } }],
+    [{ path: ["patch", "edit"], value: { value: nativePatch } }],
     revision,
   );
   expect(mixed.ok).toBe(true);
@@ -725,7 +718,7 @@ test("a user who keeps editing during apply loses nothing; unchanged consumed ce
       "families",
       "human",
       [
-        { path: ["cells", W, "staged"], value: rung("11") },
+        { path: ["cells", W, "edit"], value: rung("11") },
         { path: ["cells", D], value: staged("5") },
       ],
       now,
@@ -735,7 +728,7 @@ test("a user who keeps editing during apply loses nothing; unchanged consumed ce
       scope,
       "families",
       "agent",
-      [{ path: ["cells", H, "proposal"], value: rung("25") }],
+      [{ path: ["cells", H, "suggestion"], value: rung("25") }],
       landed.revision!,
     );
     expect(pea.ok).toBe(true);
@@ -745,32 +738,32 @@ test("a user who keeps editing during apply loses nothing; unchanged consumed ce
   );
   expect(done.retired.retired).toEqual([H]);
   const cells = await cellsNow(env.work);
-  expect(cells[W]?.staged).toEqual(rung("11"));
-  expect(cells[D]?.staged).toEqual(rung("5"));
-  expect(cells[H]).toEqual({ proposal: rung("25"), staged: null });
+  expect(cells[W]?.edit).toMatchObject(rung("11"));
+  expect(cells[D]?.edit).toMatchObject(rung("5"));
+  expect(cells[H]).toMatchObject({ suggestion: rung("25"), edit: null });
 });
 
 test("a consumed unchanged cell retires once, with a proposal equal to it; replay neither redispatches nor re-retires", async () => {
   const env = await setup();
   const { apply, revision } = await stagedPlan(env, {
-    [W]: { proposal: rung("10"), staged: { value: { value: "10", storageType: "Double" } } },
+    [W]: { suggestion: rung("10"), edit: { value: { value: "10", storageType: "Double" } } },
   });
   const first = await env.admit("families.apply", apply, revision, "retire-once");
   resultOf(first);
-  expect((await cellsNow(env.work))[W]).toEqual({ proposal: null, staged: null });
+  expect((await cellsNow(env.work))[W]).toEqual({ suggestion: null, edit: null });
   // The person stages the same value again after the retirement.
   const now = (await env.work.read(scope, "families"))!.revision;
   await env.work.apply(
     scope,
     "families",
     "human",
-    [{ path: ["cells", W, "staged"], value: rung("10") }],
+    [{ path: ["cells", W, "edit"], value: rung("10") }],
     now,
   );
   const replay = await env.admit("families.apply", apply, revision, "retire-once");
   expect(replay.id).toBe(first.id);
   expect(env.sent.filter((s) => s.key === "families.apply")).toHaveLength(1);
-  expect((await cellsNow(env.work))[W]?.staged).toEqual(rung("10"));
+  expect((await cellsNow(env.work))[W]?.edit).toMatchObject(rung("10"));
   expect(
     (await env.owner.list(undefined, first.id))[0]!.steps.filter(
       (step) => step.key === "work.retire",
@@ -787,7 +780,7 @@ test("a failed or unknown native apply leaves every staged cell staged", async (
     else env.unknown(true);
     const row = await env.admit("families.apply", apply, revision);
     expect(row.state).not.toBe("succeeded");
-    expect((await cellsNow(env.work))[W]?.staged).toEqual(rung("10"));
+    expect((await cellsNow(env.work))[W]?.edit).toMatchObject(rung("10"));
   }
 });
 
@@ -797,16 +790,15 @@ test("/family retires the draft's consumed cells after a proven apply, and keeps
   const draftKey = { binding: "address" as const, route: "family", target: at };
   const reading = JSON.stringify({ Width: 1, Height: 2 });
   const revision = (
-    await env.work.apply(
+    await env.work.publish(
       draftKey,
       "family",
-      "human",
       [
         { path: ["reading"], value: reading },
         { path: ["takenAt"], value: new Date().toISOString() },
         {
           path: ["cells"],
-          value: { "/Width": { staged: { value: 5 } }, "/Height": { staged: { value: 7 } } },
+          value: { "/Width": { edit: { value: 5 } }, "/Height": { edit: { value: 7 } } },
         },
       ],
       0,
@@ -824,11 +816,10 @@ test("/family retires the draft's consumed cells after a proven apply, and keeps
   );
   env.during(async () => {
     const now = (await env.work.read(draftKey, "family"))!.revision;
-    await env.work.apply(
+    await env.work.publish(
       draftKey,
       "family",
-      "human",
-      [{ path: ["cells", "/Height", "staged"], value: { value: 8 } }],
+      [{ path: ["cells", "/Height", "edit"], value: { value: 8 } }],
       now,
     );
   });
@@ -845,8 +836,8 @@ test("/family retires the draft's consumed cells after a proven apply, and keeps
   const cells = familyDraftRouteState.schema.parse(
     (await env.work.read(draftKey, "family"))!.doc,
   ).cells;
-  expect(cells["/Width"]?.staged).toBeNull();
-  expect(cells["/Height"]?.staged).toEqual({ value: 8 });
+  expect(cells["/Width"]?.edit).toBeNull();
+  expect(cells["/Height"]?.edit).toMatchObject({ value: 8 });
   expect(await readdir(join(env.podsRoot, "Global"), { recursive: true })).toEqual(before);
   const root = env.sent.find((s) => s.key === "family.apply")!.input.source.root;
   expect(root).toMatchObject({ id: "global", path: draft.path, origin: "SuppliedDraft" });
@@ -861,7 +852,7 @@ async function authorDraft(work: RouteWorkspace, draft: unknown, revision = 0) {
     scope,
     "parameter-links",
     "human",
-    transitionPatches([], "profile", {}, { kind: "stage", rung: { value: draft } }),
+    transitionPatches([], "profile", {}, { kind: "set", rung: { value: draft } }),
     revision,
   );
   expect(landed.ok).toBe(true);
@@ -875,18 +866,18 @@ test("a Pea-proposed profile previews labelled and never arms apply; the person'
     scope,
     "parameter-links",
     "agent",
-    transitionPatches([], "profile", {}, { kind: "propose", rung: { value: proposed } }),
+    transitionPatches([], "profile", {}, { kind: "suggest", rung: { value: proposed } }),
     0,
   );
   expect(landed).toMatchObject({ ok: true });
   // The preview evaluates the proposal, says so, and names it as its basis.
-  const preview = (await read("parameter-links.read", { evaluate: true, subject: "proposal" })) as {
+  const preview = (await read("parameter-links.read", { evaluate: true, subject: "suggestion" })) as {
     id: string;
   };
   const reading = parameterLinksReadingSchema.parse(
     (await captures.familyReadings(scope))[0]!.reading.value,
   );
-  expect(reading).toMatchObject({ evaluated: true, subject: "proposal" });
+  expect(reading).toMatchObject({ evaluated: true, subject: "suggestion" });
   expect(sent.at(-1)!.input).toMatchObject({ profile: proposed, previewOnly: true });
   const refused = await admit("parameter-links.apply", { readingId: preview.id }, landed.revision!);
   expect(refused.state).toBe("failed");
@@ -926,7 +917,7 @@ test("a draft edited after the evaluation refuses before any native write", asyn
       "profile",
       {},
       {
-        kind: "stage",
+        kind: "set",
         rung: { value: { ...link, definitions: [{ ...link.definitions[0], reducer: "max" }] } },
       },
     ),
@@ -1128,7 +1119,7 @@ test("a staged cell changed since the plan refuses apply visibly; a Pea proposal
     scope,
     "families",
     "agent",
-    [{ path: ["cells", H, "proposal"], value: rung("25") }],
+    [{ path: ["cells", H, "suggestion"], value: rung("25") }],
     now,
   );
   expect(pea.ok).toBe(true);
@@ -1137,14 +1128,12 @@ test("a staged cell changed since the plan refuses apply visibly; a Pea proposal
     scope,
     "families",
     "human",
-    [{ path: ["cells", W, "staged"], value: rung("11") }],
+    [{ path: ["cells", W, "edit"], value: rung("11") }],
     pea.revision!,
   );
   const stale = await env.admit("families.apply", apply, revision, "stale");
   expect(stale.state).toBe("failed");
-  expect((stale as { error?: string }).error).toBe(
-    "The staged cells changed since this plan; plan again",
-  );
+  expect((stale as { error?: string }).error).toMatch(/Work changed|cells changed/);
   expect(env.sent.filter((s) => s.key === "families.apply")).toHaveLength(0);
 });
 
@@ -1157,7 +1146,7 @@ const doorRegistrations = [
       title: "Door",
       description: "Caller proof",
       schema: takeoffsRouteState.schema.extend({ count: z.number().int().default(0) }),
-      agentWriteMask: [["count"]],
+
       commands: {},
     },
     handlers: {},
@@ -1206,8 +1195,8 @@ test("door 2: anonymous /actions is context.missing, a body actor is a strict pa
     expect(spoofed.status).toBe(409);
     expect(spoofed.json.error).toMatch(/actor/);
     const header = await post(pea(), admission, { "x-pe-action-actor": "human" });
-    expect([header.status, header.json.refusal?.code]).toEqual([403, "human.only"]);
-    expect(header.json.refusal.reason).toContain("pea calls are refused");
+    expect(header.status).toBe(403);
+    expect(String(header.json.error)).not.toContain("human.only");
   } finally {
     bindControl({ acquired: () => null, acquiredSession: () => null });
     await web.dispose();
@@ -1247,4 +1236,68 @@ test("door 9: route Work writes take their author from the caller; the /pe/agent
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("one direct Apply plans, seals hashes, applies and reads back under one journal command",async()=>{
+  const env=await setup();const revision=await authorFamilies(env.work);
+  resultOf(await env.admit("families.apply",{rows:{source,include:["Box"]}},revision,"direct"));
+  const writes=env.sent.filter((row)=>row.key==="families.apply");
+  expect(writes).toHaveLength(1);
+  expect(writes[0]?.input.expectedPlanHashes).toEqual({"1":"h1"});
+  expect(env.sent.filter((row)=>row.key==="families.plan")).toHaveLength(1);
+  expect(await env.owner.list()).toHaveLength(1);
+});
+
+test("a submitted source freezes before countdown; changed source never becomes a later write",async()=>{
+  const env=await setup();const revision=await authorFamilies(env.work);
+  env.approval.hold();
+  const completion=env.admit("families.apply",{rows:{source,include:"all"}},revision,"held-source","agent");
+  await vi.waitFor(async()=>expect((await env.owner.list(undefined,"held-source"))[0]?.state).toBe("waiting"));
+  const held=(await env.owner.list(undefined,"held-source"))[0]!;
+  expect(held).toMatchObject({request:{rows:{source}},preparation:{state:"unprepared"}});
+  const updated=await env.file("p.json",'{"patch":{"families":{"changed":1}}}');
+  expect(env.approval.allow()).toBe(true);
+  const refused=await completion;
+  expect(refused.state).toBe("failed");
+  expect(env.sent.filter((row)=>row.key==="families.apply")).toHaveLength(0);
+  resultOf(await env.admit("families.apply",{rows:{source:updated,include:"all"}},revision,"new-source","agent"));
+  expect(env.approval.asks).toHaveLength(1);
+});
+
+test("edits remain writable during countdown and invalidate the submitted Work revision",async()=>{
+  const env=await setup();const revision=await authorFamilies(env.work);env.approval.hold();
+  const completion=env.admit("families.apply",{rows:{source,include:"all"}},revision,"held-work","agent");
+  await vi.waitFor(async()=>expect((await env.owner.list(undefined,"held-work"))[0]?.state).toBe("waiting"));
+  expect(await env.work.apply(scope,"families","human",[{path:["excluded","Pipe"],value:{by:"pea"}}],revision)).toMatchObject({ok:true});
+  env.approval.allow();
+  expect(await completion).toMatchObject({state:"failed",notDispatched:true});
+  expect(env.sent.filter((row)=>row.key==="families.apply")).toHaveLength(0);
+});
+
+test("direct per-family sources stay one command with exact native hashes for each source",async()=>{
+  const env=await setup();const revision=await authorFamilies(env.work);
+  resultOf(await env.admit("families.apply",{rows:{sources:[{source,familyNames:["Box"]},{source,familyNames:["Pipe"]}],include:"all"}},revision,"batch"));
+  expect(env.sent.filter((row)=>row.key==="families.apply").map((row)=>row.input.expectedPlanHashes)).toEqual([{"1":"h1"},{"2":"h2"}]);
+  expect(await env.owner.list()).toHaveLength(1);
+});
+
+test("member baseline adoption reads host bytes and requires explicit replacement of pending edits",async()=>{
+  const env=await setup();
+  const where:WorkKey={binding:"workspace",route:"pods",target:null,work:memberWork(source)};
+  resultOf(await env.admit("settings.observe",{member:member("p.json")},0,"member-open","human",where));
+  const baseline=await env.work.read(where,"pods");
+  expect(baseline?.doc).toMatchObject({basis:{sha256:source.sha256,rawContent:profileBytes}});
+  const changed=await env.work.apply(where,"pods","agent",[{path:["fields","/label","edit"],value:{value:"shared"}}],baseline!.revision);
+  expect(changed.ok).toBe(true);
+  expect(await env.admit("settings.observe",{member:member("p.json")},changed.revision!,"member-refuse","human",where)).toMatchObject({state:"failed",notDispatched:true});
+  resultOf(await env.admit("settings.observe",{member:member("p.json"),sha256:source.sha256,replaceEdits:true},changed.revision!,"member-replace","human",where));
+  expect((await env.work.read(where,"pods"))?.doc).toMatchObject({fields:{}});
+});
+
+test("Family source observation is trusted host evidence, and a forged capture id refuses",async()=>{
+  const env=await setup();const where:WorkKey={...scope,route:"family"};
+  expect(await env.admit("family.observe",{readingId:"not-a-capture"},0,"observe-refuse","human",where)).toMatchObject({state:"failed",notDispatched:true});
+  resultOf(await env.admit("family.observe",{source},0,"observe-source","human",where));
+  expect((await env.work.read(where,"family"))?.doc).toMatchObject({reading:profileBytes,takenAt:null});
+  expect(env.sent).toHaveLength(0);
 });

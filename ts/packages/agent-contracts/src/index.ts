@@ -17,7 +17,7 @@ export * from "./route-doc.ts";
 export * from "./reading.ts";
 export * from "./machine.ts";
 export * from "./discovery-machine.ts";
-export * from "./trichotomy.ts";
+export * from "./draft.ts";
 export * from "./family.ts";
 export * from "./grounded-doc.ts";
 export * from "./families.ts";

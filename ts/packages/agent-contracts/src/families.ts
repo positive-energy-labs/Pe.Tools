@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { isRecord, type RouteStateSpec } from "./route-state.ts";
-import { trichotomyAgentMask, trichotomyCellSchema } from "./trichotomy.ts";
+import { draftCellSchema } from "./draft.ts";
 import { podDraftSourceSchema } from "./settings.ts";
 
 export const diagnosticSchema = z.object({
@@ -188,7 +188,7 @@ export const showFamilyCell = (value: unknown): string => {
   const cell = familyCellValueSchema.parse(value);
   return cell.unit === undefined ? cell.value : `${cell.value} ${cell.unit}`;
 };
-export const familyCellStateSchema = trichotomyCellSchema(familyCellValueSchema);
+export const familyCellStateSchema = draftCellSchema(familyCellValueSchema);
 export type FamilyCellState = z.infer<typeof familyCellStateSchema>;
 
 export interface FamilyCellAddress {
@@ -251,8 +251,8 @@ export function familyStagedPatch(
   const keys: string[] = [];
   for (const [key, cell] of Object.entries(cells)) {
     const address = familyCellAddress(key);
-    if (address.familyName !== familyName || !cell.staged) continue;
-    const { value, unit, storageType } = cell.staged.value;
+    if (address.familyName !== familyName || !cell.edit) continue;
+    const { value, unit, storageType } = cell.edit.value;
     (types[address.typeName] ??= {})[address.parameter] =
       unit === undefined ? patchValue(value, storageType) : { value, unit };
     keys.push(key);
@@ -262,7 +262,7 @@ export function familyStagedPatch(
     : { familyName, spec: { select: { names: [familyName] }, patch: { types } }, keys };
 }
 
-export const familyFilterCellSchema = trichotomyCellSchema(appliedScopeSchema).strict();
+export const familyFilterCellSchema = draftCellSchema(appliedScopeSchema).strict();
 export type FamilyFilterCell = z.infer<typeof familyFilterCellSchema>;
 
 /** Supplied Family Foundry patch bytes. Native schema and semantic validation remain FF's job. */
@@ -285,11 +285,11 @@ export const familiesPatchSourceSchema = podDraftSourceSchema.strict().refine((s
     return false;
   }
 }, "Supply JSON for the native Family Foundry patches schema");
-export const familiesPatchCellSchema = trichotomyCellSchema(familiesPatchSourceSchema).strict();
+export const familiesPatchCellSchema = draftCellSchema(familiesPatchSourceSchema).strict();
 export type FamiliesPatchCell = z.infer<typeof familiesPatchCellSchema>;
 
 /** Who held a family back. The route door checks it is the writer, so it is never just claimed. */
-export const exclusionAuthorSchema = z.enum(["person", "pea"]);
+export const exclusionAuthorSchema = z.enum(["human", "pea", "unknown"]);
 export type FamilyExclusions = Record<string, { by: z.infer<typeof exclusionAuthorSchema> }>;
 
 /**
@@ -327,9 +327,9 @@ const familiesDocumentSchema = z
   .strict();
 export type FamiliesRouteDocument = z.infer<typeof familiesDocumentSchema>;
 
-/** The scope the person staged: the only one the matrix audits and plan resolves. */
+/** The scope the person edit: the only one the matrix audits and plan resolves. */
 export const stagedFilter = (doc: FamiliesRouteDocument): AppliedFilter | null =>
-  doc.scope.staged?.value ?? null;
+  doc.scope.edit?.value ?? null;
 
 /**
  * The included plan hashes an apply must reproduce exactly, keyed by the id each name resolved to in
@@ -380,17 +380,9 @@ export const familiesRouteState = {
     "families",
     "propose",
   ],
-  description:
-    'Family Foundry: propose scope.proposal first = { value: { categoryNames, familyNames, placementScope } } (exact family names from op:revit.catalog.loaded-families); the person stages it, and plan audits only the staged scope. Propose cells.<key>.proposal for per-type values, where <key> is [familyName,typeName,parameter] of a type listed in the route read\'s scopeTypes (the staged scope, else the proposed one); do not wait for the person to stage the scope. Or propose patch.proposal = { value: { path, content } } for native Family Foundry patch JSON carrying the /schemas/settings/FamilyFoundry/patches.json schema. The person reviews and stages; never write staged. The patch source and per-type cells cannot both be staged. Hold a family back with excluded.<familyName> = { by: "pea" }; the plan sheet names who held it back, and only the person lifts their own.',
+  description: "Shared Family Foundry Work. Set scope.edit to {value:{categoryNames,familyNames,placementScope}}. Set cells.<key>.edit for a canonical [familyName,typeName,parameter] identity from scopeTypes, or patch.edit for exact native patch source bytes. Either author may replace or clear current edits and exclusions at the expected Work revision. Optional suggestion slots are review content. Apply plans/checks/writes/readbacks the submitted edits; native patch and per-type edits are mutually exclusive.",
   schema: familiesDocumentSchema,
-  // Pea writes proposals only. A staged value reaches plan only through a person's review.
-  agentWriteMask: [
-    ["scope", "proposal"],
-    ["patch", "proposal"],
-    ["excluded"],
-    ...trichotomyAgentMask(),
-    ["executionOptions"],
-  ],
+
   // Planning and applying are the `families.plan` and `families.apply` workflows. Neither is
   // a route command, so neither can write into authored Work.
   commands: {},
@@ -407,7 +399,7 @@ export const familiesRouteState = {
     const scopeCell = isRecord(doc.scope) ? doc.scope : {};
     const scope = [
       doc.scope,
-      isRecord(scopeCell.staged) ? scopeCell.staged.value : undefined,
+      isRecord(scopeCell.edit) ? scopeCell.edit.value : undefined,
       isRecord(doc.plan) ? doc.plan.scope : undefined,
     ]
       .map((candidate) => appliedScopeSchema.safeParse(candidate))

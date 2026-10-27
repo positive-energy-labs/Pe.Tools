@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { type RouteStatePatch, type RouteStateSpec } from "./route-state.ts";
-import { transitionPatches, trichotomyCellSchema, type TrichotomyCellLike } from "./trichotomy.ts";
+import { transitionPatches, draftCellSchema, type CellLike } from "./draft.ts";
 import { observationSchema } from "./reading.ts";
 import { addressSchema } from "./target.ts";
 import { documentRefSchema } from "./target.ts";
@@ -386,7 +386,7 @@ export const takeoffDecisionAddress = (key: string) => {
 /** A review flag on one shape of a zone's saved partition review: `[zoneKey, shapeKey]`. */
 export const takeoffFlagKey = (zoneKey: string, shapeKey: string) => tupleKey([zoneKey, shapeKey]);
 
-const editCellSchema = trichotomyCellSchema(z.union([z.string(), z.number()]));
+const editCellSchema = draftCellSchema(z.union([z.string(), z.number()]));
 const adoptChoiceSchema = z.object({
   checked: z.boolean().optional(),
   name: z.string().optional(),
@@ -405,11 +405,11 @@ const takeoffsDocumentSchema = z
     edits: z.record(keyed(2, "edit"), editCellSchema).default({}),
     bases: z.record(z.string(), roomEditSchema).default({}),
     /** Keyed by candidate (`<view>:<elementId>`). */
-    adopt: z.record(z.string(), trichotomyCellSchema(adoptChoiceSchema)).default({}),
-    decisions: z.record(keyed(2, "decision"), trichotomyCellSchema(verdictSchema)).default({}),
+    adopt: z.record(z.string(), draftCellSchema(adoptChoiceSchema)).default({}),
+    decisions: z.record(keyed(2, "decision"), draftCellSchema(verdictSchema)).default({}),
     /** A flag has no commit verb: the staged set is the durable judgment and the export. */
     reviewFlags: z
-      .record(keyed(2, "review flag"), trichotomyCellSchema(z.literal(true)))
+      .record(keyed(2, "review flag"), draftCellSchema(z.literal(true)))
       .default({}),
   })
   .superRefine((doc, ctx) => {
@@ -421,7 +421,7 @@ const takeoffsDocumentSchema = z
         ctx.addIssue({ code: "custom", path: ["edits", key], message: `no room field '${field}'` });
         continue;
       }
-      for (const rung of ["proposal", "staged"] as const) {
+      for (const rung of ["suggestion", "edit"] as const) {
         const value = cell[rung]?.value;
         if (value !== undefined && !schema.unwrap().safeParse(value).success)
           ctx.addIssue({
@@ -434,9 +434,9 @@ const takeoffsDocumentSchema = z
   });
 export type TakeoffsRouteDocument = z.infer<typeof takeoffsDocumentSchema>;
 
-const stagedOf = <V>(cells: Record<string, TrichotomyCellLike>) =>
+const stagedOf = <V>(cells: Record<string, CellLike>) =>
   Object.entries(cells).flatMap(([key, cell]) =>
-    cell.staged?.value !== undefined ? [[key, cell.staged.value as V] as const] : [],
+    cell.edit?.value !== undefined ? [[key, cell.edit.value as V] as const] : [],
   );
 
 /** The person's staged room edits, one per room: what sync consumes. Proposals never appear. */
@@ -467,7 +467,7 @@ export function stagedReviewFlags(doc: TakeoffsRouteDocument): Record<string, st
 /** A person discards every staged room edit: each staged edit cell unstages; proposals stay. */
 export const takeoffDiscardEdits = (doc: TakeoffsRouteDocument): RouteStatePatch[] =>
   Object.entries(doc.edits).flatMap(([key, cell]) =>
-    cell.staged ? transitionPatches(["edits"], key, cell, { kind: "unstage" }) : [],
+    cell.edit ? transitionPatches(["edits"], key, cell, { kind: "clear" }) : [],
   );
 
 /** A person flags a review shape, or unflags it: unflag unstages the shape's cell. */
@@ -482,7 +482,7 @@ export function takeoffFlagToggle(
     ["reviewFlags"],
     key,
     cell,
-    cell.staged ? { kind: "unstage" } : { kind: "stage", rung: { value: true } },
+    cell.edit ? { kind: "clear" } : { kind: "set", rung: { value: true } },
   );
 }
 
@@ -505,9 +505,9 @@ export function takeoffEditPatches(
       const cell = doc.edits[key] ?? {};
       const value = next[field];
       if (value === undefined)
-        return cell.staged ? transitionPatches(["edits"], key, cell, { kind: "unstage" }) : [];
+        return cell.edit ? transitionPatches(["edits"], key, cell, { kind: "clear" }) : [];
       return transitionPatches(["edits"], key, cell, {
-        kind: "stage",
+        kind: "set",
         rung: { value },
         ...(baseline[field] === undefined ? {} : { baseline: { value: baseline[field] } }),
       });
@@ -519,14 +519,8 @@ export const takeoffsRouteState = {
   route: "takeoffs",
   title: "Takeoffs",
   description:
-    "A person's staged room values, adoption choices, flag verdicts and review flags, each one cell. Pea may propose on any of them; a person stages, and sync reads staged values only. Model geometry is read from takeoffs.snapshot; durable saved observations are at /takeoffs/observations.",
+    "Shared edited room values, adoption choices, flag verdicts and review flags, each one cell. Either author edits or suggests; sync consumes the current edits. Model geometry is read from takeoffs.snapshot; durable saved observations are at /takeoffs/observations.",
   schema: takeoffsDocumentSchema,
-  // Pea proposes; staged values and room baselines are a person's.
-  agentWriteMask: [
-    ["edits", "*", "proposal"],
-    ["adopt", "*", "proposal"],
-    ["decisions", "*", "proposal"],
-    ["reviewFlags", "*", "proposal"],
-  ],
+
   commands: {},
 } satisfies RouteStateSpec<typeof takeoffsDocumentSchema>;

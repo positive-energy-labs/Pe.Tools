@@ -110,12 +110,12 @@ test("HTTP Work resolves B without native authority, refuses forged targets and 
         { kind: "document", ref: { session: b.session, openId: b.openId } },
         "/actions",
       ),
-    ).toThrow();
+    ).not.toThrow();
     expect(await (await request(query())).json()).toMatchObject({
       revision: 0,
       doc: { workingPhase: {} },
     });
-    const proposed = [{ path: ["workingPhase", "proposal"], value: { value: "Existing" } }];
+    const proposed = [{ path: ["workingPhase", "suggestion"], value: { value: "Existing" } }];
     expect(await (await request(query(), proposed)).json()).toMatchObject({
       ok: true,
       revision: 1,
@@ -125,9 +125,10 @@ test("HTTP Work resolves B without native authority, refuses forged targets and 
       doc: { workingPhase: {} },
     });
     // Omitting target= still resolves the saved B address, rather than inventing ephemeral Work.
-    expect(await (await request("open=session/b")).json()).toMatchObject({
+    const retained = await (await request("open=session/b")).json();
+    expect(retained).toMatchObject({
       revision: 1,
-      doc: { workingPhase: { proposal: { value: "Existing" } } },
+      doc: { workingPhase: { suggestion: { value: "Existing" } } },
     });
     documents.push({ ...b, session: "other-session" });
     expect(await (await request(`target=${encodeURIComponent(b.address)}`)).json()).toMatchObject({
@@ -168,7 +169,7 @@ test("HTTP Work resolves B without native authority, refuses forged targets and 
     const before = await app.workspace.readRaw(key, "ducts");
     expect(before).toMatchObject({
       revision: 2,
-      doc: { workingPhase: { proposal: { value: "Existing" }, staged: { value: "New" } } },
+      doc: { workingPhase: { suggestion: { value: "Existing" }, edit: { value: "New" } } },
     });
     head = { revision: 5, targets: head.targets.slice(0, 1) };
     expect((await request(query(), proposed, 2)).status).toBe(403);
@@ -505,14 +506,14 @@ test("HTTP authored writes enforce short local revision checks", async () => {
   // F-H6-4: a malformed body names the failing field and its shape.
   const stringPath = await post(
     "/pe/route-state/test-route/apply",
-    { patches: [{ path: "scope.proposal", value: 1 }], expectedRevision: 1 },
+    { patches: [{ path: "scope.suggestion", value: 1 }], expectedRevision: 1 },
     pea(),
   );
   expect(stringPath.status).toBe(400);
   expect(await stringPath.json()).toMatchObject({
     ok: false,
     kind: "error",
-    error: 'invalid body at patches[0].path: must be a segment array, e.g. ["scope","proposal"]',
+    error: 'invalid body at patches[0].path: must be a segment array, e.g. ["scope","suggestion"]',
   });
   expect(
     await (await post("/pe/route-state/test-route/apply", { patches: [] }, pea())).json(),
