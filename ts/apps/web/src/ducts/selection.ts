@@ -51,9 +51,36 @@ export const withSystem = (open: readonly string[], name: string) =>
 export const stubIdsOf = (neighbours: readonly Neighbour[], open: ReadonlySet<number>) =>
   new Set(neighbours.flatMap((n) => n.stub).filter((id) => !open.has(id)));
 
+/** Scene category names (`SceneInstance.category`, as the cached PSC1 carries them) of MEP that
+ * stays in proximity: non-focus instances of these paint as stub, never bare context rings. */
+export const MEP_CATEGORIES: ReadonlySet<string> = new Set([
+  "Ducts",
+  "Duct Fittings",
+  "Duct Accessories",
+  "Duct Insulations",
+  "Duct Linings",
+  "Flex Ducts",
+  "Air Terminals",
+  "Pipes",
+  "Pipe Fittings",
+  "Pipe Accessories",
+  "Pipe Insulations",
+  "Flex Pipes",
+  "Mechanical Equipment",
+  "Mechanical Control Devices",
+  "Plumbing Fixtures",
+  "Plumbing Equipment",
+  "Sprinklers",
+  "Cable Trays",
+  "Cable Tray Fittings",
+  "Conduits",
+  "Conduit Fittings",
+]);
+
 /**
  * Each element's kind is its air type; the Scene3D `kinds` table (the person's palette) picks the
- * hue and the Colour dial decides whether it shows. A multi-stream equipment box is unknown.
+ * hue and the Colour dial decides whether it shows. Elements the ducts snapshot does not name
+ * (pipes, linked MEP, insulation) are unknown. A multi-stream equipment box is unknown.
  */
 export function paintOfDucts(
   snapshot: DuctSnapshot,
@@ -63,8 +90,15 @@ export function paintOfDucts(
   const types = airTypesOf(snapshot);
   return (instance) => {
     const id = instance.revitId;
+    // Proximity is the whole thing: non-focus MEP is body (stub), not a context ring. Focus
+    // instances that are not opened keep the default (subject), so this never reaches them.
+    const mep = !instance.focus && MEP_CATEGORIES.has(instance.category);
     const tier: Tier | null =
-      id != null && opened.has(id) ? "subject" : id != null && stubs.has(id) ? "stub" : null;
+      id != null && opened.has(id)
+        ? "subject"
+        : (id != null && stubs.has(id)) || mep
+          ? "stub"
+          : null;
     if (!tier) return undefined;
     const kind = id == null ? "unknown" : (types.get(id) ?? "unknown");
     return { tier, kind };
