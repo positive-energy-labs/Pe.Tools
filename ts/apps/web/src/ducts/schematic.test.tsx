@@ -42,3 +42,28 @@ test("open networks draw separate schematic roots in open order, shared networks
   fireEvent.click(exhaust);
   expect(pick).toHaveBeenCalledWith(Number(exhaust.getAttribute("data-element")));
 });
+
+test("hovering a schematic edge settles instead of looping through member declarations", () => {
+  const { snapshot } = NAVIGATION_FIXTURE;
+  const scope = scopeOf(snapshot, ["SA Office"])!;
+  const index = indexOf(snapshot);
+  const encoding = encodingFor(
+    "health",
+    sceneOf(index, scope.groups, () => true),
+  );
+  const { container } = render(
+    <TestAttention registry={makeAtomRegistry()}>
+      <Schematic
+        readout={null}
+        index={index}
+        groups={scope.groups}
+        encoding={encoding}
+        onSelect={vi.fn()}
+        size="inset"
+      />
+    </TestAttention>,
+  );
+  const edge = container.querySelector("[data-subject^='chain:']")!;
+  expect(() => fireEvent.pointerOver(edge)).not.toThrow();
+  expect(container.querySelector("[data-lit]")).not.toBeNull();
+});

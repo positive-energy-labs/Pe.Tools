@@ -161,10 +161,14 @@ export function Schematic({
   }, [index, groups, members]);
   // The chain a selected fold member sits in unfolds: its members become vertices.
   const base = useMemo(() => trees.flatMap((tree) => chainsOf(tree)), [trees]);
-  const unfold = useMemo(() => {
-    const hit = base.find((c) => c.members.slice(0, -1).some((id) => selected.has(id)));
-    return new Set(hit?.members ?? []);
-  }, [base, selected]);
+  // `selected` is a fresh Set on every attention change (hover included). Memoize on the hit chain,
+  // whose identity is stable, so a hover does not rebuild chains -> members -> useMembers -> attention
+  // -> hover again (the "Maximum update depth exceeded" loop).
+  const hit = useMemo(
+    () => base.find((c) => c.members.slice(0, -1).some((id) => selected.has(id))),
+    [base, selected],
+  );
+  const unfold = useMemo(() => new Set(hit?.members ?? []), [hit]);
   const walks = useMemo(
     () => trees.map((tree) => ({ tree, chains: chainsOf(tree, unfold) })),
     [trees, unfold],
