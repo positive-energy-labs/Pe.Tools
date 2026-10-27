@@ -99,6 +99,17 @@ public sealed class ScriptPodSourceTests {
         Assert.That(ScriptPodSourceNormalizer.Normalize(captured, "sample", "src/Main.cs").ProjectSeed, Is.EqualTo(project));
     }
 
+    [Test]
+    public void Captured_manifest_reads_through_the_same_utf8_bom_seam_as_preparation() {
+        var bundle = Bundle();
+        var json = Convert.FromBase64String(bundle.Files[0].BytesBase64);
+        bundle.Files[0] = new("pod.json", Convert.ToBase64String(new byte[] { 0xEF, 0xBB, 0xBF }.Concat(json).ToArray()));
+        CompileAndRun(bundle);
+        // UTF-16 was admitted by the old StreamReader path but never by preparation; both now refuse it.
+        bundle.Files[0] = new("pod.json", Convert.ToBase64String(Encoding.Unicode.GetPreamble().Concat(Encoding.Unicode.GetBytes(Encoding.UTF8.GetString(json))).ToArray()));
+        Assert.Throws<ArgumentException>(() => ScriptPodSourceNormalizer.Normalize(bundle, "sample", "src/Main.cs"));
+    }
+
     [TestCase("../Main.cs")]
     [TestCase("src/../Main.cs")]
     [TestCase("C:/Main.cs")]

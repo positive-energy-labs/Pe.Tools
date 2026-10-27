@@ -1,3 +1,4 @@
+using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Pe.Shared.HostContracts.Scripting;
@@ -47,6 +48,26 @@ public static class PodManifestValidator {
         "name",
         "description"
     };
+
+    private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+
+    /// <summary>
+    ///     The one text decoding of pod.json bytes: strict UTF-8, where a single leading UTF-8 BOM is framing
+    ///     (as File.ReadAllText reads it); anything else, a second BOM included, reaches the JSON parser.
+    ///     Callers keep the original bytes for hashes and receipts; nothing here rewrites them.
+    /// </summary>
+    public static PodManifestValidationResult ValidateUtf8(byte[] bytes) {
+        if (bytes is null)
+            throw new ArgumentNullException(nameof(bytes));
+        var offset = bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF ? 3 : 0;
+        string json;
+        try {
+            json = StrictUtf8.GetString(bytes, offset, bytes.Length - offset);
+        } catch (DecoderFallbackException ex) {
+            return new PodManifestValidationResult(null, [ScriptDiagnosticFactory.Error(DiagnosticStage, $"pod.json is not valid UTF-8: {ex.Message}")]);
+        }
+        return ValidateJson(json);
+    }
 
     public static PodManifestValidationResult ValidateJson(string json) {
         if (json is null)
