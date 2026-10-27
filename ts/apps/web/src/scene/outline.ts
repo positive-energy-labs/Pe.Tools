@@ -3,7 +3,8 @@
  * it draws thin and faint in the same hue, constant however deep, so it reads as behind yet stays
  * findable. Translucent context owns no depth here: behind context counts as visible (the
  * renderer composites this after the context pass; see its `drawScene` exception note).
- * The ink and dark casing keep the outline visible on light meshes and ground alike. */
+ * The ink and dark casing keep the outline visible on light meshes and ground alike. The element
+ * itself keeps its hue and lifts OKLCH lightness (`LOOK.lift`); there is no grey fill. */
 import * as THREE from "three";
 import { FullScreenQuad } from "three/addons/postprocessing/Pass.js";
 import { BLACK } from "./grounds";

@@ -16,6 +16,7 @@ import { createGlow, GLOW_LAYER, OCCLUDER_LAYER } from "./glow";
 import { createDamageBatch } from "./damage-batch";
 import { createMarkBatch } from "./mark-batch";
 import { createOutline, OUTLINE_LAYER } from "./outline";
+import { liftLightness } from "./oklch";
 import {
   CONTEXT_CREASE_DEG,
   GROUND_MATERIAL,
@@ -169,7 +170,7 @@ const BOX_EDGES = [
   [2, 6],
   [3, 7],
 ] as const;
-/** Selection, hover and lighting lift the base system ink toward page ink. */
+/** Selection, hover and lighting lift the base system hue in OKLCH lightness (`LOOK.lift`). */
 type Mark = "hover" | "lit" | "selected";
 
 /** Keep only edge storage after upload; the completed async preparation must not own face arrays. */
@@ -437,7 +438,8 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       color.offsetHSL(0, 0, look.subject.darkLift);
     if (tier === "stub" && paint.surface !== "shell")
       color.lerp(ground, look.subject.stubGroundMix);
-    if (mark) color.lerp(ink, look.fill[mark]);
+    // The rung rule: emphasis keeps the hue and lifts OKLCH lightness; the outline carries the rest.
+    if (mark) color.copy(liftLightness(color, look.lift[mark]));
     const alpha = surfaceAlpha(paint, look);
     batch.setColorAt(id, new THREE.Vector4(color.r, color.g, color.b, alpha));
     const cap = caps.get(id);

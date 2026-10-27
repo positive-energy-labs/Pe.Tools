@@ -92,10 +92,11 @@ export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
   palette: Object.fromEntries(
     SYSTEM_PALETTE.map((role, i) => [`s${i + 1}`, colour(`System ink ${i + 1}`, role)]),
   ),
-  fill: {
-    hover: num("Hover ink mix", 0.22, [0, 1, 0.01]),
-    lit: num("Lit ink mix", 0.4, [0, 1, 0.01]),
-    selected: num("Selected ink mix", 0.6, [0, 1, 0.01]),
+  // 2026-10-26 rung rule: a mark keeps the hue and lifts OKLCH lightness by this much.
+  lift: {
+    hover: num("Hover lightness lift", 0.04, [0, 0.3, 0.01]),
+    lit: num("Lit lightness lift", 0.06, [0, 0.3, 0.01]),
+    selected: num("Selected lightness lift", 0.1, [0, 0.3, 0.01]),
   },
   veil: {
     colour: colour("Context ink", "theme"),
