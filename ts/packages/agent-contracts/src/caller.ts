@@ -23,7 +23,9 @@ export const callerSchema = z.discriminatedUnion("kind", [
   }),
   // A harness child and its shell, bound to one thread at spawn.
   z.strictObject({
-    kind: z.literal("pea"), context: z.string(), thread: z.string(),
+    kind: z.literal("pea"),
+    context: z.string(),
+    thread: z.string(),
     run: z.strictObject({ thread: z.string(), turn: z.string() }).optional(),
     root: z.strictObject({ thread: z.string(), turn: z.string() }).optional(),
   }),

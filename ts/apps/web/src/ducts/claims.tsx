@@ -17,12 +17,11 @@ export const VERDICTS: readonly { value: Verdict; word: string; says: string }[]
   { value: "not-this", word: "not this", says: "the claim is about the wrong place" },
 ];
 
-/** Stage the complete claim and verdict; without web identity the judge is "person". */
+/** Edit the complete claim and verdict; the host stamps the shared change's provenance. */
 export const verdictPatches = (
   doc: DuctsRouteDocument | null,
   claim: Claim,
   verdict: Verdict,
-  now: Date = new Date(),
 ): RouteStatePatch[] =>
   transitionPatches(["claims"], claim.id, doc?.claims[claim.id] ?? {}, {
     kind: "set",
@@ -33,8 +32,6 @@ export const verdictPatches = (
         ids: claim.at,
         state: claim.state,
         verdict,
-        verdictBy: "person",
-        verdictAt: now.toISOString(),
       },
     },
   });

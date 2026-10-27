@@ -10,6 +10,7 @@ import {
   scheduleReads,
   actionControls,
   semanticActions,
+  semanticWorkflowForOperation,
   familyReads,
   actionBasesSchema,
   settingsRouteState,
@@ -68,7 +69,7 @@ function admissionInput(input: z.ZodType): z.ZodType {
 /** Pure projection, ordered by compiled operations/routes, packaged content and scratch Pages. */
 export function buildCapabilities(sources: CapabilitySources): Capability[] {
   return [
-    ...sources.ops.map(opRow),
+    ...sources.ops.filter((op) => !semanticWorkflowForOperation(op.key)).map(opRow),
     {
       key: "route:threads.history",
       kind: "route-command",
@@ -233,10 +234,12 @@ function opRow(op: OpsCatalogEntry): Capability {
     needs: op.needs === "nothing" && !isTsOnlyOperationKey(op.key) ? "session" : op.needs,
     effect: op.intent !== "Read" ? "command" : "query",
     mutates: op.intent !== "Read",
-    principal: capabilityPrincipals(
-      op.intent !== "Read",
-      (op as { actor?: "any" | "human" | "agent" }).actor,
-    ),
+    principal: ["aps.auth.login", "aps.auth.logout"].includes(op.key)
+      ? ["human"]
+      : capabilityPrincipals(
+          op.intent !== "Read",
+          (op as { actor?: "any" | "human" | "agent" }).actor,
+        ),
     input: parseSchema(op.requestSchemaJson),
     output: op.responseSchemaJson ? parseSchema(op.responseSchemaJson) : undefined,
     source: "catalog",

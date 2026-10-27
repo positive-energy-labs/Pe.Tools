@@ -174,7 +174,13 @@ export const scheduleGridRouteState = {
     if (!parsed.success) return next;
     const doc = parsed.data;
     if (!doc.basis?.stale) return doc;
-    const edited = new Set(patches.filter((patch) => patch.path[0] === "cells").flatMap((patch) => patch.path.length === 1 ? Object.keys(doc.cells) : [String(patch.path[1])]));
+    const edited = new Set(
+      patches
+        .filter((patch) => patch.path[0] === "cells")
+        .flatMap((patch) =>
+          patch.path.length === 1 ? Object.keys(doc.cells) : [String(patch.path[1])],
+        ),
+    );
     const stale = doc.basis.stale.filter((cell) => !edited.has(cell.key));
     return { ...doc, basis: { ...doc.basis, stale: stale.length ? stale : undefined } };
   },

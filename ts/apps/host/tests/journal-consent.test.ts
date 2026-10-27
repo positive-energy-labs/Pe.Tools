@@ -93,6 +93,41 @@ test("waiting commands are durable, share approval, freeze submitted bytes and s
   }
 });
 
+test("an acquired document supplies provenance without bypassing the run countdown", async () => {
+  const h = await setup();
+  bindControl({ acquired: () => "pea-acquisition" });
+  let writes = 0;
+  try {
+    const target = { session: "owned-session", openId: "owned-document" };
+    const row = await h.journal.admit(
+      {
+        ...admission("acquired-write"),
+        caller,
+        destination: { kind: "document", ref: target },
+        basis: {
+          kind: "acquisition",
+          id: "pea-acquisition",
+          scope: { kind: "document", lifetime: target },
+        },
+        footprint: [{ kind: "document", ref: target }],
+      },
+      async () => null,
+      async (execution) => execution.step("native", "write", {}, async () => ++writes),
+    );
+    expect(row.state).toBe("waiting");
+    await h.ready();
+    expect(writes).toBe(0);
+    h.approve();
+    const done = await h.journal.wait(row.id);
+    expect(done.state).toBe("succeeded");
+    expect(done.consent).toMatchObject({ run, decision: { by: "human" } });
+    expect(writes).toBe(1);
+  } finally {
+    bindControl({ acquired: () => null });
+    await h.close();
+  }
+});
+
 test("per-command cancellation preserves the shared decision; Stop cancels every unstarted mutation", async () => {
   const h = await setup();
   try {

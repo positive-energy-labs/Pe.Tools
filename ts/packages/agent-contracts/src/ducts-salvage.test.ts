@@ -53,7 +53,7 @@ describe("salvageDuctsWork", () => {
       claims: {
         c: {
           suggestion: {
-            value: { title: "Run", text: "x", ids: [1], state: "assumed", verdict: "yes" },
+            value: { title: "Run", text: "x", ids: [1], state: "assumed", verdictBy: "person" },
           },
         },
       },

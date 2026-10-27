@@ -408,9 +408,7 @@ const takeoffsDocumentSchema = z
     adopt: z.record(z.string(), draftCellSchema(adoptChoiceSchema)).default({}),
     decisions: z.record(keyed(2, "decision"), draftCellSchema(verdictSchema)).default({}),
     /** A flag has no commit verb: the staged set is the durable judgment and the export. */
-    reviewFlags: z
-      .record(keyed(2, "review flag"), draftCellSchema(z.literal(true)))
-      .default({}),
+    reviewFlags: z.record(keyed(2, "review flag"), draftCellSchema(z.literal(true))).default({}),
   })
   .superRefine((doc, ctx) => {
     // Each edit's rungs hold a value that field accepts.

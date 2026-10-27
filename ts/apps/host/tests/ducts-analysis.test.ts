@@ -266,10 +266,10 @@ test("physical circuits and path pages retain staged evidence and never acquire 
   const doc = ductsDocumentSchema.parse({
     calculation: {
       scenario: {
-        staged: { value: { kind: "balanced-design", source: "Purpose balanced design" } },
+        edit: { value: { kind: "balanced-design", source: "Purpose balanced design" } },
       },
       fan: {
-        staged: {
+        edit: {
           value: {
             kind: "fan",
             element: { id: 1, uniqueId: "purpose-1" },
@@ -282,7 +282,7 @@ test("physical circuits and path pages retain staged evidence and never acquire 
         },
       },
       terminal: {
-        staged: {
+        edit: {
           value: {
             kind: "terminal",
             element: { id: 2, uniqueId: "purpose-2" },
@@ -426,9 +426,9 @@ test("canonical staged component constraints drive shared analysis without claim
   };
   const doc = ductsDocumentSchema.parse({
     calculation: {
-      scenario: { staged: { value: { kind: "balanced-design", source: "Synthetic design" } } },
+      scenario: { edit: { value: { kind: "balanced-design", source: "Synthetic design" } } },
       a: {
-        staged: {
+        edit: {
           value: {
             kind: "fan",
             element: { id: 1, uniqueId: "flow-1" },
@@ -441,7 +441,7 @@ test("canonical staged component constraints drive shared analysis without claim
         },
       },
       b: {
-        staged: {
+        edit: {
           value: {
             kind: "fan",
             element: { id: 3, uniqueId: "flow-3" },
@@ -454,7 +454,7 @@ test("canonical staged component constraints drive shared analysis without claim
         },
       },
       t: {
-        staged: {
+        edit: {
           value: {
             kind: "terminal",
             element: { id: 2, uniqueId: "flow-2" },
@@ -493,7 +493,7 @@ test("canonical staged component constraints drive shared analysis without claim
   };
   let staged = ductsDocumentSchema.parse({
     ...doc,
-    calculation: { ...doc.calculation, flow: { proposal: { value: design } } },
+    calculation: { ...doc.calculation, flow: { suggestion: { value: design } } },
   });
   f.sources.readWork = async () => ({ doc: staged, revision: 2 });
   const proposal = await f.api.read(
@@ -502,7 +502,7 @@ test("canonical staged component constraints drive shared analysis without claim
   expect(proposal.rows[0]!.component?.status).toBe("underdetermined");
   staged = ductsDocumentSchema.parse({
     ...doc,
-    calculation: { ...doc.calculation, flow: { staged: { value: design } } },
+    calculation: { ...doc.calculation, flow: { edit: { value: design } } },
   });
   const fresh = ductsAnalysisResponseSchema.parse(
     await f.api.read(
@@ -662,9 +662,9 @@ test("actual analysis handler shares bounded prescribed hydraulic closure and ex
   };
   let doc = ductsDocumentSchema.parse({
     calculation: {
-      scenario: { staged: { value: { kind: "balanced-design", source: "Purpose design" } } },
+      scenario: { edit: { value: { kind: "balanced-design", source: "Purpose design" } } },
       fan: {
-        staged: {
+        edit: {
           value: {
             kind: "fan",
             element: { id: 1, uniqueId: "purpose-1" },
@@ -677,7 +677,7 @@ test("actual analysis handler shares bounded prescribed hydraulic closure and ex
         },
       },
       terminal: {
-        staged: {
+        edit: {
           value: {
             kind: "terminal",
             element: { id: 2, uniqueId: "purpose-2" },
@@ -705,7 +705,7 @@ test("actual analysis handler shares bounded prescribed hydraulic closure and ex
     calculation: {
       ...doc.calculation,
       pressure: {
-        staged: {
+        edit: {
           value: {
             kind: "component-flow",
             componentWitness: witness,
@@ -786,12 +786,12 @@ function candidateWork() {
   return ductsDocumentSchema.parse({
     terminalDrops: {
       "2": {
-        staged: { value: { inWg: 0.12, source: "Approved purpose point" } },
-        proposal: { value: { inWg: 9, source: "Not accepted" } },
+        edit: { value: { inWg: 0.12, source: "Approved purpose point" } },
+        suggestion: { value: { inWg: 9, source: "Not accepted" } },
       },
     },
-    componentDrops: { "3": { staged: { value: { inWg: 0.02, source: "Stated component" } } } },
-    parameters: { terminalDrop: { staged: { value: "TerminalDrop" } } },
+    componentDrops: { "3": { edit: { value: { inWg: 0.02, source: "Stated component" } } } },
+    parameters: { terminalDrop: { edit: { value: "TerminalDrop" } } },
   });
 }
 const candidateRead = (id: string, selector: unknown = { kind: "document" }) =>
@@ -951,7 +951,7 @@ test("apply-request refuses changed producer outputs, custody, Work and unsuppor
 test("apply-request cannot turn proposal-only or physical fan required head into native writes", async () => {
   const f = fixture();
   let doc = ductsDocumentSchema.parse({
-    terminalDrops: { "2": { proposal: { value: { inWg: 2, source: "Unaccepted" } } } },
+    terminalDrops: { "2": { suggestion: { value: { inWg: 2, source: "Unaccepted" } } } },
   });
   f.sources.readWork = async () => ({ doc, revision: 1 });
   let initial = await f.api.read(read({ kind: "fresh", target: f.target }));
@@ -969,10 +969,10 @@ test("apply-request cannot turn proposal-only or physical fan required head into
   f.snapshot.nodes[0]!.connectors[0]!.direction = "out";
   doc = ductsDocumentSchema.parse({
     ...candidateWork(),
-    esp: { "1": { staged: { value: { inWg: 0.25 } } } },
+    esp: { "1": { edit: { value: { inWg: 0.25 } } } },
     calculation: {
       fan: {
-        staged: {
+        edit: {
           value: {
             kind: "fan",
             element: { id: 1, uniqueId: "purpose-1" },
@@ -1015,7 +1015,7 @@ test("the survey joins a sub-tolerance gap, takes the terminal flow from the loa
   const doc = ductsDocumentSchema.parse({
     loads: {
       preview: {
-        staged: {
+        edit: {
           value: {
             systems: [{ name: "System 1 Office FC-4", tag: "FC-4", cfm: 250, rooms: [] }],
           },

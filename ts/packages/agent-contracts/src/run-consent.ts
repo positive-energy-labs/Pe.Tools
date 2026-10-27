@@ -23,6 +23,8 @@ export const effectSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("session"), session: z.string() }),
   z.strictObject({ kind: z.literal("member"), pod: z.string(), path: z.string() }),
   z.strictObject({ kind: z.literal("file"), path: z.string() }),
+  // An SDK-owned installation writes/prunes a complete verified destination subtree.
+  z.strictObject({ kind: z.literal("directory"), path: z.string() }),
   z.strictObject({ kind: z.literal("receipt"), pod: z.string(), path: z.string() }),
   z.strictObject({ kind: z.literal("publication"), page: z.string() }),
 ]);

@@ -1,4 +1,5 @@
 /// <reference lib="dom" />
+/// <reference types="vite-plus/client" />
 import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
 import type { ActionAdmission, Caller } from "@pe/agent-contracts";
 
@@ -25,7 +26,7 @@ export interface InvocationContext {
 }
 
 // Frozen into the served page's module graph by the web build, like `host/runtime.ts`.
-const serviceName: string | undefined = import.meta.env.PE_RUNTIME_SERVICE;
+const serviceName = import.meta.env.PE_RUNTIME_SERVICE;
 
 // Browser clients already have a single user and same-origin transport, with no ambient tool scope.
 export const invocationContext = (): InvocationContext | undefined => undefined;

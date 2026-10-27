@@ -310,11 +310,9 @@ export async function setup() {
       as = human;
     }
   };
-  await readScheduleCapture("schedule.grid.bind",{readingId:reading.id,expectedRevision:0});
+  await readScheduleCapture("schedule.grid.bind", { readingId: reading.id, expectedRevision: 0 });
   expect(
-    await patch([
-      { path: ["cells", "1::2"], value: { edit: { value: "150 VA" } } },
-    ]),
+    await patch([{ path: ["cells", "1::2"], value: { edit: { value: "150 VA" } } }]),
   ).toMatchObject({ ok: true });
   const admission = async (id = crypto.randomUUID()): Promise<ActionAdmission> => ({
     id,
@@ -349,7 +347,11 @@ export async function setup() {
     view,
     patch,
     read,
-    bind: async (reading:ScheduleReading) => readScheduleCapture("schedule.grid.bind",{readingId:reading.id,expectedRevision:(await view()).revision}),
+    bind: async (reading: ScheduleReading) =>
+      readScheduleCapture("schedule.grid.bind", {
+        readingId: reading.id,
+        expectedRevision: (await view()).revision,
+      }),
     post,
     submit,
     admission,

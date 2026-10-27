@@ -268,11 +268,21 @@ async function setup(sdk: (args: readonly string[]) => Promise<string> = sdkSess
   });
   const captures = new TakeoffCaptures(join(dir, "captures"));
   const owner = new ActionJournal(join(dir, "actions.json"));
-  const run={thread:"domain-test",turn:dir};
-  let autoAllow=true;
-  const asks:string[]=[];
-  const runs=new RunConsents((ref,event)=>{if(event.kind==="permission_request") {asks.push(event.requestId);if(autoAllow) queueMicrotask(()=>runs.decide(ref.thread,event.requestId,"allow_now"));}});
-  runs.open(run); bindControl({runs}); cleanup.push(async()=>{runs.close(run,"stopped");bindControl({runs:undefined});});
+  const run = { thread: "domain-test", turn: dir };
+  let autoAllow = true;
+  const asks: string[] = [];
+  const runs = new RunConsents((ref, event) => {
+    if (event.kind === "permission_request") {
+      asks.push(event.requestId);
+      if (autoAllow) queueMicrotask(() => runs.decide(ref.thread, event.requestId, "allow_now"));
+    }
+  });
+  runs.open(run);
+  bindControl({ runs });
+  cleanup.push(async () => {
+    runs.close(run, "stopped");
+    bindControl({ runs: undefined });
+  });
   // biome-ignore lint/suspicious/noExplicitAny: the SDK reader is the shared native-receipt fixture.
   const deps = { workspace: work, sdk, podsRoot } as any;
   const read = (key: string, input: unknown = {}, readScope = scope) =>
@@ -291,11 +301,24 @@ async function setup(sdk: (args: readonly string[]) => Promise<string> = sdkSess
         id,
         kind: "workflow",
         key,
-        destination: key.startsWith("settings.") ? {kind:"host"} : { kind: "document", ref: target },
-        input: (key === "family.apply" || key === "families.apply") && input && typeof input === "object" && !("rows" in input) ? {rows:input} : input,
+        destination: key.startsWith("settings.")
+          ? { kind: "host" }
+          : { kind: "document", ref: target },
+        input:
+          (key === "family.apply" || key === "families.apply") &&
+          input &&
+          typeof input === "object" &&
+          !("rows" in input)
+            ? { rows: input }
+            : input,
         bases: where ? { work: { key: where, revision } } : {},
       },
-      actor === "agent" ? {caller:{kind:"pea",context:"domain-test",thread:run.thread,run,root:run},basis:null} : crossingOf(actor),
+      actor === "agent"
+        ? {
+            caller: { kind: "pea", context: "domain-test", thread: run.thread, run, root: run },
+            basis: null,
+          }
+        : crossingOf(actor),
       owner,
       captures,
       bridge,
@@ -310,7 +333,13 @@ async function setup(sdk: (args: readonly string[]) => Promise<string> = sdkSess
     return { ...member(name), sha256: createHash("sha256").update(content).digest("hex") };
   };
   return {
-    approval:{hold:()=>{autoAllow=false;},allow:()=>runs.decide(run.thread,asks.at(-1)!,"allow_now"),asks},
+    approval: {
+      hold: () => {
+        autoAllow = false;
+      },
+      allow: () => runs.decide(run.thread, asks.at(-1)!, "allow_now"),
+      asks,
+    },
     podsRoot,
     work,
     file,
@@ -390,11 +419,21 @@ const resultOf = <A>(row: unknown) => {
 };
 
 test("human and Pea share plan and Apply; Pea receives root-run consent", async () => {
-  const {work,admit,sent}=await setup();
-  const revision=await authorFamilies(work);
-  const plan=resultOf<Plan>(await admit("families.plan",{source},revision,"agent-plan","agent"));
-  resultOf(await admit("families.apply",{rows:{plan:plan.id,expectedPlanHashes:{"1":"h1"}}},revision,"agent-apply","agent"));
-  expect(sent.filter((s)=>s.key==="families.apply")).toHaveLength(1);
+  const { work, admit, sent } = await setup();
+  const revision = await authorFamilies(work);
+  const plan = resultOf<Plan>(
+    await admit("families.plan", { source }, revision, "agent-plan", "agent"),
+  );
+  resultOf(
+    await admit(
+      "families.apply",
+      { rows: { plan: plan.id, expectedPlanHashes: { "1": "h1" } } },
+      revision,
+      "agent-apply",
+      "agent",
+    ),
+  );
+  expect(sent.filter((s) => s.key === "families.apply")).toHaveLength(1);
 });
 
 test("apply sends the bytes its plan sealed, not the member as saved since", async () => {
@@ -413,9 +452,19 @@ test("apply refuses a plan it cannot name, another document's, or a hash the pla
   const revision = await authorFamilies(work);
   const plan = resultOf<Plan>(await admit("families.plan", { source }, revision));
   const refusals = [
-    await admit("families.apply", { plan: "nope", expectedPlanHashes: { "1": "h1" } }, revision, "a1"),
+    await admit(
+      "families.apply",
+      { plan: "nope", expectedPlanHashes: { "1": "h1" } },
+      revision,
+      "a1",
+    ),
     await admit("family.apply", { plan: plan.id, expectedPlanHashes: { "1": "h1" } }, 0, "a2"),
-    await admit("families.apply", { plan: plan.id, expectedPlanHashes: { "1": "h9" } }, revision, "a3"),
+    await admit(
+      "families.apply",
+      { plan: plan.id, expectedPlanHashes: { "1": "h9" } },
+      revision,
+      "a3",
+    ),
   ];
   expect(refusals.map((row) => [row.state, (row as { error?: string }).error])).toEqual([
     ["failed", expect.stringMatching(/succeeded families.plan/)],
@@ -871,7 +920,10 @@ test("a Pea-proposed profile previews labelled and never arms apply; the person'
   );
   expect(landed).toMatchObject({ ok: true });
   // The preview evaluates the proposal, says so, and names it as its basis.
-  const preview = (await read("parameter-links.read", { evaluate: true, subject: "suggestion" })) as {
+  const preview = (await read("parameter-links.read", {
+    evaluate: true,
+    subject: "suggestion",
+  })) as {
     id: string;
   };
   const reading = parameterLinksReadingSchema.parse(
@@ -1165,14 +1217,14 @@ test("door 2: anonymous /actions is context.missing, a body actor is a strict pa
     ).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, {} as RevitBridge["Service"]))),
     { disableLogger: true },
   );
-  // The document is Pea's acquisition, so the grant passes and only eligibility can refuse.
+  // Acquisition is context, not run consent. A forged actor header cannot mint a causal run.
   bindControl({ acquired: () => "acq-1" });
   const admission = {
     id: "door-2",
     kind: "workflow",
     key: "family.build",
     destination: { kind: "document", ref: { session: "S1", openId: "A" } },
-    input: {},
+    input: { source: { pod: "sample", path: "settings/family.json", sha256: "c".repeat(64) } },
     bases: {},
   };
   const post = (as: Caller, body: unknown, headers: Record<string, string> = {}) =>
@@ -1238,66 +1290,180 @@ test("door 9: route Work writes take their author from the caller; the /pe/agent
   }
 });
 
-test("one direct Apply plans, seals hashes, applies and reads back under one journal command",async()=>{
-  const env=await setup();const revision=await authorFamilies(env.work);
-  resultOf(await env.admit("families.apply",{rows:{source,include:["Box"]}},revision,"direct"));
-  const writes=env.sent.filter((row)=>row.key==="families.apply");
+test("one direct Apply plans, seals hashes, applies and reads back under one journal command", async () => {
+  const env = await setup();
+  const revision = await authorFamilies(env.work);
+  resultOf(
+    await env.admit("families.apply", { rows: { source, include: ["Box"] } }, revision, "direct"),
+  );
+  const writes = env.sent.filter((row) => row.key === "families.apply");
   expect(writes).toHaveLength(1);
-  expect(writes[0]?.input.expectedPlanHashes).toEqual({"1":"h1"});
-  expect(env.sent.filter((row)=>row.key==="families.plan")).toHaveLength(1);
+  expect(writes[0]?.input.expectedPlanHashes).toEqual({ "1": "h1" });
+  expect(env.sent.filter((row) => row.key === "families.plan")).toHaveLength(1);
   expect(await env.owner.list()).toHaveLength(1);
 });
 
-test("a submitted source freezes before countdown; changed source never becomes a later write",async()=>{
-  const env=await setup();const revision=await authorFamilies(env.work);
+test("a submitted source freezes before countdown; changed source never becomes a later write", async () => {
+  const env = await setup();
+  const revision = await authorFamilies(env.work);
   env.approval.hold();
-  const completion=env.admit("families.apply",{rows:{source,include:"all"}},revision,"held-source","agent");
-  await vi.waitFor(async()=>expect((await env.owner.list(undefined,"held-source"))[0]?.state).toBe("waiting"));
-  const held=(await env.owner.list(undefined,"held-source"))[0]!;
-  expect(held).toMatchObject({request:{rows:{source}},preparation:{state:"unprepared"}});
-  const updated=await env.file("p.json",'{"patch":{"families":{"changed":1}}}');
+  const completion = env.admit(
+    "families.apply",
+    { rows: { source, include: "all" } },
+    revision,
+    "held-source",
+    "agent",
+  );
+  await vi.waitFor(async () =>
+    expect((await env.owner.list(undefined, "held-source"))[0]?.state).toBe("waiting"),
+  );
+  const held = (await env.owner.list(undefined, "held-source"))[0]!;
+  expect(held).toMatchObject({
+    request: { rows: { source } },
+    preparation: { state: "unprepared" },
+  });
+  const updated = await env.file("p.json", '{"patch":{"families":{"changed":1}}}');
   expect(env.approval.allow()).toBe(true);
-  const refused=await completion;
+  const refused = await completion;
   expect(refused.state).toBe("failed");
-  expect(env.sent.filter((row)=>row.key==="families.apply")).toHaveLength(0);
-  resultOf(await env.admit("families.apply",{rows:{source:updated,include:"all"}},revision,"new-source","agent"));
+  expect(env.sent.filter((row) => row.key === "families.apply")).toHaveLength(0);
+  resultOf(
+    await env.admit(
+      "families.apply",
+      { rows: { source: updated, include: "all" } },
+      revision,
+      "new-source",
+      "agent",
+    ),
+  );
   expect(env.approval.asks).toHaveLength(1);
 });
 
-test("edits remain writable during countdown and invalidate the submitted Work revision",async()=>{
-  const env=await setup();const revision=await authorFamilies(env.work);env.approval.hold();
-  const completion=env.admit("families.apply",{rows:{source,include:"all"}},revision,"held-work","agent");
-  await vi.waitFor(async()=>expect((await env.owner.list(undefined,"held-work"))[0]?.state).toBe("waiting"));
-  expect(await env.work.apply(scope,"families","human",[{path:["excluded","Pipe"],value:{by:"pea"}}],revision)).toMatchObject({ok:true});
+test("edits remain writable during countdown and invalidate the submitted Work revision", async () => {
+  const env = await setup();
+  const revision = await authorFamilies(env.work);
+  env.approval.hold();
+  const completion = env.admit(
+    "families.apply",
+    { rows: { source, include: "all" } },
+    revision,
+    "held-work",
+    "agent",
+  );
+  await vi.waitFor(async () =>
+    expect((await env.owner.list(undefined, "held-work"))[0]?.state).toBe("waiting"),
+  );
+  expect(
+    await env.work.apply(
+      scope,
+      "families",
+      "human",
+      [{ path: ["excluded", "Pipe"], value: { by: "pea" } }],
+      revision,
+    ),
+  ).toMatchObject({ ok: true });
   env.approval.allow();
-  expect(await completion).toMatchObject({state:"failed",notDispatched:true});
-  expect(env.sent.filter((row)=>row.key==="families.apply")).toHaveLength(0);
+  expect(await completion).toMatchObject({ state: "failed", notDispatched: true });
+  expect(env.sent.filter((row) => row.key === "families.apply")).toHaveLength(0);
 });
 
-test("direct per-family sources stay one command with exact native hashes for each source",async()=>{
-  const env=await setup();const revision=await authorFamilies(env.work);
-  resultOf(await env.admit("families.apply",{rows:{sources:[{source,familyNames:["Box"]},{source,familyNames:["Pipe"]}],include:"all"}},revision,"batch"));
-  expect(env.sent.filter((row)=>row.key==="families.apply").map((row)=>row.input.expectedPlanHashes)).toEqual([{"1":"h1"},{"2":"h2"}]);
+test("direct per-family sources stay one command with exact native hashes for each source", async () => {
+  const env = await setup();
+  const revision = await authorFamilies(env.work);
+  resultOf(
+    await env.admit(
+      "families.apply",
+      {
+        rows: {
+          sources: [
+            { source, familyNames: ["Box"] },
+            { source, familyNames: ["Pipe"] },
+          ],
+          include: "all",
+        },
+      },
+      revision,
+      "batch",
+    ),
+  );
+  expect(
+    env.sent
+      .filter((row) => row.key === "families.apply")
+      .map((row) => row.input.expectedPlanHashes),
+  ).toEqual([{ "1": "h1" }, { "2": "h2" }]);
   expect(await env.owner.list()).toHaveLength(1);
 });
 
-test("member baseline adoption reads host bytes and requires explicit replacement of pending edits",async()=>{
-  const env=await setup();
-  const where:WorkKey={binding:"workspace",route:"pods",target:null,work:memberWork(source)};
-  resultOf(await env.admit("settings.observe",{member:member("p.json")},0,"member-open","human",where));
-  const baseline=await env.work.read(where,"pods");
-  expect(baseline?.doc).toMatchObject({basis:{sha256:source.sha256,rawContent:profileBytes}});
-  const changed=await env.work.apply(where,"pods","agent",[{path:["fields","/label","edit"],value:{value:"shared"}}],baseline!.revision);
+test("member baseline adoption reads host bytes and requires explicit replacement of pending edits", async () => {
+  const env = await setup();
+  const where: WorkKey = {
+    binding: "workspace",
+    route: "pods",
+    target: null,
+    work: memberWork(source),
+  };
+  resultOf(
+    await env.admit(
+      "settings.observe",
+      { member: member("p.json") },
+      0,
+      "member-open",
+      "human",
+      where,
+    ),
+  );
+  const baseline = await env.work.read(where, "pods");
+  expect(baseline?.doc).toMatchObject({
+    basis: { sha256: source.sha256, rawContent: profileBytes },
+  });
+  const changed = await env.work.apply(
+    where,
+    "pods",
+    "agent",
+    [{ path: ["fields", "/label", "edit"], value: { value: "shared" } }],
+    baseline!.revision,
+  );
   expect(changed.ok).toBe(true);
-  expect(await env.admit("settings.observe",{member:member("p.json")},changed.revision!,"member-refuse","human",where)).toMatchObject({state:"failed",notDispatched:true});
-  resultOf(await env.admit("settings.observe",{member:member("p.json"),sha256:source.sha256,replaceEdits:true},changed.revision!,"member-replace","human",where));
-  expect((await env.work.read(where,"pods"))?.doc).toMatchObject({fields:{}});
+  expect(
+    await env.admit(
+      "settings.observe",
+      { member: member("p.json") },
+      changed.revision!,
+      "member-refuse",
+      "human",
+      where,
+    ),
+  ).toMatchObject({ state: "failed", notDispatched: true });
+  resultOf(
+    await env.admit(
+      "settings.observe",
+      { member: member("p.json"), sha256: source.sha256, replaceEdits: true },
+      changed.revision!,
+      "member-replace",
+      "human",
+      where,
+    ),
+  );
+  expect((await env.work.read(where, "pods"))?.doc).toMatchObject({ fields: {} });
 });
 
-test("Family source observation is trusted host evidence, and a forged capture id refuses",async()=>{
-  const env=await setup();const where:WorkKey={...scope,route:"family"};
-  expect(await env.admit("family.observe",{readingId:"not-a-capture"},0,"observe-refuse","human",where)).toMatchObject({state:"failed",notDispatched:true});
-  resultOf(await env.admit("family.observe",{source},0,"observe-source","human",where));
-  expect((await env.work.read(where,"family"))?.doc).toMatchObject({reading:profileBytes,takenAt:null});
+test("Family source observation is trusted host evidence, and a forged capture id refuses", async () => {
+  const env = await setup();
+  const where: WorkKey = { ...scope, route: "family" };
+  expect(
+    await env.admit(
+      "family.observe",
+      { readingId: "not-a-capture" },
+      0,
+      "observe-refuse",
+      "human",
+      where,
+    ),
+  ).toMatchObject({ state: "failed", notDispatched: true });
+  resultOf(await env.admit("family.observe", { source }, 0, "observe-source", "human", where));
+  expect((await env.work.read(where, "family"))?.doc).toMatchObject({
+    reading: profileBytes,
+    takenAt: null,
+  });
   expect(env.sent).toHaveLength(0);
 });

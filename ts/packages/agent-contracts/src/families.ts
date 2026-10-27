@@ -380,7 +380,8 @@ export const familiesRouteState = {
     "families",
     "propose",
   ],
-  description: "Shared Family Foundry Work. Set scope.edit to {value:{categoryNames,familyNames,placementScope}}. Set cells.<key>.edit for a canonical [familyName,typeName,parameter] identity from scopeTypes, or patch.edit for exact native patch source bytes. Either author may replace or clear current edits and exclusions at the expected Work revision. Optional suggestion slots are review content. Apply plans/checks/writes/readbacks the submitted edits; native patch and per-type edits are mutually exclusive.",
+  description:
+    "Shared Family Foundry Work. Set scope.edit to {value:{categoryNames,familyNames,placementScope}}. Set cells.<key>.edit for a canonical [familyName,typeName,parameter] identity from scopeTypes, or patch.edit for exact native patch source bytes. Either author may replace or clear current edits and exclusions at the expected Work revision. Optional suggestion slots are review content. Apply plans/checks/writes/readbacks the submitted edits; native patch and per-type edits are mutually exclusive.",
   schema: familiesDocumentSchema,
 
   // Planning and applying are the `families.plan` and `families.apply` workflows. Neither is

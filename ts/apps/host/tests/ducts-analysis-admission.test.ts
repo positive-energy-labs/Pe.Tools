@@ -74,8 +74,9 @@ test("the analysis read adapter preserves Pea admission and never borrows a huma
       },
       () => call("ducts.snapshot", {}, target),
     );
-    expect(pea.status).toBe(403);
-    expect(nativeReads).toBe(0);
+    expect(pea.status, await pea.clone().text()).toBe(200);
+    expect(pea.headers.get("x-pe-native-request-id")).toMatch(/^[0-9a-f-]{36}$/);
+    expect(nativeReads).toBe(1);
     const human = await withInvocationContext(
       {
         hostBaseUrl: server.base,
@@ -85,6 +86,10 @@ test("the analysis read adapter preserves Pea admission and never borrows a huma
     );
     expect(human.status, await human.clone().text()).toBe(200);
     expect(human.headers.get("x-pe-native-request-id")).toMatch(/^[0-9a-f-]{36}$/);
+    // Each caller is admitted separately; both receive the same fresh native observation.
+    expect(human.headers.get("x-pe-native-request-id")).toBe(
+      pea.headers.get("x-pe-native-request-id"),
+    );
     expect(nativeReads).toBe(1);
   } finally {
     await server.close();

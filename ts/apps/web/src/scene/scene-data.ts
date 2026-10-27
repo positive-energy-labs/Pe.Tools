@@ -36,7 +36,7 @@ const identity = (source: SceneSource) =>
 
 /** Freshness belongs to the exact source identity; there is no elapsed-time substitute for a revision.
  * Subscriptions lease immutable data. The last subscriber owns cancellation, including StrictMode reconnects. */
-export class SceneData {
+class SceneData {
   private listeners = new Set<() => void>();
   private current: SourceSnapshot = PENDING;
   private owned: { abort: AbortController; release: () => void } | null = null;

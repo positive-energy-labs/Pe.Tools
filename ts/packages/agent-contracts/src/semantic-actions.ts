@@ -188,6 +188,18 @@ export const semanticActions = {
   ...scheduleActions,
 } satisfies Record<string, ActionDefinition>;
 export type SemanticActionKey = keyof typeof semanticActions;
+/** Native implementation details use the same public semantic workflow as browser presses. */
+export function semanticWorkflowForOperation(key: string): SemanticActionKey | undefined {
+  if (Object.hasOwn(semanticActions, key)) return key as SemanticActionKey;
+  const native: Record<string, SemanticActionKey> = {
+    "ducts.apply": "ducts.apply-losses",
+    "ducts.assign-fan": "ducts.apply-assign-fan",
+    "ducts.heal": "ducts.apply-heal",
+    "revit.apply.parameter-links": "parameter-links.apply",
+    "schedule.cells.apply": "schedule.grid.push",
+  };
+  return native[key];
+}
 export type TakeoffActionKey = keyof typeof definitions;
 export const actionBasesSchema = z
   .object({
@@ -245,8 +257,8 @@ export const actionControls = {
 export type ActionControlKey = keyof typeof actionControls;
 
 /**
- * What an admitted takeoffs action froze: the person's staged edits (per room) and staged flag
- * verdicts. Pea's proposals are never frozen here, so they can never reach a sync.
+ * Submitted Takeoffs edits and verdicts from either author. Optional suggestions are review
+ * content and do not enter execution until explicitly taken into the shared edit.
  */
 export const preparedTakeoffSchema = z.strictObject({
   process: nativeProcessSchema,

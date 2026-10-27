@@ -123,10 +123,7 @@ test("staged cells over the generated cap refuse before dispatch and keep every 
     {
       path: ["cells"],
       value: Object.fromEntries(
-        Array.from({ length: over }, (_, index) => [
-          `${index}::2`,
-          { edit: { value: "150 VA" } },
-        ]),
+        Array.from({ length: over }, (_, index) => [`${index}::2`, { edit: { value: "150 VA" } }]),
       ),
     },
   ]);
@@ -148,9 +145,7 @@ test("partial native outcome clears only a completely acknowledged cell and keep
   f.setDetail(detail);
   const reading = await f.read();
   await f.bind(reading);
-  await f.patch([
-    { path: ["cells", "2::2"], value: { edit: { value: "200 VA" } } },
-  ]);
+  await f.patch([{ path: ["cells", "2::2"], value: { edit: { value: "200 VA" } } }]);
   f.setResponse(
     cellsApplied([
       [1, 2, true],
@@ -358,9 +353,7 @@ test("F-H5-1: a dead-lifetime push names its exit; a re-read rebinds and marks a
   f.setDetail(withMark());
   const old = await f.read();
   await f.bind(old);
-  await f.patch([
-    { path: ["cells", "1::1"], value: { edit: { value: "P-9" } } },
-  ]);
+  await f.patch([{ path: ["cells", "1::1"], value: { edit: { value: "P-9" } } }]);
   f.reopen();
   const live = { session: "B", openId: "reopened-B" };
   const at = async () => ({
@@ -408,9 +401,7 @@ test("ask A: a push refused on moved evidence rebinds on its readback; the refus
   f.setDetail(withMark());
   const old = await f.read();
   await f.bind(old);
-  await f.patch([
-    { path: ["cells", "1::1"], value: { edit: { value: "P-9" } } },
-  ]);
+  await f.patch([{ path: ["cells", "1::1"], value: { edit: { value: "P-9" } } }]);
   // Revit moves Load (1::2) after the review; the domain refuses that cell on its evidence.
   f.setDetail(withMark("120"));
   // Edits follow the Work's cell order: 1::2 (staged by setup), then 1::1.
@@ -437,9 +428,7 @@ test("ask A: a push refused on moved evidence rebinds on its readback; the refus
   expect(doc.cells["1::1"]?.edit).toBeUndefined();
   expect(doc.cells["1::2"].edit).toMatchObject({ value: "150 VA" });
   // Accept: restage B over C. The key leaves `basis.stale`; the push sends C as the evidence.
-  await f.patch([
-    { path: ["cells", "1::2", "edit"], value: { value: "150 VA" } },
-  ]);
+  await f.patch([{ path: ["cells", "1::2", "edit"], value: { value: "150 VA" } }]);
   f.setResponse(cellsApplied([[1, 2, true]]));
   expect(await f.submit()).toMatchObject({
     state: "succeeded",

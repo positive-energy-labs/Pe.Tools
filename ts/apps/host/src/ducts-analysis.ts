@@ -588,7 +588,7 @@ const unreadableWorkFinding = (dropped: string[]): DuctFinding => ({
   id: "work:unreadable",
   kind: "unreadable-work",
   elementIds: [],
-  note: `Saved Work for this document has cells this version cannot read: ${dropped.join(", ")}. The rest of the Work still holds. Proposing those values again keeps it; Start fresh, a button only the person can press, sets the whole Work aside, proposals and staged values included.`,
+  note: `Saved Work for this document has cells this version cannot read: ${dropped.join(", ")}. The rest of the Work still holds. Edit those values again to keep them, or use Start fresh to preserve the original aside and start empty Work.`,
   assumed: "Priced from Revit facts alone; the unreadable saved values were not applied.",
   clearer: "person",
 });

@@ -20,6 +20,8 @@ Each turn resumes the saved ACP conversation in a fresh child process with one i
 
 Effects come from registered semantic definitions or generated native metadata. Cache invalidation is not authority. Scripts include sibling documents in their footprint. Page and external-device trust adapters remain explicit and separate from Pea's run consent.
 
+Bootstrap alignment remains a human administration command because it changes the machine's add-in installation. A read-only SDK verification freezes its exact installation subtree; the SDK owns filenames, manifests and pruning. Directory effects also exclude concurrent file writes below that root. Account sign-in and third-party trust administration retain their explicit human boundary.
+
 Semantic Apply owns planning, validation, apply, readback and conditional retirement. Preview remains optional. Turn completion notices derive completed and still-running work plus exact Work links from durable owners.
 
 ## Consequences

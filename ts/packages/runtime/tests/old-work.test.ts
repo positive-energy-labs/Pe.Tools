@@ -169,82 +169,88 @@ test("/family: shared suggestions retain either author; legacy slots require exp
   }
 });
 
-test.each(["human", "agent"] as const)("/families: %s starts fresh without changing old bytes or clobbering an aside", async (actor) => {
-  const scope: WorkKey = { binding: "address" as const, route: "families", target };
-  const key = (route: string) => `${workKey(scope)}\0${route}`;
-  const state = new Map<string, unknown>();
-  const module = new RouteWorkspace({
-    registrations: [
-      { spec: familiesRouteState as unknown as RouteStateSpec<z.ZodType>, handlers: {} },
-    ],
-    store: {
-      getState: async ({ targetKey, route }) =>
-        structuredClone(state.get(`${targetKey}\0${route}`)),
-      setState: async ({ targetKey, route, value }) =>
-        void state.set(`${targetKey}\0${route}`, structuredClone(value)),
-    },
-  });
-  const bytes = JSON.stringify(oldFamilies);
-  state.set(key("families"), JSON.parse(bytes));
+test.each(["human", "agent"] as const)(
+  "/families: %s starts fresh without changing old bytes or clobbering an aside",
+  async (actor) => {
+    const scope: WorkKey = { binding: "address" as const, route: "families", target };
+    const key = (route: string) => `${workKey(scope)}\0${route}`;
+    const state = new Map<string, unknown>();
+    const module = new RouteWorkspace({
+      registrations: [
+        { spec: familiesRouteState as unknown as RouteStateSpec<z.ZodType>, handlers: {} },
+      ],
+      store: {
+        getState: async ({ targetKey, route }) =>
+          structuredClone(state.get(`${targetKey}\0${route}`)),
+        setState: async ({ targetKey, route, value }) =>
+          void state.set(`${targetKey}\0${route}`, structuredClone(value)),
+      },
+    });
+    const bytes = JSON.stringify(oldFamilies);
+    state.set(key("families"), JSON.parse(bytes));
 
-  expect(await module.startFresh(scope, "families", actor)).toMatchObject({
-    ok: true,
-    revision: 0,
-  });
-  expect(JSON.stringify(state.get(key(`families${START_FRESH_ASIDE}1`)))).toBe(bytes);
-  expect((await module.read(scope, "families"))!.revision).toBe(0);
-  // Readable Work has nothing to set aside.
-  expect(await module.startFresh(scope, "families", actor)).toMatchObject({ ok: false });
+    expect(await module.startFresh(scope, "families", actor)).toMatchObject({
+      ok: true,
+      revision: 0,
+    });
+    expect(JSON.stringify(state.get(key(`families${START_FRESH_ASIDE}1`)))).toBe(bytes);
+    expect((await module.read(scope, "families"))!.revision).toBe(0);
+    // Readable Work has nothing to set aside.
+    expect(await module.startFresh(scope, "families", actor)).toMatchObject({ ok: false });
 
-  // Unreadable again: the second aside takes the next slot, the first keeps its bytes.
-  const second = JSON.stringify({ ...oldFamilies, revision: 8 });
-  state.set(key("families"), JSON.parse(second));
-  expect(await module.startFresh(scope, "families", actor)).toMatchObject({ ok: true });
-  expect(JSON.stringify(state.get(key(`families${START_FRESH_ASIDE}1`)))).toBe(bytes);
-  expect(JSON.stringify(state.get(key(`families${START_FRESH_ASIDE}2`)))).toBe(second);
-});
+    // Unreadable again: the second aside takes the next slot, the first keeps its bytes.
+    const second = JSON.stringify({ ...oldFamilies, revision: 8 });
+    state.set(key("families"), JSON.parse(second));
+    expect(await module.startFresh(scope, "families", actor)).toMatchObject({ ok: true });
+    expect(JSON.stringify(state.get(key(`families${START_FRESH_ASIDE}1`)))).toBe(bytes);
+    expect(JSON.stringify(state.get(key(`families${START_FRESH_ASIDE}2`)))).toBe(second);
+  },
+);
 
-test.each(["human", "agent"] as const)("/families: %s salvages the same old data before and after recovery", async (actor) => {
-  const scope: WorkKey = { binding: "address" as const, route: "families", target };
-  const key = (route: string) => `${workKey(scope)}\0${route}`;
-  const state = new Map<string, unknown>();
-  const module = new RouteWorkspace({
-    registrations: [
-      { spec: familiesRouteState as unknown as RouteStateSpec<z.ZodType>, handlers: {} },
-    ],
-    store: {
-      getState: async ({ targetKey, route }) =>
-        structuredClone(state.get(`${targetKey}\0${route}`)),
-      setState: async ({ targetKey, route, value }) =>
-        void state.set(`${targetKey}\0${route}`, structuredClone(value)),
-    },
-  });
-  expect(await module.salvage(scope, "families", actor)).toBeNull();
-  const bytes = JSON.stringify({
-    ...oldFamilies,
-    doc: { ...oldFamilies.doc, excludedIds: [3102, 7] },
-  });
-  state.set(key("families"), JSON.parse(bytes));
-  expect(await module.salvage(scope, "families", actor)).toEqual({
-    from: "unreadable",
-    value: { familyNames: [], familyIds: [3102, 7] },
-  });
-  expect(await module.startFresh(scope, "families", actor)).toMatchObject({ ok: true });
-  expect(await module.salvage(scope, "families", actor)).toEqual({
-    from: "aside:1",
-    value: { familyNames: [], familyIds: [3102, 7] },
-  });
-  // The id-keyed record Mission 11 wrote is old Work too; the newest aside answers.
-  state.set(key("families"), {
-    version: 1,
-    revision: 2,
-    doc: { excluded: { "41": { by: "person" } } },
-  });
-  expect(await module.startFresh(scope, "families", actor)).toMatchObject({ ok: true });
-  expect(await module.salvage(scope, "families", actor)).toEqual({
-    from: "aside:2",
-    value: { familyNames: [], familyIds: [41] },
-  });
-  // Read-only: nothing moved.
-  expect(JSON.stringify(state.get(key(`families${START_FRESH_ASIDE}1`)))).toBe(bytes);
-});
+test.each(["human", "agent"] as const)(
+  "/families: %s salvages the same old data before and after recovery",
+  async (actor) => {
+    const scope: WorkKey = { binding: "address" as const, route: "families", target };
+    const key = (route: string) => `${workKey(scope)}\0${route}`;
+    const state = new Map<string, unknown>();
+    const module = new RouteWorkspace({
+      registrations: [
+        { spec: familiesRouteState as unknown as RouteStateSpec<z.ZodType>, handlers: {} },
+      ],
+      store: {
+        getState: async ({ targetKey, route }) =>
+          structuredClone(state.get(`${targetKey}\0${route}`)),
+        setState: async ({ targetKey, route, value }) =>
+          void state.set(`${targetKey}\0${route}`, structuredClone(value)),
+      },
+    });
+    expect(await module.salvage(scope, "families", actor)).toBeNull();
+    const bytes = JSON.stringify({
+      ...oldFamilies,
+      doc: { ...oldFamilies.doc, excludedIds: [3102, 7] },
+    });
+    state.set(key("families"), JSON.parse(bytes));
+    expect(await module.salvage(scope, "families", actor)).toEqual({
+      from: "unreadable",
+      value: { familyNames: [], familyIds: [3102, 7] },
+    });
+    expect(await module.startFresh(scope, "families", actor)).toMatchObject({ ok: true });
+    expect(await module.salvage(scope, "families", actor)).toEqual({
+      from: "aside:1",
+      value: { familyNames: [], familyIds: [3102, 7] },
+    });
+    // The id-keyed record Mission 11 wrote is old Work too; the newest aside answers.
+    state.set(key("families"), {
+      version: 1,
+      revision: 2,
+      doc: { excluded: { "41": { by: "person" } } },
+    });
+    expect(await module.startFresh(scope, "families", actor)).toMatchObject({ ok: true });
+    expect(await module.salvage(scope, "families", actor)).toEqual({
+      from: "aside:2",
+      value: { familyNames: [], familyIds: [41] },
+    });
+    // Read-only: nothing moved.
+    expect(JSON.stringify(state.get(key(`families${START_FRESH_ASIDE}1`)))).toBe(bytes);
+  },
+);

@@ -2,8 +2,7 @@ import { paintOf, type Look } from "./grounds";
 import type { Paint, PaintOf, SceneMeshes } from "./types";
 
 /** Only these values can change prepared geometry or its render-pass partition. */
-export type SceneStructure = Pick<Paint, "tier" | "surface">;
-export type SceneAppearance = Omit<Paint, keyof SceneStructure>;
+type SceneStructure = Pick<Paint, "tier" | "surface">;
 export type ScenePlan = {
   meshes: SceneMeshes;
   roles: readonly SceneStructure[];

@@ -412,26 +412,45 @@ async function executeTool(
   gate: (row: Capability) => string | null,
   replayOperations = false,
 ): Promise<Record<string, unknown>> {
-  const scope = await scopeOf();
-  const targets = scope ? headRequests(scope) : [];
-  const defaultTarget = soleTarget(targets);
-  const revision = scope?.revision ?? 0;
   const contribution = parseContributionKey(input.key);
-  if (/^(pod|script|page|skill|member):/.test(input.key) && !contribution)
-    return refuse(
-      input.key,
-      defaultTarget,
-      revision,
-      "Legacy or malformed contribution key; obtain a canonical key with pe_find.",
-    );
-  if (contribution?.kind === "member" && replayOperations)
-    return refuse(
-      input.key,
-      defaultTarget,
-      revision,
-      "Members are read/mention-only and cannot execute.",
-    );
-  // A known operation attempt replays before catalog or target discovery.
+  // Receipt recovery precedes every live default, Work, catalog and source lookup. A retry
+  // belongs to the original admission, even when its conversation or document has closed.
+  if (replayOperations && input.key.startsWith("workflow:")) {
+    const payload: Record<string, unknown> = coerceJsonObject(input.input) ?? {};
+    const { bases, actionId, ...intent } = payload;
+    const id = typeof actionId === "string" ? actionId : requestIdentity(context);
+    const original = await readAction(id, base()).catch(() => undefined);
+    if (original) {
+      const result = (await runCapability(
+        input.key.slice(9),
+        intent,
+        {
+          hostBaseUrl: base(),
+          ...transportScope(input.target),
+          actionId: id,
+          bases: bases === undefined ? original.bases : actionBasesSchema.parse(bases),
+          receipt: true,
+          timeoutMs: input.timeoutSeconds * 1000,
+        },
+        {
+          kind: "workflow",
+          needs: "nothing",
+          mutates: true,
+          destination: original.destination,
+          prior: original,
+        },
+      )) as ActionReceipt | DetachedAction;
+      return {
+        key: input.key,
+        kind: "op",
+        recovered: true,
+        ok: result.state === "succeeded" || result.state === "detached",
+        target: receiptTarget(original),
+        result,
+      };
+    }
+  }
+  // A known operation attempt also replays before catalog or target discovery.
   if (
     replayOperations &&
     (input.key.startsWith("op:") || contribution?.kind === "script") &&
@@ -470,17 +489,40 @@ async function executeTool(
           ...(original.request.sourceBundle ? { sourceBundle: original.request.sourceBundle } : {}),
         };
       }
-      const requested = input.target;
       const caller = new HostRpcCaller({
         hostBaseUrl: base(),
         requestId: id,
-        ...transportScope(requested),
+        ...transportScope(input.target),
         timeoutMs: input.timeoutSeconds * 1000,
       });
       const result = await caller.callOperation(key, payload);
-      return { ok: result.ok, key: input.key, target: defaultTarget, revision, result };
+      return {
+        ok: result.ok,
+        key: input.key,
+        target: receiptTarget(original),
+        recovered: true,
+        result,
+      };
     }
   }
+  const scope = await scopeOf();
+  const targets = scope ? headRequests(scope) : [];
+  const defaultTarget = soleTarget(targets);
+  const revision = scope?.revision ?? 0;
+  if (/^(pod|script|page|skill|member):/.test(input.key) && !contribution)
+    return refuse(
+      input.key,
+      defaultTarget,
+      revision,
+      "Legacy or malformed contribution key; obtain a canonical key with pe_find.",
+    );
+  if (contribution?.kind === "member" && replayOperations)
+    return refuse(
+      input.key,
+      defaultTarget,
+      revision,
+      "Members are read/mention-only and cannot execute.",
+    );
   const catalog = await readCatalog(
     defaultTarget,
     undefined,
@@ -578,6 +620,18 @@ async function executeTool(
       return { ...refuse(row.key, defaultTarget, revision, JSON.stringify({ refusal })), refusal };
     return refuse(row.key, defaultTarget, revision, message(error));
   }
+}
+
+function receiptTarget(row: ActionReceipt): ResolvedTarget {
+  return {
+    session:
+      row.destination.kind === "document"
+        ? row.destination.ref.session
+        : row.destination.kind === "session"
+          ? row.destination.session
+          : null,
+    document: null,
+  };
 }
 
 type Outcome = {

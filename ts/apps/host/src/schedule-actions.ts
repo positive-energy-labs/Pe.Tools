@@ -95,21 +95,34 @@ export async function readSchedule(
   if (key === "schedule.grid.work")
     return captures.scheduleWork(scheduleReads[key].input.parse(raw.input).workspaceId);
   if (key === "schedule.grid.bind") {
-    const input=scheduleReads[key].input.parse(raw.input);
-    const reading=await captures.schedule(input.readingId);
-    const work=deps.workspace ?? actionWorkspace();
+    const input = scheduleReads[key].input.parse(raw.input);
+    const reading = await captures.schedule(input.readingId);
+    const work = deps.workspace ?? actionWorkspace();
     if (!work) throw refused("Schedule Work is unavailable");
-    const scope={binding:"workspace" as const,route:"schedules",target:null,work:reading.workspaceId};
-    const view=await work.view(scope,"schedules");
-    if (!view || view.revision !== input.expectedRevision) throw refused("Schedule Work changed; read it and bind again");
-    const document=scheduleGridDocumentSchema.parse(view.doc);
-    const previous=document.basis ? await captures.schedule(document.basis.captureId).catch(()=>null) : null;
-    const patches=document.basis ? rebindScheduleWork(document,previous,reading) : [{path:["basis"],value:{captureId:reading.id}},{path:["takenAt"],value:reading.capturedAt}];
+    const scope = {
+      binding: "workspace" as const,
+      route: "schedules",
+      target: null,
+      work: reading.workspaceId,
+    };
+    const view = await work.view(scope, "schedules");
+    if (!view || view.revision !== input.expectedRevision)
+      throw refused("Schedule Work changed; read it and bind again");
+    const document = scheduleGridDocumentSchema.parse(view.doc);
+    const previous = document.basis
+      ? await captures.schedule(document.basis.captureId).catch(() => null)
+      : null;
+    const patches = document.basis
+      ? rebindScheduleWork(document, previous, reading)
+      : [
+          { path: ["basis"], value: { captureId: reading.id } },
+          { path: ["takenAt"], value: reading.capturedAt },
+        ];
     if (patches.length) {
-      const result=await work.publish(scope,"schedules",patches,input.expectedRevision);
+      const result = await work.publish(scope, "schedules", patches, input.expectedRevision);
       if (!result.ok) throw refused(refusalText(result));
     }
-    return {envelope:await work.read(scope,"schedules")};
+    return { envelope: await work.read(scope, "schedules") };
   }
   const target = documentRefSchema.parse(raw.target);
   await resolveSdkSession(
@@ -312,28 +325,52 @@ export async function admitScheduleAction(
   if (key !== "schedule.grid.push")
     return admitScheduleSpec(key, { ...admission, ...crossing }, owner, bridge, deps);
   const { pod } = scheduleActions["schedule.grid.push"].input.parse(admission.input);
-  if (!resume && (await owner.list(undefined,admission.id)).length) return owner.admit({...admission,...crossing}, async()=>null, async()=>null);
+  if (!resume && (await owner.list(undefined, admission.id)).length)
+    return owner.admit(
+      { ...admission, ...crossing },
+      async () => null,
+      async () => null,
+    );
   const work = deps.workspace ?? actionWorkspace();
   const base = admission.bases.work;
   if (!work || !base) throw refused("Reviewed Work address and revision required");
-  const submitted = await work.read(base.key,scheduleGridRouteState.route);
-  if (!resume && (!submitted || submitted.revision !== base.revision)) return owner.admit({...admission,...crossing,footprint:[]},async()=>{throw refused("Work changed before submission");},async()=>null);
-  const original = resume ? (await owner.list(undefined,admission.id))[0] : undefined;
-  const originalDocument = original?.preparation.state === "ready" ? (original.preparation.value as {document?:unknown}).document : undefined;
+  const submitted = await work.read(base.key, scheduleGridRouteState.route);
+  if (!resume && (!submitted || submitted.revision !== base.revision))
+    return owner.admit(
+      { ...admission, ...crossing, footprint: [] },
+      async () => {
+        throw refused("Work changed before submission");
+      },
+      async () => null,
+    );
+  const original = resume ? (await owner.list(undefined, admission.id))[0] : undefined;
+  const originalDocument =
+    original?.preparation.state === "ready"
+      ? (original.preparation.value as { document?: unknown }).document
+      : undefined;
   const frozenDocument = scheduleGridDocumentSchema.parse(originalDocument ?? submitted?.doc);
   let written = false;
   const validate = async () => {
     await crossing.validate?.();
     if (written) return;
-    const latest = await work.read(base.key,scheduleGridRouteState.route);
+    const latest = await work.read(base.key, scheduleGridRouteState.route);
     const doc = scheduleGridDocumentSchema.parse(latest?.doc);
-    for (const [key,cell] of Object.entries(frozenDocument.cells)) if (cell.edit && !sameValue(cell.edit,doc.cells[key]?.edit)) throw refused("Consumed schedule edit changed before dispatch");
-    if (canonicalRouteInput(doc.basis) !== canonicalRouteInput(frozenDocument.basis)) throw refused("Schedule binding changed before dispatch");
-    assertFresh(documentMarks(bridge),target,frozenDocument.takenAt);
+    for (const [key, cell] of Object.entries(frozenDocument.cells))
+      if (cell.edit && !sameValue(cell.edit, doc.cells[key]?.edit))
+        throw refused("Consumed schedule edit changed before dispatch");
+    if (canonicalRouteInput(doc.basis) !== canonicalRouteInput(frozenDocument.basis))
+      throw refused("Schedule binding changed before dispatch");
+    assertFresh(documentMarks(bridge), target, frozenDocument.takenAt);
   };
 
   return owner.admit(
-    { ...admission, ...crossing, footprint:[{kind:"document",ref:target}], frozen:{work:submitted}, validate },
+    {
+      ...admission,
+      ...crossing,
+      footprint: [{ kind: "document", ref: target }],
+      frozen: { work: submitted },
+      validate,
+    },
     async () => {
       const view = await work.read(base.key, scheduleGridRouteState.route);
       if (!view || view.revision !== base.revision) throw refused("Work changed");
@@ -421,10 +458,7 @@ export async function admitScheduleAction(
             })
           : [];
         const result = patches.length
-          ? await work.publish(base.key, scheduleGridRouteState.route,
-              patches,
-              view.revision,
-            )
+          ? await work.publish(base.key, scheduleGridRouteState.route, patches, view.revision)
           : { ok: true, revision: view.revision };
         if (result.ok) {
           publication = result;
@@ -477,12 +511,7 @@ export async function admitScheduleAction(
           const patches = rebindScheduleWork(latest, reading, readback!);
           if (!patches.length) rebind = "skipped:unchanged";
           else if (
-            (
-              await work.publish(base.key, scheduleGridRouteState.route,
-                patches,
-                view.revision,
-              )
-            ).ok
+            (await work.publish(base.key, scheduleGridRouteState.route, patches, view.revision)).ok
           )
             rebind = "rebound";
         }
@@ -606,13 +635,31 @@ async function admitScheduleSpec(
   if (admission.destination.kind !== "document") throw refused("Exact document target required");
   const target = admission.destination.ref;
   const pods = podContext(deps, bridge, target);
-  if ((await owner.list(undefined,admission.id)).length) return owner.admit(admission,async()=>null,async()=>null);
-  const frozenSpec = key === "schedule.apply" ? await runPods(deps,composedSpec(scheduleActions[key].input.parse(admission.input).source,pods)) : null;
-  const capture = key === "schedule.capture" ? scheduleActions[key].input.parse(admission.input) : null;
-  const path = capture ? capture.path ?? `captures/schedule-${capture.scheduleId}-${createHash("sha256").update(admission.id).digest("hex").slice(0,24)}.json` : null;
-  const footprint: import("@pe/agent-contracts").Footprint = [{kind:"document",ref:target}, ...(capture ? [{kind:"member" as const,pod:capture.pod,path:path!}] : [])];
+  if ((await owner.list(undefined, admission.id)).length)
+    return owner.admit(
+      admission,
+      async () => null,
+      async () => null,
+    );
+  const frozenSpec =
+    key === "schedule.apply"
+      ? await runPods(
+          deps,
+          composedSpec(scheduleActions[key].input.parse(admission.input).source, pods),
+        )
+      : null;
+  const capture =
+    key === "schedule.capture" ? scheduleActions[key].input.parse(admission.input) : null;
+  const path = capture
+    ? (capture.path ??
+      `captures/schedule-${capture.scheduleId}-${createHash("sha256").update(admission.id).digest("hex").slice(0, 24)}.json`)
+    : null;
+  const footprint: import("@pe/agent-contracts").Footprint = [
+    { kind: "document", ref: target },
+    ...(capture ? [{ kind: "member" as const, pod: capture.pod, path: path! }] : []),
+  ];
   return owner.admit(
-    {...admission,footprint,frozen:{source:frozenSpec,path}},
+    { ...admission, footprint, frozen: { source: frozenSpec, path } },
     async () => {
       const { process } = await lifetime(bridge, target, "project", deps);
       if (key === "schedule.capture") {

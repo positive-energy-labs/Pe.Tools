@@ -97,12 +97,6 @@ export function sessionOffer(session: {
   };
 }
 
-/** The ACP mode a session starts in: the first of these the harness offers. */
-export const accessModes = {
-  guarded: ["auto", "agent", "default"],
-  unguarded: ["bypassPermissions", "agent-full-access", "full-access"],
-};
-
 /**
  * A harness refusal that means the login itself ended: ACP's `authRequired` (-32000) or the words
  * the two CLIs use for an expired or revoked subscription. Anything else is an ordinary failure.

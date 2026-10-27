@@ -170,15 +170,19 @@ test("settings.write saves reviewed member Work and republishes the new basis", 
     },
   });
   const sha256 = digest('{"width":1}');
+  const observed = await work.publish(
+    scope,
+    settingsRouteState.route,
+    [{ path: ["basis"], value: { member, rawContent: '{"width":1}', sha256 } }],
+    0,
+  );
+  expect(observed.ok).toBe(true);
   const authored = await work.apply(
     scope,
     settingsRouteState.route,
     "human",
-    [
-      { path: ["basis"], value: { member, rawContent: '{"width":1}', sha256 } },
-      { path: ["fields"], value: { "/width": { staged: { value: 5 } } } },
-    ],
-    0,
+    [{ path: ["fields"], value: { "/width": { edit: { value: 5 } } } }],
+    observed.revision!,
   );
   const owner = new ActionJournal(join(root, "journal.json"));
   const admit = (id: string, write: unknown, revision: number) =>
@@ -204,7 +208,7 @@ test("settings.write saves reviewed member Work and republishes the new basis", 
     (await work.read(scope, settingsRouteState.route))!.doc,
   );
   expect(after.basis?.sha256).toBe(digest(await readFile(file())));
-  expect(after.fields["/width"]?.staged).toBeUndefined();
+  expect(after.fields["/width"]?.edit).toBeUndefined();
   // The old basis is gone from disk; a second save against it refuses before writing.
   const stale = await admit(
     "stale",

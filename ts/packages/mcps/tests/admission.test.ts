@@ -42,7 +42,7 @@ function host(prior?: Record<string, unknown>) {
       if (init?.method !== "POST") return Response.json(prior ? [prior] : []);
       const body = JSON.parse(await bodyText(init));
       posts.push(body);
-      return Response.json(receipt(body));
+      return Response.json(prior ?? receipt(body));
     }
     if (prior) throw Error("Replay must not consult a live catalog or target");
     if (url.pathname === "/pe/capabilities")
@@ -220,6 +220,60 @@ test("pe_do admits a lifecycle action at the session its input names, with no he
       destination: { kind: "sdk-session", selection: { id: "dev" } },
     },
   ]);
+});
+
+test("workflow recovery uses the original normalized intent and bases before reading a later thread or closed document", async () => {
+  const bases = { captureId: "c".repeat(64) };
+  const original = receipt({
+    id: "old-workflow",
+    kind: "workflow",
+    key: "takeoffs.sync",
+    destination,
+    input: { path: "C:/old.rhvac", zones: [] },
+    bases,
+  });
+  const { posts, reads } = host(original);
+  const recover = (input: Record<string, unknown>, override?: unknown) =>
+    withInvocationContext(
+      {
+        hostBaseUrl: "http://admission.test",
+        headers: { "x-pe-context": "later-turn" },
+      },
+      () =>
+        peDo.execute!(
+          {
+            key: "workflow:takeoffs.sync",
+            input,
+            target: override,
+            timeoutSeconds: 30,
+          } as never,
+          { agent: { toolCallId: "new-call" } } as never,
+        ),
+    );
+  expect(await recover({ actionId: "old-workflow", path: "C:/old.rhvac" })).toMatchObject({
+    ok: true,
+    recovered: true,
+    target: { session: "A" },
+    result: { id: "old-workflow" },
+  });
+  expect(posts).toMatchObject([{ id: "old-workflow", destination, bases }]);
+  await expect(recover({ actionId: "old-workflow", path: "C:/changed.rhvac" })).rejects.toThrow(
+    "conflicts",
+  );
+  await expect(
+    recover({ actionId: "old-workflow", path: "C:/old.rhvac", bases: {} }),
+  ).rejects.toThrow("conflicts");
+  await expect(
+    recover(
+      { actionId: "old-workflow", path: "C:/old.rhvac" },
+      {
+        kind: "open",
+        ref: { session: "B", openId: "open-B" },
+      },
+    ),
+  ).rejects.toThrow("destination");
+  expect(posts).toHaveLength(1);
+  expect(new Set(reads)).toEqual(new Set(["/actions"]));
 });
 
 test("a canonical script replays its captured manifest identity and sourcePath without a current folder lookup", async () => {

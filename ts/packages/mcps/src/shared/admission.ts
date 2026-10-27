@@ -232,10 +232,14 @@ export async function runCapability(
   });
   const prior = intent.prior;
   if (prior) {
+    const normalized = (value: unknown) => {
+      if (intent.kind !== "workflow" || !Object.hasOwn(semanticActions, key)) return value;
+      return semanticActions[key as SemanticActionKey].input.parse(value);
+    };
     if (
       prior.kind !== admission.kind ||
       prior.key !== key ||
-      canonicalRouteInput(prior.request) !== canonicalRouteInput(input) ||
+      canonicalRouteInput(normalized(prior.request)) !== canonicalRouteInput(normalized(input)) ||
       canonicalRouteInput(prior.bases) !== canonicalRouteInput(admission.bases)
     )
       throw Error("Original operation ID conflicts with the requested intent");

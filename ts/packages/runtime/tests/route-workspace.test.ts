@@ -196,12 +196,18 @@ test("a handler throw discards its staged document write", async () => {
   expect(await w.read()).toBeNull();
 });
 
-test("both writers use the same schema and semantic commands",async()=>{
-  const {store}=memoryStore();const w=bind(workspace(store));
-  expect(await w.apply("agent",[{path:["count"],value:1}],0)).toMatchObject({ok:true});
-  expect(await w.apply("human",[{path:["values","bad"],value:42}],1)).toMatchObject({ok:false});
-  expect(await w.cmd("agent","increment",{},1)).toMatchObject({ok:true,revision:2});
-  expect(await w.cmd("human","bind",{},2)).toMatchObject({ok:false,error:"unknown command 'bind'"});
+test("both writers use the same schema and semantic commands", async () => {
+  const { store } = memoryStore();
+  const w = bind(workspace(store));
+  expect(await w.apply("agent", [{ path: ["count"], value: 1 }], 0)).toMatchObject({ ok: true });
+  expect(await w.apply("human", [{ path: ["values", "bad"], value: 42 }], 1)).toMatchObject({
+    ok: false,
+  });
+  expect(await w.cmd("agent", "increment", {}, 1)).toMatchObject({ ok: true, revision: 2 });
+  expect(await w.cmd("human", "bind", {}, 2)).toMatchObject({
+    ok: false,
+    error: "unknown command 'bind'",
+  });
 });
 
 // External replay/collision/reconstruction proof lives in host partition-operation.test.ts through /actions.

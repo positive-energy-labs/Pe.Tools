@@ -5,13 +5,13 @@ test("a raw draft is the base and staged fields apply on top of it", () => {
   const basis = '{\n\t"$preset": "@local/base.json",\n\t"a": 1\n}\n';
   const draft = '{\n\t"$preset": "@local/base.json",\n\t"a": 1,\n\t"b": 3\n}\n';
   const edit = { "/a": { edit: { value: 2 } } };
-  expect(
-    JSON.parse(settingsCandidate(basis, { ...edit, "": { edit: { value: draft } } })),
-  ).toEqual({
-    $preset: "@local/base.json",
-    a: 2,
-    b: 3,
-  });
+  expect(JSON.parse(settingsCandidate(basis, { ...edit, "": { edit: { value: draft } } }))).toEqual(
+    {
+      $preset: "@local/base.json",
+      a: 2,
+      b: 3,
+    },
+  );
   // Alone, the raw draft is written byte for byte; so is an untouched basis.
   expect(settingsCandidate(basis, { "": { edit: { value: draft } } })).toBe(draft);
   expect(settingsCandidate(basis, {})).toBe(basis);

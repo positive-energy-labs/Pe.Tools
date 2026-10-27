@@ -2,12 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { z } from "zod";
 import { applyPatches, type RouteEnvelope } from "./route-doc.ts";
 import type { RouteStateSpec } from "./route-state.ts";
-import {
-  fanOut,
-  transitionPatches,
-  draftCellSchema,
-  type CellLike,
-} from "./draft.ts";
+import { fanOut, transitionPatches, draftCellSchema, type CellLike } from "./draft.ts";
 
 const P = { value: "pea" };
 const S = { value: "you" };
@@ -89,7 +84,10 @@ describe("fanOut", () => {
   it("accept covers standing proposals and skips contested, agreed, absent and locked keys with reasons", () => {
     const out = fanOut(cells, ["open", "mine", "agreed", "gone", "locked"], "take", ctx);
     expect(out.covered).toEqual(["open"]);
-    expect(out.patches).toEqual([{ path: ["cells", "open", "edit"], value: { value: "pea" } }, {path:["cells","open","suggestion"],value:null}]);
+    expect(out.patches).toEqual([
+      { path: ["cells", "open", "edit"], value: { value: "pea" } },
+      { path: ["cells", "open", "suggestion"], value: null },
+    ]);
     expect(out.skipped).toEqual([
       { key: "mine", reason: "contested" },
       { key: "agreed", reason: "agreed" },

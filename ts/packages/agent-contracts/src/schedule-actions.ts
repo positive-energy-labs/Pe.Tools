@@ -98,8 +98,13 @@ export const scheduleActions = {
 export const scheduleReads = {
   "schedule.grid.bind": {
     says: "Bind immutable host schedule evidence to shared Work at an expected revision; retain authored cells and mark changed native bindings stale.",
-    needs: "nothing", effect: "query", dirties: [],
-    input: z.object({readingId:z.string().min(1),expectedRevision:z.number().int().nonnegative()}),
+    needs: "nothing",
+    effect: "query",
+    dirties: [],
+    input: z.object({
+      readingId: z.string().min(1),
+      expectedRevision: z.number().int().nonnegative(),
+    }),
   },
   "schedule.grid.catalog": {
     says: "Read schedules from the exact selected document without changing authored Work.",

@@ -1,5 +1,13 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
@@ -16,7 +24,7 @@ const filename = (targetKey: string, route: string) =>
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-/** One canonical file contains its identity and value. Legacy hash-only files stay exact-key readable. */
+/** Indexed Work carries its identity; unindexed bytes await explicit identity recovery. */
 export function fileRouteDocumentStore(dir: string): RouteDocumentStore {
   mkdirSync(dir, { recursive: true });
   // Cut over once at startup, before serving Work. Original bytes survive every write and crash.
@@ -28,8 +36,17 @@ export function fileRouteDocumentStore(dir: string): RouteDocumentStore {
       if (isRecord(record) && record.format === "route-state-record-v2") continue;
       const backup = `${path}.pre-shared-work`;
       if (!existsSync(backup)) writeFileSync(backup, bytes, { flag: "wx" });
-      if (!isRecord(record) || record.format !== "route-state-record-v1" || typeof record.route !== "string") continue;
-      const converted = { ...record, format: "route-state-record-v2", value: convertLegacyWork(record.value, record.route) };
+      if (
+        !isRecord(record) ||
+        record.format !== "route-state-record-v1" ||
+        typeof record.route !== "string"
+      )
+        continue;
+      const converted = {
+        ...record,
+        format: "route-state-record-v2",
+        value: convertLegacyWork(record.value, record.route),
+      };
       writeFileSync(`${path}.tmp`, JSON.stringify(converted));
       renameSync(`${path}.tmp`, path);
     } catch {
@@ -41,7 +58,10 @@ export function fileRouteDocumentStore(dir: string): RouteDocumentStore {
       const path = join(dir, filename(targetKey, route));
       if (!existsSync(path)) return null;
       const raw: unknown = JSON.parse(readFileSync(path, "utf8"));
-      if (!isRecord(raw) || !("format" in raw)) throw Error("Unindexed historical Work needs explicit identity recovery; source bytes were retained");
+      if (!isRecord(raw) || !("format" in raw))
+        throw Error(
+          "Unindexed historical Work needs explicit identity recovery; source bytes were retained",
+        );
       const record = recordSchema.parse(raw);
       if (record.targetKey !== targetKey || record.route !== route)
         throw new Error("Stored Work identity does not match its address");

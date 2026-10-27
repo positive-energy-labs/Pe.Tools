@@ -2,21 +2,35 @@ import { z } from "zod";
 import { canonicalRouteInput } from "./route-doc.ts";
 import { isRecord, type RouteStatePatch } from "./route-state.ts";
 
-const isRung = (value: unknown) => isRecord(value) && (Object.hasOwn(value, "value") || value.delete === true);
+const isRung = (value: unknown) =>
+  isRecord(value) && (Object.hasOwn(value, "value") || value.delete === true);
 
 /** Optional review changes, counted without interpreting their user-authored values. */
 export function pendingSuggestions(doc: unknown): number {
-  if (Array.isArray(doc)) return doc.reduce<number>((sum,item)=>sum+pendingSuggestions(item),0);
+  if (Array.isArray(doc))
+    return doc.reduce<number>((sum, item) => sum + pendingSuggestions(item), 0);
   if (!isRecord(doc) || isRung(doc)) return 0;
-  return Object.entries(doc).reduce((sum,[key,value])=>sum+(key === "suggestion" && isRung(value) ? 1 : pendingSuggestions(value)),0);
+  return Object.entries(doc).reduce(
+    (sum, [key, value]) =>
+      sum + (key === "suggestion" && isRung(value) ? 1 : pendingSuggestions(value)),
+    0,
+  );
 }
 
 /** One unfinished cell even when both its current edit and suggestion are occupied. */
 export function unfinishedCells(doc: unknown): number {
-  if (Array.isArray(doc)) return doc.reduce<number>((sum,item)=>sum+unfinishedCells(item),0);
+  if (Array.isArray(doc)) return doc.reduce<number>((sum, item) => sum + unfinishedCells(item), 0);
   if (!isRecord(doc) || isRung(doc)) return 0;
-  const own=isRung(doc.suggestion) || isRung(doc.edit) ? 1 : 0;
-  return own + Object.entries(doc).reduce((sum,[key,value])=>sum+((key === "suggestion" || key === "edit") && isRung(value) ? 0 : unfinishedCells(value)),0);
+  const own = isRung(doc.suggestion) || isRung(doc.edit) ? 1 : 0;
+  return (
+    own +
+    Object.entries(doc).reduce(
+      (sum, [key, value]) =>
+        sum +
+        ((key === "suggestion" || key === "edit") && isRung(value) ? 0 : unfinishedCells(value)),
+      0,
+    )
+  );
 }
 
 /*
@@ -39,11 +53,19 @@ const CHANGE_META = {
   confidence: z.enum(["high", "low"]).nullish(),
 };
 const valueCell = <V extends z.ZodType, E extends z.ZodRawShape>(value: V, extra: E) => {
-  const rung = valueRung(value).extend(CHANGE_META).extend(extra).strict().refine(oneWrite, ONE_WRITE);
+  const rung = valueRung(value)
+    .extend(CHANGE_META)
+    .extend(extra)
+    .strict()
+    .refine(oneWrite, ONE_WRITE);
   return z.object({ suggestion: rung.nullish(), edit: rung.nullish() }).strict();
 };
 const deletableCell = <V extends z.ZodType, E extends z.ZodRawShape>(value: V, extra: E) => {
-  const rung = deletableRung(value).extend(CHANGE_META).extend(extra).strict().refine(oneWrite, ONE_WRITE);
+  const rung = deletableRung(value)
+    .extend(CHANGE_META)
+    .extend(extra)
+    .strict()
+    .refine(oneWrite, ONE_WRITE);
   return z.object({ suggestion: rung.nullish(), edit: rung.nullish() }).strict();
 };
 
@@ -63,8 +85,6 @@ export function draftCellSchema(
   return deletable ? deletableCell(value, suggestion) : valueCell(value, suggestion);
 }
 
-
-
 /* ── the cell state machine (v3 FINAL) ─────────────────────────────────────── */
 
 /** What a rung writes: a value, or the deletion of the addressed property. */
@@ -74,7 +94,13 @@ export interface Rung {
 }
 
 export type Author = "human" | "pea" | "unknown";
-export type Change = Rung & { by?: Author; at?: string | null; base?: number | null; note?: string | null; confidence?: "high" | "low" | null };
+export type Change = Rung & {
+  by?: Author;
+  at?: string | null;
+  base?: number | null;
+  note?: string | null;
+  confidence?: "high" | "low" | null;
+};
 export interface CellLike {
   suggestion?:
     | (Change & {
@@ -197,7 +223,6 @@ function skipReason(
   _actor: Actor,
   lock: string | null,
 ): SkipReason | null {
-
   if (kind === "clear") return cell.edit == null ? "no-edit" : lock ? "locked" : null;
   if (cell.suggestion == null) return "no-suggestion";
   if (kind === "unsuggest") return null;

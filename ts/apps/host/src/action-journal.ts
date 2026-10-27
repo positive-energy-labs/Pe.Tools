@@ -2,7 +2,7 @@ import { bindActionDispatch } from "./action-dispatch.ts";
 import { BridgeError } from "./bridge.ts";
 import { appendFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { renameReplacing } from "./rename-retry.ts";
-import { dirname, join } from "node:path";
+import { dirname, join, win32 } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { OwnerReads, type OwnerValue } from "@pe/runtime";
 import { z } from "zod";
@@ -60,6 +60,13 @@ const sameCaller = (a: Caller, b: Caller) =>
     : a.kind === "human" && b.kind === "human"
       ? a.via === b.via && a.login === b.login && a.device === b.device
       : canonicalRouteInput(a) === canonicalRouteInput(b));
+const pathInside = (root: string, path: string) => {
+  const relative = win32.relative(win32.resolve(root), win32.resolve(path));
+  return (
+    relative === "" ||
+    (relative !== ".." && !relative.startsWith("..\\") && !win32.isAbsolute(relative))
+  );
+};
 const effectsOverlap = (a: Footprint, b: Footprint) =>
   a.some(
     (x) =>
@@ -68,6 +75,12 @@ const effectsOverlap = (a: Footprint, b: Footprint) =>
         if (y.kind === "receipt") return false;
         if (x.kind === "document" && y.kind === "session") return x.ref.session === y.session;
         if (x.kind === "session" && y.kind === "document") return x.session === y.ref.session;
+        if (x.kind === "directory" && (y.kind === "directory" || y.kind === "file"))
+          return (
+            pathInside(x.path, y.path) || (y.kind === "directory" && pathInside(y.path, x.path))
+          );
+        if (y.kind === "directory" && x.kind === "file") return pathInside(y.path, x.path);
+        if (x.kind === "file" && y.kind === "file") return win32.relative(x.path, y.path) === "";
         return canonicalRouteInput(x) === canonicalRouteInput(y);
       }),
   );
@@ -676,7 +689,7 @@ export class ActionJournal implements ReceiptReader {
   }
   /** Authentication precedes recovery, and recovery never borrows a newer turn. */
   async existing(admission: ActionAdmission, caller: Caller): Promise<ActionReceipt | null> {
-    const row = (await this.list(undefined, admission.id))[0];
+    const row = (await this.readFor(caller, undefined, admission.id))[0];
     if (!row) return null;
     if (!sameCaller(row.caller, caller))
       throw Error("Command id belongs to another authenticated caller");
@@ -809,6 +822,7 @@ export class ActionJournal implements ReceiptReader {
             key: ended.key,
             kind: ended.kind,
             input: ended.input,
+            ...(ended.dispatchedAt ? { dispatchedAt: ended.dispatchedAt } : {}),
             state: "failed",
             error: reason,
             status: 410,
@@ -912,7 +926,7 @@ export class ActionJournal implements ReceiptReader {
             await save((row) => ({
               ...row,
               steps: row.steps.map((current) =>
-                current.id === step.id ? { ...step, ...failure(error) } : current,
+                current.id === step.id ? { ...current, ...failure(error) } : current,
               ),
             }));
             throw error;
@@ -922,7 +936,7 @@ export class ActionJournal implements ReceiptReader {
             ...row,
             steps: row.steps.map((current) =>
               current.id === step.id
-                ? { ...step, state: "succeeded", result: result ?? null }
+                ? { ...current, state: "succeeded", result: result ?? null }
                 : current,
             ),
           }));

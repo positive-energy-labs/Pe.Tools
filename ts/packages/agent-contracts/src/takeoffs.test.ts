@@ -33,7 +33,7 @@ function land(
 }
 
 describe("takeoffsRouteState", () => {
-  it("Pea proposes on every cell family and stages none; the person's edit stages per field", () => {
+  it("suggestions stay optional and either author can set an executable edit", () => {
     const room = "room-1";
     const decision = takeoffDecisionKey(room, "seedless");
     const proposed = land(empty().doc, "agent", [
@@ -56,16 +56,11 @@ describe("takeoffsRouteState", () => {
         spec,
         { ...empty(), doc: proposed },
         "agent",
-        transitionPatches(
-          ["decisions"],
-          decision,
-          {},
-          { kind: "set", rung: { value: "dismiss" } },
-        ),
+        transitionPatches(["decisions"], decision, {}, { kind: "set", rung: { value: "dismiss" } }),
         0,
       ),
-    ).toMatchObject({ ok: false, kind: "refused" });
-    // A person's edit: a changed field stages, an unchanged one stages nothing, the base sits beside.
+    ).toMatchObject({ ok: true });
+    // A changed field becomes an edit; an unchanged field creates no edit.
     const edited = land(
       proposed,
       "human",
@@ -96,7 +91,7 @@ describe("takeoffsRouteState", () => {
     ).toMatchObject({ ok: false });
   });
 
-  it("discard unstages every staged room edit and leaves Pea's proposals standing", () => {
+  it("discard clears room edits and preserves optional suggestions", () => {
     const doc = empty().doc as TakeoffsRouteDocument;
     const edited = land(doc, "human", takeoffEditPatches(doc, "r", { name: "A" }, { name: "B" }));
     const proposed = land(

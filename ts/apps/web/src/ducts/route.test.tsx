@@ -733,7 +733,7 @@ test("a edit subject and plural claim select the whole row without framing; a ve
     title: "Open ends",
     text: "Open ends at 1 and 3.",
     ids: [1, 3],
-    verdictBy: "person",
   });
-  expect(Date.parse(work.claims.c1!.edit!.value!.verdictAt!)).not.toBeNaN();
+  expect(work.claims.c1!.edit!.value).not.toHaveProperty("verdictBy");
+  expect(work.claims.c1!.edit!.value).not.toHaveProperty("verdictAt");
 }, 20000);

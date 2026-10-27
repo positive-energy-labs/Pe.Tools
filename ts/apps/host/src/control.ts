@@ -86,7 +86,15 @@ export function mintBrowserContext(principal: RequestPrincipal): string {
 /** A secret bearer token for one caller. The receipt names `context` (an id), never the token. */
 export function mintContext(spec: MintSpec): string {
   const token = randomBytes(24).toString("base64url");
-  contexts.set(token, spec.kind === "human" ? spec : { ...spec, context: randomUUID() });
+  const bound = structuredClone(spec);
+  if (bound.kind === "pea") {
+    if (bound.run) Object.freeze(bound.run);
+    if (bound.root) Object.freeze(bound.root);
+  }
+  contexts.set(
+    token,
+    Object.freeze(bound.kind === "human" ? bound : { ...bound, context: randomUUID() }),
+  );
   return token;
 }
 export const retireContext = (token: string) => void contexts.delete(token);
@@ -287,9 +295,16 @@ export function admitAnonymousCall(caller: Caller, key: string): void {
     );
 }
 
-/** Route Work keeps its two-valued author: a human, or anything acting for one. */
-export const routeActorOf = (caller: Caller): "human" | "agent" =>
-  caller.kind === "human" ? "human" : "agent";
+/** Only authenticated human and Pea invocations author shared Work. */
+export const routeActorOf = (caller: Caller): "human" | "agent" => {
+  if (caller.kind === "human") return "human";
+  if (caller.kind === "pea") return "agent";
+  throw refuse(
+    caller.kind === "page" ? "page.use-page-door" : "context.missing",
+    "/pe/route-state",
+    "Shared Work edits require a human or Pea invocation; trust-adapter callers cannot author as Pea",
+  );
+};
 
 /**
  * The caller the identity middleware minted for this request; anonymous outside one. A door reads
@@ -343,7 +358,27 @@ export const subscribeRunChanges = (listener: () => void) =>
 export const assertRunAdmission = (origin: Origin) => {
   if (origin.caller.kind !== "pea") return;
   if (!sources.runs) throw refuse("run.none", "/actions", "No harness run owns this write.");
-  sources.runs.assertOpen(origin);
+  if (!origin.run || !origin.root)
+    throw refuse("run.none", "/actions", "This Pea process has no immutable causal run context.");
+  try {
+    sources.runs.assertOpen(origin);
+  } catch (error) {
+    throw refuse("run.closed", "/actions", String(error));
+  }
+};
+/** Page/device trust is a separate adapter; a bound document never grants host-resource writes. */
+export const validateFootprintCaller = (caller: Caller, footprint: Footprint) => {
+  if (caller.kind === "human" || caller.kind === "pea") return;
+  for (const effect of footprint) {
+    if (effect.kind === "receipt") continue;
+    if (effect.kind !== "document")
+      throw refuse(
+        caller.kind === "page" ? "page.use-page-door" : "grant.context-cannot-hold",
+        "/actions",
+        `${caller.kind} has no member, file, publication or session effect capability`,
+      );
+    admitCrossing(caller, { kind: "document", ref: effect.ref }, "/actions");
+  }
 };
 export const authorizeCommand = async (
   origin: Origin,
@@ -354,10 +389,7 @@ export const authorizeCommand = async (
   if (origin.caller.kind !== "pea") return null;
   if (!footprint.some((e) => e.kind !== "receipt")) return null;
   assertRunAdmission(origin);
-  const consequential = footprint.some(
-    (e) => e.kind !== "receipt" && !(e.kind === "document" && sources.acquired(e.ref)),
-  );
-  return consequential ? sources.runs!.authorize(origin, id, footprint) : null;
+  return sources.runs!.authorize(origin, id, footprint);
 };
 export const commandCheckpoint = (origin: Origin, consent: CommandConsent | null) => {
   if (origin.caller.kind === "pea") {
@@ -640,14 +672,12 @@ export function live(basis: Basis | null, door = "step begin"): Refused | null {
           { lifetime: basis.scope.lifetime },
         );
   if (basis?.kind === "full-access")
-    return sources.fullAccess() || admissionOn(basis.thread, basis.lifetime)
-      ? null
-      : refuse(
-          "grant.revoked",
-          door,
-          `Refused at ${door}: access was switched to Guarded and thread ${basis.thread} does not target ${refText(basis.lifetime)}. Native work already dispatched finishes; queued work does not start. Authored Work is retained.`,
-          { lifetime: basis.lifetime },
-        );
+    return refuse(
+      "grant.revoked",
+      door,
+      "Legacy Full-access approval is historical evidence only; submit a new explicit command under the current run",
+      { lifetime: basis.lifetime },
+    );
   if (basis?.kind !== "grant") return null;
   return admissionOn(basis.thread, basis.lifetime)?.revision === basis.headRevision
     ? null
