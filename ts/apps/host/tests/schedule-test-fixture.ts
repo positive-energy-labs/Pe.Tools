@@ -26,6 +26,7 @@ import { documentMarks } from "../src/document-marks.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { createPeRoutes, fileRouteDocumentStore } from "../src/pe-routes.ts";
 import { sdkSessions, originalProcess } from "./native-receipt-fixture.ts";
+import { markDispatched } from "../src/action-dispatch.ts";
 import { replayAnswer } from "./sdk-replay.ts";
 import { detailResponse } from "./schedule-fixture.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
@@ -105,7 +106,6 @@ export async function setup() {
     registrations: [
       {
         spec: scheduleGridRouteState,
-        handlers: {},
       },
     ],
   });
@@ -184,6 +184,7 @@ export async function setup() {
     invoke: (key: string, input: unknown, session: string, openId: string, id?: string) =>
       Effect.tryPromise({
         try: async () => {
+          if (id) await markDispatched(id);
           sent.push({ key, input, session, openId, id });
           if (key === "revit.catalog.schedules")
             return { value: { entries: structuredClone(catalog) } };
@@ -317,11 +318,9 @@ export async function setup() {
   ).toMatchObject({ ok: true });
   const admission = async (id = crypto.randomUUID()): Promise<ActionAdmission> => ({
     id,
-    kind: "workflow",
     key: "schedule.grid.push",
-    destination: { kind: "document", ref: b },
-    input: {},
-    bases: { work: { key: scope, revision: (await view()).revision } },
+    target: { kind: "document", ref: b },
+    input: { work: { key: scope, revision: (await view()).revision } },
   });
   const post = async (path: string, body: unknown) => {
     const response = await fetch(path, {

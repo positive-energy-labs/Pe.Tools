@@ -1,4 +1,4 @@
-import type { ActionDefinition } from "./semantic-actions.ts";
+import type { Command } from "./command.ts";
 import { z } from "zod";
 import { specDocSchema } from "./family.ts";
 import { documentRefSchema } from "./target.ts";
@@ -56,12 +56,35 @@ const applyRowsSchema = z.union([
 ]);
 const applyInputSchema = z
   .object({
-    rows: applyRowsSchema,
+    rows: applyRowsSchema.optional(),
+    include: z.union([z.literal("all"), z.array(z.string()).min(1)]).default("all"),
+    plan: z.string().min(1).optional(),
     familyNames: z.array(z.string()).optional(),
     executionOptions: familyExecutionOptionsSchema.optional(),
   })
   .strict();
 export const familyActions = {
+  "family.attach-spec": {
+    says: "Attach a PDF specification and its parsed assets to the reviewed family member.",
+    needs: "nothing",
+    effect: "command",
+    dirties: ["pods"],
+    input: z.object({
+      member: podMemberSchema,
+      source: z.union([
+        z.strictObject({ path: z.string().min(1) }),
+        z.strictObject({ url: z.url() }),
+        z.strictObject({ fileName: z.string().min(1), base64: z.string().min(1) }),
+      ]),
+    }),
+    result: z.object({
+      member: podMemberSchema,
+      specPath: z.string(),
+      pages: z.number(),
+      blocks: z.number(),
+      images: z.number(),
+    }),
+  },
   "family.observe": {
     says: "Adopt a verified capture receipt or exact saved source as the Family Work baseline; edits stay editable.",
     needs: "family-document",
@@ -110,7 +133,7 @@ export const familyActions = {
     needs: "family-document",
     effect: "query",
     dirties: [],
-    input: z.object({ source: planSourceSchema }),
+    input: z.object({ source: planSourceSchema.optional() }),
   },
   "family.apply": {
     says: "Apply the exact family plan a succeeded family.plan action returned (named by that action id, one included hash), from the spec bytes that plan sealed, and write a run receipt. Staged cells the plan consumed retire only if unchanged after native success.",
@@ -133,7 +156,7 @@ export const familyActions = {
     dirties: [],
     input: z
       .object({
-        source: planSourceSchema,
+        source: planSourceSchema.optional(),
         /**
          * Plan only these families of the scope, by NAME (a generated one-family member); absent =
          * the scope. The library resolves each name against the open document at plan.
@@ -151,7 +174,19 @@ export const familyActions = {
     dirties: ["families", "pods"],
     input: applyInputSchema,
   },
+  "families.save-draft": {
+    says: "Compose the edited family drafts from reviewed Work and save each as a new Pod member.",
+    needs: "nothing",
+    effect: "command",
+    dirties: ["pods"],
+    input: z.object({ pod: z.string().min(1) }),
+    result: z.object({
+      saved: z.number().int().nonnegative(),
+      members: z.array(podMemberSourceSchema),
+    }),
+  },
   "parameter-links.apply": {
+    native: ["revit.apply.parameter-links"],
     says: "Store the reviewed parameter-link draft and reconcile exactly the evaluated writes the human approved.",
     needs: "project-document",
     effect: "command",
@@ -194,6 +229,6 @@ export const familyReads = {
       subject: z.enum(["edit", "suggestion"]).default("edit"),
     }),
   },
-} as const satisfies Record<string, ActionDefinition>;
+} as const satisfies Record<string, Command>;
 export type FamilyActionKey = keyof typeof familyActions;
 export type FamilyReadKey = keyof typeof familyReads;

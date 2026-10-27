@@ -2,20 +2,30 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { capturePackage, captureDirectory, listPackages } from "./packages.ts";
-import { readZip } from "./pod-transfer.ts";
+import {
+  readZip,
+  writeZip,
+  installArchive,
+  preparePodExport,
+  writePodExport,
+} from "./pod-transfer.ts";
+import { z } from "zod";
+import { hostOpCatalog } from "@pe/host-contracts/catalog";
+import type { CommandContext, CommandFactory } from "./command-executor.ts";
 import { productPagesRootPath } from "./product-paths.ts";
 import { resolveSdkSession, type SdkSession } from "./sdk-session.ts";
 import { freezeScript, requireScriptSuccess } from "./operation-script.ts";
 import { Ajv, type ValidateFunction } from "ajv";
 import { Effect, Schema } from "effect";
 import {
-  actionAdmissionSchema,
+  commands,
+  type Consumed,
+  type Command,
   nativeProcessSchema,
   type Caller,
   type ExecutionTarget,
   type Footprint,
   canonicalRouteInput,
-  semanticWorkflowForOperation,
 } from "@pe/agent-contracts";
 import { admitScript, consentedRead, Refused, requireHuman } from "./control.ts";
 import { hostOperationDefinitionSchema } from "@pe/host-contracts/contracts";
@@ -24,7 +34,7 @@ import {
   tsOnlyOperationCatalog,
   tsOnlyOperationSchemas,
 } from "@pe/host-contracts/operation-types";
-import { type ActionJournal, type Crossing } from "./action-journal.ts";
+import type { ActionExecution } from "./action-journal.ts";
 import { BridgeError, type RevitBridge } from "./bridge.ts";
 import {
   readNativeReceipt,
@@ -151,344 +161,401 @@ export function gatewayTarget(
     );
   return { kind: "document", ref: { session: session.sessionId, openId: document.openId } };
 }
-export async function admitGatewayAction(
-  raw: unknown,
-  crossing: Crossing,
-  owner: ActionJournal,
+const capturedArchiveSchema = z.strictObject({
+  bytesBase64: z.string(),
+  locator: z.string(),
+  folder: z.string().optional(),
+});
+const preparedGatewaySchema = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("host-leaf"),
+    archive: capturedArchiveSchema.optional(),
+    export: z
+      .object({
+        bytesBase64: z.string(),
+        result: z.object({ archivePath: z.string() }).passthrough(),
+      })
+      .optional(),
+    promotedPage: z.string().optional(),
+  }),
+  z.strictObject({
+    kind: z.literal("native-leaf"),
+    process: nativeProcessSchema,
+    sdkSession: z.string().nullish(),
+    script: z
+      .strictObject({
+        sourceBundle: z.strictObject({
+          files: z.array(z.strictObject({ path: z.string(), bytesBase64: z.string() })),
+        }),
+      })
+      .optional(),
+  }),
+]);
+
+/** Generated native metadata is the fallback contract; public semantic implementations are hidden. */
+export function gatewayExecutor(
+  key: string,
   bridge: RevitBridge["Service"],
   local: (key: string, input: unknown) => Promise<unknown>,
   sdk?: SdkReceiptReader,
-  resume = false,
-) {
-  const admission = actionAdmissionSchema.parse(raw);
-  const target = admission.destination.kind === "document" ? admission.destination.ref : undefined;
-  const readTarget = consentedRead(crossing.caller, admission.key, admission.input, target)
-    ? target
-    : undefined;
-  if (admission.kind !== "operation") throw refused("Operation admission kind required");
-  if (Object.keys(admission.bases).length)
-    throw refused("Independent operations do not consume Work bases");
-  if (admission.destination.kind === "sdk-session")
-    throw refused("An operation requires an exact attachment, not a lifecycle selection");
-  const validate = async (process?: NativeProcess) => {
-    const destination = admission.destination;
-    if (destination.kind === "sdk-session")
-      throw refused("Lifecycle selection is not a native destination");
-    if (destination.kind === "host") {
-      if (!isTsOnlyOperationKey(admission.key))
-        throw refused("Native action needs an exact session");
-      return;
-    }
-    if (isTsOnlyOperationKey(admission.key)) throw refused("Host action needs no Revit binding");
-    const sessionId =
-      destination.kind === "session" ? destination.session : destination.ref.session;
-    const session = await resolveSdkSession(bridge, { bridgeSessionId: sessionId }, sdk);
+): CommandFactory {
+  return async (ctx: CommandContext) => {
+    const { admission, caller } = ctx;
     if (
-      session.sessionId !== sessionId ||
-      (process &&
-        (session.processId !== process.pid ||
-          session.processStartUtcUnixMs !== Date.parse(process.processStartUtc)))
-    )
-      throw refused("Original process incarnation is no longer available");
-    if (
-      destination.kind === "document" &&
-      !session.state?.openDocuments.some((doc) => doc.openId === destination.ref.openId)
-    )
-      throw refused("Original document lifetime is no longer open");
-    return session;
-  };
-  const semantic = semanticWorkflowForOperation(admission.key);
-  if (semantic)
-    throw refused(
-      `Use the semantic workflow '${semantic}' so the host seals its full Work, source and file footprint`,
-    );
-  const submittedSession = await validate();
-  const submittedDefinition = await operationDefinition(admission.key, bridge, submittedSession);
-  requireEligibleCaller(submittedDefinition, crossing.caller, "/actions");
-  if (submittedDefinition.intent !== "Mutate" && admission.key !== "scripting.execute")
-    throw refused("Only catalogued commands enter action admission");
-  const frozenScript =
-    admission.key === "scripting.execute" ? await freezeScript(admission.input) : undefined;
-  const footprint: Footprint = [];
-  const checks: (() => Promise<void>)[] = [];
-  const frozen: Record<string, unknown> = {
-    ...(frozenScript ? { script: frozenScript } : {}),
-    definition: submittedDefinition,
-  };
-  if (submittedSession) {
-    const docs = submittedSession.state?.openDocuments;
-    if (admission.key === "scripting.execute") {
-      if (!docs) throw refused("Script effects require a complete sibling document census");
-      footprint.push(
-        ...docs
-          .filter(
-            (doc) =>
-              !(
-                crossing.caller.kind === "page" &&
-                readTarget?.session === submittedSession.sessionId &&
-                readTarget.openId === doc.openId
-              ),
-          )
-          .map((doc) => ({
-            kind: "document" as const,
-            ref: { session: submittedSession.sessionId, openId: doc.openId },
-          })),
-      );
-      const census = docs.map((doc) => doc.openId).sort();
-      frozen.census = census;
-      checks.push(async () => {
-        const current = await validate();
-        if (
-          canonicalRouteInput(current?.state?.openDocuments.map((doc) => doc.openId).sort()) !==
-          canonicalRouteInput(census)
-        )
-          throw refused("Script sibling census changed after submission; submit a new command");
-      });
-    } else if (admission.destination.kind === "document")
-      footprint.push({ kind: "document", ref: admission.destination.ref });
-    else footprint.push({ kind: "session", session: submittedSession.sessionId });
-  } else {
-    const input = admission.input;
-    switch (admission.key) {
-      case "pod.member.write":
-      case "pod.member.save":
-        footprint.push({ kind: "member", pod: String(input.pod), path: String(input.path) });
-        break;
-      case "pod.export": {
-        footprint.push({ kind: "file", path: resolve(String(input.archivePath)) });
-        const capture = await capturePackage(String(input.pod));
-        const dependencies = async () => {
-          const listing = await listPackages();
-          if (listing.unreadable.length)
-            throw refused("Cannot freeze an unreadable Pod dependency catalog");
-          return listing.packages
-            .map((pod) => ({
-              id: pod.id,
-              members: pod.members.map((member) => ({ path: member.path, sha256: member.sha256 })),
-            }))
-            .sort((a, b) => a.id.localeCompare(b.id));
-        };
-        const versions = await dependencies();
-        frozen.dependencies = versions;
-        checks.push(async () => {
-          if (canonicalRouteInput(await dependencies()) !== canonicalRouteInput(versions))
-            throw refused("Pod dependency source changed after submission; submit a new command");
-        });
-        frozen.source = capture;
-        checks.push(async () => {
-          if (
-            canonicalRouteInput(await capturePackage(String(input.pod))) !==
-            canonicalRouteInput(capture)
-          )
-            throw refused("Pod source changed after submission; submit a new command");
-        });
-        break;
-      }
-      case "pod.import": {
-        const path = resolve(String(input.archivePath)),
-          bytes = await readFile(path),
-          entries = readZip(bytes);
-        const manifest = JSON.parse(entries.get("pod.json")?.toString("utf8") ?? "null") as {
-          id?: string;
-        } | null;
-        if (!manifest?.id) throw refused("Pod archive has no exact destination identity");
-        footprint.push(
-          ...[...entries.keys()].map((path) => ({
-            kind: "member" as const,
-            pod: manifest.id!,
-            path,
-          })),
-        );
-        const hash = createHash("sha256").update(bytes).digest("hex");
-        frozen.archive = { path, sha256: hash, bytesBase64: bytes.toString("base64") };
-        checks.push(async () => {
-          if (
-            createHash("sha256")
-              .update(await readFile(path))
-              .digest("hex") !== hash
-          )
-            throw refused("Pod archive changed after submission; submit a new command");
-        });
-        break;
-      }
-      case "pod.promote": {
-        const source = resolve(productPagesRootPath(), String(input.page)),
-          capture = await captureDirectory(source);
-        frozen.source = capture;
-        footprint.push(
-          { kind: "member", pod: String(input.id), path: "pod.json" },
-          ...capture.members.map((member) => ({
-            kind: "member" as const,
-            pod: String(input.id),
-            path: `pages/${String(input.page)}/${member.path}`,
-          })),
-        );
-        checks.push(async () => {
-          if (canonicalRouteInput(await captureDirectory(source)) !== canonicalRouteInput(capture))
-            throw refused("Page source changed after submission; submit a new command");
-        });
-        break;
-      }
-      case "host.shell.open":
-        if (crossing.caller.kind !== "human" && crossing.caller.kind !== "pea")
-          throw refused("Opening a host viewer requires a human or Pea caller");
-        // Opening the registered viewer changes no user resource bytes.
-        break;
-      case "aps.auth.login":
-      case "aps.auth.logout":
-        // Account administration remains an explicit human transport exception.
-        requireHuman(crossing.caller, "/actions", "APS account administration");
-        break;
-      case "rhvac.launch":
-      case "rhvac.sync":
-        footprint.push({ kind: "file", path: resolve(String(input.path)) });
-        break;
-      default:
-        throw refused(`'${admission.key}' has no declared external effect adapter`);
-    }
-  }
-  const revalidate = async () => {
-    await crossing.validate?.();
-    for (const check of checks) await check();
-  };
-  return owner.admit(
-    { ...admission, ...crossing, footprint, frozen, validate: revalidate },
-    async () => {
-      const session = await validate();
-      const definition = await operationDefinition(admission.key, bridge, session);
-      requireEligibleCaller(definition, crossing.caller, "/actions");
-      const actor = "actor" in definition ? definition.actor : undefined;
-      if (definition.intent !== "Mutate" && admission.key !== "scripting.execute")
-        throw refused("Only catalogued mutations enter external admission");
-      let nativeCheck: ValidateFunction | undefined;
-      if (isTsOnlyOperationKey(admission.key)) {
-        const contract = tsOnlyOperationSchemas[admission.key];
-        if (!("request" in contract)) throw refused("Operation has no request contract");
-        Schema.decodeUnknownSync(contract.request, {
-          onExcessProperty: "error",
-        })(admission.input);
-      } else {
-        if (!("requestSchemaJson" in definition) || !definition.requestSchemaJson)
-          throw refused("Native request schema unavailable");
-        const ajv = new Ajv({ strict: false, allErrors: true });
-        const schema = JSON.parse(definition.requestSchemaJson);
-        delete schema.$schema;
-        const check = ajv.compile(schema);
-        nativeCheck = check;
-        if (!check(admission.input))
-          throw refused(`Invalid native input: ${ajv.errorsText(check.errors)}`);
-      }
-      const expected = gatewayTarget(
-        admission.key,
-        definition.needs,
-        session,
-        admission.destination.kind === "document" ? admission.destination.ref.openId : undefined,
-      );
-      if (JSON.stringify(expected) !== JSON.stringify(admission.destination))
-        throw refused("Destination does not match operation needs");
-      if (!session) return { kind: "host-leaf", actor };
-      if (admission.key === "scripting.execute")
-        admitScript(
-          crossing.caller,
-          session.state?.openDocuments.map((doc) => ({
-            session: session.sessionId,
-            openId: doc.openId,
-          })) ?? [],
-          "/actions",
-          readTarget,
-        );
-      const process = await readOriginalProcess(
-        session.processId,
-        session.processStartUtcUnixMs ?? NaN,
-        sdk,
-      );
-      await validate(process);
-      const script = frozenScript;
-      if (script && !nativeCheck?.({ ...admission.input, sourceBundle: script.sourceBundle }))
-        throw refused(
-          `Native contract does not accept the captured Pod bundle: ${JSON.stringify(nativeCheck?.errors)}`,
-        );
-      return {
-        kind: "native-leaf",
-        process,
-        // The SDK session outlives its process; recovery reads a re-registration under it as a successor.
-        sdkSession: session.sdkSessionId,
-        actor,
-        script,
-      };
-    },
-    async (execution) => {
-      const prepared = execution.prepared as
-        | { kind: "host-leaf" }
-        | {
-            kind: "native-leaf";
-            process: NativeProcess;
-            script?: Awaited<ReturnType<typeof freezeScript>>;
-          };
-      const script = prepared.kind === "native-leaf" ? prepared.script : undefined;
-      if (
-        admission.key === "scripting.execute" &&
-        admission.input.sourcePath != null &&
-        !script?.sourceBundle
+      Object.values(commands).some(
+        (command) => "native" in command && command.native?.includes(key as never),
       )
-        throw refused(
-          "Original script preparation predates source bundles; original attempt cannot be redispatched",
-        );
-      const input = script
-        ? { ...admission.input, sourceBundle: script.sourceBundle }
-        : admission.input;
-      const result = await execution.step(
-        prepared.kind === "native-leaf" ? "native" : "file",
-        admission.key,
-        input,
-        async (requestId) => {
-          const session = await validate(
-            prepared.kind === "native-leaf"
-              ? nativeProcessSchema.parse(prepared.process)
-              : undefined,
+    )
+      throw refused("This native implementation is owned by its public command");
+    if (admission.target.kind === "sdk-session")
+      throw refused("Native operations require an exact attachment");
+    const target = admission.target.kind === "document" ? admission.target.ref : undefined;
+    const readTarget = consentedRead(caller, key, admission.input, target) ? target : undefined;
+    let session: SdkSession | undefined;
+    let metadata: Awaited<ReturnType<typeof operationDefinition>>;
+    let nativeCheck: ValidateFunction | undefined;
+    const nativeInput = z.record(z.string(), z.unknown()).superRefine((input, ctx) => {
+      try {
+        if (isTsOnlyOperationKey(key)) {
+          const contract = tsOnlyOperationSchemas[key];
+          if (!("request" in contract)) throw Error("Operation has no request contract");
+          Schema.decodeUnknownSync(contract.request, { onExcessProperty: "error" })(input);
+        } else {
+          if (!("requestSchemaJson" in metadata) || !metadata.requestSchemaJson)
+            throw Error("Native request schema unavailable");
+          if (!nativeCheck) {
+            const schema = JSON.parse(metadata.requestSchemaJson);
+            delete schema.$schema;
+            nativeCheck = new Ajv({ strict: false, allErrors: true }).compile(schema);
+          }
+          if (!nativeCheck(input)) throw Error(JSON.stringify(nativeCheck.errors));
+        }
+      } catch (error) {
+        ctx.addIssue({ code: "custom", message: String(error) });
+      }
+    });
+    const catalogued =
+      tsOnlyOperationCatalog.find((row) => row.key === key) ??
+      hostOpCatalog.find((row) => row.key === key);
+    const definition: Command = {
+      says: catalogued?.description ?? key,
+      needs:
+        (catalogued?.needs as Command["needs"]) ??
+        (admission.target.kind === "host"
+          ? "nothing"
+          : admission.target.kind === "session"
+            ? "session"
+            : "document"),
+      effect: "command",
+      dirties: [],
+      input: z.record(z.string(), z.unknown()),
+    };
+    const consumes: Consumed[] = [];
+    const effects: Footprint = [];
+    let payload: z.infer<typeof preparedGatewaySchema> = { kind: "host-leaf" };
+    let process: NativeProcess | undefined;
+    let script: Awaited<ReturnType<typeof freezeScript>>;
+    return {
+      definition,
+      prepared: preparedGatewaySchema,
+      bind: async () => {
+        session =
+          admission.target.kind === "host"
+            ? undefined
+            : await resolveSdkSession(
+                bridge,
+                {
+                  bridgeSessionId:
+                    admission.target.kind === "document"
+                      ? admission.target.ref.session
+                      : admission.target.kind === "session"
+                        ? admission.target.session
+                        : undefined,
+                },
+                sdk,
+              );
+        metadata = await operationDefinition(key, bridge, session);
+        requireEligibleCaller(metadata, caller, "/actions");
+        if (metadata.intent !== "Mutate" && key !== "scripting.execute")
+          throw refused("Only catalogued commands enter action admission");
+        const expected = gatewayTarget(key, metadata.needs, session, target?.openId);
+        if (canonicalRouteInput(expected) !== canonicalRouteInput(admission.target))
+          throw refused("Target does not match operation needs");
+        nativeInput.parse(admission.input);
+        if (session) {
+          process = await readOriginalProcess(
+            session.processId,
+            session.processStartUtcUnixMs ?? NaN,
+            sdk,
           );
-          if (admission.key === "scripting.execute" && session)
+          consumes.push({ kind: "incarnation", target: admission.target, process });
+          if (key === "scripting.execute") {
+            script = await freezeScript(admission.input);
+            if (script && admission.input.sourceBundle == null) {
+              const manifest = script.sourceBundle.files.find((file) => file.path === "pod.json");
+              const pod = manifest
+                ? (JSON.parse(
+                    Buffer.from(manifest.bytesBase64, "base64")
+                      .toString("utf8")
+                      .replace(/^\uFEFF/, ""),
+                  ) as { id?: string })
+                : null;
+              if (!pod?.id) throw refused("The captured script has no exact Pod identity");
+              consumes.push(
+                ...script.sourceBundle.files.map((file) => ({
+                  kind: "member" as const,
+                  pod: pod.id!,
+                  path: file.path,
+                  sha256: createHash("sha256")
+                    .update(Buffer.from(file.bytesBase64, "base64"))
+                    .digest("hex"),
+                  bytesBase64: file.bytesBase64,
+                })),
+              );
+            }
+            const scriptSession = session;
+            const documents = scriptSession.state?.openDocuments;
+            if (!documents) throw refused("Scripts require a complete sibling document census");
+            consumes.push({
+              kind: "census",
+              session: session.sessionId,
+              openIds: documents.map((doc) => doc.openId).sort(),
+            });
+            effects.push(
+              ...documents
+                .filter(
+                  (doc) =>
+                    !(
+                      caller.kind === "page" &&
+                      readTarget?.session === scriptSession.sessionId &&
+                      readTarget.openId === doc.openId
+                    ),
+                )
+                .map((doc) => ({
+                  kind: "document" as const,
+                  ref: { session: scriptSession.sessionId, openId: doc.openId },
+                })),
+            );
             admitScript(
-              crossing.caller,
-              session.state?.openDocuments.map((doc) => ({
-                session: session.sessionId,
-                openId: doc.openId,
-              })) ?? [],
-              "script step begin",
+              caller,
+              documents.map((doc) => ({ session: scriptSession.sessionId, openId: doc.openId })),
+              "/actions",
               readTarget,
             );
-          if (admission.destination.kind === "host") return local(admission.key, input);
-          const target = admission.destination;
-          if (target.kind === "sdk-session")
-            throw refused("Lifecycle selection is not a native destination");
-          const answer = await Effect.runPromise(
-            Effect.result(
-              bridge.invoke(
-                admission.key,
-                input,
-                target.kind === "session" ? target.session : target.ref.session,
-                target.kind === "document" ? target.ref.openId : null,
-                requestId,
+          } else
+            effects.push(
+              target
+                ? { kind: "document", ref: target }
+                : { kind: "session", session: session.sessionId },
+            );
+        } else {
+          const authored = admission.input;
+          switch (key) {
+            case "pod.member.write":
+            case "pod.member.save":
+              effects.push({
+                kind: "member",
+                pod: String(authored.pod),
+                path: String(authored.path),
+              });
+              if (key === "pod.member.save")
+                consumes.push({
+                  kind: "member",
+                  pod: String(authored.pod),
+                  path: String(authored.path),
+                  sha256: String(authored.expectedSha256),
+                });
+              break;
+            case "pod.export": {
+              const captured = await preparePodExport({
+                pod: String(authored.pod),
+                archivePath: String(authored.archivePath),
+              });
+              consumes.push({ kind: "catalog", snapshot: captured.versions });
+              payload = {
+                kind: "host-leaf",
+                export: { bytesBase64: captured.bytesBase64, result: captured.result },
+              };
+              effects.push({ kind: "file", path: resolve(String(authored.archivePath)) });
+              break;
+            }
+            case "pod.import": {
+              const path = resolve(String(authored.archivePath));
+              const bytes = await readFile(path);
+              const entries = readZip(bytes);
+              const manifest = JSON.parse(entries.get("pod.json")?.toString("utf8") ?? "null") as {
+                id?: string;
+              } | null;
+              if (!manifest?.id) throw refused("Pod archive has no exact destination identity");
+              consumes.push({
+                kind: "file",
+                path,
+                sha256: createHash("sha256").update(bytes).digest("hex"),
+                bytesBase64: bytes.toString("base64"),
+              });
+              effects.push(
+                ...[...entries.keys()].map((path) => ({
+                  kind: "member" as const,
+                  pod: manifest.id!,
+                  path,
+                })),
+              );
+              payload = {
+                kind: "host-leaf",
+                archive: {
+                  bytesBase64: bytes.toString("base64"),
+                  locator: path,
+                  ...(typeof authored.folder === "string" ? { folder: authored.folder } : {}),
+                },
+              };
+              break;
+            }
+            case "pod.promote": {
+              const source = resolve(productPagesRootPath(), String(authored.page));
+              const captured = await captureDirectory(source);
+              if (captured.diagnostics.some((issue) => issue.severity === "error"))
+                throw refused("Page source cannot be captured safely");
+              consumes.push({ kind: "directory", path: source, snapshot: captured });
+              const files = new Map<string, Buffer>([
+                [
+                  "pod.json",
+                  Buffer.from(
+                    `${JSON.stringify({ schemaVersion: 2, id: authored.id, name: authored.name ?? authored.page, version: "0.1.0", entrypoints: [] }, null, 2)}\n`,
+                  ),
+                ],
+              ]);
+              for (const member of captured.members)
+                files.set(
+                  `pages/${String(authored.page)}/${member.path}`,
+                  Buffer.from(member.bytes),
+                );
+              effects.push(
+                ...[...files.keys()].map((path) => ({
+                  kind: "member" as const,
+                  pod: String(authored.id),
+                  path,
+                })),
+              );
+              payload = {
+                kind: "host-leaf",
+                archive: {
+                  bytesBase64: writeZip(files).toString("base64"),
+                  locator: source,
+                  folder: String(authored.id),
+                },
+                promotedPage: String(authored.page),
+              };
+              break;
+            }
+            case "host.shell.open":
+              if (caller.kind !== "human" && caller.kind !== "pea")
+                throw refused("Opening a host viewer requires a human or Pea caller");
+              break;
+            case "aps.auth.login":
+            case "aps.auth.logout":
+              requireHuman(caller, "/actions", "APS account administration");
+              break;
+            case "rhvac.launch":
+            case "rhvac.sync":
+              effects.push({ kind: "file", path: resolve(String(authored.path)) });
+              break;
+            default:
+              throw refused(`'${key}' has no declared external effect adapter`);
+          }
+        }
+        return { consumes, effects };
+      },
+      prepare: async () => {
+        if (!process) return payload;
+        if (script && !nativeCheck?.({ ...admission.input, sourceBundle: script.sourceBundle }))
+          throw refused("Native contract refuses the captured Pod bundle");
+        return {
+          kind: "native-leaf",
+          process,
+          sdkSession: session?.sdkSessionId,
+          ...(script ? { script } : {}),
+        };
+      },
+      run: async (_ctx: CommandContext, execution: ActionExecution) => {
+        const prepared = preparedGatewaySchema.parse(execution.prepared);
+        const capturedScript = prepared.kind === "native-leaf" ? prepared.script : undefined;
+        if (
+          key === "scripting.execute" &&
+          admission.input.sourcePath != null &&
+          !capturedScript?.sourceBundle
+        )
+          throw refused("Original script has no sealed source bundle");
+        const input = capturedScript
+          ? { ...admission.input, sourceBundle: capturedScript.sourceBundle }
+          : admission.input;
+        return execution.step(
+          prepared.kind === "native-leaf" ? "native" : "file",
+          key,
+          input,
+          async (requestId) => {
+            if (prepared.kind === "host-leaf") {
+              if (prepared.archive) {
+                const installed = await installArchive(
+                  Buffer.from(prepared.archive.bytesBase64, "base64"),
+                  prepared.archive.locator,
+                  prepared.archive.folder,
+                );
+                return prepared.promotedPage
+                  ? { ...installed, key: `page:@${installed.id}/pages/${prepared.promotedPage}` }
+                  : installed;
+              }
+              if (prepared.export)
+                return writePodExport(
+                  prepared.export as Awaited<ReturnType<typeof preparePodExport>>,
+                );
+              return local(key, input);
+            }
+            const target = admission.target;
+            if (target.kind !== "document" && target.kind !== "session")
+              throw refused("Native target required");
+            const answer = await Effect.runPromise(
+              Effect.result(
+                bridge.invoke(
+                  key,
+                  input,
+                  target.kind === "document" ? target.ref.session : target.session,
+                  target.kind === "document" ? target.ref.openId : null,
+                  requestId,
+                ),
               ),
-            ),
-          );
-          if (answer._tag === "Failure") throw answer.failure;
-          const value = answer.success.value;
-          if (admission.key === "scripting.execute") requireScriptSuccess(value);
-          // The generated DTO exposes status as string. Only proven terminal successes proceed.
-          // Refusal/recovery evidence is not a successful effect and never permits automatic resume.
-          if (isTemporary(admission.key) && !temporarySucceeded(value))
-            throw new BridgeError(`Temporary lifecycle requires reconciliation`, 409, {
-              result: value,
-            });
-          return value;
-        },
-      );
-      return result;
-    },
-    resume,
-  );
+            );
+            if (answer._tag === "Failure") throw answer.failure;
+            const value = answer.success.value;
+            if (key === "scripting.execute") requireScriptSuccess(value);
+            if (isTemporary(key) && !temporarySucceeded(value))
+              throw new BridgeError("Temporary lifecycle requires reconciliation", 409, {
+                result: value,
+              });
+            return value;
+          },
+          prepared.kind === "native-leaf" ? prepared.process : undefined,
+        );
+      },
+      recover: async (step: import("@pe/agent-contracts").ActionStep, raw: unknown) => {
+        const prepared = preparedGatewaySchema.parse(raw);
+        if (prepared.kind !== "native-leaf")
+          throw Error("This command has no native receipt recovery");
+        const read = await readNativeReceipt(
+          step,
+          prepared.process,
+          sdk,
+          await successorOf(bridge, prepared.sdkSession),
+        );
+        return isTemporary(step.key) &&
+          read.step.state === "succeeded" &&
+          !temporarySucceeded(read.step.result)
+          ? { step, evidence: read.evidence }
+          : read;
+      },
+    };
+  };
 }
+
 const isTemporary = (key: string) =>
   key === "family.temporary.acquire" || key === "document.temporary.release";
 function temporarySucceeded(value: unknown): boolean {
@@ -509,24 +576,3 @@ async function successorOf(bridge: RevitBridge["Service"] | undefined, sdkSessio
       }
     : undefined;
 }
-export const recoverGatewayAction = (
-  id: string,
-  owner: ActionJournal,
-  sdk?: SdkReceiptReader,
-  bridge?: RevitBridge["Service"],
-) =>
-  owner.recover(id, async (step, prepared) => {
-    const value = prepared as { kind?: string; process?: unknown; sdkSession?: unknown };
-    if (value.kind !== "native-leaf") throw Error("This action has no native receipt recovery");
-    const read = await readNativeReceipt(
-      step,
-      nativeProcessSchema.parse(value.process),
-      sdk,
-      await successorOf(bridge, value.sdkSession),
-    );
-    return isTemporary(step.key) &&
-      read.step.state === "succeeded" &&
-      !temporarySucceeded(read.step.result)
-      ? { step, evidence: read.evidence }
-      : read;
-  });

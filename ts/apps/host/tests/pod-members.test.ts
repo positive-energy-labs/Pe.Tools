@@ -9,7 +9,7 @@ import { memberWork, settingsRouteState } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../../../packages/runtime/src/route-workspace.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
-import { admitFamilyAction } from "../src/family-actions.ts";
+import { invokeFamily } from "./domain-fixture.ts";
 import { writeFileStringAtomic } from "../src/files/index.ts";
 import {
   composeMember,
@@ -20,7 +20,6 @@ import {
 } from "../src/settings.ts";
 import type { RevitBridge } from "../src/bridge.ts";
 import { crossingOf } from "./callers.ts";
-
 let root: string;
 const member = { pod: "sample", path: "settings/file.json" };
 const digest = (raw: string | Uint8Array) => createHash("sha256").update(raw).digest("hex");
@@ -34,7 +33,6 @@ const schema = JSON.stringify({
   properties: { $schema: { type: "string" }, width: { type: "number" } },
   required: ["width"],
 });
-
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "pe-pod-members-"));
   await mkdir(join(root, "Renamed In Explorer", "settings"), { recursive: true });
@@ -49,7 +47,6 @@ beforeEach(async () => {
   );
 });
 afterEach(() => rm(root, { recursive: true, force: true }));
-
 test("write creates once, save replaces only the reviewed bytes, and refuses runs and escapes", async () => {
   const created = await run(writeMember({ ...member, content: '{"a":1}' }, ctx()));
   expect(created).toEqual({ ...member, sha256: digest('{"a":1}') });
@@ -77,10 +74,13 @@ test("write creates once, save replaces only the reviewed bytes, and refuses run
   const winner = racers.find((r) => r.status === "fulfilled")!;
   expect(racers.filter((r) => r.status === "fulfilled")).toHaveLength(1);
   expect(digest(await readFile(join(root, "Renamed In Explorer", "settings", "race.json")))).toBe(
-    (winner as PromiseFulfilledResult<{ sha256: string }>).value.sha256,
+    (
+      winner as PromiseFulfilledResult<{
+        sha256: string;
+      }>
+    ).value.sha256,
   );
 });
-
 test("with a session, the draft composes natively, then schema and semantic checks run", async () => {
   const calls: [string, unknown][] = [];
   const schemaUrl = "http://127.0.0.1:5180/schemas/settings/FamilyFoundry/models.json";
@@ -92,7 +92,11 @@ test("with a session, the draft composes natively, then schema and semantic chec
       if (key === "pod.member.compose")
         return Effect.succeed({
           composed: '{"width":3}',
-          source: (payload as { source: unknown }).source,
+          source: (
+            payload as {
+              source: unknown;
+            }
+          ).source,
           diagnostics: [
             {
               stage: "Shadowed",
@@ -150,7 +154,6 @@ test("with a session, the draft composes natively, then schema and semantic chec
   expect(result.schemaJson).toBe(schema);
   expect(result).toMatchObject({ schemaValidation: "passed", semanticValidation: "failed" });
 });
-
 test("settings.write saves reviewed member Work and republishes the new basis", async () => {
   await writeFile(file(), '{"width":1}');
   const scope = {
@@ -161,7 +164,7 @@ test("settings.write saves reviewed member Work and republishes the new basis", 
   };
   const rows = new Map<string, unknown>();
   const work = new RouteWorkspace({
-    registrations: [{ spec: settingsRouteState, handlers: {} }],
+    registrations: [{ spec: settingsRouteState }],
     store: {
       getState: async ({ targetKey, route }) => rows.get(targetKey + route),
       setState: async ({ targetKey, route, value }) => {
@@ -186,14 +189,16 @@ test("settings.write saves reviewed member Work and republishes the new basis", 
   );
   const owner = new ActionJournal(join(root, "journal.json"));
   const admit = (id: string, write: unknown, revision: number) =>
-    admitFamilyAction(
+    invokeFamily(
       {
         id,
-        kind: "workflow",
         key: "settings.write",
-        destination: { kind: "host" },
-        input: { member, write },
-        bases: { work: { key: scope, revision } },
+        target: { kind: "host" },
+        input: {
+          member,
+          write,
+          work: { key: scope, revision },
+        },
       },
       crossingOf("human"),
       owner,
@@ -208,7 +213,7 @@ test("settings.write saves reviewed member Work and republishes the new basis", 
     (await work.read(scope, settingsRouteState.route))!.doc,
   );
   expect(after.basis?.sha256).toBe(digest(await readFile(file())));
-  expect(after.fields["/width"]?.edit).toBeUndefined();
+  expect(after.fields["/width"]?.edit).toBeNull();
   // The old basis is gone from disk; a second save against it refuses before writing.
   const stale = await admit(
     "stale",
@@ -217,7 +222,6 @@ test("settings.write saves reviewed member Work and republishes the new basis", 
   );
   expect(stale.state).toBe("failed");
 });
-
 test("partial temp write failure cleans only the acquired temp and preserves destination", async () => {
   await writeFile(file(), "original");
   const failure = PlatformError.systemError({
@@ -251,7 +255,6 @@ test("partial temp write failure cleans only the acquired temp and preserves des
   expect(await readFile(file(), "utf8")).toBe("original");
   expect(await readdir(join(root, "Renamed In Explorer", "settings"))).toEqual(["file.json"]);
 });
-
 test("listing hashes current bytes even when file size and timestamp are unchanged", async () => {
   await writeFile(file(), '{"width":1}');
   const before = await stat(file());

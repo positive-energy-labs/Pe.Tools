@@ -6,7 +6,12 @@ import { dirname, join } from "node:path";
 import { instancesSessionSelection } from "@pe/agent-contracts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { HOST_CONTEXT_HEADER, HOST_CONTEXT_VARIABLE } from "@pe/host-contracts/contracts";
-import { admitInstancesAction, recoverInstancesAction } from "../src/instances-actions.ts";
+import {
+  invokeInstances,
+  recoverInstances,
+  fixtureAction,
+  afterDomainBind,
+} from "./domain-fixture.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { RevitBridge } from "../src/bridge.ts";
 import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
@@ -32,12 +37,10 @@ import {
   planAcquisition,
 } from "../src/acquisition.ts";
 import { runSemanticAction } from "../../../packages/mcps/src/shared/takeoff-action-client.ts";
-
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
   for (const f of cleanup.splice(0).reverse()) await f();
 });
-
 const session = { selection: { id: "dev" }, process: originalProcess };
 const receiptPath = "C:/receipts/dev.json";
 const openId = "a".repeat(32);
@@ -79,12 +82,15 @@ const adoptionAnswer = {
 const startedAnswer = {
   result: { state: "ok", phase: "ready", id: "dev", session: controlledRow() },
 };
-
 type Answer =
   | {
       result: unknown;
       exitCode?: number;
-      diagnostics?: { code: string; detail: string; fix: null }[];
+      diagnostics?: {
+        code: string;
+        detail: string;
+        fix: null;
+      }[];
       resolved?: unknown;
     }
   | Error;
@@ -141,13 +147,19 @@ async function setup(
     reads: 0,
     fail: false,
     /** Native independence facts the SDK census reports for every document; unknown by default. */
-    facts: {} as { isWorkshared?: boolean; isDetached?: boolean },
+    facts: {} as {
+      isWorkshared?: boolean;
+      isDetached?: boolean;
+    },
     /** What `doc list` says about unsaved edits. */
     modified: false,
     /** The bridge snapshot's SDK identity marker; null is a payload that did not attest. */
     identity: "sdk-open-v1" as "sdk-open-v1" | null,
     /** The incarnation `doc list` resolves; the default fixture process when null. */
-    process: null as null | { pid: number; processStartUtc: string },
+    process: null as null | {
+      pid: number;
+      processStartUtc: string;
+    },
   };
   const update = {
     plan: null,
@@ -230,14 +242,12 @@ async function setup(
     actor: "human" | "agent" = "human",
   ) => {
     const selection = instancesSessionSelection(input);
-    const row = await admitInstancesAction(
+    const row = await invokeInstances(
       {
         id: resume ?? `${key}-${++serial}`,
-        kind: "workflow",
         key,
-        destination: selection ? { kind: "sdk-session", selection } : { kind: "host" },
+        target: selection ? { kind: "sdk-session", selection } : { kind: "host" },
         input,
-        bases: {},
       },
       crossingOf(actor),
       owner,
@@ -254,19 +264,21 @@ async function setup(
   };
   return { calls, owner, deps, admit, dir, peaWork, file, census, machine };
 }
-
 /** A held process acquisition, as `instances.start` with owner pea records it. */
 async function recordPeaLaunch(owner: ActionJournal, peaWork = "C:/pea-work") {
-  const launch = await owner.admit(
+  const launch = await fixtureAction(
+    owner,
     {
       id: "pea-launch",
-      kind: "workflow",
       key: "instances.start",
       ...crossingOf("human"),
-      footprint: [],
-      destination: { kind: "host" },
-      input: { year: "2025", owner: "pea", addins: "on" },
-      bases: {},
+      effects: [],
+      target: { kind: "host" },
+      input: {
+        year: "2025",
+        owner: "pea",
+        addins: "on",
+      },
     },
     async () => ({
       target: null,
@@ -283,12 +295,10 @@ async function recordPeaLaunch(owner: ActionJournal, peaWork = "C:/pea-work") {
   );
   await owner.wait(launch.id);
 }
-
 const into = (id = "dev") => ({ session: { id } });
 const newRevit = (over: Record<string, unknown> = {}) => ({
   start: { year: "2025", owner: "you", addins: "on", ...over },
 });
-
 const grantedLifetime = { session: "bridge-dev", openId };
 /** A head whose one target a human added. */
 function grantHead(): ThreadHead {
@@ -302,7 +312,6 @@ function grantHead(): ThreadHead {
     revision: 1,
   };
 }
-
 test.each(["stop", "restart", "reset"])(
   "Pea %s declares every affected document instead of widening a thread grant",
   async (verb) => {
@@ -316,10 +325,9 @@ test.each(["stop", "restart", "reset"])(
       "agent",
     );
     expect(row.state).toBe("succeeded");
-    expect(row.footprint.filter((effect) => effect.kind === "document")).toHaveLength(2);
+    expect(row.effects.filter((effect) => effect.kind === "document")).toHaveLength(2);
   },
 );
-
 test.each(["stop", "restart", "reset"])(
   "D3 %s carries the grant when only its lifetime is present",
   async (verb) => {
@@ -338,7 +346,6 @@ test.each(["stop", "restart", "reset"])(
     expect(f.census.reads).toBeGreaterThanOrEqual(2);
   },
 );
-
 test.each(["stop", "restart"])(
   "D3 %s refuses the granted lifetime when the bridge does not attest SDK document identity",
   async (verb) => {
@@ -357,7 +364,6 @@ test.each(["stop", "restart"])(
     expect(f.calls.every((args) => args[1] === "list")).toBe(true);
   },
 );
-
 test.each(["stop", "restart", "reset"])(
   "D3 %s carries empty-user-session only after a fresh empty census",
   async (verb) => {
@@ -374,7 +380,6 @@ test.each(["stop", "restart", "reset"])(
     expect(f.census.reads).toBeGreaterThanOrEqual(3);
   },
 );
-
 test.each(["start", "open"])(
   "a held Pea %s acquisition admits agent stop only when every document is its own",
   async (verb) => {
@@ -419,13 +424,12 @@ test.each(["start", "open"])(
     const next = await stop();
     expect(next.state).toBe("succeeded");
     expect(
-      next.footprint.some(
+      next.effects.some(
         (effect) => effect.kind === "document" && effect.ref.openId === "b".repeat(32),
       ),
     ).toBe(true);
   },
 );
-
 test("an agent opens a new copy into the Revit an acquisition started; a reload there stays human", async () => {
   const f = await setup(
     () => ({ result: { state: "ok", document: { openId, path: null } } }),
@@ -453,7 +457,6 @@ test("an agent opens a new copy into the Revit an acquisition started; a reload 
     ).state,
   ).toBe("succeeded");
 });
-
 test("each Pea acquisition starts its own named Revit, never the person's dev session name", async () => {
   // The person's foreground dev session holds the checkout's default name ("dev" here).
   const f = await setup(() => startedAnswer, [controlledRow()]);
@@ -475,7 +478,6 @@ test("each Pea acquisition starts its own named Revit, never the person's dev se
     expect(argv.includes("--snapshot")).toBe(argv.includes("--project"));
   }
 });
-
 test("a Pea launch of a workshared model copies first, then opens the copy detached", async () => {
   const f = await setup(
     () => ({ result: { state: "ok", document: { openId } } }),
@@ -490,13 +492,18 @@ test("a Pea launch of a workshared model copies first, then opens the copy detac
   expect(open[2]!.startsWith(f.peaWork)).toBe(true);
   expect(open).toContain("--detach");
   expect(await readFile(source)).toEqual(before);
-  expect((receipt as { result?: unknown }).result).toMatchObject({
+  expect(
+    (
+      receipt as {
+        result?: unknown;
+      }
+    ).result,
+  ).toMatchObject({
     opened: open[2],
     copiedFrom: source,
     detached: true,
   });
 });
-
 test("Pea refuses, undispatched, a file whose worksharing it cannot read or a source it cannot resolve", async () => {
   const f = await setup(
     () => ({ result: { state: "ok", document: { openId } } }),
@@ -511,7 +518,6 @@ test("Pea refuses, undispatched, a file whose worksharing it cannot read or a so
   expect(f.calls.some((argv) => argv[0] === "doc" && argv[1] === "open")).toBe(false);
   expect(existsSync(f.peaWork)).toBe(false);
 });
-
 test.each(["open", "stop", "restart", "close"])(
   "observed 4242 is adopted by the SDK before %s dispatches by pid with its receipt",
   async (verb) => {
@@ -524,7 +530,10 @@ test.each(["open", "stop", "restart", "close"])(
     );
     const input =
       verb === "open"
-        ? { source: "C:/Tower.rvt", into: { session: { pid: 4242 } } }
+        ? {
+            source: await f.file("Tower.rvt", "Worksharing: Not enabled"),
+            into: { session: { pid: 4242 } },
+          }
         : {
             session: observed,
             ...(verb === "stop" || verb === "close" ? { unsaved: "keep" } : {}),
@@ -535,9 +544,9 @@ test.each(["open", "stop", "restart", "close"])(
     const receipt = await f.admit(`instances.${verb}`, input);
     expect(receipt.state).toBe("succeeded");
     expect(receipt.steps[0]).toMatchObject({ key: `instances.${verb}.adopt`, state: "succeeded" });
-    expect(f.calls.map((args) => args.slice(0, 2).join(" "))).toEqual([
-      ...(verb === "close" ? ["doc list"] : []),
-      "session list",
+    expect(
+      f.calls.filter((args) => args[1] !== "list").map((args) => args.slice(0, 2).join(" ")),
+    ).toEqual([
       "session start",
       `${verb === "open" || verb === "close" ? "doc" : "session"} ${verb === "restart" ? "hr" : verb}`,
     ]);
@@ -552,7 +561,6 @@ test.each(["open", "stop", "restart", "close"])(
     expect(flag(mutation, "--expect-session")).toBe(adopted.session.receipt.receiptPath);
   },
 );
-
 test.each(["resolved-pid", "resolved-start", "session-start", "receipt"])(
   "adoption refuses an invalid %s before the requested mutation",
   async (bad) => {
@@ -570,7 +578,6 @@ test.each(["resolved-pid", "resolved-start", "session-start", "receipt"])(
     expect(f.calls.some((args) => args[0] === "doc")).toBe(false);
   },
 );
-
 test("F7: an acquisition records its paths before writing; a crash at any boundary reconciles from receipts, never guessed", async () => {
   let opened = "";
   const f = await setup(
@@ -594,8 +601,20 @@ test("F7: an acquisition records its paths before writing; a crash at any bounda
     "instances.open",
   ]);
   for (const step of done.steps.filter((each) => each.kind === "file"))
-    expect((step.input as { to: string }).to.startsWith(intent.root)).toBe(true);
-  expect(opened).toBe((intent.document!.origin as { work: string }).work);
+    expect(
+      (
+        step.input as {
+          to: string;
+        }
+      ).to.startsWith(intent.root),
+    ).toBe(true);
+  expect(opened).toBe(
+    (
+      intent.document!.origin as {
+        work: string;
+      }
+    ).work,
+  );
   const certified = [{ openId, isWorkshared: false, isDetached: false }];
   expect(
     acquiredOpenIds(foldAcquisitions([done]), originalProcess, certified, [openId]).get(openId),
@@ -642,7 +661,7 @@ test("F7: an acquisition records its paths before writing; a crash at any bounda
   const reads: string[][] = [];
   // The SDK's recorded op response carries the bridge's document itself (acceptance R4d journal).
   const response = { openId, path: opened, title: "Tower" };
-  await recoverInstancesAction(done.id, journal, {
+  await recoverInstances(done.id, journal, {
     sdk: async (args) => {
       reads.push([...args]);
       return replayAnswer(args, {
@@ -668,7 +687,6 @@ test("F7: an acquisition records its paths before writing; a crash at any bounda
     done.id,
   );
 });
-
 /** An SDK that starts, opens the copy it is given, saves create-only, closes and stops. */
 async function acquisitionSetup(detached = false) {
   const row = controlledRow({ shape: shape("background") });
@@ -721,7 +739,6 @@ async function acquisitionSetup(detached = false) {
   const [acquisition] = foldAcquisitions(await f.owner.list());
   return { f, source, acquired, acquisition: acquisition! };
 }
-
 test("handover saves the acquired copy to its create-only result with a diff plan; cleanup keeps it and stops only its own Revit", async () => {
   const { f, source, acquired, acquisition } = await acquisitionSetup();
   const intent = acquisition.intent.document!;
@@ -742,7 +759,13 @@ test("handover saves the acquired copy to its create-only result with a diff pla
   expect(save).not.toContain("--central");
   const plan = JSON.parse(await readFile(intent.diffPlan, "utf8"));
   expect(plan).toMatchObject({
-    baseline: { path: (intent.origin as { baseline: string }).baseline },
+    baseline: {
+      path: (
+        intent.origin as {
+          baseline: string;
+        }
+      ).baseline,
+    },
     domain: { state: "unknown" },
   });
   expect(plan.baseline.sha256).toBe(acquisition.baseline!.sha256);
@@ -770,7 +793,11 @@ test("handover saves the acquired copy to its create-only result with a diff pla
     undefined,
     "agent",
   );
-  const work = (intent.origin as { work: string }).work;
+  const work = (
+    intent.origin as {
+      work: string;
+    }
+  ).work;
   expect(cleaned).toMatchObject({
     state: "succeeded",
     basis: { kind: "acquisition", id: acquired.id, scope: { kind: "release" } },
@@ -786,7 +813,11 @@ test("handover saves the acquired copy to its create-only result with a diff pla
   for (const kept of [
     intent.result,
     intent.diffPlan,
-    (intent.origin as { baseline: string }).baseline,
+    (
+      intent.origin as {
+        baseline: string;
+      }
+    ).baseline,
   ])
     expect(existsSync(kept)).toBe(true);
   expect(await readFile(source, "utf16le")).toBe("Worksharing: Not enabled");
@@ -800,7 +831,6 @@ test("handover saves the acquired copy to its create-only result with a diff pla
     ),
   ).rejects.toMatchObject({ refusal: { code: "acquisition.unproven" } });
 });
-
 /**
  * R6 (acceptance 2026-10-13): a Save As moves the open document to its new file; the lifetime
  * stays the acquisition's, and the new file is a receipted artifact of it that cleanup keeps.
@@ -846,12 +876,15 @@ test("a Save As of an acquired document records its new file as the acquisition'
   expect(cleaned.state).toBe("succeeded");
   expect(existsSync(out)).toBe(true);
 });
-
 test.each([false, true])(
   "keep refuses saved changes after handover even when the document is closed=%s",
   async (closed) => {
     const { f, acquired, acquisition } = await acquisitionSetup();
-    const work = (acquisition.intent.document!.origin as { work: string }).work;
+    const work = (
+      acquisition.intent.document!.origin as {
+        work: string;
+      }
+    ).work;
     // A work copy may already differ from baseline when handed over; that saved state is retainable.
     await writeFile(work, "edits before handover");
     expect(
@@ -886,7 +919,6 @@ test.each([false, true])(
     ).toMatchObject({ state: "succeeded" });
   },
 );
-
 test("cleanup names only its own acquisition: a foreign id refuses, a user document B is never closed and keeps the Revit", async () => {
   const { f, acquired, acquisition } = await acquisitionSetup();
   await expect(
@@ -905,7 +937,10 @@ test("cleanup names only its own acquisition: a foreign id refuses, a user docum
     undefined,
     "agent",
   );
-  const origin = acquisition.intent.document!.origin as { work: string; baseline: string };
+  const origin = acquisition.intent.document!.origin as {
+    work: string;
+    baseline: string;
+  };
   expect(kept).toMatchObject({
     state: "incomplete",
     error: expect.stringContaining("1 other document(s) are open there"),
@@ -921,16 +956,24 @@ test("cleanup names only its own acquisition: a foreign id refuses, a user docum
   const stopped = await f.admit(
     "instances.cleanup",
     { acquisition: acquired.id, unsaved: "discard" },
-    undefined,
+    kept.id,
     "agent",
   );
-  expect(stopped).toMatchObject({ state: "succeeded", result: { closed: null, removed: [] } });
+  expect(stopped, JSON.stringify(stopped)).toMatchObject({
+    state: "succeeded",
+    result: { closed: openId },
+  });
   expect(f.calls.filter((argv) => argv[1] === "close")).toHaveLength(1);
   expect(f.calls.at(-1)!.slice(0, 2)).toEqual(["session", "stop"]);
 });
-
 /** The SDK's `op result` for an op whose recorded process died before it settled (op.process-dead). */
-const abandonedOp = (requestId: string, key: string, process: { pid: number }): Answer => ({
+const abandonedOp = (
+  requestId: string,
+  key: string,
+  process: {
+    pid: number;
+  },
+): Answer => ({
   result: {
     state: "abandoned",
     requestId,
@@ -945,7 +988,6 @@ const abandonedOp = (requestId: string, key: string, process: { pid: number }): 
     },
   ],
 });
-
 /**
  * A fake pe-revit for Pea's own Revit across a crash of our host (acceptance R4b, W2 20). `session
  * start --id` mints a new Revit under that id and enforces the SDK's expectation rule
@@ -964,7 +1006,13 @@ async function crashWorld() {
   };
   const row = (id: string) =>
     rows.find((each) => each.id === id) as
-      | { case: string; process: typeof originalProcess; receipt: { receiptPath: string } }
+      | {
+          case: string;
+          process: typeof originalProcess;
+          receipt: {
+            receiptPath: string;
+          };
+        }
       | undefined;
   const f = await setup((args) => {
     if (args[0] === "op")
@@ -1024,9 +1072,12 @@ async function crashWorld() {
   const source = await f.file("Tower.rvt", "Worksharing: Not enabled");
   return { f, world, rows, row, die, input: { source, into: newRevit({ owner: "pea" }) } };
 }
-const stepStates = (receipt: { steps: readonly { key: string; state: string }[] }) =>
-  receipt.steps.map((step) => `${step.key}:${step.state}`);
-
+const stepStates = (receipt: {
+  steps: readonly {
+    key: string;
+    state: string;
+  }[];
+}) => receipt.steps.map((step) => `${step.key}:${step.state}`);
 test("W2 20 (a): a start whose pe-revit died with no session is not done; resume starts afresh", async () => {
   const { f, world, input } = await crashWorld();
   world.crash = "start";
@@ -1034,7 +1085,7 @@ test("W2 20 (a): a start whose pe-revit died with no session is not done; resume
   expect(lost.state).toBe("unknown");
   const start = lost.steps.at(-1)!;
   world.ops[start.id] = abandonedOp(start.id, "session.start", { pid: 37744 });
-  const recovered = await recoverInstancesAction(lost.id, f.owner, f.deps);
+  const recovered = await recoverInstances(lost.id, f.owner, f.deps);
   expect(stepStates(recovered)).toEqual([
     "acquisition.baseline:succeeded",
     "acquisition.work:succeeded",
@@ -1053,7 +1104,6 @@ test("W2 20 (a): a start whose pe-revit died with no session is not done; resume
     document: { sdkOpenId: openId },
   });
 });
-
 test("W2 20 (a'): a start whose pe-revit died after its Revit came up is done from the session list", async () => {
   const { f, world, rows, input } = await crashWorld();
   world.crash = "start";
@@ -1070,7 +1120,7 @@ test("W2 20 (a'): a start whose pe-revit died after its Revit came up is done fr
       shape: shape("background"),
     }),
   );
-  const recovered = await recoverInstancesAction(lost.id, f.owner, f.deps);
+  const recovered = await recoverInstances(lost.id, f.owner, f.deps);
   expect(recovered.steps.at(-1)).toMatchObject({
     state: "succeeded",
     result: { id, session: { process: { pid: 77 } } },
@@ -1080,7 +1130,6 @@ test("W2 20 (a'): a start whose pe-revit died after its Revit came up is done fr
   expect(world.starts).toHaveLength(1);
   expect(flag(world.opens[0]!, "--expect-session")).toBe("C:/r/77.json");
 });
-
 test("W2 20 (b): resume redoes a start whose Revit died, never reusing it", async () => {
   const { f, world, row, die, input } = await crashWorld();
   world.crash = "open";
@@ -1089,7 +1138,7 @@ test("W2 20 (b): resume redoes a start whose Revit died, never reusing it", asyn
   const first = row(acquisitionSessionId(lost.id))!;
   die();
   // The open's pe-revit died before the SDK admitted it: recovery proves it never ran.
-  const recovered = await recoverInstancesAction(lost.id, f.owner, f.deps);
+  const recovered = await recoverInstances(lost.id, f.owner, f.deps);
   expect(recovered.steps.at(-1)).toMatchObject({ state: "failed", notDispatched: true });
   const resumed = await f.admit("instances.open", input, lost.id);
   expect(resumed.state, JSON.stringify(resumed)).toBe("succeeded");
@@ -1113,7 +1162,6 @@ test("W2 20 (b): resume redoes a start whose Revit died, never reusing it", asyn
     process: { pid: first.process.pid + 1 },
   });
 });
-
 test("W2 20 (c): an open whose Revit died is not done, and cleanup releases what is left", async () => {
   const { f, world, row, die, input } = await crashWorld();
   world.crash = "open";
@@ -1122,7 +1170,7 @@ test("W2 20 (c): an open whose Revit died is not done, and cleanup releases what
   const revit = row(acquisitionSessionId(lost.id))!.process;
   die();
   world.ops[open.id] = abandonedOp(open.id, "doc.open", revit);
-  const recovered = await recoverInstancesAction(lost.id, f.owner, f.deps);
+  const recovered = await recoverInstances(lost.id, f.owner, f.deps);
   expect(recovered.steps.at(-1)).toMatchObject({ state: "failed" });
   expect(recovered.steps.at(-1)).not.toHaveProperty("notDispatched");
   const [acquisition] = foldAcquisitions(await f.owner.list());
@@ -1134,7 +1182,10 @@ test("W2 20 (c): an open whose Revit died is not done, and cleanup releases what
     undefined,
     "agent",
   );
-  const origin = acquisition!.intent.document!.origin as { work: string; baseline: string };
+  const origin = acquisition!.intent.document!.origin as {
+    work: string;
+    baseline: string;
+  };
   expect(cleaned, JSON.stringify(cleaned)).toMatchObject({
     state: "succeeded",
     result: { closed: null, removed: [origin.work, origin.baseline], stopped: null },
@@ -1143,7 +1194,6 @@ test("W2 20 (c): an open whose Revit died is not done, and cleanup releases what
   expect(f.calls.slice(before).filter((argv) => argv[1] !== "list")).toEqual([]);
   expect(foldAcquisitions(await f.owner.list())[0]!.state).toBe("released");
 });
-
 /**
  * Acceptance R4d (beta.207): our host died during the open, Pea's Revit SURVIVED with the work copy
  * open, recovery read the SDK's answer and resume completed. Cleanup then ran only
@@ -1170,16 +1220,17 @@ test("R4d: after recovery over HTTP, cleanup closes and stops the Revit that sur
     return JSON.parse(text) as {
       id: string;
       state: string;
-      steps: { key: string; state: string }[];
+      steps: {
+        key: string;
+        state: string;
+      }[];
     };
   };
   const admitted = await post("/actions", {
     id: "r4d-open",
-    kind: "workflow",
     key: "instances.open",
-    destination: { kind: "host" },
+    target: { kind: "host" },
     input,
-    bases: {},
   });
   const lost = await f.owner.wait(admitted.id);
   expect(lost.state).toBe("unknown");
@@ -1211,11 +1262,12 @@ test("R4d: after recovery over HTTP, cleanup closes and stops the Revit that sur
   });
   const cleaning = await post("/actions", {
     id: "r4d-cleanup",
-    kind: "workflow",
     key: "instances.cleanup",
-    destination: { kind: "host" },
-    input: { acquisition: lost.id, unsaved: "discard" },
-    bases: {},
+    target: { kind: "host" },
+    input: {
+      acquisition: lost.id,
+      unsaved: "discard",
+    },
   });
   const cleaned = await f.owner.wait(cleaning.id);
   expect(cleaned.state, JSON.stringify(cleaned)).toBe("succeeded");
@@ -1231,7 +1283,6 @@ test("R4d: after recovery over HTTP, cleanup closes and stops the Revit that sur
   expect(row(acquisitionSessionId(lost.id))!.case).toBe("gone-receipt");
   expect(foldAcquisitions(await f.owner.list())[0]!.state).toBe("released");
 });
-
 test.each(["running", "missing-response", "wrong-request", "wrong-key", "conflicting-state"])(
   "a lost supervisor with %s evidence stays unknown and never re-dispatches",
   async (mode) => {
@@ -1255,13 +1306,12 @@ test.each(["running", "missing-response", "wrong-request", "wrong-key", "conflic
       return { result };
     }, []);
     const lost = await f.admit("instances.start", { year: "2025", owner: "you", addins: "on" });
-    const settled = await recoverInstancesAction(lost.id, f.owner, f.deps);
+    const settled = await recoverInstances(lost.id, f.owner, f.deps);
     expect(settled.steps[0]!.state).toBe("unknown");
     expect(f.calls.at(-1)).toEqual(["op", "result", lost.steps[0]!.id, "--json"]);
     expect(f.calls.filter((args) => args[1] === "start")).toHaveLength(1);
   },
 );
-
 test("restart, stop and close run for a human; stop and close require an unsaved choice", async () => {
   const f = await setup((args) =>
     args[0] === "session"
@@ -1272,10 +1322,8 @@ test("restart, stop and close run for a human; stop and close require an unsaved
   for (const key of ["instances.stop", "instances.close"])
     await expect(f.admit(key, { session, document })).rejects.toThrow();
   expect(f.calls).toEqual([]);
-
   await expect(f.admit("instances.restart", { session, unsaved: "keep" })).rejects.toThrow();
   expect(f.calls).toEqual([]);
-
   expect((await f.admit("instances.restart", { session }, undefined, "human")).state).toBe(
     "succeeded",
   );
@@ -1284,14 +1332,12 @@ test("restart, stop and close run for a human; stop and close require an unsaved
   expect(restart).toContain("--restart");
   expect(restart).not.toContain("--unsaved");
   expect(flag(restart, "--expect-session")).toBe(receiptPath);
-
   expect(
     (await f.admit("instances.stop", { session, unsaved: "keep" }, undefined, "human")).state,
   ).toBe("succeeded");
   const stop = f.calls.at(-1)!;
   expect(stop.slice(0, 4)).toEqual(["session", "stop", "--id", "dev"]);
   expect(flag(stop, "--unsaved")).toBe("keep");
-
   const close = await f.admit(
     "instances.close",
     { session, document, unsaved: "keep" },
@@ -1304,46 +1350,38 @@ test("restart, stop and close run for a human; stop and close require an unsaved
   expect(flag(closeArgv, "--unsaved")).toBe("keep");
   expect(flag(closeArgv, "--expect-doc")).toBe(openId);
 });
-
 test("a document arriving after admission refuses stop at effect entry", async () => {
   const f = await setup(() => ({ result: { state: "ok" } }));
   f.census.documents = [];
-  const admit = f.owner.admit.bind(f.owner);
-  f.owner.admit = (...args) => {
+  afterDomainBind(f.owner, () => {
     f.census.documents = [openId];
-    return admit(...args);
-  };
+  });
   expect(
     await f.admit("instances.stop", { session, unsaved: "keep" }, undefined, "agent"),
   ).toMatchObject({
     state: "failed",
     notDispatched: true,
-    error: expect.stringContaining("lifecycle.ungranted-documents"),
+    refusal: expect.objectContaining({ kind: "stale" }),
   });
   expect(f.calls.every((args) => args[1] === "list")).toBe(true);
 });
-
 test("a user document opened in Pea's Revit after admission refuses Pea's stop at effect entry", async () => {
   const f = await setup(() => ({ result: { state: "ok" } }), [controlledRow()]);
   await recordPeaLaunch(f.owner);
   f.census.documents = [];
-  const admit = f.owner.admit.bind(f.owner);
-  f.owner.admit = (...args) => {
+  afterDomainBind(f.owner, () => {
     f.census.documents = [openId];
-    return admit(...args);
-  };
+  });
   expect(
     await f.admit("instances.stop", { session, unsaved: "keep" }, undefined, "agent"),
   ).toMatchObject({
     state: "failed",
     notDispatched: true,
-    error: expect.stringContaining("lifecycle.ungranted-documents"),
+    refusal: expect.objectContaining({ kind: "stale" }),
   });
   expect(f.calls.every((args) => args[1] === "list")).toBe(true);
 });
-
 const sdkDocument = { source: "sdk", session: session.selection, openId } as const;
-
 test("an agent save is one document crossing: the granted lifetime admits, another refuses", async () => {
   const f = await setup(() => ({ result: { state: "ok", document: { openId } } }));
   bindControl({ heads: grantHead });
@@ -1364,7 +1402,6 @@ test("an agent save is one document crossing: the granted lifetime admits, anoth
     ).state,
   ).toBe("succeeded");
 });
-
 test("/actions/cancel stops a running Instances step through the SDK op cancel, never the Revit bridge", async () => {
   let release!: () => void;
   const held = new Promise<void>((resolve) => (release = resolve));
@@ -1373,14 +1410,16 @@ test("/actions/cancel stops a running Instances step through the SDK op cancel, 
     await held;
     return { result: { state: "cancelled" } };
   });
-  const row = await admitInstancesAction(
+  const row = await invokeInstances(
     {
       id: "save-held",
-      kind: "workflow",
       key: "instances.save",
-      destination: { kind: "sdk-session", selection: session.selection },
-      input: { session, document: sdkDocument, to: { kind: "self" } },
-      bases: {},
+      target: { kind: "sdk-session", selection: session.selection },
+      input: {
+        session,
+        document: sdkDocument,
+        to: { kind: "self" },
+      },
     },
     crossingOf("human"),
     f.owner,
@@ -1406,7 +1445,6 @@ test("/actions/cancel stops a running Instances step through the SDK op cancel, 
   release();
   expect((await f.owner.wait(row.id)).state).toBe("cancelled");
 });
-
 /**
  * R5 (acceptance 2026-10-13): Pea's stop succeeded, then the action client called its own receipt
  * a conflict, because the host records the parsed request (force defaulted) and the client
@@ -1431,7 +1469,7 @@ test.each([
       key,
       { session, unsaved: "keep" },
       undefined,
-      {},
+      undefined,
       server.base,
     ).finally(() => {
       if (prior === undefined) delete process.env[HOST_CONTEXT_VARIABLE];

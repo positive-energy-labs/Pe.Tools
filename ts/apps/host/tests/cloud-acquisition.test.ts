@@ -7,10 +7,11 @@ import { instancesLaunchSchema } from "@pe/agent-contracts";
 import { acquiredOpenIds, foldAcquisitions, planAcquisition } from "../src/acquisition.ts";
 import { downloadCloudVersion } from "../src/cloud-version.ts";
 import { ActionJournal } from "../src/action-journal.ts";
-import { admitInstancesAction } from "../src/instances-actions.ts";
+import { invokeInstances, fixtureAction } from "./domain-fixture.ts";
 import { crossingOf } from "./callers.ts";
 import { replay } from "./e2-sdk-recordings.ts";
-
+import { createMachine, useHostMachine, unavailableShare } from "../src/machine.ts";
+import { unreadLeg } from "../src/update-reader.ts";
 const folders: string[] = [];
 afterEach(async () => {
   for (const folder of folders.splice(0)) await rm(folder, { recursive: true, force: true });
@@ -20,7 +21,6 @@ async function folder() {
   folders.push(dir);
   return dir;
 }
-
 const source =
   "cld://US/{11111111-1111-1111-1111-111111111111}Project/{22222222-2222-2222-2222-222222222222}Tower.rvt";
 const version = {
@@ -29,7 +29,6 @@ const version = {
   versionId: "urn:adsk.wipprod:fs.file:vf.model?version=7",
 };
 const into = { start: { year: "2025", owner: "pea", addins: "on" } } as const;
-
 test("cloud acquisition refuses a model identity without an immutable version before allocation", () => {
   expect(() =>
     planAcquisition(
@@ -41,7 +40,6 @@ test("cloud acquisition refuses a model identity without an immutable version be
     ),
   ).toThrow("immutable APS version");
 });
-
 test("the acquisition contract freezes an explicit version and reserves local baseline/work paths", () => {
   const launch = instancesLaunchSchema.parse({ source, into, cloudVersion: version });
   const intent = planAcquisition(
@@ -60,7 +58,6 @@ test("the acquisition contract freezes an explicit version and reserves local ba
   expect(intent.document!.origin).toHaveProperty("baseline");
   expect(intent.document!.origin).toHaveProperty("work");
 });
-
 const resource = {
   data: {
     type: "versions",
@@ -94,7 +91,6 @@ function apsResponses(body = resource) {
   };
   return Object.assign(request, { calls });
 }
-
 test("APS download validates immutable lineage, hashes exact bytes and never sends the bearer to storage", async () => {
   const to = join(await folder(), "baseline.rvt");
   const request = apsResponses();
@@ -119,7 +115,6 @@ test("APS download validates immutable lineage, hashes exact bytes and never sen
   ).rejects.toThrow();
   expect(await readFile(to, "utf8")).toBe("immutable-version-seven");
 });
-
 test("a changed version or model identity refuses before download and allocation", async () => {
   const to = join(await folder(), "baseline.rvt");
   const request = apsResponses({
@@ -132,7 +127,6 @@ test("a changed version or model identity refuses before download and allocation
   expect(request.calls).toHaveLength(1);
   await expect(readFile(to)).rejects.toMatchObject({ code: "ENOENT" });
 });
-
 test("recorded SDK envelopes: only the downloaded local work file crosses the acquisition open boundary", async () => {
   const dir = await folder();
   const owner = new ActionJournal(join(dir, "actions.json"));
@@ -142,17 +136,57 @@ test("recorded SDK envelopes: only the downloaded local work file crosses the ac
   );
   row.shape.posture = "background";
   row.execution = { allowed: true, code: null, detail: null };
+  const update = {
+    plan: null,
+    receipt: null,
+    requestId: null,
+    admittedPlanId: null,
+    planLeg: unreadLeg(),
+    receiptLeg: unreadLeg(),
+    automatic: true,
+  };
+  const machine = createMachine({
+    targets: { targets: () => [], subscribe: () => () => {} },
+    actions: () => owner.list(),
+    host: async () => {
+      throw Error("not needed");
+    },
+    peers: async () => [],
+    years: async () => [],
+    providers: async () => ({ providers: [], access: { guarded: true } }),
+    share: unavailableShare,
+    sessions: async () => [
+      {
+        ...row,
+        observedAtUtc: new Date().toISOString(),
+        bridge: { bridge: "ready", documents: [] },
+      },
+    ],
+    documents: async () => ({ state: "ok", documents: [] }),
+    holdings: async () => null,
+    attachments: async () => [],
+    update: {
+      current: () => update,
+      refresh: async () => update,
+      apply: async () => update,
+      automaticPending: () => false,
+      announce: () => {},
+      setAutomatic: async () => update,
+    },
+  });
+  useHostMachine(machine);
   const peaWork = join(dir, "pea-work");
-  const started = await owner.admit(
+  const started = await fixtureAction(
+    owner,
     {
       id: "process",
-      kind: "workflow",
       key: "instances.start",
       ...crossingOf("human"),
-      footprint: [{ kind: "session", session: "new:process" }],
-      destination: { kind: "host" },
-      input: into.start,
-      bases: {},
+      effects: [{ kind: "session", session: "new:process" }],
+      target: { kind: "host" },
+      input: {
+        ...(into.start as Record<string, unknown>),
+      },
     },
     async () => ({
       target: null,
@@ -189,14 +223,16 @@ test("recorded SDK envelopes: only the downloaded local work file crosses the ac
     expect(args[2]).not.toContain("cld:");
     return replay("doc-open", { result: { document: { path: args[2], openId: "e".repeat(32) } } });
   };
-  const admitted = await admitInstancesAction(
+  const admitted = await invokeInstances(
     {
       id: "version",
-      kind: "workflow",
       key: "instances.open",
-      destination: { kind: "sdk-session", selection: { id: row.id } },
-      input: { source, cloudVersion: version, into: { session: { id: row.id } } },
-      bases: {},
+      target: { kind: "sdk-session", selection: { id: row.id } },
+      input: {
+        source,
+        cloudVersion: version,
+        into: { session: { id: row.id } },
+      },
     },
     crossingOf("human"),
     owner,
@@ -211,7 +247,9 @@ test("recorded SDK envelopes: only the downloaded local work file crosses the ac
     },
   );
   const receipt = await owner.wait(admitted.id);
-  expect(receipt).toMatchObject({ state: "succeeded" });
+  expect(receipt, JSON.stringify(receipt)).toMatchObject({ state: "succeeded" });
+  useHostMachine(undefined);
+  machine.close();
   expect(receipt.steps.map((step) => step.key)).toEqual([
     "acquisition.baseline",
     "acquisition.work",
@@ -233,7 +271,6 @@ test("recorded SDK envelopes: only the downloaded local work file crosses the ac
       .size,
   ).toBe(1);
 });
-
 test("version acquisition never substitutes a reload, a template, a local source, or unverified links", () => {
   for (const change of [
     { reload: true },

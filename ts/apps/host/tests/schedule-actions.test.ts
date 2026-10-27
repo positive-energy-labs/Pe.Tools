@@ -44,7 +44,7 @@ test("actual HTTP Work + journal consumes fanout only after positive acknowledgm
       },
     },
   });
-  expect((await f.view()).doc.cells["1::2"].edit).toBeUndefined();
+  expect((await f.view()).doc.cells["1::2"].edit).toBeNull();
   expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(1);
   expect(f.sent.every((s) => s.session === "B" && s.openId === "open-B")).toBe(true);
   // Initial read and actual post-effect readback; the domain compares bindings inside its transaction.
@@ -167,7 +167,7 @@ test("partial native outcome clears only a completely acknowledged cell and keep
       },
     },
   });
-  expect((await f.view()).doc.cells["1::2"].edit).toBeUndefined();
+  expect((await f.view()).doc.cells["1::2"].edit).toBeNull();
   expect((await f.view()).doc.cells["2::2"].edit.value).toBe("200 VA");
 });
 
@@ -196,12 +196,26 @@ test("lost acceptance and host remount replay the original admission once", asyn
   const original = await f.admission();
   f.lose();
   expect(
-    await runSemanticAction("schedule.grid.push", {}, f.b, original.bases, "", original.id),
+    await runSemanticAction(
+      "schedule.grid.push",
+      {},
+      f.b,
+      original.input.work as import("@pe/agent-contracts").WorkHandle,
+      "",
+      original.id,
+    ),
   ).toMatchObject({ id: original.id, state: "succeeded" });
   await f.owner().wait(original.id);
   await f.restart();
   expect(
-    await runSemanticAction("schedule.grid.push", {}, f.b, original.bases, "", original.id),
+    await runSemanticAction(
+      "schedule.grid.push",
+      {},
+      f.b,
+      original.input.work as import("@pe/agent-contracts").WorkHandle,
+      "",
+      original.id,
+    ),
   ).toMatchObject({ id: original.id, state: "succeeded" });
   expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(1);
 });
@@ -212,7 +226,10 @@ test("lost native outcome remains staged, original receipt recovers without a fr
   const original = await f.admission();
   expect(await f.submit(original)).toMatchObject({ state: "unknown" });
   expect((await f.view()).doc.cells["1::2"].edit).toBeTruthy();
-  expect((await f.post("/actions", await f.admission())).status).toBe(409);
+  expect((await f.post("/actions", await f.admission())).value).toMatchObject({
+    state: "failed",
+    notDispatched: true,
+  });
   await f.restart();
   await controlAction("action.recover", { id: original.id }, "");
   await controlAction("action.resume", { id: original.id }, "");
@@ -225,7 +242,7 @@ test("same document in A/B has exact independent lifetimes; subject change and r
   const a = await f.read(f.a);
   expect(a.workspaceId).toBe(f.reading.workspaceId);
   expect(
-    await f.submit({ ...(await f.admission()), destination: { kind: "document", ref: f.a } }),
+    await f.submit({ ...(await f.admission()), target: { kind: "document", ref: f.a } }),
   ).toMatchObject({ state: "failed", notDispatched: true });
   const other = detailResponse();
   other.entries[0].scheduleId = 99;
@@ -251,7 +268,10 @@ test("readback failure is explicit and original resume performs only a read, nev
       rebind: "skipped:no-readback",
     },
   });
-  expect((await f.post("/actions", await f.admission())).status).toBe(409);
+  expect((await f.post("/actions", await f.admission())).value).toMatchObject({
+    state: "failed",
+    notDispatched: true,
+  });
   f.failReadback(false);
   await controlAction("action.resume", { id: result.id }, "");
   expect(await f.owner().wait(result.id)).toMatchObject({ state: "succeeded" });
@@ -288,7 +308,7 @@ test("missing acknowledgments recover the same native receipt before original re
   await controlAction("action.recover", { id: original.id }, "");
   await controlAction("action.resume", { id: original.id }, "");
   expect(await f.owner().wait(original.id)).toMatchObject({ state: "succeeded" });
-  expect((await f.view()).doc.cells["1::2"].edit).toBeUndefined();
+  expect((await f.view()).doc.cells["1::2"].edit).toBeNull();
   expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(1);
 });
 
@@ -358,7 +378,7 @@ test("F-H5-1: a dead-lifetime push names its exit; a re-read rebinds and marks a
   const live = { session: "B", openId: "reopened-B" };
   const at = async () => ({
     ...(await f.admission()),
-    destination: { kind: "document" as const, ref: live },
+    target: { kind: "document" as const, ref: live },
   });
   expect(await f.submit(await at())).toMatchObject({
     state: "failed",
@@ -425,7 +445,7 @@ test("ask A: a push refused on moved evidence rebinds on its readback; the refus
   // The readback rebinds in the push: basis = the readback, and the refused cell names A.
   let doc = (await f.view()).doc;
   expect(doc.basis).toEqual({ captureId: readback.id, stale: [{ key: "1::2", was: "100 VA" }] });
-  expect(doc.cells["1::1"]?.edit).toBeUndefined();
+  expect(doc.cells["1::1"]?.edit).toBeNull();
   expect(doc.cells["1::2"].edit).toMatchObject({ value: "150 VA" });
   // Accept: restage B over C. The key leaves `basis.stale`; the push sends C as the evidence.
   await f.patch([{ path: ["cells", "1::2", "edit"], value: { value: "150 VA" } }]);
@@ -445,7 +465,7 @@ test("ask A: a push refused on moved evidence rebinds on its readback; the refus
     }),
   ]);
   doc = (await f.view()).doc;
-  expect(doc.cells["1::2"]?.edit).toBeUndefined();
+  expect(doc.cells["1::2"]?.edit).toBeNull();
   expect(doc.basis).toEqual({ captureId: expect.any(String) });
 });
 

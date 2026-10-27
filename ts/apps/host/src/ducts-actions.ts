@@ -7,8 +7,12 @@
  */
 import { Effect } from "effect";
 import {
-  actionAdmissionSchema,
   ductsActions,
+  commands,
+  commandTool,
+  editableCells,
+  type WorkHandle,
+  type Consumed,
   nativeProcessSchema,
   type DuctsActionKey,
   type DuctsHealInput,
@@ -17,15 +21,15 @@ import { healPlan, healRequestGroup } from "@pe/ducts-domain/heal";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { z } from "zod";
 import { BridgeError, type RevitBridge } from "./bridge.ts";
-import { resolveSdkSession } from "./sdk-session.ts";
-import { type ActionJournal, type Crossing } from "./action-journal.ts";
-import {
-  readNativeReceipt,
-  readOriginalProcess,
-  type SdkReceiptReader,
-} from "./native-receipts.ts";
+import type { CommandContext, CommandFactory } from "./command-executor.ts";
+import { lifetime } from "./family-actions.ts";
+import { type SdkReceiptReader } from "./native-receipts.ts";
 
-const preparedDuctsSchema = z.strictObject({ process: nativeProcessSchema });
+const preparedDuctsSchema = z.strictObject({
+  process: nativeProcessSchema,
+  op: z.enum(["ducts.apply", "ducts.heal", "ducts.assign-fan"]),
+  input: z.record(z.string(), z.unknown()),
+});
 
 /** Each verb's native op and whether it only previews. */
 const NATIVE: Record<
@@ -59,92 +63,98 @@ async function planned(input: DuctsHealInput, read: () => Promise<DuctSnapshot>)
 }
 const refused = (message: string) => new BridgeError(message, 409, { notDispatched: true });
 
-export async function admitDuctsAction(
-  raw: unknown,
-  crossing: Crossing,
-  owner: ActionJournal,
+export function ductsExecutors(
   bridge: RevitBridge["Service"],
   deps: { sdk?: SdkReceiptReader } = {},
-  resume = false,
 ) {
-  const admission = actionAdmissionSchema.parse(raw);
-  if (!Object.hasOwn(ductsActions, admission.key))
-    throw refused(`Unknown semantic action '${admission.key}'`);
-  const key = admission.key as DuctsActionKey;
-  admission.input = ductsActions[key].input.parse(admission.input);
-  if (admission.destination.kind !== "document")
-    throw refused(`${key} requires an exact DocumentRef`);
-  const target = admission.destination.ref;
-  const session = async () =>
-    (await Effect.runPromise(bridge.list)).find((row) => row.sessionId === target.session);
-  /** The admitted project document, still open in the admitted process incarnation. */
-  const current = async (process?: z.infer<typeof nativeProcessSchema>) => {
-    const selected = await session();
-    if (
-      process &&
-      (selected?.processId !== process.pid ||
-        selected?.processStartUtcUnixMs !== Date.parse(process.processStartUtc))
-    )
-      throw refused("The admitted process incarnation is no longer available");
-    const document = selected?.state?.openDocuments.find((row) => row.openId === target.openId);
-    if (!document || document.isFamilyDocument)
-      throw refused("The admitted project document lifetime is no longer available");
-    return selected!;
-  };
-  return owner.admit(
-    { ...admission, ...crossing },
-    async () => {
-      await current();
-      const selected = await resolveSdkSession(
-        bridge,
-        { bridgeSessionId: target.session, openDocumentId: target.openId },
-        deps.sdk,
-      );
-      if (!selected.processId || selected.processStartUtcUnixMs == null)
-        throw refused("Original process identity is unavailable");
-      return {
-        process: await readOriginalProcess(
-          selected.processId,
-          selected.processStartUtcUnixMs,
-          deps.sdk,
-        ),
-      };
-    },
-    async (execution) => {
-      const { process } = preparedDuctsSchema.parse(execution.prepared);
-      const native = NATIVE[key];
-      const input = {
-        ...(native.op === "ducts.heal"
-          ? await planned(admission.input as DuctsHealInput, async () => {
-              await current(process);
-              const read = await Effect.runPromise(
-                Effect.result(bridge.invoke("ducts.snapshot", {}, target.session, target.openId)),
-              );
-              if (read._tag === "Failure") throw read.failure;
-              return read.success.value as DuctSnapshot;
-            })
-          : admission.input),
-        previewOnly: native.previewOnly,
-      };
-      const value = await execution.step("native", native.op, input, async (requestId) => {
-        await current(process);
-        const outcome = await Effect.runPromise(
-          Effect.result(bridge.invoke(native.op, input, target.session, target.openId, requestId)),
-        );
-        if (outcome._tag === "Failure") throw outcome.failure;
-        return outcome.success.value;
-      });
-      return { value, target: { session: target.session, document: null } };
-    },
-    resume,
-  );
+  return Object.fromEntries(
+    Object.keys(ductsActions).map((key) => [
+      key,
+      (ctx: CommandContext) => {
+        const { admission } = ctx;
+        const definition = commands[key as DuctsActionKey];
+        const { work, ...input } = admission.input;
+        const handle = work as WorkHandle | undefined;
+        if (admission.target.kind !== "document") throw refused("Exact document target required");
+        const target = admission.target.ref;
+        const native = NATIVE[key as DuctsActionKey];
+        let process: z.infer<typeof nativeProcessSchema>;
+        return {
+          definition,
+          prepared: preparedDuctsSchema,
+          bind: async () => {
+            ({ process } = await lifetime(bridge, target, "project", deps));
+            const consumes: Consumed[] = [
+              { kind: "incarnation", target: admission.target, process },
+            ];
+            if (handle) {
+              const frozen = await ctx.read.work(handle, "ducts");
+              const paths =
+                native.op === "ducts.apply"
+                  ? editableCells(frozen.doc, commandTool(key)?.work?.editable ?? []).flatMap(
+                      ({ path, cell }) =>
+                        cell.edit &&
+                        !["systemColours", "claims", "subject"].includes(String(path[0]))
+                          ? [[...path, "edit"]]
+                          : [],
+                    )
+                  : [];
+              consumes.push({ kind: "work", handle, paths, snapshot: frozen.doc });
+            }
+            return {
+              consumes,
+              effects:
+                definition.effect === "query" ? [] : [{ kind: "document" as const, ref: target }],
+            };
+          },
+          prepare: async () => ({
+            process,
+            op: native.op,
+            input: {
+              ...(native.op === "ducts.heal"
+                ? await planned(input as DuctsHealInput, async () => {
+                    const read = await Effect.runPromise(
+                      Effect.result(
+                        bridge.invoke("ducts.snapshot", {}, target.session, target.openId),
+                      ),
+                    );
+                    if (read._tag === "Failure") throw read.failure;
+                    return read.success.value as DuctSnapshot;
+                  })
+                : input),
+              previewOnly: native.previewOnly,
+            },
+          }),
+          run: async (
+            _ctx: CommandContext,
+            execution: import("./action-journal.ts").ActionExecution,
+          ) => {
+            const prepared = preparedDuctsSchema.parse(execution.prepared);
+            const value = await execution.step(
+              "native",
+              prepared.op,
+              prepared.input,
+              async (requestId) => {
+                const outcome = await Effect.runPromise(
+                  Effect.result(
+                    bridge.invoke(
+                      prepared.op,
+                      prepared.input,
+                      target.session,
+                      target.openId,
+                      requestId,
+                    ),
+                  ),
+                );
+                if (outcome._tag === "Failure") throw outcome.failure;
+                return outcome.success.value;
+              },
+              prepared.process,
+            );
+            return { value, target: { session: target.session, document: null } };
+          },
+        };
+      },
+    ]),
+  ) as Record<string, CommandFactory>;
 }
-
-export const recoverDuctsAction = (
-  id: string,
-  owner: ActionJournal,
-  deps: { sdk?: SdkReceiptReader },
-) =>
-  owner.recover(id, (step, prepared) =>
-    readNativeReceipt(step, preparedDuctsSchema.parse(prepared).process, deps.sdk),
-  );

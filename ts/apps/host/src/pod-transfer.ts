@@ -47,6 +47,14 @@ export async function exportPod(
   request: { pod: string; archivePath: string },
   options: TransferOptions = {},
 ): Promise<PodExport> {
+  return writePodExport(await preparePodExport(request, options));
+}
+
+/** Freeze the archive and its dependency versions before a command waits for consent. */
+export async function preparePodExport(
+  request: { pod: string; archivePath: string },
+  options: TransferOptions = {},
+) {
   const archivePath = zipPath(request.archivePath);
   const listing = await listPackages(options.podsRoot ?? productPodsRootPath());
   const pod = unique(listing, request.pod);
@@ -75,16 +83,38 @@ export async function exportPod(
 
   bounded([...files].map(([path, bytes]) => ({ path, bytes })));
   const archive = writeZip(files);
-  await writeArtifact(dirname(archivePath), archivePath, archive, true);
   return {
-    id: pod.id,
-    archivePath,
-    archiveSha256: sha256(archive),
-    members: [...files].sort(byPath).map(([path, bytes]) => ({ path, sha256: sha256(bytes) })),
-    vendored,
-    transforms,
-    captures,
+    bytesBase64: archive.toString("base64"),
+    versions: listing.packages
+      .map((pod) => ({
+        id: pod.id,
+        members: pod.members.map((member) => ({ path: member.path, sha256: member.sha256 })),
+      }))
+      .sort((a, b) => a.id.localeCompare(b.id)),
+    result: {
+      id: pod.id,
+      archivePath,
+      archiveSha256: sha256(archive),
+      members: [...files].sort(byPath).map(([path, bytes]) => ({ path, sha256: sha256(bytes) })),
+      vendored,
+      transforms,
+      captures,
+    },
   };
+}
+
+/** Write exactly the captured bytes. The locator is the immutable admitted destination. */
+export async function writePodExport(
+  prepared: Pick<Awaited<ReturnType<typeof preparePodExport>>, "bytesBase64" | "result">,
+): Promise<PodExport> {
+  const { archivePath } = prepared.result;
+  await writeArtifact(
+    dirname(archivePath),
+    archivePath,
+    Buffer.from(prepared.bytesBase64, "base64"),
+    true,
+  );
+  return prepared.result;
 }
 
 /**
