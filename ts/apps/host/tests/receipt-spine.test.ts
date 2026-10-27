@@ -18,6 +18,7 @@ const admission = (id = "private caller id") => ({
   kind: "operation" as const,
   key: "test.receipt",
   ...crossingOf("human"),
+  footprint: [{ kind: "session" as const, session: "receipt-spine-session" }],
   destination: { kind: "host" as const },
   input: { frozen: "exact" },
   bases: {},

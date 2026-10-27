@@ -36,6 +36,7 @@ import {
   type CreateElicitationRequest,
   type CreateElicitationResponse,
   type NewSessionResponse,
+  type PromptResponse,
   type RequestPermissionRequest,
   type RequestPermissionResponse,
   type SessionConfigOption,
@@ -1506,20 +1507,25 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       await options.prepare?.();
       await options.pluginHook?.("turn.before", { threadId: t.meta.id, turnId });
       if (!t.live) append(t, { kind: "starting", turnId });
-      const live = await ensure(t);
-      const refeed = t.refeed;
-      t.refeed = null;
-      const result = await live.conn.prompt({
-        sessionId: live.sessionId,
-        prompt: promptBlocks(
-          join(options.root, t.meta.id, "attachments", turnId),
-          refeed ? `${refeed}\n\n${text}` : text,
-          attachments,
-          mentions,
-          // `ensure` read the harness's prompt capabilities at its `initialize`.
-          t.meta.promptCapabilities?.embeddedContext,
-        ),
-      });
+      const cancelled = () =>
+        t.events.some((event) => event.kind === "cancel_requested" && event.turnId === turnId);
+      const live = cancelled() ? null : await ensure(t);
+      let result: PromptResponse = { stopReason: "cancelled" };
+      if (live && !cancelled()) {
+        const refeed = t.refeed;
+        t.refeed = null;
+        result = await live.conn.prompt({
+          sessionId: live.sessionId,
+          prompt: promptBlocks(
+            join(options.root, t.meta.id, "attachments", turnId),
+            refeed ? `${refeed}\n\n${text}` : text,
+            attachments,
+            mentions,
+            // `ensure` read the harness's prompt capabilities at its `initialize`.
+            t.meta.promptCapabilities?.embeddedContext,
+          ),
+        });
+      }
       const u = result.usage;
       runs.close(runRef, result.stopReason === "cancelled" ? "stopped" : "completed");
       append(t, {
@@ -1678,12 +1684,24 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
    */
   async function cancel(t: Thread, by: Caller, door: string) {
     const turnId = t.running;
-    if (turnId) runs.close({ thread: t.meta.id, turn: turnId }, "stopped");
+    if (!turnId) return false;
+    const connecting = t.live;
+    const child = t.child;
+    append(t, { kind: "cancel_requested", turnId, by, door });
+    runs.close({ thread: t.meta.id, turn: turnId }, "stopped");
     settleAsks(t, "cancel");
-    const live = turnId ? await t.live?.catch(() => null) : null;
-    if (turnId && live) append(t, { kind: "cancel_requested", turnId, by, door });
-    if (live) await live.conn.cancel({ sessionId: live.sessionId });
-    return Boolean(live);
+    const live = await connecting?.catch(() => null);
+    // A starting turn retires the warm child. Its logged cancellation also prevents prompt
+    // dispatch; an old connection must never cancel a queued turn's replacement child.
+    const current = () => t.running === turnId && t.live === connecting && t.child === child;
+    if (live && current()) {
+      try {
+        await live.conn.cancel({ sessionId: live.sessionId });
+      } catch (error) {
+        if (current()) throw error;
+      }
+    }
+    return true;
   }
 
   /** Cancel the running turn and wait for its end; false when it outlives {@link INTERRUPT_MS}. */

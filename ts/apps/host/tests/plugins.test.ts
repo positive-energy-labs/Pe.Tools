@@ -58,6 +58,7 @@ test("operation hooks observe the committed action result, never an uncommitted 
         input: {},
         bases: {},
         ...crossingOf("human"),
+        footprint: [],
       },
       async () => ({}),
       async () => ({ value: 42, nested: { kept: true } }),

@@ -242,11 +242,11 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
           "human",
           [
             {
-              path: ["flows", "1001", "staged"],
+              path: ["flows", "1001", "edit"],
               value: { value: { cfm: 100, source: "human effort" } },
             },
             {
-              path: ["flows", "1002", "staged"],
+              path: ["flows", "1002", "edit"],
               value: { value: { cfm: 200, source: "reviewed" } },
             },
           ],
@@ -262,11 +262,11 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
           "agent",
           [
             {
-              path: ["flows", "1002", "proposal"],
+              path: ["flows", "1002", "suggestion"],
               value: { value: { cfm: 220, source: "alternative" } },
             },
             {
-              path: ["flows", "1003", "proposal"],
+              path: ["flows", "1003", "suggestion"],
               value: { value: { cfm: 300, source: "proposal" } },
             },
           ],
@@ -368,8 +368,8 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
         new Request(`http://host/pe/route-state/ducts?target=${encodeURIComponent(at)}`),
       )
     ).json();
-    expect(retained.doc.flows["1001"].staged.value.source).toBe("human effort");
-    expect(retained.doc.flows["1002"].proposal.value.cfm).toBe(220);
+    expect(retained.doc.flows["1001"].edit.value.source).toBe("human effort");
+    expect(retained.doc.flows["1002"].suggestion.value.cfm).toBe(220);
     expect(await fileBytes()).toEqual(saved);
     abort.abort();
     await threads.close();
@@ -393,7 +393,7 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
           schedule,
           "schedules",
           "human",
-          [{ path: ["cells", "1::2", "staged"], value: { value: "Reviewed schedule value" } }],
+          [{ path: ["cells", "1::2", "edit"], value: { value: "Reviewed schedule value" } }],
           0,
         )
       ).ok,
@@ -441,7 +441,7 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
           hostOnly,
           "ducts",
           "human",
-          [{ path: ["flows", "99", "staged"], value: { value: { cfm: 99, source: "Unbound" } } }],
+          [{ path: ["flows", "99", "edit"], value: { value: { cfm: 99, source: "Unbound" } } }],
           0,
         )
       ).ok,
@@ -492,7 +492,7 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
     const preservedSchedule = await (
       await app.fetch(new Request("http://host/pe/route-state/schedules?work=office-schedule"))
     ).json();
-    expect(preservedSchedule.doc.cells["1::2"].staged.value).toBe("Reviewed schedule value");
+    expect(preservedSchedule.doc.cells["1::2"].edit.value).toBe("Reviewed schedule value");
     expect(await fileBytes()).toEqual(beforeAmbiguous);
 
     // Unsaved Work keeps the exact old lifetime after closure, target removal and restart.
@@ -518,7 +518,7 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
           "human",
           [
             {
-              path: ["flows", "11", "staged"],
+              path: ["flows", "11", "edit"],
               value: { value: { cfm: 110, source: "Retain me" } },
             },
           ],
@@ -534,7 +534,7 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
           "agent",
           [
             {
-              path: ["flows", "12", "proposal"],
+              path: ["flows", "12", "suggestion"],
               value: { value: { cfm: 120, source: "Proposal" } },
             },
           ],
@@ -585,8 +585,8 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
       revision: 2,
       doc: {
         flows: {
-          "11": { staged: { value: { cfm: 110, source: "Retain me" } } },
-          "12": { proposal: { value: { cfm: 120, source: "Proposal" } } },
+          "11": { edit: { value: { cfm: 110, source: "Retain me" } } },
+          "12": { suggestion: { value: { cfm: 120, source: "Proposal" } } },
         },
       },
     });

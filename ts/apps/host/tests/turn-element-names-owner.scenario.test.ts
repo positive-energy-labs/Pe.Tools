@@ -289,7 +289,8 @@ test("a queued prompt pins its documents at delivery after the head changes", as
     ).body.state,
   ).toBe("queued");
   await h.set(id, [{ kind: "open", ref: b }]);
-  expect((await h.call("POST", `/pe/threads/${id}/cancel`, {})).status).toBe(200);
+  const cancelled = await h.call("POST", `/pe/threads/${id}/cancel`, {});
+  expect(cancelled.status, JSON.stringify(cancelled.body)).toBe(200);
   await expect
     .poll(async () =>
       (await h.read(id)).events.some(
@@ -297,6 +298,13 @@ test("a queued prompt pins its documents at delivery after the head changes", as
       ),
     )
     .toBe(true);
+  const events = (await h.read(id)).events;
+  expect(events).toContainEqual(
+    expect.objectContaining({ kind: "turn_end", turnId: running, stopReason: "cancelled" }),
+  );
+  expect(events).toContainEqual(
+    expect.objectContaining({ kind: "turn_end", turnId: queued, stopReason: "end_turn" }),
+  );
   const result = await h.threads.readTurnElementNames(
     request(id, queued, [101]),
     async (_op, input, ref) => ({

@@ -24,6 +24,7 @@ async function fixture() {
     kind: "operation" as const,
     key: "test.native",
     ...crossingOf("human"),
+    footprint: [{ kind: "session" as const, session: "receipt-recovery-session" }],
     destination: { kind: "host" as const },
     input: { bytes: "\r\noriginal\r\n" },
     bases: {},

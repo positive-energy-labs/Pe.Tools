@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import { NodeServices } from "@effect/platform-node";
-import type { Caller } from "@pe/agent-contracts";
+import { win32 } from "node:path";
+import { canonicalRouteInput, type Caller } from "@pe/agent-contracts";
 import { bootstrapAlignmentSchema, bootstrapBlockers } from "@pe/host-contracts/pe-api";
 import {
   GENERATED_FROM,
@@ -33,12 +34,73 @@ export async function alignBootstrap(
 ) {
   requireHuman(caller, "/pe/machine/bootstrap", "Align Revit add-ins with this build");
   const input = bootstrapAlignmentSchema.parse(raw);
+  const envelope = async <T>(args: readonly string[]) =>
+    parsePeRevitEnvelope<T>(await read(args), args, peRevitLauncher());
+  const admission = {
+    id: input.id,
+    kind: "workflow" as const,
+    key: "machine.bootstrap",
+    caller,
+    basis: { kind: "human" as const },
+    destination: { kind: "host" as const },
+    input,
+    bases: {},
+  };
+  const previous = (await owner.list(undefined, input.id))[0];
+  if (previous) {
+    const recovered = await owner.admit(
+      { ...admission, footprint: previous.footprint },
+      async () => {
+        throw Error("An existing bootstrap command cannot prepare again");
+      },
+      async () => {
+        throw Error("An existing bootstrap command cannot dispatch again");
+      },
+    );
+    return owner.wait(recovered.id);
+  }
   if (input.confirmedVersion !== GENERATED_FROM)
     throw refuse(
       `Confirm this host's pinned SDK ${GENERATED_FROM}, not ${input.confirmedVersion}.`,
     );
-  const envelope = async <T>(args: readonly string[]) =>
-    parsePeRevitEnvelope<T>(await read(args), args, peRevitLauncher());
+  const installation = async () => {
+    const observed = await envelope<BootstrapResult>(bootstrapVerifyArgv({ year: input.year }));
+    if (observed.binary.informationalVersion?.split("+")[0] !== GENERATED_FROM)
+      throw refuse(
+        `The answering SDK is not this host's pinned ${GENERATED_FROM}; installation refused.`,
+      );
+    const result = observed.result;
+    const action = result?.actions?.[0];
+    if (
+      ![0, 3].includes(observed.exitCode) ||
+      observed.diagnostics.length ||
+      result?.verb !== "verify" ||
+      result.years.length !== 1 ||
+      result.years[0] !== input.year ||
+      result.actions.length !== 1 ||
+      action?.year !== input.year ||
+      action.op !== "check" ||
+      !["ok", "missing", "differs"].includes(action.status) ||
+      !win32.isAbsolute(action.dest) ||
+      !win32.isAbsolute(result.addinsBase)
+    )
+      throw refuse(
+        "The SDK's exact bootstrap installation destination is unavailable; installation refused.",
+      );
+    const directory = win32.dirname(action.dest);
+    if (
+      win32.basename(directory) !== input.year ||
+      win32.normalize(win32.dirname(directory)).toLowerCase() !==
+        win32.normalize(result.addinsBase).toLowerCase()
+    )
+      throw refuse(
+        "The SDK bootstrap installation destination does not match the chosen year; installation refused.",
+      );
+    return { year: input.year, directory, binary: observed.binary };
+  };
+  // SDK bootstrap owns manifests, payloads and stale directories under its reported year root.
+  // This human admin exception records that directory, never a copied list of SDK file names.
+  const frozen = await installation();
   const preflight = async () => {
     const binary = await envelope(versionArgv());
     if (
@@ -61,14 +123,9 @@ export async function alignBootstrap(
   };
   const admitted = await owner.admit(
     {
-      id: input.id,
-      kind: "workflow",
-      key: "machine.bootstrap",
-      caller,
-      basis: { kind: "human" },
-      destination: { kind: "host" },
-      input,
-      bases: {},
+      ...admission,
+      footprint: [{ kind: "directory", path: frozen.directory }],
+      frozen,
     },
     async () => {
       await preflight();
@@ -84,6 +141,10 @@ export async function alignBootstrap(
         },
         async () => {
           await preflight();
+          if (canonicalRouteInput(await installation()) !== canonicalRouteInput(frozen))
+            throw refuse(
+              "The SDK bootstrap installation image or destination changed; submit a new command.",
+            );
           const result = await envelope<BootstrapResult>(
             bootstrapInstallArgv({ year: input.year }),
           );

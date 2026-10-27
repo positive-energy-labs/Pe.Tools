@@ -33,7 +33,7 @@ afterEach(() =>
   }),
 );
 
-test("HTTP Work resolves B without native authority, refuses forged targets and retains staged/proposed Work after removal", async () => {
+test("HTTP Work shares edits independently of thread targets and refuses forged live identities", async () => {
   const directory = await mkdtemp(join(tmpdir(), "pe-work-crossing-"));
   const a = { session: "session", openId: "a", address: address("C:/Models/A.rvt") };
   const b = { session: "session", openId: "b", address: address("C:/Models/B.rvt") };
@@ -74,7 +74,14 @@ test("HTTP Work resolves B without native authority, refuses forged targets and 
       for await (const chunk of incoming) chunks.push(Buffer.from(chunk));
       const response = await withInvocationContext(
         {
-          caller: incoming.headers["x-test-author"] === "human" ? human : pea(),
+          caller:
+            incoming.headers["x-test-author"] === "human"
+              ? human
+              : incoming.headers["x-test-author"] === "page"
+                ? { kind: "page", page: "page:@pages/test" }
+                : incoming.headers["x-test-author"] === "external-mcp"
+                  ? { kind: "external-mcp", context: "device-context", label: "paired test device" }
+                  : pea(),
         },
         () =>
           app.fetch(
@@ -116,6 +123,18 @@ test("HTTP Work resolves B without native authority, refuses forged targets and 
       doc: { workingPhase: {} },
     });
     const proposed = [{ path: ["workingPhase", "suggestion"], value: { value: "Existing" } }];
+    for (const caller of [
+      { kind: "page", page: "page:@pages/test" },
+      { kind: "external-mcp", context: "device-context", label: "paired test device" },
+    ] as Caller[]) {
+      expect((await request(query(), proposed, 0, caller)).status).toBe(403);
+      const command = await fetch(`${base}/pe/route-state/ducts/command?${query()}`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-test-author": caller.kind },
+        body: JSON.stringify({ command: "not-a-command", input: {}, expectedRevision: 0 }),
+      });
+      expect(command.status).toBe(403);
+    }
     expect(await (await request(query(), proposed)).json()).toMatchObject({
       ok: true,
       revision: 1,
@@ -137,42 +156,61 @@ test("HTTP Work resolves B without native authority, refuses forged targets and 
     documents.pop();
     expect(
       await (
-        await request(query(), [{ path: ["workingPhase", "staged"], value: { value: "New" } }], 1)
+        await request(query(), [{ path: ["workingPhase", "edit"], value: { value: "New" } }], 1)
       ).json(),
-    ).toMatchObject({ ok: false });
+    ).toMatchObject({ ok: true, revision: 2 });
     expect(
       await (
         await request(
           query(),
-          [{ path: ["workingPhase", "staged"], value: { value: "New" } }],
+          [{ path: ["workingPhase", "edit"], value: { value: "Reviewed" } }],
           1,
           human,
         )
       ).json(),
-    ).toMatchObject({ ok: true, revision: 2 });
+    ).toMatchObject({ ok: false, code: "stale_revision", error: "the document moved to r2" });
+    expect(
+      await (
+        await request(
+          query(),
+          [{ path: ["workingPhase", "edit"], value: { value: "New" } }],
+          2,
+          human,
+        )
+      ).json(),
+    ).toMatchObject({ ok: true, revision: 3 });
+    for (const search of [query(b, a.address)]) {
+      expect((await request(search)).status).toBe(403);
+      expect((await request(search, proposed, 3)).status).toBe(403);
+    }
     for (const search of [
       query(outside),
-      query(b, a.address),
       "open=session/closed",
       `target=${encodeURIComponent(outside.address)}`,
-    ]) {
-      expect((await request(search)).status).toBe(403);
-      expect((await request(search, proposed, 2)).status).toBe(403);
-    }
+    ])
+      expect(await (await request(search)).json()).toMatchObject({ revision: 0 });
     documents = [a, outside];
-    expect((await request(query(), proposed, 2)).status).toBe(403);
+    expect(await (await request(query())).json()).toMatchObject({ revision: 3 });
     documents = [a, b, outside];
     full = true;
-    expect((await request(query(outside), proposed, 2)).status).toBe(403);
+    expect(await (await request(query(outside))).json()).toMatchObject({ revision: 0 });
     full = false;
+    head = { revision: 5, targets: head.targets.slice(0, 1) };
+    expect(await (await request(query(), proposed, 3)).json()).toMatchObject({
+      ok: true,
+      revision: 4,
+    });
     const key = bindWork("ducts", b.address);
     const before = await app.workspace.readRaw(key, "ducts");
     expect(before).toMatchObject({
-      revision: 2,
-      doc: { workingPhase: { suggestion: { value: "Existing" }, edit: { value: "New" } } },
+      revision: 4,
+      doc: {
+        workingPhase: {
+          suggestion: { value: "Existing", by: "pea" },
+          edit: { value: "New", by: "human" },
+        },
+      },
     });
-    head = { revision: 5, targets: head.targets.slice(0, 1) };
-    expect((await request(query(), proposed, 2)).status).toBe(403);
     expect(await app.workspace.readRaw(key, "ducts")).toEqual(before);
     const navigation = await fetch(`${base}/pe/navigation`, {
       headers: { "x-test-author": "human" },
@@ -184,12 +222,12 @@ test("HTTP Work resolves B without native authority, refuses forged targets and 
           route: "ducts",
           label: expect.any(String),
           state: "ready",
-          revision: 2,
+          revision: 4,
           proposals: 1,
         }),
       ]),
     });
-    // A human can inspect the retained authored/staged document; a fresh workspace reads the same bytes.
+    // Both authors inspect retained Work; recreation reads the same authored bytes.
     expect(await (await request(query(), undefined, 0, human)).json()).toMatchObject(before!);
     const restarted = new RouteWorkspace({
       registrations: [{ spec: ductsRouteState, handlers: {} }],
@@ -216,7 +254,6 @@ const registrations = [
       schema: takeoffsRouteState.schema.extend({
         count: threadHeadSchema.shape.revision.default(0),
       }),
-      agentWriteMask: [["count"]],
       commands: {},
     },
     handlers: {},
@@ -238,6 +275,7 @@ test("HTTP addressless Work survives workspace recreation and Save As carries it
       registrations,
       store,
       heads: { observe: () => () => {} },
+      navigation: { documents: async () => [], threads: async () => [] },
     });
     const written = await asHuman(app)(
       new Request(`${path.replace("?", "/apply?")}`, {
@@ -381,7 +419,7 @@ test("host HTTP preserves addressless Work through close and replacement bridge 
   }
 }, 20_000);
 
-/** The host's route-state surface checks every write's revision, body and actor. */
+/** The host's route-state surface checks every write's revision, body and caller. */
 test("HTTP authored writes enforce short local revision checks", async () => {
   bindControl({
     heads: () => ({
@@ -422,10 +460,9 @@ test("HTTP authored writes enforce short local revision checks", async () => {
           title: "Test Route",
           description: "A test collaborative route.",
           schema,
-          agentWriteMask: [["values"]],
           commands: {
-            increment: { description: "Increment.", actor: "any", input: z.object({}) },
-            external: { description: "External.", actor: "human", input: z.object({}) },
+            increment: { description: "Increment.", effect: "command", input: z.object({}) },
+            external: { description: "External.", effect: "command", input: z.object({}) },
           },
         },
         handlers: {
@@ -528,22 +565,20 @@ test("HTTP authored writes enforce short local revision checks", async () => {
       await post("/pe/route-state/test-route/command", { ...command, expectedRevision: 99 })
     ).json(),
   ).toMatchObject({ ok: false, code: "stale_revision" });
-  // Start fresh is a human verb: Pea's door refuses it, and readable Work has nothing to set aside.
+  // Both authors share recovery; readable Work has nothing to set aside.
   expect(
     await (await post("/pe/route-state/test-route/start-fresh", {}, pea())).json(),
-  ).toMatchObject({ ok: false, error: "start fresh is human-only" });
+  ).toMatchObject({ ok: false, error: "this route's Work is readable" });
   expect(await (await post("/pe/route-state/test-route/start-fresh", {})).json()).toMatchObject({
     ok: false,
     error: "this route's Work is readable",
   });
-  // Salvage is a human read: a route that declares none has nothing (404); Pea is refused by name.
+  // A route that declares no salvage has nothing for either author.
   const salvage = (as: Caller) =>
     withInvocationContext({ caller: as }, () =>
       app.fetch(new Request(`http://local/pe/route-state/test-route/salvage?${queryA}`)),
     );
   expect((await salvage(human)).status).toBe(404);
-  const refused = await salvage(pea());
-  expect(refused.status).toBe(403);
-  expect(await refused.json()).toMatchObject({ ok: false, error: "salvage is human-only" });
+  expect((await salvage(pea())).status).toBe(404);
   expect(externalCalls).toBe(0);
 });

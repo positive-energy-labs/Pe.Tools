@@ -149,6 +149,7 @@ test("recorded SDK envelopes: only the downloaded local work file crosses the ac
       kind: "workflow",
       key: "instances.start",
       ...crossingOf("human"),
+      footprint: [{ kind: "session", session: "new:process" }],
       destination: { kind: "host" },
       input: into.start,
       bases: {},
@@ -176,7 +177,8 @@ test("recorded SDK envelopes: only the downloaded local work file crosses the ac
   const sdk = async (args: readonly string[]) => {
     calls.push([...args]);
     if (args[0] === "session") return replay("session-list", { result: { sessions: [row] } });
-    if (args[0] !== "doc" || args[1] !== "open") throw Error(`unexpected SDK effect ${args}`);
+    if (args[0] !== "doc" || args[1] !== "open")
+      throw Error(`unexpected SDK effect ${args.join(" ")}`);
     expect(await readFile(args[2]!, "utf8")).toBe("immutable-version-seven");
     expect(args).toContain("--detach");
     expect(args.slice(args.indexOf("--links"), args.indexOf("--links") + 2)).toEqual([
