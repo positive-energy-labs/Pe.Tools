@@ -399,6 +399,10 @@ function Canvas({
     setOpenRuling(null);
     setPage({ selected: id == null ? "" : String(id), issue: "" }, { history: "push" });
   };
+  // Escape and a click on empty picture both clear; neither pushes history when nothing is picked.
+  const clearPick = () => {
+    if (page.selected || page.issue) pick(null);
+  };
   useEffect(() => {
     if (!page.selected) setOpenRuling(null);
   }, [page.selected]);
@@ -521,9 +525,7 @@ function Canvas({
         bounds,
         host: pictureHost,
         selectedBounds: boundsOfIds(read.meshes, scene, selected),
-        clearSelection: () => {
-          if (page.selected || page.issue) pick(null);
-        },
+        clearSelection: clearPick,
         onHistoryStep: () => setLanded(null),
       }}
     >
@@ -716,6 +718,7 @@ function Canvas({
             issue={page.issue}
             setPage={setPage}
             onPick={pick}
+            onClear={clearPick}
             onRuling={ruling}
           />
         );

@@ -116,6 +116,7 @@ export function ModelPicture({
   issue,
   setPage,
   onPick,
+  onClear,
   onRuling,
 }: {
   readout: ReactNode;
@@ -148,6 +149,8 @@ export function ModelPicture({
   issue: string;
   setPage: (next: Partial<DuctsPage>, move?: PageMove<DuctsPage>) => void;
   onPick: (id: number, at: { x: number; y: number }) => void;
+  /** A click on empty picture: the page's selection goes, as Escape clears it. */
+  onClear: () => void;
   onRuling: (r: Ruling, at: { x: number; y: number }) => void;
 }) {
   const stage = useStage();
@@ -347,7 +350,7 @@ export function ModelPicture({
         onDoubleClick={(pick) => frameAt(pick?.instance.key ?? null)}
         onPick={(pick, event) => {
           if (event.detail > 1) return;
-          if (!pick) return;
+          if (!pick) return onClear();
           if (pick.instance.revitId === null) return setSaid("linked element, not selectable");
           setSaid(null);
           onPick(pick.instance.revitId, { x: event.clientX, y: event.clientY });

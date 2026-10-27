@@ -681,6 +681,24 @@ test("a native tree selection keeps the camera and address pose; F frames and Es
   expect(picture.current!.orbit.read()).toEqual(framed);
 });
 
+test("a click on empty picture clears the selection; an empty clear writes no history", async () => {
+  const view = await mount();
+  const stretch = view.container.querySelector('[data-e-kind="leg"]')!.closest("[data-key]")!;
+  fireEvent.click(stretch.querySelector(".dl-row-twist")!);
+  const part = await waitFor(() => {
+    const label = view.container.querySelector('[data-e-kind="element"]');
+    expect(label).not.toBeNull();
+    return label!;
+  });
+  fireEvent.click(part);
+  await waitFor(() => expect(drawing.latest!.page.selected).toBe("1"));
+  act(() => picture.current!.onClear());
+  await waitFor(() => expect(drawing.latest!.page.selected).toBe(""));
+  const href = view.router.state.location.href;
+  act(() => picture.current!.onClear());
+  expect(view.router.state.location.href).toBe(href);
+});
+
 test("a staged subject and plural claim select the whole row without framing; a verdict stages the claim", async () => {
   work = ductsRouteState.schema.parse({
     subject: { g1: { staged: { value: [100, 1, 2, 3, 4] } } },
