@@ -59,10 +59,10 @@ test("no two lightness rungs cross at defaults, and a selection lift stays betwe
   expect(lit).toBeLessThan(selected);
 });
 
-test("stub fill stays below the subject ceiling and below the context glass peak", () => {
+test("stub is the rung above context: stub opacity sits strictly between context glass peak and subject", () => {
   // Stub alpha is capped by the subject alpha in surfaceAlpha; the context glass peak is veil.fill.
+  expect(LOOK.defaults.subject.stubOpacity).toBeGreaterThan(LOOK.defaults.veil.fill);
   expect(LOOK.defaults.subject.stubOpacity).toBeLessThan(LOOK.defaults.subject.opacity);
-  expect(LOOK.defaults.subject.stubOpacity).toBeLessThanOrEqual(LOOK.defaults.veil.fill);
 });
 
 test("a seam is one solid line, depth-tested normally and never drawn through a duct", () => {
