@@ -47,7 +47,6 @@ import {
   memberWork,
   scheduleActions,
   workKeySchema,
-  FAMILY_CATALOG_LIMIT,
 } from "@pe/agent-contracts";
 import { z } from "zod";
 import { admitTakeoffAction, recoverTakeoffAction, fileVersion } from "./takeoff-actions.ts";
@@ -62,7 +61,6 @@ import {
 } from "@pe/agent-contracts";
 import { hostTakeoffCaptures, type TakeoffCaptures } from "./takeoff-captures.ts";
 import { readFamiliesProgressively, cancelFamiliesRead } from "./families-reader.ts";
-import { documentMarks } from "./document-marks.ts";
 import {
   projectTakeoffSnapshot,
   projectTakeoffViews,
@@ -578,7 +576,7 @@ export function makeCallRoute(
           const body = z
             .strictObject({
               work: workKeySchema,
-              readId: z.uuid().optional(),
+              readId: z.uuid(),
               filter: z.strictObject({
                 categoryNames: z.array(z.string()).min(1),
                 familyNames: z.array(z.string()),
@@ -638,42 +636,17 @@ export function makeCallRoute(
             body.work.open.openId !== target.openId
           )
             throw Error("Families Work belongs to another document");
-          if (body.readId)
-            return Response.jsonUnsafe(
-              await readFamiliesProgressively({
-                bridge,
-                captures: observations(),
-                readId: body.readId,
-                work: body.work,
-                document: target,
-                documentTitle: document?.title ?? undefined,
-                filter: body.filter,
-              }),
-            );
-          documentMarks(bridge);
-          const capturedAt = new Date().toISOString();
-          const result = await Effect.runPromise(
-            bridge.invoke(
-              "revit.matrix.loaded-families",
-              {
-                filter: body.filter,
-                budget: { maxEntries: FAMILY_CATALOG_LIMIT, maxSamplesPerEntry: 1000 },
-                includeTempPlacement: true,
-              },
-              target.session,
-              target.openId,
-            ),
+          return Response.jsonUnsafe(
+            await readFamiliesProgressively({
+              bridge,
+              captures: observations(),
+              readId: body.readId,
+              work: body.work,
+              document: target,
+              documentTitle: document?.title ?? undefined,
+              filter: body.filter,
+            }),
           );
-          const saved = await observations().saveFamilies({
-            work: body.work,
-            document: target,
-            ...(document?.title ? { documentTitle: document.title } : {}),
-            filter: body.filter,
-            capturedAt,
-            result:
-              result.value as import("@pe/host-contracts/generated").RevitMatrixLoadedFamilies.Res.Response,
-          });
-          return Response.jsonUnsafe(saved);
         },
         catch: (error) => error,
       }).pipe(

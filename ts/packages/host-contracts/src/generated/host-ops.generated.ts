@@ -6984,7 +6984,8 @@ export namespace RevitMatrixLoadedFamilies {
       isTruncated: boolean;
     }
     /**
-     * A copy is eligible only when the file is exactly this document's saved revision.
+     * Worker input inventory. Version fingerprints the selected saved family and type revisions, excluding project-only state.
+     *             CopyPath is set only when the saved file is exactly this document; otherwise CopyRefusal says why the read stays in this instance.
      */
     export interface LoadedFamiliesReadSource {
       families: LoadedFamilyCatalogEntry[];
@@ -6992,7 +6993,6 @@ export namespace RevitMatrixLoadedFamilies {
       version: string;
       copyPath?: null | string;
       copyRefusal?: null | string;
-      cloudSource?: null | string;
     }
     export interface LoadedFamilyCatalogEntry {
       familyId: number;

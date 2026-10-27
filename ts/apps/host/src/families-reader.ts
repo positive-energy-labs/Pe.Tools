@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { randomUUID } from "node:crypto";
 import { copyFile, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { freemem } from "node:os";
 import { productScratchPath } from "@pe/host-contracts/service-identity";
 import {
@@ -23,7 +23,7 @@ import {
 import { adaptiveWork, type WorkExecutor } from "./adaptive-work.ts";
 import { BridgeError, CANCEL_OPERATION_KEY, type RevitBridge } from "./bridge.ts";
 import { assertFresh, documentMarks } from "./document-marks.ts";
-import { hostOwnership, productRoot } from "./host-ownership.ts";
+import { hostOwnership } from "./host-ownership.ts";
 import { parsePeRevitEnvelope, peRevitLauncher } from "./pe-revit-launch.ts";
 import { resolveStartProject, runPeRevitCli } from "./session-route.ts";
 import { type FamiliesObservation, type TakeoffCaptures } from "./takeoff-captures.ts";
@@ -42,7 +42,6 @@ type Run = {
 };
 const runs = new Map<string, Run>();
 const OP = "revit.matrix.loaded-families";
-const costsPath = () => join(productRoot(), "state", "families", "read-costs.json");
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const detail = (error: unknown) =>
   error instanceof Error || error instanceof BridgeError ? error.message : String(error);
@@ -158,9 +157,10 @@ export async function readFamiliesProgressively(options: {
       active.delete(requestId);
     }
   };
+  const costsPath = join(captures.directory, "families", "read-costs.json");
   let costs: Costs = { startupMs: 180_000, families: {} };
   try {
-    const stored = JSON.parse(await readFile(costsPath(), "utf8")) as Costs;
+    const stored = JSON.parse(await readFile(costsPath, "utf8")) as Costs;
     if (
       Number.isFinite(stored.startupMs) &&
       stored.startupMs >= 1_000 &&
@@ -172,10 +172,7 @@ export async function readFamiliesProgressively(options: {
     /* A missing or damaged timing file is a cold estimate, never a read failure. */
   }
   const samples: Sample[] = [];
-  let startingWorkers = 0;
-  let frozenPath: string | undefined;
-  let freezing: Promise<string> | undefined;
-  let folder: string | undefined;
+  let folder: Promise<string> | undefined;
   const costKey = (item: Item) => `${item.familyUniqueId}:${item.typeCount}`;
   const estimate = (item: Item) => {
     const known = costs.families[costKey(item)];
@@ -196,7 +193,14 @@ export async function readFamiliesProgressively(options: {
     if (!prepared.source) throw Error("The connected Revit does not supply bounded family reads.");
     const source = prepared.source;
     total = source.families.length;
-    for (const record of prepared.families) records.set(record.familyUniqueId, record);
+    // Extracted records carry no project decoration; the catalog's placed count is this document's.
+    const placed = new Map(source.families.map((f) => [f.familyUniqueId, f.placedInstanceCount]));
+    const keep = (record: Family) =>
+      records.set(record.familyUniqueId, {
+        ...record,
+        placedInstanceCount: placed.get(record.familyUniqueId) ?? 0,
+      });
+    for (const record of prepared.families) keep(record);
     message = source.copyRefusal ?? undefined;
     await publish("reading", "Reading families");
     const pending = source.families
@@ -213,8 +217,8 @@ export async function readFamiliesProgressively(options: {
       cost: estimate,
       startupMs: () => costs.startupMs,
       canExpand: () =>
-        !!(source.copyPath || source.cloudSource) &&
-        freemem() > (5 + 3 * startingWorkers) * 1024 ** 3 &&
+        !!source.copyPath &&
+        freemem() > 5 * 1024 ** 3 &&
         (samples.length >= Math.min(3, pending.length) ||
           pending.every((f) => costs.families[costKey(f)])),
       warning: (error) => {
@@ -225,10 +229,7 @@ export async function readFamiliesProgressively(options: {
         const record = data.families[0];
         if (!record || record.familyUniqueId !== item.familyUniqueId)
           throw Error("The worker returned another family's record.");
-        records.set(record.familyUniqueId, {
-          ...record,
-          placedInstanceCount: item.placedInstanceCount,
-        });
+        keep(record);
         if (!data.cacheHit && data.elapsedMs != null) {
           const sample = { ms: data.elapsedMs, types: item.typeCount };
           samples.push(sample);
@@ -237,7 +238,6 @@ export async function readFamiliesProgressively(options: {
         await publish("reading", "Reading families");
       },
       acquire: async (useful) => {
-        startingWorkers++;
         const id = `families-${randomUUID().slice(0, 18)}`;
         const startedAt = Date.now();
         let acquired = false;
@@ -252,18 +252,6 @@ export async function readFamiliesProgressively(options: {
           }
         };
         try {
-          if (source.copyPath) {
-            freezing ??= (async () => {
-              const scratch = productScratchPath();
-              await mkdir(scratch, { recursive: true });
-              folder = await mkdtemp(join(scratch, "families-"));
-              const candidate = join(folder, "source.rvt");
-              // One immutable input for this run, copied before any worker opens it.
-              await copyFile(source.copyPath!, candidate);
-              return candidate;
-            })();
-            frozenPath = await freezing;
-          }
           const start = {
             id,
             year: source.revitVersion,
@@ -286,15 +274,17 @@ export async function readFamiliesProgressively(options: {
             await stop();
             return null;
           }
-          const file = frozenPath ? join(dirname(frozenPath), `${id}.rvt`) : undefined;
-          if (frozenPath) await copyFile(frozenPath, file!);
+          // Each worker opens its own copy; the version check below rejects a file saved since Prepare.
+          folder ??= mkdir(productScratchPath(), { recursive: true }).then(() =>
+            mkdtemp(join(productScratchPath(), "families-")),
+          );
+          const file = join(await folder, `${id}.rvt`);
+          await copyFile(source.copyPath!, file);
           const opened = await sdk<DocOpResult>(
             docOpenArgv({
               id,
-              source: source.cloudSource ?? file!,
+              source: file,
               detach: true,
-              // Keep reads the saved local cloud revision; never discard unsynced work or sync.
-              unsynced: source.cloudSource ? "keep" : undefined,
               window: "headless",
               links: "allow",
               requestId: randomUUID(),
@@ -341,8 +331,6 @@ export async function readFamiliesProgressively(options: {
         } catch (error) {
           await stop();
           throw error;
-        } finally {
-          startingWorkers--;
         }
       },
     });
@@ -386,12 +374,12 @@ export async function readFamiliesProgressively(options: {
     return latest!;
   } finally {
     runs.delete(readId);
-    if (folder) await rm(folder, { recursive: true, force: true }).catch(() => {});
-    const temp = `${costsPath()}.${randomUUID()}.tmp`;
+    await folder?.then((dir) => rm(dir, { recursive: true, force: true })).catch(() => {});
+    const temp = `${costsPath}.${randomUUID()}.tmp`;
     try {
-      await mkdir(join(productRoot(), "state", "families"), { recursive: true });
+      await mkdir(join(captures.directory, "families"), { recursive: true });
       await writeFile(temp, JSON.stringify(costs));
-      await rename(temp, costsPath());
+      await rename(temp, costsPath);
     } catch {
       await rm(temp, { force: true }).catch(() => {});
     }

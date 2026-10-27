@@ -235,11 +235,8 @@ export function useFamiliesStore(
     let live = true;
     // A failed fetch leaves the matrix on its last body; the envelope still says it moved.
     const current = page.reading;
-    void (
-      page.reading?.progress
-        ? progressiveFamiliesObservation(bodyVersion)
-        : archivedFamiliesObservation(bodyVersion)
-    ).then(
+    // The parts door answers completed readings whole and progress revisions by new records only.
+    void progressiveFamiliesObservation(bodyVersion).then(
       (reading) => {
         if (
           !live ||

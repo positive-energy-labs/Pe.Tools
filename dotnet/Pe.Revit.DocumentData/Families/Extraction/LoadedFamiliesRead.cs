@@ -16,18 +16,19 @@ public static class LoadedFamiliesRead {
         foreach (var family in catalog)
             if (cache?.TryGet(family.FamilyId, out var record) == true)
                 cached.Add(record);
-        var (path, refusal) = CopySource(document);
-        var inputVersion = InputRevision(catalog.Select(f => (Family)document.GetElement(f.FamilyId.ToElementId())));
-        string? cloudSource = null;
-        if (document.IsModelInCloud && !document.IsModified) {
-            var cloud = document.GetCloudModelPath();
-            cloudSource = $"cld://{cloud.Region}/{cloud.GetProjectGUID():D}/{cloud.GetModelGUID():D}";
-            refusal = null;
-        }
+        // A worker opens a copy of the saved file: it cannot see unsaved memory, and SaveAs would change the
+        // user's document identity. Cloud models stay here until a detached cloud open is proven (family ledger).
+        var refusal = document.IsModified ? "Reading unsaved changes in this instance."
+            : document.IsModelInCloud ? "Reading the open cloud model in this instance."
+            : string.IsNullOrEmpty(document.PathName) || !File.Exists(document.PathName) ? "The document has no saved file to copy."
+            : null;
         return new LoadedFamiliesMatrixData(cached, [], Source: new LoadedFamiliesReadSource(
             catalog.Select(f => new LoadedFamilyCatalogEntry(f.FamilyId, f.FamilyUniqueId, f.FamilyName,
                 f.CategoryName, f.Types.Count, f.PlacedInstanceCount, [])).ToList(),
-            document.Application.VersionNumber, inputVersion, path, refusal, cloudSource));
+            document.Application.VersionNumber,
+            InputRevision(catalog.Select(f => (Family)document.GetElement(f.FamilyId.ToElementId()))),
+            refusal is null ? document.PathName : null,
+            refusal));
     }
 
     public static LoadedFamiliesMatrixData ReadLoadedFamilySnapshot(this Document document, long familyId,
@@ -39,16 +40,7 @@ public static class LoadedFamiliesRead {
             throw new ArgumentException($"Element {familyId} is not a loaded family.", nameof(familyId));
         var record = FamilySnapshotExtractor.ExtractFromProjectFamily(document, family);
         cache?.Store(record);
-        return new LoadedFamiliesMatrixData([record], record.Issues.ToList(), ElapsedMs: timer.Elapsed.TotalMilliseconds);
-    }
-
-    private static (string? Path, string? Refusal) CopySource(Document document) {
-        // Opening a clone does not copy unsaved memory. SaveAs changes the user's document identity.
-        if (document.IsModified) return (null, "Reading unsaved changes in this instance.");
-        if (document.IsModelInCloud) return (null, "Reading the open cloud revision in this instance.");
-        if (string.IsNullOrEmpty(document.PathName) || !File.Exists(document.PathName))
-            return (null, "The document has no saved file to copy.");
-        return (document.PathName, null);
+        return new LoadedFamiliesMatrixData([record], [], ElapsedMs: timer.Elapsed.TotalMilliseconds);
     }
 
     private static string InputRevision(IEnumerable<Family> families) {

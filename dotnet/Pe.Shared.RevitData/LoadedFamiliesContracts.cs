@@ -53,6 +53,8 @@ public record LoadedFamiliesMatrixRequest(
     // Temp placement supplies live instance values, regen-dependent values, and schedule membership for
     // unplaced types, at the cost of a rollback transaction on the document. Disable for a read-only pass.
     bool IncludeTempPlacement = true,
+    // Progressive-read steps the host drives (Prepare, then Extract per FamilyId, then Matrix over the
+    // supplied Snapshots). A direct caller omits all three and gets the whole matrix.
     LoadedFamiliesReadPhase Phase = LoadedFamiliesReadPhase.Matrix,
     long? FamilyId = null,
     IReadOnlyList<Families.FamilySnapshotRecord>? Snapshots = null
@@ -61,15 +63,14 @@ public record LoadedFamiliesMatrixRequest(
 [JsonConverter(typeof(StringEnumConverter))]
 public enum LoadedFamiliesReadPhase { Matrix, Prepare, Extract }
 
-/// <summary>A copy is eligible only when the file is exactly this document's saved revision.</summary>
-/// <summary>Worker input inventory. Version fingerprints selected saved family and type revisions, excluding project-only state.</summary>
+/// <summary>Worker input inventory. Version fingerprints the selected saved family and type revisions, excluding project-only state.
+/// CopyPath is set only when the saved file is exactly this document; otherwise CopyRefusal says why the read stays in this instance.</summary>
 public record LoadedFamiliesReadSource(
     List<LoadedFamilyCatalogEntry> Families,
     string RevitVersion,
     string Version,
     string? CopyPath,
-    string? CopyRefusal,
-    string? CloudSource = null
+    string? CopyRefusal
 );
 
 public record LoadedFamiliesFilter {

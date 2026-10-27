@@ -47,11 +47,10 @@ test("three known long families use three executors despite their small count", 
   expect(disposed.sort((a, b) => a - b)).toEqual([1, 2]);
 });
 
-test("admission rejects short, drained, cached and already-full queues", () => {
+test("admission rejects short, drained and cached queues", () => {
   expect(workerBenefit([60_000, 60_000, 60_000], [0], 180_000)).toBe(false);
   expect(workerBenefit(Array(28).fill(2_000), [0], 180_000)).toBe(false);
   expect(workerBenefit(Array(100).fill(0), [0], 180_000)).toBe(false);
-  expect(workerBenefit(Array(100).fill(60_000), [0, 0, 0], 180_000)).toBe(false);
   expect(workerBenefit(Array(20).fill(60_000), [0], 180_000)).toBe(true);
   expect(workerBenefit(Array(20).fill(60_000), [0, 180_000], 180_000)).toBe(true);
   expect(workerBenefit([600_000, 600_000], [0], 15_000)).toBe(true);

@@ -60,6 +60,10 @@ test("progress survives reconstruction, shares family blobs, and never replaces 
       },
     });
     expect((await new TakeoffCaptures(dir).families(first.id)).result.families).toEqual([family]);
+    // A stored "reading" revision whose run is not live here can never finish; it must not spin.
+    expect((await new TakeoffCaptures(dir).families(first.id)).progress).toMatchObject({
+      state: "failed",
+    });
     expect((await captures.families(cancelled.id)).progress?.state).toBe("cancelled");
     expect((await captures.latestFamilies(work))?.id).toBe(complete.id);
     expect((await new TakeoffCaptures(dir).displayedFamilies(work))?.id).toBe(cancelled.id);

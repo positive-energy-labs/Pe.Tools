@@ -470,8 +470,12 @@ internal sealed class RevitDataRequestService {
             if (request.Phase == LoadedFamiliesReadPhase.Extract) {
                 if (request.FamilyId is not { } familyId)
                     throw new ArgumentException("An Extract read requires familyId.");
-                var handled = new List<(bool IsError, string Message)>();
-                return RevitDialogs.NoModal(handled, () => document.ReadLoadedFamilySnapshot(familyId, cache));
+                var dialogs = new List<(bool IsError, string Message)>();
+                var extracted = RevitDialogs.NoModal(dialogs, () => document.ReadLoadedFamilySnapshot(familyId, cache));
+                // The record travels alone into the final matrix (possibly from a worker), so its dialogs ride on it.
+                return extracted with {
+                    Families = [.. extracted.Families.Select(record => record with { Issues = [.. record.Issues, .. DialogIssues(dialogs)] })]
+                };
             }
             return ReadLoadedFamiliesMatrix(document, filter, request.Budget, request.IncludeTempPlacement,
                 request.Snapshots is { } snapshots ? document.WithFamilySnapshots(snapshots, cache) : cache, cancellationToken);
@@ -497,8 +501,11 @@ internal sealed class RevitDataRequestService {
         var dialogs = new List<(bool IsError, string Message)>();
         var data = RevitDialogs.NoModal(dialogs, () => LoadedFamiliesMatrixCollector.Collect(document, filter,
             budget: budget, includeTempPlacement: includeTempPlacement, snapshotCache: snapshotCache, cancellationToken: cancellationToken));
-        return data with { Issues = [.. data.Issues, .. dialogs.Select(d => new RevitDataIssue("RevitDialogAnswered", RevitDataIssueSeverity.Warning, d.Message))] };
+        return data with { Issues = [.. data.Issues, .. DialogIssues(dialogs)] };
     }
+
+    private static IEnumerable<RevitDataIssue> DialogIssues(IEnumerable<(bool IsError, string Message)> dialogs) =>
+        dialogs.Select(d => new RevitDataIssue("RevitDialogAnswered", RevitDataIssueSeverity.Warning, d.Message));
 
     [Op("data-table.apply", Does = "Upsert a synthetic data table in one host-owned transaction: a key schedule whose rows are freely user-editable and whose cells are shared parameters on stable row elements — ideal for arbitrary agent-authored tables like design conditions or install notes. Can also place the table on a sheet. Authored element schedules apply through schedule.apply.", Title = "Apply Data Table", Finds = ["schedules", "data-table", "key-schedule", "table", "apply", "create", "upsert", "rows", "sheet-placement", "mutation"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Example = "{ \"table\": { \"name\": \"ASHRAE Design Conditions\", \"columns\": [{ \"heading\": \"Condition\" }, { \"heading\": \"Value (°F)\", \"kind\": \"Number\" }], \"rows\": [{ \"key\": \"cooling-db\", \"values\": [\"Cooling Design DB\", \"94.1\"] }, { \"key\": \"heating-db\", \"values\": [\"Heating Design DB\", \"12.3\"] }] }, \"placement\": { \"sheet\": \"M-001\" } }")]
     private ScheduleApplyData ApplyScheduleCore(ScheduleApplyRequest request, RevitDocument activeDocument) {

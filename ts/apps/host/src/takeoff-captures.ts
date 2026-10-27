@@ -169,6 +169,21 @@ const artifactOf = (path: string, url: string, bytes: Buffer): JsonArtifactRefer
 const familyObservationId = (id: string) => familiesObservationSchema.shape.id.parse(id);
 
 /** Immutable Takeoffs and Family observations outside authored Work. Immutable files use the host's existing atomic-replace pattern. */
+type ProgressManifest = { observation: Omit<FamiliesObservation, "result">; records: string[] };
+/** A progress revision in the completed-reading envelope; `families` may be empty for a parts reply. */
+const progressReading = (manifest: ProgressManifest, families: unknown[]) => ({
+  ...manifest.observation,
+  result: {
+    families,
+    issues: [],
+    page: {
+      totalCount: manifest.observation.progress?.total ?? manifest.records.length,
+      returnedCount: manifest.records.length,
+      isTruncated: false,
+    },
+  },
+});
+
 export class TakeoffCaptures {
   private readonly states = new Map<string, TakeoffObservation>();
   private readonly generations = new Map<string, number>();
@@ -176,9 +191,11 @@ export class TakeoffCaptures {
   private readonly reads = new OwnerReads();
   private readonly familiesSaves = new Map<string, Promise<unknown>>();
   private readonly familyRecordFiles = new WeakMap<object, Promise<string>>();
+  /** Progressive reads this process is running; a stored "reading" revision outside it was interrupted. */
+  private readonly liveReads = new Set<string>();
   private readonly listeners = new Set<(key: string) => void>();
   constructor(
-    private readonly directory: string,
+    readonly directory: string,
     private readonly apsCachePath = join(
       productRoot(),
       productPathNames.stateDirectoryName,
@@ -489,6 +506,7 @@ export class TakeoffCaptures {
     expectedLatestId?: string,
   ): Promise<FamiliesObservation> {
     const work = workKey(value.work);
+    if (value.progress) this.liveReads.delete(value.progress.runId);
     const completedAt = new Date().toISOString();
     const id = createHash("sha256")
       .update(JSON.stringify({ ...value, completedAt }))
@@ -643,42 +661,47 @@ export class TakeoffCaptures {
     familyObservationId(id);
     let path = join(this.directory, "families", `${id}.json`);
     const bytes = await readFile(path).catch(async (error: NodeJS.ErrnoException) => {
-      if (error.code !== "ENOENT") throw error;
+      const manifest = error.code === "ENOENT" ? await this.progressManifest(id) : null;
+      if (!manifest) throw error;
       path = join(this.directory, "families", "progress", "artifacts", `${id}.json`);
-      const manifest = JSON.parse(
-        await readFile(join(this.directory, "families", "progress", `${id}.json`), "utf8"),
-      ) as {
-        observation: Omit<FamiliesObservation, "result">;
-        records: string[];
-      };
       const families = await Promise.all(
-        manifest.records.map(async (hash) => {
-          familyObservationId(hash);
-          return JSON.parse(
+        manifest.records.map(async (hash) =>
+          JSON.parse(
             await readFile(join(this.directory, "families", "records", `${hash}.json`), "utf8"),
-          );
-        }),
+          ),
+        ),
       );
-      return Buffer.from(
-        JSON.stringify({
-          ...manifest.observation,
-          result: {
-            families,
-            issues: [],
-            page: {
-              totalCount: manifest.observation.progress?.total ?? families.length,
-              returnedCount: families.length,
-              isTruncated: false,
-            },
-          },
-        }),
-      );
+      return Buffer.from(JSON.stringify(progressReading(manifest, families)));
     });
     const record = familiesObservationSchema.parse(
       JSON.parse(bytes.toString("utf8")),
     ) as FamiliesObservation;
     if (record.id !== id) throw Error("Families observation ID does not match its file");
     return { record, path, bytes };
+  }
+
+  /** Null when `id` is not a progress revision. A "reading" revision whose run is not live here (host
+   *  restart, or an older revision of a settled run) can never finish, so it reads as failed. */
+  private async progressManifest(id: string): Promise<ProgressManifest | null> {
+    familyObservationId(id);
+    const raw = await readFile(
+      join(this.directory, "families", "progress", `${id}.json`),
+      "utf8",
+    ).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return null;
+      throw error;
+    });
+    if (raw === null) return null;
+    const manifest = JSON.parse(raw) as ProgressManifest;
+    for (const hash of manifest.records) familyObservationId(hash);
+    const progress = manifest.observation.progress;
+    if (progress?.state === "reading" && !this.liveReads.has(progress.runId))
+      manifest.observation.progress = {
+        ...progress,
+        state: "failed",
+        message: "This read is no longer running; read again.",
+      };
+    return manifest;
   }
 
   private progressKey(target: DocumentRef, filter: AppliedFilter) {
@@ -691,6 +714,8 @@ export class TakeoffCaptures {
   async saveFamiliesProgress(
     value: Omit<FamiliesObservation, "id" | "completedAt"> & { progress: FamiliesReadProgress },
   ) {
+    if (value.progress.state === "reading") this.liveReads.add(value.progress.runId);
+    else this.liveReads.delete(value.progress.runId);
     const folder = join(this.directory, "families");
     await mkdir(join(folder, "records"), { recursive: true });
     await mkdir(join(folder, "progress"), { recursive: true });
@@ -701,10 +726,11 @@ export class TakeoffCaptures {
         const saving = (async () => {
           const text = JSON.stringify(record);
           const hash = createHash("sha256").update(text).digest("hex");
+          // Content-addressed: a rename over an existing blob writes identical bytes.
           const path = join(folder, "records", `${hash}.json`);
-          await writeFile(path, text, { flag: "wx" }).catch((error: NodeJS.ErrnoException) => {
-            if (error.code !== "EEXIST") throw error;
-          });
+          const temp = `${path}.${randomUUID()}.tmp`;
+          await writeFile(temp, text);
+          await rename(temp, path);
           return hash;
         })();
         this.familyRecordFiles.set(record, saving);
@@ -745,14 +771,7 @@ export class TakeoffCaptures {
       if (error.code === "ENOENT") return null;
       throw error;
     });
-    if (!id) return null;
-    familyObservationId(id);
-    const stored = JSON.parse(
-      await readFile(join(this.directory, "families", "progress", `${id}.json`), "utf8"),
-    ) as {
-      observation: Omit<FamiliesObservation, "result">;
-    };
-    return stored.observation;
+    return id ? ((await this.progressManifest(id))?.observation ?? null) : null;
   }
 
   async clearFamiliesProgress(target: DocumentRef, filter: AppliedFilter) {
@@ -767,33 +786,12 @@ export class TakeoffCaptures {
   }
   /** Display revisions transfer only newly completed immutable family records. */
   async familiesParts(id: string) {
-    familyObservationId(id);
-    const raw = await readFile(
-      join(this.directory, "families", "progress", `${id}.json`),
-      "utf8",
-    ).catch((error: NodeJS.ErrnoException) => {
-      if (error.code === "ENOENT") return null;
-      throw error;
-    });
-    if (!raw) return { reading: await this.families(id), records: null };
-    const manifest = JSON.parse(raw) as {
-      observation: Omit<FamiliesObservation, "result">;
-      records: string[];
+    const manifest = await this.progressManifest(id);
+    if (!manifest) return { reading: await this.families(id), records: null };
+    return {
+      reading: familiesObservationSchema.parse(progressReading(manifest, [])),
+      records: manifest.records,
     };
-    for (const hash of manifest.records) familyObservationId(hash);
-    const reading = familiesObservationSchema.parse({
-      ...manifest.observation,
-      result: {
-        families: [],
-        issues: [],
-        page: {
-          totalCount: manifest.observation.progress?.total ?? manifest.records.length,
-          returnedCount: manifest.records.length,
-          isTruncated: false,
-        },
-      },
-    });
-    return { reading, records: manifest.records };
   }
   async familyRecord(hash: string) {
     familyObservationId(hash);

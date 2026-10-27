@@ -1,11 +1,13 @@
+/** Auxiliary executors beside the primary; three Revit instances in all. */
+const MAX_AUXILIARY = 2;
+
 /** Predict a pull queue's tail, including work each existing executor still holds. */
 export function workerBenefit(
   costs: readonly number[],
   availableIn: readonly number[],
   startupMs: number,
-  minimumSavingMs = 30_000,
 ): boolean {
-  if (!costs.length || !availableIn.length || availableIn.length >= 3) return false;
+  if (!costs.length || !availableIn.length) return false;
   const schedule = (extra: boolean) => {
     const slots = [...availableIn, ...(extra ? [startupMs] : [])];
     let assigned = 0;
@@ -18,9 +20,7 @@ export function workerBenefit(
   };
   const before = schedule(false),
     after = schedule(true);
-  return (
-    after.assigned > 0 && before.finish - after.finish > Math.max(minimumSavingMs, startupMs * 0.2)
-  );
+  return after.assigned > 0 && before.finish - after.finish > Math.max(30_000, startupMs * 0.2);
 }
 
 export interface WorkExecutor<T, R> {
@@ -74,7 +74,8 @@ export async function adaptiveWork<T, R>(options: {
     }
   };
   function admit() {
-    if (!useful() || !admitting || starting || opened >= 2 || !options.canExpand()) return;
+    if (!useful() || !admitting || starting || opened >= MAX_AUXILIARY || !options.canExpand())
+      return;
     const now = Date.now();
     if (
       !workerBenefit(
