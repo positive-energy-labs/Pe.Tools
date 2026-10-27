@@ -1532,9 +1532,16 @@ export class ActionJournal implements ReceiptReader {
             await save((current) => ({
               ...current,
               ...(error instanceof CommandRejected ? { refusal: error.refusal } : {}),
-              steps: current.steps.map((held) =>
-                held.id === step.id ? { ...held, ...failure(error) } : held,
-              ),
+              steps: current.steps.map((held) => {
+                if (held.id !== step.id) return held;
+                const outcome = failure(error);
+                // A domain refusal cannot erase the journal's durable dispatch evidence.
+                if (held.dispatchedAt && "notDispatched" in outcome && outcome.notDispatched) {
+                  const { notDispatched: _, ...uncertain } = outcome;
+                  return { ...held, ...uncertain, state: "unknown" };
+                }
+                return { ...held, ...outcome };
+              }),
             }));
             throw error;
           }

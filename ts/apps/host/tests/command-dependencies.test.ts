@@ -229,6 +229,51 @@ async function setup() {
   return { directory, work, key, events, runs, journal, ready, approve, close };
 }
 
+test("durable dispatch evidence overrides a domain refusal and retains overlap protection", async () => {
+  const h = await setup();
+  try {
+    const intent = {
+      id: "contradictory-refusal",
+      key: "probe.dispatch",
+      target: { kind: "host" as const },
+      input: {},
+    };
+    const effects = [{ kind: "file" as const, path: "C:/probe/dispatched" }];
+    await h.journal.invoke(
+      intent,
+      { caller: human, basis: null },
+      fixtureCommand(
+        effects,
+        async () => null,
+        async (execution) =>
+          execution.step("native", "write", {}, async (id) => {
+            await h.journal.markDispatched(id);
+            throw new BridgeError("Domain claims no dispatch", 409, { notDispatched: true });
+          }),
+      ),
+    );
+    const settled = await h.journal.wait(intent.id);
+    expect(settled.state).toBe("unknown");
+    expect(settled).not.toHaveProperty("notDispatched", true);
+    expect(settled.steps[0]).toMatchObject({ state: "unknown", dispatchedAt: expect.any(String) });
+    expect(settled.steps[0]).not.toHaveProperty("notDispatched", true);
+    let writes = 0;
+    await h.journal.invoke(
+      { ...intent, id: "behind-dispatched" },
+      { caller: human, basis: null },
+      fixtureCommand(
+        effects,
+        async () => null,
+        async () => ++writes,
+      ),
+    );
+    expect((await h.journal.wait("behind-dispatched")).state).toBe("failed");
+    expect(writes).toBe(0);
+  } finally {
+    await h.close();
+  }
+});
+
 test("rendered revision refuses unseen Work; later gates compare declared cells, profile and scope", async () => {
   for (const changed of ["unrelated", "consumed", "profile", "scope", "before-admission"]) {
     const h = await setup();
