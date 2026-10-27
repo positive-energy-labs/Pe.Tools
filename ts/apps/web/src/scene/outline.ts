@@ -8,8 +8,16 @@
 import * as THREE from "three";
 import { FullScreenQuad } from "three/addons/postprocessing/Pass.js";
 import { BLACK } from "./grounds";
+import { veilMaterial, type VeilUniforms } from "./veil";
 
 export const OUTLINE_LAYER = 2;
+
+/** A context-tier outline fades by the veil like its lines and glass ("line" kind: alpha × falloff).
+ * The seen pass carries that factor into the ring once; subject and stub outlines stay unveiled. */
+export function veilOutline(material: THREE.Material, veil: VeilUniforms, context: boolean) {
+  if (context) veilMaterial(material, veil, "line");
+  return material;
+}
 
 const vertexShader = /* glsl */ `
 varying vec2 vUv;

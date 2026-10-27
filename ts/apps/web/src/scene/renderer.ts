@@ -15,7 +15,7 @@ import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { createGlow, GLOW_LAYER, OCCLUDER_LAYER } from "./glow";
 import { createDamageBatch } from "./damage-batch";
 import { createMarkBatch } from "./mark-batch";
-import { createOutline, OUTLINE_LAYER } from "./outline";
+import { createOutline, OUTLINE_LAYER, veilOutline } from "./outline";
 import { liftLightness } from "./oklch";
 import {
   CONTEXT_CREASE_DEG,
@@ -1116,35 +1116,44 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       disposeTree(child);
     }
     for (const mark of ["selected", "lit", "hover"] as const) {
-      const ids = [...marked].filter(([, m]) => m === mark).slice(0, OUTLINED);
-      if (!ids.length) continue;
-      const positions = new Float32Array(ids.reduce((n, [id]) => n + byId[id]!.vertexCount * 3, 0));
-      let at = 0;
-      for (const [id] of ids) {
-        const { firstVertex, vertexCount } = byId[id]!;
-        for (let i = firstVertex * 3; i < (firstVertex + vertexCount) * 3; i++)
-          positions[at++] = meshes.positions[i]! - origin.getComponent(i % 3);
+      const marks = [...marked].filter(([, m]) => m === mark).slice(0, OUTLINED);
+      // One mesh per tier: context outlines veil (`veilOutline`), subject outlines do not.
+      for (const context of [false, true]) {
+        const ids = marks.filter(
+          ([id]) => (paintOf(byId[id]!, paintBy).tier === "context") === context,
+        );
+        if (!ids.length) continue;
+        const positions = new Float32Array(
+          ids.reduce((n, [id]) => n + byId[id]!.vertexCount * 3, 0),
+        );
+        let at = 0;
+        for (const [id] of ids) {
+          const { firstVertex, vertexCount } = byId[id]!;
+          for (let i = firstVertex * 3; i < (firstVertex + vertexCount) * 3; i++)
+            positions[at++] = meshes.positions[i]! - origin.getComponent(i % 3);
+        }
+        const mesh = new THREE.Mesh(
+          new THREE.BufferGeometry().setAttribute(
+            "position",
+            new THREE.BufferAttribute(positions, 3),
+          ),
+          // Blending and depth test are set per mask pass (`outline.ts`); the offset lets the
+          // element pass against its own seeded depth.
+          new THREE.MeshBasicMaterial({
+            color: OUTLINE_CHANNEL[mark],
+            depthWrite: false,
+            side: THREE.DoubleSide,
+            polygonOffset: true,
+            polygonOffsetFactor: -1,
+            polygonOffsetUnits: -4,
+          }),
+        );
+        applyClip(mesh.material);
+        veilOutline(mesh.material, veil, context);
+        mesh.layers.set(OUTLINE_LAYER);
+        mesh.frustumCulled = false;
+        outlined.add(mesh);
       }
-      const mesh = new THREE.Mesh(
-        new THREE.BufferGeometry().setAttribute(
-          "position",
-          new THREE.BufferAttribute(positions, 3),
-        ),
-        // Blending and depth test are set per mask pass (`outline.ts`); the offset lets the
-        // element pass against its own seeded depth.
-        new THREE.MeshBasicMaterial({
-          color: OUTLINE_CHANNEL[mark],
-          depthWrite: false,
-          side: THREE.DoubleSide,
-          polygonOffset: true,
-          polygonOffsetFactor: -1,
-          polygonOffsetUnits: -4,
-        }),
-      );
-      applyClip(mesh.material);
-      mesh.layers.set(OUTLINE_LAYER);
-      mesh.frustumCulled = false;
-      outlined.add(mesh);
     }
     render();
   };
