@@ -122,6 +122,8 @@ The same field-options machinery now also annotates the fixed operation surface:
 
 ## Decision rules
 
+Spatial geometry belongs to one operation. `Pe.Revit.Space.SpaceWorld` retains only change metadata between calls; query callers pass one `World` through related reads. `LinkedGeometryStore` reuses uncropped element geometry in bounded disk packs within one host-document opening, with conservative invalidation for link changes. Saved, unchanged host geometry can also be reused; unsaved changes and active transactions require native capture. Browser scene retention remains separately bounded. The [spatial ledger](features/spatial/LEDGER.md) records the memory policy and proof limits.
+
 1. **Libraries own semantics.** Host operations, Pea, scripts, ribbon commands, CLIs, and UI pages are adapters unless they are explicitly defining a contract.
 2. **Public host API means operation contracts.** The self-registering `BridgeOp` catalog (served from `GET /ops`, called over `POST /call`), request/response DTOs, operation metadata, and blessed client methods are public-facing. Bridge frames are private.
 3. **Keep document-owned and session-owned behavior separate.** If behavior only needs `Document` / `FamilyDocument`, prefer document-centric helpers and DA-safe collectors. If it needs active/open UI state, keep it near `UIApplication`, `DocumentManager`, or session services.

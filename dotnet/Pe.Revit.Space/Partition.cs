@@ -1,21 +1,13 @@
 namespace Pe.Revit.Space;
 
-/// <summary>
-///     One source's triangles, tags, and tree. The host partition patches per element from the
-///     tracker delta; a link partition never does, because a link document is not modifiable and no
-///     per-element event can ever fire for its content. A link goes dirty whole and is rebuilt only
-///     by an explicit Build.
-///     <para>
-///         There is one triangle store. Row i owns <c>_tris[_start[i] .. _start[i + 1])</c>, so a
-///         patch splices ranges instead of keeping a second per-element copy of every triangle.
-///     </para>
-/// </summary>
+/// <summary>One operation's source triangles, tags, and query tree.</summary>
 internal sealed class Partition {
     private Tri[] _tris = [];
     private PrimRow[] _prims = [];
     private int[] _start = [0];
+    private readonly LinkedGeometryStore? _store;
 
-    public Partition(int source, Document doc, SourceKind kind, long? linkInstanceId, Transform transform) {
+    public Partition(int source, Document doc, SourceKind kind, long? linkInstanceId, Transform transform, string? generation = null) {
         this.Source = source;
         this.Doc = doc;
         this.Kind = kind;
@@ -23,6 +15,7 @@ internal sealed class Partition {
         this.Transform = transform;
         this.DocumentKey = doc.GetDocumentKey();
         this.Bvh = Bvh.Build([]);
+        this._store = generation is null ? null : LinkedGeometryStore.For(doc, linkInstanceId, transform, generation);
     }
 
     public int Source { get; }
@@ -54,9 +47,14 @@ internal sealed class Partition {
 
     /// <summary>The one full ingest. Never called from a verb.</summary>
     public void Build(long epoch) {
+        using var cache = this._store?.Open();
         var sink = new List<Tri>();
         var rows = new List<PrimRow>();
-        this.Skipped = Ingest.Document(this.Doc, this.Source, this.Transform, sink, rows);
+        this.Skipped = 0;
+        foreach (var element in new FilteredElementCollector(this.Doc).WhereElementIsNotElementType()) {
+            if (!Ingest.Allowed(element)) { this.Skipped++; continue; }
+            if (this.ReadElement(element, sink, rows, true, null) == 0) this.Skipped++;
+        }
         // ponytail: List doubling means the sink peaks near 1.5x the final array before ToArray
         // trims it. That is transient garbage, not resident. A chunked writer would remove it.
         this.Adopt(sink.ToArray(), rows.ToArray());
@@ -65,17 +63,68 @@ internal sealed class Partition {
     }
 
     internal void BuildElements(IEnumerable<Element> elements, long epoch, Aabb? region = null) {
+        using var cache = this._store?.Open();
         var sink = new List<Tri>();
         var rows = new List<PrimRow>();
         this.Skipped = 0;
         foreach (var element in elements) {
             if (!Ingest.Allowed(element)) continue;
-            if (Ingest.Element(element, this.Source, rows.Count, sink, this.Transform, rows, includeCurves: false, region: region) == 0) this.Skipped++;
+            if (this.ReadElement(element, sink, rows, false, region) == 0) this.Skipped++;
         }
         // Scene capture only clips and writes triangles; it never traverses a triangle BVH.
         this.Adopt(sink.ToArray(), rows.ToArray(), false);
         this.BuiltAtEpoch = epoch;
         this.Dirty = false;
+    }
+
+    private int ReadElement(Element element, List<Tri> sink, List<PrimRow> rows, bool includeCurves, Aabb? region) {
+        // A host boundary element needs native per-solid rejection before the element's row bounds and
+        // Medium/Fine choice are derived. An uncropped cached row cannot reconstruct those decisions.
+        if (this._store is null || (this.Kind == SourceKind.Host && region is { } bounds && !this.InsideRegion(element, bounds)))
+            return Ingest.Element(element, this.Source, rows.Count, sink, this.Transform, rows, includeCurves, region);
+        // Disk rows are uncropped and source-neutral. The caller's region is applied only after capture.
+        var captured = this._store.Read(element.UniqueId + (includeCurves ? "/curves" : "/mesh"), () => {
+            var triangles = new List<Tri>();
+            var prims = new List<PrimRow>();
+            Ingest.Element(element, 0, 0, triangles, this.Transform, prims, includeCurves);
+            return new LinkedGeometryStore.Geometry(prims.ToArray(), triangles.ToArray());
+        });
+        var start = 0;
+        var added = 0;
+        foreach (var row in captured.Rows) {
+            if ((includeCurves || row.Kind != PrimKind.Curve2D) && (region is null || row.Box.Overlaps(region.Value))) {
+                var prim = rows.Count;
+                for (var i = start; i < start + row.Triangles; i++) {
+                    var triangle = captured.Triangles[i];
+                    triangle.Prim = prim;
+                    sink.Add(triangle);
+                }
+                rows.Add(row with { Source = this.Source });
+                added++;
+            }
+            start += row.Triangles;
+        }
+        return added;
+    }
+
+    private bool InsideRegion(Element element, Aabb region) {
+        try {
+            using var bounds = element.get_BoundingBox(null);
+            if (bounds is null) return false;
+            var min = bounds.Min;
+            var max = bounds.Max;
+            if (min.X > max.X || min.Y > max.Y || min.Z > max.Z) return false;
+            using var transform = this.Transform.Multiply(bounds.Transform);
+            foreach (var x in new[] { min.X, max.X })
+            foreach (var y in new[] { min.Y, max.Y })
+            foreach (var z in new[] { min.Z, max.Z }) {
+                var point = transform.OfPoint(new XYZ(x, y, z));
+                if (!(point.X >= region.MinX && point.X <= region.MaxX
+                    && point.Y >= region.MinY && point.Y <= region.MaxY
+                    && point.Z >= region.MinZ && point.Z <= region.MaxZ)) return false;
+            }
+            return true;
+        } catch { return false; }
     }
 
     internal void BuildRegion(Aabb hostBounds, long epoch, IReadOnlyList<Aabb>? local = null) {
@@ -113,71 +162,6 @@ internal sealed class Partition {
             } catch { return true; }
         });
         this.BuildElements(elements, epoch, hostBounds);
-    }
-
-    /// <summary>
-    ///     Host-only incremental refresh. Deleted ids drop, added and modified ids retessellate, and
-    ///     the next flat array is built by copying the untouched ranges and appending the new ones.
-    ///     ponytail: the whole tree is rebuilt after every patch, and the splice holds two triangle
-    ///     arrays for the length of one copy. Refit the touched nodes when that ratio starts to hurt.
-    /// </summary>
-    public void Patch(IEnumerable<long> added, IEnumerable<long> modified, IEnumerable<long> deleted, long epoch) {
-        var touched = added.Concat(modified).Distinct().ToList();
-        // One element can own several rows — a DWG import owns one per layer — so the drop set is a
-        // scan by id rather than an index lookup. Patch already walks every row to splice, so this
-        // costs nothing and removes the map that could only ever hold one row per element.
-        var gone = new HashSet<long>(deleted.Concat(touched));
-        var drop = new HashSet<int>();
-        for (var i = 0; i < this._prims.Length; i++)
-            if (gone.Contains(this._prims[i].ElementId)) _ = drop.Add(i);
-
-        var keptCount = this._prims.Length - drop.Count;
-        var addTris = new List<Tri>();
-        var addRows = new List<PrimRow>();
-        foreach (var id in touched) {
-            Element? e;
-            try {
-                e = this.Doc.GetElement(id.ToElementId());
-            } catch {
-                e = null;
-            }
-
-            // A vanished or filtered-out id can only mean "no triangles here any more".
-            if (e is null || !Ingest.Allowed(e) || !HasBox(e)) continue;
-            _ = Ingest.Element(e, this.Source, keptCount + addRows.Count, addTris, this.Transform, addRows);
-        }
-
-        var kept = 0;
-        for (var i = 0; i < this._prims.Length; i++)
-            if (!drop.Contains(i)) kept += this._start[i + 1] - this._start[i];
-
-        var nextTris = new Tri[kept + addTris.Count];
-        var nextPrims = new PrimRow[keptCount + addRows.Count];
-        int ti = 0, pi = 0;
-        for (var i = 0; i < this._prims.Length; i++) {
-            if (drop.Contains(i)) continue;
-            var from = this._start[i];
-            var count = this._start[i + 1] - from;
-            Array.Copy(this._tris, from, nextTris, ti, count);
-            // Compaction renumbers the surviving rows, so their triangles must be retagged.
-            for (var k = ti; k < ti + count; k++) nextTris[k].Prim = pi;
-            nextPrims[pi] = this._prims[i];
-            ti += count;
-            pi++;
-        }
-
-        addTris.CopyTo(nextTris, ti);
-        addRows.CopyTo(nextPrims, pi);
-        this.Adopt(nextTris, nextPrims);
-        this.BuiltAtEpoch = epoch;
-    }
-
-    private static bool HasBox(Element e) {
-        try {
-            return e.get_BoundingBox(null) is not null;
-        } catch {
-            return false;
-        }
     }
 
     /// <summary>Takes ownership of one triangle array and its rows, then derives the range map,

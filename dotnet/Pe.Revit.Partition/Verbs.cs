@@ -31,17 +31,18 @@ public static class Verbs {
     // 3.9e-4 ft gap between consecutive segments, and 1e-9 refused it. Far under the 1/8 in shortest real segment.
     internal const double JoinTolFt = 0.0005233;
 
-    public static PartitionAnswer Partition(Document document, PartitionRequest request) {
+    public static PartitionAnswer Partition(Document document, PartitionRequest request, World? world = null) {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var result = Run(document, Capture(document, request));
+        world ??= SpaceWorld.Prepare(document);
+        var result = Run(document, Capture(document, request, world), world);
         return result with { Ms = Math.Round(sw.Elapsed.TotalMilliseconds, 3) };
     }
 
     /// <summary>Solve an already captured input; callers that need the captured slices capture first.</summary>
-    public static PartitionAnswer Run(Document document, PartitionInput input) {
+    public static PartitionAnswer Run(Document document, PartitionInput input, World world) {
         var sw = System.Diagnostics.Stopwatch.StartNew();
         ProbeAnswer Probe(double x, double y) {
-            var answer = SpaceVerbs.Probe(document, new XYZ(x, y, input.LevelZ + KneeLoFt), purpose: ProbePurpose.RoomHeights);
+            var answer = SpaceVerbs.Probe(world, new XYZ(x, y, input.LevelZ + KneeLoFt), purpose: ProbePurpose.RoomHeights);
             RequireStamp(answer.Stamp, input.Knee.Stamp, document.GetDocumentKey(), "probe");
             return answer;
         }
@@ -53,7 +54,8 @@ public static class Verbs {
     }
 
     /// <summary>Read actual Space slices and native Room proposals without running or materializing a solve.</summary>
-    public static PartitionInput Capture(Document document, PartitionRequest request) {
+    public static PartitionInput Capture(Document document, PartitionRequest request, World? world = null) {
+        world ??= SpaceWorld.Prepare(document);
         var knobs = request.Knobs ?? Knobs.Default;
         if (new[] { knobs.InkHalfWidthFt, knobs.CloseFt, knobs.FloorTolFt, knobs.MinHeadroomFt,
                 knobs.MinRoomSqft, knobs.MinFeatureWidthFt, knobs.InkBackedAcceptMin }
@@ -111,13 +113,13 @@ public static class Verbs {
 
         // Stage 2, slice. Two calls per band, because Filter.Wants is a conjunction and
         // (sources AND categories AND Solid|Mesh) OR (Curve2D AND layers) is not one filter.
-        var knee = Band(document, levelZ + KneeLoFt, levelZ + KneeHiFt, declared, clip);
-        var header = Band(document, levelZ + HeaderLoFt, levelZ + HeaderHiFt, declared, clip);
+        var knee = Band(world, levelZ + KneeLoFt, levelZ + KneeHiFt, declared, clip);
+        var header = Band(world, levelZ + HeaderLoFt, levelZ + HeaderHiFt, declared, clip);
         RequireStamp(header.Solids.Stamp, knee.Solids.Stamp, document.GetDocumentKey(), "header");
         var gates = new[] { knee.Solids.Stamp.Resolved, knee.Ribbons.Stamp.Resolved,
             header.Solids.Stamp.Resolved, header.Ribbons.Stamp.Resolved };
-        var originalKnee = SpaceVerbs.OriginalCurves(document, levelZ + KneeLoFt, levelZ + KneeHiFt, clip, declared.Ribbons);
-        var originalHeader = SpaceVerbs.OriginalCurves(document, levelZ + HeaderLoFt, levelZ + HeaderHiFt, clip, declared.Ribbons);
+        var originalKnee = SpaceVerbs.OriginalCurves(world, levelZ + KneeLoFt, levelZ + KneeHiFt, clip, declared.Ribbons);
+        var originalHeader = SpaceVerbs.OriginalCurves(world, levelZ + HeaderLoFt, levelZ + HeaderHiFt, clip, declared.Ribbons);
         RequireStamp(originalKnee.Stamp, knee.Solids.Stamp, document.GetDocumentKey(), "original knee curves");
         RequireStamp(originalHeader.Stamp, knee.Solids.Stamp, document.GetDocumentKey(), "original header curves");
         var (proposals, dropped) = Proposals(document, level, phaseId, knee.Solids.Stamp, clip);
@@ -260,8 +262,7 @@ public static class Verbs {
     }
 
     private static void RequireCurrent(Document document, Stamp stamp) {
-        var world = SpaceWorld.Resident(document);
-        if (world.CurrentEpoch != stamp.Epoch || world.BuiltUtc != stamp.BuiltUtc)
+        if (SpaceWorld.Epoch(document) != stamp.Epoch)
             throw new PartitionException("stale capture: Space changed during capture or solve");
     }
 
@@ -269,11 +270,11 @@ public static class Verbs {
 
     private sealed record BandSlices(SliceAnswer Solids, SliceAnswer Ribbons, SliceAnswer Merged);
 
-    private static BandSlices Band(Document doc, double z0, double z1, Enclosure e, Aabb clip) {
-        var s = SpaceVerbs.Slice(doc, z0, z1, e.Solids, clip);
-        var r = SpaceVerbs.Slice(doc, z0, z1, e.Ribbons, clip);
-        RequireStamp(s.Stamp, s.Stamp, doc.GetDocumentKey(), "solids");
-        RequireStamp(r.Stamp, s.Stamp, doc.GetDocumentKey(), "ribbons");
+    private static BandSlices Band(World world, double z0, double z1, Enclosure e, Aabb clip) {
+        var s = SpaceVerbs.Slice(world, z0, z1, e.Solids, clip);
+        var r = SpaceVerbs.Slice(world, z0, z1, e.Ribbons, clip);
+        RequireStamp(s.Stamp, s.Stamp, world.HostDocumentKey, "solids");
+        RequireStamp(r.Stamp, s.Stamp, world.HostDocumentKey, "ribbons");
         var merged = new SliceAnswer(
             s.Stamp,
             new Searched(

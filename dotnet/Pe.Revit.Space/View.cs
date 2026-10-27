@@ -2,7 +2,7 @@ namespace Pe.Revit.Space;
 
 /// <summary>
 ///     The world as a picture, for a browser that draws it. Every answer here is a projection of
-///     resident rows and BVH nodes. Every answer carries the verbs' stamp so a stale picture says so.
+///     operation-owned rows and BVH nodes. Status alone does not capture geometry.
 /// </summary>
 public static class SpaceView {
     private static readonly Filter AllKinds = new(Kinds: [PrimKind.Solid, PrimKind.Mesh, PrimKind.Curve2D]);
@@ -30,8 +30,8 @@ public static class SpaceView {
     public sealed record SourceCategories(int Source, IReadOnlyList<string> Categories);
 
     /// <summary>
-    ///     Is there a world, and what does it hold. <see cref="Built" /> false means every other
-    ///     answer is empty and honest about it. Bounds are the union of every row box.
+    ///     Summary of the operation's capture. Status alone reports Built false because it does not
+    ///     capture geometry. Other query operations prepare their own World. Bounds union captured row boxes.
     /// </summary>
     public sealed record StatusAnswer(
         Stamp Stamp,
@@ -101,9 +101,10 @@ public static class SpaceView {
     /// <summary>One source BVH, through MaxDepth inclusive, in post-order with the root last.</summary>
     public sealed record TreeAnswer(Stamp Stamp, int Source, int MaxDepth, IReadOnlyList<BvhNode> Nodes, double Ms);
 
-    public static StatusAnswer Status(Document document) {
+    public static StatusAnswer Status(Document document) => Status(document, new World(document.GetDocumentKey(), SpaceWorld.Epoch(document)));
+
+    public static StatusAnswer Status(Document document, World world) {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var world = SpaceWorld.Resident(document);
         var built = world.BuiltUtc != default;
         var bounds = Aabb.Empty;
         var any = false;
@@ -121,7 +122,7 @@ public static class SpaceView {
         return new StatusAnswer(
             world.StampFor(world.Partitions, AllKinds),
             built,
-            world.PendingIds,
+            0,
             world.Partitions.Select(p => new SourceCategories(p.Source, p.Categories)).ToList(),
             levels,
             any ? bounds : null,
@@ -130,8 +131,7 @@ public static class SpaceView {
 
     public static RowsAnswer Rows(Document document, Filter filter) {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var world = SpaceWorld.Resident(document);
-        world.ApplyQueued();
+        var world = SpaceWorld.Prepare(document);
         var touched = world.Partitions.Where(p => filter.Wants(p.Kind)).ToList();
 
         var categories = new Legend();
@@ -183,8 +183,7 @@ public static class SpaceView {
     public static TreeAnswer Tree(Document document, int source, int maxDepth) {
         if (maxDepth < 0) throw new ArgumentOutOfRangeException(nameof(maxDepth));
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var world = SpaceWorld.Resident(document);
-        world.ApplyQueued();
+        var world = SpaceWorld.Prepare(document);
         var partition = world.Partitions.FirstOrDefault(p => p.Source == source)
             ?? throw new ArgumentOutOfRangeException(nameof(source), $"no partition with source {source}");
         var nodes = partition.Bvh.Walk(maxDepth);

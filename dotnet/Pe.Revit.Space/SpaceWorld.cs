@@ -2,140 +2,108 @@ using Pe.Revit.Loader.Documents;
 
 namespace Pe.Revit.Space;
 
-/// <summary>
-///     The resident triangle soup. One <see cref="World" /> per host document, held in the Revit
-///     process, built once by an explicit <see cref="Build(Document)" /> and refreshed per element
-///     from the SDK document tracker. Read only: there is no transaction anywhere in this library.
-/// </summary>
+/// <summary>Operation-owned geometry. Only change epochs outlive the caller.</summary>
 public static class SpaceWorld {
-    private static readonly Dictionary<string, World> Worlds = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, ChangeState> States = new(StringComparer.OrdinalIgnoreCase);
     private static readonly object Sync = new();
 
-    /// <summary>
-    ///     Subscribes to the tracker. Called once by AppCore next to DocumentCacheMaintenance.Wire.
-    ///     The epoch is minted here and nowhere else, one per Changed event. Nothing is tessellated
-    ///     inside the handler; the delta is queued and applied on the next verb call.
-    /// </summary>
     public static void Wire(IDocumentTracker documents) {
-        documents.Changed += (tracked, e) => {
-            var doc = tracked.Resolve();
+        documents.Changed += (tracked, change) => {
             lock (Sync) {
-                if (!Worlds.TryGetValue(doc.GetDocumentKey(), out var world)) return;
-                world.Enqueue(e);
+                var key = tracked.Resolve().GetDocumentKey();
+                var state = State(key);
+                state.Epoch++;
+                if (change.GetAddedElementIds().Concat(change.GetModifiedElementIds()).Concat(change.GetDeletedElementIds())
+                    .Any(id => state.LinkIds.Contains(id.Value()))) state.Generation = Guid.NewGuid().ToString("N");
             }
         };
-        documents.Closed += key => {
-            lock (Sync) _ = Worlds.Remove(key.Value);
-        };
+        documents.Closed += key => { lock (Sync) States.Remove(key.Value); };
     }
 
-    /// <summary>The one explicit ingest of every partition. Nothing else builds.</summary>
-    public static World Build(Document document) {
-        var world = Resident(document);
-        world.BuildAll(document);
-        return world;
-    }
+    public static World Build(Document document) => Prepare(document);
 
-    /// <summary>Explicit operation preparation: patch host edits and rebuild unbuilt or dirty linked sources.</summary>
     public static World Prepare(Document document) {
-        var world = Resident(document);
-        world.ApplyQueued();
-        if (world.BuiltUtc == default || world.Partitions.Any(partition => partition.Dirty))
-            world.BuildAll(document);
+        var world = new World(document.GetDocumentKey(), Epoch(document));
+        world.BuildAll(document);
+        LinkedGeometryStore.Prune();
         return world;
     }
 
-    // A scene snapshot does not populate the query world or need its triangle BVH.
     internal static World PrepareScene(Document document, IReadOnlyCollection<long> ids, ref Aabb? crop, double padding, bool focusOnly, bool proximity = false) {
         if (crop is null && ids.Count == 0) return Prepare(document);
-        var resident = Resident(document);
-        if (!focusOnly && resident.Prepared) {
-            resident.ResolveSceneCrop(ids, ref crop, padding);
-            return resident;
-        }
-        var world = new World(document.GetDocumentKey());
-        world.BuildScope(document, ids, ref crop, padding, resident.CurrentEpoch, focusOnly, proximity);
+        var world = new World(document.GetDocumentKey(), Epoch(document));
+        world.BuildScope(document, ids, ref crop, padding, world.CurrentEpoch, focusOnly, proximity);
+        LinkedGeometryStore.Prune();
         return world;
     }
 
-    /// <summary>The world for this host document, created empty if it does not exist yet.</summary>
-    public static World Resident(Document document) {
+    public static long Epoch(Document document) {
+        lock (Sync) return State(document.GetDocumentKey()).Epoch;
+    }
+
+    internal static string? HostGeneration(Document document) {
+        // Descriptive document keys survive reopening; only the SDK authority identifies this native open lifetime.
+        if (!PeDocumentIdentity.TryGetOpenId(document, out var openId)) return null;
+        return $"{openId}:{Epoch(document)}";
+    }
+    private sealed class ChangeState {
+        public long Epoch;
+        public string Generation = Guid.NewGuid().ToString("N");
+        public string Manifest = "";
+        public HashSet<long> LinkIds = [];
+    }
+
+    private static ChangeState State(string key) {
+        if (!States.TryGetValue(key, out var state)) States[key] = state = new ChangeState();
+        return state;
+    }
+
+    internal static string LinkGeneration(Document host, IReadOnlyList<RevitLinkInstance> links) {
+        // Loaded documents and worksets are reconciled every operation, including unload/reload without an instance-id delta.
+        var manifest = string.Join("|", links.OrderBy(l => l.UniqueId, StringComparer.Ordinal).Select(link => {
+            var doc = link.GetLinkDocument();
+            var worksets = doc is null ? "unloaded" : string.Join(",", new FilteredWorksetCollector(doc)
+                .OfKind(WorksetKind.UserWorkset).ToWorksets().OrderBy(w => w.Id.IntegerValue)
+                .Select(w => $"{w.Id.IntegerValue}:{w.IsOpen}"));
+            return $"{link.UniqueId}:{link.GetTypeId()}:{doc?.GetDocumentKey()}:{worksets}";
+        }));
         lock (Sync) {
-            var key = document.GetDocumentKey();
-            if (!Worlds.TryGetValue(key, out var world)) Worlds[key] = world = new World(key);
-            return world;
+            var state = State(host.GetDocumentKey());
+            if (state.Manifest != manifest) { state.Manifest = manifest; state.Generation = Guid.NewGuid().ToString("N"); }
+            state.LinkIds = new HashSet<long>(links.SelectMany(l => new[] { l.Id.Value(), l.GetTypeId().Value() }));
+            return state.Generation;
         }
     }
 
-    /// <summary>The current epoch without touching geometry. Zero when nothing is resident.</summary>
-    public static long Epoch(Document document) {
-        lock (Sync) return Worlds.TryGetValue(document.GetDocumentKey(), out var w) ? w.CurrentEpoch : 0L;
-    }
 }
 
-/// <summary>One host document's partitions, epoch, and pending delta.</summary>
+/// <summary>One operation's source documents, triangles and query indexes.</summary>
 public sealed class World {
     private readonly List<Partition> _partitions = [];
-    private readonly HashSet<long> _added = [];
-    private readonly HashSet<long> _modified = [];
-    private readonly HashSet<long> _deleted = [];
-    private readonly object _sync = new();
 
-    internal World(string hostKey) => this.HostDocumentKey = hostKey;
-
+    internal World(string hostKey, long epoch) { this.HostDocumentKey = hostKey; this.CurrentEpoch = epoch; }
     public string HostDocumentKey { get; }
     public long CurrentEpoch { get; private set; }
     public DateTime BuiltUtc { get; private set; }
-
-    /// <summary>Tracker ids waiting for a verb to patch the resident host partition.</summary>
-    public int PendingIds {
-        get { lock (this._sync) return this._added.Count + this._modified.Count + this._deleted.Count; }
-    }
-
     internal IReadOnlyList<Partition> Partitions => this._partitions;
+    internal Document HostDocument => this._partitions[0].Doc;
     internal IReadOnlyCollection<long>? SceneFocusMeshIds { get; private set; }
-    internal bool Prepared {
-        get {
-            lock (this._sync) return this.BuiltUtc != default && !this._partitions.Any(p => p.Dirty)
-                && this._added.Count + this._modified.Count + this._deleted.Count == 0;
-        }
-    }
-
-    /// <summary>Mints one epoch per tracker event and queues the ids. No geometry work here.</summary>
-    internal void Enqueue(Autodesk.Revit.DB.Events.DocumentChangedEventArgs e) {
-        lock (this._sync) {
-            this.CurrentEpoch++;
-            foreach (var id in e.GetAddedElementIds()) _ = this._added.Add(id.Value());
-            foreach (var id in e.GetModifiedElementIds()) _ = this._modified.Add(id.Value());
-            foreach (var id in e.GetDeletedElementIds()) _ = this._deleted.Add(id.Value());
-
-            // A link's content cannot change per element, so any event naming its instance or type
-            // invalidates that partition whole. It is rebuilt only by an explicit Build.
-            foreach (var p in this._partitions) {
-                if (p.LinkInstanceId is not { } li) continue;
-                if (this._added.Contains(li) || this._modified.Contains(li) || this._deleted.Contains(li))
-                    p.Dirty = true;
-            }
-        }
-    }
 
     internal void BuildAll(Document host) {
-        lock (this._sync) {
+        {
             this._partitions.Clear();
-            this._added.Clear();
-            this._modified.Clear();
-            this._deleted.Clear();
-            this._partitions.Add(new Partition(0, host, SourceKind.Host, null, Transform.Identity));
+            this._partitions.Add(new Partition(0, host, SourceKind.Host, null, Transform.Identity, SpaceWorld.HostGeneration(host)));
 
+            var links = new FilteredElementCollector(host).OfClass(typeof(RevitLinkInstance)).Cast<RevitLinkInstance>().ToList();
+            var generation = SpaceWorld.LinkGeneration(host, links);
             var source = 1;
-            foreach (var li in new FilteredElementCollector(host).OfClass(typeof(RevitLinkInstance))
-                         .Cast<RevitLinkInstance>()) {
+            foreach (var li in links) {
                 var ld = li.GetLinkDocument();
                 if (ld is null) continue;
                 var kind = ld.Title.IndexOf(".ifc", StringComparison.OrdinalIgnoreCase) >= 0
                     ? SourceKind.IfcLink
                     : SourceKind.RevitLink;
-                this._partitions.Add(new Partition(source++, ld, kind, li.Id.Value(), li.GetTotalTransform()));
+                this._partitions.Add(new Partition(source++, ld, kind, li.Id.Value(), li.GetTotalTransform(), generation));
             }
 
             foreach (var p in this._partitions) p.Build(this.CurrentEpoch);
@@ -145,18 +113,20 @@ public sealed class World {
 
     internal void BuildScope(Document host, IReadOnlyCollection<long> ids, ref Aabb? crop, double padding, long epoch, bool focusOnly, bool proximity = false) {
         this.CurrentEpoch = epoch;
-        this._partitions.Add(new Partition(0, host, SourceKind.Host, null, Transform.Identity));
+        this._partitions.Add(new Partition(0, host, SourceKind.Host, null, Transform.Identity, SpaceWorld.HostGeneration(host)));
         if (focusOnly) {
             this._partitions[0].BuildElements(ids.Select(id => host.GetElement(id.ToElementId())).OfType<Element>(), epoch);
             this.BuiltUtc = DateTime.UtcNow;
             return;
         }
+        var links = new FilteredElementCollector(host).OfClass(typeof(RevitLinkInstance)).Cast<RevitLinkInstance>().ToList();
+        var generation = SpaceWorld.LinkGeneration(host, links);
         var source = 1;
-        foreach (var link in new FilteredElementCollector(host).OfClass(typeof(RevitLinkInstance)).Cast<RevitLinkInstance>()) {
+        foreach (var link in links) {
             var linked = link.GetLinkDocument();
             if (linked is null) continue;
             var kind = linked.Title.IndexOf(".ifc", StringComparison.OrdinalIgnoreCase) >= 0 ? SourceKind.IfcLink : SourceKind.RevitLink;
-            this._partitions.Add(new Partition(source++, linked, kind, link.Id.Value(), link.GetTotalTransform()));
+            this._partitions.Add(new Partition(source++, linked, kind, link.Id.Value(), link.GetTotalTransform(), generation));
         }
         if (ids.Count > 0) {
             var focus = this._partitions[0];
@@ -185,36 +155,10 @@ public sealed class World {
         crop = bounds.Expand(padding);
     }
 
-    /// <summary>
-    ///     Applies whatever the tracker queued, lazily, on the way into a verb. Host only: link
-    ///     partitions never patch per element.
-    /// </summary>
-    internal void ApplyQueued() {
-        lock (this._sync) {
-            if (this._added.Count == 0 && this._modified.Count == 0 && this._deleted.Count == 0) return;
-            var host = this._partitions.FirstOrDefault(p => p.Source == 0);
-            host?.Patch(this._added, this._modified, this._deleted, this.CurrentEpoch);
-            this._added.Clear();
-            this._modified.Clear();
-            this._deleted.Clear();
-        }
-    }
-
-    /// <summary>
-    ///     Fresh is false when any touched partition is dirty, when ids are still queued unpatched,
-    ///     or when nothing has been built. An unbuilt world answers every question with an empty
-    ///     result, and an empty result that calls itself fresh is a lying world.
-    /// </summary>
     internal Stamp StampFor(IEnumerable<Partition> touched, Filter filter) {
-        lock (this._sync) {
-            var seen = touched as IReadOnlyList<Partition> ?? touched.ToList();
-            var rows = this._partitions.Select(p => p.Row).ToList();
-            var pending = this._added.Count + this._modified.Count + this._deleted.Count > 0;
-            var fresh = this._partitions.Count > 0 && !pending && !seen.Any(p => p.Dirty);
-            return new Stamp(
-                this.HostDocumentKey, this.CurrentEpoch, Stamp.HostInternalFt, this.BuiltUtc, rows, fresh,
-                Resolve(seen, filter));
-        }
+        var seen = touched as IReadOnlyList<Partition> ?? touched.ToList();
+        return new Stamp(this.HostDocumentKey, this.CurrentEpoch, Stamp.HostInternalFt, this.BuiltUtc,
+            this._partitions.Select(p => p.Row).ToList(), this.BuiltUtc != default, Resolve(seen, filter));
     }
 
     /// <summary>

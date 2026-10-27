@@ -50,18 +50,19 @@ internal static class RegionMeasurements
             : new("stale", measurement.RunId, null, null, "geometry-changed");
     }
 
-    internal static void Measure(Document doc, View view, Guid zoneGuid, string runId)
+    internal static void Measure(Document doc, View view, Guid zoneGuid, string runId, World? world = null)
     {
         var regions = ZoneMaterializer.ReadExisting(doc, view, zoneGuid, TakeoffCarriers.RoleRoomRegion)
             .Concat(ZoneMaterializer.ReadExisting(doc, view, zoneGuid, TakeoffCarriers.RoleHeldResidue)).ToList();
         var key = ScopeKey(doc, view, zoneGuid);
         var levelZ = view.GenLevel.ProjectElevation;
+        world ??= SpaceWorld.Prepare(doc);
         foreach (var region in regions)
         {
             var shape = new ZoneScope { Loops = region.Loops }.ExactGeometry();
             var label = shape.InteriorPoint.Coordinate;
             // ponytail: one interior height probe, matching Partition; sample multiple points when variable-height rooms are supported.
-            var probe = Pe.Revit.Space.Verbs.Probe(doc, new XYZ(label.X, label.Y, levelZ + 3.5), purpose: ProbePurpose.RoomHeights);
+            var probe = Pe.Revit.Space.Verbs.Probe(world, new XYZ(label.X, label.Y, levelZ + 3.5), purpose: ProbePurpose.RoomHeights);
             if (!probe.Stamp.Fresh || probe.Stamp.BuiltUtc == default)
                 throw new InvalidOperationException("Native measurement requires fresh Space evidence");
             var floor = probe.Floor?.Z;

@@ -38,7 +38,6 @@ public sealed class TakeoffNativeRefreshProofTests
                         Polygon = Square(5, 5, 10) }], [], _ => { });
                 tx.Commit();
             }
-            Pe.Revit.Space.SpaceWorld.Prepare(doc);
             using (var tx = new Transaction(doc, "Measure native baseline"))
             {
                 tx.Start();
