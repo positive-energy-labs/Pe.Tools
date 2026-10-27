@@ -3,7 +3,13 @@ import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
 import { hostOwnership } from "./host-ownership.ts";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { Effect } from "effect";
-import { readingKey, actionStatusSchema, type ReadingFrame } from "@pe/agent-contracts";
+import {
+  readingKey,
+  actionStatusSchema,
+  receiptsForWork,
+  commandTool,
+  type ReadingFrame,
+} from "@pe/agent-contracts";
 import { OwnerReads, resourceSnapshot, type ResourceObserver, type OwnerValue } from "@pe/runtime";
 import type { BridgeError, RevitBridge } from "./bridge.ts";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
@@ -274,18 +280,15 @@ export function hostResourceObserver(
         case "rhvac-file-version":
           return oneShot([ONE_SHOT[request.kind]!(request as never)], POLL_MS[request.kind]);
         case "receipts":
-          if (request.scope)
-            return oneShot(
-              [[`/actions?scope=${encodeURIComponent(JSON.stringify(request.scope))}`]],
-              1_000,
-            );
-          return journal().observe(request.target, request.id, (result) =>
+          return journal().observe(request.target, request.id, (result) => {
+            if ("error" in result) return accept(result);
+            let rows = request.work ? receiptsForWork(result.value, request.work) : result.value;
+            if (request.tool)
+              rows = rows.filter((row) => commandTool(row.key)?.name === request.tool);
             accept(
-              "error" in result || request.id
-                ? result
-                : { value: actionStatusSchema.array().parse(result.value) },
-            ),
-          );
+              request.id ? { value: rows } : { value: actionStatusSchema.array().parse(rows) },
+            );
+          });
         case "takeoff-reading":
           return captures().observe(request.target, accept);
         case "families-matrix":

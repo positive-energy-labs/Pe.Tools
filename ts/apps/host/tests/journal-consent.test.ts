@@ -1,3 +1,4 @@
+import { invokeCommand } from "./command-fixture.ts";
 import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,14 +10,13 @@ import type { ActionAdmission, Caller } from "@pe/agent-contracts";
 
 const run = { thread: "thread", turn: "turn" };
 const caller: Caller = { kind: "pea", context: "host-minted", thread: run.thread, run, root: run };
-const footprint = [{ kind: "file" as const, path: "C:/user/design.json" }];
+const declaredEffects = [{ kind: "file" as const, path: "C:/user/design.json" }];
 const admission = (id: string): ActionAdmission => ({
   id,
-  kind: "operation",
+
   key: "test.write",
-  destination: { kind: "host" },
+  target: { kind: "host" },
   input: { value: 250 },
-  bases: {},
 });
 const setup = async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-consent-")),
@@ -52,14 +52,15 @@ const setup = async () => {
 test("waiting commands are durable, share approval, freeze submitted bytes and serialize common destinations", async () => {
   const h = await setup();
   try {
-    let preparation = 0,
+    let prepared = 0,
       effects = 0;
     const frozen = { revision: 13, value: 250 };
     const submit = async (id: string) =>
-      h.journal.admit(
-        { ...admission(id), caller, basis: null, footprint, frozen },
+      invokeCommand(
+        h.journal,
+        { ...admission(id), caller, basis: null, effects: declaredEffects },
         async () => {
-          preparation++;
+          prepared++;
           return { ...frozen };
         },
         async (e) =>
@@ -71,7 +72,7 @@ test("waiting commands are durable, share approval, freeze submitted bytes and s
     const a = await submit("a"),
       b = await submit("b");
     await h.ready();
-    expect([a.state, b.state, preparation, effects]).toEqual(["waiting", "waiting", 0, 0]);
+    expect([a.state, b.state, prepared, effects]).toEqual(["waiting", "waiting", 0, 0]);
     expect(await readFile(h.path, "utf8")).toContain('"state":"waiting"');
     expect(h.events.filter((e) => e.kind === "permission_request")).toHaveLength(1);
     h.approve();
@@ -83,10 +84,25 @@ test("waiting commands are durable, share approval, freeze submitted bytes and s
     expect((await submit("a")).state).toBe("succeeded");
     await expect(submit("late")).rejects.toThrow("run.closed");
     await expect(
-      h.journal.existing({ ...admission("a"), input: { value: 999 } }, caller),
+      invokeCommand(
+        h.journal,
+        { ...admission("a"), input: { value: 999 }, caller, basis: null, effects: declaredEffects },
+        async () => null,
+        async () => null,
+      ),
     ).rejects.toThrow("conflicts");
     await expect(
-      h.journal.existing(admission("a"), { kind: "pea", context: "other", thread: "other" }),
+      invokeCommand(
+        h.journal,
+        {
+          ...admission("a"),
+          caller: { kind: "pea", context: "other", thread: "other" },
+          basis: null,
+          effects: declaredEffects,
+        },
+        async () => null,
+        async () => null,
+      ),
     ).rejects.toThrow("another authenticated");
   } finally {
     await h.close();
@@ -99,17 +115,18 @@ test("an acquired document supplies provenance without bypassing the run countdo
   let writes = 0;
   try {
     const target = { session: "owned-session", openId: "owned-document" };
-    const row = await h.journal.admit(
+    const row = await invokeCommand(
+      h.journal,
       {
         ...admission("acquired-write"),
         caller,
-        destination: { kind: "document", ref: target },
+        target: { kind: "document", ref: target },
         basis: {
           kind: "acquisition",
           id: "pea-acquisition",
           scope: { kind: "document", lifetime: target },
         },
-        footprint: [{ kind: "document", ref: target }],
+        effects: [{ kind: "document", ref: target }],
       },
       async () => null,
       async (execution) => execution.step("native", "write", {}, async () => ++writes),
@@ -128,29 +145,27 @@ test("an acquired document supplies provenance without bypassing the run countdo
   }
 });
 
-test("admission detaches nested intent, frozen Work and footprint from the submitter", async () => {
+test("admission detaches nested intent and effects from the submitter", async () => {
   const h = await setup();
   const input = { nested: { value: 250 } },
-    frozen = { revision: 13 },
-    effects = structuredClone(footprint);
+    submittedEffects = structuredClone(declaredEffects);
   try {
-    await h.journal.admit(
-      { ...admission("detached"), input, caller, basis: null, footprint: effects, frozen },
+    await invokeCommand(
+      h.journal,
+      { ...admission("detached"), input, caller, basis: null, effects: submittedEffects },
       async () => null,
       async () => null,
     );
     await h.ready();
     input.nested.value = 999;
-    frozen.revision = 99;
-    effects[0]!.path = "C:/other.json";
+    submittedEffects[0]!.path = "C:/other.json";
     const [row] = await h.journal.list(undefined, "detached");
     expect(row).toMatchObject({
-      request: { nested: { value: 250 } },
-      frozen: { revision: 13 },
-      footprint,
+      input: { nested: { value: 250 } },
+      effects: declaredEffects,
     });
     h.approve();
-    expect((await h.journal.wait("detached")).request).toEqual({ nested: { value: 250 } });
+    expect((await h.journal.wait("detached")).input).toEqual({ nested: { value: 250 } });
   } finally {
     await h.close();
   }
@@ -169,8 +184,9 @@ test("normal child completion cancels unapproved admitted effects before root ap
   h.runs.open(child, run);
   let writes = 0;
   try {
-    await h.journal.admit(
-      { ...admission("child-write"), caller: childCaller, basis: null, footprint },
+    await invokeCommand(
+      h.journal,
+      { ...admission("child-write"), caller: childCaller, basis: null, effects: declaredEffects },
       async () => null,
       async (e) => e.step("file", "write", {}, async () => ++writes),
     );
@@ -180,7 +196,7 @@ test("normal child completion cancels unapproved admitted effects before root ap
     expect((await h.journal.wait("child-write")).state).toBe("cancelled");
     expect(writes).toBe(0);
     expect(
-      await h.runs.authorize({ caller, run, root: run }, "root-write", footprint),
+      await h.runs.authorize({ caller, run, root: run }, "root-write", declaredEffects),
     ).toMatchObject({ run });
   } finally {
     await h.close();
@@ -192,8 +208,9 @@ test("per-command cancellation preserves the shared decision; Stop cancels every
   try {
     let effects = 0;
     const submit = (id: string) =>
-      h.journal.admit(
-        { ...admission(id), caller, basis: null, footprint },
+      invokeCommand(
+        h.journal,
+        { ...admission(id), caller, basis: null, effects: declaredEffects },
         async () => null,
         async (e) => e.step("file", "write", {}, async () => ++effects),
       );
@@ -207,8 +224,9 @@ test("per-command cancellation preserves the shared decision; Stop cancels every
     expect(effects).toBe(1);
     let release!: () => void;
     const gate = new Promise<void>((resolve) => (release = resolve));
-    await h.journal.admit(
-      { ...admission("blocked"), caller, basis: null, footprint },
+    await invokeCommand(
+      h.journal,
+      { ...admission("blocked"), caller, basis: null, effects: declaredEffects },
       async () => {
         await gate;
         return null;
@@ -227,8 +245,9 @@ test("per-command cancellation preserves the shared decision; Stop cancels every
 test("restart cancels unapproved rows and conflicting consumed edits fail before a file effect", async () => {
   const h = await setup();
   try {
-    await h.journal.admit(
-      { ...admission("old"), caller, basis: null, footprint },
+    await invokeCommand(
+      h.journal,
+      { ...admission("old"), caller, basis: null, effects: declaredEffects },
       async () => null,
       async () => null,
     );
@@ -242,24 +261,25 @@ test("restart cancels unapproved rows and conflicting consumed edits fail before
     const by: Caller = { ...caller, run: next, root: next } as Caller;
     let effects = 0,
       version = 13;
-    await h.journal.admit(
+    h.journal.configureCommands({ read: async () => version }, () => {
+      throw Error("No resumed command");
+    });
+    await invokeCommand(
+      h.journal,
       {
         ...admission("fresh"),
         caller: by,
         basis: null,
-        footprint,
-        frozen: { revision: 13 },
-        validate: async () => {
-          if (version !== 13) throw Error("consumed Work changed");
-        },
+        effects: declaredEffects,
+        consumes: [{ kind: "catalog", snapshot: 13 }],
       },
       async () => null,
       async (e) => e.step("file", "write", {}, async () => ++effects),
     );
-    version = 14;
     await vi.waitFor(() =>
       expect(h.events.filter((e) => e.kind === "permission_request")).toHaveLength(2),
     );
+    version = 14;
     const ask = h.events.findLast((e) => e.kind === "permission_request")!;
     if (ask.kind === "permission_request") h.runs.decide(next.thread, ask.requestId, "allow_now");
     expect((await h.journal.wait("fresh")).state).toBe("failed");
@@ -284,8 +304,14 @@ test("root Stop retains a dispatched child result and fences its next effect", a
     finish = Promise.withResolvers<void>();
   let nextWrites = 0;
   try {
-    await h.journal.admit(
-      { ...admission("child-dispatched"), caller: childCaller, basis: null, footprint },
+    await invokeCommand(
+      h.journal,
+      {
+        ...admission("child-dispatched"),
+        caller: childCaller,
+        basis: null,
+        effects: declaredEffects,
+      },
       async () => null,
       async (e) => {
         await e.step("native", "first", {}, async (requestId) => {
@@ -323,8 +349,9 @@ test("receipt recovery authenticates its original principal and Page bindings gr
   const h = await setup();
   try {
     const by: Caller = { kind: "human", via: "local" };
-    await h.journal.admit(
-      { ...admission("private"), caller: by, basis: { kind: "human" }, footprint },
+    await invokeCommand(
+      h.journal,
+      { ...admission("private"), caller: by, basis: { kind: "human" }, effects: declaredEffects },
       async () => null,
       async () => null,
     );
@@ -338,12 +365,13 @@ test("receipt recovery authenticates its original principal and Page bindings gr
     expect(await h.journal.readFor(by, undefined, "private")).toHaveLength(1);
     const page: Caller = { kind: "page", page: "page:@pages/report" };
     await expect(
-      h.journal.admit(
+      invokeCommand(
+        h.journal,
         {
           ...admission("page-file"),
           caller: page,
           basis: null,
-          footprint: [{ kind: "file", path: "C:/user/file.json" }],
+          effects: [{ kind: "file", path: "C:/user/file.json" }],
         },
         async () => null,
         async () => null,
@@ -361,12 +389,13 @@ test("compaction and restart never forget a command id or replay its successful 
     const journal = new ActionJournal(h.path, () => null, 1);
     let effects = 0;
     const submit = (owner: ActionJournal) =>
-      owner.admit(
+      invokeCommand(
+        owner,
         {
           ...admission("durable"),
           caller: { kind: "human", via: "local" },
           basis: { kind: "human" },
-          footprint,
+          effects: declaredEffects,
         },
         async () => null,
         async (e) => e.step("file", "write", {}, async () => ++effects),

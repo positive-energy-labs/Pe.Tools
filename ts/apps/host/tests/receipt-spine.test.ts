@@ -1,3 +1,4 @@
+import { invokeCommand } from "./command-fixture.ts";
 import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
 import { chmod, mkdtemp, rm } from "node:fs/promises";
 import { readJournal } from "./journal-fixture.ts";
@@ -15,13 +16,12 @@ afterEach(async () => {
 const stamp = { ...receiptGoldenEnvelope.stamp!, component: "host" } as ReceiptStamp;
 const admission = (id = "private caller id") => ({
   id,
-  kind: "operation" as const,
+
   key: "test.receipt",
   ...crossingOf("human"),
-  footprint: [{ kind: "session" as const, session: "receipt-spine-session" }],
-  destination: { kind: "host" as const },
+  effects: [{ kind: "session" as const, session: "receipt-spine-session" }],
+  target: { kind: "host" as const },
   input: { frozen: "exact" },
-  bases: {},
 });
 async function fixture() {
   const dir = await mkdtemp(join(tmpdir(), "pe-spine-"));
@@ -37,7 +37,8 @@ test("subscribers read one durable action authority, retain opaque ids across re
     received.push(r);
   });
   let dispatches = 0;
-  await owner.admit(
+  await invokeCommand(
+    owner,
     admission(),
     async () => ({ original: true }),
     async (ex) =>
@@ -47,7 +48,8 @@ test("subscribers read one durable action authority, retain opaque ids across re
       }),
   );
   const settled = await owner.wait(admission().id);
-  await owner.admit(
+  await invokeCommand(
+    owner,
     admission(),
     async () => {
       throw Error("duplicate prepare");

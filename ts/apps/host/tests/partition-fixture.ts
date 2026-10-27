@@ -13,7 +13,7 @@ export async function partitionFixture(dir: string, target: DocumentRef) {
   const scope = { binding: "address" as const, route: "takeoffs", target: at };
   const workFile = join(dir, "work.json");
   const workspace = new RouteWorkspace({
-    registrations: [{ spec: takeoffsRouteState, handlers: {} }],
+    registrations: [{ spec: takeoffsRouteState }],
     store: {
       getState: async () =>
         readFile(workFile, "utf8")
@@ -73,15 +73,15 @@ export async function partitionFixture(dir: string, target: DocumentRef) {
     intent: (id: string) => ({
       id,
       key: "takeoffs.partition",
-      kind: "workflow" as const,
-      destination: { kind: "document" as const, ref: target },
+      target: { kind: "document" as const, ref: target },
       input: {
+        work: { key: scope, revision: 1 },
+        captureId: capture.id,
         zoneRegion: candidate.elementId,
         view: candidate.view,
         zoneName: "Reviewed zone",
         zoneGuid: candidate.guid,
       },
-      bases: { captureId: capture.id, work: { key: scope, revision: 1 } },
     }),
   };
 }

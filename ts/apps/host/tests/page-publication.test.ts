@@ -163,9 +163,9 @@ it("records publication before waiting and Stop leaves the existing source untou
     const row = (await fixtureValue.journal.list(undefined, "publish-once"))[0]!;
     expect(row).toMatchObject({
       state: "waiting",
-      request: page,
-      preparation: { state: "unprepared" },
-      footprint: [{ kind: "publication", page: "page:@pages/flow" }],
+      input: page,
+      prepared: { state: "unprepared" },
+      effects: [{ kind: "publication", page: "page:@pages/flow" }],
     });
     expect(await readFile(join(fixtureValue.root, "flow", "index.html"), "utf8")).toBe("old");
     const ask = events.find((event) => event.kind === "permission_request")!;

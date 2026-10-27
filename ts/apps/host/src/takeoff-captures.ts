@@ -494,6 +494,11 @@ export class TakeoffCaptures {
       ),
     );
   }
+  async savedFamilyText(id: string): Promise<{ path: string; text: string }> {
+    familyCaptureSchema.shape.id.parse(id);
+    const path = join(this.directory, "family", `${id}.json`);
+    return { path, text: await readFile(path, "utf8") };
+  }
   async familyReadings(scope: WorkKey, signal?: AbortSignal): Promise<FamilyCapture[]> {
     const names = await readdir(join(this.directory, "family")).catch(
       (error: NodeJS.ErrnoException) => {

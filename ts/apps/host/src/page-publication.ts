@@ -1,3 +1,5 @@
+import { z } from "zod";
+import type { CommandFactory } from "./command-executor.ts";
 import { BridgeError } from "./bridge.ts";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -392,3 +394,61 @@ export async function publishPage(
     version,
   );
 }
+
+/** The HTTP door and journal recovery resolve the same publication implementation. */
+export const pagePublicationExecutor =
+  (
+    root: string,
+    origin: string,
+    library: (path: string) => string | null,
+    captures: Pick<CaptureStore, "adopt">,
+  ): CommandFactory =>
+  (context) => {
+    const input = pagePublicationSchema.parse(context.admission.input);
+    let version: string | null;
+    const prepared = z.strictObject({
+      version: z.string().nullable(),
+      publication: z.strictObject({
+        input: pagePublicationSchema,
+        origin: z.string(),
+        capture: z.strictObject({
+          mimeType: z.literal("image/png"),
+          data: z.string(),
+          width: z.number(),
+          height: z.number(),
+          sha256: z.string(),
+          url: z.string(),
+        }),
+      }),
+    });
+    return {
+      definition: {
+        says: "Publish a captured Page",
+        needs: "nothing",
+        effect: "command",
+        dirties: [],
+        input: pagePublicationSchema,
+      },
+      bind: async () => {
+        version = await pageVersion(root, input.slug);
+        return {
+          effects: [{ kind: "publication", page: `page:@pages/${input.slug}` }],
+          consumes: [{ kind: "file", path: join(root, input.slug, "index.html"), sha256: version }],
+        };
+      },
+      prepared,
+      prepare: async () => ({
+        version,
+        publication: await preparePagePublication(root, input, origin, library, captures),
+      }),
+      run: async (_context, execution) => {
+        const frozen = prepared.parse(execution.prepared);
+        return execution.step(
+          "publication",
+          "page.publish",
+          { slug: frozen.publication.input.slug },
+          () => commitPagePublication(root, frozen.publication, frozen.version),
+        );
+      },
+    };
+  };

@@ -1,6 +1,7 @@
+import { invokeCommand } from "./command-fixture.ts";
 /**
  * A cancel reaches the op while it runs. The socket here is a fake, everything above it — the
- * request table, the per-session FIFO gate, the journal, `/actions` and `/actions/cancel` — is
+ * input table, the per-session FIFO gate, the journal, `/actions` and `/actions/cancel` — is
  * production code. The op never answers until the test decides to answer it, so "the cancel
  * arrived while the op was still running" is the assertion, not an inference from timing.
  * The same lane pins what a refusal and a lost reply leave behind on the document.
@@ -23,6 +24,7 @@ import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
 import { bindRevoke } from "../src/revoke.ts";
 import { admitCrossing, bindControl, emitRevoke } from "../src/control.ts";
 import type { DocumentRef, ThreadHead } from "@pe/agent-contracts";
+import { commands } from "@pe/agent-contracts";
 import { asCaller, crossingOf, human } from "./callers.ts";
 
 const metrics = {
@@ -92,7 +94,7 @@ type Harness = {
   post: (path: string, body: unknown) => Effect.Effect<Response>;
   get: (path: string) => Effect.Effect<unknown>;
   answer: (requestId: string, response: Record<string, unknown>) => Effect.Effect<boolean>;
-  /** The socket closes: every request Revit has not answered loses its reply. */
+  /** The socket closes: every input Revit has not answered loses its reply. */
   disconnect: Effect.Effect<unknown>;
   fixture: Awaited<ReturnType<typeof partitionFixture>>;
 };
@@ -109,9 +111,9 @@ test("admission answers before the bridge answers anything", () =>
         "running",
       );
       // Only now does the first bridge frame exist — the 202 did not wait for it.
-      const preparation = yield* Queue.take(outgoing);
-      expect(preparation.request?.operationKey).toBe("takeoffs.initialize-carrier");
-      yield* answer(preparation.request!.requestId, {
+      const prepared = yield* Queue.take(outgoing);
+      expect(prepared.request?.operationKey).toBe("takeoffs.initialize-carrier");
+      yield* answer(prepared.request!.requestId, {
         ok: false,
         statusCode: 499,
         errorMessage: "stop",
@@ -126,8 +128,8 @@ test("a cancel reaches the op while it blocks, and the action settles cancelled"
     Effect.gen(function* () {
       const intent = fixture.intent("cancel-me");
       expect((yield* post("/actions", intent)).status).toBe(202);
-      const preparation = yield* Queue.take(outgoing);
-      yield* answer(preparation.request!.requestId, {
+      const prepared = yield* Queue.take(outgoing);
+      yield* answer(prepared.request!.requestId, {
         ok: true,
         statusCode: 200,
         payloadJson: JSON.stringify({ remaining: [] }),
@@ -193,7 +195,10 @@ test("a cancel reaches the op while it blocks, and the action settles cancelled"
           ...row.steps.map((step) => `steps/${step.id}.json`),
         ].sort(),
       );
-      expect(output.files["admission.json"]).toMatchObject(intent);
+      expect(output.files["admission.json"]).toMatchObject({
+        ...intent,
+        input: commands["takeoffs.partition"].input.parse(intent.input),
+      });
       expect(JSON.stringify(output.files)).not.toContain("cancelled");
     }),
   ));
@@ -210,16 +215,28 @@ test("an exact cancelled SDK receipt settles a lost reply once without replaying
   try {
     const interrupted = new ActionJournal(path);
     const nativeStarted = Promise.withResolvers<void>();
-    await interrupted.admit(
+    await invokeCommand(
+      interrupted,
       { ...intent, ...crossingOf("human") },
-      async () => ({ kind: "native-leaf", originalProcess }),
+      async () => ({ process: originalProcess }),
       async (execution) => {
         await execution.step("file", "prior", {}, async () => ++effects);
-        return execution.step("native", "takeoffs.partition", {}, async () => {
-          ++effects;
-          nativeStarted.resolve();
-          return new Promise(() => undefined);
-        });
+        return execution.step(
+          "native",
+          "takeoffs.partition",
+          {
+            zoneRegion: 41,
+            view: "Level 1",
+            zoneName: "Reviewed zone",
+            zoneGuid: "zone-1",
+            runId: "11111111-1111-4111-8111-111111111111",
+          },
+          async () => {
+            ++effects;
+            nativeStarted.resolve();
+            return new Promise(() => undefined);
+          },
+        );
       },
     );
     // Polling this file races its Windows rename; entry proves persistence and export finished.
@@ -296,7 +313,7 @@ test("an exact cancelled SDK receipt settles a lost reply once without replaying
   }
 });
 
-test("a cancel for a request still behind the host gate never reaches Revit", () =>
+test("a cancel for a input still behind the host gate never reaches Revit", () =>
   lane(({ outgoing, answer, fixture }) =>
     Effect.gen(function* () {
       const bridge = yield* RevitBridge;
@@ -306,7 +323,7 @@ test("a cancel for a request still behind the host gate never reaches Revit", ()
         bridge.invoke(
           "revit.catalog.loaded-families",
           {},
-          fixture.intent("probe").destination.ref.session,
+          fixture.intent("probe").target.ref.session,
           null,
           "holds-the-gate",
         ),
@@ -318,7 +335,7 @@ test("a cancel for a request still behind the host gate never reaches Revit", ()
         bridge.invoke(
           "takeoffs.partition",
           {},
-          fixture.intent("probe").destination.ref.session,
+          fixture.intent("probe").target.ref.session,
           null,
           "waits-behind",
         ),
@@ -345,8 +362,8 @@ test("Revit answering 'not in flight' is a refusal the stop control can print, n
     Effect.gen(function* () {
       const intent = fixture.intent("already-gone");
       expect((yield* post("/actions", intent)).status).toBe(202);
-      const preparation = yield* Queue.take(outgoing);
-      yield* answer(preparation.request!.requestId, {
+      const prepared = yield* Queue.take(outgoing);
+      yield* answer(prepared.request!.requestId, {
         ok: true,
         statusCode: 200,
         payloadJson: JSON.stringify({ remaining: [] }),
@@ -371,7 +388,7 @@ test("Revit answering 'not in flight' is a refusal the stop control can print, n
     }),
   ));
 
-/** Revit's own answer to a request it refused, as BridgeAgent writes a BridgeOperationException. */
+/** Revit's own answer to a input it refused, as BridgeAgent writes a BridgeOperationException. */
 const headlessRefusal = {
   ok: false,
   statusCode: 409,
@@ -380,7 +397,7 @@ const headlessRefusal = {
     {
       instancePath: "$",
       code: "DocumentHeadless",
-      message: "This request needs the active view.",
+      message: "This input needs the active view.",
       severity: "error",
     },
   ],
@@ -425,10 +442,16 @@ test("a reply lost mid-write settles unknown and blocks the next mutation on the
       expect(row).toMatchObject({ state: "unknown", status: 503 });
 
       const blocked = yield* post("/actions", fixture.intent("behind-the-unknown"));
-      expect(blocked.status).toBe(409);
-      expect(((yield* Effect.promise(() => blocked.json())) as { message: string }).message).toBe(
-        "action 'lost-mid-write' is unknown; recover that attempt before submitting another",
-      );
+      expect(blocked.status).toBe(200);
+      const refused = (yield* Effect.promise(() => blocked.json())) as {
+        id: string;
+        state: string;
+        steps: unknown[];
+      };
+      expect(refused).toMatchObject({ id: "behind-the-unknown", state: "failed", steps: [] });
+      expect((yield* Effect.promise(() => owner.list(undefined, lost.id)))[0]).toMatchObject({
+        state: "unknown",
+      });
     }),
   ));
 
@@ -446,11 +469,11 @@ function revokeHead(lifetime: DocumentRef): ThreadHead {
 
 /** A human removes the head's one target: the store writes the head, then fires the sweep. */
 function removeTarget(head: ThreadHead) {
-  const request = head.targets[0]!.request;
-  if (request.kind !== "open") throw Error("an admitted target is an open lifetime");
+  const input = head.targets[0]!.request;
+  if (input.kind !== "open") throw Error("an admitted target is an open lifetime");
   head.targets = [];
   head.revision++;
-  emitRevoke("thread-1", request.ref);
+  emitRevoke("thread-1", input.ref);
 }
 
 const nativeValue = async (
@@ -471,7 +494,7 @@ test("F-c revoke lets a dispatched step report and refuses the next step without
     Effect.gen(function* () {
       const bridge = yield* RevitBridge;
       const intent = fixture.intent("revoke-begun");
-      const target = intent.destination.ref;
+      const target = intent.target.ref;
       const head = revokeHead(target);
       bindControl({ heads: () => head, deviceThread: () => "thread-1" });
       const unbind = bindRevoke(owner, bridge);
@@ -483,8 +506,9 @@ test("F-c revoke lets a dispatched step report and refuses the next step without
           device: "revoke-device",
         };
         const row = yield* Effect.promise(() =>
-          owner.admit(
-            { ...intent, caller, basis: admitCrossing(caller, intent.destination, "/actions") },
+          invokeCommand(
+            owner,
+            { ...intent, caller, basis: admitCrossing(caller, intent.target, "/actions") },
             async () => null,
             async (execution) => {
               await execution.step("native", "first", {}, (id) =>
@@ -531,7 +555,7 @@ test.each([false, true])(
     lane(({ owner, outgoing, answer, fixture }) =>
       Effect.gen(function* () {
         const bridge = yield* RevitBridge;
-        const target = fixture.intent("probe").destination.ref;
+        const target = fixture.intent("probe").target.ref;
         const head = revokeHead(target);
         const otherTarget = { ...target, openId: "other-open" };
         const other = revokeHead(otherTarget);
@@ -547,9 +571,11 @@ test.each([false, true])(
         const started = Promise.withResolvers<void>();
         try {
           const queued = yield* Effect.promise(() =>
-            owner.admit(
+            invokeCommand(
+              owner,
               {
                 ...fixture.intent("revoke-queued"),
+                key: "test.queued",
                 caller: {
                   kind: "external-mcp" as const,
                   context: "revoke-thread",
@@ -580,11 +606,13 @@ test.each([false, true])(
           yield* Effect.sleep("50 millis");
           const otherStarted = Promise.withResolvers<void>();
           const unrelated = yield* Effect.promise(() =>
-            owner.admit(
+            invokeCommand(
+              owner,
               {
                 ...fixture.intent("other-thread"),
+                key: "test.unrelated",
                 input: {},
-                destination: { kind: "document", ref: otherTarget },
+                target: { kind: "document", ref: otherTarget },
                 caller: {
                   kind: "external-mcp" as const,
                   context: "revoke-other",
@@ -624,7 +652,7 @@ test.each([false, true])(
             };
           }
           removeTarget(head);
-          // The driver records every wire request, including an erroneous op.cancel.
+          // The driver records every wire input, including an erroneous op.cancel.
           const wire: string[] = [];
           const driver = yield* Effect.forkScoped(
             Effect.forever(
@@ -670,7 +698,7 @@ test("F-c revoke stops a begun step that has not reached the bridge queue yet", 
     Effect.gen(function* () {
       const bridge = yield* RevitBridge;
       const intent = fixture.intent("revoke-before-queue");
-      const target = intent.destination.ref;
+      const target = intent.target.ref;
       const head = revokeHead(target);
       bindControl({ heads: () => head, deviceThread: () => "thread-1" });
       const unbind = bindRevoke(owner, bridge);
@@ -686,8 +714,9 @@ test("F-c revoke stops a begun step that has not reached the bridge queue yet", 
         const inGap = Promise.withResolvers<void>();
         const leaveGap = Promise.withResolvers<void>();
         const row = yield* Effect.promise(() =>
-          owner.admit(
-            { ...intent, caller, basis: admitCrossing(caller, intent.destination, "/actions") },
+          invokeCommand(
+            owner,
+            { ...intent, caller, basis: admitCrossing(caller, intent.target, "/actions") },
             async () => null,
             (execution) =>
               execution.step("native", "gapped", {}, async (id) => {

@@ -296,9 +296,9 @@ export function admitAnonymousCall(caller: Caller, key: string): void {
 }
 
 /** Only authenticated human and Pea invocations author shared Work. */
-export const routeActorOf = (caller: Caller): "human" | "agent" => {
+export const workAuthorOf = (caller: Caller): "human" | "pea" => {
   if (caller.kind === "human") return "human";
-  if (caller.kind === "pea") return "agent";
+  if (caller.kind === "pea") return "pea";
   throw refuse(
     caller.kind === "page" ? "page.use-page-door" : "context.missing",
     "/pe/route-state",
@@ -370,7 +370,6 @@ export const assertRunAdmission = (origin: Origin) => {
 export const validateFootprintCaller = (caller: Caller, footprint: Footprint) => {
   if (caller.kind === "human" || caller.kind === "pea") return;
   for (const effect of footprint) {
-    if (effect.kind === "receipt") continue;
     if (effect.kind !== "document")
       throw refuse(
         caller.kind === "page" ? "page.use-page-door" : "grant.context-cannot-hold",
@@ -387,7 +386,7 @@ export const authorizeCommand = async (
 ): Promise<CommandConsent | null> => {
   if (origin.caller.kind === "human") return { by: "press" };
   if (origin.caller.kind !== "pea") return null;
-  if (!footprint.some((e) => e.kind !== "receipt")) return null;
+  if (!footprint.length) return null;
   assertRunAdmission(origin);
   return sources.runs!.authorize(origin, id, footprint);
 };

@@ -1,3 +1,13 @@
+import type {
+  CommandContext,
+  CommandFactory,
+  CommandReads,
+  CommandRegistry,
+  CommandExecutor,
+} from "./command-executor.ts";
+import { hasEffects } from "./command-executor.ts";
+import { importHistoricalAction } from "./legacy-action-journal.ts";
+import { validateNativeInput } from "./native-input.ts";
 import { bindActionDispatch } from "./action-dispatch.ts";
 import { BridgeError } from "./bridge.ts";
 import { appendFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
@@ -9,14 +19,27 @@ import { z } from "zod";
 import {
   canonicalRouteInput,
   actionReceiptSchema,
+  actionStepSchema,
   actionAdmissionSchema,
-  actionBasesSchema,
   type ActionAdmission,
+  type Consumed,
+  type Claim,
+  type CommandRefusal,
+  type NativeProcess,
+  type Effect,
+  type WorkKey,
+  type RouteStatePatch,
+  type RouteStateWriteResult,
+  nativeProcessSchema,
+  commands,
+  workKey,
+  transitionPatches,
+  type CellLike,
+  type WorkPath,
   type ActionStep,
   type Basis,
   type Footprint,
   type CommandConsent,
-  semanticActions,
   type Caller,
   type DocumentRef,
   type ExecutionTarget,
@@ -49,9 +72,106 @@ import {
 export type Crossing = {
   readonly caller: Caller;
   readonly basis: Basis | null;
-  readonly footprint?: Footprint;
-  readonly frozen?: unknown;
-  readonly validate?: () => Promise<void>;
+};
+
+export class CommandRejected extends Error {
+  constructor(readonly refusal: CommandRefusal) {
+    super(
+      "message" in refusal
+        ? refusal.message
+        : refusal.kind === "stale_revision"
+          ? `Work changed to r${refusal.live}`
+          : refusal.kind === "claimed"
+            ? `Resource is reserved by ${refusal.by}`
+            : "Consumed input changed",
+    );
+  }
+}
+const messageOf = (error: unknown) =>
+  error && typeof error === "object" && "message" in error ? String(error.message) : String(error);
+const holdsClaims = (row: ActionReceipt) =>
+  !(
+    (row.state === "failed" || row.state === "cancelled") &&
+    row.notDispatched === true &&
+    row.steps.every(
+      (step) =>
+        !step.dispatchedAt &&
+        (step.state === "failed" || step.state === "cancelled") &&
+        step.notDispatched === true,
+    )
+  );
+const expected = (dependency: Exclude<Consumed, { kind: "work" | "receipt" }>) => {
+  switch (dependency.kind) {
+    case "member":
+    case "file":
+      return dependency.sha256;
+    case "document-mark":
+      return true;
+    case "incarnation":
+      return dependency.process;
+    case "census":
+      return [...dependency.openIds].sort();
+    case "capture":
+      return dependency.sha256;
+    case "directory":
+    case "catalog":
+      return dependency.snapshot;
+  }
+};
+const dependencyIdentity = (dependency: Consumed): string => {
+  switch (dependency.kind) {
+    case "work":
+      return `work:${workKey(dependency.handle.key)}`;
+    case "document-mark":
+      return `mark:${canonicalRouteInput(dependency.ref)}`;
+    case "incarnation":
+      return `process:${canonicalRouteInput(dependency.target)}`;
+    case "census":
+      return `census:${dependency.session}`;
+    case "member":
+      return `member:${dependency.pod}/${dependency.path}`;
+    case "file":
+      return `file:${win32.resolve(dependency.path).toLowerCase()}`;
+    default:
+      return canonicalRouteInput(dependency);
+  }
+};
+const patchSnapshot = (snapshot: unknown, patch: RouteStatePatch): void => {
+  if (!snapshot || typeof snapshot !== "object" || !patch.path.length) return;
+  let parent = snapshot as Record<string | number, unknown>;
+  for (const segment of patch.path.slice(0, -1)) {
+    const child = parent[segment];
+    if (!child || typeof child !== "object") parent[segment] = {};
+    parent = parent[segment] as Record<string | number, unknown>;
+  }
+  const key = patch.path.at(-1)!;
+  if (patch.value === undefined) delete parent[key];
+  else parent[key] = structuredClone(patch.value);
+};
+const valueAt = (root: unknown, path: WorkPath): unknown =>
+  path.reduce<unknown>(
+    (value, segment) =>
+      value && typeof value === "object"
+        ? (value as Record<string | number, unknown>)[segment]
+        : undefined,
+    root,
+  );
+/** Wildcards keep dictionary membership in the projection, including added/deleted keys. */
+const project = (
+  document: unknown,
+  paths: readonly (readonly (string | number)[])[],
+): unknown[] => {
+  const at = (value: unknown, path: readonly (string | number)[]): unknown => {
+    if (!path.length) return value;
+    if (!value || typeof value !== "object") return null;
+    const [head, ...tail] = path;
+    if (head === "*")
+      return Object.fromEntries(
+        Object.entries(value).map(([key, child]) => [key, at(child, tail)]),
+      );
+    return at((value as Record<string, unknown>)[String(head)], tail);
+  };
+  return paths.map((path) => at(document, path));
 };
 const sameCaller = (a: Caller, b: Caller) =>
   a.kind === b.kind &&
@@ -68,30 +188,79 @@ const pathInside = (root: string, path: string) => {
   );
 };
 const effectsOverlap = (a: Footprint, b: Footprint) =>
-  a.some(
-    (x) =>
-      x.kind !== "receipt" &&
-      b.some((y) => {
-        if (y.kind === "receipt") return false;
-        if (x.kind === "document" && y.kind === "session") return x.ref.session === y.session;
-        if (x.kind === "session" && y.kind === "document") return x.session === y.ref.session;
-        if (x.kind === "directory" && (y.kind === "directory" || y.kind === "file"))
-          return (
-            pathInside(x.path, y.path) || (y.kind === "directory" && pathInside(y.path, x.path))
-          );
-        if (y.kind === "directory" && x.kind === "file") return pathInside(y.path, x.path);
-        if (x.kind === "file" && y.kind === "file") return win32.relative(x.path, y.path) === "";
-        return canonicalRouteInput(x) === canonicalRouteInput(y);
-      }),
+  a.some((x) =>
+    b.some((y) => {
+      if (x.kind === "document" && y.kind === "session") return x.ref.session === y.session;
+      if (x.kind === "session" && y.kind === "document") return x.session === y.ref.session;
+      if (x.kind === "member" && y.kind === "member" && x.pod === y.pod && x.path === y.path)
+        return true;
+      const xPath =
+        x.kind === "member"
+          ? x.location
+          : x.kind === "file" || x.kind === "directory"
+            ? x.path
+            : undefined;
+      const yPath =
+        y.kind === "member"
+          ? y.location
+          : y.kind === "file" || y.kind === "directory"
+            ? y.path
+            : undefined;
+      if (xPath && yPath)
+        return x.kind === "directory"
+          ? pathInside(xPath, yPath) || (y.kind === "directory" && pathInside(yPath, xPath))
+          : y.kind === "directory"
+            ? pathInside(yPath, xPath)
+            : win32.relative(xPath, yPath) === "";
+      if (
+        (x.kind === "member" && !x.location && (y.kind === "file" || y.kind === "directory")) ||
+        (y.kind === "member" && !y.location && (x.kind === "file" || x.kind === "directory"))
+      )
+        return true;
+      return canonicalRouteInput(x) === canonicalRouteInput(y);
+    }),
   );
-const declaredFootprint = (admission: ActionAdmission): Footprint => {
-  const definition = semanticActions[admission.key as keyof typeof semanticActions];
-  if (definition?.effect === "query") return [];
-  if (admission.destination.kind === "document")
-    return [{ kind: "document", ref: admission.destination.ref }];
-  if (admission.destination.kind === "session")
-    return [{ kind: "session", session: admission.destination.session }];
-  throw Error(`Action '${admission.key}' must declare its exact effect footprint before consent`);
+
+const effectEstablishes = (row: ActionReceipt, dependency: Consumed): boolean => {
+  if (
+    dependency.kind === "work" ||
+    dependency.kind === "receipt" ||
+    dependency.kind === "capture" ||
+    dependency.kind === "catalog" ||
+    dependency.kind === "directory"
+  )
+    return false;
+  return row.effects.some((effect) => {
+    if (dependency.kind === "member")
+      return (
+        effect.kind === "member" && effect.pod === dependency.pod && effect.path === dependency.path
+      );
+    if (dependency.kind === "file")
+      return (
+        (effect.kind === "file" && win32.relative(effect.path, dependency.path) === "") ||
+        (effect.kind === "directory" && pathInside(effect.path, dependency.path))
+      );
+    const session =
+      dependency.kind === "document-mark"
+        ? dependency.ref.session
+        : dependency.kind === "census"
+          ? dependency.session
+          : dependency.target.kind === "session"
+            ? dependency.target.session
+            : dependency.target.kind === "document"
+              ? dependency.target.ref.session
+              : null;
+    if (effect.kind === "session")
+      return (
+        effect.session === session || row.claims.some((claim) => claim.kind === "session-slot")
+      );
+    if (effect.kind === "document")
+      return (
+        effect.ref.session === session &&
+        (dependency.kind !== "document-mark" || effect.ref.openId === dependency.ref.openId)
+      );
+    return false;
+  });
 };
 
 export type ActionExecution = {
@@ -100,8 +269,24 @@ export type ActionExecution = {
     key: string,
     input: unknown,
     execute: (requestId: string) => Promise<A>,
+    process?: NativeProcess,
+    established?: (result: A) => Consumed[] | Promise<Consumed[]>,
+    releases?: (
+      result: A,
+    ) => { action: string; claim: Claim }[] | Promise<{ action: string; claim: Claim }[]>,
   ): Promise<A>;
-  publish(result: unknown): Promise<void>;
+  effect(effect: Effect): Promise<void>;
+  publishWork(
+    key: WorkKey,
+    route: string,
+    patches: readonly RouteStatePatch[],
+  ): Promise<RouteStateWriteResult>;
+  retireWork(
+    key: WorkKey,
+    route: string,
+    paths: readonly WorkPath[],
+  ): Promise<{ retired: WorkPath[]; revision: number }>;
+  establish(dependencies: Consumed[]): Promise<void>;
   readonly prepared: unknown;
   /** The latest recorded step of this kind and key: the one a resume replays or redoes. */
   recorded(kind: ActionStep["kind"], key: string): ActionStep | undefined;
@@ -122,9 +307,22 @@ type DispatchFailure =
       Extract<ActionReceipt, { state: "unknown" }>,
       "state" | "error" | "status" | "nativeOutcome" | "issues" | "evidence"
     >
-  | Pick<Extract<ActionReceipt, { state: "cancelled" }>, "state" | "error" | "status">;
+  | Pick<
+      Extract<ActionReceipt, { state: "cancelled" }>,
+      "state" | "error" | "status" | "notDispatched"
+    >;
 /** One error's step-level answer: refused before dispatch, cancelled, or uncertain. */
 const failure = (error: unknown): DispatchFailure => {
+  if (error instanceof ActionIncomplete)
+    return {
+      state: "failed",
+      error: error.message,
+      status: 409,
+      notDispatched: true,
+      evidence: { result: error.result },
+    };
+  if (error instanceof CommandRejected)
+    return { state: "failed", error: error.message, status: 409, notDispatched: true };
   const problem = error as { message?: string; statusCode?: number } | null;
   const nativeOutcome = error instanceof BridgeError ? error.nativeOutcome : undefined;
   const notDispatched =
@@ -146,7 +344,12 @@ const failure = (error: unknown): DispatchFailure => {
       : {}),
   };
   return detail.status === CANCELLED_STATUS
-    ? { state: "cancelled", error: detail.error, status: detail.status }
+    ? {
+        state: "cancelled",
+        error: detail.error,
+        status: detail.status,
+        ...(notDispatched ? { notDispatched: true as const } : {}),
+      }
     : notDispatched
       ? { ...detail, state: "failed", notDispatched: true }
       : dispatched
@@ -207,7 +410,21 @@ function settle(
     (cause.kind === "interrupted"
       ? { error: "Host restarted before the executor recorded an outcome", status: 503 }
       : undefined);
-  if (thrown?.state === "cancelled") return thrown;
+  if (thrown?.state === "cancelled") {
+    const { notDispatched: _notDispatched, ...cancelled } = thrown;
+    return {
+      ...cancelled,
+      ...(thrown.notDispatched &&
+      steps.every(
+        (step) =>
+          !step.dispatchedAt &&
+          (step.state === "failed" || step.state === "cancelled") &&
+          step.notDispatched,
+      )
+        ? { notDispatched: true }
+        : {}),
+    };
+  }
   if (!prepared)
     return {
       state: "failed",
@@ -218,7 +435,13 @@ function settle(
     };
   const uncertain = steps.find((step) => step.state === "unknown" || step.state === "running");
   if (uncertain) {
-    if (cause.kind === "recovered") return null;
+    if (cause.kind === "recovered")
+      return {
+        state: "unknown",
+        error:
+          "error" in uncertain ? uncertain.error : `Step '${uncertain.key}' has no proven outcome`,
+        status: "status" in uncertain ? uncertain.status : 503,
+      };
     const detail =
       thrown?.state === "unknown"
         ? thrown
@@ -263,25 +486,6 @@ function settle(
   };
 }
 
-const sessionOf = (target: ExecutionTarget) =>
-  target.kind === "sdk-session"
-    ? `sdk:${canonicalRouteInput(target.selection)}`
-    : target.kind === "session"
-      ? target.session
-      : target.kind === "document"
-        ? target.ref.session
-        : null;
-/**
- * An uncertain attempt blocks only what it could have touched: the same document lifetime, or a
- * session and anything on it. Never the whole host: one crashed script must not refuse every
- * action on every session (headless research, Hazard 3).
- */
-const overlaps = (a: ExecutionTarget, b: ExecutionTarget) =>
-  a.kind !== "host" &&
-  b.kind !== "host" &&
-  sessionOf(a) === sessionOf(b) &&
-  (a.kind !== "document" || b.kind !== "document" || a.ref.openId === b.ref.openId);
-
 /** The attempt without its terminal fields, so a new settlement never inherits a stale one. */
 const unsettled = (row: ActionReceipt) => {
   const {
@@ -310,7 +514,7 @@ const isOpen = (row: ActionReceipt) =>
 /**
  * One host journal. Execution never holds the authored Work lock or the journal write tail.
  *
- * Storage is append-only lines: a `{"version":5}` header, then one `{receipt}` per committed
+ * Storage is append-only lines: a `{"version":6}` header, then one `{receipt}` per committed
  * revision and one `{mapping}` per minted opaque id; the last revision of an id wins. A commit
  * appends only what it changed, and compaction rewrites the newest {@link RETAIN_RECEIPTS} telemetry
  * facts plus every command once the file holds twice what is live.
@@ -335,7 +539,10 @@ export class ActionJournal implements ReceiptReader {
   private loaded?: Promise<void>;
   private tail: Promise<unknown> = Promise.resolve();
   private readonly pending = new Map<string, Promise<ActionReceipt>>();
-  private readonly validators = new Map<string, () => Promise<void>>();
+  // Page authority is a host-minted object capability, never reconstructed from persisted data.
+  private readonly activeCallers = new Map<string, Caller>();
+  private commandReads?: CommandReads;
+  private registry?: CommandRegistry;
   private readonly cancelWaits = new Map<string, () => void>();
   private readonly listeners = new Set<() => void>();
   private readonly reads = new OwnerReads();
@@ -344,6 +551,11 @@ export class ActionJournal implements ReceiptReader {
     private readonly stamp: () => ReceiptStamp | null = () => null,
     private readonly retain = RETAIN_RECEIPTS,
   ) {}
+  configureCommands(reads: CommandReads, registry: CommandRegistry): void {
+    this.commandReads = reads;
+    this.registry = registry;
+  }
+
   private loadOnce(): Promise<void> {
     return (this.loaded ??= this.load());
   }
@@ -482,7 +694,7 @@ export class ActionJournal implements ReceiptReader {
   async validateDispatch(requestId: string): Promise<string | null> {
     const action = this.stepAction.get(requestId);
     try {
-      if (action) await this.validators.get(action)?.();
+      if (action) await this.gate(this.rows.get(action)!, "dispatch");
     } catch (error) {
       return String(error);
     }
@@ -510,8 +722,7 @@ export class ActionJournal implements ReceiptReader {
     if (!row) return null;
     if (row.cancellationRequested) return "Action cancelled before dispatch";
     try {
-      if (row.origin && row.footprint.some((e) => e.kind !== "receipt"))
-        commandCheckpoint(row.origin, row.consent);
+      if (hasEffects(row.effects)) commandCheckpoint(originOf(row.caller), row.consent);
     } catch (error) {
       return String(error);
     }
@@ -520,15 +731,16 @@ export class ActionJournal implements ReceiptReader {
 
   async list(target?: DocumentRef, id?: string): Promise<ActionReceipt[]> {
     await this.loadOnce();
-    await this.tail;
+    // Rows enter this map after durable append. Readers need the committed snapshot, not the
+    // writer's tail: a binder may read Machine, whose acquisition census reads this journal.
     const rows = id ? [this.rows.get(id)].filter((row) => row !== undefined) : this.rows.values();
     return structuredClone(
       [...rows].filter(
         (row) =>
           (!target ||
-            (row.destination.kind === "document" &&
-              row.destination.ref.session === target.session &&
-              row.destination.ref.openId === target.openId)) &&
+            (row.target.kind === "document" &&
+              row.target.ref.session === target.session &&
+              row.target.ref.openId === target.openId)) &&
           (!id || row.id === id),
       ),
     );
@@ -615,17 +827,13 @@ export class ActionJournal implements ReceiptReader {
   private async waitForTurn(id: string) {
     for (;;) {
       const row = this.rows.get(id)!;
-      if (row.cancellationRequested)
-        throw new BridgeError("Command cancelled while queued", 499, { notDispatched: true });
-      if (row.origin && row.footprint.some((e) => e.kind !== "receipt"))
-        commandCheckpoint(row.origin, row.consent);
+      await this.gate(row, "turn");
       const earlier = [...this.rows.values()].slice(0, [...this.rows.keys()].indexOf(id));
       const blocked = earlier.find(
         (other) =>
           isOpen(other) &&
-          (other.state !== "incomplete" || other.key === "schedule.grid.push") &&
-          (effectsOverlap(row.footprint, other.footprint) ||
-            (!other.origin && overlaps(row.destination, other.destination))),
+          !this.reconciles(row, other) &&
+          effectsOverlap(row.effects, other.effects),
       );
       if (!blocked) return;
       if (blocked.state === "unknown" || blocked.state === "incomplete")
@@ -643,6 +851,33 @@ export class ActionJournal implements ReceiptReader {
       });
     }
   }
+
+  private claimsOf(row: ActionReceipt): Claim[] {
+    if (!holdsClaims(row)) return [];
+    return row.claims.filter(
+      (claim) =>
+        (claim.kind !== "reconciliation" ||
+          row.state !== "cancelled" ||
+          row.steps.some((step) => step.state === "unknown" || step.state === "running")) &&
+        ![...this.rows.values()].some((other) =>
+          other.steps.some(
+            (step) =>
+              step.kind === "native" &&
+              step.state === "succeeded" &&
+              step.dispatchedAt &&
+              step.releases?.some(
+                (release) =>
+                  release.action === row.id &&
+                  canonicalRouteInput(release.claim) === canonicalRouteInput(claim),
+              ),
+          ),
+        ),
+    );
+  }
+  private reconciles(row: ActionReceipt, original: ActionReceipt): boolean {
+    return row.claims.some((claim) => claim.kind === "reconciliation" && claim.id === original.id);
+  }
+
   visibleTo(row: ActionReceipt, caller: Caller): boolean {
     if (caller.kind === "human")
       return (
@@ -658,7 +893,7 @@ export class ActionJournal implements ReceiptReader {
         row.caller.kind === "pea" &&
         (row.caller.thread === caller.thread ||
           (caller.root !== undefined &&
-            canonicalRouteInput(row.origin?.root) === canonicalRouteInput(caller.root)))
+            canonicalRouteInput(originOf(row.caller)?.root) === canonicalRouteInput(caller.root)))
       );
     if (caller.kind === "page")
       return row.caller.kind === "page" && row.caller.page === caller.page;
@@ -687,203 +922,605 @@ export class ActionJournal implements ReceiptReader {
       });
     return visible;
   }
-  /** Authentication precedes recovery, and recovery never borrows a newer turn. */
-  async existing(admission: ActionAdmission, caller: Caller): Promise<ActionReceipt | null> {
-    const row = (await this.readFor(caller, undefined, admission.id))[0];
-    if (!row) return null;
-    if (!sameCaller(row.caller, caller))
-      throw Error("Command id belongs to another authenticated caller");
-    if (
-      canonicalRouteInput({
-        id: row.id,
-        kind: row.kind,
-        key: row.key,
-        destination: row.destination,
-        input: row.request,
-        bases: row.bases,
-      }) !== canonicalRouteInput(admission)
-    )
-      throw Error(
-        `request id '${admission.id}' conflicts with its admitted intent, target or bases`,
-      );
-    return row;
+  private context(
+    admission: ActionAdmission,
+    crossing: Crossing,
+    consumed: Consumed[],
+  ): CommandContext {
+    const cached = new Map<string, { doc: unknown; revision: number }>();
+    return {
+      admission,
+      ...crossing,
+      owner: this,
+      work: this.commandReads?.work,
+      consumed,
+      read: {
+        receipts: (id) =>
+          structuredClone(
+            id
+              ? [this.rows.get(id)].filter((value): value is ActionReceipt => value !== undefined)
+              : [...this.rows.values()],
+          ),
+        work: async (handle, route) => {
+          if (handle.key.route !== route)
+            throw new CommandRejected({
+              kind: "domain",
+              code: "work.route",
+              message: "Work belongs to another tool",
+            });
+          const identity = workKey(handle.key);
+          const held = cached.get(identity);
+          if (held) return held;
+          const original = consumed.find(
+            (value) => value.kind === "work" && workKey(value.handle.key) === identity,
+          );
+          if (original?.kind === "work") {
+            if (original.handle.revision !== handle.revision)
+              throw Error("Resume changed its observed Work revision");
+            const snapshot = {
+              doc: structuredClone(original.snapshot),
+              revision: original.handle.revision,
+            };
+            cached.set(identity, snapshot);
+            return snapshot;
+          }
+          const value = await this.commandReads?.work?.view(handle.key, route);
+          if (!value)
+            throw new CommandRejected({
+              kind: "domain",
+              code: "work.unavailable",
+              message: "Work is unavailable",
+            });
+          if (value.revision !== handle.revision)
+            throw new CommandRejected({ kind: "stale_revision", handle, live: value.revision });
+          const snapshot = structuredClone({ doc: value.doc, revision: value.revision });
+          cached.set(identity, snapshot);
+          return snapshot;
+        },
+      },
+    };
   }
-  async admit(
-    raw: ActionAdmission & Crossing,
-    prepare: () => Promise<unknown>,
-    execute: (execution: ActionExecution) => Promise<unknown>,
+
+  /** One predicate at every async boundary; domain executors declare only the facts it reads. */
+  private async gate(
+    row: ActionReceipt,
+    moment:
+      | "admit"
+      | "authorize"
+      | "consented"
+      | "turn"
+      | "prepared"
+      | "step"
+      | "dispatch"
+      | "run-change",
+    postcondition = false,
+  ): Promise<void> {
+    if (row.cancellationRequested)
+      throw new BridgeError("Command cancelled before dispatch", 499, { notDispatched: true });
+    if (hasEffects(row.effects)) {
+      if (moment === "admit" || moment === "authorize") assertRunAdmission(originOf(row.caller));
+      else commandCheckpoint(originOf(row.caller), row.consent);
+    }
+    const dead = live(row.basis, moment);
+    if (dead)
+      throw new CommandRejected({ kind: "trust", code: dead.refusal.code, message: dead.message });
+    try {
+      validateFootprintCaller(this.activeCallers.get(row.id) ?? row.caller, row.effects);
+    } catch (error) {
+      if (!(error instanceof Refused) || moment === "admit") throw error;
+      throw new CommandRejected({
+        kind: "trust",
+        code: error.refusal.code,
+        message: error.message,
+      });
+    }
+    if (postcondition) return;
+    const established = row.steps.flatMap((step) =>
+      step.state === "succeeded" ? (step.established ?? []) : [],
+    );
+    const dependencies = row.consumes.map(
+      (dependency) =>
+        established.findLast(
+          (value) => dependencyIdentity(value) === dependencyIdentity(dependency),
+        ) ?? dependency,
+    );
+    for (const dependency of dependencies) {
+      if (dependency.kind === "work") {
+        const current = await this.commandReads?.work?.view(
+          dependency.handle.key,
+          dependency.handle.key.route,
+        );
+        if (!current) throw new CommandRejected({ kind: "stale", consumed: [dependency] });
+        if (
+          moment === "admit" &&
+          row.prepared.state === "unprepared" &&
+          current.revision !== dependency.handle.revision
+        )
+          throw new CommandRejected({
+            kind: "stale_revision",
+            handle: dependency.handle,
+            live: current.revision,
+          });
+        const snapshot = structuredClone(dependency.snapshot);
+        const currentDocument = structuredClone(current.doc);
+        for (const step of row.steps) {
+          if (
+            step.state !== "succeeded" ||
+            step.kind !== "publication" ||
+            (step.key !== "work.publish" && step.key !== "work.retire")
+          )
+            continue;
+          const own = step.input as { work: WorkKey; patches?: RouteStatePatch[] };
+          if (workKey(own.work) !== workKey(dependency.handle.key)) continue;
+          const retired =
+            step.key === "work.retire"
+              ? (step.result as { patches: RouteStatePatch[]; fulfilled: WorkPath[] })
+              : undefined;
+          for (const patch of own.patches ?? retired?.patches ?? []) patchSnapshot(snapshot, patch);
+          for (const path of retired?.fulfilled ?? []) {
+            patchSnapshot(snapshot, { path: [...path] });
+            patchSnapshot(currentDocument, { path: [...path] });
+          }
+        }
+        if (
+          canonicalRouteInput(project(currentDocument, dependency.paths)) !==
+          canonicalRouteInput(project(snapshot, dependency.paths))
+        )
+          throw new CommandRejected({ kind: "stale", consumed: [dependency] });
+      } else if (dependency.kind === "capture") {
+        if (
+          createHash("sha256")
+            .update(Buffer.from(dependency.bytesBase64, "base64"))
+            .digest("hex") !== dependency.sha256
+        )
+          throw new CommandRejected({ kind: "stale", consumed: [dependency] });
+      } else if (dependency.kind === "receipt") {
+        const current = this.rows.get(dependency.id);
+        if (!current || current.key !== dependency.key || current.state !== "succeeded")
+          throw new CommandRejected({ kind: "stale", consumed: [dependency] });
+      } else {
+        const current =
+          dependency.kind === "file"
+            ? await readFile(dependency.path).then(
+                (bytes) => createHash("sha256").update(bytes).digest("hex"),
+                (error: NodeJS.ErrnoException) => {
+                  if (error.code === "ENOENT") return null;
+                  throw error;
+                },
+              )
+            : this.commandReads
+              ? await this.commandReads.read(dependency)
+              : (() => {
+                  throw Error("Command dependency readers are unavailable");
+                })();
+        if (canonicalRouteInput(current) !== canonicalRouteInput(expected(dependency)))
+          throw new CommandRejected({ kind: "stale", consumed: [dependency] });
+      }
+    }
+  }
+
+  /** Identity, binding, reservations and execution have one owner and one durable row. */
+  async resume(id: string, crossing: Crossing): Promise<ActionReceipt> {
+    const row = (await this.readFor(crossing.caller, undefined, id))[0];
+    if (!row || !this.registry) throw Error("Original command or its executor is unavailable");
+    return this.invoke(
+      { id: row.id, key: row.key, target: row.target, input: row.input },
+      crossing,
+      this.registry(row.key),
+      true,
+    );
+  }
+
+  async invoke(
+    raw: ActionAdmission,
+    crossing: Crossing,
+    factory: CommandFactory,
     resume = false,
   ): Promise<ActionReceipt> {
-    const { caller, basis, validate, ...submitted } = raw;
-    // Page trust is bound to the caller object; detach authored data without copying that capability.
-    const { footprint: declared, frozen, ...authored } = structuredClone(submitted);
-    const origin = originOf(caller);
-    const admission = actionAdmissionSchema.parse(authored);
+    const admission = actionAdmissionSchema.parse(structuredClone(raw));
+    const portable = commands[admission.key as keyof typeof commands];
+    if (portable)
+      admission.input = portable.input.parse(admission.input) as Record<string, unknown>;
     return this.serial(async () => {
       const prior = this.rows.get(admission.id);
-      const identity = (row: ActionReceipt) => ({
-        id: row.id,
-        kind: row.kind,
-        key: row.key,
-        destination: row.destination,
-        input: row.request,
-        bases: row.bases,
-      });
+      if (prior && !sameCaller(prior.caller, crossing.caller))
+        throw Error("Command id belongs to another authenticated caller");
       if (prior) {
-        if (!sameCaller(prior.caller, caller))
-          throw Error("Command id belongs to another authenticated caller");
-        if (canonicalRouteInput(identity(prior)) !== canonicalRouteInput(admission))
-          throw Error(
-            `request id '${admission.id}' conflicts with its admitted intent, target or bases`,
-          );
+        const identity = { id: prior.id, key: prior.key, target: prior.target, input: prior.input };
+        if (canonicalRouteInput(identity) !== canonicalRouteInput(admission))
+          throw new CommandRejected({
+            kind: "domain",
+            code: "id-conflict",
+            message: `request id '${admission.id}' conflicts with its admitted intent or target`,
+          });
         if (!resume || (prior.state !== "unknown" && prior.state !== "incomplete"))
           return structuredClone(prior);
-        if (prior.preparation.state !== "ready")
+        if (prior.refusal?.kind === "domain" && prior.refusal.code === "historical-schema")
+          throw Error(
+            "Historical schema cannot authorize resumed execution; inspect its archived journal",
+          );
+        if (prior.prepared.state !== "ready")
           throw Error("Original consumed values were not frozen; cannot resume this attempt");
         if (prior.steps.some((step) => step.state === "unknown" || step.state === "running"))
           throw Error("Recover every uncertain step before resuming the original action");
-      }
-      const footprint = structuredClone(declared ?? declaredFootprint(admission));
-      validateFootprintCaller(caller, footprint);
-      if (footprint.some((e) => e.kind !== "receipt")) assertRunAdmission(origin);
-      const opening = admission.key === "instances.start" || admission.key === "instances.open";
-      const blocked =
-        footprint.some((e) => e.kind !== "receipt") &&
-        !opening &&
-        [...this.open]
-          .map((id) => this.rows.get(id)!)
-          .find(
-            (row) =>
-              row.id !== admission.id &&
-              (row.state === "running" ||
-                row.state === "unknown" ||
-                (row.key === "schedule.grid.push" && row.state === "incomplete")) &&
-              (effectsOverlap(footprint, row.footprint) ||
-                (!row.origin && overlaps(admission.destination, row.destination)) ||
-                (row.key === "schedule.grid.push" &&
-                  admission.key === row.key &&
-                  admission.bases.work &&
-                  canonicalRouteInput(admission.bases.work.key) ===
-                    canonicalRouteInput(
-                      actionBasesSchema.safeParse(row.bases).data?.work?.key ?? null,
-                    )) ||
-                (typeof admission.input.workspaceId === "string" &&
-                  row.request.workspaceId === admission.input.workspaceId) ||
-                (typeof admission.input.path === "string" &&
-                  row.request.path === admission.input.path)),
-          );
-      if (blocked && blocked.state !== "running")
-        throw Error(
-          `action '${blocked.id}' is ${blocked.state}; recover that attempt before submitting another`,
+        const reconciliation = [...this.rows.values()].find(
+          (other) =>
+            other.id !== prior.id &&
+            this.claimsOf(other).some(
+              (claim) => claim.kind === "reconciliation" && claim.id === prior.id,
+            ),
         );
+        if (reconciliation)
+          throw new CommandRejected({
+            kind: "claimed",
+            claim: { kind: "reconciliation", id: prior.id },
+            by: reconciliation.id,
+          });
+      }
+      const context = this.context(admission, crossing, prior?.consumes ?? []);
+      let executor!: CommandExecutor;
       let row: ActionReceipt = {
         id: admission.id,
-        kind: admission.kind,
         key: admission.key,
-        // A resume is admitted afresh under its own caller; it never inherits the original basis.
-        caller,
-        basis,
-        origin,
-        footprint,
+        caller: crossing.caller,
+        basis: crossing.basis,
+        target: structuredClone(admission.target),
+        input: structuredClone(admission.input),
+        consumes: prior?.consumes ?? [],
+        claims: prior?.claims ?? [],
+        effects: prior?.effects ?? [],
         consent: null,
-        ...(frozen === undefined ? {} : { frozen: structuredClone(frozen) }),
-        destination: admission.destination,
-        request: admission.input,
-        bases: admission.bases,
         steps: prior?.steps ?? [],
-        preparation: prior?.preparation ?? { state: "unprepared" },
+        prepared: prior?.prepared ?? { state: "unprepared" },
         recovery: prior?.recovery ?? [],
-        publication: prior?.publication ?? { state: "unrequested" },
         startedAt: prior?.startedAt ?? new Date().toISOString(),
-        state: caller.kind === "pea" && footprint.length ? "waiting" : "running",
+        state: "running",
       };
-      await this.commit([row]);
+      try {
+        executor = await factory(context);
+        admission.input = executor.definition.input.parse(admission.input) as Record<
+          string,
+          unknown
+        >;
+        const definition = executor.definition;
+        const expectedTarget = definition.target?.(admission.input);
+        if (
+          expectedTarget &&
+          canonicalRouteInput(expectedTarget) !== canonicalRouteInput(admission.target)
+        )
+          throw new CommandRejected({
+            kind: "domain",
+            code: "target.mismatch",
+            message: "Target differs from this command's explicit selection",
+          });
+        if (
+          !expectedTarget &&
+          (definition.needs === "nothing"
+            ? admission.target.kind !== "host"
+            : definition.needs === "session"
+              ? admission.target.kind !== "session"
+              : admission.target.kind !== "document")
+        )
+          throw new CommandRejected({
+            kind: "domain",
+            code: "target.required",
+            message: "Target does not match the command contract",
+          });
+        await this.commandReads?.target?.(admission.target, definition.needs);
+        if (prior?.prepared.state === "ready") executor.prepared.parse(prior.prepared.value);
+        row = { ...row, input: structuredClone(admission.input) };
+        if (!prior) {
+          const binding = await executor.bind(context);
+          const effects = await Promise.all(
+            binding.effects.map(async (effect) =>
+              effect.kind === "member" && !effect.location && this.commandReads?.effectPath
+                ? { ...effect, location: await this.commandReads.effectPath(effect) }
+                : effect,
+            ),
+          );
+          row = {
+            ...row,
+            consumes: structuredClone(binding.consumes ?? []),
+            claims: structuredClone(binding.claims ?? []),
+            effects: structuredClone(effects),
+            ...(binding.basis === undefined ? {} : { basis: binding.basis }),
+          };
+          context.consumed = structuredClone(row.consumes);
+          context.basis = row.basis;
+        }
+        this.activeCallers.set(row.id, crossing.caller);
+        await this.gate(row, "admit");
+        for (const claim of row.claims) {
+          if (claim.kind !== "reconciliation") continue;
+          const original = this.rows.get(claim.id);
+          if (
+            !original ||
+            original.id === row.id ||
+            original.prepared.state !== "ready" ||
+            this.pending.has(original.id) ||
+            original.state === "running" ||
+            original.state === "waiting" ||
+            original.steps.some((step) => step.state === "unknown" || step.state === "running")
+          )
+            throw new CommandRejected({
+              kind: "domain",
+              code: "reconciliation.unresolved",
+              message: "Reconcile only a stopped attempt whose effects all have known outcomes",
+            });
+        }
+        const claimed = [...this.rows.values()].find(
+          (other) =>
+            other.id !== row.id &&
+            holdsClaims(other) &&
+            this.claimsOf(other).some((held) =>
+              row.claims.some((claim) => canonicalRouteInput(held) === canonicalRouteInput(claim)),
+            ),
+        );
+        if (claimed) {
+          const claim = row.claims.find((candidate) =>
+            this.claimsOf(claimed).some(
+              (held) => canonicalRouteInput(held) === canonicalRouteInput(candidate),
+            ),
+          )!;
+          throw new CommandRejected({ kind: "claimed", claim, by: claimed.id });
+        }
+        const blocked = [...this.rows.values()].find(
+          (other) =>
+            other.id !== row.id &&
+            (other.state === "unknown" || other.state === "incomplete") &&
+            !this.reconciles(row, other) &&
+            effectsOverlap(row.effects, other.effects),
+        );
+        if (blocked)
+          throw Error(
+            `action '${blocked.id}' is ${blocked.state}; recover that attempt before submitting another`,
+          );
+      } catch (error) {
+        this.activeCallers.delete(row.id);
+        if (error instanceof Refused || prior) throw error;
+        const failed = actionReceiptSchema.parse({
+          ...row,
+          state: "failed",
+          error: messageOf(error),
+          status: 409,
+          notDispatched: true,
+          ...(error instanceof CommandRejected ? { refusal: error.refusal } : {}),
+        });
+        await this.commit([failed]);
+        this.notify();
+        return structuredClone(failed);
+      }
+      row = actionReceiptSchema.parse({
+        ...row,
+        state: row.caller.kind === "pea" && hasEffects(row.effects) ? "waiting" : "running",
+      });
+      try {
+        await this.commit([row]);
+      } catch (error) {
+        this.activeCallers.delete(row.id);
+        throw error;
+      }
       this.notify();
       const save = (update: (current: ActionReceipt) => ActionReceipt) =>
         this.serial(async () => {
           row = this.rows.get(row.id) ?? row;
-          const nextRow = actionReceiptSchema.parse(update(row));
-          await this.commit([nextRow]);
+          const next = actionReceiptSchema.parse(update(row));
+          await this.commit([next]);
           this.notify();
-          row = nextRow;
+          row = next;
         });
       const releaseDispatch: (() => void)[] = [];
       let cursor = 0;
       const execution: ActionExecution = {
         get prepared() {
-          return row.preparation.state === "ready" ? row.preparation.value : undefined;
+          return row.prepared.state === "ready" ? structuredClone(row.prepared.value) : undefined;
         },
         recorded: (kind, key) =>
           structuredClone(row.steps.findLast((step) => step.kind === kind && step.key === key)),
+        effect: (effect) =>
+          save((current) => ({
+            ...current,
+            effects: current.effects.some(
+              (held) => canonicalRouteInput(held) === canonicalRouteInput(effect),
+            )
+              ? current.effects
+              : [...current.effects, structuredClone(effect)],
+          })),
+        establish: async (dependencies) => {
+          const step = row.steps.findLast(
+            (step) => step.kind === "native" && step.state === "succeeded",
+          );
+          if (!step || dependencies.some((dependency) => !effectEstablishes(row, dependency)))
+            throw Error("Only proven native observations can establish a new lifetime checkpoint");
+          await save((current) => ({
+            ...current,
+            steps: current.steps.map((held) =>
+              held.id === step.id
+                ? {
+                    ...held,
+                    established: [...(held.established ?? []), ...structuredClone(dependencies)],
+                  }
+                : held,
+            ),
+          }));
+        },
+        publishWork: (key, route, patches) =>
+          execution.step("publication", "work.publish", { work: key, route, patches }, async () => {
+            const work = this.commandReads?.work;
+            const current = await work?.view(key, route);
+            if (!work || !current) throw Error("Work publication is unavailable");
+            const result = await work.publish(key, route, [...patches], current.revision);
+            if (!result.ok) throw new ActionIncomplete("Work publication did not land", result);
+            return result;
+          }),
+        retireWork: async (key, route, paths) => {
+          const priorPublications = row.steps.filter(
+            (step) =>
+              step.state === "succeeded" &&
+              step.kind === "publication" &&
+              step.key === "work.retire" &&
+              workKey((step.input as { work: WorkKey }).work) === workKey(key),
+          );
+          const priorResults = priorPublications.map(
+            (step) =>
+              (step as Extract<ActionStep, { state: "succeeded" }>).result as {
+                fulfilled: WorkPath[];
+                retired: WorkPath[];
+                revision: number;
+              },
+          );
+          const completed = new Set(
+            priorResults.flatMap((result) => result.fulfilled.map(canonicalRouteInput)),
+          );
+          const outstanding = paths.filter((path) => !completed.has(canonicalRouteInput(path)));
+          const alreadyRetired = priorResults
+            .flatMap((result) => result.retired)
+            .filter((path) =>
+              paths.some(
+                (requested) => canonicalRouteInput(requested) === canonicalRouteInput(path),
+              ),
+            );
+          if (!outstanding.length) {
+            const current = await this.commandReads?.work?.view(key, route);
+            if (!current) throw Error("Work retirement is unavailable");
+            return { retired: alreadyRetired, revision: current.revision };
+          }
+          const continuation = cursor;
+          cursor = row.steps.length;
+          try {
+            const result = await execution.step(
+              "publication",
+              "work.retire",
+              { work: key, route, paths: outstanding },
+              async () => {
+                if (
+                  !hasEffects(row.effects) ||
+                  !row.steps.some(
+                    (step) =>
+                      step.state === "succeeded" &&
+                      (step.kind === "file" || (step.kind === "native" && step.dispatchedAt)),
+                  )
+                )
+                  throw new BridgeError("Retirement requires a proven external outcome", 409, {
+                    notDispatched: true,
+                  });
+                const work = this.commandReads?.work;
+                const current = await work?.view(key, route);
+                const original = row.consumes.find(
+                  (dependency) =>
+                    dependency.kind === "work" && workKey(dependency.handle.key) === workKey(key),
+                );
+                if (!work || !current || original?.kind !== "work")
+                  throw Error("Consumed Work is unavailable for retirement");
+                const patches: RouteStatePatch[] = [];
+                const retired: WorkPath[] = [];
+                for (const path of outstanding) {
+                  const before = valueAt(original.snapshot, path) as CellLike | undefined;
+                  const now = valueAt(current.doc, path) as CellLike | undefined;
+                  if (!before?.edit || !now) continue;
+                  const next = transitionPatches(
+                    path.slice(0, -1).map(String),
+                    String(path.at(-1)),
+                    now,
+                    { kind: "retire", consumed: before.edit },
+                  );
+                  if (next.some((patch) => patch.path.at(-1) === "edit")) retired.push([...path]);
+                  patches.push(...next);
+                }
+                if (patches.length) {
+                  const publication = await work.publish(key, route, patches, current.revision);
+                  if (!publication.ok)
+                    throw new ActionIncomplete("Work retirement did not land", publication);
+                  return {
+                    retired,
+                    revision: publication.revision,
+                    patches,
+                    fulfilled: outstanding,
+                  };
+                }
+                return { retired, revision: current.revision, patches, fulfilled: outstanding };
+              },
+            );
+            return { retired: [...alreadyRetired, ...result.retired], revision: result.revision };
+          } finally {
+            cursor = continuation;
+          }
+        },
         retire: async (id, reason) => {
           const ended = row.steps.find((step) => step.id === id);
           if (!resume || ended?.state !== "succeeded")
             throw Error("Only a resumed attempt retires a succeeded step");
+          const { result: _result, state: _state, ...intent } = ended;
           const retired: ActionStep = {
-            id,
-            key: ended.key,
-            kind: ended.kind,
-            input: ended.input,
-            ...(ended.dispatchedAt ? { dispatchedAt: ended.dispatchedAt } : {}),
+            ...intent,
             state: "failed",
             error: reason,
             status: 410,
+            retired: true,
             evidence: { result: ended.result },
           };
-          await save((row) => ({
-            ...row,
-            steps: row.steps.map((step) => (step.id === id ? retired : step)),
+          await save((current) => ({
+            ...current,
+            steps: current.steps.map((step) => (step.id === id ? retired : step)),
           }));
           return structuredClone(retired);
         },
-        step: async (kind, key, input, effect) => {
+        step: async (kind, key, input, effect, process, establish, releaseClaims) => {
+          if (kind === "native") validateNativeInput(key, input);
           while (cursor < row.steps.length) {
-            const priorStep = row.steps[cursor++]!;
-            // A failed step is an earlier attempt's history; the resume redoes from it.
-            if (resume && priorStep.state === "failed") continue;
+            const previous = row.steps[cursor++]!;
             if (
-              priorStep.kind !== kind ||
-              priorStep.key !== key ||
-              canonicalRouteInput(priorStep.input) !== canonicalRouteInput(input)
+              previous.state === "succeeded" &&
+              previous.kind === "publication" &&
+              previous.key === "work.retire" &&
+              key !== "work.retire"
             )
-              throw Error("Original continuation differs from its recorded effect input");
-            if (priorStep.state === "succeeded") return structuredClone(priorStep.result) as never;
+              continue;
+            if (resume && previous.state === "failed") {
+              if (previous.notDispatched || previous.retired) continue;
+              throw Error(
+                "A dispatched failed effect needs explicit reconciliation before it can repeat",
+              );
+            }
+            if (
+              previous.kind !== kind ||
+              previous.key !== key ||
+              canonicalRouteInput(previous.input) !== canonicalRouteInput(input) ||
+              (process && canonicalRouteInput(previous.process) !== canonicalRouteInput(process))
+            )
+              throw Error(
+                "Original continuation differs from its recorded effect input or process",
+              );
+            if (previous.state === "succeeded") return structuredClone(previous.result) as never;
             throw Error("An uncertain effect cannot be replayed");
           }
+          const defaultProcess =
+            row.prepared.state === "ready" &&
+            row.prepared.value &&
+            typeof row.prepared.value === "object"
+              ? nativeProcessSchema.safeParse((row.prepared.value as { process?: unknown }).process)
+                  .data
+              : undefined;
+          const incarnation = row.consumes.find(
+            (dependency) =>
+              dependency.kind === "incarnation" &&
+              canonicalRouteInput(dependency.target) === canonicalRouteInput(row.target),
+          );
+          const exactProcess =
+            process ??
+            defaultProcess ??
+            (incarnation?.kind === "incarnation" ? incarnation.process : undefined);
           const step: ActionStep = {
             id: randomUUID(),
             kind,
             key,
             input: structuredClone(input),
+            ...(kind === "native" && exactProcess
+              ? { process: structuredClone(exactProcess) }
+              : {}),
             state: "running",
           };
-          await save((row) => {
-            if (opening && kind === "native") {
-              const running = [...this.pending.keys()]
-                .map((id) => this.rows.get(id)!)
-                .find(
-                  (other) =>
-                    other.id !== row.id &&
-                    other.state === "running" &&
-                    other.steps.some(
-                      (active) =>
-                        active.state === "running" &&
-                        active.kind === kind &&
-                        active.key === key &&
-                        canonicalRouteInput(active.input) === canonicalRouteInput(input),
-                    ),
-                );
-              if (running)
-                throw new BridgeError(
-                  `action '${running.id}' is already opening this target`,
-                  409,
-                  {
-                    notDispatched: true,
-                  },
-                );
-            }
-            return { ...row, steps: [...row.steps, step] };
-          });
+          await save((current) => ({ ...current, steps: [...current.steps, step] }));
           cursor = row.steps.length;
           if (kind === "native")
             releaseDispatch.push(
@@ -895,63 +1532,78 @@ export class ActionJournal implements ReceiptReader {
             );
           let result;
           try {
-            await this.export(row.id, `steps/${step.id}.json`, {
-              id: step.id,
-              kind,
-              key,
-              input: step.input,
-            }).catch((error) => {
+            await this.export(row.id, `steps/${step.id}.json`, step).catch((error) => {
               throw new BridgeError(`Step input export failed: ${String(error)}`, 503, {
                 notDispatched: true,
               });
             });
             row = this.rows.get(row.id) ?? row;
-            if (row.cancellationRequested)
-              throw new BridgeError("Action cancelled before dispatch", 499, {
-                notDispatched: true,
-              });
-            try {
-              if (row.origin && row.footprint.some((e) => e.kind !== "receipt"))
-                commandCheckpoint(row.origin, row.consent);
-            } catch (error) {
-              throw new BridgeError(String(error), 499, { notDispatched: true });
-            }
-            try {
-              await validate?.();
-            } catch (error) {
-              throw new BridgeError(String(error), 409, { notDispatched: true });
-            }
-            const dead = live(row.basis);
-            if (dead) throw new BridgeError(dead.message, 403, { notDispatched: true });
+            const postcondition =
+              kind === "publication" &&
+              key === "work.retire" &&
+              row.steps.some(
+                (held) =>
+                  held.state === "succeeded" &&
+                  (held.kind === "file" || (held.kind === "native" && held.dispatchedAt)),
+              );
+            await this.gate(row, "step", postcondition);
             result = await effect(step.id);
           } catch (error) {
-            await save((row) => ({
-              ...row,
-              steps: row.steps.map((current) =>
-                current.id === step.id ? { ...current, ...failure(error) } : current,
+            await save((current) => ({
+              ...current,
+              ...(error instanceof CommandRejected ? { refusal: error.refusal } : {}),
+              steps: current.steps.map((held) =>
+                held.id === step.id ? { ...held, ...failure(error) } : held,
               ),
             }));
             throw error;
           }
-          // Persistence is outside the effect catch: a missing receipt is never proof of no dispatch.
-          await save((row) => ({
-            ...row,
-            steps: row.steps.map((current) =>
-              current.id === step.id
-                ? { ...current, state: "succeeded", result: result ?? null }
-                : current,
+          // Persistence is outside the effect catch: a missing receipt never proves no dispatch.
+          const observations = (await establish?.(result)) ?? [];
+          const releases = (await releaseClaims?.(result)) ?? [];
+          const dispatched = this.rows
+            .get(row.id)
+            ?.steps.find((held) => held.id === step.id)?.dispatchedAt;
+          if (
+            releases.length &&
+            (kind !== "native" ||
+              !dispatched ||
+              releases.some(
+                (release) =>
+                  release.claim.kind !== "session-slot" ||
+                  !this.rows
+                    .get(release.action)
+                    ?.claims.some(
+                      (claim) => canonicalRouteInput(claim) === canonicalRouteInput(release.claim),
+                    ),
+              ))
+          )
+            throw Error(
+              "A logical session claim releases only with a matching dispatched native outcome",
+            );
+          if (observations.some((dependency) => !effectEstablishes(row, dependency)))
+            throw Error("Native observations cannot replace source or Work intent");
+          await save((current) => ({
+            ...current,
+            steps: current.steps.map((held) =>
+              held.id === step.id
+                ? {
+                    ...held,
+                    state: "succeeded",
+                    result: structuredClone(result ?? null),
+                    ...(observations.length ? { established: structuredClone(observations) } : {}),
+                    ...(releases.length ? { releases: structuredClone(releases) } : {}),
+                  }
+                : held,
             ),
           }));
           return result;
         },
-        publish: (result) =>
-          save((row) => ({ ...row, publication: { state: "recorded", result } })),
       };
-      let validated = row.preparation.state === "ready";
+      let validated = row.prepared.state === "ready";
       const releaseRun = subscribeRunChanges(() => {
         try {
-          if (row.origin && row.footprint.some((e) => e.kind !== "receipt"))
-            commandCheckpoint(row.origin, row.consent);
+          if (hasEffects(row.effects)) commandCheckpoint(originOf(row.caller), row.consent);
         } catch {
           this.cancelWaits.get(row.id)?.();
           void save((current) => ({ ...current, cancellationRequested: true })).catch(() => {});
@@ -959,14 +1611,14 @@ export class ActionJournal implements ReceiptReader {
       });
       const completion = Promise.resolve()
         .then(async () => {
-          // A resumed attempt exported both when it was first admitted and prepared.
           if (!prior)
             await this.export(row.id, "admission.json", {
               ...admission,
-              origin,
-              footprint,
-              frozen,
+              consumes: row.consumes,
+              claims: row.claims,
+              effects: row.effects,
             });
+          await this.gate(row, "authorize");
           const cancelled = new Promise<never>((_, reject) =>
             this.cancelWaits.set(row.id, () =>
               reject(
@@ -978,38 +1630,38 @@ export class ActionJournal implements ReceiptReader {
           );
           let consent: CommandConsent | null;
           try {
-            consent = await Promise.race([authorizeCommand(origin, row.id, footprint), cancelled]);
+            consent = await Promise.race([
+              authorizeCommand(originOf(row.caller), row.id, row.effects),
+              cancelled,
+            ]);
           } catch (error) {
             throw new BridgeError(String(error), 499, { notDispatched: true });
           } finally {
             this.cancelWaits.delete(row.id);
           }
-          if (row.cancellationRequested)
-            throw new BridgeError("Command cancelled", 499, { notDispatched: true });
           await save((current) => ({ ...current, state: "running", consent }));
-          if (footprint.some((e) => e.kind !== "receipt")) commandCheckpoint(origin, consent);
+          await this.gate(row, "consented");
           await this.waitForTurn(row.id);
-          if (row.preparation.state !== "ready") {
-            const value = await prepare();
-            await this.export(row.id, "preparation.json", value ?? null);
-            await save((row) => ({
-              ...row,
-              preparation: { state: "ready", value: value ?? null },
-            }));
+          if (row.prepared.state !== "ready") {
+            const value = structuredClone(
+              executor.prepared.parse((await executor.prepare?.(context)) ?? null),
+            );
+            await this.export(row.id, "preparation.json", value);
+            await save((current) => ({ ...current, prepared: { state: "ready", value } }));
           }
           validated = true;
-        })
-        .then(() => {
-          if (row.cancellationRequested)
-            throw new BridgeError("Command cancelled", 499, { notDispatched: true });
-          if (footprint.some((e) => e.kind !== "receipt")) commandCheckpoint(origin, row.consent);
-          return execute(execution);
+          await this.gate(row, "prepared");
+          const result = await executor.run(context, execution);
+          return executor.definition.result ? executor.definition.result.parse(result) : result;
         })
         .then(
           (result) => settle(true, row.steps, { kind: "returned", result }),
-          (error) => settle(validated, row.steps, { kind: "threw", error }),
+          (error) => ({
+            ...settle(validated, row.steps, { kind: "threw", error })!,
+            ...(error instanceof CommandRejected ? { refusal: error.refusal } : {}),
+          }),
         )
-        .then((settled) => ({ ...unsettled(row), ...settled! }) as ActionReceipt)
+        .then((settled) => ({ ...unsettled(row), ...settled }) as ActionReceipt)
         .then((finished) =>
           this.serial(async () => {
             const next = actionReceiptSchema.parse({
@@ -1029,16 +1681,16 @@ export class ActionJournal implements ReceiptReader {
               this.notify();
               this.pending.delete(row.id);
               throw error;
+            } finally {
+              this.activeCallers.delete(row.id);
+              releaseRun();
+              releaseDispatch.forEach((release) => release());
             }
             this.notify();
             this.pending.delete(row.id);
-            this.validators.delete(row.id);
-            releaseRun();
-            releaseDispatch.forEach((release) => release());
-            return actionReceiptSchema.parse(structuredClone(next));
+            return structuredClone(next);
           }),
         );
-      if (validate) this.validators.set(row.id, validate);
       this.pending.set(row.id, completion);
       void completion.catch(() => undefined);
       return structuredClone(row);
@@ -1051,7 +1703,7 @@ export class ActionJournal implements ReceiptReader {
    */
   async cancel(
     id: string,
-    signal: (requestId: string) => Promise<unknown>,
+    signal?: (requestId: string) => Promise<unknown>,
   ): Promise<ActionReceipt> {
     const row = (await this.list(undefined, id))[0];
     if (!row) throw Error(`Action '${id}' has no admitted receipt`);
@@ -1064,13 +1716,26 @@ export class ActionJournal implements ReceiptReader {
     });
     this.cancelWaits.get(id)?.();
     const step = row.steps.find((step) => step.state === "running" && step.kind === "native");
-    if (step) await signal(step.id);
+    if (step) {
+      const executor = this.registry
+        ? await this.registry(row.key)(
+            this.context(
+              { id: row.id, key: row.key, target: row.target, input: row.input },
+              { caller: row.caller, basis: row.basis },
+              row.consumes,
+            ),
+          )
+        : undefined;
+      const cancel = signal ?? executor?.cancel ?? this.commandReads?.cancel;
+      if (!cancel) throw Error("Native cancellation is unavailable");
+      await cancel(step.id);
+    }
     return (await this.list(undefined, id))[0] ?? row;
   }
 
   async recover(
     id: string,
-    read: (
+    read?: (
       step: ActionStep,
       prepared: unknown,
     ) => Promise<{
@@ -1082,13 +1747,23 @@ export class ActionJournal implements ReceiptReader {
   ): Promise<ActionReceipt> {
     const original = (await this.list(undefined, id))[0];
     if (!original) throw Error(`Action '${id}' has no admitted receipt`);
-    const incompleteSchedule =
-      original.key === "schedule.grid.push" && original.state === "incomplete";
-    if (
-      (original.state !== "unknown" && !incompleteSchedule) ||
-      original.preparation.state !== "ready"
-    )
+    if (original.refusal?.kind === "domain" && original.refusal.code === "historical-schema")
       return original;
+    const executor = this.registry
+      ? await this.registry(original.key)(
+          this.context(
+            { id: original.id, key: original.key, target: original.target, input: original.input },
+            { caller: original.caller, basis: original.basis },
+            original.consumes,
+          ),
+        )
+      : undefined;
+    if (original.prepared.state === "ready" && executor)
+      executor.prepared.parse(original.prepared.value);
+    const recover = read ?? executor?.recover ?? this.commandReads?.recover;
+    if (!recover) throw Error("This command has no native recovery adapter");
+    const incomplete = original.state === "incomplete";
+    if (original.prepared.state !== "ready") return original;
     const updates: {
       step: ActionStep;
       evidence: unknown;
@@ -1097,19 +1772,37 @@ export class ActionJournal implements ReceiptReader {
     for (const step of original.steps)
       if (
         step.kind === "native" &&
-        (step.state === "unknown" || incompleteSchedule || revisit?.(step))
+        (step.state === "unknown" ||
+          incomplete ||
+          revisit?.(step) ||
+          (!read && executor !== undefined))
       ) {
         try {
-          const update = await read(step, original.preparation.value);
-          updates.push(
-            incompleteSchedule
-              ? {
-                  step: update.step.state === "succeeded" ? update.step : step,
-                  evidence: { previous: step, receipt: update.evidence },
-                  observation: update.observation,
-                }
-              : update,
+          const update = await recover(
+            structuredClone(step),
+            structuredClone(original.prepared.value),
           );
+          if (
+            update.step.id !== step.id ||
+            update.step.key !== step.key ||
+            update.step.kind !== step.kind ||
+            canonicalRouteInput(update.step.input) !== canonicalRouteInput(step.input) ||
+            (step.process &&
+              update.step.process &&
+              canonicalRouteInput(step.process) !== canonicalRouteInput(update.step.process))
+          )
+            throw Error("Recovery cannot change a step's immutable intent or process");
+          update.step = actionStepSchema.parse({
+            ...update.step,
+            ...(step.process ? { process: step.process } : {}),
+            ...(step.dispatchedAt ? { dispatchedAt: step.dispatchedAt } : {}),
+            ...(step.established ? { established: step.established } : {}),
+            ...(step.releases ? { releases: step.releases } : {}),
+          });
+          updates.push({
+            ...update,
+            evidence: incomplete ? { previous: step, receipt: update.evidence } : update.evidence,
+          });
         } catch (error) {
           updates.push({ step, evidence: { error: String(error) } });
         }
@@ -1176,30 +1869,51 @@ export class ActionJournal implements ReceiptReader {
     return next;
   }
   private async load(): Promise<void> {
-    const raw = await readFile(this.path, "utf8").catch((error: NodeJS.ErrnoException) => {
+    const originalBytes = await readFile(this.path).catch((error: NodeJS.ErrnoException) => {
       if (error.code === "ENOENT") return null;
       throw error;
     });
-    if (raw === null) return;
+    if (originalBytes === null) return;
+    const raw = originalBytes.toString("utf8");
     const lines = raw.split("\n");
     const head = JSON.parse(lines[0]!);
     const receipts: Receipt[] = [];
     const mappings: [string, string][] = [];
+    const archive = `${this.path}.v${String(head?.version)}.${Date.now()}.archived`;
+    const fingerprint = createHash("sha256").update(originalBytes).digest("hex");
+    let imported = false;
+    const parseStored = (raw: unknown): Receipt => {
+      const row = raw as { body?: { kind?: string; value?: { kind?: string } } } | null;
+      if (
+        row?.body?.kind === "action" &&
+        (row.body.value?.kind === "operation" || row.body.value?.kind === "workflow")
+      ) {
+        imported = true;
+        return receiptSchema.parse({
+          ...row,
+          body: {
+            kind: "action",
+            value: importHistoricalAction(row.body.value, archive, fingerprint),
+          },
+        });
+      }
+      return receiptSchema.parse(raw);
+    };
     if (head?.version === 4) {
       // ponytail: one-way import of the whole-file journal; delete once no host holds a v4 file.
       const envelope = z
         .strictObject({
           version: z.literal(4),
-          receipts: receiptSchema.array(),
+          receipts: z.array(z.unknown()),
           mappings: z.record(z.string(), z.uuid()),
         })
         .parse(head);
-      receipts.push(...envelope.receipts);
+      receipts.push(...envelope.receipts.map(parseStored));
       mappings.push(...Object.entries(envelope.mappings));
       this.torn = true;
-    } else if (head?.version === 5) {
+    } else if (head?.version === 5 || head?.version === 6) {
       const line = z.union([
-        z.strictObject({ receipt: receiptSchema }),
+        z.strictObject({ receipt: z.unknown() }),
         z.strictObject({ mapping: z.tuple([z.string(), z.uuid()]) }),
       ]);
       lines.slice(1).forEach((text, i) => {
@@ -1207,13 +1921,13 @@ export class ActionJournal implements ReceiptReader {
         let entry;
         try {
           entry = line.parse(JSON.parse(text));
+          if ("receipt" in entry) receipts.push(parseStored(entry.receipt));
+          else mappings.push(entry.mapping);
         } catch (error) {
           // Only the last line can be torn by a crash; anything earlier is a corrupt journal.
           if (i === lines.length - 2) return void (this.torn = true);
           throw error;
         }
-        if ("receipt" in entry) receipts.push(entry.receipt);
-        else mappings.push(entry.mapping);
       });
       this.lines = lines.length - 1;
     } else {
@@ -1222,7 +1936,7 @@ export class ActionJournal implements ReceiptReader {
       const archived = `${this.path}.v${String(head?.version)}.${Date.now()}.archived`;
       await renameReplacing(this.path, archived);
       console.warn(
-        `${this.path} is journal version ${String(head?.version)}; this host reads version 5. Archived it as ${archived} and started a fresh journal.`,
+        `${this.path} is journal version ${String(head?.version)}; this host reads version 6. Archived it as ${archived} and started a fresh journal.`,
       );
       return;
     }
@@ -1263,7 +1977,7 @@ export class ActionJournal implements ReceiptReader {
         next = {
           ...unsettled(row),
           steps,
-          ...settle(row.preparation.state === "ready", steps, { kind: "interrupted" })!,
+          ...settle(row.prepared.state === "ready", steps, { kind: "interrupted" })!,
         } as ActionReceipt;
       }
       if (next.steps.some((step) => step.state === "running"))
@@ -1271,6 +1985,10 @@ export class ActionJournal implements ReceiptReader {
       next = actionReceiptSchema.parse(next);
       this.index(next);
       if (canonicalRouteInput(next) !== canonicalRouteInput(row)) changed.push(next);
+    }
+    if (imported || head.version !== 6) {
+      await writeFile(archive, originalBytes, { flag: "wx" });
+      this.torn = true;
     }
     if (this.torn) await this.compact();
     if (changed.length) await this.commit(changed);
@@ -1306,7 +2024,7 @@ export class ActionJournal implements ReceiptReader {
     ];
     if (lines.length) {
       if (!this.header) await mkdir(dirname(this.path), { recursive: true });
-      const text = `${this.torn ? "\n" : ""}${this.header ? "" : '{"version":5}\n'}${lines
+      const text = `${this.torn ? "\n" : ""}${this.header ? "" : '{"version":6}\n'}${lines
         .map((line) => `${JSON.stringify(line)}\n`)
         .join("")}`;
       try {
@@ -1364,7 +2082,7 @@ export class ActionJournal implements ReceiptReader {
     await mkdir(dirname(this.path), { recursive: true });
     await writeFile(
       `${this.path}.tmp`,
-      `{"version":5}\n${lines.map((line) => `${JSON.stringify(line)}\n`).join("")}`,
+      `{"version":6}\n${lines.map((line) => `${JSON.stringify(line)}\n`).join("")}`,
       "utf8",
     );
     await renameReplacing(`${this.path}.tmp`, this.path);

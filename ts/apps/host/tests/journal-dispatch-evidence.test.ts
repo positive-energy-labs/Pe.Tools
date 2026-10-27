@@ -1,3 +1,4 @@
+import { invokeCommand } from "./command-fixture.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,17 +13,18 @@ test("native dispatch evidence survives both successful and failed outcome persi
     const journal = new ActionJournal(path);
     for (const succeeds of [true, false]) {
       const id = String(succeeds);
-      await journal.admit(
+      await invokeCommand(
+        journal,
         {
           id,
-          kind: "operation",
+
           key: "test.native",
-          destination: { kind: "host" },
+          target: { kind: "host" },
           input: {},
-          bases: {},
+
           caller: { kind: "human", via: "local" },
           basis: { kind: "human" },
-          footprint: [{ kind: "session", session: "fixture-native" }],
+          effects: [{ kind: "session", session: "fixture-native" }],
         },
         async () => null,
         async (execution) =>

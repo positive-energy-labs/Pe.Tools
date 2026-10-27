@@ -193,6 +193,9 @@ test("turn completion links exact shared Work and reports accepted commands stil
     completed: () => ({
       completed: 2,
       running: 1,
+      unresolved: 1,
+      failed: 1,
+      cancelled: 1,
       work: [
         { title: "Ducts ? Office", href: "/ducts?target=C%3A%2FOffice.rvt&thread=t1" },
         { title: "Family ? Door", href: "/family?target=C%3A%2FDoor.rfa&thread=t1" },
@@ -207,6 +210,9 @@ test("turn completion links exact shared Work and reports accepted commands stil
     const [notice] = reader.items();
     expect(notice?.body).toContain("2 commands completed.");
     expect(notice?.body).toContain("1 command is still running; writes have not finished.");
+    expect(notice?.body).toContain("1 command needs recovery; effects are incomplete or unknown.");
+    expect(notice?.body).toContain("1 command failed.");
+    expect(notice?.body).toContain("1 command was cancelled.");
     expect(notice?.body).toContain("[Ducts ? Office](/ducts?target=C%3A%2FOffice.rvt&thread=t1)");
     expect(notice?.body).toContain("[Family ? Door](/family?target=C%3A%2FDoor.rfa&thread=t1)");
     expect(notice?.href).toBe("/ducts?target=C%3A%2FOffice.rvt&thread=t1");

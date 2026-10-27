@@ -70,13 +70,7 @@ import {
 import { productPagesRootPath, productPodsRootPath } from "./product-paths.ts";
 import { exportPage } from "./page-export.ts";
 import { CaptureStore, hostCaptures } from "./captures-route.ts";
-import {
-  escapeHtml,
-  preparePagePublication,
-  commitPagePublication,
-  pageVersion,
-  withPageKey,
-} from "./page-publication.ts";
+import { escapeHtml, pagePublicationExecutor, withPageKey } from "./page-publication.ts";
 import { hostActionJournal } from "./gateway-owner.ts";
 import type { ActionJournal } from "./action-journal.ts";
 import { PAGE_MEDIA, readJson } from "./page-artifacts.ts";
@@ -147,7 +141,7 @@ const servedPe = () => {
 };
 
 /** A host library by URL, or null: serving, export and publication preview read the same bytes. */
-const pageLibrary = (path: string): string | null => {
+export const pageLibrary = (path: string): string | null => {
   if (path === "/pages/pe.js") return servedPe();
   if (path === "/pages/pe.css") return `${asset("base.css")}\n${asset("pe.css")}`;
   if (path === "/pages/revit.js") return classicRevit();
@@ -790,34 +784,10 @@ export function createPagesHandler(
       try {
         const owner = journal ?? hostActionJournal();
         const id = request.headers.get("x-pe-command-id") ?? randomUUID();
-        const prior = (await owner.list(undefined, id))[0];
-        const version = prior
-          ? prior.bases.fileVersion === "absent"
-            ? null
-            : String(prior.bases.fileVersion)
-          : await pageVersion(root, input.data.slug);
-        await owner.admit(
-          {
-            id,
-            kind: "workflow",
-            key: "page.publish",
-            destination: { kind: "host" },
-            input: input.data,
-            bases: { fileVersion: version ?? "absent" },
-            caller,
-            basis: null,
-            footprint: [{ kind: "publication", page: `page:@pages/${input.data.slug}` }],
-            frozen: { input: input.data, fileVersion: version },
-          },
-          () => preparePagePublication(root, input.data, url.origin, pageLibrary, captures),
-          async (execution) =>
-            execution.step("publication", "page.publish", { slug: input.data.slug }, () =>
-              commitPagePublication(
-                root,
-                execution.prepared as Awaited<ReturnType<typeof preparePagePublication>>,
-                version,
-              ),
-            ),
+        await owner.invoke(
+          { id, key: "page.publish", target: { kind: "host" }, input: input.data },
+          { caller, basis: null },
+          pagePublicationExecutor(root, url.origin, pageLibrary, captures),
         );
         const row = await owner.wait(id);
         if (row.state !== "succeeded")

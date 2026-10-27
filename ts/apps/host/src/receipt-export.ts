@@ -15,6 +15,8 @@ import {
   type ReceiptStamp,
   type ReceiptJoin,
   type HarnessEvent,
+  commandCounts,
+  type CommandCounts,
 } from "@pe/agent-contracts";
 import { analyticsConfig, readOrCreateInstallId, writeFatalEvidence } from "@pe/runtime";
 import { isAnyOperationKey, isTsOnlyOperationKey } from "@pe/host-contracts/operation-types";
@@ -22,6 +24,7 @@ import { ActionJournal } from "./action-journal.ts";
 import { hostActionJournal, setHostReceiptStamp } from "./gateway-owner.ts";
 import { hostOwnership, productRoot } from "./host-ownership.ts";
 import { subscribeReceiptProducers, type NativeReceiptProducer } from "./bridge.ts";
+import { originOf } from "./control.ts";
 import type { NoticeContext } from "./notices.ts";
 import type { UpdateFact } from "./update-reader.ts";
 
@@ -847,7 +850,7 @@ export function createThreadReceiptAdapter(
   const localTurns = new Map<string, { threadId: string; turnId: string }>();
   const completions = new Map<
     string,
-    { running: number; completed: number; work: readonly { title: string; href: string }[] }
+    CommandCounts & { work: readonly { title: string; href: string }[] }
   >();
   let tail = Promise.resolve();
   const peaStamp = exporter.stamps.host
@@ -992,16 +995,15 @@ export function createThreadReceiptAdapter(
               ...span,
             };
         if (ended?.turnId && turnId) {
-          const actions = (await exporter.journal.list()).filter(
-            (action) =>
-              (action.origin?.root?.thread === id && action.origin.root.turn === ended.turnId) ||
-              (action.origin?.run?.thread === id && action.origin.run.turn === ended.turnId),
-          );
+          const actions = (await exporter.journal.list()).filter((action) => {
+            const origin = originOf(action.caller);
+            return (
+              (origin.root?.thread === id && origin.root.turn === ended.turnId) ||
+              (origin.run?.thread === id && origin.run.turn === ended.turnId)
+            );
+          });
           completions.set(turnId, {
-            running: actions.filter(
-              (action) => action.state === "waiting" || action.state === "running",
-            ).length,
-            completed: actions.filter((action) => action.state === "succeeded").length,
+            ...commandCounts(actions),
             work: (await workReady?.(id)) ?? [],
           });
         }

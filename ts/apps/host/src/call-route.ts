@@ -6,26 +6,12 @@ import {
   type DuctsReadingRequest,
 } from "@pe/agent-contracts";
 import { sdkSession, readSessionScope } from "./sdk-session.ts";
-import { admitScheduleAction, recoverScheduleAction, readSchedule } from "./schedule-actions.ts";
-import {
-  admitInstancesAction,
-  cancelInstancesAction,
-  recoverInstancesAction,
-} from "./instances-actions.ts";
-import { instancesActions } from "@pe/agent-contracts";
-import { actionControls, semanticActions } from "@pe/agent-contracts";
+import { readSchedule } from "./schedule-actions.ts";
+import { actionControls, commands, commandTool, receiptsForWork } from "@pe/agent-contracts";
 import { NodeHttpClient, NodeServices } from "@effect/platform-node";
 import { hostActionJournal } from "./gateway-owner.ts";
+import { operationDefinition, gatewayTarget, requireEligibleCaller } from "./gateway-actions.ts";
 import {
-  admitGatewayAction,
-  recoverGatewayAction,
-  operationDefinition,
-  gatewayTarget,
-  requireEligibleCaller,
-} from "./gateway-actions.ts";
-import {
-  originOf,
-  assertRunAdmission,
   admitCrossing,
   admitScript,
   consentedRead,
@@ -36,24 +22,10 @@ import {
   admitAnonymousCall,
 } from "./control.ts";
 import type { Caller } from "@pe/agent-contracts";
-import { actionBasesSchema, actionListFilterSchema } from "@pe/agent-contracts";
-import {
-  admitFamilyAction,
-  recoverFamilyAction,
-  readFamily,
-  type FamilyActionDependencies,
-} from "./family-actions.ts";
-import {
-  familyActions,
-  actionAdmissionSchema,
-  memberWork,
-  scheduleActions,
-  workKeySchema,
-} from "@pe/agent-contracts";
+import { readFamily, type FamilyActionDependencies } from "./family-actions.ts";
+import { actionAdmissionSchema, workKeySchema } from "@pe/agent-contracts";
 import { z } from "zod";
-import { admitTakeoffAction, recoverTakeoffAction, fileVersion } from "./takeoff-actions.ts";
-import { admitDuctsAction, recoverDuctsAction } from "./ducts-actions.ts";
-import { ductsActions, takeoffActions } from "@pe/agent-contracts";
+import { fileVersion } from "./takeoff-actions.ts";
 import { Effect, Layer, Schema } from "effect";
 import {
   addressSchema,
@@ -70,6 +42,8 @@ import {
 } from "../../../packages/mcps/src/shared/takeoff-ops.ts";
 import type { OpResponseOf } from "@pe/host-contracts/operation-types";
 import { ActionJournal } from "./action-journal.ts";
+import { commandRegistry } from "./command-registry.ts";
+import { commandReads } from "./command-reads.ts";
 import { VIEW_IMAGE_KEY } from "@pe/agent-contracts";
 import {
   captureOrigin,
@@ -161,7 +135,7 @@ export function makeCallRoute(
     readonly forwardBase: string | null;
     readonly dispatch: CallRouteDispatch;
     readonly captureHostOp?: typeof recordHostOp;
-    readonly local?: Parameters<typeof admitGatewayAction>[4];
+    readonly local?: (key: string, input: unknown) => Promise<unknown>;
   },
 ) {
   const CALL_FORWARD_BASE = process.env.PE_TOOLS_CALL_FORWARD?.trim().replace(/\/$/, "");
@@ -174,52 +148,25 @@ export function makeCallRoute(
     (composition?.dispatch ?? dispatchTsOnlyOperation)(...args);
   const observations = () => (captures ??= hostTakeoffCaptures());
   const owner = () => (operations ??= hostActionJournal());
-  /** Door 2: the strict admission (no `actor`), then the crossing for the host-minted caller. */
-  const admit = async (
-    raw: unknown,
-    bridge: RevitBridge["Service"],
-    caller: Caller,
-    resume = false,
-  ) => {
+  const registry = (bridge: RevitBridge["Service"]) => {
+    const resolve = commandRegistry(
+      bridge,
+      observations(),
+      actionDeps,
+      composition?.local ??
+        ((key, input) => executeGatewayLocal(key, input, bridge, actionDeps.launchShell)),
+    );
+    owner().configureCommands(commandReads(bridge, actionDeps), resolve);
+    return resolve;
+  };
+  const admit = async (raw: unknown, bridge: RevitBridge["Service"], caller: Caller) => {
     const input = actionAdmissionSchema.parse(raw);
-    const definition = semanticActions[input.key as keyof typeof semanticActions];
-    if (input.kind === "workflow" && definition)
-      input.input = definition.input.parse(input.input) as Record<string, unknown>;
-    const prior = !resume && (await owner().existing(input, caller));
-    if (prior) return prior;
-    if (semanticActions[input.key as keyof typeof semanticActions]?.effect !== "query")
-      assertRunAdmission(originOf(caller));
-    const reads = readsOnly(input.key, input.input);
-    const crossing = { caller, basis: admitCrossing(caller, input.destination, "/actions", reads) };
-    return input.kind === "workflow" && Object.hasOwn(scheduleActions, input.key)
-      ? admitScheduleAction(input, crossing, owner(), observations(), bridge, actionDeps, resume)
-      : input.kind === "workflow" && Object.hasOwn(instancesActions, input.key)
-        ? admitInstancesAction(input, crossing, owner(), actionDeps, resume)
-        : input.kind === "workflow" && Object.hasOwn(familyActions, input.key)
-          ? admitFamilyAction(input, crossing, owner(), observations(), bridge, actionDeps, resume)
-          : input.kind === "workflow" && Object.hasOwn(takeoffActions, input.key)
-            ? admitTakeoffAction(
-                input,
-                crossing,
-                owner(),
-                observations(),
-                bridge,
-                actionDeps,
-                resume,
-              )
-            : input.kind === "workflow" && Object.hasOwn(ductsActions, input.key)
-              ? admitDuctsAction(input, crossing, owner(), bridge, actionDeps, resume)
-              : admitGatewayAction(
-                  input,
-                  crossing,
-                  owner(),
-                  bridge,
-                  composition?.local ??
-                    ((key, input) =>
-                      executeGatewayLocal(key, input, bridge, actionDeps.launchShell)),
-                  actionDeps.sdk,
-                  resume,
-                );
+    const resolve = registry(bridge);
+    const crossing = {
+      caller,
+      basis: admitCrossing(caller, input.target, "/actions", readsOnly(input.key, input.input)),
+    };
+    return owner().invoke(input, crossing, resolve(input.key));
   };
   const callDoor = peRoutes["operation.call"];
   const post = HttpRouter.add(callDoor.method, callDoor.path, (req) => {
@@ -778,52 +725,28 @@ export function makeCallRoute(
         const session = req.headers[HOST_RPC_BRIDGE_SESSION_HEADER],
           openId = req.headers[HOST_RPC_DOCUMENT_HEADER];
         const target = session && openId ? documentRefSchema.parse({ session, openId }) : undefined;
-        let rows = await owner().readFor(caller, target, query.get("id") ?? undefined);
-        if (query.has("kind")) rows = rows.filter((row) => row.kind === query.get("kind"));
-        if (query.has("scope")) {
-          if (query.has("id")) throw Error("Choose original ID or subject listing");
-          const scope = actionListFilterSchema.parse(JSON.parse(query.get("scope")!));
-          const selected = [];
-          for (const row of rows) {
-            if (row.kind !== "workflow") continue;
-            if (
-              !["running", "unknown", "incomplete"].includes(row.state) &&
-              row.id !== query.get("include")
-            )
-              continue;
-            const workScope = actionBasesSchema.safeParse(row.bases).data?.work?.key;
-            if (scope.kind === "schedules") {
-              if (
-                row.key === "schedule.grid.push" &&
-                // The Work key names its workspace as `work` since fold-1; the filter still speaks
-                // the domain word `workspaceId`.
-                workScope?.work === scope.workspaceId
-              )
-                selected.push(row);
-              continue;
-            }
-            if (scope.kind === "instances") {
-              if (Object.hasOwn(instancesActions, row.key)) selected.push(row);
-              continue;
-            }
-            const member = (row.request.member ?? row.request.source) as
-              | { pod: string; path: string }
-              | undefined;
-            const work = member ? memberWork(member) : undefined;
-            if (row.key === "settings.write" && work === scope.workspaceId) selected.push(row);
-            else if (
-              row.destination.kind === "document" &&
-              (scope.kind === "family-file" ||
-                (scope.kind === "family" &&
-                  row.destination.ref.session === scope.target.session &&
-                  row.destination.ref.openId === scope.target.openId)) &&
-              (row.key === "family.build" || row.key === "family.apply") &&
-              work === scope.workspaceId
-            )
-              selected.push(row);
+        const id = query.get("id") ?? undefined;
+        let rows = await owner().readFor(caller, target, id);
+        const wait = Number(query.get("wait") ?? 0);
+        if (id && rows.length && Number.isFinite(wait) && wait > 0) {
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          try {
+            await Promise.race([
+              owner().wait(id),
+              new Promise<void>((resolve) => {
+                timer = setTimeout(resolve, Math.min(wait, 30_000));
+              }),
+            ]);
+          } finally {
+            if (timer) clearTimeout(timer);
           }
-          rows = selected;
+          rows = await owner().readFor(caller, target, id);
         }
+        if (query.has("work")) {
+          rows = receiptsForWork(rows, workKeySchema.parse(JSON.parse(query.get("work")!)));
+        }
+        if (query.has("tool"))
+          rows = rows.filter((row) => commandTool(row.key)?.name === query.get("tool"));
         return Response.jsonUnsafe(query.has("id") ? rows : actionStatusSchema.array().parse(rows));
       },
       catch: (error) => error,
@@ -852,71 +775,23 @@ export function makeCallRoute(
             if (!isRecord(body) || typeof body.id !== "string")
               throw Error("An original action ID is required");
             const controlled = (await owner().readFor(caller, undefined, body.id))[0];
-            if (body.kind !== undefined && body.kind !== controlled?.kind)
-              throw Error("Original admission kind mismatch");
             if (!controlled) throw Error(`Action '${body.id}' has no admitted receipt`);
-            // readFor already authenticated the same principal or causal task lineage.
+            registry(bridge);
+            // The journal resolves control behavior from the same executor as invocation.
             if (choice === "cancel")
-              return Response.jsonUnsafe(
-                // An Instances step is an SDK request: the SDK cancels it, not the Revit bridge.
-                await (Object.hasOwn(instancesActions, controlled.key)
-                  ? cancelInstancesAction(body.id, owner(), actionDeps)
-                  : owner().cancel(body.id, async (requestId) => {
-                      const { value } = await Effect.runPromise(
-                        bridge
-                          .invoke(CANCEL_OPERATION_KEY, { requestId })
-                          .pipe(Effect.catchCause(Effect.failCause)) as Effect.Effect<
-                          { value: unknown },
-                          unknown
-                        >,
-                      );
-                      // Revit answers 200 even when the id is not in flight; that is a refusal, not a stop.
-                      const answer = value as { cancelled?: boolean; message?: string } | null;
-                      if (answer?.cancelled === false) throw Error(answer.message);
-                    })),
-                { status: 202 },
-              );
-            if (choice === "recover") {
-              const original = (await owner().list(undefined, body.id))[0];
-              return Response.jsonUnsafe(
-                await (original?.kind === "workflow" && Object.hasOwn(scheduleActions, original.key)
-                  ? recoverScheduleAction(body.id, owner(), actionDeps)
-                  : original?.kind === "workflow" && Object.hasOwn(instancesActions, original.key)
-                    ? recoverInstancesAction(body.id, owner(), actionDeps)
-                    : original?.kind === "workflow" && Object.hasOwn(familyActions, original.key)
-                      ? recoverFamilyAction(body.id, owner(), actionDeps)
-                      : original?.kind === "workflow" && Object.hasOwn(takeoffActions, original.key)
-                        ? recoverTakeoffAction(body.id, owner(), actionDeps)
-                        : original?.kind === "workflow" && Object.hasOwn(ductsActions, original.key)
-                          ? recoverDuctsAction(body.id, owner(), actionDeps)
-                          : recoverGatewayAction(body.id, owner(), actionDeps.sdk, bridge)),
-              );
-            }
-            // A control added to actionControls gets a route before it gets a handler.
+              return Response.jsonUnsafe(await owner().cancel(body.id), { status: 202 });
+            if (choice === "recover") return Response.jsonUnsafe(await owner().recover(body.id));
             if (choice !== "resume") throw Error(`Action control '${choice}' has no handler`);
-            // A resume re-crosses under the current caller and never inherits the original basis.
-            if (controlled.kind === "workflow")
-              requireEligibleCaller(
-                {
-                  key: controlled.key,
-                  actor: "any",
-                },
-                caller,
-                "/actions/resume",
-              );
-            const row = await admit(
-              {
-                id: controlled.id,
-                kind: controlled.kind,
-                key: controlled.key,
-                destination: controlled.destination,
-                input: controlled.request,
-                bases: controlled.bases,
-              },
-              bridge,
+            const crossing = {
               caller,
-              true,
-            );
+              basis: admitCrossing(
+                caller,
+                controlled.target,
+                "/actions/resume",
+                readsOnly(controlled.key, controlled.input),
+              ),
+            };
+            const row = await owner().resume(body.id, crossing);
             return Response.jsonUnsafe(row, {
               status: row.state === "running" || row.state === "waiting" ? 202 : 200,
             });

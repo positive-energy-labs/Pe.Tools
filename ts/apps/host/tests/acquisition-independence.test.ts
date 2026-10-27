@@ -1,3 +1,4 @@
+import { invokeCommand } from "./command-fixture.ts";
 import { sdkBinary, sdkCommand } from "./sdk-replay.ts";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
@@ -182,17 +183,16 @@ test("handover certifies Pea's acquisition only from native SDK document facts",
     // The copy the acquisition's file steps made; its folder is the only one that exists.
     mkdirSync(dirname(work[openId]), { recursive: true });
     writeFileSync(work[openId], "work copy");
-    const row = await journal.admit(
+    const row = await invokeCommand(
+      journal,
       {
         id,
-        kind: "workflow",
+
         key: "instances.open",
         ...crossingOf("agent"),
-        footprint: [{ kind: "session", session: `new:${id}` }],
-        frozen: { acquisition: intent },
-        destination: { kind: "host" },
+        effects: [{ kind: "session", session: `new:${id}` }],
+        target: { kind: "host" },
         input: launch,
-        bases: {},
       },
       async () => ({ target: null, acquisition: intent }),
       async (execution) => {
@@ -284,9 +284,9 @@ test("handover certifies Pea's acquisition only from native SDK document facts",
         headers: { "content-type": "application/json", [HOST_CONTEXT_HEADER]: terminal },
         body: JSON.stringify({
           id: randomUUID(),
-          kind: "workflow",
+
           key: "instances.handover",
-          destination: { kind: "host" },
+          target: { kind: "host" },
           input: { acquisition },
         }),
       });

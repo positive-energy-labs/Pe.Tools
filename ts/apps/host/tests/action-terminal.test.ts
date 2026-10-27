@@ -1,3 +1,4 @@
+import { invokeCommand } from "./command-fixture.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -25,12 +26,11 @@ async function journalPath() {
 }
 const admission = (id: string) => ({
   id,
-  kind: "workflow" as const,
+
   key: "test.terminal",
   ...crossingOf("human"),
-  destination: { kind: "host" as const },
+  target: { kind: "host" as const },
   input: {},
-  bases: {},
 });
 const answer = (outcome: Outcome) => {
   if (outcome === "succeeded") return { ok: true };
@@ -52,7 +52,7 @@ async function restart(steps: ActionStep["state"][], prepared: boolean) {
   const id = randomUUID();
   const row = {
     ...admission(id),
-    request: {},
+    input: {},
     steps: steps.map((state, index) => ({
       id: randomUUID(),
       kind: "native",
@@ -61,13 +61,13 @@ async function restart(steps: ActionStep["state"][], prepared: boolean) {
       state,
       ...(state === "succeeded" ? { result: { ok: true } } : {}),
     })),
-    preparation: prepared ? { state: "ready", value: {} } : { state: "unprepared" },
+    prepared: prepared ? { state: "ready", value: {} } : { state: "unprepared" },
     recovery: [],
-    publication: { state: "unrequested" },
+
     startedAt: new Date().toISOString(),
     state: "running",
   };
-  delete (row as { input?: unknown }).input;
+
   await writeJournal(path, [row]);
   const journal = new ActionJournal(path);
   const reloaded = (await journal.list(undefined, id))[0]!;
@@ -81,8 +81,8 @@ const restarts: [ActionStep["state"][], boolean, Terminal][] = [
   // Changed: a restart before any step is a pre-effect failure; between known steps, a known partial.
   [[], true, { state: "failed", notDispatched: true }],
   [["succeeded"], true, { state: "incomplete", notDispatched: false }],
-  // Changed: before preparation froze nothing can have dispatched. The old unknown row could be
-  // neither recovered nor resumed, so it blocked its destination for good.
+  // Changed: before prepared froze nothing can have dispatched. The old unknown row could be
+  // neither recovered nor resumed, so it blocked its target for good.
   [[], false, { state: "failed", notDispatched: true }],
 ];
 test.each(restarts)("restart with steps %j, prepared %s", async (steps, prepared, expected) => {
@@ -94,28 +94,28 @@ test.each(restarts)("restart with steps %j, prepared %s", async (steps, prepared
 // pid as unreadable (Win32 error 31) rather than dead.
 const onDocument = (id: string, session: string, openId: string) => ({
   ...admission(id),
-  kind: "operation" as const,
+
   key: "scripting.execute",
-  destination: { kind: "document" as const, ref: { session, openId } },
+  target: { kind: "document" as const, ref: { session, openId } },
 });
 const nativeLeaf = async () => ({ kind: "native-leaf", process: originalProcess });
 async function crashedOn(journal: ActionJournal, session: string, openId: string) {
   const id = randomUUID();
-  await journal.admit(onDocument(id, session, openId), nativeLeaf, async (execution) =>
+  await invokeCommand(journal, onDocument(id, session, openId), nativeLeaf, async (execution) =>
     execution.step("native", "scripting.execute", {}, async () => answer("unknown")),
   );
   expect((await journal.wait(id)).state).toBe("unknown");
   return id;
 }
 const admitOn = (journal: ActionJournal, session: string, openId: string) =>
-  journal.admit(onDocument(randomUUID(), session, openId), nativeLeaf, async () => "done");
+  invokeCommand(journal, onDocument(randomUUID(), session, openId), nativeLeaf, async () => "done");
 
 test("an unknown action on session A, document X does not block session B, document Y", async () => {
   const journal = new ActionJournal(await journalPath());
   await crashedOn(journal, "session-a", "doc-x");
   const other = await admitOn(journal, "session-b", "doc-y");
   expect((await journal.wait(other.id)).state).toBe("succeeded");
-  // Another document on the same session is a different destination too.
+  // Another document on the same session is a different target too.
   const sibling = await admitOn(journal, "session-a", "doc-y");
   expect((await journal.wait(sibling.id)).state).toBe("succeeded");
 });
@@ -123,19 +123,26 @@ test("an unknown action on session A, document X does not block session B, docum
 test("an unknown action on session A, document X blocks A/X and a session-wide action on A", async () => {
   const journal = new ActionJournal(await journalPath());
   const crashed = await crashedOn(journal, "session-a", "doc-x");
-  await expect(admitOn(journal, "session-a", "doc-x")).rejects.toThrow(
-    `action '${crashed}' is unknown; recover that attempt`,
-  );
+  await expect(admitOn(journal, "session-a", "doc-x")).resolves.toMatchObject({
+    state: "failed",
+    notDispatched: true,
+    error: `action '${crashed}' is unknown; recover that attempt before submitting another`,
+  });
   await expect(
-    journal.admit(
+    invokeCommand(
+      journal,
       {
         ...onDocument(randomUUID(), "session-a", "doc-x"),
-        destination: { kind: "session", session: "session-a" },
+        target: { kind: "session", session: "session-a" },
       },
       nativeLeaf,
       async () => "done",
     ),
-  ).rejects.toThrow(/recover that attempt/);
+  ).resolves.toMatchObject({
+    state: "failed",
+    notDispatched: true,
+    error: expect.stringContaining("recover that attempt"),
+  });
 });
 
 const sdkRead = (state: string, codes: string[]) => async (args: readonly string[]) => {
@@ -174,7 +181,7 @@ test.each(gone)("recovery settles failed when %s", async (_, [state, codes], suc
     evidence: { result: { process: originalProcess, sdk: { state } } },
   });
   expect(recovered).not.toHaveProperty("notDispatched");
-  // Settled, so it no longer blocks its own destination.
+  // Settled, so it no longer blocks its own target.
   const next = await admitOn(journal, "session-a", "doc-x");
   expect((await journal.wait(next.id)).state).toBe("succeeded");
 });

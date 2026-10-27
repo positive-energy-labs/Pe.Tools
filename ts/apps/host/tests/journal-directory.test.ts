@@ -1,3 +1,4 @@
+import { invokeCommand } from "./command-fixture.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,18 +14,19 @@ test("SDK directory effects queue descendant files and directories without locki
     release = resolve;
   });
   const prepared: string[] = [];
-  const submit = (id: string, footprint: Footprint) =>
-    journal.admit(
+  const submit = (id: string, effects: Footprint) =>
+    invokeCommand(
+      journal,
       {
         id,
-        kind: "operation",
+
         key: "test.install",
-        destination: { kind: "host" },
+        target: { kind: "host" },
         input: {},
-        bases: {},
+
         caller: { kind: "human", via: "local" },
         basis: { kind: "human" },
-        footprint,
+        effects,
       },
       async () => {
         prepared.push(id);

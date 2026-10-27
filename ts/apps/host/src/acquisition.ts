@@ -34,7 +34,7 @@ const originSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 
-const acquisitionIntentSchema = z.strictObject({
+export const acquisitionIntentSchema = z.strictObject({
   id: z.string().min(1),
   /** The exclusive root under pea-work; every path this acquisition may create lives in it. */
   root: z.string(),
@@ -80,7 +80,7 @@ export type Acquisition = {
 const acquisitionKey = (id: string) => createHash("sha256").update(id).digest("hex").slice(0, 32);
 
 /** A deterministic exclusive root. */
-const acquisitionRoot = (peaWork: string, id: string) => join(peaWork, acquisitionKey(id));
+export const acquisitionRoot = (peaWork: string, id: string) => join(peaWork, acquisitionKey(id));
 
 /** The SDK session a created process runs as: its own, never the checkout's default name. */
 export const acquisitionSessionId = (id: string) => `pea-${acquisitionKey(id)}`;
@@ -182,12 +182,12 @@ const uncertain = (row: ActionReceipt) =>
 export function foldAcquisitions(receipts: readonly ActionReceipt[]): Acquisition[] {
   const linked = (key: string, id: string) =>
     receipts.filter(
-      (row) => row.key === key && forAcquisition.safeParse(row.request).data?.acquisition === id,
+      (row) => row.key === key && forAcquisition.safeParse(row.input).data?.acquisition === id,
     );
   return receipts.flatMap((row): Acquisition[] => {
     if (row.key !== "instances.start" && row.key !== "instances.open") return [];
-    if (row.preparation.state !== "ready") return [];
-    const intent = preparedSchema.safeParse(row.preparation.value).data?.acquisition;
+    if (row.prepared.state !== "ready") return [];
+    const intent = preparedSchema.safeParse(row.prepared.value).data?.acquisition;
     if (!intent || intent.id !== row.id) return [];
     const succeeded = (key: string) =>
       row.steps.find((step) => step.key === key && step.state === "succeeded");

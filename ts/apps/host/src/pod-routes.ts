@@ -49,7 +49,6 @@ export function createPodRoutes(
       if (route.trusted && !registrations.has(route.key) && options.workspace) {
         const dispose = options.workspace.register({
           spec: podRouteWorkSpec(route.workRoute, route.name),
-          handlers: {},
         });
         registrations.set(route.key, { hash: route.sha256, dispose });
       }

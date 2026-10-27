@@ -1130,16 +1130,6 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         };
         return json(await work.apply(scope, route, "human", patches, revision));
       }
-      if (url.pathname === "/work/command" && request.method === "POST") {
-        const body = (await request.json()) as {
-          name: string;
-          input: unknown;
-          revision: number;
-        };
-        return json(
-          await work.command(scope, route, "human", body.name, body.input, body.revision),
-        );
-      }
       if (url.pathname === "/snapshot" && snapshot) {
         const capture = await captures.refresh(
           target,
@@ -1200,13 +1190,12 @@ export async function createDemoOwner(parent: string, raw: unknown) {
       if (url.pathname === "/actions" && request.method === "POST") {
         const body = (await request.clone().json()) as {
           id?: string;
-          destination?: { kind: string; ref?: typeof target };
+          target?: { kind: string; ref?: typeof target };
         };
         if (
           !body.id?.startsWith(`${id}:`) ||
-          (body.destination?.kind === "document" &&
-            (body.destination.ref?.session !== id ||
-              body.destination.ref?.openId !== target.openId))
+          (body.target?.kind === "document" &&
+            (body.target.ref?.session !== id || body.target.ref?.openId !== target.openId))
         )
           return json(
             { error: "Only new local demo requests and destinations are executable" },
@@ -1280,7 +1269,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         }
       }
       // The browser's declared Work writes, fenced to this owner.
-      if (declared?.id === "work.apply" || declared?.id === "work.command") {
+      if (declared?.id === "work.apply") {
         const written = declared.params.route!;
         const target = url.searchParams.get("target");
         const workId = url.searchParams.get("work");
@@ -1289,22 +1278,9 @@ export async function createDemoOwner(parent: string, raw: unknown) {
           return json({ ok: false, kind: "error", error: "Work belongs outside this demo" }, 403);
         const body = (await request.json()) as {
           patches: Parameters<RouteWorkspace["apply"]>[3];
-          command: string;
-          input?: unknown;
           expectedRevision: number;
         };
-        return json(
-          declared.id === "work.apply"
-            ? await work.apply(key, written, "human", body.patches, body.expectedRevision)
-            : await work.command(
-                key,
-                written,
-                "human",
-                body.command,
-                body.input,
-                body.expectedRevision,
-              ),
-        );
+        return json(await work.apply(key, written, "human", body.patches, body.expectedRevision));
       }
       // The demo's browser is its one human, as its own Work writes above already say.
       const response = await withInvocationContext(

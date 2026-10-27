@@ -1,3 +1,4 @@
+import { invokeCommand } from "./command-fixture.ts";
 import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -21,20 +22,20 @@ async function fixture() {
   const path = join(dir, "actions.json");
   const intent = {
     id: "private caller admission",
-    kind: "operation" as const,
+
     key: "test.native",
     ...crossingOf("human"),
-    footprint: [{ kind: "session" as const, session: "receipt-recovery-session" }],
-    destination: { kind: "host" as const },
+    effects: [{ kind: "session" as const, session: "receipt-recovery-session" }],
+    target: { kind: "host" as const },
     input: { bytes: "\r\noriginal\r\n" },
-    bases: {},
   };
   const owner = new ActionJournal(path, () => ({
     ...receiptGoldenEnvelope.stamp!,
     component: "host",
   }));
   let dispatches = 0;
-  await owner.admit(
+  await invokeCommand(
+    owner,
     intent,
     async () => ({ originalProcess, frozen: "\r\nunchanged\r\n" }),
     (ex) =>
@@ -89,7 +90,8 @@ test("missing recovery preserves unknown; exact cancellation joins the original 
     ),
   );
   expect(cancelled.state).toBe("cancelled");
-  await restarted.admit(
+  await invokeCommand(
+    restarted,
     intent,
     async () => {
       throw Error("must not prepare twice");

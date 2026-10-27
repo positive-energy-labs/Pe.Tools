@@ -1,5 +1,8 @@
 import {
   routeAddress,
+  commands,
+  type Command,
+  type CommandCounts,
   readingKey,
   type HostLogEntry,
   type MachineNotice,
@@ -36,11 +39,9 @@ export interface NoticeContext {
   said(receipt: Receipt): string | undefined;
   /** Durable command outcomes and exact Work addresses for this completed root turn. */
   completed?(receipt: Receipt):
-    | {
-        readonly running: number;
-        readonly completed: number;
+    | (CommandCounts & {
         readonly work: readonly { title: string; href: string }[];
-      }
+      })
     | undefined;
 }
 
@@ -59,14 +60,14 @@ function noticeOf(r: Receipt, context: NoticeContext): MachineNotice | null {
       // Revit lifecycle verbs announce their end only; every other action stays quiet.
       const value = body.value;
       if (
-        !value.key.startsWith("instances.") ||
+        !(commands[value.key as keyof typeof commands] as Command | undefined)?.announce ||
         value.state === "waiting" ||
         value.state === "running"
       )
         return null;
       return {
         ...base,
-        title: `Revit ${value.key.slice("instances.".length)} ${value.state}`,
+        title: `${(commands[value.key as keyof typeof commands] as Command).says} · ${value.state}`,
         body: "error" in value ? value.error : "Done.",
       };
     }
@@ -84,6 +85,15 @@ function noticeOf(r: Receipt, context: NoticeContext): MachineNotice | null {
               : "",
             completion.running
               ? `${completion.running} command${completion.running === 1 ? " is" : "s are"} still running; writes have not finished.`
+              : "",
+            completion.unresolved
+              ? `${completion.unresolved} command${completion.unresolved === 1 ? " needs" : "s need"} recovery; effects are incomplete or unknown.`
+              : "",
+            completion.failed
+              ? `${completion.failed} command${completion.failed === 1 ? "" : "s"} failed.`
+              : "",
+            completion.cancelled
+              ? `${completion.cancelled} command${completion.cancelled === 1 ? " was" : "s were"} cancelled.`
               : "",
             ...work.map(
               ({ title, href }) =>

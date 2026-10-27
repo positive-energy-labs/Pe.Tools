@@ -100,7 +100,7 @@ import {
   callerThread,
   currentCaller,
   refusalHeaders,
-  routeActorOf,
+  workAuthorOf,
   threadHead,
 } from "./control.ts";
 import { bindRevoke } from "./revoke.ts";
@@ -110,7 +110,7 @@ import { UpdateReader } from "./update-reader.ts";
 import { makeInstalledUpdateReader } from "./update-route.ts";
 import { resolveHostVersion } from "./host-lifecycle.ts";
 import { bindActionWorkspace } from "./takeoff-actions.ts";
-import { familySpecAsset, familySpecHandlers } from "./family-spec.ts";
+import { familySpecAsset } from "./family-spec.ts";
 import { fileRouteDocumentStore } from "./route-document-store.ts";
 import {
   readNavigation,
@@ -174,7 +174,6 @@ const feedbackSchema = peRoutes["feedback.submit"].body;
 const diagnosticsSchema = peRoutes["diagnostics.submit"].body;
 const agentFeedbackSchema = peRoutes["agent-feedback.submit"].body;
 const applyBody = peRoutes["work.apply"].body;
-const commandBody = peRoutes["work.command"].body;
 
 const json = (value: unknown, status = 200) => Response.json(value, { status });
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -282,32 +281,24 @@ export function createPeRoutes(options: PeRoutesOptions) {
     apply: {
       schema: applyBody,
       hint: "expected { patches, expectedRevision }",
-      run: (scope: WorkKey, route: string, actor: "agent" | "human", body: unknown) => {
+      run: (scope: WorkKey, route: string, by: "pea" | "human", body: unknown) => {
         const { patches, expectedRevision } = body as z.infer<typeof applyBody>;
-        return work.apply(scope, route, actor, patches, expectedRevision);
-      },
-    },
-    command: {
-      schema: commandBody,
-      hint: "expected { command, input?, expectedRevision }",
-      run: (scope: WorkKey, route: string, actor: "agent" | "human", body: unknown) => {
-        const { command, input, expectedRevision } = body as z.infer<typeof commandBody>;
-        return work.command(scope, route, actor, command, input, expectedRevision);
+        return work.apply(scope, route, by, patches, expectedRevision);
       },
     },
     // Authenticated authors share recovery; the workspace preserves unreadable source bytes.
     [START_FRESH]: {
       schema: z.object({}),
       hint: "expected {}",
-      run: (scope: WorkKey, route: string, actor: "agent" | "human") =>
-        work.startFresh(scope, route, actor),
+      run: (scope: WorkKey, route: string, by: "pea" | "human") =>
+        work.startFresh(scope, route, by),
     },
   } as Record<
     string,
     {
       schema: z.ZodType;
       hint: string;
-      run: (s: WorkKey, r: string, a: "agent" | "human", b: unknown) => Promise<unknown>;
+      run: (s: WorkKey, r: string, by: "pea" | "human", b: unknown) => Promise<unknown>;
     }
   >;
 
@@ -646,8 +637,6 @@ export function createPeRoutes(options: PeRoutesOptions) {
     const [head, route, verb, extra] = parts;
     if (head === "route-state" && extra === undefined) {
       // Door 9: the author is the host-minted caller, never the path. Reads are free.
-      const actor =
-        caller.kind === "human" || caller.kind === "pea" ? routeActorOf(caller) : "agent";
       if (method === "GET" && !route) return json(work.list());
       if (method === "GET" && route && !verb) {
         const scope = await routeWorkKey(url, route, "read", caller);
@@ -663,7 +652,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
       if (method === "GET" && route && verb === "salvage") {
         const scope = workKey(url, route, "read");
         if (scope instanceof Response) return scope;
-        const salvaged = await work.salvage(scope, route, actor);
+        const salvaged = await work.salvage(scope, route);
         if (!salvaged) return json({ error: `nothing to salvage on '${route}'` }, 404);
         return "ok" in salvaged ? json(salvaged, 403) : json(salvaged);
       }
@@ -694,6 +683,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
           },
         );
       if (write && route) {
+        const by = workAuthorOf(caller);
         const scope = await routeWorkKey(url, route, "write", caller);
         if (scope instanceof Response) return scope;
         const parsed = write.schema.safeParse(await body());
@@ -708,7 +698,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
           return json({ ok: false, kind: "error", error, hint: write.hint }, 400);
         }
         try {
-          return json(await write.run(scope, route, actor, parsed.data));
+          return json(await write.run(scope, route, by, parsed.data));
         } catch (error) {
           return json(
             {
@@ -1144,10 +1134,6 @@ export function makeHostPeRoutes(
       hostOwnership.lane === "installed" ? { peaActive: threads.active } : undefined,
   });
   const registrations = registrationsFactory({ hostBaseUrl });
-  for (const registration of registrations) {
-    if (registration.spec.route === "family")
-      Object.assign(registration.handlers, familySpecHandlers());
-  }
   const catalog = createCapabilityCatalogSource({
     hostBaseUrl,
     registrations,

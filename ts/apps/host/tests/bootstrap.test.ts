@@ -79,7 +79,11 @@ test("alignment requires a human and confirmation of this host's exact SDK versi
   await expect(alignBootstrap(input, { kind: "anonymous" }, owner, sdk)).rejects.toThrow("human");
   await expect(
     alignBootstrap({ ...input, confirmedVersion: "0.1.0-beta.1" }, human, owner, sdk),
-  ).rejects.toThrow();
+  ).resolves.toMatchObject({
+    state: "failed",
+    notDispatched: true,
+    error: expect.stringContaining("Confirm this host's pinned SDK"),
+  });
   expect(sdk.calls).toHaveLength(0);
 });
 
@@ -114,8 +118,13 @@ test("alignment installs only the chosen year's bootstrap and verifies it in one
   ]);
   expect((await owner.list()).find((row) => row.id === input.id)).toMatchObject({
     state: "succeeded",
-    footprint: [{ kind: "directory", path: win32.dirname(installation.actions[0].dest) }],
-    frozen: { year: "2025", directory: win32.dirname(installation.actions[0].dest) },
+    effects: [{ kind: "directory", path: win32.dirname(installation.actions[0].dest) }],
+    prepared: {
+      state: "ready",
+      value: {
+        installation: { year: "2025", directory: win32.dirname(installation.actions[0].dest) },
+      },
+    },
   });
   const calls = sdk.calls.length;
   sdk.respond(async () => {
@@ -225,7 +234,7 @@ test("the answering SDK must match the host pin, and a failed verification never
 });
 
 test.each(["absent", "ambiguous", "wrong-year"] as const)(
-  "bootstrap refuses a %s SDK destination before command admission",
+  "bootstrap records refusal of a %s SDK destination without installation",
   async (shape) => {
     const { owner, sdk } = await fixture();
     sdk.respond(async (args) => {
@@ -239,8 +248,13 @@ test.each(["absent", "ambiguous", "wrong-year"] as const)(
               : [{ ...body.result.actions[0], year: "2026" }];
       return JSON.stringify(body);
     });
-    await expect(alignBootstrap(input, human, owner, sdk)).rejects.toThrow("destination");
-    expect(await owner.list()).toEqual([]);
+    const refused = await alignBootstrap(input, human, owner, sdk);
+    expect(refused).toMatchObject({
+      state: "failed",
+      notDispatched: true,
+      error: expect.stringContaining("destination"),
+    });
+    expect(await owner.list()).toEqual([refused]);
     expect(sdk.calls.some((args) => args[1] === "install")).toBe(false);
   },
 );

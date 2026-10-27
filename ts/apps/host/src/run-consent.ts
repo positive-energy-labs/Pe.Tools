@@ -54,7 +54,6 @@ export class RunConsents {
   ) {}
   private describe(footprint: Footprint) {
     return footprint
-      .filter((effect) => effect.kind !== "receipt")
       .map((effect) => {
         switch (effect.kind) {
           case "document": {
