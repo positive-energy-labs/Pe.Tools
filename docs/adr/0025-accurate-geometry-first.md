@@ -16,10 +16,10 @@ Space reads feed the Ducts context picture, Pea's spatial verbs, Takeoff, and fu
 
 ## Consequences
 
-- **Ducts context.** The boxes default at `Scene.cs:32` contradicts this ADR, so it must be replaced. The target is near-field meshes plus oriented far-field boxes. Near-field meshes are not affordable yet. On Chadds, a 10 ft reach around one system walked 29,107 elements, mostly in the IFC link, and cost +2,395 MiB and ≈7 minutes on every read. The near field needs a cache, a tighter reach, or a per-category policy first.
+- **Ducts context.** The boxes default at `Scene.cs:32` contradicts this ADR, so it must be replaced. The target is near-field meshes plus oriented far-field boxes. Near-field meshes are not affordable yet. On Chadds, a 10 ft reach around one system walked 29,107 elements, mostly in the IFC link, and cost +2,395 MiB (≈7 minutes in a probe script; 54.5 s on the product path, 2026-10-27). The near field needs a cache, a tighter reach, or a per-category policy first.
 - **Pea routing.** Pea's spatial verbs (Sweep, Slice, Probe) and the router read meshes, never context boxes. A box answer is a broad-phase filter, not a clearance.
 - **Clash detection** needs full meshes on the same substrate. No representation choice may remove meshes from the substrate.
 - **Takeoff.** The band slices of [ADR 0011](0011-takeoff-on-space.md) stay mesh-based.
-- **Heavy links.** Most of the cost is the walk of a loaded IFC-derived link. kaitpw still owes the default for such links: walk, summarize, or opt in.
+- **Heavy links.** Most of the Chadds cost is the walk of a loaded IFC-derived link. Resolved 2026-10-27 (ledger): building geometry is always read; cost is cut by reading less of every source (per-element reach before iteration), never by dropping a source. The "link opt-in" bound above is superseded. Live frontier: [spatial MAP](../features/spatial/MAP.md).
 - **Not context geometry.** MEP centre-line helper elements, CAD links, and insulation elements are not context geometry. Insulation draws from its host.
 - **Cost.** IFC framing has no `Location`, so oriented boxes for it need symbol geometry. On MEP fittings that cost ≈82 KB per element, against ≈107 KB for a mesh. An exact oriented box is a fidelity tool, not a memory lever.
