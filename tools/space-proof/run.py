@@ -477,6 +477,7 @@ def diff(a, b):
 # ---------------------------------------------------------------- commands
 
 def main():
+    sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run")
