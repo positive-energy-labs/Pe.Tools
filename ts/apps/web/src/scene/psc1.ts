@@ -78,20 +78,10 @@ function primitiveOf(e: Psc1Metadata["elements"][number]): ScenePrimitive | unde
     !vector(r.crossSectionXAxis)
   )
     throw Error("Invalid scene primitive");
-  const path = r.path;
-  if (
-    path != null &&
-    (r.shape !== "round" ||
-      !Array.isArray(path) ||
-      path.length < 2 ||
-      !path.every(vector) ||
-      path[0]!.some((n, i) => Math.abs(n - r.start[i]!) > 1e-8) ||
-      path.at(-1)!.some((n, i) => Math.abs(n - r.end[i]!) > 1e-8) ||
-      path.slice(1).some((p, i) => Math.hypot(...p.map((n, j) => n - path[i]![j]!)) < 1e-8))
-  )
-    throw Error("Invalid scene run path");
+  // A centreline path cannot certify a curved body's containment. Those elements must carry meshes.
+  if ("path" in r && r.path != null) throw Error("Curved scene runs require native meshes");
   const axis = r.crossSectionXAxis,
-    delta = (path ? path[1]! : r.end).map((n, i) => n - r.start[i]!);
+    delta = r.end.map((n, i) => n - r.start[i]!);
   const length = Math.hypot(...delta),
     axisLength = Math.hypot(...axis);
   const positive = (n: unknown): n is number =>

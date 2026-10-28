@@ -54,10 +54,12 @@ internal sealed class Oriented(SceneBudget budget) {
     }
 
     internal static SceneRun? Run(Element element, Transform transform) {
-        if (element is not (Duct or Pipe or Conduit or CableTray or FlexDuct or FlexPipe) || element is not MEPCurve curve) return null;
+        // A tessellated centreline does not prove a swept volume. Flex and curved runs retain native meshes.
+        if (element is not (Duct or Pipe or Conduit or CableTray) || element is not MEPCurve curve) return null;
         try {
             if (curve.Location is not LocationCurve location) return null;
             using var line = location.Curve;
+            if (line is not Line) return null;
             var localStart = line.GetEndPoint(0);
             var start = transform.OfPoint(localStart);
             var end = transform.OfPoint(line.GetEndPoint(1));
@@ -74,7 +76,7 @@ internal sealed class Oriented(SceneBudget budget) {
                     ConnectorProfileType.Oval => SceneRunShape.Oval,
                     _ => (SceneRunShape?)null
                 };
-                if (shape is null || line is not Line && shape != SceneRunShape.Round) return null;
+                if (shape is null) return null;
                 var insulation = element.get_Parameter(BuiltInParameter.RBS_REFERENCE_INSULATION_THICKNESS)?.AsDouble() ?? 0;
                 if (!Finite(insulation) || insulation < 0) return null;
                 double? width = shape == SceneRunShape.Round ? null : connector.Width + 2 * insulation;
@@ -91,16 +93,13 @@ internal sealed class Oriented(SceneBudget budget) {
                     diameter = outside + 2 * insulation;
                 }
                 if (new[] { width, height, diameter }.Any(n => n is { } v && (!Finite(v) || v <= 0))) return null;
-                IReadOnlyList<IReadOnlyList<double>>? path = line is Line ? null
-                    : line.Tessellate().Select(p => (IReadOnlyList<double>)V(transform.OfPoint(p))).ToArray();
-                if (path is not null && (path.Count < 2 || path.Zip(path.Skip(1), (a, b) => P(a).DistanceTo(P(b))).Any(d => d < 1e-8))) return null;
-                var tangent = path is null ? (end - start).Normalize() : (P(path[1]) - P(path[0])).Normalize();
+                var tangent = (end - start).Normalize();
                 using var frame = connector.CoordinateSystem;
                 var x = transform.OfVector(frame.BasisX);
                 x = (x - tangent * x.DotProduct(tangent)).Normalize();
                 if (!Finite(start.X, start.Y, start.Z, end.X, end.Y, end.Z, x.X, x.Y, x.Z)
                     || start.DistanceTo(end) <= 1e-9 || x.GetLength() < 0.99) return null;
-                return new SceneRun(V(start), V(end), shape.Value, width, height, diameter, V(x), path);
+                return new SceneRun(V(start), V(end), shape.Value, width, height, diameter, V(x));
             } finally { foreach (var connector in ends) connector.Dispose(); }
         } catch { return null; } // No inferred frame: unsupported runs use their native mesh.
     }
@@ -112,13 +111,6 @@ internal sealed class Oriented(SceneBudget budget) {
     }
 
     internal static Aabb Bounds(SceneRun run) {
-        var points = run.Path ?? [run.Start, run.End];
-        // Curved round sweeps fit inside a radius around each centreline point. Straight profiles use their exact frame.
-        if (run.Path is not null) {
-            var r = run.DiameterFt!.Value / 2 * (1 + run.RadialOverdrawFraction);
-            return new Aabb(points.Min(p => p[0]) - r, points.Min(p => p[1]) - r, points.Min(p => p[2]) - r,
-                points.Max(p => p[0]) + r, points.Max(p => p[1]) + r, points.Max(p => p[2]) + r);
-        }
         var a = P(run.Start); var b = P(run.End); var x = P(run.CrossSectionXAxis);
         var z = (b - a).Normalize(); var y = z.CrossProduct(x).Normalize();
         var halfX = (run.DiameterFt ?? run.WidthFt)!.Value / 2;

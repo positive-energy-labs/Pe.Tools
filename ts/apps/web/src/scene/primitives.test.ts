@@ -91,43 +91,6 @@ test("every float32 round facet contains the physical circle without a containme
   }
 });
 
-test("a curved round run follows every native path point after rebasing", () => {
-  const primitive = run("round");
-  if (primitive.kind !== "run") throw Error("run fixture");
-  const path = [
-    [100, 200, 0],
-    [100, 204, 3],
-    [103, 207, 7],
-    [100, 200, 10],
-  ];
-  Object.assign(primitive.run, { path, crossSectionXAxis: [1, 0, 0] });
-  const origin = new THREE.Vector3(90, 190, -5);
-  const geometry = primitiveTemplate(primitive).applyMatrix4(primitiveMatrix(primitive, origin));
-  try {
-    const positions = geometry.getAttribute("position");
-    const vertices = Array.from({ length: positions.count }, (_, i) =>
-      new THREE.Vector3().fromBufferAttribute(positions, i).add(origin),
-    );
-    for (let i = 0; i < path.length; i++) {
-      const center = new THREE.Vector3().fromArray(path[i]!);
-      const tangent = new THREE.Vector3()
-        .fromArray(path[Math.min(i + 1, path.length - 1)]!)
-        .sub(new THREE.Vector3().fromArray(path[Math.max(0, i - 1)]!))
-        .normalize();
-      const ring = vertices.filter(
-        (v) =>
-          Math.abs(v.distanceTo(center) - (1 + primitive.run.radialOverdrawFraction)) < 1e-5 &&
-          Math.abs(v.clone().sub(center).dot(tangent)) < 1e-5,
-      );
-      expect(ring.length).toBeGreaterThanOrEqual(32);
-    }
-    expect(vertices.some((v) => v.y > 207)).toBe(true);
-    expect(primitiveEdges(primitive, 30).every(Number.isFinite)).toBe(true);
-  } finally {
-    geometry.dispose();
-  }
-});
-
 test("native fitting triangles and compact runs coexist in the same render pass", async () => {
   const fitting = { ...instance(run(), 2), firstVertex: 0, vertexCount: 3 };
   delete fitting.primitive;

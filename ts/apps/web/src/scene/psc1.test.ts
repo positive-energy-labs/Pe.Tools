@@ -259,7 +259,7 @@ describe("PSC1 decode", () => {
     }
     expect(() => decodeScene(psc1(metadata({ format: "space-scene-v3" })))).toThrow("outdated");
   });
-  it("accepts a curved round path and refuses broken endpoints or repeated path points", () => {
+  it("refuses a centreline sweep in place of native curved geometry", () => {
     const run = {
       start: [0, 0, 0],
       end: [1, 1, 1],
@@ -286,27 +286,27 @@ describe("PSC1 decode", () => {
                 vertexCount: 0,
                 representation: "run",
                 orientedBox: null,
-                run: { ...run, path },
+                run: Object.assign({}, run, { path }),
               },
             ],
           }),
         ),
       );
-    expect(decode(run.path).meshes.instances[0]!.primitive).toMatchObject({ kind: "run", run });
+    expect(() => decode(run.path)).toThrow("native meshes");
     expect(() =>
       decode([
         [0, 0, 0],
         [0, 0, 1],
         [2, 1, 1],
       ]),
-    ).toThrow("path");
+    ).toThrow("native meshes");
     expect(() =>
       decode([
         [0, 0, 0],
         [0, 0, 0],
         [1, 1, 1],
       ]),
-    ).toThrow("path");
+    ).toThrow("native meshes");
   });
   it("refuses old captures and malformed completeness before they can become cache authority", () => {
     expect(() => decodeScene(psc1(metadata({ format: "space-scene-v1" })))).toThrow("outdated");

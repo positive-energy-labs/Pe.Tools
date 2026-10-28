@@ -4,7 +4,7 @@ using System.IO;
 
 namespace Pe.Revit.Tests;
 
-/// <summary>Native representations preserve element frames, curved paths, insulation and mesh-only context.</summary>
+/// <summary>Native representations preserve element frames, curved bodies, insulation and mesh-only context.</summary>
 public sealed class SpaceContextRepresentationProofTests {
     [Test]
     public void TriangleEnvelopeUsesTheTiltedDirectShapesGeometryAndDisclosesItsFrame(UIApplication uiApplication) {
@@ -137,7 +137,7 @@ public sealed class SpaceContextRepresentationProofTests {
     }
 
     [Test]
-    public void InsulatedHostAndCurvedFlexUseNativeDimensionsAndLocationPath(UIApplication uiApplication) {
+    public void InsulatedHostUsesPhysicalDimensionsAndCurvedFlexUsesNativeMesh(UIApplication uiApplication) {
         var document = MechanicalDocument(uiApplication);
         try {
             DuctInsulation insulation;
@@ -173,14 +173,8 @@ public sealed class SpaceContextRepresentationProofTests {
                 "Fixture precondition: the explicitly sized curved flex must expose a native body before Scene capture.");
             Assert.That(insulation, Is.InstanceOf<MEPCurve>(), "This subtype caused the broad-MEPCurve experiment to lose focus.");
             Assert.That(Scene.ReadRun(insulation, Transform.Identity), Is.Null);
-            var flexRun = Scene.ReadRun(flex, Transform.Identity)!;
-            Assert.That(flexRun, Is.Not.Null);
-            Assert.That(flexRun.Path, Is.Not.Null);
-            Assert.That(flexRun.DiameterFt, Is.EqualTo(1).Within(1e-8));
-            var curve = ((LocationCurve)flex.Location).Curve;
-            var nativePath = curve.Tessellate();
-            Assert.That(flexRun.Path!.Count, Is.EqualTo(nativePath.Count));
-            for (var i = 0; i < nativePath.Count; i++) AssertPoint(flexRun.Path[i], nativePath[i]);
+            Assert.That(Scene.ReadRun(flex, Transform.Identity), Is.Null,
+                "A centreline sweep cannot certify the physical flex body; retain its native mesh.");
             var hostRun = Scene.ReadRun(duct, Transform.Identity)!;
             using var manager = duct.ConnectorManager;
             var connector = manager.Connectors.Cast<Connector>().First();
@@ -190,7 +184,9 @@ public sealed class SpaceContextRepresentationProofTests {
             Assert.That(scene.UnavailableElements, Is.Empty);
             Assert.That(scene.Elements.Select(row => row.Handle.ElementId), Is.EquivalentTo(new[] { insulation.Id.Value(), flex.Id.Value() }));
             Assert.That(scene.Elements.All(row => row.Focus), Is.True);
-            Assert.That(scene.Elements.Single(row => row.Handle.ElementId == flex.Id.Value()).Representation, Is.EqualTo(SceneRepresentation.Run));
+            var flexRow = scene.Elements.Single(row => row.Handle.ElementId == flex.Id.Value());
+            Assert.That(flexRow.Representation, Is.EqualTo(SceneRepresentation.Mesh));
+            Assert.That(flexRow.VertexCount, Is.GreaterThan(0));
             Assert.That(scene.Elements.Single(row => row.Handle.ElementId == insulation.Id.Value()).Representation, Is.EqualTo(SceneRepresentation.Mesh));
             Assert.That(scene.Work.NativeGeometryCalls, Is.GreaterThan(0));
         } finally { document.Close(false); }

@@ -6195,7 +6195,7 @@ export namespace RevitDetailSpaceScene {
       reasons: string[];
     }
     /**
-     * Physical run in host feet, including host insulation. Path is a tessellated round centreline; null means straight.
+     * Straight physical run in host feet, including host insulation. Curved runs use native meshes.
      */
     export interface SceneRun {
       start: number[];
@@ -6205,7 +6205,6 @@ export namespace RevitDetailSpaceScene {
       heightFt?: null | number;
       diameterFt?: null | number;
       crossSectionXAxis: number[];
-      path?: number[][] | null;
       /**
        * Facets around a round profile or both semicircles of a flat oval; zero for rectangular.
        */

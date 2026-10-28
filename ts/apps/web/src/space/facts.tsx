@@ -162,9 +162,7 @@ export function PickFacts({
               ? "triangle envelope"
               : "symbol bounds"
             : element.representation === "run"
-              ? element.run?.path
-                ? "curved run"
-                : "straight run"
+              ? "straight run"
               : "captured surfaces"}
         </Fact>
         <Fact name="triangles">{(element.vertexCount / 3).toLocaleString()}</Fact>

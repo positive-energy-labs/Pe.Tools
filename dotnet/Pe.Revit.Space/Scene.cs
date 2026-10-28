@@ -37,10 +37,9 @@ public sealed record SceneRequest(
     SceneContextRepresentation ContextRepresentation = SceneContextRepresentation.Oriented
 );
 
-/// <summary>Physical run in host feet, including host insulation. Path is a tessellated round centreline; null means straight.</summary>
+/// <summary>Straight physical run in host feet, including host insulation. Curved runs use native meshes.</summary>
 public sealed record SceneRun(IReadOnlyList<double> Start, IReadOnlyList<double> End, SceneRunShape Shape,
-    double? WidthFt, double? HeightFt, double? DiameterFt, IReadOnlyList<double> CrossSectionXAxis,
-    IReadOnlyList<IReadOnlyList<double>>? Path = null) {
+    double? WidthFt, double? HeightFt, double? DiameterFt, IReadOnlyList<double> CrossSectionXAxis) {
     /// <summary>Facets around a round profile or both semicircles of a flat oval; zero for rectangular.</summary>
     public int RadialSegments => this.Shape == SceneRunShape.Rectangular ? 0 : 32;
     /// <summary>Fraction added to the physical radius so facets contain it. Includes float32 vertex rounding; below 0.484% at 32 facets.</summary>
@@ -385,9 +384,6 @@ public static class Scene {
 
     // A run's reach follows its location line: on a diagonal duct the host-axis box is up to twice the volume.
     private static XYZ[] Corners(SceneRun run, double reachFt) {
-        // A curved run has no single axial box. Its conservative path bounds include every bend,
-        // whereas a box about the endpoint chord can omit nearby context.
-        if (run.Path is not null) return Corners(Oriented.Bounds(run).Expand(reachFt));
         var start = new XYZ(run.Start[0], run.Start[1], run.Start[2]);
         var end = new XYZ(run.End[0], run.End[1], run.End[2]);
         var along = (end - start).Normalize();
