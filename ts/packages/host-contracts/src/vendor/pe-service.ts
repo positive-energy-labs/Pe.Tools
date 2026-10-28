@@ -1,5 +1,6 @@
 /* eslint-disable no-control-regex -- Windows rejects ASCII control characters in service names. */
 // SDK-owned copy-in primitive. Keep this file byte-identical across consumers.
+// Temporary consumer repair, approved 2026-10-28: upstream the bounded receipt-rename retry before the next SDK copy-in.
 // The service file owns discovery: its bound port is authoritative and its per-launch token authorizes shutdown.
 // FOOTGUN: Bind services to 127.0.0.1. A wider bind exposes shutdown to the LAN and prompts Windows Firewall per versioned executable.
 
@@ -371,7 +372,17 @@ export async function writeServiceFile(
   const temp = `${path}.tmp-${randomUUID()}`;
   await writeFile(temp, `${JSON.stringify(file, null, 2)}\n`, "utf8");
   try {
-    await rename(temp, path);
+    // Windows readers can briefly deny replacement; retain atomic rename and the original error on exhaustion.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await rename(temp, path);
+        break;
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (attempt === 4 || !["EPERM", "EBUSY", "EACCES"].includes(code ?? "")) throw error;
+        await delay(25 * 2 ** attempt);
+      }
+    }
   } finally {
     await rm(temp, { force: true }).catch(() => {});
   }
