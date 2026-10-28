@@ -288,6 +288,22 @@ and both backends were gone; the driver restored the branch and released slot-1 
 Evidence: worktree `t3-19486141`, `.artifacts/runs/session-20261028-space-cache/context-ab-20261028T135324Z/`
 (`<variant>/results.md`, `results.json`, `system-top.jsonl`).
 
+## Round run sizes
+
+**Round run sizes, certified Chadds clone.** Connector diameter is nominal for pipe and conduit.
+Of one straight instance per type/connector-size pair, 29/32 pipe samples and 4/4 conduit
+samples differed from their physical diameter. Pipe 5780581 has a 4 in connector and 4.5 in
+outside diameter; conduit 6183151 has a 3 in connector and 3.5 in outside diameter.
+`RBS_PIPE_OUTER_DIAMETER` matched the largest analytic `CylindricalFace` diameter in all 32
+pipe samples, maximum error 1e-16 ft. `RBS_CONDUIT_OUTER_DIAM_PARAM` matched all four conduit
+samples, maximum error 1e-17 ft. Add twice the host insulation thickness to these outside sizes.
+This is a type/size sample, not an all-instance proof. PROVEN[session dev, controlled `probe-o`
+PID 42380, native payload `daf5e204` / `322517bcb358`, 2026-10-28 07:41–07:45Z].
+Evidence: worktree `t3-5b8bc59c`, `.artifacts/accept/oriented-20261028/ev/clone-round-cylinders.json`.
+FALSIFIED[the connector radius is the physical pipe/conduit radius]. The artifact witness
+checks published sizes against outside parameters and straight-run analytic cylinders; it does
+not use a chosen allowance for tessellation error.
+
 ## Instrument
 
 The "Revit read cost census" entrypoint in the [`document-profiler` Pod](../../../examples/pods/document-profiler/) is the instrument for census items M1 to M7, M14 and M18 (MINED §5). Another agent is building it (2026-10-27); this doc has not verified it. Run it on a second project before you use any number here outside Chadds.

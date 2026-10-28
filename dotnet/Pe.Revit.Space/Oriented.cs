@@ -79,7 +79,17 @@ internal sealed class Oriented(SceneBudget budget) {
                 if (!Finite(insulation) || insulation < 0) return null;
                 double? width = shape == SceneRunShape.Round ? null : connector.Width + 2 * insulation;
                 double? height = shape == SceneRunShape.Round ? null : connector.Height + 2 * insulation;
-                double? diameter = shape == SceneRunShape.Round ? connector.Radius * 2 + 2 * insulation : null;
+                // Pipe/conduit connectors carry nominal bore, not the physical outside size (Chadds clone).
+                // Missing outside-size data takes the native mesh route, never a nominal-size substitute.
+                double? diameter = shape == SceneRunShape.Round ? element switch {
+                    Pipe => element.get_Parameter(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER)?.AsDouble(),
+                    Conduit => element.get_Parameter(BuiltInParameter.RBS_CONDUIT_OUTER_DIAM_PARAM)?.AsDouble(),
+                    _ => connector.Radius * 2
+                } : null;
+                if (shape == SceneRunShape.Round) {
+                    if (diameter is not { } outside || !Finite(outside) || outside <= 0) return null;
+                    diameter = outside + 2 * insulation;
+                }
                 if (new[] { width, height, diameter }.Any(n => n is { } v && (!Finite(v) || v <= 0))) return null;
                 IReadOnlyList<IReadOnlyList<double>>? path = line is Line ? null
                     : line.Tessellate().Select(p => (IReadOnlyList<double>)V(transform.OfPoint(p))).ToArray();
