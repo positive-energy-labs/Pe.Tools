@@ -53,8 +53,9 @@ does not pay for them again.
 7. **Levels are data, measured right.** `Level.Elevation` is relative to the project base point
    (737 ft off on Cleremont); use `ProjectElevation` through the instance transform. Levels are
    per placed source and authored scope box, and repeat under two naming sets (Manuella).
-   Datums are exact, with no grouping tolerance: Cleremont has 50 levels on 32 planes in 11
-   coincident groups. Host "Level 2" and the linked "T.O. PLATE COTTAGE" sit 0.2 mm apart and
+   Datums are exact: no architectural or visual grouping tolerance, only numerical coincidence
+   at 1e-6 ft (transform residuals ≤3.3e-10 ft; bit equality would split 50 levels into 42).
+   Cleremont has 50 levels on 32 planes in 11 coincident groups. Host "Level 2" and the linked "T.O. PLATE COTTAGE" sit 0.2 mm apart and
    stay two planes (probe-l, 2026-10-28; the earlier 31/12 was a rounded census). They are read
    with the context, never inferred.
 8. **Disclose what is missing.** A source may be unloaded (all of Manuella's), unavailable on
