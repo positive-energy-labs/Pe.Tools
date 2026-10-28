@@ -112,8 +112,10 @@ Verbs          Pea's Sweep/Slice/Probe/Partition read through the same scoped re
 
 ## Proof gate (every change, before main)
 
-- One probe Revit at a time, machine-wide (`.artifacts/locks/revit-slot-1`), opened only with
-  ≥10 GiB free: two probes beside kaitpw's 15 GB session left 2.5 GiB free on 2026-10-28.
+- One probe Revit at a time, machine-wide (`.artifacts/locks/revit-slot-1`), started only with
+  ≥10 GiB free: two probes beside kaitpw's 15 GB session left 2.5 GiB free on 2026-10-28. An
+  empty Revit costs ≈3 GiB. A worktree dev stack (dev.ts, dev-web, vite) costs 2–3.5 GiB; run it
+  only for a browser proof.
 - Real Revit, SDK-controlled probe sessions only; never kaitpw's `pe.app-25`. Cold = first read
   in a fresh process; warm = one repeat. Memory = Revit private bytes delta; time = Revit side.
 - Three models from their local copies: Chadds SA 7 and EX 7; Cleremont SA 19, SA 2 and SA 21;
