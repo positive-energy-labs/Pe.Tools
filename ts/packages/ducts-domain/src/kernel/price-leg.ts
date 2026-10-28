@@ -116,7 +116,7 @@ export function priceLeg(input: LegInput, grids: Grids, choices: Choices = {}): 
     if (input.inWg == null)
       return unpriced(
         input,
-        `${input.element.kind} ${input.element.id} has no drop (${input.source})`,
+        `${input.element.kind} has no drop (${input.source})`,
       );
     return {
       kind: "drop",

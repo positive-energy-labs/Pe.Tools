@@ -497,6 +497,8 @@ it.skipIf(!existsSync(CHADDS))(
     expect(asserted.totals.return.knownInWg).toBeCloseTo(0.006478, 6);
     expect(asserted.totals.requiredEspInWg).toBeNull();
   },
+  // Parses a 14 MB retained snapshot; under the serial verify suite it took 11.8 s.
+  120_000,
 );
 
 it("terminal drop SHIM is priced and visible; typed, catalog and firm drops take precedence", () => {

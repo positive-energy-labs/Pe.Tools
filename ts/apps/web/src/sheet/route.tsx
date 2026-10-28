@@ -35,7 +35,7 @@ function SheetWorkspace({ target }: { target: DocumentRef }) {
   };
   const anchor = (id: number) => (
     <Button
-      label={`Select element ${id} in Revit`}
+      label="Select in Revit"
       {...revitTarget([id])}
       onPress={() => select(id)}
     >
