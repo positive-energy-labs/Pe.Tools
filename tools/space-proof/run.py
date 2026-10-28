@@ -30,7 +30,9 @@ SID = "probe-h"
 MIN_FREE_GIB = 10
 GUARD_FLOOR_GIB = 3
 MODELS = {
-    "chadds": ("MEP_YoramLePairArchitects_ChaddsFord_R25_standalone_20261019.rvt", ["SA 7", "EX 7"]),
+    # The 2026-10-19 standalone copy has no IFC link and no loaded links (orchestrator, 2026-10-28), so it is not Chadds.
+    # Only the census-checked local copy of the cloud clone `Chadds_Clone_Aug_11` may carry this name.
+    "chadds": ("MEP_Chadds_Clone_Aug_11_R25_local_20261028.rvt", ["SA 7", "EX 7"]),
     "cleremont": ("MEP_Brodie_Cleremont_Ross_R25_local_20261028.rvt", ["SA 19", "SA 2", "SA 21"]),
     "manuella": ("MEP_BIG_Manuella_R25_V2_local_20261027.rvt", ["SA 42", "SA 39"]),
 }
