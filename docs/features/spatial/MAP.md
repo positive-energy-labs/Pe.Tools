@@ -75,9 +75,10 @@ manuella-generality-20261027,cleremont-generality-20261028}/REPORT.md`. Local de
 proof live in `.artifacts/revit/detached/` (Manuella and Cleremont `_local_`). Every Chadds number
 here was measured on the cloud `Chadds_Clone_Aug_11`. The older `ChaddsFord_R25_standalone_20261019`
 is a different model, FALSIFIED as a stand-in: no IFC link, no loaded links, 4,266 pipe
-insulations against the clone's 3,267 (step 3, 2026-10-28). The Chadds gate copy will be
-`MEP_Chadds_Clone_Aug_11_R25_local_20261028.rvt`, made by save-stripped; it is valid once its
-census matches the cloud's (UNPROVEN until then).
+insulations against the clone's 3,267 (step 3, 2026-10-28). The Chadds gate copy is
+`MEP_Chadds_Clone_Aug_11_R25_local_20261028.rvt`, made by save-stripped. PROVEN[probe-o,
+`004c7b43`, 2026-10-28 03:53Z]: all 196 per-partition category counts, link inventories and
+transforms equal the cloud's; IFC instance 9465481 loaded.
 
 ## Priors to drop
 
@@ -87,6 +88,8 @@ census matches the cloud's (UNPROVEN until then).
 | One crop box around the focus (`Scene.cs:158`) | Mostly empty on diagonal systems; a 1,500 ft cube with far members. |
 | Proximity tested after loading (halo) | Pays the full load, then discards. |
 | One transform per link document | Cleremont places one document three times. |
+| Every building element has a family frame | Chadds IFC elements are DirectShapes: 800 of 800 sampled framing have identity frames and 800 distinct geometry keys (probe-o, 2026-10-28). |
+| Insulation needs its own element read | The host's thickness matches: ducts 4,294/4,294 (Chadds), 364/364 (Cleremont); pipes 3,267/3,267, max error 0 (Chadds clone). |
 | An IFC-off flag or any per-model toggle | Ruled out; building geometry is always needed. |
 | `Level.Elevation` | Base-point relative; wrong by hundreds of feet. |
 | Whole-model `Prepare` per verb call | 220 s and +9.4 GiB per cold call. |
@@ -103,8 +106,9 @@ SceneRequest   focus ids (the opened systems' members), reach ft, representation
                from the host's RBS_REFERENCE_INSULATION_THICKNESS), view-specific,
                link noise classes; each exclusion counted and disclosed
   represent    runs: LocationCurve + size (+insulation); family instances: symbol box
-               x total transform (full 3D); sketch-based floors/roofs/ceilings/stairs:
-               mesh; meshes on request from the same rule; tessellate once per type
+               x total transform (full 3D); sketch-based floors/roofs/ceilings/stairs
+               and IFC DirectShapes (identity frame, geometry in place): mesh; meshes on
+               request from the same rule; tessellate once per type
   levels       per source instance: ProjectElevation through the transform; grouped
                per building, coincident levels merged, names kept
   disclose     per source: candidates counted, kept, excluded by class, cut by bound,
@@ -147,8 +151,6 @@ Verbs          Pea's Sweep/Slice/Probe/Partition read through the same scoped re
 
 ## Owed
 
-- Pipe-insulation parity on the Chadds clone (3,267). The host's `RBS_REFERENCE_INSULATION_THICKNESS`
-  matched 4,266 of 4,266 pipe insulations on the standalone, a different model. Cleremont has none.
 - How much of Cleremont's 7 GB open cost is its links.
 - Link behaviour on a machine without Desktop Connector.
 - CAD as building context: on Manuella, model-level DWG plans are the only building geometry
