@@ -59,7 +59,7 @@ public sealed record SceneSource(string DocumentKey, long? LinkInstanceId, IRead
     SceneSourceState State, string Name, SceneSourceRead? Read);
 /// <param name="Counted">Ids within reach, counted without loading.</param>
 /// <param name="Kept">Elements handed to representation.</param>
-/// <param name="Excluded">Ids within reach per exclusion class, removed before iteration; classes may overlap.</param>
+/// <param name="Excluded">Ids within reach per exclusion class; classes may overlap. Quick-filter classes are removed before iteration; run-insulation is classified after reading its host.</param>
 /// <param name="RejectedAfterLoad">Passed every quick filter, then refused by the managed gate: loaded for nothing.</param>
 /// <param name="CutByBound">Kept elements left out by a bound: missing native bounds, or the triangle or acquisition budget.</param>
 /// <param name="QueryMilliseconds">The reach query; ExcludeMilliseconds the exclusion-class queries; IterateMilliseconds the element loads.</param>
@@ -279,7 +279,8 @@ public static class Scene {
                 var candidates = new List<(Partition Source, long Id, Aabb Bounds, double Distance)>();
                 foreach (var partition in world.Partitions) {
                     budget.Check();
-                    var read = partition.Reach(reach, bound);
+                    var read = partition.Reach(reach, bound,
+                        context is SceneContextRepresentation.Oriented or SceneContextRepresentation.TriangleBoxes);
                     reads[partition] = (read, 0, 0);
                     broad += read.Counted;
                     foreach (var element in read.Kept) {

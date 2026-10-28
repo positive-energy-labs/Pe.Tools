@@ -61,7 +61,7 @@ Unless stated: PROVEN[session dev, SDK-controlled `pe.app-25` PID 19948, Chadds,
 
 - **MEP centre-line helper elements.** Categories `OST_DuctCurvesCenterLine`, `OST_DuctFittingCenterLine`, `OST_PipeCurvesCenterLine`, `OST_PipeFittingCenterLine` and `OST_FlexDuctCurvesCenterLine`. Class `Element`, no type, no `Location`, 15,193 in the document. Revit uses them to draw the "Center line" subcategory. Exclude them. UNPROVEN that they map 1:1 to ducts and fittings.
 - **CAD links.** `ImportInstance` with `IsLinked = true`: 15 are model-level, and 6 reached EX 7 context (two site plans, attic and roof DWGs, two `.3dm`). The mechanical 3D view hides them, but the scene ignores view visibility. Eight more are view-specific drafting DWGs. The boxes path does not check `ViewSpecific`. That is a code-path observation; UNPROVEN that one enters on Chadds. Ruling: CAD is an opt-in toggle in the 3D viewer and leaves Ducts context.
-- **Insulation elements.** 4,298 duct and 3,267 pipe insulations. Draw insulation from the host plus `RBS_REFERENCE_INSULATION_THICKNESS`. On 4,294 of 4,294 hosted duct insulations, that value equals the insulation's own Thickness (PROVEN for the data, PID 51772). The clone copy's 3,267 pipe insulations also match exactly; four duct hosts lack the parameter. See [representation premises](#representation-premises-2026-10-28) for the model-specific stamps. When insulation and equipment were drawn as their own context boxes, they enclosed all 74 EX 7 focus runs. That fed the grey active-system bug (testimony, look-rule thread, `.artifacts/tmp/greyprobe`).
+- **Insulation elements.** Chadds has 4,298 duct and 3,267 pipe insulations. Host thickness matches all 4,294 available duct parameters and all 3,267 pipe parameters; four duct hosts lack the parameter. This proves parameter parity, not geometric containment. Runs can carry their insulation in the sized representation. Fitting/accessory insulation keeps its own native mesh: see [fitting insulation](#fitting-insulation). Earlier axis-aligned insulation boxes enclosed all 74 EX 7 focus runs and fed the grey active-system bug (testimony, look-rule thread, `.artifacts/tmp/greyprobe`).
 - **Levels** are `CategoryType.Annotation`: 8 of 8 host Levels. They never enter context. The "level planes" seen in context were the attic and roof DWG links.
 - **Stray level `PE-CLOSE-PROBE-190704`** is at 1,352.0 ft elevation (1,004.0 ft project elevation). A past probe probably left it. Origin UNPROVEN. The MAP step 4 ruling retains it in the level read and root inventory. Distance from the pictured systems does not authorize hiding or deleting a datum.
 
@@ -303,6 +303,26 @@ Evidence: worktree `t3-5b8bc59c`, `.artifacts/accept/oriented-20261028/ev/clone-
 FALSIFIED[the connector radius is the physical pipe/conduit radius]. The artifact witness
 checks published sizes against outside parameters and straight-run analytic cylinders; it does
 not use a chosen allowance for tessellation error.
+
+## Fitting insulation
+
+Cleremont's 364 duct insulations have 178 `Duct` hosts and 186 `FamilyInstance` hosts.
+Every fitting-host insulation has native Fine vertices outside its host's Fine symbol box.
+The maximum excess is 0.269365325060402 ft at host 9411068, insulation 9411448, whose
+thickness is 0.125 ft. Eight exceed their thickness by more than 1%; the cause of those
+larger excesses is not established. A box grown by thickness is therefore not a proven
+replacement for fitting insulation. The document remained unmodified.
+FALSIFIED[session dev, controlled `probe-o` PID 15568, fitting symbol boxes contain their
+insulation, native `05686ec9` / build `e4ae1c82be20`, 2026-10-28 08:57–08:58Z].
+Evidence in worktree `t3-5b8bc59c`: `.artifacts/accept/oriented-20261028/ev/cleremont-insulation-hosts.json`
+and `cleremont-insulation-family-bounds.json`.
+
+The chosen split retains fitting/accessory insulation as separate native geometry. Only a
+represented duct/pipe run with matching host thickness can absorb its insulation. Missing
+hosts, missing sizes, and the all-mesh request retain insulation geometry. Host classification
+requires loading the insulation and its host, after the quick reach and noise filters; it
+cannot be reported as a quick-filter exclusion. UNPROVEN[Chadds host-class counts, added
+cost under per-element reach, and artifact containment gate on all three models].
 
 ## Instrument
 

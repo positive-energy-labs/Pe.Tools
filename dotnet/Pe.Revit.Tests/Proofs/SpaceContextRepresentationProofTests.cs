@@ -196,6 +196,57 @@ public sealed class SpaceContextRepresentationProofTests {
         } finally { document.Close(false); }
     }
 
+    [Test]
+    public void FittingInsulationKeepsItsOwnMeshWhileRepresentedRunsAbsorbTheirs(UIApplication uiApplication) {
+        var document = MechanicalDocument(uiApplication);
+        try {
+            Duct duct;
+            FamilyInstance fitting;
+            DuctInsulation runInsulation, fittingInsulation;
+            using (var transaction = new Transaction(document, "Create insulated elbow and runs")) {
+                transaction.Start();
+                duct = DuctOfShape(document, ConnectorProfileType.Round, new XYZ(0, 0, 10));
+                var systemType = new FilteredElementCollector(document).OfClass(typeof(MechanicalSystemType)).FirstElementId();
+                var other = Duct.Create(document, systemType, duct.GetTypeId(), duct.ReferenceLevel.Id,
+                    new XYZ(10, 0, 10), new XYZ(10, 10, 10));
+                document.Regenerate();
+                var join = new XYZ(10, 0, 10);
+                using var first = duct.ConnectorManager;
+                using var second = other.ConnectorManager;
+                fitting = document.Create.NewElbowFitting(
+                    first.Connectors.Cast<Connector>().OrderBy(c => c.Origin.DistanceTo(join)).First(),
+                    second.Connectors.Cast<Connector>().OrderBy(c => c.Origin.DistanceTo(join)).First());
+                var type = new FilteredElementCollector(document).OfClass(typeof(DuctInsulationType)).FirstElementId();
+                runInsulation = DuctInsulation.Create(document, duct.Id, type, 0.125);
+                fittingInsulation = DuctInsulation.Create(document, fitting.Id, type, 0.125);
+                transaction.Commit();
+            }
+            using var bytes = new MemoryStream();
+            var scene = Scene.Write(document, new SceneRequest([duct.Id.Value()], 20), bytes);
+            Assert.That(scene.Completeness.Complete, Is.True);
+            Assert.That(scene.Elements.Any(e => e.Handle.ElementId == runInsulation.Id.Value()), Is.False);
+            var drawn = scene.Elements.Single(e => e.Handle.ElementId == fittingInsulation.Id.Value());
+            Assert.That(drawn.Representation, Is.EqualTo(SceneRepresentation.Mesh));
+            Assert.That(drawn.VertexCount, Is.GreaterThan(0));
+            var native = new List<Tri>();
+            Ingest.Element(fittingInsulation, 0, 0, native, Transform.Identity, [], false);
+            bytes.Position = drawn.FirstVertex * 12L;
+            using var reader = new BinaryReader(bytes, System.Text.Encoding.UTF8, true);
+            var points = Enumerable.Range(0, drawn.VertexCount).Select(_ => new System.Numerics.Vector3(
+                reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle())).ToArray();
+            foreach (var triangle in native)
+                foreach (var point in new[] { triangle.A, triangle.B, triangle.C })
+                    Assert.That(points, Does.Contain(point), "Every native insulation vertex must be published.");
+
+            using var meshBytes = new MemoryStream();
+            var meshes = Scene.Write(document, new SceneRequest([duct.Id.Value()], 20,
+                ContextRepresentation: SceneContextRepresentation.Meshes), meshBytes);
+            Assert.That(meshes.Elements.Any(e => e.Handle.ElementId == runInsulation.Id.Value()), Is.True,
+                "A bare host mesh cannot absorb run insulation.");
+            Assert.That(meshes.Elements.Any(e => e.Handle.ElementId == fittingInsulation.Id.Value()), Is.True);
+        } finally { document.Close(false); }
+    }
+
     private static Document MechanicalDocument(UIApplication uiApplication) {
         var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
             $"Autodesk/RVT {uiApplication.Application.VersionNumber}/Templates/English-Imperial/Mechanical-Default.rte");

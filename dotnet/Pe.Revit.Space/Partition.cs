@@ -140,7 +140,7 @@ internal sealed class Partition {
     /// </summary>
     /// <param name="reach">Host-frame boxes, each as its 8 corners; mapped into this instance's frame here.</param>
     /// <param name="bound">Host-frame box every reach box is clamped to, as 8 corners: nothing within reach lies outside it.</param>
-    internal SceneReach Reach(IReadOnlyList<XYZ[]> reach, XYZ[] bound) {
+    internal SceneReach Reach(IReadOnlyList<XYZ[]> reach, XYZ[] bound, bool absorbRunInsulation = false) {
         var clock = System.Diagnostics.Stopwatch.StartNew();
         if (reach.Count == 0) return new SceneReach(0, [], new Dictionary<string, int>(), 0, 0, 0, 0, 0);
         using var inverse = this.Transform.Inverse;
@@ -181,8 +181,23 @@ internal sealed class Partition {
             using var collector = new FilteredElementCollector(this.Doc, keep.OrderBy(id => id.Value()).ToList())
                 .WhereElementIsNotElementType();
             // The managed gate stays as a witness: what it rejects here was loaded for nothing and is disclosed.
-            foreach (var element in collector)
+            foreach (var element in collector) {
+                // Host ownership is not a quick-filter property. Only a represented run absorbs its
+                // insulation; fitting insulation extends beyond the family symbol box (Cleremont).
+                // Keep missing hosts/sizes and unsupported runs as native insulation meshes.
+                if (absorbRunInsulation && element is Autodesk.Revit.DB.InsulationLiningBase insulation
+                    && element is Autodesk.Revit.DB.Mechanical.DuctInsulation or Autodesk.Revit.DB.Plumbing.PipeInsulation
+                    && keep.Contains(insulation.HostElementId)
+                    && this.Doc.GetElement(insulation.HostElementId) is { } host
+                    && host is Autodesk.Revit.DB.Mechanical.Duct or Autodesk.Revit.DB.Plumbing.Pipe
+                    && host.get_Parameter(BuiltInParameter.RBS_REFERENCE_INSULATION_THICKNESS)?.AsDouble() == insulation.Thickness
+                    && Oriented.Run(host, this.Transform) is not null) {
+                    excluded.TryGetValue("run-insulation", out var count);
+                    excluded["run-insulation"] = count + 1;
+                    continue;
+                }
                 if (Ingest.Allowed(element)) kept.Add(element); else rejected++;
+            }
         }
         var total = clock.Elapsed.TotalMilliseconds;
         return new SceneReach(inside.Count, kept, excluded, rejected, total, queried, classified - queried, total - classified);
@@ -192,13 +207,12 @@ internal sealed class Partition {
     ///     Classes that pass `CategoryType.Model` but are not context, excluded before iteration in every
     ///     source, each counted per read so every model proves what it matched (READING-REVIT, what passes as
     ///     geometry but is not): MEP centre-line helpers
-    ///     (class Element), insulation (drawn from its host), view-owned elements, CAD (model-level CAD is
+    ///     (class Element), view-owned elements, CAD (model-level CAD is
     ///     disclosed, not drawn, until kaitpw rules), and the link classes Cleremont found.
     /// </summary>
     private static readonly (string Name, ElementFilter Match)[] Exclusions = [
         OfCategories("centre-line", Enum.GetValues(typeof(BuiltInCategory)).Cast<BuiltInCategory>()
             .Where(c => c.ToString().EndsWith("CenterLine", StringComparison.Ordinal)).ToArray()),
-        OfCategories("insulation", BuiltInCategory.OST_DuctInsulations, BuiltInCategory.OST_PipeInsulations),
         ("view-specific", new ElementOwnerViewFilter(ElementId.InvalidElementId, true)),
         OfClasses("cad", typeof(ImportInstance)),
         OfCategories("sketch", BuiltInCategory.OST_SketchLines, BuiltInCategory.OST_Lines,
