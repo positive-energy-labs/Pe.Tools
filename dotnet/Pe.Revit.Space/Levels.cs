@@ -25,7 +25,7 @@ public sealed record SceneLevelReceipt(int Levels, int Planes, int CoincidentGro
 
 /// <summary>Annotation datums are read by class, independently of model-category geometry and scene bounds.</summary>
 public static class Levels {
-    // Below Revit's geometric tolerance; names at the same height must not be lost or shift a plane.
+    // Numerical only: Cleremont residuals <=3.3e-10 ft, nearest distinct pair 6.57e-4 ft; no architectural/visual grouping.
     private const double CoincidentFt = 1e-6;
     private sealed record Datum(long Id, string UniqueId, string Name, double ProjectElevationFt, bool BuildingStory,
         SceneLevelScope? Scope);
