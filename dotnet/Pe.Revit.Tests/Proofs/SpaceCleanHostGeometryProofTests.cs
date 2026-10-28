@@ -30,10 +30,11 @@ public sealed class SpaceCleanHostGeometryProofTests {
 
             var first = ReadScene(document, subject.Id);
             Assert.That(first.Length, Is.GreaterThan(0));
+            SpaceWorld.Prepare(document);
             using (var cached = LinkedGeometryStore.For(document, null, Transform.Identity, generation!)) {
                 Assert.That(cached, Is.Not.Null);
-                var geometry = cached!.Read(subject.UniqueId + "/mesh",
-                    () => throw new InvalidOperationException("Host scene must have populated the shared geometry store."));
+                var geometry = cached!.Read(subject.UniqueId + "/curves",
+                    () => throw new InvalidOperationException("Verb preparation must have populated the shared geometry store."));
                 Assert.That(geometry.Triangles.Length, Is.EqualTo(12));
             }
             Assert.That(ReadScene(document, subject.Id), Is.EqualTo(first), "Repeated clean host scopes preserve exact geometry bytes.");

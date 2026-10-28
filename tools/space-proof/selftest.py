@@ -29,3 +29,35 @@ roll = {"axisX": [1, 0, 0], "axisY": [0, 0.866, 0.5], "axisZ": [0, -0.5, 0.866]}
 assert run.oriented_box_agrees(roll, [0, 1, 1, 0, 0, 0, [1, 0, 0, 0, 1, 0, 0, 0, 1]]) is False
 assert run.oriented_box_agrees({"axisX": [0, 1, 0], "axisY": [1, 0, 0], "axisZ": [0, 0, 1]}, [0, 1, 0, 0, 0, 0, [1, 0, 0, 0, 1, 0, 0, 0, 1]]) is True
 print("selftest roll ok")
+
+# Exercise admission against disposable files; never inspect or mutate the real slot.
+import tempfile
+with tempfile.TemporaryDirectory() as directory:
+    original = run.LOCK, run.ORDER, run.SID
+    try:
+        run.LOCK = Path(directory) / "slot"
+        run.ORDER = Path(directory) / "ORDER"
+        run.SID = "probe-c"
+        (Path(directory) / "QUEUE.txt").write_text("probe-c TAKING\n")
+        run.ORDER.write_text("probe-o\nprobe-c\n")
+        try:
+            run.acquire_slot()
+            raise AssertionError("Out-of-order acquisition succeeded")
+        except RuntimeError:
+            pass
+        assert not run.LOCK.exists()
+        run.ORDER.write_text("probe-c\nprobe-r\n")
+        run.LOCK.mkdir()
+        try:
+            run.acquire_slot()
+            raise AssertionError("Occupied slot acquisition succeeded")
+        except FileExistsError:
+            pass
+        assert run.ORDER.read_text() == "probe-c\nprobe-r\n"
+        run.LOCK.rmdir()
+        run.acquire_slot()
+        assert run.ORDER.read_text() == "probe-r\n"
+        assert (run.LOCK / "owner.txt").read_text().startswith("probe-c ")
+    finally:
+        run.LOCK, run.ORDER, run.SID = original
+print("selftest FIFO admission ok")

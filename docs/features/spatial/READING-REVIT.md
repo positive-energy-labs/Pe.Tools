@@ -93,6 +93,164 @@ Unless stated: PROVEN[session dev, SDK-controlled `pe.app-25` PID 19948, Chadds,
 - **U16.** Chadds is the only model measured. Second model, 2026-10-28 (Manuella, local copy `.artifacts/revit/detached/MEP_BIG_Manuella_R25_V2_local_20261027.rvt`): all three Revit links unloaded and 7 host walls, so no loaded source holds building geometry; a cold /ducts read is ≈0.5 s and +4–6 MiB. Holds: a 45° wing (now in the host, world box median 2.18× oriented), counting ids is free in memory (but not in time: id queries took 9–71 s), centre-line helpers dominate noise (≈45% of context; 1:1 with pipes, not ducts), insulation from `RBS_REFERENCE_INSULATION_THICKNESS` (136/136 duct). New: view-specific DWGs enter context; 30% of family instances are tilted, so oriented boxes need the full 3D frame; levels repeat at one elevation under two naming sets. Untestable there: the per-element cost of a loaded link. PROVEN[session dev, probe-25, `bd9dd0d4`]; report `.artifacts/accept/manuella-generality-20261027/REPORT.md`. Third model, 2026-10-28 (Cleremont, local copy `.artifacts/revit/detached/MEP_Brodie_Cleremont_Ross_R25_local_20261028.rvt`): four loaded RVT links (site plus three house types) placed six times at different angles, one placement unshared about 2,100 ft away. A loaded RVT link walks at 0.8–2.3 KB per element (≈14 KB is an IFC-link property); Revit pays at open (7.1–7.4 GB). Cold /ducts context 1.6–3.6 s and +57–166 MiB. Breaks: one frame per link document (frames, partitions and oriented boxes belong to the link instance); `Level.Elevation` is relative to the project base point (use `ProjectElevation` through the instance transform; levels are per building); a system's crop can be a 1,500 ft cube because of far members (per-element reach is mandatory: −82%); sketch-based floors, roofs, ceilings and stairs have no cheap frame; links bring new noise (`<Sketch>`, curtain grids, room separations, origin markers, planting, topography, masses, nested DWGs); link availability depends on Desktop Connector sync. PROVEN[session dev, probe-25, `940f2c8f`]; report `.artifacts/accept/cleremont-generality-20261028/REPORT.md`.
 - **U17.** FALSIFIED[session dev controlled, `probe-l` PID 58456, `047921a0`, 2026-10-28 05:39Z]: Cleremont's earlier 31-elevation / 12-coincident-group census was rounded. Exact native datums yield **32 planes / 11 groups**: host `A Level 2` (7715138) is 774.0000000000003 ft; linked `T.O.PLATE COTTAGE` (2347458, instance 7906706) is 774.0006569639478 ft. Their 0.000656963947449 ft gap is 0.20024 mm. Preserve both planes; do not tune grouping or drawing to reproduce the rounded count (orchestrator verdict, 2026-10-28 05:41Z). Same evidence as the Cleremont levels row above.
 
+## U6 measured: cache attribution and revision identity (2026-10-28)
+
+PROVEN[session dev, controlled `probe-c`, `3694edfc`, 2026-10-28 09:11–09:38Z].
+Two fresh processes each on the Chadds clone SA 7 and Cleremont SA 19, using the harness's
+pinned focus ids. Each context followed its focus read. Time is native context time; memory
+is that call's Revit private-byte delta. These are the frozen step-2 baseline, before
+`6842220f`'s exclusion-time fix and step 3's representation change.
+
+| Model | Cold s / MiB | Warm s / MiB | After restart s / MiB | Warm again s / MiB |
+|---|---:|---:|---:|---:|
+| Chadds SA 7 | 5.298 / 502.1 | 1.744 / 168.4 | 5.048 / 505.7 | 1.968 / 115.6 |
+| Cleremont SA 19 | 0.693 / 32.3 | 0.480 / 19.4 | 0.734 / 36.4 | 0.493 / 16.1 |
+
+Attribution used identical inputs in one warmed process: seed, available, bypass, bypass,
+available. An exclusive file lease made only this process's packs unavailable; no shared pack
+was deleted. Every pair had identical vertex and element hashes. Means below exclude the seed.
+Boxes context does not read the pack; coarse Meshes context bypasses it too. The scene's
+remaining pack consumer is focus. Thus the cold-to-warm context improvement is not proof of
+pack value: Revit's own loaded elements and geometry survive the call.
+
+| Read | Chadds pack / bypass s | Cleremont pack / bypass s |
+|---|---:|---:|
+| Scene, Boxes | 2.184 / 2.389 | 0.467 / 0.481 |
+| Scene, Meshes | 21.663 / 23.806 | 1.256 / 1.199 |
+| Bounded `Partition.BuildElements`, Medium | 1.869 / 12.854 | 0.103 / 0.604 |
+
+The bounded Partition comparison uses the same scene membership and crop, not whole-model
+`Prepare`. `BuildElements` has no remaining production caller: this is a bounded witness of the
+same pack machinery used by `Build`, not a measured whole-verb regression. It proves a substantial
+warm latency benefit (85.5% / 83.0%); deletion must not be reported as a speedup for beta verbs.
+The actual Cleremont Sweep comparison follows below; Chadds and the other beta verbs remain
+unmeasured. Scene timings vary enough that their small differences do not establish a dependable
+cache benefit. Step 3 removes scene pack reads altogether.
+
+The proposed key failed two independent tests:
+
+- `Document.GetDocumentVersion` took 0.36–0.78 ms for 1,000 calls, but its GUID/save count stayed
+  unchanged through committed nearby and unrelated geometry moves, a link move, and rollback.
+  The link instance UniqueId also stayed unchanged while its placement moved one foot.
+  Neither version nor instance identity alone identifies current geometry.
+- Across restart, both hosts and every loaded link reported different version GUIDs with
+  unchanged save counts. No pack path was reused. The two local host files' SHA-256 hashes
+  were unchanged. FALSIFIED[session dev, `probe-c`, `3694edfc`, 2026-10-28]: the loaded
+  document version is a dependable cross-process key on these copies.
+
+The mark-only `DocumentChanged` probe copied ids without loading elements. Nearby and distant
+moves marked the correct subject separately; the nearby scene bounds matched native bounds,
+and the distant move left scoped vertices and membership identical. Transaction-group rollback
+reported an empty id set on both models, so an id-only selective invalidation rule is insufficient.
+These witnesses do not prove arbitrary dependency, reload, workset, or cloud invalidation.
+
+The raw-event probe also exposed a production wiring gap: `DocumentCacheMaintenance.Wire`
+filtered empty deltas before `SpaceWorld` or the bridge received them. The implementation now
+admits empty deltas outside the rollback sandbox; an empty group rollback is still a change
+to captured evidence. The native regression uses that same production filter and checks epoch
+advancement after rollback. UNPROVEN[changed filter's runtime behavior pending the native hold].
+
+User ruling after the bounded Partition result: measure the actual Pea `revit.detail.space-sweep`
+operation cold and repeatedly on Cleremont, before and after disabling the store. Its production
+path is `SpaceOps.Sweep` → `Verbs.Sweep(Document, ...)` → `SpaceWorld.Prepare` → `Partition.Build`,
+which did read the pack; the dead `BuildElements` entrypoint does not mean production gained
+nothing. No resident geometry cache may be added in step 5. The later ruling below retains the
+existing disk pack until step 6 re-measures its benefit after moving verbs onto the scoped read.
+Any future resident reuse requires a measured hard memory cap. The production comparison follows
+below; host-call elapsed time includes Prepare, while `SweepAnswer.Ms` times only the query.
+
+All test transactions were rolled back, all document `IsModified` checks were false, four owned
+Revit PIDs (36120, 72280, 7420, 49524) were confirmed gone, and the owned backend was stopped.
+Raw receipts, templates, hashes and one-second process/kernel memory samples are in worktree
+`t3-19486141`, `.artifacts/runs/session-20261028-space-cache/measure-20261028T091112Z/`;
+`summary.json` is the compact index. No store implementation change is certified by this baseline.
+
+### U6 follow-up: linked paths and external references
+
+PROVEN[session dev, controlled `probe-c`, `fa8de88f`, 2026-10-28 10:12–10:21Z]. Two fresh
+Cleremont processes (14444, 59420), inspecting identity immediately after open, before a scene
+read. All six placements had the same nonempty `Document.PathName` across processes: four
+files under Desktop Connector's `DC/ACCDocs/.../Cleremont - Ross Cabins/Links/`. Three placements
+share the 3 BED file, so source-document identity and placement identity remain separate.
+
+The linked documents are workshared, non-cloud documents. `GetWorksharingCentralModelPath`
+returns a non-null model path whose user-visible string is empty; direct `GetCloudModelPath`
+throws. Our `GetDocumentModelPath` returns that empty central path, and `GetDocumentPath`
+then returns null without consulting the valid `PathName`. Thus `GetDocumentKey` wrongly
+falls back to `project:unsaved:<title>:<hash>` for saved linked files. FALSIFIED[session dev,
+`probe-c`, `fa8de88f`]: Cleremont's loaded link documents have no path. The path is present;
+our helper discards it. The root fix is to fall back to `PathName` when the converted model
+path is empty, preserving the existing `project:path:...` key format for every consumer.
+
+`ExternalFileUtils.GetExternalFileReference` rejects every link type here. The types instead
+provide external-resource references from server `baddc547-d952-4d29-ae01-16e71e75aa63`.
+The complete reference-information maps (`CDX_FILE_ID`, `CDX_SDK_VER`, `CDX_TYPE`), resource
+versions, instance UniqueIds and paths were identical across both processes. Native loaded
+document versions changed for the host and all four source files; the host's version read by
+`BasicFileInfo.GetDocumentVersion` stayed identical. Neither process modified the host or links;
+the local host file's SHA-256 stayed unchanged. Both Revit PIDs and the owned backend were stopped.
+
+The placed-source address is the host document key plus the resolved source-document key plus
+the link instance id; the existing scene contract already carries all three. The root path
+fix makes that address stable on the measured copies. External-resource version is available
+as saved-resource provenance, but stability across reopen does not prove geometry invalidation:
+instance placement and unsaved geometry can change without a version change. No loaded-version
+or external-reference cache replaces the existing pack. Rename, external replacement, workset
+changes and cross-machine Desktop Connector paths are not certified by this probe.
+
+Evidence: worktree `t3-19486141`, `.artifacts/runs/session-20261028-space-cache/identity-20261028T101245Z/`
+(`summary.json`, full native receipts, file hashes, process/kernel memory log). The production
+Sweep below proves the new helper on these links in one process; the final gate still owes a
+second changed-code process and the dedicated identity fixture.
+
+### U6 production Sweep: the repeat regression is real
+
+PROVEN[session dev, controlled `probe-c`, `3694edfc` / `9a58edb2`, 2026-10-28 11:35–11:46Z].
+The actual Pea CLI called `revit.detail.space-sweep` on the Cleremont local copy, along duct
+`7950034` (`647d65be-a078-4dc5-a0f7-c05037e2c349-00794ed2`), excluding that duct itself.
+Each revision had a fresh process, then one cold call and two repeats of the identical request.
+The candidate disables store generation, so `Partition.Build` reads native geometry each call.
+Sweep, ingestion and BVH source code are unchanged between these revisions.
+
+| Actual production Sweep | Pack, `3694edfc` | Store disabled, `9a58edb2` |
+|---|---:|---:|
+| Cold operation elapsed | 27.526 s | 24.471 s |
+| Warm repeat 1 | 11.317 s | 15.772 s |
+| Warm repeat 2 | 11.297 s | 15.581 s |
+| Warm mean | 11.307 s | 15.677 s |
+| Cold private-byte delta | +2,169.9 MiB | +1,798.3 MiB |
+| Process private peak, 1 Hz sample | 9.01 GiB | 9.44 GiB |
+
+The cross-call repeat regresses **38.6% (+4.37 s)**. This is smaller than the bounded ingest's
+7× difference, but plainly exceeds variation between these repeats. It is not a speedup.
+The query itself took 2–10 ms. The table uses the host operation's elapsed time, including
+Prepare and transport; CLI startup is excluded. This is one production Sweep request on
+Cleremont, not a measurement of every beta verb or Chadds' whole-model Prepare.
+
+The candidate's warm private-byte deltas were +1,099.1 then −1,049.8 MiB, so these samples do
+not show monotonic retained-memory growth, nor establish a memory win. Minimum machine free
+was 15.25 GiB and neither watchdog fired. All six query answers agree exactly after excluding
+timing, capture stamps and the deliberately repaired document-key strings. Native element and
+link-instance identities, verdicts, gaps and searched counts agree. Every `IsModified` check
+was false and the local model's SHA-256 was unchanged. PIDs 48984 and 15640 and both owned
+backend trees were stopped; the implementation branch was restored and the slot released.
+
+The candidate's production response also carries the corrected `project:path:...` key for
+all six linked placements, with three placements sharing the same 3 BED source key. That is
+runtime evidence of the path fallback in the real model; the final gate still owes the second
+changed-code process and the dedicated workshared-link fixture.
+
+Revised ruling after the memory attribution was corrected: **keep the verb store and flags in
+step 5**. The existing pack retains bytes on disk, not a resident World. Deletion has no proved
+peak-memory win and loses 38.6% on a production repeat. Step 3 removes the scene path's store
+use independently. Step 6 must first move the verbs onto the scoped read, then re-measure the
+pack's benefit; deletion is permitted only when that benefit is gone. The comparison bar is
+the 11.307 s Cleremont Sweep repeat. Step 5 adds no resident geometry cache; any future resident
+reuse needs a hard memory cap and measurements. The whole-model Prepare/first-touch cost remains
+the cause established for the 13.8 GiB observation, not the disk pack.
+Evidence: worktree `t3-19486141`, `.artifacts/runs/session-20261028-space-cache/verb-ab-20261028T113513Z/`
+(`results.json`, `summary.json`, exact request, raw CLI/SDK receipts and memory logs).
+
 ## Instrument
 
 The "Revit read cost census" entrypoint in the [`document-profiler` Pod](../../../examples/pods/document-profiler/) is the instrument for census items M1 to M7, M14 and M18 (MINED §5). Another agent is building it (2026-10-27); this doc has not verified it. Run it on a second project before you use any number here outside Chadds.

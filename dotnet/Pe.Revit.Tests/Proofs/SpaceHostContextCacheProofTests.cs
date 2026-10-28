@@ -34,8 +34,10 @@ public sealed class SpaceHostContextCacheProofTests {
                 var whole = Scene.Write(document, new SceneRequest([compound.Id.Value()], FocusOnly: true), warm);
                 Assert.That(whole.Triangles, Is.EqualTo(24), "Prewarm includes both near and remote bodies.");
             }
+            // The retained pack belongs to verb preparation; scene capture may bypass it entirely.
+            SpaceWorld.Prepare(document);
             using (var cached = LinkedGeometryStore.For(document, null, Transform.Identity, generation!)) {
-                var whole = cached!.Read(compound.UniqueId + "/mesh",
+                var whole = cached!.Read(compound.UniqueId + "/curves",
                     () => throw new InvalidOperationException("Uncropped compound geometry must already be cached."));
                 Assert.That(whole.Triangles.Length, Is.EqualTo(24));
             }

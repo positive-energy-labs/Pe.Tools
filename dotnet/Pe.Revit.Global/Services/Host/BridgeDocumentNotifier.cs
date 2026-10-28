@@ -10,7 +10,7 @@ namespace Pe.Revit.Global.Services.Host;
 
 /// <summary>
 ///     Publishes document invalidation events to the TS host while the external bridge is
-///     connected. Pure tracker subscriber: identity, dedupe (ActiveChanged), and sandbox/empty
+///     connected. Pure tracker subscriber: identity, dedupe (ActiveChanged), and sandbox
 ///     filtering (ChangeFilter) are the tracker's job; cache upkeep is DocumentCacheMaintenance's.
 ///     Only the notification throttle lives here, and it publishes its trailing edge: a change
 ///     inside the 750 ms window arms one pending publish on the next Revit idle past the window,

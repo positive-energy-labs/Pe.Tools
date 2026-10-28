@@ -25,6 +25,7 @@ CHECKOUT = HERE.parents[1]
 ROOT = Path(subprocess.run(["git", "rev-parse", "--git-common-dir"], cwd=CHECKOUT, capture_output=True, text=True).stdout.strip()).resolve().parent
 DETACHED = ROOT / ".artifacts" / "revit" / "detached"
 LOCK = ROOT / ".artifacts" / "locks" / "revit-slot-1"
+ORDER = LOCK.parent / "ORDER"
 # Custody and isolation come from the environment so an agent with its own session id or acceptance-isolated product home
 # (PE_TOOLS_PRODUCT_HOME, inherited by every child) runs this unchanged: PE_PROOF_SESSION, PE_PROOF_CACHE (the space-scenes
 # dir the host publishes into), PE_PROOF_KEEP_HOST=1 (the caller owns and stops its own host).
@@ -48,6 +49,29 @@ def git(*args):
 
 def utc():
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def slot_log(message):
+    with (LOCK.parent / "QUEUE.txt").open("a", encoding="utf8") as stream:
+        stream.write(f"\n{SID} {CHECKOUT.name} {utc()}: {message}\n")
+
+
+def acquire_slot():
+    # ORDER is the sole admission authority. QUEUE.txt is only the human log.
+    lines = ORDER.read_text(encoding="utf-8-sig").splitlines()
+    if not lines or lines[0] != SID:
+        raise RuntimeError(f"Not {SID}'s turn: ORDER starts with {lines[:1]}")
+    LOCK.mkdir()  # atomic; never adopt another owner's directory
+    try:
+        lines = ORDER.read_text(encoding="utf-8-sig").splitlines()
+        if not lines or lines[0] != SID:
+            raise RuntimeError("ORDER changed before acquisition; no session started")
+        ORDER.write_text("\n".join(lines[1:]) + ("\n" if len(lines) > 1 else ""), encoding="utf8")
+    except Exception:
+        LOCK.rmdir()  # this call's newly created, still-empty directory only
+        raise
+    (LOCK / "owner.txt").write_text(f"{SID} harness {CHECKOUT.name} {utc()}\n")
+    slot_log("TAKING slot-1")
 
 
 # ---------------------------------------------------------------- PSC1 + accuracy (pure, no Revit)
@@ -339,27 +363,35 @@ def run_model(name, args, out: Path, fixture, results):
     groups = [[s] for s in systems] if args.cold_each else [systems]
     model = results["models"].setdefault(name, {"file": file_, "systems": systems, "processes": [], "reads": [], "accuracy": {}, "snapshot": None, "pins": {}})
     for gi, group in enumerate(groups):
+        open_floor = max(MIN_FREE_GIB, 16 if name == "chadds" else 10)
+        start_floor = open_floor + 3  # preserve headroom for an empty Revit before the model open
         for _ in range(int(os.environ.get("PE_PROOF_WAIT_FREE_S", 300)) // 5):  # hold the slot, wait out a dip; never open under the gate
             avail = psutil.virtual_memory().available / 2**30
-            if avail >= MIN_FREE_GIB:
+            if avail >= start_floor:
                 break
             time.sleep(5)
         avail = psutil.virtual_memory().available / 2**30
-        if avail < MIN_FREE_GIB:
-            raise RuntimeError(f"{avail:.1f} GiB free < {MIN_FREE_GIB} GiB required before opening {name}")
+        if avail < start_floor:
+            raise RuntimeError(f"{avail:.1f} GiB free < {start_floor} GiB required before starting {name}")
         ev = mdir / f"p{gi}"
         ev.mkdir(parents=True, exist_ok=True)
         ensure_backend_host()
         s = Session(ev)
-        proc = {"group": group, "startedUtc": utc(), "availableGiBBeforeOpen": round(avail, 2)}
+        proc = {"group": group, "startedUtc": utc(), "availableGiBBeforeStart": round(avail, 2)}
         model["processes"].append(proc)
         try:
             proc.update(s.start(f"{name}{gi}", GUARD_FLOOR_GIB))
+            avail = psutil.virtual_memory().available / 2**30
+            proc["availableGiBBeforeOpen"] = round(avail, 2)
+            if avail < open_floor:
+                raise RuntimeError(f"{avail:.1f} GiB free < {open_floor} GiB required before opening {name}")
+            slot_log(f"OPENING {name}; PID {s.pid}; free {avail:.1f} GiB")
             code, env = s.sdk("open", "doc", "open", str(path), "--id", SID, "--window", "headless")
             if code != 0:
                 s.sdk("dialogs", "session", "dialogs", "--id", SID)
                 raise RuntimeError(f"open exit {code}: {[d.get('code') for d in (env or {}).get('diagnostics', [])]}")
             s.doc = env["result"]["document"]["openId"]
+            slot_log(f"OPENED {name}; PID {s.pid}; SDK open completed, timed reads follow")
             ps = psutil.Process(s.pid)
             proc["privateAtOpen"] = ps.memory_info().private
             time.sleep(args.settle)
@@ -481,8 +513,14 @@ def run_model(name, args, out: Path, fixture, results):
                 raise RuntimeError(f"IsModified {mod} at end")
             proc["endedUtc"] = utc()
         finally:
-            proc["revitPidGone"] = s.stop(discard=True)
+            try:
+                proc["revitPidGone"] = s.stop(discard=True)
+            except Exception as error:
+                proc["stopError"] = str(error)
+                proc["revitPidGone"] = not (s.pid and psutil.pid_exists(s.pid))
             (out / "results.json").write_text(json.dumps(results, indent=1, default=str), encoding="utf8")
+            if not proc["revitPidGone"]:
+                raise RuntimeError(f"Own Revit PID {s.pid} remains alive; keep slot and backend for SDK recovery")
 
 
 # ---------------------------------------------------------------- tables
@@ -595,17 +633,16 @@ def main():
     fixture_path = HERE / "fixture.json"
     fixture = json.loads(fixture_path.read_text(encoding="utf8")) if fixture_path.exists() else {}
     commit = git("rev-parse", "--short", "HEAD")
-    out = ROOT / ".artifacts" / "accept" / "space-proof" / f"{commit}-{utc()}"
+    out = CHECKOUT / ".artifacts" / "accept" / "space-proof" / f"{commit}-{utc()}"
     plan = {"models": {n: {"file": str(DETACHED / MODELS[n][0]), "exists": (DETACHED / MODELS[n][0]).exists(), "systems": MODELS[n][1], "pinned": {s: s in fixture.get(n, {}) for s in MODELS[n][1]}} for n in names},
             "out": str(out), "lock": str(LOCK), "freeGiB": round(psutil.virtual_memory().available / 2**30, 1)}
     print(json.dumps(plan, indent=1))
     if args.plan:
         return
     try:
-        LOCK.mkdir(parents=True)
-    except FileExistsError:
-        sys.exit(f"{LOCK} is held ({(LOCK / 'owner.txt').read_text() if (LOCK / 'owner.txt').exists() else '?'}); wait for it or ask its owner")
-    (LOCK / "owner.txt").write_text(f"{SID} harness t3-f88a18ef {utc()}\n")
+        acquire_slot()
+    except (OSError, RuntimeError) as error:
+        sys.exit(f"Slot not acquired: {error}")
     out.mkdir(parents=True)
     results = {"run": {"commit": commit, "utc": utc(), "label": args.label, "context": args.context, "dirty": bool(git("status", "--porcelain", "--", "dotnet", "ts")), "baseline": args.baseline,
                        "checkout": str(CHECKOUT), "sdk": "pe-revit (pinned tool of this checkout)"}, "models": {}}
@@ -625,13 +662,16 @@ def main():
         (out / "results.md").write_text(table(results), encoding="utf8")
         if args.baseline:
             (out / "diff.md").write_text(diff(json.loads((Path(args.baseline) / "results.json").read_text(encoding="utf8")), results), encoding="utf8")
-        results["devHostStopped"] = stop_dev_host()
         alive = [p for m in results["models"].values() for p in m["processes"] if p.get("revitPidGone") is False]
         if alive:  # the slot stays held while a probe Revit of ours may still run
             print(f"SLOT KEPT: probe Revit still alive: {[p.get('pid') for p in alive]}", flush=True)
+            slot_log(f"SLOT KEPT: own Revit still alive; evidence {out}")
         else:
-            import shutil
-            shutil.rmtree(LOCK, ignore_errors=True)
+            results["devHostStopped"] = stop_dev_host()
+            (LOCK / "owner.txt").unlink()
+            LOCK.rmdir()
+            slot_log(f"RELEASE slot-1; own Revit PIDs gone and backend stopped; evidence {out}")
+        (out / "results.json").write_text(json.dumps(results, indent=1, default=str), encoding="utf8")
         print(f"results: {out}", flush=True)
     if "aborted" in results:
         sys.exit(1)

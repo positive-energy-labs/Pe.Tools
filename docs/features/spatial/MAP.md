@@ -109,6 +109,8 @@ transforms equal the cloud's; IFC instance 9465481 loaded.
 | `Level.Elevation` | Base-point relative; wrong by hundreds of feet. |
 | Whole-model `Prepare` per verb call | 220 s and +9.4 GiB per cold call. |
 | A disk pack keyed per process (`SpaceWorld.cs:47`, `LinkedGeometryStore.cs:36`) | Never hits after a restart; writes ≈550 MB per call into a shared 1 GiB cache. |
+| Loaded `Document.GetDocumentVersion` as the geometry revision | Cheap, but unchanged across committed geometry/link moves and different after restart on unchanged local files. Mark-only deltas distinguish the tested nearby/distant edits; rollback can have no ids. [U6 measured](READING-REVIT.md#u6-measured-cache-attribution-and-revision-identity-2026-10-28). |
+| Cleremont's Desktop Connector links have no stable path | `PathName` is present and stable across the measured processes. The helper discarded it when the central model path converted to an empty string. The root fallback fixes the source address; it does not establish a geometry revision. [U6 linked identity](READING-REVIT.md#u6-follow-up-linked-paths-and-external-references). |
 
 ## Target read
 
@@ -128,8 +130,9 @@ SceneRequest   focus ids (the opened systems' members), reach ft, representation
                per building, coincident levels merged, names kept
   disclose     per source: candidates counted, kept, excluded by class, cut by bound,
                unavailable; outlier focus members far from the rest
-Cache          keyed by document + link instance + version (never per process);
-               invalidated by a mark-only DocumentChanged handler; decided after step 2
+Cache          native geometry remains operation-owned; the existing disk pack reuses
+               verb captures within one Revit process. No new resident geometry cache.
+               Step 6 re-measures the pack after scoped verbs; delete only if its benefit is gone.
 Verbs          Pea's Sweep/Slice/Probe/Partition read through the same scoped read
                (beta; follow-on, not this map's target)
 ```
@@ -173,13 +176,13 @@ Verbs          Pea's Sweep/Slice/Probe/Partition read through the same scoped re
 3. Oriented representation: per-element oriented boxes in full 3D, sketch-based building as
    mesh, PSC1 and the web decoder carry them; tessellate once per type.
 4. Levels as data, drawn in the picture (landed 2026-10-28; PROVEN[browser headless over session dev controlled, `probe-l` PID 65552 generation `20261028095218243`, `8eee5175`, 2026-10-28 09:51–09:57Z] on all three models; ledger has the acceptance). Owed: the root inventory from a folded floater (overlay stacking) and the per-process key of path-less link documents (step 5).
-5. Cache key and invalidation; keep or delete `LinkedGeometryStore`. Measured 2026-10-28
-   (probe-c): `GetDocumentVersion` does not change on an edit, so it is FALSIFIED as an edit
-   key. The pack saves ≈9% on scene boxes, and deleting it makes a production Sweep repeat
-   38.6% slower (11.3→15.7 s) with no peak-memory win. The store stays until step 6 re-measures
-   it under the scoped read; that 11.3 s repeat is the bar. No geometry is retained in memory
-   across calls.
-6. Follow-on: Pea's verbs read through the scoped read.
+5. Cache key and invalidation: native baseline measured on Chadds and Cleremont across restart;
+   retain `LinkedGeometryStore` and `Dirty`/`Fresh`. Land the root linked-path fix, rollback-delta
+   filter fix and harness custody logging through native regressions and the three-model gate.
+   Loaded document version is falsified as an edit key. The pack reuses only within one process.
+6. Follow-on: Pea's verbs read through the scoped read, then re-measure the pack and delete it
+   only if its benefit is gone. The production Cleremont Sweep repeat bar is 11.307 s;
+   removing the pack before that migration costs 15.677 s (+38.6%) without a proved peak-memory win.
 
 ## Owed
 

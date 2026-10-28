@@ -15,7 +15,14 @@ with open(out, 'a', encoding='utf-8') as f:
         try: m = p.memory_info()
         except psutil.NoSuchProcess: w(event='gone'); break
         a = psutil.virtual_memory().available
-        w(private=m.private, working=m.rss, available=a)
+        top = []
+        for other in psutil.process_iter(['pid', 'name']):
+            try:
+                memory = other.memory_info()
+                top.append(dict(other.info, private=memory.private, working=memory.rss))
+            except psutil.Error:
+                pass
+        w(private=m.private, working=m.rss, available=a, top=sorted(top, key=lambda r: r['private'], reverse=True)[:15])
         low = low + 1 if a < floor else 0
         if low >= 3:
             r = subprocess.run(['dotnet', 'tool', 'run', 'pe-revit', '--', 'session', 'stop', '--id', sid, '--unsaved', 'keep',

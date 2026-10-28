@@ -43,15 +43,16 @@ public static class DocumentIdentityExtensions {
             throw new ArgumentNullException(nameof(doc));
 
         try {
-            var modelPath = doc.GetDocumentModelPath();
-            if (modelPath == null)
-                return string.IsNullOrWhiteSpace(doc.PathName) ? null : doc.PathName;
-
-            var userVisiblePath = ModelPathUtils.ConvertModelPathToUserVisiblePath(modelPath);
-            return string.IsNullOrWhiteSpace(userVisiblePath) ? null : userVisiblePath;
+            using var modelPath = doc.GetDocumentModelPath();
+            if (modelPath != null) {
+                var userVisiblePath = ModelPathUtils.ConvertModelPathToUserVisiblePath(modelPath);
+                if (!string.IsNullOrWhiteSpace(userVisiblePath)) return userVisiblePath;
+            }
         } catch {
-            return string.IsNullOrWhiteSpace(doc.PathName) ? null : doc.PathName;
+            // Fall through to the loaded file path when the model path is unavailable.
         }
+        // Workshared links can expose an empty central path and a valid PathName (Cleremont, READING-REVIT U6).
+        return string.IsNullOrWhiteSpace(doc.PathName) ? null : doc.PathName;
     }
 
     public static string GetDocumentKey(this Document doc) {

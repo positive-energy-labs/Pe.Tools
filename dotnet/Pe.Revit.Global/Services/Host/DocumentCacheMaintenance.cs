@@ -12,14 +12,12 @@ namespace Pe.Revit.Global.Services.Host;
 /// </summary>
 public static class DocumentCacheMaintenance {
     public static void Wire(IDocumentTracker documents) {
-        // One filter for every tracker consumer: rollback-sandbox churn (temp placements,
-        // snapshot probes) never persists, and empty deltas carry no information.
+        // Sandbox churn is private to its operation. Outside that scope even an empty delta matters:
+        // TransactionGroupRolledBack can restore geometry without any ids (Space READING-REVIT U6).
+        // Space epochs and the bridge must see that event; each data cache owns its narrower eviction.
         documents.ChangeFilter = e =>
             !DocumentSandbox.RollbackScopeActive
-            && !DocumentSandbox.IsSandboxTransaction(e.GetTransactionNames())
-            && (e.GetAddedElementIds().Count > 0
-                || e.GetModifiedElementIds().Count > 0
-                || e.GetDeletedElementIds().Count > 0);
+            && !DocumentSandbox.IsSandboxTransaction(e.GetTransactionNames());
 
         documents.Opened += tracked => FamilySnapshotStore.WarmStart(tracked.Resolve());
 
