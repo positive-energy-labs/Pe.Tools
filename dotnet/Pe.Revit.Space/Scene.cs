@@ -128,7 +128,7 @@ public static class Scene {
         var writtenBounds = Aabb.Empty;
         var crop = request.Bounds;
         using var writer = new BinaryWriter(vertices, System.Text.Encoding.UTF8, true);
-        LinkedGeometryStore.Geometry Capture(Partition partition, Element element, Aabb? region, bool coarse = false) {
+        LinkedGeometryStore.Geometry Capture(Partition partition, Element element, Aabb? region) {
             var rows = new List<PrimRow>();
             var mesh = new List<Tri>();
             Ingest.Element(element, partition.Source, 0, mesh, partition.Transform, rows,
@@ -247,8 +247,6 @@ public static class Scene {
                         foreach (var meshRow in captured.Rows) Write(partition, meshRow, captured.Triangles, isFocus);
                         if (captured.Rows.Length == 0) {
                             omitted++; limit ??= "missing-geometry";
-                            unavailable.Add(new SceneUnavailableElement(element.Id.Value(), element.UniqueId,
-                                element.Category?.Name, "No provable frame or native mesh was produced."));
                         }
                         return;
                     }
@@ -300,7 +298,7 @@ public static class Scene {
                     if (element is null) { omitted++; limit ??= "missing-element"; Cut(candidate.Source); continue; }
                     try {
                         budget.Check();
-                        var captured = Capture(candidate.Source, element, crop, true);
+                        var captured = Capture(candidate.Source, element, crop);
                         foreach (var row in captured.Rows) Write(candidate.Source, row, captured.Triangles, false);
                     } catch (SceneLimitException ex) {
                         limited++; limit = ex.Reason; Cut(candidate.Source);
