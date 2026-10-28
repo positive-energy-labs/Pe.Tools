@@ -26,7 +26,15 @@ import { PictureReadout } from "@pe/kit/lang/readout";
 import { nameOrFallback } from "@pe/kit/lang/subject-text";
 import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
 import { toggleLayer, type PicturePage } from "@pe/agent-contracts";
-import { useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import {
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 
 import { useElementAttention, useHoveredIssue, useIssueHover } from "#/attention";
 import { SelectionBoxButton } from "#/revit/element-menu";
@@ -102,7 +110,6 @@ type DocRef = { session: string; openId: string };
 type Move = { history: "push" | "replace" };
 const CONTEXT_KEYS = ["context", "halo"];
 
-
 /** The capture request a focus asks for; null when nothing is walked or near. */
 export function captureRequest(
   focus: PictureContent["focus"],
@@ -137,7 +144,8 @@ export function hoverGroupsOf(members: Members, admits: (group: SubjectKey) => b
   for (const group of members.keys()) {
     if (!admits(group)) continue;
     const own = leaves(group);
-    for (const leaf of own) if ((best.get(leaf)?.length ?? Infinity) > own.length) best.set(leaf, own);
+    for (const leaf of own)
+      if ((best.get(leaf)?.length ?? Infinity) > own.length) best.set(leaf, own);
   }
   return best;
 }
@@ -161,7 +169,13 @@ export function Picture<L extends string>({
   selection: Atom.Atom<ReadonlySet<SubjectKey>>;
   /** `native` follows the snapshot revision; `doc` is the bound document that keeps retention;
    * `label` names what a retained read shows; `refreshing` holds the last read while re-reading. */
-  source: { native: DocRef | null; doc: DocRef | null; version: string; label: string; refreshing: boolean };
+  source: {
+    native: DocRef | null;
+    doc: DocRef | null;
+    version: string;
+    label: string;
+    refreshing: boolean;
+  };
   page: PicturePage<L>;
   setPage: (next: Partial<PicturePage<L>>, move?: Move) => void;
   renderPane: TeachingPaneRender;
@@ -192,7 +206,13 @@ export function Picture<L extends string>({
         contextRepresentation,
         content.capture?.maxTriangles,
       ),
-    [content.focus, page.layers, page.contextRadiusFt, contextRepresentation, content.capture?.maxTriangles],
+    [
+      content.focus,
+      page.layers,
+      page.contextRadiusFt,
+      contextRepresentation,
+      content.capture?.maxTriangles,
+    ],
   );
   const captured = useCapture(request, native, source.version, content.capture?.cuts);
   const fixture = content.capture?.meshes;
@@ -328,8 +348,7 @@ export function Picture<L extends string>({
           : null,
     });
   };
-  const backWord = () =>
-    pickedKey ? content.name(pickedKey) : "the previous view";
+  const backWord = () => (pickedKey ? content.name(pickedKey) : "the previous view");
   const jumpTo = (stage: ReturnType<typeof useStage>, key: SubjectKey) => {
     const id = idOf(key);
     if (!Number.isFinite(id)) return;
@@ -458,7 +477,9 @@ export function Picture<L extends string>({
                   setLanded(null);
               }}
             >
-              {picture === "model" || !content.schematic ? model : content.schematic("main", readout)}
+              {picture === "model" || !content.schematic
+                ? model
+                : content.schematic("main", readout)}
 
               {landed?.box ? (
                 <div

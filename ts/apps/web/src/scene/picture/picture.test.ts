@@ -3,7 +3,10 @@ import type { SubjectKey } from "@pe/kit/lang/attention";
 import { captureRequest, hoverGroupsOf } from "./picture";
 
 test("focus captures walked and near once, sorted; context layers ask context", () => {
-  const focus = { walked: ["e:3", "e:1"] as SubjectKey[], near: ["e:3", "e:9", "issue:x"] as SubjectKey[] };
+  const focus = {
+    walked: ["e:3", "e:1"] as SubjectKey[],
+    near: ["e:3", "e:9", "issue:x"] as SubjectKey[],
+  };
   const request = captureRequest(focus, ["meshes"], 10, "boxes")!;
   expect(request.elementIds).toEqual([1, 3, 9]);
   expect(request.focusOnly).toBe(true);

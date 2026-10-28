@@ -302,10 +302,7 @@ function Content({
       return layers;
     };
   }, [issues]);
-  const noRuns3d = useMemo(
-    () => noRunLayers(noRuns, snapshot, issues),
-    [noRuns, snapshot, issues],
-  );
+  const noRuns3d = useMemo(() => noRunLayers(noRuns, snapshot, issues), [noRuns, snapshot, issues]);
   const look = useSyncExternalStore(knobsChanged, LOOK.read, LOOK.read);
   const kinds = colours;
   const colour = systemColours ? "firm" : "mono";
