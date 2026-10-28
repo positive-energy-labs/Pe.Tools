@@ -70,11 +70,15 @@ does not pay for them again.
 
 | Model | Building lives in | `/ducts` context, boxes | Link cost per element |
 |---|---|---|---|
-| Chadds (SA 7 / EX 7) | IFC link at 45°, loaded | 20.1 s +822 MiB / 6.0 s +162 MiB | ≈14 KB |
+| Chadds (SA 7 / EX 7) | IFC link at 45°, loaded | 6.4 s +759 MiB / 1.1 s +101 MiB (EX 7 read after SA 7, not process-cold) | ≈14 KB |
 | Manuella (SA 42 / SA 39) | 3 RVT links, unloaded; host has 7 walls | 0.5 s, +4–6 MiB | n/a |
 | Cleremont (SA 19 / SA 2) | 4 RVT links × 6 placements, loaded | 1.6 s +61 MiB / 3.6 s +166 MiB | 0.8–2.3 KB |
 
-Meshes context on Chadds SA 7: 54.5 s, +2,443 MiB. Focus meshes are cheap (whole-building 5,224
+The Chadds row is the harness baseline: headless, on the local clone copy, main product code
+`088f03d4` (`.artifacts/accept/space-proof/baseline-main-088f03d4/results.md`). A windowed run
+on the cloud clone on 2026-10-27 measured 20.1 s / 6.0 s with similar memory; why the time
+differs is UNPROVEN. EX 7 is 108 focus ids by `scopeOf` against 153 in a UI capture, also
+UNPROVEN. Meshes context on Chadds SA 7: 54.5 s, +2,443 MiB. Focus meshes are cheap (whole-building 5,224
 meshes ≈105 MiB). Reports: `.artifacts/accept/{ducts-read-baseline-20261027,
 manuella-generality-20261027,cleremont-generality-20261028}/REPORT.md`. Local detached copies for
 proof live in `.artifacts/revit/detached/` (Manuella and Cleremont `_local_`). Every Chadds number
