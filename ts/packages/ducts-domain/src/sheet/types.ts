@@ -4,7 +4,7 @@
  * The wire contract (W1-F) mirrors this file; change it there in the same commit.
  */
 
-export const SHEET_ENGINE_VERSION = "sheet/2";
+export const SHEET_ENGINE_VERSION = "sheet/3";
 
 /** A roster entry's identity. Reached ends decide the physical discharge/inlet in the sheet. */
 export interface FanPortRef {
@@ -79,10 +79,29 @@ export interface Blocker {
     kind: "default" | "heal" | "ruling";
     note: string;
     /** A heal or join candidate the closer would act on. */
-    candidate?: { toElementId: number; toConnector: number | null; gapIn: number; pair: [string, string] };
+    candidate?: {
+      toElementId: number;
+      toConnector: number | null;
+      gapIn: number;
+      pair: [string, string];
+    };
   };
   /** The other fan a shared leg or a join belongs to. */
   owner?: FanPortRef;
+  proposal?: HealProposal;
+}
+
+/** A calculation assumption, never a model write. Points use snapshot coordinates (feet). */
+export interface HealProposal {
+  kind: "join" | "tap" | "tee";
+  from: { elementId: number; connector: number; point: number[] };
+  to: { elementId: number; connector: number | null; point: number[] };
+  pair: [string, string];
+  gapIn: number;
+  fittingChange: boolean;
+  risk: string;
+  /** Extension friction and any required fitting change, priced on the continued walk. */
+  assumedLegs: Leg[];
 }
 
 export interface SideTotals {
@@ -90,6 +109,8 @@ export interface SideTotals {
   worstPath: number | null;
   /** Worst known subtotal across the side's paths, complete or not. */
   knownInWg: number;
+  /** Worst path on the continued heal walk; null while flow or pricing remains blocked. */
+  assumedInWg: number | null;
   allowanceInWg: number;
   complete: boolean;
   /** Total equivalent length of the worst path, ft. */
@@ -126,7 +147,10 @@ export interface Sheet {
     return: SideTotals;
     /** Worst supply + worst return + allowances, only when both sides are complete. */
     requiredEspInWg: number | null;
+    requiredEspAssumedInWg: number | null;
   };
+  /** Continued walk, including newly exposed ends and blockers; never substituted for known. */
+  assumed: { paths: SheetPath[]; legs: Record<string, Leg>; blockers: Blocker[] };
   blockers: Blocker[];
   inputs: SheetInput[];
   walkedElementIds: number[];

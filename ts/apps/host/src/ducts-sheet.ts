@@ -67,8 +67,12 @@ const stale = () =>
   new BridgeError("Stale sheet basis; read a new overview before using detail handles", 409, {
     notDispatched: true,
   });
-const subjectKey = ({ detail: _detail, basis: _basis, ...subject }: DuctsSheetRequest) =>
-  canonicalRouteInput(subject);
+const subjectKey = ({
+  detail: _detail,
+  basis: _basis,
+  proposal: _proposal,
+  ...subject
+}: DuctsSheetRequest) => canonicalRouteInput(subject);
 type Entry = {
   subject: string;
   inputs: DuctsSheetInputs;
@@ -91,6 +95,7 @@ const compact = (value: Sheet["blockers"][number]) => ({
   ...(value.connector === undefined ? {} : { connector: value.connector }),
   effectInWg: value.effectInWg,
   closer: value.closer.kind,
+  ...(value.proposal ? { proposal: value.proposal } : {}),
   ...(value.owner ? { owner: value.owner } : {}),
 });
 
@@ -123,6 +128,7 @@ function overview(entry: Entry): DuctsSheetOverview {
     totals: "totals" in entry.value ? entry.value.totals : null,
     paths: { supply, return: ret },
     blockers: entry.value.blockers.map(compact),
+    assumedBlockers: "assumed" in entry.value ? entry.value.assumed.blockers.map(compact) : [],
     next: {
       hint: "Repeat this request with basis and detail. legs needs pathId; elements returns walkedElementIds; inputs returns provenance and full blocker closers. Other paths use their zero-based engine path index.",
       legs: [...supply.paths, ...ret.paths].map(({ pathId }) => ({ kind: "legs", pathId })),
@@ -137,11 +143,13 @@ interface SheetWork {
   key(target: DocumentRef): Promise<WorkKey>;
   author(): WorkAuthor;
 }
-const inputKey = (request: DuctsSheetRequest) => request.mode === "fan"
-  ? `fan:${request.unitId}:${request.portIndex}`
-  : `chain:${request.start.elementId}:${request.start.connector ?? ""}:${request.end.elementId}:${request.direction}`;
+const inputKey = (request: DuctsSheetRequest) =>
+  request.mode === "fan"
+    ? `fan:${request.unitId}:${request.portIndex}`
+    : `chain:${request.start.elementId}:${request.start.connector ?? ""}:${request.end.elementId}:${request.direction}`;
 const mergeInputs = (saved: DuctsSheetInputs, override: DuctsSheetInputs): DuctsSheetInputs => ({
-  ...saved, ...override,
+  ...saved,
+  ...override,
   ...(saved.endCfm || override.endCfm ? { endCfm: { ...saved.endCfm, ...override.endCfm } } : {}),
   ...(saved.drops || override.drops ? { drops: { ...saved.drops, ...override.drops } } : {}),
 });
@@ -151,25 +159,49 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
     const owned = scope && work ? await work.workspace.readRaw(scope, "ducts") : null;
     const doc = owned ? ductsDocumentSchema.parse(owned.doc) : null;
     const project = doc?.sheetInputs.project?.edit?.value ?? {};
-    const saved = key ? doc?.sheetInputs[key]?.edit?.value ?? {} : {};
+    const saved = key ? (doc?.sheetInputs[key]?.edit?.value ?? {}) : {};
     // Only the project cell owns slot, even if old per-fan Work happens to contain one.
     const { slot: _slot, ...local } = saved;
-    return { scope, revision: owned?.revision ?? 0, inputs: { ...local, ...(project.slot ? { slot: project.slot } : {}) },
-      defaults: { terminalDropInWg: SHIM_TERMINAL_DROP_IN_WG, terminalDropSource: "SHIM placeholder", autoJoinMaxGapIn: 3, splitPolicy: "even" as const,
+    return {
+      scope,
+      revision: owned?.revision ?? 0,
+      inputs: { ...local, ...(project.slot ? { slot: project.slot } : {}) },
+      defaults: {
+        terminalDropInWg: SHIM_TERMINAL_DROP_IN_WG,
+        terminalDropSource: "SHIM placeholder",
+        autoJoinMaxGapIn: 3,
+        splitPolicy: "even" as const,
         ...doc?.sheetDefaults.edit?.value,
-        ...(doc?.sheetDefaults.edit?.value.terminalDropInWg !== undefined ? { terminalDropSource: "route settings terminal drop" } : {}),
+        ...(doc?.sheetDefaults.edit?.value.terminalDropInWg !== undefined
+          ? { terminalDropSource: "route settings terminal drop" }
+          : {}),
         slot: doc?.parameters.terminalFlow?.edit?.value,
-      } };
+      },
+    };
   }
-  async function persist(request: DuctsSheetRequest, saved: Awaited<ReturnType<typeof savedInputs>>, inputs: DuctsSheetInputs) {
+  async function persist(
+    request: DuctsSheetRequest,
+    saved: Awaited<ReturnType<typeof savedInputs>>,
+    inputs: DuctsSheetInputs,
+  ) {
     if (!request.inputs || !work || !saved.scope) return;
     const { slot, ...local } = inputs;
     const patches = [
-      ...(request.inputs.slot === undefined ? [] : [{ path: ["sheetInputs", "project", "edit"], value: { value: { slot } } }]),
-      ...(Object.keys(request.inputs).some((k) => k !== "slot") ? [{ path: ["sheetInputs", inputKey(request), "edit"], value: { value: local } }] : []),
+      ...(request.inputs.slot === undefined
+        ? []
+        : [{ path: ["sheetInputs", "project", "edit"], value: { value: { slot } } }]),
+      ...(Object.keys(request.inputs).some((k) => k !== "slot")
+        ? [{ path: ["sheetInputs", inputKey(request), "edit"], value: { value: local } }]
+        : []),
     ];
     if (!patches.length) return;
-    const result = await work.workspace.apply(saved.scope, "ducts", work.author(), patches, saved.revision);
+    const result = await work.workspace.apply(
+      saved.scope,
+      "ducts",
+      work.author(),
+      patches,
+      saved.revision,
+    );
     if (!result.ok) throw new BridgeError(refusalText(result), 409, { notDispatched: true });
   }
   // Results are disposable. The raw owner separately bounds acquisition bytes and invalidates versions.
@@ -195,6 +227,36 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
   return {
     async sheet(request: DuctsSheetRequest): Promise<DuctsSheetResponse> {
       const saved = await savedInputs(request.target, inputKey(request));
+      if (request.proposal) {
+        const entry = request.basis ? entries.get(request.basis) : undefined;
+        if (
+          !entry ||
+          request.detail ||
+          entry.workInputKey !== inputKey(request) ||
+          canonicalRouteInput(entry.target) !== canonicalRouteInput(request.target) ||
+          canonicalRouteInput(entry.inputs) !== canonicalRouteInput(saved.inputs) ||
+          entry.settingsBasis !== canonicalRouteInput(saved.defaults)
+        )
+          throw stale();
+        await current(entry);
+        const all = [
+          ...entry.value.blockers,
+          ...("assumed" in entry.value ? entry.value.assumed.blockers : []),
+        ];
+        const choice = request.proposal;
+        if (!all.some((b) => b.proposal?.pair.every((p) => choice.pair.includes(p))))
+          throw new BridgeError("Proposal is not on this sheet basis", 409, {
+            notDispatched: true,
+          });
+        if (!work)
+          throw new BridgeError("Document Work is unavailable for proposal rulings", 409, {
+            notDispatched: true,
+          });
+        const rulings = (saved.inputs.rulings ?? []).filter(
+          (r) => !r.pair.every((p) => choice.pair.includes(p)),
+        );
+        request = { ...request, inputs: { ...request.inputs, rulings: [...rulings, choice] } };
+      }
       const inputs = ductsSheetInputsSchema.parse(mergeInputs(saved.inputs, request.inputs ?? {}));
       const subject = canonicalRouteInput([subjectKey({ ...request, inputs }), saved.defaults]);
       if (request.detail) {
@@ -208,6 +270,15 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
           return {
             ...base,
             kind: "inputs",
+            edits: entry.inputs,
+            ends: [
+              ...new Map(
+                [
+                  ...pathsOf(entry.value),
+                  ...("assumed" in entry.value ? entry.value.assumed.paths : []),
+                ].map((p) => [canonicalRouteInput(p.end), p.end]),
+              ).values(),
+            ],
             inputs: entry.value.inputs,
             blockers: entry.value.blockers,
           };
@@ -256,7 +327,10 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
               grids,
               fan: { unitId: request.unitId, portIndex: request.portIndex },
               ...inputs,
-              defaults: { ...saved.defaults, slot: saved.defaults.slot ?? snapshot.slots?.terminalFlow },
+              defaults: {
+                ...saved.defaults,
+                slot: saved.defaults.slot ?? snapshot.slots?.terminalFlow,
+              },
               roster: ports,
             })
           : buildChain({
@@ -271,8 +345,10 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
               roster: ports,
             });
       for (const row of value.inputs) {
-        const field = row.name === "airflow slot" ? "slot" : row.name === "split policy" ? "splitPolicy" : null;
-        if (field && saved.inputs[field] !== undefined && request.inputs?.[field] === undefined) row.source = "Work edit";
+        const field =
+          row.name === "airflow slot" ? "slot" : row.name === "split policy" ? "splitPolicy" : null;
+        if (field && saved.inputs[field] !== undefined && request.inputs?.[field] === undefined)
+          row.source = "Work edit";
       }
       // The engine hashes its inputs; the host also binds the native observation and exact request.
       value.basis = createHash("sha256")
@@ -305,27 +381,33 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
       const snapshot = (await response.json()) as DuctSnapshot;
       const roster = suggestRoster(snapshot);
       const saved = await savedInputs(request.target);
-      const activeSlot = saved.inputs.slot ?? saved.defaults.slot ?? snapshot.slots?.terminalFlow ?? "terminalFlow";
+      const activeSlot =
+        saved.inputs.slot ?? saved.defaults.slot ?? snapshot.slots?.terminalFlow ?? "terminalFlow";
       const rows = [];
       for (const port of [...roster.fans, ...roster.suggestions]) {
-        const cached = [...entries.values()].reverse().find(
-          (entry) =>
-            entry.mode === "fan" &&
-            entry.target.session === request.target.session &&
-            entry.target.openId === request.target.openId &&
-            "fan" in entry.value &&
-            entry.value.fan.unitId === port.unitId &&
-            entry.value.fan.portIndex === port.portIndex,
-        );
+        const cached = [...entries.values()]
+          .reverse()
+          .find(
+            (entry) =>
+              entry.mode === "fan" &&
+              entry.target.session === request.target.session &&
+              entry.target.openId === request.target.openId &&
+              "fan" in entry.value &&
+              entry.value.fan.unitId === port.unitId &&
+              entry.value.fan.portIndex === port.portIndex,
+          );
         let sheet: Sheet | undefined;
         if (cached) {
           try {
             await current(cached);
             const candidate = cached.value as Sheet;
             const currentInputs = await savedInputs(request.target, cached.workInputKey);
-            if (canonicalRouteInput(currentInputs.defaults) === cached.settingsBasis
-              && canonicalRouteInput(currentInputs.inputs) === canonicalRouteInput(cached.inputs)
-              && candidate.inputs.find((i) => i.name === "airflow slot")?.value === activeSlot) sheet = candidate;
+            if (
+              canonicalRouteInput(currentInputs.defaults) === cached.settingsBasis &&
+              canonicalRouteInput(currentInputs.inputs) === canonicalRouteInput(cached.inputs) &&
+              candidate.inputs.find((i) => i.name === "airflow slot")?.value === activeSlot
+            )
+              sheet = candidate;
           } catch (error) {
             if (!(error instanceof BridgeError) || error.statusCode !== 409) throw error;
             entries.delete(cached.value.basis);
@@ -347,13 +429,18 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
             ? {
                 blockerCount: sheet.blockers.length,
                 requiredEspInWg: sheet.totals.requiredEspInWg,
+                requiredEspAssumedInWg: sheet.totals.requiredEspAssumedInWg,
                 complete: sheet.totals.supply.complete && sheet.totals.return.complete,
               }
             : {}),
         });
       }
-      return ductsRosterResponseSchema.parse({ target: request.target, rows,
-        slots: slotCoverage(snapshot.nodes, snapshot.slots?.terminalFlow), activeSlot });
+      return ductsRosterResponseSchema.parse({
+        target: request.target,
+        rows,
+        slots: slotCoverage(snapshot.nodes, snapshot.slots?.terminalFlow),
+        activeSlot,
+      });
     },
   };
 }

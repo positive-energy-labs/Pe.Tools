@@ -12,6 +12,7 @@ import { showInRevit } from "#/revit/element-menu";
 import { useSheet } from "./use-sheet";
 import { Roster, FanSheet } from "./view";
 import { SheetPicture } from "./picture";
+import { SheetInputs } from "./inputs";
 
 const manifest = defineRoute({ key: "sheet", name: "Pressure sheet", needs: "document" });
 
@@ -98,9 +99,20 @@ export function SheetWorkspace({ target }: { target: DocumentRef }) {
             anchor={anchor}
             pickPath={(id) => void state.pickPath(id)}
             busy={state.busy}
+            controls={
+              <SheetInputs
+                sheet={state.sheet}
+                slots={state.slots}
+                activeSlot={state.activeSlot}
+                busy={state.busy}
+                anchor={anchor}
+                change={(inputs) => void state.changeInputs(inputs)}
+                rule={(proposal) => void state.ruleProposal(proposal)}
+              />
+            }
             picture={
               <SheetPicture
-                key={state.sheet.overview.basis}
+                key={`${state.sheet.overview.fan?.unitId}:${state.sheet.overview.fan?.portIndex}`}
                 sheet={state.sheet}
                 select={(id) => void select(id)}
               />

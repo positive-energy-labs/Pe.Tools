@@ -7,6 +7,7 @@
 import { slotFlowOf, terminalFlow } from "../kernel/terminal-flow.ts";
 import type { Blocker } from "./types.ts";
 import { isSegment, lineage, type Walk } from "./walk.ts";
+import type { AssumedFlow } from "./assumed-flow.ts";
 
 export interface FlowOptions {
   slot: string;
@@ -15,6 +16,7 @@ export interface FlowOptions {
   sideStream?: { cfm: number; source: string } | null;
   splitPolicy?: "even" | "proportional";
   receivingDesignCfm?: Readonly<Record<number, number | null>>;
+  receivingAssumedCfm?: ReadonlyMap<string, AssumedFlow>;
   /** Chain mode: only this end carries flow (`cfm`), every other end carries nothing. */
   only?: { end: number; cfm: number | null; source: string };
 }
@@ -43,7 +45,8 @@ export function flowsOf(w: Walk, opts: FlowOptions, block: (b: Omit<Blocker, "id
   const terminalSum = w.ends.filter((e) => e.end.kind === "terminal").reduce((sum, e) => sum + (terminalAt(e)?.flow ?? 0), 0);
   const typedSum = terminalSum + fanPorts.reduce((sum, e) => sum + (typedAt(e) ?? 0), 0);
   const remainder = opts.sideStream ? opts.sideStream.cfm - typedSum : null;
-  const weights = untyped.map((e) => opts.receivingDesignCfm?.[e.end.fan?.unitId ?? e.end.elementId]);
+  const receiving = (e: Walk["ends"][number]) => e.end.fan ? opts.receivingAssumedCfm?.get(`${e.end.fan.unitId}:${e.end.fan.portIndex}`) : undefined;
+  const weights = untyped.map((e) => opts.receivingDesignCfm?.[e.end.fan?.unitId ?? e.end.elementId] ?? receiving(e)?.cfm);
   const proportional = opts.splitPolicy === "proportional" && weights.every((v) => v != null && v > 0);
   const weightSum = weights.reduce<number>((sum, v) => sum + (v ?? 0), 0);
   const policy = proportional ? "proportional" : "even";
@@ -70,7 +73,7 @@ export function flowsOf(w: Walk, opts: FlowOptions, block: (b: Omit<Blocker, "id
       const share = remainder != null && remainder >= 0 && at >= 0
         ? remainder * (proportional ? weights[at]! / weightSum : 1 / untyped.length) : null;
       [cfm, source] = typed != null ? [typed, `side-stream:typed; ${policySource} applies to remainder`]
-        : share != null ? [share, `side-stream:${opts.sideStream!.source}; ${policySource}`] : [null, null];
+        : share != null ? [share, `side-stream:${opts.sideStream!.source}; ${policySource}${proportional && receiving(e) ? `; receiving ${receiving(e)!.source}` : ""}`] : [null, null];
     }
     if (cfm == null && (opts.only ? i === opts.only.end : e.end.kind === "terminal" || isFanEnd(e))) {
       const terminal = e.end.kind === "terminal";

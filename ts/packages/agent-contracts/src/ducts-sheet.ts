@@ -14,7 +14,14 @@ export const ductsSheetInputsSchema = z.strictObject({
   splitPolicy: z.enum(["even", "proportional"]).optional(),
   endCfm: z.record(z.string().regex(/^[1-9]\d*$/), z.number().finite().nonnegative()).optional(),
   drops: z.record(z.string().regex(/^[1-9]\d*$/), z.number().finite().nonnegative()).optional(),
-  rulings: z.array(z.strictObject({ pair: z.tuple([z.string().min(1), z.string().min(1)]), verdict: z.enum(["accept", "reject"]) })).optional(),
+  rulings: z
+    .array(
+      z.strictObject({
+        pair: z.tuple([z.string().min(1), z.string().min(1)]),
+        verdict: z.enum(["accept", "reject"]),
+      }),
+    )
+    .optional(),
 });
 /** Stored beside /ducts colours and parameter slots; host passes these through one engine defaults seam. */
 export const ductsSheetDefaultsSchema = z.strictObject({
@@ -29,6 +36,13 @@ const common = {
   basis: z.string().min(1).optional(),
   detail: detail.optional(),
   inputs: ductsSheetInputsSchema.optional(),
+  /** Basis-bound calculation ruling. Does not change the Revit model. */
+  proposal: z
+    .strictObject({
+      pair: z.tuple([z.string().min(1), z.string().min(1)]),
+      verdict: z.enum(["accept", "reject"]),
+    })
+    .optional(),
 };
 export const ductsSheetRequestSchema = z.discriminatedUnion("mode", [
   z.strictObject({ ...common, mode: z.literal("fan"), unitId: elementId, portIndex }),
@@ -52,6 +66,7 @@ export const DUCTS_SHEET_GUIDE = {
     "Read route:ducts.roster with the exact target {session, openId}. Match the equipment mark, then use its unitId and portIndex; marks are not unique. Suggestions remain unconfirmed until the engineer rules.",
     "Read route:ducts.sheet with {target, mode: 'fan', unitId, portIndex}. For a named start and end, use mode 'chain', start {elementId, connector?}, end {elementId}, and asserted direction 'supply' or 'return'. A chain makes no fan ESP claim.",
     "Read the sheet's blockers back to the person with their element and connector, effect on the total, and closer. Report known subtotal, completeness, and required ESP exactly as returned. Never call an incomplete path critical.",
+    "Accept or reject a returned heal proposal with the same fan request, its basis, and proposal {pair, verdict}. This writes a calculation ruling to document Work, never a Revit heal. Assumed ESP uses the continued walk; flow and pricing gaps still withhold it.",
     "Use the returned next handles with the same target, mode, and basis to read a path's legs, walked elements, or inputs and provenance. A stale response means read a new overview; never reuse a handle against a different basis.",
     "Read inputs detail for the full closer notes and candidates. Propose a sourced default or a basis-bound previewed heal for a blocker, with its effect on the total. Use only an available typed preview/write contract and the returned candidate. If that door is unavailable, report it as owed; do not substitute old group heals. After an authorized change, read a new sheet and report its measured effect. Unknown effects stay unknown until recomputed.",
   ],
@@ -79,6 +94,7 @@ const pathEnd = z.object({
 const sideTotals = z.object({
   worstPath: z.number().nullable(),
   knownInWg: z.number(),
+  assumedInWg: z.number().nullable(),
   allowanceInWg: z.number(),
   complete: z.boolean(),
   telFt: z.number(),
@@ -88,6 +104,34 @@ const totals = z.object({
   supply: sideTotals,
   return: sideTotals,
   requiredEspInWg: z.number().nullable(),
+  requiredEspAssumedInWg: z.number().nullable(),
+});
+const leg = z.object({
+  id: z.string(),
+  elementId,
+  kind: z.enum(["duct", "fitting", "accessory", "equipment", "terminal"]),
+  inConnector: portIndex.optional(),
+  outConnector: portIndex.optional(),
+  flowCfm: z.number().nullable(),
+  flowSource: z.string().nullable(),
+  velocityFpm: z.number().nullable(),
+  lossInWg: z.number().nullable(),
+  lossSource: z.object({ kind: z.enum(["friction", "rule", "drop", "default"]), ref: z.string() }),
+  equivalentFt: z.number().nullable(),
+});
+const healProposal = z.object({
+  kind: z.enum(["join", "tap", "tee"]),
+  from: z.object({ elementId, connector: portIndex, point: z.array(z.number()).length(3) }),
+  to: z.object({
+    elementId,
+    connector: portIndex.nullable(),
+    point: z.array(z.number()).length(3),
+  }),
+  pair: z.tuple([z.string(), z.string()]),
+  gapIn: z.number().nonnegative(),
+  fittingChange: z.boolean(),
+  risk: z.string(),
+  assumedLegs: z.array(leg),
 });
 const blocker = z.object({
   id: z.string(),
@@ -107,20 +151,8 @@ const blocker = z.object({
   connector: portIndex.optional(),
   effectInWg: z.number().nullable(),
   closer: z.enum(["default", "heal", "ruling"]),
+  proposal: healProposal.optional(),
   owner: fanRef.optional(),
-});
-const leg = z.object({
-  id: z.string(),
-  elementId,
-  kind: z.enum(["duct", "fitting", "accessory", "equipment", "terminal"]),
-  inConnector: portIndex.optional(),
-  outConnector: portIndex.optional(),
-  flowCfm: z.number().nullable(),
-  flowSource: z.string().nullable(),
-  velocityFpm: z.number().nullable(),
-  lossInWg: z.number().nullable(),
-  lossSource: z.object({ kind: z.enum(["friction", "rule", "drop", "default"]), ref: z.string() }),
-  equivalentFt: z.number().nullable(),
 });
 const pathSummary = z.object({
   pathId: z.string(),
@@ -143,6 +175,7 @@ export const ductsSheetOverviewSchema = z.object({
   totals: totals.nullable(),
   paths: z.object({ supply: rankedSide, return: rankedSide }),
   blockers: z.array(blocker),
+  assumedBlockers: z.array(blocker),
   next: z.object({
     hint: z.string(),
     legs: z.array(detail.options[0]),
@@ -157,6 +190,8 @@ export const ductsSheetResponseSchema = z.discriminatedUnion("kind", [
   z.object({
     ...responseBase,
     kind: z.literal("inputs"),
+    edits: ductsSheetInputsSchema,
+    ends: z.array(pathEnd),
     inputs: z.array(
       z.object({
         name: z.string(),
@@ -187,7 +222,13 @@ export type DuctsSheetResponse = z.infer<typeof ductsSheetResponseSchema>;
 export type DuctsSheetOverview = z.infer<typeof ductsSheetOverviewSchema>;
 export const ductsRosterResponseSchema = z.object({
   target: documentRefSchema,
-  slots: z.array(z.object({ slot: z.string(), covered: z.number().int().nonnegative(), total: z.number().int().nonnegative() })),
+  slots: z.array(
+    z.object({
+      slot: z.string(),
+      covered: z.number().int().nonnegative(),
+      total: z.number().int().nonnegative(),
+    }),
+  ),
   activeSlot: z.string(),
   rows: z.array(
     z.object({
@@ -200,6 +241,7 @@ export const ductsRosterResponseSchema = z.object({
       confirmed: z.boolean().optional(),
       blockerCount: z.number().int().optional(),
       requiredEspInWg: z.number().nullable().optional(),
+      requiredEspAssumedInWg: z.number().nullable().optional(),
       complete: z.boolean().optional(),
     }),
   ),

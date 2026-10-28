@@ -6,7 +6,16 @@
 import type { FanPort } from "../roster.ts";
 import type { Grids } from "../loss-grid.ts";
 import type { DuctSnapshot } from "../types.ts";
-import { fittingFacts, teePorts, isTap, splitTappedDuct, tapDistance, type LegFlows, type Node, type Segment } from "../kernel/fitting-facts.ts";
+import {
+  fittingFacts,
+  teePorts,
+  isTap,
+  splitTappedDuct,
+  tapDistance,
+  type LegFlows,
+  type Node,
+  type Segment,
+} from "../kernel/fitting-facts.ts";
 import type { ConnectorPairRuling } from "../kernel/inferred-joins.ts";
 import { equivalentFeet, priceLeg, type Choices, type PricedLeg } from "../kernel/price-leg.ts";
 import { flowsOf, legKey, stateFlow, type FlowOptions, type Flows } from "./flow.ts";
@@ -16,15 +25,28 @@ import {
   type Chain,
   type FanPortRef,
   type Leg,
+  type HealProposal,
   type Sheet,
   type SheetInput,
   type SheetPath,
   type Side,
   type SideTotals,
 } from "./types.ts";
-import { terminateMerges, graphOf, isSegment, legsOf, lineage, walkFrom, type End, type Graph, type Walk } from "./walk.ts";
+import {
+  terminateMerges,
+  graphOf,
+  isSegment,
+  legsOf,
+  lineage,
+  walkFrom,
+  type End,
+  type Graph,
+  type Walk,
+} from "./walk.ts";
+import { assumedFanFlows } from "./assumed-flow.ts";
 
-export type SheetSnapshot = Pick<DuctSnapshot, "nodes" | "segments" | "document"> & Partial<Pick<DuctSnapshot, "slots">>;
+export type SheetSnapshot = Pick<DuctSnapshot, "nodes" | "segments" | "document"> &
+  Partial<Pick<DuctSnapshot, "slots">>;
 
 // SHIM(ducts-terminal-drop): 0.03 in-wg is a placeholder pending the firm's per-family table.
 export const SHIM_TERMINAL_DROP_IN_WG = 0.03;
@@ -36,7 +58,14 @@ export interface PricingInput {
   /** Typed drops, in-wg, by element id; they replace any rule or parameter. */
   drops?: Readonly<Record<number, number>>;
   /** Firm defaults; a terminal with no typed or catalog drop takes `terminalDropInWg`. */
-  defaults?: { terminalDropInWg?: number; terminalDropSource?: string; splitPolicy?: "even" | "proportional"; slot?: string; autoJoinMaxGapIn?: number; version?: string };
+  defaults?: {
+    terminalDropInWg?: number;
+    terminalDropSource?: string;
+    splitPolicy?: "even" | "proportional";
+    slot?: string;
+    autoJoinMaxGapIn?: number;
+    version?: string;
+  };
   roster?: readonly FanPort[];
   rulings?: readonly ConnectorPairRuling[];
   candidateBoxIn?: number;
@@ -53,6 +82,8 @@ export interface BuildSheetInput extends PricingInput {
   sideStreamCfm?: number;
   splitPolicy?: "even" | "proportional";
   allowanceInWg?: { supply?: number; return?: number };
+  /** Proof switch: compare topology assumptions with/without derived fan flow. Known is unaffected. */
+  assumeServedFlow?: boolean;
 }
 
 export interface BuildChainInput extends PricingInput {
@@ -79,6 +110,7 @@ class Pricer {
   priced = new Map<string, { blockerIds: string[]; p: PricedLeg | null }>();
   blockers = new Map<string, Blocker>();
   autoJoinNotes = new Set<string>();
+  healNotes = new Set<string>();
   constructor(readonly input: PricingInput, readonly g: Graph) {}
 
   block = (b: Omit<Blocker, "id">) => {
@@ -300,6 +332,19 @@ class Pricer {
 
   /** One path per end, legs priced, equivalent feet at each leg's own rate. */
   paths(w: Walk, flows: Flows, side: Side, ends: readonly End[] = w.ends): SheetPath[] {
+    const uses = (e: End, h: Walk["heals"][number]) =>
+      (e.state === h.state && e.out === h.out) ||
+      lineage(w, e.state).some(
+        (s) => w.states[s]!.parent === h.state && w.states[s]!.via === h.out,
+      );
+    for (const h of w.heals) {
+      const values = w.ends.flatMap((e, i) => (uses(e, h) ? [flows.end[i] ?? null] : []));
+      const cfm = values.some((v) => v == null)
+        ? null
+        : values.reduce<number>((sum, v) => sum + v!, 0);
+      const sources = [...new Set(w.ends.flatMap((e, i) => uses(e, h) && flows.endSource[i] ? [flows.endSource[i]!] : []))];
+      this.heal(h.proposal, w.states[h.state]!.el, cfm, sources.join(" + "), h.state === 0);
+    }
     return ends.map((e) => {
       const legIds = legsOf(w, e);
       const chain = lineage(w, e.state);
@@ -309,21 +354,129 @@ class Pricer {
         const out = k + 1 < chain.length ? w.states[chain[k + 1]!]!.via : e.out;
         this.leg(w, flows, side, s, out).forEach((b) => blockerIds.add(b));
       });
+      for (const h of w.heals.filter((h) => uses(e, h))) {
+        const after = h.state === 0 ? -1 : chain.indexOf(h.state);
+        const id = after < 0 ? null : legsOf(w, e)[after];
+        const at = id == null ? 0 : legIds.indexOf(id) + 1;
+        legIds.splice(at, 0, ...h.proposal.assumedLegs.map((l) => l.id));
+        for (const l of h.proposal.assumedLegs)
+          this.priced.get(l.id)?.blockerIds.forEach((b) => blockerIds.add(b));
+      }
       const priced = legIds.map((id) => this.priced.get(id)?.p ?? null);
-      const eq = equivalentFeet(priced.map((p, i) => p ?? { kind: "drop", elementId: this.legs[legIds[i]!]!.elementId, lossInWg: null, velocityFpm: null, source: null, unpriced: "" }));
+      const eq = equivalentFeet(
+        priced.map(
+          (p, i) =>
+            p ?? {
+              kind: "drop",
+              elementId: this.legs[legIds[i]!]!.elementId,
+              lossInWg: null,
+              velocityFpm: null,
+              source: null,
+              unpriced: "",
+            },
+        ),
+      );
       legIds.forEach((id, i) => {
         const leg = this.legs[id]!;
-        if (leg.equivalentFt == null && leg.lossInWg != null && eq[i] != null) leg.equivalentFt = round(eq[i]!);
+        if (leg.equivalentFt == null && leg.lossInWg != null && eq[i] != null)
+          leg.equivalentFt = round(eq[i]!);
       });
       const knownInWg = round(legIds.reduce((a, id) => a + (this.legs[id]!.lossInWg ?? 0), 0));
-      return { side, legIds, end: e.end, knownInWg, complete: blockerIds.size === 0, blockerIds: [...blockerIds] };
+      return {
+        side,
+        legIds,
+        end: e.end,
+        knownInWg,
+        complete: blockerIds.size === 0,
+        blockerIds: [...blockerIds],
+      };
     });
+  }
+
+  private heal(proposal: HealProposal, source: Node | Segment, cfm: number | null, flowSource: string, root: boolean) {
+    const key = `heal:${proposal.pair.join("|")}`;
+    const note = `${proposal.kind} ${proposal.pair.join(" to ")}; ${proposal.risk}`;
+    this.healNotes.add(note);
+    const port = source.connectors.find((c) => c.index === proposal.from.connector)!;
+    const segment = {
+      ...source,
+      ...port,
+      id: source.id,
+      lengthFt: proposal.gapIn / 12,
+      roughness: isSegment(source) ? source.roughness : { valueFt: 0.0003, provenance: "assumed" },
+    } as Segment;
+    const p =
+      cfm == null
+        ? null
+        : priceLeg({ kind: "duct", segment, lengthFt: proposal.gapIn / 12, cfm }, this.input.grids);
+    const ids = p ? this.take(p, source.id).ids : [];
+    const extension: Leg = {
+      id: `${key}:extension`,
+      elementId: source.id,
+      kind: "duct",
+      flowCfm: cfm,
+      flowSource: `${flowSource || "flow unavailable"}; continued heal walk`,
+      velocityFpm: p?.velocityFpm ?? null,
+      lossInWg: ids.length ? null : (p?.lossInWg ?? null),
+      lossSource: {
+        kind: "friction",
+        ref: `assumed extension, source section, ${proposal.gapIn.toFixed(3)} in; ${note}`,
+      },
+      equivalentFt: proposal.gapIn / 12,
+    };
+    this.legs[extension.id] = extension;
+    this.priced.set(extension.id, { p, blockerIds: ids });
+    const legs = [extension];
+    if (proposal.fittingChange) {
+      // A typed element drop includes its proposed fitting change, charged once on that element.
+      const typed = this.input.drops?.[source.id] != null;
+      const fitting: Leg = {
+        ...extension,
+        id: `${key}:fitting`,
+        kind: "fitting",
+        equivalentFt: null,
+        lossInWg: typed ? (root ? this.input.drops![source.id]! : 0) : null,
+        velocityFpm: null,
+        lossSource: {
+          kind: "drop",
+          ref: typed
+            ? `${root ? "typed root-port fitting drop" : "included in typed element drop"} ${source.id}`
+            : `unknown proposed ${proposal.kind} fitting drop; ${note}`,
+        },
+      };
+      const blockerIds = typed
+        ? []
+        : [
+            this.block({
+              kind: "unknown-drop",
+              elementId: source.id,
+              connector: proposal.from.connector,
+              detail: `proposed ${proposal.kind} needs a fitting change; type a combined drop for element ${source.id} and its new fitting`,
+              effectInWg: null,
+              closer: {
+                kind: "default",
+                note: "type the combined element/fitting drop; no coefficient is assumed",
+              },
+            }),
+          ];
+      this.legs[fitting.id] = fitting;
+      this.priced.set(fitting.id, { p: null, blockerIds });
+      legs.push(fitting);
+    }
+    proposal.assumedLegs = legs;
   }
 }
 
 const terminalDropInputs = (pricer: Pricer): SheetInput[] =>
   Object.values(pricer.legs).some((l) => l.lossSource.ref.includes("SHIM"))
-    ? [{ name: "SHIM terminal drop in-wg", value: SHIM_TERMINAL_DROP_IN_WG, source: "SHIM placeholder" }] : [];
+    ? [
+        {
+          name: "SHIM terminal drop in-wg",
+          value: SHIM_TERMINAL_DROP_IN_WG,
+          source: "SHIM placeholder",
+        },
+      ]
+    : [];
 
 const dist = (p: number[], q: number[]) => Math.hypot(...p.map((v, k) => v - q[k]!));
 
@@ -334,10 +487,18 @@ function totals(pricer: Pricer, paths: SheetPath[], allowanceInWg: number): Side
   const telFt = round(legs.reduce((a, l) => a + (l.equivalentFt ?? 0), 0));
   const worstPath = complete && worst ? worst.knownInWg : null;
   // Rate the duct and fittings actually run at: the worst path less its typed drops, over TEL.
-  const drops = legs.filter((l) => l.lossSource.kind === "drop" || l.lossSource.kind === "default").reduce((a, l) => a + (l.lossInWg ?? 0), 0);
+  const drops = legs
+    .filter((l) => l.lossSource.kind === "drop" || l.lossSource.kind === "default")
+    .reduce((a, l) => a + (l.lossInWg ?? 0), 0);
   return {
-    worstPath, knownInWg: worst?.knownInWg ?? 0, allowanceInWg, complete, telFt,
-    frictionRatePer100: worstPath != null && telFt > 0 ? round(((worstPath - drops) * 100) / telFt) : null,
+    worstPath,
+    knownInWg: worst?.knownInWg ?? 0,
+    assumedInWg: worstPath,
+    allowanceInWg,
+    complete,
+    telFt,
+    frictionRatePer100:
+      worstPath != null && telFt > 0 ? round(((worstPath - drops) * 100) / telFt) : null,
   };
 }
 
@@ -380,107 +541,320 @@ const sideSum = (f: Flows, w: Walk) => {
   return ends.some(([, v]) => v == null) ? null : ends.reduce((a, [, v]) => a + v!, 0);
 };
 
-export function buildSheet(input: BuildSheetInput): Sheet {
+function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
   const g = graphOf(input.snapshot);
   const pricer = new Pricer(input, g);
   const unit = g.byId.get(input.fan.unitId);
-  if (!unit || isSegment(unit)) throw new Error(`fan unit ${input.fan.unitId} is not in the snapshot`);
-  const entry = input.roster.find((p) => p.unitId === unit.id && p.portIndex === input.fan.portIndex);
-  const pairedInlet = entry?.inletPortIndex !== input.fan.portIndex ? entry?.inletPortIndex
-    : unit.connectors.length === 2 ? unit.connectors.find((c) => c.index !== input.fan.portIndex)?.index : undefined;
-  const opts = { roster: input.roster, rulings: input.rulings ?? [], candidateBoxIn: input.candidateBoxIn, autoJoinMaxGapIn: input.defaults?.autoJoinMaxGapIn };
+  if (!unit || isSegment(unit))
+    throw new Error(`fan unit ${input.fan.unitId} is not in the snapshot`);
+  const entry = input.roster.find(
+    (p) => p.unitId === unit.id && p.portIndex === input.fan.portIndex,
+  );
+  const pairedInlet =
+    entry?.inletPortIndex !== input.fan.portIndex
+      ? entry?.inletPortIndex
+      : unit.connectors.length === 2
+        ? unit.connectors.find((c) => c.index !== input.fan.portIndex)?.index
+        : undefined;
+  const opts = {
+    roster: input.roster,
+    rulings: input.rulings ?? [],
+    candidateBoxIn: input.candidateBoxIn,
+    autoJoinMaxGapIn: input.defaults?.autoJoinMaxGapIn,
+    assumeHeals,
+  };
   const a = walkFrom(g, unit, input.fan.portIndex, opts);
   const b = pairedInlet == null ? null : walkFrom(g, unit, pairedInlet, opts);
   terminateMerges(a);
   if (b) terminateMerges(b);
-  const aRule = endDirection(a, g, input.roster), bRule = b ? endDirection(b, g, input.roster) : null;
+  const aRule = endDirection(a, g, input.roster),
+    bRule = b ? endDirection(b, g, input.roster) : null;
   const swap = !!bRule && bRule.score > aRule.score;
   const discharge = swap ? pairedInlet! : input.fan.portIndex;
-  const inlet = swap ? input.fan.portIndex : pairedInlet ?? null;
-  const directionSource = bRule && aRule.score !== bRule.score
-    ? `ends: discharge ${swap ? bRule.source : aRule.source}; paired side is inlet`
-    : "port metadata tie-break: ends do not distinguish the paired sides";
-  const slot = input.slot ?? input.defaults?.slot ?? input.snapshot.slots?.terminalFlow ?? "terminalFlow";
+  const inlet = swap ? input.fan.portIndex : (pairedInlet ?? null);
+  const directionSource =
+    bRule && aRule.score !== bRule.score
+      ? `ends: discharge ${swap ? bRule.source : aRule.source}; paired side is inlet`
+      : "port metadata tie-break: ends do not distinguish the paired sides";
+  const slot =
+    input.slot ?? input.defaults?.slot ?? input.snapshot.slots?.terminalFlow ?? "terminalFlow";
   // The side-stream exception uses the unit design parameter; terminal-led fan flow remains a sum.
   const design = factOf(unit, "fanFlow");
   const designCfm = design != null && design > 0 ? design : null;
+  const derived =
+    assumeHeals && input.assumeServedFlow !== false
+      ? assumedFanFlows(input.snapshot, input.roster, slot, {
+          rulings: opts.rulings,
+          candidateBoxIn: opts.candidateBoxIn,
+          autoJoinMaxGapIn: opts.autoJoinMaxGapIn,
+        })
+      : new Map();
+  const assumedDesign = derived.get(`${unit.id}:${input.fan.portIndex}`);
   const flowOpts: FlowOptions = {
-    slot, endCfm: input.endCfm ?? {},
-    sideStream: input.sideStreamCfm != null ? { cfm: input.sideStreamCfm, source: "typed" }
-      : designCfm == null ? null : { cfm: designCfm, source: `parameter:${input.snapshot.slots?.fanFlow ?? "fanFlow"}` },
+    slot,
+    endCfm: input.endCfm ?? {},
+    sideStream:
+      input.sideStreamCfm != null
+        ? { cfm: input.sideStreamCfm, source: "typed" }
+        : designCfm == null
+          ? (assumedDesign ?? null)
+          : { cfm: designCfm, source: `parameter:${input.snapshot.slots?.fanFlow ?? "fanFlow"}` },
     splitPolicy: input.splitPolicy ?? input.defaults?.splitPolicy ?? "even",
-    receivingDesignCfm: Object.fromEntries(input.snapshot.nodes.map((n) => [n.id, factOf(n, "fanFlow")])),
+    receivingDesignCfm: Object.fromEntries(
+      input.snapshot.nodes.map((n) => {
+        const value = factOf(n, "fanFlow");
+        return [n.id, value != null && value > 0 ? value : null];
+      }),
+    ),
+    receivingAssumedCfm: derived,
   };
   const supply = { w: swap ? b! : a };
   const ret = b ? { w: swap ? a : b } : null;
-  for (const w of [supply.w, ret?.w]) if (w) {
-    for (const [id, blocker] of w.blockers) pricer.blockers.set(id, blocker);
-  }
+  for (const w of [supply.w, ret?.w])
+    if (w) {
+      for (const [id, blocker] of w.blockers) pricer.blockers.set(id, blocker);
+    }
   // A side whose one end carries nothing (an intake, an open end) carries the other side's flow.
   const single = (w: Walk) => w.ends.length === 1 && !carrying(w.ends[0]!);
+  const onSide = (w: Walk): FlowOptions => designCfm == null && input.sideStreamCfm == null && assumeHeals
+    ? { ...flowOpts, sideStream: derived.get(`port:${unit.id}:${w === a ? input.fan.portIndex : pairedInlet}`) ?? null }
+    : flowOpts;
   const balanced = (w: Walk, other: number | null): FlowOptions =>
-    single(w) && other ? { ...flowOpts, only: { end: 0, cfm: other, source: `balance; splitPolicy:${flowOpts.splitPolicy}` } } : flowOpts;
+    single(w) && other
+      ? {
+          ...onSide(w),
+          only: { end: 0, cfm: other, source: `balance; splitPolicy:${flowOpts.splitPolicy}` },
+        }
+      : onSide(w);
   const retFirst = !!ret && single(supply.w);
-  const retFlows = ret && retFirst ? flowsOf(ret.w, flowOpts, pricer.block) : null;
-  const supplyFlows = flowsOf(supply.w, balanced(supply.w, retFlows ? sideSum(retFlows, ret!.w) : null), pricer.block);
-  const returnFlows = ret ? retFlows ?? flowsOf(ret.w, balanced(ret.w, sideSum(supplyFlows, supply.w)), pricer.block) : null;
+  const retFlows = ret && retFirst ? flowsOf(ret.w, onSide(ret.w), pricer.block) : null;
+  const supplyFlows = flowsOf(
+    supply.w,
+    balanced(supply.w, retFlows ? sideSum(retFlows, ret!.w) : null),
+    pricer.block,
+  );
+  const returnFlows = ret
+    ? (retFlows ?? flowsOf(ret.w, balanced(ret.w, sideSum(supplyFlows, supply.w)), pricer.block))
+    : null;
   const supplyPaths = rank(pricer.paths(supply.w, supplyFlows, "supply"));
   const returnPaths = ret ? rank(pricer.paths(ret.w, returnFlows!, "return")) : [];
-  if (!ret) pricer.block({
-    kind: "open-end", elementId: unit.id, effectInWg: null, detail: `the roster names no inlet for ${unit.id}; the return side is not walked`,
-    closer: { kind: "ruling", note: "check the fan's paired duct ports; no inlet could be identified" },
-  });
-  const allowance = { supply: input.allowanceInWg?.supply ?? 0, return: input.allowanceInWg?.return ?? 0 };
+  if (!ret)
+    pricer.block({
+      kind: "open-end",
+      elementId: unit.id,
+      effectInWg: null,
+      detail: `the roster names no inlet for ${unit.id}; the return side is not walked`,
+      closer: {
+        kind: "ruling",
+        note: "check the fan's paired duct ports; no inlet could be identified",
+      },
+    });
+  const allowance = {
+    supply: input.allowanceInWg?.supply ?? 0,
+    return: input.allowanceInWg?.return ?? 0,
+  };
   const sT = totals(pricer, supplyPaths, allowance.supply);
-  const rT = ret ? totals(pricer, returnPaths, allowance.return)
-    : { worstPath: null, knownInWg: 0, allowanceInWg: allowance.return, complete: false, telFt: 0, frictionRatePer100: null };
-  const required = sT.worstPath != null && rT.worstPath != null && sT.complete && rT.complete
-    ? round(sT.worstPath + rT.worstPath + sT.allowanceInWg + rT.allowanceInWg) : null;
+  const rT = ret
+    ? totals(pricer, returnPaths, allowance.return)
+    : {
+        worstPath: null,
+        assumedInWg: null,
+        knownInWg: 0,
+        allowanceInWg: allowance.return,
+        complete: false,
+        telFt: 0,
+        frictionRatePer100: null,
+      };
+  const required =
+    sT.worstPath != null && rT.worstPath != null && sT.complete && rT.complete
+      ? round(sT.worstPath + rT.worstPath + sT.allowanceInWg + rT.allowanceInWg)
+      : null;
   const flowCfm = retFirst ? sideSum(returnFlows!, ret!.w) : sideSum(supplyFlows, supply.w);
   const walked = new Set<number>();
   for (const w of [supply.w, ret?.w]) if (w) for (const id of w.depth.keys()) walked.add(id);
 
   const inputs: SheetInput[] = [
-    { name: "auto-join maximum gap in", value: input.defaults?.autoJoinMaxGapIn ?? 3, source: input.defaults?.autoJoinMaxGapIn == null ? "default" : "route settings" },
-    ...(input.defaults?.terminalDropInWg == null || input.defaults.terminalDropSource === "SHIM placeholder" ? []
-      : [{ name: "terminal drop in-wg", value: input.defaults.terminalDropInWg, source: input.defaults.terminalDropSource ?? `firm default ${input.defaults.version ?? "unversioned"}` }]),
-    { name: "split policy", value: flowOpts.splitPolicy ?? "even", source: input.splitPolicy ? "typed" : input.defaults?.splitPolicy ? "route settings" : "default" },
-    { name: "unit design cfm", value: flowOpts.sideStream?.cfm ?? null, source: flowOpts.sideStream?.source ?? "missing design-flow parameter" },
-    { name: "airflow slot", value: slot, source: input.slot ? "typed" : input.defaults?.slot ? "route settings" : "snapshot slots" },
-    { name: "supply allowance in-wg", value: allowance.supply, source: input.allowanceInWg?.supply == null ? "default 0" : "typed" },
-    { name: "return allowance in-wg", value: allowance.return, source: input.allowanceInWg?.return == null ? "default 0" : "typed" },
+    {
+      name: "auto-join maximum gap in",
+      value: input.defaults?.autoJoinMaxGapIn ?? 3,
+      source: input.defaults?.autoJoinMaxGapIn == null ? "default" : "route settings",
+    },
+    ...(input.defaults?.terminalDropInWg == null ||
+    input.defaults.terminalDropSource === "SHIM placeholder"
+      ? []
+      : [
+          {
+            name: "terminal drop in-wg",
+            value: input.defaults.terminalDropInWg,
+            source:
+              input.defaults.terminalDropSource ??
+              `firm default ${input.defaults.version ?? "unversioned"}`,
+          },
+        ]),
+    {
+      name: "split policy",
+      value: flowOpts.splitPolicy ?? "even",
+      source: input.splitPolicy
+        ? "typed"
+        : input.defaults?.splitPolicy
+          ? "route settings"
+          : "default",
+    },
+    {
+      name: "unit design cfm",
+      value: flowOpts.sideStream?.cfm ?? null,
+      source: flowOpts.sideStream?.source ?? "missing design-flow parameter",
+    },
+    ...[...derived.entries()]
+      .filter(([ref]) =>
+        [unit.id, ...[...a.ends, ...(b?.ends ?? [])].map((e) => e.end.fan?.unitId)].includes(
+          Number(ref.split(":")[ref.startsWith("port:") ? 1 : 0]),
+        ),
+      )
+      .map(([ref, flow]) => ({
+        name: `fan ${ref} cfm (assumed)`,
+        value: flow.cfm,
+        source: flow.source,
+      })),
+    {
+      name: "airflow slot",
+      value: slot,
+      source: input.slot ? "typed" : input.defaults?.slot ? "route settings" : "snapshot slots",
+    },
+    {
+      name: "supply allowance in-wg",
+      value: allowance.supply,
+      source: input.allowanceInWg?.supply == null ? "default 0" : "typed",
+    },
+    {
+      name: "return allowance in-wg",
+      value: allowance.return,
+      source: input.allowanceInWg?.return == null ? "default 0" : "typed",
+    },
     { name: "inlet connector", value: inlet, source: directionSource },
     { name: "discharge connector", value: discharge, source: directionSource },
-    { name: "candidate box in", value: input.candidateBoxIn ?? 36, source: input.candidateBoxIn == null ? "default" : "typed" },
-    ...(input.sideStreamCfm == null ? [] : [{ name: "side-stream cfm", value: input.sideStreamCfm, source: "typed" }]),
+    {
+      name: "candidate box in",
+      value: input.candidateBoxIn ?? 36,
+      source: input.candidateBoxIn == null ? "default" : "typed",
+    },
+    ...(input.sideStreamCfm == null
+      ? []
+      : [{ name: "side-stream cfm", value: input.sideStreamCfm, source: "typed" }]),
     ...terminalDropInputs(pricer),
-    ...[...pricer.autoJoinNotes].map((note) => ({ name: note, value: null, source: "default auto-join" })),
-    ...Object.values(pricer.legs).filter((l) => l.lossSource.ref.includes("diverging-table estimate at merge"))
-      .map((l) => ({ name: `merge ${l.elementId} branch loss model`, value: "diverging-table estimate", source: l.lossSource.ref })),
-    ...Object.values(pricer.legs).filter((l) => l.lossSource.ref.startsWith("merge boundary"))
-      .map((l) => ({ name: `merge ${l.elementId} branch loss in-wg`, value: null, source: l.lossSource.ref })),
-    ...Object.entries(input.endCfm ?? {}).map(([id, v]) => ({ name: `end ${id} cfm`, value: v, source: "typed" })),
-    ...Object.entries(input.drops ?? {}).map(([id, v]) => ({ name: `element ${id} drop in-wg`, value: v, source: "typed" })),
-    ...Object.entries(input.choices ?? {}).map(([k, v]) => ({ name: `table for ${k}`, value: v, source: "typed" })),
+    ...[...pricer.autoJoinNotes].map((note) => ({
+      name: note,
+      value: null,
+      source: "default auto-join",
+    })),
+    ...[...pricer.healNotes].map((note) => ({
+      name: note,
+      value: null,
+      source: assumeHeals ? "assumed heal" : "accepted connector-pair ruling",
+    })),
+    ...Object.values(pricer.legs)
+      .filter((l) => l.lossSource.ref.includes("diverging-table estimate at merge"))
+      .map((l) => ({
+        name: `merge ${l.elementId} branch loss model`,
+        value: "diverging-table estimate",
+        source: l.lossSource.ref,
+      })),
+    ...Object.values(pricer.legs)
+      .filter((l) => l.lossSource.ref.startsWith("merge boundary"))
+      .map((l) => ({
+        name: `merge ${l.elementId} branch loss in-wg`,
+        value: null,
+        source: l.lossSource.ref,
+      })),
+    ...Object.entries(input.endCfm ?? {}).map(([id, v]) => ({
+      name: `end ${id} cfm`,
+      value: v,
+      source: "typed",
+    })),
+    ...Object.entries(input.drops ?? {}).map(([id, v]) => ({
+      name: `element ${id} drop in-wg`,
+      value: v,
+      source: "typed",
+    })),
+    ...Object.entries(input.choices ?? {}).map(([k, v]) => ({
+      name: `table for ${k}`,
+      value: v,
+      source: "typed",
+    })),
   ];
   const ratedEsp = factOf(unit, "externalStatic");
   const cited = new Set([...supplyPaths, ...returnPaths].flatMap((p) => p.blockerIds));
   return {
     engineVersion: SHEET_ENGINE_VERSION,
-    basis: basisOf(input.snapshot, [input.fan, inlet, input.rulings, input.endCfm, input.drops, input.defaults, input.sideStreamCfm, input.allowanceInWg, input.choices, slot, input.splitPolicy, input.candidateBoxIn]),
+    basis: basisOf(input.snapshot, [
+      input.fan,
+      inlet,
+      input.rulings,
+      input.endCfm,
+      input.drops,
+      input.defaults,
+      input.sideStreamCfm,
+      input.allowanceInWg,
+      input.choices,
+      slot,
+      input.splitPolicy,
+      input.candidateBoxIn,
+      input.assumeServedFlow,
+    ]),
     fan: {
-      unitId: unit.id, portIndex: input.fan.portIndex,
+      unitId: unit.id,
+      portIndex: input.fan.portIndex,
       mark: entry?.tag || unit.facts.find((f) => f.key === "mark")?.text || "",
-      ratedEspInWg: ratedEsp, inletPortIndex: inlet, dischargePortIndex: discharge, flowCfm,
+      ratedEspInWg: ratedEsp,
+      inletPortIndex: inlet,
+      dischargePortIndex: discharge,
+      flowCfm,
     },
     legs: pricer.legs,
     paths: [...supplyPaths, ...returnPaths],
-    totals: { supply: sT, return: rT, requiredEspInWg: required },
+    totals: { supply: sT, return: rT, requiredEspInWg: required, requiredEspAssumedInWg: required },
+    assumed: {
+      paths: [...supplyPaths, ...returnPaths],
+      legs: pricer.legs,
+      blockers: [...pricer.blockers.values()].filter(
+        (b) => cited.has(b.id) || b.elementId === unit.id,
+      ),
+    },
     // Only what a path or the fan carries; a branch cut to another fan keeps its blockers off this sheet.
-    blockers: [...pricer.blockers.values()].filter((b) => cited.has(b.id) || b.elementId === unit.id),
+    blockers: [...pricer.blockers.values()].filter(
+      (b) => cited.has(b.id) || b.elementId === unit.id,
+    ),
     inputs,
     walkedElementIds: [...walked].sort((a, b) => a - b),
   };
+}
+
+/** Reuse exactly the same flow/pricing rules for known and continued heal walks. */
+export function buildSheet(input: BuildSheetInput): Sheet {
+  const known = buildSheetPass(input, false);
+  const assumed = buildSheetPass(input, true);
+  known.assumed = assumed.assumed;
+  known.totals.supply.assumedInWg = assumed.totals.supply.worstPath;
+  known.totals.return.assumedInWg = assumed.totals.return.worstPath;
+  known.totals.requiredEspAssumedInWg = assumed.totals.requiredEspInWg;
+  const priced = new Map(
+    [...Object.values(known.legs), ...Object.values(assumed.legs)].map((l) => [l.id, l]),
+  );
+  for (const b of [...known.blockers, ...known.assumed.blockers])
+    if (b.proposal) {
+      b.proposal.assumedLegs = [...priced.values()].filter((l) =>
+        l.id.startsWith(`heal:${b.proposal!.pair.join("|")}:`),
+      );
+    }
+  known.inputs.push(
+    ...assumed.inputs.filter(
+      (i) => i.source === "assumed heal" || i.name.endsWith("cfm (assumed)"),
+    ),
+  );
+  known.walkedElementIds = [
+    ...new Set([...known.walkedElementIds, ...assumed.walkedElementIds]),
+  ].sort((a, b) => a - b);
+  return known;
 }
 
 /** One chain between an asserted start and end; priced at the typed flow; no ESP claim. */

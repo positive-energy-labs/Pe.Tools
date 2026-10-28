@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import type { DocumentRef, DuctsSheetOverview } from "@pe/agent-contracts";
+import type {
+  DocumentRef,
+  DuctsSheetOverview,
+  DuctsSheetInputs,
+  DuctsSheetRequest,
+  DuctsRosterResponse,
+} from "@pe/agent-contracts";
 import { fanKey, readRoster, readSheet, StaleSheet, type Detail, type FanPort } from "./api";
 
 export type OpenSheet = {
@@ -14,6 +20,8 @@ const message = (error: unknown) => (error instanceof Error ? error.message : St
 /** Mounted by document lifetime: cancellation and late answers cannot cross into another target. */
 export function useSheet(target: DocumentRef) {
   const [rows, setRows] = useState<FanPort[]>([]);
+  const [slots, setSlots] = useState<DuctsRosterResponse["slots"]>([]);
+  const [activeSlot, setActiveSlot] = useState("");
   const [sheet, setSheet] = useState<OpenSheet | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -36,7 +44,11 @@ export function useSheet(target: DocumentRef) {
     setError(null);
     try {
       const roster = await readRoster(target, job.signal);
-      if (!job.signal.aborted) setRows(roster.rows);
+      if (!job.signal.aborted) {
+        setRows(roster.rows);
+        setSlots(roster.slots);
+        setActiveSlot(roster.activeSlot);
+      }
     } catch (cause) {
       if (!job.signal.aborted) setError(message(cause));
     } finally {
@@ -52,9 +64,23 @@ export function useSheet(target: DocumentRef) {
     };
   }, [target.session, target.openId]); // target values define this mounted workspace
 
-  const overview = async (fan: Pick<FanPort, "unitId" | "portIndex">, signal: AbortSignal) => {
+  const overview = async (
+    fan: Pick<FanPort, "unitId" | "portIndex">,
+    signal: AbortSignal,
+    inputs?: DuctsSheetInputs,
+    proposal?: DuctsSheetRequest["proposal"],
+    basis?: string,
+  ) => {
     const result = await readSheet(
-      { target, mode: "fan", unitId: fan.unitId, portIndex: fan.portIndex },
+      {
+        target,
+        mode: "fan",
+        unitId: fan.unitId,
+        portIndex: fan.portIndex,
+        inputs,
+        proposal,
+        basis,
+      },
       signal,
     );
     if (result.kind !== "overview") throw Error("Expected a fan sheet overview");
@@ -66,6 +92,7 @@ export function useSheet(target: DocumentRef) {
                 ...row,
                 blockerCount: result.blockers.length,
                 requiredEspInWg: result.totals?.requiredEspInWg ?? null,
+                requiredEspAssumedInWg: result.totals?.requiredEspAssumedInWg ?? null,
                 complete:
                   result.totals != null &&
                   result.totals.supply.complete &&
@@ -115,7 +142,11 @@ export function useSheet(target: DocumentRef) {
       );
     }
   };
-  const compute = async (fan: FanPort) => {
+  const compute = async (
+    fan: Pick<FanPort, "unitId" | "portIndex">,
+    edits?: DuctsSheetInputs,
+    proposal?: DuctsSheetRequest["proposal"],
+  ) => {
     if (batchJob.current) return;
     detailJob.current?.abort();
     const job = new AbortController();
@@ -123,19 +154,30 @@ export function useSheet(target: DocumentRef) {
     setBusy(true);
     setProgress(null);
     setError(null);
-    setSheet(null);
     let base: DuctsSheetOverview | null = null;
     try {
-      base = await overview(fan, job.signal);
+      base = await overview(
+        fan,
+        job.signal,
+        edits,
+        proposal,
+        proposal ? sheet?.overview.basis : undefined,
+      );
+      if (edits?.slot) {
+        setActiveSlot(edits.slot);
+        const roster = await readRoster(target, job.signal);
+        if (!job.signal.aborted) {
+          setRows(roster.rows);
+          setSlots(roster.slots);
+        }
+      }
       if (job.signal.aborted) return;
       setSheet(blank(base));
-      const worst = [
-        ...new Set(
-          [base.totals?.supply.worstPath, base.totals?.return.worstPath]
-            .filter((id): id is number => id != null)
-            .map(String),
-        ),
-      ];
+      const worst = (["supply", "return"] as const).flatMap((side) =>
+        base!.totals?.[side].complete && base!.paths[side].paths[0]
+          ? [base!.paths[side].paths[0]!.pathId]
+          : [],
+      );
       const [inputs, elements, ...worstLegs] = await Promise.all([
         detail(base, "inputs", job.signal),
         detail(base, "elements", job.signal),
@@ -215,6 +257,12 @@ export function useSheet(target: DocumentRef) {
   };
   return {
     rows,
+    slots,
+    activeSlot,
+    changeInputs: (inputs: DuctsSheetInputs) =>
+      sheet?.overview.fan ? compute(sheet.overview.fan, inputs) : Promise.resolve(),
+    ruleProposal: (proposal: NonNullable<DuctsSheetRequest["proposal"]>) =>
+      sheet?.overview.fan ? compute(sheet.overview.fan, undefined, proposal) : Promise.resolve(),
     sheet,
     error,
     loading,

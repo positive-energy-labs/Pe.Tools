@@ -16,7 +16,8 @@ import {
   type ConnectorPairRuling,
   type Element,
 } from "../kernel/inferred-joins.ts";
-import type { Blocker, FanPortRef, PathEnd } from "./types.ts";
+import type { Blocker, FanPortRef, HealProposal, PathEnd } from "./types.ts";
+import { proposeHeal, rulingFor } from "./heal.ts";
 
 type Connector = Element["connectors"][number];
 
@@ -64,7 +65,13 @@ export interface Walk {
   depth: Map<number, number>;
   /** Arrivals at an element already entered (a loop or a second route); not walked again. */
   rejoins: number;
-  autoJoins: { from: readonly [number, number]; to: readonly [number, number]; gapIn: number; note: string }[];
+  autoJoins: {
+    from: readonly [number, number];
+    to: readonly [number, number];
+    gapIn: number;
+    note: string;
+  }[];
+  heals: { proposal: HealProposal; state: number; out: number }[];
 }
 
 export interface WalkOptions {
@@ -72,15 +79,23 @@ export interface WalkOptions {
   rulings?: readonly ConnectorPairRuling[];
   candidateBoxIn?: number;
   autoJoinMaxGapIn?: number;
+  assumeHeals?: boolean;
 }
 
 export const legId = (elementId: number, inC: number | undefined, out: number | undefined) =>
   `${elementId}:${inC ?? ""}>${out ?? ""}`;
 
 /** The roster entry a walk reached at `connector` of unit `unitId`: the port, else its inlet, else the first. */
-export function rosterRef(roster: readonly FanPort[], unitId: number, connector: number | undefined): FanPortRef | null {
+export function rosterRef(
+  roster: readonly FanPort[],
+  unitId: number,
+  connector: number | undefined,
+): FanPortRef | null {
   const own = roster.filter((p) => p.unitId === unitId);
-  const hit = own.find((p) => p.portIndex === connector) ?? own.find((p) => p.inletPortIndex === connector) ?? own[0];
+  const hit =
+    own.find((p) => p.portIndex === connector) ??
+    own.find((p) => p.inletPortIndex === connector) ??
+    own[0];
   return hit ? { unitId: hit.unitId, portIndex: hit.portIndex } : null;
 }
 
@@ -121,14 +136,22 @@ function nearestCandidate(nearby: readonly Element[], point: number[], withinIn:
 }
 
 /** Walk from `connector` of `unit` outward. */
-export function walkFrom(g: Graph, unit: Element, connector: number | undefined, opts: WalkOptions): Walk {
+export function walkFrom(
+  g: Graph,
+  unit: Element,
+  connector: number | undefined,
+  opts: WalkOptions,
+): Walk {
   const rosterUnits = new Set(opts.roster.map((p) => p.unitId));
   const searchIn = opts.candidateBoxIn ?? DEFAULT_CANDIDATE_BOX_IN;
   const box = searchIn / 12;
   const autoGapIn = opts.autoJoinMaxGapIn ?? 3;
   const autoJoins: Walk["autoJoins"] = [];
+  const heals: Walk["heals"] = [];
   const joinedPorts = new Set<string>();
-  const states: State[] = [{ el: unit, in: undefined, parent: -1, via: undefined, depth: 0, cls: null, blockerIds: [] }];
+  const states: State[] = [
+    { el: unit, in: undefined, parent: -1, via: undefined, depth: 0, cls: null, blockerIds: [] },
+  ];
   const ends: End[] = [];
   const blockers = new Map<string, Blocker>();
   const depth = new Map<number, number>([[unit.id, 0]]);
@@ -185,70 +208,169 @@ export function walkFrom(g: Graph, unit: Element, connector: number | undefined,
       const target = g.byId.get(to.elementId);
       if (target) return enter(target, to.connector, s, c.index, []);
       const id = block({
-        kind: "open-end", elementId: st.el.id, connector: c.index, effectInWg: null,
+        kind: "open-end",
+        elementId: st.el.id,
+        connector: c.index,
+        effectInWg: null,
         detail: `${st.el.id}:${c.index} connects to ${to.elementId}:${to.connector}, which the snapshot does not hold`,
         closer: { kind: "default", note: "re-read with the element in scope" },
       });
       return end(s, c.index, { kind: "open-end", elementId: st.el.id, connector: c.index }, [id]);
     }
-    const open = openPort(st.el, c);
+    const effectivePort = !classOf(c.classification) && st.cls ? { ...c, classification: st.cls } : c;
+    const open = openPort(st.el, effectivePort);
     const nearby = g.all.filter((e) => e.id !== st.el.id && near(e, c.point, box));
-    const rawCandidates = candidates(open, nearby, searchIn).filter((candidate) =>
-      candidate.toConnector == null || !joinedPorts.has(`${candidate.toElement}:${candidate.toConnector}`));
-    const rejected = (pair: readonly string[]) => opts.rulings?.some((r) => r.verdict === "reject" && r.pair.every((p) => pair.includes(p)));
-    const auto = rawCandidates.find((k) => k.toConnector != null && k.kind !== "tap"
-      && !rejected(k.pair) && (k.facingDot ?? 0) <= -OPPOSED_COS
-      && Math.hypot(...g.byId.get(k.toElement)!.connectors.find((p) => p.index === k.toConnector)!.point.map((v, i) => v - c.point[i]!)) * 12 <= autoGapIn);
+    const rawCandidates = candidates(open, nearby, searchIn).filter(
+      (candidate) =>
+        candidate.toConnector == null ||
+        !joinedPorts.has(`${candidate.toElement}:${candidate.toConnector}`),
+    );
+    const proposal = proposeHeal(
+      st.el,
+      effectivePort,
+      nearby.filter((e) => !entered.has(e.id)),
+      opts.rulings ?? [],
+      searchIn,
+      joinedPorts,
+    );
+    const rejected = (pair: readonly string[]) =>
+      opts.rulings?.some((r) => r.verdict === "reject" && r.pair.every((p) => pair.includes(p)));
+    const auto = rawCandidates.find(
+      (k) =>
+        k.toConnector != null &&
+        k.kind !== "tap" &&
+        !k.crossing &&
+        !rejected(k.pair) &&
+        (k.facingDot ?? 0) <= -OPPOSED_COS &&
+        Math.hypot(
+          ...g.byId
+            .get(k.toElement)!
+            .connectors.find((p) => p.index === k.toConnector)!
+            .point.map((v, i) => v - c.point[i]!),
+        ) *
+          12 <=
+          autoGapIn,
+    );
     const cands = applyConnectorPairRulings(rawCandidates, opts.rulings ?? []);
-    const follow = cands.find((k) =>
-      k.kind !== "tap" && k.toConnector != null && k.ruled) ?? auto;
+    const accepted = proposal && rulingFor(proposal.pair, opts.rulings ?? []) === "accept";
+    const sameAuto = proposal && auto?.pair.every((p) => proposal.pair.includes(p));
+    const follow = accepted && !sameAuto ? undefined : auto;
     if (follow) {
-      const targetPort = g.byId.get(follow.toElement)!.connectors.find((p) => p.index === follow.toConnector)!;
+      const targetPort = g.byId
+        .get(follow.toElement)!
+        .connectors.find((p) => p.index === follow.toConnector)!;
       const gapIn = Math.hypot(...targetPort.point.map((v, i) => v - c.point[i]!)) * 12;
       if (auto === follow) {
         const note = `auto-joined ${open.k} to ${follow.toElement}:${follow.toConnector} across ${gapIn.toFixed(3)} in, default \u2264${autoGapIn} in`;
-        autoJoins.push({ from: [st.el.id, c.index], to: [follow.toElement, follow.toConnector!], gapIn, note });
-        joinedPorts.add(open.k); joinedPorts.add(`${follow.toElement}:${follow.toConnector}`);
+        autoJoins.push({
+          from: [st.el.id, c.index],
+          to: [follow.toElement, follow.toConnector!],
+          gapIn,
+          note,
+        });
+        joinedPorts.add(open.k);
+        joinedPorts.add(`${follow.toElement}:${follow.toConnector}`);
       }
       return enter(g.byId.get(follow.toElement)!, follow.toConnector!, s, c.index, []);
+    }
+    if (
+      proposal &&
+      (opts.assumeHeals || rulingFor(proposal.pair, opts.rulings ?? []) === "accept")
+    ) {
+      const target = g.byId.get(proposal.to.elementId)!;
+      heals.push({ proposal, state: s, out: c.index });
+      joinedPorts.add(open.k);
+      if (proposal.kind === "tap") {
+        // Q4: this fan ends where its new branch merges into the receiving duct's stream.
+        return end(s, c.index, { kind: "joins-other-fan", elementId: target.id, fan: null });
+      }
+      const targetPort = target.connectors.find((p) => p.index === proposal.to.connector)!;
+      joinedPorts.add(`${target.id}:${targetPort.index}`);
+      enter(target, targetPort.index, s, c.index, []);
+      if (proposal.kind === "tee" && targetPort.connectedTo) {
+        const across = g.byId.get(targetPort.connectedTo.elementId);
+        if (across) enter(across, targetPort.connectedTo.connector, s, c.index, []);
+        else {
+          const id = block({
+            kind: "open-end",
+            elementId: target.id,
+            connector: targetPort.index,
+            effectInWg: null,
+            detail: `tee continuation ${targetPort.connectedTo.elementId} is absent from the snapshot`,
+            closer: { kind: "default", note: "re-read with the occupied connection in scope" },
+          });
+          end(s, c.index, { kind: "open-end", elementId: target.id, connector: targetPort.index }, [
+            id,
+          ]);
+        }
+      }
+      return;
     }
     const best = cands[0] ?? rawCandidates.find((k) => !rejected(k.pair));
     if (best) {
       // The target is occupied (a capped end) or a duct side: never healed silently (W0-A rule 2).
       const seg = g.byId.get(best.toElement);
       const at = best.point ?? c.point;
-      const port = best.toConnector != null ? seg?.connectors.find((p) => p.index === best.toConnector) : seg?.connectors.reduce((a, b) =>
-        Math.hypot(...b.point.map((v, k) => v - at[k]!)) < Math.hypot(...a.point.map((v, k) => v - at[k]!)) ? b : a);
+      const port =
+        best.toConnector != null
+          ? seg?.connectors.find((p) => p.index === best.toConnector)
+          : seg?.connectors.reduce((a, b) =>
+              Math.hypot(...b.point.map((v, k) => v - at[k]!)) <
+              Math.hypot(...a.point.map((v, k) => v - at[k]!))
+                ? b
+                : a,
+            );
       const cap = port?.connectedTo ? g.byId.get(port.connectedTo.elementId) : undefined;
       const capped = cap && !isSegment(cap) && cap.kind === "cap" ? cap : undefined;
       const gapNative = port ? Math.hypot(...port.point.map((v, k) => v - c.point[k]!)) * 12 : null;
       const id = block({
-        kind: "inferred-join", elementId: st.el.id, connector: c.index, effectInWg: null,
+        kind: "inferred-join",
+        elementId: st.el.id,
+        connector: c.index,
+        effectInWg: null,
         detail: capped
           ? `open ${open.k} faces ${best.toElement}:${port!.index}, already capped by ${capped.id}: face gap ${best.gapIn.toFixed(3)} in, connector gap ${gapNative!.toFixed(3)} in`
-                    : best.toConnector == null
+          : best.toConnector == null
             ? `open ${open.k} lands on ${best.toElement} duct body at face gap ${best.gapIn.toFixed(3)} in, occupied surface (no vacant port)`
             : `open ${open.k} nearest candidate ${best.toElement}:${best.toConnector} at ${gapNative!.toFixed(3)} in, ${port?.connectedTo ? "occupied" : "vacant"}, ${(best.facingDot ?? 0) <= -OPPOSED_COS ? "opposed" : "sideways or facing unknown"}; default auto-join requires vacant opposed ports within ${autoGapIn} in`,
+        ...(proposal ? { proposal } : {}),
         closer: {
           kind: "heal",
-          note: capped ? `remove cap ${capped.id} and connect, or rule the pair` : "heal the join in Revit, or rule the pair",
-          candidate: { toElementId: best.toElement, toConnector: best.toConnector ?? port?.index ?? null, gapIn: best.gapIn, pair: best.pair },
+          note: capped
+            ? `remove cap ${capped.id} and connect, or rule the pair`
+            : "heal the join in Revit, or rule the pair",
+          candidate: {
+            toElementId: best.toElement,
+            toConnector: best.toConnector ?? port?.index ?? null,
+            gapIn: best.gapIn,
+            pair: best.pair,
+          },
         },
       });
       return end(s, c.index, { kind: "open-end", elementId: st.el.id, connector: c.index }, [id]);
     }
     const nearest = nearestCandidate(nearby, c.point, searchIn);
     const id = block({
-      kind: "open-end", elementId: st.el.id, connector: c.index, effectInWg: null,
+      kind: "open-end",
+      elementId: st.el.id,
+      connector: c.index,
+      effectInWg: null,
       detail: nearest
         ? `${st.el.id}:${c.index} is open; nearest candidate ${nearest.label} at ${nearest.gapIn.toFixed(3)} in, ${nearest.state}`
         : `${st.el.id}:${c.index} is open with nothing within ${searchIn} in`,
-      closer: { kind: "ruling", note: "mark it an intended open end with a drop, or draw the continuation" },
+      ...(proposal ? { proposal } : {}),
+      closer: {
+        kind: proposal ? "heal" : "ruling",
+        note: proposal
+          ? proposal.risk
+          : "mark it an intended open end with a drop, or draw the continuation",
+      },
     });
     end(s, c.index, { kind: "open-end", elementId: st.el.id, connector: c.index }, [id]);
   };
 
-  const start = connector == null ? unit.connectors : unit.connectors.filter((c) => c.index === connector);
+  const start =
+    connector == null ? unit.connectors : unit.connectors.filter((c) => c.index === connector);
   states[0]!.cls = classOf(start[0]?.classification);
   for (const c of start) leave(0, c);
   while (queue.length) {
@@ -257,7 +379,7 @@ export function walkFrom(g: Graph, unit: Element, connector: number | undefined,
     const inC = st.el.connectors.find((c) => c.index === st.in)!;
     for (const c of exits(st, inC)) leave(s, c);
   }
-  return { states, ends, blockers, depth, rejoins, autoJoins };
+  return { states, ends, blockers, depth, rejoins, autoJoins, heals };
 }
 
 /** Ancestor states of `s`, root first, root excluded. */

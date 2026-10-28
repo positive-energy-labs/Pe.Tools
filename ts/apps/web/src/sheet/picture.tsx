@@ -11,6 +11,31 @@ import { markFrame, markLines } from "#/scene/marks";
 import { inkOf } from "#/scene/ink";
 import type { Layer3D, SceneMeshes } from "#/scene/types";
 import type { OpenSheet } from "./use-sheet";
+import type { DuctsSheetOverview } from "@pe/agent-contracts";
+
+/** Proposed geometry is its own dashed layer, in the snapshot's feet coordinate frame. */
+export function proposalLayer(blockers: DuctsSheetOverview["blockers"]): Layer3D {
+  const proposals = [
+    ...new Map(
+      blockers.flatMap((b) =>
+        b.proposal ? [[b.proposal.pair.join("|"), b.proposal] as const] : [],
+      ),
+    ).values(),
+  ];
+  return {
+    key: "sheet-heal-proposals",
+    build(group) {
+      group.add(
+        markLines(
+          proposals.map((p) => [p.from.point, p.to.point]),
+          inkOf("ink"),
+          { dash: { size: 0.15, gap: 0.1 } },
+        ),
+      );
+    },
+    frame: (group, at) => markFrame(group, at),
+  };
+}
 
 /** An edge layer over existing geometry. The scene owns its strokes and disposal. */
 export function pathLayer(meshes: SceneMeshes, ids: ReadonlySet<number>): Layer3D {
@@ -52,11 +77,14 @@ export function SheetPicture({
     const ids = [
       ...new Set([
         ...sheet.elements.walkedElementIds,
+        ...[...sheet.overview.blockers, ...sheet.overview.assumedBlockers].flatMap((b) =>
+          b.proposal ? [b.proposal.to.elementId] : [],
+        ),
         ...sheet.worstLegs.flatMap((path) => path.legs.map((leg) => leg.elementId)),
       ]),
     ];
     return ids.length ? sceneRequest(ids, true) : null;
-  }, [sheet.elements, sheet.worstLegs]);
+  }, [sheet.elements, sheet.worstLegs, sheet.overview]);
   const capture = useDuctScene(request, sheet.overview.target, sheet.overview.basis);
   const meshes = capture.meshes;
   const worstIds = useMemo(
@@ -64,8 +92,11 @@ export function SheetPicture({
     [sheet.worstLegs],
   );
   const layers = useMemo(
-    () => (meshes && worstIds.size ? [pathLayer(meshes, worstIds)] : []),
-    [meshes, worstIds],
+    () => [
+      ...(meshes && worstIds.size ? [pathLayer(meshes, worstIds)] : []),
+      proposalLayer([...sheet.overview.blockers, ...sheet.overview.assumedBlockers]),
+    ],
+    [meshes, worstIds, sheet.overview],
   );
   const [viewport, setViewport] = useState<OrbitViewport | null>(null);
   const pose = viewport ?? (meshes ? frame(meshes.bounds) : null);

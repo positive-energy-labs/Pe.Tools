@@ -57,13 +57,19 @@ export function Roster({
       key: "required",
       label: "Required ESP · in-wg",
       cell: (fan) =>
-        fan.requiredEspInWg != null
-          ? pressure(fan.requiredEspInWg)
-          : fan.complete === undefined
-            ? "not computed"
-            : fan.complete
-              ? "unavailable"
-              : `incomplete: ${fan.blockerCount ?? 0} blockers`,
+        fan.requiredEspInWg != null ? (
+          pressure(fan.requiredEspInWg)
+        ) : fan.requiredEspAssumedInWg != null ? (
+          <span data-tone="caution">
+            {pressure(fan.requiredEspAssumedInWg)} assumed ? {fan.blockerCount ?? 0} blockers
+          </span>
+        ) : fan.complete === undefined ? (
+          "not computed"
+        ) : fan.complete ? (
+          "unavailable"
+        ) : (
+          `incomplete: ${fan.blockerCount ?? 0} blockers`
+        ),
     },
     {
       key: "blockers",
@@ -130,7 +136,7 @@ function SideSheet({
           onClick={() => pickPath(path.pathId)}
         >
           {path.pathId}
-          {totals?.worstPath != null && String(totals.worstPath) === path.pathId ? " · worst" : ""}
+          {totals?.worstPath != null && ranked.paths[0]?.pathId === path.pathId ? " · worst" : ""}
         </Button>
       ),
     },
@@ -161,6 +167,8 @@ function SideSheet({
         <dl className="grid grid-cols-2 gap-x-4 gap-y-1">
           <dt>Known subtotal · in-wg</dt>
           <dd>{pressure(totals.knownInWg)}</dd>
+          <dt>Assumed ? in-wg</dt>
+          <dd data-tone="caution">{pressure(totals.assumedInWg)}</dd>
           <dt>Completeness</dt>
           <dd data-tone={totals.complete ? "done" : "alarm"}>
             {totals.complete ? "complete" : "incomplete"}
@@ -173,9 +181,9 @@ function SideSheet({
               <Button
                 label={`Inspect worst ${side} path`}
                 refusal={busy ? "Wait for the current read" : null}
-                onClick={() => pickPath(String(totals.worstPath))}
+                onClick={() => pickPath(ranked.paths[0]!.pathId)}
               >
-                {totals.worstPath}
+                {pressure(totals.worstPath)} in-wg
               </Button>
             )}
           </dd>
@@ -206,12 +214,14 @@ export function FanSheet({
   pickPath,
   busy,
   picture,
+  controls,
 }: {
   sheet: OpenSheet;
   anchor: ElementAnchor;
   pickPath: (id: string) => void;
   busy: boolean;
   picture?: ReactNode;
+  controls?: ReactNode;
 }) {
   const { overview, inputs, legs } = sheet;
   const blockers: Detail<"inputs">["blockers"] =
@@ -316,6 +326,21 @@ export function FanSheet({
         </p>
         <p>Rated ESP: {pressure(overview.fan?.ratedEspInWg)} in-wg</p>
       </header>
+      {overview.totals?.requiredEspAssumedInWg != null &&
+        overview.totals.requiredEspInWg == null && (
+          <p data-tone="caution">
+            Assumed ESP: {pressure(overview.totals.requiredEspAssumedInWg)} in-wg ?{" "}
+            {overview.blockers.length} blockers
+          </p>
+        )}
+      {overview.totals?.requiredEspAssumedInWg == null && overview.assumedBlockers.length > 0 && (
+        <p data-tone="caution">
+          Assumed ESP unavailable ?{" "}
+          {overview.assumedBlockers.filter((b) => b.kind === "no-flow").length} flow gaps ?{" "}
+          {overview.assumedBlockers.filter((b) => b.kind !== "no-flow").length} other blockers
+        </p>
+      )}
+      {controls}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         {(["supply", "return"] as const).map((side) => (
           <SideSheet

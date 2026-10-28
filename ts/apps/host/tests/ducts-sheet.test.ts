@@ -248,3 +248,135 @@ test("sheet inputs survive host recreation in document Work; one project slot go
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+
+test("proposal accept/reject is basis-bound, persists in document Work, and replay continues the known walk", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "sheet-proposal-"));
+  try {
+    const target = { session: "proposal-session", openId: "doc-a" };
+    const address = addressSchema.parse("C:\\models\\proposal.rvt");
+    const connector = (
+      index: number,
+      point: number[],
+      facing: number[],
+      classification: string,
+      connectedTo: { elementId: number; connector: number } | null,
+    ) => ({
+      index,
+      point,
+      facing,
+      classification,
+      connectedTo,
+      shape: "round",
+      diameterIn: 8,
+      kind: "end",
+      direction: classification === "SupplyAir" ? "out" : "in",
+    });
+    const snapshot = {
+      document: { title: "proposal", readAt: "fixed" },
+      slots: { terminalFlow: "named" },
+      segments: [],
+      nodes: [
+        {
+          id: 100,
+          kind: "equipment",
+          family: "Air Handler",
+          facts: [{ key: "mark", text: "F-100" }],
+          connectors: [
+            connector(0, [0, 0, 0], [1, 0, 0], "SupplyAir", null),
+            connector(1, [0, 0, 0], [-1, 0, 0], "ReturnAir", { elementId: 102, connector: 0 }),
+          ],
+        },
+        {
+          id: 101,
+          kind: "terminal",
+          facts: [{ key: "flow", value: 100 }],
+          connectors: [connector(0, [1, 0, 0], [-1, 0, 0], "SupplyAir", null)],
+        },
+        {
+          id: 102,
+          kind: "terminal",
+          facts: [{ key: "flow", value: 100 }],
+          connectors: [
+            connector(0, [0, 0, 0], [1, 0, 0], "ReturnAir", { elementId: 100, connector: 1 }),
+          ],
+        },
+      ],
+    } as unknown as DuctSnapshot;
+    const registrations = [{ spec: ductsRouteState }];
+    const make = () =>
+      createPeRoutes({
+        registrations,
+        store: fileRouteDocumentStore(dir),
+        heads: { observe: () => () => {} },
+        navigation: { documents: async () => [{ ...target, address }], threads: async () => [] },
+        ductsSheets: {
+          call: async (key) =>
+            Response.json(key === "ducts.snapshot" ? snapshot : { tables: {} }, {
+              headers: { [DUCTS_BODY_VERSION_HEADER]: key },
+            }),
+        },
+      });
+    let routes = make();
+    const request = { target, mode: "fan", unitId: 100, portIndex: 0 };
+    const post = (body: unknown) =>
+      routes.fetch(
+        new Request("http://host/pe/ducts/sheet", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+      );
+    const first = ductsSheetOverviewSchema.parse(await (await post(request)).json());
+    const proposal = first.blockers.find((b) => b.proposal)!.proposal!;
+    expect(first.totals!.requiredEspInWg).toBeNull();
+    expect(first.totals!.requiredEspAssumedInWg, JSON.stringify(first)).not.toBeNull();
+    const choice = { pair: proposal.pair, verdict: "reject" };
+    expect((await post({ ...request, proposal: choice })).status).toBe(409);
+    expect(
+      (
+        await post({
+          ...request,
+          basis: first.basis,
+          proposal: { ...choice, pair: ["100:0", "999:0"] },
+        })
+      ).status,
+    ).toBe(409);
+    const rejected = ductsSheetOverviewSchema.parse(
+      await (await post({ ...request, basis: first.basis, proposal: choice })).json(),
+    );
+    expect(rejected.basis).not.toBe(first.basis);
+    expect(rejected.blockers.every((b) => !b.proposal)).toBe(true);
+    expect(rejected.totals!.requiredEspAssumedInWg).toBeNull();
+    expect(
+      (await post({ ...request, basis: first.basis, proposal: { ...choice, verdict: "accept" } }))
+        .status,
+    ).toBe(409);
+    const reset = ductsSheetOverviewSchema.parse(
+      await (await post({ ...request, inputs: { rulings: [] } })).json(),
+    );
+    const accepted = ductsSheetOverviewSchema.parse(
+      await (
+        await post({ ...request, basis: reset.basis, proposal: { ...choice, verdict: "accept" } })
+      ).json(),
+    );
+    expect(accepted.totals!.requiredEspInWg).toBeGreaterThan(0.06);
+    expect(accepted.blockers).toEqual([]);
+    routes = make();
+    const replayed = ductsSheetOverviewSchema.parse(await (await post(request)).json());
+    expect(replayed.totals).toEqual(accepted.totals);
+    const scope = bindWork("ducts", address, undefined, target);
+    const raw = await new RouteWorkspace({
+      registrations,
+      store: fileRouteDocumentStore(dir),
+    }).readRaw(scope, "ducts");
+    expect(raw!.doc).toMatchObject({
+      sheetInputs: {
+        "fan:100:0": { edit: { value: { rulings: [{ pair: proposal.pair, verdict: "accept" }] } } },
+      },
+    });
+    expect(snapshot.nodes[0]!.connectors[0]!.connectedTo).toBeNull();
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
