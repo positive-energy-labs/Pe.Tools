@@ -182,6 +182,10 @@ Verbs          Pea's Sweep/Slice/Probe/Partition read through the same scoped re
    retain `LinkedGeometryStore` and `Dirty`/`Fresh`; the root linked-path fix, rollback-delta
    filter fix and harness custody logging landed.
    Loaded document version is falsified as an edit key. The pack reuses only within one process.
+Paused 2026-10-28 16:00Z for other work. Unlanded: step 3 (branch
+`t3/oriented-representation-module`, worktree `t3-5b8bc59c`) and step 6 (worktree `t3-ace23e92`).
+Each has a `RESUME.md` under its worktree's `.artifacts/`.
+
 6. Follow-on: Pea's verbs read through the scoped read, then re-measure the pack and delete it
    only if its benefit is gone. The production Cleremont Sweep repeat bar is 11.307 s;
    removing the pack before that migration costs 15.677 s (+38.6%) without a proved peak-memory win.
