@@ -398,6 +398,13 @@ internal readonly struct Obb {
         this.Centre.Y + (x * this.Along.Y) + (y * this.Across.Y) + (z * this.Up.Y),
         this.Centre.Z + (x * this.Along.Z) + (y * this.Across.Z) + (z * this.Up.Z));
 
+    /// <summary>The eight corners of the box grown by <paramref name="d" /> on each axis: everything within d of it lies inside.</summary>
+    public XYZ[] Corners(double d) {
+        var box = this;
+        return [.. from x in new[] { -1, 1 } from y in new[] { -1, 1 } from z in new[] { -1, 1 }
+            select box.ToWorld(x * (box.HalfLength + d), y * (box.HalfWidth + d), z * (box.HalfHeight + d))];
+    }
+
     /// <summary>World-axis bounds of the eight corners. Used only to prune the tree.</summary>
     public Aabb WorldBounds() {
         var ex = (this.HalfLength * Math.Abs(this.Along.X)) + (this.HalfWidth * Math.Abs(this.Across.X))

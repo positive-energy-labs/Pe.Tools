@@ -165,6 +165,15 @@ public readonly record struct Aabb(
         return x * x + y * y + z * z;
     }
 
+    internal bool Contains(Aabb o) =>
+        this.MinX <= o.MinX && this.MaxX >= o.MaxX && this.MinY <= o.MinY && this.MaxY >= o.MaxY && this.MinZ <= o.MinZ && this.MaxZ >= o.MaxZ;
+
+    internal XYZ[] Corners() {
+        var box = this;
+        return [.. from x in new[] { box.MinX, box.MaxX } from y in new[] { box.MinY, box.MaxY } from z in new[] { box.MinZ, box.MaxZ }
+            select new XYZ(x, y, z)];
+    }
+
     public bool Overlaps(Aabb o) =>
         this.MinX <= o.MaxX && this.MaxX >= o.MinX
         && this.MinY <= o.MaxY && this.MaxY >= o.MinY

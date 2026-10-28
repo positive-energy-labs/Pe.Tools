@@ -56,7 +56,10 @@ internal static class RegionMeasurements
             .Concat(ZoneMaterializer.ReadExisting(doc, view, zoneGuid, TakeoffCarriers.RoleHeldResidue)).ToList();
         var key = ScopeKey(doc, view, zoneGuid);
         var levelZ = view.GenLevel.ProjectElevation;
-        world ??= SpaceWorld.Prepare(doc);
+        if (regions.Count == 0) return;
+        var points = regions.SelectMany(r => r.Loops).SelectMany(loop => loop).ToList();
+        world ??= SpaceWorld.Prepare(doc, Pe.Revit.Space.Verbs.ProbeScope(new Aabb(points.Min(p => p[0]), points.Min(p => p[1]), 0,
+            points.Max(p => p[0]), points.Max(p => p[1]), 0), levelZ + 3.5));
         foreach (var region in regions)
         {
             var shape = new ZoneScope { Loops = region.Loops }.ExactGeometry();
