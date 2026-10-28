@@ -6,7 +6,7 @@
 import type { FanPort } from "../roster.ts";
 import type { Grids } from "../loss-grid.ts";
 import type { DuctSnapshot } from "../types.ts";
-import { fittingFacts, isTap, splitTappedDuct, tapDistance, type LegFlows, type Node, type Segment } from "../kernel/fitting-facts.ts";
+import { fittingFacts, teePorts, isTap, splitTappedDuct, tapDistance, type LegFlows, type Node, type Segment } from "../kernel/fitting-facts.ts";
 import type { ConnectorPairRuling } from "../kernel/inferred-joins.ts";
 import { equivalentFeet, priceLeg, type Choices, type PricedLeg } from "../kernel/price-leg.ts";
 import { flowsOf, legKey, stateFlow, type FlowOptions, type Flows } from "./flow.ts";
@@ -22,9 +22,12 @@ import {
   type Side,
   type SideTotals,
 } from "./types.ts";
-import { cutAtClassChange, graphOf, isSegment, legsOf, lineage, walkFrom, type End, type Graph, type Walk } from "./walk.ts";
+import { terminateMerges, graphOf, isSegment, legsOf, lineage, walkFrom, type End, type Graph, type Walk } from "./walk.ts";
 
 export type SheetSnapshot = Pick<DuctSnapshot, "nodes" | "segments" | "document"> & Partial<Pick<DuctSnapshot, "slots">>;
+
+// SHIM(ducts-terminal-drop): 0.03 in-wg is a placeholder pending the firm's per-family table.
+export const SHIM_TERMINAL_DROP_IN_WG = 0.03;
 
 export interface PricingInput {
   snapshot: SheetSnapshot;
@@ -33,14 +36,14 @@ export interface PricingInput {
   /** Typed drops, in-wg, by element id; they replace any rule or parameter. */
   drops?: Readonly<Record<number, number>>;
   /** Firm defaults; a terminal with no typed or catalog drop takes `terminalDropInWg`. */
-  defaults?: { terminalDropInWg?: number; version?: string };
+  defaults?: { terminalDropInWg?: number; terminalDropSource?: string; splitPolicy?: "even" | "proportional"; slot?: string; autoJoinMaxGapIn?: number; version?: string };
   roster?: readonly FanPort[];
   rulings?: readonly ConnectorPairRuling[];
   candidateBoxIn?: number;
 }
 
 export interface BuildSheetInput extends PricingInput {
-  fan: FanPortRef & { /** Asserted return-side start; the roster's inlet when absent. */ inletPortIndex?: number };
+  fan: FanPortRef;
   roster: readonly FanPort[];
   /** The confirmed airflow slot; the snapshot's terminal-flow slot when absent. */
   slot?: string;
@@ -48,6 +51,7 @@ export interface BuildSheetInput extends PricingInput {
   endCfm?: Readonly<Record<number, number>>;
   /** A side-stream unit's own flow, cfm, carried at the one roster fan port it feeds. */
   sideStreamCfm?: number;
+  splitPolicy?: "even" | "proportional";
   allowanceInWg?: { supply?: number; return?: number };
 }
 
@@ -74,6 +78,7 @@ class Pricer {
   legs: Record<string, Leg> = {};
   priced = new Map<string, { blockerIds: string[]; p: PricedLeg | null }>();
   blockers = new Map<string, Blocker>();
+  autoJoinNotes = new Set<string>();
   constructor(readonly input: PricingInput, readonly g: Graph) {}
 
   block = (b: Omit<Blocker, "id">) => {
@@ -131,8 +136,14 @@ class Pricer {
         const src = r.p.source;
         leg.lossSource = !src ? leg.lossSource
           : src.kind === "friction" ? { kind: "friction", ref: `Altshul-Tsal, roughness ${src.roughnessFt} ft${r.note ?? ""}` }
-          : src.kind === "rule" ? { kind: "rule", ref: `${src.rule} ${src.table} ${src.inputs.res}=${round(src.coefficient)}` }
+          : src.kind === "rule" ? { kind: "rule", ref: `${src.rule} ${src.table} ${src.inputs.res}=${round(src.coefficient)}${r.note ?? ""}` }
           : { kind: src.source.startsWith("firm default") ? "default" : "drop", ref: src.source };
+      }
+    }
+    for (const join of w.autoJoins) {
+      if ((join.from[0] === e.id && join.from[1] === out) || (join.to[0] === e.id && join.to[1] === st.in)) {
+        leg.lossSource.ref += `; ${join.note}`;
+        this.autoJoinNotes.add(join.note);
       }
     }
     this.priced.set(id, { blockerIds: ids, p });
@@ -155,8 +166,8 @@ class Pricer {
     if (e.kind === "terminal") {
       const catalog = e.terminalDrop?.catalogDropInWg;
       if (catalog != null) return drop(catalog, `parameter:${this.input.snapshot.slots?.terminalDrop ?? "terminalDrop"}`);
-      if (defaults.terminalDropInWg != null) return drop(defaults.terminalDropInWg, `firm default ${defaults.version ?? "unversioned"}`);
-      return drop(null, "no typed, catalog or default drop");
+      if (defaults.terminalDropInWg != null) return drop(defaults.terminalDropInWg, defaults.terminalDropSource ?? `firm default ${defaults.version ?? "unversioned"}`);
+      return drop(SHIM_TERMINAL_DROP_IN_WG, "SHIM placeholder");
     }
     if (e.kind === "equipment") return drop(null, "inline equipment; no typed drop and no firm default yet");
     const stated = e.kind === "accessory" ? factOf(e, "pressureDrop") : null;
@@ -164,11 +175,18 @@ class Pricer {
     if (isTap(e)) return this.tap(w, flows, s, cfm);
     const [inlet, outlet] = side === "supply" ? [conn(st.in), conn(out)] : [conn(out), conn(st.in)];
     const through = stateFlow(flows, s);
-    const legFlows: LegFlows = e.connectors.length > 2 && through != null
+    const tee = side === "supply" ? teePorts(e, inlet) : null;
+    const branchCfm = tee ? flows.leg.get(legKey(s, tee.branch.index))?.cfm : null;
+    const straightCfm = tee ? flows.leg.get(legKey(s, tee.straight.index))?.cfm : null;
+    const legFlows: LegFlows = tee && through != null && branchCfm != null && straightCfm != null
+      ? { through: cfm, branch: branchCfm, upstreamMain: through, downstreamMain: straightCfm }
+      : e.connectors.length > 2 && through != null
       ? { through: cfm, branch: cfm, upstreamMain: through, downstreamMain: through - cfm }
       : { through: cfm };
     // ponytail: return-side junctions are priced on the same (diverging) rules; converging tables are the upgrade.
-    const p = priceLeg({ kind: "fitting", fitting: e, facts: fittingFacts({ fitting: e, inlet, outlet }), flows: legFlows, leg: "C" }, grids, choices);
+    const facts = fittingFacts({ fitting: e, inlet, outlet });
+    if (e.partType === "Tee" && !tee) delete facts.junction;
+    const p = priceLeg({ kind: "fitting", fitting: e, facts, flows: legFlows, leg: "C" }, grids, choices);
     return { p, ids: this.take(p, e.id).ids };
   }
 
@@ -243,19 +261,28 @@ class Pricer {
     return { p, ids, note: `, ${round(length)} ft${cs.length ? `, ${cs.length} tap(s) passed (Cs)` : ""}` };
   }
 
-  private tap(w: Walk, flows: Flows, s: number, cfm: number) {
+  private tap(w: Walk, flows: Flows, s: number, cfm: number): { p: PricedLeg | null; ids: string[]; note?: string } {
     const { grids, choices = {} } = this.input;
     const st = w.states[s]!;
     const tap = st.el as Node;
     const parent = w.states[st.parent]!;
     const main = isSegment(parent.el) ? parent.el : null;
     const fromSide = main && main.connectors.find((c) => c.index === st.via)?.kind === "curve";
-    if (!main || !fromSide)
-      return { p: null, ids: [this.block({
-        kind: "not-priced", elementId: tap.id, effectInWg: null,
-        detail: `tap ${tap.id} is entered from its branch: the main's flow at the junction is not this fan's to state`,
-        closer: { kind: "ruling", note: "type the junction's drop" },
-      })] };
+    if (!main || !fromSide) {
+      // ponytail: a merge's receiving-stream flow is not this fan's to invent; only price its branch when observed.
+      const mainPort = tap.connectors.find((c) => c.index !== st.in);
+      const receiving = mainPort?.connectedTo && this.g.byId.get(mainPort.connectedTo.elementId);
+      const mainCfm = receiving && isSegment(receiving) ? receiving.connectors.reduce((max, c) => Math.max(max, c.flowCfm ?? 0), 0) : 0;
+      if (!receiving || !isSegment(receiving) || mainCfm <= 0)
+        return { p: { kind: "drop", elementId: tap.id, lossInWg: null, velocityFpm: null,
+          source: { kind: "drop", source: "merge boundary; branch loss unavailable without receiving-stream flow" }, unpriced: null }, ids: [] };
+      const p = priceLeg({ kind: "fitting", fitting: tap, leg: "Cb",
+        flows: { through: cfm, branch: cfm, upstreamMain: mainCfm + cfm, downstreamMain: mainCfm },
+        facts: fittingFacts({ fitting: tap, inlet: tap.connectors.find((c) => c.index === st.in), outlet: undefined, main: receiving }),
+      }, grids, choices);
+      // ponytail: this uses the existing diverging-table estimate; a retained converging grid must replace it for merge certification.
+      return { p, ids: this.take(p, tap.id).ids, note: ", diverging-table estimate at merge" };
+    }
     const parentIn = main.connectors.find((c) => c.index === parent.in)!;
     const taps = parentIn.kind === "curve" ? null : this.tapsOn(w, flows, st.parent);
     const up = stateFlow(flows, st.parent);
@@ -294,6 +321,10 @@ class Pricer {
   }
 }
 
+const terminalDropInputs = (pricer: Pricer): SheetInput[] =>
+  Object.values(pricer.legs).some((l) => l.lossSource.ref.includes("SHIM"))
+    ? [{ name: "SHIM terminal drop in-wg", value: SHIM_TERMINAL_DROP_IN_WG, source: "SHIM placeholder" }] : [];
+
 const dist = (p: number[], q: number[]) => Math.hypot(...p.map((v, k) => v - q[k]!));
 
 function totals(pricer: Pricer, paths: SheetPath[], allowanceInWg: number): SideTotals {
@@ -312,42 +343,35 @@ function totals(pricer: Pricer, paths: SheetPath[], allowanceInWg: number): Side
 
 const rank = (paths: SheetPath[]) => paths.sort((a, b) => b.knownInWg - a.knownInWg || a.legIds.length - b.legIds.length);
 
-const carrying = (e: End) => e.end.kind === "terminal" || e.end.kind === "roster-fan-port";
+const carrying = (e: End) => e.end.kind === "terminal" || e.end.kind === "roster-fan-port" || e.end.kind === "joins-other-fan";
 
-/** Walk a side and cut the branches other roster fans own. */
-function walkSide(g: Graph, pricer: Pricer, input: BuildSheetInput, unit: Node, connector: number) {
-  const opts = { roster: input.roster, rulings: input.rulings ?? [], candidateBoxIn: input.candidateBoxIn };
-  const w = walkFrom(g, unit, connector, opts);
-  for (const [id, b] of w.blockers) pricer.blockers.set(id, b);
-  cutAtClassChange(w);
-  const others = w.ends.filter((e) => e.end.kind === "roster-fan-port" && e.end.elementId !== unit.id).map((portEnd) => {
-    const other = g.byId.get(portEnd.end.elementId)!;
-    return { fan: portEnd.end.fan!, walk: walkFrom(g, other, portEnd.end.connector, opts) };
-  });
-  return { w, others };
-}
-
-/** Flows on a walked side; marks legs another fan's walk carries more of its own terminals' flow through. */
-function flowSide(pricer: Pricer, { w, others }: ReturnType<typeof walkSide>, flowOpts: FlowOptions) {
-  const flows = flowsOf(w, flowOpts, pricer.block);
-  const discard = () => "";
-  for (const o of others) {
-    const theirs = flowsOf(o.walk, { slot: flowOpts.slot, endCfm: flowOpts.endCfm, fanEndsCarryNone: true }, discard);
-    const at = new Map(o.walk.states.map((st, i) => [st.el.id, i]));
-    w.states.forEach((st, s) => {
-      const k = at.get(st.el.id);
-      if (s === 0 || k == null || k === 0) return;
-      const mine = stateFlow(flows, s);
-      const their = stateFlow(theirs, k);
-      if (mine != null && their != null && their > mine)
-        st.blockerIds.push(pricer.block({
-          kind: "shared-leg", elementId: st.el.id, effectInWg: null, owner: o.fan,
-          detail: `${st.el.id} carries ${round(their)} cfm of unit ${o.fan.unitId}'s flow against ${round(mine)} cfm of this fan's`,
-          closer: { kind: "ruling", note: "rule where this fan's path ends, or price the shared leg at the combined flow" },
-        }));
-    });
+/** The ends choose direction; connector metadata breaks ties only. */
+function endDirection(w: Walk, g: Graph, roster: readonly FanPort[]): { score: number; source: string } {
+  let score = 0;
+  const reasons = new Set<string>();
+  for (const e of w.ends) {
+    const el = g.byId.get(e.end.elementId);
+    if (!el) continue;
+    if (e.directionHint) {
+      score += e.directionHint === "supply" ? 1 : -1;
+      reasons.add(e.directionHint === "supply" ? "merge toward receiving fan inlet/return" : "merge toward another fan discharge");
+      continue;
+    }
+    const port = el.connectors.find((c) => c.index === e.end.connector);
+    const cls = (port?.classification ?? (isSegment(el) ? el.classification : null) ?? "").replaceAll(" ", "").toLowerCase();
+    if (!isSegment(el) && e.end.kind === "terminal") {
+      if (/louver|outside|outdoor|intake/i.test(`${el.family ?? ""} ${el.type ?? ""}`) || /outdoor|exhaust|return/.test(cls)) {
+        score--; reasons.add("return/exhaust terminal or outdoor intake");
+      } else if (/supply/.test(cls)) { score++; reasons.add("supply terminal"); }
+    } else if (e.end.kind === "roster-fan-port" && e.end.elementId !== w.states[0]!.el.id) {
+      const receiver = roster.find((p) => p.unitId === e.end.elementId && p.inletPortIndex === e.end.connector);
+      if (receiver || /return/.test(cls) || port?.direction === "in") { score++; reasons.add("receiving fan inlet/return"); }
+      else if (port?.direction === "out") { score--; reasons.add("another fan discharge"); }
+    } else if (/outdoor/.test(cls)) { score--; reasons.add("outdoor-air end"); }
   }
-  return flows;
+  // A merge into another fan's return is discharge evidence even when no terminal lies on this fan's side.
+
+  return { score, source: [...reasons].join("; ") || "no classified end" };
 }
 
 /** A side's delivered flow: the sum of its carrying ends; null if any lacks one. */
@@ -362,27 +386,49 @@ export function buildSheet(input: BuildSheetInput): Sheet {
   const unit = g.byId.get(input.fan.unitId);
   if (!unit || isSegment(unit)) throw new Error(`fan unit ${input.fan.unitId} is not in the snapshot`);
   const entry = input.roster.find((p) => p.unitId === unit.id && p.portIndex === input.fan.portIndex);
-  const inlet = input.fan.inletPortIndex ?? entry?.inletPortIndex ?? null;
-  const slot = input.slot ?? input.snapshot.slots?.terminalFlow ?? "terminalFlow";
+  const pairedInlet = entry?.inletPortIndex !== input.fan.portIndex ? entry?.inletPortIndex
+    : unit.connectors.length === 2 ? unit.connectors.find((c) => c.index !== input.fan.portIndex)?.index : undefined;
+  const opts = { roster: input.roster, rulings: input.rulings ?? [], candidateBoxIn: input.candidateBoxIn, autoJoinMaxGapIn: input.defaults?.autoJoinMaxGapIn };
+  const a = walkFrom(g, unit, input.fan.portIndex, opts);
+  const b = pairedInlet == null ? null : walkFrom(g, unit, pairedInlet, opts);
+  terminateMerges(a);
+  if (b) terminateMerges(b);
+  const aRule = endDirection(a, g, input.roster), bRule = b ? endDirection(b, g, input.roster) : null;
+  const swap = !!bRule && bRule.score > aRule.score;
+  const discharge = swap ? pairedInlet! : input.fan.portIndex;
+  const inlet = swap ? input.fan.portIndex : pairedInlet ?? null;
+  const directionSource = bRule && aRule.score !== bRule.score
+    ? `ends: discharge ${swap ? bRule.source : aRule.source}; paired side is inlet`
+    : "port metadata tie-break: ends do not distinguish the paired sides";
+  const slot = input.slot ?? input.defaults?.slot ?? input.snapshot.slots?.terminalFlow ?? "terminalFlow";
+  // The side-stream exception uses the unit design parameter; terminal-led fan flow remains a sum.
+  const design = factOf(unit, "fanFlow");
+  const designCfm = design != null && design > 0 ? design : null;
   const flowOpts: FlowOptions = {
     slot, endCfm: input.endCfm ?? {},
-    sideStream: input.sideStreamCfm == null ? null : { cfm: input.sideStreamCfm, source: "typed" },
+    sideStream: input.sideStreamCfm != null ? { cfm: input.sideStreamCfm, source: "typed" }
+      : designCfm == null ? null : { cfm: designCfm, source: `parameter:${input.snapshot.slots?.fanFlow ?? "fanFlow"}` },
+    splitPolicy: input.splitPolicy ?? input.defaults?.splitPolicy ?? "even",
+    receivingDesignCfm: Object.fromEntries(input.snapshot.nodes.map((n) => [n.id, factOf(n, "fanFlow")])),
   };
-  const supply = walkSide(g, pricer, input, unit, input.fan.portIndex);
-  const ret = inlet == null ? null : walkSide(g, pricer, input, unit, inlet);
+  const supply = { w: swap ? b! : a };
+  const ret = b ? { w: swap ? a : b } : null;
+  for (const w of [supply.w, ret?.w]) if (w) {
+    for (const [id, blocker] of w.blockers) pricer.blockers.set(id, blocker);
+  }
   // A side whose one end carries nothing (an intake, an open end) carries the other side's flow.
   const single = (w: Walk) => w.ends.length === 1 && !carrying(w.ends[0]!);
   const balanced = (w: Walk, other: number | null): FlowOptions =>
-    single(w) && other ? { ...flowOpts, only: { end: 0, cfm: other, source: "balance" } } : flowOpts;
+    single(w) && other ? { ...flowOpts, only: { end: 0, cfm: other, source: `balance; splitPolicy:${flowOpts.splitPolicy}` } } : flowOpts;
   const retFirst = !!ret && single(supply.w);
-  const retFlows = ret && retFirst ? flowSide(pricer, ret, flowOpts) : null;
-  const supplyFlows = flowSide(pricer, supply, balanced(supply.w, retFlows ? sideSum(retFlows, ret!.w) : null));
-  const returnFlows = ret ? retFlows ?? flowSide(pricer, ret, balanced(ret.w, sideSum(supplyFlows, supply.w))) : null;
+  const retFlows = ret && retFirst ? flowsOf(ret.w, flowOpts, pricer.block) : null;
+  const supplyFlows = flowsOf(supply.w, balanced(supply.w, retFlows ? sideSum(retFlows, ret!.w) : null), pricer.block);
+  const returnFlows = ret ? retFlows ?? flowsOf(ret.w, balanced(ret.w, sideSum(supplyFlows, supply.w)), pricer.block) : null;
   const supplyPaths = rank(pricer.paths(supply.w, supplyFlows, "supply"));
   const returnPaths = ret ? rank(pricer.paths(ret.w, returnFlows!, "return")) : [];
   if (!ret) pricer.block({
     kind: "open-end", elementId: unit.id, effectInWg: null, detail: `the roster names no inlet for ${unit.id}; the return side is not walked`,
-    closer: { kind: "ruling", note: "assert the inlet connector" },
+    closer: { kind: "ruling", note: "check the fan's paired duct ports; no inlet could be identified" },
   });
   const allowance = { supply: input.allowanceInWg?.supply ?? 0, return: input.allowanceInWg?.return ?? 0 };
   const sT = totals(pricer, supplyPaths, allowance.supply);
@@ -395,13 +441,24 @@ export function buildSheet(input: BuildSheetInput): Sheet {
   for (const w of [supply.w, ret?.w]) if (w) for (const id of w.depth.keys()) walked.add(id);
 
   const inputs: SheetInput[] = [
-    { name: "airflow slot", value: slot, source: input.slot ? "typed" : "snapshot slots" },
+    { name: "auto-join maximum gap in", value: input.defaults?.autoJoinMaxGapIn ?? 3, source: input.defaults?.autoJoinMaxGapIn == null ? "default" : "route settings" },
+    ...(input.defaults?.terminalDropInWg == null || input.defaults.terminalDropSource === "SHIM placeholder" ? []
+      : [{ name: "terminal drop in-wg", value: input.defaults.terminalDropInWg, source: input.defaults.terminalDropSource ?? `firm default ${input.defaults.version ?? "unversioned"}` }]),
+    { name: "split policy", value: flowOpts.splitPolicy ?? "even", source: input.splitPolicy ? "typed" : input.defaults?.splitPolicy ? "route settings" : "default" },
+    { name: "unit design cfm", value: flowOpts.sideStream?.cfm ?? null, source: flowOpts.sideStream?.source ?? "missing design-flow parameter" },
+    { name: "airflow slot", value: slot, source: input.slot ? "typed" : input.defaults?.slot ? "route settings" : "snapshot slots" },
     { name: "supply allowance in-wg", value: allowance.supply, source: input.allowanceInWg?.supply == null ? "default 0" : "typed" },
     { name: "return allowance in-wg", value: allowance.return, source: input.allowanceInWg?.return == null ? "default 0" : "typed" },
-    { name: "inlet connector", value: inlet, source: input.fan.inletPortIndex != null ? "asserted" : entry?.inletPortIndex != null ? "roster" : "none" },
+    { name: "inlet connector", value: inlet, source: directionSource },
+    { name: "discharge connector", value: discharge, source: directionSource },
     { name: "candidate box in", value: input.candidateBoxIn ?? 36, source: input.candidateBoxIn == null ? "default" : "typed" },
     ...(input.sideStreamCfm == null ? [] : [{ name: "side-stream cfm", value: input.sideStreamCfm, source: "typed" }]),
-    ...(input.defaults?.terminalDropInWg == null ? [] : [{ name: "terminal drop in-wg", value: input.defaults.terminalDropInWg, source: `firm default ${input.defaults.version ?? "unversioned"}` }]),
+    ...terminalDropInputs(pricer),
+    ...[...pricer.autoJoinNotes].map((note) => ({ name: note, value: null, source: "default auto-join" })),
+    ...Object.values(pricer.legs).filter((l) => l.lossSource.ref.includes("diverging-table estimate at merge"))
+      .map((l) => ({ name: `merge ${l.elementId} branch loss model`, value: "diverging-table estimate", source: l.lossSource.ref })),
+    ...Object.values(pricer.legs).filter((l) => l.lossSource.ref.startsWith("merge boundary"))
+      .map((l) => ({ name: `merge ${l.elementId} branch loss in-wg`, value: null, source: l.lossSource.ref })),
     ...Object.entries(input.endCfm ?? {}).map(([id, v]) => ({ name: `end ${id} cfm`, value: v, source: "typed" })),
     ...Object.entries(input.drops ?? {}).map(([id, v]) => ({ name: `element ${id} drop in-wg`, value: v, source: "typed" })),
     ...Object.entries(input.choices ?? {}).map(([k, v]) => ({ name: `table for ${k}`, value: v, source: "typed" })),
@@ -410,11 +467,11 @@ export function buildSheet(input: BuildSheetInput): Sheet {
   const cited = new Set([...supplyPaths, ...returnPaths].flatMap((p) => p.blockerIds));
   return {
     engineVersion: SHEET_ENGINE_VERSION,
-    basis: basisOf(input.snapshot, [input.fan, inlet, input.rulings, input.endCfm, input.drops, input.defaults, input.sideStreamCfm, input.allowanceInWg, input.choices, slot, input.candidateBoxIn]),
+    basis: basisOf(input.snapshot, [input.fan, inlet, input.rulings, input.endCfm, input.drops, input.defaults, input.sideStreamCfm, input.allowanceInWg, input.choices, slot, input.splitPolicy, input.candidateBoxIn]),
     fan: {
       unitId: unit.id, portIndex: input.fan.portIndex,
       mark: entry?.tag || unit.facts.find((f) => f.key === "mark")?.text || "",
-      ratedEspInWg: ratedEsp, inletPortIndex: inlet, flowCfm,
+      ratedEspInWg: ratedEsp, inletPortIndex: inlet, dischargePortIndex: discharge, flowCfm,
     },
     legs: pricer.legs,
     paths: [...supplyPaths, ...returnPaths],
@@ -433,12 +490,13 @@ export function buildChain(input: BuildChainInput): Chain {
   const start = g.byId.get(input.start.elementId);
   if (!start) throw new Error(`start ${input.start.elementId} is not in the snapshot`);
   // ponytail: the start element is the root and is not priced; start at the unit or terminal itself.
-  const w = walkFrom(g, start, input.start.connector, { roster: input.roster ?? [], rulings: input.rulings ?? [], candidateBoxIn: input.candidateBoxIn });
+  const w = walkFrom(g, start, input.start.connector, { roster: input.roster ?? [], rulings: input.rulings ?? [], candidateBoxIn: input.candidateBoxIn, autoJoinMaxGapIn: input.defaults?.autoJoinMaxGapIn });
   for (const [id, b] of w.blockers) pricer.blockers.set(id, b);
+  terminateMerges(w);
   let at = w.ends.findIndex((e) => e.end.elementId === input.end.elementId);
   if (at < 0) {
     const s = w.states.findIndex((st, i) => i > 0 && st.el.id === input.end.elementId);
-    if (s > 0) {
+    if (s > 0 && !lineage(w, s).some((k) => w.states[k]!.merge)) {
       const el = w.states[s]!.el;
       w.ends.push({ state: s, out: undefined, blockerIds: [], end: { kind: !isSegment(el) && el.kind === "terminal" ? "terminal" : "open-end", elementId: el.id } });
       at = w.ends.length - 1;
@@ -462,10 +520,10 @@ export function buildChain(input: BuildChainInput): Chain {
   for (const id of path?.legIds ?? []) legs[id] = pricer.legs[id]!;
   return {
     engineVersion: SHEET_ENGINE_VERSION,
-    basis: basisOf(input.snapshot, [input.start, input.end, input.direction, input.flowCfm, input.rulings, input.drops, input.choices]),
+    basis: basisOf(input.snapshot, [input.start, input.end, input.direction, input.flowCfm, input.rulings, input.drops, input.choices, input.defaults]),
     start: input.start, direction: input.direction, path, legs,
     blockers: [...pricer.blockers.values()].filter((b) => !path || path.blockerIds.includes(b.id)),
-    inputs,
+    inputs: [...inputs, ...terminalDropInputs(pricer), ...[...pricer.autoJoinNotes].map((note) => ({ name: note, value: null, source: "default auto-join" }))],
     walkedElementIds: [...w.depth.keys()].sort((a, b) => a - b),
   };
 }

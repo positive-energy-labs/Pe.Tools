@@ -56,6 +56,16 @@ export interface FittingTraversal {
   main?: Segment | null;
 }
 
+/** A plain tee entered from its run. Branch-entry/converging geometry has no diverging mapping. */
+export function teePorts(node: Node, inlet: Connector | undefined) {
+  if (node.partType !== "Tee" || node.connectors.length !== 3 || !inlet?.facing || inlet.shape !== "round") return null;
+  const dot = (a: number[], b: number[]) => a.reduce((sum, v, k) => sum + v * b[k]!, 0) / (Math.hypot(...a) * Math.hypot(...b));
+  const straight = node.connectors.find((c) => c.index !== inlet.index && c.facing && dot(inlet.facing!, c.facing) < -0.99);
+  const branch = node.connectors.find((c) => c.index !== inlet.index && c.index !== straight?.index);
+  return straight?.shape === "round" && branch?.shape === "round" && branch.facing
+    && Math.abs(dot(inlet.facing, branch.facing)) < 0.01 ? { straight, branch } : null;
+}
+
 /**
  * Facts the rules read, from a node's connectors and W1 facts. The caller asserts the traversal;
  * a transition with one In and one Out connector still reads its physical pair (as losses.ts did).
@@ -68,6 +78,7 @@ export function fittingFacts({ fitting: node, inlet: walkedInlet, outlet: walked
   const walked = physical != null && physical.inlet == null;
   const inlet = physical?.inlet ?? walkedInlet ?? node.connectors[0];
   const outlet = physical?.outlet ?? (tap ? undefined : walkedOutlet);
+  const tee = teePorts(node, inlet);
   const inletPort = portOf(inlet) ?? { shape: "other", section: null };
   const outletPort = portOf(outlet);
   const ratio =
@@ -91,6 +102,9 @@ export function fittingFacts({ fitting: node, inlet: walkedInlet, outlet: walked
     family: node.family ?? null,
     partType: node.partType ?? null,
     rOverD: factOf(node, "rOverD"),
+    centerRadiusIn: factOf(node, "centerRadius"),
+    ...(tee && outlet && inletPort.section && portOf(tee.branch)?.section && portOf(tee.straight)?.section
+      ? { junction: { branch: portOf(tee.branch)!, straight: portOf(tee.straight)!, leg: outlet.index === tee.branch.index ? "Cb" as const : "Cs" as const } } : {}),
     aoOverA1: transition ? ratio : (factOf(node, "aoOverA1") ?? ratio),
     angleDeg: physical ? physical.angleDeg : factOf(node, "angle"),
     ...(walked ? { note: "oriented by the asserted walk; its connectors state no In/Out pair" } : {}),

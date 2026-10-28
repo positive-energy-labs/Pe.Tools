@@ -1,13 +1,22 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { RouteWorkspace } from "@pe/runtime";
+import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { existsSync, readFileSync } from "node:fs";
 import { Effect } from "effect";
 import { expect, test } from "vite-plus/test";
 import {
   DUCTS_BODY_VERSION_HEADER,
+  bindWork,
+  ductsRouteState,
+  addressSchema,
   ductsRosterResponseSchema,
   ductsSheetOverviewSchema,
   ductsSheetResponseSchema,
 } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import type { DuctsSheetSources } from "../src/ducts-sheet.ts";
 import { createPeRoutes } from "../src/pe-routes.ts";
 import { DuctsReadings } from "../src/ducts-readings.ts";
 import type { RevitBridge } from "../src/bridge.ts";
@@ -166,3 +175,76 @@ test.skipIf(!existsSync(retained))(
     process.stdout.write(`MUAS-1 overview: ${bytes} UTF-8 bytes\n${JSON.stringify(overview)}\n`);
   },
 );
+
+
+test("sheet inputs survive host recreation in document Work; one project slot governs all fans and defaults come from route settings", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "ducts-sheet-inputs-"));
+  try {
+    const target = { session: "session", openId: "doc-a" };
+    const address = addressSchema.parse("C:\\models\\sheet-inputs.rvt");
+    const connector = (index: number, direction: string, classification: string, toId: number, toConnector: number) => ({
+      index, kind: "end", direction, classification, shape: "round", diameterIn: 8, point: [0, 0, 0],
+      connectedTo: { elementId: toId, connector: toConnector }, flowCfm: 200,
+    });
+    const nodes = [100, 200].flatMap((id) => [
+      { id, kind: "equipment", family: "Air Handler", facts: [{ key: "mark", text: `F-${id}` }],
+        connectors: [connector(0, "out", "SupplyAir", id + 1, 0), connector(1, "in", "ReturnAir", id + 2, 0)] },
+      ...[1, 2].map((offset) => ({ id: id + offset, kind: "terminal", family: "Grille", flowParameter: "named", facts: [{ key: "flow", value: 100 }],
+        connectors: [connector(0, "in", offset === 1 ? "SupplyAir" : "ReturnAir", id, offset - 1)] })),
+    ]);
+    const snapshot = { document: { title: "fixture", readAt: "fixed" }, nodes, segments: [], slots: { terminalFlow: "named" } } as unknown as DuctSnapshot;
+    const tableIds: string[][] = [];
+    const source: DuctsSheetSources = { call: async (key, request) => {
+      if ("ids" in request) tableIds.push(request.ids);
+      return Response.json(key === "ducts.snapshot" ? snapshot : { tables: {} }, { headers: { [DUCTS_BODY_VERSION_HEADER]: key } });
+    } };
+    const registrations = [{ spec: ductsRouteState }];
+    const store = fileRouteDocumentStore(dir);
+    const workspace = new RouteWorkspace({ store, registrations });
+    const scope = bindWork("ducts", address, undefined, target);
+    expect(await workspace.apply(scope, "ducts", "human", [{ path: ["sheetDefaults", "edit"], value: { value: { terminalDropInWg: 0.06, splitPolicy: "proportional" } } }, { path: ["parameters", "terminalFlow", "edit"], value: { value: "revit:Flow" } }], 0)).toMatchObject({ ok: true });
+    const make = (workspace?: RouteWorkspace) => createPeRoutes({
+      registrations, store: fileRouteDocumentStore(dir), ...(workspace ? { workspace } : {}), heads: { observe: () => () => {} }, ductsSheets: source,
+      navigation: { documents: async () => [{ ...target, address }], threads: async () => [] },
+    });
+    let routes = make(workspace);
+    const post = async (route: "sheet" | "roster", body: unknown) => routes.fetch(new Request(`http://host/pe/ducts/${route}`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+    }));
+    const request = { target, mode: "fan", unitId: 100, portIndex: 0 };
+    const settings = ductsSheetOverviewSchema.parse(await (await post("sheet", request)).json());
+    expect(settings.fan!.flowCfm).toBe(200);
+    expect(settings.totals!.requiredEspInWg).toBeCloseTo(0.12);
+    const firstInputs = ductsSheetResponseSchema.parse(await (await post("sheet", { ...request, basis: settings.basis, detail: { kind: "inputs" } })).json());
+    expect(firstInputs.kind === "inputs" && firstInputs.inputs).toContainEqual({ name: "split policy", value: "proportional", source: "route settings" });
+    const inputs = { slot: "named", splitPolicy: "even", endCfm: { 101: 70 }, drops: { 102: 0.09 }, rulings: [{ pair: ["11:0", "12:1"], verdict: "reject" }] };
+    const written = ductsSheetOverviewSchema.parse(await (await post("sheet", { ...request, inputs })).json());
+    expect(written.fan!.flowCfm).toBe(70);
+    expect(written.totals!.requiredEspInWg).toBeCloseTo(0.15);
+    expect((await post("sheet", { ...request, basis: settings.basis, detail: { kind: "inputs" } })).status).toBe(409);
+    routes = make(); // New workspace + real disk store, same document address.
+    const reloaded = ductsSheetOverviewSchema.parse(await (await post("sheet", request)).json());
+    expect(reloaded.fan!.flowCfm).toBe(70);
+    expect(reloaded.totals!.requiredEspInWg).toBeCloseTo(0.15);
+    const provenance = ductsSheetResponseSchema.parse(await (await post("sheet", { ...request, basis: reloaded.basis, detail: { kind: "inputs" } })).json());
+    expect(provenance.kind === "inputs" && provenance.inputs).toContainEqual({ name: "airflow slot", value: "named", source: "Work edit" });
+    const other = ductsSheetOverviewSchema.parse(await (await post("sheet", { ...request, unitId: 200 })).json());
+    expect(other.fan!.flowCfm).toBe(100); // Project slot, without copying fan 100's end overrides.
+    const roster = ductsRosterResponseSchema.parse(await (await post("roster", { target })).json());
+    expect(roster.activeSlot).toBe("named");
+    expect(roster.slots).toEqual(expect.arrayContaining([{ slot: "named", covered: 4, total: 4 }, { slot: "revit:Flow", covered: 4, total: 4 }]));
+    const changed = ductsSheetOverviewSchema.parse(await (await post("sheet", { ...request, unitId: 200, inputs: { slot: "revit:Flow" } })).json());
+    expect(changed.fan!.flowCfm).toBe(200);
+    expect((await post("sheet", { ...request, basis: reloaded.basis, detail: { kind: "inputs" } })).status).toBe(409);
+    const override = ductsSheetOverviewSchema.parse(await (await post("sheet", { ...request, inputs: { endCfm: { 101: 90 }, drops: { 101: 0.02 } } })).json());
+    expect(override.fan!.flowCfm).toBe(90);
+    expect(override.totals!.requiredEspInWg).toBeCloseTo(0.11); // Keeps saved drop on 102.
+    const noInlet = await post("sheet", { ...request, inputs: { inletPortIndex: 1 } });
+    expect(noInlet.status).toBe(400);
+    for (const ids of tableIds) expect(ids).toEqual(expect.arrayContaining(["CR3-1", "CD3-3", "SD5-9"]));
+    const raw = await new RouteWorkspace({ registrations, store: fileRouteDocumentStore(dir) }).readRaw(scope, "ducts");
+    expect(raw!.doc).toMatchObject({ sheetInputs: { project: { edit: { value: { slot: "revit:Flow" } } }, "fan:100:0": { edit: { value: { rulings: inputs.rulings, endCfm: { 101: 90 }, drops: { 101: 0.02, 102: 0.09 } } } } } });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

@@ -8,10 +8,27 @@ const detail = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("elements") }),
   z.strictObject({ kind: z.literal("inputs") }),
 ]);
+/** Project slot is shared by all fan sheets. Other inputs are retained per fan/chain subject. */
+export const ductsSheetInputsSchema = z.strictObject({
+  slot: z.string().min(1).optional(),
+  splitPolicy: z.enum(["even", "proportional"]).optional(),
+  endCfm: z.record(z.string().regex(/^[1-9]\d*$/), z.number().finite().nonnegative()).optional(),
+  drops: z.record(z.string().regex(/^[1-9]\d*$/), z.number().finite().nonnegative()).optional(),
+  rulings: z.array(z.strictObject({ pair: z.tuple([z.string().min(1), z.string().min(1)]), verdict: z.enum(["accept", "reject"]) })).optional(),
+});
+/** Stored beside /ducts colours and parameter slots; host passes these through one engine defaults seam. */
+export const ductsSheetDefaultsSchema = z.strictObject({
+  terminalDropInWg: z.number().finite().nonnegative().optional(),
+  autoJoinMaxGapIn: z.number().finite().nonnegative().optional(),
+  splitPolicy: z.enum(["even", "proportional"]).optional(),
+});
+export type DuctsSheetInputs = z.infer<typeof ductsSheetInputsSchema>;
+
 const common = {
   target: documentRefSchema,
   basis: z.string().min(1).optional(),
   detail: detail.optional(),
+  inputs: ductsSheetInputsSchema.optional(),
 };
 export const ductsSheetRequestSchema = z.discriminatedUnion("mode", [
   z.strictObject({ ...common, mode: z.literal("fan"), unitId: elementId, portIndex }),
@@ -50,13 +67,14 @@ const fan = fanRef.extend({
   mark: z.string(),
   ratedEspInWg: z.number().nullable(),
   inletPortIndex: portIndex.nullable(),
+  dischargePortIndex: portIndex,
   flowCfm: z.number().nullable(),
 });
 const pathEnd = z.object({
   kind: z.enum(["terminal", "open-end", "roster-fan-port", "joins-other-fan"]),
   elementId,
   connector: portIndex.optional(),
-  fan: fanRef.optional(),
+  fan: fanRef.nullable().optional(),
 });
 const sideTotals = z.object({
   worstPath: z.number().nullable(),
@@ -169,6 +187,8 @@ export type DuctsSheetResponse = z.infer<typeof ductsSheetResponseSchema>;
 export type DuctsSheetOverview = z.infer<typeof ductsSheetOverviewSchema>;
 export const ductsRosterResponseSchema = z.object({
   target: documentRefSchema,
+  slots: z.array(z.object({ slot: z.string(), covered: z.number().int().nonnegative(), total: z.number().int().nonnegative() })),
+  activeSlot: z.string(),
   rows: z.array(
     z.object({
       unitId: elementId,

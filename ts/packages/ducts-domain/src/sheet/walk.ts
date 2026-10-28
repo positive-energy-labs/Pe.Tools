@@ -2,8 +2,9 @@
  * The per-side walk (MAP step 3, W0-A's binding rules): BFS over connectors from one fan
  * connector. Stops at any roster unit (nothing credited from it), a terminal, an open end, or
  * equipment that is not a 2-port inline part. Inferred joins only to vacant opposed ports.
- * Revit direction never chooses an edge; classification only raises `class-change`.
+ * Revit direction never chooses an edge; class changes and branch entries mark stream merges.
  */
+import { isTap } from "../kernel/fitting-facts.ts";
 import type { FanPort } from "../roster.ts";
 import type { DuctSnapshot } from "../types.ts";
 import {
@@ -11,6 +12,7 @@ import {
   candidates,
   classOf,
   openPort,
+  sidesOf,
   type ConnectorPairRuling,
   type Element,
 } from "../kernel/inferred-joins.ts";
@@ -42,6 +44,7 @@ export interface State {
   depth: number;
   cls: string | null;
   blockerIds: string[];
+  merge?: "class-change" | "branch-tap";
 }
 
 /** A path end: legs are the ancestors of `state` (root excluded), the last leaving by `out`. */
@@ -50,6 +53,7 @@ export interface End {
   out: number | undefined;
   end: PathEnd;
   blockerIds: string[];
+  directionHint?: "supply" | "return";
 }
 
 export interface Walk {
@@ -60,12 +64,14 @@ export interface Walk {
   depth: Map<number, number>;
   /** Arrivals at an element already entered (a loop or a second route); not walked again. */
   rejoins: number;
+  autoJoins: { from: readonly [number, number]; to: readonly [number, number]; gapIn: number; note: string }[];
 }
 
 export interface WalkOptions {
   roster: readonly FanPort[];
   rulings?: readonly ConnectorPairRuling[];
   candidateBoxIn?: number;
+  autoJoinMaxGapIn?: number;
 }
 
 export const legId = (elementId: number, inC: number | undefined, out: number | undefined) =>
@@ -93,10 +99,35 @@ const near = (e: Element, p: number[], r: number) => {
   });
 };
 
+/** Nearest physical candidate, including occupied/sideways ports that inference intentionally rejects. */
+function nearestCandidate(nearby: readonly Element[], point: number[], withinIn: number) {
+  const distance = (a: number[], b: number[]) => Math.hypot(...a.map((v, i) => v - b[i]!));
+  const choices = nearby.flatMap((e) => e.connectors.map((c) => ({
+    label: `${e.id}:${c.index}`, gapIn: distance(point, c.point) * 12, state: c.connectedTo ? "occupied" : "vacant",
+  })));
+  for (const side of sidesOf(nearby.filter(isSegment))) {
+    const v = point.map((x, i) => x - side.a[i]!);
+    const dot = (a: number[], b: number[]) => a.reduce((sum, x, i) => sum + x * b[i]!, 0);
+    const t = dot(v, side.u);
+    const axial = Math.max(-t, t - side.len, 0);
+    const radial = v.map((x, i) => x - t * side.u[i]!);
+    const section = side.section;
+    const across = "w" in section
+      ? Math.hypot(Math.max(0, Math.abs(dot(radial, section.x)) - section.w), Math.max(0, Math.abs(dot(radial, section.y)) - section.h))
+      : Math.max(0, Math.hypot(...radial) - section.outer);
+    choices.push({ label: `${side.owner} duct body`, gapIn: Math.hypot(axial, across) * 12, state: "occupied surface (no vacant port)" });
+  }
+  return choices.filter((c) => c.gapIn <= withinIn).sort((a, b) => a.gapIn - b.gapIn)[0];
+}
+
 /** Walk from `connector` of `unit` outward. */
 export function walkFrom(g: Graph, unit: Element, connector: number | undefined, opts: WalkOptions): Walk {
   const rosterUnits = new Set(opts.roster.map((p) => p.unitId));
-  const box = (opts.candidateBoxIn ?? DEFAULT_CANDIDATE_BOX_IN) / 24;
+  const searchIn = opts.candidateBoxIn ?? DEFAULT_CANDIDATE_BOX_IN;
+  const box = searchIn / 12;
+  const autoGapIn = opts.autoJoinMaxGapIn ?? 3;
+  const autoJoins: Walk["autoJoins"] = [];
+  const joinedPorts = new Set<string>();
   const states: State[] = [{ el: unit, in: undefined, parent: -1, via: undefined, depth: 0, cls: null, blockerIds: [] }];
   const ends: End[] = [];
   const blockers = new Map<string, Blocker>();
@@ -137,13 +168,11 @@ export function walkFrom(g: Graph, unit: Element, connector: number | undefined,
     }
     const blockerIds = [...carry];
     const cls = classOf(c?.classification) ?? p.cls;
-    if (p.cls && cls && cls !== p.cls)
-      blockerIds.push(block({
-        kind: "class-change", elementId: e.id, connector: ci, effectInWg: null,
-        detail: `air changes from ${p.cls} to ${cls} entering ${e.id}:${ci}`,
-        closer: { kind: "ruling", note: "confirm the asserted flow continues across the classification change" },
-      }));
-    states.push({ el: e, in: ci, parent, via, depth: d, cls, blockerIds });
+    const branchTap = !isSegment(e) && isTap(e)
+      && (!isSegment(p.el) || p.el.connectors.find((port) => port.index === via)?.kind !== "curve");
+    const terminal = !isSegment(e) && e.kind === "terminal";
+    const merge = branchTap ? "branch-tap" as const : !terminal && p.cls && cls && cls !== p.cls ? "class-change" as const : undefined;
+    states.push({ el: e, in: ci, parent, via, depth: d, cls, blockerIds, ...(merge ? { merge } : {}) });
     const s = states.length - 1;
     if (!isSegment(e) && e.kind === "terminal") return end(s, undefined, { kind: "terminal", elementId: e.id, connector: ci });
     queue.push(s);
@@ -164,23 +193,31 @@ export function walkFrom(g: Graph, unit: Element, connector: number | undefined,
     }
     const open = openPort(st.el, c);
     const nearby = g.all.filter((e) => e.id !== st.el.id && near(e, c.point, box));
-    const cands = applyConnectorPairRulings(candidates(open, nearby), opts.rulings ?? []);
+    const rawCandidates = candidates(open, nearby, searchIn).filter((candidate) =>
+      candidate.toConnector == null || !joinedPorts.has(`${candidate.toElement}:${candidate.toConnector}`));
+    const rejected = (pair: readonly string[]) => opts.rulings?.some((r) => r.verdict === "reject" && r.pair.every((p) => pair.includes(p)));
+    const auto = rawCandidates.find((k) => k.toConnector != null && k.kind !== "tap"
+      && !rejected(k.pair) && (k.facingDot ?? 0) <= -OPPOSED_COS
+      && Math.hypot(...g.byId.get(k.toElement)!.connectors.find((p) => p.index === k.toConnector)!.point.map((v, i) => v - c.point[i]!)) * 12 <= autoGapIn);
+    const cands = applyConnectorPairRulings(rawCandidates, opts.rulings ?? []);
     const follow = cands.find((k) =>
-      k.kind !== "tap" && k.toConnector != null && (k.ruled || (k.facingDot ?? 0) <= -OPPOSED_COS));
+      k.kind !== "tap" && k.toConnector != null && k.ruled) ?? auto;
     if (follow) {
-      const carry = follow.ruled ? [] : [block({
-        kind: "inferred-join", elementId: st.el.id, connector: c.index, effectInWg: null,
-        detail: `open ${open.k} joined to vacant ${follow.toElement}:${follow.toConnector} across ${follow.gapIn.toFixed(3)} in (${follow.kind}, ${follow.grade})`,
-        closer: { kind: "ruling", note: "accept or reject the connector pair", candidate: { toElementId: follow.toElement, toConnector: follow.toConnector, gapIn: follow.gapIn, pair: follow.pair } },
-      })];
-      return enter(g.byId.get(follow.toElement)!, follow.toConnector!, s, c.index, carry);
+      const targetPort = g.byId.get(follow.toElement)!.connectors.find((p) => p.index === follow.toConnector)!;
+      const gapIn = Math.hypot(...targetPort.point.map((v, i) => v - c.point[i]!)) * 12;
+      if (auto === follow) {
+        const note = `auto-joined ${open.k} to ${follow.toElement}:${follow.toConnector} across ${gapIn.toFixed(3)} in, default \u2264${autoGapIn} in`;
+        autoJoins.push({ from: [st.el.id, c.index], to: [follow.toElement, follow.toConnector!], gapIn, note });
+        joinedPorts.add(open.k); joinedPorts.add(`${follow.toElement}:${follow.toConnector}`);
+      }
+      return enter(g.byId.get(follow.toElement)!, follow.toConnector!, s, c.index, []);
     }
-    const best = cands[0];
+    const best = cands[0] ?? rawCandidates.find((k) => !rejected(k.pair));
     if (best) {
       // The target is occupied (a capped end) or a duct side: never healed silently (W0-A rule 2).
       const seg = g.byId.get(best.toElement);
       const at = best.point ?? c.point;
-      const port = seg?.connectors.reduce((a, b) =>
+      const port = best.toConnector != null ? seg?.connectors.find((p) => p.index === best.toConnector) : seg?.connectors.reduce((a, b) =>
         Math.hypot(...b.point.map((v, k) => v - at[k]!)) < Math.hypot(...a.point.map((v, k) => v - at[k]!)) ? b : a);
       const cap = port?.connectedTo ? g.byId.get(port.connectedTo.elementId) : undefined;
       const capped = cap && !isSegment(cap) && cap.kind === "cap" ? cap : undefined;
@@ -189,7 +226,9 @@ export function walkFrom(g: Graph, unit: Element, connector: number | undefined,
         kind: "inferred-join", elementId: st.el.id, connector: c.index, effectInWg: null,
         detail: capped
           ? `open ${open.k} faces ${best.toElement}:${port!.index}, already capped by ${capped.id}: face gap ${best.gapIn.toFixed(3)} in, connector gap ${gapNative!.toFixed(3)} in`
-          : `open ${open.k} lands on ${best.kind} ${best.toElement}${best.toConnector == null ? "" : `:${best.toConnector}`} across ${best.gapIn.toFixed(3)} in; not a vacant opposed port`,
+                    : best.toConnector == null
+            ? `open ${open.k} lands on ${best.toElement} duct body at face gap ${best.gapIn.toFixed(3)} in, occupied surface (no vacant port)`
+            : `open ${open.k} nearest candidate ${best.toElement}:${best.toConnector} at ${gapNative!.toFixed(3)} in, ${port?.connectedTo ? "occupied" : "vacant"}, ${(best.facingDot ?? 0) <= -OPPOSED_COS ? "opposed" : "sideways or facing unknown"}; default auto-join requires vacant opposed ports within ${autoGapIn} in`,
         closer: {
           kind: "heal",
           note: capped ? `remove cap ${capped.id} and connect, or rule the pair` : "heal the join in Revit, or rule the pair",
@@ -198,9 +237,12 @@ export function walkFrom(g: Graph, unit: Element, connector: number | undefined,
       });
       return end(s, c.index, { kind: "open-end", elementId: st.el.id, connector: c.index }, [id]);
     }
+    const nearest = nearestCandidate(nearby, c.point, searchIn);
     const id = block({
       kind: "open-end", elementId: st.el.id, connector: c.index, effectInWg: null,
-      detail: `${st.el.id}:${c.index} is open with nothing within ${(box * 24).toFixed(0)} in`,
+      detail: nearest
+        ? `${st.el.id}:${c.index} is open; nearest candidate ${nearest.label} at ${nearest.gapIn.toFixed(3)} in, ${nearest.state}`
+        : `${st.el.id}:${c.index} is open with nothing within ${searchIn} in`,
       closer: { kind: "ruling", note: "mark it an intended open end with a drop, or draw the continuation" },
     });
     end(s, c.index, { kind: "open-end", elementId: st.el.id, connector: c.index }, [id]);
@@ -215,7 +257,7 @@ export function walkFrom(g: Graph, unit: Element, connector: number | undefined,
     const inC = st.el.connectors.find((c) => c.index === st.in)!;
     for (const c of exits(st, inC)) leave(s, c);
   }
-  return { states, ends, blockers, depth, rejoins };
+  return { states, ends, blockers, depth, rejoins, autoJoins };
 }
 
 /** Ancestor states of `s`, root first, root excluded. */
@@ -236,38 +278,35 @@ export function legsOf(w: Walk, e: End): string[] {
 }
 
 /**
- * Cut the branches another fan owns (MAP pillar 7, joins-other-fan): past the first
- * classification change on a path the walk has entered another fan's network, and the asserted
- * flow runs only toward the nearest roster fan port beyond it. Every other end past that change
- * belongs to that fan; F's path to it is cut where it leaves F's path to the port.
- * ponytail: needs a classification change to see the boundary; a tap into a same-class network
- * is not cut (upgrade: a connector-pair ruling naming the join).
+ * A fan's air ends where it merges into another stream. Look beyond the merge only to name
+ * its receiving roster fan; downstream legs and blockers do not belong to this sheet.
  */
-export function cutAtClassChange(f: Walk): void {
-  const crossing = (s: number) =>
-    lineage(f, s).find((k) => f.states[k]!.blockerIds.some((b) => b.startsWith("class-change:")));
+export function terminateMerges(w: Walk): void {
+  const first = (e: End) => lineage(w, e.state).find((s) => w.states[s]!.merge);
   const owners = new Map<number, End>();
-  for (const e of f.ends) {
-    const c = e.end.kind === "roster-fan-port" ? crossing(e.state) : undefined;
-    const held = c == null ? undefined : owners.get(c);
-    if (c != null && (!held || lineage(f, e.state).length < lineage(f, held.state).length)) owners.set(c, e);
+  for (const e of w.ends) {
+    const at = first(e);
+    if (at == null || e.end.kind !== "roster-fan-port" || e.end.elementId === w.states[0]!.el.id) continue;
+    const prior = owners.get(at);
+    if (!prior || lineage(w, e.state).length < lineage(w, prior.state).length) owners.set(at, e);
   }
-  const kept: End[] = [];
-  const cuts = new Set<string>();
-  for (const e of f.ends) {
-    const c = crossing(e.state);
-    const owner = c == null ? undefined : owners.get(c);
-    if (!owner || owner === e) { kept.push(e); continue; }
-    const mine = new Set(lineage(f, owner.state));
-    const at = lineage(f, e.state).findLast((s) => mine.has(s))!;
-    const key = `${at}:${owner.end.elementId}`;
-    if (cuts.has(key)) continue;
-    cuts.add(key);
-    const st = f.states[at]!;
-    kept.push({
-      state: st.parent, out: st.via, blockerIds: [],
-      end: { kind: "joins-other-fan", elementId: st.el.id, ...(st.in == null ? {} : { connector: st.in }), fan: owner.end.fan! },
-    });
-  }
-  f.ends = kept;
+  const seen = new Set<number>();
+  w.ends = w.ends.flatMap((e): End[] => {
+    const at = first(e);
+    if (at == null) return [e];
+    if (seen.has(at)) return [];
+    seen.add(at);
+    const st = w.states[at]!;
+    const branch = st.merge === "branch-tap";
+    // Branch tap itself is the last owned leg. At a class change, stop before the other stream.
+    const out = branch ? st.el.connectors.find((c) => c.index !== st.in)?.index : st.via;
+    const owner = owners.get(at)?.end;
+    const directionHint = owner?.fan
+      ? owner.connector === owner.fan.portIndex ? "return" as const : "supply" as const
+      : /supply/i.test(w.states[st.parent]!.cls ?? "") && /return/i.test(st.cls ?? "") ? "supply" as const : undefined;
+    return [{ state: branch ? at : st.parent, out, blockerIds: [], ...(directionHint ? { directionHint } : {}), end: {
+      kind: "joins-other-fan", elementId: st.el.id, ...(st.in == null ? {} : { connector: st.in }),
+      fan: owners.get(at)?.end.fan ?? null,
+    } }];
+  });
 }

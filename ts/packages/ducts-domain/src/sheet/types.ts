@@ -4,9 +4,9 @@
  * The wire contract (W1-F) mirrors this file; change it there in the same commit.
  */
 
-export const SHEET_ENGINE_VERSION = "sheet/1";
+export const SHEET_ENGINE_VERSION = "sheet/2";
 
-/** A roster entry's identity: the unit and its discharge connector (roster.ts `FanPort.portIndex`). */
+/** A roster entry's identity. Reached ends decide the physical discharge/inlet in the sheet. */
 export interface FanPortRef {
   unitId: number;
   portIndex: number;
@@ -38,7 +38,7 @@ export interface PathEnd {
   elementId: number;
   connector?: number;
   /** The other fan, for roster-fan-port and joins-other-fan. */
-  fan?: FanPortRef;
+  fan?: FanPortRef | null;
 }
 
 export type Side = "supply" | "return";
@@ -113,6 +113,8 @@ export interface Sheet {
     ratedEspInWg: number | null;
     /** The return-side start; null when the roster names none. */
     inletPortIndex: number | null;
+    /** Physical discharge after the ends decide direction; portIndex remains the roster identity. */
+    dischargePortIndex: number;
     /** Displayed as the sum of the flows its ends carry; never an input. */
     flowCfm: number | null;
   };

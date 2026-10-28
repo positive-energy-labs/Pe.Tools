@@ -141,6 +141,7 @@ export function priceLeg(input: LegInput, grids: Grids, choices: Choices = {}): 
   let found;
   try {
     found = lookupGrid(grid, lookup.x, lookup.y);
+      found.value *= lookup.factor ?? 1;
   } catch (e) {
     if (e instanceof GridError) return unpriced(input, e.message);
     throw e;

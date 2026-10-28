@@ -2,7 +2,7 @@
  * Flow on a walk (MAP, Flow on a path): a terminal's flow from the confirmed slot (missing is a
  * `no-flow` blocker); a leg carries the sum of the ends this fan reaches through it; a fan's own
  * flow is the sum of its ends, never an input. A side-stream unit (MUAS into a return) carries
- * its typed own flow at the one roster fan port it feeds.
+ * its design parameter flow, split across receiving fan ports by the asserted policy.
  */
 import { slotFlowOf, terminalFlow } from "../kernel/terminal-flow.ts";
 import type { Blocker } from "./types.ts";
@@ -13,8 +13,8 @@ export interface FlowOptions {
   /** Typed flow at an end by element id: a terminal, or a roster fan port this fan feeds. */
   endCfm?: Readonly<Record<number, number>>;
   sideStream?: { cfm: number; source: string } | null;
-  /** Another fan's walk: the roster fan ports it reaches are not its terminals and carry nothing. */
-  fanEndsCarryNone?: boolean;
+  splitPolicy?: "even" | "proportional";
+  receivingDesignCfm?: Readonly<Record<number, number | null>>;
   /** Chain mode: only this end carries flow (`cfm`), every other end carries nothing. */
   only?: { end: number; cfm: number | null; source: string };
 }
@@ -30,7 +30,26 @@ export interface Flows {
 export const legKey = (state: number, out: number | undefined) => `${state}>${out ?? ""}`;
 
 export function flowsOf(w: Walk, opts: FlowOptions, block: (b: Omit<Blocker, "id">) => string): Flows {
-  const fanEnds = w.ends.filter((e) => e.end.kind === "roster-fan-port").length;
+  const isFanEnd = (e: Walk["ends"][number]) => e.end.kind === "roster-fan-port" || e.end.kind === "joins-other-fan";
+  const typedAt = (e: Walk["ends"][number]) => opts.endCfm?.[e.end.elementId]
+    ?? (e.end.fan ? opts.endCfm?.[e.end.fan.unitId] : undefined);
+  const fanPorts = w.ends.filter(isFanEnd);
+  const fanEnds = fanPorts.length;
+  const untyped = fanPorts.filter((e) => typedAt(e) == null);
+  const terminalAt = (e: Walk["ends"][number]) => {
+    const node = w.states[e.state]!.el;
+    return isSegment(node) ? null : terminalFlow({ override: opts.endCfm?.[node.id], confirmed: slotFlowOf(node, opts.slot) });
+  };
+  const terminalSum = w.ends.filter((e) => e.end.kind === "terminal").reduce((sum, e) => sum + (terminalAt(e)?.flow ?? 0), 0);
+  const typedSum = terminalSum + fanPorts.reduce((sum, e) => sum + (typedAt(e) ?? 0), 0);
+  const remainder = opts.sideStream ? opts.sideStream.cfm - typedSum : null;
+  const weights = untyped.map((e) => opts.receivingDesignCfm?.[e.end.fan?.unitId ?? e.end.elementId]);
+  const proportional = opts.splitPolicy === "proportional" && weights.every((v) => v != null && v > 0);
+  const weightSum = weights.reduce<number>((sum, v) => sum + (v ?? 0), 0);
+  const policy = proportional ? "proportional" : "even";
+  const policySource = opts.splitPolicy === "proportional" && !proportional
+    ? "splitPolicy:proportional -> even (receiving fan design flow missing or nonpositive)"
+    : `splitPolicy:${policy}`;
   const end: (number | null)[] = [];
   const endSource: (string | null)[] = [];
   w.ends.forEach((e, i) => {
@@ -45,12 +64,15 @@ export function flowsOf(w: Walk, opts: FlowOptions, block: (b: Omit<Blocker, "id
         confirmed: slotFlowOf(node, opts.slot),
       });
       [cfm, source] = t?.flow != null ? [t.flow, t.source] : [null, null];
-    } else if (e.end.kind === "roster-fan-port" && !opts.fanEndsCarryNone) {
-      const typed = opts.endCfm?.[e.end.elementId];
-      const one = fanEnds === 1 ? opts.sideStream : null;
-      [cfm, source] = typed != null ? [typed, "side-stream:typed"] : one ? [one.cfm, `side-stream:${one.source}`] : [null, null];
+    } else if (isFanEnd(e)) {
+      const typed = typedAt(e);
+      const at = untyped.indexOf(e);
+      const share = remainder != null && remainder >= 0 && at >= 0
+        ? remainder * (proportional ? weights[at]! / weightSum : 1 / untyped.length) : null;
+      [cfm, source] = typed != null ? [typed, `side-stream:typed; ${policySource} applies to remainder`]
+        : share != null ? [share, `side-stream:${opts.sideStream!.source}; ${policySource}`] : [null, null];
     }
-    if (cfm == null && (opts.only ? i === opts.only.end : e.end.kind === "terminal" || (e.end.kind === "roster-fan-port" && !opts.fanEndsCarryNone))) {
+    if (cfm == null && (opts.only ? i === opts.only.end : e.end.kind === "terminal" || isFanEnd(e))) {
       const terminal = e.end.kind === "terminal";
       e.blockerIds.push(block({
         kind: "no-flow", elementId: e.end.elementId, ...(e.end.connector == null ? {} : { connector: e.end.connector }), effectInWg: null,
@@ -58,12 +80,14 @@ export function flowsOf(w: Walk, opts: FlowOptions, block: (b: Omit<Blocker, "id
           ? "the chain carries no flow; type one"
           : terminal
             ? `terminal ${e.end.elementId} has no ${opts.slot} value`
+            : remainder != null && remainder < 0
+              ? "typed end cfm exceeds the unit design flow; no nonnegative remainder to split"
             : fanEnds === 1
-              ? `the fan's own flow into ${e.end.elementId} is not typed`
-              : `the fan's own flow splits across ${fanEnds} roster fan ports; which share goes where is not known`,
+              ? `the fan's own flow into ${e.end.elementId} has no typed share or unit design-flow value`
+              : `the fan's own flow splits across ${fanEnds} receiving fan/merge ends; no unit design flow or complete typed shares are available`,
         closer: {
           kind: terminal ? "default" : "ruling",
-          note: terminal ? `type the terminal's cfm, or confirm a better-covered airflow slot than ${opts.slot}` : "type the side-stream cfm",
+          note: terminal ? `type the terminal's cfm, or confirm a better-covered airflow slot than ${opts.slot}` : "type the end shares, or set the unit design-flow parameter",
         },
       }));
     }
@@ -82,7 +106,7 @@ export function flowsOf(w: Walk, opts: FlowOptions, block: (b: Omit<Blocker, "id
         at.cfm = null;
         at.missing.push(...e.blockerIds.filter((b) => b.startsWith("no-flow:")));
       } else if (at.cfm != null) at.cfm += end[i]!;
-      if (end[i]) { at.ends++; at.sources.add(endSource[i]!.split(":")[0]!); }
+      if (end[i]) { at.ends++; at.sources.add(endSource[i]!); }
       leg.set(key, at);
     });
   });
