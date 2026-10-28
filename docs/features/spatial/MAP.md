@@ -72,7 +72,12 @@ does not pay for them again.
 Meshes context on Chadds SA 7: 54.5 s, +2,443 MiB. Focus meshes are cheap (whole-building 5,224
 meshes ≈105 MiB). Reports: `.artifacts/accept/{ducts-read-baseline-20261027,
 manuella-generality-20261027,cleremont-generality-20261028}/REPORT.md`. Local detached copies for
-proof live in `.artifacts/revit/detached/` (Chadds standalone, Manuella and Cleremont `_local_`).
+proof live in `.artifacts/revit/detached/` (Manuella and Cleremont `_local_`). Every Chadds number
+here was measured on the cloud `Chadds_Clone_Aug_11`. The older `ChaddsFord_R25_standalone_20261019`
+is a different model, FALSIFIED as a stand-in: no IFC link, no loaded links, 4,266 pipe
+insulations against the clone's 3,267 (step 3, 2026-10-28). The Chadds gate copy will be
+`MEP_Chadds_Clone_Aug_11_R25_local_20261028.rvt`, made by save-stripped; it is valid once its
+census matches the cloud's (UNPROVEN until then).
 
 ## Priors to drop
 
@@ -142,8 +147,8 @@ Verbs          Pea's Sweep/Slice/Probe/Partition read through the same scoped re
 
 ## Owed
 
-- Pipe-insulation parity: Chadds has 3,267 pipe insulations, never checked against the host's
-  `RBS_REFERENCE_INSULATION_THICKNESS` (step 3 runs it). Cleremont has none.
+- Pipe-insulation parity on the Chadds clone (3,267). The host's `RBS_REFERENCE_INSULATION_THICKNESS`
+  matched 4,266 of 4,266 pipe insulations on the standalone, a different model. Cleremont has none.
 - How much of Cleremont's 7 GB open cost is its links.
 - Link behaviour on a machine without Desktop Connector.
 - CAD as building context: on Manuella, model-level DWG plans are the only building geometry
