@@ -94,7 +94,8 @@ public sealed class Frames : PeScriptContainer {
             rows.Add(new JArray(i, 0, -1, 0, 0, 0, new JArray()));
         }
         if (doc.IsModified != before) throw new InvalidOperationException("IsModified changed");
-        Result(new JObject { ["rows"] = rows, ["sources"] = new JObject(docs.Select(kv => new JProperty(kv.Key.ToString(), new JObject {
+        File.WriteAllText((string)req["out"]!, rows.ToString(Newtonsoft.Json.Formatting.None)); // Result() is capped at 1 MiB; rows go to a file
+        Result(new JObject { ["rowCount"] = rows.Count, ["sources"] = new JObject(docs.Select(kv => new JProperty(kv.Key.ToString(), new JObject {
             ["loaded"] = kv.Value.D != null, ["origin"] = kv.Value.D == null ? null : new JArray(kv.Value.T.Origin.X, kv.Value.T.Origin.Y, kv.Value.T.Origin.Z),
             ["yawDeg"] = kv.Value.D == null ? 0 : Deg(Math.Atan2(kv.Value.T.BasisX.Y, kv.Value.T.BasisX.X)) }))),
             ["isModifiedBefore"] = before, ["isModifiedAfter"] = doc.IsModified });

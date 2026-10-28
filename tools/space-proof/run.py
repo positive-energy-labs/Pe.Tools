@@ -437,7 +437,7 @@ def run_model(name, args, out: Path, fixture, results):
                 for e in items:
                     per[e["handle"]["linkInstanceId"]] = per.get(e["handle"]["linkInstanceId"], 0) + 1
                 seen = {}
-                req = {"items": [], "geometrySamplePerSource": 300}
+                req = {"items": [], "geometrySamplePerSource": 300, "out": str(ev / f"frames-{system.replace(' ', '')}.rows.json")}
                 for e in items:  # deterministic stride per source: about 900 flagged, the script keeps the first 300 that have no readable frame
                     k = e["handle"]["linkInstanceId"]
                     seen[k] = seen.get(k, 0) + 1
@@ -451,7 +451,10 @@ def run_model(name, args, out: Path, fixture, results):
                 if res is None or res.get("status") != "Succeeded":
                     raise RuntimeError(f"frames script failed for {system}: exit {code}")
                 frames = res["data"]
-                (ev / f"frames-{system.replace(' ', '')}.result.json").write_text(json.dumps(frames), encoding="utf8")
+                frames["rows"] = json.loads(Path(req["out"]).read_text(encoding="utf8"))
+                if len(frames["rows"]) != frames["rowCount"] or len(frames["rows"]) != len(items):
+                    raise RuntimeError(f"frames rows {len(frames['rows'])} != items {len(items)}")
+                (ev / f"frames-{system.replace(' ', '')}.result.json").write_text(json.dumps({k: v for k, v in frames.items() if k != "rows"}), encoding="utf8")
                 acc = accuracy(meta, frames)
                 acc.update({"scriptWallS": round(wall, 1), "privateDeltaMiB": round((ps.memory_info().private - before) / MIB, 1),
                             "frameSources": frames["sources"], "isModifiedAfter": frames["isModifiedAfter"]})
