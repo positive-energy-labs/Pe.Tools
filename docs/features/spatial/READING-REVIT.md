@@ -148,7 +148,8 @@ The raw-event probe also exposed a production wiring gap: `DocumentCacheMaintena
 filtered empty deltas before `SpaceWorld` or the bridge received them. The implementation now
 admits empty deltas outside the rollback sandbox; an empty group rollback is still a change
 to captured evidence. The native regression uses that same production filter and checks epoch
-advancement after rollback. UNPROVEN[changed filter's runtime behavior pending the native hold].
+advancement after rollback. PROVEN[attached over session dev controlled, `probe-c` PID 51692, `cf3ebbe3`, 2026-10-28 13:26–13:30Z]: exact rollback geometry restored after a zero-id epoch
+advance, 18/18 native Space regressions.
 
 User ruling after the bounded Partition result: measure the actual Pea `revit.detail.space-sweep`
 operation cold and repeatedly on Cleremont, before and after disabling the store. Its production
@@ -200,8 +201,8 @@ changes and cross-machine Desktop Connector paths are not certified by this prob
 
 Evidence: worktree `t3-19486141`, `.artifacts/runs/session-20261028-space-cache/identity-20261028T101245Z/`
 (`summary.json`, full native receipts, file hashes, process/kernel memory log). The production
-Sweep below proves the new helper on these links in one process; the final gate still owes a
-second changed-code process and the dedicated identity fixture.
+Sweep below proves the new helper on these links in one process. The landing gate below adds the
+dedicated workshared-link fixture and a second changed-code process.
 
 ### U6 production Sweep: the repeat regression is real
 
@@ -237,7 +238,7 @@ backend trees were stopped; the implementation branch was restored and the slot 
 
 The candidate's production response also carries the corrected `project:path:...` key for
 all six linked placements, with three placements sharing the same 3 BED source key. That is
-runtime evidence of the path fallback in the real model; the final gate still owes the second
+runtime evidence of the path fallback in the real model; the landing gate below adds the second
 changed-code process and the dedicated workshared-link fixture.
 
 Revised ruling after the memory attribution was corrected: **keep the verb store and flags in
@@ -250,6 +251,42 @@ reuse needs a hard memory cap and measurements. The whole-model Prepare/first-to
 the cause established for the 13.8 GiB observation, not the disk pack.
 Evidence: worktree `t3-19486141`, `.artifacts/runs/session-20261028-space-cache/verb-ab-20261028T113513Z/`
 (`results.json`, `summary.json`, exact request, raw CLI/SDK receipts and memory logs).
+
+### U6 landing gate: step 5 fixes against unchanged main
+
+Native regressions, PROVEN[attached over session dev controlled, `probe-c` PID 51692, `cf3ebbe3`, 2026-10-28 13:26–13:30Z]: 18/18 attached, including
+`WorksharedLinkUsesItsResolvedPathAcrossPlacementsAndReopen` and the production-filter rollback epoch
+test. Receipt: `native-20261028T132614Z/002-native-fixtures.json`.
+
+Three-model gate, PROVEN[session dev controlled, `probe-c`, `cf3ebbe3`, 2026-10-28 13:30–13:47Z]: 28 reads on Chadds, Cleremont and Manuella.
+All 7 pinned id sets and every census equal step 2; every document unmodified; every model file's
+SHA-256 unchanged. Cleremont's six linked keys are now equal across processes. Output:
+`.artifacts/accept/space-proof/cf3ebbe3-20261028T133050Z/`.
+
+Same-hold timing control, PROVEN[session dev controlled, `probe-c`, `746599a9` vs `466a0089`,
+2026-10-28 13:53–14:14Z]. One driver ran main and then the candidate in the same worktree. Each
+system got a fresh Revit process (main 64996, 14752; candidate 69900, 25648). Both variants carried
+the identical startup-only `pe-service.ts` receipt-rename overlay; no other product bytes differed
+from the named revision. Native context time, Boxes context:
+
+| Chadds | main s | candidate s | candidate on `cf3ebbe3`, gate hold s |
+|---|---:|---:|---:|
+| SA 7 context cold | 6.29 | 7.03 | 6.03 |
+| SA 7 context warm | 1.91 | 2.13 | 2.12 |
+| EX 7 context cold | 1.90 | 1.86 | 1.67 (same process as SA 7) |
+| EX 7 context warm | 0.78 | 0.89 | 0.93 (same process as SA 7) |
+| SA 7 / EX 7 focus cold | 0.77 / 0.55 | 0.83 / 0.57 | 0.75 / 0.41 |
+
+Ruled within noise: one sample per cell, and no mechanism. Main's and the candidate's receipts
+are equal in every non-timing field: epoch 0, `fresh`, identical broad, extracted and geometry-call
+counts, identical document keys (the Chadds paths were never empty, so the fallback is a no-op there).
+Only the managed-heap bytes differ. The SA 7 cold gap (+0.74 s) is 0.44 s of IFC link iteration,
+which is Revit's native geometry walk. On identical candidate bytes that walk took 3.49 s in the gate hold
+and 4.00 s here. Accuracy is identical: 66.5% / 70.0% of rotated elements drawn axis-aligned on
+both, main's pre-existing box limit owned by step 3. The Chadds file hash was unchanged; all four PIDs
+and both backends were gone; the driver restored the branch and released slot-1 at 14:14:23Z.
+Evidence: worktree `t3-19486141`, `.artifacts/runs/session-20261028-space-cache/context-ab-20261028T135324Z/`
+(`<variant>/results.md`, `results.json`, `system-top.jsonl`).
 
 ## Instrument
 
