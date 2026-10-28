@@ -83,7 +83,57 @@ public enum DuctIssueKind {
 /// </summary>
 public sealed record DuctSnapshotRequest(
     DuctParameterSlots? Slots = null,
-    string? LabelParameter = "PE_G___TagInstance"); // firm-default: PE_* names belong in firm config, not code (kaitpw 2026-10-20, later)
+    string? LabelParameter = "PE_G___TagInstance", // firm-default: PE_* names belong in firm config, not code (kaitpw 2026-10-20, later)
+    DuctSnapshotSelector? Selector = null);
+
+[JsonConverter(typeof(StringEnumConverter))]
+public enum DuctSelectorKind {
+    /// <summary>Every duct network in the document, grouped and analysed (the shape being replaced by the path engine, ducts MAP 2026-10-27).</summary>
+    [EnumMember(Value = "document")] Document,
+    /// <summary>Exactly the named elements, raw: no groups, roots, flows, issues or systems.</summary>
+    [EnumMember(Value = "ids")] Ids,
+    /// <summary>A connector walk from one element's HVAC ports (ducts MAP "Where the data comes from", row 1), raw, with open-end candidates.</summary>
+    [EnumMember(Value = "from")] From
+}
+
+/// <summary>
+///     Which elements the snapshot reads. Kind `document` is the default and the shape every existing caller gets. Kind
+///     `ids` reads Ids. Kind `from` walks Revit connectors outward from UnitId's HVAC ports (PortIndex names one
+///     connector id; absent walks every port) through ducts, flex, fittings, accessories and equipment (equipment is a
+///     leg, never a cut: the roster decides stops later), stopping at an air terminal, an open end, or MaxHops elements
+///     deep (default 2000). At every open end a box CandidateBoxIn inches on a side (default 36) around the connector is
+///     searched for MEP elements, which join the output marked `open-end-candidate` so a join can be inferred.
+/// </summary>
+public sealed record DuctSnapshotSelector(
+    DuctSelectorKind Kind = DuctSelectorKind.Document,
+    IReadOnlyList<long>? Ids = null,
+    long? UnitId = null,
+    int? PortIndex = null,
+    int? MaxHops = null,
+    double? CandidateBoxIn = null);
+
+/// <summary>Reason a node or segment is in a `from` snapshot: reached by the connector walk, or found in an open end's candidate box.</summary>
+public static class DuctWalkReason {
+    public const string Walked = "walked";
+    public const string OpenEndCandidate = "open-end-candidate";
+}
+
+/// <summary>
+///     The `from` walk's summary. Hops is the deepest element depth reached from the start; ElementsReached counts walked
+///     elements (the start included, candidates excluded); Truncated is true when MaxHops cut the walk or an open end's
+///     box held more than the candidate cap and was counted, not listed.
+/// </summary>
+public sealed record DuctWalk(
+    long StartId,
+    int Hops,
+    int ElementsReached,
+    int OpenEnds,
+    IReadOnlyList<DuctOpenEnd> Candidates,
+    bool Truncated,
+    long ElapsedMs);
+
+/// <summary>One open end the walk stopped at and what the candidate box around it held (CandidateCount first, cheap; CandidateIds only under the cap).</summary>
+public sealed record DuctOpenEnd(long ElementId, int Connector, double[] Point, int CandidateCount, IReadOnlyList<long> CandidateIds);
 
 /// <summary>
 ///     Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
@@ -144,7 +194,8 @@ public sealed record DuctSnapshotData(
     string? StoreError = null,
     DuctPhases? Phases = null,
     IReadOnlyList<DuctAirflowCandidate>? AirflowCandidates = null,
-    IReadOnlyList<DuctAirflowCandidate>? FanFlowCandidates = null);
+    IReadOnlyList<DuctAirflowCandidate>? FanFlowCandidates = null,
+    DuctWalk? Walk = null);
 
 /// <summary>
 ///     One parameter a terminal's design airflow could be read from (pressure-drop ledger, 2026-10-20: the airflow read
@@ -321,7 +372,8 @@ public sealed record DuctNode(
     string? UniqueId = null,
     string? PhaseCreated = null,
     string? PhaseDemolished = null,
-    string? FlowParameter = null);
+    string? FlowParameter = null,
+    string? Reason = null);
 
 public sealed record DuctRoughness(double ValueFt, DuctProvenance Provenance);
 
@@ -341,7 +393,10 @@ public enum DuctCurveKind {
     [EnumMember(Value = "other")] Other
 }
 
-/// <summary>PhaseCreated and PhaseDemolished as on <see cref="DuctNode" />.</summary>
+/// <summary>
+///     PhaseCreated and PhaseDemolished as on <see cref="DuctNode" />. InsulationIn is the host's
+///     RBS_REFERENCE_INSULATION_THICKNESS in inches (null when none): the separate DuctInsulation element is never read.
+/// </summary>
 public sealed record DuctSegment(
     long Id,
     DuctSegmentKind Kind,
@@ -363,7 +418,9 @@ public sealed record DuctSegment(
     IReadOnlyList<DuctConnector> Connectors,
     string? UniqueId = null,
     string? PhaseCreated = null,
-    string? PhaseDemolished = null);
+    string? PhaseDemolished = null,
+    string? Reason = null,
+    double? InsulationIn = null);
 
 /// <summary>Pass-1 flow: terminal design flow summed up the tree from the single root. At a tapped duct it is the upstream-end flow.</summary>
 public sealed record DuctFlow(long SegmentId, double Cfm, DuctProvenance Provenance);

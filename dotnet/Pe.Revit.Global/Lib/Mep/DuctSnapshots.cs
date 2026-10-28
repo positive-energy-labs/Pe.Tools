@@ -25,7 +25,30 @@ public static class DuctSnapshots {
         [PeLossServer.Id] = DuctLossMethod.PeServer
     };
 
-    public static DuctSnapshotData Snapshot(Document doc, DuctParameterSlots? slots = null, string? labelParameter = null) {
+    // The categories a `from` walk passes through and an open end's candidate box searches. Everything else is the
+    // exclusion list (ducts MAP 2026-10-27): centreline helpers (Lines, Generic Models), separate DuctInsulation elements
+    // (the duct's own RBS_REFERENCE_INSULATION_THICKNESS is read instead), imports. Connectors never cross into a link and
+    // the box collects the host document only, so link elements, loaded or not, never appear.
+    private static readonly List<BuiltInCategory> WalkCategories = [
+        BuiltInCategory.OST_DuctCurves, BuiltInCategory.OST_FlexDuctCurves, BuiltInCategory.OST_DuctFitting,
+        BuiltInCategory.OST_DuctAccessory, BuiltInCategory.OST_DuctTerminal, BuiltInCategory.OST_MechanicalEquipment
+    ];
+
+    private const int DefaultMaxHops = 2000;
+    private const double DefaultCandidateBoxIn = 36;
+    // Above this many hits an open end's box is counted, not listed (the Space thread measured that looping elements costs memory).
+    private const int CandidateCap = 64;
+
+    /// <summary>Everything one element read needs; one per snapshot.</summary>
+    private sealed record Reader(
+        Document Doc,
+        DuctParameterSlots Slots,
+        Dictionary<Guid, Schema?> Schemas,
+        bool Network,
+        string? LabelParameter,
+        IReadOnlyDictionary<long, string> PhaseNames);
+
+    public static DuctSnapshotData Snapshot(Document doc, DuctParameterSlots? slots = null, string? labelParameter = null, DuctSnapshotSelector? selector = null) {
         // The names the person staged win, then the names the last apply recorded in the store, then the defaults.
         var (store, storeError) = DuctApplier.ReadStore(doc);
         slots = (slots?.Over(store?.Slots) ?? store?.Slots ?? new DuctParameterSlots()).WithDefaults();
@@ -50,9 +73,28 @@ public static class DuctSnapshots {
 #endif
         var phases = doc.Phases.Cast<Phase>().ToList();
         var phaseNames = phases.ToDictionary(ph => ph.Id.Value(), ph => ph.Name);
+        var schemas = LossSchemas();
+        var reader = new Reader(doc, slots, schemas, network, labelParameter, phaseNames);
+
+        if (selector is { Kind: not DuctSelectorKind.Document }) {
+            // Raw: the same nodes, segments and connectors as the document read, with no groups, roots, flows, issues,
+            // systems or layers. The path engine (TS) prices what it needs from these.
+            List<DuctNode> rawNodes;
+            List<DuctSegment> rawSegments;
+            DuctWalk? walk = null;
+            if (selector.Kind == DuctSelectorKind.From) (rawNodes, rawSegments, walk) = Walk(reader, selector);
+            else (rawNodes, rawSegments) = Selected(reader, selector);
+            return new DuctSnapshotData(
+                new DuctDocument(doc.Title, readAt, clock.ElapsedMilliseconds, network),
+                DuctCoordinateEncoding.NativeDouble,
+                levels, [], rawNodes, rawSegments, [], [], [], [],
+                slots, store, storeError,
+                new DuctPhases(phases.Select(ph => ph.Name).ToList(), PhaseViews(doc, phaseNames)),
+                Walk: walk);
+        }
+
         var segments = Of(BuiltInCategory.OST_DuctCurves).Concat(Of(BuiltInCategory.OST_FlexDuctCurves))
             .OfType<MEPCurve>().Select(c => Segment(doc, c, network) with { PhaseCreated = PhaseOf(c, true, phaseNames), PhaseDemolished = PhaseOf(c, false, phaseNames) }).ToList();
-        var schemas = LossSchemas();
         var nodes = new List<DuctNode>();
         DuctNode Phased(DuctNode n, Element e) => n with { PhaseCreated = PhaseOf(e, true, phaseNames), PhaseDemolished = PhaseOf(e, false, phaseNames) };
         nodes.AddRange(Of(BuiltInCategory.OST_DuctFitting).Select(e => Phased(Node(e, Fitting(e), slots, schemas, network, labelParameter), e)));
@@ -89,6 +131,138 @@ public static class DuctSnapshots {
             new DuctPhases(phases.Select(ph => ph.Name).ToList(), PhaseViews(doc, phaseNames)),
             AirflowCandidates(Of(BuiltInCategory.OST_DuctTerminal), groupsOf),
             AirflowCandidates(equipment, rootedBy));
+    }
+
+    /// <summary>The `ids` selector: exactly the named walkable elements, in id order, raw.</summary>
+    private static (List<DuctNode> Nodes, List<DuctSegment> Segments) Selected(Reader r, DuctSnapshotSelector selector) {
+        var nodes = new List<DuctNode>();
+        var segments = new List<DuctSegment>();
+        foreach (var id in (selector.Ids ?? throw new ArgumentException("selector.ids is required for kind ids")).Distinct().OrderBy(id => id)) {
+            var e = r.Doc.GetElement(new ElementId(id)) ?? throw new ArgumentException($"Element {id} does not exist in this document.");
+            if (!Walkable(e)) throw new ArgumentException($"Element {id} is {e.Category?.Name ?? e.GetType().Name}, not a duct, flex, fitting, accessory, terminal or mechanical equipment.");
+            Build(r, e, null, nodes, segments);
+        }
+        return (nodes, segments);
+    }
+
+    /// <summary>
+    ///     The `from` selector. Breadth-first over Revit connectors: each reached element's HVAC ports name their peers
+    ///     through Connector.AllRefs; a peer in a walk category is reached at hop+1 (equipment included: a leg, not a cut);
+    ///     an air terminal is reached and not expanded; a port with no physical peer is an open end, and a box of
+    ///     CandidateBoxIn around its origin is counted and, under the cap, listed, the unreached hits joining the output as
+    ///     `open-end-candidate`. MaxHops caps depth and sets Truncated. Nothing here reads Connector.Flow.
+    /// </summary>
+    private static (List<DuctNode> Nodes, List<DuctSegment> Segments, DuctWalk Walk) Walk(Reader r, DuctSnapshotSelector s) {
+        var clock = Stopwatch.StartNew();
+        var startId = s.UnitId ?? throw new ArgumentException("selector.unitId is required for kind from");
+        var start = r.Doc.GetElement(new ElementId(startId)) ?? throw new ArgumentException($"Element {startId} does not exist in this document.");
+        if (!Walkable(start)) throw new ArgumentException($"Element {startId} is {start.Category?.Name ?? start.GetType().Name}, not a duct, flex, fitting, accessory, terminal or mechanical equipment.");
+        var startPorts = HvacConnectors(start).Where(c => s.PortIndex is not { } p || c.Id == p).ToList();
+        if (startPorts.Count == 0) throw new ArgumentException($"Element {startId} has no HVAC port{(s.PortIndex is { } p ? $" {p}" : "")}.");
+        var maxHops = s.MaxHops ?? DefaultMaxHops;
+        var boxFt = (s.CandidateBoxIn ?? DefaultCandidateBoxIn) / 12;
+
+        var reached = new Dictionary<long, Element> { [startId] = start };
+        var candidates = new Dictionary<long, Element>();
+        var openEnds = new List<DuctOpenEnd>();
+        var queue = new Queue<(Element Element, IReadOnlyList<Connector> Ports, int Hop)>();
+        queue.Enqueue((start, startPorts, 0));
+        var hops = 0;
+        var truncated = false;
+        while (queue.Count > 0) {
+            var (e, ports, hop) = queue.Dequeue();
+            hops = Math.Max(hops, hop);
+            foreach (var port in ports) {
+                var peers = Try(() => Peers(port).ToList()) ?? [];
+                if (peers.Count == 0) {
+                    openEnds.Add(OpenEnd(r, port, boxFt, reached, candidates, ref truncated));
+                    continue;
+                }
+                foreach (var peer in peers) {
+                    var owner = peer.Owner;
+                    var id = owner.Id.Value();
+                    if (reached.ContainsKey(id) || !Walkable(owner)) continue;
+                    if (hop + 1 > maxHops) {
+                        truncated = true;
+                        continue;
+                    }
+                    reached[id] = owner;
+                    hops = Math.Max(hops, hop + 1);
+                    // Stop at an air terminal: it is an end, whatever else its ports touch.
+                    if (CategoryOf(owner) == BuiltInCategory.OST_DuctTerminal) continue;
+                    queue.Enqueue((owner, HvacConnectors(owner).ToList(), hop + 1));
+                }
+            }
+        }
+
+        var nodes = new List<DuctNode>();
+        var segments = new List<DuctSegment>();
+        foreach (var e in reached.Values) Build(r, e, DuctWalkReason.Walked, nodes, segments);
+        foreach (var e in candidates.Values.Where(c => !reached.ContainsKey(c.Id.Value()))) Build(r, e, DuctWalkReason.OpenEndCandidate, nodes, segments);
+        return (nodes, segments, new DuctWalk(startId, hops, reached.Count, openEnds.Count, openEnds, truncated, clock.ElapsedMilliseconds));
+    }
+
+    /// <summary>The physical connectors this one touches on other elements (never the system's logical connector).</summary>
+    private static IEnumerable<Connector> Peers(Connector c) {
+        foreach (Connector other in c.AllRefs)
+            if (other.Owner.Id != c.Owner.Id && other.ConnectorType is ConnectorType.End or ConnectorType.Curve)
+                yield return other;
+    }
+
+    private static DuctOpenEnd OpenEnd(Reader r, Connector port, double boxFt, IReadOnlyDictionary<long, Element> reached, Dictionary<long, Element> candidates, ref bool truncated) {
+        var origin = port.Origin;
+        var half = new XYZ(boxFt / 2, boxFt / 2, boxFt / 2);
+        FilteredElementCollector Box() => new FilteredElementCollector(r.Doc)
+            .WherePasses(new ElementMulticategoryFilter(WalkCategories))
+            .WhereElementIsNotElementType()
+            .WhereElementIsViewIndependent()
+            .WherePasses(new BoundingBoxIntersectsFilter(new Outline(origin - half, origin + half)));
+        var ownerId = port.Owner.Id.Value();
+        // Count first: the owner itself always intersects its own box.
+        var count = Math.Max(0, Box().GetElementCount() - 1);
+        var ids = new List<long>();
+        if (count > CandidateCap) {
+            truncated = true;
+        } else if (count > 0) {
+            foreach (var hit in Box().ToElements()) {
+                var id = hit.Id.Value();
+                if (id == ownerId || reached.ContainsKey(id)) continue;
+                ids.Add(id);
+                candidates.TryAdd(id, hit);
+            }
+            ids.Sort();
+        }
+        return new DuctOpenEnd(ownerId, port.Id, P(origin), count, ids);
+    }
+
+    private static BuiltInCategory? CategoryOf(Element e) =>
+        e.Category is { } category ? Try(() => (BuiltInCategory?)category.ToBuiltInCategory()) : null;
+
+    /// <summary>In a walk category and not view-specific (an import or detail item is never a leg).</summary>
+    private static bool Walkable(Element e) =>
+        !e.ViewSpecific && CategoryOf(e) is { } category && WalkCategories.Contains(category);
+
+    /// <summary>One element as the document read would emit it, stamped with the reason it is in the output.</summary>
+    private static void Build(Reader r, Element e, string? reason, List<DuctNode> nodes, List<DuctSegment> segments) {
+        var category = CategoryOf(e);
+        if (category is BuiltInCategory.OST_DuctCurves or BuiltInCategory.OST_FlexDuctCurves) {
+            if (e is MEPCurve curve)
+                segments.Add(Segment(r.Doc, curve, r.Network) with {
+                    PhaseCreated = PhaseOf(curve, true, r.PhaseNames), PhaseDemolished = PhaseOf(curve, false, r.PhaseNames), Reason = reason
+                });
+            return;
+        }
+        var kind = category switch {
+            BuiltInCategory.OST_DuctFitting => Fitting(e),
+            BuiltInCategory.OST_DuctAccessory => DuctNodeKind.Accessory,
+            BuiltInCategory.OST_DuctTerminal => DuctNodeKind.Terminal,
+            BuiltInCategory.OST_MechanicalEquipment => DuctNodeKind.Equipment,
+            _ => (DuctNodeKind?)null
+        };
+        if (kind is not { } k) return;
+        nodes.Add(Node(e, k, r.Slots, r.Schemas, r.Network, r.LabelParameter) with {
+            PhaseCreated = PhaseOf(e, true, r.PhaseNames), PhaseDemolished = PhaseOf(e, false, r.PhaseNames), Reason = reason
+        });
     }
 
     /// <summary>
@@ -267,7 +441,9 @@ public static class DuctSnapshots {
                 Converted(curve, BuiltInParameter.RBS_VELOCITY, UnitTypeId.FeetPerMinute),
                 Converted(curve, BuiltInParameter.RBS_FRICTION, UnitTypeId.InchesOfWater60DegreesFahrenheitPer100Feet),
                 Converted(curve, BuiltInParameter.RBS_PRESSURE_DROP, UnitTypeId.InchesOfWater60DegreesFahrenheit)),
-            connectors, curve.UniqueId);
+            connectors, curve.UniqueId,
+            // The host's own insulation thickness; the separate DuctInsulation element is on the exclusion list.
+            InsulationIn: Inches(curve, BuiltInParameter.RBS_REFERENCE_INSULATION_THICKNESS) is > 0 and var insulation ? insulation : null);
     }
 
     private static DuctNodeKind Fitting(Element e) =>

@@ -14,6 +14,21 @@ import { workKey, workKeySchema } from "./route-state.ts";
 import { addressSchema, documentRefSchema, sameAddress } from "./target.ts";
 import { DUCT_PARAMETER_KEYS } from "./ducts.ts";
 
+/** Which elements `ducts.snapshot` reads (ducts MAP 2026-10-27, "Where the data comes from" row 1). */
+export const ductsSnapshotSelectorSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("document") }),
+  z.strictObject({ kind: z.literal("ids"), ids: z.array(z.number().int()).min(1) }),
+  z.strictObject({
+    kind: z.literal("from"),
+    unitId: z.number().int(),
+    portIndex: z.number().int().optional(),
+    maxHops: z.number().int().positive().optional(),
+    /** Side of the open-end candidate box in inches (default 36). */
+    candidateBoxIn: z.number().positive().optional(),
+  }),
+]);
+export type DuctsSnapshotSelector = z.infer<typeof ductsSnapshotSelectorSchema>;
+
 /** Acquisition inputs, independent of a Ducts route's local selection and staged calculations. */
 export const ductsSnapshotReadingSchema = z.strictObject({
   kind: z.literal("ducts-snapshot"),
@@ -25,6 +40,11 @@ export const ductsSnapshotReadingSchema = z.strictObject({
     .optional(),
   labelParameter: z
     .string()
+    .nullish()
+    .transform((value) => value ?? undefined)
+    .optional(),
+  /** Mirrors C# DuctSnapshotSelector: absent is the whole-document read; `from` and `ids` are raw (no groups). */
+  selector: ductsSnapshotSelectorSchema
     .nullish()
     .transform((value) => value ?? undefined)
     .optional(),

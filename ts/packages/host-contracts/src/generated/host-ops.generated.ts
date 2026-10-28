@@ -687,9 +687,11 @@ export namespace DuctsPorts {
   }
 }
 
-/** Read every duct network in the project: ducts, flex, fittings, accessories, terminals and HVAC equipment with their connectors, grouped by topology with equipment cut out, plus pass-1 terminal flow, fitting geometry ratios, fitting and accessory loss methods, terminal drops, Revit's supply/return/exhaust systems with critical path and sections, issues and the query behind each layer. Slots name the fan static, fan flow, component drop and terminal catalog drop parameters; labelParameter names the instance parameter whose value names equipment for people (each node's label). Read-only. */
+/** Read every duct network in the project: ducts, flex, fittings, accessories, terminals and HVAC equipment with their connectors, grouped by topology with equipment cut out, plus pass-1 terminal flow, fitting geometry ratios, fitting and accessory loss methods, terminal drops, Revit's supply/return/exhaust systems with critical path and sections, issues and the query behind each layer. Slots name the fan static, fan flow, component drop and terminal catalog drop parameters; labelParameter names the instance parameter whose value names equipment for people (each node's label). selector narrows the read: { kind: "from", unitId, portIndex?, maxHops?, candidateBoxIn? } walks Revit connectors from one element's HVAC ports through equipment to terminals and open ends, searches a box around each open end for MEP candidates (nodes and segments marked reason open-end-candidate) and reports the walk; { kind: "ids", ids } reads exactly those elements. Both are raw: no groups, flows, issues, systems or layers. Absent or kind document is the whole-document read. Read-only. */
 export namespace DuctsSnapshot {
   export namespace Req {
+    export type DuctSelectorKind = "document" | "ids" | "from";
+
     /**
      * Optional: which parameters carry the designer-stated values (absent reads the defaults), and LabelParameter, the
      * instance parameter whose string value names equipment for people (absent reads the firm tag, PE_G___TagInstance:
@@ -699,6 +701,7 @@ export namespace DuctsSnapshot {
     export interface Request {
       slots?: null | DuctParameterSlots;
       labelParameter?: null | string;
+      selector?: null | DuctSnapshotSelector;
     }
     /**
      * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
@@ -714,6 +717,23 @@ export namespace DuctsSnapshot {
       terminalDrop?: null | string;
       fittingCoefficient?: string;
       terminalFlow?: string;
+    }
+    /**
+     * Which elements the snapshot reads. Kind `document` is the default and the shape every existing caller gets. Kind
+     * `ids` reads Ids. Kind `from` walks Revit connectors outward from UnitId's HVAC ports (PortIndex names one
+     * connector id; absent walks every port) through ducts, flex, fittings, accessories and equipment (equipment is a
+     * leg, never a cut: the roster decides stops later), stopping at an air terminal, an open end, or MaxHops elements
+     * deep (default 2000). At every open end a box CandidateBoxIn inches on a side (default 36) around the connector is
+     * searched for MEP elements, which join the output marked `open-end-candidate` so a join can be inferred.
+     *
+     */
+    export interface DuctSnapshotSelector {
+      kind?: DuctSelectorKind;
+      ids?: number[] | null;
+      unitId?: number | null;
+      portIndex?: number | null;
+      maxHops?: number | null;
+      candidateBoxIn?: null | number;
     }
   }
   export namespace Res {
@@ -778,6 +798,7 @@ export namespace DuctsSnapshot {
       phases?: null | DuctPhases;
       airflowCandidates?: DuctAirflowCandidate[] | null;
       fanFlowCandidates?: DuctAirflowCandidate[] | null;
+      walk?: null | DuctWalk;
     }
     /**
      * The document read, when, and how long the read took. NetworkBasedCalculations is DuctSettings' engine switch:
@@ -840,6 +861,7 @@ export namespace DuctsSnapshot {
       phaseCreated?: null | string;
       phaseDemolished?: null | string;
       flowParameter?: null | string;
+      reason?: null | string;
     }
     /**
      * One physical HVAC connector. Kind is "end" or "curve" (a tap on a duct's side). Direction is Revit's
@@ -921,7 +943,9 @@ export namespace DuctsSnapshot {
       catalogDropInWg?: null | number;
     }
     /**
-     * PhaseCreated and PhaseDemolished as on DuctNode.
+     * PhaseCreated and PhaseDemolished as on DuctNode. InsulationIn is the host's
+     * RBS_REFERENCE_INSULATION_THICKNESS in inches (null when none): the separate DuctInsulation element is never read.
+     *
      */
     export interface DuctSegment {
       id: number;
@@ -945,6 +969,8 @@ export namespace DuctsSnapshot {
       uniqueId?: null | string;
       phaseCreated?: null | string;
       phaseDemolished?: null | string;
+      reason?: null | string;
+      insulationIn?: null | number;
     }
     export interface DuctRoughness {
       valueFt: number;
@@ -1154,6 +1180,31 @@ export namespace DuctsSnapshot {
       groupId: string;
       have: number;
       of: number;
+    }
+    /**
+     * The `from` walk's summary. Hops is the deepest element depth reached from the start; ElementsReached counts walked
+     * elements (the start included, candidates excluded); Truncated is true when MaxHops cut the walk or an open end's
+     * box held more than the candidate cap and was counted, not listed.
+     *
+     */
+    export interface DuctWalk {
+      startId: number;
+      hops: number;
+      elementsReached: number;
+      openEnds: number;
+      candidates: DuctOpenEnd[];
+      truncated: boolean;
+      elapsedMs: number;
+    }
+    /**
+     * One open end the walk stopped at and what the candidate box around it held (CandidateCount first, cheap; CandidateIds only under the cap).
+     */
+    export interface DuctOpenEnd {
+      elementId: number;
+      connector: number;
+      point: number[];
+      candidateCount: number;
+      candidateIds: number[];
     }
   }
 }
