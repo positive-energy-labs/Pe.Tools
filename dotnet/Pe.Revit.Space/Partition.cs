@@ -143,10 +143,10 @@ internal sealed class Partition {
         var clock = System.Diagnostics.Stopwatch.StartNew();
         if (reach.Count == 0) return new SceneReach(0, [], new Dictionary<string, int>(), 0, 0, 0, 0, 0);
         using var inverse = this.Transform.Inverse;
-        var local = reach.Select(corners => corners.Select(inverse.OfPoint).ToArray()).ToList();
-        var boxes = local.Select(corners => (ElementFilter)Intersecting(corners)).ToList();
-        // The extent of every reach box goes first, so the OR of hundreds of boxes tests only elements already inside it.
-        using var extent = Intersecting(local.SelectMany(corners => corners));
+        var local = Merge(reach.Select(corners => Bounds(corners.Select(inverse.OfPoint))).ToList());
+        var boxes = local.Select(box => (ElementFilter)Intersecting(box)).ToList();
+        // The extent of every reach box goes first, so the OR tests only elements already inside it.
+        using var extent = Intersecting(local.Aggregate(Union));
         var near = boxes.Count == 1 ? boxes[0] : new LogicalOrFilter(boxes);
         HashSet<ElementId> Ids(ElementFilter filter) {
             using var collector = new FilteredElementCollector(this.Doc).WhereElementIsNotElementType().WherePasses(filter);
@@ -218,16 +218,46 @@ internal sealed class Partition {
     private static (string, ElementFilter) OfClasses(string name, params Type[] types) => (name, types.Length == 1
         ? new ElementClassFilter(types[0]) : new LogicalOrFilter(types.Select(t => (ElementFilter)new ElementClassFilter(t)).ToList()));
 
-    private static BoundingBoxIntersectsFilter Intersecting(IEnumerable<XYZ> corners) {
+    private static (XYZ Min, XYZ Max) Bounds(IEnumerable<XYZ> corners) {
         double minX = double.MaxValue, minY = double.MaxValue, minZ = double.MaxValue;
         double maxX = double.MinValue, maxY = double.MinValue, maxZ = double.MinValue;
         foreach (var p in corners) {
             minX = Math.Min(minX, p.X); minY = Math.Min(minY, p.Y); minZ = Math.Min(minZ, p.Z);
             maxX = Math.Max(maxX, p.X); maxY = Math.Max(maxY, p.Y); maxZ = Math.Max(maxZ, p.Z);
         }
-        using var outline = new Outline(new XYZ(minX, minY, minZ), new XYZ(maxX, maxY, maxZ));
+        return (new XYZ(minX, minY, minZ), new XYZ(maxX, maxY, maxZ));
+    }
+
+    private static (XYZ Min, XYZ Max) Union((XYZ Min, XYZ Max) a, (XYZ Min, XYZ Max) b) => (
+        new XYZ(Math.Min(a.Min.X, b.Min.X), Math.Min(a.Min.Y, b.Min.Y), Math.Min(a.Min.Z, b.Min.Z)),
+        new XYZ(Math.Max(a.Max.X, b.Max.X), Math.Max(a.Max.Y, b.Max.Y), Math.Max(a.Max.Z, b.Max.Z)));
+
+    private static double Volume((XYZ Min, XYZ Max) b) => (b.Max.X - b.Min.X) * (b.Max.Y - b.Min.Y) * (b.Max.Z - b.Min.Z);
+
+    /// <summary>
+    ///     Fewer outlines for the one reach query: two boxes merge when their union covers no more volume than the two
+    ///     together. A merge only ever grows coverage, so nothing reach admitted is lost; the query's cost follows the
+    ///     outline count (501 outlines over Chadds' host took 19.5 s). Neighbouring members' reach boxes overlap, so a
+    ///     system collapses to a few boxes per straight stretch.
+    ///     ponytail: O(n²) passes until stable; n is one system's members.
+    /// </summary>
+    internal static List<(XYZ Min, XYZ Max)> Merge(List<(XYZ Min, XYZ Max)> boxes) {
+        for (var merged = true; merged;) {
+            merged = false;
+            for (var i = 0; i < boxes.Count; i++)
+            for (var j = boxes.Count - 1; j > i; j--) {
+                var union = Union(boxes[i], boxes[j]);
+                if (Volume(union) > Volume(boxes[i]) + Volume(boxes[j])) continue;
+                boxes[i] = union; boxes.RemoveAt(j); merged = true;
+            }
+        }
+        return boxes;
+    }
+
+    private static BoundingBoxIntersectsFilter Intersecting((XYZ Min, XYZ Max) box) {
+        using var outline = new Outline(box.Min, box.Max);
         // One float ulp covers ingest rounding at the boundary; it only broadens the candidate gate.
-        var magnitude = new[] { minX, minY, minZ, maxX, maxY, maxZ }.Max(Math.Abs);
+        var magnitude = new[] { box.Min.X, box.Min.Y, box.Min.Z, box.Max.X, box.Max.Y, box.Max.Z }.Max(Math.Abs);
         return new BoundingBoxIntersectsFilter(outline, Math.Max(1, magnitude) * Math.Pow(2, -23));
     }
 
