@@ -11,6 +11,7 @@ public enum SceneContextRepresentation {
     [EnumMember(Value = "none")] None,
     [EnumMember(Value = "oriented")] Oriented,
     [EnumMember(Value = "triangle-boxes")] TriangleBoxes,
+    [EnumMember(Value = "link-boxes")] LinkBoxes,
     [EnumMember(Value = "meshes")] Meshes
 }
 public enum SceneRepresentation {
@@ -25,7 +26,8 @@ public enum SceneRunShape {
 }
 public enum SceneBoxFrame {
     [EnumMember(Value = "symbol")] Symbol,
-    [EnumMember(Value = "triangles")] Triangles
+    [EnumMember(Value = "triangles")] Triangles,
+    [EnumMember(Value = "link")] Link
 }
 /// <param name="ContextPaddingFt">Reach: context is what lies within this distance of each focus element's own box, never a crop around the whole focus.</param>
 public sealed record SceneRequest(
@@ -48,7 +50,7 @@ public sealed record SceneRun(IReadOnlyList<double> Start, IReadOnlyList<double>
         // Reserve that displacement in the drawn radius, rather than tolerating a physical containment loss.
         : 1 / (Math.Cos(Math.PI / this.RadialSegments) - Math.Pow(2, -24)) - 1;
 }
-/// <summary>Element-local box placed in host feet. Axes are an orthonormal right-handed frame; HalfSize is in feet.</summary>
+/// <summary>Box placed in host feet with explicit frame provenance. Link frames can overdraw elements rotated within their source. Axes are orthonormal and right-handed; HalfSize is in feet.</summary>
 public sealed record SceneOrientedBox(IReadOnlyList<double> Center, IReadOnlyList<double> AxisX,
     IReadOnlyList<double> AxisY, IReadOnlyList<double> AxisZ, IReadOnlyList<double> HalfSize,
     SceneBoxFrame Frame = SceneBoxFrame.Symbol);
@@ -104,7 +106,7 @@ public static class Scene {
         if (request.MaxTriangles is < 1 or > 3000000)
             throw new ArgumentException("maxTriangles must be between 1 and 3000000.");
         if (!Enum.IsDefined(typeof(SceneContextRepresentation), request.ContextRepresentation))
-            throw new ArgumentException("contextRepresentation must be none, oriented, triangle-boxes or meshes.");
+            throw new ArgumentException("contextRepresentation must be none, oriented, triangle-boxes, link-boxes or meshes.");
         if (!Finite(request.ContextPaddingFt) || request.ContextPaddingFt is < 0 or > 1000)
             throw new ArgumentException("contextPaddingFt must be between 0 and 1000.");
         if (request.Bounds is { } b && (!Finite(b.MinX, b.MinY, b.MinZ, b.MaxX, b.MaxY, b.MaxZ)
@@ -252,6 +254,9 @@ public static class Scene {
                 if (!isFocus && limit == "acquisition-budget") { deferred++; Cut(partition); return; }
                 try {
                     var box = run is null ? oriented.Family(element, partition.Transform) : null;
+                    if (!isFocus && run is null && box is null && context == SceneContextRepresentation.LinkBoxes
+                        && partition.Kind != SourceKind.Host)
+                        box = oriented.Link(element, partition.Transform);
                     if (run is null && box is null) {
                         if (!isFocus && triangles >= request.MaxTriangles) {
                             deferred++; limit ??= "output-budget"; Cut(partition); return;
@@ -287,7 +292,7 @@ public static class Scene {
                 foreach (var partition in world.Partitions) {
                     budget.Check();
                     var read = partition.Reach(reach, bound,
-                        context is SceneContextRepresentation.Oriented or SceneContextRepresentation.TriangleBoxes);
+                        context is SceneContextRepresentation.Oriented or SceneContextRepresentation.TriangleBoxes or SceneContextRepresentation.LinkBoxes);
                     reads[partition] = (read, 0, 0);
                     broad += read.Counted;
                     foreach (var element in read.Kept) {
@@ -298,7 +303,7 @@ public static class Scene {
                         reads[partition] = reads[partition] with { Kept = reads[partition].Kept + 1 };
                         // ETW showed Revit retains native tessellation allocations; bound what we ask it to tessellate.
                         // Runs and proven family frames avoid tessellation. Unknown frames retain native meshes.
-                        if (context is SceneContextRepresentation.Oriented or SceneContextRepresentation.TriangleBoxes) {
+                        if (context is SceneContextRepresentation.Oriented or SceneContextRepresentation.TriangleBoxes or SceneContextRepresentation.LinkBoxes) {
                             Primitive(partition, element, box.Value, ReadRun(element, partition.Transform), false);
                             continue;
                         }

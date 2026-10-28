@@ -145,8 +145,10 @@ export function ModelPicture({
   paintOf?: PaintOf;
   contextMode?: ContextMode;
   contextRadiusFt?: number;
-  contextRepresentation?: "oriented" | "meshes" | "triangle-boxes";
-  onContextRepresentation?: (representation: "oriented" | "meshes" | "triangle-boxes") => void;
+  contextRepresentation?: "oriented" | "meshes" | "triangle-boxes" | "link-boxes";
+  onContextRepresentation?: (
+    representation: "oriented" | "meshes" | "triangle-boxes" | "link-boxes",
+  ) => void;
   /** Kind to hue and the Colour dial: the two inputs of the paint seam. */
   kinds: Kinds;
   colour: ColourMode;
@@ -413,11 +415,13 @@ export function ModelPicture({
             kind="advisory"
             label={[
               onContextRepresentation
-                ? contextRepresentation === "triangle-boxes"
-                  ? "Building envelopes"
-                  : contextRepresentation === "oriented"
-                    ? "Simplified context"
-                    : "Detailed context"
+                ? contextRepresentation === "link-boxes"
+                  ? "Link-frame envelopes"
+                  : contextRepresentation === "triangle-boxes"
+                    ? "Building envelopes"
+                    : contextRepresentation === "oriented"
+                      ? "Simplified context"
+                      : "Detailed context"
                 : "",
               read.contextError ? `context: ${read.contextError}` : "",
               read.completeness?.complete === false
@@ -473,6 +477,23 @@ export function ModelPicture({
                 {contextRepresentation === "triangle-boxes"
                   ? "Use building geometry"
                   : "Use building envelopes"}
+              </Button>
+              <Button
+                label={
+                  contextRepresentation === "link-boxes"
+                    ? "Use building geometry"
+                    : "Use link-frame envelopes"
+                }
+                busy={read.pending}
+                onClick={() =>
+                  onContextRepresentation(
+                    contextRepresentation === "link-boxes" ? "oriented" : "link-boxes",
+                  )
+                }
+              >
+                {contextRepresentation === "link-boxes"
+                  ? "Use building geometry"
+                  : "Use link-frame envelopes"}
               </Button>
             </>
           ) : null}

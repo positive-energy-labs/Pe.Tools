@@ -366,11 +366,35 @@ witness stopped on them; the clarified tiers record 0.1–1x and fail only above 1
 Cause remains UNPROVEN. Saved rows identify host 7950034 / insulation 8903976,
 7950297 / 8903984 and 7950371 / 8903986 among the middle-tier findings.
 
-The IFC mesh accuracy claim remains UNPROVEN despite the old witness's zero failure count.
-It accepted a 24.026413 ft deviation under a 1,757.687573 ft predicate bound. The outlier
-probe completed but lost its result at the 1 MiB Result limit. Its replacement writes the
-identity first and chunks geometry into artifacts. Wrong native pairing, misplaced frames
-and native outlier geometry must be distinguished before this gate can turn green.
+The IFC outlier was a witness pairing bug. Element `1254396` in IFC placement `9465481`
+was paired with a near-collinear triangle elsewhere in the same element, producing
+24.026413 ft deviation. Its correct native triangle contains the questioned published
+vertices within 0.000034810 ft under a derived 0.000042994 ft bound. The link transform
+matches the certified 45-degree placement. Native and published geometry coincide at
+the scene crop; the saved three-view picture identifies the erroneous old pair.
+PROVEN[session dev, controlled `probe-o` PID 13668, `cabe69e3`, 2026-10-28 12:26Z;
+deterministic replay of saved native triangles, frozen interval predicate]. Evidence in
+`t3-5b8bc59c/.artifacts/accept/oriented-20261028/browser/ifc-outlier-1254396-native-published.png`
+and `outlier-interval.json`.
+
+The corrected full Chadds SA 7 mesh witness passed with maximum deviation
+0.000089090 ft, 0.170219 times native VertexTolerance, under its per-triangle derived
+bound. It recorded 145 middle-tier residuals for diagnosis instead of aborting.
+The full triangle-box witness also passed. Flex is native mesh: 27 elements and
+31,068 reverse-checked native vertices. All documents stayed unmodified.
+PROVEN[session dev, controlled `probe-o` PIDs 13668 / 54132, `cabe69e3`,
+2026-10-28 12:09-13:16Z]. Root evidence directories are
+`.artifacts/accept/space-proof/cabe69e3-20261028T120923Z-triangle-boxes` and
+`.artifacts/accept/space-proof/cabe69e3-20261028T122729Z-oriented`.
+
+| Chadds SA 7, first context read in fresh process | Native s | Private delta MiB | Artifact bytes | Published triangles |
+|---|---:|---:|---:|---:|
+| Meshes for IFC | 64.113 | 5,093.7 | 113,859,984 | 2,395,251 |
+| Triangle boxes for IFC | 79.317 | 5,233.4 | 48,019,084 | 320,995 |
+
+Both routes materialize full IFC geometry. Their cost excludes the later accuracy
+witness. Link-frame boxes are an unproven cost option until measured cold on both
+SA 7 and EX 7. The native-versus-managed allocation split remains unproven.
 
 ## Instrument
 

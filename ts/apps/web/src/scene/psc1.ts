@@ -31,7 +31,7 @@ function primitiveOf(e: Psc1Metadata["elements"][number]): ScenePrimitive | unde
     const b = e.orientedBox;
     if (
       !b ||
-      !["symbol", "triangles"].includes(b.frame) ||
+      !["symbol", "triangles", "link"].includes(b.frame) ||
       ![b.center, b.axisX, b.axisY, b.axisZ, b.halfSize].every(vector) ||
       b.halfSize.some((n) => n <= 0)
     )

@@ -155,7 +155,7 @@ function Canvas({
   onPose,
 }: ProtoProps & ECanvasExtra & { snapshot: NonNullable<ProtoProps["snapshot"]> }) {
   const [contextRepresentation, setContextRepresentation] = useState<
-    "oriented" | "meshes" | "triangle-boxes"
+    "oriented" | "meshes" | "triangle-boxes" | "link-boxes"
   >("oriented");
   const { hovered, onHover, lit } = useElementAttention();
   const hoveredIssue = useHoveredIssue();

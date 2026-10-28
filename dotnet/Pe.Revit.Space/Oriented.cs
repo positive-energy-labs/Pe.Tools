@@ -10,6 +10,25 @@ internal sealed class Oriented(SceneBudget budget) {
     internal readonly Ingest.SymbolMeshes Meshes = new();
     private sealed record LocalBox(double[] Min, double[] Max);
 
+    internal SceneOrientedBox? Link(Element element, Transform sourceToHost) {
+        // Temporary ADR 0025 exception pending MAP.md Owed: disclose the link frame, never claim
+        // an element frame. Full IFC geometry costs ~5 GiB per Chadds read; this envelope contains it.
+        if (element is not DirectShape) return null;
+        budget.Native();
+        using var bounds = element.get_BoundingBox(null);
+        budget.AfterNative();
+        if (bounds is null) return null;
+        using var local = bounds.Transform;
+        using var frame = sourceToHost.Multiply(local);
+        var center = frame.OfPoint((bounds.Min + bounds.Max) * 0.5);
+        var half = (bounds.Max - bounds.Min) * 0.5;
+        var x = frame.BasisX; var y = frame.BasisY; var z = frame.BasisZ;
+        if (!UnitFrame(x, y, z) || !Finite(center.X, center.Y, center.Z, half.X, half.Y, half.Z)
+            || half.X <= 0 || half.Y <= 0 || half.Z <= 0) return null;
+        if (x.CrossProduct(y).DotProduct(z) < 0) z = -z;
+        return new SceneOrientedBox(V(center), V(x), V(y), V(z), V(half), SceneBoxFrame.Link);
+    }
+
     internal SceneOrientedBox? Family(Element element, Transform sourceToHost) {
         // IFC DirectShapes have identity symbol frames with already-positioned geometry. A symbol box
         // there would merely rotate the document AABB. Only a real family frame establishes orientation.

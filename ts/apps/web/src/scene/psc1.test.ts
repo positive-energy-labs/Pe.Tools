@@ -157,7 +157,7 @@ describe("PSC1 decode", () => {
     ).toThrow("range");
     expect(() => decodeScene(psc1(metadata({ elements: [a!] })))).toThrow("Incomplete");
   });
-  it.each(["symbol", "triangles"] as const)(
+  it.each(["symbol", "triangles", "link"] as const)(
     "decodes %s frames without fabricating mesh vertices or losing linked identity",
     (frame) => {
       const elements: Psc1Metadata["elements"] = metadata().elements.map((e) => ({
