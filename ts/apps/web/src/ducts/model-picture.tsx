@@ -379,7 +379,7 @@ export function ModelPicture({
         }}
       />
       <PaneOverlay label="model levels" place="bl">
-        <LevelReadout levels={read.levels ?? null} bounds={datumBounds} />
+        <LevelReadout levels={read.levels ?? null} bounds={datumBounds} pending={read.pending} />
       </PaneOverlay>
       {meshes && sectionSubject && (
         <PaneOverlay label="section and context" place="tr">

@@ -52,9 +52,11 @@ export function LevelMarks({
 export function LevelReadout({
   levels,
   bounds,
+  pending = false,
 }: {
   levels: SceneLevels | null;
   bounds: Bounds | null;
+  pending?: boolean;
 }) {
   const rows = useMemo(
     () =>
@@ -96,8 +98,11 @@ export function LevelReadout({
         trigger={
           levels
             ? `Levels · ${levels.planes.reduce((n, p) => n + p.members.length, 0)}`
-            : "Levels unavailable"
+            : pending
+              ? "Reading levels…"
+              : "Levels unavailable"
         }
+        disabled={!levels}
         aria-label="Model levels"
         triggerLabel="Model levels"
         items={rows}
