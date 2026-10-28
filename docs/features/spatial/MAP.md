@@ -131,6 +131,9 @@ Verbs          Pea's Sweep/Slice/Probe/Partition read through the same scoped re
 
 ## Proof gate (every change, before main)
 
+- Slot turns follow `.artifacts/locks/ORDER`, one session id per line: take the slot only when
+  the lock dir is absent and the first line is your id, then delete that line. Text-matching a
+  log for "RELEASE" caused three out-of-order takes on 2026-10-28.
 - One probe Revit at a time, machine-wide (`.artifacts/locks/revit-slot-1`), started only with
   ≥10 GiB free: two probes beside kaitpw's 15 GB session left 2.5 GiB free on 2026-10-28. An
   empty Revit costs ≈3 GiB. A worktree dev stack (dev.ts, dev-web, vite) costs 2–3.5 GiB, and
