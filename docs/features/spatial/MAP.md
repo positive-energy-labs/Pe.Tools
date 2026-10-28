@@ -99,7 +99,7 @@ transforms equal the cloud's; IFC instance 9465481 loaded.
 | Proximity tested after loading (halo) | Pays the full load, then discards. |
 | One transform per link document | Cleremont places one document three times. |
 | Every building element has a family frame | Chadds IFC elements are DirectShapes: 800 of 800 sampled framing have identity frames and 800 distinct geometry keys (probe-o, 2026-10-28). |
-| Insulation needs its own element read | The host's thickness matches: ducts 4,294/4,294 (Chadds), 364/364 (Cleremont); pipes 3,267/3,267, max error 0 (Chadds clone). |
+| Insulation needs its own element read (on runs) | The run's thickness matches: ducts 4,294/4,294 (Chadds), 364/364 (Cleremont); pipes 3,267/3,267, max error 0 (Chadds clone). Not on fittings: 186 of Cleremont's 364 duct insulations sit on family instances, and all 186 reach outside the host's symbol box, by up to 0.269 ft against 0.125 ft thickness (probe-o, 2026-10-28). |
 | An IFC-off flag or any per-model toggle | Ruled out; building geometry is always needed. |
 | `Level.Elevation` | Base-point relative; wrong by hundreds of feet. |
 | Whole-model `Prepare` per verb call | 220 s and +9.4 GiB per cold call. |
