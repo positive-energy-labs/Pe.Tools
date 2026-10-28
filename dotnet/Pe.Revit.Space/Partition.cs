@@ -160,21 +160,26 @@ internal sealed class Partition {
         foreach (var box in boxes) box.Dispose();
         var excluded = new Dictionary<string, int>(StringComparer.Ordinal);
         var keep = new HashSet<ElementId>(inside);
-        // Each class is counted over the reach ids only (an id-seeded collector), never over the whole document.
-        foreach (var (name, match) in Exclusions) {
-            if (inside.Count == 0) break;
-            using var collector = new FilteredElementCollector(this.Doc, inside).WherePasses(match);
-            var members = collector.ToElementIds();
-            if (members.Count == 0) continue;
-            excluded[name] = members.Count;
-            keep.ExceptWith(members);
+        // Exclusions are queried over the reach ids only (id-seeded collectors), never the whole document: one pass
+        // with every class, then each class counted over just what that pass excluded (3 of 32,715 in Chadds' IFC link).
+        if (inside.Count > 0) {
+            ICollection<ElementId> any;
+            using (var collector = new FilteredElementCollector(this.Doc, inside).WherePasses(AnyExclusion)) any = collector.ToElementIds();
+            keep.ExceptWith(any);
+            foreach (var (name, match) in any.Count == 0 ? [] : Exclusions) {
+                using var collector = new FilteredElementCollector(this.Doc, any).WherePasses(match);
+                var hits = collector.GetElementCount();
+                if (hits > 0) excluded[name] = hits;
+            }
         }
         var classified = clock.Elapsed.TotalMilliseconds;
         var kept = new List<Element>();
         var rejected = 0;
         if (keep.Count > 0) {
             // Revit refuses to iterate an id-seeded collector with no filter; the ids are non-type already.
-            using var collector = new FilteredElementCollector(this.Doc, keep).WhereElementIsNotElementType();
+            // Document order: the loads walk storage the way a filtered collector does, not in hash order.
+            using var collector = new FilteredElementCollector(this.Doc, keep.OrderBy(id => id.Value()).ToList())
+                .WhereElementIsNotElementType();
             // The managed gate stays as a witness: what it rejects here was loaded for nothing and is disclosed.
             foreach (var element in collector)
                 if (Ingest.Allowed(element)) kept.Add(element); else rejected++;
@@ -213,6 +218,8 @@ internal sealed class Partition {
             BuiltInCategory.OST_DuctSystem, BuiltInCategory.OST_PipingSystem, BuiltInCategory.OST_ElectricalCircuit,
             BuiltInCategory.OST_SwitchSystem),
     ];
+
+    private static readonly ElementFilter AnyExclusion = new LogicalOrFilter(Exclusions.Select(e => e.Match).ToList());
 
     private static (string, ElementFilter) OfCategories(string name, params BuiltInCategory[] categories) =>
         (name, new ElementMulticategoryFilter(categories.Distinct().ToList()));
