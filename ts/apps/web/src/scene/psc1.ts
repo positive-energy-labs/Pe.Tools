@@ -11,7 +11,7 @@ import { assertLevels } from "./levels";
 
 /** The artifact's metadata, as the op declares it. */
 export type Psc1Metadata = RevitDetailSpaceScene.Artifact.SceneMetadata;
-export const SCENE_FORMAT = "space-scene-v3";
+export const SCENE_FORMAT = "space-scene-v4";
 
 const MAGIC = 0x31435350; // "PSC1" little-endian
 const MAX_TRIANGLES = 3_000_000;
@@ -24,13 +24,53 @@ const validBounds = (b: Bounds) =>
 const vector = (v: number[]) => Array.isArray(v) && v.length === 3 && v.every(Number.isFinite);
 function primitiveOf(e: Psc1Metadata["elements"][number]): ScenePrimitive | undefined {
   if (e.representation === "mesh") {
-    if (e.run != null) throw Error("Invalid mesh run metadata");
+    if (e.run != null || e.orientedBox != null) throw Error("Invalid mesh primitive metadata");
     return undefined;
   }
-  if (e.representation === "box" && e.run == null) return { kind: "box", bounds: e.bounds };
+  if (e.representation === "oriented-box" && e.run == null) {
+    const b = e.orientedBox;
+    if (
+      !b ||
+      ![b.center, b.axisX, b.axisY, b.axisZ, b.halfSize].every(vector) ||
+      b.halfSize.some((n) => n <= 0)
+    )
+      throw Error("Invalid oriented box dimensions");
+    const axes = [b.axisX, b.axisY, b.axisZ];
+    const dot = (a: number[], v: number[]) => a.reduce((sum, n, i) => sum + n * v[i]!, 0);
+    if (
+      axes.some((a) => Math.abs(Math.hypot(...a) - 1) > 1e-6) ||
+      Math.abs(dot(b.axisX, b.axisY)) > 1e-6 ||
+      Math.abs(dot(b.axisX, b.axisZ)) > 1e-6 ||
+      Math.abs(dot(b.axisY, b.axisZ)) > 1e-6 ||
+      dot(
+        [
+          b.axisX[1]! * b.axisY[2]! - b.axisX[2]! * b.axisY[1]!,
+          b.axisX[2]! * b.axisY[0]! - b.axisX[0]! * b.axisY[2]!,
+          b.axisX[0]! * b.axisY[1]! - b.axisX[1]! * b.axisY[0]!,
+        ],
+        b.axisZ,
+      ) <
+        1 - 1e-6
+    )
+      throw Error("Invalid oriented box frame");
+    // Bounds drive culling and picking. They must enclose the same frame that is drawn.
+    for (let i = 0; i < 3; i++) {
+      const extent = axes.reduce((sum, a, j) => sum + Math.abs(a[i]!) * b.halfSize[j]!, 0);
+      const min = [e.bounds.minX, e.bounds.minY, e.bounds.minZ][i]!;
+      const max = [e.bounds.maxX, e.bounds.maxY, e.bounds.maxZ][i]!;
+      const tolerance = Math.max(1, Math.abs(min), Math.abs(max)) * 2 ** -22;
+      if (
+        Math.abs(b.center[i]! - extent - min) > tolerance ||
+        Math.abs(b.center[i]! + extent - max) > tolerance
+      )
+        throw Error("Oriented box bounds disagree with frame");
+    }
+    return { kind: "oriented-box", bounds: e.bounds, box: b };
+  }
   const r = e.run;
   if (
     e.representation !== "run" ||
+    e.orientedBox != null ||
     !r ||
     !vector(r.start) ||
     !vector(r.end) ||

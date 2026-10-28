@@ -17,7 +17,7 @@ public sealed class SceneAcquisitionBudgetProofTests {
             }
             using var output = new MemoryStream();
             var scene = Scene.Write(doc, new SceneRequest([focus.Id.Value()], 100, MaxTriangles: 24, ContextRepresentation: SceneContextRepresentation.Meshes), output);
-            Assert.That(scene.Format, Is.EqualTo("space-scene-v3"));
+            Assert.That(scene.Format, Is.EqualTo("space-scene-v4"));
             Assert.That(scene.Elements.Single(row => row.Focus).Handle.ElementId, Is.EqualTo(focus.Id.Value()));
             Assert.That(scene.Triangles, Is.EqualTo(24));
             Assert.That(scene.Work.ExtractedElements, Is.EqualTo(2), "The other39 context elements must never acquire geometry.");

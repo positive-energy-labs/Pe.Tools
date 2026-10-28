@@ -22,11 +22,11 @@ public sealed class SpaceContextRepresentationProofTests {
             }
             using var bytes = new MemoryStream();
             var scene = Scene.Write(document, new SceneRequest([focus.Id.Value()], 100, MaxTriangles: 12), bytes);
-            Assert.That(scene.Format, Is.EqualTo("space-scene-v3"));
+            Assert.That(scene.Format, Is.EqualTo("space-scene-v4"));
             Assert.That(scene.Elements.Select(row => row.Handle.ElementId), Is.EquivalentTo(expectedIds),
                 "A triangle budget must not become a box candidate cap. Actual: " + string.Join(", ",
                     scene.Elements.Select(row => $"{row.Handle.ElementId}:{row.Handle.Category}")));
-            Assert.That(scene.Elements.Where(row => !row.Focus).All(row => row.Representation == SceneRepresentation.Box
+            Assert.That(scene.Elements.Where(row => !row.Focus).All(row => row.Representation == SceneRepresentation.OrientedBox
                 && row.VertexCount == 0 && row.FirstVertex == 36 && row.Run is null), Is.True);
             Assert.That(scene.Work.ContextGeometryCalls, Is.Zero);
             Assert.That(scene.Work.ExtractedElements, Is.EqualTo(1));

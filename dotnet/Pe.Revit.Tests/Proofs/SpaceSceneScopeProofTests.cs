@@ -103,7 +103,7 @@ public sealed class SpaceSceneScopeProofTests {
             Assert.That(read.Excluded["sketch"], Is.GreaterThanOrEqualTo(1), "The exclusion is counted before iteration, not hidden.");
             Assert.That(read.Counted, Is.GreaterThan(read.Kept));
             using var boxBytes = new MemoryStream();
-            var boxes = Scene.Write(doc, new SceneRequest([first.Id.Value(), last.Id.Value()], 3, ContextRepresentation: SceneContextRepresentation.Boxes), boxBytes);
+            var boxes = Scene.Write(doc, new SceneRequest([first.Id.Value(), last.Id.Value()], 3, ContextRepresentation: SceneContextRepresentation.Oriented), boxBytes);
             Assert.That(boxes.Elements.Any(e => e.Handle.ElementId == gap.Id.Value()), Is.False,
                 "Boxes read per-element reach too: the gap inside the focus's enclosing crop is never iterated.");
             Assert.That(boxes.Elements.Any(e => e.Handle.ElementId == wall.Id.Value()), Is.True);

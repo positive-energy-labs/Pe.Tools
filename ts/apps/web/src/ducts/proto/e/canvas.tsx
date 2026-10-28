@@ -154,7 +154,9 @@ function Canvas({
   onSelect,
   onPose,
 }: ProtoProps & ECanvasExtra & { snapshot: NonNullable<ProtoProps["snapshot"]> }) {
-  const [contextRepresentation, setContextRepresentation] = useState<"boxes" | "meshes">("boxes");
+  const [contextRepresentation, setContextRepresentation] = useState<"oriented" | "meshes">(
+    "oriented",
+  );
   const { hovered, onHover, lit } = useElementAttention();
   const hoveredIssue = useHoveredIssue();
   const observation = useNativeObservation();

@@ -6,7 +6,7 @@ export const sceneRequest = (
   elementIds: readonly number[],
   focusOnly = true,
   contextPaddingFt = 15,
-  contextRepresentation: ContextRepresentation = "boxes",
+  contextRepresentation: ContextRepresentation = "oriented",
 ) => {
   if (elementIds.some((id) => !Number.isSafeInteger(id) || id <= 0))
     throw Error("Use positive host element ids separated by commas");

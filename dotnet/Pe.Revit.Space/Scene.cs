@@ -9,12 +9,12 @@ namespace Pe.Revit.Space;
 
 public enum SceneContextRepresentation {
     [EnumMember(Value = "none")] None,
-    [EnumMember(Value = "boxes")] Boxes,
+    [EnumMember(Value = "oriented")] Oriented,
     [EnumMember(Value = "meshes")] Meshes
 }
 public enum SceneRepresentation {
     [EnumMember(Value = "mesh")] Mesh,
-    [EnumMember(Value = "box")] Box,
+    [EnumMember(Value = "oriented-box")] OrientedBox,
     [EnumMember(Value = "run")] Run
 }
 public enum SceneRunShape {
@@ -29,14 +29,17 @@ public sealed record SceneRequest(
     int MaxTriangles = 1500000,
     Aabb? Bounds = null,
     bool FocusOnly = false,
-    SceneContextRepresentation ContextRepresentation = SceneContextRepresentation.Boxes
+    SceneContextRepresentation ContextRepresentation = SceneContextRepresentation.Oriented
 );
 
 /// <summary>Straight physical run. Points and dimensions use host internal feet; X is the unit width axis.</summary>
 public sealed record SceneRun(IReadOnlyList<double> Start, IReadOnlyList<double> End, SceneRunShape Shape,
     double? WidthFt, double? HeightFt, double? DiameterFt, IReadOnlyList<double> CrossSectionXAxis);
+/// <summary>Element-local box placed in host feet. Axes are an orthonormal right-handed frame; HalfSize is in feet.</summary>
+public sealed record SceneOrientedBox(IReadOnlyList<double> Center, IReadOnlyList<double> AxisX,
+    IReadOnlyList<double> AxisY, IReadOnlyList<double> AxisZ, IReadOnlyList<double> HalfSize);
 public sealed record SceneElement(Handle Handle, int FirstVertex, int VertexCount, Aabb Bounds, bool Focus, long? CategoryId,
-    SceneRepresentation Representation, SceneRun? Run);
+    SceneRepresentation Representation, SceneRun? Run, SceneOrientedBox? OrientedBox = null);
 public enum SceneSourceState {
     [EnumMember(Value = "loaded")] Loaded,
     [EnumMember(Value = "unloaded")] Unloaded,
@@ -87,7 +90,7 @@ public static class Scene {
         if (request.MaxTriangles is < 1 or > 3000000)
             throw new ArgumentException("maxTriangles must be between 1 and 3000000.");
         if (!Enum.IsDefined(typeof(SceneContextRepresentation), request.ContextRepresentation))
-            throw new ArgumentException("contextRepresentation must be none, boxes or meshes.");
+            throw new ArgumentException("contextRepresentation must be none, oriented or meshes.");
         if (!Finite(request.ContextPaddingFt) || request.ContextPaddingFt is < 0 or > 1000)
             throw new ArgumentException("contextPaddingFt must be between 0 and 1000.");
         if (request.Bounds is { } b && (!Finite(b.MinX, b.MinY, b.MinZ, b.MaxX, b.MaxY, b.MaxZ)
@@ -138,7 +141,7 @@ public static class Scene {
             var row = new PrimRow(partition.Source, element.Id.Value(), element.UniqueId, element.Category?.Name ?? "<none>",
                 PrimKind.Element, bounds, 0, HeightRole: HeightRoles.Of(element.Category?.Id.Value(), element is ImportInstance));
             elements.Add(new SceneElement(partition.HandleFor(row), triangles * 3, 0, bounds, isFocus,
-                element.Category?.Id.Value(), run is null ? SceneRepresentation.Box : SceneRepresentation.Run, run));
+                element.Category?.Id.Value(), run is null ? SceneRepresentation.OrientedBox : SceneRepresentation.Run, run));
             partition.RecordScene(new LinkedGeometryStore.Geometry([row], []));
             writtenBounds = Union(writtenBounds, bounds);
         }
@@ -252,7 +255,7 @@ public static class Scene {
                         reads[partition] = reads[partition] with { Kept = reads[partition].Kept + 1 };
                         // ETW showed Revit retains native tessellation allocations; bound what we ask it to tessellate.
                         // Bounds/runs never enter mesh capture or acquire a geometry cache lease.
-                        if (context == SceneContextRepresentation.Boxes) {
+                        if (context == SceneContextRepresentation.Oriented) {
                             Primitive(partition, element, box.Value, ReadRun(element, partition.Transform), false);
                             continue;
                         }
@@ -287,7 +290,7 @@ public static class Scene {
                 if (limit is not null) throw new InvalidOperationException($"Scene acquisition stopped ({limit}) before a representation could be published.");
                 throw new ArgumentException("No representation fits this scope and triangle budget.");
             }
-            return new SceneMetadata("space-scene-v3", world.StampFor(world.Partitions, Filter.Default), crop ?? writtenBounds,
+            return new SceneMetadata("space-scene-v4", world.StampFor(world.Partitions, Filter.Default), crop ?? writtenBounds,
                 triangles, elements, ids.ToList(), omitted, world.Partitions.Select(p => new SceneSource(p.DocumentKey,
                     p.LinkInstanceId, Matrix(p.Transform), SceneSourceState.Loaded, p.Doc.Title,
                     reads.TryGetValue(p, out var r) ? new SceneSourceRead(r.Reach.Counted, r.Kept, r.Reach.Excluded,

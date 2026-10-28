@@ -5961,7 +5961,7 @@ export namespace RevitDetailSpaceRows {
 /** Export native meshes and sized straight physical runs in host internal feet. focusOnly captures host elementIds without context. Context is read per focus element: each element's own box (a run's location line and size) grown by contextPaddingFt, in every host and link placement, as one quick filter per source before any element loads; explicit bounds replace that reach. Centre-line helpers, insulation, view-owned elements, CAD and link noise classes are excluded before iteration, and every source placement (loaded, unloaded or unavailable) reports what reach counted, kept, excluded by class and cut by a bound; detachedElementIds names focus members far from the rest. Context defaults to native boxes and sized runs without tessellating; contextRepresentation meshes acquires Coarse context in the same reach. none suppresses context. Primitive rows own zero vertices; representation distinguishes mesh, box and run. Metadata phase distinguishes focus/context, unavailableElements identifies requested ids without meshes, omittedElements counts context excluded by the output budget, and completeness reports deferred context and acquisition resource limits. Successful artifacts preserve focus membership; unsupported parametric focus retains Medium/Fine meshes. Native triangle counts stop further acquisition after each tessellated face, so one already allocated face can exceed the acquisition budget. Completeness discloses omitted or deferred context. RPC returns bounded counts and the artifact id; full typed membership and source transforms remain in PSC1. No document mutation. Browser orbit, visibility and cuts need no further native calls. */
 export namespace RevitDetailSpaceScene {
   export namespace Req {
-    export type SceneContextRepresentation = "none" | "boxes" | "meshes";
+    export type SceneContextRepresentation = "none" | "oriented" | "meshes";
 
     export interface Request {
       elementIds?: number[] | null;
@@ -6087,7 +6087,7 @@ export namespace RevitDetailSpaceScene {
      *
      */
     export type HeightRole = "None" | "Floor" | "Overhead" | "ByGeometry";
-    export type SceneRepresentation = "mesh" | "box" | "run";
+    export type SceneRepresentation = "mesh" | "oriented-box" | "run";
     export type SceneRunShape = "round" | "rectangular" | "oval";
     export type SceneSourceState = "loaded" | "unloaded" | "unavailable";
 
@@ -6167,6 +6167,7 @@ export namespace RevitDetailSpaceScene {
       categoryId?: number | null;
       representation: SceneRepresentation;
       run?: null | SceneRun;
+      orientedBox?: null | SceneOrientedBox;
     }
     /**
      * The address of one element. Enough for the host to select it.

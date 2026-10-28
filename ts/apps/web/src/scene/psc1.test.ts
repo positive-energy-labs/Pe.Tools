@@ -5,6 +5,13 @@ import { contextVisible } from "./context";
 import { LOOK } from "./grounds";
 
 const BOX = { minX: 0, minY: 0, minZ: 0, maxX: 1, maxY: 1, maxZ: 1 };
+const FRAME = {
+  center: [0.5, 0.5, 0.5],
+  axisX: [1, 0, 0],
+  axisY: [0, 1, 0],
+  axisZ: [0, 0, 1],
+  halfSize: [0.5, 0.5, 0.5],
+};
 const handle = (elementId: number, linkInstanceId: number | null = null) =>
   ({
     documentKey: "doc-a",
@@ -154,11 +161,13 @@ describe("PSC1 decode", () => {
       ...e,
       firstVertex: 0,
       vertexCount: 0,
-      representation: "box" as const,
+      representation: "oriented-box" as const,
+      orientedBox: FRAME,
     }));
     elements[0] = {
       ...elements[0]!,
       representation: "run",
+      orientedBox: null,
       run: {
         start: [0, 0, 0],
         end: [0, 0, 1],
@@ -177,13 +186,13 @@ describe("PSC1 decode", () => {
     expect(meshes.instances[1]).toMatchObject({
       revitId: null,
       linkInstanceId: 7,
-      primitive: { kind: "box", bounds: BOX },
+      primitive: { kind: "oriented-box", bounds: BOX, box: FRAME },
     });
   });
   it("rejects primitive ranges, invalid bounds and unsized or nonorthogonal runs", () => {
     const box = {
       ...metadata().elements[0]!,
-      representation: "box" as const,
+      representation: "oriented-box" as const,
       firstVertex: 0,
       vertexCount: 0,
     };
@@ -196,7 +205,16 @@ describe("PSC1 decode", () => {
       crossSectionXAxis: [1, 0, 0],
     };
     const decode = (element: Psc1Metadata["elements"][number]) =>
-      decodeScene(psc1(metadata({ triangles: 0, elements: [element] })));
+      decodeScene(
+        psc1(
+          metadata({
+            triangles: 0,
+            elements: [
+              { ...element, orientedBox: element.representation === "oriented-box" ? FRAME : null },
+            ],
+          }),
+        ),
+      );
     expect(() => decode({ ...box, vertexCount: 3 })).toThrow("range");
     expect(() => decode({ ...box, bounds: { ...BOX, maxX: -1 } })).toThrow("bounds");
     expect(() => decode({ ...box, representation: "run", run: { ...run, widthFt: 0 } })).toThrow(
@@ -211,6 +229,27 @@ describe("PSC1 decode", () => {
     expect(() =>
       decode({ ...box, representation: "run", run: { ...run, crossSectionXAxis: [2, 0, 0] } }),
     ).toThrow("frame");
+  });
+  it("refuses absent, skewed, reflected or bound-inconsistent oriented frames", () => {
+    const base = {
+      ...metadata().elements[0]!,
+      representation: "oriented-box" as const,
+      firstVertex: 0,
+      vertexCount: 0,
+    };
+    for (const orientedBox of [
+      null,
+      { ...FRAME, axisX: [2, 0, 0] },
+      { ...FRAME, axisY: [1, 0, 0] },
+      { ...FRAME, axisZ: [0, 0, -1] },
+      { ...FRAME, halfSize: [0, 1, 1] },
+      { ...FRAME, center: [2, 0.5, 0.5] },
+    ]) {
+      expect(() =>
+        decodeScene(psc1(metadata({ triangles: 0, elements: [{ ...base, orientedBox }] }))),
+      ).toThrow(/box/);
+    }
+    expect(() => decodeScene(psc1(metadata({ format: "space-scene-v3" })))).toThrow("outdated");
   });
   it("refuses old captures and malformed completeness before they can become cache authority", () => {
     expect(() => decodeScene(psc1(metadata({ format: "space-scene-v1" })))).toThrow("outdated");

@@ -112,7 +112,7 @@ export function ModelPicture({
   paintOf: routePaint,
   contextMode,
   contextRadiusFt,
-  contextRepresentation = "boxes",
+  contextRepresentation = "oriented",
   onContextRepresentation,
   kinds,
   colour,
@@ -145,8 +145,8 @@ export function ModelPicture({
   paintOf?: PaintOf;
   contextMode?: ContextMode;
   contextRadiusFt?: number;
-  contextRepresentation?: "boxes" | "meshes";
-  onContextRepresentation?: (representation: "boxes" | "meshes") => void;
+  contextRepresentation?: "oriented" | "meshes";
+  onContextRepresentation?: (representation: "oriented" | "meshes") => void;
   /** Kind to hue and the Colour dial: the two inputs of the paint seam. */
   kinds: Kinds;
   colour: ColourMode;
@@ -413,7 +413,7 @@ export function ModelPicture({
             kind="advisory"
             label={[
               onContextRepresentation
-                ? contextRepresentation === "boxes"
+                ? contextRepresentation === "oriented"
                   ? "Simplified context"
                   : "Detailed context"
                 : "",
@@ -438,16 +438,18 @@ export function ModelPicture({
           {onContextRepresentation && contextMode !== "off" ? (
             <Button
               label={
-                contextRepresentation === "boxes"
+                contextRepresentation === "oriented"
                   ? "Read detailed context"
                   : "Use simplified context"
               }
               busy={read.pending}
               onClick={() =>
-                onContextRepresentation(contextRepresentation === "boxes" ? "meshes" : "boxes")
+                onContextRepresentation(
+                  contextRepresentation === "oriented" ? "meshes" : "oriented",
+                )
               }
             >
-              {contextRepresentation === "boxes"
+              {contextRepresentation === "oriented"
                 ? "Read detailed context"
                 : "Use simplified context"}
             </Button>

@@ -3,7 +3,7 @@ import type { SceneInstance, SceneMeshes, ScenePrimitive } from "./types";
 
 const ROUND_SEGMENTS = 32;
 export const primitiveKey = (p: ScenePrimitive) =>
-  p.kind === "box" || p.run.shape === "rectangular"
+  p.kind === "oriented-box" || p.run.shape === "rectangular"
     ? "box"
     : p.run.shape === "round"
       ? "round"
@@ -66,15 +66,16 @@ export function primitiveTemplate(p: ScenePrimitive): THREE.BufferGeometry {
 
 export function primitiveMatrix(p: ScenePrimitive, origin = new THREE.Vector3()) {
   const matrix = new THREE.Matrix4();
-  if (p.kind === "box") {
-    const b = p.bounds;
+  if (p.kind === "oriented-box") {
+    const b = p.box;
     return matrix
-      .makeScale(b.maxX - b.minX, b.maxY - b.minY, b.maxZ - b.minZ)
-      .setPosition(
-        (b.minX + b.maxX) / 2 - origin.x,
-        (b.minY + b.maxY) / 2 - origin.y,
-        (b.minZ + b.maxZ) / 2 - origin.z,
-      );
+      .makeBasis(
+        new THREE.Vector3().fromArray(b.axisX),
+        new THREE.Vector3().fromArray(b.axisY),
+        new THREE.Vector3().fromArray(b.axisZ),
+      )
+      .scale(new THREE.Vector3().fromArray(b.halfSize).multiplyScalar(2))
+      .setPosition(new THREE.Vector3().fromArray(b.center).sub(origin));
   }
   const r = p.run,
     start = new THREE.Vector3().fromArray(r.start),

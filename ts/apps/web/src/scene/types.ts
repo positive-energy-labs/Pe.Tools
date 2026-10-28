@@ -8,7 +8,7 @@ import type { RevitDetailSpaceScene } from "@pe/host-contracts/generated";
 import type { Look } from "./grounds";
 
 export type ScenePrimitive =
-  | { kind: "box"; bounds: Bounds }
+  | { kind: "oriented-box"; bounds: Bounds; box: RevitDetailSpaceScene.Artifact.SceneOrientedBox }
   | { kind: "run"; bounds: Bounds; run: RevitDetailSpaceScene.Artifact.SceneRun };
 
 /** Axis-aligned bounds in host internal feet. */

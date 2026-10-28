@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { expect, test } from "vite-plus/test";
 import { SceneMeshes, type SceneInstance, type ScenePrimitive } from "./types";
-import { primitiveMatrix, primitiveTemplate } from "./primitives";
+import { primitiveEdges, primitiveMatrix, primitiveTemplate } from "./primitives";
 import { prepareGeometry } from "./prepare-geometry";
 import { prepareFaceBatches } from "./face-batches";
 import { createFacePicker } from "./picking";
@@ -14,6 +14,17 @@ import { sceneMemory } from "./scene-memory";
 import { damageLayers } from "./damage";
 
 const bounds = { minX: 99, minY: 198, minZ: 0, maxX: 101, maxY: 202, maxZ: 10 };
+const box = (b = bounds): ScenePrimitive => ({
+  kind: "oriented-box",
+  bounds: b,
+  box: {
+    center: [(b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2, (b.minZ + b.maxZ) / 2],
+    axisX: [1, 0, 0],
+    axisY: [0, 1, 0],
+    axisZ: [0, 0, 1],
+    halfSize: [(b.maxX - b.minX) / 2, (b.maxY - b.minY) / 2, (b.maxZ - b.minZ) / 2],
+  },
+});
 const run = (shape: "round" | "rectangular" | "oval" = "rectangular"): ScenePrimitive => ({
   kind: "run",
   bounds,
@@ -153,15 +164,15 @@ test.each([false, true])(
 );
 
 test("run stubs cut to actual triangles while untouched boxes retain their compact identity", () => {
-  const box = instance({ kind: "box", bounds: { ...bounds, minX: 120, maxX: 122 } }, 2);
-  box.focus = false;
-  const meshes = scene([instance(run()), box]);
+  const contextBox = instance(box({ ...bounds, minX: 120, maxX: 122 }), 2);
+  contextBox.focus = false;
+  const meshes = scene([instance(run()), contextBox]);
   const clipped = clipMeshes(meshes, new Map([[1, [{ from: [100, 200, 0], at: [100, 200, 4] }]]]));
   const cut = clipped.instances[0]!;
   expect(cut.primitive).toBeUndefined();
   expect(cut.vertexCount).toBeGreaterThan(0);
   expect(instanceBounds(clipped).get(cut)!.maxZ).toBeCloseTo(4);
-  expect(clipped.instances[1]!.primitive).toBe(box.primitive);
+  expect(clipped.instances[1]!.primitive).toBe(contextBox.primitive);
   expect(clipped.instances[1]!.key).toBe("2");
   expect(clipped.bounds.maxX).toBe(122);
   const caps = sectionCaps(scene([instance(run())]), {
@@ -185,7 +196,7 @@ test("a large context keeps zero mesh buffers, one shared box template and relea
   const count = 20_000;
   const meshes = scene(
     Array.from({ length: count }, (_, i) => ({
-      ...instance({ kind: "box", bounds }, i + 1),
+      ...instance(box(), i + 1),
       focus: false,
     })),
   );
@@ -218,4 +229,49 @@ test("a large context keeps zero mesh buffers, one shared box template and relea
     material.dispose();
   }
   expect(sceneMemory.snapshot().owners.active).toBe(baseline);
+});
+
+test("tilted and linked box corners and edges use the element frame through world rebasing", () => {
+  const rotation = new THREE.Matrix4().makeRotationFromEuler(
+    new THREE.Euler(0.47, -0.31, Math.PI / 4),
+  );
+  const x = new THREE.Vector3(),
+    y = new THREE.Vector3(),
+    z = new THREE.Vector3();
+  rotation.extractBasis(x, y, z);
+  const p: ScenePrimitive = {
+    kind: "oriented-box",
+    bounds,
+    box: {
+      center: [100, 200, 5],
+      axisX: x.toArray(),
+      axisY: y.toArray(),
+      axisZ: z.toArray(),
+      halfSize: [7, 2, 0.5],
+    },
+  };
+  const origin = new THREE.Vector3(90, 190, 2);
+  const matrix = primitiveMatrix(p, origin);
+  for (let i = 0; i < 8; i++) {
+    const corner = new THREE.Vector3(i & 1 ? 0.5 : -0.5, i & 2 ? 0.5 : -0.5, i & 4 ? 0.5 : -0.5)
+      .applyMatrix4(matrix)
+      .add(origin);
+    const expected = new THREE.Vector3(100, 200, 5)
+      .addScaledVector(x, i & 1 ? 7 : -7)
+      .addScaledVector(y, i & 2 ? 2 : -2)
+      .addScaledVector(z, i & 4 ? 0.5 : -0.5);
+    expect(corner.distanceTo(expected)).toBeLessThan(1e-10);
+  }
+  const edges = primitiveEdges(p, 30);
+  expect(edges.length).toBe(72);
+  for (let i = 0; i < edges.length; i += 6) {
+    const direction = new THREE.Vector3(
+      edges[i + 3]! - edges[i]!,
+      edges[i + 4]! - edges[i + 1]!,
+      edges[i + 5]! - edges[i + 2]!,
+    ).normalize();
+    expect(Math.max(...[x, y, z].map((axis) => Math.abs(direction.dot(axis))))).toBeGreaterThan(
+      1 - 1e-7,
+    );
+  }
 });
