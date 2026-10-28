@@ -137,7 +137,7 @@ public static class Scene {
             extracted++;
             extractedTriangles += captured.Triangles.Length;
             partition.RecordScene(captured);
-            budget.Retained(focusCount + captured.Triangles.Length);
+            budget.Retained(focusCount + captured.Triangles.Length + oriented.Meshes.TriangleCount);
             return captured;
         }
         try {
@@ -230,7 +230,7 @@ public static class Scene {
                         return false;
                     }
                     kept.Add(triangle); bounds = Union(bounds, Box(triangle));
-                    budget.Retained(focusCount + source.Length + kept.Count);
+                    budget.Retained(focusCount + source.Length + kept.Count + oriented.Meshes.TriangleCount);
                     return true;
                 }
             }

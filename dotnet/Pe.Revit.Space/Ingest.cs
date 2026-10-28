@@ -8,7 +8,8 @@ namespace Pe.Revit.Space;
 internal static class Ingest {
     /// <summary>Managed symbol triangles for one read, keyed by native geometry identity, not family type.</summary>
     internal sealed class SymbolMeshes {
-        internal readonly Dictionary<(Document, string, ViewDetailLevel), (Tri[] Triangles, bool Solid)> Entries = new();
+        internal readonly Dictionary<(string, string, ViewDetailLevel), (Tri[] Triangles, bool Solid)> Entries = new();
+        internal int TriangleCount { get; set; }
     }
     /// <summary>Model categories that carry no obstacle geometry but poison the world AABB.
     /// Proven on projectA: four 3D view crop boxes stretch host X across 13,860 ft.</summary>
@@ -116,7 +117,8 @@ internal static class Ingest {
 
         using (ge) {
             budget?.AfterNative();
-            if (ge is not null) Walk(ge, xf, prim, sink, ref sawSolid, region, xf.HasReflection, budget, symbols, e.Document, o.DetailLevel);
+            if (ge is not null) Walk(ge, xf, prim, sink, ref sawSolid, region, xf.HasReflection, budget, symbols,
+                symbols is null ? "" : e.Document.GetDocumentKey(), o.DetailLevel);
         }
     }
 
@@ -125,7 +127,7 @@ internal static class Ingest {
     // ponytail: loose curves outside a DWG import, and points, are still dropped. Only an
     // ImportInstance raises its curves into ribbons, because only there does a layer name exist.
     private static void Walk(GeometryElement ge, Transform xf, int prim, List<Tri> outp, ref bool sawSolid, Aabb? region, bool reverseWinding, SceneBudget? budget,
-        SymbolMeshes? symbols, Document document, ViewDetailLevel detail) {
+        SymbolMeshes? symbols, string document, ViewDetailLevel detail) {
         // Native symbol hierarchies are acyclic; unlike copied geometry, nested symbols are not flattened.
         foreach (var go in ge) {
             using (go) switch (go) {
@@ -160,8 +162,11 @@ internal static class Ingest {
                 case GeometryInstance gi: {
                     using var local = gi.Transform;
                     using var toHost = xf.Multiply(local);
-                    using var id = gi.GetSymbolGeometryId();
-                    var key = (document, id.AsUniqueIdentifier(), detail);
+                    var key = (document, "", detail);
+                    if (symbols is not null) {
+                        using var id = gi.GetSymbolGeometryId();
+                        key = (document, id.AsUniqueIdentifier(), detail);
+                    }
                     if (symbols is not null && symbols.Entries.TryGetValue(key, out var cached)) {
                         Place(cached.Triangles, toHost, prim, outp, reverseWinding ^ local.HasReflection);
                         sawSolid |= cached.Solid;
@@ -186,6 +191,7 @@ internal static class Ingest {
                             Walk(inner, Transform.Identity, 0, triangles, ref solid, null, false, budget, symbols, document, detail);
                             var value = triangles.ToArray();
                             symbols.Entries.Add(key, (value, solid));
+                            symbols.TriangleCount += value.Length;
                             Place(value, toHost, prim, outp, reverseWinding ^ local.HasReflection);
                             sawSolid |= solid;
                         }

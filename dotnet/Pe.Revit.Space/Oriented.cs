@@ -6,7 +6,7 @@ namespace Pe.Revit.Space;
 
 /// <summary>Operation-owned representation reader. Native wrappers never survive an element read.</summary>
 internal sealed class Oriented(SceneBudget budget) {
-    private readonly Dictionary<(Document, string), LocalBox> _boxes = new();
+    private readonly Dictionary<(string, string), LocalBox> _boxes = new();
     internal readonly Ingest.SymbolMeshes Meshes = new();
     private sealed record LocalBox(double[] Min, double[] Max);
 
@@ -27,7 +27,7 @@ internal sealed class Oriented(SceneBudget budget) {
             using var total = family.GetTotalTransform();
             if (!placement.AlmostEqual(total)) return null;
             using var symbolId = instance.GetSymbolGeometryId();
-            var key = (element.Document, symbolId.AsUniqueIdentifier());
+            var key = (element.Document.GetDocumentKey(), symbolId.AsUniqueIdentifier());
             if (!this._boxes.TryGetValue(key, out var local)) {
                 budget.Native();
                 using var symbol = instance.GetSymbolGeometry();
