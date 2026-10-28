@@ -133,10 +133,10 @@ internal sealed class Partition {
 
     /// <summary>
     ///     The one context query of this source instance: ids whose bounds meet any reach box, counted without
-    ///     loading. Exclusion classes are quick filters with no reach term (category and class indexes), intersected
-    ///     with those ids in managed code; only what survives is iterated, and iterating loads (≈14 KB per element in
-    ///     the Chadds IFC link). Exactly one reach query per source: every query that carries the OR of hundreds of
-    ///     boxes costs ≈0.1–0.4 s (Cleremont SA 19, 13 such queries per source took 6.2 s against main's 1.5 s).
+    ///     loading. Exclusion classes are quick filters over those ids alone (id-seeded collectors, no reach term);
+    ///     only what survives is iterated, and iterating loads (≈14 KB per element in the Chadds IFC link). The reach
+    ///     query is the time cost: it scales with outlines × elements tested (501 outlines over Chadds' host took
+    ///     19.5 s), so outlines merge and their extent filters first. One reach query per source.
     /// </summary>
     /// <param name="reach">Host-frame boxes, each as its 8 corners; mapped into this instance's frame here.</param>
     internal SceneReach Reach(IReadOnlyList<XYZ[]> reach) {
@@ -148,10 +148,6 @@ internal sealed class Partition {
         // The extent of every reach box goes first, so the OR tests only elements already inside it.
         using var extent = Intersecting(local.Aggregate(Union));
         var near = boxes.Count == 1 ? boxes[0] : new LogicalOrFilter(boxes);
-        HashSet<ElementId> Ids(ElementFilter filter) {
-            using var collector = new FilteredElementCollector(this.Doc).WhereElementIsNotElementType().WherePasses(filter);
-            return [.. collector.ToElementIds()];
-        }
         HashSet<ElementId> inside;
         using (var collector = new FilteredElementCollector(this.Doc).WhereElementIsNotElementType().WherePasses(extent).WherePasses(near))
             inside = [.. collector.ToElementIds()];
@@ -160,11 +156,13 @@ internal sealed class Partition {
         foreach (var box in boxes) box.Dispose();
         var excluded = new Dictionary<string, int>(StringComparer.Ordinal);
         var keep = new HashSet<ElementId>(inside);
+        // Each class is counted over the reach ids only (an id-seeded collector), never over the whole document.
         foreach (var (name, match) in Exclusions) {
-            var members = Ids(match);
-            var hits = inside.Count(members.Contains);
-            if (hits == 0) continue;
-            excluded[name] = hits;
+            if (inside.Count == 0) break;
+            using var collector = new FilteredElementCollector(this.Doc, inside).WherePasses(match);
+            var members = collector.ToElementIds();
+            if (members.Count == 0) continue;
+            excluded[name] = members.Count;
             keep.ExceptWith(members);
         }
         var classified = clock.Elapsed.TotalMilliseconds;
