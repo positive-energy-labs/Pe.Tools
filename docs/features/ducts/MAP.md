@@ -226,3 +226,22 @@ Work          pending deltas only, per machine, per document (today's rule, kept
 
 Open on this map: where Defaults live in firm config (Pod vs repo config); the sheet's export
 format; the Cleremont context numbers from the Space thread, still being measured.
+
+## Overnight questions and assumptions (orchestrator, 2026-10-27 night; for kaitpw's morning)
+
+Assumptions taken without a ruling; each is reversible. Questions need a verdict.
+
+**Assumptions**
+- A1 Terminal drop placeholder 0.03 in-wg for every terminal with no typed or catalog drop, marked `SHIM(ducts-terminal-drop)` / `SHIM_TERMINAL_DROP_IN_WG` (kaitpw: "louding comment it as a shim").
+- A2 Side-stream (ERV/MUAS) flow = the unit's design-flow parameter; split across the roster fan ports it reaches by `splitPolicy` even (default) or proportional to the receiving fans' design flow; a typed end cfm wins (kaitpw: "the most flexible").
+- A3 Revit's own terminal Flow is a confirmable project airflow slot (`revit:Flow`). On Chadds it covers 355 of 394 terminals versus 27 for `PE_M_Grd_AirFlow`. History 6 still holds: no silent per-terminal fallback; the project confirms one slot.
+- A4 Fan sheets acquire `from` every port of the unit (both sides); an ERV's read also carries its second fan (ponytail ceiling).
+- A5 The C# `from` walk stops at mechanical equipment with more than two ports; two-port inline equipment (silencer, heater, dehumidifier) passes with an unknown drop.
+- A6 Inputs (slot, split policy, end cfm, drops, asserted inlet port, join rulings) persist in per-document Work for now; the model store is the later home.
+- A7 The new surface is a separate `/sheet` route; `/ducts` is untouched.
+
+**Questions**
+- Q1 MUAS-1's Revit port metadata runs opposite to the .r10 (W1-D). Is this a family authoring error to fix in the family, or should the roster carry an asserted discharge port per unit as a ruling?
+- Q2 Firm terminal-drop table: who owns the values (by family, size, cfm), and where should the defaults file live (Pod vs repo config, open since the map)?
+- Q3 ASHRAE prices the paired elbow about 25% below Manual D 8-A2 (W1-D). Is the firm option for Manual D equivalent lengths needed before engineers trust sheets?
+- Q4 211 path legs enter a tap from its branch (one fan's duct tapping into another fan's main). Should that be a shared-leg ruling ("this tap belongs to fan X") or a modelling defect to fix in Revit?
