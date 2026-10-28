@@ -161,7 +161,7 @@ Verbs          Pea's Sweep/Slice/Probe/Partition read through the same scoped re
 2. The shared context read (landed 2026-10-28 at `5a9f6d58`'s bytes; ledger has the table): link-instance
    partitions, per-element reach before iteration, exclusions, disclosure. Deleted
    `Partition.BuildRegion` and `SceneCandidates`; the `Dirty` and `Fresh` flags and the duplicate
-   pack keys move to step 5. Owed: the warm-read time fix (`41ddd8fe` lineage, own hold).
+   pack keys move to step 5. Warm-read time fix landed at `6842220f` (ledger).
 3. Oriented representation: per-element oriented boxes in full 3D, sketch-based building as
    mesh, PSC1 and the web decoder carry them; tessellate once per type.
 4. Levels as data, drawn in the picture.
