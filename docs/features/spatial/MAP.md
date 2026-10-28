@@ -37,7 +37,9 @@ does not pay for them again.
    (≈14 KB each in the Chadds IFC link, 0.8–2.3 KB in Cleremont's RVT links, ≈1 KB host). So
    every exclusion and every reach is a quick filter applied before iteration. A filter applied
    after the loop (main's halo mode) saves nothing. Counting is free in memory, not in time:
-   one query per source takes 0.01–0.05 s, hundreds take 20–113 s. One OR filter per source.
+   one query per source takes 0.01–0.05 s, hundreds take 20–113 s. One OR filter per source, and
+   a short one: an OR of 501 per-element boxes took 28 s on Chadds SA 7 against main's 5.8 s
+   (probe-r, 2026-10-28). Merge the reach boxes and prefilter by their extent.
 4. **Read near each run, not around the system.** A system's axis-aligned crop is not its
    neighbourhood: a diagonal system's crop is mostly empty, and Cleremont SA 2's is a cube
    1,500 ft wide because of far members. Per-element reach cut candidates 9–82%.
