@@ -453,7 +453,7 @@ def table(results):
         for s, a in m["accuracy"].items():
             sh = a["shareRotatedDrawnAxisAligned"]
             k = a["frameKinds"]
-            L.append(f'| {s} | {a["nonFocus"]} | {a["rotated"]} | {a["rotatedBoxes"]} | **{"n/a" if sh is None else f"{sh:.1%}"}** | {a["unknownFrame"]} | {a["orientedBoxMismatch"]}/{a["orientedBoxChecked"]} | {a["runMismatch"]}/{a["runChecked"]} | {k["none"]}/{k["instance"]}/{k["line"]}/{k["curved"]}/{k["geometrySample"]} |')
+            L.append(f'| {s} | {a["nonFocus"]} | {a["rotated"]} | {a["rotatedBoxes"]} | **{"n/a" if sh is None else f"{sh:.1%}"}** | {a["unknownFrame"]} | {a["orientedBoxMismatch"]}/{a["orientedBoxChecked"]} | {a.get("runMismatch", "-")}/{a.get("runChecked", "-")} | {k["none"]}/{k["instance"]}/{k["line"]}/{k["curved"]}/{k["geometrySample"]} |')
         L.append("")
     return "\n".join(L)
 
@@ -497,11 +497,23 @@ def main():
     r.add_argument("--plan", action="store_true")
     r.add_argument("--pre-script", action="append", default=[], help="read-only .cs script run once per process before the first scene read (repeatable)")
     d = sub.add_parser("diff"); d.add_argument("a"); d.add_argument("b")
+    m = sub.add_parser("merge", help="one table from the models of several runs (later runs win a model)")
+    m.add_argument("out"); m.add_argument("runs", nargs="+")
     c = sub.add_parser("check"); c.add_argument("artifact"); c.add_argument("frames", nargs="?")
     args = ap.parse_args()
     if args.cmd == "diff":
         a, b = (json.loads((Path(p) / "results.json").read_text(encoding="utf8")) for p in (args.a, args.b))
         print(diff(a, b)); return
+    if args.cmd == "merge":
+        runs = [json.loads((Path(p) / "results.json").read_text(encoding="utf8")) for p in args.runs]
+        merged = {"run": {**runs[0]["run"], "mergedFrom": [{"dir": Path(p).name, "commit": r["run"]["commit"], "models": list(r["models"])} for p, r in zip(args.runs, runs)]}, "models": {}}
+        for r in runs:
+            merged["models"].update(r["models"])
+        out = Path(args.out); out.mkdir(parents=True, exist_ok=True)
+        (out / "results.json").write_text(json.dumps(merged, indent=1, default=str), encoding="utf8")
+        note = "\nMerged from: " + ", ".join(f'{x["dir"]} ({x["commit"]}: {", ".join(x["models"])})' for x in merged["run"]["mergedFrom"]) + "\n"
+        (out / "results.md").write_text(table(merged) + note, encoding="utf8")
+        print(out); return
     if args.cmd == "check":
         meta = decode_psc1(Path(args.artifact).read_bytes())
         print(json.dumps(census(meta), indent=1)[:3000])
