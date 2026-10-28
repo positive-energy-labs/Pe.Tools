@@ -86,12 +86,11 @@ public static class Levels {
             if (linked is null) {
                 status = "unavailable";
                 reason = "Link document is unavailable.";
-                if (host.GetElement(instance.GetTypeId()) is RevitLinkType type
-                    && ExternalFileUtils.IsExternalFileReference(host, type.Id)) {
-                    var reference = type.GetExternalFileReference();
-                    var fileStatus = reference?.GetLinkedFileStatus();
+                if (host.GetElement(instance.GetTypeId()) is RevitLinkType type) {
+                    // Cloud links have a load status but no external file reference (Manuella).
+                    var fileStatus = type.GetLinkedFileStatus();
                     status = fileStatus == LinkedFileStatus.Unloaded ? "unloaded" : "unavailable";
-                    reason = fileStatus is null ? reason : $"Link document is {fileStatus}.";
+                    reason = $"Link document is {fileStatus}.";
                 }
             }
             Read(linked, instance.Id.Value(), instance.Name, instance.GetTotalTransform(), status, reason);
