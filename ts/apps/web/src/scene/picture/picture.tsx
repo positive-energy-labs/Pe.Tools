@@ -126,7 +126,7 @@ export function captureRequest(
 }
 
 /** Each element's smallest admitted group's leaves, from the declared members. */
-function hoverGroupsOf(members: Members, admits: (group: SubjectKey) => boolean) {
+export function hoverGroupsOf(members: Members, admits: (group: SubjectKey) => boolean) {
   const leaves = (key: SubjectKey, seen = new Set<SubjectKey>()): SubjectKey[] => {
     if (seen.has(key)) return [];
     seen.add(key);
