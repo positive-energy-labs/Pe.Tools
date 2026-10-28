@@ -139,11 +139,15 @@ internal sealed class Partition {
     ///     19.5 s), so outlines merge and their extent filters first. One reach query per source.
     /// </summary>
     /// <param name="reach">Host-frame boxes, each as its 8 corners; mapped into this instance's frame here.</param>
-    internal SceneReach Reach(IReadOnlyList<XYZ[]> reach) {
+    /// <param name="bound">Host-frame box every reach box is clamped to, as 8 corners: nothing within reach lies outside it.</param>
+    internal SceneReach Reach(IReadOnlyList<XYZ[]> reach, XYZ[] bound) {
         var clock = System.Diagnostics.Stopwatch.StartNew();
         if (reach.Count == 0) return new SceneReach(0, [], new Dictionary<string, int>(), 0, 0, 0, 0, 0);
         using var inverse = this.Transform.Inverse;
-        var local = Merge(reach.Select(corners => Bounds(corners.Select(inverse.OfPoint))).ToList());
+        var limit = Bounds(bound.Select(inverse.OfPoint));
+        var local = Merge(reach.Select(corners => Clamp(Bounds(corners.Select(inverse.OfPoint)), limit))
+            .Where(box => box.Min.X <= box.Max.X && box.Min.Y <= box.Max.Y && box.Min.Z <= box.Max.Z).ToList());
+        if (local.Count == 0) return new SceneReach(0, [], new Dictionary<string, int>(), 0, 0, 0, 0, 0);
         var boxes = local.Select(box => (ElementFilter)Intersecting(box)).ToList();
         // The extent of every reach box goes first, so the OR tests only elements already inside it.
         using var extent = Intersecting(local.Aggregate(Union));
@@ -229,6 +233,10 @@ internal sealed class Partition {
     private static (XYZ Min, XYZ Max) Union((XYZ Min, XYZ Max) a, (XYZ Min, XYZ Max) b) => (
         new XYZ(Math.Min(a.Min.X, b.Min.X), Math.Min(a.Min.Y, b.Min.Y), Math.Min(a.Min.Z, b.Min.Z)),
         new XYZ(Math.Max(a.Max.X, b.Max.X), Math.Max(a.Max.Y, b.Max.Y), Math.Max(a.Max.Z, b.Max.Z)));
+
+    private static (XYZ Min, XYZ Max) Clamp((XYZ Min, XYZ Max) a, (XYZ Min, XYZ Max) b) => (
+        new XYZ(Math.Max(a.Min.X, b.Min.X), Math.Max(a.Min.Y, b.Min.Y), Math.Max(a.Min.Z, b.Min.Z)),
+        new XYZ(Math.Min(a.Max.X, b.Max.X), Math.Min(a.Max.Y, b.Max.Y), Math.Min(a.Max.Z, b.Max.Z)));
 
     private static double Volume((XYZ Min, XYZ Max) b) => (b.Max.X - b.Min.X) * (b.Max.Y - b.Min.Y) * (b.Max.Z - b.Min.Z);
 

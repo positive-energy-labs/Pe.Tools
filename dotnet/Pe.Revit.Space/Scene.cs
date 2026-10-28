@@ -177,7 +177,11 @@ public static class Scene {
             if (ids.Count > 0 && focus.Count + runs.Count == 0 && crop is null)
                 throw new ArgumentException("None of the requested elementIds produced a visible host representation.");
             List<XYZ[]> reach = [];
+            // Every point within reach of a focus element lies inside the focus bounds grown by reach (main's crop),
+            // so each reach outline is clamped to it in each source's frame: a diagonal run's oriented box poked past it.
+            XYZ[] bound = [];
             if (context != SceneContextRepresentation.None) {
+                bound = Corners(request.Bounds ?? focusBounds.Expand(request.ContextPaddingFt));
                 reach = request.Bounds is { } explicitBounds ? [Corners(explicitBounds)]
                     : Reach(focus, runs, request.ContextPaddingFt, out detached);
                 // The crop is the host extent of the reach boxes, never the focus bounds grown: a diagonal run's
@@ -236,7 +240,7 @@ public static class Scene {
                 var candidates = new List<(Partition Source, long Id, Aabb Bounds, double Distance)>();
                 foreach (var partition in world.Partitions) {
                     budget.Check();
-                    var read = partition.Reach(reach);
+                    var read = partition.Reach(reach, bound);
                     reads[partition] = (read, 0, 0);
                     broad += read.Counted;
                     foreach (var element in read.Kept) {
