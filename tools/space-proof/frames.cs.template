@@ -6,7 +6,8 @@ using Autodesk.Revit.DB;
 using Newtonsoft.Json.Linq;
 
 // Space proof harness, accuracy pass. Read-only. For every (link instance id | null, element id) the published
-// PSC1 artifact drew, read the element's OWN frame in Revit and return [index, frame, rotated, yawDeg*10, tiltDeg*10, ratio*100].
+// PSC1 artifact drew, read the element's OWN frame in Revit and return [index, frame, rotated, yawDeg*10, tiltDeg*10, ratio*100, v].
+//   v       host-frame numbers: frame 1 basisX,Y,Z (9); frame 2 start,end,direction (9); frame 3 start,end (6); else empty.
 //   frame   1 instance transform  2 location line  3 curved location  4 sampled geometry (yaw fit)  0 none readable
 //   rotated 1 own frame is not square to the host axes (beyond 0.5 deg), 0 square, -1 unknown
 // Frames are composed with the placed link instance's total transform, never the link document's.
@@ -15,6 +16,7 @@ public sealed class Frames : PeScriptContainer {
     const double Tol = 0.5; // degrees from a world axis
     static bool Axial(XYZ v) { v = v.Normalize(); return Math.Max(Math.Abs(v.X), Math.Max(Math.Abs(v.Y), Math.Abs(v.Z))) >= Math.Cos(Tol * Math.PI / 180); }
     static double Deg(double rad) => rad * 180 / Math.PI;
+    static JArray V(params XYZ[] ps) => new JArray(ps.SelectMany(p => new[] { Math.Round(p.X, 5), Math.Round(p.Y, 5), Math.Round(p.Z, 5) }));
 
     static void Points(GeometryElement g, Transform t, List<XYZ> into) {
         foreach (var o in g) {
@@ -65,30 +67,31 @@ public sealed class Frames : PeScriptContainer {
             long? link = it["link"]!.Type == JTokenType.Null ? null : (long)it["link"]!;
             var (d, t) = Source(link);
             var e = d?.GetElement(new ElementId((long)it["id"]!));
-            if (e is null) { rows.Add(new JArray(i, 0, -1, 0, 0, 0)); continue; }
+            if (e is null) { rows.Add(new JArray(i, 0, -1, 0, 0, 0, new JArray())); continue; }
             if (e is Instance inst && inst.GetTotalTransform() is { } own) {
                 var tt = t.Multiply(own);
                 var tilt = Deg(Math.Acos(Math.Min(1, Math.Abs(tt.BasisZ.Normalize().Z))));
                 rows.Add(new JArray(i, 1, Axial(tt.BasisX) && Axial(tt.BasisY) && Axial(tt.BasisZ) ? 0 : 1,
-                    (int)Math.Round(Deg(Math.Atan2(tt.BasisX.Y, tt.BasisX.X)) * 10), (int)Math.Round(tilt * 10), 0));
+                    (int)Math.Round(Deg(Math.Atan2(tt.BasisX.Y, tt.BasisX.X)) * 10), (int)Math.Round(tilt * 10), 0, V(tt.BasisX.Normalize(), tt.BasisY.Normalize(), tt.BasisZ.Normalize())));
                 continue;
             }
             if (e.Location is LocationCurve lc) {
                 if (lc.Curve is Line line) {
                     var dir = t.OfVector(line.Direction);
                     rows.Add(new JArray(i, 2, Axial(dir) ? 0 : 1, (int)Math.Round(Deg(Math.Atan2(dir.Y, dir.X)) * 10),
-                        (int)Math.Round(Deg(Math.Asin(Math.Min(1, Math.Abs(dir.Normalize().Z)))) * 10), 0));
-                } else rows.Add(new JArray(i, 3, -1, 0, 0, 0));
+                        (int)Math.Round(Deg(Math.Asin(Math.Min(1, Math.Abs(dir.Normalize().Z)))) * 10), 0,
+                        V(t.OfPoint(line.GetEndPoint(0)), t.OfPoint(line.GetEndPoint(1)), dir.Normalize())));
+                } else rows.Add(new JArray(i, 3, -1, 0, 0, 0, V(t.OfPoint(lc.Curve.GetEndPoint(0)), t.OfPoint(lc.Curve.GetEndPoint(1)))));
                 continue;
             }
             var k = link ?? -1; taken.TryGetValue(k, out var n);
-            if (n < sample && (long)it["id"]! % 7 == 0) { // deterministic subset; bounded geometry cost
+            if (n < sample && it["geo"] is { } geo && (bool)geo) { // the harness flags a deterministic stride per source; bounded geometry cost
                 taken[k] = n + 1;
                 var pts = new List<XYZ>();
                 try { using var opt = new Options { DetailLevel = ViewDetailLevel.Coarse }; using var g = e.get_Geometry(opt); if (g != null) Points(g, t, pts); } catch { }
-                if (YawFit(pts) is { } fit) { rows.Add(new JArray(i, 4, fit.ratio > 1.15 ? 1 : 0, (int)Math.Round(fit.yaw * 10), 0, (int)Math.Round(fit.ratio * 100))); continue; }
+                if (YawFit(pts) is { } fit) { rows.Add(new JArray(i, 4, fit.ratio > 1.15 ? 1 : 0, (int)Math.Round(fit.yaw * 10), 0, (int)Math.Round(fit.ratio * 100), new JArray())); continue; }
             }
-            rows.Add(new JArray(i, 0, -1, 0, 0, 0));
+            rows.Add(new JArray(i, 0, -1, 0, 0, 0, new JArray()));
         }
         if (doc.IsModified != before) throw new InvalidOperationException("IsModified changed");
         Result(new JObject { ["rows"] = rows, ["sources"] = new JObject(docs.Select(kv => new JProperty(kv.Key.ToString(), new JObject {

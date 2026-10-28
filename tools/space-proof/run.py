@@ -82,54 +82,80 @@ def _angdiff(a, b, mod):
     return min(d, mod - d)
 
 
-def oriented_box_agrees(box, frame, rotated):
-    """An oriented-box element must carry its element's own axes (step 3 contract: center, axisX/Y/Z, halfSize)."""
+def _dot(a, b):
+    return abs(sum(x * y for x, y in zip(a, b)))
+
+
+def oriented_box_agrees(box, row):
+    """An oriented-box element carries its element's own axes (step 3 contract: center, axisX/Y/Z, halfSize).
+    Instance frame: every box axis lies along a distinct basis vector of the placed total transform (full 3D, roll included).
+    Line frame: some box axis lies along the location line. None when the contract fields or the frame are absent."""
     ax = [box.get("axisX"), box.get("axisY"), box.get("axisZ")]
+    v = row[6] if len(row) > 6 else []
     if any(a is None for a in ax):
         return None
-    kind, yaw10, tilt10 = frame
-    if kind == 1:  # instance transform: yaw modulo 90, tilt of Z against world Z
-        yaw = min(_angdiff(_yaw(a), yaw10 / 10, 90) for a in ax[:2])
-        tilt = math.degrees(math.acos(min(1, abs(ax[2][2]))))
-        return yaw <= 1 and abs(tilt - tilt10 / 10) <= 1
-    if kind == 2:  # location line: some box axis lies along it
-        d = (math.cos(math.radians(yaw10 / 10)) * math.cos(math.radians(tilt10 / 10)), math.sin(math.radians(yaw10 / 10)) * math.cos(math.radians(tilt10 / 10)), math.sin(math.radians(tilt10 / 10)))
-        return any(abs(sum(x * y for x, y in zip(a, d))) >= math.cos(math.radians(1)) for a in ax)
+    c = math.cos(math.radians(1))
+    if row[1] == 1 and len(v) == 9:
+        basis = [v[0:3], v[3:6], v[6:9]]
+        used = set()
+        for a in ax:
+            hit = next((i for i, b in enumerate(basis) if i not in used and _dot(a, b) >= c), None)
+            if hit is None:
+                return False
+            used.add(hit)
+        return True
+    if row[1] == 2 and len(v) == 9:
+        return any(_dot(a, v[6:9]) >= c for a in ax)
     return None
+
+
+def run_agrees(run, row, tol=0.02):
+    """A straight run's endpoints are the location line's endpoints (host ft), in either order."""
+    v = row[6] if len(row) > 6 else []
+    if row[1] != 2 or len(v) != 9 or not run or "start" not in run:
+        return None
+    s, e = run["start"], run["end"]
+    d = lambda p, q: max(abs(x - y) for x, y in zip(p, q))
+    return (d(s, v[0:3]) <= tol and d(e, v[3:6]) <= tol) or (d(s, v[3:6]) <= tol and d(e, v[0:3]) <= tol)
 
 
 def accuracy(meta, frames):
     """Share of non-focus elements drawn axis-aligned (box) while their own frame is rotated, read from `frames` rows."""
     items = frame_items(meta)
     rows = {r[0]: r for r in frames["rows"]}
-    out = {"nonFocus": len(items), "rotatedBoxes": 0, "rotated": 0, "unknownFrame": 0, "tally": {}, "orientedBoxMismatch": 0, "orientedBoxChecked": 0}
+    z = lambda: {"nonFocus": 0, "rotated": 0, "rotatedBoxes": 0, "unknownFrame": 0}
+    out = {**z(), "tally": {}, "bySource": {}, "orientedBoxChecked": 0, "orientedBoxMismatch": 0, "runChecked": 0, "runMismatch": 0}
+    kinds = {}
     for i, e in enumerate(items):
-        r = rows.get(i, [i, 0, -1, 0, 0, 0])
-        _, kind, rot = r[0], r[1], r[2]
-        rep = e["representation"]
-        cls = "rotated" if rot == 1 else "square" if rot == 0 else "unknown"
+        r = rows.get(i, [i, 0, -1, 0, 0, 0, []])
+        kind, rot, rep = r[1], r[2], e["representation"]
+        src = str(e["handle"]["linkInstanceId"] if e["handle"]["linkInstanceId"] is not None else "host")
+        bucket = out["bySource"].setdefault(src, z())
+        kinds[kind] = kinds.get(kind, 0) + 1
         t = out["tally"].setdefault(rep, {"rotated": 0, "square": 0, "unknown": 0})
-        t[cls] += 1
-        if rot == 1:
-            out["rotated"] += 1
-            if rep == "box":
-                out["rotatedBoxes"] += 1
-        elif rot == -1:
-            out["unknownFrame"] += 1
+        t["rotated" if rot == 1 else "square" if rot == 0 else "unknown"] += 1
+        for b in (out, bucket):
+            b["nonFocus"] += 1
+            if rot == 1:
+                b["rotated"] += 1
+                b["rotatedBoxes"] += rep == "box"
+            elif rot == -1:
+                b["unknownFrame"] += 1
         if rep == "oriented-box" and isinstance(e.get("orientedBox"), dict):
-            ok = oriented_box_agrees(e["orientedBox"], (kind, r[3], r[4]), rot)
+            ok = oriented_box_agrees(e["orientedBox"], r)
             if ok is not None:
                 out["orientedBoxChecked"] += 1
-                out["orientedBoxMismatch"] += 0 if ok else 1
-    out["shareRotatedDrawnAxisAligned"] = out["rotatedBoxes"] / out["rotated"] if out["rotated"] else None
-    out["shareOfFramedBoxesRotated"] = (
-        out["rotatedBoxes"] / (out["tally"].get("box", {}).get("rotated", 0) + out["tally"].get("box", {}).get("square", 0))
-        if out["tally"].get("box", {}).get("rotated", 0) + out["tally"].get("box", {}).get("square", 0) else None)
-    byk = {}
-    for i, e in enumerate(items):
-        r = rows.get(i, [i, 0, -1])
-        byk[r[1]] = byk.get(r[1], 0) + 1
-    out["frameKinds"] = {"none": byk.get(0, 0), "instance": byk.get(1, 0), "line": byk.get(2, 0), "curved": byk.get(3, 0), "geometrySample": byk.get(4, 0)}
+                out["orientedBoxMismatch"] += not ok
+        if rep == "run":
+            ok = run_agrees(e.get("run"), r)
+            if ok is not None:
+                out["runChecked"] += 1
+                out["runMismatch"] += not ok
+    share = lambda b: b["rotatedBoxes"] / b["rotated"] if b["rotated"] else None
+    out["shareRotatedDrawnAxisAligned"] = share(out)
+    for b in out["bySource"].values():
+        b["shareRotatedDrawnAxisAligned"] = share(b)
+    out["frameKinds"] = {"none": kinds.get(0, 0), "instance": kinds.get(1, 0), "line": kinds.get(2, 0), "curved": kinds.get(3, 0), "geometrySample": kinds.get(4, 0)}
     return out
 
 
@@ -354,7 +380,15 @@ def run_model(name, args, out: Path, fixture, results):
             for system in group:
                 meta = model["_meta"].pop(system)
                 items = frame_items(meta)
-                req = {"items": [{"link": e["handle"]["linkInstanceId"], "id": e["handle"]["elementId"]} for e in items], "geometrySamplePerSource": 300}
+                per = {}
+                for e in items:
+                    per[e["handle"]["linkInstanceId"]] = per.get(e["handle"]["linkInstanceId"], 0) + 1
+                seen = {}
+                req = {"items": [], "geometrySamplePerSource": 300}
+                for e in items:  # deterministic stride per source: about 900 flagged, the script keeps the first 300 that have no readable frame
+                    k = e["handle"]["linkInstanceId"]
+                    seen[k] = seen.get(k, 0) + 1
+                    req["items"].append({"link": k, "id": e["handle"]["elementId"], "geo": seen[k] % max(1, per[k] // 900) == 0})
                 rf = ev / f"frames-{system.replace(' ', '')}.items.json"
                 rf.write_text(json.dumps(req), encoding="utf8")
                 cs = ev / f"frames-{system.replace(' ', '')}.cs"
@@ -409,11 +443,11 @@ def table(results):
                     kept[k.split("|")[0]] = kept.get(k.split("|")[0], 0) + n
                 L.append(f'- {x["system"]}: ' + ", ".join(f'{s.get("linkInstanceId") or "host"} kept {kept.get(str(s.get("linkInstanceId") or "host"), 0)}' + "".join(f" {k} {v}" for k, v in s.items() if k not in ("documentKey", "linkInstanceId", "sourceToHost")) for s in x["sources"]))
         L += ["", "### Accuracy (non-focus elements of the cold context artifact against their own frame, read in Revit)", "",
-              "| system | non-focus | own frame rotated | rotated drawn as box | **share rotated drawn axis-aligned** | frame unknown | oriented-box mismatch | frame kinds (none/instance/line/curved/geo) |", "|---|--:|--:|--:|--:|--:|--|--|"]
+              "| system | non-focus | own frame rotated | rotated drawn as box | **share rotated drawn axis-aligned** | frame unknown | oriented-box mismatch | run endpoint mismatch | frame kinds (none/instance/line/curved/geo) |", "|---|--:|--:|--:|--:|--:|--|--|--|"]
         for s, a in m["accuracy"].items():
             sh = a["shareRotatedDrawnAxisAligned"]
             k = a["frameKinds"]
-            L.append(f'| {s} | {a["nonFocus"]} | {a["rotated"]} | {a["rotatedBoxes"]} | **{"n/a" if sh is None else f"{sh:.1%}"}** | {a["unknownFrame"]} | {a["orientedBoxMismatch"]}/{a["orientedBoxChecked"]} | {k["none"]}/{k["instance"]}/{k["line"]}/{k["curved"]}/{k["geometrySample"]} |')
+            L.append(f'| {s} | {a["nonFocus"]} | {a["rotated"]} | {a["rotatedBoxes"]} | **{"n/a" if sh is None else f"{sh:.1%}"}** | {a["unknownFrame"]} | {a["orientedBoxMismatch"]}/{a["orientedBoxChecked"]} | {a["runMismatch"]}/{a["runChecked"]} | {k["none"]}/{k["instance"]}/{k["line"]}/{k["curved"]}/{k["geometrySample"]} |')
         L.append("")
     return "\n".join(L)
 
