@@ -460,6 +460,8 @@ export function Picture<L extends string>({
           <>
             <div
               ref={setPictureHost}
+              // Exception to "the core names no surface": tests/e2e/route-chaos.test.ts still selects
+              // E's picture by `data-proto="E"`. Move that test to `data-picture`, then drop this.
               data-proto="E"
               data-picture=""
               aria-busy={read.pending || undefined}
