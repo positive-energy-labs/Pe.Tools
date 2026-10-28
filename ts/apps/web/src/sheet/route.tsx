@@ -16,7 +16,7 @@ import { SheetInputs } from "./inputs";
 
 const manifest = defineRoute({ key: "sheet", name: "Pressure sheet", needs: "document" });
 
-export function SheetWorkspace({ target }: { target: DocumentRef }) {
+function SheetWorkspace({ target }: { target: DocumentRef }) {
   const state = useSheet(target);
   const [selectionMessage, setSelectionMessage] = useState<string | null>(null);
   const scope = { document: target, source: "native" as const };

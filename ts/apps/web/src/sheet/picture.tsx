@@ -38,7 +38,7 @@ export function proposalLayer(blockers: DuctsSheetOverview["blockers"]): Layer3D
 }
 
 /** An edge layer over existing geometry. The scene owns its strokes and disposal. */
-export function pathLayer(meshes: SceneMeshes, ids: ReadonlySet<number>): Layer3D {
+function pathLayer(meshes: SceneMeshes, ids: ReadonlySet<number>): Layer3D {
   return {
     key: "sheet-worst-path",
     build(group) {
