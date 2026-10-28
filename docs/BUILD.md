@@ -49,7 +49,10 @@ the host's loaded payload, not fresh worktree C# or host code. See
 
 The same boundary runs in production preview. Build with the borrowed host environment set so the
 bundle retains that host's service identity; an ordinary distributable build still binds `host`.
-From the worktree's `ts/apps/web`, these commands start no host or Revit process:
+From the worktree's `ts/apps/web`, these commands start no host or Revit process. Run `vp build`
+there directly: `vp run --filter @pe/web build` from the root drops `PE_WEB_READ_HOST_CHECKOUT`,
+and the bundle binds `host`, so the checkout host answers 403 `runtime.owner-mismatch` (two
+agents, 2026-10-28):
 
 ```powershell
 $env:PE_WEB_READ_HOST_CHECKOUT = 'C:/Users/kaitp/source/repos/Pe.Tools'
