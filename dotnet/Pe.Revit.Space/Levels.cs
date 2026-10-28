@@ -6,8 +6,10 @@ namespace Pe.Revit.Space;
 /// A host or site file can contain several buildings; the member names remain authoritative.</summary>
 public sealed record SceneLevelSource(int Source, string? DocumentKey, long? LinkInstanceId, string Name,
     string Status, int? CountedLevels, IReadOnlyList<long> UnavailableLevelIds, string? Reason);
+/// <summary>An authored scope box, not an inferred building identity.</summary>
+public sealed record SceneLevelScope(long ElementId, string Name);
 public sealed record SceneLevelMember(int Source, long ElementId, string UniqueId, string Name,
-    double ProjectElevationFt, bool BuildingStory);
+    double ProjectElevationFt, bool BuildingStory, SceneLevelScope? Scope);
 /// <summary>A measured plane in host internal feet. Coincident planes retain every member and source.</summary>
 public sealed record SceneLevelPlane(IReadOnlyList<double> Point, IReadOnlyList<double> Normal,
     IReadOnlyList<SceneLevelMember> Members);
@@ -25,7 +27,8 @@ public sealed record SceneLevelReceipt(int Levels, int Planes, int CoincidentGro
 public static class Levels {
     // Below Revit's geometric tolerance; names at the same height must not be lost or shift a plane.
     private const double CoincidentFt = 1e-6;
-    private sealed record Datum(long Id, string UniqueId, string Name, double ProjectElevationFt, bool BuildingStory);
+    private sealed record Datum(long Id, string UniqueId, string Name, double ProjectElevationFt, bool BuildingStory,
+        SceneLevelScope? Scope);
 
     public static SceneLevels Read(Document host, System.Threading.CancellationToken cancellationToken = default) {
         using var process = Process.GetCurrentProcess();
@@ -51,8 +54,11 @@ public static class Levels {
                     if (document.GetElement(id) is not Level level) { data.Missing.Add(id.Value()); continue; }
                     // FOOTGUN: Level.Elevation uses the selected base point. Cleremont differs by 737 ft;
                     // one linked file even mixes bases. ProjectElevation alone shares the geometry frame.
+                    var scopeId = level.get_Parameter(BuiltInParameter.DATUM_VOLUME_OF_INTEREST)?.AsElementId();
+                    var scope = scopeId is not null && document.GetElement(scopeId) is { } box
+                        ? new SceneLevelScope(box.Id.Value(), box.Name) : null;
                     data.Levels.Add(new Datum(level.Id.Value(), level.UniqueId, level.Name, level.ProjectElevation,
-                        level.get_Parameter(BuiltInParameter.LEVEL_IS_BUILDING_STORY)?.AsInteger() == 1));
+                        level.get_Parameter(BuiltInParameter.LEVEL_IS_BUILDING_STORY)?.AsInteger() == 1, scope));
                 }
                 documents.Add(document, data);
             }
@@ -62,7 +68,7 @@ public static class Levels {
             foreach (var level in data.Levels) {
                 var point = transform.OfPoint(new XYZ(0, 0, level.ProjectElevationFt));
                 var member = new SceneLevelMember(source, level.Id, level.UniqueId, level.Name,
-                    level.ProjectElevationFt, level.BuildingStory);
+                    level.ProjectElevationFt, level.BuildingStory, level.Scope);
                 var coincident = planes.FindIndex(p => Math.Abs(Math.Abs(p.Normal.DotProduct(normal)) - 1) < 1e-10
                     && Math.Abs(p.Normal.DotProduct(point - p.Point)) <= CoincidentFt);
                 if (coincident >= 0) planes[coincident].Members.Add(member);

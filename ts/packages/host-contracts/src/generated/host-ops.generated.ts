@@ -6269,6 +6269,14 @@ export namespace RevitDetailSpaceScene {
       name: string;
       projectElevationFt: number;
       buildingStory: boolean;
+      scope?: null | SceneLevelScope;
+    }
+    /**
+     * An authored scope box, not an inferred building identity.
+     */
+    export interface SceneLevelScope {
+      elementId: number;
+      name: string;
     }
     export interface SceneLevelWork {
       nativeMilliseconds: number;

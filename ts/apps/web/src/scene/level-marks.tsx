@@ -69,7 +69,9 @@ export function LevelReadout({
           plane.members.map((member) => ({
             key: `${member.source}:${member.elementId}`,
             name: member.name,
-            source: sourceName(levels.sources[member.source]!),
+            source: [sourceName(levels.sources[member.source]!), member.scope?.name]
+              .filter(Boolean)
+              .join(" / "),
             plane: index,
             elevation: plane.point[2]!,
             status: "loaded",

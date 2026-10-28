@@ -106,7 +106,9 @@ export function assertLevels(levels: SceneLevels) {
           !levels.sources[m.source] ||
           !Number.isSafeInteger(m.elementId) ||
           typeof m.name !== "string" ||
-          !Number.isFinite(m.projectElevationFt),
+          !Number.isFinite(m.projectElevationFt) ||
+          (m.scope != null &&
+            (!Number.isSafeInteger(m.scope.elementId) || typeof m.scope.name !== "string")),
       )
     )
       throw Error("Invalid level plane metadata");
