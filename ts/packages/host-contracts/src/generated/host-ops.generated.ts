@@ -5958,18 +5958,20 @@ export namespace RevitDetailSpaceRows {
   }
 }
 
-/** Export native meshes and sized straight physical runs in host internal feet. focusOnly captures host elementIds without context. Context defaults to native boxes and sized runs without tessellating context; contextRepresentation meshes explicitly acquires Coarse context within contextPaddingFt of focus bounds, or explicit bounds. none suppresses context. Primitive rows own zero vertices; representation distinguishes mesh, box and run. Metadata phase distinguishes focus/context, unavailableElements identifies requested ids without meshes, omittedElements counts context excluded by the output budget, and completeness reports deferred context and acquisition resource limits. Successful artifacts preserve focus membership; unsupported parametric focus retains Medium/Fine meshes. Native triangle counts stop further acquisition after each tessellated face, so one already allocated face can exceed the acquisition budget. Completeness discloses omitted or deferred context. RPC returns bounded counts and the artifact id; full typed membership and source transforms remain in PSC1. No document mutation. Browser orbit, visibility and cuts need no further native calls. */
+/** Export native meshes and sized straight physical runs in host internal feet. focusOnly captures host elementIds without context. Context is read per focus element: each element's own box (a run's location line and size) grown by contextPaddingFt, in every host and link placement, as one quick filter per source before any element loads; explicit bounds replace that reach. Centre-line helpers, insulation, view-owned elements, CAD and link noise classes are excluded before iteration, and every source placement (loaded, unloaded or unavailable) reports what reach counted, kept, excluded by class and cut by a bound; detachedElementIds names focus members far from the rest. Context defaults to native boxes and sized runs without tessellating; contextRepresentation meshes acquires Coarse context in the same reach. none suppresses context. Primitive rows own zero vertices; representation distinguishes mesh, box and run. Metadata phase distinguishes focus/context, unavailableElements identifies requested ids without meshes, omittedElements counts context excluded by the output budget, and completeness reports deferred context and acquisition resource limits. Successful artifacts preserve focus membership; unsupported parametric focus retains Medium/Fine meshes. Native triangle counts stop further acquisition after each tessellated face, so one already allocated face can exceed the acquisition budget. Completeness discloses omitted or deferred context. RPC returns bounded counts and the artifact id; full typed membership and source transforms remain in PSC1. No document mutation. Browser orbit, visibility and cuts need no further native calls. */
 export namespace RevitDetailSpaceScene {
   export namespace Req {
     export type SceneContextRepresentation = "none" | "boxes" | "meshes";
 
     export interface Request {
       elementIds?: number[] | null;
+      /**
+       * Reach: context is what lies within this distance of each focus element's own box, never a crop around the whole focus.
+       */
       contextPaddingFt?: number;
       maxTriangles?: number;
       bounds?: null | Aabb;
       focusOnly?: boolean;
-      proximity?: boolean;
       contextRepresentation?: SceneContextRepresentation;
     }
     /**
@@ -6010,6 +6012,8 @@ export namespace RevitDetailSpaceScene {
       omittedElements: number;
       unavailableElements: number;
       sources: number;
+      unreadSources: number;
+      detachedElements: number;
       phase: string;
       work: SceneWork;
       completeness: SceneCompleteness;
@@ -6085,6 +6089,7 @@ export namespace RevitDetailSpaceScene {
     export type HeightRole = "None" | "Floor" | "Overhead" | "ByGeometry";
     export type SceneRepresentation = "mesh" | "box" | "run";
     export type SceneRunShape = "round" | "rectangular" | "oval";
+    export type SceneSourceState = "loaded" | "unloaded" | "unavailable";
 
     export interface SceneMetadata {
       format: string;
@@ -6099,6 +6104,7 @@ export namespace RevitDetailSpaceScene {
       unavailableElements: SceneUnavailableElement[];
       work: SceneWork;
       completeness: SceneCompleteness;
+      detachedElementIds: number[];
       levels: SceneLevels;
     }
     /**
@@ -6198,10 +6204,53 @@ export namespace RevitDetailSpaceScene {
       diameterFt?: null | number;
       crossSectionXAxis: number[];
     }
+    /**
+     * One source instance: the host, or one placement of a link. A link document placed three times is three sources.
+     */
     export interface SceneSource {
+      /**
+       * Empty when the link is not loaded; Name then names its link type.
+       */
       documentKey: string;
       linkInstanceId?: number | null;
       sourceToHost: number[];
+      state: SceneSourceState;
+      name: string;
+      /**
+       * What the context read did in this source; null when context was not read or the source is not loaded.
+       */
+      read?: null | SceneSourceRead;
+    }
+    export interface SceneSourceRead {
+      /**
+       * Ids within reach, counted without loading.
+       */
+      counted: number;
+      /**
+       * Elements handed to representation.
+       */
+      kept: number;
+      /**
+       * Ids within reach per exclusion class, removed before iteration; classes may overlap.
+       */
+      excluded: {
+        [k: string]: number;
+      };
+      /**
+       * Passed every quick filter, then refused by the managed gate: loaded for nothing.
+       */
+      rejectedAfterLoad: number;
+      /**
+       * Kept elements left out by a bound: missing native bounds, or the triangle or acquisition budget.
+       */
+      cutByBound: number;
+      milliseconds: number;
+      /**
+       * The reach query; ExcludeMilliseconds the exclusion-class queries; IterateMilliseconds the element loads.
+       */
+      queryMilliseconds: number;
+      excludeMilliseconds: number;
+      iterateMilliseconds: number;
     }
     export interface SceneUnavailableElement {
       elementId: number;
