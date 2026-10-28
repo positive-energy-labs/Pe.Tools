@@ -33,7 +33,7 @@ export function assumedFanFlows(
   const receiving = new Map<string, Set<string>>();
   const bySide = new Map<
     string,
-    { unitId: number; terminals: Map<number, number>; receiving: Set<string> }
+    { unitId: number; ref: string; terminals: Map<number, number>; receiving: Set<string> }
   >();
   const result = new Map<string, AssumedFlow>();
   for (const fan of roster) {
@@ -52,7 +52,14 @@ export function assumedFanFlows(
           const flow = slotFlowOf(n, slot).cfm;
           if (flow != null && flow > 0) terminals.set(n.id, flow);
         }
-        if (e.end.fan && e.end.fan.unitId !== fan.unitId) {
+        // Borrow only where this unit's discharge lands on another unit's intake (MUAS into an ERV inlet).
+        // Other units on a shared trunk are co-sources or co-sinks, not receivers: Chadds' ERVs RV-11 and
+        // RV-23 share an exhaust riser and an OA trunk with five more, and borrowed 3164 cfm each.
+        // Port direction is family metadata (Q1: a tie-break only); it gates an assumed value, never a total.
+        const reached = e.end.connector == null ? undefined : g.byId.get(e.end.elementId);
+        const reachedDir = reached && !isSegment(reached) ? reached.connectors.find((c) => c.index === e.end.connector)?.direction : undefined;
+        const ownDir = unit.connectors.find((c) => c.index === connector)?.direction;
+        if (e.end.kind === "roster-fan-port" && e.end.fan && e.end.fan.unitId !== fan.unitId && ownDir === "out" && reachedDir === "in") {
           others.add(`${e.end.fan.unitId}:${e.end.fan.portIndex}`);
           sideReceiving.add(`${e.end.fan.unitId}:${e.end.fan.portIndex}`);
         }
@@ -60,6 +67,7 @@ export function assumedFanFlows(
       terminalSides.push(terminals);
       bySide.set(`port:${fan.unitId}:${connector}`, {
         unitId: fan.unitId,
+        ref: `${fan.unitId}:${fan.portIndex}`,
         terminals,
         receiving: sideReceiving,
       });
@@ -107,7 +115,11 @@ export function assumedFanFlows(
       unit.facts.some((f) => f.key === "fanFlow" && f.value != null && f.value > 0)
     )
       continue;
-    const terminals = new Map(side.terminals);
+    // A side with no terminals carries its paired side's flow: one stream passes through the fan.
+    // Only a fan with no terminals on either side (MUAS feeding ERVs) borrows the receiving fans' flow;
+    // borrowing per side pushed a big ERV's 3164 cfm through RV-11's 4 in discharge (569 implausible).
+    const paired = side.terminals.size ? side.terminals : (direct.get(side.ref) ?? new Map<number, number>());
+    const terminals = new Map(paired);
     if (!terminals.size)
       for (const other of side.receiving)
         for (const [id, flow] of direct.get(other) ?? []) terminals.set(id, flow);
@@ -116,7 +128,7 @@ export function assumedFanFlows(
     if (cfm > 0)
       result.set(key, {
         cfm,
-        source: `derived from served terminals (assumed); side ${key}, ${terminals.size} covered terminals, slot:${slot}${side.terminals.size ? "" : "; via receiving fan"}`,
+        source: `derived from served terminals (assumed); side ${key}, ${terminals.size} covered terminals, slot:${slot}${side.terminals.size ? "" : paired.size ? "; via paired side" : "; via receiving fan"}`,
       });
     else if (connectorFlow > 0)
       result.set(key, {

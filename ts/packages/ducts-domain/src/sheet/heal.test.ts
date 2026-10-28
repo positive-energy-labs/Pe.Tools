@@ -207,8 +207,9 @@ it("derived served-terminal flow supplies assumed ESP, preserves missing designe
   expect(without.totals.requiredEspAssumedInWg).toBeNull();
   expect(withFlow.totals.requiredEspAssumedInWg).not.toBeNull();
   expect(withFlow.totals.requiredEspInWg).toBeNull();
-  // This side serves the receiving fan's 200 cfm, not the paired return's 100 cfm.
-  expect(withFlow.assumed.legs["1:0>1"]!.flowCfm).toBe(200);
+  // One stream passes through the fan: this side carries its paired return's 100 cfm. The receiving
+  // fan's 200 cfm mixes other air downstream; borrowing it put 3164 cfm through RV-11's 4 in duct.
+  expect(withFlow.assumed.legs["1:0>1"]!.flowCfm).toBe(100);
   expect(withFlow.blockers.some((b) => b.kind === "no-flow")).toBe(true);
   expect(
     Object.values(withFlow.assumed.legs).some((l) =>
