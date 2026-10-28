@@ -197,6 +197,27 @@ class Session:
         return gone
 
 
+def stop_dev_host():
+    """`session start` brings up this checkout's dev host plus its web frontend (~2.5 GiB). The harness started them, so it ends them."""
+    svc = Path(os.environ["LOCALAPPDATA"]) / "Positive Energy" / "Pe.Tools" / "state" / "service"
+    stopped = []
+    for f in svc.glob("host-source-*.json"):
+        try:
+            j = json.loads(f.read_text(encoding="utf8"))
+            if Path(j.get("sourceRoot", "")).resolve() != CHECKOUT or not psutil.pid_exists(j["pid"]):
+                continue
+            root = psutil.Process(j["pid"])
+            tree = root.children(recursive=True) + [root]
+            for p in tree:
+                p.terminate()
+            psutil.wait_procs(tree, timeout=15)
+            stopped += [p.pid for p in tree if not p.is_running()]
+        except Exception as e:
+            print(f"  dev host stop: {f.name}: {e}", flush=True)
+    print(f"  dev host stack stopped: {stopped}", flush=True)
+    return stopped
+
+
 class Peak(threading.Thread):
     """Samples the probe's private bytes at 4 Hz while a call runs."""
     def __init__(self, pid):
@@ -257,7 +278,7 @@ def run_model(name, args, out: Path, fixture, results):
             if code != 0:
                 s.sdk("dialogs", "session", "dialogs", "--id", SID)
                 raise RuntimeError(f"open exit {code}: {[d.get('code') for d in (env or {}).get('diagnostics', [])]}")
-            s.doc = env["result"]["openId"]
+            s.doc = env["result"]["document"]["openId"]
             ps = psutil.Process(s.pid)
             proc["privateAtOpen"] = ps.memory_info().private
             time.sleep(args.settle)
@@ -468,6 +489,7 @@ def main():
         (out / "results.md").write_text(table(results), encoding="utf8")
         if args.baseline:
             (out / "diff.md").write_text(diff(json.loads((Path(args.baseline) / "results.json").read_text(encoding="utf8")), results), encoding="utf8")
+        results["devHostStopped"] = stop_dev_host()
         alive = [p for m in results["models"].values() for p in m["processes"] if p.get("revitPidGone") is False]
         if alive:  # the slot stays held while a probe Revit of ours may still run
             print(f"SLOT KEPT: probe Revit still alive: {[p.get('pid') for p in alive]}", flush=True)
