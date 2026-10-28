@@ -211,11 +211,12 @@ function psc1(): ArrayBuffer {
       limitReason: null,
     },
     sources: [
-      { documentKey: HOST, linkInstanceId: null, sourceToHost: [] },
-      { documentKey: LINK, linkInstanceId: 900, sourceToHost: [] },
+      { documentKey: HOST, linkInstanceId: null, sourceToHost: [], state: "loaded", name: "host", read: null },
+      { documentKey: LINK, linkInstanceId: 900, sourceToHost: [], state: "loaded", name: "link", read: null },
     ],
     phase: "context",
     unavailableElements: [],
+    detachedElementIds: [],
   };
   const json = new TextEncoder().encode(JSON.stringify(metadata));
   const offset = Math.ceil((8 + json.length) / 4) * 4;

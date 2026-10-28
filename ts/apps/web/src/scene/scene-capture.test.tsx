@@ -63,7 +63,7 @@ const finish = async (index: number, id: string) => {
 it("context representation changes retain exact focus and never reuse incompatible coverage", async () => {
   const view = renderHook(
     ({ representation }: { representation: "boxes" | "meshes" }) =>
-      useDuctScene(sceneRequest([7199], false, 10, true, representation), doc, "representation"),
+      useDuctScene(sceneRequest([7199], false, 10, representation), doc, "representation"),
     { initialProps: { representation: "boxes" } },
   );
   expect(native.calls[0]!.request.contextRepresentation).toBe("none");
@@ -91,7 +91,7 @@ it("context representation changes retain exact focus and never reuse incompatib
 
 it("shows exact focus before context, keeps it inspectable, and does not recapture on visual renders or shrink", async () => {
   const view = renderHook(
-    ({ radius, epoch }) => useDuctScene(sceneRequest([7121], false, radius, true), doc, epoch),
+    ({ radius, epoch }) => useDuctScene(sceneRequest([7121], false, radius), doc, epoch),
     { initialProps: { radius: 10, epoch: 3 } },
   );
   expect(native.calls).toHaveLength(1);
@@ -115,34 +115,28 @@ it("shows exact focus before context, keeps it inspectable, and does not recaptu
   expect(view.result.current).toMatchObject({ meshes: { id: "focus-first" }, focusReady: true });
 });
 
-it("fences late scopes and revisions, and radial coverage never satisfies full context", async () => {
+it("fences late scopes and revisions", async () => {
   const view = renderHook(
-    ({ ids, proximity, epoch }) =>
-      useDuctScene(sceneRequest(ids, false, 10, proximity), doc, epoch),
-    { initialProps: { ids: [7122], proximity: true, epoch: 0 } },
+    ({ ids, epoch }) => useDuctScene(sceneRequest(ids, false, 10), doc, epoch),
+    { initialProps: { ids: [7122], epoch: 0 } },
   );
   await finish(0, "old-focus");
   await waitFor(() => expect(native.calls).toHaveLength(2));
-  view.rerender({ ids: [7123], proximity: true, epoch: 0 });
+  view.rerender({ ids: [7123], epoch: 0 });
   expect(native.calls).toHaveLength(3);
   await finish(1, "late-context");
   expect(view.result.current.meshes).toBeNull();
   await finish(2, "new-focus");
   await waitFor(() => expect(native.calls).toHaveLength(4));
-  await finish(3, "new-radial");
-  await waitFor(() => expect(view.result.current.pending).toBe(false));
-  view.rerender({ ids: [7123], proximity: false, epoch: 0 });
+  view.rerender({ ids: [7123], epoch: 1 });
   expect(native.calls).toHaveLength(5);
-  expect(native.calls[4]!.request.proximity).toBe(false);
-  view.rerender({ ids: [7123], proximity: false, epoch: 1 });
-  expect(native.calls).toHaveLength(6);
-  expect(native.calls[5]!.request.focusOnly).toBe(true);
-  await finish(4, "late-full");
+  expect(native.calls[4]!.request.focusOnly).toBe(true);
+  await finish(3, "late-reach");
   expect(view.result.current.meshes).toBeNull();
 });
 
 it("shares identical in-flight reads and fences a replacement document", async () => {
-  const request = sceneRequest([7124], false, 10, true);
+  const request = sceneRequest([7124], false, 10);
   const first = renderHook(() => useDuctScene(request, doc, "snapshot-a"));
   const second = renderHook(({ target }) => useDuctScene(request, target, "snapshot-a"), {
     initialProps: { target: doc },
@@ -161,7 +155,7 @@ it("shares identical in-flight reads and fences a replacement document", async (
 
 it("reuses A/B/A and remounts at the same native revision, but expansion and revision changes read", async () => {
   const hook = ({ id, radius, revision }: { id: number; radius: number; revision: string }) =>
-    useDuctScene(sceneRequest([id], false, radius, true), doc, revision);
+    useDuctScene(sceneRequest([id], false, radius), doc, revision);
   const view = renderHook(hook, { initialProps: { id: 7130, radius: 10, revision: "reuse-a" } });
   await finish(0, "reuse-focus-a");
   await waitFor(() => expect(native.calls).toHaveLength(2));
@@ -189,7 +183,7 @@ it("reuses A/B/A and remounts at the same native revision, but expansion and rev
 
 it("keeps a limited expansion usable without retrying or promoting it over complete smaller coverage", async () => {
   const hook = ({ radius }: { radius: number }) =>
-    useDuctScene(sceneRequest([7140], false, radius, true), doc, "limited-context");
+    useDuctScene(sceneRequest([7140], false, radius), doc, "limited-context");
   const view = renderHook(hook, { initialProps: { radius: 10 } });
   await finish(0, "limited-proof-focus");
   await waitFor(() => expect(native.calls).toHaveLength(2));
@@ -228,7 +222,7 @@ it("keeps a limited expansion usable without retrying or promoting it over compl
 
 it("reports failed optional context separately from the usable focus", async () => {
   const view = renderHook(() =>
-    useDuctScene(sceneRequest([7141], false, 10, true), doc, "context-failure"),
+    useDuctScene(sceneRequest([7141], false, 10), doc, "context-failure"),
   );
   await finish(0, "context-failure-focus");
   await waitFor(() => expect(native.calls).toHaveLength(2));

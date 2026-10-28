@@ -286,7 +286,6 @@ export const sceneRequestOf = (
       ids.sort((a, b) => a - b),
       !page.layers.includes("halo") && !page.layers.includes("context"),
       page.contextRadiusFt ?? 10,
-      !page.layers.includes("context"),
       contextRepresentation,
     ),
     // Whole-document exact focus exceeds 1.5M triangles on Project A. Never drop focus to fit.

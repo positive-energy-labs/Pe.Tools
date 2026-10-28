@@ -6,7 +6,6 @@ export const sceneRequest = (
   elementIds: readonly number[],
   focusOnly = true,
   contextPaddingFt = 15,
-  proximity = false,
   contextRepresentation: ContextRepresentation = "boxes",
 ) => {
   if (elementIds.some((id) => !Number.isSafeInteger(id) || id <= 0))
@@ -17,7 +16,6 @@ export const sceneRequest = (
     contextPaddingFt,
     maxTriangles: 1_500_000,
     focusOnly,
-    proximity,
     contextRepresentation: focusOnly ? ("none" as const) : contextRepresentation,
   };
 };

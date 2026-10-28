@@ -63,7 +63,6 @@ export function useDuctScene(
   if (request && !request.focusOnly) {
     coverage = {
       ...request,
-      proximity: request.proximity && (coverage?.proximity ?? true),
       contextPaddingFt: Math.max(request.contextPaddingFt, coverage?.contextPaddingFt ?? 0),
     };
   }
@@ -72,7 +71,6 @@ export function useDuctScene(
       ? {
           ...request,
           focusOnly: true,
-          proximity: false,
           contextPaddingFt: 0,
           contextRepresentation: "none",
         }
