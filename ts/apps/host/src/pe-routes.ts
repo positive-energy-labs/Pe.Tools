@@ -1,4 +1,5 @@
 import { createScheduledTasks } from "./scheduled-tasks.ts";
+import { createDuctsSheets, sheetNativeRead, type DuctsSheetSources } from "./ducts-sheet.ts";
 import { eligibleThreads, threadHistory } from "./thread-history.ts";
 import { productRoot } from "@pe/host-contracts/service-identity";
 import { normalizePeError } from "@pe/host-contracts/pe-api";
@@ -173,6 +174,7 @@ export interface PeRoutesOptions {
   /** The host log `log.read` pages; the host's own when absent. */
   log?: HostLog;
   ductsAnalysis?: Omit<DuctsAnalysisSources, "readWork">;
+  ductsSheets?: DuctsSheetSources;
 }
 
 const feedbackSchema = peRoutes["feedback.submit"].body;
@@ -251,6 +253,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
         readWork: (key) => work.readRaw(key, "ducts"),
       })
     : null;
+  const sheets = options.ductsSheets ? createDuctsSheets(options.ductsSheets) : null;
   const views = new RouteViewStore();
   const workReads = new OwnerReads();
   const resources = observeResources(work, options.heads, (request, publish, after) => {
@@ -332,6 +335,22 @@ export function createPeRoutes(options: PeRoutesOptions) {
         return json(
           { error: "Scene artifact unavailable; capture it again from its document" },
           404,
+        );
+      }
+    }
+    if (declared.id === "ducts.sheet" || declared.id === "ducts.roster") {
+      if (!sheets) return json({ error: "Duct sheets are unavailable" }, 503);
+      try {
+        return json(
+          declared.id === "ducts.sheet"
+            ? await sheets.sheet(peRoutes["ducts.sheet"].body.parse(await request.json()))
+            : await sheets.roster(peRoutes["ducts.roster"].body.parse(await request.json())),
+        );
+      } catch (error) {
+        const problem = error as { statusCode?: number; message?: unknown };
+        return json(
+          { error: typeof problem?.message === "string" ? problem.message : message(error) },
+          error instanceof z.ZodError ? 400 : (problem?.statusCode ?? 409),
         );
       }
     }
@@ -1161,6 +1180,7 @@ export function makeHostPeRoutes(
   const routes = createPeRoutes({
     workspace: hostWork?.workspace,
     registrations,
+    ductsSheets: { call: sheetNativeRead(hostBaseUrl) },
     ductsAnalysis: {
       root: productDuctsAnalysesPath(),
       producer: { version: resolveHostVersion(), ...hostOwnership },
