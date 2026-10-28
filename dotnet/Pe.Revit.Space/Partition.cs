@@ -164,7 +164,8 @@ internal sealed class Partition {
         var kept = new List<Element>();
         var rejected = 0;
         if (keep.Count > 0) {
-            using var collector = new FilteredElementCollector(this.Doc, keep);
+            // Revit refuses to iterate an id-seeded collector with no filter; the ids are non-type already.
+            using var collector = new FilteredElementCollector(this.Doc, keep).WhereElementIsNotElementType();
             // The managed gate stays as a witness: what it rejects here was loaded for nothing and is disclosed.
             foreach (var element in collector)
                 if (Ingest.Allowed(element)) kept.Add(element); else rejected++;
