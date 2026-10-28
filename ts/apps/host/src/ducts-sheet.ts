@@ -33,7 +33,7 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { BridgeError } from "./bridge.ts";
 
 type SnapshotRequest = {
-  selector: { kind: "document" } | { kind: "from"; unitId: number; portIndex?: number };
+  selector: { kind: "document" } | { kind: "roster" } | { kind: "from"; unitId: number; portIndex?: number };
 };
 const tableRequest = { ids: [...new Set(LOSS_RULES.map((rule) => rule.table))].sort() };
 export interface DuctsSheetSources {
@@ -375,8 +375,8 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
       return ductsSheetResponseSchema.parse(overview(entry));
     },
     async roster(request: DuctsRosterRequest) {
-      // ponytail: document is the only snapshot selector yielding every equipment port; whole-document cost is the ceiling until an equipment selector exists.
-      const acquisition: SnapshotRequest = { selector: { kind: "document" } };
+      // Units and terminals only: the whole-document read exceeded the 16 MiB bridge frame on Chadds (2026-10-28).
+      const acquisition: SnapshotRequest = { selector: { kind: "roster" } };
       const response = await readNative("ducts.snapshot", acquisition, request.target);
       const snapshot = (await response.json()) as DuctSnapshot;
       const roster = suggestRoster(snapshot);
@@ -438,7 +438,8 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
       return ductsRosterResponseSchema.parse({
         target: request.target,
         rows,
-        slots: slotCoverage(snapshot.nodes, snapshot.slots?.terminalFlow),
+        // The active slot is listed even when no terminal holds it (a route default such as "Actual Supply Air Flow" read 0/0 unlisted on Chadds).
+        slots: slotCoverage(snapshot.nodes, [activeSlot, snapshot.slots?.terminalFlow]),
         activeSlot,
       });
     },

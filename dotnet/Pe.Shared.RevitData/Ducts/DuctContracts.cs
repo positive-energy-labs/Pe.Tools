@@ -93,7 +93,9 @@ public enum DuctSelectorKind {
     /// <summary>Exactly the named elements, raw: no groups, roots, flows, issues or systems.</summary>
     [EnumMember(Value = "ids")] Ids,
     /// <summary>A connector walk from one element's HVAC ports (ducts MAP "Where the data comes from", row 1), raw, with open-end candidates.</summary>
-    [EnumMember(Value = "from")] From
+    [EnumMember(Value = "from")] From,
+    /// <summary>The fan roster's read: every HVAC equipment node and air terminal, raw, plus Revit's systems without sections.</summary>
+    [EnumMember(Value = "roster")] Roster
 }
 
 /// <summary>

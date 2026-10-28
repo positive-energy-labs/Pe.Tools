@@ -82,12 +82,28 @@ public static class DuctSnapshots {
             List<DuctNode> rawNodes;
             List<DuctSegment> rawSegments;
             DuctWalk? walk = null;
+            List<DuctSystem> rawSystems = [];
             if (selector.Kind == DuctSelectorKind.From) (rawNodes, rawSegments, walk) = Walk(reader, selector);
+            else if (selector.Kind == DuctSelectorKind.Roster) {
+                // The whole-document read exceeded the 16 MiB bridge frame on Chadds (2026-10-28); the roster needs units, base
+                // equipment, and terminals for each airflow slot's coverage.
+                rawNodes = Of(BuiltInCategory.OST_MechanicalEquipment).Where(e => HvacConnectors(e).Any())
+                    .Select(e => Node(e, DuctNodeKind.Equipment, slots, schemas, network, labelParameter))
+                    .Concat(Of(BuiltInCategory.OST_DuctTerminal).Select(e => Node(e, DuctNodeKind.Terminal, slots, schemas, network, labelParameter)))
+                    .ToList();
+                rawSegments = [];
+                rawSystems = new FilteredElementCollector(doc).OfClass(typeof(MechanicalSystem)).Cast<MechanicalSystem>()
+                    .Where(m => m.SystemType is DuctSystemType.SupplyAir or DuctSystemType.ReturnAir or DuctSystemType.ExhaustAir)
+                    .OrderBy(m => m.Name, StringComparer.Ordinal)
+                    .Select(m => new DuctSystem(m.Id.Value(), m.Name, m.SystemType.ToString(), null,
+                        Try(() => m.BaseEquipment?.Id.Value()), Try(() => m.BaseEquipmentConnector?.Id), null, [], []))
+                    .ToList();
+            }
             else (rawNodes, rawSegments) = Selected(reader, selector);
             return new DuctSnapshotData(
                 new DuctDocument(doc.Title, readAt, clock.ElapsedMilliseconds, network),
                 DuctCoordinateEncoding.NativeDouble,
-                levels, [], rawNodes, rawSegments, [], [], [], [],
+                levels, [], rawNodes, rawSegments, [], [], [], rawSystems,
                 slots, store, storeError,
                 new DuctPhases(phases.Select(ph => ph.Name).ToList(), PhaseViews(doc, phaseNames)),
                 Walk: walk);

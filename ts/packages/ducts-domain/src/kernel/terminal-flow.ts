@@ -49,9 +49,9 @@ export function slotFlowOf(node: Node, slot: string): { slot: string; cfm: numbe
 }
 
 /** Terminals covered by each candidate airflow slot, so a person confirms the project's one slot by coverage. */
-export function slotCoverage(nodes: readonly Node[], named: string | null | undefined): { slot: string; covered: number; total: number }[] {
+export function slotCoverage(nodes: readonly Node[], named: readonly (string | null | undefined)[]): { slot: string; covered: number; total: number }[] {
   const terminals = nodes.filter((n) => n.kind === "terminal");
-  const slots = [...new Set([named, ...terminals.map((t) => t.flowParameter)].filter((s): s is string => !!s)), REVIT_FLOW_SLOT];
+  const slots = [...new Set([...named, ...terminals.map((t) => t.flowParameter)].filter((s): s is string => !!s)), REVIT_FLOW_SLOT];
   return slots
     .map((slot) => ({ slot, covered: terminals.filter((t) => slotFlowOf(t, slot).cfm != null).length, total: terminals.length }))
     .sort((a, b) => b.covered - a.covered);

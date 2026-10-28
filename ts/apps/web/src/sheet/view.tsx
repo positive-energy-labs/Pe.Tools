@@ -61,7 +61,7 @@ export function Roster({
           pressure(fan.requiredEspInWg)
         ) : fan.requiredEspAssumedInWg != null ? (
           <span data-tone="caution">
-            {pressure(fan.requiredEspAssumedInWg)} assumed ? {fan.blockerCount ?? 0} blockers
+            {pressure(fan.requiredEspAssumedInWg)} assumed · {fan.blockerCount ?? 0} blockers
           </span>
         ) : fan.complete === undefined ? (
           "not computed"
@@ -167,7 +167,7 @@ function SideSheet({
         <dl className="grid grid-cols-2 gap-x-4 gap-y-1">
           <dt>Known subtotal · in-wg</dt>
           <dd>{pressure(totals.knownInWg)}</dd>
-          <dt>Assumed ? in-wg</dt>
+          <dt>Assumed · in-wg</dt>
           <dd data-tone="caution">{pressure(totals.assumedInWg)}</dd>
           <dt>Completeness</dt>
           <dd data-tone={totals.complete ? "done" : "alarm"}>
@@ -329,14 +329,14 @@ export function FanSheet({
       {overview.totals?.requiredEspAssumedInWg != null &&
         overview.totals.requiredEspInWg == null && (
           <p data-tone="caution">
-            Assumed ESP: {pressure(overview.totals.requiredEspAssumedInWg)} in-wg ?{" "}
+            Assumed ESP: {pressure(overview.totals.requiredEspAssumedInWg)} in-wg ·{" "}
             {overview.blockers.length} blockers
           </p>
         )}
       {overview.totals?.requiredEspAssumedInWg == null && overview.assumedBlockers.length > 0 && (
         <p data-tone="caution">
-          Assumed ESP unavailable ?{" "}
-          {overview.assumedBlockers.filter((b) => b.kind === "no-flow").length} flow gaps ?{" "}
+          Assumed ESP unavailable ·{" "}
+          {overview.assumedBlockers.filter((b) => b.kind === "no-flow").length} flow gaps ·{" "}
           {overview.assumedBlockers.filter((b) => b.kind !== "no-flow").length} other blockers
         </p>
       )}
