@@ -41,3 +41,10 @@ export const stageTeaching = (): readonly TeachDescriptor[] => [
     items: [...actionTeaching(Object.values(STAGE_ACTIONS)), ...ORBIT_GESTURES],
   },
 ];
+
+/** The picture's two modes, as the pane strip and Help teach them; `S` swaps them. */
+export const PICTURE_MODES = (["model", "schematic"] as const).map((key) => ({
+  key,
+  label: key,
+  says: `The ${key} large, the other in the corner`,
+}));

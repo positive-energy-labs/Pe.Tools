@@ -12,6 +12,7 @@ export {
   SPACE_LAYERS,
   spaceElementKey,
 } from "./routes/index.ts";
+export { pictureFields, type PicturePage } from "./routes/picture.ts";
 export type { History } from "./route-field.ts";
 export * from "./page-keys.ts";
 export * from "./route-doc.ts";

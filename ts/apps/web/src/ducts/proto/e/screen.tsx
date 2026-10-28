@@ -33,12 +33,7 @@ import { useRevitSubjectProps } from "#/revit/element-menu";
 import { noRunBranches } from "@pe/ducts-domain/no-runs";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { AttentionRoot, useIssueHover, useHoveredIssue } from "#/attention";
-import {
-  elementKey,
-  useAttentionDocument,
-  useMembers,
-  type SubjectKey,
-} from "@pe/kit/lang/attention";
+import { elementKey, type SubjectKey } from "@pe/kit/lang/attention";
 import {
   annotatedFindings,
   stageIssues,
@@ -64,7 +59,7 @@ import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length
 import { BarRules, systemNoteCount, systemRowParts } from "./bar";
 import { DuctSettings } from "./settings";
 import { FanFacts, fanFacts, type FanFact } from "./fan-sections";
-import { ECanvas } from "./canvas";
+import { DuctsPicture } from "./picture";
 import { grilleLabels } from "./labels";
 import { FanButton, Inbox, type FanVerbs } from "./inbox";
 import type { WriteVerbs } from "./inbox-write";
@@ -475,7 +470,7 @@ function LoadedScreenBody({
   const reading = encoded.encoding.quantity ? encoded.encoding : null;
   const subjectProps = useRevitSubjectProps();
   const issues = useMemo(() => (inbox ? stageIssues(inbox) : []), [inbox]);
-  const jump = useRef<((id: number) => void) | null>(null);
+  const jump = useRef<((key: SubjectKey) => void) | null>(null);
   const setHoveredIssue = useIssueHover();
   const { epoch, system, systemSearch, systemSort } = page;
   const systemKeys = useMemo(
@@ -507,8 +502,6 @@ function LoadedScreenBody({
     trees.forEach(walk);
     return map;
   }, [issues, trees]);
-  useAttentionDocument(props.attentionDoc, props.selection);
-  useMembers(props.attentionDoc, membership);
   // The picture annotates the Fix rows' findings, or the Diagnostics kind picked in its key.
   const kindClause = page.rulingSearch.pills.find(
     (pill) => pill.field === "kind" && pill.op === "=",
@@ -908,7 +901,7 @@ function LoadedScreenBody({
       doc: props.attentionDoc,
       nameOf: subjectName,
 
-      go: (id: number) => (jump.current ? jump.current(id) : select(id)),
+      go: (id: number) => (jump.current ? jump.current(elementKey(id)) : select(id)),
       refProps: subjectProps,
     }),
     [props.attentionDoc, subjectName, select, subjectProps],
@@ -933,10 +926,10 @@ function LoadedScreenBody({
                 "e-rules": (pane) => pane(rulesPanes[0], { meta: scope?.name ?? "" }),
                 "e-picture": (pane) => (
                   <div className="relative size-full min-w-0">
-                    <ECanvas
+                    <DuctsPicture
                       renderPane={pane}
                       {...props}
-                      onIssueHover={setHoveredIssue}
+                      membership={membership}
                       issueScope={issueScope}
                       annotated={annotated}
                       issues={issues}

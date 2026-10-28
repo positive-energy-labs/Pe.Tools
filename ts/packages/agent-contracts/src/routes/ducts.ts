@@ -1,17 +1,7 @@
 import { listSearchKey, listSearchCodec } from "../list-search.ts";
 import { z } from "zod";
-import { sceneViewSchema, sceneViewCodec } from "../scene-view.ts";
-import {
-  fitViewportCodec,
-  layersKey,
-  modeKey,
-  orbitLooks,
-  viewportCodec,
-  viewportKey,
-  viewportSchema,
-  type OrbitLook,
-  type Viewport,
-} from "../page-keys.ts";
+import { orbitLooks, viewportCodec, type OrbitLook } from "../page-keys.ts";
+import { pictureFields } from "./picture.ts";
 import { DUCTS_FINDS } from "../ducts.ts";
 import { field, setKeys, text, type RouteDeclaration } from "../route-field.ts";
 
@@ -28,13 +18,16 @@ export const DUCTS_LAYERS = [
   "findings",
 ] as const;
 
+/** The picture's keys; the default encoding is this view's choice. */
+const picture = pictureFields(
+  DUCTS_LAYERS,
+  ["meshes", "system-colours", "stub-labels", "halo", "no-run", "labels", "findings"],
+  "health",
+);
+
 const ductsFields = {
-  contextRadiusFt: field(z.number().min(0).max(64).default(10), { url: "replace", agent: "set" }),
-  sceneView: field(
-    sceneViewSchema.default({ preset: "all", section: null }),
-    { url: "replace", agent: "set" },
-    sceneViewCodec,
-  ),
+  contextRadiusFt: picture.contextRadiusFt,
+  sceneView: picture.sceneView,
   /**
    * The subject: the open Revit system names, oldest first, each read across every group it is in;
    * the last is the active one the write, heal and fan verbs act on. Empty = the whole document.
@@ -42,8 +35,7 @@ const ductsFields = {
   system: field(z.array(z.string().max(200)).default([]), { url: "push", agent: "set" }),
   /** A level id; empty = every level. */
   level: field(text(), { url: "push", agent: "set" }),
-  /** The selected element id; empty = none. */
-  selected: field(text(), { url: "push", agent: "set" }),
+  selected: picture.selected,
   systemSearch: field(
     listSearchKey().describe(
       "JSON {v:1,keywords:string,pills:[{field,op:'=',value}]}. Literal AND keywords and equality pills: airType (SupplyAir, ReturnAir, ExhaustAir), status (priced, unpriced), needsFix (yes, no). Needs a fix means at least one scoped Fix row holds the price.",
@@ -76,44 +68,12 @@ const ductsFields = {
     listSearchCodec,
   ),
   inputSort: field(z.enum(["", "name"]).default(""), { url: "replace", agent: "set" }),
-  /** The picture's encoding, a key of the web's `ENCODINGS`. */
-  encoding: field(z.string().max(200).default("health"), { url: "push", agent: "set" }),
-  /** The layer keys the picture draws; empty = none. */
-  layers: field(
-    layersKey(DUCTS_LAYERS, [
-      "meshes",
-      "system-colours",
-      "stub-labels",
-      "halo",
-      "no-run",
-      "labels",
-      "findings",
-    ]),
-    {
-      url: "push",
-      agent: "set",
-    },
-  ),
-  /**
-   * How the model picture draws context when the halo or context layer is on: `glass` surfaces or
-   * `lines`. With neither layer on, context is off (nothing captured or drawn).
-   */
-  contextStyle: field(modeKey(["lines", "glass"], "glass"), { url: "replace", agent: "set" }),
-  /** What the picture pane draws: the `model` in space, or the `schematic` one-line. */
-  picture: field(modeKey(["model", "schematic"], "model"), { url: "push", agent: "set" }),
-  /** Where the model picture looks from; null = fit the subject. A drag replaces, a preset pushes. */
-  viewport: field(
-    viewportKey(viewportSchema),
-    { url: "replace", agent: "set" },
-    fitViewportCodec<Viewport>(),
-  ),
-  /**
-   * The selected inbox row: an issue id (it may name no element), or `<segment>:<cell key>` for a
-   * Work cell; empty = none. Exception to "Pea's, never the URL's": the chat head's review link is
-   * an address (`LinkPage` carries URL keys only) and must land on a cell's row. `replace`, so a
-   * row pick never fills history; the issue-id half still resets whenever the selection moves.
-   */
-  issue: field(text(), { url: "replace", agent: "set" }),
+  encoding: picture.encoding,
+  layers: picture.layers,
+  contextStyle: picture.contextStyle,
+  picture: picture.picture,
+  viewport: picture.viewport,
+  issue: picture.issue,
 };
 
 type DuctsFacts = {

@@ -2,7 +2,7 @@ import { DUCTS_LAYERS } from "@pe/agent-contracts";
 import { declaredTeaching, type TeachingLayout } from "@pe/kit/lang/teach";
 import { LIST_ACTIONS, LIST_SEARCH_SYNTAX, SEARCH_FOCUS_SYNTAX } from "@pe/kit/lang/list-teaching";
 import { actionTeaching } from "@pe/kit/keys";
-import { stageTeaching } from "#/scene/stage-teaching";
+import { PICTURE_MODES, stageTeaching } from "#/scene/stage-teaching";
 
 const LAYER_WORDS: Record<
   (typeof DUCTS_LAYERS)[number],
@@ -20,11 +20,7 @@ const LAYER_WORDS: Record<
 };
 
 export const DUCTS_LAYER_OPTIONS = DUCTS_LAYERS.map((key) => ({ key, ...LAYER_WORDS[key] }));
-export const DUCTS_PICTURE_MODES = (["model", "schematic"] as const).map((key) => ({
-  key,
-  label: key,
-  says: `The ${key} large, the other in the corner`,
-}));
+
 const search = (label: string) => ({
   kind: "search" as const,
   label: `Search ${label}`,
@@ -85,7 +81,7 @@ const DUCTS_REGIONS = {
     purpose: "Inspect the model or schematic; selecting a system changes the scope.",
     controls: [
       ...stageTeaching(),
-      { kind: "modes" as const, label: "picture", options: DUCTS_PICTURE_MODES },
+      { kind: "modes" as const, label: "picture", options: PICTURE_MODES },
       { kind: "views" as const, label: "layers", options: DUCTS_LAYER_OPTIONS },
     ],
   },

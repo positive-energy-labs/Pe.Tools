@@ -48,7 +48,7 @@ import { unitFlowsIn } from "@pe/ducts-domain/survey";
 import { scopeOf, systemScope, groupsOfSystem } from "@pe/ducts-domain/system-scope";
 import { healWords, networkWord, outcomeWords } from "@pe/ducts-domain/words";
 import { claimsForGroup } from "@pe/ducts-domain/claims";
-import { sceneRequest, type ContextRepresentation } from "#/scene/host";
+import { elementKey } from "@pe/kit/lang/attention";
 import { airflowOptions } from "./airflow";
 import { elementNamer } from "./claims";
 import { espWaits, fanRefusal, fanWords, holding, triage } from "./inbox-rows";
@@ -261,35 +261,21 @@ const currentPricing = (ctx: DuctsCtx) => {
 const pendingOf = (ctx: DuctsCtx) =>
   pendingCount(ctx.work.doc, observed<DuctSnapshot>(ctx, "ducts")?.store);
 
-/** Capture scoped raw and priced members plus connector-derived stubs; context is a separate layer. */
-export const sceneRequestOf = (
+/** E's focus: scoped raw and priced members walked, connector-derived stubs near. The picture
+ * captures both; context is its own layer. Null with no system open. */
+export const ductsFocus = (
   snapshot: DuctSnapshot | null,
-  page: Pick<DuctsPage, "system" | "layers"> & Partial<Pick<DuctsPage, "contextRadiusFt">>,
+  system: DuctsPage["system"],
   drawn: Iterable<number> = [],
   stubs: Iterable<number> = [],
-  contextRepresentation: ContextRepresentation = "boxes",
 ) => {
   if (!snapshot) return null;
   // Only opened systems are read: an unscoped page must never capture the whole document.
-  const scope = scopeOf(snapshot, page.system);
+  const scope = scopeOf(snapshot, system);
   if (!scope) return null;
-  const ids = [
-    ...new Set([
-      ...scope.members,
-      ...drawn,
-      ...stubs,
-    ]),
-  ].filter((id) => id > 0);
-  if (!ids.length) return null;
   return {
-    ...sceneRequest(
-      ids.sort((a, b) => a - b),
-      !page.layers.includes("halo") && !page.layers.includes("context"),
-      page.contextRadiusFt ?? 10,
-      contextRepresentation,
-    ),
-    // Whole-document exact focus exceeds 1.5M triangles on Project A. Never drop focus to fit.
-    maxTriangles: 3_000_000,
+    walked: [...new Set([...scope.members, ...drawn])].map((id) => elementKey(id)),
+    near: [...stubs].map((id) => elementKey(id)),
   };
 };
 

@@ -35,7 +35,7 @@ import type { ProtoProps } from "./proto/props";
 import { useNativeObservation } from "#/revit/observation";
 import { peReadings } from "#/readings";
 import { pricingJob, type PricingRequest, type PricingResponse } from "./pricing-job";
-import type { ModelPicture } from "./model-picture";
+import type { ModelPicture } from "#/scene/picture/model";
 import type { SceneInstance } from "#/scene/types";
 import { scopeOf } from "@pe/ducts-domain/system-scope";
 import { declaredTeaching } from "@pe/kit/lang/teach";
@@ -43,8 +43,8 @@ import { useTeaching } from "@pe/kit/lang/use-teach";
 import { DUCTS_LAYOUT } from "./proto/e/teaching";
 
 const picture = vi.hoisted(() => ({ current: null as Parameters<typeof ModelPicture>[0] | null }));
-vi.mock("./model-picture", async (original) => {
-  const module = await original<typeof import("./model-picture")>();
+vi.mock("#/scene/picture/model", async (original) => {
+  const module = await original<typeof import("#/scene/picture/model")>();
   return {
     ...module,
     ModelPicture: (props: Parameters<typeof ModelPicture>[0]) => {
@@ -631,7 +631,7 @@ test("picture layers choose the Context and Colour dials", async () => {
   const instance = { revitId: 1 } as SceneInstance;
   await mount();
   await waitFor(() => expect(picture.current?.contextMode).toBe("glass"));
-  expect(picture.current!.paintOf!(instance)).toEqual({ tier: "subject", kind: "supply" });
+  expect(picture.current!.paint!(null)!(instance)).toEqual({ tier: "subject", kind: "supply" });
   expect(picture.current?.colour).toBe("firm");
   expect(picture.current?.kinds.supply).toBe("#0569a5");
   act(() => drawing.latest!.setPage({ layers: ["meshes", "halo", "context"] }));
