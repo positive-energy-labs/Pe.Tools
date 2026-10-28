@@ -145,6 +145,9 @@ Verbs          Pea's Sweep/Slice/Probe/Partition read through the same scoped re
   start. A watchdog stop is a boundary: name the consumer from a per-process memory log before
   holding again (a Chadds open on 2026-10-28 dropped machine free 16→1 GiB while the probe held
   1.9 GiB; cause UNPROVEN).
+- A Revit script's `Result()` is capped at 1 MiB: write rows and geometry to a file and return
+  its path (two holds lost to this on 2026-10-28). Run every instrument offline over a saved
+  artifact before it takes the slot.
 - Browser proof runs in a headless Chromium driven by script (Playwright or CDP), never computer
   use. The T3 preview tab never fires requestAnimationFrame, so scene readings never publish there.
 - Real Revit, SDK-controlled probe sessions only; never kaitpw's `pe.app-25`. Cold = first read
