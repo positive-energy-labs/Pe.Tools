@@ -1,0 +1,146 @@
+/**
+ * The fan sheet (docs/features/ducts/MAP.md, Data model): one per roster fan port, recomputed on
+ * every read, never persisted. Legs are keyed once; paths are leg-id lists from the fan outward.
+ * The wire contract (W1-F) mirrors this file; change it there in the same commit.
+ */
+
+export const SHEET_ENGINE_VERSION = "sheet/1";
+
+/** A roster entry's identity: the unit and its discharge connector (roster.ts `FanPort.portIndex`). */
+export interface FanPortRef {
+  unitId: number;
+  portIndex: number;
+}
+
+export type LegKind = "duct" | "fitting" | "accessory" | "equipment" | "terminal";
+
+export interface Leg {
+  /** `${elementId}:${in}>${out}` in walk order (from the fan); an absent side is empty. */
+  id: string;
+  elementId: number;
+  kind: LegKind;
+  /** Walk order, not air order: on the return side air leaves by `inConnector`. */
+  inConnector?: number;
+  outConnector?: number;
+  flowCfm: number | null;
+  /** e.g. `terminals:3`, `side-stream:typed`; null with no flow. */
+  flowSource: string | null;
+  velocityFpm: number | null;
+  /** Null when unpriced or implausible; the reason is a blocker naming this element. */
+  lossInWg: number | null;
+  lossSource: { kind: "friction" | "rule" | "drop" | "default"; ref: string };
+  /** At this leg's own rate (duct and fitting legs only); typed drops stay in in-wg. */
+  equivalentFt: number | null;
+}
+
+export interface PathEnd {
+  kind: "terminal" | "open-end" | "roster-fan-port" | "joins-other-fan";
+  elementId: number;
+  connector?: number;
+  /** The other fan, for roster-fan-port and joins-other-fan. */
+  fan?: FanPortRef;
+}
+
+export type Side = "supply" | "return";
+
+export interface SheetPath {
+  side: Side;
+  legIds: string[];
+  end: PathEnd;
+  /** Sum of the priced legs on the path. */
+  knownInWg: number;
+  /** No blocker on any leg or the end of this path. */
+  complete: boolean;
+  blockerIds: string[];
+}
+
+export type BlockerKind =
+  | "open-end"
+  | "inferred-join"
+  | "unknown-drop"
+  | "no-flow"
+  | "flow-mismatch"
+  | "shared-leg"
+  | "class-change"
+  | "not-priced"
+  | "implausible-loss"
+  | "equipment-pairing";
+
+export interface Blocker {
+  /** `${kind}:${elementId}` plus `:${connector}` when one is named. */
+  id: string;
+  kind: BlockerKind;
+  elementId: number;
+  connector?: number;
+  detail: string;
+  /** Effect on the total when known (an implausible leg's number, kept out of totals). */
+  effectInWg: number | null;
+  closer: {
+    kind: "default" | "heal" | "ruling";
+    note: string;
+    /** A heal or join candidate the closer would act on. */
+    candidate?: { toElementId: number; toConnector: number | null; gapIn: number; pair: [string, string] };
+  };
+  /** The other fan a shared leg or a join belongs to. */
+  owner?: FanPortRef;
+}
+
+export interface SideTotals {
+  /** Worst complete path, in-wg; null when any path on the side is incomplete. */
+  worstPath: number | null;
+  /** Worst known subtotal across the side's paths, complete or not. */
+  knownInWg: number;
+  allowanceInWg: number;
+  complete: boolean;
+  /** Total equivalent length of the worst path, ft. */
+  telFt: number;
+  /** ASP x 100 / TEL on the worst path; null without a worst path. */
+  frictionRatePer100: number | null;
+}
+
+export interface SheetInput {
+  name: string;
+  value: number | string | null;
+  source: string;
+}
+
+export interface Sheet {
+  engineVersion: string;
+  /** Hash of snapshot identity + rulings + defaults + engine version. */
+  basis: string;
+  fan: FanPortRef & {
+    mark: string;
+    ratedEspInWg: number | null;
+    /** The return-side start; null when the roster names none. */
+    inletPortIndex: number | null;
+    /** Displayed as the sum of the flows its ends carry; never an input. */
+    flowCfm: number | null;
+  };
+  legs: Record<string, Leg>;
+  /** Ranked worst first per side, supply first. */
+  paths: SheetPath[];
+  totals: {
+    supply: SideTotals;
+    return: SideTotals;
+    /** Worst supply + worst return + allowances, only when both sides are complete. */
+    requiredEspInWg: number | null;
+  };
+  blockers: Blocker[];
+  inputs: SheetInput[];
+  walkedElementIds: number[];
+}
+
+/** Chain mode: one path between an asserted start and end, in the sheet's shape, with no ESP claim. */
+export interface Chain {
+  engineVersion: string;
+  basis: string;
+  start: { elementId: number; connector?: number };
+  /** `supply`: air flows from start to end; `return`: from end to start. */
+  direction: Side;
+  /** Null when the end is not reached; the blockers say why. */
+  path: SheetPath | null;
+  legs: Record<string, Leg>;
+  blockers: Blocker[];
+  inputs: SheetInput[];
+  walkedElementIds: number[];
+}
