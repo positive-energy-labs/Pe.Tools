@@ -185,6 +185,12 @@ Verbs          Pea's Sweep/Slice/Probe/Partition read through the same scoped re
 6. Follow-on: Pea's verbs read through the scoped read, then re-measure the pack and delete it
    only if its benefit is gone. The production Cleremont Sweep repeat bar is 11.307 s;
    removing the pack before that migration costs 15.677 s (+38.6%) without a proved peak-memory win.
+   In flight (probe-v, unlanded): scoped Sweep on Cleremont 1.45 s cold / +113 MiB / peak 6.9 GiB,
+   repeats 0.77 and 0.41 s, against main's 27.5 s / +2.0 GiB / 8.7 GiB. PROVEN that the reach filter
+   loses nothing: of 2,961 elements in the region plus 5 ft, every one with geometry inside is
+   returned. Main's Slice and Census also return elements with no geometry in the region, because
+   of the axis-aligned box lie. The verb bar is therefore identical answers except those, each
+   proved by a witness to have no piece inside the region.
 
 ## Owed
 
