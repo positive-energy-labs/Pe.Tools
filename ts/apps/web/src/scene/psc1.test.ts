@@ -251,6 +251,53 @@ describe("PSC1 decode", () => {
     }
     expect(() => decodeScene(psc1(metadata({ format: "space-scene-v3" })))).toThrow("outdated");
   });
+  it("accepts a curved round path and refuses broken endpoints or repeated path points", () => {
+    const run = {
+      start: [0, 0, 0],
+      end: [1, 1, 1],
+      shape: "round" as const,
+      diameterFt: 1,
+      crossSectionXAxis: [1, 0, 0],
+      path: [
+        [0, 0, 0],
+        [0, 0, 1],
+        [1, 1, 1],
+      ],
+    };
+    const decode = (path: number[][]) =>
+      decodeScene(
+        psc1(
+          metadata({
+            triangles: 0,
+            elements: [
+              {
+                ...metadata().elements[0]!,
+                firstVertex: 0,
+                vertexCount: 0,
+                representation: "run",
+                orientedBox: null,
+                run: { ...run, path },
+              },
+            ],
+          }),
+        ),
+      );
+    expect(decode(run.path).meshes.instances[0]!.primitive).toMatchObject({ kind: "run", run });
+    expect(() =>
+      decode([
+        [0, 0, 0],
+        [0, 0, 1],
+        [2, 1, 1],
+      ]),
+    ).toThrow("path");
+    expect(() =>
+      decode([
+        [0, 0, 0],
+        [0, 0, 0],
+        [1, 1, 1],
+      ]),
+    ).toThrow("path");
+  });
   it("refuses old captures and malformed completeness before they can become cache authority", () => {
     expect(() => decodeScene(psc1(metadata({ format: "space-scene-v1" })))).toThrow("outdated");
     const old = metadata();
