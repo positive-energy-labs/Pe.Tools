@@ -173,7 +173,12 @@ Verbs          Pea's Sweep/Slice/Probe/Partition read through the same scoped re
 3. Oriented representation: per-element oriented boxes in full 3D, sketch-based building as
    mesh, PSC1 and the web decoder carry them; tessellate once per type.
 4. Levels as data, drawn in the picture (landed 2026-10-28; PROVEN[browser headless over session dev controlled, `probe-l` PID 65552 generation `20261028095218243`, `8eee5175`, 2026-10-28 09:51–09:57Z] on all three models; ledger has the acceptance). Owed: the root inventory from a folded floater (overlay stacking) and the per-process key of path-less link documents (step 5).
-5. Cache key and invalidation; keep or delete `LinkedGeometryStore`.
+5. Cache key and invalidation; keep or delete `LinkedGeometryStore`. Measured 2026-10-28
+   (probe-c): `GetDocumentVersion` does not change on an edit, so it is FALSIFIED as an edit
+   key. The pack saves ≈9% on scene boxes, and deleting it makes a production Sweep repeat
+   38.6% slower (11.3→15.7 s) with no peak-memory win. The store stays until step 6 re-measures
+   it under the scoped read; that 11.3 s repeat is the bar. No geometry is retained in memory
+   across calls.
 6. Follow-on: Pea's verbs read through the scoped read.
 
 ## Owed
