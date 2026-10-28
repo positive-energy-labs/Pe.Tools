@@ -193,7 +193,12 @@ Verbs          Pea's Sweep/Slice/Probe/Partition read through the same scoped re
   reach. Leaning meshes, but meshing IFC context measured 61 s and +5.0 GiB cold on Chadds SA 7
   (31,296 meshes, 2.38 M triangles; probe-o, 2026-10-28) against 4.75 s and +0.5 GiB for main's
   boxes. That breaks the restart goal, so meshes stay on request and the landed default is the
-  cheapest option that is oriented and containing, until kaitpw rules.
+  cheapest option that is oriented and containing, until kaitpw rules. Chadds SA 7 cold, three
+  options (probe-o, 2026-10-28): meshes 61–64 s, +5.0 GiB; triangle-boxes 79 s, +5.0 GiB (both
+  materialize ~32k DirectShapes); link-boxes (each element's box in the link's own frame, then
+  the link transform) 8.5 s, +0.5 GiB, containing by construction, volume within 1.07× of the
+  triangle fit for 90% and over 1.5× for 9.5% (elements rotated inside the link, max 518×).
+  Interim default: link-boxes, with the loose tail disclosed.
 - How much of Cleremont's 7 GB open cost is its links.
 - Link behaviour on a machine without Desktop Connector.
 - CAD as building context: on Manuella, model-level DWG plans are the only building geometry
