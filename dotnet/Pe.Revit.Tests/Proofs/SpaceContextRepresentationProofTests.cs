@@ -4,10 +4,10 @@ using System.IO;
 
 namespace Pe.Revit.Tests;
 
-/// <summary>Native scene primitives must avoid context tessellation and preserve physical run dimensions and roll.</summary>
+/// <summary>Native representations preserve element frames, curved paths, insulation and mesh-only context.</summary>
 public sealed class SpaceContextRepresentationProofTests {
     [Test]
-    public void DefaultBoxesKeepEveryCandidateWithoutAcquiringContextGeometry(UIApplication uiApplication) {
+    public void DefaultUsesNativeMeshesForDirectShapesWithoutAnElementFrame(UIApplication uiApplication) {
         var document = RevitFamilyFixtureHarness.CreateProjectDocument(uiApplication.Application);
         try {
             DirectShape focus;
@@ -21,22 +21,22 @@ public sealed class SpaceContextRepresentationProofTests {
                 transaction.Commit();
             }
             using var bytes = new MemoryStream();
-            var scene = Scene.Write(document, new SceneRequest([focus.Id.Value()], 100, MaxTriangles: 12), bytes);
+            var scene = Scene.Write(document, new SceneRequest([focus.Id.Value()], 100, MaxTriangles: 1000), bytes);
             Assert.That(scene.Format, Is.EqualTo("space-scene-v4"));
             Assert.That(scene.Elements.Select(row => row.Handle.ElementId), Is.EquivalentTo(expectedIds),
                 "A triangle budget must not become a box candidate cap. Actual: " + string.Join(", ",
                     scene.Elements.Select(row => $"{row.Handle.ElementId}:{row.Handle.Category}")));
-            Assert.That(scene.Elements.Where(row => !row.Focus).All(row => row.Representation == SceneRepresentation.OrientedBox
-                && row.VertexCount == 0 && row.FirstVertex == 36 && row.Run is null), Is.True);
-            Assert.That(scene.Work.ContextGeometryCalls, Is.Zero);
-            Assert.That(scene.Work.ExtractedElements, Is.EqualTo(1));
-            Assert.That(scene.Triangles, Is.EqualTo(12));
+            Assert.That(scene.Elements.All(row => row.Representation == SceneRepresentation.Mesh
+                && row.VertexCount == 36 && row.Run is null && row.OrientedBox is null), Is.True);
+            Assert.That(scene.Work.ContextGeometryCalls, Is.EqualTo(40));
+            Assert.That(scene.Work.ExtractedElements, Is.EqualTo(41));
+            Assert.That(scene.Triangles, Is.EqualTo(41 * 12));
             Assert.That(scene.Completeness.Complete, Is.True);
             using var noneBytes = new MemoryStream();
             var none = Scene.Write(document, new SceneRequest([focus.Id.Value()], ContextRepresentation: SceneContextRepresentation.None), noneBytes);
             Assert.That(none.Work.BroadCandidates, Is.Zero);
             Assert.That(none.Elements, Has.Count.EqualTo(1));
-            Assert.That(none.Work.NativeGeometryCalls, Is.EqualTo(scene.Work.NativeGeometryCalls));
+            Assert.That(none.Work.ContextGeometryCalls, Is.Zero);
         } finally { document.Close(false); }
     }
 
@@ -93,14 +93,15 @@ public sealed class SpaceContextRepresentationProofTests {
     }
 
     [Test]
-    public void InsulationAndFlexFocusKeepNativeMeshesRatherThanBoxes(UIApplication uiApplication) {
+    public void InsulatedHostAndCurvedFlexUseNativeDimensionsAndLocationPath(UIApplication uiApplication) {
         var document = MechanicalDocument(uiApplication);
         try {
             DuctInsulation insulation;
             FlexDuct flex;
+            Duct duct;
             using (var transaction = new Transaction(document, "Create unsupported parametric focus")) {
                 transaction.Start();
-                var duct = DuctOfShape(document, ConnectorProfileType.Round, new XYZ(0, 0, 10));
+                duct = DuctOfShape(document, ConnectorProfileType.Round, new XYZ(0, 0, 10));
                 var insulationType = new FilteredElementCollector(document).OfClass(typeof(DuctInsulationType)).FirstElementId();
                 var flexTypes = new FilteredElementCollector(document).OfClass(typeof(FlexDuctType)).Cast<FlexDuctType>().ToList();
                 var flexType = flexTypes.FirstOrDefault(type => type.Shape == ConnectorProfileType.Round);
@@ -128,12 +129,25 @@ public sealed class SpaceContextRepresentationProofTests {
                 "Fixture precondition: the explicitly sized curved flex must expose a native body before Scene capture.");
             Assert.That(insulation, Is.InstanceOf<MEPCurve>(), "This subtype caused the broad-MEPCurve experiment to lose focus.");
             Assert.That(Scene.ReadRun(insulation, Transform.Identity), Is.Null);
-            Assert.That(Scene.ReadRun(flex, Transform.Identity), Is.Null);
+            var flexRun = Scene.ReadRun(flex, Transform.Identity)!;
+            Assert.That(flexRun, Is.Not.Null);
+            Assert.That(flexRun.Path, Is.Not.Null);
+            Assert.That(flexRun.DiameterFt, Is.EqualTo(1).Within(1e-8));
+            var curve = ((LocationCurve)flex.Location).Curve;
+            var nativePath = curve.Tessellate();
+            Assert.That(flexRun.Path!.Count, Is.EqualTo(nativePath.Count));
+            for (var i = 0; i < nativePath.Count; i++) AssertPoint(flexRun.Path[i], nativePath[i]);
+            var hostRun = Scene.ReadRun(duct, Transform.Identity)!;
+            using var manager = duct.ConnectorManager;
+            var connector = manager.Connectors.Cast<Connector>().First();
+            Assert.That(hostRun.DiameterFt, Is.EqualTo(2 * connector.Radius + 2 * insulation.Thickness).Within(1e-8));
             using var bytes = new MemoryStream();
             var scene = Scene.Write(document, new SceneRequest([insulation.Id.Value(), flex.Id.Value()], FocusOnly: true), bytes);
             Assert.That(scene.UnavailableElements, Is.Empty);
             Assert.That(scene.Elements.Select(row => row.Handle.ElementId), Is.EquivalentTo(new[] { insulation.Id.Value(), flex.Id.Value() }));
-            Assert.That(scene.Elements.All(row => row.Focus && row.Representation == SceneRepresentation.Mesh && row.VertexCount > 0), Is.True);
+            Assert.That(scene.Elements.All(row => row.Focus), Is.True);
+            Assert.That(scene.Elements.Single(row => row.Handle.ElementId == flex.Id.Value()).Representation, Is.EqualTo(SceneRepresentation.Run));
+            Assert.That(scene.Elements.Single(row => row.Handle.ElementId == insulation.Id.Value()).Representation, Is.EqualTo(SceneRepresentation.Mesh));
             Assert.That(scene.Work.NativeGeometryCalls, Is.GreaterThan(0));
         } finally { document.Close(false); }
     }

@@ -3,7 +3,7 @@
  * written as real PSC1 bytes and read back by the real decoder, with one answer per space op shaped
  * as the generated DTOs declare. No Revit, no host: every fact here is invented and says so.
  */
-import { decodeScene, type Psc1Metadata } from "#/scene/psc1";
+import { decodeScene, SCENE_FORMAT, type Psc1Metadata } from "#/scene/psc1";
 
 import type { Answer } from "./manifest";
 
@@ -188,7 +188,7 @@ function psc1(): ArrayBuffer {
       acquiredTriangles: positions.length / 9,
       contextGeometryCalls: 0,
     },
-    format: "space-scene-v3",
+    format: SCENE_FORMAT,
     stamp,
     bounds,
     triangles: positions.length / 9,

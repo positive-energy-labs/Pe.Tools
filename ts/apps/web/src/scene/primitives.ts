@@ -3,14 +3,18 @@ import type { SceneInstance, SceneMeshes, ScenePrimitive } from "./types";
 
 const ROUND_SEGMENTS = 32;
 export const primitiveKey = (p: ScenePrimitive) =>
-  p.kind === "oriented-box" || p.run.shape === "rectangular"
-    ? "box"
-    : p.run.shape === "round"
-      ? "round"
-      : `oval:${p.run.widthFt! / p.run.heightFt!}`;
+  p.kind === "run" && p.run.path
+    ? `path:${p.run.diameterFt}:${JSON.stringify(p.run.path)}`
+    : p.kind === "oriented-box" || p.run.shape === "rectangular"
+      ? "box"
+      : p.run.shape === "round"
+        ? "round"
+        : `oval:${p.run.widthFt! / p.run.heightFt!}`;
 
 /** Templates are owned by the stage that copies them into its batch, never a global cache. */
 export function primitiveTemplate(p: ScenePrimitive): THREE.BufferGeometry {
+  if (p.kind === "run" && p.run.path)
+    return pathTemplate(p.run.path, p.run.diameterFt!, p.run.crossSectionXAxis);
   if (primitiveKey(p) === "box") return new THREE.BoxGeometry(1, 1, 1).toNonIndexed();
   if (p.kind === "run" && p.run.shape === "round")
     return new THREE.CylinderGeometry(0.5, 0.5, 1, ROUND_SEGMENTS)
@@ -80,6 +84,7 @@ export function primitiveMatrix(p: ScenePrimitive, origin = new THREE.Vector3())
   const r = p.run,
     start = new THREE.Vector3().fromArray(r.start),
     end = new THREE.Vector3().fromArray(r.end);
+  if (r.path) return matrix.makeTranslation(start.sub(origin));
   const tangent = end.clone().sub(start),
     length = tangent.length();
   tangent.normalize();
@@ -96,6 +101,53 @@ export function primitiveMatrix(p: ScenePrimitive, origin = new THREE.Vector3())
       ),
     )
     .setPosition(start.add(end).multiplyScalar(0.5).sub(origin));
+}
+
+/** Revit supplies the polyline. Transport the round profile along it without inventing a spline. */
+function pathTemplate(path: number[][], diameter: number, axis: number[]) {
+  const points = path.map((p) => new THREE.Vector3().fromArray(p));
+  const origin = points[0]!.clone();
+  for (const point of points) point.sub(origin);
+  const rings: THREE.Vector3[][] = [];
+  let x = new THREE.Vector3().fromArray(axis);
+  let previous = points[1]!.clone().sub(points[0]!).normalize();
+  for (let i = 0; i < points.length; i++) {
+    const before = points[Math.max(0, i - 1)]!;
+    const after = points[Math.min(points.length - 1, i + 1)]!;
+    const tangent = after.clone().sub(before).normalize();
+    x.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(previous, tangent));
+    x.addScaledVector(tangent, -x.dot(tangent)).normalize();
+    const y = new THREE.Vector3().crossVectors(tangent, x).normalize();
+    rings.push(
+      Array.from({ length: ROUND_SEGMENTS }, (_, j) => {
+        const angle = (j * Math.PI * 2) / ROUND_SEGMENTS;
+        return points[i]!.clone()
+          .addScaledVector(x, (Math.cos(angle) * diameter) / 2)
+          .addScaledVector(y, (Math.sin(angle) * diameter) / 2);
+      }),
+    );
+    previous = tangent;
+  }
+  const positions: number[] = [];
+  const triangle = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3) =>
+    positions.push(...a.toArray(), ...b.toArray(), ...c.toArray());
+  for (let i = 1; i < rings.length; i++)
+    for (let j = 0; j < ROUND_SEGMENTS; j++) {
+      const next = (j + 1) % ROUND_SEGMENTS;
+      triangle(rings[i - 1]![j]!, rings[i - 1]![next]!, rings[i]![next]!);
+      triangle(rings[i - 1]![j]!, rings[i]![next]!, rings[i]![j]!);
+    }
+  for (let j = 0; j < ROUND_SEGMENTS; j++) {
+    const next = (j + 1) % ROUND_SEGMENTS;
+    triangle(points[0]!, rings[0]![next]!, rings[0]![j]!);
+    triangle(points.at(-1)!, rings.at(-1)![j]!, rings.at(-1)![next]!);
+  }
+  const geometry = new THREE.BufferGeometry().setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute(positions, 3),
+  );
+  geometry.computeVertexNormals();
+  return geometry;
 }
 
 /** Temporary world triangles for clipping, marks and sampling only; the main draw stays instanced. */

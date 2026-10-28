@@ -6194,7 +6194,7 @@ export namespace RevitDetailSpaceScene {
       reasons: string[];
     }
     /**
-     * Straight physical run. Points and dimensions use host internal feet; X is the unit width axis.
+     * Physical run in host feet, including host insulation. Path is a tessellated round centreline; null means straight.
      */
     export interface SceneRun {
       start: number[];
@@ -6204,6 +6204,7 @@ export namespace RevitDetailSpaceScene {
       heightFt?: null | number;
       diameterFt?: null | number;
       crossSectionXAxis: number[];
+      path?: number[][] | null;
     }
     /**
      * One source instance: the host, or one placement of a link. A link document placed three times is three sources.

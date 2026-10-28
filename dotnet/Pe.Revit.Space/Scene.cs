@@ -32,9 +32,10 @@ public sealed record SceneRequest(
     SceneContextRepresentation ContextRepresentation = SceneContextRepresentation.Oriented
 );
 
-/// <summary>Straight physical run. Points and dimensions use host internal feet; X is the unit width axis.</summary>
+/// <summary>Physical run in host feet, including host insulation. Path is a tessellated round centreline; null means straight.</summary>
 public sealed record SceneRun(IReadOnlyList<double> Start, IReadOnlyList<double> End, SceneRunShape Shape,
-    double? WidthFt, double? HeightFt, double? DiameterFt, IReadOnlyList<double> CrossSectionXAxis);
+    double? WidthFt, double? HeightFt, double? DiameterFt, IReadOnlyList<double> CrossSectionXAxis,
+    IReadOnlyList<IReadOnlyList<double>>? Path = null);
 /// <summary>Element-local box placed in host feet. Axes are an orthonormal right-handed frame; HalfSize is in feet.</summary>
 public sealed record SceneOrientedBox(IReadOnlyList<double> Center, IReadOnlyList<double> AxisX,
     IReadOnlyList<double> AxisY, IReadOnlyList<double> AxisZ, IReadOnlyList<double> HalfSize);
@@ -106,7 +107,7 @@ public static class Scene {
         var levels = Levels.Read(document, cancellationToken);
         var world = SpaceWorld.SceneSources(document);
         foreach (var partition in world.Partitions) partition.BeginScene(world.CurrentEpoch);
-        var leases = new Dictionary<Partition, IDisposable?>();
+        var oriented = new Oriented(budget);
         var focus = new List<(Partition Source, PrimRow Row, Tri[] Triangles)>();
         var runs = new List<(Partition Source, Element Element, Aabb Bounds, SceneRun Run)>();
         var focusCount = 0;
@@ -128,22 +129,16 @@ public static class Scene {
         var crop = request.Bounds;
         using var writer = new BinaryWriter(vertices, System.Text.Encoding.UTF8, true);
         LinkedGeometryStore.Geometry Capture(Partition partition, Element element, Aabb? region, bool coarse = false) {
-            if (!coarse && !leases.ContainsKey(partition)) leases[partition] = partition.OpenScene();
-            var captured = partition.CaptureScene(element, region, budget, coarse);
+            var rows = new List<PrimRow>();
+            var mesh = new List<Tri>();
+            Ingest.Element(element, partition.Source, 0, mesh, partition.Transform, rows,
+                includeCurves: false, region: region, budget: budget, symbols: oriented.Meshes);
+            var captured = new LinkedGeometryStore.Geometry(rows.ToArray(), mesh.ToArray());
             extracted++;
             extractedTriangles += captured.Triangles.Length;
             partition.RecordScene(captured);
             budget.Retained(focusCount + captured.Triangles.Length);
             return captured;
-        }
-        void Primitive(Partition partition, Element element, Aabb bounds, SceneRun? run, bool isFocus) {
-            if (crop is { } region && !bounds.Overlaps(region)) return;
-            var row = new PrimRow(partition.Source, element.Id.Value(), element.UniqueId, element.Category?.Name ?? "<none>",
-                PrimKind.Element, bounds, 0, HeightRole: HeightRoles.Of(element.Category?.Id.Value(), element is ImportInstance));
-            elements.Add(new SceneElement(partition.HandleFor(row), triangles * 3, 0, bounds, isFocus,
-                element.Category?.Id.Value(), run is null ? SceneRepresentation.OrientedBox : SceneRepresentation.Run, run));
-            partition.RecordScene(new LinkedGeometryStore.Geometry([row], []));
-            writtenBounds = Union(writtenBounds, bounds);
         }
         try {
             foreach (var id in ids) {
@@ -157,8 +152,9 @@ public static class Scene {
                 var bounds = world.Partitions[0].SceneBounds(element);
                 var run = bounds is not null ? ReadRun(element, world.Partitions[0].Transform) : null;
                 if (run is not null && bounds is { } runBounds) {
-                    runs.Add((world.Partitions[0], element, runBounds, run));
-                    focusBounds = Union(focusBounds, runBounds);
+                    var representedBounds = Oriented.Bounds(run);
+                    runs.Add((world.Partitions[0], element, representedBounds, run));
+                    focusBounds = Union(focusBounds, representedBounds);
                     continue;
                 }
                 LinkedGeometryStore.Geometry captured;
@@ -238,6 +234,32 @@ public static class Scene {
                     return true;
                 }
             }
+            void Primitive(Partition partition, Element element, Aabb bounds, SceneRun? run, bool isFocus) {
+                if (crop is { } region && !bounds.Overlaps(region)) return;
+                try {
+                    var box = run is null ? oriented.Family(element, partition.Transform) : null;
+                    if (run is null && box is null) {
+                        var captured = Capture(partition, element, crop);
+                        foreach (var meshRow in captured.Rows) Write(partition, meshRow, captured.Triangles, isFocus);
+                        if (captured.Rows.Length == 0) {
+                            omitted++; limit ??= "missing-geometry";
+                            unavailable.Add(new SceneUnavailableElement(element.Id.Value(), element.UniqueId,
+                                element.Category?.Name, "No provable frame or native mesh was produced."));
+                        }
+                        return;
+                    }
+                    bounds = run is not null ? Oriented.Bounds(run) : Oriented.Bounds(box!);
+                    var row = new PrimRow(partition.Source, element.Id.Value(), element.UniqueId, element.Category?.Name ?? "<none>",
+                        PrimKind.Element, bounds, 0, HeightRole: HeightRoles.Of(element.Category?.Id.Value(), element is ImportInstance));
+                    elements.Add(new SceneElement(partition.HandleFor(row), triangles * 3, 0, bounds, isFocus,
+                        element.Category?.Id.Value(), run is null ? SceneRepresentation.OrientedBox : SceneRepresentation.Run, run, box));
+                    partition.RecordScene(new LinkedGeometryStore.Geometry([row], []));
+                    writtenBounds = Union(writtenBounds, bounds);
+                } catch (SceneLimitException ex) {
+                    if (isFocus) throw;
+                    limited++; omitted++; limit = ex.Reason;
+                }
+            }
             foreach (var row in focus) Write(row.Source, row.Row, row.Triangles, true);
             foreach (var row in runs) Primitive(row.Source, row.Element, row.Bounds, row.Run, true);
             if (context != SceneContextRepresentation.None) {
@@ -254,7 +276,7 @@ public static class Scene {
                         if (box is null) { omitted++; limit ??= "missing-bounds"; Cut(partition); continue; }
                         reads[partition] = reads[partition] with { Kept = reads[partition].Kept + 1 };
                         // ETW showed Revit retains native tessellation allocations; bound what we ask it to tessellate.
-                        // Bounds/runs never enter mesh capture or acquire a geometry cache lease.
+                        // Runs and proven family frames avoid tessellation. Unknown frames retain native meshes.
                         if (context == SceneContextRepresentation.Oriented) {
                             Primitive(partition, element, box.Value, ReadRun(element, partition.Transform), false);
                             continue;
@@ -303,8 +325,7 @@ public static class Scene {
                     budget.GeometryCalls - focusGeometryCalls),
                 new SceneCompleteness(limit is null, deferred, limited, limit), detached, levels);
         } finally {
-            foreach (var lease in leases.Values) lease?.Dispose();
-            LinkedGeometryStore.Prune();
+            oriented.Meshes.Entries.Clear();
         }
     }
 
@@ -363,41 +384,7 @@ public static class Scene {
         host.get_Parameter(BuiltInParameter.RBS_REFERENCE_INSULATION_THICKNESS) is { HasValue: true } p
         && p.AsDouble() is var t and > 0 ? t : null;
 
-    internal static SceneRun? ReadRun(Element element, Transform transform) {
-        // Insulation also inherits MEPCurve. Only these physical rigid types have a supported run contract.
-        if (element is not (Duct or Pipe or Conduit or CableTray) || element is not MEPCurve curve) return null;
-        try {
-            if (curve.Location is not LocationCurve { Curve: Line line }) return null;
-            var localStart = line.GetEndPoint(0);
-            var start = transform.OfPoint(localStart);
-            var end = transform.OfPoint(line.GetEndPoint(1));
-            var tangent = (end - start).Normalize();
-            using var manager = curve.ConnectorManager;
-            using var connectors = manager.Connectors;
-            var connector = connectors.Cast<Connector>().Where(c => c.ConnectorType == ConnectorType.End)
-                .OrderBy(c => c.Origin.DistanceTo(localStart)).FirstOrDefault();
-            if (connector is null) return null;
-            using (connector) {
-                var shape = connector.Shape switch {
-                    ConnectorProfileType.Round => SceneRunShape.Round,
-                    ConnectorProfileType.Rectangular => SceneRunShape.Rectangular,
-                    ConnectorProfileType.Oval => SceneRunShape.Oval,
-                    _ => (SceneRunShape?)null
-                };
-                if (shape is null) return null;
-                double? width = shape == SceneRunShape.Round ? null : connector.Width;
-                double? height = shape == SceneRunShape.Round ? null : connector.Height;
-                double? diameter = shape == SceneRunShape.Round ? connector.Radius * 2 : null;
-                if (new[] { width, height, diameter }.Any(size => size is { } value && (!Finite(value) || value <= 0))) return null;
-                using var frame = connector.CoordinateSystem;
-                var x = transform.OfVector(frame.BasisX).Normalize();
-                if (!Finite(start.X, start.Y, start.Z, end.X, end.Y, end.Z, x.X, x.Y, x.Z)
-                    || start.DistanceTo(end) <= 1e-9 || Math.Abs(x.DotProduct(tangent)) > 1e-6) return null;
-                return new SceneRun([start.X, start.Y, start.Z], [end.X, end.Y, end.Z], shape.Value,
-                    width, height, diameter, [x.X, x.Y, x.Z]);
-            }
-        } catch { return null; } // Unsupported native size/frame retains mesh focus or box context.
-    }
+    internal static SceneRun? ReadRun(Element element, Transform transform) => Oriented.Run(element, transform);
 
     private static Aabb Box(Tri t) => new(
         Math.Min(t.A.X, Math.Min(t.B.X, t.C.X)), Math.Min(t.A.Y, Math.Min(t.B.Y, t.C.Y)), Math.Min(t.A.Z, Math.Min(t.B.Z, t.C.Z)),
