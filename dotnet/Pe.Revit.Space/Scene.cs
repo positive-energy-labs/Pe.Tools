@@ -236,9 +236,13 @@ public static class Scene {
             }
             void Primitive(Partition partition, Element element, Aabb bounds, SceneRun? run, bool isFocus) {
                 if (crop is { } region && !bounds.Overlaps(region)) return;
+                if (!isFocus && limit == "acquisition-budget") { deferred++; return; }
                 try {
                     var box = run is null ? oriented.Family(element, partition.Transform) : null;
                     if (run is null && box is null) {
+                        if (!isFocus && triangles >= request.MaxTriangles) {
+                            deferred++; limit ??= "output-budget"; return;
+                        }
                         var captured = Capture(partition, element, crop);
                         foreach (var meshRow in captured.Rows) Write(partition, meshRow, captured.Triangles, isFocus);
                         if (captured.Rows.Length == 0) {
