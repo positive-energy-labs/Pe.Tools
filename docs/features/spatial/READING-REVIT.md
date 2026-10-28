@@ -2,7 +2,7 @@
 
 This doc is the authority for every Pe.* read of Revit geometry: Space, Ducts context, Pea's spatial verbs, Takeoff and clash detection. The decision is [ADR 0025](../../adr/0025-accurate-geometry-first.md). Open work lives in the [spatial ledger](LEDGER.md). Source: `.artifacts/accept/revit-read-lessons-20261027/MINED.md`. The R, U and M ids below point into it. Written 2026-10-27.
 
-**Scope.** The original census is the cloud Chadds clone, Revit 2025, with one loaded IFC-derived RVT link. Later rows identify Manuella and Cleremont local copies explicitly; U16 records their different link and cost behaviour. The levels read uses the certified Chadds clone copy named in [MAP.md](MAP.md), not the older linkless standalone. Measurements remain scoped to their named model, source state, lane and version.
+**Scope.** The original census is the cloud Chadds clone, Revit 2025, with one loaded IFC-derived RVT link. Later rows identify Manuella and Cleremont local copies explicitly; U16 records their different link and cost behaviour. The levels read uses the certified Chadds clone copy named in [MAP.md](MAP.md), not the older linkless standalone. Measurements remain scoped to their named model, source state, lane and version. The older `MEP_YoramLePairArchitects_ChaddsFord_R25_standalone_20261019.rvt` is a different, linkless model.
 
 ## Truth rules (kaitpw)
 
@@ -287,6 +287,32 @@ both, main's pre-existing box limit owned by step 3. The Chadds file hash was un
 and both backends were gone; the driver restored the branch and released slot-1 at 14:14:23Z.
 Evidence: worktree `t3-19486141`, `.artifacts/runs/session-20261028-space-cache/context-ab-20261028T135324Z/`
 (`<variant>/results.md`, `results.json`, `system-top.jsonl`).
+## Representation premises, 2026-10-28
+
+The Chadds gate copy `MEP_Chadds_Clone_Aug_11_R25_local_20261028.rvt` was made through SDK `save-stripped`, with `sourceUnchanged: true`. A fresh process reopened it with IFC instance `9465481` loaded. All 196 per-partition/category counts match the cloud source. Link inventories and instance transforms match exactly. Both census reads left the documents unmodified. PROVEN[session dev, controlled `probe-o`, cloud PID 53588 / local PID 55572, `004c7b43`, 2026-10-28 03:53Z]. Evidence under worktree `t3-5b8bc59c/.artifacts/accept/oriented-20261028/ev/`: `chadds-save-local.json`, `cloud-census-counts.json`, `local-census-counts.json`, `clone-census-comparison.json`. These counts certify the agreed copy gate, not geometric equality of every element. `clone-levels.json` records local level IDs, names and `ProjectElevation`; cloud-versus-local level equality was not measured.
+
+| Model | Pipe insulation host parameter versus Thickness | Duct insulation host parameter versus Thickness |
+|---|---|---|
+| Chadds clone copy | 3,267/3,267 exact, max error 0 ft | 4,294 exact, 4 missing host parameters out of 4,298; max measured error 0 ft |
+| Chadds older standalone, a different model | 4,266/4,266 exact, max error 0 ft | 5,491 exact, 4 missing host parameters out of 5,495; max measured error 0 ft |
+| Manuella local | None present | 136/136 exact |
+| Cleremont local, including loaded links | None present | 364/364 exact |
+
+PROVEN[session dev, controlled `probe-o`, clone PID 55572 / other copies PID 47116, `004c7b43` working tree, 2026-10-28]. Evidence: `clone-premises.json`, `chadds-premises.json`, `manuella-premises.json`, `cleremont-premises.json` in the same directory. Missing host parameters are not parity successes.
+
+**The IFC frame premise is false.** The first 800 structural framing elements in the clone's IFC link are all `DirectShape`, with 800 distinct symbol geometry identities and 800 identity instance transforms. They have no usable location line. A symbol AABB times that identity frame remains a document-axis box and cannot establish each member's orientation. Use meshes for these elements. FALSIFIED[session dev, controlled `probe-o` PID 55572, IFC framing as FamilyInstance with an element frame, `004c7b43`, 03:54Z]. Evidence: `clone-ifc-frames.json`. A frame derived from each shape's triangles remains an unmeasured option, not a default.
+
+Symbol reads below follow preceding census/insulation reads; they are **not cold product costs**. They include collector iteration, geometry and result construction. Native geometry was read at Medium, without triangulation. Native family frames matched `GetTotalTransform` in every sampled family; no sampled family had nested or multiple root instances. This sample does not prove those absent elsewhere.
+
+| Model/source and route | Elements | Seconds | Private delta | Bytes/element |
+|---|---:|---:|---:|---:|
+| Chadds clone duct fittings, symbol bounds | 800 | 0.1621 | 6,131,712 | 7,665 |
+| Chadds clone IFC DirectShape framing, symbol bounds | 800 | 0.2659 | 51,519,488 | 64,399 |
+| Manuella duct fittings, symbol bounds | 459 | 0.1470 | 6,701,056 | 14,599 |
+| Cleremont host duct fittings, symbol bounds | 585 | 0.2268 | 17,784,832 | 30,401 |
+| Cleremont house framing, symbol bounds, three documents | 32 / 112 / 334 | 0.0151 / 0.0383 / 0.0783 | -4,096 / 0 / -4,096 | Allocation noise |
+
+PROVEN[session dev, controlled `probe-o`, same evidence and custody as the insulation table]. UNPROVEN[cold oriented product cost; IFC mesh cost under step 2 per-element reach]. Geometry cache identity must use `GetSymbolGeometryId().AsUniqueIdentifier()` plus document and detail, not `FamilySymbol.Id`: 800 clone duct fittings produced 290 native geometry identities. Curved Chadds flex samples expose `LocationCurve` with `HermiteSpline`; a straight chord is not their path.
 
 ## Round run sizes
 
