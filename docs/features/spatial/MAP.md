@@ -112,6 +112,8 @@ Verbs          Pea's Sweep/Slice/Probe/Partition read through the same scoped re
 
 ## Proof gate (every change, before main)
 
+- One probe Revit at a time, machine-wide (`.artifacts/locks/revit-slot-1`), opened only with
+  ≥10 GiB free: two probes beside kaitpw's 15 GB session left 2.5 GiB free on 2026-10-28.
 - Real Revit, SDK-controlled probe sessions only; never kaitpw's `pe.app-25`. Cold = first read
   in a fresh process; warm = one repeat. Memory = Revit private bytes delta; time = Revit side.
 - Three models from their local copies: Chadds SA 7 and EX 7; Cleremont SA 19, SA 2 and SA 21;
@@ -138,7 +140,8 @@ Verbs          Pea's Sweep/Slice/Probe/Partition read through the same scoped re
 
 ## Owed
 
-- Pipe-insulation parity: none of the three models has pipe insulation.
+- Pipe-insulation parity: Chadds has 3,267 pipe insulations, never checked against the host's
+  `RBS_REFERENCE_INSULATION_THICKNESS` (step 3 runs it). Cleremont has none.
 - How much of Cleremont's 7 GB open cost is its links.
 - Link behaviour on a machine without Desktop Connector.
 - CAD as building context: on Manuella, model-level DWG plans are the only building geometry
