@@ -295,6 +295,15 @@ def run_model(name, args, out: Path, fixture, results):
             code2 = subprocess.run([str(Path.home() / ".vite-plus/bin/vp.exe"), "exec", "jiti", str(HERE / "scope-ids.ts"), str(snapfile), *group],
                                    cwd=CHECKOUT / "ts/apps/pea", capture_output=True, text=True, env=dict(os.environ, NO_COLOR="1"))
             derived = json.loads(code2.stdout[code2.stdout.index("{"):])
+            for ps_path in args.pre_script:  # extra read-only native actions (e.g. a levels witness) before the first scene read
+                before = ps.memory_info().private
+                code, res, wall = s.pea(f"prescript-{Path(ps_path).stem}", ["script", "execute", "--file", str(Path(ps_path).resolve()), "--permission-mode", "NoTransaction", "--timeout-seconds", "3000", "--open-document-id", s.doc, "--json"])
+                mod = s.modified()
+                model.setdefault("preScripts", []).append({"file": str(ps_path), "process": gi, "status": (res or {}).get("status"), "wallS": round(wall, 1),
+                                                           "privateDeltaMiB": round((ps.memory_info().private - before) / MIB, 1), "isModified": mod,
+                                                           "output": (res or {}).get("output"), "data": (res or {}).get("data")})
+                if res is None or res.get("status") != "Succeeded" or mod is None or any(mod):
+                    raise RuntimeError(f"pre-script {ps_path}: exit {code} status {(res or {}).get('status')} isModified {mod}")
             for system in group:
                 pinned = fixture.get(name, {}).get(system)
                 ids = derived[system]
@@ -443,6 +452,7 @@ def main():
     r.add_argument("--cold-each", action="store_true")
     r.add_argument("--settle", type=int, default=120)
     r.add_argument("--plan", action="store_true")
+    r.add_argument("--pre-script", action="append", default=[], help="read-only .cs script run once per process before the first scene read (repeatable)")
     d = sub.add_parser("diff"); d.add_argument("a"); d.add_argument("b")
     c = sub.add_parser("check"); c.add_argument("artifact"); c.add_argument("frames", nargs="?")
     args = ap.parse_args()
