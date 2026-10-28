@@ -6282,6 +6282,12 @@ export namespace RevitDetailSpaceScene {
        */
       cutByBound: number;
       milliseconds: number;
+      /**
+       * The reach query; ExcludeMilliseconds the exclusion-class queries; IterateMilliseconds the element loads.
+       */
+      queryMilliseconds: number;
+      excludeMilliseconds: number;
+      iterateMilliseconds: number;
     }
     export interface SceneUnavailableElement {
       elementId: number;
