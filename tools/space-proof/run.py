@@ -409,6 +409,19 @@ def run_model(name, args, out: Path, fixture, results):
                 acc.update({"scriptWallS": round(wall, 1), "privateDeltaMiB": round((ps.memory_info().private - before) / MIB, 1),
                             "frameSources": frames["sources"], "isModifiedAfter": frames["isModifiedAfter"]})
                 model["accuracy"][system] = acc
+                for ps_path in args.post_script:  # per artifact, after the frames pass: __METADATA__ becomes the decoded PSC1 metadata json
+                    mf = ev / f"artifact-{system.replace(' ', '')}.metadata.json"
+                    mf.write_text(json.dumps(meta), encoding="utf8")
+                    cs2 = ev / f"post-{Path(ps_path).stem}-{system.replace(' ', '')}.cs"
+                    cs2.write_text(Path(ps_path).read_text(encoding="utf8").replace("__METADATA__", str(mf)), encoding="utf8")
+                    before = ps.memory_info().private
+                    code, res, wall = s.pea(f"post-{Path(ps_path).stem}-{system.replace(' ', '')}", ["script", "execute", "--file", str(cs2), "--permission-mode", "NoTransaction", "--timeout-seconds", "3000", "--open-document-id", s.doc, "--json"])
+                    mod = s.modified()
+                    acc.setdefault("postScripts", []).append({"file": str(ps_path), "status": (res or {}).get("status"), "wallS": round(wall, 1),
+                                                              "privateDeltaMiB": round((ps.memory_info().private - before) / MIB, 1), "isModified": mod,
+                                                              "output": (res or {}).get("output"), "data": (res or {}).get("data")})
+                    if res is None or res.get("status") != "Succeeded" or mod is None or any(mod):
+                        raise RuntimeError(f"post-script {ps_path}: exit {code} status {(res or {}).get('status')} isModified {mod}")
             mod = s.modified()
             if mod is None or any(mod):
                 raise RuntimeError(f"IsModified {mod} at end")
@@ -495,6 +508,7 @@ def main():
     r.add_argument("--cold-each", action="store_true")
     r.add_argument("--settle", type=int, default=120)
     r.add_argument("--plan", action="store_true")
+    r.add_argument("--post-script", action="append", default=[], help="read-only .cs template run per artifact after the frames pass; __METADATA__ = decoded PSC1 metadata json path (repeatable)")
     r.add_argument("--pre-script", action="append", default=[], help="read-only .cs script run once per process before the first scene read (repeatable)")
     d = sub.add_parser("diff"); d.add_argument("a"); d.add_argument("b")
     m = sub.add_parser("merge", help="one table from the models of several runs (later runs win a model)")
