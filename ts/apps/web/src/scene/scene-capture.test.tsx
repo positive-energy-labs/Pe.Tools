@@ -1,18 +1,12 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
-import { sceneRequest } from "./host";
+import { sceneRequest, type ContextRepresentation } from "./host";
 import { useDuctScene } from "#/ducts/scene-read";
 
 const native = vi.hoisted(() => ({
   calls: [] as {
-    request: {
-      elementIds: number[];
-      focusOnly: boolean;
-      contextPaddingFt: number;
-      proximity: boolean;
-      contextRepresentation: "none" | "oriented" | "meshes";
-    };
+    request: ReturnType<typeof sceneRequest>;
     resolve: (value: { id: string }) => void;
     reject: (error: Error) => void;
   }[],
@@ -62,7 +56,7 @@ const finish = async (index: number, id: string) => {
 
 it("context representation changes retain exact focus and never reuse incompatible coverage", async () => {
   const view = renderHook(
-    ({ representation }: { representation: "oriented" | "meshes" }) =>
+    ({ representation }: { representation: Exclude<ContextRepresentation, "none"> }) =>
       useDuctScene(sceneRequest([7199], false, 10, representation), doc, "representation"),
     { initialProps: { representation: "oriented" } },
   );
@@ -82,11 +76,17 @@ it("context representation changes retain exact focus and never reuse incompatib
   expect(view.result.current.focusMeshes).toBe(focus);
   await finish(2, "representation-meshes");
   await waitFor(() => expect(view.result.current.pending).toBe(false));
+  view.rerender({ representation: "triangle-boxes" });
+  await waitFor(() => expect(native.calls).toHaveLength(4));
+  expect(native.calls[3]!.request.contextRepresentation).toBe("triangle-boxes");
+  expect(view.result.current.focusMeshes).toBe(focus);
+  await finish(3, "representation-triangle-boxes");
+  await waitFor(() => expect(view.result.current.pending).toBe(false));
   view.rerender({ representation: "oriented" });
   await waitFor(() =>
     expect(view.result.current.meshes).toMatchObject({ id: "representation-oriented" }),
   );
-  expect(native.calls).toHaveLength(3);
+  expect(native.calls).toHaveLength(4);
 });
 
 it("shows exact focus before context, keeps it inspectable, and does not recapture on visual renders or shrink", async () => {

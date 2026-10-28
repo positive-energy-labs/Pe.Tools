@@ -7,6 +7,50 @@ namespace Pe.Revit.Tests;
 /// <summary>Native representations preserve element frames, curved paths, insulation and mesh-only context.</summary>
 public sealed class SpaceContextRepresentationProofTests {
     [Test]
+    public void TriangleEnvelopeUsesTheTiltedDirectShapesGeometryAndDisclosesItsFrame(UIApplication uiApplication) {
+        var document = RevitFamilyFixtureHarness.CreateProjectDocument(uiApplication.Application);
+        try {
+            DirectShape focus, context;
+            using var yaw = Transform.CreateRotation(XYZ.BasisZ, 0.53);
+            using var tilt = Transform.CreateRotation(XYZ.BasisX, 0.31);
+            using var rotation = yaw.Multiply(tilt);
+            using var translation = Transform.CreateTranslation(new XYZ(10003, 2, 2));
+            using var pose = translation.Multiply(rotation);
+            using (var transaction = new Transaction(document, "Create tilted DirectShape")) {
+                transaction.Start();
+                focus = Cube(document, 10000);
+                using var loop = new CurveLoop();
+                var points = new[] { XYZ.Zero, new XYZ(2, 0, 0), new XYZ(2, 3, 0), new XYZ(0, 3, 0) };
+                for (var i = 0; i < 4; i++) loop.Append(Line.CreateBound(points[i], points[(i + 1) % 4]));
+                using var body = GeometryCreationUtilities.CreateExtrusionGeometry([loop], XYZ.BasisZ, 8);
+                using var placed = SolidUtils.CreateTransformed(body, pose);
+                context = DirectShape.CreateElement(document, ((long)BuiltInCategory.OST_GenericModel).ToElementId());
+                context.SetShape([placed]);
+                transaction.Commit();
+            }
+            using var nativeBytes = new MemoryStream();
+            var native = Scene.Write(document, new SceneRequest([focus.Id.Value()], 20), nativeBytes);
+            Assert.That(native.Elements.Single(e => e.Handle.ElementId == context.Id.Value()).Representation, Is.EqualTo(SceneRepresentation.Mesh));
+            using var boxBytes = new MemoryStream();
+            var boxed = Scene.Write(document, new SceneRequest([focus.Id.Value()], 20,
+                ContextRepresentation: SceneContextRepresentation.TriangleBoxes), boxBytes);
+            var box = boxed.Elements.Single(e => e.Handle.ElementId == context.Id.Value()).OrientedBox!;
+            Assert.That(box.Frame, Is.EqualTo(SceneBoxFrame.Triangles));
+            var axes = new[] { Point(box.AxisX), Point(box.AxisY), Point(box.AxisZ) };
+            foreach (var basis in new[] { pose.BasisX, pose.BasisY, pose.BasisZ })
+                Assert.That(axes.Max(axis => Math.Abs(axis.DotProduct(basis))), Is.GreaterThan(1 - 1e-5));
+            Assert.That(box.HalfSize.Aggregate(8.0, (volume, size) => volume * size), Is.EqualTo(48).Within(0.02));
+            foreach (var x in new[] { 0, 2 })
+            foreach (var y in new[] { 0, 3 })
+            foreach (var z in new[] { 0, 8 }) {
+                var delta = pose.OfPoint(new XYZ(x, y, z)) - Point(box.Center);
+                for (var i = 0; i < 3; i++) Assert.That(Math.Abs(delta.DotProduct(axes[i])), Is.LessThanOrEqualTo(box.HalfSize[i] + 0.002));
+            }
+            Assert.That(boxed.Elements.Select(e => e.Handle.ElementId), Is.EquivalentTo(native.Elements.Select(e => e.Handle.ElementId)));
+        } finally { document.Close(false); }
+    }
+
+    [Test]
     public void DefaultUsesNativeMeshesForDirectShapesWithoutAnElementFrame(UIApplication uiApplication) {
         var document = RevitFamilyFixtureHarness.CreateProjectDocument(uiApplication.Application);
         try {

@@ -23,6 +23,7 @@ const box = (b = bounds): ScenePrimitive => ({
     axisY: [0, 1, 0],
     axisZ: [0, 0, 1],
     halfSize: [(b.maxX - b.minX) / 2, (b.maxY - b.minY) / 2, (b.maxZ - b.minZ) / 2],
+    frame: "symbol" as const,
   },
 });
 const run = (shape: "round" | "rectangular" | "oval" = "rectangular"): ScenePrimitive => ({
@@ -285,6 +286,7 @@ test("tilted and linked box corners and edges use the element frame through worl
       axisY: y.toArray(),
       axisZ: z.toArray(),
       halfSize: [7, 2, 0.5],
+      frame: "symbol" as const,
     },
   };
   const origin = new THREE.Vector3(90, 190, 2);

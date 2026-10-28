@@ -11,6 +11,7 @@ const FRAME = {
   axisY: [0, 1, 0],
   axisZ: [0, 0, 1],
   halfSize: [0.5, 0.5, 0.5],
+  frame: "symbol" as const,
 };
 const handle = (elementId: number, linkInstanceId: number | null = null) =>
   ({
@@ -156,39 +157,42 @@ describe("PSC1 decode", () => {
     ).toThrow("range");
     expect(() => decodeScene(psc1(metadata({ elements: [a!] })))).toThrow("Incomplete");
   });
-  it("decodes an all-primitive scene without fabricating mesh vertices or losing linked identity", () => {
-    const elements: Psc1Metadata["elements"] = metadata().elements.map((e) => ({
-      ...e,
-      firstVertex: 0,
-      vertexCount: 0,
-      representation: "oriented-box" as const,
-      orientedBox: FRAME,
-    }));
-    elements[0] = {
-      ...elements[0]!,
-      representation: "run",
-      orientedBox: null,
-      run: {
-        start: [0, 0, 0],
-        end: [0, 0, 1],
-        shape: "round",
-        diameterFt: 1,
-        crossSectionXAxis: [1, 0, 0],
-      },
-    } as Psc1Metadata["elements"][number];
-    const { meshes } = decodeScene(psc1(metadata({ triangles: 0, elements })));
-    expect(meshes.positions.byteLength).toBe(0);
-    expect(meshes.instances[0]).toMatchObject({
-      focus: true,
-      revitId: 1,
-      primitive: { kind: "run", run: { diameterFt: 1 } },
-    });
-    expect(meshes.instances[1]).toMatchObject({
-      revitId: null,
-      linkInstanceId: 7,
-      primitive: { kind: "oriented-box", bounds: BOX, box: FRAME },
-    });
-  });
+  it.each(["symbol", "triangles"] as const)(
+    "decodes %s frames without fabricating mesh vertices or losing linked identity",
+    (frame) => {
+      const elements: Psc1Metadata["elements"] = metadata().elements.map((e) => ({
+        ...e,
+        firstVertex: 0,
+        vertexCount: 0,
+        representation: "oriented-box" as const,
+        orientedBox: { ...FRAME, frame },
+      }));
+      elements[0] = {
+        ...elements[0]!,
+        representation: "run",
+        orientedBox: null,
+        run: {
+          start: [0, 0, 0],
+          end: [0, 0, 1],
+          shape: "round",
+          diameterFt: 1,
+          crossSectionXAxis: [1, 0, 0],
+        },
+      } as Psc1Metadata["elements"][number];
+      const { meshes } = decodeScene(psc1(metadata({ triangles: 0, elements })));
+      expect(meshes.positions.byteLength).toBe(0);
+      expect(meshes.instances[0]).toMatchObject({
+        focus: true,
+        revitId: 1,
+        primitive: { kind: "run", run: { diameterFt: 1 } },
+      });
+      expect(meshes.instances[1]).toMatchObject({
+        revitId: null,
+        linkInstanceId: 7,
+        primitive: { kind: "oriented-box", bounds: BOX, box: { ...FRAME, frame } },
+      });
+    },
+  );
   it("rejects primitive ranges, invalid bounds and unsized or nonorthogonal runs", () => {
     const box = {
       ...metadata().elements[0]!,

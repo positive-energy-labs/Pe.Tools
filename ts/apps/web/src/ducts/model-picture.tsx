@@ -145,8 +145,8 @@ export function ModelPicture({
   paintOf?: PaintOf;
   contextMode?: ContextMode;
   contextRadiusFt?: number;
-  contextRepresentation?: "oriented" | "meshes";
-  onContextRepresentation?: (representation: "oriented" | "meshes") => void;
+  contextRepresentation?: "oriented" | "meshes" | "triangle-boxes";
+  onContextRepresentation?: (representation: "oriented" | "meshes" | "triangle-boxes") => void;
   /** Kind to hue and the Colour dial: the two inputs of the paint seam. */
   kinds: Kinds;
   colour: ColourMode;
@@ -413,9 +413,11 @@ export function ModelPicture({
             kind="advisory"
             label={[
               onContextRepresentation
-                ? contextRepresentation === "oriented"
-                  ? "Simplified context"
-                  : "Detailed context"
+                ? contextRepresentation === "triangle-boxes"
+                  ? "Building envelopes"
+                  : contextRepresentation === "oriented"
+                    ? "Simplified context"
+                    : "Detailed context"
                 : "",
               read.contextError ? `context: ${read.contextError}` : "",
               read.completeness?.complete === false
@@ -436,23 +438,42 @@ export function ModelPicture({
               .join(" / ")}
           />
           {onContextRepresentation && contextMode !== "off" ? (
-            <Button
-              label={
-                contextRepresentation === "oriented"
+            <>
+              <Button
+                label={
+                  contextRepresentation !== "meshes"
+                    ? "Read detailed context"
+                    : "Use simplified context"
+                }
+                busy={read.pending}
+                onClick={() =>
+                  onContextRepresentation(
+                    contextRepresentation !== "meshes" ? "meshes" : "oriented",
+                  )
+                }
+              >
+                {contextRepresentation !== "meshes"
                   ? "Read detailed context"
-                  : "Use simplified context"
-              }
-              busy={read.pending}
-              onClick={() =>
-                onContextRepresentation(
-                  contextRepresentation === "oriented" ? "meshes" : "oriented",
-                )
-              }
-            >
-              {contextRepresentation === "oriented"
-                ? "Read detailed context"
-                : "Use simplified context"}
-            </Button>
+                  : "Use simplified context"}
+              </Button>
+              <Button
+                label={
+                  contextRepresentation === "triangle-boxes"
+                    ? "Use building geometry"
+                    : "Use building envelopes"
+                }
+                busy={read.pending}
+                onClick={() =>
+                  onContextRepresentation(
+                    contextRepresentation === "triangle-boxes" ? "oriented" : "triangle-boxes",
+                  )
+                }
+              >
+                {contextRepresentation === "triangle-boxes"
+                  ? "Use building geometry"
+                  : "Use building envelopes"}
+              </Button>
+            </>
           ) : null}
         </PaneOverlay>
       ) : null}

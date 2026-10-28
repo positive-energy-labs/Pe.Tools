@@ -158,7 +158,9 @@ export function PickFacts({
         <Fact name="height role">{h.heightRole}</Fact>
         <Fact name="geometry">
           {element.representation === "oriented-box"
-            ? "oriented bounds"
+            ? element.orientedBox?.frame === "triangles"
+              ? "triangle envelope"
+              : "symbol bounds"
             : element.representation === "run"
               ? element.run?.path
                 ? "curved run"

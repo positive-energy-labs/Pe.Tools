@@ -10,6 +10,7 @@ namespace Pe.Revit.Space;
 public enum SceneContextRepresentation {
     [EnumMember(Value = "none")] None,
     [EnumMember(Value = "oriented")] Oriented,
+    [EnumMember(Value = "triangle-boxes")] TriangleBoxes,
     [EnumMember(Value = "meshes")] Meshes
 }
 public enum SceneRepresentation {
@@ -21,6 +22,10 @@ public enum SceneRunShape {
     [EnumMember(Value = "round")] Round,
     [EnumMember(Value = "rectangular")] Rectangular,
     [EnumMember(Value = "oval")] Oval
+}
+public enum SceneBoxFrame {
+    [EnumMember(Value = "symbol")] Symbol,
+    [EnumMember(Value = "triangles")] Triangles
 }
 /// <param name="ContextPaddingFt">Reach: context is what lies within this distance of each focus element's own box, never a crop around the whole focus.</param>
 public sealed record SceneRequest(
@@ -38,7 +43,8 @@ public sealed record SceneRun(IReadOnlyList<double> Start, IReadOnlyList<double>
     IReadOnlyList<IReadOnlyList<double>>? Path = null);
 /// <summary>Element-local box placed in host feet. Axes are an orthonormal right-handed frame; HalfSize is in feet.</summary>
 public sealed record SceneOrientedBox(IReadOnlyList<double> Center, IReadOnlyList<double> AxisX,
-    IReadOnlyList<double> AxisY, IReadOnlyList<double> AxisZ, IReadOnlyList<double> HalfSize);
+    IReadOnlyList<double> AxisY, IReadOnlyList<double> AxisZ, IReadOnlyList<double> HalfSize,
+    SceneBoxFrame Frame = SceneBoxFrame.Symbol);
 public sealed record SceneElement(Handle Handle, int FirstVertex, int VertexCount, Aabb Bounds, bool Focus, long? CategoryId,
     SceneRepresentation Representation, SceneRun? Run, SceneOrientedBox? OrientedBox = null);
 public enum SceneSourceState {
@@ -243,12 +249,17 @@ public static class Scene {
                         if (!isFocus && triangles >= request.MaxTriangles) {
                             deferred++; limit ??= "output-budget"; Cut(partition); return;
                         }
-                        var captured = Capture(partition, element, crop);
-                        foreach (var meshRow in captured.Rows) Write(partition, meshRow, captured.Triangles, isFocus);
-                        if (captured.Rows.Length == 0) {
-                            omitted++; limit ??= "missing-geometry"; Cut(partition);
+                        var envelope = !isFocus && context == SceneContextRepresentation.TriangleBoxes && element is DirectShape;
+                        // An element's envelope needs its whole geometry, before the scene crop clips any triangles.
+                        var captured = Capture(partition, element, envelope ? null : crop);
+                        box = envelope ? TriangleBox.Fit(captured.Triangles, budget.Check) : null;
+                        if (box is null) {
+                            foreach (var meshRow in captured.Rows) Write(partition, meshRow, captured.Triangles, isFocus);
+                            if (captured.Rows.Length == 0) {
+                                omitted++; limit ??= "missing-geometry"; Cut(partition);
+                            }
+                            return;
                         }
-                        return;
                     }
                     bounds = run is not null ? Oriented.Bounds(run) : Oriented.Bounds(box!);
                     var row = new PrimRow(partition.Source, element.Id.Value(), element.UniqueId, element.Category?.Name ?? "<none>",
@@ -279,7 +290,7 @@ public static class Scene {
                         reads[partition] = reads[partition] with { Kept = reads[partition].Kept + 1 };
                         // ETW showed Revit retains native tessellation allocations; bound what we ask it to tessellate.
                         // Runs and proven family frames avoid tessellation. Unknown frames retain native meshes.
-                        if (context == SceneContextRepresentation.Oriented) {
+                        if (context is SceneContextRepresentation.Oriented or SceneContextRepresentation.TriangleBoxes) {
                             Primitive(partition, element, box.Value, ReadRun(element, partition.Transform), false);
                             continue;
                         }
