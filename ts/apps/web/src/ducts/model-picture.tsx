@@ -456,6 +456,7 @@ export function ModelPicture({
                   ? "Read detailed context"
                   : "Use simplified context"}
               </Button>
+              {/* Temporary comparison pending the IFC drawing ruling in docs/features/spatial/MAP.md Owed. */}
               <Button
                 label={
                   contextRepresentation === "triangle-boxes"
