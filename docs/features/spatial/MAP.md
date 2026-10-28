@@ -52,8 +52,11 @@ does not pay for them again.
    masses and nested DWGs. Exclusions apply to every partition and are proved per model.
 7. **Levels are data, measured right.** `Level.Elevation` is relative to the project base point
    (737 ft off on Cleremont); use `ProjectElevation` through the instance transform. Levels are
-   per building (Cleremont: 50 levels, 31 distinct elevations, 12 coincident groups) and repeat
-   under two naming sets (Manuella). They are read with the context, never inferred.
+   per placed source and authored scope box, and repeat under two naming sets (Manuella).
+   Datums are exact, with no grouping tolerance: Cleremont has 50 levels on 32 planes in 11
+   coincident groups. Host "Level 2" and the linked "T.O. PLATE COTTAGE" sit 0.2 mm apart and
+   stay two planes (probe-l, 2026-10-28; the earlier 31/12 was a rounded census). They are read
+   with the context, never inferred.
 8. **Disclose what is missing.** A source may be unloaded (all of Manuella's), unavailable on
    this machine (Cleremont's links resolve through Desktop Connector), or cut by a bound. The
    picture says so per link instance, with the same words on every model.
