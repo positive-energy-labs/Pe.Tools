@@ -141,15 +141,21 @@ internal sealed class Partition {
     /// <param name="reach">Host-frame boxes, each as its 8 corners; mapped into this instance's frame here.</param>
     internal SceneReach Reach(IReadOnlyList<XYZ[]> reach) {
         var clock = System.Diagnostics.Stopwatch.StartNew();
-        if (reach.Count == 0) return new SceneReach(0, [], new Dictionary<string, int>(), 0, 0);
+        if (reach.Count == 0) return new SceneReach(0, [], new Dictionary<string, int>(), 0, 0, 0, 0, 0);
         using var inverse = this.Transform.Inverse;
-        var boxes = reach.Select(corners => (ElementFilter)Intersecting(corners.Select(inverse.OfPoint))).ToList();
+        var local = reach.Select(corners => corners.Select(inverse.OfPoint).ToArray()).ToList();
+        var boxes = local.Select(corners => (ElementFilter)Intersecting(corners)).ToList();
+        // The extent of every reach box goes first, so the OR of hundreds of boxes tests only elements already inside it.
+        using var extent = Intersecting(local.SelectMany(corners => corners));
         var near = boxes.Count == 1 ? boxes[0] : new LogicalOrFilter(boxes);
         HashSet<ElementId> Ids(ElementFilter filter) {
             using var collector = new FilteredElementCollector(this.Doc).WhereElementIsNotElementType().WherePasses(filter);
             return [.. collector.ToElementIds()];
         }
-        var inside = Ids(near);
+        HashSet<ElementId> inside;
+        using (var collector = new FilteredElementCollector(this.Doc).WhereElementIsNotElementType().WherePasses(extent).WherePasses(near))
+            inside = [.. collector.ToElementIds()];
+        var queried = clock.Elapsed.TotalMilliseconds;
         if (boxes.Count > 1) near.Dispose();
         foreach (var box in boxes) box.Dispose();
         var excluded = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -161,6 +167,7 @@ internal sealed class Partition {
             excluded[name] = hits;
             keep.ExceptWith(members);
         }
+        var classified = clock.Elapsed.TotalMilliseconds;
         var kept = new List<Element>();
         var rejected = 0;
         if (keep.Count > 0) {
@@ -170,7 +177,8 @@ internal sealed class Partition {
             foreach (var element in collector)
                 if (Ingest.Allowed(element)) kept.Add(element); else rejected++;
         }
-        return new SceneReach(inside.Count, kept, excluded, rejected, clock.Elapsed.TotalMilliseconds);
+        var total = clock.Elapsed.TotalMilliseconds;
+        return new SceneReach(inside.Count, kept, excluded, rejected, total, queried, classified - queried, total - classified);
     }
 
     /// <summary>
@@ -283,5 +291,6 @@ internal sealed class Partition {
 /// <param name="Counted">Ids inside reach before any exclusion; counting loads nothing.</param>
 /// <param name="Excluded">Ids inside reach per exclusion class; classes can overlap, so they need not sum.</param>
 /// <param name="RejectedAfterLoad">Kept by every quick filter, then refused by <see cref="Ingest.Allowed" />: loaded for nothing.</param>
+/// <param name="QueryMilliseconds">The one reach query; ExcludeMilliseconds the class queries; IterateMilliseconds the loads.</param>
 internal sealed record SceneReach(int Counted, IReadOnlyList<Element> Kept, IReadOnlyDictionary<string, int> Excluded,
-    int RejectedAfterLoad, double Milliseconds);
+    int RejectedAfterLoad, double Milliseconds, double QueryMilliseconds, double ExcludeMilliseconds, double IterateMilliseconds);

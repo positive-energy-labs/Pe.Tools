@@ -52,8 +52,9 @@ public sealed record SceneSource(string DocumentKey, long? LinkInstanceId, IRead
 /// <param name="Excluded">Ids within reach per exclusion class, removed before iteration; classes may overlap.</param>
 /// <param name="RejectedAfterLoad">Passed every quick filter, then refused by the managed gate: loaded for nothing.</param>
 /// <param name="CutByBound">Kept elements left out by a bound: missing native bounds, or the triangle or acquisition budget.</param>
+/// <param name="QueryMilliseconds">The reach query; ExcludeMilliseconds the exclusion-class queries; IterateMilliseconds the element loads.</param>
 public sealed record SceneSourceRead(int Counted, int Kept, IReadOnlyDictionary<string, int> Excluded, int RejectedAfterLoad,
-    int CutByBound, double Milliseconds);
+    int CutByBound, double Milliseconds, double QueryMilliseconds, double ExcludeMilliseconds, double IterateMilliseconds);
 public sealed record SceneUnavailableElement(long ElementId, string? UniqueId, string? Category, string Reason);
 public sealed record SceneMetadata(string Format, Stamp Stamp, Aabb Bounds, int Triangles,
     IReadOnlyList<SceneElement> Elements, IReadOnlyList<long> RequestedElementIds, int OmittedElements,
@@ -285,7 +286,8 @@ public static class Scene {
                 triangles, elements, ids.ToList(), omitted, world.Partitions.Select(p => new SceneSource(p.DocumentKey,
                     p.LinkInstanceId, Matrix(p.Transform), SceneSourceState.Loaded, p.Doc.Title,
                     reads.TryGetValue(p, out var r) ? new SceneSourceRead(r.Reach.Counted, r.Kept, r.Reach.Excluded,
-                        r.Reach.RejectedAfterLoad, r.Cut, r.Reach.Milliseconds) : null))
+                        r.Reach.RejectedAfterLoad, r.Cut, r.Reach.Milliseconds, r.Reach.QueryMilliseconds, r.Reach.ExcludeMilliseconds,
+                        r.Reach.IterateMilliseconds) : null))
                     .Concat(world.Unread.Select(u => new SceneSource("", u.LinkInstanceId, Matrix(u.Transform), u.State, u.Name, null)))
                     .ToList(), context == SceneContextRepresentation.None ? "focus" : "context", unavailable,
                 new SceneWork(broad, extracted, extractedTriangles, clock.Elapsed.TotalMilliseconds,
