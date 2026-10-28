@@ -57,9 +57,18 @@ export function assumedFanFlows(
         // RV-23 share an exhaust riser and an OA trunk with five more, and borrowed 3164 cfm each.
         // Port direction is family metadata (Q1: a tie-break only); it gates an assumed value, never a total.
         const reached = e.end.connector == null ? undefined : g.byId.get(e.end.elementId);
-        const reachedDir = reached && !isSegment(reached) ? reached.connectors.find((c) => c.index === e.end.connector)?.direction : undefined;
+        const reachedDir =
+          reached && !isSegment(reached)
+            ? reached.connectors.find((c) => c.index === e.end.connector)?.direction
+            : undefined;
         const ownDir = unit.connectors.find((c) => c.index === connector)?.direction;
-        if (e.end.kind === "roster-fan-port" && e.end.fan && e.end.fan.unitId !== fan.unitId && ownDir === "out" && reachedDir === "in") {
+        if (
+          e.end.kind === "roster-fan-port" &&
+          e.end.fan &&
+          e.end.fan.unitId !== fan.unitId &&
+          ownDir === "out" &&
+          reachedDir === "in"
+        ) {
           others.add(`${e.end.fan.unitId}:${e.end.fan.portIndex}`);
           sideReceiving.add(`${e.end.fan.unitId}:${e.end.fan.portIndex}`);
         }
@@ -118,7 +127,9 @@ export function assumedFanFlows(
     // A side with no terminals carries its paired side's flow: one stream passes through the fan.
     // Only a fan with no terminals on either side (MUAS feeding ERVs) borrows the receiving fans' flow;
     // borrowing per side pushed a big ERV's 3164 cfm through RV-11's 4 in discharge (569 implausible).
-    const paired = side.terminals.size ? side.terminals : (direct.get(side.ref) ?? new Map<number, number>());
+    const paired = side.terminals.size
+      ? side.terminals
+      : (direct.get(side.ref) ?? new Map<number, number>());
     const terminals = new Map(paired);
     if (!terminals.size)
       for (const other of side.receiving)

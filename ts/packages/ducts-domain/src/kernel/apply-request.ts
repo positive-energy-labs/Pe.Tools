@@ -20,7 +20,12 @@ export interface ApplyRequestInput {
   /** Terminal flows the sheet used, with their source. */
   terminalFlows: readonly { id: number; cfm: number; source: string | null }[];
   /** Typed or defaulted drops the sheet used, by element kind. */
-  drops: readonly { id: number; inWg: number; source: string | null; kind: "terminal" | "component" }[];
+  drops: readonly {
+    id: number;
+    inWg: number;
+    source: string | null;
+    kind: "terminal" | "component";
+  }[];
   /** Rule key -> table the sheet priced under. */
   choices: Choices;
   slots: DuctsApplyInput["slots"];
@@ -48,7 +53,13 @@ export function applyRequest(input: ApplyRequestInput): Omit<DuctsApplyInput, "p
   const seen = new Set<number>();
   const fittings = byId(
     input.legs.flatMap((leg) => {
-      if (leg.kind !== "fitting" || leg.source?.kind !== "rule" || leg.unpriced || leg.elementId <= 0) return [];
+      if (
+        leg.kind !== "fitting" ||
+        leg.source?.kind !== "rule" ||
+        leg.unpriced ||
+        leg.elementId <= 0
+      )
+        return [];
       if (seen.has(leg.elementId)) return [];
       seen.add(leg.elementId);
       return [
@@ -65,15 +76,31 @@ export function applyRequest(input: ApplyRequestInput): Omit<DuctsApplyInput, "p
     }),
   );
   const drops = (kind: "terminal" | "component") =>
-    byId(input.drops.filter((d) => d.kind === kind).map(({ id, inWg, source }) => ({ id, inWg, source })));
+    byId(
+      input.drops
+        .filter((d) => d.kind === kind)
+        .map(({ id, inWg, source }) => ({ id, inWg, source })),
+    );
   const terminals = drops("terminal");
   const components = drops("component");
-  const terminalFlows = byId(input.terminalFlows.map(({ id, cfm, source }) => ({ id, cfm, source })));
+  const terminalFlows = byId(
+    input.terminalFlows.map(({ id, cfm, source }) => ({ id, cfm, source })),
+  );
   const equipmentFlows =
-    input.designFlowCfm == null ? [] : [{ id: input.fan.unitId, cfm: input.designFlowCfm, source: "sheet: sum of reached terminals" }];
+    input.designFlowCfm == null
+      ? []
+      : [
+          {
+            id: input.fan.unitId,
+            cfm: input.designFlowCfm,
+            source: "sheet: sum of reached terminals",
+          },
+        ];
   // Only a complete total is ever written as required ESP (map pillar 3).
   const equipment =
-    input.requiredEspInWg == null ? [] : [{ id: input.fan.unitId, externalStaticInWg: input.requiredEspInWg }];
+    input.requiredEspInWg == null
+      ? []
+      : [{ id: input.fan.unitId, externalStaticInWg: input.requiredEspInWg }];
   const stored = input.store;
   const { appliedAt } = input;
   const store: DuctsApplyInput["store"] = {
@@ -85,28 +112,48 @@ export function applyRequest(input: ApplyRequestInput): Omit<DuctsApplyInput, "p
     instances: {
       ...stored?.instances,
       ...Object.fromEntries(
-        fittings.map(({ id, table, inputs, coefficient }) => [String(id), { table, inputs, coefficient, appliedAt }]),
+        fittings.map(({ id, table, inputs, coefficient }) => [
+          String(id),
+          { table, inputs, coefficient, appliedAt },
+        ]),
       ),
     },
     terminals: {
       ...stored?.terminals,
-      ...Object.fromEntries(terminals.map(({ id, inWg, source }) => [String(id), { inWg, source, appliedAt }])),
+      ...Object.fromEntries(
+        terminals.map(({ id, inWg, source }) => [String(id), { inWg, source, appliedAt }]),
+      ),
     },
     terminalFlows: {
       ...stored?.terminalFlows,
-      ...Object.fromEntries(terminalFlows.map(({ id, cfm, source }) => [String(id), { cfm, source, appliedAt }])),
+      ...Object.fromEntries(
+        terminalFlows.map(({ id, cfm, source }) => [String(id), { cfm, source, appliedAt }]),
+      ),
     },
     equipmentFlows: {
       ...stored?.equipmentFlows,
-      ...Object.fromEntries(equipmentFlows.map(({ id, cfm, source }) => [String(id), { cfm, source, appliedAt }])),
+      ...Object.fromEntries(
+        equipmentFlows.map(({ id, cfm, source }) => [String(id), { cfm, source, appliedAt }]),
+      ),
     },
     verdicts: stored?.verdicts ?? {},
     roles: stored?.roles ?? {},
     slots: Object.fromEntries(
-      Object.entries({ ...stored?.slots, ...input.slots }).flatMap(([key, name]) => (name ? [[key, name]] : [])),
+      Object.entries({ ...stored?.slots, ...input.slots }).flatMap(([key, name]) =>
+        name ? [[key, name]] : [],
+      ),
     ),
     workRevision: stored?.workRevision ?? 0,
     appliedAt,
   };
-  return { slots: input.slots, fittings, terminals, components, equipment, terminalFlows, equipmentFlows, store };
+  return {
+    slots: input.slots,
+    fittings,
+    terminals,
+    components,
+    equipment,
+    terminalFlows,
+    equipmentFlows,
+    store,
+  };
 }

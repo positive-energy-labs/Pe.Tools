@@ -109,7 +109,10 @@ const near = (e: Element, p: number[], r: number) => {
     const a = e.polyline[i]!;
     const ab = b.map((v, k) => v - a[k]!);
     const len2 = ab.reduce((s, v) => s + v * v, 0);
-    const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ab.reduce((s, v, k) => s + v * (p[k]! - a[k]!), 0) / len2));
+    const t =
+      len2 === 0
+        ? 0
+        : Math.max(0, Math.min(1, ab.reduce((s, v, k) => s + v * (p[k]! - a[k]!), 0) / len2));
     return d(a.map((v, k) => v + ab[k]! * t)) <= r + pad;
   });
 };
@@ -117,9 +120,13 @@ const near = (e: Element, p: number[], r: number) => {
 /** Nearest physical candidate, including occupied/sideways ports that inference intentionally rejects. */
 function nearestCandidate(nearby: readonly Element[], point: number[], withinIn: number) {
   const distance = (a: number[], b: number[]) => Math.hypot(...a.map((v, i) => v - b[i]!));
-  const choices = nearby.flatMap((e) => e.connectors.map((c) => ({
-    label: `${e.id}:${c.index}`, gapIn: distance(point, c.point) * 12, state: c.connectedTo ? "occupied" : "vacant",
-  })));
+  const choices = nearby.flatMap((e) =>
+    e.connectors.map((c) => ({
+      label: `${e.id}:${c.index}`,
+      gapIn: distance(point, c.point) * 12,
+      state: c.connectedTo ? "occupied" : "vacant",
+    })),
+  );
   for (const side of sidesOf(nearby.filter(isSegment))) {
     const v = point.map((x, i) => x - side.a[i]!);
     const dot = (a: number[], b: number[]) => a.reduce((sum, x, i) => sum + x * b[i]!, 0);
@@ -127,10 +134,18 @@ function nearestCandidate(nearby: readonly Element[], point: number[], withinIn:
     const axial = Math.max(-t, t - side.len, 0);
     const radial = v.map((x, i) => x - t * side.u[i]!);
     const section = side.section;
-    const across = "w" in section
-      ? Math.hypot(Math.max(0, Math.abs(dot(radial, section.x)) - section.w), Math.max(0, Math.abs(dot(radial, section.y)) - section.h))
-      : Math.max(0, Math.hypot(...radial) - section.outer);
-    choices.push({ label: `${side.owner} duct body`, gapIn: Math.hypot(axial, across) * 12, state: "occupied surface (no vacant port)" });
+    const across =
+      "w" in section
+        ? Math.hypot(
+            Math.max(0, Math.abs(dot(radial, section.x)) - section.w),
+            Math.max(0, Math.abs(dot(radial, section.y)) - section.h),
+          )
+        : Math.max(0, Math.hypot(...radial) - section.outer);
+    choices.push({
+      label: `${side.owner} duct body`,
+      gapIn: Math.hypot(axial, across) * 12,
+      state: "occupied surface (no vacant port)",
+    });
   }
   return choices.filter((c) => c.gapIn <= withinIn).sort((a, b) => a.gapIn - b.gapIn)[0];
 }
@@ -175,7 +190,12 @@ export function walkFrom(
     if (!depth.has(e.id)) depth.set(e.id, d);
     if (rosterUnits.has(e.id) || e.id === unit.id) {
       const fan = rosterRef(opts.roster, e.id, ci) ?? { unitId: e.id, portIndex: ci };
-      return end(parent, via, { kind: "roster-fan-port", elementId: e.id, connector: ci, fan }, carry);
+      return end(
+        parent,
+        via,
+        { kind: "roster-fan-port", elementId: e.id, connector: ci, fan },
+        carry,
+      );
     }
     if (entered.has(e.id)) return void rejoins++;
     entered.add(e.id);
@@ -183,21 +203,43 @@ export function walkFrom(
     if (!isSegment(e) && e.kind === "cap") return; // sealed: no air leaves by a cap
     if (!isSegment(e) && e.kind === "equipment" && e.connectors.length !== 2) {
       const id = block({
-        kind: "equipment-pairing", elementId: e.id, connector: ci, effectInWg: null,
+        kind: "equipment-pairing",
+        elementId: e.id,
+        connector: ci,
+        effectInWg: null,
         detail: `${e.family ?? "equipment"} ${e.id} has ${e.connectors.length} duct connectors and is not a roster fan; which one air leaves by is not known`,
-        closer: { kind: "ruling", note: `rule a connector pair through ${e.id}, or confirm it as a roster fan` },
+        closer: {
+          kind: "ruling",
+          note: `rule a connector pair through ${e.id}, or confirm it as a roster fan`,
+        },
       });
       return end(parent, via, { kind: "open-end", elementId: e.id, connector: ci }, [...carry, id]);
     }
     const blockerIds = [...carry];
     const cls = classOf(c?.classification) ?? p.cls;
-    const branchTap = !isSegment(e) && isTap(e)
-      && (!isSegment(p.el) || p.el.connectors.find((port) => port.index === via)?.kind !== "curve");
+    const branchTap =
+      !isSegment(e) &&
+      isTap(e) &&
+      (!isSegment(p.el) || p.el.connectors.find((port) => port.index === via)?.kind !== "curve");
     const terminal = !isSegment(e) && e.kind === "terminal";
-    const merge = branchTap ? "branch-tap" as const : !terminal && p.cls && cls && cls !== p.cls ? "class-change" as const : undefined;
-    states.push({ el: e, in: ci, parent, via, depth: d, cls, blockerIds, ...(merge ? { merge } : {}) });
+    const merge = branchTap
+      ? ("branch-tap" as const)
+      : !terminal && p.cls && cls && cls !== p.cls
+        ? ("class-change" as const)
+        : undefined;
+    states.push({
+      el: e,
+      in: ci,
+      parent,
+      via,
+      depth: d,
+      cls,
+      blockerIds,
+      ...(merge ? { merge } : {}),
+    });
     const s = states.length - 1;
-    if (!isSegment(e) && e.kind === "terminal") return end(s, undefined, { kind: "terminal", elementId: e.id, connector: ci });
+    if (!isSegment(e) && e.kind === "terminal")
+      return end(s, undefined, { kind: "terminal", elementId: e.id, connector: ci });
     queue.push(s);
   };
 
@@ -217,7 +259,8 @@ export function walkFrom(
       });
       return end(s, c.index, { kind: "open-end", elementId: st.el.id, connector: c.index }, [id]);
     }
-    const effectivePort = !classOf(c.classification) && st.cls ? { ...c, classification: st.cls } : c;
+    const effectivePort =
+      !classOf(c.classification) && st.cls ? { ...c, classification: st.cls } : c;
     const open = openPort(st.el, effectivePort);
     const nearby = g.all.filter((e) => e.id !== st.el.id && near(e, c.point, box));
     const rawCandidates = candidates(open, nearby, searchIn).filter(
@@ -408,7 +451,8 @@ export function terminateMerges(w: Walk): void {
   const owners = new Map<number, End>();
   for (const e of w.ends) {
     const at = first(e);
-    if (at == null || e.end.kind !== "roster-fan-port" || e.end.elementId === w.states[0]!.el.id) continue;
+    if (at == null || e.end.kind !== "roster-fan-port" || e.end.elementId === w.states[0]!.el.id)
+      continue;
     const prior = owners.get(at);
     if (!prior || lineage(w, e.state).length < lineage(w, prior.state).length) owners.set(at, e);
   }
@@ -424,11 +468,25 @@ export function terminateMerges(w: Walk): void {
     const out = branch ? st.el.connectors.find((c) => c.index !== st.in)?.index : st.via;
     const owner = owners.get(at)?.end;
     const directionHint = owner?.fan
-      ? owner.connector === owner.fan.portIndex ? "return" as const : "supply" as const
-      : /supply/i.test(w.states[st.parent]!.cls ?? "") && /return/i.test(st.cls ?? "") ? "supply" as const : undefined;
-    return [{ state: branch ? at : st.parent, out, blockerIds: [], ...(directionHint ? { directionHint } : {}), end: {
-      kind: "joins-other-fan", elementId: st.el.id, ...(st.in == null ? {} : { connector: st.in }),
-      fan: owners.get(at)?.end.fan ?? null,
-    } }];
+      ? owner.connector === owner.fan.portIndex
+        ? ("return" as const)
+        : ("supply" as const)
+      : /supply/i.test(w.states[st.parent]!.cls ?? "") && /return/i.test(st.cls ?? "")
+        ? ("supply" as const)
+        : undefined;
+    return [
+      {
+        state: branch ? at : st.parent,
+        out,
+        blockerIds: [],
+        ...(directionHint ? { directionHint } : {}),
+        end: {
+          kind: "joins-other-fan",
+          elementId: st.el.id,
+          ...(st.in == null ? {} : { connector: st.in }),
+          fan: owners.get(at)?.end.fan ?? null,
+        },
+      },
+    ];
   });
 }

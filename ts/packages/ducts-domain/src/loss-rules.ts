@@ -115,10 +115,16 @@ const elbowInput = (f: FittingFacts, _flows: Flows, table: string) =>
 const angleInput = (f: FittingFacts) => ({ res: "Co", x: f.angleDeg ?? NaN, y: f.aoOverA1 ?? NaN });
 
 // CR3-1 angle factor K, verbatim from Revit's shipped CR3-1.tbl (Cp is the 90-degree grid).
-const radiusAngleFactor = (angle: number) => lookupGrid({
-  title: "CR3-1 Angle Factor K", xLabel: "Theta", x: [0, 20, 30, 45, 60, 75, 90, 110, 130, 150, 180],
-  grid: [0, 0.31, 0.45, 0.60, 0.78, 0.90, 1, 1.13, 1.20, 1.28, 1.40],
-}, angle).value;
+const radiusAngleFactor = (angle: number) =>
+  lookupGrid(
+    {
+      title: "CR3-1 Angle Factor K",
+      xLabel: "Theta",
+      x: [0, 20, 30, 45, 60, 75, 90, 110, 130, 150, 180],
+      grid: [0, 0.31, 0.45, 0.6, 0.78, 0.9, 1, 1.13, 1.2, 1.28, 1.4],
+    },
+    angle,
+  ).value;
 
 export const LOSS_RULES: readonly LossRule[] = [
   {
@@ -157,42 +163,91 @@ export const LOSS_RULES: readonly LossRule[] = [
     input: elbowInput,
     basisOf: inletBasis,
   },
-  ...([90, 45] as const).map((angle): LossRule => ({
-    key: `elbow-15d-${angle}-le10`, family: "Round Elbow", type: "1.5 D die stamped",
-    cond: `${angle} degrees, D <= 10 in`, table: angle === 90 ? "CD3-1" : "CD3-3",
-    options: ["CD3-1", "CD3-3"], basis: "Pv of the elbow",
-    when: (f) => elbow(f) && near(f.rOverD, 1.5) && dIn(f) <= 10
-      && f.angleDeg != null && Math.abs(f.angleDeg - angle) < 0.01,
-    input: elbowInput, basisOf: inletBasis,
-  })),
+  ...([90, 45] as const).map(
+    (angle): LossRule => ({
+      key: `elbow-15d-${angle}-le10`,
+      family: "Round Elbow",
+      type: "1.5 D die stamped",
+      cond: `${angle} degrees, D <= 10 in`,
+      table: angle === 90 ? "CD3-1" : "CD3-3",
+      options: ["CD3-1", "CD3-3"],
+      basis: "Pv of the elbow",
+      when: (f) =>
+        elbow(f) &&
+        near(f.rOverD, 1.5) &&
+        dIn(f) <= 10 &&
+        f.angleDeg != null &&
+        Math.abs(f.angleDeg - angle) < 0.01,
+      input: elbowInput,
+      basisOf: inletBasis,
+    }),
+  ),
   {
     key: "elbow-round-radius",
-    family: "Round Elbow", type: "3 gore", cond: "r/D 1.5 to 2; 90 degrees",
-    table: "CD3-12", options: ["CD3-12"], basis: "Pv of the elbow",
-    when: (f) => elbow(f) && f.rOverD != null && f.rOverD >= 1.5 && f.rOverD <= 2
-      && f.angleDeg != null && Math.abs(f.angleDeg - 90) < 0.01,
-    input: elbowInput, basisOf: inletBasis,
+    family: "Round Elbow",
+    type: "3 gore",
+    cond: "r/D 1.5 to 2; 90 degrees",
+    table: "CD3-12",
+    options: ["CD3-12"],
+    basis: "Pv of the elbow",
+    when: (f) =>
+      elbow(f) &&
+      f.rOverD != null &&
+      f.rOverD >= 1.5 &&
+      f.rOverD <= 2 &&
+      f.angleDeg != null &&
+      Math.abs(f.angleDeg - 90) < 0.01,
+    input: elbowInput,
+    basisOf: inletBasis,
   },
   {
     key: "elbow-rect-radius",
-    family: "Rectangular Elbow - Radius", type: "smooth radius without vanes", cond: "measured radius and angle",
-    table: "CR3-1", options: ["CR3-1"], basis: "Pv of the elbow; Cp times angle factor K",
-    when: (f) => f.partType === "Elbow" && f.inlet.shape === "rectangular"
-      && /radius/i.test(f.family ?? "") && !vaned(f) && (f.centerRadiusIn ?? 0) > 0
-      && f.angleDeg != null && f.angleDeg > 0 && f.angleDeg <= 180,
+    family: "Rectangular Elbow - Radius",
+    type: "smooth radius without vanes",
+    cond: "measured radius and angle",
+    table: "CR3-1",
+    options: ["CR3-1"],
+    basis: "Pv of the elbow; Cp times angle factor K",
+    when: (f) =>
+      f.partType === "Elbow" &&
+      f.inlet.shape === "rectangular" &&
+      /radius/i.test(f.family ?? "") &&
+      !vaned(f) &&
+      (f.centerRadiusIn ?? 0) > 0 &&
+      f.angleDeg != null &&
+      f.angleDeg > 0 &&
+      f.angleDeg <= 180,
     // ponytail: Width is the turn-plane side in these Revit radius families, as for the mitered rule.
-    input: (f) => ({ res: "Cp", x: (f.inlet.heightIn ?? NaN) / (f.inlet.widthIn ?? NaN),
-      y: (f.centerRadiusIn ?? NaN) / (f.inlet.widthIn ?? NaN), factor: radiusAngleFactor(f.angleDeg!) }),
+    input: (f) => ({
+      res: "Cp",
+      x: (f.inlet.heightIn ?? NaN) / (f.inlet.widthIn ?? NaN),
+      y: (f.centerRadiusIn ?? NaN) / (f.inlet.widthIn ?? NaN),
+      factor: radiusAngleFactor(f.angleDeg!),
+    }),
     basisOf: inletBasis,
   },
   {
     key: "tee-round",
-    family: "Round Tee", type: "plain 90 degree", cond: "entered from the run",
-    table: "SD5-9", options: ["SD5-9"], basis: "branch Pv on Cb; straight outlet Pv on Cs",
-    when: (f, flows) => f.partType === "Tee" && f.inlet.shape === "round" && !!f.junction && (flows.qc ?? 0) > 0,
-    input: (f, flows) => f.junction!.leg === "Cb"
-      ? { res: "Cb", x: flows.qb! / flows.qc!, y: f.junction!.branch.section!.areaFt2 / f.inlet.section!.areaFt2 }
-      : { res: "Cs", x: flows.qs! / flows.qc!, y: f.junction!.straight.section!.areaFt2 / f.inlet.section!.areaFt2 },
+    family: "Round Tee",
+    type: "plain 90 degree",
+    cond: "entered from the run",
+    table: "SD5-9",
+    options: ["SD5-9"],
+    basis: "branch Pv on Cb; straight outlet Pv on Cs",
+    when: (f, flows) =>
+      f.partType === "Tee" && f.inlet.shape === "round" && !!f.junction && (flows.qc ?? 0) > 0,
+    input: (f, flows) =>
+      f.junction!.leg === "Cb"
+        ? {
+            res: "Cb",
+            x: flows.qb! / flows.qc!,
+            y: f.junction!.branch.section!.areaFt2 / f.inlet.section!.areaFt2,
+          }
+        : {
+            res: "Cs",
+            x: flows.qs! / flows.qc!,
+            y: f.junction!.straight.section!.areaFt2 / f.inlet.section!.areaFt2,
+          },
     basisOf: (f, flows) => ({ section: f.outlet?.section ?? null, cfm: flows.q }),
   },
   {

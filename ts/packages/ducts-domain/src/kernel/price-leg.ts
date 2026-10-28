@@ -76,7 +76,12 @@ const round4 = (n: number) => +n.toFixed(4);
 
 const unpriced = (input: LegInput, reason: string, extra: Partial<PricedLeg> = {}): PricedLeg => ({
   kind: input.kind,
-  elementId: input.kind === "duct" ? input.segment.id : input.kind === "fitting" ? input.fitting.id : input.element.id,
+  elementId:
+    input.kind === "duct"
+      ? input.segment.id
+      : input.kind === "fitting"
+        ? input.fitting.id
+        : input.element.id,
   lossInWg: null,
   velocityFpm: null,
   source: null,
@@ -97,13 +102,22 @@ export function priceLeg(input: LegInput, grids: Grids, choices: Choices = {}): 
       elementId: s.id,
       lossInWg: f.dp,
       velocityFpm: f.fpm,
-      source: { kind: "friction", f: f.f, roughnessFt: s.roughness.valueFt, rateInWgPer100Ft: rate },
+      source: {
+        kind: "friction",
+        f: f.f,
+        roughnessFt: s.roughness.valueFt,
+        rateInWgPer100Ft: rate,
+      },
       unpriced: null,
       lengthFt: input.lengthFt,
     };
   }
   if (input.kind === "drop") {
-    if (input.inWg == null) return unpriced(input, `${input.element.kind} ${input.element.id} has no drop (${input.source})`);
+    if (input.inWg == null)
+      return unpriced(
+        input,
+        `${input.element.kind} ${input.element.id} has no drop (${input.source})`,
+      );
     return {
       kind: "drop",
       elementId: input.element.id,
@@ -141,7 +155,7 @@ export function priceLeg(input: LegInput, grids: Grids, choices: Choices = {}): 
   let found;
   try {
     found = lookupGrid(grid, lookup.x, lookup.y);
-      found.value *= lookup.factor ?? 1;
+    found.value *= lookup.factor ?? 1;
   } catch (e) {
     if (e instanceof GridError) return unpriced(input, e.message);
     throw e;
@@ -205,7 +219,10 @@ export function priceLeg(input: LegInput, grids: Grids, choices: Choices = {}): 
  * leg before it on the path, else after it, else `designRate`. A typed drop stays in in-wg
  * (null); so does an unpriced leg.
  */
-export function equivalentFeet(legs: readonly PricedLeg[], designRate = DEFAULT_DESIGN_FRICTION_RATE): (number | null)[] {
+export function equivalentFeet(
+  legs: readonly PricedLeg[],
+  designRate = DEFAULT_DESIGN_FRICTION_RATE,
+): (number | null)[] {
   const rates = legs.map((l) => (l.source?.kind === "friction" ? l.source.rateInWgPer100Ft : null));
   const refRate = (i: number) => {
     for (let k = i - 1; k >= 0; k--) if (rates[k] != null) return rates[k]!;

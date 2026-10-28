@@ -8,7 +8,8 @@ export type Node = DuctSnapshot["nodes"][number];
 export type Segment = DuctSnapshot["segments"][number];
 export type Connector = Node["connectors"][number];
 
-export const factOf = (node: Node, key: string) => node.facts.find((f) => f.key === key)?.value ?? null;
+export const factOf = (node: Node, key: string) =>
+  node.facts.find((f) => f.key === key)?.value ?? null;
 
 export const portOf = (c: Connector | undefined): Port | null =>
   c
@@ -58,19 +59,39 @@ export interface FittingTraversal {
 
 /** A plain tee entered from its run. Branch-entry/converging geometry has no diverging mapping. */
 export function teePorts(node: Node, inlet: Connector | undefined) {
-  if (node.partType !== "Tee" || node.connectors.length !== 3 || !inlet?.facing || inlet.shape !== "round") return null;
-  const dot = (a: number[], b: number[]) => a.reduce((sum, v, k) => sum + v * b[k]!, 0) / (Math.hypot(...a) * Math.hypot(...b));
-  const straight = node.connectors.find((c) => c.index !== inlet.index && c.facing && dot(inlet.facing!, c.facing) < -0.99);
-  const branch = node.connectors.find((c) => c.index !== inlet.index && c.index !== straight?.index);
-  return straight?.shape === "round" && branch?.shape === "round" && branch.facing
-    && Math.abs(dot(inlet.facing, branch.facing)) < 0.01 ? { straight, branch } : null;
+  if (
+    node.partType !== "Tee" ||
+    node.connectors.length !== 3 ||
+    !inlet?.facing ||
+    inlet.shape !== "round"
+  )
+    return null;
+  const dot = (a: number[], b: number[]) =>
+    a.reduce((sum, v, k) => sum + v * b[k]!, 0) / (Math.hypot(...a) * Math.hypot(...b));
+  const straight = node.connectors.find(
+    (c) => c.index !== inlet.index && c.facing && dot(inlet.facing!, c.facing) < -0.99,
+  );
+  const branch = node.connectors.find(
+    (c) => c.index !== inlet.index && c.index !== straight?.index,
+  );
+  return straight?.shape === "round" &&
+    branch?.shape === "round" &&
+    branch.facing &&
+    Math.abs(dot(inlet.facing, branch.facing)) < 0.01
+    ? { straight, branch }
+    : null;
 }
 
 /**
  * Facts the rules read, from a node's connectors and W1 facts. The caller asserts the traversal;
  * a transition with one In and one Out connector still reads its physical pair (as losses.ts did).
  */
-export function fittingFacts({ fitting: node, inlet: walkedInlet, outlet: walkedOutlet, main }: FittingTraversal): FittingFacts {
+export function fittingFacts({
+  fitting: node,
+  inlet: walkedInlet,
+  outlet: walkedOutlet,
+  main,
+}: FittingTraversal): FittingFacts {
   const tap = isTap(node);
   const transition = node.partType === "Transition";
   const physical = transition ? transitionGeometry(node) : null;
@@ -103,11 +124,24 @@ export function fittingFacts({ fitting: node, inlet: walkedInlet, outlet: walked
     partType: node.partType ?? null,
     rOverD: factOf(node, "rOverD"),
     centerRadiusIn: factOf(node, "centerRadius"),
-    ...(tee && outlet && inletPort.section && portOf(tee.branch)?.section && portOf(tee.straight)?.section
-      ? { junction: { branch: portOf(tee.branch)!, straight: portOf(tee.straight)!, leg: outlet.index === tee.branch.index ? "Cb" as const : "Cs" as const } } : {}),
+    ...(tee &&
+    outlet &&
+    inletPort.section &&
+    portOf(tee.branch)?.section &&
+    portOf(tee.straight)?.section
+      ? {
+          junction: {
+            branch: portOf(tee.branch)!,
+            straight: portOf(tee.straight)!,
+            leg: outlet.index === tee.branch.index ? ("Cb" as const) : ("Cs" as const),
+          },
+        }
+      : {}),
     aoOverA1: transition ? ratio : (factOf(node, "aoOverA1") ?? ratio),
     angleDeg: physical ? physical.angleDeg : factOf(node, "angle"),
-    ...(walked ? { note: "oriented by the asserted walk; its connectors state no In/Out pair" } : {}),
+    ...(walked
+      ? { note: "oriented by the asserted walk; its connectors state no In/Out pair" }
+      : {}),
     inputError: physical?.error,
     inlet: inletPort,
     outlet: outletPort,
@@ -195,7 +229,12 @@ export function splitTappedDuct(args: {
         kind: "tap-branch",
         tap: t.tap,
         leg: "Cb",
-        flows: { through: t.branchCfm, branch: t.branchCfm, upstreamMain: q, downstreamMain: q - t.branchCfm },
+        flows: {
+          through: t.branchCfm,
+          branch: t.branchCfm,
+          upstreamMain: q,
+          downstreamMain: q - t.branchCfm,
+        },
         atFt: at,
       });
       return pieces;
@@ -205,7 +244,12 @@ export function splitTappedDuct(args: {
         kind: "tap-straight",
         tap: t.tap,
         leg: "Cs",
-        flows: { through: q, branch: t.branchCfm, upstreamMain: q, downstreamMain: q - t.branchCfm },
+        flows: {
+          through: q,
+          branch: t.branchCfm,
+          upstreamMain: q,
+          downstreamMain: q - t.branchCfm,
+        },
         atFt: at,
       });
       q -= t.branchCfm;

@@ -323,15 +323,35 @@ it("assumed flow borrows a receiving unit's flow only through its intake, never 
       document: { title: "co-source", readAt: "fixed" },
       slots: { terminalFlow: "named" },
       nodes: [
-        node(300, "equipment", [dir(port(0, [0, 0, 0], [1, 0, 0], [10, 0]), "out"), dir(port(1, [0, 0, 0], [-1, 0, 0], null), "in")]),
-        node(400, "equipment", [dir(port(0, [4, 0, 0], [-1, 0, 0], [10, 1]), bDirection), dir(port(1, [4, 0, 0], [1, 0, 0], [402, 0], "ReturnAir"), "in")]),
+        node(300, "equipment", [
+          dir(port(0, [0, 0, 0], [1, 0, 0], [10, 0]), "out"),
+          dir(port(1, [0, 0, 0], [-1, 0, 0], null), "in"),
+        ]),
+        node(400, "equipment", [
+          dir(port(0, [4, 0, 0], [-1, 0, 0], [10, 1]), bDirection),
+          dir(port(1, [4, 0, 0], [1, 0, 0], [402, 0], "ReturnAir"), "in"),
+        ]),
         node(402, "terminal", [port(0, [4, 0, 0], [-1, 0, 0], [400, 1], "ReturnAir")], 150),
       ],
-      segments: [duct(10, [0, 0, 0], [4, 0, 0], [port(0, [0, 0, 0], [-1, 0, 0], [300, 0]), port(1, [4, 0, 0], [1, 0, 0], [400, 0])])],
+      segments: [
+        duct(
+          10,
+          [0, 0, 0],
+          [4, 0, 0],
+          [port(0, [0, 0, 0], [-1, 0, 0], [300, 0]), port(1, [4, 0, 0], [1, 0, 0], [400, 0])],
+        ),
+      ],
     } as unknown as DuctSnapshot;
     const units = [
       { unitId: 300, portIndex: 0, inletPortIndex: 1, side: "supply", tag: "A", kind: "erv" },
-      { unitId: 400, portIndex: 0, inletPortIndex: 1, side: "supply", tag: "B", kind: "air-handler" },
+      {
+        unitId: 400,
+        portIndex: 0,
+        inletPortIndex: 1,
+        side: "supply",
+        tag: "B",
+        kind: "air-handler",
+      },
     ] as FanPort[];
     return assumedFanFlows(snapshot as never, units, "named", {});
   };

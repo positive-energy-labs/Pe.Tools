@@ -111,7 +111,10 @@ class Pricer {
   blockers = new Map<string, Blocker>();
   autoJoinNotes = new Set<string>();
   healNotes = new Set<string>();
-  constructor(readonly input: PricingInput, readonly g: Graph) {}
+  constructor(
+    readonly input: PricingInput,
+    readonly g: Graph,
+  ) {}
 
   block = (b: Omit<Blocker, "id">) => {
     const id = `${b.kind}:${b.elementId}${b.connector == null ? "" : `:${b.connector}`}`;
@@ -123,15 +126,38 @@ class Pricer {
   private take(p: PricedLeg, el: number): { lossInWg: number | null; ids: string[] } {
     if (p.implausible) {
       const pv = p.source?.kind === "rule" ? p.source.pv : 0;
-      return { lossInWg: null, ids: [this.block({
-        kind: "implausible-loss", elementId: p.elementId, effectInWg: round(p.implausible.coefficient * pv), detail: p.unpriced!,
-        closer: { kind: "ruling", note: "type the fitting's drop or assign another table" },
-      })] };
+      return {
+        lossInWg: null,
+        ids: [
+          this.block({
+            kind: "implausible-loss",
+            elementId: p.elementId,
+            effectInWg: round(p.implausible.coefficient * pv),
+            detail: p.unpriced!,
+            closer: { kind: "ruling", note: "type the fitting's drop or assign another table" },
+          }),
+        ],
+      };
     }
-    if (p.unpriced) return { lossInWg: null, ids: [this.block({
-      kind: p.kind === "drop" ? "unknown-drop" : "not-priced", elementId: el, effectInWg: null, detail: p.unpriced,
-      closer: { kind: p.kind === "drop" ? "default" : "ruling", note: p.kind === "drop" ? "type a drop or take the firm default" : "assign a rule or type the drop" },
-    })] };
+    if (p.unpriced)
+      return {
+        lossInWg: null,
+        ids: [
+          this.block({
+            kind: p.kind === "drop" ? "unknown-drop" : "not-priced",
+            elementId: el,
+            effectInWg: null,
+            detail: p.unpriced,
+            closer: {
+              kind: p.kind === "drop" ? "default" : "ruling",
+              note:
+                p.kind === "drop"
+                  ? "type a drop or take the firm default"
+                  : "assign a rule or type the drop",
+            },
+          }),
+        ],
+      };
     return { lossInWg: p.lossInWg, ids: [] };
   }
 
@@ -146,10 +172,17 @@ class Pricer {
     const cfm = f ? f.cfm : 0;
     const kind: Leg["kind"] = isSegment(e) ? "duct" : e.kind === "cap" ? "fitting" : e.kind;
     const leg: Leg = {
-      id, elementId: e.id, kind,
-      ...(st.in == null ? {} : { inConnector: st.in }), ...(out == null ? {} : { outConnector: out }),
-      flowCfm: cfm, flowSource: f && f.ends ? `${[...f.sources].join("+")}:${f.ends}` : null,
-      velocityFpm: null, lossInWg: null, lossSource: { kind: "default", ref: "unpriced" }, equivalentFt: null,
+      id,
+      elementId: e.id,
+      kind,
+      ...(st.in == null ? {} : { inConnector: st.in }),
+      ...(out == null ? {} : { outConnector: out }),
+      flowCfm: cfm,
+      flowSource: f && f.ends ? `${[...f.sources].join("+")}:${f.ends}` : null,
+      velocityFpm: null,
+      lossInWg: null,
+      lossSource: { kind: "default", ref: "unpriced" },
+      equivalentFt: null,
     };
     this.legs[id] = leg;
     const ids = [...(f?.missing ?? [])];
@@ -166,14 +199,29 @@ class Pricer {
         leg.lossInWg = t.lossInWg;
         leg.velocityFpm = r.p.velocityFpm;
         const src = r.p.source;
-        leg.lossSource = !src ? leg.lossSource
-          : src.kind === "friction" ? { kind: "friction", ref: `Altshul-Tsal, roughness ${src.roughnessFt} ft${r.note ?? ""}` }
-          : src.kind === "rule" ? { kind: "rule", ref: `${src.rule} ${src.table} ${src.inputs.res}=${round(src.coefficient)}${r.note ?? ""}` }
-          : { kind: src.source.startsWith("firm default") ? "default" : "drop", ref: src.source };
+        leg.lossSource = !src
+          ? leg.lossSource
+          : src.kind === "friction"
+            ? {
+                kind: "friction",
+                ref: `Altshul-Tsal, roughness ${src.roughnessFt} ft${r.note ?? ""}`,
+              }
+            : src.kind === "rule"
+              ? {
+                  kind: "rule",
+                  ref: `${src.rule} ${src.table} ${src.inputs.res}=${round(src.coefficient)}${r.note ?? ""}`,
+                }
+              : {
+                  kind: src.source.startsWith("firm default") ? "default" : "drop",
+                  ref: src.source,
+                };
       }
     }
     for (const join of w.autoJoins) {
-      if ((join.from[0] === e.id && join.from[1] === out) || (join.to[0] === e.id && join.to[1] === st.in)) {
+      if (
+        (join.from[0] === e.id && join.from[1] === out) ||
+        (join.to[0] === e.id && join.to[1] === st.in)
+      ) {
         leg.lossSource.ref += `; ${join.note}`;
         this.autoJoinNotes.add(join.note);
       }
@@ -182,8 +230,14 @@ class Pricer {
     return ids;
   }
 
-  private price(w: Walk, flows: Flows, side: Side, s: number, out: number | undefined, cfm: number):
-    { p: PricedLeg | null; ids: string[]; note?: string } {
+  private price(
+    w: Walk,
+    flows: Flows,
+    side: Side,
+    s: number,
+    out: number | undefined,
+    cfm: number,
+  ): { p: PricedLeg | null; ids: string[]; note?: string } {
     const { grids, choices = {}, drops = {}, defaults = {} } = this.input;
     const st = w.states[s]!;
     const e = st.el;
@@ -197,11 +251,20 @@ class Pricer {
     const conn = (i: number | undefined) => e.connectors.find((c) => c.index === i);
     if (e.kind === "terminal") {
       const catalog = e.terminalDrop?.catalogDropInWg;
-      if (catalog != null) return drop(catalog, `parameter:${this.input.snapshot.slots?.terminalDrop ?? "terminalDrop"}`);
-      if (defaults.terminalDropInWg != null) return drop(defaults.terminalDropInWg, defaults.terminalDropSource ?? `firm default ${defaults.version ?? "unversioned"}`);
+      if (catalog != null)
+        return drop(
+          catalog,
+          `parameter:${this.input.snapshot.slots?.terminalDrop ?? "terminalDrop"}`,
+        );
+      if (defaults.terminalDropInWg != null)
+        return drop(
+          defaults.terminalDropInWg,
+          defaults.terminalDropSource ?? `firm default ${defaults.version ?? "unversioned"}`,
+        );
       return drop(SHIM_TERMINAL_DROP_IN_WG, "SHIM placeholder");
     }
-    if (e.kind === "equipment") return drop(null, "inline equipment; no typed drop and no firm default yet");
+    if (e.kind === "equipment")
+      return drop(null, "inline equipment; no typed drop and no firm default yet");
     const stated = e.kind === "accessory" ? factOf(e, "pressureDrop") : null;
     if (stated != null && stated > 0) return drop(stated, "parameter:pressureDrop");
     if (isTap(e)) return this.tap(w, flows, s, cfm);
@@ -210,15 +273,20 @@ class Pricer {
     const tee = side === "supply" ? teePorts(e, inlet) : null;
     const branchCfm = tee ? flows.leg.get(legKey(s, tee.branch.index))?.cfm : null;
     const straightCfm = tee ? flows.leg.get(legKey(s, tee.straight.index))?.cfm : null;
-    const legFlows: LegFlows = tee && through != null && branchCfm != null && straightCfm != null
-      ? { through: cfm, branch: branchCfm, upstreamMain: through, downstreamMain: straightCfm }
-      : e.connectors.length > 2 && through != null
-      ? { through: cfm, branch: cfm, upstreamMain: through, downstreamMain: through - cfm }
-      : { through: cfm };
+    const legFlows: LegFlows =
+      tee && through != null && branchCfm != null && straightCfm != null
+        ? { through: cfm, branch: branchCfm, upstreamMain: through, downstreamMain: straightCfm }
+        : e.connectors.length > 2 && through != null
+          ? { through: cfm, branch: cfm, upstreamMain: through, downstreamMain: through - cfm }
+          : { through: cfm };
     // ponytail: return-side junctions are priced on the same (diverging) rules; converging tables are the upgrade.
     const facts = fittingFacts({ fitting: e, inlet, outlet });
     if (e.partType === "Tee" && !tee) delete facts.junction;
-    const p = priceLeg({ kind: "fitting", fitting: e, facts, flows: legFlows, leg: "C" }, grids, choices);
+    const p = priceLeg(
+      { kind: "fitting", fitting: e, facts, flows: legFlows, leg: "C" },
+      grids,
+      choices,
+    );
     return { p, ids: this.take(p, e.id).ids };
   }
 
@@ -255,24 +323,54 @@ class Pricer {
       const taps = this.tapsOn(w, flows, s);
       const upstreamCfm = stateFlow(flows, s);
       if (!taps || upstreamCfm == null) return { p: null, ids };
-      const leaveBy = outC?.kind === "curve" ? outC.connectedTo?.elementId ?? null : null;
+      const leaveBy = outC?.kind === "curve" ? (outC.connectedTo?.elementId ?? null) : null;
       const split = splitTappedDuct({ duct, upstream: inC, upstreamCfm, taps, leaveBy });
       pieces = split.filter((x) => x.kind === "friction");
-      cs = split.flatMap((x) => x.kind !== "tap-straight" ? [] : [priceLeg({
-        kind: "fitting", fitting: x.tap, leg: "Cs", flows: x.flows,
-        facts: fittingFacts({ fitting: x.tap, inlet: x.tap.connectors.find((c) => c.connectedTo?.elementId === duct.id), outlet: undefined, main: duct }),
-      }, grids, choices)]);
+      cs = split.flatMap((x) =>
+        x.kind !== "tap-straight"
+          ? []
+          : [
+              priceLeg(
+                {
+                  kind: "fitting",
+                  fitting: x.tap,
+                  leg: "Cs",
+                  flows: x.flows,
+                  facts: fittingFacts({
+                    fitting: x.tap,
+                    inlet: x.tap.connectors.find((c) => c.connectedTo?.elementId === duct.id),
+                    outlet: undefined,
+                    main: duct,
+                  }),
+                },
+                grids,
+                choices,
+              ),
+            ],
+      );
     } else {
       // Entered by a tap on its side: friction from the tap to the connector it leaves by.
       // ponytail: taps passed on the way are not charged here; the split above covers the usual entry.
-      const first = duct.connectors.filter((c) => c.kind !== "curve")
+      const first = duct.connectors
+        .filter((c) => c.kind !== "curve")
         .sort((a, b) => dist(a.point, duct.polyline[0]!) - dist(b.point, duct.polyline[0]!))[0];
-      const pos = (c: typeof inC | undefined) => !c ? duct.lengthFt
-        : c.kind === "curve" ? tapDistance(duct, { id: c.connectedTo?.elementId ?? -1, point: c.point } as Node, first)
-        : dist(c.point, duct.polyline[0]!) <= dist(c.point, duct.polyline.at(-1)!) ? 0 : duct.lengthFt;
+      const pos = (c: typeof inC | undefined) =>
+        !c
+          ? duct.lengthFt
+          : c.kind === "curve"
+            ? tapDistance(
+                duct,
+                { id: c.connectedTo?.elementId ?? -1, point: c.point } as Node,
+                first,
+              )
+            : dist(c.point, duct.polyline[0]!) <= dist(c.point, duct.polyline.at(-1)!)
+              ? 0
+              : duct.lengthFt;
       pieces = [{ kind: "friction", lengthFt: Math.abs(pos(outC) - pos(inC)), cfm }];
     }
-    const priced = pieces.map((x) => priceLeg({ kind: "duct", segment: duct, lengthFt: x.lengthFt, cfm: x.cfm }, grids));
+    const priced = pieces.map((x) =>
+      priceLeg({ kind: "duct", segment: duct, lengthFt: x.lengthFt, cfm: x.cfm }, grids),
+    );
     let loss = 0;
     for (const p of [...priced, ...cs]) {
       const t = this.take(p, p.elementId);
@@ -284,16 +382,33 @@ class Pricer {
     const rate = length > 1e-9 && fr > 0 ? (fr / length) * 100 : null;
     const head = priced[0];
     const p: PricedLeg = {
-      kind: "duct", elementId: duct.id, lossInWg: loss, velocityFpm: head?.velocityFpm ?? null,
-      source: { kind: "friction", f: head?.source?.kind === "friction" ? head.source.f : 0, roughnessFt: duct.roughness.valueFt, rateInWgPer100Ft: rate },
+      kind: "duct",
+      elementId: duct.id,
+      lossInWg: loss,
+      velocityFpm: head?.velocityFpm ?? null,
+      source: {
+        kind: "friction",
+        f: head?.source?.kind === "friction" ? head.source.f : 0,
+        roughnessFt: duct.roughness.valueFt,
+        rateInWgPer100Ft: rate,
+      },
       unpriced: null,
       // Equivalent feet: the straight length, plus any Cs charged on it at this duct's own rate.
       lengthFt: rate ? (loss / rate) * 100 : length,
     };
-    return { p, ids, note: `, ${round(length)} ft${cs.length ? `, ${cs.length} tap(s) passed (Cs)` : ""}` };
+    return {
+      p,
+      ids,
+      note: `, ${round(length)} ft${cs.length ? `, ${cs.length} tap(s) passed (Cs)` : ""}`,
+    };
   }
 
-  private tap(w: Walk, flows: Flows, s: number, cfm: number): { p: PricedLeg | null; ids: string[]; note?: string } {
+  private tap(
+    w: Walk,
+    flows: Flows,
+    s: number,
+    cfm: number,
+  ): { p: PricedLeg | null; ids: string[]; note?: string } {
     const { grids, choices = {} } = this.input;
     const st = w.states[s]!;
     const tap = st.el as Node;
@@ -304,29 +419,82 @@ class Pricer {
       // ponytail: a merge's receiving-stream flow is not this fan's to invent; only price its branch when observed.
       const mainPort = tap.connectors.find((c) => c.index !== st.in);
       const receiving = mainPort?.connectedTo && this.g.byId.get(mainPort.connectedTo.elementId);
-      const mainCfm = receiving && isSegment(receiving) ? receiving.connectors.reduce((max, c) => Math.max(max, c.flowCfm ?? 0), 0) : 0;
+      const mainCfm =
+        receiving && isSegment(receiving)
+          ? receiving.connectors.reduce((max, c) => Math.max(max, c.flowCfm ?? 0), 0)
+          : 0;
       if (!receiving || !isSegment(receiving) || mainCfm <= 0)
-        return { p: { kind: "drop", elementId: tap.id, lossInWg: null, velocityFpm: null,
-          source: { kind: "drop", source: "merge boundary; branch loss unavailable without receiving-stream flow" }, unpriced: null }, ids: [] };
-      const p = priceLeg({ kind: "fitting", fitting: tap, leg: "Cb",
-        flows: { through: cfm, branch: cfm, upstreamMain: mainCfm + cfm, downstreamMain: mainCfm },
-        facts: fittingFacts({ fitting: tap, inlet: tap.connectors.find((c) => c.index === st.in), outlet: undefined, main: receiving }),
-      }, grids, choices);
+        return {
+          p: {
+            kind: "drop",
+            elementId: tap.id,
+            lossInWg: null,
+            velocityFpm: null,
+            source: {
+              kind: "drop",
+              source: "merge boundary; branch loss unavailable without receiving-stream flow",
+            },
+            unpriced: null,
+          },
+          ids: [],
+        };
+      const p = priceLeg(
+        {
+          kind: "fitting",
+          fitting: tap,
+          leg: "Cb",
+          flows: {
+            through: cfm,
+            branch: cfm,
+            upstreamMain: mainCfm + cfm,
+            downstreamMain: mainCfm,
+          },
+          facts: fittingFacts({
+            fitting: tap,
+            inlet: tap.connectors.find((c) => c.index === st.in),
+            outlet: undefined,
+            main: receiving,
+          }),
+        },
+        grids,
+        choices,
+      );
       // ponytail: this uses the existing diverging-table estimate; a retained converging grid must replace it for merge certification.
       return { p, ids: this.take(p, tap.id).ids, note: ", diverging-table estimate at merge" };
     }
     const parentIn = main.connectors.find((c) => c.index === parent.in)!;
     const taps = parentIn.kind === "curve" ? null : this.tapsOn(w, flows, st.parent);
     const up = stateFlow(flows, st.parent);
-    const branch = taps && up != null
-      ? splitTappedDuct({ duct: main, upstream: parentIn, upstreamCfm: up, taps, leaveBy: tap.id }).at(-1)
-      : undefined;
-    const legFlows: LegFlows = branch?.kind === "tap-branch" ? branch.flows
-      : { through: cfm, branch: cfm, upstreamMain: up ?? cfm, downstreamMain: (up ?? cfm) - cfm };
-    const p = priceLeg({
-      kind: "fitting", fitting: tap, leg: "Cb", flows: legFlows,
-      facts: fittingFacts({ fitting: tap, inlet: tap.connectors.find((c) => c.index === st.in), outlet: undefined, main }),
-    }, grids, choices);
+    const branch =
+      taps && up != null
+        ? splitTappedDuct({
+            duct: main,
+            upstream: parentIn,
+            upstreamCfm: up,
+            taps,
+            leaveBy: tap.id,
+          }).at(-1)
+        : undefined;
+    const legFlows: LegFlows =
+      branch?.kind === "tap-branch"
+        ? branch.flows
+        : { through: cfm, branch: cfm, upstreamMain: up ?? cfm, downstreamMain: (up ?? cfm) - cfm };
+    const p = priceLeg(
+      {
+        kind: "fitting",
+        fitting: tap,
+        leg: "Cb",
+        flows: legFlows,
+        facts: fittingFacts({
+          fitting: tap,
+          inlet: tap.connectors.find((c) => c.index === st.in),
+          outlet: undefined,
+          main,
+        }),
+      },
+      grids,
+      choices,
+    );
     return { p, ids: this.take(p, tap.id).ids };
   }
 
@@ -342,7 +510,11 @@ class Pricer {
       const cfm = values.some((v) => v == null)
         ? null
         : values.reduce<number>((sum, v) => sum + v!, 0);
-      const sources = [...new Set(w.ends.flatMap((e, i) => uses(e, h) && flows.endSource[i] ? [flows.endSource[i]!] : []))];
+      const sources = [
+        ...new Set(
+          w.ends.flatMap((e, i) => (uses(e, h) && flows.endSource[i] ? [flows.endSource[i]!] : [])),
+        ),
+      ];
       this.heal(h.proposal, w.states[h.state]!.el, cfm, sources.join(" + "), h.state === 0);
     }
     return ends.map((e) => {
@@ -393,7 +565,13 @@ class Pricer {
     });
   }
 
-  private heal(proposal: HealProposal, source: Node | Segment, cfm: number | null, flowSource: string, root: boolean) {
+  private heal(
+    proposal: HealProposal,
+    source: Node | Segment,
+    cfm: number | null,
+    flowSource: string,
+    root: boolean,
+  ) {
     const key = `heal:${proposal.pair.join("|")}`;
     const note = `${proposal.kind} ${proposal.pair.join(" to ")}; ${proposal.risk}`;
     this.healNotes.add(note);
@@ -502,12 +680,18 @@ function totals(pricer: Pricer, paths: SheetPath[], allowanceInWg: number): Side
   };
 }
 
-const rank = (paths: SheetPath[]) => paths.sort((a, b) => b.knownInWg - a.knownInWg || a.legIds.length - b.legIds.length);
+const rank = (paths: SheetPath[]) =>
+  paths.sort((a, b) => b.knownInWg - a.knownInWg || a.legIds.length - b.legIds.length);
 
-const carrying = (e: End) => e.end.kind === "terminal" || e.end.kind === "roster-fan-port" || e.end.kind === "joins-other-fan";
+const carrying = (e: End) =>
+  e.end.kind === "terminal" || e.end.kind === "roster-fan-port" || e.end.kind === "joins-other-fan";
 
 /** The ends choose direction; connector metadata breaks ties only. */
-function endDirection(w: Walk, g: Graph, roster: readonly FanPort[]): { score: number; source: string } {
+function endDirection(
+  w: Walk,
+  g: Graph,
+  roster: readonly FanPort[],
+): { score: number; source: string } {
   let score = 0;
   const reasons = new Set<string>();
   for (const e of w.ends) {
@@ -515,20 +699,43 @@ function endDirection(w: Walk, g: Graph, roster: readonly FanPort[]): { score: n
     if (!el) continue;
     if (e.directionHint) {
       score += e.directionHint === "supply" ? 1 : -1;
-      reasons.add(e.directionHint === "supply" ? "merge toward receiving fan inlet/return" : "merge toward another fan discharge");
+      reasons.add(
+        e.directionHint === "supply"
+          ? "merge toward receiving fan inlet/return"
+          : "merge toward another fan discharge",
+      );
       continue;
     }
     const port = el.connectors.find((c) => c.index === e.end.connector);
-    const cls = (port?.classification ?? (isSegment(el) ? el.classification : null) ?? "").replaceAll(" ", "").toLowerCase();
+    const cls = (port?.classification ?? (isSegment(el) ? el.classification : null) ?? "")
+      .replaceAll(" ", "")
+      .toLowerCase();
     if (!isSegment(el) && e.end.kind === "terminal") {
-      if (/louver|outside|outdoor|intake/i.test(`${el.family ?? ""} ${el.type ?? ""}`) || /outdoor|exhaust|return/.test(cls)) {
-        score--; reasons.add("return/exhaust terminal or outdoor intake");
-      } else if (/supply/.test(cls)) { score++; reasons.add("supply terminal"); }
+      if (
+        /louver|outside|outdoor|intake/i.test(`${el.family ?? ""} ${el.type ?? ""}`) ||
+        /outdoor|exhaust|return/.test(cls)
+      ) {
+        score--;
+        reasons.add("return/exhaust terminal or outdoor intake");
+      } else if (/supply/.test(cls)) {
+        score++;
+        reasons.add("supply terminal");
+      }
     } else if (e.end.kind === "roster-fan-port" && e.end.elementId !== w.states[0]!.el.id) {
-      const receiver = roster.find((p) => p.unitId === e.end.elementId && p.inletPortIndex === e.end.connector);
-      if (receiver || /return/.test(cls) || port?.direction === "in") { score++; reasons.add("receiving fan inlet/return"); }
-      else if (port?.direction === "out") { score--; reasons.add("another fan discharge"); }
-    } else if (/outdoor/.test(cls)) { score--; reasons.add("outdoor-air end"); }
+      const receiver = roster.find(
+        (p) => p.unitId === e.end.elementId && p.inletPortIndex === e.end.connector,
+      );
+      if (receiver || /return/.test(cls) || port?.direction === "in") {
+        score++;
+        reasons.add("receiving fan inlet/return");
+      } else if (port?.direction === "out") {
+        score--;
+        reasons.add("another fan discharge");
+      }
+    } else if (/outdoor/.test(cls)) {
+      score--;
+      reasons.add("outdoor-air end");
+    }
   }
   // A merge into another fan's return is discharge evidence even when no terminal lies on this fan's side.
 
@@ -616,9 +823,14 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
     }
   // A side whose one end carries nothing (an intake, an open end) carries the other side's flow.
   const single = (w: Walk) => w.ends.length === 1 && !carrying(w.ends[0]!);
-  const onSide = (w: Walk): FlowOptions => designCfm == null && input.sideStreamCfm == null && assumeHeals
-    ? { ...flowOpts, sideStream: derived.get(`port:${unit.id}:${w === a ? input.fan.portIndex : pairedInlet}`) ?? null }
-    : flowOpts;
+  const onSide = (w: Walk): FlowOptions =>
+    designCfm == null && input.sideStreamCfm == null && assumeHeals
+      ? {
+          ...flowOpts,
+          sideStream:
+            derived.get(`port:${unit.id}:${w === a ? input.fan.portIndex : pairedInlet}`) ?? null,
+        }
+      : flowOpts;
   const balanced = (w: Walk, other: number | null): FlowOptions =>
     single(w) && other
       ? {
@@ -864,7 +1076,12 @@ export function buildChain(input: BuildChainInput): Chain {
   const start = g.byId.get(input.start.elementId);
   if (!start) throw new Error(`start ${input.start.elementId} is not in the snapshot`);
   // ponytail: the start element is the root and is not priced; start at the unit or terminal itself.
-  const w = walkFrom(g, start, input.start.connector, { roster: input.roster ?? [], rulings: input.rulings ?? [], candidateBoxIn: input.candidateBoxIn, autoJoinMaxGapIn: input.defaults?.autoJoinMaxGapIn });
+  const w = walkFrom(g, start, input.start.connector, {
+    roster: input.roster ?? [],
+    rulings: input.rulings ?? [],
+    candidateBoxIn: input.candidateBoxIn,
+    autoJoinMaxGapIn: input.defaults?.autoJoinMaxGapIn,
+  });
   for (const [id, b] of w.blockers) pricer.blockers.set(id, b);
   terminateMerges(w);
   let at = w.ends.findIndex((e) => e.end.elementId === input.end.elementId);
@@ -872,32 +1089,75 @@ export function buildChain(input: BuildChainInput): Chain {
     const s = w.states.findIndex((st, i) => i > 0 && st.el.id === input.end.elementId);
     if (s > 0 && !lineage(w, s).some((k) => w.states[k]!.merge)) {
       const el = w.states[s]!.el;
-      w.ends.push({ state: s, out: undefined, blockerIds: [], end: { kind: !isSegment(el) && el.kind === "terminal" ? "terminal" : "open-end", elementId: el.id } });
+      w.ends.push({
+        state: s,
+        out: undefined,
+        blockerIds: [],
+        end: {
+          kind: !isSegment(el) && el.kind === "terminal" ? "terminal" : "open-end",
+          elementId: el.id,
+        },
+      });
       at = w.ends.length - 1;
     }
   }
   const inputs: SheetInput[] = [
-    { name: "chain cfm", value: input.flowCfm ?? null, source: input.flowCfm == null ? "none" : "typed" },
-    ...Object.entries(input.drops ?? {}).map(([id, v]) => ({ name: `element ${id} drop in-wg`, value: v, source: "typed" })),
+    {
+      name: "chain cfm",
+      value: input.flowCfm ?? null,
+      source: input.flowCfm == null ? "none" : "typed",
+    },
+    ...Object.entries(input.drops ?? {}).map(([id, v]) => ({
+      name: `element ${id} drop in-wg`,
+      value: v,
+      source: "typed",
+    })),
   ];
   let path: SheetPath | null = null;
-  if (at < 0) pricer.block({
-    kind: "open-end", elementId: input.end.elementId, effectInWg: null,
-    detail: `${input.end.elementId} is not reached from ${input.start.elementId} under the walk's stop rules`,
-    closer: { kind: "ruling", note: "check the start connector, or rule the stops between" },
-  });
+  if (at < 0)
+    pricer.block({
+      kind: "open-end",
+      elementId: input.end.elementId,
+      effectInWg: null,
+      detail: `${input.end.elementId} is not reached from ${input.start.elementId} under the walk's stop rules`,
+      closer: { kind: "ruling", note: "check the start connector, or rule the stops between" },
+    });
   else {
-    const flows = flowsOf(w, { slot: "", only: { end: at, cfm: input.flowCfm ?? null, source: "typed" } }, pricer.block);
+    const flows = flowsOf(
+      w,
+      { slot: "", only: { end: at, cfm: input.flowCfm ?? null, source: "typed" } },
+      pricer.block,
+    );
     path = pricer.paths(w, flows, input.direction, [w.ends[at]!])[0]!;
   }
   const legs: Record<string, Leg> = {};
   for (const id of path?.legIds ?? []) legs[id] = pricer.legs[id]!;
   return {
     engineVersion: SHEET_ENGINE_VERSION,
-    basis: basisOf(input.snapshot, [input.start, input.end, input.direction, input.flowCfm, input.rulings, input.drops, input.choices, input.defaults]),
-    start: input.start, direction: input.direction, path, legs,
+    basis: basisOf(input.snapshot, [
+      input.start,
+      input.end,
+      input.direction,
+      input.flowCfm,
+      input.rulings,
+      input.drops,
+      input.choices,
+      input.defaults,
+    ]),
+    start: input.start,
+    direction: input.direction,
+    path,
+    legs,
     blockers: [...pricer.blockers.values()].filter((b) => !path || path.blockerIds.includes(b.id)),
-    inputs: [...inputs, ...terminalDropInputs(pricer), ...[...pricer.autoJoinNotes].map((note) => ({ name: note, value: null, source: "default auto-join" }))],
+    inputs: [
+      ...inputs,
+      ...terminalDropInputs(pricer),
+      ...[...pricer.autoJoinNotes].map((note) => ({
+        name: note,
+        value: null,
+        source: "default auto-join",
+      })),
+    ],
     walkedElementIds: [...w.depth.keys()].sort((a, b) => a - b),
   };
 }

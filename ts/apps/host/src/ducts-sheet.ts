@@ -33,7 +33,10 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { BridgeError } from "./bridge.ts";
 
 type SnapshotRequest = {
-  selector: { kind: "document" } | { kind: "roster" } | { kind: "from"; unitId: number; portIndex?: number };
+  selector:
+    | { kind: "document" }
+    | { kind: "roster" }
+    | { kind: "from"; unitId: number; portIndex?: number };
 };
 const tableRequest = { ids: [...new Set(LOSS_RULES.map((rule) => rule.table))].sort() };
 export interface DuctsSheetSources {

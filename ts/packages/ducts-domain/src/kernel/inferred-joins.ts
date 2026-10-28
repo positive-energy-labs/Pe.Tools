@@ -145,7 +145,17 @@ export function sidesOf(segments: readonly Segment[]): Side[] {
         u = unit(sub(s.polyline[i]!, a)),
         section = u && sectionOf(s, u, rollOf(s));
       if (u && section)
-        sides.push({ label: "side", owner: s.id, cls: segmentClass(s), segment: s, a, u, len, run, section });
+        sides.push({
+          label: "side",
+          owner: s.id,
+          cls: segmentClass(s),
+          segment: s,
+          a,
+          u,
+          len,
+          run,
+          section,
+        });
       run += len;
     }
   }
@@ -248,7 +258,8 @@ const differ = (a: string | null, b: string | null) => a != null && b != null &&
 
 /** An open-to-open join's grade (proximity.ts gradeJoint). */
 export function gradeJoint(p: OpenPort, q: OpenPort, crossing: boolean): DuctInferenceGrade {
-  if (crossing || (p.captured && q.captured && dot(p.axis!, q.axis!) >= AXIS_COS)) return "anomalous";
+  if (crossing || (p.captured && q.captured && dot(p.axis!, q.axis!) >= AXIS_COS))
+    return "anomalous";
   if (!p.axis || !q.axis || p.cls !== q.cls) return "stretched";
   const r = sub(q.point, p.point);
   const lateral = Math.hypot(...add(r, p.axis, -dot(r, p.axis))) * 12;
@@ -317,7 +328,10 @@ export function candidates(open: OpenPort, nearby: readonly Element[], tolIn = 1
   if (open.axis) {
     const faceTol = FACE_TOL_IN / 12;
     const taken = new Set(out.map((c) => `${c.toElement}:${c.toConnector}`));
-    for (const face of facesOf(nearby.filter((e) => e.id !== open.id), others)) {
+    for (const face of facesOf(
+      nearby.filter((e) => e.id !== open.id),
+      others,
+    )) {
       const hit = land(face, open.point, open.axis);
       if (!hit) continue;
       const near = face.label === "side" ? hit.d <= faceTol : Math.abs(hit.d) <= faceTol;
@@ -357,7 +371,10 @@ export function candidates(open: OpenPort, nearby: readonly Element[], tolIn = 1
       });
     }
   }
-  return out.sort((x, y) => Math.abs(x.gapIn) - Math.abs(y.gapIn) || x.pair.join("|").localeCompare(y.pair.join("|")));
+  return out.sort(
+    (x, y) =>
+      Math.abs(x.gapIn) - Math.abs(y.gapIn) || x.pair.join("|").localeCompare(y.pair.join("|")),
+  );
 }
 
 /** A person's ruling on a connector pair (end-to-end, collar) or a connector-and-duct pair (tap). */
