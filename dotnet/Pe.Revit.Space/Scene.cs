@@ -97,7 +97,7 @@ public static class Scene {
         if (request.MaxTriangles is < 1 or > 3000000)
             throw new ArgumentException("maxTriangles must be between 1 and 3000000.");
         if (!Enum.IsDefined(typeof(SceneContextRepresentation), request.ContextRepresentation))
-            throw new ArgumentException("contextRepresentation must be none, oriented or meshes.");
+            throw new ArgumentException("contextRepresentation must be none, oriented, triangle-boxes or meshes.");
         if (!Finite(request.ContextPaddingFt) || request.ContextPaddingFt is < 0 or > 1000)
             throw new ArgumentException("contextPaddingFt must be between 0 and 1000.");
         if (request.Bounds is { } b && (!Finite(b.MinX, b.MinY, b.MinZ, b.MaxX, b.MaxY, b.MaxZ)
