@@ -237,11 +237,11 @@ Assumptions taken without a ruling; each is reversible. Questions need a verdict
 - A3 Revit's own terminal Flow is a confirmable project airflow slot (`revit:Flow`). On Chadds it covers 355 of 394 terminals versus 27 for `PE_M_Grd_AirFlow`. History 6 still holds: no silent per-terminal fallback; the project confirms one slot.
 - A4 Fan sheets acquire `from` every port of the unit (both sides); an ERV's read also carries its second fan (ponytail ceiling).
 - A5 The C# `from` walk stops at mechanical equipment with more than two ports; two-port inline equipment (silencer, heater, dehumidifier) passes with an unknown drop.
-- A6 Inputs (slot, split policy, end cfm, drops, asserted inlet port, join rulings) persist in per-document Work for now; the model store is the later home.
+- A6 Inputs (slot, split policy, end cfm, drops, join rulings) persist in per-document Work for now; the model store is the later home. Firm defaults (shim terminal drop, split policy default, slot) live in the /ducts route settings beside supply colours and slots, behind one `defaults` object the engine takes (kaitpw: interim home, clean seam).
 - A7 The new surface is a separate `/sheet` route; `/ducts` is untouched.
 
 **Questions**
-- Q1 MUAS-1's Revit port metadata runs opposite to the .r10 (W1-D). Is this a family authoring error to fix in the family, or should the roster carry an asserted discharge port per unit as a ruling?
-- Q2 Firm terminal-drop table: who owns the values (by family, size, cfm), and where should the defaults file live (Pod vs repo config, open since the map)?
-- Q3 ASHRAE prices the paired elbow about 25% below Manual D 8-A2 (W1-D). Is the firm option for Manual D equivalent lengths needed before engineers trust sheets?
-- Q4 211 path legs enter a tap from its branch (one fan's duct tapping into another fan's main). Should that be a shared-leg ruling ("this tap belongs to fan X") or a modelling defect to fix in Revit?
+- Q1 RULED (kaitpw): no ruling. The fan is where air starts and the terminal where it ends, so the ends assign the sides (supply terminals or another fan's inlet = discharge; return/exhaust terminals or an OA louver = inlet); port metadata only breaks ties. Utopia fix is flipping the family in Revit.
+- Q2 RULED for the interim: route settings (see A6); the firm table's owner and values are open, productionize later.
+- Q3 OPEN, parked by kaitpw: ASHRAE prices the paired elbow about 25% below Manual D 8-A2 (W1-D); is the Manual D option needed before engineers trust sheets?
+- Q4 RULED (kaitpw: likely a modelling defect, and not first-principles information to control): a tap entered from its branch, and an air-type change such as an ERV supply entering a fan-coil return, end the path as `joins-other-fan`, priced up to the merge; no blocker, no ruling.
