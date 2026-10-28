@@ -53,7 +53,7 @@ export const stubIdsOf = (neighbours: readonly Neighbour[], open: ReadonlySet<nu
 
 /** Scene category names (`SceneInstance.category`, as the cached PSC1 carries them) of MEP that
  * stays in proximity: non-focus instances of these paint as stub, never bare context rings. */
-export const MEP_CATEGORIES: ReadonlySet<string> = new Set([
+const MEP_CATEGORIES: ReadonlySet<string> = new Set([
   "Ducts",
   "Duct Fittings",
   "Duct Accessories",

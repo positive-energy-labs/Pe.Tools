@@ -124,7 +124,7 @@ export function pickAt(
 /** The context pane is pickable only where the picture draws it: glass mode, inside the far edge,
  * and at or above the pass's discard threshold (`veil.ts` discards context alpha below 0.004).
  * Creases in lines mode are never a surface the pointer can meet. Same rule as the shader. */
-export const CONTEXT_DRAW_ALPHA = 0.004;
+const CONTEXT_DRAW_ALPHA = 0.004;
 export function contextPickable(
   mode: string,
   distance: number,
