@@ -5958,7 +5958,7 @@ export namespace RevitDetailSpaceRows {
   }
 }
 
-/** Export native meshes, full 3D family frames and sized physical runs in host internal feet, including host insulation. Curved round runs carry their tessellated LocationCurve path. focusOnly captures host elementIds without context. Context is read per focus element: each element's own box (a run's location line and size) grown by contextPaddingFt, in every host and link placement, as one quick filter per source before any element loads; explicit bounds replace that reach. Centre-line helpers, insulation, view-owned elements, CAD and link noise classes are excluded before iteration, and every source placement (loaded, unloaded or unavailable) reports what reach counted, kept, excluded by class and cut by a bound; detachedElementIds names focus members far from the rest. Context defaults to oriented family boxes and sized runs; elements without a proven frame, including IFC DirectShapes and sketch-based building elements, retain native meshes. The triangle-boxes option replaces context DirectShapes with envelopes fitted to their own triangles: frame candidates come from the 24 largest triangles, all vertices set extents, and frame=triangles discloses the approximation. contextRepresentation meshes acquires native context in the same reach. none suppresses context. Primitive rows own zero vertices; representation distinguishes mesh, oriented-box and run. Oriented boxes carry center, three unit axes and half sizes. Symbol meshes are tessellated once per native geometry identity and detail during the operation, then placed through the instance and link transforms. Metadata phase distinguishes focus/context, unavailableElements identifies requested ids without meshes, omittedElements counts context excluded by the output budget, and completeness reports deferred context and acquisition resource limits. Successful artifacts preserve focus membership; unsupported parametric focus retains Medium/Fine meshes. Native triangle counts stop further acquisition after each tessellated face, so one already allocated face can exceed the acquisition budget. Completeness discloses omitted or deferred context. RPC returns bounded counts and the artifact id; full typed membership and source transforms remain in PSC1. No document mutation. Browser orbit, visibility and cuts need no further native calls. */
+/** Export native meshes, full 3D family frames and sized physical runs in host internal feet, including host insulation. Round and flat-oval profiles use 32 circumscribed facets. radialOverdrawFraction discloses the radius expansion, including float32 vertex rounding; round radial overdraw is below 0.484%. Physical diameterFt remains the outside diameter including insulation; bounds include the drawn expansion. Curved round runs carry their tessellated LocationCurve path. focusOnly captures host elementIds without context. Context is read per focus element: each element's own box (a run's location line and size) grown by contextPaddingFt, in every host and link placement, as one quick filter per source before any element loads; explicit bounds replace that reach. Centre-line helpers, view-owned elements, CAD and link noise classes are excluded before iteration. Fitting/accessory insulation retains its own native mesh; only a represented duct/pipe run with matching thickness absorbs its insulation, classified after loading the host. Every source placement (loaded, unloaded or unavailable) reports what reach counted, kept, excluded by class and cut by a bound; detachedElementIds names focus members far from the rest. Context defaults to oriented family boxes and sized runs; elements without a proven frame, including IFC DirectShapes and sketch-based building elements, retain native meshes. The triangle-boxes option replaces context DirectShapes with envelopes fitted to their own triangles: frame candidates come from the 24 largest triangles, all vertices set extents, and frame=triangles discloses the approximation. contextRepresentation meshes acquires native context in the same reach. none suppresses context. Primitive rows own zero vertices; representation distinguishes mesh, oriented-box and run. Oriented boxes carry center, three unit axes and half sizes. Symbol meshes are tessellated once per native geometry identity and detail during the operation, then placed through the instance and link transforms. Metadata phase distinguishes focus/context, unavailableElements identifies requested ids without meshes, omittedElements counts context excluded by the output budget, and completeness reports deferred context and acquisition resource limits. Successful artifacts preserve focus membership; unsupported parametric focus retains Medium/Fine meshes. Native triangle counts stop further acquisition after each tessellated face, so one already allocated face can exceed the acquisition budget. Completeness discloses omitted or deferred context. RPC returns bounded counts and the artifact id; full typed membership and source transforms remain in PSC1. No document mutation. Browser orbit, visibility and cuts need no further native calls. */
 export namespace RevitDetailSpaceScene {
   export namespace Req {
     export type SceneContextRepresentation = "none" | "oriented" | "triangle-boxes" | "meshes";
@@ -6206,6 +6206,14 @@ export namespace RevitDetailSpaceScene {
       diameterFt?: null | number;
       crossSectionXAxis: number[];
       path?: number[][] | null;
+      /**
+       * Facets around a round profile or both semicircles of a flat oval; zero for rectangular.
+       */
+      radialSegments: number;
+      /**
+       * Fraction added to the physical radius so facets contain it. Includes float32 vertex rounding; below 0.484% at 32 facets.
+       */
+      radialOverdrawFraction: number;
     }
     /**
      * Element-local box placed in host feet. Axes are an orthonormal right-handed frame; HalfSize is in feet.
@@ -6245,7 +6253,7 @@ export namespace RevitDetailSpaceScene {
        */
       kept: number;
       /**
-       * Ids within reach per exclusion class, removed before iteration; classes may overlap.
+       * Ids within reach per exclusion class; classes may overlap. Quick-filter classes are removed before iteration; run-insulation is classified after reading its host.
        */
       excluded: {
         [k: string]: number;

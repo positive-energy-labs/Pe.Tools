@@ -1,35 +1,44 @@
 import * as THREE from "three";
 import type { SceneInstance, SceneMeshes, ScenePrimitive } from "./types";
 
-const ROUND_SEGMENTS = 32;
 export const primitiveKey = (p: ScenePrimitive) =>
   p.kind === "run" && p.run.path
-    ? `path:${p.run.diameterFt}:${JSON.stringify(p.run.path)}`
+    ? `path:${p.run.diameterFt}:${p.run.radialSegments}:${p.run.radialOverdrawFraction}:${JSON.stringify(p.run.path)}`
     : p.kind === "oriented-box" || p.run.shape === "rectangular"
       ? "box"
       : p.run.shape === "round"
-        ? "round"
-        : `oval:${p.run.widthFt! / p.run.heightFt!}`;
+        ? `round:${p.run.radialSegments}:${p.run.radialOverdrawFraction}`
+        : `oval:${p.run.widthFt! / p.run.heightFt!}:${p.run.radialSegments}:${p.run.radialOverdrawFraction}`;
 
 /** Templates are owned by the stage that copies them into its batch, never a global cache. */
 export function primitiveTemplate(p: ScenePrimitive): THREE.BufferGeometry {
   if (p.kind === "run" && p.run.path)
-    return pathTemplate(p.run.path, p.run.diameterFt!, p.run.crossSectionXAxis);
+    return pathTemplate(
+      p.run.path,
+      p.run.diameterFt! * (1 + p.run.radialOverdrawFraction),
+      p.run.crossSectionXAxis,
+      p.run.radialSegments,
+    );
   if (primitiveKey(p) === "box") return new THREE.BoxGeometry(1, 1, 1).toNonIndexed();
   if (p.kind === "run" && p.run.shape === "round")
-    return new THREE.CylinderGeometry(0.5, 0.5, 1, ROUND_SEGMENTS)
+    return new THREE.CylinderGeometry(
+      0.5 * (1 + p.run.radialOverdrawFraction),
+      0.5 * (1 + p.run.radialOverdrawFraction),
+      1,
+      p.run.radialSegments,
+    )
       .rotateX(Math.PI / 2)
       .toNonIndexed();
   const run = (p as Extract<ScenePrimitive, { kind: "run" }>).run;
   const w = run.widthFt!,
     h = run.heightFt!;
   // Flat oval: two semicircles joined by straight sides. The profile is normalized to width/height.
-  const radius = Math.min(w, h) / 2,
+  const radius = (Math.min(w, h) / 2) * (1 + run.radialOverdrawFraction),
     offset = Math.abs(w - h) / 2;
   const ring: { x: number; y: number; nx: number; ny: number }[] = [];
   for (const half of [0, 1])
-    for (let i = 0; i <= ROUND_SEGMENTS / 2; i++) {
-      const angle = -Math.PI / 2 + half * Math.PI + (i * Math.PI) / (ROUND_SEGMENTS / 2);
+    for (let i = 0; i <= run.radialSegments / 2; i++) {
+      const angle = -Math.PI / 2 + half * Math.PI + (i * Math.PI) / (run.radialSegments / 2);
       let x = Math.cos(angle) * radius + (half ? -offset : offset),
         y = Math.sin(angle) * radius;
       let nx = Math.cos(angle),
@@ -104,7 +113,7 @@ export function primitiveMatrix(p: ScenePrimitive, origin = new THREE.Vector3())
 }
 
 /** Revit supplies the polyline. Transport the round profile along it without inventing a spline. */
-function pathTemplate(path: number[][], diameter: number, axis: number[]) {
+function pathTemplate(path: number[][], diameter: number, axis: number[], segments: number) {
   const points = path.map((p) => new THREE.Vector3().fromArray(p));
   const origin = points[0]!.clone();
   for (const point of points) point.sub(origin);
@@ -119,8 +128,8 @@ function pathTemplate(path: number[][], diameter: number, axis: number[]) {
     x.addScaledVector(tangent, -x.dot(tangent)).normalize();
     const y = new THREE.Vector3().crossVectors(tangent, x).normalize();
     rings.push(
-      Array.from({ length: ROUND_SEGMENTS }, (_, j) => {
-        const angle = (j * Math.PI * 2) / ROUND_SEGMENTS;
+      Array.from({ length: segments }, (_, j) => {
+        const angle = (j * Math.PI * 2) / segments;
         return points[i]!.clone()
           .addScaledVector(x, (Math.cos(angle) * diameter) / 2)
           .addScaledVector(y, (Math.sin(angle) * diameter) / 2);
@@ -132,13 +141,13 @@ function pathTemplate(path: number[][], diameter: number, axis: number[]) {
   const triangle = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3) =>
     positions.push(...a.toArray(), ...b.toArray(), ...c.toArray());
   for (let i = 1; i < rings.length; i++)
-    for (let j = 0; j < ROUND_SEGMENTS; j++) {
-      const next = (j + 1) % ROUND_SEGMENTS;
+    for (let j = 0; j < segments; j++) {
+      const next = (j + 1) % segments;
       triangle(rings[i - 1]![j]!, rings[i - 1]![next]!, rings[i]![next]!);
       triangle(rings[i - 1]![j]!, rings[i]![next]!, rings[i]![j]!);
     }
-  for (let j = 0; j < ROUND_SEGMENTS; j++) {
-    const next = (j + 1) % ROUND_SEGMENTS;
+  for (let j = 0; j < segments; j++) {
+    const next = (j + 1) % segments;
     triangle(points[0]!, rings[0]![next]!, rings[0]![j]!);
     triangle(points.at(-1)!, rings.at(-1)![j]!, rings.at(-1)![next]!);
   }

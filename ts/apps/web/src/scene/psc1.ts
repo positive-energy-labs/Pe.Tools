@@ -96,6 +96,15 @@ function primitiveOf(e: Psc1Metadata["elements"][number]): ScenePrimitive | unde
     axisLength = Math.hypot(...axis);
   const positive = (n: unknown): n is number =>
     typeof n === "number" && Number.isFinite(n) && n > 0;
+  const radialSegments = r.shape === "rectangular" ? 0 : 32;
+  const radialOverdraw =
+    radialSegments === 0 ? 0 : 1 / (Math.cos(Math.PI / radialSegments) - 2 ** -24) - 1;
+  if (
+    r.radialSegments !== radialSegments ||
+    !Number.isFinite(r.radialOverdrawFraction) ||
+    Math.abs(r.radialOverdrawFraction - radialOverdraw) > Number.EPSILON
+  )
+    throw Error("Invalid scene run containment disclosure");
   if (
     length <= 1e-8 ||
     Math.abs(axisLength - 1) > 1e-4 ||

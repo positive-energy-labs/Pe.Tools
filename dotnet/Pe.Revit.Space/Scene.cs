@@ -40,7 +40,15 @@ public sealed record SceneRequest(
 /// <summary>Physical run in host feet, including host insulation. Path is a tessellated round centreline; null means straight.</summary>
 public sealed record SceneRun(IReadOnlyList<double> Start, IReadOnlyList<double> End, SceneRunShape Shape,
     double? WidthFt, double? HeightFt, double? DiameterFt, IReadOnlyList<double> CrossSectionXAxis,
-    IReadOnlyList<IReadOnlyList<double>>? Path = null);
+    IReadOnlyList<IReadOnlyList<double>>? Path = null) {
+    /// <summary>Facets around a round profile or both semicircles of a flat oval; zero for rectangular.</summary>
+    public int RadialSegments => this.Shape == SceneRunShape.Rectangular ? 0 : 32;
+    /// <summary>Fraction added to the physical radius so facets contain it. Includes float32 vertex rounding; below 0.484% at 32 facets.</summary>
+    public double RadialOverdrawFraction => this.RadialSegments == 0 ? 0
+        // A facet's apothem is R*cos(pi/n). Float32 coordinate rounding moves a vertex by at most R*2^-24.
+        // Reserve that displacement in the drawn radius, rather than tolerating a physical containment loss.
+        : 1 / (Math.Cos(Math.PI / this.RadialSegments) - Math.Pow(2, -24)) - 1;
+}
 /// <summary>Element-local box placed in host feet. Axes are an orthonormal right-handed frame; HalfSize is in feet.</summary>
 public sealed record SceneOrientedBox(IReadOnlyList<double> Center, IReadOnlyList<double> AxisX,
     IReadOnlyList<double> AxisY, IReadOnlyList<double> AxisZ, IReadOnlyList<double> HalfSize,
@@ -393,7 +401,8 @@ public static class Scene {
     }
 
     /// <summary>
-    ///     A duct or pipe's insulation thickness, read from the host. Insulation elements never enter context; the
+    ///     A duct or pipe's insulation thickness, read from the host. Sized runs absorb their insulation;
+    ///     fitting/accessory insulation retains its own native geometry. The
     ///     host's value equals the insulation's own Thickness on 4,294 Chadds duct and 3,267/3,267 pipe insulations
     ///     with a readable parameter (probe-o, clone copy, 2026-10-28). Four duct hosts have no parameter. Null when none.
     /// </summary>

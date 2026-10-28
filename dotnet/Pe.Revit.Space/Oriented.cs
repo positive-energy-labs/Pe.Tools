@@ -115,14 +115,17 @@ internal sealed class Oriented(SceneBudget budget) {
         var points = run.Path ?? [run.Start, run.End];
         // Curved round sweeps fit inside a radius around each centreline point. Straight profiles use their exact frame.
         if (run.Path is not null) {
-            var r = run.DiameterFt!.Value / 2;
+            var r = run.DiameterFt!.Value / 2 * (1 + run.RadialOverdrawFraction);
             return new Aabb(points.Min(p => p[0]) - r, points.Min(p => p[1]) - r, points.Min(p => p[2]) - r,
                 points.Max(p => p[0]) + r, points.Max(p => p[1]) + r, points.Max(p => p[2]) + r);
         }
         var a = P(run.Start); var b = P(run.End); var x = P(run.CrossSectionXAxis);
         var z = (b - a).Normalize(); var y = z.CrossProduct(x).Normalize();
+        var halfX = (run.DiameterFt ?? run.WidthFt)!.Value / 2;
+        var halfY = (run.DiameterFt ?? run.HeightFt)!.Value / 2;
+        var overdraw = Math.Min(halfX, halfY) * run.RadialOverdrawFraction;
         return Bounds(new SceneOrientedBox(V((a + b) * 0.5), V(x), V(y), V(z),
-            [(run.DiameterFt ?? run.WidthFt)!.Value / 2, (run.DiameterFt ?? run.HeightFt)!.Value / 2, a.DistanceTo(b) / 2]));
+            [halfX + overdraw, halfY + overdraw, a.DistanceTo(b) / 2]));
     }
 
     private static bool UnitFrame(XYZ x, XYZ y, XYZ z) =>

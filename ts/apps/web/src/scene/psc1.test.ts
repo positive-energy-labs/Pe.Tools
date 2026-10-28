@@ -176,6 +176,8 @@ describe("PSC1 decode", () => {
           end: [0, 0, 1],
           shape: "round",
           diameterFt: 1,
+          radialSegments: 32,
+          radialOverdrawFraction: 1 / (Math.cos(Math.PI / 32) - 2 ** -24) - 1,
           crossSectionXAxis: [1, 0, 0],
         },
       } as Psc1Metadata["elements"][number];
@@ -204,6 +206,8 @@ describe("PSC1 decode", () => {
       start: [0, 0, 0],
       end: [0, 0, 1],
       shape: "rectangular" as const,
+      radialSegments: 0,
+      radialOverdrawFraction: 0,
       widthFt: 2,
       heightFt: 1,
       crossSectionXAxis: [1, 0, 0],
@@ -260,6 +264,8 @@ describe("PSC1 decode", () => {
       start: [0, 0, 0],
       end: [1, 1, 1],
       shape: "round" as const,
+      radialSegments: 32,
+      radialOverdrawFraction: 1 / (Math.cos(Math.PI / 32) - 2 ** -24) - 1,
       diameterFt: 1,
       crossSectionXAxis: [1, 0, 0],
       path: [

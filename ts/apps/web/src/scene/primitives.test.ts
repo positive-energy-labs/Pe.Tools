@@ -34,6 +34,9 @@ const run = (shape: "round" | "rectangular" | "oval" = "rectangular"): ScenePrim
     end: [100, 200, 10],
     shape,
     crossSectionXAxis: [0, 1, 0],
+    radialSegments: shape === "rectangular" ? 0 : 32,
+    radialOverdrawFraction:
+      shape === "rectangular" ? 0 : 1 / (Math.cos(Math.PI / 32) - 2 ** -24) - 1,
     ...(shape === "round" ? { diameterFt: 2 } : { widthFt: 4, heightFt: 2 }),
   },
 });
@@ -62,6 +65,32 @@ const prepare = (meshes: SceneMeshes, context = false) =>
     angles: meshes.instances.map(() => 30),
   });
 
+test("every float32 round facet contains the physical circle without a containment tolerance", () => {
+  const primitive = run("round");
+  if (primitive.kind !== "run") throw Error("run fixture");
+  expect(primitive.run.radialOverdrawFraction).toBeLessThan(0.00484);
+  const geometry = primitiveTemplate(primitive);
+  try {
+    const positions = geometry.getAttribute("position");
+    let facets = 0;
+    for (let i = 0; i < positions.count; i += 3) {
+      const a = new THREE.Vector3().fromBufferAttribute(positions, i);
+      const b = new THREE.Vector3().fromBufferAttribute(positions, i + 1);
+      const c = new THREE.Vector3().fromBufferAttribute(positions, i + 2);
+      const normal = b.clone().sub(a).cross(c.clone().sub(a)).normalize();
+      if (Math.abs(normal.z) > 0.5) continue;
+      facets++;
+      // The unit template's physical radius is 0.5. Test the actual stored facet plane.
+      expect(Math.abs(normal.dot(a))).toBeGreaterThanOrEqual(0.5);
+    }
+    expect(facets).toBe(64);
+    // An inscribed 32-gon necessarily cuts the circle at each facet midpoint.
+    expect(0.5 * Math.cos(Math.PI / 32)).toBeLessThan(0.5);
+  } finally {
+    geometry.dispose();
+  }
+});
+
 test("a curved round run follows every native path point after rebasing", () => {
   const primitive = run("round");
   if (primitive.kind !== "run") throw Error("run fixture");
@@ -87,7 +116,7 @@ test("a curved round run follows every native path point after rebasing", () => 
         .normalize();
       const ring = vertices.filter(
         (v) =>
-          Math.abs(v.distanceTo(center) - 1) < 1e-5 &&
+          Math.abs(v.distanceTo(center) - (1 + primitive.run.radialOverdrawFraction)) < 1e-5 &&
           Math.abs(v.clone().sub(center).dot(tangent)) < 1e-5,
       );
       expect(ring.length).toBeGreaterThanOrEqual(32);
@@ -171,9 +200,11 @@ test.each([false, true])(
     const geometry = primitiveTemplate(primitive).applyMatrix4(primitiveMatrix(primitive));
     try {
       geometry.computeBoundingBox();
-      expect(geometry.boundingBox!.getSize(new THREE.Vector3()).toArray()).toEqual(
-        tall ? [2, 4, 10] : [4, 2, 10],
-      );
+      const size = geometry.boundingBox!.getSize(new THREE.Vector3());
+      const added = 2 * primitive.run.radialOverdrawFraction;
+      expect(size.x).toBeCloseTo((tall ? 2 : 4) + added, 5);
+      expect(size.y).toBeCloseTo((tall ? 4 : 2) + added, 5);
+      expect(size.z).toBe(10);
       const p = geometry.getAttribute("position"),
         points = Array.from({ length: p.count }, (_, i) =>
           new THREE.Vector3().fromBufferAttribute(p, i),
@@ -182,15 +213,15 @@ test.each([false, true])(
       expect(
         points.some((p) =>
           tall
-            ? Math.abs(p.x + 1) < 1e-6 && Math.abs(p.y - 1) < 1e-6
-            : Math.abs(p.x - 1) < 1e-6 && Math.abs(p.y - 1) < 1e-6,
+            ? Math.abs(p.x + 1 + added / 2) < 1e-6 && Math.abs(p.y - 1) < 1e-6
+            : Math.abs(p.x - 1) < 1e-6 && Math.abs(p.y - 1 - added / 2) < 1e-6,
         ),
       ).toBe(true);
       expect(
         points.some((p) =>
           tall
-            ? Math.abs(p.x + 1) < 1e-6 && Math.abs(p.y + 1) < 1e-6
-            : Math.abs(p.x + 1) < 1e-6 && Math.abs(p.y - 1) < 1e-6,
+            ? Math.abs(p.x + 1 + added / 2) < 1e-6 && Math.abs(p.y + 1) < 1e-6
+            : Math.abs(p.x + 1) < 1e-6 && Math.abs(p.y - 1 - added / 2) < 1e-6,
         ),
       ).toBe(true);
       const n = geometry.getAttribute("normal");
