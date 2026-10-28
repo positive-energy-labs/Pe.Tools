@@ -389,7 +389,7 @@ PROVEN[session dev, controlled `probe-o` PIDs 13668 / 54132, `cabe69e3`,
 
 | Chadds SA 7, first context read in fresh process | Native s | Private delta MiB | Artifact bytes | Published triangles |
 |---|---:|---:|---:|---:|
-| Meshes for IFC | 64.113 | 5,093.7 | 113,859,984 | 2,395,251 |
+| Meshes for IFC | 64.113 | 5,197.4 | 113,859,984 | 2,395,251 |
 | Triangle boxes for IFC | 79.317 | 5,233.4 | 48,019,084 | 320,995 |
 
 Both routes materialize full IFC geometry. Their cost excludes the later accuracy
