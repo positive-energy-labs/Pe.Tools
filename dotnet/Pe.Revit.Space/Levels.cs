@@ -25,7 +25,7 @@ public sealed record SceneLevelReceipt(int Levels, int Planes, int CoincidentGro
 public static class Levels {
     // Below Revit's geometric tolerance; names at the same height must not be lost or shift a plane.
     private const double CoincidentFt = 1e-6;
-    private sealed record Datum(long Id, string UniqueId, string Name, double Elevation, bool BuildingStory);
+    private sealed record Datum(long Id, string UniqueId, string Name, double ProjectElevationFt, bool BuildingStory);
 
     public static SceneLevels Read(Document host, System.Threading.CancellationToken cancellationToken = default) {
         using var process = Process.GetCurrentProcess();
@@ -60,9 +60,9 @@ public static class Levels {
                 data.Count, data.Missing, data.Missing.Count == 0 ? null : "Counted level ids could not be read."));
             var normal = transform.OfVector(XYZ.BasisZ).Normalize();
             foreach (var level in data.Levels) {
-                var point = transform.OfPoint(new XYZ(0, 0, level.Elevation));
+                var point = transform.OfPoint(new XYZ(0, 0, level.ProjectElevationFt));
                 var member = new SceneLevelMember(source, level.Id, level.UniqueId, level.Name,
-                    level.Elevation, level.BuildingStory);
+                    level.ProjectElevationFt, level.BuildingStory);
                 var coincident = planes.FindIndex(p => Math.Abs(Math.Abs(p.Normal.DotProduct(normal)) - 1) < 1e-10
                     && Math.Abs(p.Normal.DotProduct(point - p.Point)) <= CoincidentFt);
                 if (coincident >= 0) planes[coincident].Members.Add(member);
