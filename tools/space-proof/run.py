@@ -339,6 +339,11 @@ def run_model(name, args, out: Path, fixture, results):
     groups = [[s] for s in systems] if args.cold_each else [systems]
     model = results["models"].setdefault(name, {"file": file_, "systems": systems, "processes": [], "reads": [], "accuracy": {}, "snapshot": None, "pins": {}})
     for gi, group in enumerate(groups):
+        for _ in range(int(os.environ.get("PE_PROOF_WAIT_FREE_S", 300)) // 5):  # hold the slot, wait out a dip; never open under the gate
+            avail = psutil.virtual_memory().available / 2**30
+            if avail >= MIN_FREE_GIB:
+                break
+            time.sleep(5)
         avail = psutil.virtual_memory().available / 2**30
         if avail < MIN_FREE_GIB:
             raise RuntimeError(f"{avail:.1f} GiB free < {MIN_FREE_GIB} GiB required before opening {name}")
