@@ -1,11 +1,29 @@
 import * as THREE from "three";
 import type { RevitDetailSpaceScene } from "@pe/host-contracts/generated";
 import type { Bounds, Layer3D } from "./types";
+import type { Section } from "./section";
 
 export type SceneLevels = RevitDetailSpaceScene.Artifact.SceneLevels;
 export type LevelPlane = SceneLevels["planes"][number];
 export const levelNames = (plane: LevelPlane) =>
   [...new Set(plane.members.map((m) => m.name))].join(" / ");
+
+/** The datum perimeter follows the visible section; otherwise all four edges can lie outside it. */
+export function levelPictureBounds(bounds: Bounds, section: Section | null): Bounds | null {
+  const next = { ...bounds };
+  for (const axis of ["X", "Y", "Z"] as const) {
+    if (section?.kind === "box") {
+      next[`min${axis}`] = Math.max(next[`min${axis}`], section.bounds[`min${axis}`]);
+      next[`max${axis}`] = Math.min(next[`max${axis}`], section.bounds[`max${axis}`]);
+    } else if (section?.kind === "plane" && section.axis.toUpperCase() === axis) {
+      if (section.keep === "below")
+        next[`max${axis}`] = Math.min(next[`max${axis}`], section.offset);
+      else next[`min${axis}`] = Math.max(next[`min${axis}`], section.offset);
+    }
+    if (next[`min${axis}`] > next[`max${axis}`]) return null;
+  }
+  return next;
+}
 
 /** Datums span the picture, not an invented building footprint. Keep the nearest enclosing levels.
  * All other datums remain in the root inventory; none changes the camera fit. */

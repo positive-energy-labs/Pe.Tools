@@ -30,7 +30,7 @@ import { PaneOverlay } from "@pe/kit/lang/pane";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Button } from "@pe/kit/lang/button";
 import { Scene3D } from "#/scene/scene3d";
-import { levelLayer } from "#/scene/levels";
+import { levelLayer, levelPictureBounds } from "#/scene/levels";
 import { LevelMarks, LevelReadout } from "#/scene/level-marks";
 import type { SceneRead } from "#/scene/use-scene";
 import type { Bounds, Kinds, Layer3D, PaintOf, SceneMeshes } from "#/scene/types";
@@ -196,17 +196,6 @@ export function ModelPicture({
     [meshes, paintOf, bounds],
   );
   const look = useSyncExternalStore(knobsChanged, LOOK.read, LOOK.read);
-  const pictureLayers = useMemo(
-    () =>
-      meshes
-        ? [
-            ...(read.levels ? [levelLayer(read.levels, meshes.bounds)] : []),
-            ...findings3d,
-            portLayer(equipmentPorts(graph, meshes, paintOf), colour === "firm" ? kinds : {}, look),
-          ]
-        : findings3d,
-    [graph, meshes, paintOf, findings3d, look, kinds, colour, read.levels],
-  );
   const preset = look.layers.preset === "page" ? sceneView.preset : look.layers.preset;
   const [sectionDraft, setSectionDraft] = useState<Section | undefined>();
   const section = sectionDraft ?? sceneView.section;
@@ -220,6 +209,21 @@ export function ModelPicture({
     return volume && { ...volume, preview: sectionDraft !== undefined };
   }, [section, sectionSubject, look.layers.preset, look.section.paddingFt, sectionDraft]);
   const shownView = { preset, section: clipVolume?.section ?? null };
+  const datumBounds = useMemo(
+    () => meshes && levelPictureBounds(meshes.bounds, clipVolume?.section ?? null),
+    [meshes, clipVolume],
+  );
+  const pictureLayers = useMemo(
+    () =>
+      meshes
+        ? [
+            ...(read.levels && datumBounds ? [levelLayer(read.levels, datumBounds)] : []),
+            ...findings3d,
+            portLayer(equipmentPorts(graph, meshes, paintOf), colour === "firm" ? kinds : {}, look),
+          ]
+        : findings3d,
+    [graph, meshes, paintOf, findings3d, look, kinds, colour, read.levels, datumBounds],
+  );
   const commitSection = (next: Section) => {
     setSectionDraft(undefined);
     setPage({ sceneView: { ...sceneView, section: next } }, { history: "replace" });
@@ -375,7 +379,7 @@ export function ModelPicture({
         }}
       />
       <PaneOverlay label="model levels" place="bl">
-        <LevelReadout levels={read.levels ?? null} bounds={meshes?.bounds ?? null} />
+        <LevelReadout levels={read.levels ?? null} bounds={datumBounds} />
       </PaneOverlay>
       {meshes && sectionSubject && (
         <PaneOverlay label="section and context" place="tr">
@@ -459,10 +463,10 @@ export function ModelPicture({
           <CaptionBounds.Provider value={captionField}>
             {meshes && (
               <svg className="pointer-events-none absolute inset-0 size-full">
-                {read.levels && (
+                {read.levels && datumBounds && (
                   <LevelMarks
                     levels={read.levels}
-                    bounds={meshes.bounds}
+                    bounds={datumBounds}
                     project={annotationProject}
                     size={overlay.size}
                   />

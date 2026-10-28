@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
-import { assertLevels, levelExtents, levelNames, type SceneLevels } from "./levels";
+import {
+  assertLevels,
+  levelExtents,
+  levelNames,
+  levelPictureBounds,
+  type SceneLevels,
+} from "./levels";
 
 const levels = (): SceneLevels => ({
   sources: [
@@ -32,6 +38,14 @@ const levels = (): SceneLevels => ({
 });
 
 describe("measured levels in the picture", () => {
+  it("keeps the perimeter inside the visible section instead of clipping all its edges away", () => {
+    const bounds = { minX: 0, maxX: 100, minY: 0, maxY: 100, minZ: 0, maxZ: 30 };
+    const section = { minX: 30, maxX: 50, minY: 30, maxY: 50, minZ: 3, maxZ: 16 };
+    expect(levelPictureBounds(bounds, { kind: "box", bounds: section })).toEqual(section);
+    expect(
+      levelPictureBounds(bounds, { kind: "plane", axis: "x", keep: "below", offset: 20 })?.maxX,
+    ).toBe(20);
+  });
   it("draws the nearest enclosing datums in host feet without fitting a distant stray into the camera", () => {
     const data = levels();
     const bounds = { minX: 1400, maxX: 1450, minY: 1700, maxY: 1750, minZ: 2, maxZ: 12 };
