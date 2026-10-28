@@ -341,8 +341,8 @@ public static class Scene {
 
     /// <summary>
     ///     A duct or pipe's insulation thickness, read from the host. Insulation elements never enter context; the
-    ///     host's value equals the insulation's own Thickness on 4,294 of 4,294 Chadds duct insulations (pipe parity
-    ///     untested: no measured model has pipe insulation). Null when the host carries none.
+    ///     host's value equals the insulation's own Thickness on 4,294 of 4,294 Chadds duct insulations; pipe parity is
+    ///     unchecked (Chadds' 3,267 pipe insulations, owed to step 3). Null when the host carries none.
     /// </summary>
     public static double? InsulationThicknessFt(Element host) =>
         host.get_Parameter(BuiltInParameter.RBS_REFERENCE_INSULATION_THICKNESS) is { HasValue: true } p
