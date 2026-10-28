@@ -147,7 +147,7 @@ public static class DuctSnapshots {
 
     /// <summary>
     ///     The `from` selector. Breadth-first over Revit connectors: each reached element's HVAC ports name their peers
-    ///     through Connector.AllRefs; a peer in a walk category is reached at hop+1 (equipment included: a leg, not a cut);
+    ///     through Connector.AllRefs; a peer in a walk category is reached at hop+1 (two-port equipment is a leg; multiport equipment is reached, not expanded);
     ///     an air terminal is reached and not expanded; a port with no physical peer is an open end, and a box of
     ///     CandidateBoxIn around its origin is counted and, under the cap, listed, the unreached hits joining the output as
     ///     `open-end-candidate`. MaxHops caps depth and sets Truncated. Nothing here reads Connector.Flow.
@@ -190,7 +190,11 @@ public static class DuctSnapshots {
                     hops = Math.Max(hops, hop + 1);
                     // Stop at an air terminal: it is an end, whatever else its ports touch.
                     if (CategoryOf(owner) == BuiltInCategory.OST_DuctTerminal) continue;
-                    queue.Enqueue((owner, HvacConnectors(owner).ToList(), hop + 1));
+                    var ownerPorts = HvacConnectors(owner).ToList();
+                    // Stop at multiport equipment: its air-stream pairing is unknown, and passing through all-to-all
+                    // leaked MUAS-1's walk into most of Chadds (W0-A, 1470 elements). Two-port inline gear passes.
+                    if (CategoryOf(owner) == BuiltInCategory.OST_MechanicalEquipment && ownerPorts.Count > 2) continue;
+                    queue.Enqueue((owner, ownerPorts, hop + 1));
                 }
             }
         }

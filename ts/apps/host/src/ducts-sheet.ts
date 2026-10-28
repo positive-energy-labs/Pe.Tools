@@ -168,11 +168,12 @@ export function createDuctsSheets(sources: DuctsSheetSources) {
           legs: path.legIds.map((id) => entry.value.legs[id]),
         });
       }
-      // TODO: prove the from selector includes the paired inlet; its current start-port filter only acquires the named side.
+      // A fan sheet walks both sides, so acquire from every port of the unit; the engine picks this fan's ports.
+      // ponytail: an ERV acquires its second fan's sides too; filter by the roster's port pairing if reads get heavy.
       const acquisition: SnapshotRequest = {
         selector:
           request.mode === "fan"
-            ? { kind: "from", unitId: request.unitId, portIndex: request.portIndex }
+            ? { kind: "from", unitId: request.unitId }
             : {
                 kind: "from",
                 unitId: request.start.elementId,
