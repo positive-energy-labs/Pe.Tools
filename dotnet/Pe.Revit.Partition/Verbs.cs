@@ -59,7 +59,7 @@ public static class Verbs {
     /// </summary>
     public static World PrepareSpace(Document document, PartitionRequest request) {
         var (_, _, level, clip) = Scope(document, request);
-        return SpaceWorld.Prepare(document, SpaceVerbs.ProbeScope(clip, level.ProjectElevation + KneeLoFt));
+        return SpaceWorld.Prepare(document, SpaceVerbs.ProbeScope(clip, level.ProjectElevation + KneeLoFt), curves: true);
     }
 
     /// <summary>Read actual Space slices and native Room proposals without running or materializing a solve.</summary>
@@ -73,7 +73,7 @@ public static class Verbs {
 
         var (loops, view, level, clip) = Scope(document, request);
         var levelZ = level.ProjectElevation;
-        world ??= SpaceWorld.Prepare(document, SpaceVerbs.ProbeScope(clip, levelZ + KneeLoFt));
+        world ??= SpaceWorld.Prepare(document, SpaceVerbs.ProbeScope(clip, levelZ + KneeLoFt), curves: true);
         var phaseId = PhaseId(view, BuiltInParameter.VIEW_PHASE);
 
         // Enclosure is declared per document, never inferred. The reason travels into the answer.

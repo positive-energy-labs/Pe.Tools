@@ -49,14 +49,14 @@ internal sealed class Partition {
 
     /// <summary>The verb ingest: every given element whole, curves included, then the query tree. Without
     ///     <paramref name="elements" /> it walks the whole document, which only status, rows and tree ask for.</summary>
-    public void Build(long epoch, IEnumerable<Element>? elements = null) {
+    public void Build(long epoch, IEnumerable<Element>? elements = null, bool includeCurves = true) {
         using var cache = this._store?.Open();
         var sink = new List<Tri>();
         var rows = new List<PrimRow>();
         this.Skipped = 0;
         foreach (var element in elements ?? new FilteredElementCollector(this.Doc).WhereElementIsNotElementType()) {
             if (!Ingest.Allowed(element)) { this.Skipped++; continue; }
-            if (this.ReadElement(element, sink, rows, true, null) == 0) this.Skipped++;
+            if (this.ReadElement(element, sink, rows, includeCurves, null) == 0) this.Skipped++;
         }
         // ponytail: List doubling means the sink peaks near 1.5x the final array before ToArray
         // trims it. That is transient garbage, not resident. A chunked writer would remove it.

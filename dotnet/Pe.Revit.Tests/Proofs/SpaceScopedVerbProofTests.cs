@@ -41,6 +41,8 @@ public sealed class SpaceScopedVerbProofTests {
             var scoped = SpaceWorld.Prepare(doc, Verbs.ProbeScope(clip, 5));
             Assert.Throws<ArgumentException>(() => Verbs.Probe(scoped, new XYZ(500.5, 500.5, 5)),
                 "A question outside the read scope must refuse, never answer from geometry it never loaded.");
+            Assert.Throws<ArgumentException>(() => Verbs.Slice(scoped, 0.25, 0.75, new Filter(Kinds: [PrimKind.Curve2D]), clip),
+                "A world read without CAD ribbons must refuse a Curve2D question.");
         } finally { doc.Close(false); }
     }
 

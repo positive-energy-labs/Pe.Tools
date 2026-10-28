@@ -35,9 +35,11 @@ public static class SpaceWorld {
     ///     <paramref name="reach" /> (host-frame boxes as 8 corners; default the scope itself), through the /ducts context
     ///     read: one quick filter per placement, ids counted before any load, triangle-less classes never loaded. A verb
     ///     asks this world only inside <paramref name="scope" />; a question outside it throws instead of answering CLEAR.
+    ///     <paramref name="curves" /> reads CAD ribbons: a site DWG's ribbons were 2.6 M of a 10 ft Cleremont Sweep's
+    ///     2.75 M triangles, and no default question asks for Curve2D.
     /// </summary>
-    public static World Prepare(Document document, Aabb scope, IReadOnlyList<XYZ[]>? reach = null) {
-        var world = new World(document.GetDocumentKey(), Epoch(document), scope);
+    public static World Prepare(Document document, Aabb scope, IReadOnlyList<XYZ[]>? reach = null, bool curves = false) {
+        var world = new World(document.GetDocumentKey(), Epoch(document), scope, curves);
         world.BuildWithin(document, reach ?? [scope.Corners()]);
         LinkedGeometryStore.Prune();
         return world;
@@ -93,10 +95,14 @@ public static class SpaceWorld {
 public sealed class World {
     private readonly List<Partition> _partitions = [];
 
-    internal World(string hostKey, long epoch, Aabb? scope = null) { this.HostDocumentKey = hostKey; this.CurrentEpoch = epoch; this.Scope = scope; }
+    internal World(string hostKey, long epoch, Aabb? scope = null, bool curves = true) {
+        this.HostDocumentKey = hostKey; this.CurrentEpoch = epoch; this.Scope = scope; this.Curves = curves;
+    }
     public string HostDocumentKey { get; }
     /// <summary>The host-frame box this world was read for; null when it holds the whole model.</summary>
     public Aabb? Scope { get; }
+    /// <summary>Whether CAD imports were read as Curve2D ribbons. A whole-model world always reads them.</summary>
+    public bool Curves { get; }
     public long CurrentEpoch { get; private set; }
     public DateTime BuiltUtc { get; private set; }
     internal IReadOnlyList<Partition> Partitions => this._partitions;
@@ -139,19 +145,24 @@ public sealed class World {
             var near = partition.Reach(reach, scope.Corners(), obstacles: true).Kept;
             var read = new HashSet<long>(near.Select(e => e.Id.Value()));
             // A DWG's ribbons rise from its curves to the storey above, past the import's own bounds: imports gate in plan.
-            using var imports = new FilteredElementCollector(partition.Doc).OfClass(typeof(ImportInstance));
-            var below = imports.Where(e => !read.Contains(e.Id.Value()) && Ingest.Allowed(e) && partition.SceneBounds(e) is { } b
-                && b.MinZ <= scope.MaxZ && b.MinX <= scope.MaxX && b.MaxX >= scope.MinX && b.MinY <= scope.MaxY && b.MaxY >= scope.MinY).ToList();
+            List<Element> below = [];
+            if (this.Curves) {
+                using var imports = new FilteredElementCollector(partition.Doc).OfClass(typeof(ImportInstance));
+                below = imports.Where(e => !read.Contains(e.Id.Value()) && Ingest.Allowed(e) && partition.SceneBounds(e) is { } b
+                    && b.MinZ <= scope.MaxZ && b.MinX <= scope.MaxX && b.MaxX >= scope.MinX && b.MinY <= scope.MaxY && b.MaxY >= scope.MinY).ToList();
+            }
             // Document order, as the whole-model walk loads them.
-            partition.Build(this.CurrentEpoch, near.Concat(below).OrderBy(e => e.Id.Value()));
+            partition.Build(this.CurrentEpoch, near.Concat(below).OrderBy(e => e.Id.Value()), this.Curves);
         }
         this.BuiltUtc = DateTime.UtcNow;
     }
 
     /// <summary>Refuses a question this world was not read for: geometry outside its scope was never loaded.</summary>
-    internal void Require(Aabb question) {
+    internal void Require(Aabb question, Filter? filter = null) {
         if (this.Scope is { } scope && !scope.Contains(question))
             throw new ArgumentException($"The question {question} lies outside the scope {scope} this Space world was read for.");
+        if (!this.Curves && filter?.Kinds?.Contains(PrimKind.Curve2D) == true)
+            throw new ArgumentException("This Space world was read without CAD ribbons; prepare one with curves for a Curve2D question.");
     }
 
     internal Stamp StampFor(IEnumerable<Partition> touched, Filter filter) {

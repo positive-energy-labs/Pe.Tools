@@ -100,6 +100,8 @@ public static class Verbs {
         Enumerable.Range(0, Math.Max(0, polyline.Count - 1))
             .Select(i => Obb.FromSegment(polyline[i], polyline[i + 1], widthFt, heightFt).Corners(clearanceFt)).ToList();
 
+    private static bool Curves(Filter? filter) => filter?.Kinds?.Contains(PrimKind.Curve2D) == true;
+
     private static Aabb Bounds(IEnumerable<XYZ[]> boxes) => boxes.SelectMany(corners => corners)
         .Aggregate(Aabb.Empty, (box, p) => new Aabb(Math.Min(box.MinX, p.X), Math.Min(box.MinY, p.Y), Math.Min(box.MinZ, p.Z),
             Math.Max(box.MaxX, p.X), Math.Max(box.MaxY, p.Y), Math.Max(box.MaxZ, p.Z)));
@@ -109,7 +111,7 @@ public static class Verbs {
     ///     selects curves through the same per-curve storey-band assumption used by ribbons.
     /// </summary>
     public static OriginalCurvesAnswer OriginalCurves(Document document, double z0, double z1, Aabb xyClip, Filter filter) =>
-        OriginalCurves(SpaceWorld.Prepare(document, Slab(z0, z1, xyClip)), z0, z1, xyClip, filter);
+        OriginalCurves(SpaceWorld.Prepare(document, Slab(z0, z1, xyClip), curves: true), z0, z1, xyClip, filter);
 
     public static OriginalCurvesAnswer OriginalCurves(
         World world,
@@ -119,7 +121,7 @@ public static class Verbs {
         Filter filter
     ) {
         if (z1 < z0) (z0, z1) = (z1, z0);
-        world.Require(Slab(z0, z1, xyClip));
+        world.Require(Slab(z0, z1, xyClip), new Filter(Kinds: [PrimKind.Curve2D]));
         var sw = System.Diagnostics.Stopwatch.StartNew();
 
         var touched = world.Partitions.Where(p => filter.Wants(p.Kind)).ToList();
@@ -228,11 +230,11 @@ public static class Verbs {
 
     /// <summary>What is in this box, by source, category, and kind, plus the ten fattest elements.</summary>
     public static CensusAnswer Census(Document document, Aabb box, Filter? filter = null) =>
-        Census(SpaceWorld.Prepare(document, box), box, filter);
+        Census(SpaceWorld.Prepare(document, box, curves: Curves(filter)), box, filter);
 
     public static CensusAnswer Census(World world, Aabb box, Filter? filter = null) {
         filter ??= Filter.Default;
-        world.Require(box);
+        world.Require(box, filter);
         var sw = System.Diagnostics.Stopwatch.StartNew();
 
 
@@ -288,7 +290,7 @@ public static class Verbs {
     /// </summary>
     public static SweepAnswer Sweep(Document document, IReadOnlyList<XYZ> polyline, double widthFt, double heightFt, double clearanceFt, Filter? filter = null) {
         var reach = SweepReach(polyline, widthFt, heightFt, clearanceFt);
-        return Sweep(SpaceWorld.Prepare(document, Bounds(reach), reach), polyline, widthFt, heightFt, clearanceFt, filter);
+        return Sweep(SpaceWorld.Prepare(document, Bounds(reach), reach, Curves(filter)), polyline, widthFt, heightFt, clearanceFt, filter);
     }
 
     public static SweepAnswer Sweep(
@@ -300,7 +302,7 @@ public static class Verbs {
         Filter? filter = null
     ) {
         filter ??= Filter.Default;
-        world.Require(Bounds(SweepReach(polyline, widthFt, heightFt, clearanceFt)));
+        world.Require(Bounds(SweepReach(polyline, widthFt, heightFt, clearanceFt)), filter);
         var sw = System.Diagnostics.Stopwatch.StartNew();
 
 
@@ -366,7 +368,7 @@ public static class Verbs {
     ///     </para>
     /// </summary>
     public static SliceAnswer Slice(Document document, double z0, double z1, Filter? filter = null, Aabb? xyClip = null) =>
-        Slice(SpaceWorld.Prepare(document, Slab(z0, z1, xyClip)), z0, z1, filter, xyClip);
+        Slice(SpaceWorld.Prepare(document, Slab(z0, z1, xyClip), curves: Curves(filter)), z0, z1, filter, xyClip);
 
     public static SliceAnswer Slice(
         World world,
@@ -377,7 +379,7 @@ public static class Verbs {
     ) {
         filter ??= Filter.Default;
         if (z1 < z0) (z0, z1) = (z1, z0);
-        world.Require(Slab(z0, z1, xyClip));
+        world.Require(Slab(z0, z1, xyClip), filter);
         var sw = System.Diagnostics.Stopwatch.StartNew();
 
 
@@ -494,7 +496,7 @@ public static class Verbs {
     ///     null rather than guessing when the ray leaves the model without hitting anything.
     /// </summary>
     public static ProbeAnswer Probe(Document document, XYZ at, Filter? filter = null, double maxDistanceFt = 200.0, ProbePurpose purpose = ProbePurpose.Obstructions) =>
-        Probe(SpaceWorld.Prepare(document, Column(at, maxDistanceFt)), at, filter, maxDistanceFt, purpose);
+        Probe(SpaceWorld.Prepare(document, Column(at, maxDistanceFt), curves: Curves(filter)), at, filter, maxDistanceFt, purpose);
 
     private static Aabb Column(XYZ at, double maxDistanceFt) => ProbeScope(new Aabb(at.X, at.Y, 0, at.X, at.Y, 0), at.Z, maxDistanceFt);
 
@@ -506,7 +508,7 @@ public static class Verbs {
         ProbePurpose purpose = ProbePurpose.Obstructions
     ) {
         filter ??= Filter.Default;
-        world.Require(Column(at, maxDistanceFt));
+        world.Require(Column(at, maxDistanceFt), filter);
         var sw = System.Diagnostics.Stopwatch.StartNew();
 
 
