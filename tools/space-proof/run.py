@@ -7,7 +7,7 @@
 
 One fresh SDK-controlled session (`probe-h`) per model, headless, one hold of `.artifacts/locks/revit-slot-1`.
 Per model: open the local copy, settle, read /ducts' `ducts.snapshot`, then per system the page's two scene calls
-(focus, then context; `sceneRequestOf`, ts/apps/web/src/ducts/manifest.ts) cold, then once more warm. Cold is the first
+(focus, then context, no retired `proximity` field - its default is false; `sceneRequestOf`, ts/apps/web/src/ducts/manifest.ts) cold, then once more warm. Cold is the first
 read in the process for the model's first system; with --cold-each every system gets its own fresh process.
 Every read records private bytes (before, peak, after), Revit-side ms, the scene receipt, the artifact census, and
 IsModified; any modification aborts the run. After the reads, the PSC1 artifact of each system's cold context call is
@@ -284,8 +284,8 @@ def load_artifact(art):
 def page_requests(ids, context):
     """The two calls /ducts makes (scene-read.ts useDuctScene) for an opened system with the context layer on (manifest.ts sceneRequestOf)."""
     base = {"elementIds": ids, "maxTriangles": 3_000_000}
-    return ({**base, "contextPaddingFt": 0, "focusOnly": True, "proximity": False, "contextRepresentation": "none"},
-            {**base, "contextPaddingFt": 10, "focusOnly": False, "proximity": False, "contextRepresentation": context})
+    return ({**base, "contextPaddingFt": 0, "focusOnly": True, "contextRepresentation": "none"},
+            {**base, "contextPaddingFt": 10, "focusOnly": False, "contextRepresentation": context})
 
 
 def run_model(name, args, out: Path, fixture, results):
