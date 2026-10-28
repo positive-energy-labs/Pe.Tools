@@ -5,6 +5,10 @@ import { levelExtents, levelNames, type SceneLevels } from "./levels";
 import type { Bounds } from "./types";
 import type { Project, Size } from "./projection";
 
+// Link names need not distinguish repeated placements of the same house file.
+const sourceName = (source: SceneLevels["sources"][number]) =>
+  source.linkInstanceId == null ? source.name : `${source.name} · ${source.linkInstanceId}`;
+
 export function LevelMarks({
   levels,
   bounds,
@@ -65,7 +69,7 @@ export function LevelReadout({
           plane.members.map((member) => ({
             key: `${member.source}:${member.elementId}`,
             name: member.name,
-            source: levels.sources[member.source]!.name,
+            source: sourceName(levels.sources[member.source]!),
             plane: index,
             elevation: plane.point[2]!,
             status: "loaded",
@@ -78,7 +82,7 @@ export function LevelReadout({
             .map((s) => ({
               key: `source:${s.source}`,
               name: s.name,
-              source: s.name,
+              source: sourceName(s),
               plane: -1,
               elevation: NaN,
               status: s.status,
