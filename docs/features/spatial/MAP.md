@@ -155,9 +155,10 @@ Verbs          Pea's Sweep/Slice/Probe/Partition read through the same scoped re
 1. Proof harness (landed 2026-10-28: `tools/space-proof/`; baseline in the ledger). One command runs the gate on the three local copies and writes a comparable
    table. Promotes the throwaway instruments (`t3/ducts-read-baseline-measure`,
    `t3/cleremont-generality-research`) into a durable tool.
-2. The shared context read: link-instance partitions, per-element reach before iteration,
-   exclusions, disclosure. Deletes `Partition.BuildRegion`, `SceneCandidates`, the `Dirty` and
-   `Fresh` flags and the duplicate pack keys.
+2. The shared context read (landed 2026-10-28 at `5a9f6d58`'s bytes; ledger has the table): link-instance
+   partitions, per-element reach before iteration, exclusions, disclosure. Deleted
+   `Partition.BuildRegion` and `SceneCandidates`; the `Dirty` and `Fresh` flags and the duplicate
+   pack keys move to step 5. Owed: the warm-read time fix (`41ddd8fe` lineage, own hold).
 3. Oriented representation: per-element oriented boxes in full 3D, sketch-based building as
    mesh, PSC1 and the web decoder carry them; tessellate once per type.
 4. Levels as data, drawn in the picture.
