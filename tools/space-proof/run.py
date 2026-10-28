@@ -30,7 +30,7 @@ LOCK = ROOT / ".artifacts" / "locks" / "revit-slot-1"
 # dir the host publishes into), PE_PROOF_KEEP_HOST=1 (the caller owns and stops its own host).
 CACHE = Path(os.environ.get("PE_PROOF_CACHE") or Path(os.environ["LOCALAPPDATA"]) / "Positive Energy" / "Pe.Tools" / "cache" / "space-scenes")
 SID = os.environ.get("PE_PROOF_SESSION", "probe-h")
-MIN_FREE_GIB = 10
+MIN_FREE_GIB = float(os.environ.get("PE_PROOF_MIN_FREE_GIB", 10))
 GUARD_FLOOR_GIB = 3
 MODELS = {
     # The 2026-10-19 standalone copy has no IFC link and no loaded links (orchestrator, 2026-10-28), so it is not Chadds.
@@ -228,6 +228,38 @@ class Session:
         return gone
 
 
+_BACKEND = None
+
+
+def service_pid():
+    """Live host pid for this checkout from the service files, else None."""
+    svc = Path(os.environ["LOCALAPPDATA"]) / "Positive Energy" / "Pe.Tools" / "state" / "service"
+    for f in svc.glob("host-source-*.json"):
+        try:
+            j = json.loads(f.read_text(encoding="utf8"))
+            if Path(j.get("sourceRoot", "")).resolve() == CHECKOUT and psutil.pid_exists(j["pid"]):
+                return j["pid"]
+        except Exception:
+            pass
+    return None
+
+
+def ensure_backend_host():
+    """`session start` boots the dev host WITH its vite frontend (~2.5 GiB). A backend-only host (`vp run start`, ~0.55 GiB, no web)
+    started first is reused by the session, so the harness starts one when this checkout has none. Not for PE_PROOF_KEEP_HOST callers."""
+    global _BACKEND
+    if os.environ.get("PE_PROOF_KEEP_HOST") == "1" or service_pid():
+        return
+    _BACKEND = subprocess.Popen([str(Path.home() / ".vite-plus/bin/vp.exe"), "run", "start"], cwd=CHECKOUT / "ts/apps/host",
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+    for _ in range(60):
+        if service_pid():
+            print(f"  backend-only host up: pid {service_pid()}", flush=True)
+            return
+        time.sleep(1)
+    raise RuntimeError("backend-only host did not claim this checkout's service name within 60 s")
+
+
 def stop_dev_host():
     """`session start` brings up this checkout's dev host plus its web frontend (~2.5 GiB). The harness started them, so it ends them."""
     if os.environ.get("PE_PROOF_KEEP_HOST") == "1":
@@ -248,6 +280,15 @@ def stop_dev_host():
             stopped += [p.pid for p in tree if not p.is_running()]
         except Exception as e:
             print(f"  dev host stop: {f.name}: {e}", flush=True)
+    if _BACKEND is not None and _BACKEND.poll() is None:
+        try:
+            tree = psutil.Process(_BACKEND.pid).children(recursive=True) + [psutil.Process(_BACKEND.pid)]
+            for p in tree:
+                p.terminate()
+            psutil.wait_procs(tree, timeout=15)
+            stopped += [p.pid for p in tree]
+        except psutil.Error:
+            pass
     print(f"  dev host stack stopped: {stopped}", flush=True)
     return stopped
 
@@ -303,6 +344,7 @@ def run_model(name, args, out: Path, fixture, results):
             raise RuntimeError(f"{avail:.1f} GiB free < {MIN_FREE_GIB} GiB required before opening {name}")
         ev = mdir / f"p{gi}"
         ev.mkdir(parents=True, exist_ok=True)
+        ensure_backend_host()
         s = Session(ev)
         proc = {"group": group, "startedUtc": utc(), "availableGiBBeforeOpen": round(avail, 2)}
         model["processes"].append(proc)
