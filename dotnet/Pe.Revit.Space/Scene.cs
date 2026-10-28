@@ -175,8 +175,15 @@ public static class Scene {
             }
             if (ids.Count > 0 && focus.Count + runs.Count == 0 && crop is null)
                 throw new ArgumentException("None of the requested elementIds produced a visible host representation.");
-            if (context != SceneContextRepresentation.None && crop is null && focus.Count + runs.Count > 0)
-                crop = focusBounds.Expand(request.ContextPaddingFt);
+            List<XYZ[]> reach = [];
+            if (context != SceneContextRepresentation.None) {
+                reach = request.Bounds is { } explicitBounds ? [Corners(explicitBounds)]
+                    : Reach(focus, runs, request.ContextPaddingFt, out detached);
+                // The crop is the host extent of the reach boxes, never the focus bounds grown: a diagonal run's
+                // reach box reaches past them, and what reach admits must not be clipped away unseen.
+                if (crop is null && reach.Count > 0) crop = reach.SelectMany(corners => corners)
+                    .Aggregate(Aabb.Empty, (box, p) => box.Include(new Vector3((float)p.X, (float)p.Y, (float)p.Z)));
+            }
             var focusGeometryCalls = budget.GeometryCalls;
             var index = new SceneFocusIndex(focus.Select(row => row.Row.Box).Concat(runs.Select(row => row.Bounds)).ToArray());
             var runIndex = new SceneFocusIndex(runs.Select(row => row.Bounds).ToArray());
@@ -225,8 +232,6 @@ public static class Scene {
             foreach (var row in focus) Write(row.Source, row.Row, row.Triangles, true);
             foreach (var row in runs) Primitive(row.Source, row.Element, row.Bounds, row.Run, true);
             if (context != SceneContextRepresentation.None) {
-                var reach = request.Bounds is { } explicitBounds ? [Corners(explicitBounds)]
-                    : Reach(focus, runs, request.ContextPaddingFt, out detached);
                 var candidates = new List<(Partition Source, long Id, Aabb Bounds, double Distance)>();
                 foreach (var partition in world.Partitions) {
                     budget.Check();
