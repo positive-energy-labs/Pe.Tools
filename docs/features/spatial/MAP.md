@@ -140,7 +140,7 @@ Verbs          Pea's Sweep/Slice/Probe/Partition read through the same scoped re
 
 ## Steps
 
-1. Proof harness: one command runs the gate on the three local copies and writes a comparable
+1. Proof harness (landed 2026-10-28: `tools/space-proof/`; baseline in the ledger). One command runs the gate on the three local copies and writes a comparable
    table. Promotes the throwaway instruments (`t3/ducts-read-baseline-measure`,
    `t3/cleremont-generality-research`) into a durable tool.
 2. The shared context read: link-instance partitions, per-element reach before iteration,
