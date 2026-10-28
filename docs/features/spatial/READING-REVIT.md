@@ -321,8 +321,56 @@ The chosen split retains fitting/accessory insulation as separate native geometr
 represented duct/pipe run with matching host thickness can absorb its insulation. Missing
 hosts, missing sizes, and the all-mesh request retain insulation geometry. Host classification
 requires loading the insulation and its host, after the quick reach and noise filters; it
-cannot be reported as a quick-filter exclusion. UNPROVEN[Chadds host-class counts, added
-cost under per-element reach, and artifact containment gate on all three models].
+cannot be reported as a quick-filter exclusion. The full-read cost and Chadds host-class
+counts are below; separate insulation cost and the three-model containment gate remain unproven.
+
+
+## Representation cost under shipped reach, 2026-10-28
+
+The `adc1c811` candidate includes step 2's landed reach/warm-read fix and step 4 levels.
+The harness recorded these cold-labelled context reads. Only the first system in each
+fresh process is process-cold; the later systems follow earlier reads in that process.
+Memory is the harness's sampled private-byte delta across the operation, not the narrower
+SceneWork start/end window.
+
+| Model / system | Revit seconds | Private delta MiB | Published elements |
+|---|---:|---:|---:|
+| Chadds clone SA 7 | 61.181 | 5,179.0 | 37,296 |
+| Chadds clone EX 7 | 11.064 | 896.7 | 8,469 |
+| Cleremont SA 19 | 1.395 | 85.3 | 1,852 |
+| Cleremont SA 2 | 0.872 | 8.7 | 1,187 |
+| Cleremont SA 21 | 0.879 | 78.9 | 1,173 |
+
+Chadds SA 7 published 2,384,895 triangles, including 29,745 DirectShape mesh rows.
+SceneWork's narrower private-byte interval grew 5,327,753,216 bytes; managed live bytes
+at its end were 603,434,568. This does not isolate native materialization from managed
+heap commitment. That split, cold triangle-box costs and Coarse detail remain unproven.
+Meshes cannot be the landed IFC default at this cost.
+PROVEN[session dev, controlled `probe-o` PID 65256 Chadds / PID 77728 Cleremont,
+`adc1c811`, 2026-10-28 10:55–11:35Z, harness timing/memory columns]. Root evidence:
+`.artifacts/accept/space-proof/adc1c811-20261028T105454Z-oriented/results.json`.
+
+The clone's insulation host census is 4,298 duct insulations: 2,266 family hosts,
+2,008 duct hosts, 20 flex hosts and four missing hosts. Pipe insulation is 3,267:
+1,598 family hosts and 1,669 pipe hosts. Pipe host thickness matches all 3,267 own
+Thickness values exactly. Duct parity is 4,294/4,294 available hosts, maximum error zero.
+The separate linkless standalone has 4,266/4,266 pipe parity and is not the gate model.
+PROVEN[session dev, controlled `probe-o` PID 65256, `adc1c811`, 2026-10-28 11:01–11:07Z,
+`ev/chadds/p0/022-post-artifact-primitives.cs-SA7.stdout` in the root evidence directory].
+
+At runtime `VertexTolerance` was 0.0005233832795 ft. Chadds SA 7 maxima were 7.15034x
+for the rejected inscribed facets, 0.0506742x for circumscribed facets and 0.0615391x for
+folded insulation. Cleremont SA 19 reached 4.85944x, 0.121950x and 0.156292x respectively.
+The latter two are contained at Revit's resolution but need residual diagnosis. The old
+witness stopped on them; the clarified tiers record 0.1–1x and fail only above 1x.
+Cause remains UNPROVEN. Saved rows identify host 7950034 / insulation 8903976,
+7950297 / 8903984 and 7950371 / 8903986 among the middle-tier findings.
+
+The IFC mesh accuracy claim remains UNPROVEN despite the old witness's zero failure count.
+It accepted a 24.026413 ft deviation under a 1,757.687573 ft predicate bound. The outlier
+probe completed but lost its result at the 1 MiB Result limit. Its replacement writes the
+identity first and chunks geometry into artifacts. Wrong native pairing, misplaced frames
+and native outlier geometry must be distinguished before this gate can turn green.
 
 ## Instrument
 
