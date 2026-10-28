@@ -176,7 +176,10 @@ Verbs          Pea's Sweep/Slice/Probe/Partition read through the same scoped re
 
 - IFC/DirectShape drawing (kaitpw 2026-10-28): rule after seeing meshes and per-element
   triangle-fit oriented boxes side by side on the Chadds clone, both measured under step 2's
-  reach. Leaning meshes; step 3 lands meshes as the default with the box as an option.
+  reach. Leaning meshes, but meshing IFC context measured 61 s and +5.0 GiB cold on Chadds SA 7
+  (31,296 meshes, 2.38 M triangles; probe-o, 2026-10-28) against 4.75 s and +0.5 GiB for main's
+  boxes. That breaks the restart goal, so meshes stay on request and the landed default is the
+  cheapest option that is oriented and containing, until kaitpw rules.
 - How much of Cleremont's 7 GB open cost is its links.
 - Link behaviour on a machine without Desktop Connector.
 - CAD as building context: on Manuella, model-level DWG plans are the only building geometry
