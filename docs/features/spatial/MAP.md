@@ -154,6 +154,9 @@ Verbs          Pea's Sweep/Slice/Probe/Partition read through the same scoped re
 
 ## Owed
 
+- IFC/DirectShape drawing (kaitpw 2026-10-28): rule after seeing meshes and per-element
+  triangle-fit oriented boxes side by side on the Chadds clone, both measured under step 2's
+  reach. Leaning meshes; step 3 lands meshes as the default with the box as an option.
 - How much of Cleremont's 7 GB open cost is its links.
 - Link behaviour on a machine without Desktop Connector.
 - CAD as building context: on Manuella, model-level DWG plans are the only building geometry
