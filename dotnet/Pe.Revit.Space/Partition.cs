@@ -132,10 +132,11 @@ internal sealed class Partition {
     }
 
     /// <summary>
-    ///     The one context query of this source instance: elements whose bounds meet any reach box, minus every
-    ///     exclusion class, as quick filters before iteration. Iterating loads an element (≈14 KB in the Chadds
-    ///     IFC link) and counting ids is free, so only kept elements are iterated. One OR filter per source:
-    ///     hundreds of queries cost 20–113 s on Cleremont. Each class is counted, never iterated.
+    ///     The one context query of this source instance: ids whose bounds meet any reach box, counted without
+    ///     loading. Exclusion classes are quick filters with no reach term (category and class indexes), intersected
+    ///     with those ids in managed code; only what survives is iterated, and iterating loads (≈14 KB per element in
+    ///     the Chadds IFC link). Exactly one reach query per source: every query that carries the OR of hundreds of
+    ///     boxes costs ≈0.1–0.4 s (Cleremont SA 19, 13 such queries per source took 6.2 s against main's 1.5 s).
     /// </summary>
     /// <param name="reach">Host-frame boxes, each as its 8 corners; mapped into this instance's frame here.</param>
     internal SceneReach Reach(IReadOnlyList<XYZ[]> reach) {
@@ -144,30 +145,31 @@ internal sealed class Partition {
         using var inverse = this.Transform.Inverse;
         var boxes = reach.Select(corners => (ElementFilter)Intersecting(corners.Select(inverse.OfPoint))).ToList();
         var near = boxes.Count == 1 ? boxes[0] : new LogicalOrFilter(boxes);
-        ICollection<ElementId> Ids(params ElementFilter[] filters) {
-            using var collector = new FilteredElementCollector(this.Doc).WhereElementIsNotElementType();
-            // Class before reach, so Revit can narrow by its category and class index before testing bounds.
-            foreach (var filter in filters) collector.WherePasses(filter);
-            return collector.ToElementIds();
+        HashSet<ElementId> Ids(ElementFilter filter) {
+            using var collector = new FilteredElementCollector(this.Doc).WhereElementIsNotElementType().WherePasses(filter);
+            return [.. collector.ToElementIds()];
         }
-        var counted = Ids(near).Count;
+        var inside = Ids(near);
+        if (boxes.Count > 1) near.Dispose();
+        foreach (var box in boxes) box.Dispose();
         var excluded = new Dictionary<string, int>(StringComparer.Ordinal);
-        foreach (var (name, match, _) in Exclusions) {
-            var n = Ids(match, near).Count;
-            if (n > 0) excluded[name] = n;
+        var keep = new HashSet<ElementId>(inside);
+        foreach (var (name, match) in Exclusions) {
+            var members = Ids(match);
+            var hits = inside.Count(members.Contains);
+            if (hits == 0) continue;
+            excluded[name] = hits;
+            keep.ExceptWith(members);
         }
         var kept = new List<Element>();
         var rejected = 0;
-        using (var collector = new FilteredElementCollector(this.Doc).WhereElementIsNotElementType()) {
-            foreach (var (_, _, keep) in Exclusions) collector.WherePasses(keep);
-            collector.WherePasses(near);
+        if (keep.Count > 0) {
+            using var collector = new FilteredElementCollector(this.Doc, keep);
             // The managed gate stays as a witness: what it rejects here was loaded for nothing and is disclosed.
             foreach (var element in collector)
                 if (Ingest.Allowed(element)) kept.Add(element); else rejected++;
         }
-        if (boxes.Count > 1) near.Dispose();
-        foreach (var box in boxes) box.Dispose();
-        return new SceneReach(counted, kept, excluded, rejected, clock.Elapsed.TotalMilliseconds);
+        return new SceneReach(inside.Count, kept, excluded, rejected, clock.Elapsed.TotalMilliseconds);
     }
 
     /// <summary>
@@ -177,11 +179,11 @@ internal sealed class Partition {
     ///     (class Element), insulation (drawn from its host), view-owned elements, CAD (model-level CAD is
     ///     disclosed, not drawn, until kaitpw rules), and the link classes Cleremont found.
     /// </summary>
-    private static readonly (string Name, ElementFilter Match, ElementFilter Keep)[] Exclusions = [
+    private static readonly (string Name, ElementFilter Match)[] Exclusions = [
         OfCategories("centre-line", Enum.GetValues(typeof(BuiltInCategory)).Cast<BuiltInCategory>()
             .Where(c => c.ToString().EndsWith("CenterLine", StringComparison.Ordinal)).ToArray()),
         OfCategories("insulation", BuiltInCategory.OST_DuctInsulations, BuiltInCategory.OST_PipeInsulations),
-        ("view-specific", new ElementOwnerViewFilter(ElementId.InvalidElementId, true), new ElementOwnerViewFilter(ElementId.InvalidElementId)),
+        ("view-specific", new ElementOwnerViewFilter(ElementId.InvalidElementId, true)),
         OfClasses("cad", typeof(ImportInstance)),
         OfCategories("sketch", BuiltInCategory.OST_SketchLines, BuiltInCategory.OST_Lines,
             BuiltInCategory.OST_RailingRailPathExtensionLines, BuiltInCategory.OST_RailingRailPathLines),
@@ -192,17 +194,20 @@ internal sealed class Partition {
         OfCategories("beam-system", BuiltInCategory.OST_StructuralFramingSystem),
         OfCategories("planting", BuiltInCategory.OST_Planting, BuiltInCategory.OST_Entourage),
         OfCategories("site", BuiltInCategory.OST_Topography, BuiltInCategory.OST_Toposolid, BuiltInCategory.OST_Mass),
+        // Ingest.Allowed refuses these after loading; refusing them here first spends no load (326 in one SA 19 link read).
+        OfCategories("non-geometry", BuiltInCategory.OST_Cameras, BuiltInCategory.OST_Levels, BuiltInCategory.OST_Grids,
+            BuiltInCategory.OST_CLines, BuiltInCategory.OST_ReferenceLines, BuiltInCategory.OST_VolumeOfInterest,
+            BuiltInCategory.OST_SectionBox, BuiltInCategory.OST_Matchline, BuiltInCategory.OST_Rooms, BuiltInCategory.OST_MEPSpaces,
+            BuiltInCategory.OST_Areas, BuiltInCategory.OST_Views, BuiltInCategory.OST_Schedules, BuiltInCategory.OST_Sheets,
+            BuiltInCategory.OST_DuctSystem, BuiltInCategory.OST_PipingSystem, BuiltInCategory.OST_ElectricalCircuit,
+            BuiltInCategory.OST_SwitchSystem),
     ];
 
-    private static (string, ElementFilter, ElementFilter) OfCategories(string name, params BuiltInCategory[] categories) {
-        var ids = categories.Distinct().ToList();
-        return (name, new ElementMulticategoryFilter(ids), new ElementMulticategoryFilter(ids, true));
-    }
+    private static (string, ElementFilter) OfCategories(string name, params BuiltInCategory[] categories) =>
+        (name, new ElementMulticategoryFilter(categories.Distinct().ToList()));
 
-    private static (string, ElementFilter, ElementFilter) OfClasses(string name, params Type[] types) => types.Length == 1
-        ? (name, new ElementClassFilter(types[0]), new ElementClassFilter(types[0], true))
-        : (name, new LogicalOrFilter(types.Select(t => (ElementFilter)new ElementClassFilter(t)).ToList()),
-            new LogicalAndFilter(types.Select(t => (ElementFilter)new ElementClassFilter(t, true)).ToList()));
+    private static (string, ElementFilter) OfClasses(string name, params Type[] types) => (name, types.Length == 1
+        ? new ElementClassFilter(types[0]) : new LogicalOrFilter(types.Select(t => (ElementFilter)new ElementClassFilter(t)).ToList()));
 
     private static BoundingBoxIntersectsFilter Intersecting(IEnumerable<XYZ> corners) {
         double minX = double.MaxValue, minY = double.MaxValue, minZ = double.MaxValue;
