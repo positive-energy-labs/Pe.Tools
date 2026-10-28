@@ -91,7 +91,7 @@ test.skipIf(!existsSync(retained))(
     expect(overview.paths.return.paths.length).toBeLessThanOrEqual(5);
     expect(overview.blockers.length).toBeGreaterThan(0);
     expect(overview.totals?.requiredEspInWg).toBeNull();
-    expect(requests).toContainEqual({ selector: { kind: "from", unitId: 14577391, portIndex: 2 } });
+    expect(requests).toContainEqual({ selector: { kind: "from", unitId: 14577391 } });
     const reads = requests.length;
     const detail = await post("sheet", {
       ...request,
