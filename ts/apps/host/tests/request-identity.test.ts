@@ -67,6 +67,35 @@ afterEach(async () => {
   await Promise.all(disposals.splice(0).map((dispose) => dispose()));
 });
 
+test("same-origin built workers enter as assets, without opening another path or origin", async () => {
+  const worker = {
+    host: local.host,
+    origin: `http://${local.host}`,
+    "sec-fetch-site": "same-origin",
+    "sec-fetch-mode": "same-origin",
+    "sec-fetch-dest": "worker",
+  };
+  expect(
+    await readRequestIdentity(worker, "/assets/prepare.worker-hash.js", options),
+  ).toHaveProperty("principal");
+  for (const path of ["/pe/environment", "/assets/worker.json", "/pages/example/worker.js"])
+    expect(await readRequestIdentity(worker, path, options)).toHaveProperty("refusal");
+  expect(
+    await readRequestIdentity(
+      { ...worker, "sec-fetch-site": "cross-site", origin: "https://foreign.example" },
+      "/assets/prepare.worker-hash.js",
+      options,
+    ),
+  ).toHaveProperty("refusal");
+  expect(
+    await readRequestIdentity(
+      { ...worker, origin: "https://foreign.example" },
+      "/assets/prepare.worker-hash.js",
+      options,
+    ),
+  ).toMatchObject({ refusal: { code: "identity.origin" } });
+});
+
 test.each(["/call", "/pe/readings", "/api/bridge", "/host/status"])(
   "stale browser cannot enter %s without its original runtime owner",
   async (path) => {
