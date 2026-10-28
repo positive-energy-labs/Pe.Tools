@@ -3,6 +3,7 @@ import { RealTable } from "./integration-table";
 import { PaneStripSpecimen } from "./pane-strip";
 import { SatelliteSpecimens } from "./satellites";
 import { TokenSpecimens } from "./tokens";
+import { LevelsSpecimen } from "./levels";
 
 export function DesignSystemSpecimens() {
   return (
@@ -11,6 +12,7 @@ export function DesignSystemSpecimens() {
       <CatalogueSpecimens />
       <RealTable />
       <PaneStripSpecimen />
+      <LevelsSpecimen />
       <SatelliteSpecimens />
     </>
   );

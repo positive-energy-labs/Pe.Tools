@@ -59,7 +59,7 @@ public sealed record SceneUnavailableElement(long ElementId, string? UniqueId, s
 public sealed record SceneMetadata(string Format, Stamp Stamp, Aabb Bounds, int Triangles,
     IReadOnlyList<SceneElement> Elements, IReadOnlyList<long> RequestedElementIds, int OmittedElements,
     IReadOnlyList<SceneSource> Sources, string Phase, IReadOnlyList<SceneUnavailableElement> UnavailableElements,
-    SceneWork Work, SceneCompleteness Completeness, IReadOnlyList<long> DetachedElementIds);
+    SceneWork Work, SceneCompleteness Completeness, IReadOnlyList<long> DetachedElementIds, SceneLevels Levels);
 /// <param name="DeferredCandidates">Known unacquired candidates, or null when discovery stopped before the remaining count was known.</param>
 public sealed record SceneCompleteness(bool Complete, int? DeferredCandidates, int AcquisitionLimitedElements, string? LimitReason);
 public sealed record SceneMemory(long StartPrivateBytes, long EndPrivateBytes, long PeakPrivateBytes, long ManagedBytes);
@@ -70,13 +70,13 @@ public sealed record SceneWork(int BroadCandidates, int ExtractedElements, int E
 public sealed record SceneReceipt(string Format, string Frame, string HostDocumentKey, long Epoch, DateTime BuiltUtc, bool Fresh,
     Aabb Bounds, int Triangles, int Elements, int FocusElements, int ContextElements, int RequestedElements,
     int OmittedElements, int UnavailableElements, int Sources, int UnreadSources, int DetachedElements, string Phase,
-    SceneWork Work, SceneCompleteness Completeness) {
+    SceneWork Work, SceneCompleteness Completeness, SceneLevelReceipt Levels) {
     public static SceneReceipt From(SceneMetadata scene) => new(scene.Format, scene.Stamp.Frame,
         scene.Stamp.HostDocumentKey, scene.Stamp.Epoch, scene.Stamp.BuiltUtc, scene.Stamp.Fresh, scene.Bounds, scene.Triangles,
         scene.Elements.Count, scene.Elements.Count(element => element.Focus), scene.Elements.Count(element => !element.Focus),
         scene.RequestedElementIds.Count, scene.OmittedElements, scene.UnavailableElements.Count, scene.Sources.Count,
         scene.Sources.Count(source => source.State != SceneSourceState.Loaded), scene.DetachedElementIds.Count,
-        scene.Phase, scene.Work, scene.Completeness);
+        scene.Phase, scene.Work, scene.Completeness, SceneLevelReceipt.From(scene.Levels));
 }
 public sealed record SceneArtifact(SceneReceipt Scene, string Id, string Url, long Bytes);
 
@@ -100,6 +100,7 @@ public static class Scene {
         if (context == SceneContextRepresentation.Meshes && ids.Count == 0 && request.Bounds is null)
             throw new ArgumentException("meshes context requires elementIds or explicit bounds.");
         var budget = new SceneBudget(request.MaxTriangles, cancellationToken);
+        var levels = Levels.Read(document, cancellationToken);
         var world = SpaceWorld.SceneSources(document);
         foreach (var partition in world.Partitions) partition.BeginScene(world.CurrentEpoch);
         var leases = new Dictionary<Partition, IDisposable?>();
@@ -297,7 +298,7 @@ public static class Scene {
                 new SceneWork(broad, extracted, extractedTriangles, clock.Elapsed.TotalMilliseconds,
                     budget.PeakRetainedTriangles, budget.NativeCalls, budget.Diagnostics(), budget.NativeTriangles,
                     budget.GeometryCalls - focusGeometryCalls),
-                new SceneCompleteness(limit is null, deferred, limited, limit), detached);
+                new SceneCompleteness(limit is null, deferred, limited, limit), detached, levels);
         } finally {
             foreach (var lease in leases.Values) lease?.Dispose();
             LinkedGeometryStore.Prune();

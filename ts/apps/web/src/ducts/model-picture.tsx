@@ -30,6 +30,8 @@ import { PaneOverlay } from "@pe/kit/lang/pane";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Button } from "@pe/kit/lang/button";
 import { Scene3D } from "#/scene/scene3d";
+import { levelLayer } from "#/scene/levels";
+import { LevelMarks, LevelReadout } from "#/scene/level-marks";
 import type { SceneRead } from "#/scene/use-scene";
 import type { Bounds, Kinds, Layer3D, PaintOf, SceneMeshes } from "#/scene/types";
 
@@ -198,11 +200,12 @@ export function ModelPicture({
     () =>
       meshes
         ? [
+            ...(read.levels ? [levelLayer(read.levels, meshes.bounds)] : []),
             ...findings3d,
             portLayer(equipmentPorts(graph, meshes, paintOf), colour === "firm" ? kinds : {}, look),
           ]
         : findings3d,
-    [graph, meshes, paintOf, findings3d, look, kinds, colour],
+    [graph, meshes, paintOf, findings3d, look, kinds, colour, read.levels],
   );
   const preset = look.layers.preset === "page" ? sceneView.preset : look.layers.preset;
   const [sectionDraft, setSectionDraft] = useState<Section | undefined>();
@@ -371,6 +374,9 @@ export function ModelPicture({
           onPick(pick.instance.revitId, { x: event.clientX, y: event.clientY });
         }}
       />
+      <PaneOverlay label="model levels" place="bl">
+        <LevelReadout levels={read.levels ?? null} bounds={meshes?.bounds ?? null} />
+      </PaneOverlay>
       {meshes && sectionSubject && (
         <PaneOverlay label="section and context" place="tr">
           <SectionControls
@@ -453,6 +459,14 @@ export function ModelPicture({
           <CaptionBounds.Provider value={captionField}>
             {meshes && (
               <svg className="pointer-events-none absolute inset-0 size-full">
+                {read.levels && (
+                  <LevelMarks
+                    levels={read.levels}
+                    bounds={meshes.bounds}
+                    project={annotationProject}
+                    size={overlay.size}
+                  />
+                )}
                 <ContinuationMarks meshes={meshes} project={annotationProject} />
               </svg>
             )}

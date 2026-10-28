@@ -21,6 +21,11 @@ const metadata = (patch: Partial<Psc1Metadata> = {}): Psc1Metadata =>
     stamp: { frame: "host-internal-ft" } as Psc1Metadata["stamp"],
     bounds: BOX,
     triangles: 2,
+    levels: {
+      sources: [],
+      planes: [],
+      work: { nativeMilliseconds: 0, startPrivateBytes: 0, endPrivateBytes: 0 },
+    },
     completeness: {
       complete: true,
       deferredCandidates: 0,

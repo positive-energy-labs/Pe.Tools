@@ -7,6 +7,7 @@ import { SceneMeshes, type SceneInstance } from "./types";
 
 import type { RevitDetailSpaceScene } from "@pe/host-contracts/generated";
 import type { Bounds, ScenePrimitive } from "./types";
+import { assertLevels } from "./levels";
 
 /** The artifact's metadata, as the op declares it. */
 export type Psc1Metadata = RevitDetailSpaceScene.Artifact.SceneMetadata;
@@ -71,6 +72,7 @@ export function decodeScene(buffer: ArrayBuffer): { metadata: Psc1Metadata; mesh
     new TextDecoder().decode(new Uint8Array(buffer, 8, length)),
   ) as Psc1Metadata;
   const completeness = metadata.completeness;
+  assertLevels(metadata.levels);
   if (metadata.format !== SCENE_FORMAT || !completeness)
     throw Error("Scene capture is outdated. Reload the Revit payload and refresh the scene.");
   if (

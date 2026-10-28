@@ -173,6 +173,11 @@ const handleOf = (b: Box) => ({
 function psc1(): ArrayBuffer {
   const positions = BOXES.flatMap((b) => boxTriangles(b.box));
   const metadata: Psc1Metadata = {
+    levels: {
+      sources: [],
+      planes: [],
+      work: { nativeMilliseconds: 0, startPrivateBytes: 0, endPrivateBytes: 0 },
+    },
     work: {
       broadCandidates: BOXES.length,
       extractedElements: BOXES.length,

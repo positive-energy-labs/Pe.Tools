@@ -16,6 +16,7 @@ export type SceneRead = {
   omittedElements: number;
   unavailableElements: number;
   completeness: Psc1Metadata["completeness"] | null;
+  levels?: Psc1Metadata["levels"] | null;
   /** Optional context failed; the exact focus remains usable. */
   contextError?: string | null;
 };
@@ -55,6 +56,7 @@ export function useScene(
     omittedElements: read.metadata?.omittedElements ?? 0,
     unavailableElements: read.metadata?.unavailableElements.length ?? 0,
     completeness: read.metadata?.completeness ?? null,
+    levels: read.metadata?.levels ?? null,
   };
 }
 export type ArtifactRead = {
