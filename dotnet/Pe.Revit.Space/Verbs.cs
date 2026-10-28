@@ -228,7 +228,11 @@ public static class Verbs {
             curve.Points.Select(Point).ToList(), arc);
     }
 
-    /// <summary>What is in this box, by source, category, and kind, plus the ten fattest elements.</summary>
+    /// <summary>
+    ///     What is in this box, by source, category, and kind, plus the ten fattest elements. An element is admitted when its
+    ///     own-frame box meets the box: the whole-model read also counted rotated elements whose axis-aligned host box
+    ///     reached in while no piece of their geometry did (ADR 0025; ruled 2026-10-28, spatial ledger).
+    /// </summary>
     public static CensusAnswer Census(Document document, Aabb box, Filter? filter = null) =>
         Census(SpaceWorld.Prepare(document, box, curves: Curves(filter)), box, filter);
 
@@ -364,7 +368,9 @@ public static class Verbs {
     ///         <paramref name="xyClip" /> rejects, it does not cut: an element whose bounds miss the
     ///         rectangle is skipped, but a surviving piece is still the whole triangle clipping and
     ///         may reach outside. Cutting in xy would emit pieces that are no longer triangle
-    ///         clippings, and every consumer of this shape assumes they are.
+    ///         clippings, and every consumer of this shape assumes they are. The Document entry reads only the band
+    ///         within the clip, so an element is admitted when its own-frame box meets that region; a rotated element
+    ///         whose axis-aligned box alone reaches the clip is not (ADR 0025; ruled 2026-10-28, spatial ledger).
     ///     </para>
     /// </summary>
     public static SliceAnswer Slice(Document document, double z0, double z1, Filter? filter = null, Aabb? xyClip = null) =>
