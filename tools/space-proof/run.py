@@ -25,8 +25,11 @@ CHECKOUT = HERE.parents[1]
 ROOT = Path(subprocess.run(["git", "rev-parse", "--git-common-dir"], cwd=CHECKOUT, capture_output=True, text=True).stdout.strip()).resolve().parent
 DETACHED = ROOT / ".artifacts" / "revit" / "detached"
 LOCK = ROOT / ".artifacts" / "locks" / "revit-slot-1"
-CACHE = Path(os.environ["LOCALAPPDATA"]) / "Positive Energy" / "Pe.Tools" / "cache" / "space-scenes"
-SID = "probe-h"
+# Custody and isolation come from the environment so an agent with its own session id or acceptance-isolated product home
+# (PE_TOOLS_PRODUCT_HOME, inherited by every child) runs this unchanged: PE_PROOF_SESSION, PE_PROOF_CACHE (the space-scenes
+# dir the host publishes into), PE_PROOF_KEEP_HOST=1 (the caller owns and stops its own host).
+CACHE = Path(os.environ.get("PE_PROOF_CACHE") or Path(os.environ["LOCALAPPDATA"]) / "Positive Energy" / "Pe.Tools" / "cache" / "space-scenes")
+SID = os.environ.get("PE_PROOF_SESSION", "probe-h")
 MIN_FREE_GIB = 10
 GUARD_FLOOR_GIB = 3
 MODELS = {
@@ -227,6 +230,9 @@ class Session:
 
 def stop_dev_host():
     """`session start` brings up this checkout's dev host plus its web frontend (~2.5 GiB). The harness started them, so it ends them."""
+    if os.environ.get("PE_PROOF_KEEP_HOST") == "1":
+        print("  dev host kept (PE_PROOF_KEEP_HOST=1); the caller stops it", flush=True)
+        return []
     svc = Path(os.environ["LOCALAPPDATA"]) / "Positive Energy" / "Pe.Tools" / "state" / "service"
     stopped = []
     for f in svc.glob("host-source-*.json"):
