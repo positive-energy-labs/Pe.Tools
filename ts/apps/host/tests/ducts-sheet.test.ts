@@ -161,7 +161,8 @@ test.skipIf(!existsSync(retained))(
       (await post("sheet", { ...request, basis: overview.basis, detail: overview.next.elements }))
         .status,
     ).toBe(409);
-    expect(requests).toHaveLength(reads);
+    // The chain names one start port, so it is a different raw read from the fan sheet's every-port read.
+    expect(requests).toHaveLength(reads + 1);
     process.stdout.write(`MUAS-1 overview: ${bytes} UTF-8 bytes\n${JSON.stringify(overview)}\n`);
   },
 );
