@@ -225,7 +225,7 @@ public static class Scene {
                 bool Take(Tri triangle) {
                     if (triangles + kept.Count >= request.MaxTriangles) {
                         if (isFocus) throw new ArgumentException("Selected mesh exceeds maxTriangles; narrow elementIds or raise the budget.");
-                        omitted++; limit ??= "output-budget";
+                        omitted++; limit ??= "output-budget"; Cut(partition);
                         stopped = true;
                         return false;
                     }
@@ -236,17 +236,17 @@ public static class Scene {
             }
             void Primitive(Partition partition, Element element, Aabb bounds, SceneRun? run, bool isFocus) {
                 if (crop is { } region && !bounds.Overlaps(region)) return;
-                if (!isFocus && limit == "acquisition-budget") { deferred++; return; }
+                if (!isFocus && limit == "acquisition-budget") { deferred++; Cut(partition); return; }
                 try {
                     var box = run is null ? oriented.Family(element, partition.Transform) : null;
                     if (run is null && box is null) {
                         if (!isFocus && triangles >= request.MaxTriangles) {
-                            deferred++; limit ??= "output-budget"; return;
+                            deferred++; limit ??= "output-budget"; Cut(partition); return;
                         }
                         var captured = Capture(partition, element, crop);
                         foreach (var meshRow in captured.Rows) Write(partition, meshRow, captured.Triangles, isFocus);
                         if (captured.Rows.Length == 0) {
-                            omitted++; limit ??= "missing-geometry";
+                            omitted++; limit ??= "missing-geometry"; Cut(partition);
                         }
                         return;
                     }
@@ -259,7 +259,7 @@ public static class Scene {
                     writtenBounds = Union(writtenBounds, bounds);
                 } catch (SceneLimitException ex) {
                     if (isFocus) throw;
-                    limited++; omitted++; limit = ex.Reason;
+                    limited++; omitted++; limit = ex.Reason; Cut(partition);
                 }
             }
             foreach (var row in focus) Write(row.Source, row.Row, row.Triangles, true);
@@ -365,6 +365,9 @@ public static class Scene {
 
     // A run's reach follows its location line: on a diagonal duct the host-axis box is up to twice the volume.
     private static XYZ[] Corners(SceneRun run, double reachFt) {
+        // A curved run has no single axial box. Its conservative path bounds include every bend,
+        // whereas a box about the endpoint chord can omit nearby context.
+        if (run.Path is not null) return Corners(Oriented.Bounds(run).Expand(reachFt));
         var start = new XYZ(run.Start[0], run.Start[1], run.Start[2]);
         var end = new XYZ(run.End[0], run.End[1], run.End[2]);
         var along = (end - start).Normalize();
@@ -379,8 +382,8 @@ public static class Scene {
 
     /// <summary>
     ///     A duct or pipe's insulation thickness, read from the host. Insulation elements never enter context; the
-    ///     host's value equals the insulation's own Thickness on 4,294 of 4,294 Chadds duct insulations; pipe parity is
-    ///     unchecked (Chadds' 3,267 pipe insulations, owed to step 3). Null when the host carries none.
+    ///     host's value equals the insulation's own Thickness on 4,294 Chadds duct and 3,267/3,267 pipe insulations
+    ///     with a readable parameter (probe-o, clone copy, 2026-10-28). Four duct hosts have no parameter. Null when none.
     /// </summary>
     public static double? InsulationThicknessFt(Element host) =>
         host.get_Parameter(BuiltInParameter.RBS_REFERENCE_INSULATION_THICKNESS) is { HasValue: true } p

@@ -5958,7 +5958,7 @@ export namespace RevitDetailSpaceRows {
   }
 }
 
-/** Export native meshes and sized straight physical runs in host internal feet. focusOnly captures host elementIds without context. Context is read per focus element: each element's own box (a run's location line and size) grown by contextPaddingFt, in every host and link placement, as one quick filter per source before any element loads; explicit bounds replace that reach. Centre-line helpers, insulation, view-owned elements, CAD and link noise classes are excluded before iteration, and every source placement (loaded, unloaded or unavailable) reports what reach counted, kept, excluded by class and cut by a bound; detachedElementIds names focus members far from the rest. Context defaults to native boxes and sized runs without tessellating; contextRepresentation meshes acquires Coarse context in the same reach. none suppresses context. Primitive rows own zero vertices; representation distinguishes mesh, box and run. Metadata phase distinguishes focus/context, unavailableElements identifies requested ids without meshes, omittedElements counts context excluded by the output budget, and completeness reports deferred context and acquisition resource limits. Successful artifacts preserve focus membership; unsupported parametric focus retains Medium/Fine meshes. Native triangle counts stop further acquisition after each tessellated face, so one already allocated face can exceed the acquisition budget. Completeness discloses omitted or deferred context. RPC returns bounded counts and the artifact id; full typed membership and source transforms remain in PSC1. No document mutation. Browser orbit, visibility and cuts need no further native calls. */
+/** Export native meshes, full 3D family frames and sized physical runs in host internal feet, including host insulation. Curved round runs carry their tessellated LocationCurve path. focusOnly captures host elementIds without context. Context is read per focus element: each element's own box (a run's location line and size) grown by contextPaddingFt, in every host and link placement, as one quick filter per source before any element loads; explicit bounds replace that reach. Centre-line helpers, insulation, view-owned elements, CAD and link noise classes are excluded before iteration, and every source placement (loaded, unloaded or unavailable) reports what reach counted, kept, excluded by class and cut by a bound; detachedElementIds names focus members far from the rest. Context defaults to oriented family boxes and sized runs; elements without a proven frame, including IFC DirectShapes and sketch-based building elements, retain native meshes. contextRepresentation meshes acquires native context in the same reach. none suppresses context. Primitive rows own zero vertices; representation distinguishes mesh, oriented-box and run. Oriented boxes carry center, three unit axes and half sizes. Symbol meshes are tessellated once per native geometry identity and detail during the operation, then placed through the instance and link transforms. Metadata phase distinguishes focus/context, unavailableElements identifies requested ids without meshes, omittedElements counts context excluded by the output budget, and completeness reports deferred context and acquisition resource limits. Successful artifacts preserve focus membership; unsupported parametric focus retains Medium/Fine meshes. Native triangle counts stop further acquisition after each tessellated face, so one already allocated face can exceed the acquisition budget. Completeness discloses omitted or deferred context. RPC returns bounded counts and the artifact id; full typed membership and source transforms remain in PSC1. No document mutation. Browser orbit, visibility and cuts need no further native calls. */
 export namespace RevitDetailSpaceScene {
   export namespace Req {
     export type SceneContextRepresentation = "none" | "oriented" | "meshes";
@@ -6205,6 +6205,16 @@ export namespace RevitDetailSpaceScene {
       diameterFt?: null | number;
       crossSectionXAxis: number[];
       path?: number[][] | null;
+    }
+    /**
+     * Element-local box placed in host feet. Axes are an orthonormal right-handed frame; HalfSize is in feet.
+     */
+    export interface SceneOrientedBox {
+      center: number[];
+      axisX: number[];
+      axisY: number[];
+      axisZ: number[];
+      halfSize: number[];
     }
     /**
      * One source instance: the host, or one placement of a link. A link document placed three times is three sources.
