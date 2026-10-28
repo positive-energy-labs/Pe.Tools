@@ -25,7 +25,9 @@ does not pay for them again.
 
 ## Pillars
 
-1. **Accuracy first.** Every element is drawn in its own frame: a mesh, or a box oriented by
+1. **Accuracy first, and drawn shapes contain the physical object.** Pea routes against this
+   world, so an under-drawn element claims free space that is not free: a faceted round run
+   is circumscribed (r/cos(π/n), over-draw disclosed), never inscribed. Every element is drawn in its own frame: a mesh, or a box oriented by
    that element's transform or location line, in full 3D (30–34% of family instances are tilted
    on Manuella and Cleremont). Never an axis-aligned box around a rotated element. [ADR 0025]
 2. **Building geometry is always read, whatever its source.** Host, Revit link, IFC link, CAD.
