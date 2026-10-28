@@ -36,7 +36,7 @@ public sealed record SceneRequest(
     int MaxTriangles = 1500000,
     Aabb? Bounds = null,
     bool FocusOnly = false,
-    SceneContextRepresentation ContextRepresentation = SceneContextRepresentation.Oriented
+    SceneContextRepresentation ContextRepresentation = SceneContextRepresentation.LinkBoxes
 );
 
 /// <summary>Straight physical run in host feet, including host insulation. Curved runs use native meshes.</summary>
@@ -78,7 +78,17 @@ public sealed record SceneUnavailableElement(long ElementId, string? UniqueId, s
 public sealed record SceneMetadata(string Format, Stamp Stamp, Aabb Bounds, int Triangles,
     IReadOnlyList<SceneElement> Elements, IReadOnlyList<long> RequestedElementIds, int OmittedElements,
     IReadOnlyList<SceneSource> Sources, string Phase, IReadOnlyList<SceneUnavailableElement> UnavailableElements,
-    SceneWork Work, SceneCompleteness Completeness, IReadOnlyList<long> DetachedElementIds, SceneLevels Levels);
+    SceneWork Work, SceneCompleteness Completeness, IReadOnlyList<long> DetachedElementIds, SceneLevels Levels) {
+    /// <summary>Counts by link placement. Bounding boxes alone cannot identify geometry rotated inside the source frame.</summary>
+    public IReadOnlyDictionary<long, SceneLinkEnvelopeCount> LinkEnvelopes => this.Elements
+        .Where(e => !e.Focus && e.Handle.LinkInstanceId.HasValue && e.OrientedBox?.Frame == SceneBoxFrame.Link)
+        .GroupBy(e => e.Handle.LinkInstanceId!.Value)
+        .ToDictionary(g => g.Key, g => new SceneLinkEnvelopeCount(g.Count(), null, "unmeasured-without-element-geometry"));
+}
+/// <param name="Elements">Published link-frame boxes in one source placement.</param>
+/// <param name="LooseElements">Count exceeding 1.5 times a triangle-fitted envelope's volume; null when unmeasured, never inferred from the source bounding box.</param>
+/// <param name="Looseness">Why the loose count is unknown. Measuring it requires geometry that this representation deliberately avoids.</param>
+public sealed record SceneLinkEnvelopeCount(int Elements, int? LooseElements, string Looseness);
 /// <param name="DeferredCandidates">Known unacquired candidates, or null when discovery stopped before the remaining count was known.</param>
 public sealed record SceneCompleteness(bool Complete, int? DeferredCandidates, int AcquisitionLimitedElements, string? LimitReason);
 public sealed record SceneMemory(long StartPrivateBytes, long EndPrivateBytes, long PeakPrivateBytes, long ManagedBytes);
@@ -89,13 +99,14 @@ public sealed record SceneWork(int BroadCandidates, int ExtractedElements, int E
 public sealed record SceneReceipt(string Format, string Frame, string HostDocumentKey, long Epoch, DateTime BuiltUtc, bool Fresh,
     Aabb Bounds, int Triangles, int Elements, int FocusElements, int ContextElements, int RequestedElements,
     int OmittedElements, int UnavailableElements, int Sources, int UnreadSources, int DetachedElements, string Phase,
-    SceneWork Work, SceneCompleteness Completeness, SceneLevelReceipt Levels) {
+    SceneWork Work, SceneCompleteness Completeness, SceneLevelReceipt Levels,
+    IReadOnlyDictionary<long, SceneLinkEnvelopeCount> LinkEnvelopes) {
     public static SceneReceipt From(SceneMetadata scene) => new(scene.Format, scene.Stamp.Frame,
         scene.Stamp.HostDocumentKey, scene.Stamp.Epoch, scene.Stamp.BuiltUtc, scene.Stamp.Fresh, scene.Bounds, scene.Triangles,
         scene.Elements.Count, scene.Elements.Count(element => element.Focus), scene.Elements.Count(element => !element.Focus),
         scene.RequestedElementIds.Count, scene.OmittedElements, scene.UnavailableElements.Count, scene.Sources.Count,
         scene.Sources.Count(source => source.State != SceneSourceState.Loaded), scene.DetachedElementIds.Count,
-        scene.Phase, scene.Work, scene.Completeness, SceneLevelReceipt.From(scene.Levels));
+        scene.Phase, scene.Work, scene.Completeness, SceneLevelReceipt.From(scene.Levels), scene.LinkEnvelopes);
 }
 public sealed record SceneArtifact(SceneReceipt Scene, string Id, string Url, long Bytes);
 

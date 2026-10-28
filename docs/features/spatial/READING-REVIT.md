@@ -391,10 +391,28 @@ PROVEN[session dev, controlled `probe-o` PIDs 13668 / 54132, `cabe69e3`,
 |---|---:|---:|---:|---:|
 | Meshes for IFC | 64.113 | 5,197.4 | 113,859,984 | 2,395,251 |
 | Triangle boxes for IFC | 79.317 | 5,233.4 | 48,019,084 | 320,995 |
+| Link-frame boxes for IFC | 8.457 | 667.2 | 47,985,488 | 321,081 |
 
-Both routes materialize full IFC geometry. Their cost excludes the later accuracy
-witness. Link-frame boxes are an unproven cost option until measured cold on both
-SA 7 and EX 7. The native-versus-managed allocation split remains unproven.
+Meshes and triangle boxes materialize full IFC geometry. Link-frame boxes avoid it.
+Their 535,531,520-byte in-process private delta is narrower than the harness delta.
+All costs exclude the later accuracy witness. SA 7's link-envelope witness passed:
+maximum native vertex excursion 0.00000762694 ft, 0.014572 times VertexTolerance;
+all represented runs, family boxes, flex and insulation also passed. Source `9465481`
+has 29,734 link boxes; 22 DirectShapes retain native meshes, including degenerate
+native bounding boxes. The redundant premise that all triangle-box elements have
+positive native bounding-box extents was FALSIFIED after the gate, and retired.
+PROVEN[session dev, controlled probe-o PID 45052, `440cdf85`, 2026-10-28 14:18-14:27Z].
+Root evidence: `.artifacts/accept/space-proof/440cdf85-20261028T141432Z-link-boxes`.
+
+The 29,733 common envelopes have volume-ratio median 0.99993, p90 1.07219,
+p95 5.97021, p99 12.10914 and max 518.15895. 2,834 exceed 1.5x; 2,817 of those
+also differ from the link frame by more than one degree. The worst is structural
+framing element `1239883` in IFC placement `9465481`, 3,847.807 versus 7.426 cubic feet.
+A source bounding box alone cannot distinguish internally rotated geometry from an
+axis-aligned body with the same extents. No proven cheap classifier is implemented;
+production reports the loose count as unmeasured, not zero. The measured tail identities
+come from the earlier geometry read. Its separate materialization cost remains pending.
+EX 7 cold cost, remaining model gates and final browser comparisons remain pending.
 
 ## Instrument
 

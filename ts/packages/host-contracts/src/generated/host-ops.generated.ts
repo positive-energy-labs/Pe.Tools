@@ -5958,7 +5958,7 @@ export namespace RevitDetailSpaceRows {
   }
 }
 
-/** Export native meshes, full 3D family frames and sized physical runs in host internal feet, including host insulation. Round and flat-oval profiles use 32 circumscribed facets. radialOverdrawFraction discloses the radius expansion, including float32 vertex rounding; round radial overdraw is below 0.484%. Physical diameterFt remains the outside diameter including insulation; bounds include the drawn expansion. Flex and curved runs retain native meshes. focusOnly captures host elementIds without context. Context is read per focus element: each element's own box (a run's location line and size) grown by contextPaddingFt, in every host and link placement, as one quick filter per source before any element loads; explicit bounds replace that reach. Centre-line helpers, view-owned elements, CAD and link noise classes are excluded before iteration. Fitting/accessory insulation retains its own native mesh; only a represented duct/pipe run with matching thickness absorbs its insulation, classified after loading the host. Every source placement (loaded, unloaded or unavailable) reports what reach counted, kept, excluded by class and cut by a bound; detachedElementIds names focus members far from the rest. Context defaults to oriented family boxes and sized runs; elements without a proven frame, including IFC DirectShapes and sketch-based building elements, retain native meshes. The triangle-boxes option replaces context DirectShapes with envelopes fitted to their own triangles: frame candidates come from the 24 largest triangles, all vertices set extents, and frame=triangles discloses the approximation. The link-boxes comparison option uses each linked DirectShape's native source-document bounding box through the link transform, without geometry materialization; frame=link discloses its source frame and possible overdraw for internally rotated geometry. contextRepresentation meshes acquires native context in the same reach. none suppresses context. Primitive rows own zero vertices; representation distinguishes mesh, oriented-box and run. Oriented boxes carry center, three unit axes and half sizes. Symbol meshes are tessellated once per native geometry identity and detail during the operation, then placed through the instance and link transforms. Metadata phase distinguishes focus/context, unavailableElements identifies requested ids without meshes, omittedElements counts context excluded by the output budget, and completeness reports deferred context and acquisition resource limits. Successful artifacts preserve focus membership; unsupported parametric focus retains Medium/Fine meshes. Native triangle counts stop further acquisition after each tessellated face, so one already allocated face can exceed the acquisition budget. Completeness discloses omitted or deferred context. RPC returns bounded counts and the artifact id; full typed membership and source transforms remain in PSC1. No document mutation. Browser orbit, visibility and cuts need no further native calls. */
+/** Export native meshes, full 3D family frames and sized physical runs in host internal feet, including host insulation. Round and flat-oval profiles use 32 circumscribed facets. radialOverdrawFraction discloses the radius expansion, including float32 vertex rounding; round radial overdraw is below 0.484%. Physical diameterFt remains the outside diameter including insulation; bounds include the drawn expansion. Flex and curved runs retain native meshes. focusOnly captures host elementIds without context. Context is read per focus element: each element's own box (a run's location line and size) grown by contextPaddingFt, in every host and link placement, as one quick filter per source before any element loads; explicit bounds replace that reach. Centre-line helpers, view-owned elements, CAD and link noise classes are excluded before iteration. Fitting/accessory insulation retains its own native mesh; only a represented duct/pipe run with matching thickness absorbs its insulation, classified after loading the host. Every source placement (loaded, unloaded or unavailable) reports what reach counted, kept, excluded by class and cut by a bound; detachedElementIds names focus members far from the rest. Context defaults to oriented family boxes, sized runs and linked DirectShape source-frame envelopes. Other elements without a proven frame retain native meshes. The oriented option retains meshes for DirectShapes. The triangle-boxes option replaces context DirectShapes with envelopes fitted to their own triangles: frame candidates come from the 24 largest triangles, all vertices set extents, and frame=triangles discloses the approximation. The interim link-boxes default uses each linked DirectShape's native source-document bounding box through the link transform, without geometry materialization; frame=link discloses its source frame and possible overdraw for internally rotated geometry. Receipt and metadata linkEnvelopes count boxes per link placement. looseElements is null with unmeasured-without-element-geometry: source bounds cannot identify the internally rotated tail cheaply. contextRepresentation meshes acquires native context in the same reach. none suppresses context. Primitive rows own zero vertices; representation distinguishes mesh, oriented-box and run. Oriented boxes carry center, three unit axes and half sizes. Symbol meshes are tessellated once per native geometry identity and detail during the operation, then placed through the instance and link transforms. Metadata phase distinguishes focus/context, unavailableElements identifies requested ids without meshes, omittedElements counts context excluded by the output budget, and completeness reports deferred context and acquisition resource limits. Successful artifacts preserve focus membership; unsupported parametric focus retains Medium/Fine meshes. Native triangle counts stop further acquisition after each tessellated face, so one already allocated face can exceed the acquisition budget. Completeness discloses omitted or deferred context. RPC returns bounded counts and the artifact id; full typed membership and source transforms remain in PSC1. No document mutation. Browser orbit, visibility and cuts need no further native calls. */
 export namespace RevitDetailSpaceScene {
   export namespace Req {
     export type SceneContextRepresentation = "none" | "oriented" | "triangle-boxes" | "link-boxes" | "meshes";
@@ -6018,6 +6018,9 @@ export namespace RevitDetailSpaceScene {
       work: SceneWork;
       completeness: SceneCompleteness;
       levels: SceneLevelReceipt;
+      linkEnvelopes: {
+        [k: string]: SceneLinkEnvelopeCount;
+      };
     }
     /**
      * Axis-aligned bounds in host internal feet.
@@ -6068,6 +6071,20 @@ export namespace RevitDetailSpaceScene {
       startPrivateBytes: number;
       endPrivateBytes: number;
     }
+    export interface SceneLinkEnvelopeCount {
+      /**
+       * Published link-frame boxes in one source placement.
+       */
+      elements: number;
+      /**
+       * Count exceeding 1.5 times a triangle-fitted envelope's volume; null when unmeasured, never inferred from the source bounding box.
+       */
+      looseElements?: number | null;
+      /**
+       * Why the loose count is unknown. Measuring it requires geometry that this representation deliberately avoids.
+       */
+      looseness: string;
+    }
   }
   export namespace Artifact {
     /**
@@ -6107,6 +6124,12 @@ export namespace RevitDetailSpaceScene {
       completeness: SceneCompleteness;
       detachedElementIds: number[];
       levels: SceneLevels;
+      /**
+       * Counts by link placement. Bounding boxes alone cannot identify geometry rotated inside the source frame.
+       */
+      linkEnvelopes: {
+        [k: string]: SceneLinkEnvelopeCount;
+      };
     }
     /**
      * Provenance and freshness. Every answer embeds one; it is not optional.
@@ -6352,6 +6375,20 @@ export namespace RevitDetailSpaceScene {
       nativeMilliseconds: number;
       startPrivateBytes: number;
       endPrivateBytes: number;
+    }
+    export interface SceneLinkEnvelopeCount {
+      /**
+       * Published link-frame boxes in one source placement.
+       */
+      elements: number;
+      /**
+       * Count exceeding 1.5 times a triangle-fitted envelope's volume; null when unmeasured, never inferred from the source bounding box.
+       */
+      looseElements?: number | null;
+      /**
+       * Why the loose count is unknown. Measuring it requires geometry that this representation deliberately avoids.
+       */
+      looseness: string;
     }
   }
 }

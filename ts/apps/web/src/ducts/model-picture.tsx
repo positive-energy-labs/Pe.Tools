@@ -452,7 +452,7 @@ export function ModelPicture({
                 busy={read.pending}
                 onClick={() =>
                   onContextRepresentation(
-                    contextRepresentation !== "meshes" ? "meshes" : "oriented",
+                    contextRepresentation !== "meshes" ? "meshes" : "link-boxes",
                   )
                 }
               >

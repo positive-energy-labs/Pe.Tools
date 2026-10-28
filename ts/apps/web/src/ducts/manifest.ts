@@ -267,7 +267,7 @@ export const sceneRequestOf = (
   page: Pick<DuctsPage, "system" | "layers"> & Partial<Pick<DuctsPage, "contextRadiusFt">>,
   drawn: Iterable<number> = [],
   stubs: Iterable<number> = [],
-  contextRepresentation: ContextRepresentation = "oriented",
+  contextRepresentation: ContextRepresentation = "link-boxes",
 ) => {
   if (!snapshot) return null;
   // Only opened systems are read: an unscoped page must never capture the whole document.
