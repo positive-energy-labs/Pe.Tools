@@ -172,7 +172,8 @@ internal sealed class Partition {
 
     /// <summary>
     ///     Classes that pass `CategoryType.Model` but are not context, excluded before iteration in every
-    ///     source. Proven per model (READING-REVIT, what passes as geometry but is not): MEP centre-line helpers
+    ///     source, each counted per read so every model proves what it matched (READING-REVIT, what passes as
+    ///     geometry but is not): MEP centre-line helpers
     ///     (class Element), insulation (drawn from its host), view-owned elements, CAD (model-level CAD is
     ///     disclosed, not drawn, until kaitpw rules), and the link classes Cleremont found.
     /// </summary>
