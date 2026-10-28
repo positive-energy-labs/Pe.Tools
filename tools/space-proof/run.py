@@ -415,6 +415,10 @@ def run_model(name, args, out: Path, fixture, results):
                             read["error"] = f"pea exit {code}"
                             model["reads"].append(read)
                             raise RuntimeError(f"{system} {call} {temp}: pea exit {code}")
+                        if "response" not in resp:  # ok:false bodies carry status/message/problem instead of a response
+                            read["error"] = json.dumps({k: v for k, v in resp.items() if k not in ("operation", "resolvedTarget")})[:1500]
+                            model["reads"].append(read)
+                            raise RuntimeError(f"{system} {call} {temp}: host refused: {read['error'][:300]}")
                         art = find_artifact(resp["response"])
                         receipt = art["scene"]
                         blob = load_artifact(art)
