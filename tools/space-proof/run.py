@@ -535,6 +535,9 @@ def main():
             print(json.dumps(accuracy(meta, json.loads(Path(args.frames).read_text(encoding="utf8"))), indent=1))
         return
     names = args.models.split(",")
+    others = [p.pid for p in psutil.process_iter(["name"]) if p.info["name"] == "Revit.exe"]
+    if len(others) > 1 and os.environ.get("PE_PROOF_ALLOW_OTHERS") != "1" and not args.plan:
+        sys.exit(f"{len(others)} Revit.exe are running {others}; only the person's session may run beside a probe (2026-10-28 03:17Z and 04:43Z: a concurrent open took available RAM to 1.4 GiB). PE_PROOF_ALLOW_OTHERS=1 overrides.")
     fixture_path = HERE / "fixture.json"
     fixture = json.loads(fixture_path.read_text(encoding="utf8")) if fixture_path.exists() else {}
     commit = git("rev-parse", "--short", "HEAD")
