@@ -38,6 +38,7 @@ All values are deltas of Revit private bytes in MiB. Unless a row says otherwise
 | Repeat of the same read, same process | ≈0 | | S2, S3 |
 | PSC1 publish | +38 to +364 of managed heap commit, −465 after GC | | S2: transient .NET heap |
 | Revit alone, native default 3D at Medium | 3.10 GB after open, 15.48 GB after the 3D view opens, 20.10 GB after 31.7 s API rotation, 17.78 GB idle later | | PROVEN[session dev, PID 76216, `660a3888`, 07:22Z]. Script compile raised the baseline to 3.63 GB first. API refresh is a proxy for mouse orbit. The command dirtied the model |
+| `Levels.Read`, Manuella local copy, first read in a fresh process | 15 levels, 12 planes, 3 coincident groups; 77.79 ms, net private −8 KiB (below the memory noise floor); warm 51.34 ms, +64 KiB | All 3 links disclosed unloaded; 311 horizontal ducts agree with reference-level `ProjectElevation` + offset, max error 9.88e−9 ft | PROVEN[session dev controlled, `probe-l` PID 69896 generation `20261028050303794`, `4fb82a1b`, 2026-10-28 05:04Z]. No document modification; local file hash unchanged. Evidence: `t3-a8641718/.artifacts/accept/levels-20261028/attempt-2/manuella-levels.json`. Browser alignment and the other two models remain UNPROVEN |
 
 What the table supports:
 - Cost follows the elements walked. The loaded IFC link is the cost: first touch of its elements is ≈1.12 GiB of a ≈1.88 GiB cold whole-building read, before any geometry call. Radius, triangle budget and detail level do not bound it. On 2026-10-26, cold 10 ft context took 84.25 s and 15 ft took 86.67 s.
