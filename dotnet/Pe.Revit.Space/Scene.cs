@@ -22,13 +22,13 @@ public enum SceneRunShape {
     [EnumMember(Value = "rectangular")] Rectangular,
     [EnumMember(Value = "oval")] Oval
 }
+/// <param name="ContextPaddingFt">Reach: context is what lies within this distance of each focus element's own box, never a crop around the whole focus.</param>
 public sealed record SceneRequest(
     IReadOnlyList<long>? ElementIds = null,
     double ContextPaddingFt = 15,
     int MaxTriangles = 1500000,
     Aabb? Bounds = null,
     bool FocusOnly = false,
-    bool Proximity = false,
     SceneContextRepresentation ContextRepresentation = SceneContextRepresentation.Boxes
 );
 
@@ -37,12 +37,28 @@ public sealed record SceneRun(IReadOnlyList<double> Start, IReadOnlyList<double>
     double? WidthFt, double? HeightFt, double? DiameterFt, IReadOnlyList<double> CrossSectionXAxis);
 public sealed record SceneElement(Handle Handle, int FirstVertex, int VertexCount, Aabb Bounds, bool Focus, long? CategoryId,
     SceneRepresentation Representation, SceneRun? Run);
-public sealed record SceneSource(string DocumentKey, long? LinkInstanceId, IReadOnlyList<double> SourceToHost);
+public enum SceneSourceState {
+    [EnumMember(Value = "loaded")] Loaded,
+    [EnumMember(Value = "unloaded")] Unloaded,
+    [EnumMember(Value = "unavailable")] Unavailable
+}
+/// <summary>One source instance: the host, or one placement of a link. A link document placed three times is three sources.</summary>
+/// <param name="DocumentKey">Empty when the link is not loaded; Name then names its link type.</param>
+/// <param name="Read">What the context read did in this source; null when context was not read or the source is not loaded.</param>
+public sealed record SceneSource(string DocumentKey, long? LinkInstanceId, IReadOnlyList<double> SourceToHost,
+    SceneSourceState State, string Name, SceneSourceRead? Read);
+/// <param name="Counted">Ids within reach, counted without loading.</param>
+/// <param name="Kept">Elements handed to representation.</param>
+/// <param name="Excluded">Ids within reach per exclusion class, removed before iteration; classes may overlap.</param>
+/// <param name="RejectedAfterLoad">Passed every quick filter, then refused by the managed gate: loaded for nothing.</param>
+/// <param name="CutByBound">Kept elements left out by a bound: missing native bounds, or the triangle or acquisition budget.</param>
+public sealed record SceneSourceRead(int Counted, int Kept, IReadOnlyDictionary<string, int> Excluded, int RejectedAfterLoad,
+    int CutByBound, double Milliseconds);
 public sealed record SceneUnavailableElement(long ElementId, string? UniqueId, string? Category, string Reason);
 public sealed record SceneMetadata(string Format, Stamp Stamp, Aabb Bounds, int Triangles,
     IReadOnlyList<SceneElement> Elements, IReadOnlyList<long> RequestedElementIds, int OmittedElements,
     IReadOnlyList<SceneSource> Sources, string Phase, IReadOnlyList<SceneUnavailableElement> UnavailableElements,
-    SceneWork Work, SceneCompleteness Completeness);
+    SceneWork Work, SceneCompleteness Completeness, IReadOnlyList<long> DetachedElementIds);
 /// <param name="DeferredCandidates">Known unacquired candidates, or null when discovery stopped before the remaining count was known.</param>
 public sealed record SceneCompleteness(bool Complete, int? DeferredCandidates, int AcquisitionLimitedElements, string? LimitReason);
 public sealed record SceneMemory(long StartPrivateBytes, long EndPrivateBytes, long PeakPrivateBytes, long ManagedBytes);
@@ -52,11 +68,13 @@ public sealed record SceneWork(int BroadCandidates, int ExtractedElements, int E
 /// <summary>Bounded RPC receipt. Full membership, source transforms and unavailable identities live in PSC1.</summary>
 public sealed record SceneReceipt(string Format, string Frame, string HostDocumentKey, long Epoch, DateTime BuiltUtc, bool Fresh,
     Aabb Bounds, int Triangles, int Elements, int FocusElements, int ContextElements, int RequestedElements,
-    int OmittedElements, int UnavailableElements, int Sources, string Phase, SceneWork Work, SceneCompleteness Completeness) {
+    int OmittedElements, int UnavailableElements, int Sources, int UnreadSources, int DetachedElements, string Phase,
+    SceneWork Work, SceneCompleteness Completeness) {
     public static SceneReceipt From(SceneMetadata scene) => new(scene.Format, scene.Stamp.Frame,
         scene.Stamp.HostDocumentKey, scene.Stamp.Epoch, scene.Stamp.BuiltUtc, scene.Stamp.Fresh, scene.Bounds, scene.Triangles,
         scene.Elements.Count, scene.Elements.Count(element => element.Focus), scene.Elements.Count(element => !element.Focus),
         scene.RequestedElementIds.Count, scene.OmittedElements, scene.UnavailableElements.Count, scene.Sources.Count,
+        scene.Sources.Count(source => source.State != SceneSourceState.Loaded), scene.DetachedElementIds.Count,
         scene.Phase, scene.Work, scene.Completeness);
 }
 public sealed record SceneArtifact(SceneReceipt Scene, string Id, string Url, long Bytes);
@@ -75,8 +93,6 @@ public static class Scene {
             || b.MinX >= b.MaxX || b.MinY >= b.MaxY || b.MinZ >= b.MaxZ))
             throw new ArgumentException("bounds must be finite ordered host-internal-ft bounds.");
         var ids = new HashSet<long>(request.ElementIds ?? []);
-        if (request.Proximity && (ids.Count == 0 || request.Bounds is not null))
-            throw new ArgumentException("proximity requires elementIds and cannot specify bounds.");
         if (request.FocusOnly && (ids.Count == 0 || request.Bounds is not null))
             throw new ArgumentException("focusOnly requires elementIds and cannot specify bounds.");
         var context = request.FocusOnly ? SceneContextRepresentation.None : request.ContextRepresentation;
@@ -98,6 +114,9 @@ public static class Scene {
         var limited = 0;
         var omitted = 0;
         string? limit = null;
+        var reads = new Dictionary<Partition, (SceneReach Reach, int Kept, int Cut)>();
+        void Cut(Partition partition) { if (reads.TryGetValue(partition, out var r)) reads[partition] = r with { Cut = r.Cut + 1 }; }
+        IReadOnlyList<long> detached = [];
         var elements = new List<SceneElement>();
         var triangles = 0;
         var writtenBounds = Aabb.Empty;
@@ -206,39 +225,50 @@ public static class Scene {
             foreach (var row in focus) Write(row.Source, row.Row, row.Triangles, true);
             foreach (var row in runs) Primitive(row.Source, row.Element, row.Bounds, row.Run, true);
             if (context != SceneContextRepresentation.None) {
+                var reach = request.Bounds is { } explicitBounds ? [Corners(explicitBounds)]
+                    : Reach(focus, runs, request.ContextPaddingFt, out detached);
                 var candidates = new List<(Partition Source, long Id, Aabb Bounds, double Distance)>();
                 foreach (var partition in world.Partitions) {
-                    foreach (var element in partition.SceneElements(crop)) {
+                    budget.Check();
+                    var read = partition.Reach(reach);
+                    reads[partition] = (read, 0, 0);
+                    broad += read.Counted;
+                    foreach (var element in read.Kept) {
                         budget.Check();
-                        broad++;
                         if (partition.Kind == SourceKind.Host && ids.Contains(element.Id.Value())) continue;
-                        if (!Ingest.Allowed(element)) continue;
-                        var bounds = partition.SceneBounds(element);
-                        if (bounds is null) { omitted++; limit ??= "missing-bounds"; continue; }
-                        if (ids.Count > 0 && (request.Proximity || context == SceneContextRepresentation.Meshes)
-                            && !index.Overlaps(bounds.Value, request.ContextPaddingFt)) continue;
+                        var box = partition.SceneBounds(element);
+                        if (box is null) { omitted++; limit ??= "missing-bounds"; Cut(partition); continue; }
+                        reads[partition] = reads[partition] with { Kept = reads[partition].Kept + 1 };
                         // ETW showed Revit retains native tessellation allocations; bound what we ask it to tessellate.
                         // Bounds/runs never enter mesh capture or acquire a geometry cache lease.
                         if (context == SceneContextRepresentation.Boxes) {
-                            Primitive(partition, element, bounds.Value, ReadRun(element, partition.Transform), false);
+                            Primitive(partition, element, box.Value, ReadRun(element, partition.Transform), false);
                             continue;
                         }
-                        candidates.Add((partition, element.Id.Value(), bounds.Value, index.DistanceSquared(bounds.Value)));
+                        candidates.Add((partition, element.Id.Value(), box.Value, index.DistanceSquared(box.Value)));
                     }
                 }
                 candidates = candidates.OrderBy(row => row.Distance).ToList();
                 for (var i = 0; i < candidates.Count; i++) {
-                    if (triangles >= request.MaxTriangles) { deferred += candidates.Count - i; limit ??= "output-budget"; break; }
+                    if (triangles >= request.MaxTriangles) {
+                        deferred += candidates.Count - i; limit ??= "output-budget";
+                        foreach (var rest in candidates.Skip(i)) Cut(rest.Source);
+                        break;
+                    }
                     var candidate = candidates[i];
                     var element = candidate.Source.Doc.GetElement(candidate.Id.ToElementId());
-                    if (element is null) { omitted++; limit ??= "missing-element"; continue; }
+                    if (element is null) { omitted++; limit ??= "missing-element"; Cut(candidate.Source); continue; }
                     try {
                         budget.Check();
                         var captured = Capture(candidate.Source, element, crop, true);
                         foreach (var row in captured.Rows) Write(candidate.Source, row, captured.Triangles, false);
                     } catch (SceneLimitException ex) {
-                        limited++; limit = ex.Reason;
-                        if (ex.Reason != "element-acquisition-limit") { deferred += candidates.Count - i - 1; break; }
+                        limited++; limit = ex.Reason; Cut(candidate.Source);
+                        if (ex.Reason != "element-acquisition-limit") {
+                            deferred += candidates.Count - i - 1;
+                            foreach (var rest in candidates.Skip(i + 1)) Cut(rest.Source);
+                            break;
+                        }
                     }
                 }
             }
@@ -247,22 +277,76 @@ public static class Scene {
                 throw new ArgumentException("No representation fits this scope and triangle budget.");
             }
             return new SceneMetadata("space-scene-v3", world.StampFor(world.Partitions, Filter.Default), crop ?? writtenBounds,
-                triangles, elements, ids.ToList(), omitted, world.Partitions.Select(p => {
-                    var t = p.Transform;
-                    return new SceneSource(p.DocumentKey, p.LinkInstanceId, new[] {
-                        t.BasisX.X, t.BasisX.Y, t.BasisX.Z, 0, t.BasisY.X, t.BasisY.Y, t.BasisY.Z, 0,
-                        t.BasisZ.X, t.BasisZ.Y, t.BasisZ.Z, 0, t.Origin.X, t.Origin.Y, t.Origin.Z, 1
-                    });
-                }).ToList(), context == SceneContextRepresentation.None ? "focus" : "context", unavailable,
+                triangles, elements, ids.ToList(), omitted, world.Partitions.Select(p => new SceneSource(p.DocumentKey,
+                    p.LinkInstanceId, Matrix(p.Transform), SceneSourceState.Loaded, p.Doc.Title,
+                    reads.TryGetValue(p, out var r) ? new SceneSourceRead(r.Reach.Counted, r.Kept, r.Reach.Excluded,
+                        r.Reach.RejectedAfterLoad, r.Cut, r.Reach.Milliseconds) : null))
+                    .Concat(world.Unread.Select(u => new SceneSource("", u.LinkInstanceId, Matrix(u.Transform), u.State, u.Name, null)))
+                    .ToList(), context == SceneContextRepresentation.None ? "focus" : "context", unavailable,
                 new SceneWork(broad, extracted, extractedTriangles, clock.Elapsed.TotalMilliseconds,
                     budget.PeakRetainedTriangles, budget.NativeCalls, budget.Diagnostics(), budget.NativeTriangles,
                     budget.GeometryCalls - focusGeometryCalls),
-                new SceneCompleteness(limit is null, deferred, limited, limit));
+                new SceneCompleteness(limit is null, deferred, limited, limit), detached);
         } finally {
             foreach (var lease in leases.Values) lease?.Dispose();
             LinkedGeometryStore.Prune();
         }
     }
+
+    private static IReadOnlyList<double> Matrix(Transform t) => [
+        t.BasisX.X, t.BasisX.Y, t.BasisX.Z, 0, t.BasisY.X, t.BasisY.Y, t.BasisY.Z, 0,
+        t.BasisZ.X, t.BasisZ.Y, t.BasisZ.Z, 0, t.Origin.X, t.Origin.Y, t.Origin.Z, 1
+    ];
+
+    /// <summary>
+    ///     One reach box per focus element, in host feet, as 8 corners: a run's own oriented box (location line and
+    ///     size), else its triangle bounds, grown by <paramref name="reachFt" />. Members whose reach meets no
+    ///     reach of the largest group are <paramref name="detached" />: still read, and disclosed (Cleremont SA 2
+    ///     carries air terminals 1,500 ft from the rest of its system).
+    /// </summary>
+    private static List<XYZ[]> Reach(List<(Partition Source, PrimRow Row, Tri[] Triangles)> focus,
+        List<(Partition Source, Element Element, Aabb Bounds, SceneRun Run)> runs, double reachFt, out IReadOnlyList<long> detached) {
+        var members = focus.Select(row => (Id: row.Row.ElementId, Box: row.Row.Box, Corners: Corners(row.Row.Box.Expand(reachFt))))
+            .Concat(runs.Select(row => (Id: row.Element.Id.Value(), Box: row.Bounds, Corners: Corners(row.Run, reachFt)))).ToList();
+        // ponytail: O(n²) single linkage over the grown host boxes. n is one system's members (501 on Chadds SA 7);
+        // sort-and-sweep when a request names thousands.
+        var root = Enumerable.Range(0, members.Count).ToArray();
+        int Find(int i) => root[i] == i ? i : root[i] = Find(root[i]);
+        for (var i = 0; i < members.Count; i++)
+        for (var j = i + 1; j < members.Count; j++)
+            if (members[i].Box.Expand(reachFt).Overlaps(members[j].Box.Expand(reachFt))) root[Find(i)] = Find(j);
+        var main = Enumerable.Range(0, members.Count).GroupBy(Find).OrderByDescending(g => g.Count()).FirstOrDefault()?.Key;
+        detached = Enumerable.Range(0, members.Count).Where(i => Find(i) != main).Select(i => members[i].Id).Distinct().ToList();
+        return members.Select(member => member.Corners).ToList();
+    }
+
+    private static XYZ[] Corners(Aabb box) => [
+        new(box.MinX, box.MinY, box.MinZ), new(box.MaxX, box.MinY, box.MinZ), new(box.MinX, box.MaxY, box.MinZ), new(box.MaxX, box.MaxY, box.MinZ),
+        new(box.MinX, box.MinY, box.MaxZ), new(box.MaxX, box.MinY, box.MaxZ), new(box.MinX, box.MaxY, box.MaxZ), new(box.MaxX, box.MaxY, box.MaxZ)
+    ];
+
+    // A run's reach follows its location line: on a diagonal duct the host-axis box is up to twice the volume.
+    private static XYZ[] Corners(SceneRun run, double reachFt) {
+        var start = new XYZ(run.Start[0], run.Start[1], run.Start[2]);
+        var end = new XYZ(run.End[0], run.End[1], run.End[2]);
+        var along = (end - start).Normalize();
+        var x = new XYZ(run.CrossSectionXAxis[0], run.CrossSectionXAxis[1], run.CrossSectionXAxis[2]);
+        var y = along.CrossProduct(x);
+        var halfX = (run.DiameterFt ?? run.WidthFt ?? 0) / 2 + reachFt;
+        var halfY = (run.DiameterFt ?? run.HeightFt ?? 0) / 2 + reachFt;
+        var a = start - along * reachFt;
+        var b = end + along * reachFt;
+        return [.. from p in new[] { a, b } from sx in new[] { -1, 1 } from sy in new[] { -1, 1 } select p + x * (sx * halfX) + y * (sy * halfY)];
+    }
+
+    /// <summary>
+    ///     A duct or pipe's insulation thickness, read from the host. Insulation elements never enter context; the
+    ///     host's value equals the insulation's own Thickness on 4,294 of 4,294 Chadds duct insulations (pipe parity
+    ///     untested: no measured model has pipe insulation). Null when the host carries none.
+    /// </summary>
+    public static double? InsulationThicknessFt(Element host) =>
+        host.get_Parameter(BuiltInParameter.RBS_REFERENCE_INSULATION_THICKNESS) is { HasValue: true } p
+        && p.AsDouble() is var t and > 0 ? t : null;
 
     internal static SceneRun? ReadRun(Element element, Transform transform) {
         // Insulation also inherits MEPCurve. Only these physical rigid types have a supported run contract.

@@ -25,9 +25,9 @@ public sealed class SceneArtifactReceiptProofTests {
             new Resolved([SourceKind.Host], ["Ducts"], [PrimKind.Solid, PrimKind.Mesh], [], []));
         var work = new SceneWork(count, 0, 0, 12, AcquiredTriangles: 0, ContextGeometryCalls: 0);
         var metadata = new SceneMetadata("space-scene-v3", stamp, bounds, 1, rows, [1, 2, count + 1], 3,
-            [new SceneSource("source-document", null, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])],
+            [new SceneSource("source-document", null, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], SceneSourceState.Loaded, "source", null)],
             "context", [new SceneUnavailableElement(count + 1, "missing-focus", "Ducts", "Unavailable native body.")],
-            work, new SceneCompleteness(false, 0, 0, "missing-bounds"));
+            work, new SceneCompleteness(false, 0, 0, "missing-bounds"), []);
         var directory = Path.Combine(Path.GetTempPath(), "scene-receipt-proof-" + Guid.NewGuid().ToString("N"));
         try {
             using var vertices = new MemoryStream();

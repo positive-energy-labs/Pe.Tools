@@ -40,9 +40,9 @@ public sealed class SpaceSceneScopeProofTests {
             Assert.That(store, Is.Not.Null, "A clean saved loaded linked snapshot is cacheable.");
             store!.Read("identity-proof", Capture);
             using var bytes = new MemoryStream();
-            var scene = Scene.Write(doc, new SceneRequest([focus.Id.Value()], 3, Proximity: true, ContextRepresentation: SceneContextRepresentation.Meshes), bytes);
+            var scene = Scene.Write(doc, new SceneRequest([focus.Id.Value()], 3, ContextRepresentation: SceneContextRepresentation.Meshes), bytes);
             using var repeated = new MemoryStream();
-            Scene.Write(doc, new SceneRequest([focus.Id.Value()], 4, Proximity: true, ContextRepresentation: SceneContextRepresentation.Meshes), repeated);
+            Scene.Write(doc, new SceneRequest([focus.Id.Value()], 4, ContextRepresentation: SceneContextRepresentation.Meshes), repeated);
             Assert.That(repeated.ToArray(), Is.EqualTo(bytes.ToArray()), "Coarse context recapture preserves crossing faces across overlapping scopes.");
             using (var transaction = new Transaction(doc, "Edit host without changing link")) {
                 transaction.Start();
@@ -79,6 +79,7 @@ public sealed class SpaceSceneScopeProofTests {
         var doc = RevitFamilyFixtureHarness.CreateProjectDocument(uiApplication.Application);
         try {
             DirectShape first, last, gap, wall, contains;
+            ModelCurve line;
             using (var transaction = new Transaction(doc, "Create proximity proof geometry")) {
                 transaction.Start();
                 first = Cube(doc, 0);
@@ -86,18 +87,26 @@ public sealed class SpaceSceneScopeProofTests {
                 gap = Cube(doc, 50);
                 wall = Block(doc, -100, 2, 0, 200, 0.1, 1);
                 contains = Block(doc, -20, -20, -20, 40, 40, 40);
+                line = doc.Create.NewModelCurve(Line.CreateBound(new XYZ(0, 0, 0), new XYZ(2, 0, 0)),
+                    SketchPlane.Create(doc, Plane.CreateByNormalAndOrigin(XYZ.BasisZ, XYZ.Zero)));
                 transaction.Commit();
             }
             using var bytes = new MemoryStream();
-            var scene = Scene.Write(doc, new SceneRequest([first.Id.Value(), last.Id.Value()], 3, Proximity: true, ContextRepresentation: SceneContextRepresentation.Meshes), bytes);
+            var scene = Scene.Write(doc, new SceneRequest([first.Id.Value(), last.Id.Value()], 3, ContextRepresentation: SceneContextRepresentation.Meshes), bytes);
             Assert.That(scene.Elements.Where(e => e.Focus).Select(e => e.Handle.ElementId), Is.EquivalentTo(new[] { first.Id.Value(), last.Id.Value() }));
             Assert.That(scene.Elements.Any(e => e.Handle.ElementId == gap.Id.Value()), Is.False);
             Assert.That(scene.Elements.Any(e => e.Handle.ElementId == wall.Id.Value()), Is.True, "A long triangle's interior crosses the radius although its vertices do not.");
             Assert.That(scene.Elements.Any(e => e.Handle.ElementId == contains.Id.Value()), Is.True, "Containing solids cannot be called empty because their surfaces are far away.");
             Assert.That(scene.Elements.Where(e => e.Focus).Sum(e => e.VertexCount), Is.EqualTo(72));
-            using var oldBytes = new MemoryStream();
-            var old = Scene.Write(doc, new SceneRequest([first.Id.Value(), last.Id.Value()], 3, ContextRepresentation: SceneContextRepresentation.Boxes), oldBytes);
-            Assert.That(old.Elements.Any(e => e.Handle.ElementId == gap.Id.Value()), Is.True);
+            var read = scene.Sources.Single().Read!;
+            Assert.That(scene.Elements.Any(e => e.Handle.ElementId == line.Id.Value()), Is.False, "A model line is not context.");
+            Assert.That(read.Excluded["sketch"], Is.GreaterThanOrEqualTo(1), "The exclusion is counted before iteration, not hidden.");
+            Assert.That(read.Counted, Is.GreaterThan(read.Kept));
+            using var boxBytes = new MemoryStream();
+            var boxes = Scene.Write(doc, new SceneRequest([first.Id.Value(), last.Id.Value()], 3, ContextRepresentation: SceneContextRepresentation.Boxes), boxBytes);
+            Assert.That(boxes.Elements.Any(e => e.Handle.ElementId == gap.Id.Value()), Is.False,
+                "Boxes read per-element reach too: the gap inside the focus's enclosing crop is never iterated.");
+            Assert.That(boxes.Elements.Any(e => e.Handle.ElementId == wall.Id.Value()), Is.True);
         } finally { doc.Close(false); }
     }
 

@@ -16,7 +16,7 @@ public sealed class SceneAcquisitionBudgetProofTests {
                 tx.Commit();
             }
             using var output = new MemoryStream();
-            var scene = Scene.Write(doc, new SceneRequest([focus.Id.Value()], 100, MaxTriangles: 24, Proximity: true, ContextRepresentation: SceneContextRepresentation.Meshes), output);
+            var scene = Scene.Write(doc, new SceneRequest([focus.Id.Value()], 100, MaxTriangles: 24, ContextRepresentation: SceneContextRepresentation.Meshes), output);
             Assert.That(scene.Format, Is.EqualTo("space-scene-v3"));
             Assert.That(scene.Elements.Single(row => row.Focus).Handle.ElementId, Is.EqualTo(focus.Id.Value()));
             Assert.That(scene.Triangles, Is.EqualTo(24));

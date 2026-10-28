@@ -85,7 +85,9 @@ public sealed class World {
     public DateTime BuiltUtc { get; private set; }
     internal IReadOnlyList<Partition> Partitions => this._partitions;
     internal Document HostDocument => this._partitions[0].Doc;
-    internal IReadOnlyCollection<long>? SceneFocusMeshIds { get; private set; }
+    private readonly List<(long LinkInstanceId, string Name, SceneSourceState State, Transform Transform)> _unread = [];
+    /// <summary>Link placements with no readable document: unloaded, or unavailable on this machine.</summary>
+    internal IReadOnlyList<(long LinkInstanceId, string Name, SceneSourceState State, Transform Transform)> Unread => this._unread;
 
     internal void InitializeSources(Document host) {
         this._partitions.Add(new Partition(0, host, SourceKind.Host, null, Transform.Identity, SpaceWorld.HostGeneration(host)));
@@ -94,7 +96,14 @@ public sealed class World {
         var source = 1;
         foreach (var link in links) {
             var linked = link.GetLinkDocument();
-            if (linked is null) continue;
+            if (linked is null) {
+                // An unread placement is disclosed, never silently dropped (Manuella: every link unloaded).
+                var type = host.GetElement(link.GetTypeId()) as RevitLinkType;
+                var state = type?.GetLinkedFileStatus() is LinkedFileStatus.Unloaded or LinkedFileStatus.LocallyUnloaded
+                    or LinkedFileStatus.InClosedWorkset ? SceneSourceState.Unloaded : SceneSourceState.Unavailable;
+                this._unread.Add((link.Id.Value(), type?.Name ?? link.Name, state, link.GetTotalTransform()));
+                continue;
+            }
             var kind = linked.Title.IndexOf(".ifc", StringComparison.OrdinalIgnoreCase) >= 0 ? SourceKind.IfcLink : SourceKind.RevitLink;
             this._partitions.Add(new Partition(source++, linked, kind, link.Id.Value(), link.GetTotalTransform(), generation));
         }

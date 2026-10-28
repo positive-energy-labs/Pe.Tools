@@ -41,7 +41,6 @@ internal sealed class Partition {
     public long BuiltAtEpoch { get; private set; }
     public bool Dirty { get; set; } = true;
     public int Skipped { get; private set; }
-    internal int SceneCandidates { get; private set; }
 
     public SourceRow Row => new(
         this.Source, this.DocumentKey, this.LinkInstanceId, this.Kind,
@@ -132,24 +131,89 @@ internal sealed class Partition {
         return result;
     }
 
-    internal IEnumerable<Element> SceneElements(Aabb? region) {
-        using var collector = new FilteredElementCollector(this.Doc);
-        collector.WhereElementIsNotElementType();
-        if (region is { } bounds) {
-            using var inverse = this.Transform.Inverse;
-            var box = Aabb.Empty;
-            foreach (var x in new[] { bounds.MinX, bounds.MaxX })
-            foreach (var y in new[] { bounds.MinY, bounds.MaxY })
-            foreach (var z in new[] { bounds.MinZ, bounds.MaxZ }) {
-                var point = inverse.OfPoint(new XYZ(x, y, z));
-                box = box.Include(new Vector3((float)point.X, (float)point.Y, (float)point.Z));
-            }
-            using var outline = new Outline(new XYZ(box.MinX, box.MinY, box.MinZ), new XYZ(box.MaxX, box.MaxY, box.MaxZ));
-            var magnitude = new[] { box.MinX, box.MinY, box.MinZ, box.MaxX, box.MaxY, box.MaxZ }.Max(Math.Abs);
-            using var filter = new BoundingBoxIntersectsFilter(outline, Math.Max(1, magnitude) * Math.Pow(2, -23));
-            collector.WherePasses(filter);
-            foreach (var element in collector) yield return element;
-        } else foreach (var element in collector) yield return element;
+    /// <summary>
+    ///     The one context query of this source instance: elements whose bounds meet any reach box, minus every
+    ///     exclusion class, as quick filters before iteration. Iterating loads an element (≈14 KB in the Chadds
+    ///     IFC link) and counting ids is free, so only kept elements are iterated. One OR filter per source:
+    ///     hundreds of queries cost 20–113 s on Cleremont. Each class is counted, never iterated.
+    /// </summary>
+    /// <param name="reach">Host-frame boxes, each as its 8 corners; mapped into this instance's frame here.</param>
+    internal SceneReach Reach(IReadOnlyList<XYZ[]> reach) {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        if (reach.Count == 0) return new SceneReach(0, [], new Dictionary<string, int>(), 0, 0);
+        using var inverse = this.Transform.Inverse;
+        var boxes = reach.Select(corners => (ElementFilter)Intersecting(corners.Select(inverse.OfPoint))).ToList();
+        var near = boxes.Count == 1 ? boxes[0] : new LogicalOrFilter(boxes);
+        ICollection<ElementId> Ids(params ElementFilter[] filters) {
+            using var collector = new FilteredElementCollector(this.Doc).WhereElementIsNotElementType();
+            // Class before reach, so Revit can narrow by its category and class index before testing bounds.
+            foreach (var filter in filters) collector.WherePasses(filter);
+            return collector.ToElementIds();
+        }
+        var counted = Ids(near).Count;
+        var excluded = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var (name, match, _) in Exclusions) {
+            var n = Ids(match, near).Count;
+            if (n > 0) excluded[name] = n;
+        }
+        var kept = new List<Element>();
+        var rejected = 0;
+        using (var collector = new FilteredElementCollector(this.Doc).WhereElementIsNotElementType()) {
+            foreach (var (_, _, keep) in Exclusions) collector.WherePasses(keep);
+            collector.WherePasses(near);
+            // The managed gate stays as a witness: what it rejects here was loaded for nothing and is disclosed.
+            foreach (var element in collector)
+                if (Ingest.Allowed(element)) kept.Add(element); else rejected++;
+        }
+        if (boxes.Count > 1) near.Dispose();
+        foreach (var box in boxes) box.Dispose();
+        return new SceneReach(counted, kept, excluded, rejected, clock.Elapsed.TotalMilliseconds);
+    }
+
+    /// <summary>
+    ///     Classes that pass `CategoryType.Model` but are not context, excluded before iteration in every
+    ///     source. Proven per model (READING-REVIT, what passes as geometry but is not): MEP centre-line helpers
+    ///     (class Element), insulation (drawn from its host), view-owned elements, CAD (model-level CAD is
+    ///     disclosed, not drawn, until kaitpw rules), and the link classes Cleremont found.
+    /// </summary>
+    private static readonly (string Name, ElementFilter Match, ElementFilter Keep)[] Exclusions = [
+        OfCategories("centre-line", Enum.GetValues(typeof(BuiltInCategory)).Cast<BuiltInCategory>()
+            .Where(c => c.ToString().EndsWith("CenterLine", StringComparison.Ordinal)).ToArray()),
+        OfCategories("insulation", BuiltInCategory.OST_DuctInsulations, BuiltInCategory.OST_PipeInsulations),
+        ("view-specific", new ElementOwnerViewFilter(ElementId.InvalidElementId, true), new ElementOwnerViewFilter(ElementId.InvalidElementId)),
+        OfClasses("cad", typeof(ImportInstance)),
+        OfCategories("sketch", BuiltInCategory.OST_SketchLines, BuiltInCategory.OST_Lines,
+            BuiltInCategory.OST_RailingRailPathExtensionLines, BuiltInCategory.OST_RailingRailPathLines),
+        OfCategories("curtain-grid", BuiltInCategory.OST_CurtainGrids, BuiltInCategory.OST_CurtainGridsWall,
+            BuiltInCategory.OST_CurtainGridsRoof, BuiltInCategory.OST_CurtainGridsSystem, BuiltInCategory.OST_CurtainGridsCurtaSystem),
+        OfCategories("separation", BuiltInCategory.OST_RoomSeparationLines, BuiltInCategory.OST_MEPSpaceSeparationLines),
+        OfClasses("origin", typeof(BasePoint), typeof(InternalOrigin)),
+        OfCategories("beam-system", BuiltInCategory.OST_StructuralFramingSystem),
+        OfCategories("planting", BuiltInCategory.OST_Planting, BuiltInCategory.OST_Entourage),
+        OfCategories("site", BuiltInCategory.OST_Topography, BuiltInCategory.OST_Toposolid, BuiltInCategory.OST_Mass),
+    ];
+
+    private static (string, ElementFilter, ElementFilter) OfCategories(string name, params BuiltInCategory[] categories) {
+        var ids = categories.Distinct().ToList();
+        return (name, new ElementMulticategoryFilter(ids), new ElementMulticategoryFilter(ids, true));
+    }
+
+    private static (string, ElementFilter, ElementFilter) OfClasses(string name, params Type[] types) => types.Length == 1
+        ? (name, new ElementClassFilter(types[0]), new ElementClassFilter(types[0], true))
+        : (name, new LogicalOrFilter(types.Select(t => (ElementFilter)new ElementClassFilter(t)).ToList()),
+            new LogicalAndFilter(types.Select(t => (ElementFilter)new ElementClassFilter(t, true)).ToList()));
+
+    private static BoundingBoxIntersectsFilter Intersecting(IEnumerable<XYZ> corners) {
+        double minX = double.MaxValue, minY = double.MaxValue, minZ = double.MaxValue;
+        double maxX = double.MinValue, maxY = double.MinValue, maxZ = double.MinValue;
+        foreach (var p in corners) {
+            minX = Math.Min(minX, p.X); minY = Math.Min(minY, p.Y); minZ = Math.Min(minZ, p.Z);
+            maxX = Math.Max(maxX, p.X); maxY = Math.Max(maxY, p.Y); maxZ = Math.Max(maxZ, p.Z);
+        }
+        using var outline = new Outline(new XYZ(minX, minY, minZ), new XYZ(maxX, maxY, maxZ));
+        // One float ulp covers ingest rounding at the boundary; it only broadens the candidate gate.
+        var magnitude = new[] { minX, minY, minZ, maxX, maxY, maxZ }.Max(Math.Abs);
+        return new BoundingBoxIntersectsFilter(outline, Math.Max(1, magnitude) * Math.Pow(2, -23));
     }
 
     internal Aabb? SceneBounds(Element element) {
@@ -190,43 +254,6 @@ internal sealed class Partition {
         } catch { return false; }
     }
 
-    internal void BuildRegion(Aabb hostBounds, long epoch, IReadOnlyList<Aabb>? local = null) {
-        var inverse = this.Transform.Inverse;
-        var min = new XYZ(double.MaxValue, double.MaxValue, double.MaxValue);
-        var max = new XYZ(double.MinValue, double.MinValue, double.MinValue);
-        foreach (var x in new[] { hostBounds.MinX, hostBounds.MaxX })
-        foreach (var y in new[] { hostBounds.MinY, hostBounds.MaxY })
-        foreach (var z in new[] { hostBounds.MinZ, hostBounds.MaxZ }) {
-            var point = inverse.OfPoint(new XYZ(x, y, z));
-            min = new XYZ(Math.Min(min.X, point.X), Math.Min(min.Y, point.Y), Math.Min(min.Z, point.Z));
-            max = new XYZ(Math.Max(max.X, point.X), Math.Max(max.Y, point.Y), Math.Max(max.Z, point.Z));
-        }
-        // The transformed enclosure is conservative for rotated links. Exact clipping stays in Scene.
-        using var outline = new Outline(min, max);
-        // One float ulp covers ingest rounding at the crop boundary; it only broadens the candidate gate.
-        var magnitude = new[] { min.X, min.Y, min.Z, max.X, max.Y, max.Z }.Max(Math.Abs);
-        using var filter = new BoundingBoxIntersectsFilter(outline, Math.Max(1, magnitude) * Math.Pow(2, -23));
-        using var collector = new FilteredElementCollector(this.Doc);
-        var candidates = collector.WhereElementIsNotElementType().WherePasses(filter).ToElements();
-        this.SceneCandidates = candidates.Count;
-        var elements = candidates.AsEnumerable();
-        if (local is not null) elements = elements.Where(e => {
-            try {
-                if (e.get_BoundingBox(null) is not { } b) return true;
-                var transform = this.Transform.Multiply(b.Transform);
-                var box = Aabb.Empty;
-                foreach (var x in new[] { b.Min.X, b.Max.X })
-                foreach (var y in new[] { b.Min.Y, b.Max.Y })
-                foreach (var z in new[] { b.Min.Z, b.Max.Z }) {
-                    var p = transform.OfPoint(new XYZ(x, y, z));
-                    box = box.Include(new Vector3((float)p.X, (float)p.Y, (float)p.Z));
-                }
-                return local.Any(scope => scope.Overlaps(box));
-            } catch { return true; }
-        });
-        this.BuildElements(elements, epoch, hostBounds);
-    }
-
     /// <summary>Takes ownership of one triangle array and its rows, then derives the range map,
     /// the id index, and the tree. The only place any of the four is assigned.</summary>
     private void Adopt(Tri[] tris, PrimRow[] prims, bool buildIndex = true) {
@@ -245,3 +272,9 @@ internal sealed class Partition {
         this.DocumentKey, row.ElementId, row.UniqueId, this.LinkInstanceId, row.Category, row.Kind,
         row.Layer, row.Extrusion, row.HeightRole);
 }
+
+/// <param name="Counted">Ids inside reach before any exclusion; counting loads nothing.</param>
+/// <param name="Excluded">Ids inside reach per exclusion class; classes can overlap, so they need not sum.</param>
+/// <param name="RejectedAfterLoad">Kept by every quick filter, then refused by <see cref="Ingest.Allowed" />: loaded for nothing.</param>
+internal sealed record SceneReach(int Counted, IReadOnlyList<Element> Kept, IReadOnlyDictionary<string, int> Excluded,
+    int RejectedAfterLoad, double Milliseconds);
