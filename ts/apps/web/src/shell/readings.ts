@@ -65,6 +65,8 @@ export interface ReadingContext extends ReadingScope {
 export type ReadingDelivery<T = unknown> = (publication: ReadingPublication<T>) => void;
 type Release = () => void;
 interface SourcePolicy {
+  /** Source-owned input selection, e.g. parameter slots; unrelated Work edits do not reacquire it. */
+  key?(scope: ReadingScope): unknown;
   /** Defaults to the attempt's exact document/session. Disk and service sources declare theirs. */
   effects?(context: ReadingContext): readonly Effect[];
   dirties?: readonly string[];
@@ -124,10 +126,13 @@ interface Node<P> {
   source: ReadingSource;
   state: ReadingState;
   demand: number;
+  mounted: number;
   generation: number;
   revision: number;
   signature?: string;
   context?: ReadingContext;
+  trigger?: ReadingContext["trigger"];
+  receiptHeld?: "capture" | "demand";
   release?: Release;
   controller?: AbortController;
   worker?: WorkerChannel;
@@ -153,6 +158,7 @@ export function createReadingGraph<P, W>(
       decl,
       source,
       demand: 0,
+      mounted: 0,
       generation: 0,
       revision: -1,
       state: { status: "absent", current: false, complete: false, basis: null, version: 0 },
@@ -191,6 +197,7 @@ export function createReadingGraph<P, W>(
     Object.fromEntries((node.decl.deps ?? []).map((id) => [id, get(id).state]));
   const signatureOf = (node: Node<P>) =>
     canonicalRouteInput([
+      node.source.key?.(scope),
       node.decl.retire === "page" ? node.decl.args?.(scope.page) : null,
       (node.decl.deps ?? []).map((id) => get(id).state.version),
       node.source.kind === "worker" ? [scope.workRevision, node.source.algorithmVersion] : null,
@@ -333,6 +340,8 @@ export function createReadingGraph<P, W>(
       signal: controller.signal,
     };
     node.context = context;
+    node.trigger = context.trigger;
+    node.receiptHeld = undefined;
     node.revision = -1;
     put(node, {
       status: "pending",
@@ -388,6 +397,8 @@ export function createReadingGraph<P, W>(
     try {
       for (const node of order) {
         if (!node.demand) continue;
+        if (node.receiptHeld === "capture" || (node.receiptHeld === "demand" && !node.mounted))
+          continue;
         const inputs = Object.values(inputsOf(node));
         if (inputs.some((input) => input.value === undefined)) {
           if (node.context && node.signature !== signatureOf(node)) stale(node);
@@ -415,7 +426,10 @@ export function createReadingGraph<P, W>(
   const retain = (ids: readonly string[], acquire: boolean) => {
     if (disposed) throw new ReadingGraphRefusal("Reading graph is disposed");
     const selected = closure(ids);
-    for (const node of selected) node.demand++;
+    for (const node of selected) {
+      node.demand++;
+      if (acquire) node.mounted++;
+    }
     if (acquire) flush();
     let released = false;
     return () => {
@@ -423,6 +437,7 @@ export function createReadingGraph<P, W>(
       released = true;
       for (const node of selected.toReversed()) {
         node.demand--;
+        if (acquire) node.mounted--;
         if (node.demand || disposed) continue;
         detach(node);
         node.worker?.stop();
@@ -502,6 +517,7 @@ export function createReadingGraph<P, W>(
           if (!retire) continue;
           stale(node, workChanged || targetChanged);
           node.signature = undefined;
+          node.receiptHeld = undefined;
           node.invocation = undefined;
           const release = node.pin;
           node.pin = undefined;
@@ -552,7 +568,7 @@ export function createReadingGraph<P, W>(
             ? dirties.length > 0
             : effects.some((a) => readingEffects.some((b) => overlaps(a, b))))
         );
-      });
+      }, true);
     },
     documentChanged(ref: DocumentRef) {
       invalidate((node) => {
@@ -576,20 +592,32 @@ export function createReadingGraph<P, W>(
     },
   };
 
-  function invalidate(matches: (node: Node<P>) => boolean) {
+  function invalidate(matches: (node: Node<P>) => boolean, receipt = false) {
     if (disposed) return;
     batching = true;
     try {
-      for (const node of order)
-        if (matches(node)) {
+      const invalidated = new Set<string>();
+      for (const node of order) {
+        const dependency = receipt && (node.decl.deps ?? []).some((id) => invalidated.has(id));
+        if (receipt && node.source.kind === "port") {
+          if (dependency) node.receiptHeld = "capture";
+          continue;
+        }
+        if (matches(node) || dependency) {
+          invalidated.add(node.id);
+          const capture = node.trigger?.kind === "verb";
           stale(node);
           node.invocation = undefined;
           const release = node.pin;
           node.pin = undefined;
           release?.();
-          // Keep the signature: an invalidation requires an explicit refresh, never a blind retry.
-          node.signature = signatureOf(node);
+          // Receipt-dirtied use/feed/worker readings and their derives reacquire only with current
+          // mounted demand; unmounted ones wait for demand. Ports and verb-triggered captures never
+          // auto-reacquire (nor retry a timed-out native operation). Document changes only fence.
+          node.receiptHeld = receipt ? (capture ? "capture" : "demand") : node.receiptHeld;
+          node.signature = receipt && !capture ? undefined : signatureOf(node);
         }
+      }
     } finally {
       batching = false;
     }

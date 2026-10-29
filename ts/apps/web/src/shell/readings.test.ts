@@ -255,10 +255,10 @@ describe("reading graph", () => {
     );
     expect(graph.get("matrix").current).toBe(true);
     graph.acceptReceipt(receipt({ id: "partial", state: "incomplete" }), ["families"]);
-    expect(graph.get("matrix")).toMatchObject({ value: 1, current: false, status: "stale" });
+    expect(graph.get("matrix")).toMatchObject({ previous: 1, current: false, status: "pending" });
     expect(graph.get("catalogs").current).toBe(true);
     done(matrix.deliver, 99, 2);
-    expect(graph.get("matrix").value).toBe(1);
+    expect(graph.get("matrix").previous).toBe(1);
     expect(logs.at(-1)?.kind).toBe("drop");
     graph.start("matrix", "refresh");
     done(read.attempts.at(-1)!.deliver, 3);
@@ -273,6 +273,123 @@ describe("reading graph", () => {
     done(read.attempts.at(-1)!.deliver, 5);
     graph.acceptReceipt(receipt({ id: "unknown-effects", state: "unknown", effects: [] }));
     expect(graph.get("matrix").current).toBe(false);
+    release();
+    graph.dispose();
+  });
+
+  it.each(["use", "feed"] as const)(
+    "receipt-dirtied mounted %s reacquires with a fenced generation and derives from the new answer",
+    (kind) => {
+      const read = controlled(kind);
+      const { graph, logs } = fixture(
+        {
+          model: decl("model", { kind }),
+          twice: decl("twice", { kind: "derive", deps: ["model"] }),
+        },
+        {
+          model: { ...read.source, dirties: ["snapshot"] },
+          twice: { kind: "derive", derive: (ctx) => Number(ctx.inputs.model.value) * 2 },
+        },
+      );
+      const release = graph.mount(["twice"]);
+      const before = read.attempts[0];
+      done(before.deliver, 2);
+      expect(graph.get("twice")).toMatchObject({ value: 4, current: true });
+      graph.acceptReceipt(receipt(), ["snapshot"]);
+      expect(read.attempts).toHaveLength(2);
+      const fresh = read.attempts[1];
+      expect(before.context.signal.aborted).toBe(true);
+      expect(fresh.context.attempt.generation).toBeGreaterThan(before.context.attempt.generation);
+      expect(fresh.context.trigger.kind).toBe("demand");
+      done(before.deliver, 99, 2);
+      expect(graph.get("model").current).toBe(false);
+      expect(graph.get("twice").current).toBe(false);
+      expect(logs.at(-1)?.kind).toBe("drop");
+      done(fresh.deliver, 3);
+      expect(graph.get("twice")).toMatchObject({ value: 6, current: true });
+      graph.acceptReceipt(receipt(), ["snapshot"]);
+      expect(read.attempts).toHaveLength(2);
+      release();
+      graph.dispose();
+    },
+  );
+
+  it("receipt-dirtied unmounted readings stay stale until new mounted demand", () => {
+    const read = controlled();
+    const { graph } = fixture({ model: decl("model") }, { model: read.source });
+    const release = graph.mount(["model"]);
+    done(read.attempts[0].deliver, 1);
+    release();
+    graph.acceptReceipt(receipt());
+    expect(read.attempts).toHaveLength(1);
+    expect(graph.get("model")).toMatchObject({ value: 1, current: false, status: "stale" });
+    const remounted = graph.mount(["model"]);
+    expect(read.attempts).toHaveLength(2);
+    done(read.attempts[1].deliver, 2);
+    expect(graph.get("model")).toMatchObject({ value: 2, current: true });
+    remounted();
+    graph.dispose();
+  });
+
+  it("receipt invalidation neither reopens ports nor retries a timed-out verb capture", () => {
+    const input = controlled();
+    const capture = controlled();
+    const close = vi.fn();
+    const open = vi.fn(() => ({ value: "service", close }));
+    const { graph } = fixture(
+      {
+        input: decl("input"),
+        native: decl("native", { deps: ["input"] }),
+        service: decl("service", { kind: "port", deps: ["input"] }),
+      },
+      { input: input.source, native: capture.source, service: { kind: "port", open } },
+    );
+    const release = graph.mount(["native", "service"]);
+    done(input.attempts[0].deliver, 1);
+    graph.start("native", "capture");
+    const timedOut = capture.attempts.at(-1)!;
+    timedOut.deliver({ kind: "failure", error: "Native operation timed out" });
+    const count = capture.attempts.length;
+    graph.acceptReceipt(receipt({ state: "unknown" }));
+    done(input.attempts.at(-1)!.deliver, 2);
+    expect(capture.attempts).toHaveLength(count);
+    expect(timedOut.context.signal.aborted).toBe(true);
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(close).not.toHaveBeenCalled();
+    expect(graph.get("service")).toMatchObject({ value: "service", current: true });
+    graph.start("native", "inspected-retry");
+    expect(capture.attempts).toHaveLength(count + 1);
+    release();
+    graph.dispose();
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("receipt-dirtied mounted workers acquire a new generation and reject the old job's delivery", () => {
+    const jobs: { context: ReadingContext; deliver: ReadingDelivery<number> }[] = [];
+    const { graph } = fixture(
+      { price: decl("price", { kind: "worker" }) },
+      {
+        price: {
+          kind: "worker",
+          algorithmVersion: "v1",
+          connect: () => ({
+            update: (context, deliver) => {
+              jobs.push({ context, deliver });
+            },
+            stop: vi.fn(),
+          }),
+        },
+      },
+    );
+    const release = graph.mount(["price"]);
+    const before = jobs[0];
+    graph.acceptReceipt(receipt());
+    expect(jobs).toHaveLength(2);
+    expect(jobs[1].context.attempt.generation).toBeGreaterThan(before.context.attempt.generation);
+    done(before.deliver, 1);
+    expect(graph.get("price").current).toBe(false);
+    done(jobs[1].deliver, 2);
+    expect(graph.get("price")).toMatchObject({ value: 2, current: true });
     release();
     graph.dispose();
   });

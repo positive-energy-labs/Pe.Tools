@@ -21,7 +21,7 @@ export interface ReadingWorkerPort<I, T, D = never> {
 /** One running job plus one replaceable latest job; obsolete deltas still advance the decode base. */
 export function workerSource<I, T, D = never>(options: {
   algorithmVersion: string;
-  input(context: ReadingContext): I;
+  input(context: ReadingContext, previous?: ReadingContext): I;
   spawn(): ReadingWorkerPort<I, T, D>;
   applyDelta?(previous: T | undefined, delta: D): T;
 }): WorkerSource<T> {
@@ -35,6 +35,7 @@ export function workerSource<I, T, D = never>(options: {
       let running: (Job & { id: number }) | undefined;
       let sequence = 0;
       let decoded: T | undefined;
+      let sentContext: ReadingContext | undefined;
       let stopped = false;
       const send = () => {
         if (stopped || running || !latest) return;
@@ -52,8 +53,9 @@ export function workerSource<I, T, D = never>(options: {
               context.workRevision,
               options.algorithmVersion,
             ]),
-            input: options.input(context),
+            input: options.input(context, sentContext),
           });
+          sentContext = context;
         } catch (error) {
           running = undefined;
           job.deliver({ kind: "failure", error });
