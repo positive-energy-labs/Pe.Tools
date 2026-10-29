@@ -68,9 +68,10 @@ export interface PictureContent<L extends string = string, F extends string = st
   focus: { walked: readonly SubjectKey[]; near: readonly SubjectKey[] };
   /** Group subjects (issue:, run:, leg:, system:) to their element keys; the core registers them. */
   members?: Members;
-  /** Reverse hover: an element lights the smallest declared group this admits. Absent = off. */
+  /** Reverse hover: a hovered element also lights the smallest declared group this admits.
+   * Absent = the single element. */
   hoverGroups?: (group: SubjectKey) => boolean;
-  /** A picked element's selection, widened (its leg); absent = the element alone. */
+  /** A picked element's selection, widened (E: its leg). Absent = the single element. */
   widen?: (key: SubjectKey) => readonly SubjectKey[];
   /** Capture limits and clipping; `meshes` substitutes a dev fixture for the capture. */
   capture?: { maxTriangles?: number; cuts?: SceneMeshes["cuts"]; meshes?: SceneMeshes | null };
