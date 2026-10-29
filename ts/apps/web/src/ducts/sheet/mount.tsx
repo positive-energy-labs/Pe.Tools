@@ -1,16 +1,19 @@
 /**
- * The sheet mount inside the /ducts shell (`?view=sheet`): the route's data, params, auth and
+ * The sheet mount inside the /ducts shell (`?stage=sheet`, the head's "Pricing fans" stage): the route's data, params, auth and
  * subject plumbing stay; only the body under them is the sheet. `SheetViewProps` is assembled here,
  * once, from the spine (`use-fan-sheet`, `picture`, `inputs-surface`); the view receives it whole
  * and never reaches past it.
  */
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { stagedDucts } from "@pe/agent-contracts";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
-import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { AttentionRoot } from "#/attention";
 import { useRevitSubjectProps } from "#/revit/element-menu";
 import type { ProtoProps } from "../proto/props";
+import { useDuctSnapshot } from "../host";
 import { subjectNamer } from "../subject-text";
+import { blockerElements } from "./layers";
+import { EMPTY_SNAPSHOT, sheetSnapshot } from "./scoped-snapshot";
 import { InputsSurface } from "./inputs-surface";
 import { SheetPicture } from "./picture";
 import type { SheetViewProps } from "./types";
@@ -18,30 +21,44 @@ import { SheetView } from "./view";
 import { useFanSheet } from "./use-fan-sheet";
 
 export function SheetScreen({ props }: { props: ProtoProps }) {
-  if (!props.snapshot || !props.doc)
+  // The sheet needs a bound document only; it reads its own scoped snapshot (`scoped-snapshot.ts`).
+  if (!props.doc)
     return (
       <p className="p-3 text-ink-2" role="status">
-        {props.empty?.says ?? (props.reading.pending ? "reading ducts…" : "no document bound")}
+        {props.empty?.says ?? "no document bound"}
       </p>
     );
   return (
     <AttentionRoot doc={props.attentionDoc}>
-      <Loaded props={props} snapshot={props.snapshot} target={props.doc} />
+      <Loaded props={props} target={props.doc} />
     </AttentionRoot>
   );
 }
 
-function Loaded({
-  props,
-  snapshot,
-  target,
-}: {
-  props: ProtoProps;
-  snapshot: DuctSnapshot;
-  target: NonNullable<ProtoProps["doc"]>;
-}) {
-  const nameOf = useMemo(() => subjectNamer(snapshot), [snapshot]);
+function Loaded({ props, target }: { props: ProtoProps; target: NonNullable<ProtoProps["doc"]> }) {
+  const [nameOf, setNameOf] = useState(() => subjectNamer(EMPTY_SNAPSHOT));
   const state = useFanSheet(target, props.work, nameOf);
+  const ids = useMemo(() => {
+    const sheet = state.sheet;
+    if (!sheet?.overview.fan) return [];
+    return [
+      ...new Set([
+        sheet.overview.fan.unitId,
+        ...(sheet.elements?.walkedElementIds ?? []),
+        ...state.blockers.flatMap(blockerElements),
+      ]),
+    ].sort((a, b) => a - b);
+  }, [state.sheet, state.blockers]);
+  const edit = useMemo(() => stagedDucts(props.work.doc), [props.work.doc]);
+  const read = useDuctSnapshot(
+    ids.length ? target : null,
+    props.page.epoch,
+    edit.parameters,
+    edit.labelParameter,
+    ids.length ? { kind: "ids", ids } : null,
+  );
+  const snapshot = useMemo(() => sheetSnapshot(ids.length ? read.snapshot : null), [ids, read.snapshot]);
+  useEffect(() => setNameOf(() => subjectNamer(snapshot)), [snapshot]);
   const refProps = useRevitSubjectProps();
   const subjects = useMemo(
     () => ({ doc: props.attentionDoc, nameOf, go: props.onSelect, refProps }),

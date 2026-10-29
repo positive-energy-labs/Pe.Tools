@@ -15,6 +15,7 @@ import {
   type PictureContent,
   type PictureLayer,
   type PictureOverlayFrame,
+  type PictureStrand,
 } from "#/scene/picture/picture";
 import { coloursOf } from "../colours";
 import { encodingFor } from "../encoding";
@@ -26,9 +27,49 @@ import { paintOfDucts } from "../selection";
 import { subjectNamer } from "../subject-text";
 import { blockerElements, sheetIssues, sheetLayers } from "./layers";
 import type { SheetBlocker } from "./tiers";
+import type { Detail } from "./api";
 import type { OpenSheet } from "./use-sheet";
 
 const NONE: readonly never[] = [];
+
+/**
+ * The worksheet as picture content (ducts LEDGER 2026-10-29): every terminal run is a strand in
+ * air order (a return run is walked fan to grille, so it reverses), the critical run heavy; `over`
+ * is every leg past its velocity limit; runs and sections register as groups; a picked element
+ * widens to its first section, the one under the critical run.
+ */
+export function worksheetPicture(ws: Detail<"worksheet"> | null) {
+  const members = new Map<SubjectKey, readonly SubjectKey[]>();
+  const strands: PictureStrand[] = [];
+  const over = new Set<SubjectKey>();
+  const sectionOf = new Map<SubjectKey, SubjectKey>();
+  if (!ws) return { members, strands, over, widen: undefined };
+  const keyOf = (legId: string) => {
+    const leg = ws.legs[legId];
+    return leg ? elementKey(leg.elementId) : null;
+  };
+  const keys = (legIds: readonly string[]) =>
+    legIds.map(keyOf).filter((k): k is SubjectKey => k != null);
+  for (const side of ["supply", "return"] as const) {
+    for (const run of ws[side].runs) {
+      const path = keys(run.legIds);
+      if (side === "return") path.reverse();
+      strands.push({ key: `run:${run.id}` as SubjectKey, path, heavy: run.critical });
+      members.set(`run:${run.id}` as SubjectKey, path);
+      for (const k of keys(run.overLegIds)) over.add(k);
+    }
+    for (const section of ws[side].sections)
+      members.set(`section:${section.id}` as SubjectKey, keys(section.legIds));
+    for (const [elementId, sections] of Object.entries(ws[side].elementSections))
+      if (sections[0] && !sectionOf.has(elementKey(Number(elementId))))
+        sectionOf.set(elementKey(Number(elementId)), `section:${sections[0]}` as SubjectKey);
+  }
+  const widen = (key: SubjectKey) => {
+    const section = sectionOf.get(key);
+    return section ? (members.get(section) ?? NONE) : NONE;
+  };
+  return { members, strands, over, widen };
+}
 const NO_IDS: ReadonlySet<number> = new Set();
 const fmt = (n: number) => n.toFixed(3);
 
@@ -67,9 +108,11 @@ export function SheetPicture({
     () => ({ walked: [...focusIds].map((id) => elementKey(id)), near: NONE }),
     [focusIds],
   );
+  const runs = useMemo(() => worksheetPicture(sheet?.worksheet ?? null), [sheet]);
   const members = useMemo<Members>(
     () =>
       new Map<SubjectKey, readonly SubjectKey[]>([
+        ...runs.members,
         ...(sheet?.worstLegs ?? []).map(
           (path) =>
             [
@@ -85,7 +128,7 @@ export function SheetPicture({
             ] as const,
         ),
       ]),
-    [sheet, blockers],
+    [sheet, blockers, runs],
   );
   const scene = useMemo(
     () =>
@@ -193,6 +236,11 @@ export function SheetPicture({
       content={{
         focus,
         members,
+        // Ruling C: hovering an element lights its section; a pick selects that section.
+        hoverGroups: (group) => group.startsWith("section:"),
+        widen: runs.widen,
+        strands: runs.strands,
+        over: runs.over,
         lines,
         name: (key) => nameOf(idOf(key)) ?? "element not in snapshot",
         paint,

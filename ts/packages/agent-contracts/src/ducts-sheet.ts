@@ -7,6 +7,8 @@ const detail = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("legs"), pathId: z.string().min(1) }),
   z.strictObject({ kind: z.literal("elements") }),
   z.strictObject({ kind: z.literal("inputs") }),
+  /** Every run and section of a fan sheet (ducts LEDGER 2026-10-29): the page's worksheet and the picture's strands. */
+  z.strictObject({ kind: z.literal("worksheet") }),
 ]);
 /**
  * Sheet inputs are PER PROJECT (kaitpw ruling R2, 2026-10-28): one document Work cell,
@@ -57,6 +59,13 @@ export const ductsSheetDefaultsSchema = z.strictObject({
   terminalDropInWg: z.number().finite().nonnegative().optional(),
   autoJoinMaxGapIn: z.number().finite().nonnegative().optional(),
   splitPolicy: z.enum(["even", "proportional"]).optional(),
+  /** A leg above this velocity is "over", the one thing the sheet's picture paints (kaitpw 2026-10-29). */
+  velocityLimitFpm: z
+    .strictObject({
+      supply: z.number().finite().positive().optional(),
+      return: z.number().finite().positive().optional(),
+    })
+    .optional(),
 });
 export type DuctsSheetInputs = z.infer<typeof ductsSheetInputsSchema>;
 
@@ -199,6 +208,40 @@ const rankedSide = z.object({
   rest: z.number().int().nonnegative(),
 });
 const responseBase = { target: documentRefSchema, basis: z.string() };
+const side = z.enum(["supply", "return"]);
+const worksheetSection = z.object({
+  id: z.string(),
+  side,
+  legIds: z.array(z.string()),
+  runIds: z.array(z.string()),
+  cfm: z.number().nullable(),
+  knownInWg: z.number(),
+  unpricedLegs: z.number().int().nonnegative(),
+  telFt: z.number(),
+  maxFpm: z.number().nullable(),
+  overLegIds: z.array(z.string()),
+});
+const worksheetRun = z.object({
+  id: z.string(),
+  side,
+  end: pathEnd,
+  legIds: z.array(z.string()),
+  sectionIds: z.array(z.string()),
+  cfm: z.number().nullable(),
+  telFt: z.number(),
+  knownInWg: z.number(),
+  complete: z.boolean(),
+  residualInWg: z.number().nullable(),
+  critical: z.boolean(),
+  maxFpm: z.number().nullable(),
+  overLegIds: z.array(z.string()),
+});
+const worksheetSide = z.object({
+  runs: z.array(worksheetRun),
+  sections: z.array(worksheetSection),
+  worstKnownInWg: z.number().nullable(),
+  elementSections: z.record(z.string(), z.array(z.string())),
+});
 export const ductsSheetOverviewSchema = z.object({
   ...responseBase,
   kind: z.literal("overview"),
@@ -213,12 +256,22 @@ export const ductsSheetOverviewSchema = z.object({
     legs: z.array(detail.options[0]),
     elements: detail.options[1],
     inputs: detail.options[2],
+    worksheet: detail.options[3],
   }),
 });
 export const ductsSheetResponseSchema = z.discriminatedUnion("kind", [
   ductsSheetOverviewSchema,
   z.object({ ...responseBase, kind: z.literal("legs"), pathId: z.string(), legs: z.array(leg) }),
   z.object({ ...responseBase, kind: z.literal("elements"), walkedElementIds: z.array(elementId) }),
+  z.object({
+    ...responseBase,
+    kind: z.literal("worksheet"),
+    limits: z.object({ supplyFpm: z.number(), returnFpm: z.number(), source: z.string() }),
+    supply: worksheetSide,
+    return: worksheetSide,
+    /** Every leg a run names, by leg id. */
+    legs: z.record(z.string(), leg),
+  }),
   z.object({
     ...responseBase,
     kind: z.literal("inputs"),

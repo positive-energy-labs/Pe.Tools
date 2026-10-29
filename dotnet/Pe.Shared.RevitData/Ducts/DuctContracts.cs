@@ -95,7 +95,12 @@ public enum DuctSelectorKind {
     /// <summary>A connector walk from one element's HVAC ports (ducts MAP "Where the data comes from", row 1), raw, with open-end candidates.</summary>
     [EnumMember(Value = "from")] From,
     /// <summary>The fan roster's read: every HVAC equipment node and air terminal, raw, plus Revit's systems without sections.</summary>
-    [EnumMember(Value = "roster")] Roster
+    [EnumMember(Value = "roster")] Roster,
+    /// <summary>
+    ///     The named Revit systems' networks, grouped and analysed exactly as `document` is: the network page's read (the
+    ///     whole-document read outgrew the 16 MiB bridge frame on cloud Chadds, 2026-10-29).
+    /// </summary>
+    [EnumMember(Value = "systems")] Systems
 }
 
 /// <summary>
@@ -104,7 +109,10 @@ public enum DuctSelectorKind {
 ///     connector id; absent walks every port) through ducts, flex, fittings, accessories and equipment (equipment is a
 ///     leg, never a cut: the roster decides stops later), stopping at an air terminal, an open end, or MaxHops elements
 ///     deep (default 2000). At every open end a box CandidateBoxIn inches on a side (default 36) around the connector is
-///     searched for MEP elements, which join the output marked `open-end-candidate` so a join can be inferred.
+///     searched for MEP elements, which join the output marked `open-end-candidate` so a join can be inferred. Kind
+///     `systems` reads SystemIds (MechanicalSystem ids): each system's DuctNetwork, Elements and base equipment, grown
+///     along connectors to whole groups (a group is a connected component, so one the systems touch is never cut), and
+///     answers in the `document` shape with Systems holding only the named systems.
 /// </summary>
 public sealed record DuctSnapshotSelector(
     DuctSelectorKind Kind = DuctSelectorKind.Document,
@@ -112,7 +120,8 @@ public sealed record DuctSnapshotSelector(
     long? UnitId = null,
     int? PortIndex = null,
     int? MaxHops = null,
-    double? CandidateBoxIn = null);
+    double? CandidateBoxIn = null,
+    IReadOnlyList<long>? SystemIds = null);
 
 /// <summary>Reason a node or segment is in a `from` snapshot: reached by the connector walk, or found in an open end's candidate box.</summary>
 public static class DuctWalkReason {

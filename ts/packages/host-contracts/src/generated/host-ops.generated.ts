@@ -690,7 +690,7 @@ export namespace DuctsPorts {
 /** Read every duct network in the project: ducts, flex, fittings, accessories, terminals and HVAC equipment with their connectors, grouped by topology with equipment cut out, plus pass-1 terminal flow, fitting geometry ratios, fitting and accessory loss methods, terminal drops, Revit's supply/return/exhaust systems with critical path and sections, issues and the query behind each layer. Slots name the fan static, fan flow, component drop and terminal catalog drop parameters; labelParameter names the instance parameter whose value names equipment for people (each node's label). selector narrows the read: { kind: "from", unitId, portIndex?, maxHops?, candidateBoxIn? } walks Revit connectors from one element's HVAC ports through equipment to terminals and open ends, searches a box around each open end for MEP candidates (nodes and segments marked reason open-end-candidate) and reports the walk; { kind: "ids", ids } reads exactly those elements; { kind: "roster" } reads every HVAC equipment node and air terminal plus Revit's systems without sections (the fan roster and its slot coverage). All are raw: no groups, flows, issues or layers, and only roster carries systems. Absent or kind document is the whole-document read. Read-only. */
 export namespace DuctsSnapshot {
   export namespace Req {
-    export type DuctSelectorKind = "document" | "ids" | "from" | "roster";
+    export type DuctSelectorKind = "document" | "ids" | "from" | "roster" | "systems";
 
     /**
      * Optional: which parameters carry the designer-stated values (absent reads the defaults), and LabelParameter, the
@@ -724,7 +724,10 @@ export namespace DuctsSnapshot {
      * connector id; absent walks every port) through ducts, flex, fittings, accessories and equipment (equipment is a
      * leg, never a cut: the roster decides stops later), stopping at an air terminal, an open end, or MaxHops elements
      * deep (default 2000). At every open end a box CandidateBoxIn inches on a side (default 36) around the connector is
-     * searched for MEP elements, which join the output marked `open-end-candidate` so a join can be inferred.
+     * searched for MEP elements, which join the output marked `open-end-candidate` so a join can be inferred. Kind
+     * `systems` reads SystemIds (MechanicalSystem ids): each system's DuctNetwork, Elements and base equipment, grown
+     * along connectors to whole groups (a group is a connected component, so one the systems touch is never cut), and
+     * answers in the `document` shape with Systems holding only the named systems.
      *
      */
     export interface DuctSnapshotSelector {
@@ -734,6 +737,7 @@ export namespace DuctsSnapshot {
       portIndex?: number | null;
       maxHops?: number | null;
       candidateBoxIn?: null | number;
+      systemIds?: number[] | null;
     }
   }
   export namespace Res {

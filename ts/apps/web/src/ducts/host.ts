@@ -4,8 +4,8 @@
  * `PE_DUCTS_FIXTURE=<snapshot.json>` at `vp dev` (vite.config.ts) makes the route read a saved
  * snapshot instead of the host, so a view can be built with no Revit.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { DuctParameterKey } from "@pe/agent-contracts";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { DuctParameterKey, DuctsSnapshotSelector } from "@pe/agent-contracts";
 
 import { hostFetch } from "#/host/runtime";
 import { EMPTY_CATALOGS, type Catalogs } from "@pe/ducts-domain/catalog";
@@ -14,6 +14,7 @@ import type { HostOpResponse } from "@pe/host-contracts/operation-types";
 import { toGrids, type Grids } from "@pe/ducts-domain/loss-grid";
 import { TABLE_IDS } from "@pe/ducts-domain/pricing";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { mergeSnapshots, nextSystemsRead } from "./system-reads";
 
 /** The saved snapshot's URL in dev, else undefined. */
 export const SAVED: string | undefined = import.meta.env.DEV
@@ -64,10 +65,13 @@ export function useDuctSnapshot(
   epoch: number,
   slots: Partial<Record<DuctParameterKey, string>> = {},
   labelParameter: string | null = null,
+  /** Absent reads the whole document; the fan sheet reads only what its open fan touches (`ids`). */
+  selector: DuctsSnapshotSelector | null = null,
 ) {
   const request = {
     ...(Object.keys(slots).length ? { slots } : {}),
     ...(labelParameter ? { labelParameter } : {}),
+    ...(selector ? { selector } : {}),
   };
   const call = useDuctsReading<DuctSnapshot>(
     doc && !SAVED ? { kind: "ducts-snapshot", target: doc, ...request } : null,
@@ -91,6 +95,123 @@ export function useDuctSnapshot(
     staleReason: call.staleReason,
     nativeObservation: call.nativeObservation,
     version: call.version,
+  };
+}
+
+type SystemsPart = {
+  ids: number[];
+  snapshot: DuctSnapshot;
+  version: string;
+  epoch: number;
+  observation: ReturnType<typeof useDuctsReading>["nativeObservation"];
+};
+const NO_PARTS: ReadonlyMap<string, SystemsPart> = new Map();
+
+/**
+ * The network stage's read: `systems` reads of the `wanted` Revit system ids, one read of at most
+ * SYSTEMS_PER_READ systems at a time, joined into one snapshot (`system-reads.ts`). A read stays
+ * read while the document, slots and label parameter hold, so closing a system keeps its groups and
+ * reopening it reads nothing. A refresh (`epoch`) reads every read system again; until it has, the
+ * last reads stay drawn and `current` is false.
+ */
+export function useSystemsSnapshot(
+  doc: { session: string; openId: string } | null,
+  epoch: number,
+  slots: Partial<Record<DuctParameterKey, string>>,
+  labelParameter: string | null,
+  wanted: readonly number[],
+) {
+  const scope = doc ? JSON.stringify([doc.session, doc.openId, slots, labelParameter]) : null;
+  const [parts, setParts] = useState<{ scope: string | null; byIds: Map<string, SystemsPart> }>({
+    scope: null,
+    byIds: new Map(),
+  });
+  const byIds = parts.scope === scope ? parts.byIds : NO_PARTS;
+  const read = useMemo(
+    () =>
+      new Set([...byIds.values()].filter((p) => p.epoch === epoch).flatMap((p) => p.ids)),
+    [byIds, epoch],
+  );
+  const wantedKey = wanted.join(",");
+  // A refresh reads the read systems again behind the wanted ones, so the drawing never thins.
+  const batch = useMemo(
+    () =>
+      nextSystemsRead(
+        [...wanted, ...[...byIds.values()].flatMap((p) => p.ids)],
+        read,
+      ),
+    [wantedKey, byIds, read], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const batchKey = batch.join(",");
+  const call = useDuctsReading<DuctSnapshot>(
+    doc && batch.length
+      ? {
+          kind: "ducts-snapshot",
+          target: doc,
+          ...(Object.keys(slots).length ? { slots } : {}),
+          ...(labelParameter ? { labelParameter } : {}),
+          selector: { kind: "systems", systemIds: batch },
+        }
+      : null,
+  );
+  // The host keeps a body until it is refreshed: a body this route took before the refresh is
+  // read again once, never taken as the refresh's answer.
+  const taken = useRef(new Map<string, { version: string; epoch: number }>());
+  const refreshed = useRef(new Set<string>());
+  const { refresh } = call;
+  const refreshOnce = useCallback(() => {
+    const key = `${scope}|${batchKey}|${epoch}`;
+    if (refreshed.current.has(key)) return;
+    refreshed.current.add(key);
+    refresh();
+  }, [scope, batchKey, epoch, refresh]);
+  const previousEpoch = useRef(epoch);
+  useEffect(() => {
+    if (epoch === previousEpoch.current) return;
+    previousEpoch.current = epoch;
+    if (batch.length) refreshOnce();
+  }, [epoch, batch.length, refreshOnce]);
+  useEffect(() => {
+    if (!scope || !batch.length || call.data === undefined || !call.version) return;
+    const key = `${scope}|${batchKey}`;
+    const prior = taken.current.get(key);
+    if (prior && prior.epoch !== epoch && prior.version === call.version) return refreshOnce();
+    taken.current.set(key, { version: call.version, epoch });
+    const part = {
+      ids: batch,
+      snapshot: call.data,
+      version: call.version,
+      epoch,
+      observation: call.nativeObservation,
+    };
+    setParts((previous) => {
+      const next = new Map(previous.scope === scope ? previous.byIds : NO_PARTS);
+      // A part this one rereads in full is replaced, never joined beside it.
+      for (const [k, p] of next) if (p.ids.every((id) => batch.includes(id))) next.delete(k);
+      next.set(batchKey, part);
+      return { scope, byIds: next };
+    });
+  }, [call.data, call.version]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Older reads first, so a fresher read's copy of a shared group wins.
+  const ordered = useMemo(
+    () => [...byIds.values()].sort((a, b) => a.epoch - b.epoch),
+    [byIds],
+  );
+  const snapshot = useMemo(() => mergeSnapshots(ordered.map((p) => p.snapshot)), [ordered]);
+  const stale = ordered.some((p) => p.epoch !== epoch);
+  return {
+    snapshot,
+    /** The wanted and earlier-read system ids answered under this refresh. */
+    read,
+    /** The system ids being read now; empty when every wanted system is read. */
+    reading: batch,
+    error: call.error?.message ?? null,
+    pending: batch.length > 0 && !call.error,
+    current: snapshot !== null && !stale && !call.error,
+    staleReason: call.staleReason,
+    nativeObservation: ordered.at(-1)?.observation,
+    // Geometry keys on this: any part read again is a new version.
+    version: ordered.length ? ordered.map((p) => p.version).join("+") : undefined,
   };
 }
 

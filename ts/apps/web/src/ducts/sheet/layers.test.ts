@@ -193,6 +193,13 @@ it("issues name the blocker's elements and the snapshot findings drawn on them",
   });
 });
 
+it("a consequence issue names its present cause; an orphan stands alone", () => {
+  const consequence = { ...noFlow, causedBy: join.id };
+  const [, tethered] = sheetIssues([join, consequence], null);
+  expect(tethered!.causedBy).toBe(join.id);
+  expect(sheetIssues([consequence], null)[0]).not.toHaveProperty("causedBy");
+});
+
 it("every face layer answers the blocker row through targets and findings", () => {
   const layers = sheetLayers({
     snapshot,

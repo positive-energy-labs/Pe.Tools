@@ -20,6 +20,8 @@ export const ductsSnapshotSelectorSchema = z.discriminatedUnion("kind", [
   /** The fan roster's read: every HVAC equipment node and air terminal, and Revit's systems without sections. */
   z.strictObject({ kind: z.literal("roster") }),
   z.strictObject({ kind: z.literal("ids"), ids: z.array(z.number().int()).min(1) }),
+  /** The named Revit systems' groups, whole, in the document read's cooked shape: the network page's read. */
+  z.strictObject({ kind: z.literal("systems"), systemIds: z.array(z.number().int()).min(1) }),
   z.strictObject({
     kind: z.literal("from"),
     unitId: z.number().int(),
@@ -45,7 +47,7 @@ export const ductsSnapshotReadingSchema = z.strictObject({
     .nullish()
     .transform((value) => value ?? undefined)
     .optional(),
-  /** Mirrors C# DuctSnapshotSelector: absent is the whole-document read; `from` and `ids` are raw (no groups). */
+  /** Mirrors C# DuctSnapshotSelector: absent is the whole-document read; `from`, `ids` and `roster` are raw (no groups). */
   selector: ductsSnapshotSelectorSchema
     .nullish()
     .transform((value) => value ?? undefined)

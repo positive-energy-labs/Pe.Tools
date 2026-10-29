@@ -9,6 +9,7 @@ import { declaredTeaching, type TeachingLayout } from "@pe/kit/lang/teach";
 import { LIST_ACTIONS, LIST_SEARCH_SYNTAX, SEARCH_FOCUS_SYNTAX } from "@pe/kit/lang/list-teaching";
 import { actionTeaching } from "@pe/kit/keys";
 import { stageTeaching } from "#/scene/stage-teaching";
+import { DUCTS_LAYER_OPTIONS } from "../proto/e/teaching";
 
 const listControls = (label: string) => [
   {
@@ -40,7 +41,10 @@ const SHEET_REGIONS = {
     pane: { scroll: "clip", flush: true, picture: true },
     label: "Picture",
     purpose: "The open fan's walk; every blocker is drawn where it can be drawn and listed below.",
-    controls: [...stageTeaching()],
+    controls: [
+      ...stageTeaching(),
+      { kind: "views" as const, label: "layers", options: DUCTS_LAYER_OPTIONS },
+    ],
   },
   ledger: {
     id: "sheet-ledger",

@@ -499,6 +499,11 @@ export const manifest = presentation<
 >(tools["ducts"], {
   key: "ducts",
   name: "Ducts",
+  // The head's stage word switches the body: the network picture or the fan sheet (`sheet/mount.tsx`).
+  stages: [
+    { key: "network", word: "Pricing systems" },
+    { key: "sheet", word: "Pricing fans" },
+  ],
   docs: ductsDocs,
   needs: "project",
   cells: ductCells([

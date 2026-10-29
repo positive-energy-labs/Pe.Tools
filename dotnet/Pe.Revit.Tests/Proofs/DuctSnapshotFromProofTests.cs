@@ -45,7 +45,42 @@ public sealed class DuctSnapshotFromProofTests {
         }
     }
 
-    private static (Duct Left, Duct Right) Ring(Document doc) {
+    /// <summary>
+    ///     The `systems` selector on two separate rings: reading the first ring's Revit system answers that ring's group
+    ///     whole, the same group the document read gives it, and never the second ring.
+    /// </summary>
+    [Test]
+    public void Systems_reads_the_named_systems_groups_whole(UIApplication uiapp) {
+        var app = uiapp.Application;
+        RevitTestFailureGuard.EnsureInstalled(app);
+        var doc = app.NewProjectDocument(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            $"Autodesk\\RVT {app.VersionNumber}\\Templates\\English-Imperial\\Mechanical-Default.rte"));
+        try {
+            var (left, _) = Ring(doc);
+            var (other, _) = Ring(doc, 100);
+            var system = left.MEPSystem?.Id.Value();
+            Assert.That(system, Is.Not.Null, "Revit put the ring's ducts in a system");
+            Assert.That(other.MEPSystem?.Id.Value(), Is.Not.EqualTo(system), "the second ring is another system");
+            var whole = DuctSnapshots.Snapshot(doc);
+            var read = DuctSnapshots.Snapshot(doc, selector: new DuctSnapshotSelector(DuctSelectorKind.Systems, SystemIds: [system!.Value]));
+            var ring = whole.Segments.Single(s => s.Id == left.Id.Value()).GroupId;
+            Assert.Multiple(() => {
+                Assert.That(read.Groups.Select(g => g.Id), Is.EqualTo(new[] { ring }), "only the named system's group");
+                Assert.That(read.Groups.Single().ElementCount, Is.EqualTo(whole.Groups.Single(g => g.Id == ring).ElementCount), "the group whole");
+                Assert.That(read.Segments.Select(s => s.Id), Has.None.EqualTo(other.Id.Value()));
+                Assert.That(read.Systems.Select(s => s.Id), Is.EqualTo(new[] { system.Value }));
+                Assert.That(read.Layers, Is.Not.Empty, "the document shape: layers are cooked");
+                Assert.That(read.Walk, Is.Null);
+            });
+            Assert.Throws<ArgumentException>(() => DuctSnapshots.Snapshot(doc,
+                selector: new DuctSnapshotSelector(DuctSelectorKind.Systems, SystemIds: [left.Id.Value()])), "a duct is not a system");
+        } finally {
+            _ = doc.Close(false);
+        }
+    }
+
+    private static (Duct Left, Duct Right) Ring(Document doc, double y0 = 0) {
         using var t = new Transaction(doc, "duct snapshot from proof: ring");
         _ = t.Start();
         var system = new FilteredElementCollector(doc).OfClass(typeof(MechanicalSystemType)).Cast<MechanicalSystemType>()
@@ -59,7 +94,7 @@ public sealed class DuctSnapshotFromProofTests {
             _ = d.get_Parameter(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM).Set(1.0);
             return d;
         }
-        XYZ At(double x, double y) => new(x, y, 10);
+        XYZ At(double x, double y) => new(x, y0 + y, 10);
         var ducts = new[] {
             Make(At(0, 0), At(10, 0)), Make(At(10 + Gap, 0), At(20, 0)), Make(At(20, 0), At(20, 10)),
             Make(At(20, 10), At(0, 10)), Make(At(0, 10), At(0, 0))

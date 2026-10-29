@@ -76,7 +76,7 @@ public static class DuctSnapshots {
         var schemas = LossSchemas();
         var reader = new Reader(doc, slots, schemas, network, labelParameter, phaseNames);
 
-        if (selector is { Kind: not DuctSelectorKind.Document }) {
+        if (selector is { Kind: not (DuctSelectorKind.Document or DuctSelectorKind.Systems) }) {
             // Raw: the same nodes, segments and connectors as the document read, with no groups, roots, flows, issues,
             // systems or layers. The path engine (TS) prices what it needs from these.
             List<DuctNode> rawNodes;
@@ -92,9 +92,7 @@ public static class DuctSnapshots {
                     .Concat(Of(BuiltInCategory.OST_DuctTerminal).Select(e => Node(e, DuctNodeKind.Terminal, slots, schemas, network, labelParameter)))
                     .ToList();
                 rawSegments = [];
-                rawSystems = new FilteredElementCollector(doc).OfClass(typeof(MechanicalSystem)).Cast<MechanicalSystem>()
-                    .Where(m => m.SystemType is DuctSystemType.SupplyAir or DuctSystemType.ReturnAir or DuctSystemType.ExhaustAir)
-                    .OrderBy(m => m.Name, StringComparer.Ordinal)
+                rawSystems = AirSystems(doc)
                     .Select(m => new DuctSystem(m.Id.Value(), m.Name, m.SystemType.ToString(), null,
                         Try(() => m.BaseEquipment?.Id.Value()), Try(() => m.BaseEquipmentConnector?.Id), null, [], []))
                     .ToList();
@@ -109,20 +107,31 @@ public static class DuctSnapshots {
                 Walk: walk);
         }
 
-        var segments = Of(BuiltInCategory.OST_DuctCurves).Concat(Of(BuiltInCategory.OST_FlexDuctCurves))
-            .OfType<MEPCurve>().Select(c => Segment(doc, c, network) with { PhaseCreated = PhaseOf(c, true, phaseNames), PhaseDemolished = PhaseOf(c, false, phaseNames) }).ToList();
+        List<DuctSegment> segments;
         var nodes = new List<DuctNode>();
-        DuctNode Phased(DuctNode n, Element e) => n with { PhaseCreated = PhaseOf(e, true, phaseNames), PhaseDemolished = PhaseOf(e, false, phaseNames) };
-        nodes.AddRange(Of(BuiltInCategory.OST_DuctFitting).Select(e => Phased(Node(e, Fitting(e), slots, schemas, network, labelParameter), e)));
-        nodes.AddRange(Of(BuiltInCategory.OST_DuctAccessory).Select(e => Phased(Node(e, DuctNodeKind.Accessory, slots, schemas, network, labelParameter), e)));
-        nodes.AddRange(Of(BuiltInCategory.OST_DuctTerminal).Select(e => Phased(Node(e, DuctNodeKind.Terminal, slots, schemas, network, labelParameter), e)));
-        var equipment = Of(BuiltInCategory.OST_MechanicalEquipment).Where(e => HvacConnectors(e).Any()).ToList();
-        nodes.AddRange(equipment.Select(e => Phased(Node(e, DuctNodeKind.Equipment, slots, schemas, network, labelParameter), e)));
-        var systems = new FilteredElementCollector(doc).OfClass(typeof(MechanicalSystem)).Cast<MechanicalSystem>()
-            .Where(m => m.SystemType is DuctSystemType.SupplyAir or DuctSystemType.ReturnAir or DuctSystemType.ExhaustAir)
-            .OrderBy(m => m.Name, StringComparer.Ordinal)
-            .Select(RevitSystem)
-            .ToList();
+        List<Element> terminalElements, equipment;
+        List<DuctSystem> systems;
+        if (selector is { Kind: DuctSelectorKind.Systems }) {
+            // The same elements the document read would give these systems' groups, so the analysis below answers them
+            // the same; a group no named system touches is never read.
+            var (named, members) = SystemMembers(doc, selector);
+            segments = [];
+            foreach (var e in members) Build(reader, e, null, nodes, segments);
+            terminalElements = members.Where(e => CategoryOf(e) == BuiltInCategory.OST_DuctTerminal).ToList();
+            equipment = members.Where(e => CategoryOf(e) == BuiltInCategory.OST_MechanicalEquipment).ToList();
+            systems = named.Select(RevitSystem).ToList();
+        } else {
+            segments = Of(BuiltInCategory.OST_DuctCurves).Concat(Of(BuiltInCategory.OST_FlexDuctCurves))
+                .OfType<MEPCurve>().Select(c => Segment(doc, c, network) with { PhaseCreated = PhaseOf(c, true, phaseNames), PhaseDemolished = PhaseOf(c, false, phaseNames) }).ToList();
+            DuctNode Phased(DuctNode n, Element e) => n with { PhaseCreated = PhaseOf(e, true, phaseNames), PhaseDemolished = PhaseOf(e, false, phaseNames) };
+            nodes.AddRange(Of(BuiltInCategory.OST_DuctFitting).Select(e => Phased(Node(e, Fitting(e), slots, schemas, network, labelParameter), e)));
+            nodes.AddRange(Of(BuiltInCategory.OST_DuctAccessory).Select(e => Phased(Node(e, DuctNodeKind.Accessory, slots, schemas, network, labelParameter), e)));
+            terminalElements = Of(BuiltInCategory.OST_DuctTerminal);
+            nodes.AddRange(terminalElements.Select(e => Phased(Node(e, DuctNodeKind.Terminal, slots, schemas, network, labelParameter), e)));
+            equipment = Of(BuiltInCategory.OST_MechanicalEquipment).Where(e => HvacConnectors(e).Any()).ToList();
+            nodes.AddRange(equipment.Select(e => Phased(Node(e, DuctNodeKind.Equipment, slots, schemas, network, labelParameter), e)));
+            systems = AirSystems(doc).Select(RevitSystem).ToList();
+        }
 
         var analysis = DuctNetwork.Analyze(nodes, segments);
         var groupsOf = analysis.Nodes.Where(n => n.Kind == DuctNodeKind.Terminal && n.GroupId is not null)
@@ -145,8 +154,49 @@ public static class DuctSnapshots {
             store,
             storeError,
             new DuctPhases(phases.Select(ph => ph.Name).ToList(), PhaseViews(doc, phaseNames)),
-            AirflowCandidates(Of(BuiltInCategory.OST_DuctTerminal), groupsOf),
+            AirflowCandidates(terminalElements, groupsOf),
             AirflowCandidates(equipment, rootedBy));
+    }
+
+    /// <summary>Every supply, return and exhaust MechanicalSystem, by name.</summary>
+    private static IEnumerable<MechanicalSystem> AirSystems(Document doc) =>
+        new FilteredElementCollector(doc).OfClass(typeof(MechanicalSystem)).Cast<MechanicalSystem>()
+            .Where(m => m.SystemType is DuctSystemType.SupplyAir or DuctSystemType.ReturnAir or DuctSystemType.ExhaustAir)
+            .OrderBy(m => m.Name, StringComparer.Ordinal);
+
+    /// <summary>
+    ///     The `systems` selector's elements, in id order: each named system's DuctNetwork, Elements and base equipment,
+    ///     then grown along physical connectors until closed. Growth passes through ducts, flex, fittings, accessories and
+    ///     terminals and stops at equipment (reached, never expanded): DuctNetwork.Analyze cuts equipment out, so the
+    ///     result holds every group the systems touch whole, with its roots, exactly as the document read holds it.
+    /// </summary>
+    private static (List<MechanicalSystem> Systems, List<Element> Members) SystemMembers(Document doc, DuctSnapshotSelector selector) {
+        var ids = selector.SystemIds ?? throw new ArgumentException("selector.systemIds is required for kind systems");
+        if (ids.Count == 0) throw new ArgumentException("selector.systemIds names no system.");
+        var systems = ids.Distinct().Select(id =>
+                doc.GetElement(new ElementId(id)) as MechanicalSystem
+                ?? throw new ArgumentException($"Element {id} is not a duct system in this document."))
+            .OrderBy(m => m.Name, StringComparer.Ordinal).ToList();
+        var members = new Dictionary<long, Element>();
+        var queue = new Queue<Element>();
+        void Reach(Element? e) {
+            // Equipment with no HVAC port is not in the document read either.
+            if (e is null || !Walkable(e) || members.ContainsKey(e.Id.Value())) return;
+            var equipment = CategoryOf(e) == BuiltInCategory.OST_MechanicalEquipment;
+            if (equipment && !HvacConnectors(e).Any()) return;
+            members[e.Id.Value()] = e;
+            if (!equipment) queue.Enqueue(e);
+        }
+        foreach (var m in systems) {
+            foreach (Element e in Try(() => m.DuctNetwork) ?? new ElementSet()) Reach(e);
+            foreach (Element e in Try(() => m.Elements) ?? new ElementSet()) Reach(e);
+            Reach(Try(() => m.BaseEquipment));
+        }
+        while (queue.Count > 0)
+            foreach (var port in HvacConnectors(queue.Dequeue()))
+            foreach (var peer in Try(() => Peers(port).ToList()) ?? [])
+                Reach(peer.Owner);
+        return (systems, members.Values.OrderBy(e => e.Id.Value()).ToList());
     }
 
     /// <summary>The `ids` selector: exactly the named walkable elements, in id order, raw.</summary>

@@ -89,7 +89,8 @@ export interface DuctsPictureExtra {
    * document's census, the system a switch is opening, and whether the read is refreshing. */
   identity: {
     system: (ReturnType<typeof systemList>[number] & { note: SystemNote | undefined }) | null;
-    census: { systems: number; priced: number; fix: number };
+    /** `partial` says how many of the document's systems are read when the read is by system. */
+    census: { systems: number; priced: number; fix: number; partial?: string | null };
     refreshing: boolean;
     /** Opens the system's tree, where its issues stand. */
     open: () => void;
@@ -394,6 +395,7 @@ function Content({
     identity.system == null ? (
       <span className="truncate" data-e-census="">
         <span className="face-mono">{identity.census.systems}</span> systems
+        {identity.census.partial ? ` · ${identity.census.partial}` : null}
       </span>
     ) : (
       <span data-e-state="">

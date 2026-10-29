@@ -14,6 +14,16 @@ afterEach(() => {
 });
 const roster = ductsRosterResponseSchema.parse(fixture.roster);
 
+const emptySide = { runs: [], sections: [], worstKnownInWg: null, elementSections: {} };
+const worksheet = (basis: string) => ({
+  target: fixture.elements.target,
+  basis,
+  kind: "worksheet",
+  limits: { supplyFpm: 900, returnFpm: 700, source: "SHIM placeholder" },
+  supply: emptySide,
+  return: emptySide,
+  legs: {},
+});
 const json = (value: unknown) =>
   new Response(JSON.stringify(value), { headers: { "content-type": "application/json" } });
 test("basis-bound legs returning 409 refresh the overview and discard old details", async () => {
@@ -36,6 +46,7 @@ test("basis-bound legs returning 409 refresh the overview and discard old detail
         },
         { status: 409 },
       );
+    if (body.detail.kind === "worksheet") return json(worksheet(fixture.overview.basis));
     return json(body.detail.kind === "inputs" ? fixture.inputs : fixture.elements);
   });
   const { result } = renderHook(() => useSheet(roster.target));
@@ -92,6 +103,7 @@ test("input recomputation writes the current fan and updates assumed roster ESP"
     const body = JSON.parse(String(init?.body));
     requests.push(body);
     if (url.endsWith("roster")) return json(fixture.roster);
+    if (body.detail?.kind === "worksheet") return json(worksheet(body.basis));
     if (body.detail)
       return json({
         ...(body.detail.kind === "inputs" ? fixture.inputs : fixture.elements),

@@ -131,6 +131,9 @@
       },
       "inputs": {
         "kind": "inputs"
+      },
+      "worksheet": {
+        "kind": "worksheet"
       }
     },
     "assumedBlockers": []

@@ -729,8 +729,13 @@ test("a staged subject and plural claim select the whole row without framing; a 
       nodes: snapshot.nodes.map((node) => (node.id === 100 ? { ...node, label: "AHU-9" } : node)),
     });
   await mount();
-  // The edit labelParameter rides the snapshot request.
-  await waitFor(() => expect(requests.at(-1)?.request).toEqual({ labelParameter: "Unit Tag" }));
+  // The edit labelParameter rides the open system's snapshot request (the roster's carries none).
+  await waitFor(() =>
+    expect(requests.at(-1)?.request).toEqual({
+      labelParameter: "Unit Tag",
+      selector: { kind: "systems", systemIds: [snapshot.systems.find((s) => s.name === "SA")!.id] },
+    }),
+  );
   // A person reveals the folded pane before acting on its evidence.
   fireEvent.click(await screen.findByRole("button", { name: /^Expand Rulings/ }));
   const inbox = await screen.findByText("Check");

@@ -13,14 +13,20 @@ import { elementKey, type SubjectKey } from "@pe/kit/lang/attention";
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { stagedDucts, type DuctClaim, type CellLike } from "@pe/agent-contracts";
-import type { Reading, OrbitViewport } from "@pe/agent-contracts";
+import type { Reading, OrbitViewport, DuctsSnapshotSelector } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { EMPTY_CATALOGS } from "@pe/ducts-domain/catalog";
 
 import { Surface } from "@pe/kit/lang/surface";
 import { useWork } from "@pe/kit/lang/work";
 import { frozenDemo } from "#/host/demo-client";
-import { SAVED, useDuctSnapshot, useDuctTables, useDuctCatalogs } from "./host";
+import {
+  SAVED,
+  useDuctSnapshot,
+  useDuctTables,
+  useDuctCatalogs,
+  useSystemsSnapshot,
+} from "./host";
 import { SCENE_CLAIMS, SCENE_FIXTURE } from "./scene.fixture";
 import { NAVIGATION_FIXTURE } from "./navigation.fixture";
 import { COLOURS_FIXTURE } from "./colours.fixture";
@@ -69,15 +75,29 @@ function useBodyAction(action: ActionHandle): ActionHandle {
   );
 }
 
+const NO_SLOTS = {};
+const ROSTER: DuctsSnapshotSelector = { kind: "roster" };
+
 const fmt = (n: number | null | undefined) => (n == null ? "—" : n.toFixed(4));
 const NO_NATIVE_OBSERVATION: NativeObservation = { scope: null };
+
+/** A system's picker line: classification, the tags of the units rooting it, terminals, networks. */
+const systemSub = (item: ReturnType<typeof systemsOf>[number]) =>
+  [
+    item.classification,
+    item.units.join(", ") || "no fan",
+    `${item.terminals} terminal${item.terminals === 1 ? "" : "s"}`,
+    item.groups.length > 1 ? `${item.groups.length} networks` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
 /** Revit's critical path as a word, whatever the engine flag: a system with no path reads "no path". */
 const revitSays = (inWg: number | null | undefined) => (inWg == null ? "no path" : fmt(inWg));
 
-/** `url` is false in a chat pane, which does not own the address. `view="sheet"` swaps the E2 body
+/** `url` is false in a chat pane, which does not own the address. Stage `sheet` swaps the E2 body
  * for the fan sheet under the same shell (`sheet/mount.tsx`). */
-export function DuctsRoute({ url = true, view }: { url?: boolean; view?: "sheet" } = {}) {
+export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
   const [chosen] = useChooseTarget();
   const thread = useRouteThread();
   // `?demo=scene` mounts the makeup-air fixture, snapshot included, and no host is read; its
@@ -136,7 +156,50 @@ export function DuctsRoute({ url = true, view }: { url?: boolean; view?: "sheet"
       : null;
   const documentKey = doc ? `${doc.session}/${doc.openId}` : null;
   const edit = useMemo(() => stagedDucts(handle.work.doc), [handle.work.doc]);
-  const read = useDuctSnapshot(demo ? null : doc, page.epoch, edit.parameters, edit.labelParameter);
+  // The whole-document read outgrew the bridge's 16 MiB frame on cloud Chadds (2026-10-29), so no
+  // stage asks it: the fan sheet reads what its open fan touches (`sheet/mount.tsx`), and the
+  // network stage reads the systems the person opened (kaitpw 2026-10-29). The roster names every
+  // system cheaply; "read every system" reads the rest a few at a time (`system-reads.ts`). A
+  // saved snapshot is still the one whole read.
+  const scopedDoc = demo || SAVED || page.stage === "sheet" ? null : doc;
+  const roster = useDuctSnapshot(scopedDoc, page.epoch, NO_SLOTS, null, ROSTER);
+  const rosterSystems = roster.snapshot?.systems ?? null;
+  const [everyFor, setEveryFor] = useState<string | null>(null);
+  const every = everyFor !== null && everyFor === documentKey;
+  const wanted = useMemo(() => {
+    const ids = new Map<string, number[]>();
+    for (const s of rosterSystems ?? []) ids.set(s.name, [...(ids.get(s.name) ?? []), s.id]);
+    return [
+      ...page.system.flatMap((name) => ids.get(name) ?? []),
+      ...(every ? (rosterSystems ?? []).map((s) => s.id) : []),
+    ];
+  }, [rosterSystems, page.system, every]);
+  const scoped = useSystemsSnapshot(
+    scopedDoc,
+    page.epoch,
+    edit.parameters,
+    edit.labelParameter,
+    wanted,
+  );
+  const whole = useDuctSnapshot(
+    SAVED && !demo && page.stage !== "sheet" ? doc : null,
+    page.epoch,
+    edit.parameters,
+    edit.labelParameter,
+  );
+  const read = SAVED ? whole : scoped;
+  // How much of the document the panes hold; null when they hold all of it (saved, fixture).
+  const coverage = useMemo<ProtoProps["coverage"]>(() => {
+    if (!scopedDoc || !rosterSystems) return null;
+    const done = rosterSystems.filter((s) => scoped.read.has(s.id)).length;
+    return {
+      read: done,
+      of: rosterSystems.length,
+      reading: rosterSystems.filter((s) => scoped.reading.includes(s.id)).map((s) => s.name),
+      readAll:
+        every || done === rosterSystems.length ? null : () => setEveryFor(documentKey),
+    };
+  }, [scopedDoc, rosterSystems, scoped.read, scoped.reading, every, documentKey]);
   const snapshot = demo?.snapshot ?? read.snapshot;
   const snapshotCurrent = demo !== null || read.current;
   // useDuctSnapshot fences responses by the exact request generation before exposing data.
@@ -153,7 +216,7 @@ export function DuctsRoute({ url = true, view }: { url?: boolean; view?: "sheet"
     }),
     [snapshot, read.nativeObservation, demo],
   );
-  const error = demo ? null : read.error;
+  const error = demo ? null : (read.error ?? (scopedDoc ? roster.error : null));
   const pending = demo ? false : read.pending;
   const catalogs = useDuctCatalogs(page.epoch);
   const tables = useDuctTables(demo ? null : (doc?.session ?? null));
@@ -215,7 +278,9 @@ export function DuctsRoute({ url = true, view }: { url?: boolean; view?: "sheet"
   );
   const pricingInput = useMemo<PricingInput | null>(
     () =>
-      snapshot && snapshotCurrent && grids && !pending && !error
+      // Not gated on `pending`: the systems read is current while it reads one more system, and
+      // the panes price what is read so far (the whole read is never current while pending).
+      snapshot && snapshotCurrent && grids && !error
         ? {
             snapshot,
             grids,
@@ -231,7 +296,6 @@ export function DuctsRoute({ url = true, view }: { url?: boolean; view?: "sheet"
       snapshotCurrent,
       grids,
       catalogTables,
-      pending,
       error,
       handle.work.doc,
       handle.work.revision,
@@ -335,7 +399,7 @@ export function DuctsRoute({ url = true, view }: { url?: boolean; view?: "sheet"
       ? "choose a document first"
       : error
         ? `ducts.snapshot failed: ${error}`
-        : pending
+        : pending || roster.pending
           ? "reading ducts…"
           : "this document has no duct networks";
   const busy = handle.busy !== null;
@@ -372,9 +436,13 @@ export function DuctsRoute({ url = true, view }: { url?: boolean; view?: "sheet"
     : held
       ? "refreshing pricing; the bars show the last priced Work revision"
       : !snapshot
-        ? readingWord
+        ? coverage && !wanted.length
+          ? "choose a system to read its ducts"
+          : readingWord
         : pending
-          ? `${readingWord}; the bars show the last read`
+          ? coverage
+            ? `reading ${coverage.reading.join(", ")}; the bars show what is read`
+            : `${readingWord}; the bars show the last read`
           : tables.error
             ? `ducts.tables failed: ${tables.error}`
             : !grids
@@ -387,7 +455,7 @@ export function DuctsRoute({ url = true, view }: { url?: boolean; view?: "sheet"
                     ? "needs a fix: implausible loss (no Pe fan; nothing is written to Revit for it)"
                     : solved
                       ? `Pe fan ${fmt(solved.fan)} in-wg${provisionalWords(solved.provisional)} (not in Revit until written), Revit ${revitSays(solved.revitCritical)}`
-                      : `largest Pe fan ${fmt(priced.next.fan)} in-wg${provisionalWords(priced.next.provisional)} over ${systems.length} systems`;
+                      : `largest Pe fan ${fmt(priced.next.fan)} in-wg${provisionalWords(priced.next.provisional)} over ${systems.length} systems${coverage && coverage.read < coverage.of ? ` (${coverage.read} of ${coverage.of} read)` : ""}`;
   // Every written segment's cells count in the Work sentence.
   const counted = useMemo(
     () =>
@@ -411,61 +479,72 @@ export function DuctsRoute({ url = true, view }: { url?: boolean; view?: "sheet"
       ) : (
         <LadderPicker ladder={ladder} disabled={busy} />
       )}
-      {", "}
-      <Ladder
-        levels={[
-          {
-            key: "system",
-            label:
-              page.system.length > 1
-                ? page.system.join(" + ")
-                : system
-                  ? system.classification
-                    ? `${system.name} (${system.classification})`
-                    : system.name
+      {page.stage === "sheet" ? (
+        // The fan sheet scopes by fan, not by system or level; its fans list is the subject.
+        "."
+      ) : (
+        <>
+          {", "}
+          <Ladder
+            levels={[
+              {
+                key: "system",
+                label:
+                  page.system.length > 1
+                    ? page.system.join(" + ")
+                    : system
+                      ? system.classification
+                        ? `${system.name} (${system.classification})`
+                        : system.name
+                      : null,
+                placeholder:
+                  coverage && coverage.read < coverage.of ? "choose a system" : "every system",
+                // A system by its name, classification and the tags of the units rooting it; never a
+                // group id. Read scoped, the roster names every system and one not read says so.
+                options: coverage
+                  ? rosterSystems!.map((item) => {
+                      const read = systems.find((s) => s.name === item.name);
+                      return {
+                        id: item.name,
+                        label: item.name,
+                        sub: read ? systemSub(read) : `${item.classification} · not read yet`,
+                      };
+                    })
+                  : snapshot
+                    ? systems.map((item) => ({
+                        id: item.name,
+                        label: item.name,
+                        sub: systemSub(item),
+                      }))
+                    : null,
+                note: readWord,
+                picked: (id) => page.system.includes(id),
+                pick: (id) => setPage({ system: toggleSystem(page.system, id) }),
+              },
+            ]}
+            disabled={busy}
+          />
+          {" on "}
+          <Ladder
+            levels={[
+              {
+                key: "level",
+                label: level?.name ?? null,
+                placeholder: "every level",
+                options: snapshot
+                  ? levels.map((item) => ({ id: String(item.id), label: item.name }))
                   : null,
-            placeholder: "every system",
-            // A system by its name, classification and the tags of the units rooting it; never a group id.
-            options: snapshot
-              ? systems.map((item) => ({
-                  id: item.name,
-                  label: item.name,
-                  sub: [
-                    item.classification,
-                    item.units.join(", ") || "no fan",
-                    `${item.terminals} terminal${item.terminals === 1 ? "" : "s"}`,
-                    item.groups.length > 1 ? `${item.groups.length} networks` : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" · "),
-                }))
-              : null,
-            note: readWord,
-            picked: (id) => page.system.includes(id),
-            pick: (id) => setPage({ system: toggleSystem(page.system, id) }),
-          },
-        ]}
-        disabled={busy}
-      />
-      {" on "}
-      <Ladder
-        levels={[
-          {
-            key: "level",
-            label: level?.name ?? null,
-            placeholder: "every level",
-            options: snapshot
-              ? levels.map((item) => ({ id: String(item.id), label: item.name }))
-              : null,
-            note: readWord,
-            picked: (id) => id === page.level,
-            pick: (id) => setPage({ level: id === page.level ? "" : id }),
-          },
-        ]}
-        disabled={busy}
-      />
-      {"; "}
-      {lossesWord}.
+                note: readWord,
+                picked: (id) => id === page.level,
+                pick: (id) => setPage({ level: id === page.level ? "" : id }),
+              },
+            ]}
+            disabled={busy}
+          />
+          {"; "}
+          {lossesWord}.
+        </>
+      )}
     </>
   );
 
@@ -485,9 +564,14 @@ export function DuctsRoute({ url = true, view }: { url?: boolean; view?: "sheet"
       ? { says: "no document bound", exit: "choose a document in the sentence" }
       : error && !snapshot
         ? { says: `ducts.snapshot failed: ${error}`, exit: "refresh once the host answers" }
-        : !snapshot
-          ? { says: "reading ducts…", exit: "wait for the snapshot" }
-          : null;
+        : !snapshot && coverage && !wanted.length
+          ? {
+              says: `${coverage.of} systems; none read yet`,
+              exit: "choose a system in the sentence to read its ducts, or read every system a few at a time",
+            }
+          : !snapshot
+            ? { says: "reading ducts…", exit: "wait for the snapshot" }
+            : null;
 
   const onSelect = useCallback(
     (id: number | null) => setPage({ selected: id == null ? "" : String(id), issue: "" }),
@@ -524,7 +608,10 @@ export function DuctsRoute({ url = true, view }: { url?: boolean; view?: "sheet"
         return new Set(
           page.selected && /^\d+$/.test(page.selected)
             ? [elementKey(page.selected)]
-            : page.issue
+            : // A worksheet strand or section pick (sheet stage) selects the group as itself.
+              page.selected && /^(run|section):/.test(page.selected)
+              ? [page.selected as SubjectKey]
+              : page.issue
               ? [`issue:${page.issue}` as SubjectKey]
               : [],
         );
@@ -567,6 +654,7 @@ export function DuctsRoute({ url = true, view }: { url?: boolean; view?: "sheet"
     },
     actions,
     edit: pendingCount(handle.work.doc, snapshot?.store),
+    coverage,
   };
 
   return (
@@ -627,7 +715,7 @@ export function DuctsRoute({ url = true, view }: { url?: boolean; view?: "sheet"
         <NativeObservationScope
           value={snapshotCurrent && !held ? nativeObservation : NO_NATIVE_OBSERVATION}
         >
-          {view === "sheet" ? (
+          {page.stage === "sheet" ? (
             <SheetScreen props={shell} />
           ) : (
             <EScreen props={shell} />

@@ -14,6 +14,8 @@ export type OpenSheet = {
   elements: Detail<"elements"> | null;
   legs: Detail<"legs"> | null;
   worstLegs: Detail<"legs">[];
+  /** Every run and section (ducts LEDGER 2026-10-29): the worksheet table and the picture's strands. */
+  worksheet: Detail<"worksheet"> | null;
 };
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -103,7 +105,7 @@ export function useSheet(target: DocumentRef) {
       );
     return result;
   };
-  const detail = async <K extends "inputs" | "elements" | "legs">(
+  const detail = async <K extends "inputs" | "elements" | "legs" | "worksheet">(
     base: DuctsSheetOverview,
     kind: K,
     signal: AbortSignal,
@@ -131,6 +133,7 @@ export function useSheet(target: DocumentRef) {
     elements: null,
     legs: null,
     worstLegs: [],
+    worksheet: null,
   });
   const recoverStale = async (base: DuctsSheetOverview, signal: AbortSignal) => {
     if (!base.fan) return;
@@ -178,13 +181,21 @@ export function useSheet(target: DocumentRef) {
           ? [base!.paths[side].paths[0]!.pathId]
           : [],
       );
-      const [inputs, elements, ...worstLegs] = await Promise.all([
+      const [inputs, elements, worksheet, ...worstLegs] = await Promise.all([
         detail(base, "inputs", job.signal),
         detail(base, "elements", job.signal),
+        detail(base, "worksheet", job.signal),
         ...worst.map((path) => detail(base!, "legs", job.signal, path)),
       ] as const);
       if (!job.signal.aborted)
-        setSheet({ overview: base, inputs, elements, worstLegs, legs: worstLegs[0] ?? null });
+        setSheet({
+          overview: base,
+          inputs,
+          elements,
+          worksheet,
+          worstLegs,
+          legs: worstLegs[0] ?? null,
+        });
     } catch (cause) {
       if (!job.signal.aborted) {
         try {

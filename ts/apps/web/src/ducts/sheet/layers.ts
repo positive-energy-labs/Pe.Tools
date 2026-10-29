@@ -17,7 +17,7 @@ import type { Layer3D, SceneMeshes } from "#/scene/types";
 import { findingLayers, findingShapes, type FindingShapes } from "../finding-layers";
 import type { StageIssue } from "../inbox-rows";
 import type { Detail } from "./api";
-import type { SheetBlocker } from "./tiers";
+import { isConsequence, presentIds, type SheetBlocker } from "./tiers";
 
 type Kind = DuctsSheetOverview["blockers"][number]["kind"];
 /** Kinds whose door is the element's damage skin. */
@@ -71,7 +71,7 @@ export const blockerElements = (blocker: SheetBlocker): number[] => [
 export function sheetIssues(
   blockers: readonly SheetBlocker[],
   shapes: FindingShapes | null,
-): StageIssue[] {
+): (StageIssue & { causedBy?: string })[] {
   const partsOf = (ids: readonly number[]) =>
     shapes
       ? [
@@ -84,6 +84,7 @@ export function sheetIssues(
           .filter((part) => ids.includes(part.elementId))
           .map((part) => part.finding)
       : [];
+  const present = presentIds(blockers);
   return blockers.map((blocker) => {
     const ids = blockerElements(blocker);
     return {
@@ -91,6 +92,8 @@ export function sheetIssues(
       ids,
       findings: [...new Set([blocker.id, ...(FACE.has(blocker.kind) ? partsOf(ids) : [])])],
       damage: DAMAGE.has(blocker.kind) ? blocker.kind : null,
+      // A consequence names its cause so the picture can dim and tether it; an orphan stands alone.
+      ...(isConsequence(blocker, present) ? { causedBy: blocker.causedBy! } : {}),
     };
   });
 }

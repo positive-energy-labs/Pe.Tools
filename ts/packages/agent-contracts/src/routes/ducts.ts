@@ -27,6 +27,8 @@ const picture = pictureFields(
 );
 
 const ductsFields = {
+  /** The body under the Situation: the network picture (`network`) or the fan sheet (`sheet`). A view; it runs no verb. */
+  stage: field(z.enum(["network", "sheet"]).default("network"), { url: "push", agent: "set" }),
   contextRadiusFt: picture.contextRadiusFt,
   sceneView: picture.sceneView,
   /**

@@ -29,6 +29,7 @@ import { LOSS_RULES } from "@pe/ducts-domain/loss-rules";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
 import { SHIM_TERMINAL_DROP_IN_WG, buildSheet, buildChain } from "@pe/ducts-domain/sheet/index";
 import type { Sheet, Chain, SheetPath } from "@pe/ducts-domain/sheet/types";
+import { worksheet } from "@pe/ducts-domain/sheet/worksheet";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { BridgeError } from "./bridge.ts";
 
@@ -165,13 +166,17 @@ function overview(entry: Entry): DuctsSheetOverview {
     blockers: entry.value.blockers.map(compact),
     assumedBlockers: "assumed" in entry.value ? entry.value.assumed.blockers.map(compact) : [],
     next: {
-      hint: "Repeat this request with basis and detail. legs needs pathId; elements returns walkedElementIds; inputs returns provenance and full blocker closers. Other paths use their zero-based engine path index.",
+      hint: "Repeat this request with basis and detail. legs needs pathId; elements returns walkedElementIds; inputs returns provenance and full blocker closers; worksheet returns every run and section with its legs. Other paths use their zero-based engine path index.",
       legs: [...supply.paths, ...ret.paths].map(({ pathId }) => ({ kind: "legs", pathId })),
       elements: { kind: "elements" },
       inputs: { kind: "inputs" },
+      worksheet: { kind: "worksheet" },
     },
   };
 }
+// SHIM(velocity-limits): stand-in Manual D rules of thumb until the firm defaults file lands
+// (kaitpw 2026-10-29: "over" is velocity, limits are firm defaults); route settings override.
+const SHIM_VELOCITY_LIMIT_FPM = { supply: 900, return: 700 } as const;
 
 interface SheetWork {
   workspace: RouteWorkspace;
@@ -333,6 +338,32 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
         const base = { target: entry.target, basis: entry.value.basis };
         if (request.detail.kind === "elements")
           return { ...base, kind: "elements", walkedElementIds: entry.value.walkedElementIds };
+        if (request.detail.kind === "worksheet") {
+          if (!("assumed" in entry.value))
+            throw new BridgeError("A worksheet is a fan sheet's; a chain has one path", 400, {
+              notDispatched: true,
+            });
+          const typed = saved.defaults.velocityLimitFpm;
+          const limits = {
+            supply: typed?.supply ?? SHIM_VELOCITY_LIMIT_FPM.supply,
+            return: typed?.return ?? SHIM_VELOCITY_LIMIT_FPM.return,
+          };
+          const sheet = entry.value;
+          const w = worksheet(sheet, { maxFpm: limits });
+          const named = new Set([...w.supply.runs, ...w.return.runs].flatMap((r) => r.legIds));
+          return ductsSheetResponseSchema.parse({
+            ...base,
+            kind: "worksheet",
+            limits: {
+              supplyFpm: limits.supply,
+              returnFpm: limits.return,
+              source: typed?.supply != null || typed?.return != null ? "route settings" : "SHIM placeholder",
+            },
+            supply: w.supply,
+            return: w.return,
+            legs: Object.fromEntries([...named].map((id) => [id, sheet.legs[id]])),
+          });
+        }
         if (request.detail.kind === "inputs")
           return {
             ...base,

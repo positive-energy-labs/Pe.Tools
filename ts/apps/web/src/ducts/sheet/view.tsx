@@ -1,5 +1,5 @@
 /**
- * The fan sheet view of /ducts (`?view=sheet`; protoui rounds 1 to 3, 2026-10-28, variant A "Ledger"
+ * The fan sheet view of /ducts (`?stage=sheet`, the head's "Pricing fans" stage; protoui rounds 1 to 3, 2026-10-28, variant A "Ledger"
  * promoted): on the house pane system (`SHEET_LAYOUT`, `TeachingLayoutView`, `ListView`), the
  * roster and the inputs fold share one full-height sidebar; the picture sits over the tier ledger on
  * the right, each in its own resizable pane. The ledger is ONE scroll with every tier's items
@@ -28,6 +28,7 @@ import {
   type Tier,
 } from "./tiers";
 import type { SheetViewProps } from "./types";
+import { Worksheet } from "./worksheet-table";
 
 const rosterState = (row: FanPort) =>
   row.complete
@@ -237,6 +238,8 @@ function Ledger({ props }: { props: SheetViewProps }) {
         <p role="status">{props.loading ? "reading roster…" : "computing…"}</p>
       )}
       <Sides props={props} />
+      {/* The worksheet is the body (ducts LEDGER 2026-10-29); the tiers below are the gaps to close. */}
+      {props.sheet && <Worksheet ws={props.sheet.worksheet} />}
       {props.sheet &&
         TIERS.map((tier) => (
           <TierGroup
