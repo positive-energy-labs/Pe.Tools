@@ -45,6 +45,12 @@ export interface MountBody<P, W> {
 }
 export type RouteAdapters<P, W> = MountAdapters<P, W> & {
   bodies: Readonly<Record<string, (body: MountBody<P, W>) => ReactNode>>;
+  /**
+   * Shared view state for every pane body (attention, hover, one model projection computed once),
+   * mounted once around the layout inside the owner's scopes. Context providers only: no host door,
+   * no verbs, no keys, no layout; those belong to the graph (ADR 0026) and the guards refuse them.
+   */
+  wrap?(owner: GraphMount<P, W>, children: ReactNode): ReactNode;
 };
 export interface MountRouteProps {
   hidden?: boolean;
@@ -296,15 +302,17 @@ function MountedGraph<P, W>({
           className="flex h-full min-h-0 flex-col"
         >
           <GraphSituation graph={graph} owner={owner} enabled={!hidden && current()} />
-          {layout && (
-            <GraphLayoutView
-              layout={layout}
-              panes={graph.panes}
-              active={active}
-              bodies={bodies}
-              state={{ panes: layoutState, onChange: setLayoutState }}
-            />
-          )}
+          {layout &&
+            (adapters.wrap ?? ((_owner, children) => children))(
+              owner,
+              <GraphLayoutView
+                layout={layout}
+                panes={graph.panes}
+                active={active}
+                bodies={bodies}
+                state={{ panes: layoutState, onChange: setLayoutState }}
+              />,
+            )}
         </div>
       </KeyScope>
     </KeyScope>
