@@ -128,5 +128,5 @@ it("a pick writes the page's selection and the stage pivot follows it", () => {
 it("a hovered worst path lights its legs", () => {
   const { registry } = mount();
   act(() => setHovered(registry, { doc: "d", key: "path:p1" }));
-  expect([...seen.model!.lit].sort()).toEqual([a!.id, b!.id].sort());
+  expect([...seen.model!.lit].sort((x, y) => x - y)).toEqual([a!.id, b!.id].sort((x, y) => x - y));
 });
