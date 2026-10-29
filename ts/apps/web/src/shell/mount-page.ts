@@ -19,10 +19,14 @@ export function graphUrlPage<P, W>(graph: RouteGraph<P, W>): UrlPage<P> {
       fields.map(([id, field]) => {
         const raw = search[id];
         const typed = field.schema.safeParse(raw);
+        // The router JSON-parses search values, so `?level=30` arrives as a number and `?on=true`
+        // as a boolean; a scalar re-enters the one string grammar. Objects and arrays never do.
+        const scalar =
+          typeof raw === "string" || typeof raw === "number" || typeof raw === "boolean";
         const decoded = typed.success
           ? typed
-          : typeof raw === "string"
-            ? field.schema.safeParse(field.codec.decode(raw))
+          : scalar
+            ? field.schema.safeParse(field.codec.decode(String(raw)))
             : typed;
         return [id, decoded.success ? decoded.data : field.schema.parse(undefined)];
       }),
