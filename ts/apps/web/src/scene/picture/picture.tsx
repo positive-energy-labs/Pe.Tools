@@ -7,11 +7,12 @@
  * so neither remounts when a view or variant swaps its content.
  */
 import type * as Atom from "effect/unstable/reactivity/Atom";
-import { useAtomValue } from "@effect/atom-react";
+import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import {
   AttentionDocument,
   elementKey,
   hovered as hoveredRef,
+  setHovered,
   useAttentionDocument,
   useMembers,
   type Members,
@@ -39,12 +40,14 @@ import {
 import { useElementAttention, useHoveredIssue, useIssueHover } from "#/attention";
 import { SelectionBoxButton } from "#/revit/element-menu";
 import { observedElements, useNativeObservation } from "#/revit/observation";
+import { alarmLayers } from "#/scene/damage";
 import { sceneRequest, type ContextRepresentation } from "#/scene/host";
 import type { OrbitViewport } from "#/scene/orbit";
 import { viewportProject } from "#/scene/projection";
 import type { ColourMode } from "#/scene/renderer";
 import { PictureStage, projectBounds, stageViewport, useStage } from "#/scene/stage-controller";
 import { pictureModes } from "#/scene/stage-teaching";
+import { strandLayers } from "#/scene/strands";
 import type { Bounds, IssueTarget, Kinds, PaintOf, SceneMeshes } from "#/scene/types";
 
 import { usePictureFloaters } from "./floaters";
@@ -57,10 +60,12 @@ import {
   type PictureLayer,
   type PictureLine,
   type PictureOverlayFrame,
+  type PictureStrand,
 } from "./model";
 import { useCapture, usePictureRead } from "./read";
+import { strandFixture, strandFixtureOn } from "./strand-fixture";
 
-export { idOf, type PictureLayer, type PictureLine, type PictureOverlayFrame };
+export { idOf, type PictureLayer, type PictureLine, type PictureOverlayFrame, type PictureStrand };
 
 /** Everything a surface says about its picture. Numeric ids stop at the renderer adapter. */
 export interface PictureContent<L extends string = string, F extends string = string> {
@@ -77,6 +82,11 @@ export interface PictureContent<L extends string = string, F extends string = st
   capture?: { maxTriangles?: number; cuts?: SceneMeshes["cuts"]; meshes?: SceneMeshes | null };
   /** Centrelines: bounds before meshes arrive, the jump fallback, and the globe's lines. */
   lines: readonly PictureLine[];
+  /** Ordered paths drawn over the centrelines, side by side where they share an element. The
+   * heavy strand and any lit or selected strand animate their flow; the rest hold still. */
+  strands?: readonly PictureStrand[];
+  /** Subjects over a limit: the only alarm ink (look rule 2026-10-26). Absent = nothing alarms. */
+  over?: ReadonlySet<SubjectKey>;
   /** A subject's name as the surface's rows read it. */
   name: (key: SubjectKey) => string;
   paint?: (meshes: SceneMeshes | null) => PaintOf | undefined;
@@ -139,28 +149,49 @@ export function captureRequest(
   };
 }
 
+/** A subject's leaves through the declared members: transitive, cycle-bounded; an undeclared key
+ * is its own leaf (attention's `expand`, over a plain map). */
+export function leavesOf(members: Members, key: SubjectKey, seen = new Set<SubjectKey>()) {
+  if (seen.has(key)) return [];
+  seen.add(key);
+  const children = members.get(key);
+  return children
+    ? children.flatMap((child): SubjectKey[] => leavesOf(members, child, seen))
+    : [key];
+}
+
 /** Each element's smallest admitted group's leaves, from the declared members. */
 export function hoverGroupsOf(members: Members, admits: (group: SubjectKey) => boolean) {
-  const leaves = (key: SubjectKey, seen = new Set<SubjectKey>()): SubjectKey[] => {
-    if (seen.has(key)) return [];
-    seen.add(key);
-    const children = members.get(key);
-    return children ? children.flatMap((child) => leaves(child, seen)) : [key];
-  };
   const best = new Map<SubjectKey, readonly SubjectKey[]>();
   for (const group of members.keys()) {
     if (!admits(group)) continue;
-    const own = leaves(group);
+    const own = leavesOf(members, group);
     for (const leaf of own)
       if ((best.get(leaf)?.length ?? Infinity) > own.length) best.set(leaf, own);
   }
   return best;
 }
 
+/** The declared members plus each strand's path, unless the surface already declared the strand. */
+export function membersWithStrands(members: Members, strands: readonly PictureStrand[]): Members {
+  const missing = strands.filter((strand) => !members.has(strand.key));
+  return missing.length
+    ? new Map([...members, ...missing.map((strand) => [strand.key, strand.path] as const)])
+    : members;
+}
+
+/** What a mark pick writes to the page: a subject mark (a strand) selects its own key; an issue
+ * mark selects its element and the issue. */
+export const markPick = (target: IssueTarget) =>
+  target.subject
+    ? { selected: target.key, issue: "" }
+    : { selected: String(target.elementId), issue: target.key };
+
 const landPicture = (node: HTMLDivElement | null) => {
   if (node) land(node);
 };
 const NO_MEMBERS: Members = new Map();
+const NO_STRANDS: readonly PictureStrand[] = [];
 
 export function Picture<L extends string, F extends string>({
   selection,
@@ -197,7 +228,8 @@ export function Picture<L extends string, F extends string>({
   const doc = useContext(AttentionDocument);
   if (!doc) throw new Error("Picture requires an AttentionRoot (attention document)");
   useAttentionDocument(doc, selection);
-  useMembers(doc, content.members ?? NO_MEMBERS);
+  const registry = useContext(RegistryContext);
+  const selectedKeys = useAtomValue(selection);
   const [contextRepresentation, setContextRepresentation] = useState<"boxes" | "meshes">("boxes");
   const { lit: attentionLit, selected: attentionSelected } = useElementAttention();
   // Reverse hover answers a hovered element only, never a row's expansion into elements.
@@ -234,6 +266,20 @@ export function Picture<L extends string, F extends string>({
     pictureDocument && request ? `${pictureDocument.session}/${pictureDocument.openId}` : null;
   const { read, holding } = usePictureRead(capture, pictureKey, source.label, source.refreshing);
   const bounds = usePictureBounds(read.meshes, content.lines);
+  // Dev only: `?strands=fixture` draws strands from the content's centrelines (else the meshes').
+  const devStrands = useMemo(
+    () =>
+      !content.strands && strandFixtureOn() ? strandFixture(content.lines, read.meshes) : null,
+    [content.strands, content.lines, read.meshes],
+  );
+  const strands = content.strands ?? devStrands?.strands ?? NO_STRANDS;
+  const strandLines = devStrands?.lines ?? content.lines;
+  const overSubjects = content.over ?? devStrands?.over;
+  const members = useMemo(
+    () => membersWithStrands(content.members ?? NO_MEMBERS, strands),
+    [content.members, strands],
+  );
+  useMembers(doc, members);
   const [pictureHost, setPictureHost] = useState<HTMLDivElement | null>(null);
   const [pictureSize, setPictureSize] = useState<{ width: number; height: number } | null>(null);
   useEffect(() => {
@@ -279,10 +325,38 @@ export function Picture<L extends string, F extends string>({
   }, [pose, onPose]);
   const layers = new Set<string>(page.layers);
   // Stable while the layers and the page's toggles hold, so the renderer's layers do too.
-  const drawn = useMemo(
-    () => (content.layers ?? []).filter((l) => !l.toggle || page.layers.includes(l.toggle as L)),
-    [content.layers, page.layers],
+  // Strands and over paint are the core's own layer: always drawn while the content gives them.
+  const overKeys = useMemo(
+    () =>
+      new Set(
+        [...(overSubjects ?? [])]
+          .flatMap((key) => leavesOf(members, key))
+          .filter((key) => key.startsWith("e:")),
+      ),
+    [overSubjects, members],
   );
+  const coreLayer = useMemo<PictureLayer | null>(() => {
+    const built = strandLayers(strands, strandLines, overKeys);
+    const overIds = new Set([...overKeys].map(idOf));
+    return built.length || overIds.size
+      ? {
+          key: "strands",
+          draw: ({ meshes }) => [...built, ...(meshes ? alarmLayers(meshes, overIds) : [])],
+        }
+      : null;
+  }, [strands, strandLines, overKeys]);
+  const drawn = useMemo(
+    () => [
+      ...(coreLayer ? [coreLayer] : []),
+      ...(content.layers ?? []).filter((l) => !l.toggle || page.layers.includes(l.toggle as L)),
+    ],
+    [coreLayer, content.layers, page.layers],
+  );
+  // A strand lit (its subject hovered here or on a row) or selected flows: the renderer reads it
+  // through the same hover and focus rungs an issue mark takes.
+  const hoveredStrand =
+    over?.doc === doc && strands.some((strand) => strand.key === over.key) ? over.key : null;
+  const selectedStrand = strands.find((strand) => selectedKeys.has(strand.key))?.key ?? "";
   const picture = page.picture;
   const flat = content.flat;
   const swap = () =>
@@ -333,8 +407,17 @@ export function Picture<L extends string, F extends string>({
   };
   const pickIssue =
     content.onIssuePick ??
-    ((target: IssueTarget) =>
-      setPage({ selected: String(target.elementId), issue: target.key }, { history: "push" }));
+    ((target: IssueTarget) => setPage(markPick(target), { history: "push" }));
+  const pickMark = (target: IssueTarget) => {
+    if (!target.subject) return pickIssue(target);
+    content.onPick?.(target.key as SubjectKey);
+    setPage(markPick(target), { history: "push" });
+  };
+  // A subject mark lights its own key; an issue mark lights `issue:<key>` (useIssueHover).
+  const hoverMark = (target: IssueTarget | null) =>
+    target?.subject
+      ? setHovered(registry, { doc, key: target.key as SubjectKey })
+      : onIssueHover(target?.key ?? null);
 
   // A named alias jump writes selection and view together; its landing marks the subject.
   const [landed, setLanded] = useState<{ box: DOMRect | null; back: string; n: number } | null>(
@@ -458,10 +541,10 @@ export function Picture<L extends string, F extends string>({
             lit={lit}
             drawn={drawn}
             overlay={content.overlay}
-            hoveredIssue={hoveredIssue}
-            onIssueHover={onIssueHover}
-            onIssuePick={pickIssue}
-            issue={page.issue}
+            hoveredIssue={hoveredIssue ?? hoveredStrand}
+            onIssueHover={hoverMark}
+            onIssuePick={pickMark}
+            issue={page.issue || selectedStrand}
             setPage={setPage}
             onPick={pick}
             onClear={clearPick}

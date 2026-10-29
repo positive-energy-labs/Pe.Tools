@@ -45,6 +45,16 @@ const CONTEXT_LIMITS: Record<string, string> = {
 /** A drawn subject's centreline in world feet, where it sits before (or without) its meshes. One
  * point is a point subject (a fitting); two or more are a line the globe draws. */
 export type PictureLine = { key: SubjectKey; points: readonly (readonly number[])[] };
+/** One ordered path through the picture's elements: a terminal run, a home run, a circuit. Strands
+ * that share an element ride side by side through it, and `path` order is the flow direction. */
+export type PictureStrand = {
+  /** The strand's own subject (`run:<id>`): a pick on its line selects it, a row lights it. */
+  key: SubjectKey;
+  /** Element keys in flow order; each needs a centreline in `lines`. */
+  path: readonly SubjectKey[];
+  /** The governing strand (the critical run): drawn heavy and always flowing. */
+  heavy?: boolean;
+};
 /** Numeric element ids stop here: the renderer adapter speaks `revitId`, the picture `e:` keys. */
 export const idOf = (key: SubjectKey) => (key.startsWith("e:") ? Number(key.slice(2)) : NaN);
 
@@ -165,7 +175,8 @@ export function ModelPicture({
   /** DOM the surface draws over the picture at the released frame (labels, pins, callouts). */
   overlay?: (frame: PictureOverlayFrame) => ReactNode;
   hoveredIssue: string | null;
-  onIssueHover: (key: string | null) => void;
+  /** The mark under the pointer: an issue, or a mark that is its own subject (a strand). */
+  onIssueHover: (target: IssueTarget | null) => void;
   onIssuePick: (target: IssueTarget) => void;
   issue: string;
   setPage: (
@@ -211,9 +222,6 @@ export function ModelPicture({
     setPage({ sceneView: { ...sceneView, section: next } }, { history: "replace" });
   };
   const registry = useContext(RegistryContext);
-  const hoverIssue = (target: IssueTarget | null) => {
-    onIssueHover(target?.key ?? null);
-  };
   // Meshes move natively during a gesture; DOM annotations re-project only at release.
   const held = useRef<OrbitViewport | null>(null);
   const pose = useSyncExternalStore(orbit.subscribe, () =>
@@ -309,7 +317,7 @@ export function ModelPicture({
         layers={pictureLayers}
         hoveredIssue={hoveredIssue}
         focusedIssue={issue}
-        onIssueHover={hoverIssue}
+        onIssueHover={onIssueHover}
         onIssuePick={onIssuePick}
         onProject={(project, at, _ray, moving) => {
           lastFrame.current = { project, size: at };

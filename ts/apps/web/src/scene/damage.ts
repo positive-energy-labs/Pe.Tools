@@ -89,6 +89,20 @@ export function damageLayers(meshes: SceneMeshes, rows: readonly DamageRow[]): L
   });
 }
 
+/** Elements over a limit wear the damage skin: the one alarm ink on meshes. No targets, so a pick
+ * falls through to the element itself. */
+export function alarmLayers(meshes: SceneMeshes, ids: ReadonlySet<number>): Layer3D[] {
+  if (!ids.size) return [];
+  return meshes.instances.flatMap((instance) =>
+    (instance.vertexCount || instance.primitive) &&
+    instance.revitId != null &&
+    instance.linkInstanceId == null &&
+    ids.has(instance.revitId)
+      ? [{ ...damageLayer(meshes, instance, [], []), key: `over:${instance.key}` }]
+      : [],
+  );
+}
+
 export function damageLayer(
   meshes: SceneMeshes,
   instance: SceneInstance,

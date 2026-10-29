@@ -1,6 +1,6 @@
 import { expect, test } from "vite-plus/test";
 import type { SubjectKey } from "@pe/kit/lang/attention";
-import { captureRequest, hoverGroupsOf } from "./picture";
+import { captureRequest, hoverGroupsOf, markPick, membersWithStrands } from "./picture";
 
 test("focus captures walked and near once, sorted; context layers ask context", () => {
   const focus = {
@@ -12,6 +12,28 @@ test("focus captures walked and near once, sorted; context layers ask context", 
   expect(request.focusOnly).toBe(true);
   expect(captureRequest(focus, ["halo"], 10, "boxes")!.focusOnly).toBe(false);
   expect(captureRequest({ walked: [], near: [] }, ["context"], 10, "boxes")).toBeNull();
+});
+
+test("a strand pick selects its own subject; an issue pick its element and the issue", () => {
+  expect(markPick({ key: "run:7", elementId: 1, subject: true })).toEqual({
+    selected: "run:7",
+    issue: "",
+  });
+  expect(markPick({ key: "blocker-3", elementId: 42 })).toEqual({
+    selected: "42",
+    issue: "blocker-3",
+  });
+});
+
+test("strands declare their paths as members unless the surface already did", () => {
+  const declared = new Map<SubjectKey, readonly SubjectKey[]>([["run:a", ["leg:1"]]]);
+  const members = membersWithStrands(declared, [
+    { key: "run:a", path: ["e:1"] },
+    { key: "run:b", path: ["e:2", "e:3"] },
+  ]);
+  expect(members.get("run:a")).toEqual(["leg:1"]);
+  expect(members.get("run:b")).toEqual(["e:2", "e:3"]);
+  expect(membersWithStrands(declared, [])).toBe(declared);
 });
 
 test("reverse hover lights the smallest admitted group holding the element", () => {
