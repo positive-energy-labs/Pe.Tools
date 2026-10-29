@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { type RouteGraph, type VerbDecl } from "@pe/agent-contracts";
+import { Route as rootRoute } from "../routes/__root";
 import { createRoute } from "@tanstack/react-router";
 import { KeyScope, ScopeKeys, actionScopeKeys, useScopeLive, type ScopeKey } from "@pe/kit/keys";
 import { Button } from "@pe/kit/lang/button";
@@ -19,7 +20,6 @@ import { reduceLayout } from "../../../../packages/kit/src/components/lang/layou
 import { PrimaryRouteControls } from "../navigation/route-controls";
 import { RouteVisibility, useRouteCurrent } from "../route/activity";
 import { routeSearch, useRouteOwner } from "../route/route-owner";
-import { routeFromManifest } from "../route/shell-probe";
 import { Ladder } from "../route/ladder";
 import { useInitialUrlPage, useUrlPage } from "../route/url";
 import { bindGraphChords } from "./keys";
@@ -99,16 +99,15 @@ export function mountRoute<P, W>(graph: RouteGraph<P, W>, adapters: RouteAdapter
   };
 }
 
-/** Reuse S0c's createRoute/root integration; the file-route generator remains untouched. */
+/** A code route under the app root (S0c proved coexistence); the file-route generator stays untouched. */
 export function routeFromGraph<P, W, const Path extends string>(
   graph: RouteGraph<P, W>,
   adapters: RouteAdapters<P, W>,
   path: Path = `/${graph.address.replace(/^\//, "")}` as Path,
 ) {
   const url = graphUrlPage(graph);
-  const parent = routeFromManifest({ path, manifest: graph }).options.getParentRoute!;
   return createRoute({
-    getParentRoute: parent,
+    getParentRoute: () => rootRoute,
     path,
     validateSearch: (search: Record<string, unknown>) => ({
       ...routeSearch(search),

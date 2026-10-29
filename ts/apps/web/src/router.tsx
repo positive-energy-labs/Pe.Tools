@@ -1,6 +1,7 @@
 import {
   createRouter as createTanStackRouter,
   Link,
+  type AnyRoute,
   type ErrorComponentProps,
 } from "@tanstack/react-router";
 import { EmptyState } from "@pe/kit/lang/empty";
@@ -13,11 +14,15 @@ import { publicRoutes } from "./route/builtin-routes";
 import { ShellProbe, ShellProbeRoute, shellProbe } from "./route/shell-probe";
 
 // Use the unannotated root: the generated tree's file-only type map excludes code routes.
-const appRouteTree = rootRoute.addChildren({
-  ...routeTree.children!,
-  ShellProbeRoute,
-  ductLossRoute,
-});
+// `addChildren` mutates the root and returns it, so `routeTree.children` already holds the code
+// routes once this module re-evaluates (SSR runner, HMR); re-adding by path keeps the tree idempotent.
+const pathOf = (route: AnyRoute) => (route.options as { path?: string }).path;
+const codeRoutes: AnyRoute[] = [ShellProbeRoute, ductLossRoute];
+const codePaths = new Set(codeRoutes.map(pathOf));
+const fileRoutes = (routeTree.children as unknown as AnyRoute[]).filter(
+  (route) => !codePaths.has(pathOf(route)),
+);
+const appRouteTree = rootRoute.addChildren([...fileRoutes, ...codeRoutes]);
 const unregisterProbe = publicRoutes.register({
   manifest: shellProbe.manifest,
   hosted: () => <ShellProbe />,
