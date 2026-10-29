@@ -23,6 +23,7 @@ const picture = pictureFields(
   DUCTS_LAYERS,
   ["meshes", "system-colours", "stub-labels", "halo", "no-run", "labels", "findings"],
   "health",
+  "schematic",
 );
 
 const ductsFields = {

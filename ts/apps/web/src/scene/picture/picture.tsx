@@ -44,7 +44,7 @@ import type { OrbitViewport } from "#/scene/orbit";
 import { viewportProject } from "#/scene/projection";
 import type { ColourMode } from "#/scene/renderer";
 import { PictureStage, projectBounds, stageViewport, useStage } from "#/scene/stage-controller";
-import { PICTURE_MODES } from "#/scene/stage-teaching";
+import { pictureModes } from "#/scene/stage-teaching";
 import type { Bounds, IssueTarget, Kinds, PaintOf, SceneMeshes } from "#/scene/types";
 
 import { usePictureFloaters } from "./floaters";
@@ -63,7 +63,7 @@ import { useCapture, usePictureRead } from "./read";
 export { idOf, type PictureLayer, type PictureLine, type PictureOverlayFrame };
 
 /** Everything a surface says about its picture. Numeric ids stop at the renderer adapter. */
-export interface PictureContent<L extends string = string> {
+export interface PictureContent<L extends string = string, F extends string = string> {
   /** What is captured: `walked` draws as ink, `near` joins the capture as stubs. Never implies reach. */
   focus: { walked: readonly SubjectKey[]; near: readonly SubjectKey[] };
   /** Group subjects (issue:, run:, leg:, system:) to their element keys; the core registers them. */
@@ -95,8 +95,14 @@ export interface PictureContent<L extends string = string> {
     /** The picked element's facts. */
     facts?: (key: SubjectKey) => ReactNode;
   };
-  /** A second, flat picture (`S` swaps; the other sits in the corner). Absent = model only. */
-  schematic?: (size: "main" | "inset", readout?: ReactNode) => ReactNode;
+  /** A second, flat picture (a schematic, a plan): its key is the page's `picture` value; `S`
+   * swaps it with the model and the other sits in the corner. Absent = model only. */
+  flat?: {
+    key: F;
+    label: string;
+    says?: string;
+    render: (size: "main" | "inset", readout?: ReactNode) => ReactNode;
+  };
   /** The go-to popup; `jump` selects and flies to a subject with a landing. */
   goTo?: (jump: (key: SubjectKey) => void) => ReactNode;
   furniture?: { title?: ReactNode; actions?: ReactNode; legend?: ReactNode };
@@ -155,7 +161,7 @@ const landPicture = (node: HTMLDivElement | null) => {
 };
 const NO_MEMBERS: Members = new Map();
 
-export function Picture<L extends string>({
+export function Picture<L extends string, F extends string>({
   selection,
   source,
   page,
@@ -176,10 +182,10 @@ export function Picture<L extends string>({
     label: string;
     refreshing: boolean;
   };
-  page: PicturePage<L>;
-  setPage: (next: Partial<PicturePage<L>>, move?: Move) => void;
+  page: PicturePage<L, F>;
+  setPage: (next: Partial<PicturePage<L, F>>, move?: Move) => void;
   renderPane: TeachingPaneRender;
-  content: PictureContent<L>;
+  content: PictureContent<L, F>;
   /** Reports the committed renderer pose as derived facts; never writes Page. */
   onPose?: (pose: OrbitViewport | null) => void;
   /** Alias picks elsewhere call this when the subject is already the selection: fly again. */
@@ -277,8 +283,9 @@ export function Picture<L extends string>({
     [content.layers, page.layers],
   );
   const picture = page.picture;
+  const flat = content.flat;
   const swap = () =>
-    setPage({ picture: picture === "model" ? "schematic" : "model" }, { history: "push" });
+    setPage({ picture: picture === "model" && flat ? flat.key : "model" }, { history: "push" });
 
   // The page's element pick; a claim or a row selects through `issue` and its members.
   const pickedId = /^\d+$/.test(page.selected) ? Number(page.selected) : null;
@@ -376,7 +383,7 @@ export function Picture<L extends string>({
     lit,
     selected: attentionSelected,
     swap,
-    small: content.schematic && (() => content.schematic!("inset")),
+    flat: flat && { key: flat.key, label: flat.label, small: () => flat.render("inset") },
   });
 
   return (
@@ -482,9 +489,7 @@ export function Picture<L extends string>({
                   setLanded(null);
               }}
             >
-              {picture === "model" || !content.schematic
-                ? model
-                : content.schematic("main", readout)}
+              {picture === "model" || !flat ? model : flat.render("main", readout)}
 
               {landed?.box ? (
                 <div
@@ -513,14 +518,14 @@ export function Picture<L extends string>({
                 {content.furniture?.actions}
               </ButtonGroup>
             ),
-            modes: content.schematic
+            modes: flat
               ? {
                   label: "picture",
                   value: picture,
                   onChange: (key) =>
                     setPage({ picture: key as typeof picture }, { history: "push" }),
                   // `S` sits on the other picture, so the one chord always swaps.
-                  options: PICTURE_MODES.map((option) => ({
+                  options: pictureModes(flat).map((option) => ({
                     ...option,
                     chord: option.key === picture ? undefined : "S",
                   })),

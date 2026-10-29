@@ -42,9 +42,13 @@ export const stageTeaching = (): readonly TeachDescriptor[] => [
   },
 ];
 
-/** The picture's two modes, as the pane strip and Help teach them; `S` swaps them. */
-export const PICTURE_MODES = (["model", "schematic"] as const).map((key) => ({
-  key,
-  label: key,
-  says: `The ${key} large, the other in the corner`,
-}));
+/** The picture's two modes, the model and a surface's flat picture, as the pane strip and Help
+ * teach them; `S` swaps them. */
+export const pictureModes = (flat: { key: string; label: string; says?: string }) => [
+  { key: "model", label: "model", says: "The model large, the other in the corner" },
+  {
+    key: flat.key,
+    label: flat.label,
+    says: flat.says ?? `The ${flat.label} large, the other in the corner`,
+  },
+];

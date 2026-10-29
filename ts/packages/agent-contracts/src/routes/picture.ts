@@ -15,10 +15,15 @@ import { field, text } from "../route-field.ts";
  * these by name, in the order its address already has; the layer keys and the default encoding
  * are the route's choice (one line each).
  */
-export const pictureFields = <const L extends readonly [string, ...string[]]>(
+export const pictureFields = <
+  const L extends readonly [string, ...string[]],
+  const F extends string = never,
+>(
   layers: L,
   on: readonly L[number][],
   encoding: string,
+  /** The second, flat picture's key (the web's `PictureContent.flat.key`); absent = model only. */
+  flat?: F,
 ) => ({
   contextRadiusFt: field(z.number().min(0).max(64).default(10), { url: "replace", agent: "set" }),
   sceneView: field(
@@ -37,8 +42,11 @@ export const pictureFields = <const L extends readonly [string, ...string[]]>(
    * `lines`. With neither layer on, context is off (nothing captured or drawn).
    */
   contextStyle: field(modeKey(["lines", "glass"], "glass"), { url: "replace", agent: "set" }),
-  /** What the picture pane draws: the `model` in space, or the `schematic` one-line. */
-  picture: field(modeKey(["model", "schematic"], "model"), { url: "push", agent: "set" }),
+  /** What the picture pane draws: the `model` in space, or the route's flat picture. */
+  picture: field(modeKey(["model", ...(flat ? [flat] : [])] as ["model", ...F[]], "model"), {
+    url: "push",
+    agent: "set",
+  }),
   /** Where the model picture looks from; null = fit the subject. A drag replaces, a preset pushes. */
   viewport: field(
     viewportKey(viewportSchema),
@@ -54,8 +62,8 @@ export const pictureFields = <const L extends readonly [string, ...string[]]>(
   issue: field(text(), { url: "replace", agent: "set" }),
 });
 
-type PictureFields = ReturnType<typeof pictureFields<[string, ...string[]]>>;
-/** The page slice the picture reads and writes, over a route's own layer keys. */
-export type PicturePage<L extends string = string> = {
-  [K in Exclude<keyof PictureFields, "layers">]: z.output<PictureFields[K]["schema"]>;
-} & { layers: L[] };
+type PictureFields = ReturnType<typeof pictureFields<[string, ...string[]], string>>;
+/** The page slice the picture reads and writes, over a route's own layer keys and flat picture. */
+export type PicturePage<L extends string = string, F extends string = string> = {
+  [K in Exclude<keyof PictureFields, "layers" | "picture">]: z.output<PictureFields[K]["schema"]>;
+} & { layers: L[]; picture: "model" | F };

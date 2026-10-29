@@ -53,7 +53,7 @@ import type { SystemNote } from "../../system-list-search";
 import type { Split } from "../../loss-split";
 import type { systemList } from "../../system-list";
 import type { StageIssue } from "../../inbox-rows";
-import { DUCTS_LAYER_OPTIONS } from "./teaching";
+import { DUCTS_FLAT, DUCTS_LAYER_OPTIONS } from "./teaching";
 import { RulingBody, useMarks } from "./rulings";
 import { noRunParts } from "../../subject-text";
 import { stubLabels } from "../../stub-labels";
@@ -519,7 +519,7 @@ function Content({
         layerOptions: DUCTS_LAYER_OPTIONS,
         overlay,
         readout: { subject: systemName ?? undefined, summary, idle, facts },
-        schematic,
+        flat: { ...DUCTS_FLAT, render: schematic },
         goTo: (jumpTo) => (
           <GoToSubject
             snapshot={snapshot}

@@ -27,7 +27,7 @@ export function usePictureFloaters({
   lit,
   selected,
   swap,
-  small,
+  flat,
 }: {
   picture: PicturePage["picture"];
   pose: OrbitViewport | null;
@@ -38,8 +38,8 @@ export function usePictureFloaters({
   lit: ReadonlySet<number>;
   selected: ReadonlySet<number>;
   swap: () => void;
-  /** The other picture, small; absent = the picture has one mode and no corner. */
-  small?: () => ReactNode;
+  /** The flat picture, drawn small; absent = the picture has one mode and no corner. */
+  flat?: { key: string; label: string; small: () => ReactNode };
 }): FloaterSpec[] {
   const [globe, setGlobe] = useState(true);
   const [corner, setCorner] = useState(true);
@@ -79,12 +79,12 @@ export function usePictureFloaters({
           <p className="t-small text-ink-2 m-0 p-2">no pose yet</p>
         ),
     },
-    ...(small
+    ...(flat
       ? [
           {
             key: "corner",
             kind: "picture" as const,
-            label: picture === "model" ? "schematic, small" : "model, small",
+            label: picture === "model" ? `${flat.label}, small` : "model, small",
             says: "The other picture, small; a click swaps it with the main one",
             place: "br" as const,
             size: CORNER,
@@ -93,13 +93,13 @@ export function usePictureFloaters({
             render: () => (
               <Button
                 kind="quiet"
-                label={`swap: the ${picture === "model" ? "schematic" : "model"} large`}
-                data-picture-corner={picture === "model" ? "schematic" : "model"}
+                label={`swap: the ${picture === "model" ? flat.label : "model"} large`}
+                data-picture-corner={picture === "model" ? flat.key : "model"}
                 onClick={swap}
               >
                 <span className="pointer-events-none flex size-full min-h-0 flex-col overflow-hidden">
                   {picture === "model" ? (
-                    small()
+                    flat.small()
                   ) : meshes && pose ? (
                     <Scene3D readout={null} className="size-full" meshes={meshes} orbit={orbit} />
                   ) : (
