@@ -65,6 +65,9 @@ const RAIL = "calc(var(--control-h) + var(--gutter))";
 
 interface PaneSizeSpec {
   defaultSize: number;
+  /** Controlled preference; container fitting never changes it. */
+  size?: number;
+  onSizeChange?: (size: number) => void;
   minSize: number;
   maxSize?: number;
   /** The other side's floor; unset, it is `minSize`, so no side is ever crushed to a sliver. */
@@ -140,6 +143,7 @@ function usePaneSize(spec: PaneSizeSpec & { target: PaneSide }) {
     if (collapsed) expand(collapsed);
     const next = clampSize(requested, spec, containerSize);
     setInternalSize(next);
+    spec.onSizeChange?.(next);
     if (spec.persist && typeof window !== "undefined") {
       try {
         window.localStorage.setItem(spec.persist, String(next));
@@ -152,7 +156,7 @@ function usePaneSize(spec: PaneSizeSpec & { target: PaneSide }) {
   return {
     collapsed,
     other,
-    renderedSize: clampSize(internalSize, spec, available),
+    renderedSize: clampSize(spec.size ?? internalSize, spec, available),
     fold,
     expand,
     focus: (side: PaneSide) => {
