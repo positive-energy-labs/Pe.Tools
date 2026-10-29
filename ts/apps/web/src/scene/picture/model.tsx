@@ -1,8 +1,8 @@
 import { RegistryContext } from "@effect/atom-react";
-import { holdCitation } from "@pe/kit/lang/attention";
+import { holdCitation, type SubjectKey } from "@pe/kit/lang/attention";
 import { useWork } from "@pe/kit/lang/work";
-/** The subject's real meshes and annotations. Camera policy belongs to useStage. */
-import { emptyListSearch } from "@pe/agent-contracts";
+/** The subject's real meshes, section and completeness; a surface's marks arrive as layers and the
+ * overlay. Camera policy belongs to useStage. */
 import {
   useContext,
   useEffect,
@@ -13,39 +13,25 @@ import {
   type ReactNode,
 } from "react";
 
-import type { PageMove } from "#/route/manifest";
-import type { SceneView } from "@pe/agent-contracts";
-import { LOOK, paintOf as resolvePaint } from "#/scene/grounds";
+import type { PicturePage, SceneView } from "@pe/agent-contracts";
+import { LOOK } from "#/scene/grounds";
 import { subscribe as knobsChanged } from "#/knobs/knobs";
 import { fitSection, sectionVolume, type Section } from "#/scene/section";
 import { SectionControls, SectionHandles } from "#/scene/section-controls";
 import { boundsOfInstances, boundsOfPoints, frame, type OrbitViewport } from "#/scene/orbit";
 import type { PictureBounds } from "#/scene/framing";
-import { framingPoints, captionObstacles } from "#/scene/framing";
+import { framingPoints } from "#/scene/framing";
 import { useStage } from "#/scene/stage-controller";
 import { sectionProject, viewportProject, type Project, type Size } from "#/scene/projection";
-import { continuationAnchor, ContinuationMarks } from "#/scene/continuations";
+import { ContinuationMarks } from "#/scene/continuations";
 import { type LiveOrbit } from "@pe/kit/lang/live-orbit";
 import { PaneOverlay } from "@pe/kit/lang/pane";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Button } from "@pe/kit/lang/button";
 import { Scene3D } from "#/scene/scene3d";
-import { levelLayer, levelPictureBounds } from "#/scene/levels";
-import { LevelMarks, LevelReadout } from "#/scene/level-marks";
 import type { SceneRead } from "#/scene/use-scene";
-import type { Bounds, Kinds, Layer3D, PaintOf, SceneMeshes } from "#/scene/types";
-
-import { CaptionBounds } from "./subject-labels";
-import { equipmentPaint, equipmentPorts } from "./paint";
-import { portLayer } from "#/scene/ports";
+import type { Bounds, IssueTarget, Kinds, Layer3D, PaintOf, SceneMeshes } from "#/scene/types";
 import type { ColourMode, ContextMode } from "#/scene/renderer";
-import { systemPaint } from "#/scene/surfaces";
-import { Annotations, type Label, type Ruling } from "./annotations";
-import type { Encoding } from "./encoding";
-import type { DuctsPage } from "./manifest";
-import type { Scene } from "./scene";
-import type { StageIssue } from "./inbox-rows";
-import type { IssueTarget } from "#/scene/types";
 
 const NONE: ReadonlySet<string> = new Set();
 const CONTEXT_LIMITS: Record<string, string> = {
@@ -56,24 +42,41 @@ const CONTEXT_LIMITS: Record<string, string> = {
   "element-acquisition-limit": "Some context elements exceed the geometry limit",
 };
 
-const centrelinePoints = (scene: Scene, ids?: ReadonlySet<number>) => [
-  ...scene.segments.flatMap((f) => (!ids || ids.has(f.segment.id) ? f.segment.polyline : [])),
-  ...scene.nodes.flatMap((f) => (!ids || ids.has(f.node.id) ? [f.node.point] : [])),
-];
+/** A drawn subject's centreline in world feet, where it sits before (or without) its meshes. One
+ * point is a point subject (a fitting); two or more are a line the globe draws. */
+export type PictureLine = { key: SubjectKey; points: readonly (readonly number[])[] };
+/** One ordered path through the picture's elements: a terminal run, a home run, a circuit. Strands
+ * that share an element ride side by side through it, and `path` order is the flow direction. */
+export type PictureStrand = {
+  /** The strand's own subject (`run:<id>`): a pick on its line selects it, a row lights it. */
+  key: SubjectKey;
+  /** Element keys in flow order; each needs a centreline in `lines`. */
+  path: readonly SubjectKey[];
+  /** The governing strand (the critical run): drawn heavy and always flowing. */
+  heavy?: boolean;
+};
+/** Numeric element ids stop here: the renderer adapter speaks `revitId`, the picture `e:` keys. */
+export const idOf = (key: SubjectKey) => (key.startsWith("e:") ? Number(key.slice(2)) : NaN);
+
+const centrelinePoints = (lines: readonly PictureLine[], ids?: ReadonlySet<number>) =>
+  lines.flatMap((line) => (!ids || ids.has(idOf(line.key)) ? line.points : []));
 
 /** Where elements sit: their meshes', else their centrelines'; null when none is drawn. */
 export function boundsOfIds(
   meshes: SceneMeshes | null,
-  scene: Scene,
+  lines: readonly PictureLine[],
   ids: ReadonlySet<number>,
 ): Bounds | null {
   return (
     (meshes && boundsOfInstances(meshes, (i) => i.revitId !== null && ids.has(i.revitId))) ??
-    boundsOfPoints(centrelinePoints(scene, ids))
+    boundsOfPoints(centrelinePoints(lines, ids))
   );
 }
 
-export function usePictureBounds(meshes: SceneMeshes | null, scene: Scene): PictureBounds | null {
+export function usePictureBounds(
+  meshes: SceneMeshes | null,
+  lines: readonly PictureLine[],
+): PictureBounds | null {
   return useMemo(() => {
     if (meshes)
       return {
@@ -81,14 +84,36 @@ export function usePictureBounds(meshes: SceneMeshes | null, scene: Scene): Pict
         subject: boundsOfInstances(meshes, (i) => i.focus) ?? meshes.bounds,
         points: () => framingPoints(meshes),
       };
-    const own = boundsOfPoints(centrelinePoints(scene));
+    const own = boundsOfPoints(centrelinePoints(lines));
     return own && { scene: own, subject: own };
-  }, [meshes, scene]);
+  }, [meshes, lines]);
 }
+
+/** What a surface's overlay draws against: the released frame, never a mid-gesture one. */
+export type PictureOverlayFrame = {
+  /** World feet to overlay px, with the shown section applied. */
+  project: Project;
+  /** The same camera without the section: what occludes on screen. */
+  camera: Project;
+  size: Size;
+  meshes: SceneMeshes | null;
+  paintOf: PaintOf | undefined;
+  /** The picture's selection (widened), as element ids. */
+  selected: ReadonlySet<number>;
+  /** The picture's pick and frame (double-click) verbs. */
+  pick: (id: number, at: { x: number; y: number }) => void;
+  frame: (id: number) => void;
+};
+/** A surface's 3D marks. `toggle` names the page layer that gates it; absent = always drawn. */
+export type PictureLayer = {
+  key: string;
+  toggle?: string;
+  draw: (ctx: { meshes: SceneMeshes | null; paintOf: PaintOf | undefined }) => readonly Layer3D[];
+};
 
 /** The pose the picture shows: the page's, else the fit of the subject; null with nothing to fit. */
 export const poseOf = (
-  viewport: DuctsPage["viewport"],
+  viewport: PicturePage["viewport"],
   bounds: PictureBounds | null,
   size?: Size | null,
 ): OrbitViewport | null =>
@@ -104,12 +129,10 @@ export function ModelPicture({
   bounds,
   orbit,
   wheelHost,
-  scene,
   layers,
-  encoding,
   selected,
   lit,
-  paintOf: routePaint,
+  paint,
   contextMode,
   contextRadiusFt,
   contextRepresentation = "boxes",
@@ -117,32 +140,28 @@ export function ModelPicture({
   kinds,
   colour,
   sceneView,
-  hovered,
-  labels,
-  rulings,
-  findings3d,
-  issues,
+  drawn,
+  overlay: drawOverlay,
   hoveredIssue,
   onIssueHover,
-  pointOf,
+  onIssuePick,
   issue,
   setPage,
   onPick,
   onClear,
-  onRuling,
 }: {
   readout: ReactNode;
   read: SceneRead;
   bounds: PictureBounds | null;
   orbit: LiveOrbit;
   wheelHost?: HTMLElement | null;
-  scene: Scene;
+  /** The page's layer keys; `meshes` is the scene's own (off isolates nothing drawn). */
   layers: ReadonlySet<string>;
-  encoding: Encoding;
-  /** Element ids: the selection (with its leg), and what a hovered row elsewhere lights. */
+  /** Element ids: the selection (widened), and what a hovered subject elsewhere lights. */
   selected: ReadonlySet<number>;
   lit: ReadonlySet<number>;
-  paintOf?: PaintOf;
+  /** The surface's paint over the shown meshes; absent: focus is the subject. */
+  paint?: (meshes: SceneMeshes | null) => PaintOf | undefined;
   contextMode?: ContextMode;
   contextRadiusFt?: number;
   contextRepresentation?: "boxes" | "meshes";
@@ -151,41 +170,26 @@ export function ModelPicture({
   kinds: Kinds;
   colour: ColourMode;
   sceneView: SceneView;
-  hovered: number | null;
-  labels: readonly Label[];
-  rulings: readonly Ruling[];
-  /** The stage's issue marks in 3D (`finding-layers.ts`, `scene/damage.ts`), each already gated by its own picture layer. */
-  findings3d: readonly Layer3D[];
-  issues: readonly StageIssue[];
+  /** The surface's layers, already gated by their toggles. */
+  drawn: readonly PictureLayer[];
+  /** DOM the surface draws over the picture at the released frame (labels, pins, callouts). */
+  overlay?: (frame: PictureOverlayFrame) => ReactNode;
   hoveredIssue: string | null;
-  onIssueHover: (key: string | null) => void;
-  pointOf: (id: number) => readonly number[] | null;
+  /** The mark under the pointer: an issue, or a mark that is its own subject (a strand). */
+  onIssueHover: (target: IssueTarget | null) => void;
+  onIssuePick: (target: IssueTarget) => void;
   issue: string;
-  setPage: (next: Partial<DuctsPage>, move?: PageMove<DuctsPage>) => void;
+  setPage: (
+    next: Partial<Pick<PicturePage, "sceneView" | "contextRadiusFt">>,
+    move?: { history: "push" | "replace" },
+  ) => void;
   onPick: (id: number, at: { x: number; y: number }) => void;
   /** A click on empty picture: the page's selection goes, as Escape clears it. */
   onClear: () => void;
-  onRuling: (r: Ruling, at: { x: number; y: number }) => void;
 }) {
   const stage = useStage();
   const meshes = read.meshes;
-  const graph = useMemo(
-    () =>
-      scene.graphOf(
-        meshes?.instances.flatMap((i) =>
-          i.revitId !== null &&
-          i.linkInstanceId === null &&
-          resolvePaint(i, routePaint).tier !== "context"
-            ? [i.revitId]
-            : [],
-        ) ?? [],
-      ),
-    [scene, meshes, routePaint],
-  );
-  const paintOf = useMemo(() => {
-    const paint = equipmentPaint(graph, routePaint);
-    return meshes ? systemPaint(meshes, paint) : paint;
-  }, [graph, meshes, routePaint]);
+  const paintOf = useMemo(() => paint?.(meshes), [paint, meshes]);
   const sectionSubject = useMemo(
     () =>
       meshes
@@ -209,35 +213,15 @@ export function ModelPicture({
     return volume && { ...volume, preview: sectionDraft !== undefined };
   }, [section, sectionSubject, look.layers.preset, look.section.paddingFt, sectionDraft]);
   const shownView = { preset, section: clipVolume?.section ?? null };
-  const datumBounds = useMemo(
-    () => meshes && levelPictureBounds(meshes.bounds, clipVolume?.section ?? null),
-    [meshes, clipVolume],
-  );
   const pictureLayers = useMemo(
-    () =>
-      meshes
-        ? [
-            ...(read.levels && datumBounds ? [levelLayer(read.levels, datumBounds)] : []),
-            ...findings3d,
-            portLayer(equipmentPorts(graph, meshes, paintOf), colour === "firm" ? kinds : {}, look),
-          ]
-        : findings3d,
-    [graph, meshes, paintOf, findings3d, look, kinds, colour, read.levels, datumBounds],
+    () => drawn.flatMap((layer) => layer.draw({ meshes, paintOf })),
+    [drawn, meshes, paintOf],
   );
   const commitSection = (next: Section) => {
     setSectionDraft(undefined);
     setPage({ sceneView: { ...sceneView, section: next } }, { history: "replace" });
   };
   const registry = useContext(RegistryContext);
-  const pickIssue = (target: IssueTarget) => {
-    setPage(
-      { selected: String(target.elementId), issue: target.key, rulingSearch: emptyListSearch() },
-      { history: "push" },
-    );
-  };
-  const hoverIssue = (target: IssueTarget | null) => {
-    onIssueHover(target?.key ?? null);
-  };
   // Meshes move natively during a gesture; DOM annotations re-project only at release.
   const held = useRef<OrbitViewport | null>(null);
   const pose = useSyncExternalStore(orbit.subscribe, () =>
@@ -276,27 +260,6 @@ export function ModelPicture({
       ? { project: viewportProject(pose, bounds.scene, size), size }
       : null;
   const annotationProject = overlay && sectionProject(overlay.project, shownView.section);
-  const captionField = useMemo(
-    () =>
-      overlay &&
-      annotationProject && {
-        ...overlay.size,
-        obstacles:
-          meshes && labels.some((label) => layers.has(label.stub ? "stub-labels" : "labels"))
-            ? captionObstacles(meshes, overlay.project, paintOf, overlay.size)
-            : [],
-      },
-    [overlay, shownView.section, meshes, paintOf, labels, layers],
-  ); // eslint-disable-line react-hooks/exhaustive-deps
-  const captionLabels = useMemo(
-    () =>
-      meshes
-        ? labels.map((label) =>
-            label.stub ? { ...label, at: continuationAnchor(meshes, label.ids, label.at) } : label,
-          )
-        : labels,
-    [meshes, labels],
-  );
 
   const keysOf = useMemo(() => {
     const out = new Map<number, string[]>();
@@ -308,15 +271,6 @@ export function ModelPicture({
     ids.size ? new Set([...ids].flatMap((id) => keysOf.get(id) ?? [])) : NONE;
   const selectedKeys = useMemo(() => keys(selected), [selected, keysOf]); // eslint-disable-line react-hooks/exhaustive-deps
   const litKeys = useMemo(() => keys(lit), [lit, keysOf]); // eslint-disable-line react-hooks/exhaustive-deps
-  const meshed = useMemo(
-    () =>
-      new Set(
-        layers.has("meshes")
-          ? (meshes?.instances.flatMap((i) => (i.revitId == null ? [] : [i.revitId])) ?? [])
-          : [],
-      ),
-    [meshes, layers.has("meshes")], // eslint-disable-line react-hooks/exhaustive-deps
-  );
 
   const frameAt = (key: string | null) =>
     stage.frameOn(key && meshes ? boundsOfInstances(meshes, (i) => i.key === key) : null);
@@ -363,8 +317,8 @@ export function ModelPicture({
         layers={pictureLayers}
         hoveredIssue={hoveredIssue}
         focusedIssue={issue}
-        onIssueHover={hoverIssue}
-        onIssuePick={pickIssue}
+        onIssueHover={onIssueHover}
+        onIssuePick={onIssuePick}
         onProject={(project, at, _ray, moving) => {
           lastFrame.current = { project, size: at };
           if (!moving && !orbit.moving()) setFramed(lastFrame.current);
@@ -378,9 +332,6 @@ export function ModelPicture({
           onPick(pick.instance.revitId, { x: event.clientX, y: event.clientY });
         }}
       />
-      <PaneOverlay label="model levels" place="bl">
-        <LevelReadout levels={read.levels ?? null} bounds={datumBounds} pending={read.pending} />
-      </PaneOverlay>
       {meshes && sectionSubject && (
         <PaneOverlay label="section and context" place="tr">
           <SectionControls
@@ -460,41 +411,21 @@ export function ModelPicture({
           ref={fade}
           className="pointer-events-none absolute inset-0 transition-opacity duration-150 data-flying:opacity-0"
         >
-          <CaptionBounds.Provider value={captionField}>
-            {meshes && (
-              <svg className="pointer-events-none absolute inset-0 size-full">
-                {read.levels && datumBounds && (
-                  <LevelMarks
-                    levels={read.levels}
-                    bounds={datumBounds}
-                    project={annotationProject}
-                    size={overlay.size}
-                  />
-                )}
-                <ContinuationMarks meshes={meshes} project={annotationProject} />
-              </svg>
-            )}
-            <Annotations
-              {...overlay}
-              project={annotationProject}
-              scene={scene}
-              layers={layers}
-              encoding={encoding}
-              selected={selected}
-              hovered={hovered}
-              labels={captionLabels}
-              meshed={meshed}
-              issues={issues}
-              rulings={rulings}
-              pointOf={pointOf}
-              issue={issue}
-              onPick={onPick}
-              onFrame={(id) =>
-                frameAt(meshes?.instances.find((i) => i.revitId === id)?.key ?? null)
-              }
-              onRuling={onRuling}
-            />
-          </CaptionBounds.Provider>
+          {meshes && (
+            <svg className="pointer-events-none absolute inset-0 size-full">
+              <ContinuationMarks meshes={meshes} project={annotationProject} />
+            </svg>
+          )}
+          {drawOverlay?.({
+            project: annotationProject,
+            camera: overlay.project,
+            size: overlay.size,
+            meshes,
+            paintOf,
+            selected,
+            pick: onPick,
+            frame: (id) => frameAt(meshes?.instances.find((i) => i.revitId === id)?.key ?? null),
+          })}
           {meshes && sectionSubject && shownView.section && (
             <SectionHandles
               section={shownView.section}

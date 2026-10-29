@@ -687,9 +687,11 @@ export namespace DuctsPorts {
   }
 }
 
-/** Read every duct network in the project: ducts, flex, fittings, accessories, terminals and HVAC equipment with their connectors, grouped by topology with equipment cut out, plus pass-1 terminal flow, fitting geometry ratios, fitting and accessory loss methods, terminal drops, Revit's supply/return/exhaust systems with critical path and sections, issues and the query behind each layer. Slots name the fan static, fan flow, component drop and terminal catalog drop parameters; labelParameter names the instance parameter whose value names equipment for people (each node's label). Read-only. */
+/** Read every duct network in the project: ducts, flex, fittings, accessories, terminals and HVAC equipment with their connectors, grouped by topology with equipment cut out, plus pass-1 terminal flow, fitting geometry ratios, fitting and accessory loss methods, terminal drops, Revit's supply/return/exhaust systems with critical path and sections, issues and the query behind each layer. Slots name the fan static, fan flow, component drop and terminal catalog drop parameters; labelParameter names the instance parameter whose value names equipment for people (each node's label). selector narrows the read: { kind: "from", unitId, portIndex?, maxHops?, candidateBoxIn? } walks Revit connectors from one element's HVAC ports through equipment to terminals and open ends, searches a box around each open end for MEP candidates (nodes and segments marked reason open-end-candidate) and reports the walk; { kind: "ids", ids } reads exactly those elements; { kind: "roster" } reads every HVAC equipment node and air terminal plus Revit's systems without sections (the fan roster and its slot coverage). All are raw: no groups, flows, issues or layers, and only roster carries systems. Absent or kind document is the whole-document read. Read-only. */
 export namespace DuctsSnapshot {
   export namespace Req {
+    export type DuctSelectorKind = "document" | "ids" | "from" | "roster" | "systems";
+
     /**
      * Optional: which parameters carry the designer-stated values (absent reads the defaults), and LabelParameter, the
      * instance parameter whose string value names equipment for people (absent reads the firm tag, PE_G___TagInstance:
@@ -699,6 +701,7 @@ export namespace DuctsSnapshot {
     export interface Request {
       slots?: null | DuctParameterSlots;
       labelParameter?: null | string;
+      selector?: null | DuctSnapshotSelector;
     }
     /**
      * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
@@ -714,6 +717,29 @@ export namespace DuctsSnapshot {
       terminalDrop?: null | string;
       fittingCoefficient?: string;
       terminalFlow?: string;
+    }
+    /**
+     * Which elements the snapshot reads. Kind `document` is the default and the shape every existing caller gets. Kind
+     * `ids` reads Ids. Kind `from` walks Revit connectors outward from UnitId's HVAC ports (PortIndex names one
+     * connector id; absent walks every port) through ducts, flex, fittings, accessories and equipment (equipment is a
+     * leg, never a cut: the roster decides stops later), stopping at an air terminal, an open end, or MaxHops elements
+     * deep (default 2000). At every open end a box CandidateBoxIn inches on a side (default 36) around the connector is
+     * searched for MEP elements, which join the output marked `open-end-candidate` so a join can be inferred. Every kind
+     * reports model health (Issues) under CandidateBoxIn and AutoJoinGapIn (DuctHealthTolerances). Kind
+     * `systems` reads SystemIds (MechanicalSystem ids): each system's DuctNetwork, Elements and base equipment, grown
+     * along connectors to whole groups (a group is a connected component, so one the systems touch is never cut), and
+     * answers in the `document` shape with Systems holding only the named systems.
+     *
+     */
+    export interface DuctSnapshotSelector {
+      kind?: DuctSelectorKind;
+      ids?: number[] | null;
+      unitId?: number | null;
+      portIndex?: number | null;
+      maxHops?: number | null;
+      candidateBoxIn?: null | number;
+      systemIds?: number[] | null;
+      autoJoinGapIn?: null | number;
     }
   }
   export namespace Res {
@@ -739,20 +765,23 @@ export namespace DuctsSnapshot {
      * The native path form; samples alone do not certify nonlinear curve arclength stations.
      */
     export type DuctCurveKind = "line" | "arc" | "flex-polyline" | "other";
+    /**
+     * Model health (ducts LEDGER 2026-10-29): what is true of the model whatever is calculated, keyed by element and
+     * connector, never by group. Pricing findings (leg flow, shared leg, flow mismatch, not priced, implausible loss,
+     * equipment pairing, velocity over) need a named fan and are the TypeScript sheet's.
+     *
+     */
     export type DuctIssueKind =
       | "open-end"
+      | "near-miss"
       | "loop"
       | "stub"
-      | "mixed-classification"
+      | "air-type-change"
       | "implausible-size"
       | "default-flex-roughness"
-      | "no-fan-static"
       | "no-component-drop"
       | "no-terminal-flow"
-      | "no-root"
-      | "multi-root"
-      | "high-velocity"
-      | "no-flow-leg";
+      | "high-velocity";
 
     /**
      * Store is Pe's `_PE_DuctLosses` provenance blob, absent when the model has none. StoreError is set instead when
@@ -778,6 +807,8 @@ export namespace DuctsSnapshot {
       phases?: null | DuctPhases;
       airflowCandidates?: DuctAirflowCandidate[] | null;
       fanFlowCandidates?: DuctAirflowCandidate[] | null;
+      walk?: null | DuctWalk;
+      tolerances?: null | DuctHealthTolerances;
     }
     /**
      * The document read, when, and how long the read took. NetworkBasedCalculations is DuctSettings' engine switch:
@@ -800,7 +831,8 @@ export namespace DuctsSnapshot {
     }
     /**
      * A connected duct network with equipment cut out: the unit a solver runs on. Id is "g" plus the smallest
-     * element id in it, stable while that element exists. RootIds are the equipment it hangs off.
+     * element id in it, stable while that element exists. RootIds are the equipment it hangs off. IssueIds index the
+     * health findings on its elements (issues are keyed by element, never by group).
      *
      */
     export interface DuctGroup {
@@ -840,6 +872,7 @@ export namespace DuctsSnapshot {
       phaseCreated?: null | string;
       phaseDemolished?: null | string;
       flowParameter?: null | string;
+      reason?: null | string;
     }
     /**
      * One physical HVAC connector. Kind is "end" or "curve" (a tap on a duct's side). Direction is Revit's
@@ -921,7 +954,9 @@ export namespace DuctsSnapshot {
       catalogDropInWg?: null | number;
     }
     /**
-     * PhaseCreated and PhaseDemolished as on DuctNode.
+     * PhaseCreated and PhaseDemolished as on DuctNode. InsulationIn is the host's
+     * RBS_REFERENCE_INSULATION_THICKNESS in inches (null when none): the separate DuctInsulation element is never read.
+     *
      */
     export interface DuctSegment {
       id: number;
@@ -945,6 +980,8 @@ export namespace DuctsSnapshot {
       uniqueId?: null | string;
       phaseCreated?: null | string;
       phaseDemolished?: null | string;
+      reason?: null | string;
+      insulationIn?: null | number;
     }
     export interface DuctRoughness {
       valueFt: number;
@@ -968,15 +1005,71 @@ export namespace DuctsSnapshot {
       provenance: DuctProvenance;
     }
     /**
-     * Id is "kind:elementId" (open ends add ":connector"); an assumption verdict keys on it.
+     * One model-health finding. Id is "kind:elementId" plus ":connector" when Connector is set; an assumption verdict
+     * keys on it. Near is set on an open end: what lies within the candidate box of it.
+     *
      */
     export interface DuctIssue {
       id: string;
       kind: DuctIssueKind;
-      elementId?: number | null;
+      elementId: number;
+      connector?: number | null;
       point?: number[] | null;
-      groupId: string;
       note: string;
+      near?: null | DuctNear;
+    }
+    /**
+     * The neighbourhood of one open end, measured from its connector (point, outward axis), never decided: which of
+     * these a calculation joins, and under which ruling, is the pricing engine's. Ports: every connector of every
+     * other element within CandidateBoxIn, vacant or not. Faces: where the end's axis lands on a duct side, a capped
+     * end or an open connector's mouth within 2 in. Bodies: each duct side piece nearby, with the closest distance
+     * and, when the end sits off the side away from its ends, the tap point on its surface within 24 in.
+     *
+     */
+    export interface DuctNear {
+      ports: DuctNearPort[];
+      faces: DuctNearFace[];
+      bodies: DuctNearBody[];
+    }
+    /**
+     * Another connector near an open end. GapIn: centre to centre. FacingDot: cosine of the two outward axes (null
+     * when either is unknown). Opposed: the cosine is at most -0.9. Aligned: opposed, ahead of the end and within
+     * 0.5 in of its axis. AutoJoin: vacant, opposed and within AutoJoinGapIn: the near-miss partner.
+     *
+     */
+    export interface DuctNearPort {
+      elementId: number;
+      connector: number;
+      gapIn: number;
+      facingDot?: null | number;
+      opposed: boolean;
+      aligned: boolean;
+      autoJoin: boolean;
+    }
+    /**
+     * The end's axis landing on a face within 2 in. Kind "collar": an open connector's mouth (Connector set);
+     * "tap": a duct side or an end a cap closes (Connector null, AtFt along the duct, Point on its centerline). GapIn
+     * is signed: negative is inside the face. Opposed as on DuctNearPort.
+     *
+     */
+    export interface DuctNearFace {
+      kind: string;
+      elementId: number;
+      connector?: number | null;
+      gapIn: number;
+      facingDot?: null | number;
+      opposed: boolean;
+      atFt?: null | number;
+      point?: number[] | null;
+    }
+    /**
+     * One duct side piece near an end: GapIn its closest distance; TapGapIn and TapPoint the surface point a tap would land on.
+     */
+    export interface DuctNearBody {
+      segmentId: number;
+      gapIn: number;
+      tapGapIn?: null | number;
+      tapPoint?: number[] | null;
     }
     /**
      * One real query, printed verbatim in Query, and how much of the model it answered.
@@ -1155,6 +1248,42 @@ export namespace DuctsSnapshot {
       have: number;
       of: number;
     }
+    /**
+     * The `from` walk's summary. Hops is the deepest element depth reached from the start; ElementsReached counts walked
+     * elements (the start included, candidates excluded); Truncated is true when MaxHops cut the walk or an open end's
+     * box held more than the candidate cap and was counted, not listed.
+     *
+     */
+    export interface DuctWalk {
+      startId: number;
+      hops: number;
+      elementsReached: number;
+      openEnds: number;
+      candidates: DuctOpenEnd[];
+      truncated: boolean;
+      elapsedMs: number;
+    }
+    /**
+     * One open end the walk stopped at and what the candidate box around it held (CandidateCount first, cheap; CandidateIds only under the cap).
+     */
+    export interface DuctOpenEnd {
+      elementId: number;
+      connector: number;
+      point: number[];
+      candidateCount: number;
+      candidateIds: number[];
+    }
+    /**
+     * The near-miss tolerances Issues were measured under, the one home for both (ducts LEDGER 2026-10-29).
+     * CandidateBoxIn: an open end's neighbourhood, inches either way of its connector (a duct body counts when its
+     * centerline comes within it plus half its largest side). AutoJoinGapIn: a vacant, opposed partner this close is a
+     * near miss the sheet may join without a ruling.
+     *
+     */
+    export interface DuctHealthTolerances {
+      candidateBoxIn: number;
+      autoJoinGapIn: number;
+    }
   }
 }
 
@@ -1172,8 +1301,8 @@ export namespace DuctsTables {
     /**
      * Tables keyed by upper-case id, then by result key (Co, Cb, Cs; a block printed twice gets "#2").
      * A table Revit ships as "No table" has no results. Missing names ids with no file in Folder. Unsupported maps
-     * an id to why it was not parsed: three-axis tables (a second Y such as Re or As/Ac) and fixed-width rows whose
-     * numbers run together; a wrong grid is worse than none.
+     * an id to why it was not parsed: a row whose value count does not match its axes (a triangular two-axis table,
+     * a value Revit's file prints past its row); a wrong grid is worse than none.
      *
      */
     export interface Response {
@@ -1189,9 +1318,13 @@ export namespace DuctsTables {
       };
     }
     /**
-     * One coefficient grid; the wire shape the web's loss-grid.ts reads. With Y present, Grid is number[][]: one row
-     * per Y, one column per X. With Y absent, Grid is number[] over X; a constant ("Co= 0.12") is one value with X
-     * empty. Grid is typed object because the wire is a union; Rows and Values build it.
+     * One coefficient grid; the wire shape the web's loss-grid.ts reads. With Z present (a three-axis table such as
+     * ER5-1's As/Ac by Ab/Ac by Qb/Qc), Grid is (number[] | null)[][]: one slice per Z, in it one row per Y, one column
+     * per X. Y is every inner value any slice prints, and a row is null where its slice prints none (ER5-1 has no
+     * Ab/Ac 0.25 row at As/Ac 0.5; ED5-4 states Ab2/Ac only up to Ab1/Ac). Z is the table's first (outer) column, Y
+     * its second. With Y present and Z absent, Grid is number[][]: one row per Y, one column per X. With Y absent, Grid
+     * is number[] over X; a constant ("Co= 0.12") is one value with X empty. Grid is typed object because the wire is
+     * a union; Slices, Rows and Values build it.
      *
      */
     export interface AshraeGrid {
@@ -1201,6 +1334,8 @@ export namespace DuctsTables {
       yLabel?: null | string;
       y?: number[] | null;
       grid: unknown;
+      zLabel?: null | string;
+      z?: number[] | null;
     }
   }
 }

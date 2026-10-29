@@ -37,7 +37,7 @@ const group = (id: string, rootIds: number[], issueIds: string[] = []) =>
   }) as unknown as TriageInput["snapshot"]["groups"][number];
 
 const snapshot: TriageInput["snapshot"] = {
-  groups: [group("g1", [1], ["open-end:g1:2:1"]), group("g2", [], [])],
+  groups: [group("g1", [1], ["open-end:2:1"]), group("g2", [], [])],
   nodes: [
     node(1, "equipment", null),
     node(30, "terminal", "g1"),
@@ -54,7 +54,7 @@ const finding = (f: Partial<DuctFinding> & Pick<DuctFinding, "id" | "kind">): Du
   ...f,
 });
 const findings = [
-  finding({ id: "open-end:g1:2:1", kind: "open-end", elementIds: [2] }),
+  finding({ id: "open-end:2:1", kind: "open-end", elementIds: [2] }),
   finding({ id: "no-fan:g2", kind: "no-fan", groupId: "g2", elementIds: [40] }),
   finding({
     id: "proximity:5:0|6:0",
@@ -219,7 +219,7 @@ describe("healing replaces the capped and connect verdicts", () => {
             end: "2:1",
             gapIn: 0,
             ids: [2],
-            covers: ["open-end:g1:2:1"],
+            covers: ["open-end:2:1"],
           },
           {
             key: "join:5:0|6:0",
@@ -234,7 +234,7 @@ describe("healing replaces the capped and connect verdicts", () => {
         ],
       },
     ],
-    covered: new Set(["open-end:g1:2:1", "proximity:5:0|6:0"]),
+    covered: new Set(["open-end:2:1", "proximity:5:0|6:0"]),
     hard: new Map([
       [
         "proximity:7:0|8:0",
@@ -369,7 +369,7 @@ describe("healing replaces the capped and connect verdicts", () => {
     );
     for (const issue of issues) expect(focusRow(issue.key, keys)).toBe(issue.key);
     expect(issues.find((i) => i.key === "heal:g1")?.findings).toEqual(
-      expect.arrayContaining(["open-end:g1:2:1", "proximity:5:0|6:0"]),
+      expect.arrayContaining(["open-end:2:1", "proximity:5:0|6:0"]),
     );
     expect(issues.find((i) => i.key === "flows:30")?.damage).toBeTruthy();
     expect(

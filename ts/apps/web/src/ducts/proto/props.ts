@@ -75,4 +75,13 @@ export interface ProtoProps {
   };
   /** How many changes a write would carry: edit cells and pending rulings. */
   edit: number;
+  /** How many of the document's Revit systems the snapshot holds when the network stage reads by
+   * system (`system-reads.ts`): document-wide panes say they are partial and offer `readAll`, which
+   * reads the rest a few systems at a time (null once asked or done). Absent: the whole document. */
+  coverage?: {
+    read: number;
+    of: number;
+    reading: readonly string[];
+    readAll: (() => void) | null;
+  } | null;
 }

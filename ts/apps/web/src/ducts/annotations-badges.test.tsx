@@ -146,10 +146,10 @@ it("one gap repair has one row, two named subjects, two pins and one evidence se
     ],
   }));
   const issues = segments.map((e) => ({
-    id: `open-end:${e.groupId}:${e.id}:0`,
+    id: `open-end:${e.id}:0`,
     kind: "open-end",
     elementId: e.id,
-    groupId: e.groupId,
+    connector: 0,
     point: e.connectors[0]!.point,
     note: "open",
   }));
@@ -163,7 +163,6 @@ it("one gap repair has one row, two named subjects, two pins and one evidence se
     id: i.id,
     kind: "open-end",
     elementIds: [i.elementId],
-    groupId: i.groupId,
     note: i.note,
     assumed: null,
     clearer: "person",

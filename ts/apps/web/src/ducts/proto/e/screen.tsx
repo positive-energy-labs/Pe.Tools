@@ -33,12 +33,7 @@ import { useRevitSubjectProps } from "#/revit/element-menu";
 import { noRunBranches } from "@pe/ducts-domain/no-runs";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { AttentionRoot, useIssueHover, useHoveredIssue } from "#/attention";
-import {
-  elementKey,
-  useAttentionDocument,
-  useMembers,
-  type SubjectKey,
-} from "@pe/kit/lang/attention";
+import { elementKey, type SubjectKey } from "@pe/kit/lang/attention";
 import {
   annotatedFindings,
   stageIssues,
@@ -64,7 +59,7 @@ import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length
 import { BarRules, systemNoteCount, systemRowParts } from "./bar";
 import { DuctSettings } from "./settings";
 import { FanFacts, fanFacts, type FanFact } from "./fan-sections";
-import { ECanvas } from "./canvas";
+import { DuctsPicture } from "./picture";
 import { grilleLabels } from "./labels";
 import { FanButton, Inbox, type FanVerbs } from "./inbox";
 import type { WriteVerbs } from "./inbox-write";
@@ -119,6 +114,7 @@ export function EScreen({ props }: { props: ProtoProps }) {
         busy={props.reading.pending || props.pricing}
       >
         {!props.snapshot && props.empty ? <p>{props.empty.exit}</p> : null}
+        {!props.snapshot ? <ReadCoverage coverage={props.coverage} /> : null}
         <HelpWorld facts={DUCTS_TEACHING} />
       </LoadingContext>
     );
@@ -126,6 +122,34 @@ export function EScreen({ props }: { props: ProtoProps }) {
     <AttentionRoot doc={props.attentionDoc}>
       <LoadedScreenBody props={{ ...props, snapshot: props.snapshot }} />
     </AttentionRoot>
+  );
+}
+
+/** "n of m systems read", or null when the snapshot holds every system. */
+const partialWord = (coverage: ProtoProps["coverage"]) =>
+  coverage && coverage.read < coverage.of
+    ? `${coverage.read} of ${coverage.of} systems read`
+    : null;
+
+/** The scoped read's extent and its one verb: read every system, a few per read, into the panes. */
+function ReadCoverage({ coverage }: { coverage: ProtoProps["coverage"] }) {
+  const partial = partialWord(coverage);
+  if (!coverage || !partial) return null;
+  return (
+    <p className="flex flex-wrap items-baseline gap-2 t-small text-ink-2" data-e-coverage="">
+      <span>
+        {partial}
+        {coverage.reading.length ? ` · reading ${coverage.reading.join(", ")}…` : ""}
+      </span>
+      {coverage.readAll ? (
+        <Button
+          label="Read every system, a few systems per read, so the totals cover the document"
+          onClick={coverage.readAll}
+        >
+          Read every system
+        </Button>
+      ) : null}
+    </p>
   );
 }
 
@@ -265,15 +289,18 @@ function LoadedScreenBody({
   // What heals in Revit is planned over the raw snapshot (the tolerated one has bridged it already).
   const heal = props.analysis?.heal ?? null;
   const notes = props.analysis?.notes ?? NO_NOTES;
-  // The document at a glance: how many systems price clean, and how many a person must fix first.
+  // The document at a glance: how many systems price clean, and how many a person must fix first;
+  // read by system, over the systems read so far, and it says so.
+  const partial = partialWord(props.coverage);
   const census = useMemo(() => {
     const issues = systems.map((s) => systemNoteCount(s, notes.get(s.key)).issues);
     return {
       systems: systems.length,
       priced: systems.filter((s) => s.total != null).length,
       fix: issues.filter((i) => i.some((x) => x.tone === "alarm")).length,
+      partial,
     };
-  }, [systems, notes]);
+  }, [systems, notes, partial]);
   const chosenRow = useMemo(() => {
     const row = systems.find((s) => s.key === activeSystem(page));
     return row ? { ...row, note: notes.get(row.key) } : null;
@@ -475,7 +502,7 @@ function LoadedScreenBody({
   const reading = encoded.encoding.quantity ? encoded.encoding : null;
   const subjectProps = useRevitSubjectProps();
   const issues = useMemo(() => (inbox ? stageIssues(inbox) : []), [inbox]);
-  const jump = useRef<((id: number) => void) | null>(null);
+  const jump = useRef<((key: SubjectKey) => void) | null>(null);
   const setHoveredIssue = useIssueHover();
   const { epoch, system, systemSearch, systemSort } = page;
   const systemKeys = useMemo(
@@ -507,8 +534,6 @@ function LoadedScreenBody({
     trees.forEach(walk);
     return map;
   }, [issues, trees]);
-  useAttentionDocument(props.attentionDoc, props.selection);
-  useMembers(props.attentionDoc, membership);
   // The picture annotates the Fix rows' findings, or the Diagnostics kind picked in its key.
   const kindClause = page.rulingSearch.pills.find(
     (pill) => pill.field === "kind" && pill.op === "=",
@@ -643,7 +668,11 @@ function LoadedScreenBody({
     () =>
       tree ? (
         <>
-          <OpenSystems system={page.system} onChange={(system) => setPage({ system })} />
+          <OpenSystems
+            system={page.system}
+            onChange={(system) => setPage({ system })}
+            whole={!partialWord(props.coverage)}
+          />
           <Scroll className="min-h-0 flex-1">
             <div className="min-w-0 shrink-0">
               <SystemTree
@@ -712,6 +741,7 @@ function LoadedScreenBody({
     () => (
       <>
         <OpenSystems system={page.system} onChange={(system) => setPage({ system })} />
+        <ReadCoverage coverage={props.coverage} />
         <Scroll className="min-h-0 flex-1">
           <SystemsList
             systems={systems}
@@ -729,6 +759,7 @@ function LoadedScreenBody({
       census.systems,
       census.priced,
       census.fix,
+      props.coverage,
       systems,
       fansOf,
       nameOf,
@@ -908,7 +939,7 @@ function LoadedScreenBody({
       doc: props.attentionDoc,
       nameOf: subjectName,
 
-      go: (id: number) => (jump.current ? jump.current(id) : select(id)),
+      go: (id: number) => (jump.current ? jump.current(elementKey(id)) : select(id)),
       refProps: subjectProps,
     }),
     [props.attentionDoc, subjectName, select, subjectProps],
@@ -925,18 +956,21 @@ function LoadedScreenBody({
               content={{
                 "e-systems": (pane) =>
                   pane(systemsPane, {
-                    meta: `${census.systems} · ${census.priced} priced · ${census.fix} need a fix`,
+                    meta: `${census.systems} · ${census.priced} priced · ${census.fix} need a fix${partial ? ` · ${partial}` : ""}`,
                   }),
                 "e-sidebar": (pane) => pane(treePane),
                 "e-inputs": (pane) => pane(inputsPane, { meta: inputsCount }),
-                "e-rules-all": (pane) => pane(rulesPanes[1], { meta: "every system" }),
+                "e-rules-all": (pane) =>
+                  pane(rulesPanes[1], {
+                    meta: partial ? `every read system · ${partial}` : "every system",
+                  }),
                 "e-rules": (pane) => pane(rulesPanes[0], { meta: scope?.name ?? "" }),
                 "e-picture": (pane) => (
                   <div className="relative size-full min-w-0">
-                    <ECanvas
+                    <DuctsPicture
                       renderPane={pane}
                       {...props}
-                      onIssueHover={setHoveredIssue}
+                      membership={membership}
                       issueScope={issueScope}
                       annotated={annotated}
                       issues={issues}

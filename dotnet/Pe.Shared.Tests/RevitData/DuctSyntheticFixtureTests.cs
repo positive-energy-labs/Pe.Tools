@@ -76,11 +76,12 @@ public sealed class DuctSyntheticFixtureTests {
             Duct(12, 6, [10, -0.5, 9], [10, -8, 9], Port(1, [10, -0.5, 9], r, 6, null, 22, 2), Port(2, [10, -8, 9], r, 6, null, 31, 1))
         };
         var a = DuctNetwork.Analyze(nodes, segments);
+        var issues = DuctHealth.Assess(a.Nodes, a.Segments, DuctHealth.Tolerances(null));
         return new DuctSnapshotData(
             new DuctDocument("Synthetic", DateTimeOffset.Parse("2026-10-04T00:00:00Z"), 1, true),
             DuctCoordinateEncoding.NativeDouble,
             [new DuctLevel(100, "Level 1", 0)],
-            a.Groups, a.Nodes, a.Segments, a.Flows, a.Issues, [],
+            DuctHealth.Index(a.Groups, a.Nodes, a.Segments, issues), a.Nodes, a.Segments, a.Flows, issues, [],
             [new DuctSystem(500, "SA 1", "SupplyAir", true, 1, 1, 0.1, [1, 2],
                 [new DuctSection(1, 400, 0.04, [10, 21]), new DuctSection(2, 300, 0.06, [11, 30]), new DuctSection(3, 100, 0.05, [22, 12, 31])])],
             new DuctParameterSlots());

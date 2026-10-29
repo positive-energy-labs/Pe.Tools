@@ -355,7 +355,6 @@ export function triage(input: TriageInput) {
   const { snapshot, scope, findings, flows, equipmentFlows, doc } = input;
   // The role a unit plays now: the survey's (ruled, edit, else proposed), else Work's edit one.
   const roleNow = (id: number) => input.roles?.get(id)?.role ?? roleOf(doc, id);
-  const ruled = (id: number) => ["ruled", "edit"].includes(input.roles?.get(id)?.why ?? "");
   const name = (id: number) => subjectName("unnamed element", input.nameOf?.(id));
   const label = input.groupLabel ?? ((id: string) => id);
   const nodes = new Map(snapshot.nodes.map((n) => [n.id, n]));
@@ -684,47 +683,6 @@ export function triage(input: TriageInput) {
         });
         break;
       }
-      case "multi-root": {
-        // Two or more fans after the suggestion: a person confirms each fan (the group then prices
-        // per fan) or rules the inline gear passive.
-        const active = f.elementIds.filter((id) => roleNow(id) !== "passive");
-        const why = f.elementIds
-          .map(
-            (id) =>
-              `${name(id)}: ${roleNow(id) ?? "fan"}, ${input.roles?.get(id)?.reason ?? "edit"}`,
-          )
-          .join("; ");
-        toFix({
-          ...item,
-          title: `Several fans: ${names(active)}`,
-          status: "blocks the path",
-          note: `${why}. Confirm each fan to price the group per fan, or rule a unit passive.`,
-          verbs: [
-            ...active
-              .filter((id) => !ruled(id))
-              .map(
-                (id): RowVerb => ({
-                  kind: "role",
-                  id,
-                  role: "fan",
-                  label: `${name(id)} is a fan`,
-                  says: `Rule ${name(id)} a fan; once every fan is ruled the group prices per fan`,
-                }),
-              ),
-            ...active.map(
-              (id): RowVerb => ({
-                kind: "role",
-                id,
-                role: "passive",
-                label: `${name(id)} is passive`,
-                says: `Stage ${name(id)} as passive (it moves no design air); the other root is the fan`,
-              }),
-            ),
-            select(f.elementIds),
-          ],
-        });
-        break;
-      }
       default: {
         const grade = f.grade === "anomalous";
         // An anomalous join is a person's repair in Revit (reversed connector, cross-class): no
@@ -896,8 +854,6 @@ export function triage(input: TriageInput) {
 const KIND_TITLE: Record<string, string> = {
   loop: "Loop in the system",
   "loop-by-inference": "Loop through an inferred join",
-  "no-root": "No root",
-  "multi-root": "Several roots",
   "implausible-loss": "Implausible fitting loss, not priced",
 };
 

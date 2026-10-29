@@ -21,11 +21,8 @@ public static class DuctHealer {
     /// <summary>Ends this close are coincident and only ConnectTo. Mirrors HEAL_COINCIDENT_IN (ducts-domain heal.ts).</summary>
     public const double CoincidentIn = 1.0 / 16;
 
-    /// <summary>
-    ///     The widest gap a union or an extend heals. The spike PROVED a 3 in union and a 2.8 in extend and FALSIFIED a
-    ///     13.7 in extend (Revit said connected with the end 13.7 in off). Mirrors HEAL_JOIN_GAP_IN.
-    /// </summary>
-    public const double JoinGapIn = 3.0;
+    /// <summary>The widest gap a union or an extend heals: the near-miss auto-join gap, one home (DuctHealth).</summary>
+    public const double JoinGapIn = DuctHealth.AutoJoinGapIn;
 
     /// <summary>The post-check: the most two joined connector origins may differ, and the most an end may sit off its partner's axis.</summary>
     public const double CheckTolIn = 1.0 / 16;

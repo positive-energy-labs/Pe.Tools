@@ -39,7 +39,7 @@ import type { ProtoProps } from "./proto/props";
 import { useNativeObservation } from "#/revit/observation";
 import { peReadings } from "#/readings";
 import { pricingJob, type PricingRequest, type PricingResponse } from "./pricing-job";
-import type { ModelPicture } from "./model-picture";
+import type { ModelPicture } from "#/scene/picture/model";
 import type { SceneInstance } from "#/scene/types";
 import { scopeOf } from "@pe/ducts-domain/system-scope";
 import { declaredTeaching } from "@pe/kit/lang/teach";
@@ -47,8 +47,8 @@ import { useTeaching } from "@pe/kit/lang/use-teach";
 import { DUCTS_LAYOUT } from "./proto/e/teaching";
 
 const picture = vi.hoisted(() => ({ current: null as Parameters<typeof ModelPicture>[0] | null }));
-vi.mock("./model-picture", async (original) => {
-  const module = await original<typeof import("./model-picture")>();
+vi.mock("#/scene/picture/model", async (original) => {
+  const module = await original<typeof import("#/scene/picture/model")>();
   return {
     ...module,
     ModelPicture: (props: Parameters<typeof ModelPicture>[0]) => {
@@ -169,7 +169,7 @@ const snapshot: DuctSnapshot = {
       terminalCount: 0,
       elementCount: 1,
       loops: 0,
-      issueIds: ["no-root:g2"],
+      issueIds: [],
     },
   ],
   nodes: [100, 2, 4, 6].map((id) => ({
@@ -203,16 +203,7 @@ const snapshot: DuctSnapshot = {
     connectors: connectors(id),
   })),
   flows: [],
-  issues: [
-    {
-      id: "no-root:g2",
-      kind: "no-root",
-      elementId: null,
-      point: null,
-      groupId: "g2",
-      note: "no root",
-    },
-  ],
+  issues: [],
   layers: [],
   systems: [{ id: 900, name: "SA", classification: "Supply Air", criticalPath: [], sections: [] }],
   slots: {
@@ -657,7 +648,7 @@ test("picture layers choose the Context and Colour dials", async () => {
   const instance = { revitId: 1 } as SceneInstance;
   await mount();
   await waitFor(() => expect(picture.current?.contextMode).toBe("glass"));
-  expect(picture.current!.paintOf!(instance)).toEqual({ tier: "subject", kind: "supply" });
+  expect(picture.current!.paint!(null)!(instance)).toEqual({ tier: "subject", kind: "supply" });
   expect(picture.current?.colour).toBe("firm");
   expect(picture.current?.kinds.supply).toBe("#0569a5");
   act(() => drawing.latest!.setPage({ layers: ["meshes", "halo", "context"] }));
@@ -755,8 +746,13 @@ test("a staged subject and plural claim select the whole row without framing; a 
       nodes: snapshot.nodes.map((node) => (node.id === 100 ? { ...node, label: "AHU-9" } : node)),
     });
   await mount();
-  // The edit labelParameter rides the snapshot request.
-  await waitFor(() => expect(requests.at(-1)?.request).toEqual({ labelParameter: "Unit Tag" }));
+  // The edit labelParameter rides the open system's snapshot request (the roster's carries none).
+  await waitFor(() =>
+    expect(requests.at(-1)?.request).toEqual({
+      labelParameter: "Unit Tag",
+      selector: { kind: "systems", systemIds: [snapshot.systems.find((s) => s.name === "SA")!.id] },
+    }),
+  );
   // A person reveals the folded pane before acting on its evidence.
   fireEvent.click(await screen.findByRole("button", { name: /^Expand Rulings/ }));
   const inbox = await screen.findByText("Check");

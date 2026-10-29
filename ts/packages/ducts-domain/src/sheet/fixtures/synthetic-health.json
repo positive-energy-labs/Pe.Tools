@@ -1,0 +1,1423 @@
+{
+  "9c70b50f-1323": {
+    "issues": [
+      {
+        "id": "no-terminal-flow:200",
+        "kind": "no-terminal-flow",
+        "elementId": 200,
+        "note": "no design flow"
+      },
+      {
+        "id": "open-end:1:1",
+        "kind": "open-end",
+        "elementId": 1,
+        "connector": 1,
+        "point": [
+          4.0,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [
+            {
+              "elementId": 2,
+              "connector": 0,
+              "gapIn": 3.0,
+              "facingDot": -1.0,
+              "opposed": true,
+              "aligned": true,
+              "autoJoin": true
+            }
+          ],
+          "faces": [],
+          "bodies": [
+            {
+              "segmentId": 2,
+              "gapIn": 3.0
+            }
+          ]
+        }
+      },
+      {
+        "id": "near-miss:1:1",
+        "kind": "near-miss",
+        "elementId": 1,
+        "connector": 1,
+        "point": [
+          4.0,
+          0.0,
+          0.0
+        ],
+        "note": "vacant opposed 2:0 is 3 in away (auto-join gap 3 in)"
+      },
+      {
+        "id": "open-end:2:0",
+        "kind": "open-end",
+        "elementId": 2,
+        "connector": 0,
+        "point": [
+          4.25,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [
+            {
+              "elementId": 1,
+              "connector": 1,
+              "gapIn": 3.0,
+              "facingDot": -1.0,
+              "opposed": true,
+              "aligned": true,
+              "autoJoin": true
+            }
+          ],
+          "faces": [],
+          "bodies": [
+            {
+              "segmentId": 1,
+              "gapIn": 3.0
+            }
+          ]
+        }
+      },
+      {
+        "id": "near-miss:2:0",
+        "kind": "near-miss",
+        "elementId": 2,
+        "connector": 0,
+        "point": [
+          4.25,
+          0.0,
+          0.0
+        ],
+        "note": "vacant opposed 1:1 is 3 in away (auto-join gap 3 in)"
+      }
+    ],
+    "tolerances": {
+      "candidateBoxIn": 36.0,
+      "autoJoinGapIn": 3.0
+    }
+  },
+  "3cd0381b-1365": {
+    "issues": [
+      {
+        "id": "no-terminal-flow:200",
+        "kind": "no-terminal-flow",
+        "elementId": 200,
+        "note": "no design flow"
+      },
+      {
+        "id": "open-end:1:1",
+        "kind": "open-end",
+        "elementId": 1,
+        "connector": 1,
+        "point": [
+          4.0,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [
+            {
+              "elementId": 2,
+              "connector": 0,
+              "gapIn": 3.0100000000000016,
+              "facingDot": -1.0,
+              "opposed": true,
+              "aligned": true,
+              "autoJoin": false
+            }
+          ],
+          "faces": [],
+          "bodies": [
+            {
+              "segmentId": 2,
+              "gapIn": 3.0100000000000016
+            }
+          ]
+        }
+      },
+      {
+        "id": "open-end:2:0",
+        "kind": "open-end",
+        "elementId": 2,
+        "connector": 0,
+        "point": [
+          4.2508333333333335,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [
+            {
+              "elementId": 1,
+              "connector": 1,
+              "gapIn": 3.0100000000000016,
+              "facingDot": -1.0,
+              "opposed": true,
+              "aligned": true,
+              "autoJoin": false
+            }
+          ],
+          "faces": [],
+          "bodies": [
+            {
+              "segmentId": 1,
+              "gapIn": 3.0100000000000016
+            }
+          ]
+        }
+      }
+    ],
+    "tolerances": {
+      "candidateBoxIn": 36.0,
+      "autoJoinGapIn": 3.0
+    }
+  },
+  "e5dfc37b-1341": {
+    "issues": [
+      {
+        "id": "no-terminal-flow:200",
+        "kind": "no-terminal-flow",
+        "elementId": 200,
+        "note": "no design flow"
+      },
+      {
+        "id": "open-end:1:1",
+        "kind": "open-end",
+        "elementId": 1,
+        "connector": 1,
+        "point": [
+          4.0,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [
+            {
+              "elementId": 2,
+              "connector": 0,
+              "gapIn": 12.0,
+              "facingDot": -1.0,
+              "opposed": true,
+              "aligned": true,
+              "autoJoin": false
+            }
+          ],
+          "faces": [],
+          "bodies": [
+            {
+              "segmentId": 2,
+              "gapIn": 12.0
+            }
+          ]
+        }
+      }
+    ],
+    "tolerances": {
+      "candidateBoxIn": 36.0,
+      "autoJoinGapIn": 3.0
+    }
+  },
+  "7e2c2b54-2189": {
+    "issues": [
+      {
+        "id": "no-terminal-flow:54",
+        "kind": "no-terminal-flow",
+        "elementId": 54,
+        "point": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "note": "no design flow"
+      },
+      {
+        "id": "open-end:51:1",
+        "kind": "open-end",
+        "elementId": 51,
+        "connector": 1,
+        "point": [
+          0.0,
+          -5.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [],
+          "faces": [],
+          "bodies": []
+        }
+      },
+      {
+        "id": "open-end:52:1",
+        "kind": "open-end",
+        "elementId": 52,
+        "connector": 1,
+        "point": [
+          10.0,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [
+            {
+              "elementId": 53,
+              "connector": 0,
+              "gapIn": 0.3999999999999986,
+              "facingDot": -1.0,
+              "opposed": true,
+              "aligned": true,
+              "autoJoin": true
+            }
+          ],
+          "faces": [],
+          "bodies": [
+            {
+              "segmentId": 53,
+              "gapIn": 0.3999999999999986
+            }
+          ]
+        }
+      },
+      {
+        "id": "near-miss:52:1",
+        "kind": "near-miss",
+        "elementId": 52,
+        "connector": 1,
+        "point": [
+          10.0,
+          0.0,
+          0.0
+        ],
+        "note": "vacant opposed 53:0 is 0.4 in away (auto-join gap 3 in)"
+      },
+      {
+        "id": "open-end:53:0",
+        "kind": "open-end",
+        "elementId": 53,
+        "connector": 0,
+        "point": [
+          10.033333333333333,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [
+            {
+              "elementId": 52,
+              "connector": 1,
+              "gapIn": 0.3999999999999986,
+              "facingDot": -1.0,
+              "opposed": true,
+              "aligned": true,
+              "autoJoin": true
+            }
+          ],
+          "faces": [],
+          "bodies": [
+            {
+              "segmentId": 52,
+              "gapIn": 0.3999999999999986
+            }
+          ]
+        }
+      },
+      {
+        "id": "near-miss:53:0",
+        "kind": "near-miss",
+        "elementId": 53,
+        "connector": 0,
+        "point": [
+          10.033333333333333,
+          0.0,
+          0.0
+        ],
+        "note": "vacant opposed 52:1 is 0.4 in away (auto-join gap 3 in)"
+      }
+    ],
+    "tolerances": {
+      "candidateBoxIn": 36.0,
+      "autoJoinGapIn": 3.0
+    }
+  },
+  "e7d06859-1980": {
+    "issues": [
+      {
+        "id": "open-end:1:1",
+        "kind": "open-end",
+        "elementId": 1,
+        "connector": 1,
+        "point": [
+          4.0,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [
+            {
+              "elementId": 2,
+              "connector": 0,
+              "gapIn": 12.0,
+              "facingDot": -1.0,
+              "opposed": true,
+              "aligned": true,
+              "autoJoin": false
+            }
+          ],
+          "faces": [],
+          "bodies": [
+            {
+              "segmentId": 2,
+              "gapIn": 12.0
+            }
+          ]
+        }
+      },
+      {
+        "id": "open-end:2:0",
+        "kind": "open-end",
+        "elementId": 2,
+        "connector": 0,
+        "point": [
+          5.0,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [
+            {
+              "elementId": 200,
+              "connector": 0,
+              "gapIn": 36.0,
+              "facingDot": 1.0,
+              "opposed": false,
+              "aligned": false,
+              "autoJoin": false
+            },
+            {
+              "elementId": 1,
+              "connector": 1,
+              "gapIn": 12.0,
+              "facingDot": -1.0,
+              "opposed": true,
+              "aligned": true,
+              "autoJoin": false
+            }
+          ],
+          "faces": [],
+          "bodies": [
+            {
+              "segmentId": 1,
+              "gapIn": 12.0
+            }
+          ]
+        }
+      }
+    ],
+    "tolerances": {
+      "candidateBoxIn": 36.0,
+      "autoJoinGapIn": 3.0
+    }
+  },
+  "aa0488f5-3585": {
+    "issues": [
+      {
+        "id": "no-terminal-flow:70",
+        "kind": "no-terminal-flow",
+        "elementId": 70,
+        "point": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "note": "no design flow"
+      },
+      {
+        "id": "no-terminal-flow:71",
+        "kind": "no-terminal-flow",
+        "elementId": 71,
+        "point": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "note": "no design flow"
+      },
+      {
+        "id": "open-end:64:1",
+        "kind": "open-end",
+        "elementId": 64,
+        "connector": 1,
+        "point": [
+          4.5,
+          4.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [
+            {
+              "elementId": 65,
+              "connector": 1,
+              "gapIn": 12.0,
+              "facingDot": -1.0,
+              "opposed": true,
+              "aligned": true,
+              "autoJoin": false
+            }
+          ],
+          "faces": [],
+          "bodies": [
+            {
+              "segmentId": 65,
+              "gapIn": 27.0
+            },
+            {
+              "segmentId": 65,
+              "gapIn": 12.0
+            }
+          ]
+        }
+      },
+      {
+        "id": "open-end:65:1",
+        "kind": "open-end",
+        "elementId": 65,
+        "connector": 1,
+        "point": [
+          5.5,
+          4.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [
+            {
+              "elementId": 64,
+              "connector": 1,
+              "gapIn": 12.0,
+              "facingDot": -1.0,
+              "opposed": true,
+              "aligned": true,
+              "autoJoin": false
+            }
+          ],
+          "faces": [],
+          "bodies": [
+            {
+              "segmentId": 64,
+              "gapIn": 27.0
+            },
+            {
+              "segmentId": 64,
+              "gapIn": 12.0
+            }
+          ]
+        }
+      }
+    ],
+    "tolerances": {
+      "candidateBoxIn": 36.0,
+      "autoJoinGapIn": 3.0
+    }
+  },
+  "25029363-2552": {
+    "issues": [
+      {
+        "id": "open-end:1:1",
+        "kind": "open-end",
+        "elementId": 1,
+        "connector": 1,
+        "point": [
+          4.0,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [],
+          "faces": [],
+          "bodies": [
+            {
+              "segmentId": 2,
+              "gapIn": 8.0,
+              "tapGapIn": 8.000000000000004,
+              "tapPoint": [
+                4.666666666666667,
+                0.0,
+                0.0
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "tolerances": {
+      "candidateBoxIn": 36.0,
+      "autoJoinGapIn": 3.0
+    }
+  },
+  "42b45913-2247": {
+    "issues": [
+      {
+        "id": "open-end:1:1",
+        "kind": "open-end",
+        "elementId": 1,
+        "connector": 1,
+        "point": [
+          4.0,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [
+            {
+              "elementId": 900,
+              "connector": 0,
+              "gapIn": 12.0,
+              "facingDot": 1.0,
+              "opposed": false,
+              "aligned": false,
+              "autoJoin": false
+            },
+            {
+              "elementId": 2,
+              "connector": 0,
+              "gapIn": 12.0,
+              "facingDot": -1.0,
+              "opposed": true,
+              "aligned": true,
+              "autoJoin": false
+            }
+          ],
+          "faces": [],
+          "bodies": [
+            {
+              "segmentId": 2,
+              "gapIn": 12.0
+            }
+          ]
+        }
+      }
+    ],
+    "tolerances": {
+      "candidateBoxIn": 36.0,
+      "autoJoinGapIn": 3.0
+    }
+  },
+  "11175203-2006": {
+    "issues": [],
+    "tolerances": {
+      "candidateBoxIn": 36.0,
+      "autoJoinGapIn": 3.0
+    }
+  },
+  "03769b92-2228": {
+    "issues": [
+      {
+        "id": "open-end:250:0",
+        "kind": "open-end",
+        "elementId": 250,
+        "connector": 0,
+        "point": [
+          4.1,
+          0.0,
+          0.0
+        ],
+        "note": "terminal not connected",
+        "near": {
+          "ports": [
+            {
+              "elementId": 1,
+              "connector": 1,
+              "gapIn": 1.1999999999999957,
+              "facingDot": -1.0,
+              "opposed": true,
+              "aligned": true,
+              "autoJoin": true
+            },
+            {
+              "elementId": 2,
+              "connector": 0,
+              "gapIn": 10.800000000000004,
+              "facingDot": 1.0,
+              "opposed": false,
+              "aligned": false,
+              "autoJoin": false
+            }
+          ],
+          "faces": [],
+          "bodies": [
+            {
+              "segmentId": 1,
+              "gapIn": 1.1999999999999957
+            },
+            {
+              "segmentId": 2,
+              "gapIn": 10.800000000000004
+            }
+          ]
+        }
+      },
+      {
+        "id": "near-miss:250:0",
+        "kind": "near-miss",
+        "elementId": 250,
+        "connector": 0,
+        "point": [
+          4.1,
+          0.0,
+          0.0
+        ],
+        "note": "vacant opposed 1:1 is 1.2 in away (auto-join gap 3 in)"
+      },
+      {
+        "id": "open-end:1:1",
+        "kind": "open-end",
+        "elementId": 1,
+        "connector": 1,
+        "point": [
+          4.0,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [
+            {
+              "elementId": 250,
+              "connector": 0,
+              "gapIn": 1.1999999999999957,
+              "facingDot": -1.0,
+              "opposed": true,
+              "aligned": true,
+              "autoJoin": true
+            },
+            {
+              "elementId": 2,
+              "connector": 0,
+              "gapIn": 12.0,
+              "facingDot": -1.0,
+              "opposed": true,
+              "aligned": true,
+              "autoJoin": false
+            }
+          ],
+          "faces": [],
+          "bodies": [
+            {
+              "segmentId": 2,
+              "gapIn": 12.0
+            }
+          ]
+        }
+      },
+      {
+        "id": "near-miss:1:1",
+        "kind": "near-miss",
+        "elementId": 1,
+        "connector": 1,
+        "point": [
+          4.0,
+          0.0,
+          0.0
+        ],
+        "note": "vacant opposed 250:0 is 1.2 in away (auto-join gap 3 in)"
+      },
+      {
+        "id": "open-end:2:0",
+        "kind": "open-end",
+        "elementId": 2,
+        "connector": 0,
+        "point": [
+          5.0,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [
+            {
+              "elementId": 200,
+              "connector": 0,
+              "gapIn": 36.0,
+              "facingDot": 1.0,
+              "opposed": false,
+              "aligned": false,
+              "autoJoin": false
+            },
+            {
+              "elementId": 250,
+              "connector": 0,
+              "gapIn": 10.800000000000004,
+              "facingDot": 1.0,
+              "opposed": false,
+              "aligned": false,
+              "autoJoin": false
+            },
+            {
+              "elementId": 1,
+              "connector": 1,
+              "gapIn": 12.0,
+              "facingDot": -1.0,
+              "opposed": true,
+              "aligned": true,
+              "autoJoin": false
+            }
+          ],
+          "faces": [],
+          "bodies": [
+            {
+              "segmentId": 1,
+              "gapIn": 12.0
+            }
+          ]
+        }
+      }
+    ],
+    "tolerances": {
+      "candidateBoxIn": 36.0,
+      "autoJoinGapIn": 3.0
+    }
+  },
+  "8dcd298b-959": {
+    "issues": [
+      {
+        "id": "open-end:100:0",
+        "kind": "open-end",
+        "elementId": 100,
+        "connector": 0,
+        "point": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [
+            {
+              "elementId": 102,
+              "connector": 0,
+              "gapIn": 0.0,
+              "facingDot": 0.0,
+              "opposed": false,
+              "aligned": false,
+              "autoJoin": false
+            },
+            {
+              "elementId": 200,
+              "connector": 0,
+              "gapIn": 12.0,
+              "facingDot": 0.0,
+              "opposed": false,
+              "aligned": false,
+              "autoJoin": false
+            }
+          ],
+          "faces": [],
+          "bodies": []
+        }
+      },
+      {
+        "id": "open-end:200:0",
+        "kind": "open-end",
+        "elementId": 200,
+        "connector": 0,
+        "point": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "note": "terminal not connected",
+        "near": {
+          "ports": [
+            {
+              "elementId": 100,
+              "connector": 0,
+              "gapIn": 12.0,
+              "facingDot": 0.0,
+              "opposed": false,
+              "aligned": false,
+              "autoJoin": false
+            },
+            {
+              "elementId": 100,
+              "connector": 1,
+              "gapIn": 12.0,
+              "facingDot": 1.0,
+              "opposed": false,
+              "aligned": false,
+              "autoJoin": false
+            },
+            {
+              "elementId": 102,
+              "connector": 0,
+              "gapIn": 12.0,
+              "facingDot": -1.0,
+              "opposed": true,
+              "aligned": true,
+              "autoJoin": false
+            }
+          ],
+          "faces": [],
+          "bodies": []
+        }
+      }
+    ],
+    "tolerances": {
+      "candidateBoxIn": 36.0,
+      "autoJoinGapIn": 3.0
+    }
+  },
+  "bb27aef9-1356": {
+    "issues": [
+      {
+        "id": "no-terminal-flow:200",
+        "kind": "no-terminal-flow",
+        "elementId": 200,
+        "note": "no design flow"
+      },
+      {
+        "id": "open-end:1:1",
+        "kind": "open-end",
+        "elementId": 1,
+        "connector": 1,
+        "point": [
+          4.0,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [
+            {
+              "elementId": 2,
+              "connector": 0,
+              "gapIn": 3.0,
+              "facingDot": -1.0,
+              "opposed": true,
+              "aligned": true,
+              "autoJoin": false
+            }
+          ],
+          "faces": [],
+          "bodies": [
+            {
+              "segmentId": 2,
+              "gapIn": 3.0
+            }
+          ]
+        }
+      },
+      {
+        "id": "open-end:2:0",
+        "kind": "open-end",
+        "elementId": 2,
+        "connector": 0,
+        "point": [
+          4.25,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [
+            {
+              "elementId": 1,
+              "connector": 1,
+              "gapIn": 3.0,
+              "facingDot": -1.0,
+              "opposed": true,
+              "aligned": true,
+              "autoJoin": false
+            }
+          ],
+          "faces": [],
+          "bodies": [
+            {
+              "segmentId": 1,
+              "gapIn": 3.0
+            }
+          ]
+        }
+      }
+    ],
+    "tolerances": {
+      "candidateBoxIn": 36.0,
+      "autoJoinGapIn": 2.0
+    }
+  },
+  "091ddc12-1361": {
+    "issues": [
+      {
+        "id": "no-terminal-flow:200",
+        "kind": "no-terminal-flow",
+        "elementId": 200,
+        "note": "no design flow"
+      },
+      {
+        "id": "open-end:1:1",
+        "kind": "open-end",
+        "elementId": 1,
+        "connector": 1,
+        "point": [
+          4.0,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [
+            {
+              "elementId": 2,
+              "connector": 0,
+              "gapIn": 2.0000000000000036,
+              "facingDot": 0.0,
+              "opposed": false,
+              "aligned": false,
+              "autoJoin": false
+            }
+          ],
+          "faces": [],
+          "bodies": [
+            {
+              "segmentId": 2,
+              "gapIn": 2.0000000000000036
+            }
+          ]
+        }
+      },
+      {
+        "id": "open-end:2:0",
+        "kind": "open-end",
+        "elementId": 2,
+        "connector": 0,
+        "point": [
+          4.166666666666667,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [
+            {
+              "elementId": 1,
+              "connector": 1,
+              "gapIn": 2.0000000000000036,
+              "facingDot": 0.0,
+              "opposed": false,
+              "aligned": false,
+              "autoJoin": false
+            }
+          ],
+          "faces": [],
+          "bodies": [
+            {
+              "segmentId": 1,
+              "gapIn": 2.0000000000000036
+            }
+          ]
+        }
+      }
+    ],
+    "tolerances": {
+      "candidateBoxIn": 36.0,
+      "autoJoinGapIn": 3.0
+    }
+  },
+  "73e3656a-669": {
+    "issues": [
+      {
+        "id": "open-end:1:1",
+        "kind": "open-end",
+        "elementId": 1,
+        "connector": 1,
+        "point": [
+          4.0,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [],
+          "faces": [],
+          "bodies": []
+        }
+      }
+    ],
+    "tolerances": {
+      "candidateBoxIn": 36.0,
+      "autoJoinGapIn": 3.0
+    }
+  },
+  "e74ed2dd-3585": {
+    "issues": [
+      {
+        "id": "no-terminal-flow:70",
+        "kind": "no-terminal-flow",
+        "elementId": 70,
+        "point": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "note": "no design flow"
+      },
+      {
+        "id": "no-terminal-flow:71",
+        "kind": "no-terminal-flow",
+        "elementId": 71,
+        "point": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "note": "no design flow"
+      },
+      {
+        "id": "open-end:64:1",
+        "kind": "open-end",
+        "elementId": 64,
+        "connector": 1,
+        "point": [
+          4.9,
+          4.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [
+            {
+              "elementId": 65,
+              "connector": 1,
+              "gapIn": 2.3999999999999915,
+              "facingDot": -1.0,
+              "opposed": true,
+              "aligned": true,
+              "autoJoin": true
+            }
+          ],
+          "faces": [],
+          "bodies": [
+            {
+              "segmentId": 65,
+              "gapIn": 22.199999999999996
+            },
+            {
+              "segmentId": 65,
+              "gapIn": 2.3999999999999915
+            }
+          ]
+        }
+      },
+      {
+        "id": "near-miss:64:1",
+        "kind": "near-miss",
+        "elementId": 64,
+        "connector": 1,
+        "point": [
+          4.9,
+          4.0,
+          0.0
+        ],
+        "note": "vacant opposed 65:1 is 2.4 in away (auto-join gap 3 in)"
+      },
+      {
+        "id": "open-end:65:1",
+        "kind": "open-end",
+        "elementId": 65,
+        "connector": 1,
+        "point": [
+          5.1,
+          4.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [
+            {
+              "elementId": 64,
+              "connector": 1,
+              "gapIn": 2.3999999999999915,
+              "facingDot": -1.0,
+              "opposed": true,
+              "aligned": true,
+              "autoJoin": true
+            }
+          ],
+          "faces": [],
+          "bodies": [
+            {
+              "segmentId": 64,
+              "gapIn": 22.199999999999996
+            },
+            {
+              "segmentId": 64,
+              "gapIn": 2.3999999999999915
+            }
+          ]
+        }
+      },
+      {
+        "id": "near-miss:65:1",
+        "kind": "near-miss",
+        "elementId": 65,
+        "connector": 1,
+        "point": [
+          5.1,
+          4.0,
+          0.0
+        ],
+        "note": "vacant opposed 64:1 is 2.4 in away (auto-join gap 3 in)"
+      }
+    ],
+    "tolerances": {
+      "candidateBoxIn": 36.0,
+      "autoJoinGapIn": 3.0
+    }
+  },
+  "2fa62873-2247": {
+    "issues": [
+      {
+        "id": "air-type-change:200:0",
+        "kind": "air-type-change",
+        "elementId": 200,
+        "connector": 0,
+        "point": [
+          8.0,
+          0.0,
+          0.0
+        ],
+        "note": "SupplyAir meets ReturnAir at 2:1"
+      },
+      {
+        "id": "air-type-change:900:0",
+        "kind": "air-type-change",
+        "elementId": 900,
+        "connector": 0,
+        "point": [
+          5.0,
+          0.0,
+          0.0
+        ],
+        "note": "SupplyAir meets ReturnAir at 2:0"
+      },
+      {
+        "id": "open-end:1:1",
+        "kind": "open-end",
+        "elementId": 1,
+        "connector": 1,
+        "point": [
+          4.0,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [
+            {
+              "elementId": 900,
+              "connector": 0,
+              "gapIn": 12.0,
+              "facingDot": 1.0,
+              "opposed": false,
+              "aligned": false,
+              "autoJoin": false
+            },
+            {
+              "elementId": 2,
+              "connector": 0,
+              "gapIn": 12.0,
+              "facingDot": -1.0,
+              "opposed": true,
+              "aligned": true,
+              "autoJoin": false
+            }
+          ],
+          "faces": [],
+          "bodies": [
+            {
+              "segmentId": 2,
+              "gapIn": 12.0
+            }
+          ]
+        }
+      },
+      {
+        "id": "air-type-change:2:0",
+        "kind": "air-type-change",
+        "elementId": 2,
+        "connector": 0,
+        "point": [
+          5.0,
+          0.0,
+          0.0
+        ],
+        "note": "ReturnAir meets SupplyAir at 900:0"
+      },
+      {
+        "id": "air-type-change:2:1",
+        "kind": "air-type-change",
+        "elementId": 2,
+        "connector": 1,
+        "point": [
+          8.0,
+          0.0,
+          0.0
+        ],
+        "note": "ReturnAir meets SupplyAir at 200:0"
+      }
+    ],
+    "tolerances": {
+      "candidateBoxIn": 36.0,
+      "autoJoinGapIn": 3.0
+    }
+  },
+  "9aaa4aeb-1389": {
+    "issues": [
+      {
+        "id": "no-terminal-flow:200",
+        "kind": "no-terminal-flow",
+        "elementId": 200,
+        "note": "no design flow"
+      },
+      {
+        "id": "open-end:1:1",
+        "kind": "open-end",
+        "elementId": 1,
+        "connector": 1,
+        "point": [
+          4.0,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [
+            {
+              "elementId": 2,
+              "connector": 0,
+              "gapIn": 2.0000000000000036,
+              "facingDot": -1.0,
+              "opposed": true,
+              "aligned": true,
+              "autoJoin": false
+            }
+          ],
+          "faces": [],
+          "bodies": [
+            {
+              "segmentId": 2,
+              "gapIn": 2.0000000000000036
+            }
+          ]
+        }
+      }
+    ],
+    "tolerances": {
+      "candidateBoxIn": 36.0,
+      "autoJoinGapIn": 3.0
+    }
+  },
+  "e4592002-969": {
+    "issues": [
+      {
+        "id": "open-end:100:0",
+        "kind": "open-end",
+        "elementId": 100,
+        "connector": 0,
+        "point": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [
+            {
+              "elementId": 101,
+              "connector": 0,
+              "gapIn": 12.0,
+              "facingDot": -1.0,
+              "opposed": true,
+              "aligned": true,
+              "autoJoin": false
+            },
+            {
+              "elementId": 102,
+              "connector": 0,
+              "gapIn": 0.0,
+              "facingDot": 1.0,
+              "opposed": false,
+              "aligned": false,
+              "autoJoin": false
+            }
+          ],
+          "faces": [],
+          "bodies": []
+        }
+      },
+      {
+        "id": "open-end:101:0",
+        "kind": "open-end",
+        "elementId": 101,
+        "connector": 0,
+        "point": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "note": "terminal not connected",
+        "near": {
+          "ports": [
+            {
+              "elementId": 100,
+              "connector": 0,
+              "gapIn": 12.0,
+              "facingDot": -1.0,
+              "opposed": true,
+              "aligned": true,
+              "autoJoin": false
+            },
+            {
+              "elementId": 100,
+              "connector": 1,
+              "gapIn": 12.0,
+              "facingDot": 1.0,
+              "opposed": false,
+              "aligned": false,
+              "autoJoin": false
+            },
+            {
+              "elementId": 102,
+              "connector": 0,
+              "gapIn": 12.0,
+              "facingDot": -1.0,
+              "opposed": true,
+              "aligned": true,
+              "autoJoin": false
+            }
+          ],
+          "faces": [],
+          "bodies": []
+        }
+      }
+    ],
+    "tolerances": {
+      "candidateBoxIn": 36.0,
+      "autoJoinGapIn": 3.0
+    }
+  }
+}

@@ -8,7 +8,7 @@ import { type OrbitViewport } from "./orbit";
 import { createLiveOrbit } from "@pe/kit/lang/live-orbit";
 import { OrbitMinimap } from "@pe/kit/lang/minimap";
 import { Scene3D } from "./scene3d";
-import { usePictureRead } from "#/ducts/scene-read";
+import { usePictureRead } from "#/scene/picture/read";
 import type { SceneRead } from "./use-scene";
 import { Row } from "@pe/kit/lang/row";
 import type { Pick, PaintOf } from "./types";

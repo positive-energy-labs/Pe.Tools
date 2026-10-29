@@ -13,7 +13,7 @@ test("Fix notes exclude advisory Heal rows and another system sharing the group"
   } as DuctSnapshot;
   const base = survey(snapshot, null);
   const finding: DuctFinding = {
-    id: "open-end:g10:21:1",
+    id: "open-end:21:1",
     kind: "open-end",
     elementIds: [21],
     note: "Open end",

@@ -706,6 +706,9 @@ export function useDuctsReading<T>(
                             ...(request.labelParameter
                               ? { labelParameter: request.labelParameter }
                               : {}),
+                            // The host keys the shared body on the selector too: without it a
+                            // scoped read reached Revit as the whole-document read.
+                            ...(request.selector ? { selector: request.selector } : {}),
                           },
                         }
                       : { key: "ducts.tables", request: { ids: request.ids } },

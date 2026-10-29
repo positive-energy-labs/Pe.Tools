@@ -70,7 +70,7 @@ import type { RevitCatalogLoadedFamilies } from "@pe/host-contracts/generated";
 import { coerceJsonObject } from "../shared/coerce.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
 import { peSourceTree } from "./source-tree.ts";
-import { ductsGuideInputSchema, ductsGuideReading, presentDuctCases } from "./ducts-skill.ts";
+import { ductsGuideInputSchema, ductsGuideReading } from "./ducts-skill.ts";
 
 function base(): string {
   // Hosted tools inherit the authority already admitted by the host middleware.
@@ -810,6 +810,25 @@ async function dispatch(
           result: await response.json(),
         };
       }
+      if (row.key === "route:ducts.sheet" || row.key === "route:ducts.roster") {
+        const client = createPeClient(base(), fetch);
+        const response =
+          row.key === "route:ducts.sheet"
+            ? await client.response("ducts.sheet", {
+                body: peRoutes["ducts.sheet"].body.parse(payload),
+              })
+            : await client.response("ducts.roster", {
+                body: peRoutes["ducts.roster"].body.parse(payload),
+              });
+        const result = await response.json();
+        return {
+          ok: response.ok,
+          target: response.ok
+            ? { session: result.target.session, document: result.target.openId }
+            : { session: null, document: null },
+          result,
+        };
+      }
       if (row.key === "route:ducts.analysis") {
         const response = await createPeClient(base(), fetch).response("ducts.analysis", {
           body: peRoutes["ducts.analysis"].body.parse(payload),
@@ -825,43 +844,12 @@ async function dispatch(
         };
       }
       if (row.key === "route:ducts.guide") {
-        const { document, section } = ductsGuideInputSchema.parse(payload);
-        const guide = ductsGuideReading(section);
-        if (!document)
-          return { ok: true, target: { session: null, document: null }, result: { guide } };
-        // The same fresh document read route:ducts.analysis runs; the guide stands without it.
-        try {
-          const response = await createPeClient(base(), fetch).response("ducts.analysis", {
-            body: peRoutes["ducts.analysis"].body.parse({
-              source: { kind: "fresh", target: document },
-              selector: { kind: "document" },
-              projection: "summary",
-              // One row: the guide wants the counts and the findings, not the page.
-              limit: 1,
-            }),
-          });
-          if (!response.ok)
-            return {
-              ok: true,
-              target: { session: null, document: null },
-              result: { guide, present: null, presentError: await response.text() },
-            };
-          const result = await response.json();
-          return {
-            ok: true,
-            target: { session: result.target.session, document: result.target.openId },
-            result: {
-              guide,
-              present: presentDuctCases(result.findingCounts.byKindAndGrade, result.findings),
-            },
-          };
-        } catch (error) {
-          return {
-            ok: true,
-            target: { session: null, document: null },
-            result: { guide, present: null, presentError: message(error) },
-          };
-        }
+        const { section } = ductsGuideInputSchema.parse(payload);
+        return {
+          ok: true,
+          target: { session: null, document: null },
+          result: { guide: ductsGuideReading(section) },
+        };
       }
       const view = /^route:([a-z-]+)\.(view|set-view)$/.exec(row.key);
       const route = view && routeViewRoutes.find((key) => key === view[1]);

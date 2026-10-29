@@ -158,6 +158,10 @@ export type PeApiSchemas = Record<
   | "turnElementNamesRequestSchema"
   | "turnElementNamesObservationSchema"
   | "routeStatePatchSchema"
+  | "ductsSheetRequestSchema"
+  | "ductsSheetResponseSchema"
+  | "ductsRosterRequestSchema"
+  | "ductsRosterResponseSchema"
   | "ductsAnalysisRequestSchema"
   | "ductsAnalysisResponseSchema"
   | "routeViewSchema"
@@ -740,6 +744,24 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "human",
       "pe",
       "human",
+    ),
+    "ducts.sheet": route(
+      "POST",
+      "/pe/ducts/sheet",
+      schemas.ductsSheetRequestSchema as S["ductsSheetRequestSchema"],
+      schemas.ductsSheetResponseSchema as S["ductsSheetResponseSchema"],
+      "read",
+      "pe",
+      "read",
+    ),
+    "ducts.roster": route(
+      "POST",
+      "/pe/ducts/roster",
+      schemas.ductsRosterRequestSchema as S["ductsRosterRequestSchema"],
+      schemas.ductsRosterResponseSchema as S["ductsRosterResponseSchema"],
+      "read",
+      "pe",
+      "read",
     ),
     "ducts.analysis": route(
       "POST",

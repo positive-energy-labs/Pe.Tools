@@ -13,6 +13,7 @@ internal static class PeRoutes {
         internal static class Keys {
             public const string ThreadSearch = "threadSearch";
             public const string ThreadSort = "threadSort";
+            public const string Stage = "stage";
             public const string ContextRadiusFt = "contextRadiusFt";
             public const string SceneView = "sceneView";
             public const string System = "system";

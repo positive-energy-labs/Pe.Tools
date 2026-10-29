@@ -111,12 +111,12 @@ test("block hover lights all references; token hover/focus narrows and exit rest
 });
 
 test("a shared numbering lights only the subjects this text names", () => {
-  const nameOf = (id: number) => (id < 100 ? `E${id}` : null);
-  const body = subjectDocument(["Ends at 7"], nameOf, [8, 9]);
+  const nameOf = (id: number) => (id < 100000 ? `E${id}` : null);
+  const body = subjectDocument(["Ends at 10007"], nameOf, [10008, 10009]);
   expect(body.references.map((r) => r.number)).toEqual([1, 2, 3]);
   // The heading names none of the body's subjects: no badge may stand for it.
   expect(subjectDocument(["No loss rule"], nameOf, [], body.references).references).toEqual([]);
   // It names one: that one, with the body's number.
-  const heading = subjectDocument(["Fix 8"], nameOf, [], body.references);
-  expect(heading.references).toEqual([{ id: 8, name: "E8", number: 2 }]);
+  const heading = subjectDocument(["Fix 10008"], nameOf, [], body.references);
+  expect(heading.references).toEqual([{ id: 10008, name: "E10008", number: 2 }]);
 });

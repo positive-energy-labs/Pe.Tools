@@ -45,7 +45,7 @@ export function usePictureRead(
 }
 
 /** Focus owns the first frame. Coverage grows only within one document/revision/membership. */
-export function useDuctScene(
+export function useCapture(
   request: ReturnType<typeof sceneRequest> | null,
   doc: { session: string; openId: string } | null,
   epoch: number | string,
