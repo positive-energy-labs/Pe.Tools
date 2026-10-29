@@ -61,12 +61,18 @@ export function markLines(
   return group;
 }
 
-export function markVolume(geometry: THREE.BufferGeometry, color: THREE.Color): THREE.Group {
+export function markVolume(
+  geometry: THREE.BufferGeometry,
+  color: THREE.Color,
+  // A ghost is a proposal not yet consented: dashed edges and a fainter body than a solid volume.
+  { ghost = false }: { ghost?: boolean } = {},
+): THREE.Group {
   const mesh = new THREE.Mesh(
     geometry,
     new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false }),
   );
   mesh.renderOrder = 9;
+  mesh.userData.ghost = ghost;
   const position = new THREE.EdgesGeometry(geometry, 30).getAttribute("position");
   const edges: Edge[] = [];
   for (let i = 0; i < position.count; i += 2)
@@ -75,7 +81,7 @@ export function markVolume(geometry: THREE.BufferGeometry, color: THREE.Color): 
       [position.getX(i + 1), position.getY(i + 1), position.getZ(i + 1)],
     ]);
   const group = new THREE.Group();
-  group.add(mesh, markLines(edges, color));
+  group.add(mesh, markLines(edges, color, ghost ? { dash: { size: 0.1, gap: 0.06 } } : {}));
   return group;
 }
 
@@ -100,7 +106,7 @@ export function markFrame(group: THREE.Object3D, at: LayerFrame): boolean {
         material.color.copy(object.userData.rest).lerp(WHITE, LIFT[at.state] + swell * 0.4);
       }
     } else if (object instanceof THREE.Mesh && object.material instanceof THREE.MeshBasicMaterial)
-      object.material.opacity = volumeAlpha + swell * 0.3;
+      object.material.opacity = (volumeAlpha + swell * 0.3) * (object.userData.ghost ? 0.45 : 1);
   });
   return swell > 0;
 }

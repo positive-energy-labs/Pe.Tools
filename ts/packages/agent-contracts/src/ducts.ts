@@ -356,6 +356,7 @@ export const ductsDocumentSchema = z
   .strictObject({
     // ponytail: Work holds pending sheet inputs; durable connector rulings belong in the model store when sheet apply lands.
     sheetDefaults: draftCellSchema(ductsSheetDefaultsSchema).default({}),
+    /** Only the `project` key is read (R2, 2026-10-28); per-fan keys from older Work are ignored, never migrated. */
     sheetInputs: z.record(z.string().min(1), draftCellSchema(ductsSheetInputsSchema)).default({}),
     calculation: z.record(z.string().min(1), draftCellSchema(ductCalculationSchema)).default({}),
     /** Deletable: a delete edit takes back the verdict the model's store holds at that key. */

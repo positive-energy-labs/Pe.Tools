@@ -174,9 +174,13 @@ test.skipIf(!existsSync(retained))(
     expect(requests).toHaveLength(reads + 1);
     process.stdout.write(`MUAS-1 overview: ${bytes} UTF-8 bytes\n${JSON.stringify(overview)}\n`);
   },
+  // Parses the 14 MB retained snapshot and surveys every roster fan once (assumedFanFlows): the
+  // first MUAS-1 build measured 10.1 s before R-FACE and 11.0 s after (2026-10-28); the route
+  // test took 16.6-17.3 s against vitest's 15 s default.
+  60_000,
 );
 
-test("sheet inputs survive host recreation in document Work; one project slot governs all fans and defaults come from route settings", async () => {
+test("sheet inputs survive host recreation in document Work; one project cell governs all fans and defaults come from route settings", async () => {
   const dir = await mkdtemp(join(tmpdir(), "ducts-sheet-inputs-"));
   try {
     const target = { session: "session", openId: "doc-a" };
@@ -317,7 +321,7 @@ test("sheet inputs survive host recreation in document Work; one project slot go
     const other = ductsSheetOverviewSchema.parse(
       await (await post("sheet", { ...request, unitId: 200 })).json(),
     );
-    expect(other.fan!.flowCfm).toBe(100); // Project slot, without copying fan 100's end overrides.
+    expect(other.fan!.flowCfm).toBe(100); // Project inputs (R2): fan 100's end cfm is keyed by its own terminal.
     const roster = ductsRosterResponseSchema.parse(await (await post("roster", { target })).json());
     expect(roster.activeSlot).toBe("named");
     expect(roster.slots).toEqual(
@@ -353,10 +357,11 @@ test("sheet inputs survive host recreation in document Work; one project slot go
     }).readRaw(scope, "ducts");
     expect(raw!.doc).toMatchObject({
       sheetInputs: {
-        project: { edit: { value: { slot: "revit:Flow" } } },
-        "fan:100:0": {
+        project: {
           edit: {
             value: {
+              slot: "revit:Flow",
+              splitPolicy: "even",
               rulings: inputs.rulings,
               endCfm: { 101: 90 },
               drops: { 101: 0.02, 102: 0.09 },
@@ -365,6 +370,7 @@ test("sheet inputs survive host recreation in document Work; one project slot go
         },
       },
     });
+    expect(raw!.doc).not.toHaveProperty(["sheetInputs", "fan:100:0"]);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -492,8 +498,34 @@ test("proposal accept/reject is basis-bound, persists in document Work, and repl
     }).readRaw(scope, "ducts");
     expect(raw!.doc).toMatchObject({
       sheetInputs: {
-        "fan:100:0": { edit: { value: { rulings: [{ pair: proposal.pair, verdict: "accept" }] } } },
+        project: { edit: { value: { rulings: [{ pair: proposal.pair, verdict: "accept" }] } } },
       },
+    });
+    // R-CAP: an end ruling persists in the same project cell; the capped port is neither an end
+    // nor a blocker, so the supply side has nothing left to price and ESP stays withheld.
+    const endRulings = [{ end: { elementId: 100, connector: 0 }, verdict: "capped" }];
+    const capped = ductsSheetOverviewSchema.parse(
+      await (await post({ ...request, inputs: { rulings: [], endRulings } })).json(),
+    );
+    expect(capped.basis).not.toBe(accepted.basis);
+    expect(capped.blockers.some((b) => b.elementId === 100)).toBe(false);
+    expect(capped.paths.supply.paths).toEqual([]);
+    expect(capped.totals!.requiredEspInWg).toBeNull();
+    const cappedInputs = ductsSheetResponseSchema.parse(
+      await (await post({ ...request, basis: capped.basis, detail: { kind: "inputs" } })).json(),
+    );
+    expect(cappedInputs.kind === "inputs" && cappedInputs.inputs).toContainEqual({
+      name: "open end 100:0 ruled capped",
+      value: null,
+      source: "end ruling",
+    });
+    expect(cappedInputs.kind === "inputs" && cappedInputs.edits.endRulings).toEqual(endRulings);
+    const rawCapped = await new RouteWorkspace({
+      registrations,
+      store: fileRouteDocumentStore(dir),
+    }).readRaw(scope, "ducts");
+    expect(rawCapped!.doc).toMatchObject({
+      sheetInputs: { project: { edit: { value: { rulings: [], endRulings } } } },
     });
     expect(snapshot.nodes[0]!.connectors[0]!.connectedTo).toBeNull();
   } finally {

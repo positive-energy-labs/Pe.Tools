@@ -55,6 +55,10 @@ export interface FittingTraversal {
   outlet: Connector | undefined;
   /** The duct a tap hangs off, for its main section; null when unknown. */
   main?: Segment | null;
+  /** Air joins at this junction (the caller knows the side and the entry); see loss-rules.ts. */
+  converging?: boolean;
+  /** A tap whose main carries air both ways from it (the caller walked both); see loss-rules.ts. */
+  bullhead?: boolean;
 }
 
 /** A plain tee entered from its run. Branch-entry/converging geometry has no diverging mapping. */
@@ -91,6 +95,8 @@ export function fittingFacts({
   inlet: walkedInlet,
   outlet: walkedOutlet,
   main,
+  converging,
+  bullhead,
 }: FittingTraversal): FittingFacts {
   const tap = isTap(node);
   const transition = node.partType === "Transition";
@@ -112,7 +118,8 @@ export function fittingFacts({
     ? null
     : mainArea != null
       ? {
-          shape: "round",
+          // The area is read at the tap; the shape is the main duct's (a takeoff on a 32x11 trunk is rectangular).
+          shape: main?.shape ?? "round",
           section: { areaFt2: mainArea, dhIn: 12 * Math.sqrt((4 * mainArea) / Math.PI) },
         }
       : main
@@ -122,7 +129,13 @@ export function fittingFacts({
     kind: node.kind === "accessory" ? "accessory" : "fitting",
     family: node.family ?? null,
     partType: node.partType ?? null,
-    rOverD: factOf(node, "rOverD"),
+    // The C# derives rOverD only in the whole-document pass; `from` and `ids` reads carry centerRadius
+    // alone (live Chadds, 2026-10-28: every round elbow on MUAS-1's walk read "no rule matches").
+    rOverD:
+      factOf(node, "rOverD") ??
+      (factOf(node, "centerRadius") != null && (node.connectors[0]?.diameterIn ?? 0) > 0
+        ? Math.round((factOf(node, "centerRadius")! / node.connectors[0]!.diameterIn!) * 1e4) / 1e4
+        : null),
     centerRadiusIn: factOf(node, "centerRadius"),
     ...(tee &&
     outlet &&
@@ -148,6 +161,8 @@ export function fittingFacts({
     main: mainPort,
     abOverAc: factOf(node, "abOverAc"),
     takeoff: tap,
+    ...(converging ? { converging: true } : {}),
+    ...(bullhead ? { bullhead: true } : {}),
   };
 }
 

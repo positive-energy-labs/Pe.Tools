@@ -15,15 +15,19 @@ export const rulingFor = (
   rulings: readonly ConnectorPairRuling[],
 ) => rulings.findLast((r) => r.pair.every((p) => pair.includes(p)))?.verdict;
 
+/** The best heal, or none; `proposeHeals` ranks them all so a caller can refuse the first (R-A). */
+export const proposeHeal = (...args: Parameters<typeof proposeHeals>): HealProposal | undefined =>
+  proposeHeals(...args)[0];
+
 /** Join first, body tap second, occupied junction last. Never propose an air-type crossing. */
-export function proposeHeal(
+export function proposeHeals(
   from: Element,
   port: Port,
   nearby: readonly Element[],
   rulings: readonly ConnectorPairRuling[],
   withinIn = 36,
   unavailable: ReadonlySet<string> = new Set(),
-): HealProposal | undefined {
+): HealProposal[] {
   const cls =
     classOf(port.classification) ??
     ("classification" in from ? classOf(from.classification) : null);
@@ -67,7 +71,13 @@ export function proposeHeal(
       const other =
         classOf(c.classification) ??
         ("classification" in target ? classOf(target.classification) : null);
-      if (!sameAir(other)) continue;
+      // Ends of different air classes never join silently; an accept ruling on the pair joins them
+      // (as `applyConnectorPairRulings` does), e.g. a SupplyAir grille 0.01 in from a ReturnAir plenum.
+      if (
+        !sameAir(other) &&
+        rulingFor([`${from.id}:${port.index}`, `${target.id}:${c.index}`], rulings) !== "accept"
+      )
+        continue;
       const gapIn = distance(port.point, c.point) * 12;
       if (gapIn > withinIn) continue;
       if (c.connectedTo) {
@@ -130,5 +140,5 @@ export function proposeHeal(
       a.gapIn - b.gapIn ||
       a.pair.join("|").localeCompare(b.pair.join("|"))
     );
-  })[0];
+  });
 }

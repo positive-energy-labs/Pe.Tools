@@ -8,17 +8,46 @@ const detail = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("elements") }),
   z.strictObject({ kind: z.literal("inputs") }),
 ]);
-/** Project slot is shared by all fan sheets. Other inputs are retained per fan/chain subject. */
+/**
+ * Sheet inputs are PER PROJECT (kaitpw ruling R2, 2026-10-28): one document Work cell,
+ * `sheetInputs.project`, holds the slot, split policy, join rulings, end rulings, typed drops and
+ * typed end cfm that every fan's sheet reads. A join accepted on one fan holds on its sibling.
+ * Drops and end cfm are keyed by element id, so they are per element, not per fan.
+ * `endRulings` is a second array beside the connector-pair `rulings` (R-CAP, 2026-10-28): the
+ * engine and kernel consume `rulings` as `ConnectorPairRuling[]` end to end, so a union there
+ * would make every consumer filter; an end ruling names one connector and today has one verdict.
+ */
 export const ductsSheetInputsSchema = z.strictObject({
   slot: z.string().min(1).optional(),
   splitPolicy: z.enum(["even", "proportional"]).optional(),
   endCfm: z.record(z.string().regex(/^[1-9]\d*$/), z.number().finite().nonnegative()).optional(),
+  /**
+   * A unit's design flow, cfm, by unit element id: what a side-stream unit (MUAS, ERV) pushes, split
+   * across the receiving ends by the split policy (A2). One number instead of a typed share per end.
+   */
+  unitCfm: z.record(z.string().regex(/^[1-9]\d*$/), z.number().finite().positive()).optional(),
+  /** Request-only: element/unit ids whose typed value to remove. The host applies it and never saves it. */
+  clear: z
+    .strictObject({
+      endCfm: z.array(z.string()).optional(),
+      drops: z.array(z.string()).optional(),
+      unitCfm: z.array(z.string()).optional(),
+    })
+    .optional(),
   drops: z.record(z.string().regex(/^[1-9]\d*$/), z.number().finite().nonnegative()).optional(),
   rulings: z
     .array(
       z.strictObject({
         pair: z.tuple([z.string().min(1), z.string().min(1)]),
         verdict: z.enum(["accept", "reject"]),
+      }),
+    )
+    .optional(),
+  endRulings: z
+    .array(
+      z.strictObject({
+        end: z.strictObject({ elementId, connector: portIndex }),
+        verdict: z.literal("capped"),
       }),
     )
     .optional(),
@@ -66,7 +95,7 @@ export const DUCTS_SHEET_GUIDE = {
     "Read route:ducts.roster with the exact target {session, openId}. Match the equipment mark, then use its unitId and portIndex; marks are not unique. Suggestions remain unconfirmed until the engineer rules.",
     "Read route:ducts.sheet with {target, mode: 'fan', unitId, portIndex}. For a named start and end, use mode 'chain', start {elementId, connector?}, end {elementId}, and asserted direction 'supply' or 'return'. A chain makes no fan ESP claim.",
     "Read the sheet's blockers back to the person with their element and connector, effect on the total, and closer. Report known subtotal, completeness, and required ESP exactly as returned. Never call an incomplete path critical.",
-    "Accept or reject a returned heal proposal with the same fan request, its basis, and proposal {pair, verdict}. This writes a calculation ruling to document Work, never a Revit heal. Assumed ESP uses the continued walk; flow and pricing gaps still withhold it.",
+    "Accept or reject a returned heal proposal with the same fan request, its basis, and proposal {pair, verdict}. This writes a calculation ruling to document Work, never a Revit heal. Assumed ESP uses the continued walk; flow and pricing gaps still withhold it. An open end a person rules capped is written as inputs.endRulings [{end: {elementId, connector}, verdict: 'capped'}]; it is then neither an end nor a blocker. A 'sibling-fan' end is another fan sharing the trunk, priced to the junction and carrying none of this fan's flow.",
     "Use the returned next handles with the same target, mode, and basis to read a path's legs, walked elements, or inputs and provenance. A stale response means read a new overview; never reuse a handle against a different basis.",
     "Read inputs detail for the full closer notes and candidates. Propose a sourced default or a basis-bound previewed heal for a blocker, with its effect on the total. Use only an available typed preview/write contract and the returned candidate. If that door is unavailable, report it as owed; do not substitute old group heals. After an authorized change, read a new sheet and report its measured effect. Unknown effects stay unknown until recomputed.",
   ],
@@ -86,7 +115,8 @@ const fan = fanRef.extend({
   flowCfm: z.number().nullable(),
 });
 const pathEnd = z.object({
-  kind: z.enum(["terminal", "open-end", "roster-fan-port", "joins-other-fan"]),
+  /** `sibling-fan` (R-SIB): a named fan sharing the trunk; priced to the junction, 0 cfm, no blocker. */
+  kind: z.enum(["terminal", "open-end", "roster-fan-port", "joins-other-fan", "sibling-fan"]),
   elementId,
   connector: portIndex.optional(),
   fan: fanRef.nullable().optional(),
@@ -153,6 +183,8 @@ const blocker = z.object({
   closer: z.enum(["default", "heal", "ruling"]),
   proposal: healProposal.optional(),
   owner: fanRef.optional(),
+  /** R-B: the open-end blocker whose assumed heal exposed this one; a consequence, not a gap of its own. */
+  causedBy: z.string().optional(),
 });
 const pathSummary = z.object({
   pathId: z.string(),
@@ -210,6 +242,15 @@ export const ductsSheetResponseSchema = z.discriminatedUnion("kind", [
               toElementId: elementId,
               toConnector: portIndex.nullable(),
               gapIn: z.number(),
+              pair: z.tuple([z.string(), z.string()]),
+            })
+            .optional(),
+          crossing: z
+            .object({
+              toElementId: elementId,
+              toConnector: portIndex,
+              distanceIn: z.number(),
+              classes: z.tuple([z.string(), z.string()]),
               pair: z.tuple([z.string(), z.string()]),
             })
             .optional(),

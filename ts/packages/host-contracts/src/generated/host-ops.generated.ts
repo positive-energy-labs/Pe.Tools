@@ -1223,8 +1223,8 @@ export namespace DuctsTables {
     /**
      * Tables keyed by upper-case id, then by result key (Co, Cb, Cs; a block printed twice gets "#2").
      * A table Revit ships as "No table" has no results. Missing names ids with no file in Folder. Unsupported maps
-     * an id to why it was not parsed: three-axis tables (a second Y such as Re or As/Ac) and fixed-width rows whose
-     * numbers run together; a wrong grid is worse than none.
+     * an id to why it was not parsed: a row whose value count does not match its axes (a triangular two-axis table,
+     * a value Revit's file prints past its row); a wrong grid is worse than none.
      *
      */
     export interface Response {
@@ -1240,9 +1240,13 @@ export namespace DuctsTables {
       };
     }
     /**
-     * One coefficient grid; the wire shape the web's loss-grid.ts reads. With Y present, Grid is number[][]: one row
-     * per Y, one column per X. With Y absent, Grid is number[] over X; a constant ("Co= 0.12") is one value with X
-     * empty. Grid is typed object because the wire is a union; Rows and Values build it.
+     * One coefficient grid; the wire shape the web's loss-grid.ts reads. With Z present (a three-axis table such as
+     * ER5-1's As/Ac by Ab/Ac by Qb/Qc), Grid is (number[] | null)[][]: one slice per Z, in it one row per Y, one column
+     * per X. Y is every inner value any slice prints, and a row is null where its slice prints none (ER5-1 has no
+     * Ab/Ac 0.25 row at As/Ac 0.5; ED5-4 states Ab2/Ac only up to Ab1/Ac). Z is the table's first (outer) column, Y
+     * its second. With Y present and Z absent, Grid is number[][]: one row per Y, one column per X. With Y absent, Grid
+     * is number[] over X; a constant ("Co= 0.12") is one value with X empty. Grid is typed object because the wire is
+     * a union; Slices, Rows and Values build it.
      *
      */
     export interface AshraeGrid {
@@ -1252,6 +1256,8 @@ export namespace DuctsTables {
       yLabel?: null | string;
       y?: number[] | null;
       grid: unknown;
+      zLabel?: null | string;
+      z?: number[] | null;
     }
   }
 }

@@ -51,7 +51,15 @@ export type LegSource =
       table: string;
       coefficient: number;
       pv: number;
-      inputs: { res: string; x: number; y?: number; xLabel: string; yLabel?: string };
+      inputs: {
+        res: string;
+        x: number;
+        y?: number;
+        z?: number;
+        xLabel: string;
+        yLabel?: string;
+        zLabel?: string;
+      };
       notes: string[];
     }
   | { kind: "drop"; source: string };
@@ -114,10 +122,7 @@ export function priceLeg(input: LegInput, grids: Grids, choices: Choices = {}): 
   }
   if (input.kind === "drop") {
     if (input.inWg == null)
-      return unpriced(
-        input,
-        `${input.element.kind} has no drop (${input.source})`,
-      );
+      return unpriced(input, `${input.element.kind} has no drop (${input.source})`);
     return {
       kind: "drop",
       elementId: input.element.id,
@@ -148,14 +153,25 @@ export function priceLeg(input: LegInput, grids: Grids, choices: Choices = {}): 
         ? `tap ${node.id} carries no branch flow or its main flow is unknown, no takeoff rule applies`
         : `no rule matches ${node.kind}${node.partType ? ` ${node.partType}` : ""}${facts.family ? ` (${facts.family})` : ""}`,
     );
-  const table = (choices[rule.key] ?? rule.table).toUpperCase();
+  const chosen = choices[rule.key]?.toUpperCase();
+  // A rule's fallback stands in only for its own default, when that grid is not served at all.
+  const fallback =
+    !chosen && rule.fallback && !grids[rule.table] && grids[rule.fallback] ? rule.fallback : null;
+  const table = chosen ?? fallback ?? rule.table;
   const lookup = rule.input(facts, flows, table, leg);
   const grid = grids[table]?.[lookup.res];
   if (!grid) return unpriced(input, `${table} ${lookup.res} is not loaded`);
   let found;
+  const rebased: string[] = [];
   try {
-    found = lookupGrid(grid, lookup.x, lookup.y);
-    found.value *= lookup.factor ?? 1;
+    found = lookupGrid(grid, lookup.x, lookup.y, lookup.z);
+    const factor =
+      typeof lookup.factor === "function" ? lookup.factor(found.at) : (lookup.factor ?? 1);
+    if (typeof lookup.factor === "function" && factor !== 1)
+      rebased.push(
+        `${lookup.res} x ${+factor.toPrecision(3)}: charged on the velocity the table's own geometry has where it was read`,
+      );
+    found.value *= factor;
   } catch (e) {
     if (e instanceof GridError) return unpriced(input, e.message);
     throw e;
@@ -164,7 +180,8 @@ export function priceLeg(input: LegInput, grids: Grids, choices: Choices = {}): 
   if (!basis.section) return unpriced(input, "no cross-section for the velocity pressure");
   const f = friction(basis.section, basis.cfm, 0);
   const reasons: ImplausibleLoss["reasons"] = [];
-  if (found.value * f.pv > IMPLAUSIBLE_ROW_IN_WG) reasons.push("drop");
+  // Either sign: a converging Cb off its table's geometry can "gain" as implausibly as it can lose.
+  if (Math.abs(found.value * f.pv) > IMPLAUSIBLE_ROW_IN_WG) reasons.push("drop");
   if (f.fpm > IMPLAUSIBLE_FPM) reasons.push("velocity");
   const source: LegSource = {
     kind: "rule",
@@ -176,15 +193,23 @@ export function priceLeg(input: LegInput, grids: Grids, choices: Choices = {}): 
       res: lookup.res,
       x: lookup.x,
       ...(lookup.y == null ? {} : { y: lookup.y }),
+      ...(lookup.z == null ? {} : { z: lookup.z }),
       xLabel: grid.xLabel,
       ...(grid.yLabel ? { yLabel: grid.yLabel } : {}),
+      ...(grid.zLabel ? { zLabel: grid.zLabel } : {}),
     },
-    notes: [...found.notes, ...(facts.note ? [facts.note] : [])],
+    notes: [
+      ...found.notes,
+      ...rebased,
+      ...(fallback ? [`${rule.table} is not served; its fallback ${fallback} priced`] : []),
+      ...(lookup.note ? [lookup.note] : []),
+      ...(facts.note ? [facts.note] : []),
+    ],
   };
   if (reasons.length) {
     const why = reasons.map((r) =>
       r === "drop"
-        ? `${round4(found.value * f.pv)} in-wg over ${IMPLAUSIBLE_ROW_IN_WG}`
+        ? `${round4(found.value * f.pv)} in-wg, magnitude over ${IMPLAUSIBLE_ROW_IN_WG}`
         : `velocity over ${IMPLAUSIBLE_FPM} fpm`,
     );
     return unpriced(

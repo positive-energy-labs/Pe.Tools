@@ -34,11 +34,22 @@ export interface Leg {
 }
 
 export interface PathEnd {
-  kind: "terminal" | "open-end" | "roster-fan-port" | "joins-other-fan";
+  /**
+   * R-SIB (kaitpw/counsel 2026-10-28): `sibling-fan` is a named roster fan reached at its inlet on
+   * this fan's return side, or at its discharge on its supply side: a sibling sharing the trunk.
+   * Its path is priced to the junction only, carries 0 cfm and raises no blocker.
+   */
+  kind: "terminal" | "open-end" | "roster-fan-port" | "joins-other-fan" | "sibling-fan";
   elementId: number;
   connector?: number;
-  /** The other fan, for roster-fan-port and joins-other-fan. */
+  /** The other fan, for roster-fan-port, joins-other-fan and sibling-fan. */
   fan?: FanPortRef | null;
+}
+
+/** A person's ruling on one open end (R-CAP, kaitpw 2026-10-28): capped, so neither an end nor a blocker. */
+export interface EndRuling {
+  end: { elementId: number; connector: number };
+  verdict: "capped";
 }
 
 export type Side = "supply" | "return";
@@ -85,10 +96,26 @@ export interface Blocker {
       gapIn: number;
       pair: [string, string];
     };
+    /**
+     * A vacant facing port of another air class within reach. Never joined silently; carried so a
+     * person can choose it (an accept ruling on `pair`) beside the same-class `candidate`.
+     */
+    crossing?: {
+      toElementId: number;
+      toConnector: number;
+      distanceIn: number;
+      classes: [string, string];
+      pair: [string, string];
+    };
   };
   /** The other fan a shared leg or a join belongs to. */
   owner?: FanPortRef;
   proposal?: HealProposal;
+  /**
+   * R-B (kaitpw 2026-10-28): the id of the open-end blocker whose assumed heal first exposed this
+   * one. A consequence of the heal, not an independent gap; set only in the assumed pass.
+   */
+  causedBy?: string;
 }
 
 /** A calculation assumption, never a model write. Points use snapshot coordinates (feet). */

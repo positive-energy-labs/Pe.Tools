@@ -49,6 +49,8 @@ interface OrientedBox {
   center: number[];
   axes: [number[], number[], number[]];
   half: [number, number, number];
+  /** A heal not yet consented draws as a ghost (`markVolume`); the sheet sets this, /ducts never. */
+  ghost?: boolean;
 }
 export interface FindingShapes {
   outlines: { outline: Outline; ink: Ink; finding: string; elementId: number }[];
@@ -307,7 +309,7 @@ function geometryLayers(shapes: FindingShapes): Layer3D[] {
                   Math.PI / 2,
                 )
               : new THREE.BoxGeometry(b.half[0] * 2, b.half[1] * 2, b.half[2] * 2);
-          const volume = markVolume(geometry, new THREE.Color(INK.cap));
+          const volume = markVolume(geometry, new THREE.Color(INK.cap), { ghost: b.ghost });
           const [x, y, z] = b.axes.map((a) => new THREE.Vector3(a[0], a[1], a[2]));
           volume.setRotationFromMatrix(new THREE.Matrix4().makeBasis(x!, y!, z!));
           volume.position.set(b.center[0]!, b.center[1]!, b.center[2]!);

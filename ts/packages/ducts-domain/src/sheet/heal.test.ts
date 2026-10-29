@@ -110,7 +110,7 @@ it("extends a join on the assumed walk, charges gap friction, and only an accept
   );
 });
 
-it("proposes a duct-body tap, keeps its unpriced fitting blocked, and uses typed flow/drop on the continuation", () => {
+it("proposes a duct-body tap and walks on through the landing duct both ways (R-Q4); the unpriced fitting stays blocked until a drop is typed", () => {
   const snapshot = fixture();
   snapshot.segments[1] = duct(
     2,
@@ -118,26 +118,55 @@ it("proposes a duct-body tap, keeps its unpriced fitting blocked, and uses typed
     [5, 5, 0],
     [port(0, [5, -5, 0], [0, -1, 0], [300, 0]), port(1, [5, 5, 0], [0, 1, 0], [400, 0])],
   ) as unknown as DuctSnapshot["segments"][number];
+  snapshot.nodes.push(
+    node(
+      300,
+      "terminal",
+      [port(0, [5, -5, 0], [0, 1, 0], [2, 0])],
+      50,
+    ) as unknown as DuctSnapshot["nodes"][number],
+    node(
+      400,
+      "terminal",
+      [port(0, [5, 5, 0], [0, -1, 0], [2, 1])],
+      50,
+    ) as unknown as DuctSnapshot["nodes"][number],
+  );
   const input = {
     snapshot,
     roster,
     fan: { unitId: 100, portIndex: 0 },
     grids: {},
-    endCfm: { 2: 100 },
+    endCfm: { 300: 50, 400: 50 },
   };
   const sheet = buildSheet(input);
   const proposal = sheet.blockers.find((b) => b.proposal)!.proposal!;
   expect(proposal.kind).toBe("tap");
   expect(proposal.to.connector).toBeNull();
   expect(proposal.gapIn).toBeCloseTo(8);
+  // The landing duct is this fan's own (unowned) network: a split, not a Q4 merge.
+  expect(sheet.assumed.paths.some((p) => p.end.kind === "joins-other-fan")).toBe(false);
   expect(
-    sheet.assumed.paths.some((p) => p.end.kind === "joins-other-fan" && p.end.elementId === 2),
-  ).toBe(true);
+    sheet.assumed.paths
+      .filter((p) => p.side === "supply")
+      .map((p) => p.end.elementId)
+      .sort(),
+  ).toEqual([300, 400]);
+  // Entered at the landing point (no connector): 5 ft each way at each terminal's 50 cfm.
+  for (const id of ["2:>0", "2:>1"]) {
+    expect(sheet.assumed.legs[id]).toMatchObject({ flowCfm: 50 });
+    expect(sheet.assumed.legs[id]!.lossInWg).toBeCloseTo(
+      friction(roundSection(8), 50, 5, 0.0003).dp,
+      8,
+    );
+  }
   expect(sheet.assumed.blockers.some((b) => b.kind === "unknown-drop")).toBe(true);
   expect(sheet.totals.requiredEspAssumedInWg).toBeNull();
   const priced = buildSheet({ ...input, drops: { 1: 0.02 } });
   expect(priced.totals.requiredEspAssumedInWg).toBeCloseTo(
-    0.05 + friction(roundSection(8), 100, 8 / 12, 0.0003).dp,
+    0.08 +
+      friction(roundSection(8), 100, 8 / 12, 0.0003).dp +
+      friction(roundSection(8), 50, 5, 0.0003).dp,
     6,
   );
   expect(priced.totals.requiredEspInWg).toBeNull();
@@ -149,7 +178,7 @@ it("proposes a duct-body tap, keeps its unpriced fitting blocked, and uses typed
   expect(accepted.totals.requiredEspInWg).not.toBeNull();
 });
 
-it("occupied mouths require a risky tee, preserve both branches, and cross-air-type proposals are refused even when accepted", () => {
+it("occupied mouths require a risky tee, preserve both branches, and cross-air-type proposals are refused unless the person accepts that pair", () => {
   const snapshot = fixture();
   snapshot.segments[1]!.connectors[0]!.connectedTo = { elementId: 900, connector: 0 };
   snapshot.nodes.push(
@@ -168,12 +197,21 @@ it("occupied mouths require a risky tee, preserve both branches, and cross-air-t
   expect(sheet.assumed.paths.some((p) => p.end.elementId === 200)).toBe(true);
   expect(sheet.assumed.blockers.some((b) => b.kind === "unknown-drop")).toBe(true);
   for (const c of snapshot.segments[1]!.connectors) c.classification = "ReturnAir";
+  // Unruled, a crossing is never proposed, even on the assumed walk (W0-A rule 2 holds).
+  const silent = walkFrom(graphOf(snapshot), snapshot.nodes[0]!, 0, { roster, assumeHeals: true });
+  expect(silent.heals).toEqual([]);
+  expect([...silent.blockers.values()].some((b) => b.proposal)).toBe(false);
+  // Departure (2026-10-28, FC-23 close): this test once held "refused even when accepted". The
+  // kernel's `applyConnectorPairRulings` has always joined an accepted pair across classes, and
+  // the page's "accept join" verb writes exactly that pair; on Chadds three ReturnAir plenums
+  // end 0.01 in from SupplyAir grilles, which nothing else can close. The boundary that holds:
+  // only a person's accept of that exact pair joins; nothing crosses silently.
   const walk = walkFrom(graphOf(snapshot), snapshot.nodes[0]!, 0, {
     roster,
     assumeHeals: true,
     rulings: [{ pair: p.pair, verdict: "accept" }],
   });
-  expect(walk.heals).toEqual([]);
+  expect(walk.heals.map((h) => h.proposal.pair)).toEqual([p.pair]);
   expect([...walk.blockers.values()].some((b) => b.proposal)).toBe(false);
 });
 
@@ -317,7 +355,7 @@ it.skipIf(!existsSync(retained))(
 );
 
 it("assumed flow borrows a receiving unit's flow only through its intake, never from a co-source on a shared trunk", () => {
-  const units = (bDirection: "in" | "out") => {
+  const units = (bDirection: "in" | "out", aKind: FanPort["kind"] = "muas") => {
     const dir = (p: Port, d: string) => ({ ...p, direction: d }) as Port;
     const snapshot = {
       document: { title: "co-source", readAt: "fixed" },
@@ -343,7 +381,7 @@ it("assumed flow borrows a receiving unit's flow only through its intake, never 
       ],
     } as unknown as DuctSnapshot;
     const units = [
-      { unitId: 300, portIndex: 0, inletPortIndex: 1, side: "supply", tag: "A", kind: "erv" },
+      { unitId: 300, portIndex: 0, inletPortIndex: 1, side: "supply", tag: "A", kind: aKind },
       {
         unitId: 400,
         portIndex: 0,
@@ -359,4 +397,11 @@ it("assumed flow borrows a receiving unit's flow only through its intake, never 
   expect(units("in").get("300:0")?.cfm).toBe(150);
   // B's port is a discharge on the same trunk (Chadds RV-11/RV-23): a co-source, nothing to borrow.
   expect(units("out").get("300:0")).toBeUndefined();
+  // An ERV in A's place supplies no terminal through its own discharge: unknown, with a line,
+  // never B's 150 (kaitpw 2026-10-28; Chadds RV-25 and RV-7 read FC-23's sum before).
+  expect(units("in", "erv").get("300:0")).toEqual({
+    cfm: 0,
+    source:
+      "unknown (0 assumed): ERV 300:0's discharge reaches no terminal it supplies; type the unit design flow",
+  });
 });

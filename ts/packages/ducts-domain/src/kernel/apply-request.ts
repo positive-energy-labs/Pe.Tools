@@ -34,11 +34,12 @@ export interface ApplyRequestInput {
   appliedAt: string;
 }
 
-/** A rule leg's table lookup as the store keeps it: "xLabel=x, yLabel=y". */
+/** A rule leg's table lookup as the store keeps it: "xLabel=x, yLabel=y, zLabel=z". */
 const inputsOf = (inputs: Extract<PricedLeg["source"], { kind: "rule" }>["inputs"]) => {
   const at = (n: number) => +n.toPrecision(4);
   const x = `${inputs.xLabel}=${at(inputs.x)}`;
-  return inputs.y == null ? x : `${x}, ${inputs.yLabel ?? "y"}=${at(inputs.y)}`;
+  const xy = inputs.y == null ? x : `${x}, ${inputs.yLabel ?? "y"}=${at(inputs.y)}`;
+  return inputs.z == null ? xy : `${xy}, ${inputs.zLabel ?? "z"}=${at(inputs.z)}`;
 };
 
 const byId = <T extends { id: number }>(xs: T[]) => xs.sort((a, b) => a.id - b.id);

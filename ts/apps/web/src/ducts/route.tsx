@@ -43,6 +43,7 @@ import { claimsForGroup } from "@pe/ducts-domain/claims";
 import { provisionalWords } from "./provisional";
 import type { ProtoProps } from "./proto/props";
 import { EScreen } from "./proto/e/screen";
+import { SheetScreen } from "./sheet/mount";
 import { useDuctsViewBridge } from "./view-bridge";
 import { NativeObservationScope, type NativeObservation } from "#/revit/observation";
 import type { ActionHandle } from "#/route/handle";
@@ -74,8 +75,9 @@ const NO_NATIVE_OBSERVATION: NativeObservation = { scope: null };
 /** Revit's critical path as a word, whatever the engine flag: a system with no path reads "no path". */
 const revitSays = (inWg: number | null | undefined) => (inWg == null ? "no path" : fmt(inWg));
 
-/** `url` is false in a chat pane, which does not own the address. */
-export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
+/** `url` is false in a chat pane, which does not own the address. `view="sheet"` swaps the E2 body
+ * for the fan sheet under the same shell (`sheet/mount.tsx`). */
+export function DuctsRoute({ url = true, view }: { url?: boolean; view?: "sheet" } = {}) {
   const [chosen] = useChooseTarget();
   const thread = useRouteThread();
   // `?demo=scene` mounts the makeup-air fixture, snapshot included, and no host is read; its
@@ -625,7 +627,11 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
         <NativeObservationScope
           value={snapshotCurrent && !held ? nativeObservation : NO_NATIVE_OBSERVATION}
         >
-          <EScreen props={shell} />
+          {view === "sheet" ? (
+            <SheetScreen props={shell} />
+          ) : (
+            <EScreen props={shell} />
+          )}
         </NativeObservationScope>
       </Surface>
     </RegistryContext>

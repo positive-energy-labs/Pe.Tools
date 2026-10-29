@@ -38,7 +38,31 @@ type SnapshotRequest = {
     | { kind: "roster" }
     | { kind: "from"; unitId: number; portIndex?: number };
 };
-const tableRequest = { ids: [...new Set(LOSS_RULES.map((rule) => rule.table))].sort() };
+// Each rule's default and the fallback it prices when that default is not served (ER5-2 for ER5-1).
+const tableRequest = {
+  ids: [
+    ...new Set(
+      LOSS_RULES.flatMap((rule) => [rule.table, ...(rule.fallback ? [rule.fallback] : [])]),
+    ),
+  ].sort(),
+};
+/** Union two `from` reads of one document by element id; a walked copy wins over a candidate copy. */
+function mergeSnapshots(a: DuctSnapshot, b: DuctSnapshot): DuctSnapshot {
+  const union = <T extends { id: number; reason?: string | null }>(x: readonly T[], y: readonly T[]) => {
+    const byId = new Map(x.map((e) => [e.id, e]));
+    for (const e of y) {
+      const have = byId.get(e.id);
+      if (!have || ((have.reason ?? "walked") !== "walked" && (e.reason ?? "walked") === "walked"))
+        byId.set(e.id, e);
+    }
+    return [...byId.values()];
+  };
+  return {
+    ...a,
+    nodes: union(a.nodes as never[], b.nodes as never[]) as DuctSnapshot["nodes"],
+    segments: union(a.segments as never[], b.segments as never[]) as DuctSnapshot["segments"],
+  };
+}
 export interface DuctsSheetSources {
   call: (
     key: "ducts.snapshot" | "ducts.tables",
@@ -77,9 +101,9 @@ const subjectKey = ({
   ...subject
 }: DuctsSheetRequest) => canonicalRouteInput(subject);
 type Entry = {
+  /** Target, mode, fan or chain, the project inputs and the defaults: what one sheet is a sheet of. */
   subject: string;
   inputs: DuctsSheetInputs;
-  workInputKey: string;
   settingsBasis: string;
   request: SnapshotRequest;
   version: string;
@@ -100,7 +124,15 @@ const compact = (value: Sheet["blockers"][number]) => ({
   closer: value.closer.kind,
   ...(value.proposal ? { proposal: value.proposal } : {}),
   ...(value.owner ? { owner: value.owner } : {}),
+  ...(value.causedBy ? { causedBy: value.causedBy } : {}),
 });
+/** Known blockers first, then the assumed pass's own (R-B consequences cite a known id). */
+/** Known first: a blocker the known pass raises is never a consequence of an assumed heal (R-B). */
+const allBlockers = (value: Sheet | Chain) => {
+  const known = new Map(value.blockers.map((b) => [b.id, b]));
+  const assumed = "assumed" in value ? value.assumed.blockers.filter((b) => !known.has(b.id)) : [];
+  return [...known.values(), ...assumed];
+};
 
 function overview(entry: Entry): DuctsSheetOverview {
   const paths = pathsOf(entry.value);
@@ -146,29 +178,28 @@ interface SheetWork {
   key(target: DocumentRef): Promise<WorkKey>;
   author(): WorkAuthor;
 }
-const inputKey = (request: DuctsSheetRequest) =>
-  request.mode === "fan"
-    ? `fan:${request.unitId}:${request.portIndex}`
-    : `chain:${request.start.elementId}:${request.start.connector ?? ""}:${request.end.elementId}:${request.direction}`;
-const mergeInputs = (saved: DuctsSheetInputs, override: DuctsSheetInputs): DuctsSheetInputs => ({
-  ...saved,
-  ...override,
-  ...(saved.endCfm || override.endCfm ? { endCfm: { ...saved.endCfm, ...override.endCfm } } : {}),
-  ...(saved.drops || override.drops ? { drops: { ...saved.drops, ...override.drops } } : {}),
-});
+/** Records merge key by key; `clear` removes keys and is never saved (it is request-only). */
+const mergeInputs = (saved: DuctsSheetInputs, override: DuctsSheetInputs): DuctsSheetInputs => {
+  const { clear, ...rest } = override;
+  const record = (key: "endCfm" | "drops" | "unitCfm") => {
+    if (!saved[key] && !rest[key] && !clear?.[key]) return {};
+    const merged: Record<string, number> = { ...saved[key], ...rest[key] };
+    for (const id of clear?.[key] ?? []) delete merged[id];
+    return { [key]: merged };
+  };
+  const { clear: _saved, ...base } = saved;
+  return { ...base, ...rest, ...record("endCfm"), ...record("drops"), ...record("unitCfm") };
+};
 export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) {
-  async function savedInputs(target: DocumentRef, key?: string) {
+  // Inputs are per project (R2): one `sheetInputs.project` cell for every fan; older per-fan keys are ignored.
+  async function savedInputs(target: DocumentRef) {
     const scope = work ? await work.key(target) : null;
     const owned = scope && work ? await work.workspace.readRaw(scope, "ducts") : null;
     const doc = owned ? ductsDocumentSchema.parse(owned.doc) : null;
-    const project = doc?.sheetInputs.project?.edit?.value ?? {};
-    const saved = key ? (doc?.sheetInputs[key]?.edit?.value ?? {}) : {};
-    // Only the project cell owns slot, even if old per-fan Work happens to contain one.
-    const { slot: _slot, ...local } = saved;
     return {
       scope,
       revision: owned?.revision ?? 0,
-      inputs: { ...local, ...(project.slot ? { slot: project.slot } : {}) },
+      inputs: doc?.sheetInputs.project?.edit?.value ?? {},
       defaults: {
         terminalDropInWg: SHIM_TERMINAL_DROP_IN_WG,
         terminalDropSource: "SHIM placeholder",
@@ -188,21 +219,11 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
     inputs: DuctsSheetInputs,
   ) {
     if (!request.inputs || !work || !saved.scope) return;
-    const { slot, ...local } = inputs;
-    const patches = [
-      ...(request.inputs.slot === undefined
-        ? []
-        : [{ path: ["sheetInputs", "project", "edit"], value: { value: { slot } } }]),
-      ...(Object.keys(request.inputs).some((k) => k !== "slot")
-        ? [{ path: ["sheetInputs", inputKey(request), "edit"], value: { value: local } }]
-        : []),
-    ];
-    if (!patches.length) return;
     const result = await work.workspace.apply(
       saved.scope,
       "ducts",
       work.author(),
-      patches,
+      [{ path: ["sheetInputs", "project", "edit"], value: { value: inputs } }],
       saved.revision,
     );
     if (!result.ok) throw new BridgeError(refusalText(result), 409, { notDispatched: true });
@@ -220,6 +241,48 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
       throw new BridgeError(await response.text(), response.status, { notDispatched: true });
     return response;
   }
+  /**
+   * The C# `from` walk follows Revit connectors only, so it stops where an accepted join bridges a gap:
+   * the far side arrives as an open-end candidate and its own connections read as open ends that are
+   * not open in Revit (MUAS-1's FA 43 onto the louver plenum, 2026-10-28). Walk again from the far
+   * element of every accepted pair whose near side was walked, merge, and repeat until no accepted
+   * join points outside the read. Elements are unioned by id; a walked copy wins over a candidate.
+   * ponytail: one extra `from` read per bridged join and round (bounded at four rounds); fold the
+   * seeds into one native read if this gets slow.
+   */
+  async function followAcceptedJoins(
+    snapshot: DuctSnapshot,
+    rulings: readonly { pair: readonly string[]; verdict: string }[],
+    target: DocumentRef,
+  ): Promise<DuctSnapshot> {
+    type Walked = { id: number; reason?: string | null };
+    const elementOf = (end: string) => Number(end.split(":")[0]);
+    const seeded = new Set<number>();
+    let merged = snapshot;
+    for (let round = 0; round < 4; round += 1) {
+      const walked = new Set(
+        [...merged.nodes, ...merged.segments]
+          .filter((e) => ((e as Walked).reason ?? "walked") === "walked")
+          .map((e) => e.id),
+      );
+      const seeds = rulings
+        .filter((r) => r.verdict === "accept")
+        .flatMap((r) => {
+          const [a, b] = r.pair.map(elementOf) as [number, number];
+          return walked.has(a) && !walked.has(b) ? [b] : walked.has(b) && !walked.has(a) ? [a] : [];
+        })
+        .filter((id) => !seeded.has(id));
+      if (seeds.length === 0) break;
+      for (const id of seeds) {
+        seeded.add(id);
+        const more = (await (
+          await readNative("ducts.snapshot", { selector: { kind: "from", unitId: id } }, target)
+        ).json()) as DuctSnapshot;
+        merged = mergeSnapshots(merged, more);
+      }
+    }
+    return merged;
+  }
   async function current(entry: Entry) {
     const responses = await Promise.all([
       readNative("ducts.snapshot", entry.request, entry.target, entry.version),
@@ -229,25 +292,26 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
   }
   return {
     async sheet(request: DuctsSheetRequest): Promise<DuctsSheetResponse> {
-      const saved = await savedInputs(request.target, inputKey(request));
+      const saved = await savedInputs(request.target);
       if (request.proposal) {
         const entry = request.basis ? entries.get(request.basis) : undefined;
+        // The entry must be this fan's sheet over the project inputs and defaults as saved now.
         if (
           !entry ||
           request.detail ||
-          entry.workInputKey !== inputKey(request) ||
-          canonicalRouteInput(entry.target) !== canonicalRouteInput(request.target) ||
-          canonicalRouteInput(entry.inputs) !== canonicalRouteInput(saved.inputs) ||
-          entry.settingsBasis !== canonicalRouteInput(saved.defaults)
+          entry.subject !==
+            canonicalRouteInput([subjectKey({ ...request, inputs: saved.inputs }), saved.defaults])
         )
           throw stale();
         await current(entry);
-        const all = [
-          ...entry.value.blockers,
-          ...("assumed" in entry.value ? entry.value.assumed.blockers : []),
-        ];
+        const all = allBlockers(entry.value);
         const choice = request.proposal;
-        if (!all.some((b) => b.proposal?.pair.every((p) => choice.pair.includes(p))))
+        // A person may accept the same-class proposal or the class crossing the row offers beside it.
+        const offered = (b: (typeof all)[number]) =>
+          [b.proposal?.pair, b.closer.crossing?.pair].some(
+            (pair) => pair?.every((p) => choice.pair.includes(p)) ?? false,
+          );
+        if (!all.some(offered))
           throw new BridgeError("Proposal is not on this sheet basis", 409, {
             notDispatched: true,
           });
@@ -283,7 +347,7 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
               ).values(),
             ],
             inputs: entry.value.inputs,
-            blockers: entry.value.blockers,
+            blockers: allBlockers(entry.value),
           };
         const path = pathsOf(entry.value)[Number(request.detail.pathId)];
         if (!/^(0|[1-9][0-9]*)$/.test(request.detail.pathId) || !path)
@@ -319,7 +383,11 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
         throw new BridgeError("Ducts read did not return an observation version", 409, {
           notDispatched: true,
         });
-      const snapshot = (await response.json()) as DuctSnapshot;
+      const snapshot = await followAcceptedJoins(
+        (await response.json()) as DuctSnapshot,
+        inputs.rulings ?? [],
+        request.target,
+      );
       const grids = toGrids(await tables.json());
       const roster = suggestRoster(snapshot);
       const ports = [...roster.fans, ...roster.suggestions];
@@ -330,6 +398,9 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
               grids,
               fan: { unitId: request.unitId, portIndex: request.portIndex },
               ...inputs,
+              ...(inputs.unitCfm?.[String(request.unitId)] != null
+                ? { sideStreamCfm: inputs.unitCfm[String(request.unitId)] }
+                : {}),
               defaults: {
                 ...saved.defaults,
                 slot: saved.defaults.slot ?? snapshot.slots?.terminalFlow,
@@ -360,7 +431,6 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
       const entry: Entry = {
         subject,
         inputs,
-        workInputKey: inputKey(request),
         settingsBasis: canonicalRouteInput(saved.defaults),
         request: acquisition,
         version,
@@ -386,6 +456,9 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
       const saved = await savedInputs(request.target);
       const activeSlot =
         saved.inputs.slot ?? saved.defaults.slot ?? snapshot.slots?.terminalFlow ?? "terminalFlow";
+      // Project inputs and defaults are one basis for every fan: a ruling on one fan stales them all.
+      const projectBasis = canonicalRouteInput(saved.defaults);
+      const projectInputs = canonicalRouteInput(saved.inputs);
       const rows = [];
       for (const port of [...roster.fans, ...roster.suggestions]) {
         const cached = [...entries.values()]
@@ -404,10 +477,9 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
           try {
             await current(cached);
             const candidate = cached.value as Sheet;
-            const currentInputs = await savedInputs(request.target, cached.workInputKey);
             if (
-              canonicalRouteInput(currentInputs.defaults) === cached.settingsBasis &&
-              canonicalRouteInput(currentInputs.inputs) === canonicalRouteInput(cached.inputs) &&
+              projectBasis === cached.settingsBasis &&
+              projectInputs === canonicalRouteInput(cached.inputs) &&
               candidate.inputs.find((i) => i.name === "airflow slot")?.value === activeSlot
             )
               sheet = candidate;
@@ -416,6 +488,9 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
             entries.delete(cached.value.basis);
           }
         }
+        // R3 (kaitpw 2026-10-28): `externalStatic` is the firm's one ESP parameter
+        // (PE_M_Fan_ExternalStaticPressure), the REQUIRED ESP Pe writes; the page labels it
+        // "required (written)". Rated ESP has no firm slot yet; the contract field keeps its name.
         const rating =
           snapshot.nodes
             .find((node) => node.id === port.unitId)

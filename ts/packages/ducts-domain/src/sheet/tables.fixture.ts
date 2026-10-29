@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Grid, Grids } from "../loss-grid.ts";
+import { toGrids, type Grid, type Grids } from "../loss-grid.ts";
 
 // ---- test-only .tbl reader (ctable.py parse), as in kernel/price-leg.test.ts ------------------
 function parseTbl(file: string): Record<string, Grid> {
@@ -49,10 +49,13 @@ export const grids: Grids = Object.fromEntries(
       .filter((f) => f.endsWith(".tbl"))
       .flatMap((f) => {
         try {
-          return [[f.replace(".tbl", "").toUpperCase(), parseTbl(join(d, f))]];
+          // toGrids refuses what this reader cannot shape: Cr3-10's layout, and the three-axis
+          // ER5-1 / ED5-3 / ED5-4 beside the C# fixtures (src/fixtures/converging-tables.json has them).
+          const id = f.replace(".tbl", "").toUpperCase();
+          return Object.entries(toGrids({ tables: { [id]: parseTbl(join(d, f)) } }));
         } catch {
           return [];
-        } // Cr3-10 is another layout
+        }
       }),
   ),
 );

@@ -42,8 +42,13 @@ async function post<T>(
     body: JSON.stringify(body),
     signal,
   });
-  if (response.status === 409) throw new StaleSheet("Sheet changed; reading a new overview.");
-  if (!response.ok) throw Error((await readPeError(response)).message);
+  if (!response.ok) {
+    const { message } = await readPeError(response);
+    // Only a stale basis is recoverable by re-reading; every other 409 is a refusal the person must see.
+    if (response.status === 409 && /stale sheet basis/i.test(message))
+      throw new StaleSheet("Sheet changed; reading a new overview.");
+    throw Error(message);
+  }
   return schema.parse(await response.json());
 }
 export const readRoster = (target: DocumentRef, signal: AbortSignal) =>

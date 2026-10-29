@@ -8,7 +8,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "vite-plus/test";
 
-import type { Grid, Grids } from "../loss-grid.ts";
+import { toGrids, type Grid, type Grids } from "../loss-grid.ts";
 import { friction, roundSection } from "../loss-physics.ts";
 import { suggestRoster, type FanPort } from "../roster.ts";
 import type { DuctSnapshot } from "../types.ts";
@@ -61,10 +61,13 @@ const grids: Grids = Object.fromEntries(
       .filter((f) => f.endsWith(".tbl"))
       .flatMap((f) => {
         try {
-          return [[f.replace(".tbl", "").toUpperCase(), parseTbl(join(d, f))]];
+          // toGrids refuses what this reader cannot shape: Cr3-10's layout, and the three-axis
+          // ER5-1 / ED5-3 / ED5-4 beside the C# fixtures (src/fixtures/converging-tables.json has them).
+          const id = f.replace(".tbl", "").toUpperCase();
+          return Object.entries(toGrids({ tables: { [id]: parseTbl(join(d, f)) } }));
         } catch {
           return [];
-        } // Cr3-10 is another layout
+        }
       }),
   ),
 );
@@ -456,6 +459,126 @@ it("an open end blocks its side; a vacant opposed port within the default gap au
   expect(ruled.totals.requiredEspInWg).toBeNull();
 });
 
+it("R-FACE: two walked stubs whose vacant ends face each other propose a join; within the auto-join gap they auto-join", () => {
+  // Fan 600:0 -> duct 61 (0..10 ft, +x) -> grille 70. Taps 62 (at 3 ft) and 63 (at 7 ft) feed two
+  // stubs that rise 4 ft and turn toward each other along y = 4: 64 ends at x = 3 + reach facing
+  // +x, 65 ends at x = 7 - reach facing -x. Both stubs are walked from the trunk before either
+  // open end is reached; before R-FACE `proposeHeals` never saw a walked element.
+  const facing = (reach: number) => {
+    const fan = node(600, "equipment", {
+      connectors: [conn(0, [61, 0], round(6)), conn(1, [71, 0], round(6), "end", [-1, 0, 0])],
+    });
+    const grille = node(70, "terminal", {
+      connectors: [conn(0, [61, 1], round(6), "end", [10, 0, 0])],
+    });
+    const back = node(71, "terminal", {
+      connectors: [conn(0, [600, 1], round(6), "end", [-1, 0, 0])],
+    });
+    const tap62 = node(62, "fitting", {
+      partType: "TapAdjustable",
+      connectors: [
+        conn(0, [61, 2], round(6), "curve", [3, 0, 0]),
+        conn(1, [64, 0], round(6), "end", [3, 0, 0]),
+      ],
+    });
+    const tap63 = node(63, "fitting", {
+      partType: "TapAdjustable",
+      connectors: [
+        conn(0, [61, 3], round(6), "curve", [7, 0, 0]),
+        conn(1, [65, 0], round(6), "end", [7, 0, 0]),
+      ],
+    });
+    const trunk = duct(
+      61,
+      10,
+      round(6),
+      [
+        [0, 0, 0],
+        [10, 0, 0],
+      ],
+      [
+        conn(0, [600, 0], round(6), "end", [0, 0, 0]),
+        conn(1, [70, 0], round(6), "end", [10, 0, 0]),
+        conn(2, [62, 0], round(6), "curve", [3, 0, 0]),
+        conn(3, [63, 0], round(6), "curve", [7, 0, 0]),
+      ],
+    );
+    const stub64 = duct(
+      64,
+      4 + reach,
+      round(6),
+      [
+        [3, 0, 0],
+        [3, 4, 0],
+        [3 + reach, 4, 0],
+      ],
+      [
+        conn(0, [62, 1], round(6), "end", [3, 0, 0]),
+        conn(1, null, round(6), "end", [3 + reach, 4, 0]),
+      ],
+    );
+    const stub65 = duct(
+      65,
+      4 + reach,
+      round(6),
+      [
+        [7, 0, 0],
+        [7, 4, 0],
+        [7 - reach, 4, 0],
+      ],
+      [
+        conn(0, [63, 1], round(6), "end", [7, 0, 0]),
+        conn(1, null, round(6), "end", [7 - reach, 4, 0]),
+      ],
+    );
+    return {
+      snapshot: snapshot([fan, grille, back, tap62, tap63], [trunk, stub64, stub65]),
+      fan: { unitId: 600, portIndex: 0 },
+      roster: [fanPort(600, 0, 1)],
+      grids: {},
+      endCfm: { 70: 100, 71: 100 },
+      drops: { 70: 0.02, 71: 0.02 },
+    };
+  };
+  const gaps = (s: ReturnType<typeof buildSheet>) =>
+    [...s.blockers, ...s.assumed.blockers].filter((b) => b.kind !== "not-priced").map((b) => b.id);
+  // 12 in apart: a join proposal each way, no blocker beyond the pair, closed by one accept.
+  const apart = buildSheet(facing(1.5));
+  expect(apart.blockers.find((b) => b.id === "inferred-join:64:1")!.proposal).toMatchObject({
+    kind: "join",
+    pair: ["64:1", "65:1"],
+    gapIn: 12,
+    fittingChange: false,
+  });
+  expect(apart.blockers.find((b) => b.id === "inferred-join:65:1")!.proposal).toMatchObject({
+    pair: ["65:1", "64:1"],
+  });
+  expect(gaps(apart).sort()).toEqual(["inferred-join:64:1", "inferred-join:65:1"]);
+  // The assumed walk takes the join: the far side is no end, so nothing is raised there.
+  expect(apart.assumed.paths.map((p) => p.end.elementId)).toEqual([70, 71]);
+  const ruled = buildSheet({
+    ...facing(1.5),
+    rulings: [{ pair: ["64:1", "65:1"], verdict: "accept" }],
+  });
+  expect(gaps(ruled)).toEqual([]);
+  expect(ruled.paths.map((p) => [p.end.kind, p.end.elementId])).toEqual([
+    ["terminal", 70],
+    ["terminal", 71],
+  ]);
+  expect(ruled.inputs.some((i) => i.name.startsWith("join 64:1 to 65:1"))).toBe(true);
+  // 2.4 in apart: auto-joined on the known walk, with provenance, and no blocker at all.
+  const close = buildSheet(facing(2 - 0.1));
+  expect(gaps(close)).toEqual([]);
+  expect(close.paths.map((p) => [p.end.kind, p.end.elementId])).toEqual([
+    ["terminal", 70],
+    ["terminal", 71],
+  ]);
+  expect(
+    close.inputs.some((i) => i.name.includes("auto-joined 64:1 to 65:1 across 2.400 in")),
+  ).toBe(true);
+  expect(close.walkedElementIds).toEqual(expect.arrayContaining([64, 65]));
+});
+
 const CHADDS =
   "C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/tmp/ducts-sheet/chadds-snapshot-raw.json";
 it.skipIf(!existsSync(CHADDS))(
@@ -576,7 +699,8 @@ it("side-stream design flow splits only the untyped remainder and names policy/f
   const input = {
     snapshot: snap,
     fan: { unitId: 100, portIndex: 0 },
-    roster: [100, 200, 300, 400].map((id) => fanPort(id, 0)),
+    // Receivers are reached at their inlet (port 0); A-INFLOW treats a reached discharge as a source.
+    roster: [fanPort(100, 0), ...[200, 300, 400].map((id) => fanPort(id, 1, 0))],
     grids,
     drops: { 2: 0 },
   };
@@ -635,7 +759,35 @@ it("end terminals decide direction despite reversed metadata; an outdoor louver 
   expect(sheet.blockers).toEqual([]);
 });
 
-it("a branch-entry tap ends the path at the merge, prices its branch when receiving flow exists, and names an omitted loss otherwise", () => {
+it("a Greenheck ESD louver classified Supply Air is still an outdoor inlet end (Chadds 14088043)", () => {
+  const f = node(100, "equipment", {
+    connectors: [conn(0, [10, 0], round(8)), conn(1, [20, 0], round(8))],
+  });
+  const louver = node(10, "terminal", {
+    family: "Greenheck Circular ESD-403",
+    connectors: [conn(0, [100, 0], round(8), "end", [0, 0, 0], "SupplyAir")],
+  });
+  const supply = node(20, "terminal", {
+    family: "Supply Grille",
+    connectors: [conn(0, [100, 1], round(8), "end", [0, 0, 0], "SupplyAir")],
+  });
+  // Port 0 reaches the louver. Read by classification alone the two sides tie at one supply end each.
+  const sheet = buildSheet({
+    snapshot: snapshot([f, louver, supply], []),
+    fan: { unitId: 100, portIndex: 0 },
+    // The roster names port 0 the discharge; only the louver rule can make it the inlet.
+    roster: [fanPort(100, 0, 1)],
+    grids,
+    endCfm: { 10: 100, 20: 100 },
+  });
+  expect(sheet.fan).toMatchObject({ dischargePortIndex: 1, inletPortIndex: 0 });
+  expect(sheet.paths.map((p) => [p.side, p.end.elementId])).toEqual([
+    ["supply", 20],
+    ["return", 10],
+  ]);
+});
+
+it("a branch-entry tap onto this fan's own network is a split (R-Q4): the walk continues both ways along the main and prices the branch from the modelled main flow", () => {
   const f = node(100, "equipment", {
     connectors: [conn(0, [1, 0], round(6))],
     facts: [{ key: "fanFlow", value: 100 }],
@@ -665,21 +817,39 @@ it("a branch-entry tap ends the path at the merge, prices its branch when receiv
     ],
     [conn(0, [200, 0], round(8)), conn(1, [4, 0], round(8)), conn(2, [2, 0], round(6), "curve")],
   );
-  for (const c of main.connectors) c.flowCfm = 300;
   const grille = node(4, "terminal", { connectors: [conn(0, [3, 1], round(8))] });
   const input = {
     snapshot: snapshot([f, g, tap, grille], [branch, main]),
     fan: { unitId: 100, portIndex: 0 },
     roster: [fanPort(100, 0), fanPort(200, 1, 0)],
     grids,
+    endCfm: { 4: 60 },
   };
   const sheet = buildSheet(input);
-  expect(sheet.paths[0]!.end).toMatchObject({
-    kind: "joins-other-fan",
-    elementId: 2,
-    fan: { unitId: 200 },
-  });
-  expect(sheet.paths[0]!.legIds).toEqual(["1:0>1", "2:1>0"]);
+  // Both directions along the main: the grille, and the other fan's inlet taking the remainder.
+  expect(sheet.paths.map((p) => [p.end.kind, p.end.elementId])).toEqual([
+    ["terminal", 4],
+    ["roster-fan-port", 200],
+  ]);
+  expect(sheet.paths.find((p) => p.end.elementId === 4)!.legIds).toEqual([
+    "1:0>1",
+    "2:1>0",
+    "3:2>1",
+    "4:0>",
+  ]);
+  expect(sheet.paths.find((p) => p.end.elementId === 200)!.legIds).toEqual([
+    "1:0>1",
+    "2:1>0",
+    "3:2>0",
+  ]);
+  expect(sheet.legs["3:2>1"]!.flowCfm).toBe(60);
+  expect(sheet.legs["3:2>0"]!.flowCfm).toBe(40);
+  expect(sheet.blockers.some((b) => b.kind === "no-flow" || b.kind === "class-change")).toBe(false);
+  // The tap's branch is priced on the main flow the model carries, with no connector metadata.
+  expect(sheet.legs["2:1>0"]!.lossInWg).toBeGreaterThan(0);
+  expect(sheet.legs["2:1>0"]!.lossSource.ref).toContain("SD5-9 Cb");
+  expect(sheet.inputs.some((i) => i.name === "merge 2 branch loss in-wg")).toBe(false);
+  expect(sheet.paths.every((p) => p.complete)).toBe(true);
   const beyond = buildChain({
     ...input,
     start: { elementId: 100, connector: 0 },
@@ -687,28 +857,5 @@ it("a branch-entry tap ends the path at the merge, prices its branch when receiv
     direction: "supply",
     flowCfm: 100,
   });
-  expect(beyond.path).toBeNull();
-  const toMerge = buildChain({
-    ...input,
-    start: { elementId: 100, connector: 0 },
-    end: { elementId: 2 },
-    direction: "supply",
-    flowCfm: 100,
-  });
-  expect(toMerge.path!.end.kind).toBe("joins-other-fan");
-  expect(sheet.paths[0]!.complete).toBe(true);
-  expect(sheet.legs["2:1>0"]!.lossInWg).toBeGreaterThan(0);
-  expect(sheet.legs["2:1>0"]!.lossSource.ref).toContain("SD5-9 Cb");
-  expect(sheet.blockers.some((b) => b.kind === "not-priced" || b.kind === "class-change")).toBe(
-    false,
-  );
-  for (const c of main.connectors) c.flowCfm = undefined;
-  const missing = buildSheet(input);
-  expect(missing.paths[0]!.complete).toBe(true);
-  expect(missing.legs["2:1>0"]!.lossInWg).toBeNull();
-  expect(missing.inputs).toContainEqual({
-    name: "merge 2 branch loss in-wg",
-    value: null,
-    source: "merge boundary; branch loss unavailable without receiving-stream flow",
-  });
+  expect(beyond.path!.end).toMatchObject({ kind: "terminal", elementId: 4 });
 });
