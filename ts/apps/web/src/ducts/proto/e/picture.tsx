@@ -5,16 +5,7 @@
  */
 import { useElementAttention } from "#/attention";
 import { elementKey, type Members, type SubjectKey } from "@pe/kit/lang/attention";
-import {
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  useSyncExternalStore,
-  type ReactNode,
-  type RefObject,
-} from "react";
+import { useContext, useEffect, useMemo, useState, type ReactNode, type RefObject } from "react";
 
 import { emptyListSearch } from "@pe/agent-contracts";
 import { snapshotById } from "@pe/ducts-domain/readiness";
@@ -27,41 +18,32 @@ import { Button } from "@pe/kit/lang/button";
 import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
 import { SubjectText } from "@pe/kit/lang/subject-text";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
-import { LOOK, paintOf as resolvePaint } from "#/scene/grounds";
-import { subscribe as knobsChanged } from "#/knobs/knobs";
-import { captionObstacles } from "#/scene/framing";
-import { continuationAnchor } from "#/scene/continuations";
 import { damageLayers } from "#/scene/damage";
-import { portLayer } from "#/scene/ports";
-import { systemPaint } from "#/scene/surfaces";
 import type { Layer3D, SceneMeshes } from "#/scene/types";
 import {
   idOf,
   Picture,
   type PictureContent,
   type PictureLayer,
-  type PictureLine,
   type PictureOverlayFrame,
 } from "#/scene/picture/picture";
 import { frozenDemo } from "#/host/demo-client";
 import { VisibleRouteResource } from "#/route/activity";
 
-import { Annotations, type Label, type Ruling } from "../../annotations";
+import type { Ruling } from "../../annotations";
+import { DuctsOverlay, linesOf, useEquipment } from "../../picture-content";
 import { elementNamer } from "../../claims";
 import { NodeFactsView, SegmentFactsView } from "../../facts";
 import { labelOfNode, legsOf } from "../../legs";
 import { ductsFocus } from "../../manifest";
 import { activeSystem, paintOfDucts, stubIdsOf, withSystem } from "../../selection";
 import { findingLayers, findingShapes, noRunLayers } from "../../finding-layers";
-import { equipmentPaint, equipmentPorts } from "../../paint";
-import { CaptionBounds } from "../../subject-labels";
 import { GoToSubject } from "./go-to";
 import { RunDetail, runOf } from "./run-detail";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
 import { ProvisionalNote } from "../../provisional";
-import { indexOf, sceneOf, subjectScene, type Scene } from "../../scene";
+import { indexOf, sceneOf, subjectScene } from "../../scene";
 import { Schematic } from "../../schematic";
-import type { Encoding } from "../../encoding";
 import { EncodingPicker } from "../encoding/picker";
 import { ScaleLegend } from "../encoding/scale-legend";
 import type { GroupEncoding } from "../encoding/use-encoding";
@@ -217,43 +199,7 @@ function Content({
     }),
     [meshCuts],
   );
-  const lines = useMemo<PictureLine[]>(
-    () => [
-      ...scene.segments.map((f) => ({ key: elementKey(f.segment.id), points: f.segment.polyline })),
-      ...scene.nodes.map((f) => ({ key: elementKey(f.node.id), points: [f.node.point] })),
-    ],
-    [scene],
-  );
-  // Equipment reads as its scene graph sees it; one graph per shown meshes feeds paint and ports.
-  const graphOf = useMemo(() => {
-    const graphs = new WeakMap<object, ReturnType<Scene["graphOf"]>>();
-    const none = {};
-    return (meshes: SceneMeshes | null) => {
-      const at = meshes ?? none;
-      let graph = graphs.get(at);
-      if (!graph)
-        graphs.set(
-          at,
-          (graph = scene.graphOf(
-            meshes?.instances.flatMap((i) =>
-              i.revitId !== null &&
-              i.linkInstanceId === null &&
-              resolvePaint(i, routePaint).tier !== "context"
-                ? [i.revitId]
-                : [],
-            ) ?? [],
-          )),
-        );
-      return graph;
-    };
-  }, [scene, routePaint]);
-  const paint = useCallback(
-    (meshes: SceneMeshes | null) => {
-      const paint = equipmentPaint(graphOf(meshes), routePaint);
-      return meshes ? systemPaint(meshes, paint) : paint;
-    },
-    [graphOf, routePaint],
-  );
+  const lines = useMemo(() => linesOf(scene), [scene]);
 
   const sub = scene.subject ?? null;
   const nameOfId = useMemo(() => elementNamer(snapshot, sub), [snapshot, sub]);
@@ -303,9 +249,9 @@ function Content({
     };
   }, [issues]);
   const noRuns3d = useMemo(() => noRunLayers(noRuns, snapshot, issues), [noRuns, snapshot, issues]);
-  const look = useSyncExternalStore(knobsChanged, LOOK.read, LOOK.read);
   const kinds = colours;
   const colour = systemColours ? "firm" : "mono";
+  const { paint, ports } = useEquipment(scene, routePaint, kinds, colour);
   // Each stage mark answers its own picture layer: no-runs to `no-run`, findings and damage to `findings`.
   const layers = useMemo<PictureLayer[]>(
     () => [
@@ -315,21 +261,9 @@ function Content({
         toggle: "findings",
         draw: ({ meshes }) => [...findings3d, ...damageOf(meshes)],
       },
-      {
-        key: "ports",
-        draw: ({ meshes, paintOf }) =>
-          meshes
-            ? [
-                portLayer(
-                  equipmentPorts(graphOf(meshes), meshes, paintOf ?? paint(meshes)),
-                  colour === "firm" ? kinds : {},
-                  look,
-                ),
-              ]
-            : [],
-      },
+      ports,
     ],
-    [noRuns3d, findings3d, damageOf, graphOf, paint, colour, kinds, look],
+    [noRuns3d, findings3d, damageOf, ports],
   );
 
   // Header facts: a system name (never a group id), Pe fan static, critical run total.
@@ -641,101 +575,5 @@ function Content({
         onPick: () => setOpenRuling(null),
       }}
     />
-  );
-}
-
-/** E's DOM marks over the picture: captions, footnotes and ruling pins, at the released frame. */
-function DuctsOverlay({
-  frame,
-  scene,
-  layers,
-  encoding,
-  labels,
-  rulings,
-  covered: stageLayers,
-  issues,
-  pointOf,
-  issue,
-  onRuling,
-}: {
-  frame: PictureOverlayFrame;
-  scene: Scene;
-  layers: ReadonlySet<string>;
-  encoding: Encoding;
-  labels: readonly Label[];
-  rulings: readonly Ruling[];
-  /** The 3D marks drawn now: a ruling they carry draws no pin. */
-  covered: readonly Layer3D[];
-  issues: readonly StageIssue[];
-  pointOf: (id: number) => readonly number[] | null;
-  issue: string;
-  onRuling: (r: Ruling) => void;
-}) {
-  const { hovered } = useElementAttention();
-  const { meshes, paintOf, camera, size } = frame;
-  const captionField = useMemo(
-    () => ({
-      ...size,
-      obstacles:
-        meshes && labels.some((label) => layers.has(label.stub ? "stub-labels" : "labels"))
-          ? captionObstacles(meshes, camera, paintOf, size)
-          : [],
-    }),
-    [frame.project, camera, size, meshes, paintOf, labels, layers], // eslint-disable-line react-hooks/exhaustive-deps
-  );
-  const captionLabels = useMemo(
-    () =>
-      meshes
-        ? labels.map((label) =>
-            label.stub ? { ...label, at: continuationAnchor(meshes, label.ids, label.at) } : label,
-          )
-        : labels,
-    [meshes, labels],
-  );
-  const meshed = useMemo(
-    () =>
-      new Set(
-        layers.has("meshes")
-          ? (meshes?.instances.flatMap((i) => (i.revitId == null ? [] : [i.revitId])) ?? [])
-          : [],
-      ),
-    [meshes, layers.has("meshes")], // eslint-disable-line react-hooks/exhaustive-deps
-  );
-  const covered = useMemo(
-    () => new Set(stageLayers.flatMap((layer) => layer.findings ?? [])),
-    [stageLayers],
-  );
-  const marks = rulings.filter(
-    (r) =>
-      !meshes ||
-      !covered.has(
-        r.kind === "claim"
-          ? `claim:${r.claim.id}`
-          : r.kind === "inferred"
-            ? r.finding.id
-            : r.issue.id,
-      ),
-  );
-  return (
-    <CaptionBounds.Provider value={captionField}>
-      <Annotations
-        project={frame.project}
-        size={size}
-        scene={scene}
-        layers={layers}
-        encoding={encoding}
-        selected={frame.selected}
-        hovered={hovered}
-        labels={captionLabels}
-        meshed={meshed}
-        issues={issues}
-        rulings={marks}
-        pointOf={pointOf}
-        issue={issue}
-        onPick={frame.pick}
-        onFrame={frame.frame}
-        onRuling={onRuling}
-      />
-    </CaptionBounds.Provider>
   );
 }
