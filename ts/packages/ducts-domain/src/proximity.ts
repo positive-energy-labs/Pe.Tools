@@ -1088,54 +1088,16 @@ export function tolerate(
   });
   const regroup = <T extends { groupId?: string | null }>(e: T): T =>
     e.groupId == null ? e : { ...e, groupId: canon(e.groupId) };
-  const openEnd = (issue: DuctSnapshot["issues"][number]) =>
-    issue.kind === "open-end" &&
-    issue.elementId != null &&
-    consumed.has(key(issue.elementId, Number(issue.id.split(":").at(-1))));
-  // A group that absorbed others has new roots: the root-count issues the Revit read raised on
-  // the pieces (`no-root` on a fragment that now has the fan, `multi-root` on a part) are stale, so
-  // they are re-derived from the merged group.
-  const absorbers = new Set([...alias.keys()].map(canon));
-  const rootCount = (i: DuctSnapshot["issues"][number]) =>
-    (i.kind === "no-root" || i.kind === "multi-root") && absorbers.has(canon(i.groupId));
-  const rederived = [...absorbers].flatMap((id): DuctSnapshot["issues"] => {
-    const g = groups.get(id)!;
-    if (g.rootIds.length > 1)
-      return [
-        {
-          id: `multi-root:${id}`,
-          kind: "multi-root" as const,
-          groupId: id,
-          note: `${g.rootIds.length} equipment ports on ${g.rootIds.length} equipment`,
-        },
-      ];
-    if (g.rootIds.length === 0 && g.terminalCount > 0)
-      return [
-        {
-          id: `no-root:${id}`,
-          kind: "no-root" as const,
-          groupId: id,
-          note: "terminals but no equipment port",
-        },
-      ];
-    return [];
-  });
-  const issues = [
-    ...snapshot.issues.filter((i) => !openEnd(i) && !rootCount(i)).map(regroup),
-    ...rederived,
-  ];
+  // A joint drawn here answers the open end (and its near-miss) on each port it consumed.
+  const answered = (issue: DuctSnapshot["issues"][number]) =>
+    (issue.kind === "open-end" || issue.kind === "near-miss") &&
+    issue.connector != null &&
+    consumed.has(key(issue.elementId, issue.connector));
+  const issues = snapshot.issues.filter((i) => !answered(i));
   const kept = new Set(issues.map((i) => i.id));
   const merged: Group[] = snapshot.groups.flatMap((g) => {
     const group = groups.get(g.id);
-    if (!group) return [];
-    const fresh = rederived.filter((i) => i.groupId === g.id).map((i) => i.id);
-    const stale = new Set(fresh);
-    return [
-      {
-        ...group,
-        issueIds: [...group.issueIds.filter((id) => kept.has(id) && !stale.has(id)), ...fresh],
-      },
-    ];
+    return group ? [{ ...group, issueIds: group.issueIds.filter((id) => kept.has(id)) }] : [];
   });
   return {
     ...inference,

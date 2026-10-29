@@ -50,8 +50,9 @@ import {
 } from "./walk.ts";
 import { assumedFanFlows, type AssumedFlow } from "./assumed-flow.ts";
 
+/** Issues and tolerances are C#'s model health (ducts LEDGER 2026-10-29); absent, no open end has a measured neighbourhood. */
 export type SheetSnapshot = Pick<DuctSnapshot, "nodes" | "segments" | "document"> &
-  Partial<Pick<DuctSnapshot, "slots">>;
+  Partial<Pick<DuctSnapshot, "slots" | "issues" | "tolerances">>;
 
 // SHIM(ducts-terminal-drop): 0.03 in-wg is a placeholder pending the firm's per-family table.
 export const SHIM_TERMINAL_DROP_IN_WG = 0.03;
@@ -68,6 +69,7 @@ export interface PricingInput {
     terminalDropSource?: string;
     splitPolicy?: "even" | "proportional";
     slot?: string;
+    /** Route setting; the host passes it to the C# read (`selector.autoJoinGapIn`), which measures under it. */
     autoJoinMaxGapIn?: number;
     version?: string;
   };
@@ -75,6 +77,7 @@ export interface PricingInput {
   rulings?: readonly ConnectorPairRuling[];
   /** R-CAP: open ends a person ruled capped. */
   endRulings?: readonly EndRuling[];
+  /** Typed; the host passes it to the C# read (`selector.candidateBoxIn`), which measures under it. */
   candidateBoxIn?: number;
 }
 
@@ -898,8 +901,6 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
     roster: input.roster,
     rulings: input.rulings ?? [],
     endRulings: input.endRulings ?? [],
-    candidateBoxIn: input.candidateBoxIn,
-    autoJoinMaxGapIn: input.defaults?.autoJoinMaxGapIn,
     assumeHeals,
     owners: foreignOwners(g, input.roster, unit),
   };
@@ -926,8 +927,6 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
       ? assumedFanFlows(input.snapshot, input.roster, slot, {
           rulings: opts.rulings,
           endRulings: opts.endRulings,
-          candidateBoxIn: opts.candidateBoxIn,
-          autoJoinMaxGapIn: opts.autoJoinMaxGapIn,
         })
       : new Map();
   // An unknown assumed flow (an unbounded ERV, 0 with a line) is no flow to split: shares stay no-flow.
@@ -1037,8 +1036,12 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
   const inputs: SheetInput[] = [
     {
       name: "auto-join maximum gap in",
-      value: input.defaults?.autoJoinMaxGapIn ?? 3,
-      source: input.defaults?.autoJoinMaxGapIn == null ? "default" : "route settings",
+      value: input.snapshot.tolerances?.autoJoinGapIn ?? null,
+      source: !input.snapshot.tolerances
+        ? "not measured: the read carries no model health"
+        : input.defaults?.autoJoinMaxGapIn == null
+          ? "default"
+          : "route settings",
     },
     ...(input.defaults?.terminalDropInWg == null ||
     input.defaults.terminalDropSource === "SHIM placeholder"
@@ -1134,8 +1137,12 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
     { name: "discharge connector", value: discharge, source: directionSource },
     {
       name: "candidate box in",
-      value: input.candidateBoxIn ?? 36,
-      source: input.candidateBoxIn == null ? "default" : "typed",
+      value: input.snapshot.tolerances?.candidateBoxIn ?? null,
+      source: !input.snapshot.tolerances
+        ? "not measured: the read carries no model health"
+        : input.candidateBoxIn == null
+          ? "default"
+          : "typed",
     },
     ...(input.sideStreamCfm == null
       ? []
@@ -1274,8 +1281,6 @@ export function buildChain(input: BuildChainInput): Chain {
     roster: input.roster ?? [],
     rulings: input.rulings ?? [],
     endRulings: input.endRulings ?? [],
-    candidateBoxIn: input.candidateBoxIn,
-    autoJoinMaxGapIn: input.defaults?.autoJoinMaxGapIn,
     owners: foreignOwners(g, input.roster ?? [], start),
   });
   for (const [id, b] of w.blockers) pricer.blockers.set(id, b);

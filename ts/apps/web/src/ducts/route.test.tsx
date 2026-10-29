@@ -165,7 +165,7 @@ const snapshot: DuctSnapshot = {
       terminalCount: 0,
       elementCount: 1,
       loops: 0,
-      issueIds: ["no-root:g2"],
+      issueIds: [],
     },
   ],
   nodes: [100, 2, 4, 6].map((id) => ({
@@ -199,16 +199,7 @@ const snapshot: DuctSnapshot = {
     connectors: connectors(id),
   })),
   flows: [],
-  issues: [
-    {
-      id: "no-root:g2",
-      kind: "no-root",
-      elementId: null,
-      point: null,
-      groupId: "g2",
-      note: "no root",
-    },
-  ],
+  issues: [],
   layers: [],
   systems: [{ id: 900, name: "SA", classification: "Supply Air", criticalPath: [], sections: [] }],
   slots: {

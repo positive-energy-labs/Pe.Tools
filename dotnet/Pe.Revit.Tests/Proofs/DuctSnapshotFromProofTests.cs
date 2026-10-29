@@ -8,7 +8,9 @@ namespace Pe.Revit.Tests.Proofs;
 ///     Documents the `ducts.snapshot` `from` selector (ducts MAP 2026-10-27, order of work step 2) on the same in-code
 ///     ring as <see cref="DuctHealPinnedProofTests" />: five 12 in round ducts and four elbows, open at one 2 in gap.
 ///     A walk from one duct reaches the whole ring through the elbows, stops at the two open ends, and the 36 in
-///     candidate box at each open end finds the duct across the gap. The output carries no groups.
+///     candidate box at each open end finds the duct across the gap. The output carries no groups. Model health (ducts
+///     LEDGER 2026-10-29) is served by every selector, keyed by element and connector: each of the two ends at the 2 in
+///     gap is an open end and a near miss naming the other.
 /// </summary>
 [TestFixture]
 public sealed class DuctSnapshotFromProofTests {
@@ -31,7 +33,6 @@ public sealed class DuctSnapshotFromProofTests {
                 Assert.That(walk.OpenEnds, Is.EqualTo(2), "one end of each duct at the gap");
                 Assert.That(walk.Truncated, Is.False);
                 Assert.That(snapshot.Groups, Is.Empty);
-                Assert.That(snapshot.Issues, Is.Empty);
                 Assert.That(snapshot.Systems, Is.Empty);
                 Assert.That(snapshot.Segments.Count(s => s.Reason == DuctWalkReason.Walked), Is.EqualTo(5));
                 Assert.That(snapshot.Nodes.Count(n => n.Reason == DuctWalkReason.Walked), Is.EqualTo(4));
@@ -40,6 +41,20 @@ public sealed class DuctSnapshotFromProofTests {
                 Assert.That(walk.Candidates.Select(c => c.ElementId), Is.EquivalentTo(new[] { left.Id.Value(), right.Id.Value() }));
                 Assert.That(walk.Candidates.All(c => c.CandidateCount >= 1), Is.True, "each open end sees the duct across the gap");
             });
+            AssertGapHealth(snapshot, left, right, "from");
+            // `ids` reads one duct: its partner across the gap is measured as context and never reported on.
+            var one = DuctSnapshots.Snapshot(doc, selector: new DuctSnapshotSelector(DuctSelectorKind.Ids, Ids: [left.Id.Value()]));
+            var leftEnd = GapEnd(one, left);
+            Assert.Multiple(() => {
+                Assert.That(one.Issues.Select(i => i.ElementId).Distinct(), Is.EqualTo(new[] { left.Id.Value() }), "ids reports only its own elements");
+                Assert.That(leftEnd.Near!.Ports.Single(p => p.AutoJoin).ElementId, Is.EqualTo(right.Id.Value()), "the partner outside the read is measured");
+                Assert.That(one.Issues.Single(i => i.Kind == DuctIssueKind.NearMiss).Connector, Is.EqualTo(leftEnd.Connector));
+                Assert.That(one.Tolerances, Is.EqualTo(new DuctHealthTolerances(36, 3)));
+            });
+            AssertGapHealth(DuctSnapshots.Snapshot(doc), left, right, "document");
+            // A read's tolerance moves the near miss: at a 1 in auto-join gap the 2 in gap is an open end, not a near miss.
+            var tight = DuctSnapshots.Snapshot(doc, selector: new DuctSnapshotSelector(DuctSelectorKind.Ids, Ids: [left.Id.Value()], AutoJoinGapIn: 1));
+            Assert.That(tight.Issues.Where(i => i.Kind == DuctIssueKind.NearMiss), Is.Empty);
         } finally {
             _ = doc.Close(false);
         }
@@ -57,7 +72,7 @@ public sealed class DuctSnapshotFromProofTests {
             Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
             $"Autodesk\\RVT {app.VersionNumber}\\Templates\\English-Imperial\\Mechanical-Default.rte"));
         try {
-            var (left, _) = Ring(doc);
+            var (left, right) = Ring(doc);
             var (other, _) = Ring(doc, 100);
             var system = left.MEPSystem?.Id.Value();
             Assert.That(system, Is.Not.Null, "Revit put the ring's ducts in a system");
@@ -73,12 +88,35 @@ public sealed class DuctSnapshotFromProofTests {
                 Assert.That(read.Layers, Is.Not.Empty, "the document shape: layers are cooked");
                 Assert.That(read.Walk, Is.Null);
             });
+            AssertGapHealth(read, left, right, "systems");
             Assert.Throws<ArgumentException>(() => DuctSnapshots.Snapshot(doc,
                 selector: new DuctSnapshotSelector(DuctSelectorKind.Systems, SystemIds: [left.Id.Value()])), "a duct is not a system");
         } finally {
             _ = doc.Close(false);
         }
     }
+
+    /// <summary>The gap's two ends: each an open end with a near miss naming the other, keyed element:connector.</summary>
+    private static void AssertGapHealth(DuctSnapshotData snapshot, Element left, Element right, string selector) {
+        var a = GapEnd(snapshot, left);
+        var b = GapEnd(snapshot, right);
+        Assert.Multiple(() => {
+            Assert.That(snapshot.Issues.Where(i => i.Kind == DuctIssueKind.OpenEnd).Select(i => i.Id),
+                Is.EquivalentTo(new[] { a.Id, b.Id }), $"{selector}: the ring is open only at the gap");
+            Assert.That(a.Id, Is.EqualTo($"open-end:{left.Id.Value()}:{a.Connector}"), selector);
+            Assert.That(snapshot.Issues.Where(i => i.Kind == DuctIssueKind.NearMiss).Select(i => i.Id), Is.EquivalentTo(new[] {
+                $"near-miss:{left.Id.Value()}:{a.Connector}", $"near-miss:{right.Id.Value()}:{b.Connector}"
+            }), selector);
+            var mate = a.Near!.Ports.Single(p => p.AutoJoin);
+            Assert.That((mate.ElementId, mate.Connector), Is.EqualTo((right.Id.Value(), b.Connector!.Value)), selector);
+            Assert.That(mate.GapIn, Is.EqualTo(2).Within(0.01), selector);
+            Assert.That(snapshot.Tolerances, Is.EqualTo(new DuctHealthTolerances(36, 3)), selector);
+        });
+    }
+
+    private static DuctIssue GapEnd(DuctSnapshotData snapshot, Element duct) =>
+        snapshot.Issues.Single(i => i.Kind == DuctIssueKind.OpenEnd && i.ElementId == duct.Id.Value());
+
 
     private static (Duct Left, Duct Right) Ring(Document doc, double y0 = 0) {
         using var t = new Transaction(doc, "duct snapshot from proof: ring");

@@ -12,6 +12,7 @@ import { toGrids, type Grid, type Grids } from "../loss-grid.ts";
 import { friction, roundSection } from "../loss-physics.ts";
 import { suggestRoster, type FanPort } from "../roster.ts";
 import type { DuctSnapshot } from "../types.ts";
+import { withHealth } from "./health.fixture.ts";
 import { SHIM_TERMINAL_DROP_IN_WG, buildChain, buildSheet, type SheetSnapshot } from "./index.ts";
 
 // ---- test-only .tbl reader (ctable.py parse), as in kernel/price-leg.test.ts ------------------
@@ -419,7 +420,7 @@ it("an open end blocks its side; a vacant opposed port within the default gap au
     connectors: [conn(0, [53, 1], round(6), "end", [20, 0, 0])],
   });
   const input = {
-    snapshot: snapshot([fan, grille], [open, d52, d53]),
+    snapshot: withHealth(snapshot([fan, grille], [open, d52, d53])),
     fan: { unitId: 500, portIndex: 0 },
     roster: [fanPort(500, 0, 1)],
     grids,
@@ -532,7 +533,7 @@ it("R-FACE: two walked stubs whose vacant ends face each other propose a join; w
       ],
     );
     return {
-      snapshot: snapshot([fan, grille, back, tap62, tap63], [trunk, stub64, stub65]),
+      snapshot: withHealth(snapshot([fan, grille, back, tap62, tap63], [trunk, stub64, stub65])),
       fan: { unitId: 600, portIndex: 0 },
       roster: [fanPort(600, 0, 1)],
       grids: {},
@@ -580,7 +581,7 @@ it("R-FACE: two walked stubs whose vacant ends face each other propose a join; w
 });
 
 const CHADDS =
-  "C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/tmp/ducts-sheet/chadds-snapshot-raw.json";
+  "C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/tmp/ducts-sheet/chadds-snapshot-health.json";
 it.skipIf(!existsSync(CHADDS))(
   "MUAS-1 on Chadds: bounded walk, the capped plenum named, FC-23 a stop, no ESP",
   () => {

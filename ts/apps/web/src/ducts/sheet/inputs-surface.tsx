@@ -17,7 +17,6 @@ import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length
 import { IMPLAUSIBLE_FPM, IMPLAUSIBLE_ROW_IN_WG } from "@pe/ducts-domain/kernel/price-leg";
 import { LOSS_RULES } from "@pe/ducts-domain/loss-rules";
 import { SHEET_ENGINE_VERSION } from "@pe/ducts-domain/sheet/types";
-import { DEFAULT_CANDIDATE_BOX_IN } from "@pe/ducts-domain/sheet/walk";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Accordion } from "@pe/kit/lang/accordion";
 import { Button } from "@pe/kit/lang/button";
@@ -278,7 +277,7 @@ export function inputFields(ctx: InputContext): InputField[] {
       group: "firm",
       sub: "geometry",
       label: "auto-join gap",
-      value: `${defaults.autoJoinMaxGapIn} in`,
+      value: `${text(defaults.autoJoinMaxGapIn)} in`,
       live: "auto-join-gap",
     },
     {
@@ -286,7 +285,7 @@ export function inputFields(ctx: InputContext): InputField[] {
       group: "firm",
       sub: "geometry",
       label: "candidate box",
-      value: `${text(row("candidate box in")?.value ?? DEFAULT_CANDIDATE_BOX_IN)} in`,
+      value: `${text(row("candidate box in")?.value)} in`,
       reason: "no-op: C# only",
     },
     {
@@ -294,16 +293,16 @@ export function inputFields(ctx: InputContext): InputField[] {
       group: "firm",
       sub: "geometry",
       label: "heal search radius",
-      value: "36 in (heal.ts)",
-      reason: "no-op: engine only",
+      value: `${text(row("candidate box in")?.value)} in (the candidate box)`,
+      reason: "no-op: C# only",
     },
     {
       census: "Facing threshold",
       group: "firm",
       sub: "geometry",
       label: "facing threshold",
-      value: "cos 0.9 · 0.5 in lateral (walk.ts)",
-      reason: "no-op: engine only",
+      value: "cos 0.9 · 0.5 in lateral (DuctHealth.cs)",
+      reason: "no-op: C# only",
     },
     {
       census: "Roughness",

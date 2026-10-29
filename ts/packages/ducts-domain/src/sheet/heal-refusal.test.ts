@@ -16,7 +16,7 @@ import { grids } from "./tables.fixture.ts";
 import { foreignOwners, graphOf, walkFrom } from "./walk.ts";
 
 const CHADDS =
-  "C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/tmp/ducts-sheet/chadds-snapshot-raw.json";
+  "C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/tmp/ducts-sheet/chadds-snapshot-health.json";
 const FC23 = 8732550;
 const OTHER_FC23 = 13760867;
 

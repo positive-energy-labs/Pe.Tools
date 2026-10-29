@@ -5,36 +5,48 @@
  * Revit direction never chooses an edge; class changes mark stream merges. R-Q4 (kaitpw
  * 2026-10-28): a tap entered from its branch is a merge only when its landing is on another roster
  * fan's network (`foreignOwners`); on this fan's own or an unowned duct it is a split, walked on
- * through the landing duct in both directions.
+ * through the landing duct in both directions. An open end's neighbourhood is C#'s model health
+ * (`snapshot.issues`, ducts LEDGER 2026-10-29): the walk reads it and decides, never measures.
  */
 import { isTap } from "../kernel/fitting-facts.ts";
 import type { FanPort } from "../roster.ts";
 import type { DuctSnapshot } from "../types.ts";
 import {
   applyConnectorPairRulings,
-  candidates,
+  candidatesOf,
   classOf,
-  openPort,
-  sidesOf,
+  connectorKey,
+  nearOf,
   type ConnectorPairRuling,
   type Element,
+  type Near,
 } from "../kernel/inferred-joins.ts";
 import type { Blocker, EndRuling, FanPortRef, HealProposal, PathEnd, Side } from "./types.ts";
 import { proposeHeals, rulingFor } from "./heal.ts";
 
 type Connector = Element["connectors"][number];
 
-/** Two outward axes this close to antiparallel are opposed (inferred-joins NEAR_MISS_OPPOSED_COS). */
-const OPPOSED_COS = 0.9;
-export const DEFAULT_CANDIDATE_BOX_IN = 36;
-
 export interface Graph {
   all: readonly Element[];
   byId: ReadonlyMap<number, Element>;
+  /** Each open end's neighbourhood, measured by C# (model health, ducts LEDGER 2026-10-29). */
+  near: ReadonlyMap<string, Near>;
+  /** The tolerances the neighbourhood was measured under (`snapshot.tolerances`, C#'s one home), in. */
+  candidateBoxIn: number | null;
+  autoJoinGapIn: number | null;
 }
-export const graphOf = (s: Pick<DuctSnapshot, "nodes" | "segments">): Graph => {
+export const graphOf = (
+  s: Pick<DuctSnapshot, "nodes" | "segments"> &
+    Partial<Pick<DuctSnapshot, "issues" | "tolerances">>,
+): Graph => {
   const all = [...s.nodes, ...s.segments];
-  return { all, byId: new Map(all.map((e) => [e.id, e])) };
+  return {
+    all,
+    byId: new Map(all.map((e) => [e.id, e])),
+    near: nearOf(s.issues),
+    candidateBoxIn: s.tolerances?.candidateBoxIn ?? null,
+    autoJoinGapIn: s.tolerances?.autoJoinGapIn ?? null,
+  };
 };
 export const isSegment = (e: Element): e is DuctSnapshot["segments"][number] => "polyline" in e;
 
@@ -92,8 +104,6 @@ export interface WalkOptions {
   roster: readonly FanPort[];
   rulings?: readonly ConnectorPairRuling[];
   endRulings?: readonly EndRuling[];
-  candidateBoxIn?: number;
-  autoJoinMaxGapIn?: number;
   assumeHeals?: boolean;
   /** Elements on another roster fan's network (`foreignOwners`); a tee or tap may not land on one (R-A). */
   owners?: ReadonlyMap<number, FanPort>;
@@ -169,55 +179,26 @@ export const reachedPort = (
       ? "inlet"
       : undefined;
 
-const near = (e: Element, p: number[], r: number) => {
-  const d = (q: number[]) => Math.max(...q.map((v, k) => Math.abs(v - p[k]!)));
-  if (e.connectors.some((c) => c.point.length === 3 && d(c.point) <= r)) return true;
-  if (!isSegment(e)) return false;
-  // A long duct body can pass the box with no vertex in it: test the closest point of each piece.
-  const pad = Math.max(e.diameterIn ?? 0, e.widthIn ?? 0, e.heightIn ?? 0) / 24;
-  return e.polyline.slice(1).some((b, i) => {
-    const a = e.polyline[i]!;
-    const ab = b.map((v, k) => v - a[k]!);
-    const len2 = ab.reduce((s, v) => s + v * v, 0);
-    const t =
-      len2 === 0
-        ? 0
-        : Math.max(0, Math.min(1, ab.reduce((s, v, k) => s + v * (p[k]! - a[k]!), 0) / len2));
-    return d(a.map((v, k) => v + ab[k]! * t)) <= r + pad;
-  });
-};
-
-/** Nearest physical candidate, including occupied/sideways ports that inference intentionally rejects. */
-function nearestCandidate(nearby: readonly Element[], point: number[], withinIn: number) {
-  const distance = (a: number[], b: number[]) => Math.hypot(...a.map((v, i) => v - b[i]!));
-  const choices = nearby.flatMap((e) =>
-    e.connectors.map((c) => ({
-      label: `${e.id}:${c.index}`,
-      gapIn: distance(point, c.point) * 12,
-      state: c.connectedTo ? "occupied" : "vacant",
-    })),
-  );
-  for (const side of sidesOf(nearby.filter(isSegment))) {
-    const v = point.map((x, i) => x - side.a[i]!);
-    const dot = (a: number[], b: number[]) => a.reduce((sum, x, i) => sum + x * b[i]!, 0);
-    const t = dot(v, side.u);
-    const axial = Math.max(-t, t - side.len, 0);
-    const radial = v.map((x, i) => x - t * side.u[i]!);
-    const section = side.section;
-    const across =
-      "w" in section
-        ? Math.hypot(
-            Math.max(0, Math.abs(dot(radial, section.x)) - section.w),
-            Math.max(0, Math.abs(dot(radial, section.y)) - section.h),
-          )
-        : Math.max(0, Math.hypot(...radial) - section.outer);
-    choices.push({
-      label: `${side.owner} duct body`,
-      gapIn: Math.hypot(axial, across) * 12,
-      state: "occupied surface (no vacant port)",
-    });
+/** Nearest measured neighbour of an open end, occupied or vacant, port or duct body, in what the graph holds. */
+function nearestOf(near: Near | undefined, g: Graph, withinIn: number) {
+  const choices: { label: string; gapIn: number; state: string }[] = [];
+  for (const p of near?.ports ?? []) {
+    const c = g.byId.get(p.elementId)?.connectors.find((x) => x.index === p.connector);
+    if (c)
+      choices.push({
+        label: connectorKey(p.elementId, p.connector),
+        gapIn: p.gapIn,
+        state: c.connectedTo ? "occupied" : "vacant",
+      });
   }
-  return choices.filter((c) => c.gapIn <= withinIn).sort((a, b) => a.gapIn - b.gapIn)[0];
+  for (const body of near?.bodies ?? [])
+    if (g.byId.has(body.segmentId))
+      choices.push({
+        label: `${body.segmentId} duct body`,
+        gapIn: body.gapIn,
+        state: "occupied surface (no vacant port)",
+      });
+  return choices.filter((c) => c.gapIn <= withinIn).sort((x, y) => x.gapIn - y.gapIn)[0];
 }
 
 /** Walk from `connector` of `unit` outward. */
@@ -228,9 +209,8 @@ export function walkFrom(
   opts: WalkOptions,
 ): Walk {
   const rosterUnits = new Set(opts.roster.map((p) => p.unitId));
-  const searchIn = opts.candidateBoxIn ?? DEFAULT_CANDIDATE_BOX_IN;
-  const box = searchIn / 12;
-  const autoGapIn = opts.autoJoinMaxGapIn ?? 3;
+  // The read's candidate box (C#, one home); a read without health measured no neighbourhood.
+  const searchIn = g.candidateBoxIn ?? 0;
   const autoJoins: Walk["autoJoins"] = [];
   const heals: Walk["heals"] = [];
   const capped: Walk["capped"] = [];
@@ -316,6 +296,8 @@ export function walkFrom(
       : undefined;
     const mergeOwner = landing == null ? undefined : opts.owners?.get(landing);
     const terminal = !isSegment(e) && e.kind === "terminal";
+    // Not a re-detection of C#'s air-type-change (ruling 2026-10-29): the class carried along this
+    // path (inherited through unclassified parts) decides where this fan's stream ends, a calc call.
     const merge = mergeOwner
       ? ("branch-tap" as const)
       : !terminal && p.cls && cls && cls !== p.cls
@@ -361,7 +343,13 @@ export function walkFrom(
     }
     const effectivePort =
       !classOf(c.classification) && st.cls ? { ...c, classification: st.cls } : c;
-    const open = openPort(st.el, effectivePort);
+    const open = {
+      k: connectorKey(st.el.id, c.index),
+      id: st.el.id,
+      index: c.index,
+      cls: classOf(effectivePort.classification),
+    };
+    const measured = g.near.get(open.k);
     // The far side of a join already taken from the other end (a walked pair, R-FACE): not an end.
     if (joinedPorts.has(open.k)) return;
     // R-CAP: a person ruled this open end capped; it is neither an end nor a blocker.
@@ -369,8 +357,7 @@ export function walkFrom(
       capped.push({ elementId: st.el.id, connector: c.index });
       return;
     }
-    const nearby = g.all.filter((e) => e.id !== st.el.id && near(e, c.point, box));
-    const rawCandidates = candidates(open, nearby, searchIn).filter(
+    const rawCandidates = candidatesOf(open, measured, g.byId).filter(
       (candidate) =>
         candidate.toConnector == null ||
         !joinedPorts.has(`${candidate.toElement}:${candidate.toConnector}`),
@@ -381,9 +368,9 @@ export function walkFrom(
     const ranked = proposeHeals(
       st.el,
       effectivePort,
-      nearby,
+      measured,
+      g.byId,
       opts.rulings ?? [],
-      searchIn,
       joinedPorts,
     ).filter((p) => p.kind === "join" || !entered.has(p.to.elementId));
     // R-A: a tee or tap onto another roster fan's network would merge streams (Q4); a join to a
@@ -394,21 +381,9 @@ export function walkFrom(
     const proposal = ranked.find((p) => !foreignOf(p));
     const rejected = (pair: readonly string[]) =>
       opts.rulings?.some((r) => r.verdict === "reject" && r.pair.every((p) => pair.includes(p)));
+    // C#'s near miss (vacant, opposed, within the read's auto-join gap); the sheet adds its rulings and air class.
     const auto = rawCandidates.find(
-      (k) =>
-        k.toConnector != null &&
-        k.kind !== "tap" &&
-        !k.crossing &&
-        !rejected(k.pair) &&
-        (k.facingDot ?? 0) <= -OPPOSED_COS &&
-        Math.hypot(
-          ...g.byId
-            .get(k.toElement)!
-            .connectors.find((p) => p.index === k.toConnector)!
-            .point.map((v, i) => v - c.point[i]!),
-        ) *
-          12 <=
-          autoGapIn,
+      (k) => k.autoJoin && k.toConnector != null && !k.crossing && !rejected(k.pair),
     );
     const cands = applyConnectorPairRulings(rawCandidates, opts.rulings ?? []);
     const best = cands[0] ?? rawCandidates.find((k) => !rejected(k.pair));
@@ -421,7 +396,7 @@ export function walkFrom(
         const port = g.byId.get(k.toElement)?.connectors.find((p) => p.index === k.toConnector);
         if (!port || port.connectedTo) continue;
         const d = Math.hypot(...port.point.map((v, i) => v - c.point[i]!)) * 12;
-        if (d <= Math.max(autoGapIn, searchIn) && (!pick || d < pick.d)) pick = { k, port, d };
+        if (d <= searchIn && (!pick || d < pick.d)) pick = { k, port, d };
       }
       if (!pick) return {};
       const target = g.byId.get(pick.k.toElement)!;
@@ -449,7 +424,7 @@ export function walkFrom(
         .connectors.find((p) => p.index === follow.toConnector)!;
       const gapIn = Math.hypot(...targetPort.point.map((v, i) => v - c.point[i]!)) * 12;
       if (auto === follow) {
-        const note = `auto-joined ${open.k} to ${follow.toElement}:${follow.toConnector} across ${gapIn.toFixed(3)} in, default \u2264${autoGapIn} in`;
+        const note = `auto-joined ${open.k} to ${follow.toElement}:${follow.toConnector} across ${gapIn.toFixed(3)} in, default \u2264${g.autoJoinGapIn} in`;
         autoJoins.push({
           from: [st.el.id, c.index],
           to: [follow.toElement, follow.toConnector!],
@@ -545,7 +520,7 @@ export function walkFrom(
             ? `open ${open.k} faces ${best.toElement}:${port!.index}, already capped by ${capped.id}: face gap ${best.gapIn.toFixed(3)} in, connector gap ${gapNative!.toFixed(3)} in`
             : best.toConnector == null
               ? `open ${open.k} lands on ${best.toElement} duct body at face gap ${best.gapIn.toFixed(3)} in, occupied surface (no vacant port)`
-              : `open ${open.k} nearest candidate ${best.toElement}:${best.toConnector} at ${gapNative!.toFixed(3)} in, ${port?.connectedTo ? "occupied" : "vacant"}, ${(best.facingDot ?? 0) <= -OPPOSED_COS ? "opposed" : "sideways or facing unknown"}; default auto-join requires vacant opposed ports within ${autoGapIn} in`,
+              : `open ${open.k} nearest candidate ${best.toElement}:${best.toConnector} at ${gapNative!.toFixed(3)} in, ${port?.connectedTo ? "occupied" : "vacant"}, ${best.opposed ? "opposed" : "sideways or facing unknown"}; default auto-join requires vacant opposed ports within ${g.autoJoinGapIn} in`,
           ...(proposal ? { proposal } : {}),
           closer: {
             kind: "heal",
@@ -565,7 +540,7 @@ export function walkFrom(
       );
       return end(s, c.index, { kind: "open-end", elementId: st.el.id, connector: c.index }, [id]);
     }
-    const nearest = nearestCandidate(nearby, c.point, searchIn);
+    const nearest = nearestOf(measured, g, searchIn);
     const id = block(
       {
         kind: "open-end",

@@ -5,6 +5,7 @@ import { suggestRoster, type FanPort } from "../roster.ts";
 import { friction, roundSection } from "../loss-physics.ts";
 import { buildSheet } from "./build.ts";
 import { grids } from "./tables.fixture.ts";
+import { withHealth } from "./health.fixture.ts";
 import { graphOf, walkFrom } from "./walk.ts";
 import { assumedFanFlows } from "./assumed-flow.ts";
 
@@ -77,7 +78,7 @@ function fixture() {
 it("extends a join on the assumed walk, charges gap friction, and only an accepted ruling completes known ESP", () => {
   const snapshot = fixture();
   const input = {
-    snapshot,
+    snapshot: withHealth(snapshot),
     roster,
     fan: { unitId: 100, portIndex: 0 },
     grids: {},
@@ -133,7 +134,7 @@ it("proposes a duct-body tap and walks on through the landing duct both ways (R-
     ) as unknown as DuctSnapshot["nodes"][number],
   );
   const input = {
-    snapshot,
+    snapshot: withHealth(snapshot),
     roster,
     fan: { unitId: 100, portIndex: 0 },
     grids: {},
@@ -186,7 +187,12 @@ it("occupied mouths require a risky tee, preserve both branches, and cross-air-t
       port(0, [5, 0, 0], [1, 0, 0], [2, 0]),
     ]) as unknown as DuctSnapshot["nodes"][number],
   );
-  const input = { snapshot, roster, fan: { unitId: 100, portIndex: 0 }, grids: {} };
+  const input = {
+    snapshot: withHealth(snapshot),
+    roster,
+    fan: { unitId: 100, portIndex: 0 },
+    grids: {},
+  };
   const sheet = buildSheet(input);
   const p = sheet.blockers.find((b) => b.proposal)!.proposal!;
   expect(p).toMatchObject({
@@ -198,7 +204,10 @@ it("occupied mouths require a risky tee, preserve both branches, and cross-air-t
   expect(sheet.assumed.blockers.some((b) => b.kind === "unknown-drop")).toBe(true);
   for (const c of snapshot.segments[1]!.connectors) c.classification = "ReturnAir";
   // Unruled, a crossing is never proposed, even on the assumed walk (W0-A rule 2 holds).
-  const silent = walkFrom(graphOf(snapshot), snapshot.nodes[0]!, 0, { roster, assumeHeals: true });
+  const silent = walkFrom(graphOf(withHealth(snapshot)), snapshot.nodes[0]!, 0, {
+    roster,
+    assumeHeals: true,
+  });
   expect(silent.heals).toEqual([]);
   expect([...silent.blockers.values()].some((b) => b.proposal)).toBe(false);
   // Departure (2026-10-28, FC-23 close): this test once held "refused even when accepted". The
@@ -206,7 +215,7 @@ it("occupied mouths require a risky tee, preserve both branches, and cross-air-t
   // the page's "accept join" verb writes exactly that pair; on Chadds three ReturnAir plenums
   // end 0.01 in from SupplyAir grilles, which nothing else can close. The boundary that holds:
   // only a person's accept of that exact pair joins; nothing crosses silently.
-  const walk = walkFrom(graphOf(snapshot), snapshot.nodes[0]!, 0, {
+  const walk = walkFrom(graphOf(withHealth(snapshot)), snapshot.nodes[0]!, 0, {
     roster,
     assumeHeals: true,
     rulings: [{ pair: p.pair, verdict: "accept" }],
@@ -236,7 +245,7 @@ it("derived served-terminal flow supplies assumed ESP, preserves missing designe
     { key: "flow", value: 200, unit: "cfm", provenance: "designer-stated" },
   ];
   const input = {
-    snapshot,
+    snapshot: withHealth(snapshot),
     roster: [...roster, { ...roster[0]!, unitId: 400 }],
     fan: { unitId: 100, portIndex: 0 },
     grids: {},
@@ -277,7 +286,12 @@ it("an accepted pair takes priority over a nearer automatic join", () => {
       50,
     ) as unknown as DuctSnapshot["nodes"][number],
   );
-  const input = { snapshot, roster, fan: { unitId: 100, portIndex: 0 }, grids: {} };
+  const input = {
+    snapshot: withHealth(snapshot),
+    roster,
+    fan: { unitId: 100, portIndex: 0 },
+    grids: {},
+  };
   const ordinary = buildSheet(input);
   expect(ordinary.paths.some((p) => p.end.elementId === 250)).toBe(true);
   const accepted = buildSheet({ ...input, rulings: [{ pair: ["1:1", "2:0"], verdict: "accept" }] });
@@ -293,7 +307,7 @@ it("a typed fitting drop at the fan root is charged once even though the root is
   snapshot.nodes[2]!.connectors[0]!.connectedTo = null;
   snapshot.nodes[2]!.connectors[0]!.point = [1, 0, 0];
   const sheet = buildSheet({
-    snapshot,
+    snapshot: withHealth(snapshot),
     roster,
     fan: { unitId: 100, portIndex: 0 },
     grids: {},
@@ -308,7 +322,7 @@ it("a typed fitting drop at the fan root is charged once even though the root is
 });
 
 const retained =
-  "C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/tmp/ducts-sheet/chadds-snapshot-raw.json";
+  "C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/tmp/ducts-sheet/chadds-snapshot-health.json";
 it.skipIf(!existsSync(retained))(
   "retained Chadds: compare assumptions with and without served-terminal derivation",
   () => {

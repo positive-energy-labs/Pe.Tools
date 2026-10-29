@@ -54,7 +54,7 @@ function fixture() {
         terminalCount: 1,
         elementCount: 1,
         loops: 0,
-        issueIds: ["fan"],
+        issueIds: ["air-type-change:2:0"],
       },
     ],
     nodes: [
@@ -110,11 +110,11 @@ function fixture() {
     },
     issues: [
       {
-        id: "fan",
-        kind: "no-fan-static",
-        elementId: 1,
-        groupId: "g",
-        note: "Fan rating absent",
+        id: "air-type-change:2:0",
+        kind: "air-type-change",
+        elementId: 2,
+        connector: 0,
+        note: "SupplyAir meets ReturnAir at 1:0",
       },
     ],
   };
@@ -591,11 +591,10 @@ test("a reading whose findings alone pass the budget keeps a row and every count
   const f = fixture();
   for (let i = 0; i < 1500; i++)
     f.snapshot.issues.push({
-      id: `stub:g:${1000 + i}`,
+      id: `stub:${1000 + i}`,
       kind: "stub",
       elementId: 1,
       point: [0, 0, 0],
-      groupId: "g",
       note: "Y".repeat(60),
     } as DuctSnapshot["issues"][number]);
   const page = await f.api.read(
@@ -1036,14 +1035,13 @@ test("the survey joins a sub-tolerance gap, takes the terminal flow from the loa
       assumed: expect.stringContaining("0.40 in apart; joined"),
     }),
     expect.objectContaining({
-      kind: "no-fan-static",
-      elementIds: [1],
+      kind: "air-type-change",
+      elementIds: [2],
       clearer: "route",
-      note: expect.stringContaining("computed by the route when the path prices"),
     }),
   ]);
   expect(summary.findingCounts).toMatchObject({
-    byKind: { "joined-by-proximity": 1, "no-fan-static": 1 },
+    byKind: { "joined-by-proximity": 1, "air-type-change": 1 },
     byClearer: { route: 1, pea: 0, person: 1 },
   });
   // Graded keys carry the grade; the ungraded finding keeps its bare kind.
@@ -1053,7 +1051,7 @@ test("the survey joins a sub-tolerance gap, takes the terminal flow from the loa
   );
   expect(graded).toHaveLength(1);
   expect(["near-miss", "stretched", "anomalous"]).toContain(graded[0]!.split(":")[1]);
-  expect(summary.findingCounts.byKindAndGrade["no-fan-static"]).toBe(1);
+  expect(summary.findingCounts.byKindAndGrade["air-type-change"]).toBe(1);
   expect(summary.completeness.reasons.map((r) => r.code)).not.toContain("unreached-terminals");
   expect(summary.completeness.reasons.map((r) => r.code)).not.toContain("unknown-terminal-flow");
   const terminals = ductsAnalysisResponseSchema.parse(

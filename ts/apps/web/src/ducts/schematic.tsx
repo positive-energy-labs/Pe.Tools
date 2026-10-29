@@ -48,6 +48,11 @@ const INSET_LABEL_W = 24;
 /** A tone's ink role: `mute` is the one tone with no role of its own name. */
 const inkOf = (tone: Tone | undefined) => tokenRef(tone ?? "ink-mute");
 const issueInk = (kind: IssueKind) => inkOf(ISSUE_KINDS[kind].color.tone);
+/**
+ * An extra root keeps the alarm ink the retired `multi-root` issue gave it (ducts LEDGER 2026-10-29
+ * retired the kind, not the drawing): the walk-blocking tone, the one `open-end` carries.
+ */
+const EXTRA_ROOT_INK = inkOf(ISSUE_KINDS["open-end"].color.tone);
 
 interface Placed {
   chain: Chain;
@@ -453,11 +458,11 @@ function Vertex({
             width={12}
             height={10}
             fill="none"
-            stroke={issueInk("multi-root")}
+            stroke={EXTRA_ROOT_INK}
             strokeWidth={1.5}
           />
           {labelled ? (
-            <text x={x + 9} y={y - 15 - i * 12} fill={issueInk("multi-root")}>
+            <text x={x + 9} y={y - 15 - i * 12} fill={EXTRA_ROOT_INK}>
               {`another root: equipment ${root.equipment} port ${root.port}`}
             </text>
           ) : null}

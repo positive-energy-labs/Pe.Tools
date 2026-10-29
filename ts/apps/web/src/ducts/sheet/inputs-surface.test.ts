@@ -37,8 +37,21 @@ it("carries every census row (68 rows in the 2026-10-28 census) plus the project
   for (const field of fields) expect(field.live && field.reason).toBeFalsy();
 });
 
-it("labels the 3 in field auto-join gap and shows the 36 in candidate box as a C# no-op", () => {
-  const byLabel = new Map(inputFields(context).map((f) => [f.label, f]));
+it("labels the 3 in field auto-join gap and shows the read's 36 in candidate box as a C# no-op", () => {
+  // The box is the one the C# read measured health under, as the sheet reports it; no sheet, no number.
+  expect(new Map(inputFields(context).map((f) => [f.label, f])).get("candidate box")?.value).toBe(
+    "— in",
+  );
+  const sheet = {
+    overview: {},
+    inputs: { inputs: [{ name: "candidate box in", value: 36, source: "default" }] },
+  };
+  const byLabel = new Map(
+    inputFields({ ...context, sheet: sheet as unknown as InputContext["sheet"] }).map((f) => [
+      f.label,
+      f,
+    ]),
+  );
   expect(byLabel.get("auto-join gap")).toMatchObject({ live: "auto-join-gap", value: "3 in" });
   expect(byLabel.get("candidate box")).toMatchObject({ reason: "no-op: C# only", value: "36 in" });
   expect(byLabel.get("terminal drop")).toMatchObject({ shim: "ducts-terminal-drop" });

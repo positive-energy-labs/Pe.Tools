@@ -57,40 +57,4 @@ public sealed class DuctFamilyTablesTests {
         var ex = Assert.Throws<InvalidOperationException>(() => DuctFamilyTables.ElbowCsv(AshraeTables.Read(Folder(), ["CD3-2"])));
         Assert.That(ex!.Message, Does.Contain("CD3-4"));
     }
-
-    private static DuctConnector Port(int index, long? to = null, int toPort = 0) =>
-        new(index, "end", [index, 0, 0], DuctShape.Round, "8\"ø", 8, null, null, null, "bidirectional", null,
-            to is { } id ? new DuctRef(id, toPort) : null);
-
-    private static DuctNode Node(long id, DuctNodeKind kind, string? part, IReadOnlyList<DuctConnector> ports, params DuctFact[] facts) =>
-        new(id, kind, kind.ToString(), "Fam", "Type", part, null, [0, 0, 0], null, "SA 1", "Supply Air", ports, facts);
-
-    private static DuctSegment Duct(long id, double lengthFt, params DuctConnector[] ports) =>
-        new(id, DuctSegmentKind.Duct, DuctCurveKind.Line, "Round", DuctShape.Round, "8\"ø", 8, null, null, lengthFt,
-            [[0, 0, 0], [lengthFt, 0, 0]], null, null, "SA 1", "Supply Air",
-            new DuctRoughness(0.0003, DuctProvenance.RevitDefault), new DuctRevitValues(null, null, null, null), ports);
-
-    [Test]
-    public void A_tap_leg_with_no_flow_is_an_issue_and_an_elbow_is_not() {
-        // AHU 1 -> duct 10 -> tee 20 -> duct 11 -> terminal 30 (100 cfm); tee leg 3 -> duct 12 -> terminal 31 (no flow).
-        // Elbow 21 on duct 11 carries flow; a leg with no flow on a non-junction raises nothing.
-        var nodes = new List<DuctNode> {
-            Node(1, DuctNodeKind.Equipment, null, [Port(1, 10, 1)], new DuctFact(DuctNetwork.ExternalStatic, 1, null, "in-wg", DuctProvenance.DesignerStated)),
-            Node(20, DuctNodeKind.Fitting, "Tee", [Port(1, 10, 2), Port(2, 11, 1), Port(3, 12, 1)]),
-            Node(30, DuctNodeKind.Terminal, null, [Port(1, 11, 2)], new DuctFact(DuctNetwork.TerminalFlow, 100, null, "cfm", DuctProvenance.DesignerStated)),
-            Node(31, DuctNodeKind.Terminal, null, [Port(1, 12, 2)])
-        };
-        var segments = new List<DuctSegment> {
-            Duct(10, 10, Port(1, 1, 1), Port(2, 20, 1)),
-            Duct(11, 5, Port(1, 20, 2), Port(2, 30, 1)),
-            Duct(12, 5, Port(1, 20, 3), Port(2, 31, 1))
-        };
-
-        var a = DuctNetwork.Analyze(nodes, segments);
-
-        Assert.That(a.Issues.Select(i => i.Id), Is.EquivalentTo(new[] { "no-terminal-flow:g10:31", "no-flow-leg:g10:20:3" }));
-        var leg = a.Issues.Single(i => i.Kind == DuctIssueKind.NoFlowLeg);
-        Assert.That(leg.ElementId, Is.EqualTo(20));
-        Assert.That(leg.Note, Is.EqualTo("Tee leg 3 carries no flow"));
-    }
 }

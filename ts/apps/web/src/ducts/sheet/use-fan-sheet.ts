@@ -58,7 +58,9 @@ export function useFanSheet(
         edited.terminalDropInWg !== undefined
           ? "route settings terminal drop"
           : (drop?.source ?? SHIM_TERMINAL_DROP_SOURCE),
-      autoJoinMaxGapIn: edited.autoJoinMaxGapIn ?? (typeof box?.value === "number" ? box.value : 3),
+      // The gap the read was measured under (C#'s default unless route settings name one).
+      autoJoinMaxGapIn:
+        edited.autoJoinMaxGapIn ?? (typeof box?.value === "number" ? box.value : null),
       splitPolicy:
         edited.splitPolicy ?? (split?.value === "proportional" ? "proportional" : "even"),
       basis: sheet?.overview.basis ?? null,

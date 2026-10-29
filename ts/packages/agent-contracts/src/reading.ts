@@ -27,8 +27,10 @@ export const ductsSnapshotSelectorSchema = z.discriminatedUnion("kind", [
     unitId: z.number().int(),
     portIndex: z.number().int().optional(),
     maxHops: z.number().int().positive().optional(),
-    /** Side of the open-end candidate box in inches (default 36). */
+    /** Open-end candidate box in inches (C# default 36): the walk's box side and model health's neighbourhood. */
     candidateBoxIn: z.number().positive().optional(),
+    /** Model health's auto-join gap in inches (C# default 3). */
+    autoJoinGapIn: z.number().nonnegative().optional(),
   }),
 ]);
 export type DuctsSnapshotSelector = z.infer<typeof ductsSnapshotSelectorSchema>;

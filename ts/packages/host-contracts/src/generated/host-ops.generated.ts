@@ -724,7 +724,8 @@ export namespace DuctsSnapshot {
      * connector id; absent walks every port) through ducts, flex, fittings, accessories and equipment (equipment is a
      * leg, never a cut: the roster decides stops later), stopping at an air terminal, an open end, or MaxHops elements
      * deep (default 2000). At every open end a box CandidateBoxIn inches on a side (default 36) around the connector is
-     * searched for MEP elements, which join the output marked `open-end-candidate` so a join can be inferred. Kind
+     * searched for MEP elements, which join the output marked `open-end-candidate` so a join can be inferred. Every kind
+     * reports model health (Issues) under CandidateBoxIn and AutoJoinGapIn (DuctHealthTolerances). Kind
      * `systems` reads SystemIds (MechanicalSystem ids): each system's DuctNetwork, Elements and base equipment, grown
      * along connectors to whole groups (a group is a connected component, so one the systems touch is never cut), and
      * answers in the `document` shape with Systems holding only the named systems.
@@ -738,6 +739,7 @@ export namespace DuctsSnapshot {
       maxHops?: number | null;
       candidateBoxIn?: null | number;
       systemIds?: number[] | null;
+      autoJoinGapIn?: null | number;
     }
   }
   export namespace Res {
@@ -763,20 +765,23 @@ export namespace DuctsSnapshot {
      * The native path form; samples alone do not certify nonlinear curve arclength stations.
      */
     export type DuctCurveKind = "line" | "arc" | "flex-polyline" | "other";
+    /**
+     * Model health (ducts LEDGER 2026-10-29): what is true of the model whatever is calculated, keyed by element and
+     * connector, never by group. Pricing findings (leg flow, shared leg, flow mismatch, not priced, implausible loss,
+     * equipment pairing, velocity over) need a named fan and are the TypeScript sheet's.
+     *
+     */
     export type DuctIssueKind =
       | "open-end"
+      | "near-miss"
       | "loop"
       | "stub"
-      | "mixed-classification"
+      | "air-type-change"
       | "implausible-size"
       | "default-flex-roughness"
-      | "no-fan-static"
       | "no-component-drop"
       | "no-terminal-flow"
-      | "no-root"
-      | "multi-root"
-      | "high-velocity"
-      | "no-flow-leg";
+      | "high-velocity";
 
     /**
      * Store is Pe's `_PE_DuctLosses` provenance blob, absent when the model has none. StoreError is set instead when
@@ -803,6 +808,7 @@ export namespace DuctsSnapshot {
       airflowCandidates?: DuctAirflowCandidate[] | null;
       fanFlowCandidates?: DuctAirflowCandidate[] | null;
       walk?: null | DuctWalk;
+      tolerances?: null | DuctHealthTolerances;
     }
     /**
      * The document read, when, and how long the read took. NetworkBasedCalculations is DuctSettings' engine switch:
@@ -825,7 +831,8 @@ export namespace DuctsSnapshot {
     }
     /**
      * A connected duct network with equipment cut out: the unit a solver runs on. Id is "g" plus the smallest
-     * element id in it, stable while that element exists. RootIds are the equipment it hangs off.
+     * element id in it, stable while that element exists. RootIds are the equipment it hangs off. IssueIds index the
+     * health findings on its elements (issues are keyed by element, never by group).
      *
      */
     export interface DuctGroup {
@@ -998,15 +1005,71 @@ export namespace DuctsSnapshot {
       provenance: DuctProvenance;
     }
     /**
-     * Id is "kind:elementId" (open ends add ":connector"); an assumption verdict keys on it.
+     * One model-health finding. Id is "kind:elementId" plus ":connector" when Connector is set; an assumption verdict
+     * keys on it. Near is set on an open end: what lies within the candidate box of it.
+     *
      */
     export interface DuctIssue {
       id: string;
       kind: DuctIssueKind;
-      elementId?: number | null;
+      elementId: number;
+      connector?: number | null;
       point?: number[] | null;
-      groupId: string;
       note: string;
+      near?: null | DuctNear;
+    }
+    /**
+     * The neighbourhood of one open end, measured from its connector (point, outward axis), never decided: which of
+     * these a calculation joins, and under which ruling, is the pricing engine's. Ports: every connector of every
+     * other element within CandidateBoxIn, vacant or not. Faces: where the end's axis lands on a duct side, a capped
+     * end or an open connector's mouth within 2 in. Bodies: each duct side piece nearby, with the closest distance
+     * and, when the end sits off the side away from its ends, the tap point on its surface within 24 in.
+     *
+     */
+    export interface DuctNear {
+      ports: DuctNearPort[];
+      faces: DuctNearFace[];
+      bodies: DuctNearBody[];
+    }
+    /**
+     * Another connector near an open end. GapIn: centre to centre. FacingDot: cosine of the two outward axes (null
+     * when either is unknown). Opposed: the cosine is at most -0.9. Aligned: opposed, ahead of the end and within
+     * 0.5 in of its axis. AutoJoin: vacant, opposed and within AutoJoinGapIn: the near-miss partner.
+     *
+     */
+    export interface DuctNearPort {
+      elementId: number;
+      connector: number;
+      gapIn: number;
+      facingDot?: null | number;
+      opposed: boolean;
+      aligned: boolean;
+      autoJoin: boolean;
+    }
+    /**
+     * The end's axis landing on a face within 2 in. Kind "collar": an open connector's mouth (Connector set);
+     * "tap": a duct side or an end a cap closes (Connector null, AtFt along the duct, Point on its centerline). GapIn
+     * is signed: negative is inside the face. Opposed as on DuctNearPort.
+     *
+     */
+    export interface DuctNearFace {
+      kind: string;
+      elementId: number;
+      connector?: number | null;
+      gapIn: number;
+      facingDot?: null | number;
+      opposed: boolean;
+      atFt?: null | number;
+      point?: number[] | null;
+    }
+    /**
+     * One duct side piece near an end: GapIn its closest distance; TapGapIn and TapPoint the surface point a tap would land on.
+     */
+    export interface DuctNearBody {
+      segmentId: number;
+      gapIn: number;
+      tapGapIn?: null | number;
+      tapPoint?: number[] | null;
     }
     /**
      * One real query, printed verbatim in Query, and how much of the model it answered.
@@ -1209,6 +1272,17 @@ export namespace DuctsSnapshot {
       point: number[];
       candidateCount: number;
       candidateIds: number[];
+    }
+    /**
+     * The near-miss tolerances Issues were measured under, the one home for both (ducts LEDGER 2026-10-29).
+     * CandidateBoxIn: an open end's neighbourhood, inches either way of its connector (a duct body counts when its
+     * centerline comes within it plus half its largest side). AutoJoinGapIn: a vacant, opposed partner this close is a
+     * near miss the sheet may join without a ruling.
+     *
+     */
+    export interface DuctHealthTolerances {
+      candidateBoxIn: number;
+      autoJoinGapIn: number;
     }
   }
 }

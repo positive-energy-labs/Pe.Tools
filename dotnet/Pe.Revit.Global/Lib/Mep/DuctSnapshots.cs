@@ -35,7 +35,6 @@ public static class DuctSnapshots {
     ];
 
     private const int DefaultMaxHops = 2000;
-    private const double DefaultCandidateBoxIn = 36;
     // Above this many hits an open end's box is counted, not listed (the Space thread measured that looping elements costs memory).
     private const int CandidateCap = 64;
 
@@ -75,10 +74,11 @@ public static class DuctSnapshots {
         var phaseNames = phases.ToDictionary(ph => ph.Id.Value(), ph => ph.Name);
         var schemas = LossSchemas();
         var reader = new Reader(doc, slots, schemas, network, labelParameter, phaseNames);
+        var tolerances = DuctHealth.Tolerances(selector);
 
         if (selector is { Kind: not (DuctSelectorKind.Document or DuctSelectorKind.Systems) }) {
-            // Raw: the same nodes, segments and connectors as the document read, with no groups, roots, flows, issues,
-            // systems or layers. The path engine (TS) prices what it needs from these.
+            // Raw: the same nodes, segments and connectors as the document read, with no groups, roots, flows, systems or
+            // layers, and the same model health. The path engine (TS) prices what it needs from these.
             List<DuctNode> rawNodes;
             List<DuctSegment> rawSegments;
             DuctWalk? walk = null;
@@ -98,13 +98,15 @@ public static class DuctSnapshots {
                     .ToList();
             }
             else (rawNodes, rawSegments) = Selected(reader, selector);
+            var rawIssues = Health(reader, rawNodes, rawSegments, tolerances, bounded: true);
             return new DuctSnapshotData(
                 new DuctDocument(doc.Title, readAt, clock.ElapsedMilliseconds, network),
                 DuctCoordinateEncoding.NativeDouble,
-                levels, [], rawNodes, rawSegments, [], [], [], rawSystems,
+                levels, [], rawNodes, rawSegments, [], rawIssues, [], rawSystems,
                 slots, store, storeError,
                 new DuctPhases(phases.Select(ph => ph.Name).ToList(), PhaseViews(doc, phaseNames)),
-                Walk: walk);
+                Walk: walk,
+                Tolerances: tolerances);
         }
 
         List<DuctSegment> segments;
@@ -134,6 +136,9 @@ public static class DuctSnapshots {
         }
 
         var analysis = DuctNetwork.Analyze(nodes, segments);
+        // A systems read is bounded: its open ends are measured against the whole document around them.
+        var issues = Health(reader, analysis.Nodes, analysis.Segments, tolerances, bounded: selector is { Kind: DuctSelectorKind.Systems });
+        var groups = DuctHealth.Index(analysis.Groups, analysis.Nodes, analysis.Segments, issues);
         var groupsOf = analysis.Nodes.Where(n => n.Kind == DuctNodeKind.Terminal && n.GroupId is not null)
             .ToDictionary(n => n.Id, n => (IReadOnlyList<string>)[n.GroupId!]);
         // A unit belongs to every group it roots (one port per group, a supply and a return side).
@@ -143,19 +148,56 @@ public static class DuctSnapshots {
             new DuctDocument(doc.Title, readAt, clock.ElapsedMilliseconds, network),
             DuctCoordinateEncoding.NativeDouble,
             levels,
-            analysis.Groups,
+            groups,
             analysis.Nodes,
             analysis.Segments,
             analysis.Flows,
-            analysis.Issues,
-            Layers(analysis, systems, slots),
+            issues,
+            Layers(analysis, groups, issues, systems, slots),
             systems,
             slots,
             store,
             storeError,
             new DuctPhases(phases.Select(ph => ph.Name).ToList(), PhaseViews(doc, phaseNames)),
             AirflowCandidates(terminalElements, groupsOf),
-            AirflowCandidates(equipment, rootedBy));
+            AirflowCandidates(equipment, rootedBy),
+            Tolerances: tolerances);
+    }
+
+    /// <summary>
+    ///     Model health over the read (<see cref="DuctHealth" />). A bounded read (every selector but `document`) also
+    ///     reads, as unreported context, every element whose box meets an open end's candidate box (plus a foot, so a duct
+    ///     body whose centerline is within the box plus half its side is found) and every joint partner outside the read.
+    /// </summary>
+    private static IReadOnlyList<DuctIssue> Health(Reader r, IReadOnlyList<DuctNode> nodes, IReadOnlyList<DuctSegment> segments, DuctHealthTolerances tolerances, bool bounded) {
+        if (!bounded) return DuctHealth.Assess(nodes, segments, tolerances);
+        var have = nodes.Select(n => n.Id).Concat(segments.Select(s => s.Id)).ToHashSet();
+        var context = new Dictionary<long, Element>();
+        void Reach(Element? e) {
+            if (e is not null && Walkable(e) && !have.Contains(e.Id.Value())) context.TryAdd(e.Id.Value(), e);
+        }
+        var half = tolerances.CandidateBoxIn / 12 + 1;
+        var ends = nodes.Where(n => n.Kind != DuctNodeKind.Cap).SelectMany(n => n.Connectors)
+            .Concat(segments.SelectMany(s => s.Connectors)).ToList();
+        foreach (var c in ends) {
+            if (c.ConnectedTo is { } to) {
+                if (!have.Contains(to.ElementId)) Reach(r.Doc.GetElement(new ElementId(to.ElementId)));
+                continue;
+            }
+            if (c.Point.Length != 3) continue;
+            var origin = new XYZ(c.Point[0], c.Point[1], c.Point[2]);
+            var box = new XYZ(half, half, half);
+            foreach (var hit in new FilteredElementCollector(r.Doc)
+                         .WherePasses(new ElementMulticategoryFilter(WalkCategories))
+                         .WhereElementIsNotElementType()
+                         .WhereElementIsViewIndependent()
+                         .WherePasses(new BoundingBoxIntersectsFilter(new Outline(origin - box, origin + box))))
+                Reach(hit);
+        }
+        var contextNodes = new List<DuctNode>();
+        var contextSegments = new List<DuctSegment>();
+        foreach (var e in context.Values.OrderBy(e => e.Id.Value())) Build(r, e, null, contextNodes, contextSegments);
+        return DuctHealth.Assess(nodes, segments, tolerances, contextNodes, contextSegments);
     }
 
     /// <summary>Every supply, return and exhaust MechanicalSystem, by name.</summary>
@@ -226,7 +268,7 @@ public static class DuctSnapshots {
         var startPorts = HvacConnectors(start).Where(c => s.PortIndex is not { } p || c.Id == p).ToList();
         if (startPorts.Count == 0) throw new ArgumentException($"Element {startId} has no HVAC port{(s.PortIndex is { } p ? $" {p}" : "")}.");
         var maxHops = s.MaxHops ?? DefaultMaxHops;
-        var boxFt = (s.CandidateBoxIn ?? DefaultCandidateBoxIn) / 12;
+        var boxFt = DuctHealth.Tolerances(s).CandidateBoxIn / 12;
 
         var reached = new Dictionary<long, Element> { [startId] = start };
         var candidates = new Dictionary<long, Element>();
@@ -590,7 +632,7 @@ public static class DuctSnapshots {
             ? s
             : null;
 
-    private static IReadOnlyList<DuctLayer> Layers(DuctNetwork.Analysis a, IReadOnlyList<DuctSystem> systems, DuctParameterSlots slots) {
+    private static IReadOnlyList<DuctLayer> Layers(DuctNetwork.Analysis a, IReadOnlyList<DuctGroup> groups, IReadOnlyList<DuctIssue> issues, IReadOnlyList<DuctSystem> systems, DuctParameterSlots slots) {
         var segs = a.Segments;
         var terminals = a.Nodes.Where(n => n.Kind == DuctNodeKind.Terminal).ToList();
         var equipment = a.Nodes.Where(n => n.Kind == DuctNodeKind.Equipment).ToList();
@@ -598,7 +640,6 @@ public static class DuctSnapshots {
         var ports = a.Nodes.Where(n => n.Kind != DuctNodeKind.Equipment).SelectMany(n => n.Connectors)
             .Concat(segs.SelectMany(s => s.Connectors)).ToList();
         var elements = a.Nodes.Count + segs.Count;
-        var issueGroups = a.Issues.Select(i => i.GroupId).ToHashSet();
         var fittings = a.Nodes.Where(n => n.Kind == DuctNodeKind.Fitting).ToList();
         var lossy = a.Nodes.Where(n => n.Loss is not null).ToList();
         return [
@@ -648,9 +689,9 @@ public static class DuctSnapshots {
             new("revit-systems", "Revit systems and critical path",
                 "FilteredElementCollector(doc).OfClass(MechanicalSystem) where SystemType is SupplyAir, ReturnAir or ExhaustAir: IsWellConnected, BaseEquipment, BaseEquipmentConnector, PressureLossOfCriticalPath, GetCriticalPathSectionNumbers(), GetSectionByNumber(k) Flow, TotalPressureLoss, GetElementIds(); DuctSettings.NetworkBasedCalculations",
                 new(systems.Count(s => s.CriticalPath.Count > 0), systems.Count), DuctProvenance.RevitReported),
-            new("issues", "Issues",
-                "DuctNetwork.Analyze over the topology layer: open ends (caps excluded), loops, stubs under 3 in, implausible sizes, default flex roughness, roots, missing terminal flow, fan static and component drops, and Revit velocity of 2000 fpm or more",
-                new(a.Groups.Count(g => !issueGroups.Contains(g.Id)), a.Groups.Count), DuctProvenance.Derived)
+            new("issues", "Model health",
+                "DuctHealth.Assess per element and connector: open ends (caps excluded) with their neighbourhood, near misses, loops, stubs under 3 in, air-type changes at a joint, implausible sizes, default flex roughness, missing terminal flow and component drops, and Revit velocity of 2000 fpm or more",
+                new(groups.Count(g => g.IssueIds.Count == 0), groups.Count), DuctProvenance.Derived)
         ];
     }
 

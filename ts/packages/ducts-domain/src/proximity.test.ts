@@ -72,11 +72,11 @@ const snap = (segments: Segment[], nodes: Node[] = []): DuctSnapshot => {
     s.connectors
       .filter((c) => !c.connectedTo)
       .map((c) => ({
-        id: `open-end:${s.groupId}:${s.id}:${c.index}`,
+        id: `open-end:${s.id}:${c.index}`,
         kind: "open-end" as const,
         elementId: s.id,
+        connector: c.index,
         point: c.point,
-        groupId: s.groupId!,
         note: "open",
       })),
   );
@@ -98,7 +98,9 @@ const snap = (segments: Segment[], nodes: Node[] = []): DuctSnapshot => {
       terminalCount: 0,
       elementCount: [...segments, ...nodes].filter((s) => s.groupId === id).length,
       loops: 0,
-      issueIds: issues.filter((i) => i.groupId === id).map((i) => i.id),
+      issueIds: issues
+        .filter((i) => segments.find((s) => s.id === i.elementId)?.groupId === id)
+        .map((i) => i.id),
     })),
     nodes,
     segments,
@@ -208,13 +210,10 @@ it("a 0.4 in gap joins the two open ends and merges their groups", () => {
   expect(findings.map((f) => f.id)).toEqual(["proximity:1:2|2:1"]);
   expect(snapshot.segments[0]!.connectors[1]!.connectedTo).toEqual({ elementId: 2, connector: 1 });
   expect(snapshot.segments[1]!.connectors[0]!.connectedTo).toEqual({ elementId: 1, connector: 2 });
-  // An absorbed group's issue ids keep their prefix: a verdict cell is keyed on the id as read.
-  expect(snapshot.issues.map((i) => [i.id, i.groupId])).toEqual([
-    ["open-end:g1:1:1", "g1"],
-    ["open-end:g2:2:2", "g1"],
-  ]);
+  // An absorbed group's issue ids stay as read: a verdict cell is keyed on the id as read.
+  expect(snapshot.issues.map((i) => i.id)).toEqual(["open-end:1:1", "open-end:2:2"]);
   expect(snapshot.groups.map((g) => [g.id, g.elementCount, g.issueIds])).toEqual([
-    ["g1", 2, ["open-end:g1:1:1", "open-end:g2:2:2"]],
+    ["g1", 2, ["open-end:1:1", "open-end:2:2"]],
   ]);
   expect(groupTree(snapshot, "g1").parent.get(2)).toBe(1);
   // The input is untouched.
@@ -258,9 +257,9 @@ it("a branch end 0.3 in off a main's side becomes a virtual tap on the main", ()
   });
   expect(snapshot.segments[1]!.connectors[0]!.connectedTo).toEqual({ elementId: -1, connector: 1 });
   expect(snapshot.issues.map((i) => i.id)).toEqual([
-    "open-end:g1:1:1",
-    "open-end:g1:1:2",
-    "open-end:g2:2:2",
+    "open-end:1:1",
+    "open-end:1:2",
+    "open-end:2:2",
   ]);
   expect(snapshot.groups.map((g) => [g.id, g.elementCount])).toEqual([["g1", 3]]);
   const tree = groupTree(snapshot, "g1");
@@ -276,7 +275,7 @@ it("a edit ignore verdict on the finding id withholds that inference", () => {
   const out = tolerate(before, ignoring("proximity:1:2|2:1"));
   expect(out.joints).toEqual([]);
   expect(out.snapshot).toBe(before);
-  expect(out.snapshot.issues.map((i) => i.id)).toContain("open-end:g1:1:2");
+  expect(out.snapshot.issues.map((i) => i.id)).toContain("open-end:1:2");
 });
 
 it("an inferred joint that closes a ring is also a loop-by-inference finding", () => {
@@ -436,7 +435,7 @@ it("a damper inside a duct's body, aligned with it, neither end connected, is in
       { elementId: 1, connector: 3 },
     ]);
     expect(snapshot.groups.map((g) => [g.id, g.elementCount])).toEqual([["g1", 4]]);
-    expect(snapshot.issues.map((i) => i.id)).toEqual(["open-end:g1:1:1", "open-end:g1:3:2"]);
+    expect(snapshot.issues.map((i) => i.id)).toEqual(["open-end:1:1", "open-end:3:2"]);
     const tree = groupTree(snapshot, "g1");
     expect([...tree.parts.keys()].sort((a, b) => a - b)).toEqual([-1, 1, 3, 9]);
     expect(before.segments[0]!.connectors).toHaveLength(2);

@@ -16,13 +16,14 @@ import {
   ductsSheetResponseSchema,
 } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { withHealth } from "@pe/ducts-domain/sheet/health.fixture";
 import type { DuctsSheetSources } from "../src/ducts-sheet.ts";
 import { createPeRoutes } from "../src/pe-routes.ts";
 import { DuctsReadings } from "../src/ducts-readings.ts";
 import type { RevitBridge } from "../src/bridge.ts";
 
 const retained =
-  "C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/tmp/ducts-sheet/chadds-snapshot-raw.json";
+  "C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/tmp/ducts-sheet/chadds-snapshot-health.json";
 
 test.skipIf(!existsSync(retained))(
   "MUAS-1 sheet route is bounded and detail is cached, subject-bound and invalidated",
@@ -398,7 +399,8 @@ test("proposal accept/reject is basis-bound, persists in document Work, and repl
       kind: "end",
       direction: classification === "SupplyAir" ? "out" : "in",
     });
-    const snapshot = {
+    // C# model health for the graph (the open fan port's neighbourhood), recorded through the sheet fixture.
+    const snapshot = withHealth({
       document: { title: "proposal", readAt: "fixed" },
       slots: { terminalFlow: "named" },
       segments: [],
@@ -428,7 +430,7 @@ test("proposal accept/reject is basis-bound, persists in document Work, and repl
           ],
         },
       ],
-    } as unknown as DuctSnapshot;
+    } as unknown as DuctSnapshot);
     const registrations = [{ spec: ductsRouteState }];
     const make = () =>
       createPeRoutes({

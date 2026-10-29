@@ -1,31 +1,30 @@
 import {
-  axisOf,
   classOf,
-  sidesOf,
-  type Element,
+  connectorKey,
+  segmentClass,
   type ConnectorPairRuling,
+  type Element,
+  type Near,
 } from "../kernel/inferred-joins.ts";
 import type { HealProposal } from "./types.ts";
 
 type Port = Element["connectors"][number];
-const distance = (a: number[], b: number[]) => Math.hypot(...a.map((v, i) => v - b[i]!));
-const dot = (a: number[], b: number[]) => a.reduce((s, v, i) => s + v * b[i]!, 0);
 export const rulingFor = (
   pair: readonly [string, string],
   rulings: readonly ConnectorPairRuling[],
 ) => rulings.findLast((r) => r.pair.every((p) => pair.includes(p)))?.verdict;
 
-/** The best heal, or none; `proposeHeals` ranks them all so a caller can refuse the first (R-A). */
-export const proposeHeal = (...args: Parameters<typeof proposeHeals>): HealProposal | undefined =>
-  proposeHeals(...args)[0];
-
-/** Join first, body tap second, occupied junction last. Never propose an air-type crossing. */
+/**
+ * Heals for one open end, ranked: join first, body tap second, occupied junction last; never an
+ * unaccepted air-type crossing. The neighbourhood is C#'s measurement (`near`, model health); the
+ * proposal, its risk and its ranking are the sheet's.
+ */
 export function proposeHeals(
   from: Element,
   port: Port,
-  nearby: readonly Element[],
+  near: Near | undefined,
+  g: ReadonlyMap<number, Element>,
   rulings: readonly ConnectorPairRuling[],
-  withinIn = 36,
   unavailable: ReadonlySet<string> = new Set(),
 ): HealProposal[] {
   const cls =
@@ -42,8 +41,8 @@ export function proposeHeals(
     fittingChange: boolean,
   ) => {
     const pair: [string, string] = [
-      `${from.id}:${port.index}`,
-      connector == null ? String(target.id) : `${target.id}:${connector}`,
+      connectorKey(from.id, port.index),
+      connector == null ? String(target.id) : connectorKey(target.id, connector),
     ];
     if (rulingFor(pair, rulings) === "reject") return;
     proposals.push({
@@ -64,72 +63,42 @@ export function proposeHeals(
       assumedLegs: [],
     });
   };
-  for (const target of nearby) {
-    if (target.id === from.id || (!("polyline" in target) && target.kind === "cap")) continue;
-    for (const c of target.connectors) {
-      if (unavailable.has(`${target.id}:${c.index}`)) continue;
-      const other =
-        classOf(c.classification) ??
-        ("classification" in target ? classOf(target.classification) : null);
-      // Ends of different air classes never join silently; an accept ruling on the pair joins them
-      // (as `applyConnectorPairRulings` does), e.g. a SupplyAir grille 0.01 in from a ReturnAir plenum.
-      if (
-        !sameAir(other) &&
-        rulingFor([`${from.id}:${port.index}`, `${target.id}:${c.index}`], rulings) !== "accept"
-      )
-        continue;
-      const gapIn = distance(port.point, c.point) * 12;
-      if (gapIn > withinIn) continue;
-      if (c.connectedTo) {
-        // An occupied mouth is offered only with an explicit fitting change, never as a join.
-        if ("polyline" in target || target.connectors.length >= 3)
-          add("tee", target, c.index, c.point, gapIn, true);
-      } else {
-        const a = axisOf(from, port),
-          b = axisOf(target, c);
-        const displacement = c.point.map((v, i) => v - port.point[i]!);
-        const axial = a && dot(displacement, a);
-        const lateral = a && Math.hypot(...displacement.map((v, i) => v - axial! * a[i]!));
-        const aligned = a && b && dot(a, b) <= -0.9 && axial! >= -1e-6 && lateral! * 12 <= 0.5;
-        const sameSize =
-          port.shape === c.shape &&
-          port.diameterIn === c.diameterIn &&
-          port.widthIn === c.widthIn &&
-          port.heightIn === c.heightIn;
-        add("join", target, c.index, c.point, gapIn, !aligned || !sameSize);
-      }
+  for (const p of near?.ports ?? []) {
+    const target = g.get(p.elementId);
+    if (!target || target.id === from.id || (!("polyline" in target) && target.kind === "cap"))
+      continue;
+    if (unavailable.has(connectorKey(p.elementId, p.connector))) continue;
+    const c = target.connectors.find((x) => x.index === p.connector);
+    if (!c) continue;
+    const other =
+      classOf(c.classification) ??
+      ("classification" in target ? classOf(target.classification) : null);
+    // Ends of different air classes never join silently; an accept ruling on the pair joins them
+    // (as `applyConnectorPairRulings` does), e.g. a SupplyAir grille 0.01 in from a ReturnAir plenum.
+    if (
+      !sameAir(other) &&
+      rulingFor([connectorKey(from.id, port.index), connectorKey(target.id, c.index)], rulings) !==
+        "accept"
+    )
+      continue;
+    if (c.connectedTo) {
+      // An occupied mouth is offered only with an explicit fitting change, never as a join.
+      if ("polyline" in target || target.connectors.length >= 3)
+        add("tee", target, c.index, c.point, p.gapIn, true);
+    } else {
+      const sameSize =
+        port.shape === c.shape &&
+        port.diameterIn === c.diameterIn &&
+        port.widthIn === c.widthIn &&
+        port.heightIn === c.heightIn;
+      add("join", target, c.index, c.point, p.gapIn, !p.aligned || !sameSize);
     }
   }
-  for (const side of sidesOf(
-    nearby.filter((e): e is Extract<Element, { polyline: unknown }> => "polyline" in e),
-  )) {
-    if (!sameAir(side.cls)) continue;
-    const offset = port.point.map((v, i) => v - side.a[i]!);
-    const t = dot(offset, side.u);
-    // A tap must land inside the body, away from an end's mouth.
-    const margin =
-      Math.max(
-        side.segment.diameterIn ?? 0,
-        side.segment.widthIn ?? 0,
-        side.segment.heightIn ?? 0,
-      ) / 24;
-    if (t <= margin || t >= side.len - margin) continue;
-    const center = side.a.map((v, i) => v + t * side.u[i]!);
-    const radial = port.point.map((v, i) => v - center[i]!);
-    const s = side.section;
-    const surface =
-      "w" in s
-        ? center.map(
-            (v, i) =>
-              v +
-              Math.max(-s.w, Math.min(s.w, dot(radial, s.x))) * s.x[i]! +
-              Math.max(-s.h, Math.min(s.h, dot(radial, s.y))) * s.y[i]!,
-          )
-        : center.map(
-            (v, i) => v + radial[i]! * Math.min(1, s.outer / (Math.hypot(...radial) || 1)),
-          );
-    const gapIn = distance(port.point, surface) * 12;
-    if (gapIn <= Math.min(24, withinIn)) add("tap", side.segment, null, surface, gapIn, true);
+  for (const b of near?.bodies ?? []) {
+    const segment = g.get(b.segmentId);
+    if (!segment || !("polyline" in segment) || b.tapGapIn == null || !b.tapPoint) continue;
+    if (!sameAir(segmentClass(segment))) continue;
+    add("tap", segment, null, b.tapPoint, b.tapGapIn, true);
   }
   const priority = { join: 0, tap: 1, tee: 2 };
   return proposals.sort((a, b) => {

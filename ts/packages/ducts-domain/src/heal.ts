@@ -130,9 +130,7 @@ function build(snapshot: DuctSnapshot, raw: DuctsRouteDocument | null): HealPlan
   );
   const issueOf = new Map(
     snapshot.issues.flatMap((i) =>
-      i.kind === "open-end" && i.elementId != null
-        ? [[`${i.elementId}:${i.id.split(":").at(-1)}`, i.id]]
-        : [],
+      i.kind === "open-end" && i.connector != null ? [[`${i.elementId}:${i.connector}`, i.id]] : [],
     ),
   );
   const tapped = new Set([

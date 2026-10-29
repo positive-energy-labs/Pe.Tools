@@ -21,7 +21,8 @@ export interface SheetDefaults {
   /** The firm or route terminal drop; `SHIM` when the engine's placeholder is in force. */
   terminalDropInWg: number | null;
   terminalDropSource: string;
-  autoJoinMaxGapIn: number;
+  /** null until a sheet reports the gap its read was measured under. */
+  autoJoinMaxGapIn: number | null;
   splitPolicy: "even" | "proportional";
   /** The open sheet's basis hash: the one hash the defaults, inputs and tables are pinned into. */
   basis: string | null;
@@ -74,4 +75,3 @@ export interface SheetViewProps {
   /** The one inputs surface: four groups (firm, project, this fan, this element), every census row. */
   inputsSurface: ReactNode;
 }
-

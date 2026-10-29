@@ -7,7 +7,13 @@ import { expect, it, vi } from "vite-plus/test";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { DuctsSheetOverview } from "@pe/agent-contracts";
 import type { Detail } from "./api";
-import { blockerShapes, centrelineLayers, sheetIssues, sheetLayers, worstPathLayer } from "./layers";
+import {
+  blockerShapes,
+  centrelineLayers,
+  sheetIssues,
+  sheetLayers,
+  worstPathLayer,
+} from "./layers";
 import { detailOf, type SheetBlocker } from "./tiers";
 
 vi.mock("#/scene/ink", () => ({ inkOf: () => new THREE.Color(0xffffff) }));
@@ -69,7 +75,12 @@ const snapshot = {
         conn(1, [20, 3 * IN, 0], [1, 0, 0], { elementId: 9, connector: 1 }),
       ],
     ),
-    duct(3, [30, 0, 0], [40, 0, 0], [conn(0, [30, 0, 0], [-1, 0, 0]), conn(1, [40, 0, 0], [1, 0, 0])]),
+    duct(
+      3,
+      [30, 0, 0],
+      [40, 0, 0],
+      [conn(0, [30, 0, 0], [-1, 0, 0]), conn(1, [40, 0, 0], [1, 0, 0])],
+    ),
   ],
   issues: [],
   groups: [],
@@ -156,9 +167,7 @@ const round = {
       diameterIn: 12,
     },
   ],
-  issues: [
-    { id: "open-end:1:1", kind: "open-end", elementId: 1, severity: "warning", message: "" },
-  ],
+  issues: [{ id: "open-end:1:1", kind: "open-end", elementId: 1, connector: 1, note: "" }],
 } as unknown as DuctSnapshot;
 const capPair: [string, string] = ["1:1", "cap"];
 const openEnd: SheetBlocker = {
@@ -168,14 +177,24 @@ const openEnd: SheetBlocker = {
   connector: 1,
   effectInWg: null,
   detail: "",
-  closer: { kind: "heal", note: "", candidate: { toElementId: 1, toConnector: 1, gapIn: 0, pair: capPair } },
+  closer: {
+    kind: "heal",
+    note: "",
+    candidate: { toElementId: 1, toConnector: 1, gapIn: 0, pair: capPair },
+  },
 };
 
 it("a heal volume is a ghost until its pair is accepted, then solid", () => {
   const ghost = blockerShapes(round, null, [openEnd], null, new Set([1]));
   expect(ghost.boxes.length).toBeGreaterThan(0);
   expect(ghost.boxes.every((b) => b.ghost)).toBe(true);
-  const solid = blockerShapes(round, null, [openEnd], inputs([{ pair: capPair, verdict: "accept" }]), new Set([1]));
+  const solid = blockerShapes(
+    round,
+    null,
+    [openEnd],
+    inputs([{ pair: capPair, verdict: "accept" }]),
+    new Set([1]),
+  );
   expect(solid.boxes.length).toBeGreaterThan(0);
   expect(solid.boxes.every((b) => b.ghost === false)).toBe(true);
 });

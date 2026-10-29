@@ -33,11 +33,13 @@ import { worksheet } from "@pe/ducts-domain/sheet/worksheet";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { BridgeError } from "./bridge.ts";
 
+/** The near-miss tolerance C# measures model health under (one home, ducts LEDGER 2026-10-29); absent, its default. */
+type Tolerances = { autoJoinGapIn?: number };
 type SnapshotRequest = {
   selector:
     | { kind: "document" }
     | { kind: "roster" }
-    | { kind: "from"; unitId: number; portIndex?: number };
+    | ({ kind: "from"; unitId: number; portIndex?: number } & Tolerances);
 };
 // Each rule's default and the fallback it prices when that default is not served (ER5-2 for ER5-1).
 const tableRequest = {
@@ -47,9 +49,12 @@ const tableRequest = {
     ),
   ].sort(),
 };
-/** Union two `from` reads of one document by element id; a walked copy wins over a candidate copy. */
+/** Union two `from` reads of one document by element id (a walked copy wins over a candidate copy), and their health by id. */
 function mergeSnapshots(a: DuctSnapshot, b: DuctSnapshot): DuctSnapshot {
-  const union = <T extends { id: number; reason?: string | null }>(x: readonly T[], y: readonly T[]) => {
+  const union = <T extends { id: number; reason?: string | null }>(
+    x: readonly T[],
+    y: readonly T[],
+  ) => {
     const byId = new Map(x.map((e) => [e.id, e]));
     for (const e of y) {
       const have = byId.get(e.id);
@@ -62,6 +67,8 @@ function mergeSnapshots(a: DuctSnapshot, b: DuctSnapshot): DuctSnapshot {
     ...a,
     nodes: union(a.nodes as never[], b.nodes as never[]) as DuctSnapshot["nodes"],
     segments: union(a.segments as never[], b.segments as never[]) as DuctSnapshot["segments"],
+    // Health is model truth, measured the same way in either read; the first copy of an id stands.
+    issues: [...new Map([...b.issues, ...a.issues].map((i) => [i.id, i])).values()],
   };
 }
 export interface DuctsSheetSources {
@@ -208,7 +215,6 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
       defaults: {
         terminalDropInWg: SHIM_TERMINAL_DROP_IN_WG,
         terminalDropSource: "SHIM placeholder",
-        autoJoinMaxGapIn: 3,
         splitPolicy: "even" as const,
         ...doc?.sheetDefaults.edit?.value,
         ...(doc?.sheetDefaults.edit?.value.terminalDropInWg !== undefined
@@ -259,6 +265,7 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
     snapshot: DuctSnapshot,
     rulings: readonly { pair: readonly string[]; verdict: string }[],
     target: DocumentRef,
+    tolerances: Tolerances,
   ): Promise<DuctSnapshot> {
     type Walked = { id: number; reason?: string | null };
     const elementOf = (end: string) => Number(end.split(":")[0]);
@@ -281,7 +288,11 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
       for (const id of seeds) {
         seeded.add(id);
         const more = (await (
-          await readNative("ducts.snapshot", { selector: { kind: "from", unitId: id } }, target)
+          await readNative(
+            "ducts.snapshot",
+            { selector: { kind: "from", unitId: id, ...tolerances } },
+            target,
+          )
         ).json()) as DuctSnapshot;
         merged = mergeSnapshots(merged, more);
       }
@@ -357,7 +368,10 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
             limits: {
               supplyFpm: limits.supply,
               returnFpm: limits.return,
-              source: typed?.supply != null || typed?.return != null ? "route settings" : "SHIM placeholder",
+              source:
+                typed?.supply != null || typed?.return != null
+                  ? "route settings"
+                  : "SHIM placeholder",
             },
             supply: w.supply,
             return: w.return,
@@ -392,16 +406,22 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
       }
       // A fan sheet walks both sides, so acquire from every port of the unit; the engine picks this fan's ports.
       // ponytail: an ERV acquires its second fan's sides too; filter by the roster's port pairing if reads get heavy.
+      // The route's auto-join gap is a read tolerance: C# measures health under it (its own default when unset).
+      const tolerances: Tolerances =
+        saved.defaults.autoJoinMaxGapIn == null
+          ? {}
+          : { autoJoinGapIn: saved.defaults.autoJoinMaxGapIn };
       const acquisition: SnapshotRequest = {
         selector:
           request.mode === "fan"
-            ? { kind: "from", unitId: request.unitId }
+            ? { kind: "from", unitId: request.unitId, ...tolerances }
             : {
                 kind: "from",
                 unitId: request.start.elementId,
                 ...(request.start.connector === undefined
                   ? {}
                   : { portIndex: request.start.connector }),
+                ...tolerances,
               },
       };
       const [response, tables] = await Promise.all([
@@ -418,6 +438,7 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
         (await response.json()) as DuctSnapshot,
         inputs.rulings ?? [],
         request.target,
+        tolerances,
       );
       const grids = toGrids(await tables.json());
       const roster = suggestRoster(snapshot);

@@ -27,7 +27,7 @@ import { buildSheet, type BuildSheetInput } from "./build.ts";
 import type { EndRuling, Sheet } from "./types.ts";
 
 const CHADDS =
-  "C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/tmp/ducts-sheet/chadds-snapshot-raw.json";
+  "C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/tmp/ducts-sheet/chadds-snapshot-health.json";
 const FC23 = 13760867;
 const OTHER_FC23 = 8732550;
 const RV25 = 13770618;

@@ -48,11 +48,12 @@ export interface Survey {
   inferred: InferredLink[];
 }
 
-const PERSON = new Set(["open-end", "no-root", "multi-root", "no-terminal-flow"]);
+const PERSON = new Set(["open-end", "near-miss", "no-terminal-flow"]);
 
 /**
  * A group with no air mover (no root, or every root a passive unit) has no duct path to a
- * fan, so it prices nothing (`losses.ts`) and says so once. It stands in for the group's `no-root`.
+ * fan, so it prices nothing (`losses.ts`) and says so once. Model health never names a group
+ * (ducts LEDGER 2026-10-29), so this group-level finding is the route's own.
  */
 function noFanFindings(snapshot: DuctSnapshot, passive: ReadonlySet<number>): DuctFinding[] {
   return snapshot.groups
@@ -169,10 +170,7 @@ export function series(snapshot: DuctSnapshot, tags: Set<string>) {
     return { ...g, rootIds: owners };
   });
   if (!dropped.size) return { snapshot, findings };
-  const issues = snapshot.issues.filter(
-    (i) => !(i.kind === "multi-root" && dropped.has(i.groupId)),
-  );
-  return { snapshot: { ...snapshot, groups, issues }, findings };
+  return { snapshot: { ...snapshot, groups }, findings };
 }
 
 const cache = new WeakMap<DuctSnapshot, Map<string, ReturnType<typeof tolerate>>>();
@@ -224,8 +222,6 @@ export function survey(
   const trees = m.groups.map((g) => groupTree(m, g.id));
   const flows = terminalFlows(m, edit.loads.preview, edit.flows, trees, roomFlows);
   const noFan = noFanFindings(m, passive);
-  const fanless = new Set(noFan.map((f) => f.groupId));
-  const rootsOf = (groupId: string) => m.groups.find((g) => g.id === groupId)?.rootIds ?? [];
   // A fan that states no flow takes the sum of the terminal flows it serves in each group (nearest
   // port wins, `groupFans`), shown as derived and never written. The solve prices each group from
   // that group's own sum; this per-unit reading is the largest over the groups it roots.
@@ -289,33 +285,14 @@ export function survey(
       clearer: "person" as const,
     })),
     ...flows.findings.map(flowFinding),
-    ...m.issues
-      .filter((i) => !(i.kind === "no-root" && fanless.has(i.groupId)))
-      // Several roots price per fan (`multiFan`); the raw issue is not a blocker.
-      .filter((i) => i.kind !== "multi-root")
-      .map((i) => ({
-        id: i.id,
-        kind: i.kind,
-        ...(i.kind === "multi-root" || i.kind === "no-root" ? { groupId: i.groupId } : {}),
-        // A group-level issue names the group's roots, so the person can select them.
-        elementIds:
-          i.elementId != null
-            ? [i.elementId]
-            : i.kind === "multi-root"
-              ? rootsOf(i.groupId)
-              : i.kind === "no-root"
-                ? m.nodes
-                    .filter((n) => n.groupId === i.groupId && n.kind === "terminal")
-                    .map((n) => n.id)
-                : [],
-        // Fan static is the route's output, not an input a person owes.
-        note:
-          i.kind === "no-fan-static"
-            ? `${i.note}; computed by the route when the path prices`
-            : i.note,
-        assumed: null,
-        clearer: PERSON.has(i.kind) ? ("person" as const) : ("route" as const),
-      })),
+    ...m.issues.map((i) => ({
+      id: i.id,
+      kind: i.kind,
+      elementIds: [i.elementId],
+      note: i.note,
+      assumed: null,
+      clearer: PERSON.has(i.kind) ? ("person" as const) : ("route" as const),
+    })),
   ];
   const result = {
     snapshot: m,
