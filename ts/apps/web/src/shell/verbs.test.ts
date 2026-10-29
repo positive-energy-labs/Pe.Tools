@@ -393,7 +393,7 @@ test("Pea can commit an authentic ticket after JSON transport with the same invo
 
 test("kernel cell verbs use the shared transitions and host acknowledgement", async () => {
   const env = environment("human");
-  const { verbs, subjects } = kernelCellVerbs([{ segment: "cells", groupOf: () => [] }]);
+  const { verbs, subjects } = kernelCellVerbs({ cells: [{ segment: "cells", groupOf: () => [] }] });
   const ctx = { ...env.ctx, subjects: { ...env.ctx.subjects, ...subjects } };
   const subject = { type: "cell:cells", id: "first", work: key, path: ["cells", "first"] };
   expect(Object.keys(verbs)).toEqual([
@@ -516,18 +516,20 @@ test("a host refusal and a transport failure retain distinct terminal evidence",
 
 test("reject uses unsuggest, and cell admission can refuse deletion", async () => {
   const env = environment("human");
-  const { verbs, subjects } = kernelCellVerbs([{ segment: "cells", groupOf: () => [] }]);
+  const { verbs, subjects } = kernelCellVerbs({ cells: [{ segment: "cells", groupOf: () => [] }] });
   const ctx = { ...env.ctx, subjects };
   const subject = { type: "cell:cells", id: "first", work: key, path: ["cells", "first"] };
   expect((await invoke(ctx, verbs["cell:cells.reject"]!, subject, undefined)).state).toBe("done");
   expect(env.doc().cells.first?.suggestion).toBeNull();
-  const locked = kernelCellVerbs([
-    {
-      segment: "cells",
-      groupOf: () => [],
-      admit: () => ({ code: "locked", message: "This cell is locked" }),
-    },
-  ]);
+  const locked = kernelCellVerbs({
+    cells: [
+      {
+        segment: "cells",
+        groupOf: () => [],
+        admit: () => ({ code: "locked", message: "This cell is locked" }),
+      },
+    ],
+  });
   const bound = bind(locked.verbs["cell:cells.delete"]!, {
     ctx: { ...ctx, subjects: locked.subjects },
     subject,

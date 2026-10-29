@@ -2,75 +2,23 @@ import { createHash } from "node:crypto";
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { createRouteRegistry } from "../../kit/src/route-registry.ts";
-import { ductLossAddress } from "../src/routes/duct-loss.ts";
+import { ductLossGraph as ductLoss } from "../../../apps/web/src/duct-loss/graph.ts";
 import { field, text } from "../src/route-field.ts";
 import {
+  cellVerbId,
   gate,
   graphFieldPolicy,
   pane,
   projectRouteGraph,
   routeGraphHash,
-  split,
   validateRouteGraph,
+  type CellsDecl,
   type FieldRole,
   type RouteGraph,
   type VerbDecl,
 } from "../src/route-graph.ts";
 
-type DuctLossPage = {
-  [K in keyof typeof ductLossAddress.fields]: z.output<
-    (typeof ductLossAddress.fields)[K]["schema"]
-  >;
-};
-const fields = ductLossAddress.fields;
-const ductLoss: RouteGraph<DuctLossPage, null> = {
-  key: "duct-loss",
-  address: "duct-loss",
-  name: "Duct Loss",
-  fields: {
-    shape: { ...fields.shape, role: "subject" },
-    a: { ...fields.a, role: "query" },
-    b: { ...fields.b, role: "query" },
-    cfm: { ...fields.cfm, role: "query" },
-    length: { ...fields.length, role: "query" },
-    roughness: { ...fields.roughness, role: "query" },
-    density: { ...fields.density, role: "query" },
-    face: { ...fields.face, role: "pose" },
-  },
-  readings: {
-    result: {
-      kind: "derive",
-      source: "duct-loss.solve",
-      args: (page) => page,
-      deps: ["page"],
-      retire: "page",
-    },
-  },
-  verbs: {},
-  panes: {
-    wheel: { label: "Wheel", purpose: "Drag diameter or airflow", draws: ["result"], verbs: [] },
-    inputs: {
-      label: "Inputs",
-      purpose: "Type the duct and read its loss",
-      draws: ["result"],
-      verbs: [],
-    },
-    charts: {
-      label: "Charts",
-      purpose: "Four lenses on the same law",
-      draws: ["result"],
-      verbs: [],
-    },
-  },
-  layout: split(
-    "calc",
-    { axis: "v", sized: "end", size: 360 },
-    split("top", { axis: "h", sized: "end", size: 320 }, pane("wheel"), pane("inputs")),
-    pane("charts"),
-  ),
-  stages: { calculate: { word: "Calculating", panes: ["wheel", "inputs", "charts"], verbs: [] } },
-  pick: false,
-};
+const fields = ductLoss.fields;
 
 const verb = (label: string, chord = "Mod+Enter"): VerbDecl => ({
   kind: "command",
@@ -324,6 +272,69 @@ test("sibling panes may bind the same chord; a pane's own duplicate or a stage c
 
 test("malformed runtime data refuses instead of throwing", () => {
   expect(validateRouteGraph(null as unknown as RouteGraph).map((refusal) => refusal.code)).toEqual([
+    "invalid-graph",
+  ]);
+});
+
+const workSchema = z.object({
+  rules: z.record(z.string(), z.object({ suggestion: z.unknown() })).default({}),
+  scope: z.object({ suggestion: z.unknown() }).nullable(),
+  note: z.string(),
+});
+type Work = z.infer<typeof workSchema>;
+const rules: CellsDecl<Work> = {
+  segment: "rules",
+  groupOf: (key) => [key],
+  nouns: ["rule"],
+  noun: "loss rules",
+  show: () => "rule",
+};
+const withCells = (...cells: CellsDecl<Work>[]): RouteGraph =>
+  ({ ...ductLoss, work: workSchema, cells }) as unknown as RouteGraph;
+
+test("cells project with executable bindings marked, and the hash covers them and the Work schema", async () => {
+  const graph = withCells(rules);
+  expect(validateRouteGraph(graph)).toEqual([]);
+  const json = projectRouteGraph(graph);
+  expect(json.cells).toEqual([
+    {
+      groupOf: { runtime: true },
+      noun: "loss rules",
+      nouns: ["rule"],
+      segment: "rules",
+      show: { runtime: true },
+    },
+  ]);
+  expect(json.work).toMatchObject({ type: "object", required: expect.arrayContaining(["note"]) });
+  expect(JSON.parse(JSON.stringify(json))).toEqual(json);
+  const base = await routeGraphHash(projectRouteGraph(ductLoss));
+  const hashed = await routeGraphHash(json);
+  expect(hashed).not.toBe(base);
+  const renamed = withCells({ ...rules, noun: "other" });
+  expect(await routeGraphHash(projectRouteGraph(renamed))).not.toBe(hashed);
+});
+
+test("a cell segment must be in the Work schema, as a record unless it is a root cell", () => {
+  expect(validateRouteGraph(withCells({ ...rules, segment: "ghost" }))).toMatchObject([
+    { code: "missing-segment", path: "cells.0" },
+  ]);
+  expect(validateRouteGraph(withCells({ ...rules, segment: "note" }))).toMatchObject([
+    { code: "missing-segment", message: "Work 'note' must be a keyed record of cells" },
+  ]);
+  expect(validateRouteGraph(withCells({ ...rules, segment: null, key: "scope" }))).toEqual([]);
+  expect(validateRouteGraph(withCells({ ...rules, segment: null }))[0]?.code).toBe("invalid-graph");
+  const noSchema = { ...withCells(rules), work: undefined } as RouteGraph;
+  expect(validateRouteGraph(noSchema).map((refusal) => refusal.code)).toEqual(["missing-segment"]);
+});
+
+test("kernel cell verb ids are reserved and a family may be declared once", () => {
+  const id = cellVerbId(rules, "take");
+  expect(id).toBe("cell:rules.take");
+  const collided = { ...withCells(rules), verbs: { [id]: verb("Take") } };
+  expect(validateRouteGraph(collided)).toEqual([
+    { code: "reserved-verb", path: `verbs.${id}`, message: `'${id}' is a kernel cell verb id` },
+  ]);
+  expect(validateRouteGraph(withCells(rules, rules)).map((refusal) => refusal.code)).toEqual([
     "invalid-graph",
   ]);
 });

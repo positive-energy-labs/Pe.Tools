@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { History, RouteField } from "./route-field.ts";
+import type { RouteStatePatch } from "./route-state.ts";
 import type { RouteViewRefusalCode } from "./route-view.ts";
 
 export type FieldRole =
@@ -125,6 +126,37 @@ export type GraphTransition<P> = (
   | { readonly patch: Partial<P> }
   | { readonly refusal: { readonly code: RouteViewRefusalCode; readonly message: string } };
 
+/** The kernel-owned lifecycle verbs of a Work's authored cells; their ids are reserved. */
+export const CELL_VERB_KINDS = ["take", "reject", "reopen", "delete"] as const;
+export type CellVerbKind = (typeof CELL_VERB_KINDS)[number];
+
+/** One family of authored cells in a route's Work, as the Situation and the Chat head read it. */
+export interface CellsDecl<W = unknown> {
+  /** The Work segment holding the keyed cells; null = one root cell at `key` (`scope`, `launch`). */
+  segment: string | null;
+  key?: string;
+  /** A key's group path; `nouns` names its depths, singular ("parameter", "family"). */
+  groupOf: (key: string) => string[];
+  nouns?: readonly string[];
+  /** The head's subject for these cells; absent = the thread's document. */
+  noun?: string;
+  show?: (value: unknown) => string;
+  /** A group's words for the person when its path key is a machine key. */
+  label?: (group: string) => string;
+  /** The page fields that land a review on this cell's own place in the route. */
+  focus?: (key: string) => Record<string, string>;
+  /** The head's commit: `open` the route (default), or `plan` there ("apply", one per Work). */
+  commit?: "open" | "plan";
+  /** Why the head may not write these patches (only the route can), else null. */
+  admit?(doc: W, patches: readonly RouteStatePatch[]): { code: string; message: string } | null;
+}
+
+/** The subject type of a cell family's rows, and the reserved verb ids derived from it. */
+export const cellSubjectType = (family: Pick<CellsDecl, "segment" | "key">): string =>
+  `cell:${family.segment ?? family.key}`;
+export const cellVerbId = (family: Pick<CellsDecl, "segment" | "key">, kind: CellVerbKind) =>
+  `${cellSubjectType(family)}.${kind}`;
+
 export interface RouteGraph<P = Record<string, unknown>, W = unknown> {
   key: string;
   address: string;
@@ -135,6 +167,10 @@ export interface RouteGraph<P = Record<string, unknown>, W = unknown> {
   panes: Readonly<Record<string, PaneDecl>>;
   layout: LayoutNode;
   stages: Readonly<Record<string, StageDecl>>;
+  /** The Work document's schema; required to declare `cells`, whose segments it must contain. */
+  work?: z.ZodType<W>;
+  /** Authored segments of the Work; the kernel owns take, reject, reopen and delete for them. */
+  cells?: readonly CellsDecl<W>[];
   pick?: false;
   transition?: GraphTransition<P>;
   predicates?: Readonly<Record<string, (page: Readonly<P>, work: W | null) => boolean>>;
@@ -163,6 +199,8 @@ export interface RouteGraphJson {
   readonly panes: Readonly<Record<string, GraphJsonObject>>;
   readonly layout: GraphJsonObject;
   readonly stages: Readonly<Record<string, GraphJsonObject>>;
+  readonly work?: GraphJsonObject;
+  readonly cells?: readonly GraphJsonObject[];
   readonly stageOrder: readonly string[];
   readonly pick?: false;
   readonly transition?: GraphJsonObject;
@@ -222,6 +260,8 @@ export interface RouteGraphRefusal {
     | "missing-verb"
     | "unknown-gate"
     | "chord-conflict"
+    | "missing-segment"
+    | "reserved-verb"
     | "stage-order"
     | "invalid-graph";
   path: string;
@@ -237,6 +277,16 @@ const chordKey = (chord: Chord) =>
     .map((key) => key.trim())
     .sort()
     .join("+");
+
+type ZodDef = { type: string; innerType?: z.ZodType; shape?: Record<string, z.ZodType> };
+const defOf = (schema: z.ZodType) => (schema as unknown as { _zod: { def: ZodDef } })._zod.def;
+/** Looks through optional, default and nullable wrappers to the schema that holds the shape. */
+function unwrapSchema(schema: z.ZodType): ZodDef {
+  let def = defOf(schema);
+  while (def.innerType && ["optional", "default", "nullable", "prefault"].includes(def.type))
+    def = defOf(def.innerType);
+  return def;
+}
 
 /** Collects admission refusals without running route code. Malformed runtime data also refuses. */
 export function validateRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphRefusal[] {
@@ -296,6 +346,27 @@ export function validateRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphRef
           checkChord(paneScope, path, verb, chord);
         }
       }
+    }
+    const families = new Set<string>();
+    const shape = graph.work ? unwrapSchema(graph.work).shape : undefined;
+    for (const [index, family] of (graph.cells ?? []).entries()) {
+      const path = `cells.${index}`;
+      const type = cellSubjectType(family);
+      if (family.segment === null && !family.key)
+        refuse("invalid-graph", path, "A root cell needs a key");
+      if (families.has(type)) refuse("invalid-graph", path, `Duplicate cell family '${type}'`);
+      families.add(type);
+      for (const kind of CELL_VERB_KINDS) {
+        const id = cellVerbId(family, kind);
+        if (Object.hasOwn(graph.verbs, id))
+          refuse("reserved-verb", `verbs.${id}`, `'${id}' is a kernel cell verb id`);
+      }
+      const name = family.segment ?? family.key ?? "";
+      const held = shape && Object.hasOwn(shape, name) ? shape[name] : undefined;
+      if (!held)
+        refuse("missing-segment", path, `The Work schema has no '${name}' to hold these cells`);
+      else if (family.segment !== null && unwrapSchema(held).type !== "record")
+        refuse("missing-segment", path, `Work '${name}' must be a keyed record of cells`);
     }
     const seen = new Set<LayoutNode>();
     const walk = (node: LayoutNode) => {
