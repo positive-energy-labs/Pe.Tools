@@ -7,6 +7,17 @@ import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Button } from "@pe/kit/lang/button";
 import { routeTree } from "./routeTree.gen";
+import { Route as rootRoute } from "./routes/__root";
+import { publicRoutes } from "./route/builtin-routes";
+import { ShellProbe, ShellProbeRoute, shellProbe } from "./route/shell-probe";
+
+// Use the unannotated root: the generated tree's file-only type map excludes code routes.
+const appRouteTree = rootRoute.addChildren({ ...routeTree.children!, ShellProbeRoute });
+const unregisterProbe = publicRoutes.register({
+  manifest: shellProbe.manifest,
+  hosted: () => <ShellProbe />,
+});
+if (import.meta.hot) import.meta.hot.dispose(unregisterProbe);
 
 function NotFound() {
   return (
@@ -35,7 +46,7 @@ function RouteError({ error, reset }: ErrorComponentProps) {
 
 export function getRouter() {
   const router = createTanStackRouter({
-    routeTree,
+    routeTree: appRouteTree,
     scrollRestoration: true,
     defaultPreload: "intent",
     defaultPreloadStaleTime: 0,
