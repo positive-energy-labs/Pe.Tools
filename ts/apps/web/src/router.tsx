@@ -24,9 +24,13 @@ const fileRoutes = (routeTree.children as unknown as AnyRoute[]).filter(
 );
 // The runtime value is an array (what addChildren stores); the type keeps the generated tree's map
 // plus the code routes so `Register` stays fully typed for every useSearch/useRouterState consumer.
-const appRouteTree = rootRoute.addChildren([...fileRoutes, ...codeRoutes] as unknown as NonNullable<
-  typeof routeTree.children
-> & {
+type FileChildren = {
+  [K in keyof NonNullable<typeof routeTree.children>]: NonNullable<typeof routeTree.children>[K];
+};
+const appRouteTree = rootRoute.addChildren([
+  ...fileRoutes,
+  ...codeRoutes,
+] as unknown as FileChildren & {
   ShellProbeRoute: typeof ShellProbeRoute;
   ductLossRoute: typeof ductLossRoute;
 });
