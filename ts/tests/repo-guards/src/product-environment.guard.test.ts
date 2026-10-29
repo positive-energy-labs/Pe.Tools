@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vite-plus/test";
@@ -22,7 +22,9 @@ const files = execFileSync("git", ["ls-files", "--cached", "--others", "--exclud
         /^dotnet\/[^/]+\/.*\.(cs|ps1)$/.test(file) ||
         /^tools\/.*\.ps1$/.test(file)) &&
       !/(?:\.Tests\/|\/tests\/|\.(?:test|spec)\.)/i.test(file) &&
-      !testScripts.has(file),
+      !testScripts.has(file) &&
+      // git ls-files still lists an unstaged deletion; census the candidate tree's files.
+      existsSync(resolve(root, file)),
   );
 
 // Match the root read, even if a later line constructs the path. Exceptions are exact lines,

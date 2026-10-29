@@ -316,7 +316,7 @@ const RULES: Rule[] = [
     roots: [W + "**/*.{ts,tsx}"], asOf: "2026-10-23",
     exclude: [W + "{doc,docs,guide,tutorial,help,chat}/**"],
     allow: allow({
-      "routes/duct-loss.tsx": "Input labels, measured values, headings and equations name the calculation.",
+      "duct-loss/route.tsx": "Input labels, measured values, headings and equations name the calculation.",
       "duct/charts.tsx": "Caption labels the plotted law.",
       "components/work/band.tsx": "Recovery receipts, write conflicts and staged tallies support a decision.",
       "route/situation-verbs.tsx": "Outcomes and refusals disclose effects before a write.",
@@ -329,7 +329,7 @@ const RULES: Rule[] = [
       "route/situation-lamp.tsx": "Reader opens state inspection.",
       "route/situation-marks.tsx": "Reader opens state details.",
     }), max: {
-      [W + "routes/duct-loss.tsx"]: 7,
+      [W + "duct-loss/route.tsx"]: 7,
       [W + "duct/charts.tsx"]: 1,
       [W + "components/work/band.tsx"]: 3,
       [W + "route/situation-verbs.tsx"]: 2,

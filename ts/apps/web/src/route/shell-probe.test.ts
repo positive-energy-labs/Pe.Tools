@@ -3,7 +3,7 @@ import { createElement } from "react";
 import { act, cleanup, render } from "@testing-library/react";
 import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import { Route as ductLossRoute } from "../routes/duct-loss";
+import { ductLossRoute } from "../duct-loss/route";
 import { getRouter } from "../router";
 import { publicRoutes } from "./builtin-routes";
 import { ShellProbeRoute, shellProbe } from "./shell-probe";

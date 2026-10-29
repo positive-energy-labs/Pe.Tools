@@ -7,12 +7,17 @@ import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Button } from "@pe/kit/lang/button";
 import { routeTree } from "./routeTree.gen";
+import { ductLossRoute } from "./duct-loss/route";
 import { Route as rootRoute } from "./routes/__root";
 import { publicRoutes } from "./route/builtin-routes";
 import { ShellProbe, ShellProbeRoute, shellProbe } from "./route/shell-probe";
 
 // Use the unannotated root: the generated tree's file-only type map excludes code routes.
-const appRouteTree = rootRoute.addChildren({ ...routeTree.children!, ShellProbeRoute });
+const appRouteTree = rootRoute.addChildren({
+  ...routeTree.children!,
+  ShellProbeRoute,
+  ductLossRoute,
+});
 const unregisterProbe = publicRoutes.register({
   manifest: shellProbe.manifest,
   hosted: () => <ShellProbe />,

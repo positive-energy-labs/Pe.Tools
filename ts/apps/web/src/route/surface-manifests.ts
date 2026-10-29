@@ -3,15 +3,6 @@ import { defineRoute } from "./manifest";
 import { routeAddress } from "@pe/agent-contracts";
 import { SHEET_ROWS, solve } from "#/grilles/math";
 
-export const ductLossManifest = defineRoute({
-  key: "duct-loss",
-  name: "Duct Loss",
-  // The formula's provenance lives here, the route's tutorial (I6), not under the formula.
-  docs: "Calculate duct friction from dimensions and airflow. The wheel, charts and formula use the same inputs. All calculation runs in this browser. The formula is ASHRAE Fundamentals, Duct Design: Darcy friction with the Altshul-Tsal factor (L in ft, D in inches, roughness in ft, density in lb/ft3). The wheel reads the friction-chart power law 0.109136·Q^1.9/D^5.02 for galvanized duct and standard air, as the SMACNA Ductulator does; it runs up to a tenth above the Altshul-Tsal figure.",
-  address: "duct-loss",
-  page: routeAddress("duct-loss").schema,
-});
-
 const grilleInput = z
   .object({
     boardLength: z.number(),
