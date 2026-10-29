@@ -291,6 +291,7 @@ export function useRoute<W, R extends string, P, A extends string>(
       patches: RouteStatePatch[],
       expectedRevision?: number | null,
       admitted = false,
+      context: { press: string } = { press: crypto.randomUUID() },
     ): Promise<Refusal | null> => {
       // Hiding refuses new invocations. An admitted action still files its native result in Work.
       if (!admitted && !current())
@@ -316,9 +317,14 @@ export function useRoute<W, R extends string, P, A extends string>(
             expectedRevision ??
             (seen?.state === "ready" ? (seen.observation.revision ?? 0) : undefined);
           if (bound !== undefined) while (own.has(bound)) bound = own.get(bound)!;
-          return writer.apply(patches, bound, (base, revision) => {
-            accepted = { base, revision };
-          });
+          return writer.apply(
+            patches,
+            bound,
+            (base, revision) => {
+              accepted = { base, revision };
+            },
+            context,
+          );
         })
         .catch(causeRefusal)
         .then((refusal) => {
@@ -427,11 +433,15 @@ export function useRoute<W, R extends string, P, A extends string>(
         ),
       // Bound to the action's snapshot, through the queue: it follows this owner's own landed
       // writes past that snapshot, and a foreign write still refuses it.
-      write: async (patches: RouteStatePatch[], expectedRevision?: number) => {
+      write: async (
+        patches: RouteStatePatch[],
+        expectedRevision?: number,
+        context?: { press: string },
+      ) => {
         const refusal =
           actionRevision === null
             ? notHydrated
-            : await writeWork(patches, expectedRevision ?? actionRevision, true);
+            : await writeWork(patches, expectedRevision ?? actionRevision, true, context);
         if (refusal) throw new ActionRefusal(refusal);
         return null;
       },
@@ -461,7 +471,7 @@ export function useRoute<W, R extends string, P, A extends string>(
             let stopped = false;
             const refusal = await owner.runAction(
               name,
-              async (cancelWith) => {
+              async (cancelWith, press) => {
                 const unavailable = requirementRefusal(action);
                 if (unavailable) return refuse("not-ready", unavailable);
                 // The verb row runs a verb bare. An empty-object input is supplied; a verb that
@@ -483,7 +493,15 @@ export function useRoute<W, R extends string, P, A extends string>(
                 const reason = action.ready(ctx as never, parsed.data as never);
                 if (reason) return refuse("not-ready", reason);
                 const refusal =
-                  (await action.run({ ...ctx, cancelWith } as never, parsed.data as never)) ?? null;
+                  (await action.run(
+                    {
+                      ...ctx,
+                      cancelWith,
+                      write: (patches: RouteStatePatch[], expectedRevision?: number) =>
+                        ctx.write(patches, expectedRevision, { press }),
+                    } as never,
+                    parsed.data as never,
+                  )) ?? null;
                 // A partial outcome landed something: stale either way; a planning press, nothing.
                 if (!action.plans?.(ctx as never) && (!refusal || refusal.code === "partial"))
                   for (const reading of action.dirties) {

@@ -1222,6 +1222,8 @@ async function routeWrite(
   const result = await routeFetch(route, query, {
     ...body,
     expectedRevision,
+    press: null,
+    kind: "apply",
   });
   // A command whose receipt names the target it resolved to (instances, pods) wins over the Target.
   const receipt = (result.result ?? result) as { target?: unknown };

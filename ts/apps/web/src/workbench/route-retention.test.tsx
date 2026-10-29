@@ -10,7 +10,13 @@ import {
   RouterProvider,
   useRouterState,
 } from "@tanstack/react-router";
-import { ductsRouteState, readingKey, routeAddress, type ThreadTab } from "@pe/agent-contracts";
+import {
+  ductsRouteState,
+  readingKey,
+  routeAddress,
+  workWriteSchema,
+  type ThreadTab,
+} from "@pe/agent-contracts";
 import { z } from "zod";
 import { peClient } from "#/host/pe-client";
 import { peReadings } from "#/readings";
@@ -288,10 +294,29 @@ test("an action admitted while visible finishes native receipt and Work bookkeep
   const { go } = await mount();
   const a = probes.get("A")!;
   await waitFor(() => expect(probes.get("A")!.handle.work.current).toBe(true));
-  const write = vi.spyOn(routeHost, "postRouteWrite").mockResolvedValue({
-    status: 200,
-    result: { ok: true, revision: 1 } as never,
-  });
+  const write = vi
+    .spyOn(routeHost, "postRouteWrite")
+    .mockImplementation(async (_op, _input, body) => {
+      const { expectedRevision, press, patches, kind } = workWriteSchema.parse(body);
+      return {
+        status: 200,
+        result: {
+          ok: true,
+          revision: expectedRevision + 1,
+          write: {
+            key: a.handle.work.key,
+            kind,
+            by: "human",
+            press,
+            base: expectedRevision,
+            revision: expectedRevision + 1,
+            patches,
+            inverse: [],
+            undoable: true,
+          },
+        },
+      };
+    });
   let finish!: () => void;
   const nativeReceipt = new Promise<void>((resolve) => {
     finish = resolve;

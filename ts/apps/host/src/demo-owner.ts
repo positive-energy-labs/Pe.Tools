@@ -26,6 +26,7 @@ import {
   type TakeoffSnapshot,
   refusalText,
   commandTool,
+  workWriteSchema,
 } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../../../packages/runtime/src/route-workspace.ts";
 import { ActionJournal } from "./action-journal.ts";
@@ -1274,11 +1275,8 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         const key = bindWork(written, target ? address(target) : null, workId ?? undefined);
         if (!routes.has(written) || !localScope(key))
           return json({ ok: false, kind: "error", error: "Work belongs outside this demo" }, 403);
-        const body = (await request.json()) as {
-          patches: Parameters<RouteWorkspace["apply"]>[3];
-          expectedRevision: number;
-        };
-        return json(await work.apply(key, written, "human", body.patches, body.expectedRevision));
+        const body = workWriteSchema.parse(await request.json());
+        return json(await work.write(key, written, "human", body));
       }
       // The demo's browser is its one human, as its own Work writes above already say.
       const response = await withInvocationContext(

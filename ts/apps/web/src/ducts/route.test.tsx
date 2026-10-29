@@ -6,6 +6,10 @@ import { Route } from "#/routes/ducts";
 import { DuctsRoute } from "./route";
 import {
   applyPatches,
+  address,
+  bindWork,
+  routeDocDelta,
+  workWriteSchema,
   ductsRouteState,
   readingKey,
   readingRequestSchema,
@@ -338,7 +342,10 @@ beforeEach(() => {
       });
     }
     if (url.includes("/route-state/ducts/apply") && typeof init?.body === "string") {
-      const { patches, expectedRevision } = JSON.parse(init.body);
+      const { patches, expectedRevision, press, kind } = workWriteSchema.parse(
+        JSON.parse(init.body),
+      );
+      const before = work;
       const result = applyPatches(
         ductsRouteState,
         { version: 1, revision, doc: work },
@@ -350,7 +357,26 @@ beforeEach(() => {
       work = result.envelope.doc;
       revision = result.envelope.revision;
       queueMicrotask(() => workListeners.forEach((emit) => emit()));
-      return Response.json({ ok: true, revision });
+      const query = new URL(url, "http://fixture").searchParams;
+      return Response.json({
+        ok: true,
+        revision,
+        write: {
+          key: bindWork(
+            "ducts",
+            query.get("target") ? address(query.get("target")!) : null,
+            query.get("work") ?? undefined,
+          ),
+          kind,
+          by: "human",
+          press,
+          base: expectedRevision,
+          revision,
+          patches: routeDocDelta(before, work),
+          inverse: routeDocDelta(work, before),
+          undoable: true,
+        },
+      });
     }
     if (url === "/call" && typeof init?.body === "string") {
       const { key, request } = JSON.parse(init.body);

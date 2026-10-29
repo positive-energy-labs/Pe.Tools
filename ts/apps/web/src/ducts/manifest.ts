@@ -273,13 +273,7 @@ export const sceneRequestOf = (
   // Only opened systems are read: an unscoped page must never capture the whole document.
   const scope = scopeOf(snapshot, page.system);
   if (!scope) return null;
-  const ids = [
-    ...new Set([
-      ...scope.members,
-      ...drawn,
-      ...stubs,
-    ]),
-  ].filter((id) => id > 0);
+  const ids = [...new Set([...scope.members, ...drawn, ...stubs])].filter((id) => id > 0);
   if (!ids.length) return null;
   return {
     ...sceneRequest(

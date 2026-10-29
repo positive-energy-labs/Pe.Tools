@@ -138,7 +138,10 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
    */
   const runAction = async (
     key: string,
-    work: (cancelWith: (cancel: () => Promise<void>) => void) => Promise<Refusal | null>,
+    work: (
+      cancelWith: (cancel: () => Promise<void>) => void,
+      press: string,
+    ) => Promise<Refusal | null>,
     keys?: readonly string[],
     onStopped?: () => void,
     /** The word on the button. The log says what the user pressed, never the action key. */
@@ -156,6 +159,7 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
       return refusal;
     }
     inFlight = true;
+    const press = crypto.randomUUID();
     runningLabel = label;
     runningSince = Date.now();
     write(key, "busy", () => registry.set(busy, { key, seconds: 0 }));
@@ -216,7 +220,7 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
     try {
       const running = work((cancel) => {
         cancelRead = cancel;
-      });
+      }, press);
       const result = await Promise.race([running, stopped, timedOut]);
       if (result === "timeout") {
         const refusal = refuse("unknown", `stopped: no answer after ${waitSeconds}s`);
