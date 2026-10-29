@@ -185,12 +185,14 @@ test.each(["human", "pea"] as const)(
     const bytes = JSON.stringify(oldFamilies);
     state.set(key("families"), JSON.parse(bytes));
 
+    // ADR 0026: a fresh Work advances the revision past the set-aside one, so a stale
+    // expectedRevision from before the start-fresh can never match after it.
     expect(await module.startFresh(scope, "families", actor)).toMatchObject({
       ok: true,
-      revision: 0,
+      revision: oldFamilies.revision + 1,
     });
     expect(JSON.stringify(state.get(key(`families${START_FRESH_ASIDE}1`)))).toBe(bytes);
-    expect((await module.read(scope, "families"))!.revision).toBe(0);
+    expect((await module.read(scope, "families"))!.revision).toBe(oldFamilies.revision + 1);
     // Readable Work has nothing to set aside.
     expect(await module.startFresh(scope, "families", actor)).toMatchObject({ ok: false });
 
