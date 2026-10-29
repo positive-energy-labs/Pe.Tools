@@ -452,7 +452,10 @@ export function createGraphMount<P, W>(
     binding,
     control(id: string, row?: unknown, place = "stage") {
       const bound = structuredClone(binding(id, row));
-      const origin = canonicalRouteInput([place, bound]);
+      // A control's identity is where it sits (place, row, subject), never its args: a binding
+      // reads current readings and Work, so args change after a write while the review must stay
+      // at its control for the core staleness check to run. Cross-row commits stay refused.
+      const origin = canonicalRouteInput([place, row ?? null, bound.subject]);
       const control = bind(verbs[id]!, { ctx: context, ...bound });
       const reason = () =>
         disposed || !available()
