@@ -21,7 +21,12 @@ import {
 import { createRouteOwner, makeAtomRegistry } from "../route/route-owner";
 import { createViewOwner } from "../route/view-owner";
 import { refuse } from "../route/refusal";
-import { createReadingGraph, type ReadingLog, type ReadingSource } from "./readings";
+import {
+  createReadingGraph,
+  type ReadingLog,
+  type ReadingSource,
+  type ReadingState,
+} from "./readings";
 import { createWorkJournal } from "./journal";
 import { createRouteTimeline, type TimelineEntry } from "./timeline";
 import { validateGraphChords } from "./keys";
@@ -47,6 +52,12 @@ export interface MountBinding {
   subject: VerbSubject | null;
   args: unknown;
 }
+/** What a verb binding may read: target, Work, Page and the current kernel reading states, one snapshot per call. */
+export type BindingScope<P, W> = MountScope<W> & {
+  page: P;
+  readings: Readonly<Record<string, ReadingState>>;
+};
+
 export interface MountAdapters<P, W> {
   /** Immutable external-store snapshot; Page is owned by the mount's existing ViewOwner. */
   getSnapshot(): MountScope<W>;
@@ -56,9 +67,9 @@ export interface MountAdapters<P, W> {
   write(key: WorkKey, write: WorkWrite): Promise<RouteStateWriteResult>;
   subscribeAcceptedDeltas(key: WorkKey, onAck: (ack: WorkWriteAck) => void): () => void;
   subjects?: VerbContext["subjects"];
-  binding?(id: string, row: unknown, scope: MountScope<W> & { page: P }): MountBinding;
+  binding?(id: string, row: unknown, scope: BindingScope<P, W>): MountBinding;
   /** The cell subject (`cell:<seg|key>`) a pane row stands for, or null; the kernel's cell verbs follow it. */
-  cell?(row: unknown, scope: MountScope<W> & { page: P }): VerbSubject | null;
+  cell?(row: unknown, scope: BindingScope<P, W>): VerbSubject | null;
   /** Explicit captures only. Ordinary pane demand must not start an expensive operation. */
   verbReadings?: Readonly<Record<string, readonly string[]>>;
   /** Native effects name their actual Work footprint; [[]] explicitly means the whole Work. */
@@ -353,11 +364,13 @@ export function createGraphMount<P, W>(
     notify();
     return result;
   };
+  const bindingScope = (): BindingScope<P, W> => ({
+    ...scope,
+    page: view.read().page,
+    readings: Object.fromEntries(Object.keys(graph.readings).map((id) => [id, readings.get(id)])),
+  });
   const cellSubject = (row: unknown): VerbSubject | null => {
-    const subject =
-      row === undefined
-        ? null
-        : (adapters.cell?.(row, { ...scope, page: view.read().page }) ?? null);
+    const subject = row === undefined ? null : (adapters.cell?.(row, bindingScope()) ?? null);
     if (subject && !kernel.placement[subject.type])
       throw Error(`Row resolved unknown cell type '${subject.type}'`);
     return subject;
@@ -365,7 +378,7 @@ export function createGraphMount<P, W>(
   const binding = (id: string, row?: unknown): MountBinding =>
     kernel.verbs[id]
       ? { subject: cellSubject(row), args: {} }
-      : (adapters.binding?.(id, row, { ...scope, page: view.read().page }) ?? {
+      : (adapters.binding?.(id, row, bindingScope()) ?? {
           subject: null,
           args: {},
         });
