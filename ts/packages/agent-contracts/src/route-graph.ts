@@ -242,7 +242,9 @@ const chordKey = (chord: Chord) =>
 export function validateRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphRefusal[] {
   const refusals: RouteGraphRefusal[] = [];
   const refuse = (code: RouteGraphRefusal["code"], path: string, message: string) => {
-    refusals.push({ code, path, message });
+    // A pane shared by several stages is checked once per stage; say each refusal once.
+    if (!refusals.some((r) => r.code === code && r.path === path && r.message === message))
+      refusals.push({ code, path, message });
   };
   try {
     const checkVerb = (id: string, path: string) => {
@@ -261,32 +263,39 @@ export function validateRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphRef
         if (!declared) refuse("missing-pane", `stages.${id}.panes`, `Unknown pane '${paneId}'`);
         else for (const verb of placedIds(declared.verbs)) verbs.add(verb);
       }
-      const chords = new Map<string, string>();
-      const checkChord = (verb: string, chord: Chord) => {
+      // A chord collides within its own scope path: stage chords, then stage chords plus one pane's.
+      // Sibling panes are disjoint kit scopes, so they never see each other's chords.
+      const checkChord = (scope: Map<string, string>, path: string, verb: string, chord: Chord) => {
         const key = chordKey(chord);
-        const prior = chords.get(key);
+        const prior = scope.get(key);
         if (prior && prior !== verb)
-          refuse(
-            "chord-conflict",
-            `stages.${id}.chords`,
-            `'${prior}' and '${verb}' share '${chord}'`,
-          );
-        chords.set(key, verb);
+          refuse("chord-conflict", path, `'${prior}' and '${verb}' share '${chord}'`);
+        scope.set(key, verb);
       };
-      for (const verb of verbs) {
-        checkVerb(verb, `stages.${id}.verbs`);
+      for (const verb of verbs) checkVerb(verb, `stages.${id}.verbs`);
+      const stageScope = new Map<string, string>();
+      for (const verb of stage.verbs) {
         const chord = graph.verbs[verb]?.chord;
-        if (chord) checkChord(verb, chord);
+        if (chord) checkChord(stageScope, `stages.${id}.chords`, verb, chord);
       }
       for (const [verb, chord] of Object.entries(stage.chords ?? {})) {
         checkVerb(verb, `stages.${id}.chords`);
-        checkChord(verb, chord);
+        checkChord(stageScope, `stages.${id}.chords`, verb, chord);
       }
-      for (const paneId of stage.panes)
-        for (const [verb, chord] of Object.entries(graph.panes[paneId]?.chords ?? {})) {
-          checkVerb(verb, `panes.${paneId}.chords`);
-          checkChord(verb, chord);
+      for (const paneId of stage.panes) {
+        const declared = Object.hasOwn(graph.panes, paneId) ? graph.panes[paneId] : undefined;
+        if (!declared) continue;
+        const paneScope = new Map(stageScope);
+        const path = `panes.${paneId}.chords`;
+        for (const verb of placedIds(declared.verbs)) {
+          const chord = graph.verbs[verb]?.chord;
+          if (chord) checkChord(paneScope, path, verb, chord);
         }
+        for (const [verb, chord] of Object.entries(declared.chords ?? {})) {
+          checkVerb(verb, path);
+          checkChord(paneScope, path, verb, chord);
+        }
+      }
     }
     const seen = new Set<LayoutNode>();
     const walk = (node: LayoutNode) => {

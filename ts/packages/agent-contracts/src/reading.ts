@@ -177,6 +177,12 @@ export const readingRequestSchema = z.discriminatedUnion("kind", [
     workKeySchema.options[2].extend({ kind: z.literal("work") }),
     workKeySchema.options[3].extend({ kind: z.literal("work") }),
   ]),
+  /**
+   * One Work's accepted writes, in acceptance order: each `event` frame is one host-stamped
+   * `WorkWriteAck` (author, press, forward and inverse patches, revision). A subscription replays
+   * the host's retained window first, so a duplicate is possible and a revision jump is a gap.
+   */
+  z.strictObject({ kind: z.literal("work-acks"), work: workKeySchema }),
   z.strictObject({ kind: z.literal("thread-head"), thread: z.string().min(1).max(200) }),
   /** Every harness thread's summary, one snapshot per change (coalesced). */
   z.strictObject({ kind: z.literal("threads") }),

@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 import {
+  readingFrameSchema,
   workKey,
+  workWriteAckSchema,
   type Caller,
   type RouteStatePatch,
   type WorkKey,
@@ -259,4 +261,45 @@ test("the wire requires a press field and a human apply requires a nonempty disp
     ok: false,
   });
   expect(await h.stored()).toBeNull();
+});
+
+test("an agent's HTTP write reaches a resource-stream subscriber with its host stamps, and a resubscription replays the window", async () => {
+  const h = await fixture();
+  const open = async () => {
+    const abort = new AbortController();
+    const keys = encodeURIComponent(JSON.stringify([{ kind: "work-acks", work: h.scope }]));
+    const response = await withInvocationContext({ caller: human }, () =>
+      h.app.fetch(new Request(`http://host/pe/resources?keys=${keys}`, { signal: abort.signal })),
+    );
+    expect(response.status).toBe(200);
+    const reader = response.body!.getReader();
+    const next = async () => {
+      const text = new TextDecoder().decode((await reader.read()).value);
+      const frame = readingFrameSchema.parse(JSON.parse(text.slice("data: ".length).trim()));
+      if (frame.kind !== "event") throw Error(`Expected an event frame, got ${frame.kind}`);
+      return workWriteAckSchema.parse(frame.value);
+    };
+    return { next, close: () => abort.abort() };
+  };
+  const live = await open();
+  await h.apply(width(20), 0, pea());
+  const second = await h.apply(width(30), 1);
+  const agent = await live.next();
+  const person = await live.next();
+  expect(agent).toMatchObject({
+    kind: "apply",
+    by: "pea",
+    press: null,
+    base: 0,
+    revision: 1,
+    patches: [{ path: ["settings", "width"], value: 20 }],
+    inverse: [{ path: ["settings", "width"], value: 10 }],
+  });
+  expect(person).toMatchObject({ by: "human", press: "press-1", base: 1, revision: 2 });
+  expect(person).toEqual(second.write);
+  live.close();
+
+  const again = await open();
+  expect([(await again.next()).revision, (await again.next()).revision]).toEqual([1, 2]);
+  again.close();
 });

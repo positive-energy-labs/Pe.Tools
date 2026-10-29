@@ -289,6 +289,39 @@ test("pane placements and chord maps participate in the stage's chord conflict c
   ).toContain("missing-verb");
 });
 
+test("sibling panes may bind the same chord; a pane's own duplicate or a stage collision refuses", () => {
+  const graph = {
+    ...ductLoss,
+    verbs: { a: verb("A", "E"), b: verb("B", "e"), c: verb("C", "F"), d: verb("D", "Alt+D") },
+    panes: {
+      ...ductLoss.panes,
+      wheel: { ...ductLoss.panes.wheel!, verbs: ["a"] },
+      inputs: { ...ductLoss.panes.inputs!, verbs: ["b"] },
+    },
+  };
+  expect(validateRouteGraph(graph)).toEqual([]);
+  // The same chord twice inside one pane, from a verb's own chord and a pane chord map.
+  const duplicated = {
+    ...graph,
+    panes: {
+      ...graph.panes,
+      inputs: { ...graph.panes.inputs, verbs: ["b", "c"], chords: { c: "E" } },
+    },
+  };
+  expect(validateRouteGraph(duplicated)).toEqual([
+    { code: "chord-conflict", path: "panes.inputs.chords", message: "'b' and 'c' share 'E'" },
+  ]);
+  // A stage chord is in scope for every pane under it.
+  const shadowed = {
+    ...graph,
+    stages: { calculate: { ...graph.stages.calculate!, verbs: ["d"], chords: { d: "E" } } },
+  };
+  expect(validateRouteGraph(shadowed).map((refusal) => refusal.path)).toEqual([
+    "panes.wheel.chords",
+    "panes.inputs.chords",
+  ]);
+});
+
 test("malformed runtime data refuses instead of throwing", () => {
   expect(validateRouteGraph(null as unknown as RouteGraph).map((refusal) => refusal.code)).toEqual([
     "invalid-graph",

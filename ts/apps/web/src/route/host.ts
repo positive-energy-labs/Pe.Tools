@@ -1,6 +1,12 @@
 import { peRoutes } from "@pe/agent-contracts/pe-api";
 import { peClient } from "#/host/pe-client";
-import type { RouteStateWriteResult } from "@pe/agent-contracts";
+import {
+  workWriteAckSchema,
+  type RouteStateWriteResult,
+  type WorkKey,
+  type WorkWriteAck,
+} from "@pe/agent-contracts";
+import { peReadings, type Readings } from "#/readings";
 export type RouteWriteResponse = { status: number; result: RouteStateWriteResult | null };
 type WorkInput = { params: { route: string }; query: Record<string, string> };
 
@@ -29,4 +35,31 @@ export async function getRouteSalvage(
   if (!response.ok || !body || typeof body.from !== "string")
     throw Error(body?.error?.message ?? `salvage failed (${response.status})`);
   return body;
+}
+
+/**
+ * The host's accepted writes of one Work, as it stamped them (`by`, press, forward and inverse
+ * patches, revision), over the one Readings stream. The host replays its retained window on every
+ * (re)subscription, so an ack at or below the last one delivered is dropped here. `onGap` runs when
+ * the transport reports loss, an ack cannot be read, or a delivered ack does not follow the last
+ * one: acks between were missed, and a journal must stop trusting its history.
+ */
+export function subscribeAcceptedDeltas(
+  key: WorkKey,
+  onAck: (ack: WorkWriteAck) => void,
+  onGap?: () => void,
+  source: Readings = peReadings,
+): () => void {
+  let seen: number | null = null;
+  return source.subscribe({ kind: "work-acks", work: key }, (frame) => {
+    if (frame.kind === "gap") return onGap?.();
+    if (frame.kind !== "event") return;
+    const parsed = workWriteAckSchema.safeParse(frame.value);
+    if (!parsed.success) return onGap?.();
+    const ack = parsed.data;
+    if (seen !== null && ack.revision <= seen) return;
+    if (seen !== null && ack.base !== seen) onGap?.();
+    seen = ack.revision;
+    onAck(ack);
+  });
 }

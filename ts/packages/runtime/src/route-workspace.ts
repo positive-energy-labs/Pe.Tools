@@ -63,6 +63,8 @@ export class RouteWorkspace {
   #tail = Promise.resolve();
   readonly #listeners = new Set<(event: RouteWorkspaceEvent) => void>();
   readonly #reads = new OwnerReads();
+  readonly #accepted = new Map<string, WorkWriteAck[]>();
+  readonly #acceptedListeners = new Map<string, Set<(ack: WorkWriteAck) => void>>();
   readonly #inverses = new Map<
     string,
     { write: WorkWriteAck; after: unknown; recovery?: { doc: unknown } }[]
@@ -308,6 +310,7 @@ export class RouteWorkspace {
         undoable: true,
       };
       this.#remember(write, landed.envelope.doc);
+      this.#accept(write);
       await this.#publish({
         type: "route_workspace",
         scope,
@@ -376,6 +379,7 @@ export class RouteWorkspace {
       };
       this.#inverses.delete(workKey(scope));
       if (prior.success) this.#remember(write, fresh.doc, { doc: prior.data.doc });
+      this.#accept(write);
       await this.#publish({
         ...write,
         type: "route_workspace",
@@ -435,6 +439,34 @@ export class RouteWorkspace {
   subscribe(listener: (event: RouteWorkspaceEvent) => void): () => void {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
+  }
+
+  /**
+   * Every accepted write of one Work, as the host stamped it: the retained window first (oldest to
+   * newest), then each later write. Replay and subscription share one synchronous step, so no write
+   * falls between them; the window is bounded, so a reader that missed more sees a revision jump.
+   */
+  observeAccepted(scope: WorkKey, listener: (ack: WorkWriteAck) => void): () => void {
+    const key = workKey(scope);
+    for (const ack of this.#accepted.get(key) ?? []) listener(structuredClone(ack));
+    const listeners = this.#acceptedListeners.get(key) ?? new Set();
+    this.#acceptedListeners.set(key, listeners);
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+      if (listeners.size === 0 && this.#acceptedListeners.get(key) === listeners)
+        this.#acceptedListeners.delete(key);
+    };
+  }
+
+  #accept(write: WorkWriteAck) {
+    const key = workKey(write.key);
+    // shortcut: like restore receipts, the window is this host lifetime's last 100 writes per Work.
+    this.#accepted.set(
+      key,
+      [...(this.#accepted.get(key) ?? []), structuredClone(write)].slice(-100),
+    );
+    for (const listener of this.#acceptedListeners.get(key) ?? []) listener(structuredClone(write));
   }
 
   #load(scope: WorkKey, spec: RouteStateSpec<z.ZodType>): Promise<RouteEnvelope<unknown>>;

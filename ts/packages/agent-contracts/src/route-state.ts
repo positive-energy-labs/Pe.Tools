@@ -122,6 +122,20 @@ export type WorkWriteAck = {
   aside?: string;
 };
 
+/** The wire form of an accepted write: what the host stamped, validated where a browser receives it. */
+export const workWriteAckSchema: z.ZodType<WorkWriteAck> = z.object({
+  key: workKeySchema,
+  kind: z.enum(["apply", "restore", "publish", "start-fresh"]),
+  by: z.enum(["pea", "human"]),
+  press: z.string().min(1).nullable(),
+  base: z.number().int().nonnegative(),
+  revision: z.number().int().nonnegative(),
+  patches: z.array(routeStatePatchSchema),
+  inverse: z.array(routeStatePatchSchema),
+  undoable: z.boolean(),
+  aside: z.string().optional(),
+});
+
 export type RouteWriteKind = "error" | "refused" | "advisory" | "partial";
 
 export type RouteStateWriteResult =
