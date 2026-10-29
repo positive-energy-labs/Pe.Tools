@@ -5,12 +5,12 @@ export type RouteWriteResponse = { status: number; result: RouteStateWriteResult
 type WorkInput = { params: { route: string }; query: Record<string, string> };
 
 export async function postRouteWrite(
-  operation: "apply" | "start-fresh",
+  operation: "apply" | "restore" | "start-fresh",
   input: WorkInput,
   body: unknown,
 ): Promise<RouteWriteResponse> {
   const response =
-    operation === "apply"
+    operation !== "start-fresh"
       ? await peClient.response("work.apply", {
           ...input,
           body: peRoutes["work.apply"].body.parse(body),

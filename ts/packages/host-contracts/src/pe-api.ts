@@ -724,6 +724,8 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       z.object({
         patches: z.array(routeStatePatchSchema),
         expectedRevision: z.number().int().nonnegative(),
+        press: z.string().min(1).nullable(),
+        kind: z.enum(["apply", "restore"]).default("apply"),
       }),
       object,
       "human-or-pea",

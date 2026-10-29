@@ -3,6 +3,9 @@ import { z } from "zod";
 import { OwnerReads, type OwnerValue } from "./owner-read.ts";
 import {
   applyPatches,
+  checkRevision,
+  routeDocDelta,
+  canonicalRouteInput,
   refuse,
   refusalText,
   START_FRESH_ASIDE,
@@ -12,6 +15,8 @@ import {
   type RouteRefusal,
   type RouteStatePatch,
   type RouteStateWriteResult,
+  type WorkWrite,
+  type WorkWriteAck,
 } from "@pe/agent-contracts";
 import type { RouteStateSpec, RouteWriteAdmission } from "@pe/agent-contracts";
 
@@ -20,17 +25,16 @@ export interface RouteWorkspaceRegistration {
   admit?: RouteWriteAdmission;
 }
 
-export interface RouteWorkspaceEvent {
+export type RouteWorkspaceEvent = {
   type: "route_workspace";
   scope: WorkKey;
-  by: WorkAuthor;
   route: string;
-  action: "apply" | "start-fresh";
-  revision: number;
+  action: WorkWriteAck["kind"];
   patchCount?: number;
-  ok: boolean;
-  error?: string;
-}
+} & (
+  | (WorkWriteAck & { ok: true })
+  | { ok: false; by: WorkAuthor; revision: number; error: string }
+);
 
 export interface RouteDocumentStore {
   getState(input: { targetKey: string; route: string }): Promise<unknown>;
@@ -59,6 +63,10 @@ export class RouteWorkspace {
   #tail = Promise.resolve();
   readonly #listeners = new Set<(event: RouteWorkspaceEvent) => void>();
   readonly #reads = new OwnerReads();
+  readonly #inverses = new Map<
+    string,
+    { write: WorkWriteAck; after: unknown; recovery?: { doc: unknown } }[]
+  >();
 
   constructor(private readonly options: RouteWorkspaceOptions) {
     for (const registration of options.registrations) {
@@ -186,6 +194,15 @@ export class RouteWorkspace {
     };
   }
 
+  /** The untrusted write envelope has no authorship field. `by` is the host caller's principal. */
+  write(scope: WorkKey, route: string, by: WorkAuthor, input: WorkWrite) {
+    if (by === "human" && input.kind === "apply" && !input.press)
+      return Promise.resolve(
+        refuse("refused", "a human edit needs a press", "Mint a press before dispatch."),
+      );
+    return this.apply(scope, route, by, input.patches, input.expectedRevision, false, input);
+  }
+
   async apply(
     scope: WorkKey,
     route: string,
@@ -193,25 +210,70 @@ export class RouteWorkspace {
     patches: RouteStatePatch[],
     expectedRevision: number,
     trusted = false,
+    context: Pick<WorkWrite, "press" | "kind"> = { press: null, kind: "apply" },
   ): Promise<RouteStateWriteResult> {
+    if (scope.route !== route)
+      return refuse(
+        "refused",
+        "Work identity does not match the route",
+        "Use the Work key for this route.",
+      );
     const registration = this.#registry.get(route);
     if (!registration) return unknownRoute(route);
 
     return this.#serialized(async () => {
-      const emit = (event: Omit<RouteWorkspaceEvent, "type" | "scope" | "route" | "by">) =>
-        this.#publish({ type: "route_workspace", scope, route, by, ...event });
       const envelope = await this.#load(scope, registration.spec).catch(unreadable);
       if ("ok" in envelope) return envelope;
-      const applied = applyPatches(
-        registration.spec,
-        envelope,
-        by,
-        patches,
-        expectedRevision,
-        trusted,
-      );
+      const kind = trusted ? "publish" : context.kind;
+      const press = by === "human" && kind === "apply" ? context.press : null;
+      const records = this.#inverses.get(workKey(scope)) ?? [];
+      const recorded =
+        kind === "restore"
+          ? records.findLast(
+              (entry) => canonicalRouteInput(entry.write.inverse) === canonicalRouteInput(patches),
+            )
+          : undefined;
+      if (
+        kind === "restore" &&
+        (!recorded ||
+          !recorded.write.inverse.every(
+            (patch) =>
+              canonicalRouteInput(valueAt(envelope.doc, patch.path)) ===
+              canonicalRouteInput(valueAt(recorded.after, patch.path)),
+          ))
+      )
+        return refuse(
+          "refused",
+          "this inverse is unknown or its paths changed",
+          "Re-read Work and clear conflicting history.",
+        );
+      if (recorded?.recovery !== undefined) {
+        const stale = checkRevision(envelope, expectedRevision);
+        if (stale) return stale;
+      }
+      const applied =
+        recorded?.recovery !== undefined
+          ? {
+              ok: true as const,
+              changed: true,
+              envelope: {
+                ...envelope,
+                revision: envelope.revision + 1,
+                doc: structuredClone(recorded.recovery.doc),
+              },
+            }
+          : applyPatches(
+              registration.spec,
+              envelope,
+              by,
+              recorded?.write.inverse ?? patches,
+              expectedRevision,
+              trusted || kind === "restore",
+              kind === "restore",
+            );
       const landed =
         (applied.ok &&
+          recorded?.recovery === undefined &&
           (await registration.admit?.(applied.envelope.doc, patches, {
             scope,
             by,
@@ -219,8 +281,12 @@ export class RouteWorkspace {
           }))) ||
         applied;
       if (!landed.ok) {
-        await emit({
-          action: "apply",
+        await this.#publish({
+          type: "route_workspace",
+          scope,
+          route,
+          by,
+          action: kind,
           revision: envelope.revision,
           patchCount: patches.length,
           ok: false,
@@ -230,8 +296,24 @@ export class RouteWorkspace {
       }
 
       await this.#persist(scope, route, landed.envelope);
-      await emit({
-        action: "apply",
+      const write: WorkWriteAck = {
+        key: scope,
+        kind,
+        by,
+        press,
+        base: envelope.revision,
+        revision: landed.envelope.revision,
+        patches: routeDocDelta(envelope.doc, landed.envelope.doc),
+        inverse: routeDocDelta(landed.envelope.doc, envelope.doc),
+        undoable: true,
+      };
+      this.#remember(write, landed.envelope.doc);
+      await this.#publish({
+        type: "route_workspace",
+        scope,
+        route,
+        ...write,
+        action: kind,
         revision: landed.envelope.revision,
         patchCount: patches.length,
         ok: true,
@@ -242,6 +324,7 @@ export class RouteWorkspace {
         ok: true,
         revision: landed.envelope.revision,
         doc: structuredClone(landed.envelope.doc),
+        write,
       };
     });
   }
@@ -256,6 +339,12 @@ export class RouteWorkspace {
    * `<route>:aside:<n>`, and starts an empty Work at the same address. Readable Work is refused.
    */
   async startFresh(scope: WorkKey, route: string, by: WorkAuthor): Promise<RouteStateWriteResult> {
+    if (scope.route !== route)
+      return refuse(
+        "refused",
+        "Work identity does not match the route",
+        "Use the Work key for this route.",
+      );
     const registration = this.#registry.get(route);
     if (!registration) return unknownRoute(route);
     const { spec } = registration;
@@ -269,8 +358,26 @@ export class RouteWorkspace {
         slot++;
       await this.options.store.setState({ targetKey, route: aside(route, slot), value: raw });
       const fresh = emptyEnvelope(spec);
+      const prior = envelopeSchema.safeParse(raw);
+      fresh.revision = (prior.success ? prior.data.revision : 0) + 1;
       await this.#persist(scope, route, fresh);
+      // Recovery is the explicit exception to schema-valid restore: only these host-held bytes return.
+      const write: WorkWriteAck = {
+        key: scope,
+        kind: "start-fresh",
+        by,
+        press: null,
+        base: prior.success ? prior.data.revision : 0,
+        revision: fresh.revision,
+        patches: [{ path: [], value: structuredClone(fresh.doc) }],
+        inverse: prior.success ? [{ path: [], value: structuredClone(prior.data.doc) }] : [],
+        undoable: prior.success,
+        aside: aside(route, slot),
+      };
+      this.#inverses.delete(workKey(scope));
+      if (prior.success) this.#remember(write, fresh.doc, { doc: prior.data.doc });
       await this.#publish({
+        ...write,
         type: "route_workspace",
         scope,
         route,
@@ -279,7 +386,7 @@ export class RouteWorkspace {
         revision: fresh.revision,
         ok: true,
       });
-      return { ok: true, revision: fresh.revision };
+      return { ok: true, revision: fresh.revision, write };
     });
   }
 
@@ -377,7 +484,27 @@ export class RouteWorkspace {
   }
 
   async #publish(event: RouteWorkspaceEvent): Promise<void> {
-    for (const listener of this.#listeners) listener(event);
+    for (const listener of this.#listeners) listener(structuredClone(event));
+  }
+
+  #remember(write: WorkWriteAck, after: unknown, recovery?: { doc: unknown }) {
+    const key = workKey(write.key);
+    const records = this.#inverses.get(key) ?? [];
+    // Foreign writes are barriers even if a later write happens to put the same values back.
+    const kept =
+      write.by === "pea" || write.kind === "publish"
+        ? records.filter(
+            (entry) =>
+              !entry.write.inverse.some((inverse) =>
+                [...write.patches, ...write.inverse].some((patch) =>
+                  overlaps(inverse.path, patch.path),
+                ),
+              ),
+          )
+        : records;
+    kept.push(structuredClone({ write, after, ...(recovery !== undefined ? { recovery } : {}) }));
+    // shortcut: restore receipts cover the last 100 transitions in this host lifetime; persist them for reload survival.
+    this.#inverses.set(key, kept.slice(-100));
   }
 
   #serialized<T>(work: () => Promise<T>): Promise<T> {
@@ -388,6 +515,20 @@ export class RouteWorkspace {
     );
     return run;
   }
+}
+
+const overlaps = (a: RouteStatePatch["path"], b: RouteStatePatch["path"]) =>
+  a
+    .slice(0, Math.min(a.length, b.length))
+    .every((part, index) => String(part) === String(b[index]));
+function valueAt(doc: unknown, path: RouteStatePatch["path"]): unknown {
+  let value = doc;
+  for (const segment of path) {
+    if (typeof value !== "object" || value === null || !Object.hasOwn(value, segment))
+      return { exists: false };
+    value = Reflect.get(value, segment);
+  }
+  return { exists: true, value };
 }
 
 const envelopeSchema = z.object({

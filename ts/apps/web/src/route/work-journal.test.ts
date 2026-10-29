@@ -8,6 +8,8 @@ import {
   type RouteStatePatch,
   type RouteStateSpec,
   type WorkKey,
+  type WorkWrite,
+  type WorkWriteAck,
 } from "@pe/agent-contracts";
 import {
   RouteWorkspace,
@@ -105,26 +107,23 @@ test("S0b: real Work writes need exact inverses, verb-press identity and Pea pat
   });
   const release = registry.mount(slice);
   const writer = docWriter(spec, key, registry, slice, Atom.make(false));
-  type Packet = { patches: RouteStatePatch[]; expectedRevision: number; press?: string | null };
+  type Packet = WorkWrite;
   const packets: Packet[] = [];
+  let accepted: WorkWriteAck;
   transport.response.mockImplementation(async (operation: string, request: { body: Packet }) => {
     if (operation === "work.fresh") {
       const result = await workspace.startFresh(key, spec.route, "human");
+      if (result.ok) accepted = result.write!;
       return { ok: true, status: 200, json: async () => result };
     }
     expect(operation).toBe("work.apply");
     packets.push(structuredClone(request.body));
-    const result = await workspace.apply(
-      key,
-      spec.route,
-      "human",
-      request.body.patches,
-      request.body.expectedRevision,
-    );
+    const result = await workspace.write(key, spec.route, "human", request.body);
+    if (result.ok) accepted = result.write!;
     return { ok: true, status: 200, json: async () => result };
   });
   const write = async (patches: RouteStatePatch[], press: string) => {
-    // Missing today: a fourth invocation context. JS drops it; both real write doors are exercised.
+    // One dispatch context survives both real write doors.
     const refusal = await Reflect.apply(writer.apply, writer, [
       patches,
       stored.revision,
@@ -178,8 +177,8 @@ test("S0b: real Work writes need exact inverses, verb-press identity and Pea pat
       stored = { version: 1, revision: 0, doc: initial() };
       const before = structuredClone(stored.doc);
       await write(one.patches, one.name);
-      const undo = inverse(before, stored.doc);
-      expect(await writer.apply(undo, stored.revision)).toBeNull();
+      const undo = accepted!.inverse;
+      expect(await writer.restore(undo, stored.revision)).toBeNull();
       expect
         .soft(JSON.stringify(stored.doc), `${one.name}: inverse restores prior document bytes`)
         .toBe(JSON.stringify(before));
@@ -251,13 +250,12 @@ test("S0b: real Work writes need exact inverses, verb-press identity and Pea pat
       .soft(steps, "Pea invalidates earlier human inverses that overlap its paths")
       .toHaveLength(0);
     const candidate = steps.at(-1);
-    if (candidate) expect(await writer.apply(candidate.inverse, stored.revision)).toBeNull();
+    if (candidate) expect(await writer.restore(candidate.inverse, stored.revision)).toBeNull();
     expect
       .soft(stored.doc.settings.width, "Ctrl+Z must preserve Pea's width after its barrier")
       .toBe(99);
 
-    // The other mutation through docWriter moves unreadable bytes aside. Ordinary patches cannot
-    // restore a document that the current schema refuses, even though its raw preimage survives.
+    // Recovery returns a host-issued inverse for the unreadable preimage kept in the aside.
     const unreadable = { legacy: true };
     stored = { version: 1, revision: 7, doc: unreadable as unknown as Doc };
     expect(await writer.startFresh()).toBeNull();
@@ -266,13 +264,10 @@ test("S0b: real Work writes need exact inverses, verb-press identity and Pea pat
       revision: 7,
       doc: unreadable,
     });
-    const recoveryInverse: RouteStatePatch[] = [
-      ...Object.keys(stored.doc).map((field) => ({ path: [field] })),
-      { path: ["legacy"], value: true },
-    ];
+    const recoveryInverse = accepted!.inverse;
     expect
       .soft(
-        await writer.apply(recoveryInverse, stored.revision),
+        await writer.restore(recoveryInverse, stored.revision),
         "startFresh has no schema-valid inverse through apply",
       )
       .toBeNull();

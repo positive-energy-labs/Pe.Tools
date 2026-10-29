@@ -49,6 +49,7 @@ export function applyPatches<S extends z.ZodType>(
   patches: readonly RouteStatePatch[],
   expectedRevision: number,
   trusted = false,
+  restore = false,
 ): RouteLanded<z.infer<S>> | RouteRefusal {
   const stale = checkRevision(envelope, expectedRevision);
   if (stale) return stale;
@@ -60,17 +61,45 @@ export function applyPatches<S extends z.ZodType>(
       "Use the route's read or capture command.",
     );
 
-  const draft = structuredClone(envelope.doc) as Record<string, unknown>;
+  let draft = structuredClone(envelope.doc) as Record<string, unknown>;
   try {
-    for (const patch of patches) applyPatch(draft, patch);
+    for (const patch of patches) {
+      if (restore && patch.path.length === 0) draft = structuredClone(patch.value) as typeof draft;
+      else applyPatch(draft, structuredClone(patch));
+    }
   } catch (error) {
     return refuse("error", message(error), "patch paths must address plain document keys.");
   }
   return commitDoc(
     spec,
     envelope,
-    stampChanges(spec.reconcileEdit?.(draft, patches) ?? draft, envelope.doc, by, expectedRevision),
+    restore
+      ? draft
+      : stampChanges(
+          spec.reconcileEdit?.(draft, patches) ?? draft,
+          envelope.doc,
+          by,
+          expectedRevision,
+        ),
   );
+}
+
+/** Replace a container when its keys change, so inverse replay preserves key order as well. */
+export function routeDocDelta(
+  before: unknown,
+  after: unknown,
+  path: RouteStatePatch["path"] = [],
+): RouteStatePatch[] {
+  if (JSON.stringify(before) === JSON.stringify(after)) return [];
+  if (
+    isRecord(before) &&
+    isRecord(after) &&
+    JSON.stringify(Object.keys(before)) === JSON.stringify(Object.keys(after))
+  )
+    return Object.keys(before).flatMap((key) =>
+      routeDocDelta(before[key], after[key], [...path, key]),
+    );
+  return [{ path, ...(after === undefined ? {} : { value: structuredClone(after) }) }];
 }
 
 export function checkRevision(

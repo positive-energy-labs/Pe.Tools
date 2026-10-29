@@ -287,10 +287,9 @@ export function createPeRoutes(options: PeRoutesOptions) {
   const writes = {
     apply: {
       schema: applyBody,
-      hint: "expected { patches, expectedRevision }",
+      hint: "expected { patches, expectedRevision, press, kind? }",
       run: (scope: WorkKey, route: string, by: "pea" | "human", body: unknown) => {
-        const { patches, expectedRevision } = body as z.infer<typeof applyBody>;
-        return work.apply(scope, route, by, patches, expectedRevision);
+        return work.write(scope, route, by, body as z.infer<typeof applyBody>);
       },
     },
     // Authenticated authors share recovery; the workspace preserves unreadable source bytes.

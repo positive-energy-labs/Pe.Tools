@@ -11,6 +11,7 @@ import {
   type RouteStatePatch,
   type RouteStateSpec,
   type WorkKey,
+  type WorkWriteAck,
 } from "@pe/agent-contracts";
 import { Equal, Hash, Option } from "effect";
 import { dirty, mapReading, readingAtom, peReadings, previousOf, type Readings } from "#/readings";
@@ -94,16 +95,15 @@ export function docWriter<S extends RouteStateSpec<any>>(
   conflict: Atom.Writable<boolean> | undefined,
 ) {
   const send = async (
-    operation: "apply" | typeof START_FRESH,
+    operation: "apply" | "restore" | typeof START_FRESH,
     body: Record<string, unknown> & { expectedRevision?: number },
-    onAccepted?: (base: number, revision: number) => void,
+    onAccepted?: (base: number, revision: number, write: WorkWriteAck) => void,
   ): Promise<Refusal | null> => {
     try {
       const { status, result } = await postRouteWrite(operation, routeInput(spec.route, key), body);
       if (!result) return refuse("failed", `${operation} failed (${status})`);
       if (!result.ok && result.code === "stale_revision" && conflict) registry.set(conflict, true);
-      if (result.ok && body.expectedRevision !== undefined)
-        onAccepted?.(body.expectedRevision, result.revision);
+      if (result.ok) onAccepted?.(result.write.base, result.revision, result.write);
       return writeRefusal(result);
     } catch (cause) {
       return causeRefusal(cause);
@@ -122,14 +122,25 @@ export function docWriter<S extends RouteStateSpec<any>>(
     apply: (
       patches: RouteStatePatch[],
       expectedRevision?: number,
-      onAccepted?: (base: number, revision: number) => void,
+      onAccepted?: (base: number, revision: number, write: WorkWriteAck) => void,
+      context: { press: string } = { press: crypto.randomUUID() },
     ) => {
       const revision = writeRevision(expectedRevision);
       if (revision === null) return Promise.resolve(notHydrated);
-      return send("apply", { patches, expectedRevision: revision }, onAccepted);
+      return send(
+        "apply",
+        { patches, expectedRevision: revision, press: context.press, kind: "apply" },
+        onAccepted,
+      );
     },
+    restore: (
+      patches: RouteStatePatch[],
+      expectedRevision: number,
+      onAccepted?: (base: number, revision: number, write: WorkWriteAck) => void,
+    ) => send("restore", { patches, expectedRevision, press: null, kind: "restore" }, onAccepted),
     /** The human door only; the host refuses Pea's door and readable Work. */
-    startFresh: () => send(START_FRESH, {}),
+    startFresh: (onAccepted?: (base: number, revision: number, write: WorkWriteAck) => void) =>
+      send(START_FRESH, {}, onAccepted),
     /** The human door only: what the route carries over from Work it can no longer read. */
     salvage: () => getRouteSalvage(routeInput(spec.route, key)),
   };
@@ -163,8 +174,10 @@ export function useRouteWorks<S extends RouteStateSpec<any>>(
       doc: (current?.doc ?? null) as RouteDocOf<S> | null,
       revision: current?.revision ?? null,
       stale: reading?.state === "stale",
-      write: (patches: RouteStatePatch[], expectedRevision?: number) =>
-        writer ? writer.apply(patches, expectedRevision) : Promise.resolve(notHydrated),
+      write: (patches: RouteStatePatch[], expectedRevision?: number, context?: { press: string }) =>
+        writer
+          ? writer.apply(patches, expectedRevision, undefined, context)
+          : Promise.resolve(notHydrated),
       reload: () => {
         if (key) dirty({ ...key, kind: "work" });
       },
