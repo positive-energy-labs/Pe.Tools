@@ -22,7 +22,14 @@ const codePaths = new Set(codeRoutes.map(pathOf));
 const fileRoutes = (routeTree.children as unknown as AnyRoute[]).filter(
   (route) => !codePaths.has(pathOf(route)),
 );
-const appRouteTree = rootRoute.addChildren([...fileRoutes, ...codeRoutes]);
+// The runtime value is an array (what addChildren stores); the type keeps the generated tree's map
+// plus the code routes so `Register` stays fully typed for every useSearch/useRouterState consumer.
+const appRouteTree = rootRoute.addChildren([...fileRoutes, ...codeRoutes] as unknown as NonNullable<
+  typeof routeTree.children
+> & {
+  ShellProbeRoute: typeof ShellProbeRoute;
+  ductLossRoute: typeof ductLossRoute;
+});
 const unregisterProbe = publicRoutes.register({
   manifest: shellProbe.manifest,
   hosted: () => <ShellProbe />,
