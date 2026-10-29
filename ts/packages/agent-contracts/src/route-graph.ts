@@ -1,0 +1,347 @@
+import { z } from "zod";
+import type { History, RouteField } from "./route-field.ts";
+import type { RouteViewRefusalCode } from "./route-view.ts";
+
+export type FieldRole =
+  | "subject"
+  | "stage"
+  | "selection"
+  | "pose"
+  | "query"
+  | "draft"
+  | "device"
+  | "transient";
+
+export interface FieldPolicy {
+  url: History | false;
+  share: boolean;
+  agent: "read" | "set" | false;
+}
+
+/** RouteField owns schema and codec. False explicitly opts out of a role's projection default. */
+export type FieldDecl<S extends z.ZodType = z.ZodType> = Omit<RouteField<S>, keyof FieldPolicy> &
+  Partial<FieldPolicy>;
+
+export const fieldRoleDefaults: Readonly<Record<FieldRole, Readonly<FieldPolicy>>> = {
+  subject: { url: "push", share: true, agent: "set" },
+  stage: { url: "push", share: true, agent: "set" },
+  selection: { url: "replace", share: true, agent: "set" },
+  pose: { url: "replace", share: true, agent: "set" },
+  query: { url: "replace", share: true, agent: "set" },
+  draft: { url: "replace", share: false, agent: "set" },
+  device: { url: false, share: false, agent: "read" },
+  transient: { url: false, share: false, agent: false },
+};
+
+export function graphFieldPolicy(field: Partial<FieldPolicy> & { role: FieldRole }): FieldPolicy {
+  const defaults = fieldRoleDefaults[field.role];
+  return {
+    url: field.url ?? defaults.url,
+    share: field.share ?? defaults.share,
+    agent: field.agent ?? defaults.agent,
+  };
+}
+
+/**
+ * Every attempt is keyed by exact Target (session + openId), Work identity, and an unreused
+ * generation. Retire that generation on scope change. Parts, completion, and failure all check
+ * it; returning A -> B -> A cannot revive A's retired attempt. Dependencies name inputs, not
+ * permission to reuse an attempt (S0a-families-race).
+ */
+export interface ReadingDecl<P = unknown> {
+  kind: "use" | "derive" | "worker" | "port" | "feed";
+  source: string;
+  args?: (page: Readonly<P>) => unknown;
+  deps?: readonly string[];
+  retire: "target" | "page" | "never";
+}
+
+/** Platform-neutral spelling, e.g. Mod+Enter. The kernel's key adapter owns parsing. */
+export type Chord = string;
+
+export interface VerbDecl<S extends z.ZodType = z.ZodType> {
+  kind: "work" | "command";
+  subject?: string;
+  input: S;
+  review: "none" | "shown" | "required";
+  chord?: Chord;
+  label: string;
+  says?: string;
+  effect?: "query" | "command";
+}
+
+/** Dynamic placement declares its possible ids without executing a row callback at admission.
+ * The kernel also checks that each resolved row returns only ids in this list. */
+export type VerbPlacement<Row = never> =
+  | readonly string[]
+  | (((row: Row) => readonly string[]) & { readonly ids: readonly string[] });
+
+export interface PaneDecl<Row = never> {
+  label: string;
+  purpose: string;
+  draws: readonly string[];
+  verbs: VerbPlacement<Row>;
+  chords?: Readonly<Record<string, Chord>>;
+}
+
+export interface SplitOptions {
+  axis: "h" | "v";
+  sized: "start" | "end";
+  size: number;
+}
+
+/** The kernel reduces gated empty branches bottom-up; a single survivor fills its branch. */
+export type LayoutNode =
+  | ({ kind: "split"; id: string; children: readonly LayoutNode[] } & SplitOptions)
+  | { kind: "pane"; id: string }
+  | { kind: "gate"; when: string; child: LayoutNode };
+
+export const split = (
+  id: string,
+  options: SplitOptions,
+  ...children: [LayoutNode, LayoutNode, ...LayoutNode[]]
+): LayoutNode => ({ kind: "split", id, ...options, children });
+export const pane = (id: string): LayoutNode => ({ kind: "pane", id });
+export const gate = (when: string, child: LayoutNode): LayoutNode => ({
+  kind: "gate",
+  when,
+  child,
+});
+
+export interface StageDecl {
+  word: string;
+  panes: readonly string[];
+  verbs: readonly string[];
+  chords?: Readonly<Record<string, Chord>>;
+  teach?: string;
+}
+
+/** Matches the existing PageTransition's atomic patch/refusal shape, without importing web. */
+export type GraphTransition<P> = (
+  current: Readonly<P>,
+  patch: Readonly<Partial<P>>,
+  origin: "page" | "action" | "pea" | "url" | "initial",
+) =>
+  | { readonly patch: Partial<P> }
+  | { readonly refusal: { readonly code: RouteViewRefusalCode; readonly message: string } };
+
+export interface RouteGraph<P = Record<string, unknown>, W = unknown> {
+  key: string;
+  address: string;
+  name: string;
+  fields: { readonly [K in keyof P]-?: FieldDecl<z.ZodType<P[K]>> & { role: FieldRole } };
+  readings: Readonly<Record<string, ReadingDecl<P>>>;
+  verbs: Readonly<Record<string, VerbDecl>>;
+  panes: Readonly<Record<string, PaneDecl>>;
+  layout: LayoutNode;
+  stages: Readonly<Record<string, StageDecl>>;
+  pick?: false;
+  transition?: GraphTransition<P>;
+  predicates?: Readonly<Record<string, (page: Readonly<P>, work: W | null) => boolean>>;
+  /** Defaults to stage declaration order. The projection retains it despite sorting map keys. */
+  stageOrder?: readonly string[];
+}
+
+export type GraphJsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | readonly GraphJsonValue[]
+  | { readonly [key: string]: GraphJsonValue };
+type GraphJsonObject = { readonly [key: string]: GraphJsonValue };
+
+/** Executable bindings are marked, never stringified or invoked. Pod admission also hashes
+ * the module: this descriptor alone cannot attest the behavior of functions or codecs. */
+export interface RouteGraphJson {
+  readonly key: string;
+  readonly address: string;
+  readonly name: string;
+  readonly fields: Readonly<Record<string, GraphJsonObject>>;
+  readonly readings: Readonly<Record<string, GraphJsonObject>>;
+  readonly verbs: Readonly<Record<string, GraphJsonObject>>;
+  readonly panes: Readonly<Record<string, GraphJsonObject>>;
+  readonly layout: GraphJsonObject;
+  readonly stages: Readonly<Record<string, GraphJsonObject>>;
+  readonly stageOrder: readonly string[];
+  readonly pick?: false;
+  readonly transition?: GraphJsonObject;
+  readonly predicates?: Readonly<Record<string, GraphJsonObject>>;
+}
+
+function sortedJson(value: unknown): GraphJsonValue {
+  // Installed Zod 4 owns JSON Schema conversion. Input direction retains preprocessing inputs.
+  if (value instanceof z.ZodType) return sortedJson(z.toJSONSchema(value, { io: "input" }));
+  if (typeof value === "function") {
+    const ids = "ids" in value ? value.ids : undefined;
+    return ids === undefined ? { runtime: true } : { ids: sortedJson(ids), runtime: true };
+  }
+  if (Array.isArray(value)) return value.map(sortedJson);
+  if (value !== null && typeof value === "object")
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([, item]) => item !== undefined)
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([key, item]) => [key, sortedJson(item)]),
+    );
+  if (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "boolean" ||
+    (typeof value === "number" && Number.isFinite(value))
+  )
+    return value;
+  throw new Error("Route graph projection requires JSON values or declared runtime bindings");
+}
+
+export function projectRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphJson {
+  const fields = Object.fromEntries(
+    Object.entries(graph.fields).map(([key, field]) => {
+      const declared = field as FieldDecl & { role: FieldRole };
+      return [key, { ...declared, ...graphFieldPolicy(declared) }];
+    }),
+  );
+  return sortedJson({
+    ...graph,
+    fields,
+    stageOrder: graph.stageOrder ?? Object.keys(graph.stages),
+  }) as unknown as RouteGraphJson;
+}
+
+/** Web Crypto keeps the contract browser-safe; hash canonical UTF-8 JSON, even after JSON reload. */
+export async function routeGraphHash(json: RouteGraphJson): Promise<string> {
+  const bytes = new TextEncoder().encode(JSON.stringify(sortedJson(json)));
+  const hash = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+export interface RouteGraphRefusal {
+  code:
+    | "missing-pane"
+    | "missing-reading"
+    | "missing-verb"
+    | "unknown-gate"
+    | "chord-conflict"
+    | "stage-order"
+    | "invalid-graph";
+  path: string;
+  message: string;
+}
+
+const placedIds = (placement: VerbPlacement): readonly string[] =>
+  typeof placement === "function" ? placement.ids : placement;
+const chordKey = (chord: Chord) =>
+  chord
+    .toLowerCase()
+    .split("+")
+    .map((key) => key.trim())
+    .sort()
+    .join("+");
+
+/** Collects admission refusals without running route code. Malformed runtime data also refuses. */
+export function validateRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphRefusal[] {
+  const refusals: RouteGraphRefusal[] = [];
+  const refuse = (code: RouteGraphRefusal["code"], path: string, message: string) => {
+    refusals.push({ code, path, message });
+  };
+  try {
+    const checkVerb = (id: string, path: string) => {
+      if (!Object.hasOwn(graph.verbs, id)) refuse("missing-verb", path, `Unknown verb '${id}'`);
+    };
+    for (const [id, declared] of Object.entries(graph.panes)) {
+      for (const reading of declared.draws)
+        if (!Object.hasOwn(graph.readings, reading))
+          refuse("missing-reading", `panes.${id}.draws`, `Unknown reading '${reading}'`);
+      for (const verb of placedIds(declared.verbs)) checkVerb(verb, `panes.${id}.verbs`);
+    }
+    for (const [id, stage] of Object.entries(graph.stages)) {
+      const verbs = new Set(stage.verbs);
+      for (const paneId of stage.panes) {
+        const declared = Object.hasOwn(graph.panes, paneId) ? graph.panes[paneId] : undefined;
+        if (!declared) refuse("missing-pane", `stages.${id}.panes`, `Unknown pane '${paneId}'`);
+        else for (const verb of placedIds(declared.verbs)) verbs.add(verb);
+      }
+      const chords = new Map<string, string>();
+      const checkChord = (verb: string, chord: Chord) => {
+        const key = chordKey(chord);
+        const prior = chords.get(key);
+        if (prior && prior !== verb)
+          refuse(
+            "chord-conflict",
+            `stages.${id}.chords`,
+            `'${prior}' and '${verb}' share '${chord}'`,
+          );
+        chords.set(key, verb);
+      };
+      for (const verb of verbs) {
+        checkVerb(verb, `stages.${id}.verbs`);
+        const chord = graph.verbs[verb]?.chord;
+        if (chord) checkChord(verb, chord);
+      }
+      for (const [verb, chord] of Object.entries(stage.chords ?? {})) {
+        checkVerb(verb, `stages.${id}.chords`);
+        checkChord(verb, chord);
+      }
+      for (const paneId of stage.panes)
+        for (const [verb, chord] of Object.entries(graph.panes[paneId]?.chords ?? {})) {
+          checkVerb(verb, `panes.${paneId}.chords`);
+          checkChord(verb, chord);
+        }
+    }
+    const seen = new Set<LayoutNode>();
+    const walk = (node: LayoutNode) => {
+      if (seen.has(node)) {
+        refuse(
+          "invalid-graph",
+          "layout",
+          "Layout must be a tree, without repeated nodes or cycles",
+        );
+        return;
+      }
+      seen.add(node);
+      switch (node.kind) {
+        case "pane":
+          if (!Object.hasOwn(graph.panes, node.id))
+            refuse("missing-pane", "layout", `Unknown pane '${node.id}'`);
+          break;
+        case "gate":
+          if (
+            !Object.hasOwn(graph.stages, node.when) &&
+            !Object.hasOwn(graph.predicates ?? {}, node.when)
+          )
+            refuse("unknown-gate", "layout", `Unknown stage or predicate '${node.when}'`);
+          walk(node.child);
+          break;
+        case "split":
+          if (node.children.length < 2)
+            refuse("invalid-graph", "layout", `Split '${node.id}' needs two children`);
+          for (const child of node.children) walk(child);
+          break;
+        default:
+          refuse("invalid-graph", "layout", "Unknown layout node kind");
+      }
+    };
+    walk(graph.layout);
+    const stages = Object.keys(graph.stages);
+    const order = graph.stageOrder ?? stages;
+    if (
+      (graph.pick === false || graph.stageOrder !== undefined) &&
+      (!order.length ||
+        order.length !== stages.length ||
+        new Set(order).size !== stages.length ||
+        order.some((id) => !Object.hasOwn(graph.stages, id)))
+    )
+      refuse(
+        "stage-order",
+        "stageOrder",
+        "Stages must form one nonempty order containing every stage exactly once",
+      );
+  } catch (cause) {
+    refuse(
+      "invalid-graph",
+      "graph",
+      cause instanceof Error ? cause.message : "Malformed route graph",
+    );
+  }
+  return refusals;
+}

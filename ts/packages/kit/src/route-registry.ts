@@ -1,11 +1,12 @@
 import type { ReactNode } from "react";
-import { commandTool } from "@pe/agent-contracts";
+import { commandTool, type RouteGraphJson } from "@pe/agent-contracts";
 
 /** The discoverable projection of a route's full, typed manifest. */
 interface RegisteredManifest {
   readonly key: string;
   readonly name: string;
   readonly work?: { readonly title: string };
+  readonly graph?: RouteGraphJson;
 }
 type HostedRouteView = (props: { thread: string; visible: boolean }) => ReactNode;
 export interface RouteRegistration {
