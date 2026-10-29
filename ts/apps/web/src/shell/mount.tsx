@@ -340,7 +340,7 @@ function MountedPane<P, W>({
         <GraphVerb
           key={verb}
           id={verb}
-          verb={graph.verbs[verb]!}
+          verb={owner.verbs[verb]!}
           owner={owner}
           enabled={enabled}
           pane={id}
@@ -352,17 +352,18 @@ function MountedPane<P, W>({
         focusRow: (row) => owner.focusRow(id, row),
         verbs: (row) => {
           const placement = declaration.verbs;
-          const verbs = typeof placement === "function" ? placement(row as never) : placement;
+          const authored = typeof placement === "function" ? placement(row as never) : placement;
           if (
             typeof placement === "function" &&
-            verbs.some((verb) => !placement.ids.includes(verb))
+            authored.some((verb) => !placement.ids.includes(verb))
           )
             throw Error(`Undeclared row verb in ${id}`);
-          return verbs.map((verb) => (
+          // Cell verbs are declared by the kernel for this row's cell type, never by the pane author.
+          return [...authored, ...owner.cellVerbs(row)].map((verb) => (
             <GraphVerb
               key={verb}
               id={verb}
-              verb={graph.verbs[verb]!}
+              verb={owner.verbs[verb]!}
               owner={owner}
               row={row}
               pane={id}
@@ -432,7 +433,7 @@ function GraphSituation<P, W>({
             </Label>
           ))}
         {stage.verbs.map((id) => (
-          <GraphVerb key={id} id={id} verb={graph.verbs[id]!} owner={owner} enabled={enabled} />
+          <GraphVerb key={id} id={id} verb={owner.verbs[id]!} owner={owner} enabled={enabled} />
         ))}
         {owner.busy() && (
           <Button label="Stop" onClick={() => owner.stop()}>

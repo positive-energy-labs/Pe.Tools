@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import { StrictMode } from "react";
-import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { createMemoryHistory, createRouter, RouterProvider } from "@tanstack/react-router";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import {
   actionReceiptSchema,
+  draftCellSchema,
   pane,
   split,
   workKey,
@@ -70,18 +71,42 @@ function receipt(): ActionReceipt {
   });
 }
 type Page = { stage: string; cfm: number };
-type Doc = { rows: Record<string, { id: string; n: number }> };
+type Doc = {
+  rows: Record<string, { id: string; n: number }>;
+  rules?: Record<
+    string,
+    { suggestion?: { value: string } | null; edit?: { value: string } | null }
+  >;
+};
 const key: WorkKey = { binding: "workspace", route: "mount-proof", target: null, work: "one" };
-const docSchema = z.object({
-  rows: z.record(z.string(), z.object({ id: z.string(), n: z.number() })),
+const rows = z.record(z.string(), z.object({ id: z.string(), n: z.number() }));
+const docSchema = z.object({ rows });
+const cellDocSchema = z.object({
+  rows,
+  rules: z.record(z.string(), draftCellSchema(z.string())).default({}),
 });
 
-async function fixture() {
-  const initial = { version: 1, revision: 0, doc: { rows: { slot: { id: "row-a", n: 1 } } } };
+/** `cells` adds a `rules` segment of cells (and the graph's Work schema + cell declaration) to the Work. */
+async function fixture(cells = false) {
+  const initial = {
+    version: 1,
+    revision: 0,
+    doc: {
+      rows: { slot: { id: "row-a", n: 1 } },
+      ...(cells ? { rules: { a: { suggestion: { value: "one" } } } } : {}),
+    },
+  };
   const stored = new Map<string, unknown>([[workKey(key), initial]]);
   const workspace = new RouteWorkspace({
     registrations: [
-      { spec: { route: key.route, title: "Mount proof", description: "Mount", schema: docSchema } },
+      {
+        spec: {
+          route: key.route,
+          title: "Mount proof",
+          description: "Mount",
+          schema: cells ? cellDocSchema : docSchema,
+        },
+      },
     ],
     store: {
       getState: async ({ targetKey }) => structuredClone(stored.get(targetKey) ?? null),
@@ -106,6 +131,12 @@ async function fixture() {
     key: "mount-proof",
     address: "mount-proof",
     name: "Mount proof",
+    ...(cells
+      ? {
+          work: cellDocSchema as unknown as z.ZodType<Doc>,
+          cells: [{ segment: "rules", groupOf: (id: string) => [id], nouns: ["rule"] }],
+        }
+      : {}),
     fields: {
       stage: { ...field(z.string().default("edit"), {}), role: "stage" },
       cfm: { ...field(z.number().default(400), {}), role: "query" },
@@ -704,4 +735,66 @@ test("graph field policies project Page to URL and Back restores its stage witho
   await waitFor(() => expect(f.owner().stage()).toBe("edit"));
   expect(f.writes).toHaveLength(0);
   expect(transport.run).not.toHaveBeenCalled();
+});
+
+function cellRows(f: Awaited<ReturnType<typeof fixture>>) {
+  f.adapters.cell = (row, scope) => ({
+    type: "cell:rules",
+    id: (row as { id: string }).id,
+    path: ["rules", (row as { id: string }).id],
+    work: scope.work!.handle.key,
+  });
+  f.adapters.bodies = {
+    ...f.adapters.bodies,
+    inputs: ({ verbs }) => (
+      <ul>
+        {Object.keys(f.scope().work.doc.rules ?? {}).map((id) => (
+          <li key={id} aria-label={`rule ${id}`}>
+            {verbs({ id })}
+          </li>
+        ))}
+      </ul>
+    ),
+  };
+}
+
+test("a graph with a Work schema and one cells segment mounts, and its row shows the four cell verbs", async () => {
+  const f = await fixture(true);
+  cellRows(f);
+  const { view } = await mounted(f);
+  const row = within(view.getByLabelText("rule a"));
+  for (const name of ["take", "reject", "reopen", "delete"])
+    expect(row.getByRole("button", { name })).toBeTruthy();
+  // Chord-free: nothing is registered for them.
+  expect(
+    readRegistrations().filter((r) =>
+      /\.(take|reject|reopen|delete)$/.test(readKeyMeta(r.options.meta)?.actionId ?? ""),
+    ),
+  ).toHaveLength(0);
+});
+
+test("pressing take on a cell row is one journal step and Mod+Z restores it", async () => {
+  const f = await fixture(true);
+  cellRows(f);
+  const { view } = await mounted(f);
+  const take = within(view.getByLabelText("rule a")).getByRole("button", { name: "take" });
+  fireEvent.click(take);
+  await waitFor(() => expect(f.scope().work.doc.rules!.a!.edit).toMatchObject({ value: "one" }));
+  expect(f.owner().journal(key).read().undo).toHaveLength(1);
+  take.focus();
+  chord(take, "z");
+  await waitFor(() => expect(f.scope().work.doc.rules!.a!.edit ?? null).toBeNull());
+  expect(f.writes.at(-1)).toMatchObject({ kind: "restore" });
+});
+
+test("a graph verb colliding with a cell verb id is refused at admission, not at render", async () => {
+  const f = await fixture(true);
+  cellRows(f);
+  (f.graph.verbs as Record<string, unknown>)["cell:rules.take"] = f.graph.verbs.other;
+  const get = vi.spyOn(f.adapters, "getSnapshot");
+  const Component = mountRoute(f.graph, f.adapters);
+  const view = render(<Component />);
+  expect(view.getByRole("alert").textContent).toContain("cell:rules.take");
+  expect(get).not.toHaveBeenCalled();
+  expect(f.subscriptions()).toEqual({ subscriptions: 0, deltaSubscriptions: 0 });
 });

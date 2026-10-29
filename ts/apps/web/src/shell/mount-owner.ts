@@ -15,6 +15,7 @@ import {
   type WorkHandle,
   type WorkKey,
   type WorkWrite,
+  type VerbDecl,
   type WorkWriteAck,
 } from "@pe/agent-contracts";
 import { createRouteOwner, makeAtomRegistry } from "../route/route-owner";
@@ -24,6 +25,7 @@ import { createReadingGraph, type ReadingLog, type ReadingSource } from "./readi
 import { createWorkJournal } from "./journal";
 import { createRouteTimeline, type TimelineEntry } from "./timeline";
 import { validateGraphChords } from "./keys";
+import { kernelCellVerbs } from "./verbs-cells";
 import {
   bind,
   commit,
@@ -55,6 +57,8 @@ export interface MountAdapters<P, W> {
   subscribeAcceptedDeltas(key: WorkKey, onAck: (ack: WorkWriteAck) => void): () => void;
   subjects?: VerbContext["subjects"];
   binding?(id: string, row: unknown, scope: MountScope<W> & { page: P }): MountBinding;
+  /** The cell subject (`cell:<seg|key>`) a pane row stands for, or null; the kernel's cell verbs follow it. */
+  cell?(row: unknown, scope: MountScope<W> & { page: P }): VerbSubject | null;
   /** Explicit captures only. Ordinary pane demand must not start an expensive operation. */
   verbReadings?: Readonly<Record<string, readonly string[]>>;
   /** Native effects name their actual Work footprint; [[]] explicitly means the whole Work. */
@@ -127,6 +131,9 @@ export function createGraphMount<P, W>(
     Object.fromEntries(graphFields(graph).map(([id, f]) => [id, f.schema])),
   ) as z.ZodType<P>;
   const initialPage = schema.parse({ ...adapters.initialPage, ...initial });
+  // Validation ran above: cell verb ids cannot collide with graph verbs, so a plain spread is safe.
+  const kernel = kernelCellVerbs(graph);
+  const verbs: Readonly<Record<string, VerbDecl>> = { ...graph.verbs, ...kernel.verbs };
   const registry = makeAtomRegistry();
   const base = createRouteOwner(graph.key, registry);
   const view = createViewOwner(base, schema, initialPage, { transition: graph.transition });
@@ -272,7 +279,7 @@ export function createGraphMount<P, W>(
   };
   const context: VerbContext<"human"> = {
     caller: "human",
-    subjects: adapters.subjects ?? {},
+    subjects: { ...adapters.subjects, ...kernel.subjects },
     snapshot: () => ({
       target: scope.target,
       work: scope.work,
@@ -346,11 +353,22 @@ export function createGraphMount<P, W>(
     notify();
     return result;
   };
+  const cellSubject = (row: unknown): VerbSubject | null => {
+    const subject =
+      row === undefined
+        ? null
+        : (adapters.cell?.(row, { ...scope, page: view.read().page }) ?? null);
+    if (subject && !kernel.placement[subject.type])
+      throw Error(`Row resolved unknown cell type '${subject.type}'`);
+    return subject;
+  };
   const binding = (id: string, row?: unknown): MountBinding =>
-    adapters.binding?.(id, row, { ...scope, page: view.read().page }) ?? {
-      subject: null,
-      args: {},
-    };
+    kernel.verbs[id]
+      ? { subject: cellSubject(row), args: {} }
+      : (adapters.binding?.(id, row, { ...scope, page: view.read().page }) ?? {
+          subject: null,
+          args: {},
+        });
   const run = async (id: string, bound: MountBinding, origin: string, answers?: unknown) => {
     if (disposed || !available())
       return {
@@ -358,7 +376,7 @@ export function createGraphMount<P, W>(
         press: null,
         refusal: refuse("not-ready", "This route is inactive"),
       };
-    const verb = graph.verbs[id];
+    const verb = verbs[id];
     if (!verb) throw Error(`Unknown verb ${id}`);
     const review = reviews.get(id);
     // Another press cannot steal the running invocation's identity.
@@ -371,7 +389,7 @@ export function createGraphMount<P, W>(
   };
   const cancelReviews = () => {
     for (const { verb, ticket } of reviews.values())
-      void invoke(context, graph.verbs[verb]!, ticket.subject, ticket.input, {
+      void invoke(context, verbs[verb]!, ticket.subject, ticket.input, {
         kind: "cancel",
         ticket,
       }).then((result) => consume(verb, result));
@@ -389,6 +407,13 @@ export function createGraphMount<P, W>(
     busy: () => registry.get(base.busy),
     journalRefusal: () => journalRefusal,
     paneRows,
+    /** Graph verbs plus the kernel's cell verbs; the one table every lookup reads. */
+    verbs,
+    /** Chord-free cell verb ids a row carries (palette and row menu only); [] when it is no cell. */
+    cellVerbs: (row: unknown): readonly string[] => {
+      const subject = cellSubject(row);
+      return subject ? kernel.placement[subject.type]! : [];
+    },
     focusRow(pane: string, row: unknown) {
       if (Object.is(paneRows.get(pane), row)) return;
       paneRows.set(pane, row);
@@ -409,7 +434,7 @@ export function createGraphMount<P, W>(
     control(id: string, row?: unknown, place = "stage") {
       const bound = structuredClone(binding(id, row));
       const origin = canonicalRouteInput([place, bound]);
-      const control = bind(graph.verbs[id]!, { ctx: context, ...bound });
+      const control = bind(verbs[id]!, { ctx: context, ...bound });
       const reason = () =>
         disposed || !available()
           ? "This route is inactive"
