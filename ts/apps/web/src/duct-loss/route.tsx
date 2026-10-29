@@ -8,7 +8,7 @@ import { DuctCharts } from "#/duct/charts";
 import { FACES, type FaceKey } from "#/duct/ductulator";
 import { Ductulator } from "#/duct/wheel";
 import { type DuctInput, type DuctResult, materials, solve } from "#/duct/math";
-import { routeFromGraph, type MountBody, type MountScope, type RouteAdapters } from "#/shell/mount";
+import { routeFromGraph, type MountBody, type RouteAdapters } from "#/shell/mount";
 import { ductLossGraph, type DuctLossPage } from "./graph";
 
 const fmt = (n: number, d = 2) => n.toLocaleString("en-US", { maximumFractionDigits: d });
@@ -68,8 +68,6 @@ f   = f'                  if f' ≥ 0.018
 Dₑ  = 1.30 (ab)^0.625 / (a + b)^0.25           Huebscher`;
 
 type Body = MountBody<DuctLossPage, null>;
-const scope: MountScope<null> = { target: { kind: "host" }, work: null };
-const release = () => {};
 const pageSchema = routeAddress("duct-loss").schema;
 
 function result({ owner }: Body) {
@@ -219,19 +217,9 @@ function Charts(body: Body) {
 }
 
 const adapters: RouteAdapters<DuctLossPage, null> = {
-  getSnapshot: () => scope,
-  subscribe: () => release,
   sources: {
     "duct-loss.solve": { kind: "derive", derive: ({ args }) => solve(pageSchema.parse(args)) },
   },
-  // This calculator has no Work. These ports never contact a host or manufacture acknowledgements.
-  write: async () => ({
-    ok: false,
-    kind: "refused",
-    error: "Duct Loss has no Work",
-    hint: "Edit Page fields instead",
-  }),
-  subscribeAcceptedDeltas: () => release,
   bodies: { wheel: Wheel, inputs: Inputs, charts: Charts },
 };
 

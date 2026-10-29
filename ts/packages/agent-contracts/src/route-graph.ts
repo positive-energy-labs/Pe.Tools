@@ -62,6 +62,8 @@ export type Chord = string;
 
 export interface VerbDecl<S extends z.ZodType = z.ZodType> {
   kind: "work" | "command";
+  /** Semantic command identity, retained in the graph's agent projection. */
+  does?: string;
   subject?: string;
   input: S;
   review: "none" | "shown" | "required";
@@ -167,6 +169,12 @@ export interface RouteGraph<P = Record<string, unknown>, W = unknown> {
   panes: Readonly<Record<string, PaneDecl>>;
   layout: LayoutNode;
   stages: Readonly<Record<string, StageDecl>>;
+  /**
+   * What Target the kernel resolves before the route acts, with the old manifest's values and
+   * meaning: absent = the host (no document read); otherwise a `?target` pin, else the machine's
+   * sole user document of that kind. Required with `work`: Work keys by the resolved document.
+   */
+  needs?: "session" | "document" | "project" | "family";
   /** The Work document's schema; required to declare `cells`, whose segments it must contain. */
   work?: z.ZodType<W>;
   /** Authored segments of the Work; the kernel owns take, reject, reopen and delete for them. */
@@ -199,6 +207,7 @@ export interface RouteGraphJson {
   readonly panes: Readonly<Record<string, GraphJsonObject>>;
   readonly layout: GraphJsonObject;
   readonly stages: Readonly<Record<string, GraphJsonObject>>;
+  readonly needs?: RouteGraph["needs"];
   readonly work?: GraphJsonObject;
   readonly cells?: readonly GraphJsonObject[];
   readonly stageOrder: readonly string[];
@@ -347,6 +356,8 @@ export function validateRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphRef
         }
       }
     }
+    if (graph.work && !graph.needs)
+      refuse("invalid-graph", "needs", "A graph with Work must declare the Target it needs");
     const families = new Set<string>();
     const shape = graph.work ? unwrapSchema(graph.work).shape : undefined;
     for (const [index, family] of (graph.cells ?? []).entries()) {

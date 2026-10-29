@@ -59,7 +59,10 @@ export type BindingScope<P, W> = MountScope<W> & {
 };
 
 export interface MountAdapters<P, W> {
-  /** Immutable external-store snapshot; Page is owned by the mount's existing ViewOwner. */
+  /**
+   * Immutable external-store snapshot; Page is owned by the mount's existing ViewOwner. This and
+   * the three host ports below come from the kernel's `useWorkScope`; only tests inject fakes.
+   */
   getSnapshot(): MountScope<W>;
   subscribe(notify: () => void): () => void;
   sources: Readonly<Record<string, ReadingSource>>;
@@ -88,7 +91,10 @@ export interface MountAdapters<P, W> {
   navigate?(pane: string | null, everywhere: boolean): void;
 }
 
-export function mountRefusals<P, W>(graph: RouteGraph<P, W>, adapters?: MountAdapters<P, W>) {
+export function mountRefusals<P, W>(
+  graph: RouteGraph<P, W>,
+  adapters?: Pick<MountAdapters<P, W>, "sources" | "verbReadings">,
+) {
   const refusals = validateRouteGraph(graph);
   // validateRouteGraph also handles malformed runtime inputs; do not traverse those again.
   if (refusals.some((r) => r.code === "invalid-graph")) return refusals;

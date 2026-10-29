@@ -23,26 +23,52 @@ import {
   createGraphMount,
   mountRoute,
   routeFromGraph,
+  type MountAdapters,
   type RouteAdapters,
   type GraphMount,
   type MountScope,
 } from "./mount";
 import { commandVerb, workVerb } from "./verbs";
 import type { ReadingContext, ReadingDelivery } from "./readings";
+import { peReadings } from "#/readings";
 
 const transport = vi.hoisted(() => ({ run: vi.fn() }));
 vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({
   runSemanticAction: transport.run,
   cancelRunningAdmissions: vi.fn(async () => []),
 }));
+// The kernel's Target/Work door, faked with the fixture's ports; null runs the real door.
+const door = vi.hoisted(() => ({ ports: null as object | null }));
+vi.mock("./use-work-scope", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./use-work-scope")>();
+  return {
+    useWorkScope: (graph: never) =>
+      door.ports
+        ? {
+            ...door.ports,
+            status: {
+              resolution: { kind: "resolved", target: { kind: "host" } },
+              bindingLost: null,
+              targetProvenance: { source: "none" },
+              closed: false,
+            },
+          }
+        : actual.useWorkScope(graph),
+  };
+});
 vi.mock("../routes/__root", async () => {
   const { createRootRoute, Outlet } = await import("@tanstack/react-router");
   return { Route: createRootRoute({ component: Outlet }) };
 });
 
 const cleanups: (() => void)[] = [];
+const noRead = (): (() => void) => () => {};
+let subscribed = vi.fn(noRead);
 beforeEach(() => {
   transport.run.mockReset();
+  door.ports = null;
+  subscribed = vi.fn(noRead);
+  vi.spyOn(peReadings, "subscribe").mockImplementation(subscribed);
   transport.run.mockResolvedValue(receipt());
   vi.stubGlobal("scrollTo", vi.fn());
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
@@ -133,6 +159,7 @@ async function fixture(cells = false) {
     name: "Mount proof",
     ...(cells
       ? {
+          needs: "document" as const,
           work: cellDocSchema as unknown as z.ZodType<Doc>,
           cells: [{ segment: "rules", groupOf: (id: string) => [id], nouns: ["rule"] }],
         }
@@ -195,7 +222,7 @@ async function fixture(cells = false) {
     };
     for (const notify of listeners) notify();
   };
-  const adapters: RouteAdapters<Page, Doc> = {
+  const adapters: MountAdapters<Page, Doc> & RouteAdapters<Page, Doc> = {
     getSnapshot: () => scope,
     subscribe: (notify) => {
       subscriptions++;
@@ -291,6 +318,7 @@ async function fixture(cells = false) {
   };
 }
 async function mounted(f: Awaited<ReturnType<typeof fixture>>, strict = false) {
+  door.ports = f.adapters;
   const route = routeFromGraph(f.graph, f.adapters, "/mount-proof");
   const router = createRouter({
     routeTree: root.addChildren([route]),
@@ -605,6 +633,7 @@ test("a dynamic pane binds only its explicit focused row and keeps row identity 
 
 test("parent hidden scope prevents keys, writes and pane demand; retained controls recheck ownership", async () => {
   const f = await fixture();
+  door.ports = f.adapters;
   const route = routeFromGraph(f.graph, f.adapters, "/mount-proof");
   const router = createRouter({
     routeTree: root.addChildren([route]),
@@ -797,4 +826,23 @@ test("a graph verb colliding with a cell verb id is refused at admission, not at
   expect(view.getByRole("alert").textContent).toContain("cell:rules.take");
   expect(get).not.toHaveBeenCalled();
   expect(f.subscriptions()).toEqual({ subscriptions: 0, deltaSubscriptions: 0 });
+});
+
+test("a route mounted with no adapter ports gets the kernel's host Target and no Work, reading no document", async () => {
+  const f = await fixture();
+  const { sources, bodies } = f.adapters;
+  const route = routeFromGraph(f.graph, { sources, bodies }, "/mount-proof");
+  const router = createRouter({
+    routeTree: root.addChildren([route]),
+    history: createMemoryHistory({ initialEntries: ["/mount-proof"] }),
+  });
+  await router.load();
+  const view = render(<RouterProvider router={router} />);
+  await waitFor(() => expect(view.getByLabelText("Solved").textContent).toBe("800"));
+  expect(f.owner().snapshot()).toEqual({ target: { kind: "host" }, work: null });
+  expect(subscribed).not.toHaveBeenCalled();
+  expect(await f.owner().context.write(key, { patches: [], press: "p" } as never)).toMatchObject({
+    ok: false,
+    error: "This route has no Work",
+  });
 });

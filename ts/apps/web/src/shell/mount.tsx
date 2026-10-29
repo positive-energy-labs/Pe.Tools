@@ -21,6 +21,8 @@ import { PrimaryRouteControls } from "../navigation/route-controls";
 import { RouteVisibility, useRouteCurrent } from "../route/activity";
 import { routeSearch, useRouteOwner } from "../route/route-owner";
 import { Ladder } from "../route/ladder";
+import type { RouteHandle } from "../route/handle";
+import { LadderPicker, useDocumentLadder } from "../route/situation-ladder";
 import { useInitialUrlPage, useUrlPage } from "../route/url";
 import { bindGraphChords } from "./keys";
 import {
@@ -31,6 +33,7 @@ import {
   type MountAdapters,
 } from "./mount-owner";
 import { graphUrlPage } from "./mount-page";
+import { useWorkScope, type WorkScopeStatus } from "./use-work-scope";
 
 export type { GraphMount, MountAdapters, MountScope, MountBinding } from "./mount-owner";
 export { createGraphMount } from "./mount-owner";
@@ -43,7 +46,11 @@ export interface MountBody<P, W> {
   /** The pane's selected/focused row is explicit; the kernel never guesses from an index. */
   focusRow(this: void, row: unknown): void;
 }
-export type RouteAdapters<P, W> = MountAdapters<P, W> & {
+/** Target, Work and their host write ports are the kernel's (`useWorkScope`); a route never passes them. */
+export type RouteAdapters<P, W> = Omit<
+  MountAdapters<P, W>,
+  "getSnapshot" | "subscribe" | "write" | "subscribeAcceptedDeltas"
+> & {
   bodies: Readonly<Record<string, (body: MountBody<P, W>) => ReactNode>>;
   /**
    * Shared view state for every pane body (attention, hover, one model projection computed once),
@@ -85,14 +92,17 @@ export function mountRoute<P, W>(graph: RouteGraph<P, W>, adapters: RouteAdapter
   const url = graphUrlPage(graph);
   return function MountedRoute({ hidden = false }: MountRouteProps) {
     const initial = useInitialUrlPage(url);
-    const owner = useRouteOwner(() => createGraphMount(graph, adapters, initial));
+    const scope = useWorkScope(graph);
+    const owner = useRouteOwner(() => createGraphMount(graph, { ...adapters, ...scope }, initial));
     useEffect(() => owner.connect(), [owner]);
     useUrlPage(url, owner.view);
     useSyncExternalStore(owner.subscribe, owner.version, owner.version);
     const visible = useContext(RouteVisibility);
     const current = useRouteCurrent();
     const live = useScopeLive();
-    owner.setAvailable(() => !hidden && visible && live && current());
+    // An unresolved or closed document's route still draws and reads; it arms no verb.
+    const armed = !graph.needs || scope.status.resolution.kind === "resolved";
+    owner.setAvailable(() => armed && !hidden && visible && live && current());
     return (
       <MountedGraph
         graph={graph}
@@ -100,6 +110,7 @@ export function mountRoute<P, W>(graph: RouteGraph<P, W>, adapters: RouteAdapter
         owner={owner}
         hidden={hidden || !visible || !live || !current()}
         current={current}
+        status={scope.status}
       />
     );
   };
@@ -139,12 +150,14 @@ function MountedGraph<P, W>({
   owner,
   hidden,
   current,
+  status,
 }: {
   graph: RouteGraph<P, W>;
   adapters: RouteAdapters<P, W>;
   owner: GraphMount<P, W>;
   hidden: boolean;
   current: () => boolean;
+  status: WorkScopeStatus;
 }) {
   const stageId = owner.stage();
   const stage = graph.stages[stageId]!;
@@ -301,7 +314,12 @@ function MountedGraph<P, W>({
           aria-label={`${graph.name} route`}
           className="flex h-full min-h-0 flex-col"
         >
-          <GraphSituation graph={graph} owner={owner} enabled={!hidden && current()} />
+          <GraphSituation
+            graph={graph}
+            owner={owner}
+            enabled={!hidden && current()}
+            status={status}
+          />
           {layout &&
             (adapters.wrap ?? ((_owner, children) => children))(
               owner,
@@ -384,14 +402,47 @@ function MountedPane<P, W>({
   );
 }
 
+/** The old kernel's document ladder and resolution words, over the kernel's Target status. */
+function GraphTarget({ status, disabled }: { status: WorkScopeStatus; disabled: boolean }) {
+  // ponytail: useDocumentLadder reads only resolution, bindingLost, targetProvenance and readings.
+  const ladder = useDocumentLadder({ readings: {}, ...status } as unknown as RouteHandle<
+    unknown,
+    string,
+    unknown,
+    string
+  >);
+  const { resolution } = status;
+  return (
+    <>
+      <LadderPicker ladder={ladder} disabled={disabled} />
+      {resolution.kind === "checking" ? (
+        <span role="status" className="text-ink-2">
+          checking the inventory
+        </span>
+      ) : resolution.kind === "failed" ? (
+        <span role="alert" data-tone="caution">
+          {resolution.message}
+        </span>
+      ) : resolution.kind === "choose" ? (
+        <span role="status" data-tone="caution">
+          {status.bindingLost?.sentence ??
+            `choose a target — ${resolution.reason.replaceAll("-", " ")}`}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
 function GraphSituation<P, W>({
   graph,
   owner,
   enabled,
+  status,
 }: {
   graph: RouteGraph<P, W>;
   owner: GraphMount<P, W>;
   enabled: boolean;
+  status: WorkScopeStatus;
 }) {
   const stageId = owner.stage();
   const stage = graph.stages[stageId]!;
@@ -404,6 +455,7 @@ function GraphSituation<P, W>({
         className="flex flex-wrap items-center gap-2"
       >
         <b>{graph.name}</b>
+        {graph.needs && <GraphTarget status={status} disabled={!enabled} />}
         {graph.pick !== false && stageField && Object.keys(graph.stages).length > 1 ? (
           <Ladder
             disabled={!enabled}

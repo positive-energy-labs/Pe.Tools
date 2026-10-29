@@ -290,7 +290,7 @@ const rules: CellsDecl<Work> = {
   show: () => "rule",
 };
 const withCells = (...cells: CellsDecl<Work>[]): RouteGraph =>
-  ({ ...ductLoss, work: workSchema, cells }) as unknown as RouteGraph;
+  ({ ...ductLoss, needs: "document", work: workSchema, cells }) as unknown as RouteGraph;
 
 test("cells project with executable bindings marked, and the hash covers them and the Work schema", async () => {
   const graph = withCells(rules);
@@ -337,4 +337,20 @@ test("kernel cell verb ids are reserved and a family may be declared once", () =
   expect(validateRouteGraph(withCells(rules, rules)).map((refusal) => refusal.code)).toEqual([
     "invalid-graph",
   ]);
+});
+
+test("a graph with Work declares the Target it needs; needs is projected and hashed", async () => {
+  const unscoped = { ...withCells(rules), needs: undefined } as RouteGraph;
+  expect(validateRouteGraph(unscoped)).toEqual([
+    {
+      code: "invalid-graph",
+      path: "needs",
+      message: "A graph with Work must declare the Target it needs",
+    },
+  ]);
+  const json = projectRouteGraph(withCells(rules));
+  expect(json.needs).toBe("document");
+  const project = projectRouteGraph({ ...withCells(rules), needs: "project" } as RouteGraph);
+  expect(await routeGraphHash(project)).not.toBe(await routeGraphHash(json));
+  expect(projectRouteGraph(ductLoss).needs).toBeUndefined();
 });
