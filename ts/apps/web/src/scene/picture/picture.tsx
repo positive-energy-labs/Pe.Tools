@@ -185,7 +185,10 @@ export function Picture<L extends string>({
   /** Alias picks elsewhere call this when the subject is already the selection: fly again. */
   jump?: RefObject<((key: SubjectKey) => void) | null>;
 }) {
-  const doc = useContext(AttentionDocument) ?? "";
+  // No document = selection and member registration silently do nothing (the fan sheet's 10-28
+  // defect), so a Picture outside an `AttentionRoot` fails loudly instead.
+  const doc = useContext(AttentionDocument);
+  if (!doc) throw new Error("Picture requires an AttentionRoot (attention document)");
   useAttentionDocument(doc, selection);
   useMembers(doc, content.members ?? NO_MEMBERS);
   const [contextRepresentation, setContextRepresentation] = useState<"boxes" | "meshes">("boxes");
