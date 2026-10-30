@@ -44,6 +44,9 @@ test("a collapsed row's action owns pointer and keyboard presses without togglin
   render(<Fixture />);
   const row = screen.getByRole("button", { name: /Heal network/ });
   const button = screen.getByRole("button", { name: "Preview heal" });
+  expect(button.hasAttribute("data-icon-only")).toBe(true);
+  expect(button.querySelector("svg")).not.toBeNull();
+  expect(button.textContent).toBe("");
   fireEvent.pointerDown(button);
   fireEvent.pointerUp(button);
   fireEvent.click(button);
@@ -62,4 +65,11 @@ test("a collapsed row's action owns pointer and keyboard presses without togglin
   expect(row.getAttribute("aria-expanded")).toBe("true");
   fireEvent.keyDown(row, { key: " " });
   expect(row.getAttribute("aria-expanded")).toBe("false");
+});
+
+test("buttons outside the row action slot keep their words", () => {
+  render(<Button label="Preview heal">Preview heal</Button>);
+  const button = screen.getByRole("button", { name: "Preview heal" });
+  expect(button.hasAttribute("data-icon-only")).toBe(false);
+  expect(button.textContent).toBe("Preview heal");
 });

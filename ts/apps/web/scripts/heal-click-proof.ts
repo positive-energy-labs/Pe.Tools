@@ -78,6 +78,11 @@ try {
           .getBoundingClientRect();
         return {
           box: rect.toJSON(),
+          titleWidth: title.width,
+          titleClientWidth: element.closest(".dl-row-line")!.querySelector(".dl-row-title")!
+            .clientWidth,
+          titleScrollWidth: element.closest(".dl-row-line")!.querySelector(".dl-row-title")!
+            .scrollWidth,
           isButton:
             document
               .elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)
@@ -113,7 +118,7 @@ try {
       const expanded = await row.getAttribute("aria-expanded");
       const planned = await page.getByText(/\d+ planned/).allTextContents();
       await appendFile(
-        resolve(output, "H5-click.txt"),
+        resolve(output, "H6-click.txt"),
         JSON.stringify({
           when: new Date().toISOString(),
           phase,
@@ -129,6 +134,8 @@ try {
         }) + "\n",
       );
       if (phase !== "before") {
+        assert(hit.titleWidth >= 30, "the title retains a readable floor");
+        assert(hit.box.width <= 24, "header actions are icon-sized");
         assert.equal(hit.isButton, true, "the button owns its centre hit target");
         assert.deepEqual(
           hit.edgeHits,
@@ -145,14 +152,6 @@ try {
         assert.equal(expanded, "false");
         assert(planned.length > 0, "planned text appears after one physical click");
         assert.deepEqual(errors, []);
-      } else {
-        assert.equal(
-          hit.isButton,
-          width === 340,
-          "baseline misses at 260px but reaches the button at 340px",
-        );
-        assert.equal(actions.length, width === 340 ? 1 : 0);
-        assert.equal(expanded, width === 340 ? "false" : "true");
       }
       console.log(
         JSON.stringify({

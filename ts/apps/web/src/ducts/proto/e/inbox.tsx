@@ -5,7 +5,7 @@ import { Ban, Check, Eye, EyeOff, Fan, Link, Pencil, X, type LucideIcon } from "
 import type { DuctsRouteDocument } from "@pe/agent-contracts";
 import type { LossesWork } from "../../work";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { Button } from "@pe/kit/lang/button";
+import { Button, ButtonIcon } from "@pe/kit/lang/button";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { FactChip } from "@pe/kit/lang/chip";
 import { useList, emptyListState, type ListState, type ListPersist } from "@pe/kit/lang/collection";
@@ -56,16 +56,18 @@ export interface FanVerbs {
 function CommandVerb({
   verb,
   pair,
+  icon,
 }: {
   verb: Extract<RowVerb, { kind: "command" }>;
   pair: FanVerbs;
   icon?: LucideIcon;
 }) {
-  return pair.render(
+  const control = pair.render(
     verb.on.verb === "fan"
       ? { kind: "assign-fan", unitId: verb.on.unitId, systemId: verb.on.systemId }
       : { kind: verb.on.verb, group: verb.on.group },
   );
+  return icon ? <ButtonIcon value={icon}>{control}</ButtonIcon> : control;
 }
 export function FanButton({
   verb,

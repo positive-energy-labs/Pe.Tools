@@ -1,9 +1,10 @@
 import { mention, elementKey, useMention, type Ref } from "./attention";
 import { reachProps } from "./reach";
 import { useState, type CSSProperties, type ReactNode } from "react";
-import { ChevronRight, Flame } from "lucide-react";
+import { ChevronRight, Ellipsis, Flame } from "lucide-react";
 
 import { tv } from "../../lib/tv";
+import { ButtonIcon } from "./button";
 import { TooltipHint } from "./tooltip";
 import { rowRevit, useRevitTarget, type RevitElementReference } from "./revit-target";
 import type { StateCellProps } from "./cell-state";
@@ -263,7 +264,7 @@ function ListRow({
                     onKeyDown={(event) => event.stopPropagation()}
                     onKeyUp={(event) => event.stopPropagation()}
                   >
-                    {props.actions}
+                    <ButtonIcon value={Ellipsis}>{props.actions}</ButtonIcon>
                   </span>
                 ) : null}
               </span>

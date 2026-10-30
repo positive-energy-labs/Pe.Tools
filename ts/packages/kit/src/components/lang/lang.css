@@ -716,11 +716,9 @@ tr.dl-row[data-active] {
 }
 /* Reserve actions even at rest so revealing them cannot move their hit targets. */
 .dl-row-line:has(> .dl-row-meta > .dl-row-actions) {
-  grid-template-columns: minmax(0, 1fr) max-content;
+  grid-template-columns: minmax(6ch, 1fr) max-content;
 }
-.dl-row-label:has(.dl-row-actions) {
-  min-width: min-content;
-}
+
 .dl-row-title,
 .dl-row-label,
 .dl-row-sub,
@@ -766,7 +764,7 @@ tr.dl-row[data-active] {
   width: 1.2em;
   height: 1.2em;
 }
-.dl-row .dl-row-meta > .dl-row-actions > :is(.dl-button, button, a) {
+.dl-row .dl-row-meta > .dl-row-actions :is(.dl-button, button, a) {
   width: auto;
   min-height: 0;
   height: 1lh;
@@ -778,7 +776,7 @@ tr.dl-row[data-active] {
     visibility: visible;
     opacity: 0;
   }
-  .dl-row .dl-row-meta > .dl-row-actions > :is(.dl-button, button, a) {
+  .dl-row .dl-row-meta > .dl-row-actions :is(.dl-button, button, a) {
     flex: 1;
     aspect-ratio: auto;
   }
