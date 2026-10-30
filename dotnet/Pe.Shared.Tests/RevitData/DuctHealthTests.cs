@@ -60,6 +60,24 @@ public sealed class DuctHealthTests {
     }
 
     [Test]
+    public void A_capped_connector_near_an_open_end_names_its_cap() {
+        // 10 -> | 2.6 in | [cap 12] 11: MUAS-1's intake 2.63 in from the louver plenum's capped end (C3).
+        const double gap = 2.6 / 12;
+        var left = Duct(10, [0, 0, 0], [5, 0, 0], Port(0, [0, 0, 0]), Port(1, [5, 0, 0]));
+        var right = Duct(11, [5 + gap, 0, 0], [10, 0, 0], Port(0, [5 + gap, 0, 0], to: 12), Port(1, [10, 0, 0]));
+        var cap = Node(12, DuctNodeKind.Cap, [5 + gap, 0, 0], [Port(0, [5 + gap, 0, 0], to: 11)]);
+
+        var end = DuctHealth.Assess([cap], [left, right], Defaults).Single(i => i.Id == "open-end:10:1");
+
+        var capped = end.Near!.Ports.Single(p => p.ElementId == 11 && p.Connector == 0);
+        Assert.Multiple(() => {
+            Assert.That(capped.CappedBy, Is.EqualTo(12));
+            Assert.That(capped.AutoJoin, Is.False, "an occupied connector is never an auto-join");
+            Assert.That(end.Near.Ports.Where(p => p.ElementId != 11).All(p => p.CappedBy is null), Is.True);
+        });
+    }
+
+    [Test]
     public void The_auto_join_gap_is_a_read_tolerance() {
         const double gap = 2.0 / 12;
         var left = Duct(10, [0, 0, 0], [5, 0, 0], Port(0, [0, 0, 0]), Port(1, [5, 0, 0]));
@@ -69,6 +87,19 @@ public sealed class DuctHealthTests {
 
         Assert.That(tight.Where(i => i.Kind == DuctIssueKind.NearMiss), Is.Empty, "2 in is past a 1 in auto-join gap");
         Assert.That(tight.Single(i => i.Id == "open-end:10:1").Near!.Ports.Single().AutoJoin, Is.False);
+    }
+
+    [Test]
+    public void An_unmeasured_read_lists_its_open_ends_without_a_neighbourhood() {
+        // The roster and ids reads (ducts LEDGER 2026-10-29): the same open ends, no Near and so no near miss.
+        const double gap = 2.0 / 12;
+        var left = Duct(10, [0, 0, 0], [5, 0, 0], Port(0, [0, 0, 0]), Port(1, [5, 0, 0]));
+        var right = Duct(11, [5 + gap, 0, 0], [10, 0, 0], Port(0, [5 + gap, 0, 0]), Port(1, [10, 0, 0]));
+
+        var issues = DuctHealth.Assess([], [left, right], Defaults, measure: false);
+
+        Assert.That(issues.Select(i => i.Id), Is.EquivalentTo(new[] { "open-end:10:0", "open-end:10:1", "open-end:11:0", "open-end:11:1" }));
+        Assert.That(issues.All(i => i.Near is null), Is.True);
     }
 
     [Test]
@@ -121,6 +152,62 @@ public sealed class DuctHealthTests {
         }));
         Assert.That(ids.Count(i => i.StartsWith("loop:", StringComparison.Ordinal)), Is.EqualTo(1), "one ring, one closer");
         Assert.That(ids, Has.None.StartWith("no-terminal-flow:32"));
+    }
+
+    /// <summary>A two-port damper at `at` along x, its ports 0.06 in apart, both open (Project A 13568060).</summary>
+    private static DuctNode Damper(long id, double[] at, double[]? facing0 = null, double[]? facing1 = null) {
+        var half = 0.03 / 12;
+        return Node(id, DuctNodeKind.Accessory, at, [
+            Port(1, [at[0] + half, at[1], at[2]], facing: facing0 ?? [1, 0, 0]),
+            Port(2, [at[0] - half, at[1], at[2]], facing: facing1 ?? [-1, 0, 0])
+        ]);
+    }
+
+    [Test]
+    public void A_damper_inside_a_duct_aligned_with_it_and_unconnected_is_inline_on_it() {
+        var host = Duct(1, [0, 0, 0], [10, 0, 0], Port(0, [0, 0, 0]), Port(1, [10, 0, 0], 3, 0));
+        var next = Duct(3, [10, 0, 0], [20, 0, 0], Port(0, [10, 0, 0], 1, 1), Port(1, [20, 0, 0]));
+
+        var issues = DuctHealth.Assess([Damper(9, [4, 0, 0])], [host, next], Defaults);
+
+        var inline = issues.Single(i => i.Kind == DuctIssueKind.Inline);
+        Assert.Multiple(() => {
+            Assert.That(inline.Id, Is.EqualTo("inline:9"));
+            Assert.That(inline.ElementId, Is.EqualTo(9));
+            Assert.That(inline.Connector, Is.Null);
+            Assert.That(inline.Inline!.SegmentId, Is.EqualTo(1));
+            Assert.That(inline.Inline.AtFt, Is.EqualTo(4).Within(1e-4));
+            // Port 2 faces the host's first point (x 0), so it comes first.
+            Assert.That(inline.Inline.Ports, Is.EqualTo(new[] { 2, 1 }));
+            Assert.That(inline.Note, Does.Contain("lies inside duct 1, 4.00 ft along it"));
+            // Its ports are still open ends: health states what is, the route decides the splice.
+            Assert.That(issues.Select(i => i.Id), Is.SupersetOf(new[] { "open-end:9:1", "open-end:9:2" }));
+        });
+        Assert.That(DuctHealth.Assess([Damper(9, [4, 0, 0])], [host, next], Defaults, measure: false)
+            .Where(i => i.Kind == DuctIssueKind.Inline), Is.Empty, "an unmeasured read finds no inline part");
+    }
+
+    [Test]
+    public void A_connected_crossways_outside_or_other_class_part_is_not_inline() {
+        DuctSegment Host() => Duct(1, [0, 0, 0], [10, 0, 0], Port(0, [0, 0, 0]), Port(1, [10, 0, 0]));
+        static bool Inline(IReadOnlyList<DuctNode> nodes, IReadOnlyList<DuctSegment> segments) =>
+            DuctHealth.Assess(nodes, segments, Defaults).Any(i => i.Kind == DuctIssueKind.Inline);
+
+        var joined = Damper(9, [4, 0, 0]);
+        joined = joined with { Connectors = [joined.Connectors[0] with { ConnectedTo = new DuctRef(2, 0) }, joined.Connectors[1]] };
+        var across = Damper(9, [4, 0, 0], [0, 1, 0], [0, -1, 0]);
+        var returnAir = Damper(9, [4, 0, 0]);
+        returnAir = returnAir with { Connectors = returnAir.Connectors.Select(c => c with { Classification = "ReturnAir" }).ToList() };
+        Assert.Multiple(() => {
+            Assert.That(Inline([Damper(9, [4, 0, 0])], [Host()]), Is.True);
+            Assert.That(Inline([joined], [Host()]), Is.False, "one end connected");
+            Assert.That(Inline([across], [Host()]), Is.False, "across the run");
+            Assert.That(Inline([Damper(9, [4, 1, 0])], [Host()]), Is.False, "outside the body");
+            Assert.That(Inline([returnAir], [Host()]), Is.False, "another air class");
+            Assert.That(Inline([Damper(9, [4, 0, 0]), Damper(8, [6, 0, 0])], [Host()]) &&
+                DuctHealth.Assess([Damper(9, [4, 0, 0]), Damper(8, [6, 0, 0])], [Host()], Defaults)
+                    .Count(i => i.Kind == DuctIssueKind.Inline) == 1, Is.True, "ponytail: one part per duct");
+        });
     }
 
     [Test]

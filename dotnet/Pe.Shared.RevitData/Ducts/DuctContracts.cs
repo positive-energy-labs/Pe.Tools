@@ -57,6 +57,11 @@ public enum DuctIssueKind {
     [EnumMember(Value = "open-end")] OpenEnd,
     /// <summary>An open end whose vacant, opposed partner is within the auto-join gap: a joint drawn a hair apart.</summary>
     [EnumMember(Value = "near-miss")] NearMiss,
+    /// <summary>
+    ///     A two-port accessory or fitting lying inside one straight duct's body, aligned with its run, neither port connected
+    ///     (a damper dropped into a duct). Keyed by the part; carries <see cref="DuctInline" />, the host it sits in.
+    /// </summary>
+    [EnumMember(Value = "inline")] Inline,
     /// <summary>The read's connector graph (equipment cut out) has a cycle; the element closes one.</summary>
     [EnumMember(Value = "loop")] Loop,
     /// <summary>A duct shorter than 3 in: a connector stub between fittings.</summary>
@@ -89,11 +94,11 @@ public sealed record DuctSnapshotRequest(
 public enum DuctSelectorKind {
     /// <summary>Every duct network in the document, grouped and analysed (the shape being replaced by the path engine, ducts MAP 2026-10-27).</summary>
     [EnumMember(Value = "document")] Document,
-    /// <summary>Exactly the named elements, raw: no groups, roots, flows, issues or systems.</summary>
+    /// <summary>Exactly the named elements, raw: no groups, roots, flows or systems; health without open-end neighbourhoods.</summary>
     [EnumMember(Value = "ids")] Ids,
     /// <summary>A connector walk from one element's HVAC ports (ducts MAP "Where the data comes from", row 1), raw, with open-end candidates.</summary>
     [EnumMember(Value = "from")] From,
-    /// <summary>The fan roster's read: every HVAC equipment node and air terminal, raw, plus Revit's systems without sections.</summary>
+    /// <summary>The fan roster's read: every HVAC equipment node and air terminal, raw, plus Revit's systems without sections; health without open-end neighbourhoods.</summary>
     [EnumMember(Value = "roster")] Roster,
     /// <summary>
     ///     The named Revit systems' networks, grouped and analysed exactly as `document` is: the network page's read (the
@@ -449,7 +454,8 @@ public sealed record DuctFlow(long SegmentId, double Cfm, DuctProvenance Provena
 
 /// <summary>
 ///     One model-health finding. Id is "kind:elementId" plus ":connector" when Connector is set; an assumption verdict
-///     keys on it. Near is set on an open end: what lies within the candidate box of it.
+///     keys on it. Near is set on an open end: what lies within the candidate box of it. A `roster` or `ids` read does not
+///     measure it (null there) and so reports no near miss.
 /// </summary>
 public sealed record DuctIssue(
     string Id,
@@ -458,7 +464,14 @@ public sealed record DuctIssue(
     int? Connector,
     double[]? Point,
     string Note,
-    DuctNear? Near = null);
+    DuctNear? Near = null,
+    DuctInline? Inline = null);
+
+/// <summary>
+///     Where an inline part sits: SegmentId the straight duct whose body holds both its open ports, AtFt along that duct
+///     from its first polyline point, Ports the part's two connector indices, the one facing the duct's first point first.
+/// </summary>
+public sealed record DuctInline(long SegmentId, double AtFt, IReadOnlyList<int> Ports);
 
 /// <summary>
 ///     The neighbourhood of one open end, measured from its connector (point, outward axis), never decided: which of
@@ -475,9 +488,10 @@ public sealed record DuctNear(
 /// <summary>
 ///     Another connector near an open end. GapIn: centre to centre. FacingDot: cosine of the two outward axes (null
 ///     when either is unknown). Opposed: the cosine is at most -0.9. Aligned: opposed, ahead of the end and within
-///     0.5 in of its axis. AutoJoin: vacant, opposed and within AutoJoinGapIn: the near-miss partner.
+///     0.5 in of its axis. AutoJoin: vacant, opposed and within AutoJoinGapIn: the near-miss partner. CappedBy: the end
+///     cap occupying this connector (a fact of the model); a heal there replaces the cap with a transition.
 /// </summary>
-public sealed record DuctNearPort(long ElementId, int Connector, double GapIn, double? FacingDot, bool Opposed, bool Aligned, bool AutoJoin);
+public sealed record DuctNearPort(long ElementId, int Connector, double GapIn, double? FacingDot, bool Opposed, bool Aligned, bool AutoJoin, long? CappedBy = null);
 
 /// <summary>
 ///     The end's axis landing on a face within 2 in. Kind "collar": an open connector's mouth (Connector set);
