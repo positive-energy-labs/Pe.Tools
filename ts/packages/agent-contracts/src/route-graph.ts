@@ -60,10 +60,19 @@ export interface ReadingDecl<P = unknown> {
 /** Platform-neutral spelling, e.g. Mod+Enter. The kernel's key adapter owns parsing. */
 export type Chord = string;
 
+/**
+ * `work` writes Work patches, `command` runs a semantic command, `query` runs a host read outside
+ * the command table, `recovery` is the kernel's own way out of Work it cannot read: no patches,
+ * no command.
+ */
 export interface VerbDecl<S extends z.ZodType = z.ZodType> {
-  kind: "work" | "command";
-  /** Semantic command identity, retained in the graph's agent projection. */
+  kind: "work" | "command" | "query" | "recovery";
+  /** Semantic command or host read identity, retained in the graph's agent projection. */
   does?: string;
+  /** A query whose result names the subject Work the graph's `workSubject` field then selects. */
+  selects?: "work";
+  /** The answer a required review needs, when the declaration states it for Pea. */
+  answers?: z.ZodType;
   subject?: string;
   input: S;
   review: "none" | "shown" | "required";
@@ -159,6 +168,17 @@ export const cellSubjectType = (family: Pick<CellsDecl, "segment" | "key">): str
 export const cellVerbId = (family: Pick<CellsDecl, "segment" | "key">, kind: CellVerbKind) =>
   `${cellSubjectType(family)}.${kind}`;
 
+/** The kernel's recovery for Work the host cannot read; reserved on every graph with Work. */
+export const START_FRESH_VERB = "work.start-fresh";
+export const startFreshVerb = {
+  kind: "recovery",
+  label: "Start fresh",
+  says: "Set the unreadable Work aside and start it empty; its old bytes are kept beside it",
+  review: "required",
+  input: z.strictObject({}).default({}),
+  answers: z.strictObject({ confirm: z.literal(true) }),
+} as const satisfies VerbDecl;
+
 export interface RouteGraph<P = Record<string, unknown>, W = unknown> {
   key: string;
   address: string;
@@ -177,6 +197,11 @@ export interface RouteGraph<P = Record<string, unknown>, W = unknown> {
   needs?: "session" | "document" | "project" | "family";
   /** The Work document's schema; required to declare `cells`, whose segments it must contain. */
   work?: z.ZodType<W>;
+  /**
+   * The Page field whose value names the subject Work (`binding: "workspace"`), so Work follows
+   * Page selection. Empty falls back to the `?work=` carry, then the resolved document's Work.
+   */
+  workSubject?: keyof P & string;
   /** Authored segments of the Work; the kernel owns take, reject, reopen and delete for them. */
   cells?: readonly CellsDecl<W>[];
   pick?: false;
@@ -209,6 +234,7 @@ export interface RouteGraphJson {
   readonly stages: Readonly<Record<string, GraphJsonObject>>;
   readonly needs?: RouteGraph["needs"];
   readonly work?: GraphJsonObject;
+  readonly workSubject?: string;
   readonly cells?: readonly GraphJsonObject[];
   readonly stageOrder: readonly string[];
   readonly pick?: false;
@@ -250,6 +276,8 @@ export function projectRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphJson
   );
   return sortedJson({
     ...graph,
+    // Kernel-owned verbs are part of what Pea may invoke; the cell verbs derive from `cells`.
+    verbs: graph.work ? { ...graph.verbs, [START_FRESH_VERB]: startFreshVerb } : graph.verbs,
     fields,
     stageOrder: graph.stageOrder ?? Object.keys(graph.stages),
   }) as unknown as RouteGraphJson;
@@ -358,6 +386,24 @@ export function validateRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphRef
     }
     if (graph.work && !graph.needs)
       refuse("invalid-graph", "needs", "A graph with Work must declare the Target it needs");
+    if (graph.work && Object.hasOwn(graph.verbs, START_FRESH_VERB))
+      refuse(
+        "reserved-verb",
+        `verbs.${START_FRESH_VERB}`,
+        `'${START_FRESH_VERB}' is a kernel verb id`,
+      );
+    if (graph.workSubject !== undefined) {
+      if (!graph.work)
+        refuse("invalid-graph", "workSubject", "Only a graph with Work can select it by subject");
+      if (!Object.hasOwn(graph.fields, graph.workSubject))
+        refuse("invalid-graph", "workSubject", `Unknown Page field '${graph.workSubject}'`);
+    }
+    for (const [id, verb] of Object.entries(graph.verbs)) {
+      if (verb.selects === "work" && graph.workSubject === undefined)
+        refuse("invalid-graph", `verbs.${id}`, "A query that selects Work needs `workSubject`");
+      if (verb.kind === "recovery")
+        refuse("reserved-verb", `verbs.${id}`, "Recovery verbs are kernel-owned");
+    }
     const families = new Set<string>();
     const shape = graph.work ? unwrapSchema(graph.work).shape : undefined;
     for (const [index, family] of (graph.cells ?? []).entries()) {

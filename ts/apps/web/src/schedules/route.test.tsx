@@ -175,7 +175,7 @@ test("taking a cell row uses the kernel cell verb and one undo restores its prop
   expect(host.doc).toEqual(before);
 });
 
-test("kernel gap: a schedule workspaceId URL must select that subject's Work", async () => {
+test("a schedule workspaceId URL selects that subject's Work through the graph's workSubject", async () => {
   await mounted(routeUrl({}, false));
   expect(
     host.workRequests.some(
@@ -187,7 +187,7 @@ test("kernel gap: a schedule workspaceId URL must select that subject's Work", a
   ).toBe(true);
 });
 
-test("kernel gap: the graph's native Read query must execute at its declared row", async () => {
+test("the graph's native Read query executes at its declared row and selects its subject's Work", async () => {
   const { view } = await mounted();
   const read = await view.findByRole("button", { name: "Read schedule" });
   expect(
@@ -196,6 +196,9 @@ test("kernel gap: the graph's native Read query must execute at its declared row
   ).not.toBe("true");
   fireEvent.click(read);
   await waitFor(() =>
-    expect(host.reads).toEqual([{ key: "schedule.grid.snapshot", input: { scheduleId: 42 } }]),
+    // The read's own contract normalizes the request (its maxRows default) before the host sees it.
+    expect(host.reads).toEqual([
+      { key: "schedule.grid.snapshot", input: { scheduleId: 42, maxRows: 200 } },
+    ]),
   );
 });

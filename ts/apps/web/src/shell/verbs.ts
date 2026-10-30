@@ -2,7 +2,11 @@ import { z } from "zod";
 import {
   canonicalRouteInput,
   commands,
+  familyReads,
+  scheduleReads,
   workKey,
+  type FamilyReadKey,
+  type ScheduleReadKey,
   type ExecutionTarget,
   type Command,
   type PaneDecl,
@@ -18,7 +22,9 @@ import {
 import {
   runSemanticAction,
   actionResult,
+  readFamilyCapture,
 } from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import { readScheduleCapture } from "../../../../packages/mcps/src/shared/schedule-client";
 import type { createRouteOwner } from "../route/route-owner";
 import { refuse, writeRefusal, type Refusal } from "../route/refusal";
 import { DEFAULT_WAIT_S } from "../route/waits";
@@ -36,6 +42,8 @@ export interface VerbSnapshot {
   readonly work: { readonly handle: WorkHandle; readonly doc: unknown } | null;
   /** Reading versions, document change marks, or other domain prerequisites. */
   readonly basis: unknown;
+  /** Work the host holds but cannot read; only a recovery verb acts on it. */
+  readonly unreadable?: WorkKey | null;
 }
 export interface VerbContext<C extends Caller = Caller> {
   readonly caller: C;
@@ -51,6 +59,8 @@ export interface VerbContext<C extends Caller = Caller> {
   ) => Promise<RouteStateWriteResult>;
   readonly changed?: (state: InvocationState, press: string | null) => void;
   readonly waitSeconds?: number;
+  /** The kernel's recovery door; absent means no recovery verb can run. */
+  readonly recover?: (recovery: Recovery, key: WorkKey) => Promise<RouteStateWriteResult>;
 }
 export interface VerbScope {
   readonly snapshot: VerbSnapshot;
@@ -78,6 +88,8 @@ export type InvocationResult =
   | { state: "review"; press: string; ticket: ReviewTicket }
   | { state: "done"; press: string; kind: "work"; acknowledgement: WorkWriteAck }
   | { state: "done"; press: string; kind: "command"; receipt: HostReceipt }
+  | { state: "done"; press: string; kind: "query"; receipt: QueryReceipt }
+  | { state: "done"; press: string; kind: "recovery"; acknowledgement: WorkWriteAck }
   | {
       state: "refused" | "failed" | "stale";
       press: string | null;
@@ -85,6 +97,19 @@ export type InvocationResult =
       receipt?: HostReceipt;
     };
 type HostReceipt = Awaited<ReturnType<typeof runSemanticAction>>;
+/** Host reads outside the command table: they run through the same invocation, never a route fetch. */
+export type QueryKey = ScheduleReadKey | FamilyReadKey;
+const reads = { ...scheduleReads, ...familyReads };
+/** Receipt-shaped so the timeline records a read like a command; `subject` is the Work it names. */
+export interface QueryReceipt {
+  readonly id: string;
+  readonly key: QueryKey;
+  readonly state: "succeeded";
+  readonly input: unknown;
+  readonly value: unknown;
+  readonly subject: string | null;
+}
+export type Recovery = "start-fresh";
 type Terminal = Exclude<InvocationResult, { state: "review" }>;
 export type InvocationPhase<C extends Caller> =
   | { kind: "press" }
@@ -101,6 +126,9 @@ interface Binding {
   prepare?: (scope: VerbScope, input: unknown) => unknown;
   answers?: z.ZodType;
   waitSeconds?: number;
+  query?: QueryKey;
+  subject?: (value: unknown) => string | null;
+  recover?: Recovery;
 }
 const bindings = new WeakMap<VerbDecl, Binding>();
 
@@ -155,6 +183,76 @@ export function commandVerb<K extends SemanticActionKey, S extends z.ZodType>(
       implementation.intent(scope, input as z.output<S>, reply) as Record<string, unknown>,
   });
   return verb;
+}
+
+/** A host read verb. It writes nothing itself; `subject` names the Work its result selects. */
+export function queryVerb<K extends QueryKey, S extends z.ZodType>(
+  read: K,
+  declaration: Declaration<S> &
+    (
+      | { review: "required"; answers: z.ZodType }
+      | { review: "none" | "shown"; answers?: z.ZodType }
+    ),
+  implementation: {
+    ready?: (scope: VerbScope, input: z.output<S>) => string | null;
+    prepare?: (scope: VerbScope, input: z.output<S>) => unknown;
+    intent?: (
+      scope: VerbScope,
+      input: z.output<S>,
+      answers: unknown,
+    ) => z.input<(typeof reads)[K]["input"]>;
+    subject?: (value: unknown) => string | null;
+  } = {},
+): VerbDecl<S> {
+  const { answers, ...metadata } = declaration;
+  const verb: VerbDecl<S> = {
+    does: read,
+    ...metadata,
+    kind: "query",
+    effect: "query",
+    ...(implementation.subject && { selects: "work" as const }),
+  };
+  bindings.set(verb, {
+    query: read,
+    answers,
+    subject: implementation.subject,
+    ready:
+      implementation.ready &&
+      ((scope, input) => implementation.ready!(scope, input as z.output<S>)),
+    prepare:
+      implementation.prepare &&
+      ((scope, input) => implementation.prepare!(scope, input as z.output<S>)),
+    intent: (scope, input, reply) =>
+      (implementation.intent?.(scope, input as z.output<S>, reply) ?? input) as Record<
+        string,
+        unknown
+      >,
+  });
+  return verb;
+}
+
+/** A kernel recovery: no patches, no command; a required review whose answers the declaration states. */
+export function recoveryVerb<S extends z.ZodType>(
+  recovery: Recovery,
+  declaration: Omit<VerbDecl<S>, "kind" | "review" | "answers"> & { answers: z.ZodType },
+): VerbDecl<S> {
+  const verb: VerbDecl<S> = { ...declaration, kind: "recovery", review: "required" };
+  bindings.set(verb, {
+    recover: recovery,
+    answers: declaration.answers,
+    ready: (scope) =>
+      scope.snapshot.unreadable ? null : "This Work is readable; there is nothing to recover",
+    prepare: (scope) => ({ work: workKey(scope.snapshot.unreadable!) }),
+  });
+  return verb;
+}
+
+async function runQuery(key: QueryKey, input: Record<string, unknown>, snapshot: VerbSnapshot) {
+  const target = snapshot.target.kind === "document" ? snapshot.target.ref : undefined;
+  if (Object.hasOwn(scheduleReads, key))
+    return readScheduleCapture(key as ScheduleReadKey, input, target);
+  if (!snapshot.work) throw Error("Work has not been read yet");
+  return readFamilyCapture(key as FamilyReadKey, input, snapshot.work.handle.key, target);
 }
 
 /** Preview commands use the same admitted transport as commit, and return host-owned evidence. */
@@ -399,6 +497,40 @@ async function invokeCore<C extends Caller>(
           const refusal = binding.ready?.(fresh, input);
           if (refusal) return finish(failure("refused", refusal, press));
           ctx.changed?.("applying", press);
+          if (verb.kind === "recovery") {
+            if (!binding.recover || !ctx.recover || !current.unreadable)
+              return finish(failure("refused", "This route has no recovery for this Work", press));
+            const result = await ctx.recover(binding.recover, structuredClone(current.unreadable));
+            if (!result.ok) return finish(resultOf(writeRefusal(result)!, press));
+            return finish({
+              state: "done",
+              kind: "recovery",
+              press,
+              acknowledgement: result.write,
+            });
+          }
+          if (verb.kind === "query") {
+            if (!binding.query || !binding.intent)
+              return finish(failure("refused", "This query has no read binding", press));
+            // The read's own contract validates and normalizes what reaches the host.
+            const request = reads[binding.query].input.parse(
+              structuredClone(binding.intent(fresh, input, answers)),
+            ) as Record<string, unknown>;
+            const value = await runQuery(binding.query, request, current);
+            return finish({
+              state: "done",
+              kind: "query",
+              press,
+              receipt: copy({
+                id: press,
+                key: binding.query,
+                state: "succeeded" as const,
+                input: request,
+                value,
+                subject: binding.subject?.(value) ?? null,
+              }),
+            });
+          }
           if (verb.kind === "work") {
             if (!current.work || !binding.patches)
               return finish(failure("refused", "Work has not been read yet", press));

@@ -2,11 +2,12 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
   type ReactNode,
 } from "react";
-import { type RouteGraph, type VerbDecl } from "@pe/agent-contracts";
+import { START_FRESH_VERB, type RouteGraph, type VerbDecl } from "@pe/agent-contracts";
 import { Route as rootRoute } from "../routes/__root";
 import { createRoute } from "@tanstack/react-router";
 import { KeyScope, ScopeKeys, actionScopeKeys, useScopeLive, type ScopeKey } from "@pe/kit/keys";
@@ -92,8 +93,12 @@ export function mountRoute<P, W>(graph: RouteGraph<P, W>, adapters: RouteAdapter
   const url = graphUrlPage(graph, adapters.initialPage);
   return function MountedRoute({ hidden = false }: MountRouteProps) {
     const initial = useInitialUrlPage(url);
-    const scope = useWorkScope(graph);
+    // The door follows the owner's Page (its workSubject); before the owner exists, the URL's.
+    // The mount re-renders on every Page change, so the next render reads the moved field.
+    const mounted = useRef<GraphMount<P, W> | null>(null);
+    const scope = useWorkScope(graph, mounted.current?.view.read().page ?? initial);
     const owner = useRouteOwner(() => createGraphMount(graph, { ...adapters, ...scope }, initial));
+    mounted.current = owner;
     useEffect(() => owner.connect(), [owner]);
     useUrlPage(url, owner.view);
     useSyncExternalStore(owner.subscribe, owner.version, owner.version);
@@ -500,6 +505,15 @@ function GraphSituation<P, W>({
         {stage.verbs.map((id) => (
           <GraphVerb key={id} id={id} verb={owner.verbs[id]!} owner={owner} enabled={enabled} />
         ))}
+        {/* The kernel's recovery sits on the stage only while the host cannot read the Work. */}
+        {owner.snapshot().unreadable && (
+          <GraphVerb
+            id={START_FRESH_VERB}
+            verb={owner.verbs[START_FRESH_VERB]!}
+            owner={owner}
+            enabled={enabled}
+          />
+        )}
         {owner.busy() && (
           <Button label="Stop" onClick={() => owner.stop()}>
             Stop
@@ -532,8 +546,9 @@ function GraphVerb<P, W>({
   const [answers, setAnswers] = useState("");
   const [error, setError] = useState<string | null>(null);
   const press = () => {
-    let value: unknown;
-    if (review && answers.trim()) {
+    // A recovery's one answer is the commit press itself.
+    let value: unknown = review && verb.kind === "recovery" ? { confirm: true } : undefined;
+    if (review && verb.kind !== "recovery" && answers.trim()) {
       try {
         value = JSON.parse(answers);
       } catch {
@@ -564,7 +579,7 @@ function GraphVerb<P, W>({
       {review && (
         <span aria-label={`${verb.label} review`}>
           <output>{JSON.stringify(review.ticket.evidence)}</output>
-          {verb.review === "required" && (
+          {verb.review === "required" && verb.kind !== "recovery" && (
             <Label>
               Review answers
               <Textarea

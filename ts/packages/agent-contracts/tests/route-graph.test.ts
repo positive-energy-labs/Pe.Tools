@@ -11,6 +11,7 @@ import {
   pane,
   projectRouteGraph,
   routeGraphHash,
+  START_FRESH_VERB,
   validateRouteGraph,
   type CellsDecl,
   type FieldRole,
@@ -353,4 +354,83 @@ test("a graph with Work declares the Target it needs; needs is projected and has
   const project = projectRouteGraph({ ...withCells(rules), needs: "project" } as RouteGraph);
   expect(await routeGraphHash(project)).not.toBe(await routeGraphHash(json));
   expect(projectRouteGraph(ductLoss).needs).toBeUndefined();
+});
+
+test("workSubject names a Page field of a graph with Work; it is projected and hashed", async () => {
+  const subject = Object.keys(ductLoss.fields)[0]!;
+  const graph = { ...withCells(rules), workSubject: subject } as RouteGraph;
+  expect(validateRouteGraph(graph)).toEqual([]);
+  const json = projectRouteGraph(graph);
+  expect(json.workSubject).toBe(subject);
+  expect(await routeGraphHash(json)).not.toBe(
+    await routeGraphHash(projectRouteGraph(withCells(rules))),
+  );
+  expect(validateRouteGraph({ ...graph, workSubject: "ghost" } as RouteGraph)).toEqual([
+    { code: "invalid-graph", path: "workSubject", message: "Unknown Page field 'ghost'" },
+  ]);
+  expect(
+    validateRouteGraph({ ...ductLoss, workSubject: subject } as RouteGraph).map((r) => r.path),
+  ).toEqual(["workSubject"]);
+});
+
+test("a query verb projects its read identity; selecting Work requires workSubject", async () => {
+  const read: VerbDecl = {
+    kind: "query",
+    does: "schedule.grid.snapshot",
+    selects: "work",
+    effect: "query",
+    label: "Read",
+    review: "none",
+    input: z.strictObject({ id: z.number().optional() }),
+  };
+  const graph = { ...withCells(rules), verbs: { read } } as RouteGraph;
+  expect(validateRouteGraph(graph)).toEqual([
+    {
+      code: "invalid-graph",
+      path: "verbs.read",
+      message: "A query that selects Work needs `workSubject`",
+    },
+  ]);
+  const subject = Object.keys(ductLoss.fields)[0]!;
+  const admitted = { ...graph, workSubject: subject } as RouteGraph;
+  expect(validateRouteGraph(admitted)).toEqual([]);
+  const json = projectRouteGraph(admitted);
+  expect(json.verbs.read).toMatchObject({
+    kind: "query",
+    does: "schedule.grid.snapshot",
+    selects: "work",
+    effect: "query",
+  });
+  const unselecting = { ...admitted, verbs: { read: { ...read, selects: undefined } } };
+  expect(await routeGraphHash(projectRouteGraph(unselecting as RouteGraph))).not.toBe(
+    await routeGraphHash(json),
+  );
+});
+
+test("every graph with Work projects the kernel's start-fresh recovery; its id and kind are reserved", () => {
+  const json = projectRouteGraph(withCells(rules));
+  expect(json.verbs[START_FRESH_VERB]).toEqual({
+    kind: "recovery",
+    label: "Start fresh",
+    review: "required",
+    says: expect.any(String),
+    input: expect.objectContaining({ type: "object", additionalProperties: false }),
+    answers: expect.objectContaining({
+      properties: { confirm: { type: "boolean", const: true } },
+      required: ["confirm"],
+    }),
+  });
+  expect(projectRouteGraph(ductLoss).verbs).toEqual({});
+  const collided = { ...withCells(rules), verbs: { [START_FRESH_VERB]: verb("Fresh") } };
+  expect(validateRouteGraph(collided)).toEqual([
+    {
+      code: "reserved-verb",
+      path: `verbs.${START_FRESH_VERB}`,
+      message: `'${START_FRESH_VERB}' is a kernel verb id`,
+    },
+  ]);
+  const own = { ...withCells(rules), verbs: { mine: { ...verb("Mine"), kind: "recovery" } } };
+  expect(validateRouteGraph(own as RouteGraph)).toEqual([
+    { code: "reserved-verb", path: "verbs.mine", message: "Recovery verbs are kernel-owned" },
+  ]);
 });

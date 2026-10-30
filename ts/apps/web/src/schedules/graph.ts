@@ -11,12 +11,12 @@ import {
   splitScheduleCellKey,
   type RouteGraph,
   type ScheduleGridDocument,
-  type VerbDecl,
+  type ScheduleReading,
 } from "@pe/agent-contracts";
 import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { schedulesAddress } from "../../../../packages/agent-contracts/src/routes/schedules";
 import { threadListFields } from "../../../../packages/agent-contracts/src/routes/shared";
-import { commandVerb, workVerb } from "#/shell/verbs";
+import { commandVerb, queryVerb, workVerb } from "#/shell/verbs";
 import { NATIVE_APPLY_WAIT_S } from "#/route/waits";
 
 export const SCHEDULE_SPEC_SCHEMA = "/schemas/settings/CmdScheduleManager/schedules.json";
@@ -46,6 +46,8 @@ export const schedulesGraph: RouteGraph<SchedulesPage, ScheduleGridDocument> = {
   name: "Schedules",
   needs: "project",
   work: scheduleGridRouteState.schema,
+  // A schedule's Work is its subject's: picking a schedule or reading one moves this field.
+  workSubject: "workspaceId",
   fields: {
     threadSearch: { ...fields.threadSearch, role: "query" },
     threadSort: { ...fields.threadSort, role: "query" },
@@ -164,24 +166,21 @@ export const schedulesGraph: RouteGraph<SchedulesPage, ScheduleGridDocument> = {
         intent: (_, input) => ({ source: input.source! }),
       },
     ),
-    // The shared runner has no query binding yet. Preserve their semantic identities; do not
-    // turn a native read or host publication into a fake authored Work edit (ADR 0026).
-    read: {
-      kind: "command",
-      does: "schedule.grid.snapshot",
-      review: "none",
-      effect: "query",
-      label: "Read schedule",
-      input: scheduleReads["schedule.grid.snapshot"].input,
-    } satisfies VerbDecl,
-    bind: {
-      kind: "command",
-      does: "schedule.grid.bind",
-      review: "none",
-      effect: "query",
+    // Host reads, never a fake authored Work edit (ADR 0026); a read selects its subject's Work.
+    read: queryVerb(
+      "schedule.grid.snapshot",
+      {
+        label: "Read schedule",
+        review: "none",
+        input: scheduleReads["schedule.grid.snapshot"].input,
+      },
+      { subject: (value) => (value as ScheduleReading).workspaceId },
+    ),
+    bind: queryVerb("schedule.grid.bind", {
       label: "Bind schedule reading",
+      review: "none",
       input: scheduleReads["schedule.grid.bind"].input,
-    } satisfies VerbDecl,
+    }),
   },
   panes: {
     list: {

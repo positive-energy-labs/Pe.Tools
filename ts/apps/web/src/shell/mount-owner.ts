@@ -2,6 +2,8 @@ import { z } from "zod";
 import {
   canonicalRouteInput,
   commands,
+  START_FRESH_VERB,
+  startFreshVerb,
   validateRouteGraph,
   workKey,
   type ActionReceipt,
@@ -20,7 +22,7 @@ import {
 } from "@pe/agent-contracts";
 import { createRouteOwner, makeAtomRegistry } from "../route/route-owner";
 import { createViewOwner } from "../route/view-owner";
-import { refuse, writeRefusal } from "../route/refusal";
+import { refuse } from "../route/refusal";
 import {
   createReadingGraph,
   type ReadingLog,
@@ -35,6 +37,7 @@ import {
   bind,
   commit,
   invoke,
+  recoveryVerb,
   type InvocationResult,
   type ReviewTicket,
   type VerbContext,
@@ -49,10 +52,13 @@ export interface MountScope<W> {
   work: { handle: WorkHandle; doc: W } | null;
   /** The mount sets this: a write was refused as stale and nothing newer has been read or accepted since. */
   conflict?: boolean;
-  /** The kernel door sets this: the host holds Work it cannot read, so `startFresh` is the one way out. */
+  /** The kernel door sets this: the host holds Work it cannot read, so start-fresh is the one way out. */
   unreadable?: WorkKey;
 }
 export const CONFLICT_REFUSAL = "Work changed; review and retry";
+// One executable recovery for every mount; its declaration is the contract's, so Pea reads the same verb.
+const { kind: _kind, review: _review, ...freshDeclaration } = startFreshVerb;
+const startFresh = recoveryVerb("start-fresh", freshDeclaration);
 export interface MountBinding {
   subject: VerbSubject | null;
   args: unknown;
@@ -74,7 +80,7 @@ export interface MountAdapters<P, W> {
   initialPage?: Partial<P>;
   write(key: WorkKey, write: WorkWrite): Promise<RouteStateWriteResult>;
   subscribeAcceptedDeltas(key: WorkKey, onAck: (ack: WorkWriteAck) => void): () => void;
-  /** The human recovery door (`useWorkScope`); absent only in tests that never reach unreadable Work. */
+  /** The recovery door behind the start-fresh verb (`useWorkScope`); absent only in tests that never reach unreadable Work. */
   startFresh?(key: WorkKey): Promise<RouteStateWriteResult>;
   subjects?: VerbContext["subjects"];
   binding?(id: string, row: unknown, scope: BindingScope<P, W>): MountBinding;
@@ -157,7 +163,11 @@ export function createGraphMount<P, W>(
   const initialPage = schema.parse({ ...adapters.initialPage, ...initial });
   // Validation ran above: cell verb ids cannot collide with graph verbs, so a plain spread is safe.
   const kernel = kernelCellVerbs(graph);
-  const verbs: Readonly<Record<string, VerbDecl>> = { ...graph.verbs, ...kernel.verbs };
+  const verbs: Readonly<Record<string, VerbDecl>> = {
+    ...graph.verbs,
+    ...kernel.verbs,
+    ...(graph.work && { [START_FRESH_VERB]: startFresh }),
+  };
   const registry = makeAtomRegistry();
   const base = createRouteOwner(graph.key, registry);
   const view = createViewOwner(base, schema, initialPage, { transition: graph.transition });
@@ -344,9 +354,21 @@ export function createGraphMount<P, W>(
     snapshot: () => ({
       target: scope.target,
       work: scope.work,
-      basis: { pageEpoch: view.read().epoch, readings: basis() },
+      unreadable: scope.unreadable ?? null,
+      basis: {
+        pageEpoch: view.read().epoch,
+        readings: basis(),
+        unreadable: scope.unreadable ? workKey(scope.unreadable) : null,
+      },
     }),
     write: (key, envelope) => write(key, { ...envelope, kind: "apply" }),
+    recover: async (_recovery, key) => {
+      if (!adapters.startFresh)
+        return { ok: false, kind: "refused", error: "This route has no recovery door", hint: "" };
+      const result = await adapters.startFresh(key);
+      if (result.ok && !disposed) journalFor(key).accept(result.write);
+      return result;
+    },
     changed: () => notify(),
     owner: {
       runAction: (name, work, keys, stopped, label, wait) =>
@@ -399,8 +421,36 @@ export function createGraphMount<P, W>(
       reviews.delete(id);
       if (result.press) {
         const dispatch = dispatches.get(result.press);
+        if (dispatch && result.state === "done" && result.kind === "query") {
+          timeline.append({
+            kind: "receipt",
+            at: Date.now(),
+            press: result.press,
+            verb: id,
+            receiptId: `query:${result.press}`,
+            basis: { workKey: dispatch.key ? workKey(dispatch.key) : null, query: result.receipt },
+          });
+          // A read that names its subject Work selects it through Page, the one carry the door follows.
+          if (result.receipt.subject !== null && graph.workSubject)
+            view.setPage({ [graph.workSubject]: result.receipt.subject } as Partial<P>);
+        }
+        if (dispatch && result.state === "done" && result.kind === "recovery")
+          // The whole Work is replaced: a root barrier on the timeline, and the journal holds no step.
+          timeline.append({
+            kind: "receipt",
+            at: Date.now(),
+            press: result.press,
+            verb: id,
+            receiptId: `recovery:${result.press}`,
+            paths: [[]],
+            basis: { workKey: workKey(result.acknowledgement.key) },
+          });
         if (dispatch) {
-          if ("receipt" in result && result.receipt) {
+          if (
+            "receipt" in result &&
+            result.receipt &&
+            !("kind" in result && result.kind === "query")
+          ) {
             if (["detached", "waiting", "running"].includes(result.receipt.state))
               unsettledWorks.set(result.receipt.id, dispatch.key);
             else if (result.receipt.state !== "detached")
@@ -457,68 +507,6 @@ export function createGraphMount<P, W>(
       ? await commit(context, verb, review.ticket, answers)
       : await invoke(context, verb, bound.subject, bound.args);
     return consume(id, result);
-  };
-  // The one recovery verb the kernel owns for Work the host cannot read (S1b: the old bytes go
-  // aside, the revision advances, the whole Work is a barrier). It is not a graph verb: it writes
-  // no Work patches and runs no command, so the verb core has no seam for it; it keeps the same
-  // review contract (a ticket, then explicit confirm) and is chord-free.
-  const freshAnswers = z.strictObject({ confirm: z.literal(true) });
-  let freshTicket: { press: string; key: string } | null = null;
-  const freshRefusal = (): string | null =>
-    disposed || !available()
-      ? "This route is inactive"
-      : !scope.unreadable || !adapters.startFresh
-        ? "This Work is readable; there is nothing to start fresh"
-        : null;
-  const startFresh = {
-    label: "Start fresh",
-    review: "required" as const,
-    answers: freshAnswers,
-    get refusal() {
-      return freshRefusal();
-    },
-    get ticket() {
-      return freshTicket;
-    },
-    /** Opens the review; nothing is written until `commit` carries `{ confirm: true }`. */
-    begin() {
-      const refusal = freshRefusal();
-      if (refusal)
-        return { state: "refused" as const, press: null, refusal: refuse("not-ready", refusal) };
-      freshTicket = { press: crypto.randomUUID(), key: workKey(scope.unreadable!) };
-      notify();
-      return { state: "review" as const, ticket: freshTicket };
-    },
-    cancel() {
-      freshTicket = null;
-      notify();
-    },
-    async commit(answers: unknown) {
-      const ticket = freshTicket;
-      const press = ticket?.press ?? null;
-      const refused = (message: string, code: "not-ready" | "stale-revision" = "not-ready") => ({
-        state: (code === "stale-revision" ? "stale" : "refused") as "stale" | "refused",
-        press,
-        refusal: refuse(code, message),
-      });
-      if (!ticket) return refused("Review the start-fresh first");
-      const checked = freshAnswers.safeParse(answers);
-      if (!checked.success) return refused("Confirm to start fresh");
-      const refusal = freshRefusal();
-      if (refusal) return refused(refusal);
-      if (workKey(scope.unreadable!) !== ticket.key) {
-        freshTicket = null;
-        return refused("The Work changed; review again", "stale-revision");
-      }
-      const key = structuredClone(scope.unreadable!);
-      freshTicket = null;
-      const result = await adapters.startFresh!(key);
-      if (result.ok && !disposed) journalFor(key).accept(result.write);
-      notify();
-      return result.ok
-        ? { state: "done" as const, press: ticket.press, acknowledgement: result.write }
-        : { state: "refused" as const, press: ticket.press, refusal: writeRefusal(result)! };
-    },
   };
   const cancelReviews = () => {
     for (const { verb, ticket } of reviews.values())
@@ -609,7 +597,6 @@ export function createGraphMount<P, W>(
         : (graph.stageOrder ?? Object.keys(graph.stages))[0]!;
     },
     journal: journalFor,
-    startFresh,
     async restore(direction: "undo" | "redo") {
       if (!scope.work || disposed || !available()) return null;
       const key = structuredClone(scope.work.handle.key);

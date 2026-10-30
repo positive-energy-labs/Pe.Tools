@@ -42,7 +42,7 @@ const door = vi.hoisted(() => ({ ports: null as object | null }));
 vi.mock("./use-work-scope", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./use-work-scope")>();
   return {
-    useWorkScope: (graph: never) =>
+    useWorkScope: (graph: never, page?: never) =>
       door.ports
         ? {
             ...door.ports,
@@ -53,7 +53,7 @@ vi.mock("./use-work-scope", async (importOriginal) => {
               closed: false,
             },
           }
-        : actual.useWorkScope(graph),
+        : actual.useWorkScope(graph, page),
   };
 });
 vi.mock("../routes/__root", async () => {

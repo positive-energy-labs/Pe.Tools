@@ -40,7 +40,7 @@ export type WorkScopeStatus = Pick<
 > & {
   /** Readable Work whose document is not live: shown, never armed (no writer, no verb). */
   closed: boolean;
-  /** The host holds Work it cannot read: the kernel's `startFresh` is the one recovery. */
+  /** The host holds Work it cannot read: the kernel's start-fresh verb is the one recovery. */
   unreadable: boolean;
 };
 export interface WorkScopePorts<W> {
@@ -53,8 +53,15 @@ export interface WorkScopePorts<W> {
   status: WorkScopeStatus;
 }
 
-export function useWorkScope<P, W>(graph: RouteGraph<P, W>): WorkScopePorts<W> {
+/** `page` is the mount's current Page; a graph's `workSubject` field in it names the subject Work. */
+export function useWorkScope<P, W>(
+  graph: RouteGraph<P, W>,
+  page?: Readonly<Partial<P>>,
+): WorkScopePorts<W> {
   const carry = useRouteSearchSlice((search) => ({ target: search.target, work: search.work }));
+  const field = graph.workSubject ? page?.[graph.workSubject] : undefined;
+  // Page selection wins over the `?work=` carry: a pick moves the field, the carry stays behind.
+  const work = typeof field === "string" && field ? field : carry.work;
   const target = useRouteTarget(
     { needs: graph.needs },
     appAtomRegistry,
@@ -76,7 +83,7 @@ export function useWorkScope<P, W>(graph: RouteGraph<P, W>): WorkScopePorts<W> {
       ? resolution.target.ref
       : undefined;
   const keyText = JSON.stringify(
-    bindWork(graph.key, workAddress, carry.work, bound ?? workOpen ?? undefined),
+    bindWork(graph.key, workAddress, work, bound ?? workOpen ?? undefined),
   );
   const key = useMemo(() => JSON.parse(keyText) as WorkKey, [keyText]);
   const spec = useMemo(
@@ -87,7 +94,7 @@ export function useWorkScope<P, W>(graph: RouteGraph<P, W>): WorkScopePorts<W> {
     [graph],
   );
   // Target-owned Work never falls back to the shared host key while its document is unresolved.
-  const readable = carry.work !== undefined || workAddress !== null || key.binding === "open";
+  const readable = work !== undefined || workAddress !== null || key.binding === "open";
   const atom = useMemo(() => (spec && readable ? docAtom(spec, key) : null), [spec, readable, key]);
   const reading = useOwned(appAtomRegistry, atom);
   // Only the host's own unreadable-Work failure offers recovery; a host that is down does not.
