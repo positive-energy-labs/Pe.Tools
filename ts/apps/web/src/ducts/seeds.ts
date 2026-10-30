@@ -8,6 +8,7 @@ import {
 } from "@pe/agent-contracts";
 import { EMPTY_CATALOGS } from "@pe/ducts-domain/catalog";
 import { SCENE_FIXTURE } from "./scene.fixture";
+import { LAYOUT_FIXTURE, LAYOUT_ROSTER } from "./layout.fixture";
 import { COLOURS_FIXTURE } from "./colours.fixture";
 import { NAVIGATION_FIXTURE } from "./navigation.fixture";
 import { pricingJob } from "./pricing-job";
@@ -17,6 +18,7 @@ import sheetFixture from "./sheet/sheet.fixture.json";
 export const ductsSeeds = Object.fromEntries(
   Object.entries({
     scene: SCENE_FIXTURE,
+    layout: LAYOUT_FIXTURE,
     colours: COLOURS_FIXTURE,
     navigation: NAVIGATION_FIXTURE,
   }).map(([name, fixture]) => {
@@ -30,6 +32,10 @@ export const ductsSeeds = Object.fromEntries(
       base: { snapshot: fixture.snapshot, grids: {}, catalogs: EMPTY_CATALOGS },
       doc: work,
     });
+    const fans =
+      name === "scene" || name === "layout"
+        ? ductsRosterResponseSchema.parse(name === "layout" ? LAYOUT_ROSTER : sheetFixture.roster)
+        : null;
     const seed: GraphSeedData<DuctsPage, DuctsRouteDocument> = {
       work,
       page: { stage: "network" },
@@ -40,22 +46,21 @@ export const ductsSeeds = Object.fromEntries(
         tables: {},
         catalogs: { tables: EMPTY_CATALOGS, findings: [] },
         pricing: "result" in pricing ? pricing.result : null,
-        fans: name === "scene" ? ductsRosterResponseSchema.parse(sheetFixture.roster) : null,
-        sheet:
-          name === "scene"
-            ? {
-                rows: ductsRosterResponseSchema.parse(sheetFixture.roster).rows,
-                progress: null,
-                open: {
-                  overview: ductsSheetOverviewSchema.parse(sheetFixture.overview),
-                  inputs: ductsSheetResponseSchema.parse(sheetFixture.inputs),
-                  elements: ductsSheetResponseSchema.parse(sheetFixture.elements),
-                  legs: ductsSheetResponseSchema.parse(sheetFixture.legs),
-                  worstLegs: [],
-                  worksheet: null,
-                },
-              }
-            : { rows: [], progress: null, open: null },
+        fans,
+        sheet: fans
+          ? {
+              rows: fans.rows,
+              progress: null,
+              open: {
+                overview: ductsSheetOverviewSchema.parse(sheetFixture.overview),
+                inputs: ductsSheetResponseSchema.parse(sheetFixture.inputs),
+                elements: ductsSheetResponseSchema.parse(sheetFixture.elements),
+                legs: ductsSheetResponseSchema.parse(sheetFixture.legs),
+                worstLegs: [],
+                worksheet: null,
+              },
+            }
+          : { rows: [], progress: null, open: null },
         sheetSnapshot: fixture.snapshot,
       },
     };

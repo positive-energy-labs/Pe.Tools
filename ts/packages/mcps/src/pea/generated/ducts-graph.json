@@ -1796,6 +1796,9 @@
     "colours": {
       "title": "colours"
     },
+    "layout": {
+      "title": "layout"
+    },
     "navigation": {
       "title": "navigation"
     },

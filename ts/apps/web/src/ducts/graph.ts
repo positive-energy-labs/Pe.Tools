@@ -114,6 +114,7 @@ const ductCells = (families: CellsDecl<DuctsRouteDocument>[]): CellsDecl<DuctsRo
 
 export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
   seeds: {
+    layout: { title: "layout", load: () => import("./seeds").then((m) => m.ductsSeeds["layout"]!) },
     scene: { title: "scene", load: () => import("./seeds").then((m) => m.ductsSeeds["scene"]!) },
     colours: {
       title: "colours",
