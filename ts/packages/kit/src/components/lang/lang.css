@@ -714,6 +714,13 @@ tr.dl-row[data-active] {
 .dl-row[data-meta-fill] :is(.dl-row-meta, .dl-row-fact) {
   width: 100%;
 }
+/* Reserve actions even at rest so revealing them cannot move their hit targets. */
+.dl-row-line:has(> .dl-row-meta > .dl-row-actions) {
+  grid-template-columns: minmax(0, 1fr) max-content;
+}
+.dl-row-label:has(.dl-row-actions) {
+  min-width: min-content;
+}
 .dl-row-title,
 .dl-row-label,
 .dl-row-sub,
