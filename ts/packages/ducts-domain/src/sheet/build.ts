@@ -24,8 +24,21 @@ import {
   type LegInput,
   type PricedLeg,
 } from "../kernel/price-leg.ts";
-import { LOSS_RULES, ruleByKey, ruleWords, type FittingFacts, type LossRule } from "../loss-rules.ts";
-import { flowsOf, legKey, sharedTerminal, stateFlow, type FlowOptions, type Flows } from "./flow.ts";
+import {
+  LOSS_RULES,
+  ruleByKey,
+  ruleWords,
+  type FittingFacts,
+  type LossRule,
+} from "../loss-rules.ts";
+import {
+  flowsOf,
+  legKey,
+  sharedTerminal,
+  stateFlow,
+  type FlowOptions,
+  type Flows,
+} from "./flow.ts";
 import {
   SHEET_ENGINE_VERSION,
   type Blocker,
@@ -108,7 +121,8 @@ function candidatesFor(f: FittingFacts): FittingPricing["candidates"] {
       : f.partType === "Tee"
         ? /^(tee|junction)-/.test(r.key)
         : f.partType === "Elbow"
-          ? r.key.startsWith("elbow-") && (f.inlet.shape === "round") === r.family.startsWith("Round")
+          ? r.key.startsWith("elbow-") &&
+            (f.inlet.shape === "round") === r.family.startsWith("Round")
           : f.partType === "Transition"
             ? r.key.startsWith("trx-")
             : r.family === f.family;
@@ -155,7 +169,9 @@ class Pricer {
   }
   /** The census rows the given paths cross, in census order. */
   fittingsOn(paths: readonly SheetPath[]): FittingPricing[] {
-    const keys = new Set(paths.flatMap((p) => p.legIds.flatMap((id) => [...(this.censusOf.get(id) ?? [])])));
+    const keys = new Set(
+      paths.flatMap((p) => p.legIds.flatMap((id) => [...(this.censusOf.get(id) ?? [])])),
+    );
     return [...this.fittings.values()].filter((f) => keys.has(f.key));
   }
   /** A heal's proposed-fitting leg per main element its branch path continues into. */
@@ -266,14 +282,17 @@ class Pricer {
     if (s === 0 || isSegment(tap) || !isTap(tap)) return null;
     const parent = w.states[st.parent]!;
     const fromSide =
-      isSegment(parent.el) && parent.el.connectors.find((c) => c.index === st.via)?.kind === "curve";
+      isSegment(parent.el) &&
+      parent.el.connectors.find((c) => c.index === st.via)?.kind === "curve";
     if (fromSide) return null;
     const mainPort = tap.connectors.find((c) => c.index !== st.in);
-    const landing = w.states.findIndex((x, i) => i > 0 && x.parent === s && x.via === mainPort?.index);
+    const landing = w.states.findIndex(
+      (x, i) => i > 0 && x.parent === s && x.via === mainPort?.index,
+    );
     if (landing < 0) return null;
-    const ways = w.states[landing]!.el.connectors
-      .filter((c) => c.index !== w.states[landing]!.in)
-      .map((c) => ({ out: c.index, cfm: flows.leg.get(legKey(landing, c.index))?.cfm ?? 0 }));
+    const ways = w.states[landing]!.el.connectors.filter(
+      (c) => c.index !== w.states[landing]!.in,
+    ).map((c) => ({ out: c.index, cfm: flows.leg.get(legKey(landing, c.index))?.cfm ?? 0 }));
     return { landing, ways };
   }
 
@@ -387,7 +406,13 @@ class Pricer {
       rule: rule?.key ?? null,
       table: rule ? (chosen?.value.toUpperCase() ?? rule.table) : null,
       ruleSource: rule ? "matched" : "none",
-      tableSource: rule ? (chosen ? (chosen.source === "stored" ? "stored" : "typed") : "default") : null,
+      tableSource: rule
+        ? chosen
+          ? chosen.source === "stored"
+            ? "stored"
+            : "typed"
+          : "default"
+        : null,
       options: rule ? [...new Set([rule.table, ...rule.options])] : [],
       candidates: candidatesFor(facts),
       lossInWg: null,
@@ -684,24 +709,24 @@ class Pricer {
           ids: [],
         };
       const p = this.fit({
-          kind: "fitting",
+        kind: "fitting",
+        fitting: tap,
+        leg: "Cb",
+        flows: bullhead
+          ? { through: cfm, branch: modelled, upstreamMain: cfm, downstreamMain: cfm - modelled }
+          : divides
+            ? { through: cfm, branch: cfm, upstreamMain: total, downstreamMain: total - cfm }
+            : { through: cfm, branch: cfm, upstreamMain: mainCfm + cfm, downstreamMain: mainCfm },
+        facts: fittingFacts({
           fitting: tap,
-          leg: "Cb",
-          flows: bullhead
-            ? { through: cfm, branch: modelled, upstreamMain: cfm, downstreamMain: cfm - modelled }
-            : divides
-              ? { through: cfm, branch: cfm, upstreamMain: total, downstreamMain: total - cfm }
-              : { through: cfm, branch: cfm, upstreamMain: mainCfm + cfm, downstreamMain: mainCfm },
-          facts: fittingFacts({
-            fitting: tap,
-            inlet: tap.connectors.find((c) => c.index === st.in),
-            outlet: undefined,
-            main: receiving,
-            converging: split ? side === "return" : side === "supply",
-            // With loss-rules' bullhead-diverging-round (SD5-18), the two-way supply split is a
-            // diverging bullhead per path.
-            bullhead: bullhead || (divides && twoWay),
-          }),
+          inlet: tap.connectors.find((c) => c.index === st.in),
+          outlet: undefined,
+          main: receiving,
+          converging: split ? side === "return" : side === "supply",
+          // With loss-rules' bullhead-diverging-round (SD5-18), the two-way supply split is a
+          // diverging bullhead per path.
+          bullhead: bullhead || (divides && twoWay),
+        }),
       });
       return {
         p,
@@ -798,7 +823,8 @@ class Pricer {
         // The extension, then the one path through its proposed fitting this end takes.
         const own = [`heal:${h.proposal.pair.join("|")}:extension`];
         const toward = this.towardOf(w, h, chain, e);
-        const fitting = toward == null ? undefined : this.healPaths.get(h.proposal.pair.join("|"))?.get(toward);
+        const fitting =
+          toward == null ? undefined : this.healPaths.get(h.proposal.pair.join("|"))?.get(toward);
         if (fitting) own.push(fitting);
         legIds.splice(at, 0, ...own);
         for (const l of own) this.priced.get(l)?.blockerIds.forEach((b) => blockerIds.add(b));
@@ -911,7 +937,12 @@ class Pricer {
       const el = w.states[landing]!.el;
       return el.connectors.flatMap((c) =>
         flows.leg.has(legKey(landing, c.index))
-          ? [{ toward: c.connectedTo?.elementId ?? el.id, cfm: crossing(w, flows, landing, c.index) }]
+          ? [
+              {
+                toward: c.connectedTo?.elementId ?? el.id,
+                cfm: crossing(w, flows, landing, c.index),
+              },
+            ]
           : [],
       );
     }
@@ -931,7 +962,9 @@ class Pricer {
 
   /** The main element an end's path continues into past a heal's proposed fitting. */
   private towardOf(w: Walk, h: Walk["heals"][number], chain: number[], e: End): number | null {
-    const at = chain.findIndex((s) => w.states[s]!.parent === h.state && w.states[s]!.via === h.out);
+    const at = chain.findIndex(
+      (s) => w.states[s]!.parent === h.state && w.states[s]!.via === h.out,
+    );
     if (at < 0) return null;
     const kid = w.states[chain[at]!]!;
     if (h.proposal.kind !== "tap") return kid.el.id;
@@ -1135,7 +1168,11 @@ class Pricer {
       leg.lossSource = lossSourceOf(
         p.source,
         `; proposed ${proposal.kind} ${pairText}, branch toward ${d.toward}${
-          twoWay ? (side === "return" ? "; bullhead, both main sides feed it" : "; collar air divides both ways") : ""
+          twoWay
+            ? side === "return"
+              ? "; bullhead, both main sides feed it"
+              : "; collar air divides both ways"
+            : ""
         }`,
       );
     settle(t.ids, p);
@@ -1269,7 +1306,9 @@ type Port = Node["connectors"][number];
  */
 function proposedTransition(side: Side, source: Port, landing: Port, gapIn: number) {
   const dims = (c: Port) =>
-    c.shape === "round" ? [c.diameterIn ?? NaN, c.diameterIn ?? NaN] : [c.widthIn ?? NaN, c.heightIn ?? NaN];
+    c.shape === "round"
+      ? [c.diameterIn ?? NaN, c.diameterIn ?? NaN]
+      : [c.widthIn ?? NaN, c.heightIn ?? NaN];
   const [a, b] = [dims(source), dims(landing)];
   const half = Math.max(...a.map((v, i) => Math.abs(v - b[i]!) / 2));
   const angleDeg =
@@ -1456,10 +1495,16 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
   const terminalCfm = (id: number) => terminalCfmOf(input.inputs, id);
   const derived =
     assumeHeals && input.assumeServedFlow !== false
-      ? assumedFanFlows(input.snapshot, input.roster, terminalCfm, fnv(JSON.stringify(input.inputs.terminals)), {
-          rulings: opts.rulings,
-          endRulings: opts.endRulings,
-        })
+      ? assumedFanFlows(
+          input.snapshot,
+          input.roster,
+          terminalCfm,
+          fnv(JSON.stringify(input.inputs.terminals)),
+          {
+            rulings: opts.rulings,
+            endRulings: opts.endRulings,
+          },
+        )
       : new Map();
   // An unknown assumed flow (an unbounded ERV, 0 with a line) is no flow to split: shares stay no-flow.
   const known = (f: AssumedFlow | undefined) => (f && f.cfm > 0 ? f : null);
@@ -1530,7 +1575,11 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
     single(w) && other
       ? {
           ...onSide(w),
-          only: { end: lone(w)!, cfm: other, source: `balance; splitPolicy:${flowOpts.splitPolicy}` },
+          only: {
+            end: lone(w)!,
+            cfm: other,
+            source: `balance; splitPolicy:${flowOpts.splitPolicy}`,
+          },
         }
       : onSide(w);
   const retFirst = !!ret && single(supply.w);
@@ -1583,7 +1632,11 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
   const walked = new Set<number>();
   for (const w of [supply.w, ret?.w]) if (w) for (const id of w.depth.keys()) walked.add(id);
 
-  const note = (kind: SheetNote["kind"], text: string, value: SheetNote["value"] = null): SheetNote => ({
+  const note = (
+    kind: SheetNote["kind"],
+    text: string,
+    value: SheetNote["value"] = null,
+  ): SheetNote => ({
     kind,
     text,
     value,
@@ -1597,13 +1650,17 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
           Number(ref.split(":")[ref.startsWith("port:") ? 1 : 0]),
         ),
       )
-      .map(([ref, flow]) => note("assumed-flow", `fan ${ref} cfm (assumed): ${flow.source}`, flow.cfm)),
+      .map(([ref, flow]) =>
+        note("assumed-flow", `fan ${ref} cfm (assumed): ${flow.source}`, flow.cfm),
+      ),
     ...[
       ...supplyFlows.inflows.map((x) => [supply.w, x] as const),
       ...(returnFlows ? returnFlows.inflows.map((x) => [ret!.w, x] as const) : []),
     ].map(([w, x]) => {
       const e = w.ends[x.end]!.end;
-      const from = x.fan ? `${tagOf(x.fan.unitId) || "unit"} ${x.fan.unitId}:${x.fan.portIndex}` : "unnamed stream";
+      const from = x.fan
+        ? `${tagOf(x.fan.unitId) || "unit"} ${x.fan.unitId}:${x.fan.portIndex}`
+        : "unnamed stream";
       return note(
         "inflow",
         `inflow from ${from} at ${e.elementId}${assumeHeals ? " (assumed)" : ""}: ${x.source}`,
@@ -1625,46 +1682,45 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
       }),
     // R-SHARE: each sibling's draw on a shared terminal, then each shared terminal's consumers
     // summed against the flow it states (a cross-check, not the source).
-    ...[
-      [supply.w, supplyFlows] as const,
-      ...(ret ? [[ret.w, returnFlows!] as const] : []),
-    ].flatMap(([w, f]) => [
-      ...f.draws.map((d) => {
-        const fan = w.ends[d.sibling]!.end.fan!;
-        return note(
-          "sibling",
-          `sibling ${tagOf(fan.unitId) || "unit"} ${fan.unitId}:${fan.portIndex} draws ${d.cfm == null ? "an unknown flow" : `${round(d.cfm)} cfm`} from shared terminal ${w.ends[d.terminal]!.end.elementId}: ${d.source ?? "no design flow"}`,
-          d.cfm == null ? null : round(d.cfm),
-        );
-      }),
-      ...[...new Set(f.draws.map((d) => d.terminal))].flatMap((k) => {
-        const own = f.end[k];
-        const drawn = f.draws.filter((d) => d.terminal === k);
-        const id = w.ends[k]!.end.elementId;
-        // The flow the terminal states: its resolved design value, else Revit's own connector flow.
-        // History 6 bars Revit's flow as a per-terminal source; a cross-check only reads it (the
-        // Chadds louver 14088043 states 1120 there while its airflow slot is empty).
-        const resolved = input.inputs.terminals[String(id)]?.cfm;
-        const node = g.byId.get(id);
-        const revit = node && !isSegment(node) ? slotFlowOf(node, REVIT_FLOW_SLOT).cfm : null;
-        const stated: Resolved<number | null> | null =
-          resolved?.value != null
-            ? resolved
-            : revit != null
-              ? { value: revit, source: "revit", ref: "connector Flow" }
-              : null;
-        if (own == null || drawn.some((d) => d.cfm == null) || stated?.value == null) return [];
-        const sum = round(own + drawn.reduce((a, d) => a + d.cfm!, 0));
-        if (Math.abs(sum - stated.value) < 0.5) return [];
-        return [
-          note(
+    ...[[supply.w, supplyFlows] as const, ...(ret ? [[ret.w, returnFlows!] as const] : [])].flatMap(
+      ([w, f]) => [
+        ...f.draws.map((d) => {
+          const fan = w.ends[d.sibling]!.end.fan!;
+          return note(
             "sibling",
-            `shared terminal ${id}: consumers sum ${sum} cfm (this fan ${round(own)}, siblings ${drawn.map((d) => round(d.cfm!)).join(" + ")}); the terminal states ${stated.value} (${provenance(stated)})`,
-            sum,
-          ),
-        ];
-      }),
-    ]),
+            `sibling ${tagOf(fan.unitId) || "unit"} ${fan.unitId}:${fan.portIndex} draws ${d.cfm == null ? "an unknown flow" : `${round(d.cfm)} cfm`} from shared terminal ${w.ends[d.terminal]!.end.elementId}: ${d.source ?? "no design flow"}`,
+            d.cfm == null ? null : round(d.cfm),
+          );
+        }),
+        ...[...new Set(f.draws.map((d) => d.terminal))].flatMap((k) => {
+          const own = f.end[k];
+          const drawn = f.draws.filter((d) => d.terminal === k);
+          const id = w.ends[k]!.end.elementId;
+          // The flow the terminal states: its resolved design value, else Revit's own connector flow.
+          // History 6 bars Revit's flow as a per-terminal source; a cross-check only reads it (the
+          // Chadds louver 14088043 states 1120 there while its airflow slot is empty).
+          const resolved = input.inputs.terminals[String(id)]?.cfm;
+          const node = g.byId.get(id);
+          const revit = node && !isSegment(node) ? slotFlowOf(node, REVIT_FLOW_SLOT).cfm : null;
+          const stated: Resolved<number | null> | null =
+            resolved?.value != null
+              ? resolved
+              : revit != null
+                ? { value: revit, source: "revit", ref: "connector Flow" }
+                : null;
+          if (own == null || drawn.some((d) => d.cfm == null) || stated?.value == null) return [];
+          const sum = round(own + drawn.reduce((a, d) => a + d.cfm!, 0));
+          if (Math.abs(sum - stated.value) < 0.5) return [];
+          return [
+            note(
+              "sibling",
+              `shared terminal ${id}: consumers sum ${sum} cfm (this fan ${round(own)}, siblings ${drawn.map((d) => round(d.cfm!)).join(" + ")}); the terminal states ${stated.value} (${provenance(stated)})`,
+              sum,
+            ),
+          ];
+        }),
+      ],
+    ),
     // R-CAP: every open end the walk skipped on a person's capped ruling.
     ...[
       ...new Map(
@@ -1738,9 +1794,7 @@ export function buildSheet(input: BuildSheetInput): Sheet {
         l.id.startsWith(`heal:${b.proposal!.pair.join("|")}:`),
       );
     }
-  known.notes.push(
-    ...assumed.notes.filter((n) => n.kind === "heal" || n.kind === "assumed-flow"),
-  );
+  known.notes.push(...assumed.notes.filter((n) => n.kind === "heal" || n.kind === "assumed-flow"));
   // One row per fitting across both passes: the known pass's, unless the assumed pass could not
   // price it (an assumed-only blocker cites that row, so the row must say why).
   const rows = new Map(known.fittings.map((f) => [f.key, f]));
@@ -1807,13 +1861,23 @@ export function buildChain(input: BuildChainInput): Chain {
   for (const id of path?.legIds ?? []) legs[id] = pricer.legs[id]!;
   return {
     engineVersion: SHEET_ENGINE_VERSION,
-    basis: basisOf(input.snapshot, [input.start, input.end, input.direction, input.flowCfm, input.inputs]),
+    basis: basisOf(input.snapshot, [
+      input.start,
+      input.end,
+      input.direction,
+      input.flowCfm,
+      input.inputs,
+    ]),
     start: input.start,
     direction: input.direction,
     path,
     legs,
     blockers: [...pricer.blockers.values()].filter((b) => !path || path.blockerIds.includes(b.id)),
-    notes: [...pricer.autoJoinNotes].map((text) => ({ kind: "auto-join" as const, text, value: null })),
+    notes: [...pricer.autoJoinNotes].map((text) => ({
+      kind: "auto-join" as const,
+      text,
+      value: null,
+    })),
     fittings: path ? pricer.fittingsOn([path]) : [...pricer.fittings.values()],
     walkedElementIds: [...w.depth.keys()].sort((a, b) => a - b),
   };

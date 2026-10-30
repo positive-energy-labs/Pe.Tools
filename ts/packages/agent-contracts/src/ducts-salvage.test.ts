@@ -63,4 +63,3 @@ describe("salvageDuctsWork", () => {
     expect(out.dropped.length).toBeGreaterThan(0);
   });
 });
-

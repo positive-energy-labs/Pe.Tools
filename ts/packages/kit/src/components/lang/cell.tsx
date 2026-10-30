@@ -356,7 +356,6 @@ export function StateCell(props: StateCellProps) {
                   label: o.label,
                   ...(sub ? { sub, lines: 2 as const } : {}),
                   ...(o.disabled ? { refusal: o.disabled } : {}),
-                  
                 };
               }}
               onPick={(o) => {
@@ -366,7 +365,13 @@ export function StateCell(props: StateCellProps) {
                 if (o.key === props.choice!.current && props.stage !== "proposed") return;
                 const out = props.choice!.pick(o.key);
                 const settle = (refused: string | CellRefusal | null | void) =>
-                  setRefusal(refused == null ? null : typeof refused === "string" ? { message: refused } : refused);
+                  setRefusal(
+                    refused == null
+                      ? null
+                      : typeof refused === "string"
+                        ? { message: refused }
+                        : refused,
+                  );
                 if (out instanceof Promise) void out.then(settle);
                 else settle(out);
               }}

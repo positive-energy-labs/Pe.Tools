@@ -230,9 +230,11 @@ it("a complete sheet: required ESP = worst supply + worst return + allowances", 
     fan: { unitId: 100, portIndex: 0 },
     roster: [fanPort(100, 0, 1)],
     grids,
-    inputs: inputsFor(network, { endCfm: { 6: 200, 8: 100, 10: 300 }, drops: { 6: 0.05, 8: 0.08, 10: 0.03 }, allowanceInWg: { supply: 0.1, return: 0.05 } }),
-    
-    
+    inputs: inputsFor(network, {
+      endCfm: { 6: 200, 8: 100, 10: 300 },
+      drops: { 6: 0.05, 8: 0.08, 10: 0.03 },
+      allowanceInWg: { supply: 0.1, return: 0.05 },
+    }),
   });
   const R = friction(roundSection(8), 300, 20, 0.0003).dp + 0.03;
   const supply = sheet.paths.filter((p) => p.side === "supply");
@@ -258,7 +260,9 @@ it("a complete sheet: required ESP = worst supply + worst return + allowances", 
   // defect 6): both legs on duct 3 carry 300 up to tap 4; past it 200 runs on to grille 6, 100
   // leaves by the tap. The leaving flow is in the leg's flowSource.
   expect(sheet.legs["3:0>1"]).toMatchObject({ flowCfm: 300, kind: "duct" });
-  expect(sheet.legs["3:0>1"]!.flowSource).toContain("300 cfm where it enters, 200 cfm leaves by connector 1");
+  expect(sheet.legs["3:0>1"]!.flowSource).toContain(
+    "300 cfm where it enters, 200 cfm leaves by connector 1",
+  );
   expect(sheet.legs["3:0>2"]).toMatchObject({ flowCfm: 300 });
   expect(sheet.legs["3:0>2"]!.velocityFpm).toBeCloseTo(300 / roundSection(8).areaFt2, 6);
   expect(sheet.legs["4:0>1"]).toMatchObject({ flowCfm: 100 });
@@ -274,9 +278,11 @@ it("a complete sheet: required ESP = worst supply + worst return + allowances", 
     fan: { unitId: 100, portIndex: 0 },
     roster: [fanPort(100, 0, 1)],
     grids,
-    inputs: inputsFor(network, { endCfm: { 6: 200, 8: 100, 10: 300 }, drops: { 6: 0.05, 8: 0.08, 10: 0.03 }, allowanceInWg: { supply: 0.1, return: 0.05 } }),
-    
-    
+    inputs: inputsFor(network, {
+      endCfm: { 6: 200, 8: 100, 10: 300 },
+      drops: { 6: 0.05, 8: 0.08, 10: 0.03 },
+      allowanceInWg: { supply: 0.1, return: 0.05 },
+    }),
   });
   expect(again.basis).toBe(sheet.basis);
   const missing = buildSheet({
@@ -284,8 +290,10 @@ it("a complete sheet: required ESP = worst supply + worst return + allowances", 
     fan: { unitId: 100, portIndex: 0 },
     roster: [fanPort(100, 0, 1)],
     grids,
-    inputs: inputsFor(network, { endCfm: { 6: 200, 10: 300 }, drops: { 6: 0.05, 8: 0.08, 10: 0.03 } }),
-    
+    inputs: inputsFor(network, {
+      endCfm: { 6: 200, 10: 300 },
+      drops: { 6: 0.05, 8: 0.08, 10: 0.03 },
+    }),
   });
   expect(missing.basis).not.toBe(sheet.basis);
   // A terminal with no flow withholds every leg it shares, and the total.
@@ -295,7 +303,8 @@ it("a complete sheet: required ESP = worst supply + worst return + allowances", 
 });
 
 it("chain mode prices one asserted chain at a typed flow, with no ESP claim", () => {
-  const chain = buildChain({ roster: [],
+  const chain = buildChain({
+    roster: [],
     snapshot: network,
     start: { elementId: 100, connector: 0 },
     end: { elementId: 8 },
@@ -391,10 +400,16 @@ it("a side-stream into another fan's return ends at the merge without a class-ch
   // F's own 100 still lands there.
   const withG: SheetSnapshot = {
     ...sheetSnapshot1,
-    slots: { fanFlow: "PE_M_Fan_AirFlowDesign", terminalFlow: "PE_M_Grd_AirFlow" } as DuctSnapshot["slots"],
+    slots: {
+      fanFlow: "PE_M_Fan_AirFlowDesign",
+      terminalFlow: "PE_M_Grd_AirFlow",
+    } as DuctSnapshot["slots"],
     nodes: sheetSnapshot1.nodes.map((n) =>
       n.id === 400
-        ? { ...n, facts: [{ key: "fanFlow", value: 1200, unit: "cfm", provenance: "designer-stated" }] }
+        ? {
+            ...n,
+            facts: [{ key: "fanFlow", value: 1200, unit: "cfm", provenance: "designer-stated" }],
+          }
         : n,
     ) as Node[],
   };
@@ -454,7 +469,6 @@ it("an open end blocks its side; a vacant opposed port within the default gap au
     roster: [fanPort(500, 0, 1)],
     grids,
     inputs: inputsFor(sheetSnapshot2, { endCfm: { 54: 100 }, drops: { 54: 0.02 } }),
-    
   };
   const sheet = buildSheet(input);
   const supply = sheet.paths.find((p) => p.side === "supply")!;
@@ -480,7 +494,14 @@ it("an open end blocks its side; a vacant opposed port within the default gap au
   expect(ret.complete).toBe(true);
   expect(sheet.totals.requiredEspInWg).toBeNull();
   // A person's accept closes the join; the open supply end still withholds ESP.
-  const ruled = buildSheet({ ...input, inputs: inputsFor(input.snapshot, { endCfm: { 54: 100 }, drops: { 54: 0.02 }, rulings: [{ pair: ["52:1", "53:0"], verdict: "accept" }] }) });
+  const ruled = buildSheet({
+    ...input,
+    inputs: inputsFor(input.snapshot, {
+      endCfm: { 54: 100 },
+      drops: { 54: 0.02 },
+      rulings: [{ pair: ["52:1", "53:0"], verdict: "accept" }],
+    }),
+  });
   expect(ruled.paths.find((p) => p.side === "return")!.complete).toBe(true);
   expect(ruled.totals.return.worstPath).toBeCloseTo(
     friction(roundSection(6), 100, 10 + 10, 0.0003).dp + 0.02,
@@ -561,14 +582,18 @@ it("R-FACE: two walked stubs whose vacant ends face each other propose a join; w
         conn(1, null, round(6), "end", [7 - reach, 4, 0]),
       ],
     );
-    const sheetSnapshot3 = withHealth(snapshot([fan, grille, back, tap62, tap63], [trunk, stub64, stub65]));
-  return {
+    const sheetSnapshot3 = withHealth(
+      snapshot([fan, grille, back, tap62, tap63], [trunk, stub64, stub65]),
+    );
+    return {
       snapshot: sheetSnapshot3,
       fan: { unitId: 600, portIndex: 0 },
       roster: [fanPort(600, 0, 1)],
       grids: {},
-      inputs: inputsFor(sheetSnapshot3, { endCfm: { 70: 100, 71: 100 }, drops: { 70: 0.02, 71: 0.02 } }),
-      
+      inputs: inputsFor(sheetSnapshot3, {
+        endCfm: { 70: 100, 71: 100 },
+        drops: { 70: 0.02, 71: 0.02 },
+      }),
     };
   };
   const gaps = (s: ReturnType<typeof buildSheet>) =>
@@ -590,7 +615,11 @@ it("R-FACE: two walked stubs whose vacant ends face each other propose a join; w
   const input = facing(1.5);
   const ruled = buildSheet({
     ...input,
-    inputs: inputsFor(input.snapshot, { endCfm: { 70: 100, 71: 100 }, drops: { 70: 0.02, 71: 0.02 }, rulings: [{ pair: ["64:1", "65:1"], verdict: "accept" }] }),
+    inputs: inputsFor(input.snapshot, {
+      endCfm: { 70: 100, 71: 100 },
+      drops: { 70: 0.02, 71: 0.02 },
+      rulings: [{ pair: ["64:1", "65:1"], verdict: "accept" }],
+    }),
   });
   expect(gaps(ruled)).toEqual([]);
   expect(ruled.paths.map((p) => [p.end.kind, p.end.elementId])).toEqual([
@@ -605,9 +634,9 @@ it("R-FACE: two walked stubs whose vacant ends face each other propose a join; w
     ["terminal", 70],
     ["terminal", 71],
   ]);
-  expect(
-    close.notes.some((i) => i.text.includes("auto-joined 64:1 to 65:1 across 2.400 in")),
-  ).toBe(true);
+  expect(close.notes.some((i) => i.text.includes("auto-joined 64:1 to 65:1 across 2.400 in"))).toBe(
+    true,
+  );
   expect(close.walkedElementIds).toEqual(expect.arrayContaining([64, 65]));
 });
 
@@ -621,7 +650,8 @@ it.skipIf(!existsSync(CHADDS))(
     const roster = [...r.fans, ...r.suggestions];
     const port = roster.find((p) => p.unitId === 14577391)!;
     const sheet = buildSheet({
-      snapshot: snap, inputs: inputsFor(snap),
+      snapshot: snap,
+      inputs: inputsFor(snap),
       fan: { unitId: 14577391, portIndex: port.portIndex },
       roster,
       grids,
@@ -647,7 +677,9 @@ it.skipIf(!existsSync(CHADDS))(
       fan: { unitId: 14577391, portIndex: port.portIndex },
       roster,
       grids,
-      inputs: inputsFor(snap, { endCfm: { 14577391: 150, 6105264: 35, 6953852: 50, 13760867: 1200 } }),
+      inputs: inputsFor(snap, {
+        endCfm: { 14577391: 150, 6105264: 35, 6953852: 50, 13760867: 1200 },
+      }),
     });
     expect(asserted.fan.flowCfm).toBe(150);
     // The intake (damper to the capped plenum) at 150 cfm: W0-A's independent sum was 0.006478.
@@ -675,7 +707,15 @@ it("firm terminal drop is priced and visible; typed and catalog drops take prece
   }
   const typed = buildSheet({
     ...input,
-    inputs: inputsFor(input.snapshot, { endCfm: { 6: 200, 8: 100, 10: 300 }, drops: { 6: 0.07 }, firm: { ...TEST_FIRM, version: "firm-1", criteria: { ...TEST_FIRM.criteria, terminalDropInWg: 0.04 } } }),
+    inputs: inputsFor(input.snapshot, {
+      endCfm: { 6: 200, 8: 100, 10: 300 },
+      drops: { 6: 0.07 },
+      firm: {
+        ...TEST_FIRM,
+        version: "firm-1",
+        criteria: { ...TEST_FIRM.criteria, terminalDropInWg: 0.04 },
+      },
+    }),
   });
   expect(typed.legs["6:0>"]!.lossInWg).toBe(0.07);
   expect(typed.legs["8:0>"]!.lossInWg).toBe(0.04);
@@ -683,7 +723,14 @@ it("firm terminal drop is priced and visible; typed and catalog drops take prece
   catalog.nodes.find((n) => n.id === 8)!.terminalDrop = {
     catalogDropInWg: 0.09,
   } as Node["terminalDrop"];
-  const priced = buildSheet({ ...input, snapshot: catalog, inputs: inputsFor(catalog, { endCfm: { 6: 200, 8: 100, 10: 300 }, firm: { ...TEST_FIRM, criteria: { ...TEST_FIRM.criteria, terminalDropInWg: 0.04 } } }) });
+  const priced = buildSheet({
+    ...input,
+    snapshot: catalog,
+    inputs: inputsFor(catalog, {
+      endCfm: { 6: 200, 8: 100, 10: 300 },
+      firm: { ...TEST_FIRM, criteria: { ...TEST_FIRM.criteria, terminalDropInWg: 0.04 } },
+    }),
+  });
   expect(priced.legs["8:0>"]!.lossInWg).toBe(0.09);
   expect(priced.legs["6:0>"]!.lossSource.ref).toBe("firm:test");
 });
@@ -738,17 +785,25 @@ it("side-stream design flow: a receiving unit's design flow is its share at its 
   expect(shares.fan.flowCfm).toBe(300);
   expect(shares.legs["1:0>1"]!.flowCfm).toBe(300);
   expect([3, 4, 5].map((id) => shares.legs[`${id}:0>1`]!.flowCfm)).toEqual([50, 100, 150]);
-  expect(shares.legs["4:0>1"]!.flowSource).toContain("unit design flow revit:PE_M_Fan_AirFlowDesign");
+  expect(shares.legs["4:0>1"]!.flowSource).toContain(
+    "unit design flow revit:PE_M_Fan_AirFlowDesign",
+  );
   expect(shares.blockers.some((b) => b.kind === "no-flow")).toBe(false);
   // Typed over Revit: the typed share wins; the others keep theirs.
-  const typedOver = buildSheet({ ...input, inputs: inputsFor(snap, { drops: { 2: 0 }, endCfm: { 200: 30 } }) });
+  const typedOver = buildSheet({
+    ...input,
+    inputs: inputsFor(snap, { drops: { 2: 0 }, endCfm: { 200: 30 } }),
+  });
   expect([3, 4, 5].map((id) => typedOver.legs[`${id}:0>1`]!.flowCfm)).toEqual([30, 100, 150]);
   // Receivers with no design flow take the remainder by the policy.
   for (const id of [300, 400]) snap.nodes.find((n) => n.id === id)!.facts = [];
   const even = buildSheet({ ...input, inputs: inputsFor(snap, { drops: { 2: 0 } }) });
   expect([3, 4, 5].map((id) => even.legs[`${id}:0>1`]!.flowCfm)).toEqual([50, 125, 125]);
   expect(even.legs["4:0>1"]!.flowSource).toContain("splitPolicy:even");
-  const fallback = buildSheet({ ...input, inputs: inputsFor(snap, { drops: { 2: 0 }, splitPolicy: "proportional", endCfm: { 200: 50 } }) });
+  const fallback = buildSheet({
+    ...input,
+    inputs: inputsFor(snap, { drops: { 2: 0 }, splitPolicy: "proportional", endCfm: { 200: 50 } }),
+  });
   expect([3, 4, 5].map((id) => fallback.legs[`${id}:0>1`]!.flowCfm)).toEqual([50, 125, 125]);
   expect(fallback.legs["4:0>1"]!.flowSource).toContain("even (receiving fan design flow missing");
   expect(fallback.basis).not.toBe(even.basis);
@@ -756,15 +811,24 @@ it("side-stream design flow: a receiving unit's design flow is its share at its 
   snap.nodes.find((n) => n.id === 100)!.facts = [];
   const missing = buildSheet({ ...input, inputs: inputsFor(snap, { drops: { 2: 0 } }) });
   expect(missing.blockers.some((b) => b.kind === "no-flow")).toBe(true);
-  const typed = buildSheet({ ...input, inputs: inputsFor(snap, { drops: { 2: 0 }, endCfm: { 200: 30, 300: 40, 400: 50 } }) });
+  const typed = buildSheet({
+    ...input,
+    inputs: inputsFor(snap, { drops: { 2: 0 }, endCfm: { 200: 30, 300: 40, 400: 50 } }),
+  });
   expect(typed.fan.flowCfm).toBe(120);
   expect(typed.blockers.some((b) => b.kind === "no-flow")).toBe(false);
-  const over = buildSheet({ ...input, inputs: inputsFor(snap, { drops: { 2: 0 }, endCfm: { 100: 20, 200: 30 } }) });
+  const over = buildSheet({
+    ...input,
+    inputs: inputsFor(snap, { drops: { 2: 0 }, endCfm: { 100: 20, 200: 30 } }),
+  });
   expect(over.legs["3:0>1"]!.flowCfm).toBe(30);
   expect(over.blockers.some((b) => b.detail.includes("exceeds"))).toBe(true);
   // The closer on an "exceeds" row writes the receiving unit's design flow (equipmentFlows), the
   // one door that closes it (UAT 2026-10-29: a per-end flows cell on a unit is never read).
-  const closed = buildSheet({ ...input, inputs: inputsFor(snap, { drops: { 2: 0 }, endCfm: { 100: 20, 200: 30, 300: 40, 400: 50 } }) });
+  const closed = buildSheet({
+    ...input,
+    inputs: inputsFor(snap, { drops: { 2: 0 }, endCfm: { 100: 20, 200: 30, 300: 40, 400: 50 } }),
+  });
   expect(closed.blockers.some((b) => b.kind === "no-flow")).toBe(false);
   expect([3, 4, 5].map((id) => closed.legs[`${id}:0>1`]!.flowCfm)).toEqual([30, 40, 50]);
 });
@@ -894,7 +958,10 @@ it("a branch-entry tap onto this fan's own network is a split (R-Q4): the walk c
   const main8 = roundSection(8);
   // Air dividing both ways from the collar is a diverging bullhead: SD5-18 Cb1 per path (branch 1),
   // on branch 1's own velocity along the main (2026-10-30; the basis is verified in loss-rules.ts).
-  for (const [id, q] of [["2:1>0>4", 60], ["2:1>0>200", 40]] as const) {
+  for (const [id, q] of [
+    ["2:1>0>4", 60],
+    ["2:1>0>200", 40],
+  ] as const) {
     const leg = sheet.legs[id]!;
     expect(leg.flowCfm).toBe(q);
     expect(leg.velocityFpm).toBeCloseTo(q / main8.areaFt2, 6);
@@ -907,15 +974,25 @@ it("a branch-entry tap onto this fan's own network is a split (R-Q4): the walk c
   // fix6, one way (FC-23 takeoffs 13885163, 9448322, 9448375): all 100 cfm turns toward the
   // grille. Qc is the real collar total, Qb/Qc 1, never the branch plus the main it turns into
   // (100/200, which priced every one-way supply split at half its flow ratio).
-  const oneWay = buildSheet({ ...input, inputs: inputsFor(sheetSnapshot6, { endCfm: { 4: 100 } }) });
-  expect(oneWay.paths.find((p) => p.end.elementId === 4)!.legIds).toEqual(["1:0>1", "2:1>0", "3:2>1", "4:0>"]);
+  const oneWay = buildSheet({
+    ...input,
+    inputs: inputsFor(sheetSnapshot6, { endCfm: { 4: 100 } }),
+  });
+  expect(oneWay.paths.find((p) => p.end.elementId === 4)!.legIds).toEqual([
+    "1:0>1",
+    "2:1>0",
+    "3:2>1",
+    "4:0>",
+  ]);
   const turn = oneWay.legs["2:1>0"]!;
   expect(turn.flowCfm).toBe(100);
   const cb1 = lookupGrid(grids["SD5-9"]!.Cb!, 1, collar.areaFt2 / main8.areaFt2).value;
   expect(turn.lossSource.ref).toContain(`SD5-9 Cb=${+cb1.toFixed(6)}`);
   expect(turn.lossSource.ref).toContain("all 100 cfm turns one way along the main");
   expect(turn.lossInWg).toBeCloseTo(cb1 * 0.075 * (100 / collar.areaFt2 / 1097) ** 2, 4);
-  expect(sheet.notes.some((i) => i.kind === "merge" && i.text.startsWith("merge 2 branch loss:"))).toBe(false);
+  expect(
+    sheet.notes.some((i) => i.kind === "merge" && i.text.startsWith("merge 2 branch loss:")),
+  ).toBe(false);
   expect(sheet.paths.every((p) => p.complete)).toBe(true);
   const beyond = buildChain({
     ...input,
@@ -931,7 +1008,10 @@ it("an inline damper C# finds inside a walked duct is priced in series; without 
   // Fan 700:0 -> duct 71 (0..10 ft, +x) -> grille 73 at x 10. Damper 72 sits inside 71 at x 7,
   // its ports 0.06 in apart and connected to nothing (Project A 13568060; ruling 2026-10-29).
   const half = 0.03 / 12;
-  const fan = node(700, "equipment", { point: [0, 0, 0], connectors: [conn(0, [71, 0], round(8))] });
+  const fan = node(700, "equipment", {
+    point: [0, 0, 0],
+    connectors: [conn(0, [71, 0], round(8))],
+  });
   const host = duct(
     71,
     10,
@@ -995,7 +1075,11 @@ it("R-SHARE: a louver shared with a sibling's inlet carries both consumers; this
   });
   const tee = node(12, "fitting", {
     partType: "Tee",
-    connectors: [conn(0, [11, 1], round(10)), conn(1, [13, 0], round(12)), conn(2, [14, 0], round(6))],
+    connectors: [
+      conn(0, [11, 1], round(10)),
+      conn(1, [13, 0], round(12)),
+      conn(2, [14, 0], round(6)),
+    ],
   });
   const louver = node(30, "terminal", {
     family: "Outdoor Louver",
@@ -1076,7 +1160,10 @@ it("R-SHARE: a louver shared with a sibling's inlet carries both consumers; this
   ]);
 
   // A sibling with no design flow withholds the shared section with a no-flow of its own.
-  const unknownSnap = snapshot([muas, { ...erv, facts: [] }, tee, louver, grille20, grille40], [d11, d13, d14]);
+  const unknownSnap = snapshot(
+    [muas, { ...erv, facts: [] }, tee, louver, grille20, grille40],
+    [d11, d13, d14],
+  );
   const unknown = buildSheet({
     snapshot: unknownSnap,
     fan: { unitId: 100, portIndex: 1 },
@@ -1090,7 +1177,9 @@ it("R-SHARE: a louver shared with a sibling's inlet carries both consumers; this
     [13, null],
     [30, null],
   ]);
-  expect(unknown.blockers.filter((b) => b.kind === "no-flow").map((b) => b.elementId)).toEqual([200]);
+  expect(unknown.blockers.filter((b) => b.kind === "no-flow").map((b) => b.elementId)).toEqual([
+    200,
+  ]);
 });
 
 it("R-SHARE + C3: a proposed transition in front of a shared plenum carries this fan's own flow, not the plenum's sum; the louver's Revit flow is the cross-check", () => {
@@ -1217,7 +1306,9 @@ it("R-SHARE + C3: a proposed transition in front of a shared plenum carries this
 // MUAS-1's sheet at loss 0 with no rule: the walk priced a heal whose landing it had already
 // walked, so no end of MUAS-1 crosses it. The census is the fittings this fan's paths cross.
 const GROUNDING = "C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/tmp/muas-grounding/";
-it.skipIf(!existsSync(`${GROUNDING}from-muas-t.json`) || !existsSync(`${GROUNDING}from-louver.json`))(
+it.skipIf(
+  !existsSync(`${GROUNDING}from-muas-t.json`) || !existsSync(`${GROUNDING}from-louver.json`),
+)(
   "MUAS-1's fittings census lists only fittings its paths cross",
   () => {
     const load = (n: string) =>
@@ -1226,7 +1317,8 @@ it.skipIf(!existsSync(`${GROUNDING}from-muas-t.json`) || !existsSync(`${GROUNDIN
       b = load("from-louver");
     const union = <T extends { id: number; reason?: string | null }>(x: T[], y: T[]) => {
       const m = new Map(x.map((e) => [e.id, e]));
-      for (const e of y) if (!m.has(e.id) || (m.get(e.id)!.reason ?? "walked") !== "walked") m.set(e.id, e);
+      for (const e of y)
+        if (!m.has(e.id) || (m.get(e.id)!.reason ?? "walked") !== "walked") m.set(e.id, e);
       return [...m.values()];
     };
     const snap = {
@@ -1246,7 +1338,9 @@ it.skipIf(!existsSync(`${GROUNDING}from-muas-t.json`) || !existsSync(`${GROUNDIN
       }),
     });
     // The walk did price the cut heal: its legs exist, on no path.
-    expect(Object.keys(sheet.assumed.legs).some((id) => id.startsWith("heal:13771256:0|13771267:1"))).toBe(true);
+    expect(
+      Object.keys(sheet.assumed.legs).some((id) => id.startsWith("heal:13771256:0|13771267:1")),
+    ).toBe(true);
     const keys = sheet.fittings.map((f) => f.key);
     expect(keys.filter((k) => k.includes("13771256"))).toEqual([]);
     expect(new Set(keys).size).toBe(keys.length);

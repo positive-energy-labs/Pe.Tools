@@ -1,6 +1,12 @@
 import { expect, test } from "vite-plus/test";
 import type { SubjectKey } from "@pe/kit/lang/attention";
-import { captureRequest, hoverGroupsOf, jumpSubject, markPick, membersWithStrands } from "./picture";
+import {
+  captureRequest,
+  hoverGroupsOf,
+  jumpSubject,
+  markPick,
+  membersWithStrands,
+} from "./picture";
 
 test("focus captures walked and near once, sorted; context layers ask context", () => {
   const focus = {

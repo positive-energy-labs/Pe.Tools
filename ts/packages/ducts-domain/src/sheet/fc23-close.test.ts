@@ -64,7 +64,16 @@ function closeFromPage(input: BuildSheetInput, seed: ConnectorPairRuling[] = [])
   const drops: Record<number, number> = {};
   const fittingDrops: Record<string, number> = {};
   const read = () =>
-    buildSheet({ ...input, inputs: inputsFor(input.snapshot, { slot: "revit:Flow", endRulings: input.inputs.rulings.ends, rulings, drops, fittingDrops }) });
+    buildSheet({
+      ...input,
+      inputs: inputsFor(input.snapshot, {
+        slot: "revit:Flow",
+        endRulings: input.inputs.rulings.ends,
+        rulings,
+        drops,
+        fittingDrops,
+      }),
+    });
   let closed = read();
   for (let round = 0; round < 8; round++) {
     let changed = false;
@@ -195,7 +204,10 @@ it.skipIf(!existsSync(CHADDS))(
     const endRulings: EndRuling[] = [
       { end: { elementId: 8734004, connector: 1 }, verdict: "capped" },
     ];
-    const capped = buildSheet({ ...input, inputs: inputsFor(snap, { slot: "revit:Flow", endRulings }) });
+    const capped = buildSheet({
+      ...input,
+      inputs: inputsFor(snap, { slot: "revit:Flow", endRulings }),
+    });
     expect(
       [...capped.blockers, ...capped.assumed.blockers].some((b) => b.elementId === 8734004),
     ).toBe(false);
@@ -211,7 +223,10 @@ it.skipIf(!existsSync(CHADDS))(
 
     // Close from the page: accept every proposal and inferred-join candidate as it appears, type
     // every unknown drop, cap 8734004:1, and nothing else.
-    const blind = closeFromPage({ ...input, inputs: inputsFor(snap, { slot: "revit:Flow", endRulings }) });
+    const blind = closeFromPage({
+      ...input,
+      inputs: inputsFor(snap, { slot: "revit:Flow", endRulings }),
+    });
     expect(blind.rulings.map((r) => r.pair.join(">"))).toEqual([
       "13771256:0>13771267:1",
       "14517389:0>14663504:0",
@@ -245,7 +260,17 @@ it.skipIf(!existsSync(CHADDS))(
         .sort((a, b) => a - b);
     expect(returnTerminals(blind.closed)).toEqual([13884018, 14584961, 14663850]);
     // Completeness for real, on the constant grid stub: zero blockers of any kind, both sides complete.
-    const blindPriced = buildSheet({ ...input, grids: stubGrids, inputs: inputsFor(snap, { slot: "revit:Flow", endRulings, rulings: blind.rulings, drops: blind.drops, fittingDrops: blind.fittingDrops }) });
+    const blindPriced = buildSheet({
+      ...input,
+      grids: stubGrids,
+      inputs: inputsFor(snap, {
+        slot: "revit:Flow",
+        endRulings,
+        rulings: blind.rulings,
+        drops: blind.drops,
+        fittingDrops: blind.fittingDrops,
+      }),
+    });
     expect(blindPriced.blockers).toEqual([]);
     expect(blindPriced.assumed.blockers).toEqual([]);
     expect(blindPriced.totals.supply.complete && blindPriced.totals.return.complete).toBe(true);
@@ -265,17 +290,30 @@ it.skipIf(!existsSync(CHADDS))(
 
     // The per-plenum closure: accept each stub's own grille first (the pair each inferred-join
     // names once its stub neighbour is taken), then the same loop. Each plenum ends at its grille.
-    const seeded = closeFromPage({ ...input, inputs: inputsFor(snap, { slot: "revit:Flow", endRulings }) }, [
-      { pair: ["14517389:0", "14548688:1"], verdict: "accept" },
-      { pair: ["14663504:0", "14663834:1"], verdict: "accept" },
-      { pair: ["14663546:0", "14663850:1"], verdict: "accept" },
-    ]);
+    const seeded = closeFromPage(
+      { ...input, inputs: inputsFor(snap, { slot: "revit:Flow", endRulings }) },
+      [
+        { pair: ["14517389:0", "14548688:1"], verdict: "accept" },
+        { pair: ["14663504:0", "14663834:1"], verdict: "accept" },
+        { pair: ["14663546:0", "14663850:1"], verdict: "accept" },
+      ],
+    );
     expect(ids(seeded.closed.blockers)).toEqual([]);
     expect(ids(seeded.closed.assumed.blockers)).toEqual([]);
     expect(returnTerminals(seeded.closed)).toEqual([
       13884018, 14548688, 14584961, 14663834, 14663850,
     ]);
-    const seededPriced = buildSheet({ ...input, grids: stubGrids, inputs: inputsFor(snap, { slot: "revit:Flow", endRulings, rulings: seeded.rulings, drops: seeded.drops, fittingDrops: seeded.fittingDrops }) });
+    const seededPriced = buildSheet({
+      ...input,
+      grids: stubGrids,
+      inputs: inputsFor(snap, {
+        slot: "revit:Flow",
+        endRulings,
+        rulings: seeded.rulings,
+        drops: seeded.drops,
+        fittingDrops: seeded.fittingDrops,
+      }),
+    });
     expect(seededPriced.blockers).toEqual([]);
     expect(seededPriced.totals.supply.complete && seededPriced.totals.return.complete).toBe(true);
     // 0.7079 -> 0.8062 the same evening: converging tap Cb re-referenced to the common section;
@@ -401,7 +439,13 @@ it.skipIf(!existsSync(CHADDS))(
   () => {
     const { snap, roster } = load();
     const inputs = inputsFor(snap, { slot: "revit:Flow" });
-    const flows = assumedFanFlows(snap, roster, (id) => inputs.terminals[String(id)]?.cfm.value ?? null, JSON.stringify(inputs.terminals), {});
+    const flows = assumedFanFlows(
+      snap,
+      roster,
+      (id) => inputs.terminals[String(id)]?.cfm.value ?? null,
+      JSON.stringify(inputs.terminals),
+      {},
+    );
     const fc = flows.get(`${FC23}:1`)!;
     const rv25 = flows.get(`${RV25}:2`)!;
     const rv7 = flows.get(`${RV7}:2`)!;
@@ -457,9 +501,7 @@ it.skipIf(!existsSync(CHADDS))(
       kind: "rule",
       ref: expect.stringMatching(/^tap-converging-rect ER5-2 Cb=/),
     });
-    expect(
-      sheet.notes.some((i) => /diverging-table/.test(i.text)),
-    ).toBe(false);
+    expect(sheet.notes.some((i) => /diverging-table/.test(i.text))).toBe(false);
 
     // 3. The supply's round volume damper 13493795 is no longer the 1.0 in-wg "designer-stated" row:
     // fully open CD9-1 (Co 0.19 at Theta 0), one input line per demoted family.
@@ -472,8 +514,16 @@ it.skipIf(!existsSync(CHADDS))(
       ["Damper_Volume_Square", 49],
     ] as const)
       expect(
-        snap.nodes.filter((node) => node.family === family).map((node) => input.inputs.components[String(node.id)]?.drop),
-      ).toEqual(Array.from({ length: n }, () => ({ value: null, source: "none", ref: `family placeholder 1 on ${n}` })));
+        snap.nodes
+          .filter((node) => node.family === family)
+          .map((node) => input.inputs.components[String(node.id)]?.drop),
+      ).toEqual(
+        Array.from({ length: n }, () => ({
+          value: null,
+          source: "none",
+          ref: `family placeholder 1 on ${n}`,
+        })),
+      );
 
     // A demoted family no rule prices raises unknown-drop with the family default in its note.
     const renamed = {
@@ -482,12 +532,15 @@ it.skipIf(!existsSync(CHADDS))(
         n.family === "Damper_Volume_Round" ? { ...n, family: "Volume Widget" } : n,
       ),
     };
-    const widget = buildSheet({ ...input, snapshot: renamed, inputs: inputsFor(renamed, { slot: "revit:Flow" }) });
+    const widget = buildSheet({
+      ...input,
+      snapshot: renamed,
+      inputs: inputsFor(renamed, { slot: "revit:Flow" }),
+    });
     expect(widget.blockers).toContainEqual(
       expect.objectContaining({
         id: "unknown-drop:13493795",
-        detail:
-          "accessory has no drop (family placeholder 1 on 252; type the real drop)",
+        detail: "accessory has no drop (family placeholder 1 on 252; type the real drop)",
       }),
     );
   },

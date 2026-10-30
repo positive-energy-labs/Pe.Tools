@@ -94,7 +94,14 @@ export const ductsCriteriaEditsSchema = z.strictObject({
   allowanceInWg: sided(nonneg.nullable().optional()).optional(),
 });
 export type DuctsCriteriaEdits = z.infer<typeof ductsCriteriaEditsSchema>;
-export const DUCT_UNIT_KINDS = ["fan-coil", "air-handler", "erv", "muas", "dehumidifier", "other"] as const;
+export const DUCT_UNIT_KINDS = [
+  "fan-coil",
+  "air-handler",
+  "erv",
+  "muas",
+  "dehumidifier",
+  "other",
+] as const;
 export type DuctUnitKind = (typeof DUCT_UNIT_KINDS)[number];
 const unitRole = z.enum(["fan", "passive"]);
 export const joinRulingSchema = z.strictObject({
@@ -187,9 +194,7 @@ export const ductsSheetEditsSchema = z.strictObject({
     )
     .optional(),
   ends: z
-    .array(
-      z.strictObject({ end: endRulingSchema.shape.end, verdict: z.enum(["capped", "clear"]) }),
-    )
+    .array(z.strictObject({ end: endRulingSchema.shape.end, verdict: z.enum(["capped", "clear"]) }))
     .optional(),
 });
 export type DuctsSheetEdits = z.infer<typeof ductsSheetEditsSchema>;
@@ -355,7 +360,9 @@ const fittingPricingFields = {
   ruleSource: z.enum(["matched", "assigned", "none"]),
   tableSource: z.enum(["default", "fallback", "typed", "stored"]).nullable(),
   options: z.array(z.string()),
-  candidates: z.array(z.object({ rule: z.string(), words: z.string(), tables: z.array(z.string()) })),
+  candidates: z.array(
+    z.object({ rule: z.string(), words: z.string(), tables: z.array(z.string()) }),
+  ),
   lossInWg: z.number().nullable(),
   /** Why it is not priced; null when priced. */
   unpriced: z.string().nullable(),

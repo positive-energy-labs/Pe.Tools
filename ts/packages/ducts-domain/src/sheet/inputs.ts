@@ -107,7 +107,10 @@ export const EDIT_SEGMENTS = {
  */
 export function editCells(edits: DuctsSheetEdits): string[][] {
   const cells: string[][] = [];
-  for (const [field, segment] of Object.entries(EDIT_SEGMENTS) as [keyof typeof EDIT_SEGMENTS, string][])
+  for (const [field, segment] of Object.entries(EDIT_SEGMENTS) as [
+    keyof typeof EDIT_SEGMENTS,
+    string,
+  ][])
     for (const key of Object.keys(edits[field] ?? {})) cells.push([segment, key]);
   if (edits.criteria) cells.push(["criteria"]);
   for (const { pair } of edits.joins ?? []) cells.push(["assumptions", JOIN_KEY(pair)]);
@@ -146,7 +149,11 @@ export function resolveCriteria(
   type Scalar = Exclude<keyof DuctsCriteriaValues, Sided>;
   type Sided = "velocityLimitFpm" | "allowanceInWg";
   const layered = <T>(typed: T | undefined, stored: T | undefined, base: T): Resolved<T> =>
-    typed !== undefined ? r(typed, "project") : stored !== undefined ? r(stored, "stored") : r(base, "firm", firm.version);
+    typed !== undefined
+      ? r(typed, "project")
+      : stored !== undefined
+        ? r(stored, "stored")
+        : r(base, "firm", firm.version);
   const criterion = <K extends Scalar>(key: K): Resolved<DuctsCriteriaValues[K]> =>
     layered(
       work?.criteria?.[key] as DuctsCriteriaValues[K] | undefined,
@@ -155,8 +162,16 @@ export function resolveCriteria(
     );
   // Each side resolves on its own: typing return keeps supply's source (ducts LEDGER, sided criteria).
   const sided = (key: Sided) => ({
-    supply: layered(work?.criteria?.[key]?.supply, store?.criteria?.[key]?.supply, firm.criteria[key].supply),
-    return: layered(work?.criteria?.[key]?.return, store?.criteria?.[key]?.return, firm.criteria[key].return),
+    supply: layered(
+      work?.criteria?.[key]?.supply,
+      store?.criteria?.[key]?.supply,
+      firm.criteria[key].supply,
+    ),
+    return: layered(
+      work?.criteria?.[key]?.return,
+      store?.criteria?.[key]?.return,
+      firm.criteria[key].return,
+    ),
   });
   return {
     velocityLimitFpm: sided("velocityLimitFpm"),
@@ -325,7 +340,14 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
   };
 }
 
-const KINDS: readonly string[] = ["fan-coil", "air-handler", "erv", "muas", "dehumidifier", "other"];
+const KINDS: readonly string[] = [
+  "fan-coil",
+  "air-handler",
+  "erv",
+  "muas",
+  "dehumidifier",
+  "other",
+];
 const isKind = (v: string | undefined): v is DuctUnitKind => v != null && KINDS.includes(v);
 const isRole = (v: string | undefined): v is "fan" | "passive" => v === "fan" || v === "passive";
 

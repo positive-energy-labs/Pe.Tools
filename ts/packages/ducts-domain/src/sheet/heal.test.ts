@@ -82,7 +82,8 @@ it("extends a join on the assumed walk, charges gap friction, and only an accept
   const snapshot = fixture();
   const sheetSnapshot1 = withHealth(snapshot);
   const input = {
-    snapshot: sheetSnapshot1, inputs: inputsFor(sheetSnapshot1),
+    snapshot: sheetSnapshot1,
+    inputs: inputsFor(sheetSnapshot1),
     roster,
     fan: { unitId: 100, portIndex: 0 },
     grids: {},
@@ -104,11 +105,17 @@ it("extends a join on the assumed walk, charges gap friction, and only an accept
     8,
   );
   expect(snapshot.segments[0]!.connectors[1]!.connectedTo).toBeNull();
-  const accepted = buildSheet({ ...input, inputs: inputsFor(input.snapshot, { rulings: [{ pair: proposal.pair, verdict: "accept" }] }) });
+  const accepted = buildSheet({
+    ...input,
+    inputs: inputsFor(input.snapshot, { rulings: [{ pair: proposal.pair, verdict: "accept" }] }),
+  });
   expect(accepted.blockers).toEqual([]);
   expect(accepted.totals.requiredEspInWg).toBeCloseTo(expected, 6);
   expect(accepted.basis).not.toBe(sheet.basis);
-  const rejected = buildSheet({ ...input, inputs: inputsFor(input.snapshot, { rulings: [{ pair: proposal.pair, verdict: "reject" }] }) });
+  const rejected = buildSheet({
+    ...input,
+    inputs: inputsFor(input.snapshot, { rulings: [{ pair: proposal.pair, verdict: "reject" }] }),
+  });
   expect(rejected.totals.requiredEspAssumedInWg).toBeNull();
   expect(rejected.blockers.some((b) => b.proposal?.pair.join() === proposal.pair.join())).toBe(
     false,
@@ -182,7 +189,10 @@ it("proposes a duct-body tap and walks on through the landing duct both ways (R-
     ...input,
     inputs: inputsFor(input.snapshot, {
       endCfm: { 300: 50, 400: 50 },
-      fittingDrops: { [PROPOSED_KEY(proposal.pair, 300)]: 0.02, [PROPOSED_KEY(proposal.pair, 400)]: 0.05 },
+      fittingDrops: {
+        [PROPOSED_KEY(proposal.pair, 300)]: 0.02,
+        [PROPOSED_KEY(proposal.pair, 400)]: 0.05,
+      },
     }),
   });
   const known = (end: number) =>
@@ -202,7 +212,10 @@ it("proposes a duct-body tap and walks on through the landing duct both ways (R-
     ...input,
     inputs: inputsFor(input.snapshot, {
       endCfm: { 300: 50, 400: 50 },
-      fittingDrops: { [PROPOSED_KEY(proposal.pair, 300)]: 0.02, [PROPOSED_KEY(proposal.pair, 400)]: 0.05 },
+      fittingDrops: {
+        [PROPOSED_KEY(proposal.pair, 300)]: 0.02,
+        [PROPOSED_KEY(proposal.pair, 400)]: 0.05,
+      },
       rulings: [{ pair: proposal.pair, verdict: "accept" }],
     }),
   });
@@ -210,7 +223,11 @@ it("proposes a duct-body tap and walks on through the landing duct both ways (R-
   // With the tables, each path is priced by its auto-matched takeoff table, at its own share: the
   // collar's 100 cfm divides both ways, so each path reads the diverging table at Qb/Qc 0.5.
   if (grids["SD5-9"]) {
-    const tabled = buildSheet({ ...input, grids, inputs: inputsFor(input.snapshot, { endCfm: { 300: 50, 400: 50 } }) });
+    const tabled = buildSheet({
+      ...input,
+      grids,
+      inputs: inputsFor(input.snapshot, { endCfm: { 300: 50, 400: 50 } }),
+    });
     const rows = tabled.fittings.filter((f) => f.proposed?.kind === "tap");
     expect(rows.map((f) => [f.proposed!.toward, f.rule, f.table, f.ruleSource]).sort()).toEqual([
       [300, "tap-std", "SD5-9", "matched"],
@@ -231,7 +248,8 @@ it("occupied mouths require a risky tee, preserve both branches, and cross-air-t
   );
   const sheetSnapshot3 = withHealth(snapshot);
   const input = {
-    snapshot: sheetSnapshot3, inputs: inputsFor(sheetSnapshot3),
+    snapshot: sheetSnapshot3,
+    inputs: inputsFor(sheetSnapshot3),
     roster,
     fan: { unitId: 100, portIndex: 0 },
     grids: {},
@@ -247,7 +265,9 @@ it("occupied mouths require a risky tee, preserve both branches, and cross-air-t
   // The tee is a fitting on its table (none loaded here), not a combined drop on the open end.
   expect(sheet.assumed.blockers.some((b) => b.kind === "unknown-drop")).toBe(false);
   expect(
-    sheet.assumed.blockers.some((b) => b.kind === "not-priced" && b.fitting?.startsWith("proposed:")),
+    sheet.assumed.blockers.some(
+      (b) => b.kind === "not-priced" && b.fitting?.startsWith("proposed:"),
+    ),
   ).toBe(true);
   for (const c of snapshot.segments[1]!.connectors) c.classification = "ReturnAir";
   // Unruled, a crossing is never proposed, even on the assumed walk (W0-A rule 2 holds).
@@ -276,12 +296,18 @@ it("a capped mouth 2.6 in from an open end proposes replacing the cap with a tra
   // here an 8 in round end 2.6 in from a 30x30 duct whose facing connector carries cap 900.
   const snapshot = fixture();
   const gap = 2.6 / 12;
-  const rect = (p: Port) => Object.assign(p, { shape: "rectangular", diameterIn: undefined, widthIn: 30, heightIn: 30 });
+  const rect = (p: Port) =>
+    Object.assign(p, { shape: "rectangular", diameterIn: undefined, widthIn: 30, heightIn: 30 });
   snapshot.segments[1] = {
-    ...duct(2, [4 + gap, 0, 0], [8, 0, 0], [
-      rect(port(0, [4 + gap, 0, 0], [-1, 0, 0], [900, 0])),
-      rect(port(1, [8, 0, 0], [1, 0, 0], [200, 0])),
-    ]),
+    ...duct(
+      2,
+      [4 + gap, 0, 0],
+      [8, 0, 0],
+      [
+        rect(port(0, [4 + gap, 0, 0], [-1, 0, 0], [900, 0])),
+        rect(port(1, [8, 0, 0], [1, 0, 0], [200, 0])),
+      ],
+    ),
     shape: "rectangular",
     diameterIn: undefined,
     widthIn: 30,
@@ -293,7 +319,13 @@ it("a capped mouth 2.6 in from an open end proposes replacing the cap with a tra
     ]) as unknown as DuctSnapshot["nodes"][number],
   );
   const s = withHealth(snapshot);
-  const input = { snapshot: s, inputs: inputsFor(s), roster, fan: { unitId: 100, portIndex: 0 }, grids };
+  const input = {
+    snapshot: s,
+    inputs: inputsFor(s),
+    roster,
+    fan: { unitId: 100, portIndex: 0 },
+    grids,
+  };
   const sheet = buildSheet(input);
   const proposals = sheet.blockers.flatMap((b) => (b.proposal ? [b.proposal] : []));
   expect(proposals.some((p) => p.kind === "tee")).toBe(false);
@@ -325,7 +357,9 @@ it("a capped mouth 2.6 in from an open end proposes replacing the cap with a tra
   expect(fittingPricingSchema.array().safeParse(sheet.fittings).error?.issues ?? []).toEqual([]);
   const path = sheet.assumed.paths.find((x) => x.end.elementId === 200)!;
   expect(path.complete).toBe(true);
-  const fittingLegs = path.legIds.filter((id) => id.startsWith("heal:") && id.includes(":fitting>"));
+  const fittingLegs = path.legIds.filter(
+    (id) => id.startsWith("heal:") && id.includes(":fitting>"),
+  );
   expect(fittingLegs).toEqual([`heal:1:1|2:0:fitting>2`]);
   expect(sheet.assumed.legs[fittingLegs[0]!]!.lossSource.ref).toMatch(/^trx-grille SR4-3 /);
   // A typed drop on that one path stands in for the table.
@@ -355,7 +389,8 @@ it("derived served-terminal flow supplies assumed ESP, preserves missing designe
   ];
   const sheetSnapshot4 = withHealth(snapshot);
   const input = {
-    snapshot: sheetSnapshot4, inputs: inputsFor(sheetSnapshot4),
+    snapshot: sheetSnapshot4,
+    inputs: inputsFor(sheetSnapshot4),
     roster: [...roster, { ...roster[0]!, unitId: 400 }],
     fan: { unitId: 100, portIndex: 0 },
     grids: {},
@@ -380,7 +415,11 @@ it("derived served-terminal flow supplies assumed ESP, preserves missing designe
   const fallbackSnapshot = structuredClone(snapshot);
   for (const n of fallbackSnapshot.nodes) n.facts = [];
   fallbackSnapshot.nodes[0]!.connectors[0]!.flowCfm = 90;
-  const fallback = buildSheet({ ...input, snapshot: fallbackSnapshot, inputs: inputsFor(fallbackSnapshot) });
+  const fallback = buildSheet({
+    ...input,
+    snapshot: fallbackSnapshot,
+    inputs: inputsFor(fallbackSnapshot),
+  });
   expect(fallback.notes.some((i) => i.text.includes("unit connector flowCfm (assumed)"))).toBe(
     true,
   );
@@ -398,14 +437,18 @@ it("an accepted pair takes priority over a nearer automatic join", () => {
   );
   const sheetSnapshot5 = withHealth(snapshot);
   const input = {
-    snapshot: sheetSnapshot5, inputs: inputsFor(sheetSnapshot5),
+    snapshot: sheetSnapshot5,
+    inputs: inputsFor(sheetSnapshot5),
     roster,
     fan: { unitId: 100, portIndex: 0 },
     grids: {},
   };
   const ordinary = buildSheet(input);
   expect(ordinary.paths.some((p) => p.end.elementId === 250)).toBe(true);
-  const accepted = buildSheet({ ...input, inputs: inputsFor(input.snapshot, { rulings: [{ pair: ["1:1", "2:0"], verdict: "accept" }] }) });
+  const accepted = buildSheet({
+    ...input,
+    inputs: inputsFor(input.snapshot, { rulings: [{ pair: ["1:1", "2:0"], verdict: "accept" }] }),
+  });
   expect(accepted.paths.some((p) => p.end.elementId === 200)).toBe(true);
   expect(accepted.paths.some((p) => p.end.elementId === 250)).toBe(false);
 });
@@ -440,7 +483,9 @@ it("a proposed join's turn at the fan root is priced on its path, not by the uni
     roster,
     fan: { unitId: 100, portIndex: 0 },
     grids: {},
-    inputs: inputsFor(sheetSnapshot6, { fittingDrops: { [PROPOSED_KEY(proposal.pair, 200)]: 0.02 } }),
+    inputs: inputsFor(sheetSnapshot6, {
+      fittingDrops: { [PROPOSED_KEY(proposal.pair, 200)]: 0.02 },
+    }),
   });
   expect(typed.totals.requiredEspAssumedInWg).toBeCloseTo(
     0.08 + friction(roundSection(8), 100, 1, 0.0003).dp,
@@ -459,7 +504,13 @@ it.skipIf(!existsSync(retained))(
     const r = suggestRoster(snapshot),
       roster = [...r.fans, ...r.suggestions];
     const results = roster.map((fan) => {
-      const input = { snapshot, roster, fan, inputs: inputsFor(snapshot, { slot: "revit:Flow" }), grids };
+      const input = {
+        snapshot,
+        roster,
+        fan,
+        inputs: inputsFor(snapshot, { slot: "revit:Flow" }),
+        grids,
+      };
       const withFlow = buildSheet(input),
         without = buildSheet({ ...input, assumeServedFlow: false });
       return {
@@ -534,7 +585,13 @@ it("assumed flow borrows a receiving unit's flow only through its intake, never 
       },
     ] as FanPort[];
     const inputs = inputsFor(snapshot);
-    return assumedFanFlows(snapshot, units, (id) => inputs.terminals[String(id)]?.cfm.value ?? null, JSON.stringify(inputs.terminals), {});
+    return assumedFanFlows(
+      snapshot,
+      units,
+      (id) => inputs.terminals[String(id)]?.cfm.value ?? null,
+      JSON.stringify(inputs.terminals),
+      {},
+    );
   };
   // B's port is its intake: A's discharge is B's whole intake stream, so A borrows B's 150 cfm.
   expect(units("in").get("300:0")?.cfm).toBe(150);

@@ -98,9 +98,7 @@
             "knownInWg": 0,
             "complete": false,
             "legCount": 15,
-            "blockerIds": [
-              "inferred-join:14122436:1"
-            ]
+            "blockerIds": ["inferred-join:14122436:1"]
           }
         ],
         "rest": 0
@@ -252,10 +250,7 @@
     },
     "basis": "muas-fixture-basis",
     "kind": "elements",
-    "walkedElementIds": [
-      14577391,
-      14122436
-    ],
+    "walkedElementIds": [14577391, 14122436],
     "beyond": []
   },
   "legs": {

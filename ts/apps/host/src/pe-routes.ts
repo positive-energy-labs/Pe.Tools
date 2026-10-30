@@ -258,25 +258,22 @@ export function createPeRoutes(options: PeRoutesOptions) {
       })
     : null;
   const sheets = options.ductsSheets
-    ? createDuctsSheets(
-        options.ductsSheets,
-        {
-          workspace: work,
-          author: () => (currentCaller().kind === "pea" ? "pea" : "human"),
-          key: async (target) => {
-            const documents = options.navigation
-              ? z
-                  .array(documentRefSchema.extend({ address: addressSchema.nullable() }))
-                  .parse(await options.navigation.documents())
-              : null;
-            const doc = documents?.find(
-              (d) => d.session === target.session && d.openId === target.openId,
-            );
-            if (documents && !doc) throw new Error("Sheet Work target is no longer open");
-            return bindWork("ducts", doc?.address ?? null, undefined, target);
-          },
+    ? createDuctsSheets(options.ductsSheets, {
+        workspace: work,
+        author: () => (currentCaller().kind === "pea" ? "pea" : "human"),
+        key: async (target) => {
+          const documents = options.navigation
+            ? z
+                .array(documentRefSchema.extend({ address: addressSchema.nullable() }))
+                .parse(await options.navigation.documents())
+            : null;
+          const doc = documents?.find(
+            (d) => d.session === target.session && d.openId === target.openId,
+          );
+          if (documents && !doc) throw new Error("Sheet Work target is no longer open");
+          return bindWork("ducts", doc?.address ?? null, undefined, target);
         },
-      )
+      })
     : null;
   const views = new RouteViewStore();
   const workReads = new OwnerReads();

@@ -56,19 +56,42 @@ const elbow = (id: number, a: [number, number], b: [number, number], facts: obje
 const network: SheetSnapshot = {
   nodes: [
     node(100, "equipment", { connectors: [conn(0, [1, 0]), conn(1, [9, 0])] }),
-    elbow(2, [1, 1], [3, 0], [
-      { key: "angle", value: 35, unit: "deg", provenance: "geometry" },
-      { key: "centerRadius", value: 12, unit: "in", provenance: "geometry" },
-    ]),
+    elbow(
+      2,
+      [1, 1],
+      [3, 0],
+      [
+        { key: "angle", value: 35, unit: "deg", provenance: "geometry" },
+        { key: "centerRadius", value: 12, unit: "in", provenance: "geometry" },
+      ],
+    ),
     elbow(4, [3, 1], [5, 0], [{ key: "rOverD", value: 1, unit: "", provenance: "geometry" }]),
     node(6, "terminal", { connectors: [conn(0, [5, 1])] }),
     node(10, "terminal", { connectors: [conn(0, [9, 1])] }),
   ],
-  segments: [duct(1, [100, 0], [2, 0]), duct(3, [2, 1], [4, 0]), duct(5, [4, 1], [6, 0]), duct(9, [100, 1], [10, 0])],
-  document: { title: "elbows", readAt: "2026-10-29", elapsedMs: 0, networkBasedCalculations: false },
+  segments: [
+    duct(1, [100, 0], [2, 0]),
+    duct(3, [2, 1], [4, 0]),
+    duct(5, [4, 1], [6, 0]),
+    duct(9, [100, 1], [10, 0]),
+  ],
+  document: {
+    title: "elbows",
+    readAt: "2026-10-29",
+    elapsedMs: 0,
+    networkBasedCalculations: false,
+  },
 };
 const roster: FanPort[] = [
-  { unitId: 100, portIndex: 0, inletPortIndex: 1, tag: "MUAS", side: "supply", kind: "muas", source: "ruling" },
+  {
+    unitId: 100,
+    portIndex: 0,
+    inletPortIndex: 1,
+    tag: "MUAS",
+    side: "supply",
+    kind: "muas",
+    source: "ruling",
+  },
 ];
 const sheetWith = (extra: Parameters<typeof inputsFor>[1] = {}) =>
   buildSheet({
@@ -76,7 +99,11 @@ const sheetWith = (extra: Parameters<typeof inputsFor>[1] = {}) =>
     fan: { unitId: 100, portIndex: 0 },
     roster,
     grids,
-    inputs: inputsFor(network, { endCfm: { 6: 150, 10: 150 }, drops: { 6: 0.03, 10: 0.03 }, ...extra }),
+    inputs: inputsFor(network, {
+      endCfm: { 6: 150, 10: 150 },
+      drops: { 6: 0.03, 10: 0.03 },
+      ...extra,
+    }),
   });
 
 it("an elbow no rule matches is not priced, and its blocker names a census row offering the elbow rules", () => {
@@ -123,7 +150,12 @@ it("a typed table swaps what a matched rule reads and says so", () => {
   const base = sheetWith();
   const sheet = sheetWith({ choices: { "elbow-1d-le10": "CD3-21" } });
   const row = sheet.fittings.find((f) => f.key === "4")!;
-  expect(row).toMatchObject({ rule: "elbow-1d-le10", table: "CD3-21", ruleSource: "matched", tableSource: "typed" });
+  expect(row).toMatchObject({
+    rule: "elbow-1d-le10",
+    table: "CD3-21",
+    ruleSource: "matched",
+    tableSource: "typed",
+  });
   expect(row.options).toContain("CD3-2");
   expect(row.lossInWg).not.toBeCloseTo(base.fittings.find((f) => f.key === "4")!.lossInWg!, 6);
 });
@@ -140,7 +172,9 @@ it("the resolver reads Work's ruleAssignments and per-path proposed drops with a
       },
     },
   });
-  expect(inputs.assignments).toEqual({ "Round Elbow": { value: "elbow-15d-45-le10", source: "typed" } });
+  expect(inputs.assignments).toEqual({
+    "Round Elbow": { value: "elbow-15d-45-le10", source: "typed" },
+  });
   expect(inputs.fittingDrops).toEqual({ "proposed:1:1|2:0>7": { value: 0.04, source: "typed" } });
 });
 

@@ -237,7 +237,9 @@ it("never caps an end Revit gives a flow: the air leaves there (Chadds EX 1 1162
   const s = snap([duct(10, [0, 0, 0], [10, 0, 0])]);
   s.segments[0]!.connectors[1]!.flowCfm = 444;
   expect(items(s).map((i) => i.end)).toEqual(["10:0"]);
-  expect(healPlan(s).hard.get("open-end:10:1")?.note).toMatch(/carries 444 cfm in Revit; a cap would block its air/);
+  expect(healPlan(s).hard.get("open-end:10:1")?.note).toMatch(
+    /carries 444 cfm in Revit; a cap would block its air/,
+  );
 });
 
 it("never caps an end C# marks auto-join toward a port outside the read (Chadds RA 37, live 2026-10-30)", () => {
@@ -245,11 +247,27 @@ it("never caps an end C# marks auto-join toward a port outside the read (Chadds 
   // 14663850:1 at 2.25 in. The partners sat outside the per-system read, so only C#'s `near` knew.
   const s = snap([duct(10, [0, 0, 0], [10, 0, 0]), duct(11, [20, 0, 0], [30, 0, 0])]);
   const near = (gapIn: number, elementId: number) => ({
-    ports: [{ elementId, connector: 1, gapIn, facingDot: -1, opposed: true, aligned: gapIn < 1, autoJoin: true }],
+    ports: [
+      {
+        elementId,
+        connector: 1,
+        gapIn,
+        facingDot: -1,
+        opposed: true,
+        aligned: gapIn < 1,
+        autoJoin: true,
+      },
+    ],
   });
   Object.assign(s.issues.find((i) => i.id === "open-end:10:0")!, { near: near(0.012, 14548688) });
   Object.assign(s.issues.find((i) => i.id === "open-end:11:0")!, { near: near(2.25, 14663834) });
-  expect(items(s).map((i) => i.end).sort()).toEqual(["10:1", "11:1"]);
-  expect(healPlan(s).hard.get("open-end:10:0")?.note).toMatch(/faces 14548688:1 0\.01 in away: a join, not a cap/);
+  expect(
+    items(s)
+      .map((i) => i.end)
+      .sort(),
+  ).toEqual(["10:1", "11:1"]);
+  expect(healPlan(s).hard.get("open-end:10:0")?.note).toMatch(
+    /faces 14548688:1 0\.01 in away: a join, not a cap/,
+  );
   expect(healPlan(s).hard.get("open-end:11:0")?.note).toMatch(/faces 14663834:1 2\.25 in away/);
 });

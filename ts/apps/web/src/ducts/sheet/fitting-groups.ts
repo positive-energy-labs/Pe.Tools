@@ -12,7 +12,10 @@ import { ruleByKey, ruleWords } from "@pe/ducts-domain/loss-rules";
 import type { SubjectPart } from "@pe/kit/lang/subject-text";
 
 /** "CD3-1  Elbow, Die Stamped, 90 Degree, r/D = 1.5 (UMC 1985, Report SRF785)" → the fitting words. */
-export const tableMeaning = (id: string, titles: Readonly<Record<string, string>>): string | null => {
+export const tableMeaning = (
+  id: string,
+  titles: Readonly<Record<string, string>>,
+): string | null => {
   const title = titles[id.toUpperCase()];
   if (!title) return null;
   return title
@@ -78,7 +81,10 @@ export function fittingGroups(
   inputs: Pick<DuctsInputs, "tables" | "assignments"> | null,
   titles: Readonly<Record<string, string>> = {},
 ): FittingGroup[] {
-  const groups = new Map<string, { kind: FittingGroup["kind"]; rows: FittingPricing[]; name: string }>();
+  const groups = new Map<
+    string,
+    { kind: FittingGroup["kind"]; rows: FittingPricing[]; name: string }
+  >();
   for (const f of fittings) {
     const [kind, name] =
       f.ruleSource === "matched" && f.rule
@@ -96,10 +102,12 @@ export function fittingGroups(
     if (![...groups.values()].some((g) => g.rows.some((f) => f.rule === rule)))
       groups.set(`rule:${rule}`, { kind: "rule", rows: [], name: rule });
   for (const family of Object.keys(inputs?.assignments ?? {}))
-    if (!groups.has(`family:${family}`)) groups.set(`family:${family}`, { kind: "family", rows: [], name: family });
+    if (!groups.has(`family:${family}`))
+      groups.set(`family:${family}`, { kind: "family", rows: [], name: family });
 
   const meaning = (t: string) => tableMeaning(t, titles);
-  const sub = (t: string, reach: string) => `${meaning(t) ?? "not served by this Revit's ASHRAE set"} · ${reach}`;
+  const sub = (t: string, reach: string) =>
+    `${meaning(t) ?? "not served by this Revit's ASHRAE set"} · ${reach}`;
   const out: FittingGroup[] = [];
   for (const [key, g] of groups) {
     const members = g.rows.map((f): GroupMember => {
@@ -121,7 +129,12 @@ export function fittingGroups(
       const chosen = inputs?.tables[g.name];
       const table = (chosen?.value ?? rule?.table ?? g.rows[0]?.table ?? "").toUpperCase() || null;
       const reach = "every fitting this rule matches in the document";
-      const options = [...new Set([...(rule ? [rule.table, ...rule.options] : []), ...g.rows.flatMap((f) => f.options)])];
+      const options = [
+        ...new Set([
+          ...(rule ? [rule.table, ...rule.options] : []),
+          ...g.rows.flatMap((f) => f.options),
+        ]),
+      ];
       const fallback = g.rows.length > 0 && g.rows.every((f) => f.tableSource === "fallback");
       out.push({
         ...base,
@@ -137,7 +150,12 @@ export function fittingGroups(
           current: t === table,
           // Picking the rule's own table clears a choice instead of typing the default (r16 wrote
           // "typed CD3-2", which changed nothing and read as a person's choice).
-          edits: t === table ? null : t === rule?.table ? { tables: { [g.name]: null } } : { tables: { [g.name]: { table: t } } },
+          edits:
+            t === table
+              ? null
+              : t === rule?.table
+                ? { tables: { [g.name]: null } }
+                : { tables: { [g.name]: { table: t } } },
         })),
         clear: chosen?.source === "typed" ? { tables: { [g.name]: null } } : null,
       });
@@ -155,7 +173,13 @@ export function fittingGroups(
         reach: g.rows.length ? reach : `${reach}; none on this fan's walk`,
         table,
         tableMeaning: table ? meaning(table) : null,
-        source: assigned ? (rule ? `assigned ${ruleWords(rule)}` : "assigned") : unpriced ? "not priced" : "auto",
+        source: assigned
+          ? rule
+            ? `assigned ${ruleWords(rule)}`
+            : "assigned"
+          : unpriced
+            ? "not priced"
+            : "auto",
         choices: g.name
           ? candidates.flatMap((c) =>
               c.tables.map((t, i) => ({
@@ -166,7 +190,10 @@ export function fittingGroups(
                 edits:
                   assigned?.value === c.rule && table === t
                     ? null
-                    : { assignments: { [g.name]: { rule: c.rule } }, ...(i === 0 ? {} : { tables: { [c.rule]: { table: t } } }) },
+                    : {
+                        assignments: { [g.name]: { rule: c.rule } },
+                        ...(i === 0 ? {} : { tables: { [c.rule]: { table: t } } }),
+                      },
               })),
             )
           : [],
@@ -187,6 +214,7 @@ export function fittingGroups(
     });
   }
   return out.sort(
-    (a, b) => ORDER[a.kind] - ORDER[b.kind] || a.title.localeCompare(b.title) || a.key.localeCompare(b.key),
+    (a, b) =>
+      ORDER[a.kind] - ORDER[b.kind] || a.title.localeCompare(b.title) || a.key.localeCompare(b.key),
   );
 }

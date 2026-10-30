@@ -9,9 +9,7 @@
         "runtime": true
       },
       "noun": "calculation evidence",
-      "nouns": [
-        "calculation evidence"
-      ],
+      "nouns": ["calculation evidence"],
       "segment": "calculation",
       "show": {
         "runtime": true
@@ -25,9 +23,7 @@
         "runtime": true
       },
       "noun": "duct assumptions",
-      "nouns": [
-        "assumption"
-      ],
+      "nouns": ["assumption"],
       "segment": "assumptions",
       "show": {
         "runtime": true
@@ -44,9 +40,7 @@
         "runtime": true
       },
       "noun": "loss rules",
-      "nouns": [
-        "rule"
-      ],
+      "nouns": ["rule"],
       "segment": "rules",
       "show": {
         "runtime": true
@@ -60,9 +54,7 @@
         "runtime": true
       },
       "noun": "grille catalog links",
-      "nouns": [
-        "catalog link"
-      ],
+      "nouns": ["catalog link"],
       "segment": "catalogs",
       "show": {
         "runtime": true
@@ -76,9 +68,7 @@
         "runtime": true
       },
       "noun": "fitting families priced as a rule",
-      "nouns": [
-        "fitting family"
-      ],
+      "nouns": ["fitting family"],
       "segment": "ruleAssignments",
       "show": {
         "runtime": true
@@ -92,9 +82,7 @@
         "runtime": true
       },
       "noun": "terminal drops",
-      "nouns": [
-        "terminal"
-      ],
+      "nouns": ["terminal"],
       "segment": "terminalDrops",
       "show": {
         "runtime": true
@@ -108,9 +96,7 @@
         "runtime": true
       },
       "noun": "component drops",
-      "nouns": [
-        "component"
-      ],
+      "nouns": ["component"],
       "segment": "componentDrops",
       "show": {
         "runtime": true
@@ -124,9 +110,7 @@
         "runtime": true
       },
       "noun": "terminal flows",
-      "nouns": [
-        "terminal"
-      ],
+      "nouns": ["terminal"],
       "segment": "flows",
       "show": {
         "runtime": true
@@ -140,9 +124,7 @@
         "runtime": true
       },
       "noun": "unit ESPs",
-      "nouns": [
-        "unit"
-      ],
+      "nouns": ["unit"],
       "segment": "esp",
       "show": {
         "runtime": true
@@ -156,9 +138,7 @@
         "runtime": true
       },
       "noun": "unit flows",
-      "nouns": [
-        "unit"
-      ],
+      "nouns": ["unit"],
       "segment": "equipmentFlows",
       "show": {
         "runtime": true
@@ -172,9 +152,7 @@
         "runtime": true
       },
       "noun": "unit roles",
-      "nouns": [
-        "unit"
-      ],
+      "nouns": ["unit"],
       "segment": "roles",
       "show": {
         "runtime": true
@@ -188,9 +166,7 @@
         "runtime": true
       },
       "noun": "parameter slots",
-      "nouns": [
-        "slot"
-      ],
+      "nouns": ["slot"],
       "segment": "parameters",
       "show": {
         "runtime": true
@@ -204,10 +180,7 @@
         "runtime": true
       },
       "noun": "unit kinds",
-      "nouns": [
-        "family",
-        "type"
-      ],
+      "nouns": ["family", "type"],
       "segment": "kinds",
       "show": {
         "runtime": true
@@ -280,10 +253,7 @@
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "glass",
-        "enum": [
-          "lines",
-          "glass"
-        ],
+        "enum": ["lines", "glass"],
         "type": "string"
       },
       "share": true,
@@ -373,21 +343,14 @@
                     "type": "array"
                   }
                 },
-                "required": [
-                  "esp",
-                  "roots",
-                  "ids"
-                ],
+                "required": ["esp", "roots", "ids"],
                 "type": "object"
               },
               "group": {
                 "type": "string"
               },
               "mode": {
-                "enum": [
-                  "preview",
-                  "apply"
-                ],
+                "enum": ["preview", "apply"],
                 "type": "string"
               },
               "request": {
@@ -414,10 +377,7 @@
                                 "type": "string"
                               },
                               "kind": {
-                                "enum": [
-                                  "cap",
-                                  "join"
-                                ],
+                                "enum": ["cap", "join"],
                                 "type": "string"
                               },
                               "other": {
@@ -425,27 +385,19 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "key",
-                              "kind",
-                              "end"
-                            ],
+                            "required": ["key", "kind", "end"],
                             "type": "object"
                           },
                           "type": "array"
                         }
                       },
-                      "required": [
-                        "group"
-                      ],
+                      "required": ["group"],
                       "type": "object"
                     },
                     "type": "array"
                   }
                 },
-                "required": [
-                  "groups"
-                ],
+                "required": ["groups"],
                 "type": "object"
               },
               "response": {},
@@ -471,12 +423,7 @@
                       "type": "array"
                     },
                     "how": {
-                      "enum": [
-                        "cap",
-                        "connect",
-                        "union",
-                        "extend"
-                      ],
+                      "enum": ["cap", "connect", "union", "extend"],
                       "type": "string"
                     },
                     "ids": {
@@ -495,14 +442,7 @@
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "key",
-                    "end",
-                    "how",
-                    "ids",
-                    "findings",
-                    "outcome"
-                  ],
+                  "required": ["key", "end", "how", "ids", "findings", "outcome"],
                   "type": "object"
                 },
                 "type": "array"
@@ -567,11 +507,7 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "field",
-                "op",
-                "value"
-              ],
+              "required": ["field", "op", "value"],
               "type": "object"
             },
             "maxItems": 32,
@@ -583,11 +519,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "v",
-          "keywords",
-          "pills"
-        ],
+        "required": ["v", "keywords", "pills"],
         "type": "object"
       },
       "share": true,
@@ -607,10 +539,7 @@
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "",
-        "enum": [
-          "",
-          "name"
-        ],
+        "enum": ["", "name"],
         "type": "string"
       },
       "share": true,
@@ -711,10 +640,7 @@
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "model",
-        "enum": [
-          "model",
-          "schematic"
-        ],
+        "enum": ["model", "schematic"],
         "type": "string"
       },
       "share": true,
@@ -776,11 +702,7 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "field",
-                "op",
-                "value"
-              ],
+              "required": ["field", "op", "value"],
               "type": "object"
             },
             "maxItems": 32,
@@ -792,11 +714,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "v",
-          "keywords",
-          "pills"
-        ],
+        "required": ["v", "keywords", "pills"],
         "type": "object"
       },
       "share": true,
@@ -816,11 +734,7 @@
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "",
-        "enum": [
-          "",
-          "name",
-          "status"
-        ],
+        "enum": ["", "name", "status"],
         "type": "string"
       },
       "share": true,
@@ -846,14 +760,7 @@
         "properties": {
           "preset": {
             "default": "all",
-            "enum": [
-              "all",
-              "walls",
-              "structural",
-              "no-lighting",
-              "nearby-structure",
-              "subject"
-            ],
+            "enum": ["all", "walls", "structural", "no-lighting", "nearby-structure", "subject"],
             "type": "string"
           },
           "section": {
@@ -883,14 +790,7 @@
                             "type": "number"
                           }
                         },
-                        "required": [
-                          "minX",
-                          "minY",
-                          "minZ",
-                          "maxX",
-                          "maxY",
-                          "maxZ"
-                        ],
+                        "required": ["minX", "minY", "minZ", "maxX", "maxY", "maxZ"],
                         "type": "object"
                       },
                       "kind": {
@@ -898,27 +798,17 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "bounds"
-                    ],
+                    "required": ["kind", "bounds"],
                     "type": "object"
                   },
                   {
                     "properties": {
                       "axis": {
-                        "enum": [
-                          "x",
-                          "y",
-                          "z"
-                        ],
+                        "enum": ["x", "y", "z"],
                         "type": "string"
                       },
                       "keep": {
-                        "enum": [
-                          "below",
-                          "above"
-                        ],
+                        "enum": ["below", "above"],
                         "type": "string"
                       },
                       "kind": {
@@ -929,12 +819,7 @@
                         "type": "number"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "axis",
-                      "offset",
-                      "keep"
-                    ],
+                    "required": ["kind", "axis", "offset", "keep"],
                     "type": "object"
                   }
                 ]
@@ -1004,10 +889,7 @@
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "network",
-        "enum": [
-          "network",
-          "sheet"
-        ],
+        "enum": ["network", "sheet"],
         "type": "string"
       },
       "share": true,
@@ -1080,11 +962,7 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "field",
-                "op",
-                "value"
-              ],
+              "required": ["field", "op", "value"],
               "type": "object"
             },
             "maxItems": 32,
@@ -1096,11 +974,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "v",
-          "keywords",
-          "pills"
-        ],
+        "required": ["v", "keywords", "pills"],
         "type": "object"
       },
       "share": true,
@@ -1120,11 +994,7 @@
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "",
-        "enum": [
-          "",
-          "name",
-          "loss"
-        ],
+        "enum": ["", "name", "loss"],
         "type": "string"
       },
       "share": true,
@@ -1173,11 +1043,7 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "field",
-                "op",
-                "value"
-              ],
+              "required": ["field", "op", "value"],
               "type": "object"
             },
             "maxItems": 32,
@@ -1189,11 +1055,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "v",
-          "keywords",
-          "pills"
-        ],
+        "required": ["v", "keywords", "pills"],
         "type": "object"
       },
       "share": true,
@@ -1213,11 +1075,7 @@
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "",
-        "enum": [
-          "",
-          "recent",
-          "title"
-        ],
+        "enum": ["", "recent", "title"],
         "type": "string"
       },
       "share": true,
@@ -1260,11 +1118,7 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "field",
-                "op",
-                "value"
-              ],
+              "required": ["field", "op", "value"],
               "type": "object"
             },
             "maxItems": 32,
@@ -1276,11 +1130,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "v",
-          "keywords",
-          "pills"
-        ],
+        "required": ["v", "keywords", "pills"],
         "type": "object"
       },
       "share": true,
@@ -1300,10 +1150,7 @@
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "",
-        "enum": [
-          "",
-          "name"
-        ],
+        "enum": ["", "name"],
         "type": "string"
       },
       "share": true,
@@ -1338,11 +1185,7 @@
                     "type": "number"
                   }
                 },
-                "required": [
-                  "kind",
-                  "top",
-                  "left"
-                ],
+                "required": ["kind", "top", "left"],
                 "type": "object"
               },
               {
@@ -1361,12 +1204,7 @@
                     "type": "number"
                   }
                 },
-                "required": [
-                  "kind",
-                  "scale",
-                  "tx",
-                  "ty"
-                ],
+                "required": ["kind", "scale", "tx", "ty"],
                 "type": "object"
               },
               {
@@ -1393,10 +1231,7 @@
                     "type": "array"
                   },
                   "projection": {
-                    "enum": [
-                      "perspective",
-                      "parallel"
-                    ],
+                    "enum": ["perspective", "parallel"],
                     "type": "string"
                   },
                   "yaw": {
@@ -1406,13 +1241,7 @@
                     "type": "number"
                   }
                 },
-                "required": [
-                  "kind",
-                  "yaw",
-                  "elev",
-                  "zoom",
-                  "pivot"
-                ],
+                "required": ["kind", "yaw", "elev", "zoom", "pivot"],
                 "type": "object"
               }
             ]
@@ -1605,106 +1434,73 @@
   "needs": "project",
   "panes": {
     "e-inbox": {
-      "draws": [
-        "pricing"
-      ],
+      "draws": ["pricing"],
       "label": "Rulings",
       "purpose": "Review assumptions and planned writes",
       "verbs": {
-        "ids": [
-          "price",
-          "heal-preview",
-          "heal",
-          "assign-fan"
-        ],
+        "ids": ["price", "heal-preview", "heal", "assign-fan"],
         "runtime": true
       }
     },
     "e-inputs": {
-      "draws": [
-        "pricing"
-      ],
+      "draws": ["pricing"],
       "label": "Inputs",
       "purpose": "Edit flow, ESP, role and drop",
       "verbs": {
-        "ids": [
-          "assign-fan"
-        ],
+        "ids": ["assign-fan"],
         "runtime": true
       }
     },
     "e-picture": {
-      "draws": [
-        "pricing"
-      ],
+      "draws": ["pricing"],
       "label": "Picture",
       "purpose": "Inspect the model or schematic",
       "verbs": []
     },
     "e-rules": {
-      "draws": [
-        "pricing"
-      ],
+      "draws": ["pricing"],
       "label": "This system's rules",
       "purpose": "Review fitting rules for the opened systems",
       "verbs": []
     },
     "e-rules-all": {
-      "draws": [
-        "pricing"
-      ],
+      "draws": ["pricing"],
       "label": "All-systems rules",
       "purpose": "Price every read fitting type",
       "verbs": []
     },
     "e-sidebar": {
-      "draws": [
-        "pricing"
-      ],
+      "draws": ["pricing"],
       "label": "System tree",
       "purpose": "Inspect the opened systems and their runs",
       "verbs": []
     },
     "e-systems": {
-      "draws": [
-        "roster",
-        "ducts",
-        "pricing"
-      ],
+      "draws": ["roster", "ducts", "pricing"],
       "label": "Systems",
       "purpose": "Choose a system to inspect",
       "verbs": []
     },
     "sheet-inputs": {
-      "draws": [
-        "sheet"
-      ],
+      "draws": ["sheet"],
       "label": "Inputs",
       "purpose": "Edit firm, project, fan and element inputs",
       "verbs": []
     },
     "sheet-ledger": {
-      "draws": [
-        "sheet"
-      ],
+      "draws": ["sheet"],
       "label": "Ledger",
       "purpose": "Required ESP and blockers by consent tier",
       "verbs": []
     },
     "sheet-picture": {
-      "draws": [
-        "sheet",
-        "sheetSnapshot"
-      ],
+      "draws": ["sheet", "sheetSnapshot"],
       "label": "Picture",
       "purpose": "Inspect the fan's walk and blockers",
       "verbs": []
     },
     "sheet-roster": {
-      "draws": [
-        "fans",
-        "sheet"
-      ],
+      "draws": ["fans", "sheet"],
       "label": "Fans",
       "purpose": "Open a fan port to read its sheet",
       "verbs": []
@@ -1732,9 +1528,7 @@
       "args": {
         "runtime": true
       },
-      "deps": [
-        "roster"
-      ],
+      "deps": ["roster"],
       "kind": "use",
       "retire": "page",
       "source": "ducts.networks"
@@ -1750,12 +1544,7 @@
       "source": "ducts.meshes"
     },
     "pricing": {
-      "deps": [
-        "ducts",
-        "tables",
-        "catalogs",
-        "meshes"
-      ],
+      "deps": ["ducts", "tables", "catalogs", "meshes"],
       "kind": "worker",
       "retire": "target",
       "source": "ducts.pricing"
@@ -1769,17 +1558,13 @@
       "args": {
         "runtime": true
       },
-      "deps": [
-        "fans"
-      ],
+      "deps": ["fans"],
       "kind": "use",
       "retire": "page",
       "source": "ducts.sheet"
     },
     "sheetSnapshot": {
-      "deps": [
-        "sheet"
-      ],
+      "deps": ["sheet"],
       "kind": "use",
       "retire": "target",
       "source": "ducts.sheet-snapshot"
@@ -1790,9 +1575,7 @@
       "source": "ducts.tables"
     }
   },
-  "resetOnTarget": [
-    "heal"
-  ],
+  "resetOnTarget": ["heal"],
   "seeds": {
     "colours": {
       "title": "colours"
@@ -1807,10 +1590,7 @@
       "title": "scene"
     }
   },
-  "stageOrder": [
-    "network",
-    "sheet"
-  ],
+  "stageOrder": ["network", "sheet"],
   "stages": {
     "network": {
       "panes": [
@@ -1822,33 +1602,12 @@
         "e-picture",
         "e-inbox"
       ],
-      "verbs": [
-        "refresh",
-        "preview",
-        "price",
-        "heal-preview",
-        "heal",
-        "fan-preview",
-        "assign-fan"
-      ],
+      "verbs": ["refresh", "preview", "price", "heal-preview", "heal", "fan-preview", "assign-fan"],
       "word": "Pricing systems"
     },
     "sheet": {
-      "panes": [
-        "sheet-roster",
-        "sheet-inputs",
-        "sheet-picture",
-        "sheet-ledger"
-      ],
-      "verbs": [
-        "refresh",
-        "preview",
-        "price",
-        "heal-preview",
-        "heal",
-        "fan-preview",
-        "assign-fan"
-      ],
+      "panes": ["sheet-roster", "sheet-inputs", "sheet-picture", "sheet-ledger"],
+      "verbs": ["refresh", "preview", "price", "heal-preview", "heal", "fan-preview", "assign-fan"],
       "word": "Pricing fans"
     }
   },
@@ -1891,10 +1650,7 @@
                 "type": "integer"
               }
             },
-            "required": [
-              "systemId",
-              "unitId"
-            ],
+            "required": ["systemId", "unitId"],
             "type": "object"
           }
         },
@@ -1935,20 +1691,11 @@
                     "type": "string"
                   },
                   "section": {
-                    "enum": [
-                      "units",
-                      "terminals",
-                      "parts",
-                      "rulings"
-                    ],
+                    "enum": ["units", "terminals", "parts", "rulings"],
                     "type": "string"
                   }
                 },
-                "required": [
-                  "label",
-                  "section",
-                  "ids"
-                ],
+                "required": ["label", "section", "ids"],
                 "type": "object"
               },
               "rowKey": {
@@ -1965,9 +1712,7 @@
                 "type": "string"
               }
             },
-            "required": [
-              "label"
-            ],
+            "required": ["label"],
             "type": "object"
           },
           "patches": {
@@ -1988,18 +1733,13 @@
                 },
                 "value": {}
               },
-              "required": [
-                "path"
-              ],
+              "required": ["path"],
               "type": "object"
             },
             "type": "array"
           }
         },
-        "required": [
-          "patches",
-          "expectedRevision"
-        ],
+        "required": ["patches", "expectedRevision"],
         "type": "object"
       },
       "kind": "work",
@@ -2038,10 +1778,7 @@
                 "type": "integer"
               }
             },
-            "required": [
-              "systemId",
-              "unitId"
-            ],
+            "required": ["systemId", "unitId"],
             "type": "object"
           }
         },
@@ -2093,10 +1830,7 @@
                             "type": "string"
                           },
                           "kind": {
-                            "enum": [
-                              "cap",
-                              "join"
-                            ],
+                            "enum": ["cap", "join"],
                             "type": "string"
                           },
                           "other": {
@@ -2104,28 +1838,20 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "key",
-                          "kind",
-                          "end"
-                        ],
+                        "required": ["key", "kind", "end"],
                         "type": "object"
                       },
                       "type": "array"
                     }
                   },
-                  "required": [
-                    "group"
-                  ],
+                  "required": ["group"],
                   "type": "object"
                 },
                 "minItems": 1,
                 "type": "array"
               }
             },
-            "required": [
-              "groups"
-            ],
+            "required": ["groups"],
             "type": "object"
           }
         },
@@ -2177,10 +1903,7 @@
                             "type": "string"
                           },
                           "kind": {
-                            "enum": [
-                              "cap",
-                              "join"
-                            ],
+                            "enum": ["cap", "join"],
                             "type": "string"
                           },
                           "other": {
@@ -2188,28 +1911,20 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "key",
-                          "kind",
-                          "end"
-                        ],
+                        "required": ["key", "kind", "end"],
                         "type": "object"
                       },
                       "type": "array"
                     }
                   },
-                  "required": [
-                    "group"
-                  ],
+                  "required": ["group"],
                   "type": "object"
                 },
                 "minItems": 1,
                 "type": "array"
               }
             },
-            "required": [
-              "groups"
-            ],
+            "required": ["groups"],
             "type": "object"
           }
         },
@@ -2264,10 +1979,7 @@
                       ]
                     }
                   },
-                  "required": [
-                    "id",
-                    "inWg"
-                  ],
+                  "required": ["id", "inWg"],
                   "type": "object"
                 },
                 "type": "array"
@@ -2286,10 +1998,7 @@
                       "type": "integer"
                     }
                   },
-                  "required": [
-                    "id",
-                    "externalStaticInWg"
-                  ],
+                  "required": ["id", "externalStaticInWg"],
                   "type": "object"
                 },
                 "type": "array"
@@ -2318,10 +2027,7 @@
                       ]
                     }
                   },
-                  "required": [
-                    "id",
-                    "cfm"
-                  ],
+                  "required": ["id", "cfm"],
                   "type": "object"
                 },
                 "type": "array"
@@ -2349,10 +2055,7 @@
                       ]
                     },
                     "method": {
-                      "enum": [
-                        "pe-server",
-                        "specific-coefficient"
-                      ],
+                      "enum": ["pe-server", "specific-coefficient"],
                       "type": "string"
                     },
                     "ruleKey": {
@@ -2376,11 +2079,7 @@
                       ]
                     }
                   },
-                  "required": [
-                    "id",
-                    "method",
-                    "coefficient"
-                  ],
+                  "required": ["id", "method", "coefficient"],
                   "type": "object"
                 },
                 "type": "array"
@@ -2463,10 +2162,7 @@
                           ]
                         }
                       },
-                      "required": [
-                        "cfm",
-                        "appliedAt"
-                      ],
+                      "required": ["cfm", "appliedAt"],
                       "type": "object"
                     },
                     "propertyNames": {
@@ -2505,10 +2201,7 @@
                           ]
                         }
                       },
-                      "required": [
-                        "coefficient",
-                        "appliedAt"
-                      ],
+                      "required": ["coefficient", "appliedAt"],
                       "type": "object"
                     },
                     "propertyNames": {
@@ -2528,10 +2221,7 @@
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "role",
-                        "ruledAt"
-                      ],
+                      "required": ["role", "ruledAt"],
                       "type": "object"
                     },
                     "propertyNames": {
@@ -2626,10 +2316,7 @@
                           ]
                         }
                       },
-                      "required": [
-                        "cfm",
-                        "appliedAt"
-                      ],
+                      "required": ["cfm", "appliedAt"],
                       "type": "object"
                     },
                     "propertyNames": {
@@ -2659,10 +2346,7 @@
                           ]
                         }
                       },
-                      "required": [
-                        "inWg",
-                        "appliedAt"
-                      ],
+                      "required": ["inWg", "appliedAt"],
                       "type": "object"
                     },
                     "propertyNames": {
@@ -2682,10 +2366,7 @@
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "verdict",
-                        "ruledAt"
-                      ],
+                      "required": ["verdict", "ruledAt"],
                       "type": "object"
                     },
                     "propertyNames": {
@@ -2730,10 +2411,7 @@
                       ]
                     }
                   },
-                  "required": [
-                    "id",
-                    "cfm"
-                  ],
+                  "required": ["id", "cfm"],
                   "type": "object"
                 },
                 "type": "array"
@@ -2762,10 +2440,7 @@
                       ]
                     }
                   },
-                  "required": [
-                    "id",
-                    "inWg"
-                  ],
+                  "required": ["id", "inWg"],
                   "type": "object"
                 },
                 "type": "array"
@@ -2834,10 +2509,7 @@
                       ]
                     }
                   },
-                  "required": [
-                    "id",
-                    "inWg"
-                  ],
+                  "required": ["id", "inWg"],
                   "type": "object"
                 },
                 "type": "array"
@@ -2856,10 +2528,7 @@
                       "type": "integer"
                     }
                   },
-                  "required": [
-                    "id",
-                    "externalStaticInWg"
-                  ],
+                  "required": ["id", "externalStaticInWg"],
                   "type": "object"
                 },
                 "type": "array"
@@ -2888,10 +2557,7 @@
                       ]
                     }
                   },
-                  "required": [
-                    "id",
-                    "cfm"
-                  ],
+                  "required": ["id", "cfm"],
                   "type": "object"
                 },
                 "type": "array"
@@ -2919,10 +2585,7 @@
                       ]
                     },
                     "method": {
-                      "enum": [
-                        "pe-server",
-                        "specific-coefficient"
-                      ],
+                      "enum": ["pe-server", "specific-coefficient"],
                       "type": "string"
                     },
                     "ruleKey": {
@@ -2946,11 +2609,7 @@
                       ]
                     }
                   },
-                  "required": [
-                    "id",
-                    "method",
-                    "coefficient"
-                  ],
+                  "required": ["id", "method", "coefficient"],
                   "type": "object"
                 },
                 "type": "array"
@@ -3033,10 +2692,7 @@
                           ]
                         }
                       },
-                      "required": [
-                        "cfm",
-                        "appliedAt"
-                      ],
+                      "required": ["cfm", "appliedAt"],
                       "type": "object"
                     },
                     "propertyNames": {
@@ -3075,10 +2731,7 @@
                           ]
                         }
                       },
-                      "required": [
-                        "coefficient",
-                        "appliedAt"
-                      ],
+                      "required": ["coefficient", "appliedAt"],
                       "type": "object"
                     },
                     "propertyNames": {
@@ -3098,10 +2751,7 @@
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "role",
-                        "ruledAt"
-                      ],
+                      "required": ["role", "ruledAt"],
                       "type": "object"
                     },
                     "propertyNames": {
@@ -3196,10 +2846,7 @@
                           ]
                         }
                       },
-                      "required": [
-                        "cfm",
-                        "appliedAt"
-                      ],
+                      "required": ["cfm", "appliedAt"],
                       "type": "object"
                     },
                     "propertyNames": {
@@ -3229,10 +2876,7 @@
                           ]
                         }
                       },
-                      "required": [
-                        "inWg",
-                        "appliedAt"
-                      ],
+                      "required": ["inWg", "appliedAt"],
                       "type": "object"
                     },
                     "propertyNames": {
@@ -3252,10 +2896,7 @@
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "verdict",
-                        "ruledAt"
-                      ],
+                      "required": ["verdict", "ruledAt"],
                       "type": "object"
                     },
                     "propertyNames": {
@@ -3300,10 +2941,7 @@
                       ]
                     }
                   },
-                  "required": [
-                    "id",
-                    "cfm"
-                  ],
+                  "required": ["id", "cfm"],
                   "type": "object"
                 },
                 "type": "array"
@@ -3332,10 +2970,7 @@
                       ]
                     }
                   },
-                  "required": [
-                    "id",
-                    "inWg"
-                  ],
+                  "required": ["id", "inWg"],
                   "type": "object"
                 },
                 "type": "array"
@@ -3403,9 +3038,7 @@
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "rule"
-                      ],
+                      "required": ["rule"],
                       "type": "object"
                     },
                     {
@@ -3430,9 +3063,7 @@
                           "type": "number"
                         }
                       },
-                      "required": [
-                        "inWg"
-                      ],
+                      "required": ["inWg"],
                       "type": "object"
                     },
                     {
@@ -3502,10 +3133,7 @@
                   "splitPolicy": {
                     "anyOf": [
                       {
-                        "enum": [
-                          "even",
-                          "proportional"
-                        ],
+                        "enum": ["even", "proportional"],
                         "type": "string"
                       },
                       {
@@ -3573,24 +3201,15 @@
                           "type": "integer"
                         }
                       },
-                      "required": [
-                        "elementId",
-                        "connector"
-                      ],
+                      "required": ["elementId", "connector"],
                       "type": "object"
                     },
                     "verdict": {
-                      "enum": [
-                        "capped",
-                        "clear"
-                      ],
+                      "enum": ["capped", "clear"],
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "end",
-                    "verdict"
-                  ],
+                  "required": ["end", "verdict"],
                   "type": "object"
                 },
                 "type": "array"
@@ -3606,9 +3225,7 @@
                           "type": "number"
                         }
                       },
-                      "required": [
-                        "cfm"
-                      ],
+                      "required": ["cfm"],
                       "type": "object"
                     },
                     {
@@ -3633,9 +3250,7 @@
                           "type": "number"
                         }
                       },
-                      "required": [
-                        "inWg"
-                      ],
+                      "required": ["inWg"],
                       "type": "object"
                     },
                     {
@@ -3660,9 +3275,7 @@
                           "type": "number"
                         }
                       },
-                      "required": [
-                        "inWg"
-                      ],
+                      "required": ["inWg"],
                       "type": "object"
                     },
                     {
@@ -3687,9 +3300,7 @@
                           "type": "number"
                         }
                       },
-                      "required": [
-                        "cfm"
-                      ],
+                      "required": ["cfm"],
                       "type": "object"
                     },
                     {
@@ -3721,18 +3332,11 @@
                       "type": "array"
                     },
                     "verdict": {
-                      "enum": [
-                        "accept",
-                        "reject",
-                        "clear"
-                      ],
+                      "enum": ["accept", "reject", "clear"],
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "pair",
-                    "verdict"
-                  ],
+                  "required": ["pair", "verdict"],
                   "type": "object"
                 },
                 "type": "array"
@@ -3755,9 +3359,7 @@
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "kind"
-                      ],
+                      "required": ["kind"],
                       "type": "object"
                     },
                     {
@@ -3777,16 +3379,11 @@
                       "additionalProperties": false,
                       "properties": {
                         "role": {
-                          "enum": [
-                            "fan",
-                            "passive"
-                          ],
+                          "enum": ["fan", "passive"],
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "role"
-                      ],
+                      "required": ["role"],
                       "type": "object"
                     },
                     {
@@ -3811,9 +3408,7 @@
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "table"
-                      ],
+                      "required": ["table"],
                       "type": "object"
                     },
                     {
@@ -3837,9 +3432,7 @@
                           "type": "number"
                         }
                       },
-                      "required": [
-                        "inWg"
-                      ],
+                      "required": ["inWg"],
                       "type": "object"
                     },
                     {
@@ -3882,20 +3475,11 @@
                     "type": "string"
                   },
                   "section": {
-                    "enum": [
-                      "units",
-                      "terminals",
-                      "parts",
-                      "rulings"
-                    ],
+                    "enum": ["units", "terminals", "parts", "rulings"],
                     "type": "string"
                   }
                 },
-                "required": [
-                  "label",
-                  "section",
-                  "ids"
-                ],
+                "required": ["label", "section", "ids"],
                 "type": "object"
               },
               "rowKey": {
@@ -3912,17 +3496,11 @@
                 "type": "string"
               }
             },
-            "required": [
-              "label"
-            ],
+            "required": ["label"],
             "type": "object"
           }
         },
-        "required": [
-          "edits",
-          "basis",
-          "expectedRevision"
-        ],
+        "required": ["edits", "basis", "expectedRevision"],
         "type": "object"
       },
       "kind": "work",
@@ -3939,9 +3517,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "confirm"
-        ],
+        "required": ["confirm"],
         "type": "object"
       },
       "input": {
@@ -3993,20 +3569,13 @@
                       ]
                     },
                     "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
+                      "enum": ["human", "pea", "unknown"],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
+                          "enum": ["high", "low"],
                           "type": "string"
                         },
                         {
@@ -4038,18 +3607,11 @@
                               "type": "string"
                             },
                             "verdict": {
-                              "enum": [
-                                "capped",
-                                "connect",
-                                "ignore"
-                              ],
+                              "enum": ["capped", "connect", "ignore"],
                               "type": "string"
                             }
                           },
-                          "required": [
-                            "kind",
-                            "verdict"
-                          ],
+                          "required": ["kind", "verdict"],
                           "type": "object"
                         },
                         {
@@ -4064,10 +3626,7 @@
                               "type": "string"
                             }
                           },
-                          "required": [
-                            "kind",
-                            "ft"
-                          ],
+                          "required": ["kind", "ft"],
                           "type": "object"
                         },
                         {
@@ -4082,10 +3641,7 @@
                               "type": "string"
                             }
                           },
-                          "required": [
-                            "kind",
-                            "inWg"
-                          ],
+                          "required": ["kind", "inWg"],
                           "type": "object"
                         },
                         {
@@ -4100,10 +3656,7 @@
                               "type": "string"
                             }
                           },
-                          "required": [
-                            "kind",
-                            "inWg"
-                          ],
+                          "required": ["kind", "inWg"],
                           "type": "object"
                         }
                       ]
@@ -4144,20 +3697,13 @@
                       ]
                     },
                     "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
+                      "enum": ["human", "pea", "unknown"],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
+                          "enum": ["high", "low"],
                           "type": "string"
                         },
                         {
@@ -4189,18 +3735,11 @@
                               "type": "string"
                             },
                             "verdict": {
-                              "enum": [
-                                "capped",
-                                "connect",
-                                "ignore"
-                              ],
+                              "enum": ["capped", "connect", "ignore"],
                               "type": "string"
                             }
                           },
-                          "required": [
-                            "kind",
-                            "verdict"
-                          ],
+                          "required": ["kind", "verdict"],
                           "type": "object"
                         },
                         {
@@ -4215,10 +3754,7 @@
                               "type": "string"
                             }
                           },
-                          "required": [
-                            "kind",
-                            "ft"
-                          ],
+                          "required": ["kind", "ft"],
                           "type": "object"
                         },
                         {
@@ -4233,10 +3769,7 @@
                               "type": "string"
                             }
                           },
-                          "required": [
-                            "kind",
-                            "inWg"
-                          ],
+                          "required": ["kind", "inWg"],
                           "type": "object"
                         },
                         {
@@ -4251,10 +3784,7 @@
                               "type": "string"
                             }
                           },
-                          "required": [
-                            "kind",
-                            "inWg"
-                          ],
+                          "required": ["kind", "inWg"],
                           "type": "object"
                         }
                       ]
@@ -4308,20 +3838,13 @@
                       ]
                     },
                     "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
+                      "enum": ["human", "pea", "unknown"],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
+                          "enum": ["high", "low"],
                           "type": "string"
                         },
                         {
@@ -4375,12 +3898,7 @@
                                   "curveKind": {
                                     "anyOf": [
                                       {
-                                        "enum": [
-                                          "line",
-                                          "arc",
-                                          "flex-polyline",
-                                          "other"
-                                        ],
+                                        "enum": ["line", "arc", "flex-polyline", "other"],
                                         "type": "string"
                                       },
                                       {
@@ -4401,10 +3919,7 @@
                                         "type": "string"
                                       }
                                     },
-                                    "required": [
-                                      "id",
-                                      "uniqueId"
-                                    ],
+                                    "required": ["id", "uniqueId"],
                                     "type": "object"
                                   },
                                   "family": {
@@ -4498,11 +4013,7 @@
                                                   ]
                                                 }
                                               },
-                                              "required": [
-                                                "id",
-                                                "uniqueId",
-                                                "connector"
-                                              ],
+                                              "required": ["id", "uniqueId", "connector"],
                                               "type": "object"
                                             },
                                             {
@@ -4632,10 +4143,7 @@
                                         "type": "string"
                                       }
                                     },
-                                    "required": [
-                                      "id",
-                                      "uniqueId"
-                                    ],
+                                    "required": ["id", "uniqueId"],
                                     "type": "object"
                                   },
                                   "port": {
@@ -4659,11 +4167,7 @@
                                             "type": "string"
                                           }
                                         },
-                                        "required": [
-                                          "id",
-                                          "uniqueId",
-                                          "connector"
-                                        ],
+                                        "required": ["id", "uniqueId", "connector"],
                                         "type": "object"
                                       },
                                       "diameterIn": {
@@ -4712,12 +4216,7 @@
                                         "type": "array"
                                       },
                                       "shape": {
-                                        "enum": [
-                                          "round",
-                                          "rectangular",
-                                          "oval",
-                                          "other"
-                                        ],
+                                        "enum": ["round", "rectangular", "oval", "other"],
                                         "type": "string"
                                       },
                                       "widthIn": {
@@ -4752,12 +4251,7 @@
                                     "type": "string"
                                   }
                                 },
-                                "required": [
-                                  "element",
-                                  "port",
-                                  "signedCfm",
-                                  "source"
-                                ],
+                                "required": ["element", "port", "signedCfm", "source"],
                                 "type": "object"
                               },
                               "type": "array"
@@ -4787,10 +4281,7 @@
                                                     "type": "string"
                                                   }
                                                 },
-                                                "required": [
-                                                  "id",
-                                                  "uniqueId"
-                                                ],
+                                                "required": ["id", "uniqueId"],
                                                 "type": "object"
                                               },
                                               "port": {
@@ -4816,11 +4307,7 @@
                                                             "type": "string"
                                                           }
                                                         },
-                                                        "required": [
-                                                          "id",
-                                                          "uniqueId",
-                                                          "connector"
-                                                        ],
+                                                        "required": ["id", "uniqueId", "connector"],
                                                         "type": "object"
                                                       },
                                                       {
@@ -4908,17 +4395,11 @@
                                                 "type": "object"
                                               }
                                             },
-                                            "required": [
-                                              "element",
-                                              "port"
-                                            ],
+                                            "required": ["element", "port"],
                                             "type": "object"
                                           },
                                           "kind": {
-                                            "enum": [
-                                              "gauge",
-                                              "physical-boundary"
-                                            ],
+                                            "enum": ["gauge", "physical-boundary"],
                                             "type": "string"
                                           },
                                           "source": {
@@ -4929,12 +4410,7 @@
                                             "type": "number"
                                           }
                                         },
-                                        "required": [
-                                          "at",
-                                          "kind",
-                                          "totalPressureInWg",
-                                          "source"
-                                        ],
+                                        "required": ["at", "kind", "totalPressureInWg", "source"],
                                         "type": "object"
                                       },
                                       "type": "array"
@@ -4956,10 +4432,7 @@
                                                 "type": "string"
                                               }
                                             },
-                                            "required": [
-                                              "id",
-                                              "uniqueId"
-                                            ],
+                                            "required": ["id", "uniqueId"],
                                             "type": "object"
                                           },
                                           "flowCfm": {
@@ -4991,11 +4464,7 @@
                                                             "type": "string"
                                                           }
                                                         },
-                                                        "required": [
-                                                          "id",
-                                                          "uniqueId",
-                                                          "connector"
-                                                        ],
+                                                        "required": ["id", "uniqueId", "connector"],
                                                         "type": "object"
                                                       },
                                                       {
@@ -5112,11 +4581,7 @@
                                                             "type": "string"
                                                           }
                                                         },
-                                                        "required": [
-                                                          "id",
-                                                          "uniqueId",
-                                                          "connector"
-                                                        ],
+                                                        "required": ["id", "uniqueId", "connector"],
                                                         "type": "object"
                                                       },
                                                       {
@@ -5248,10 +4713,7 @@
                                                     "type": "string"
                                                   }
                                                 },
-                                                "required": [
-                                                  "id",
-                                                  "uniqueId"
-                                                ],
+                                                "required": ["id", "uniqueId"],
                                                 "type": "object"
                                               },
                                               "port": {
@@ -5277,11 +4739,7 @@
                                                             "type": "string"
                                                           }
                                                         },
-                                                        "required": [
-                                                          "id",
-                                                          "uniqueId",
-                                                          "connector"
-                                                        ],
+                                                        "required": ["id", "uniqueId", "connector"],
                                                         "type": "object"
                                                       },
                                                       {
@@ -5369,10 +4827,7 @@
                                                 "type": "object"
                                               }
                                             },
-                                            "required": [
-                                              "element",
-                                              "port"
-                                            ],
+                                            "required": ["element", "port"],
                                             "type": "object"
                                           },
                                           "portFlows": {
@@ -5396,10 +4851,7 @@
                                                           "type": "string"
                                                         }
                                                       },
-                                                      "required": [
-                                                        "id",
-                                                        "uniqueId"
-                                                      ],
+                                                      "required": ["id", "uniqueId"],
                                                       "type": "object"
                                                     },
                                                     "port": {
@@ -5517,20 +4969,14 @@
                                                       "type": "object"
                                                     }
                                                   },
-                                                  "required": [
-                                                    "element",
-                                                    "port"
-                                                  ],
+                                                  "required": ["element", "port"],
                                                   "type": "object"
                                                 },
                                                 "signedCfm": {
                                                   "type": "number"
                                                 }
                                               },
-                                              "required": [
-                                                "at",
-                                                "signedCfm"
-                                              ],
+                                              "required": ["at", "signedCfm"],
                                               "type": "object"
                                             },
                                             "minItems": 2,
@@ -5560,10 +5006,7 @@
                                                     "type": "string"
                                                   }
                                                 },
-                                                "required": [
-                                                  "id",
-                                                  "uniqueId"
-                                                ],
+                                                "required": ["id", "uniqueId"],
                                                 "type": "object"
                                               },
                                               "port": {
@@ -5589,11 +5032,7 @@
                                                             "type": "string"
                                                           }
                                                         },
-                                                        "required": [
-                                                          "id",
-                                                          "uniqueId",
-                                                          "connector"
-                                                        ],
+                                                        "required": ["id", "uniqueId", "connector"],
                                                         "type": "object"
                                                       },
                                                       {
@@ -5681,10 +5120,7 @@
                                                 "type": "object"
                                               }
                                             },
-                                            "required": [
-                                              "element",
-                                              "port"
-                                            ],
+                                            "required": ["element", "port"],
                                             "type": "object"
                                           },
                                           "totalPressureDifferenceInWg": {
@@ -5730,10 +5166,7 @@
                                                 "type": "string"
                                               }
                                             },
-                                            "required": [
-                                              "id",
-                                              "uniqueId"
-                                            ],
+                                            "required": ["id", "uniqueId"],
                                             "type": "object"
                                           },
                                           "ports": {
@@ -5760,11 +5193,7 @@
                                                           "type": "string"
                                                         }
                                                       },
-                                                      "required": [
-                                                        "id",
-                                                        "uniqueId",
-                                                        "connector"
-                                                      ],
+                                                      "required": ["id", "uniqueId", "connector"],
                                                       "type": "object"
                                                     },
                                                     {
@@ -5819,12 +5248,7 @@
                                                   "type": "array"
                                                 },
                                                 "shape": {
-                                                  "enum": [
-                                                    "round",
-                                                    "rectangular",
-                                                    "oval",
-                                                    "other"
-                                                  ],
+                                                  "enum": ["round", "rectangular", "oval", "other"],
                                                   "type": "string"
                                                 },
                                                 "widthIn": {
@@ -5859,11 +5283,7 @@
                                             "type": "string"
                                           }
                                         },
-                                        "required": [
-                                          "element",
-                                          "ports",
-                                          "source"
-                                        ],
+                                        "required": ["element", "ports", "source"],
                                         "type": "object"
                                       },
                                       "type": "array"
@@ -5918,10 +5338,7 @@
                                   "type": "string"
                                 }
                               },
-                              "required": [
-                                "id",
-                                "uniqueId"
-                              ],
+                              "required": ["id", "uniqueId"],
                               "type": "object"
                             },
                             "kind": {
@@ -5947,11 +5364,7 @@
                                   "type": "number"
                                 }
                               },
-                              "required": [
-                                "totalLossInWg",
-                                "flowCfm",
-                                "source"
-                              ],
+                              "required": ["totalLossInWg", "flowCfm", "source"],
                               "type": "object"
                             },
                             "ports": {
@@ -5979,11 +5392,7 @@
                                               "type": "string"
                                             }
                                           },
-                                          "required": [
-                                            "id",
-                                            "uniqueId",
-                                            "connector"
-                                          ],
+                                          "required": ["id", "uniqueId", "connector"],
                                           "type": "object"
                                         },
                                         {
@@ -6038,12 +5447,7 @@
                                       "type": "array"
                                     },
                                     "shape": {
-                                      "enum": [
-                                        "round",
-                                        "rectangular",
-                                        "oval",
-                                        "other"
-                                      ],
+                                      "enum": ["round", "rectangular", "oval", "other"],
                                       "type": "string"
                                     },
                                     "widthIn": {
@@ -6093,11 +5497,7 @@
                                               "type": "string"
                                             }
                                           },
-                                          "required": [
-                                            "id",
-                                            "uniqueId",
-                                            "connector"
-                                          ],
+                                          "required": ["id", "uniqueId", "connector"],
                                           "type": "object"
                                         },
                                         {
@@ -6152,12 +5552,7 @@
                                       "type": "array"
                                     },
                                     "shape": {
-                                      "enum": [
-                                        "round",
-                                        "rectangular",
-                                        "oval",
-                                        "other"
-                                      ],
+                                      "enum": ["round", "rectangular", "oval", "other"],
                                       "type": "string"
                                     },
                                     "widthIn": {
@@ -6192,13 +5587,7 @@
                               "type": "string"
                             }
                           },
-                          "required": [
-                            "kind",
-                            "element",
-                            "ports",
-                            "loss",
-                            "source"
-                          ],
+                          "required": ["kind", "element", "ports", "loss", "source"],
                           "type": "object"
                         },
                         {
@@ -6228,10 +5617,7 @@
                                   "type": "string"
                                 }
                               },
-                              "required": [
-                                "id",
-                                "uniqueId"
-                              ],
+                              "required": ["id", "uniqueId"],
                               "type": "object"
                             },
                             "inlet": {
@@ -6259,11 +5645,7 @@
                                               "type": "string"
                                             }
                                           },
-                                          "required": [
-                                            "id",
-                                            "uniqueId",
-                                            "connector"
-                                          ],
+                                          "required": ["id", "uniqueId", "connector"],
                                           "type": "object"
                                         },
                                         {
@@ -6318,12 +5700,7 @@
                                       "type": "array"
                                     },
                                     "shape": {
-                                      "enum": [
-                                        "round",
-                                        "rectangular",
-                                        "oval",
-                                        "other"
-                                      ],
+                                      "enum": ["round", "rectangular", "oval", "other"],
                                       "type": "string"
                                     },
                                     "widthIn": {
@@ -6385,11 +5762,7 @@
                                               "type": "string"
                                             }
                                           },
-                                          "required": [
-                                            "id",
-                                            "uniqueId",
-                                            "connector"
-                                          ],
+                                          "required": ["id", "uniqueId", "connector"],
                                           "type": "object"
                                         },
                                         {
@@ -6444,12 +5817,7 @@
                                       "type": "array"
                                     },
                                     "shape": {
-                                      "enum": [
-                                        "round",
-                                        "rectangular",
-                                        "oval",
-                                        "other"
-                                      ],
+                                      "enum": ["round", "rectangular", "oval", "other"],
                                       "type": "string"
                                     },
                                     "widthIn": {
@@ -6522,10 +5890,7 @@
                                   "type": "string"
                                 }
                               },
-                              "required": [
-                                "id",
-                                "uniqueId"
-                              ],
+                              "required": ["id", "uniqueId"],
                               "type": "object"
                             },
                             "flowCfm": {
@@ -6564,11 +5929,7 @@
                                       "type": "number"
                                     }
                                   },
-                                  "required": [
-                                    "totalLossInWg",
-                                    "flowCfm",
-                                    "source"
-                                  ],
+                                  "required": ["totalLossInWg", "flowCfm", "source"],
                                   "type": "object"
                                 },
                                 {
@@ -6600,11 +5961,7 @@
                                           "type": "string"
                                         }
                                       },
-                                      "required": [
-                                        "id",
-                                        "uniqueId",
-                                        "connector"
-                                      ],
+                                      "required": ["id", "uniqueId", "connector"],
                                       "type": "object"
                                     },
                                     {
@@ -6659,12 +6016,7 @@
                                   "type": "array"
                                 },
                                 "shape": {
-                                  "enum": [
-                                    "round",
-                                    "rectangular",
-                                    "oval",
-                                    "other"
-                                  ],
+                                  "enum": ["round", "rectangular", "oval", "other"],
                                   "type": "string"
                                 },
                                 "widthIn": {
@@ -6692,10 +6044,7 @@
                               "type": "object"
                             },
                             "role": {
-                              "enum": [
-                                "demand",
-                                "reference"
-                              ],
+                              "enum": ["demand", "reference"],
                               "type": "string"
                             },
                             "source": {
@@ -6727,18 +6076,13 @@
                               "type": "string"
                             }
                           },
-                          "required": [
-                            "kind",
-                            "source"
-                          ],
+                          "required": ["kind", "source"],
                           "type": "object"
                         }
                       ]
                     }
                   },
-                  "required": [
-                    "value"
-                  ],
+                  "required": ["value"],
                   "type": "object"
                 },
                 {
@@ -6774,20 +6118,13 @@
                       ]
                     },
                     "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
+                      "enum": ["human", "pea", "unknown"],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
+                          "enum": ["high", "low"],
                           "type": "string"
                         },
                         {
@@ -6841,12 +6178,7 @@
                                   "curveKind": {
                                     "anyOf": [
                                       {
-                                        "enum": [
-                                          "line",
-                                          "arc",
-                                          "flex-polyline",
-                                          "other"
-                                        ],
+                                        "enum": ["line", "arc", "flex-polyline", "other"],
                                         "type": "string"
                                       },
                                       {
@@ -6867,10 +6199,7 @@
                                         "type": "string"
                                       }
                                     },
-                                    "required": [
-                                      "id",
-                                      "uniqueId"
-                                    ],
+                                    "required": ["id", "uniqueId"],
                                     "type": "object"
                                   },
                                   "family": {
@@ -6964,11 +6293,7 @@
                                                   ]
                                                 }
                                               },
-                                              "required": [
-                                                "id",
-                                                "uniqueId",
-                                                "connector"
-                                              ],
+                                              "required": ["id", "uniqueId", "connector"],
                                               "type": "object"
                                             },
                                             {
@@ -7098,10 +6423,7 @@
                                         "type": "string"
                                       }
                                     },
-                                    "required": [
-                                      "id",
-                                      "uniqueId"
-                                    ],
+                                    "required": ["id", "uniqueId"],
                                     "type": "object"
                                   },
                                   "port": {
@@ -7125,11 +6447,7 @@
                                             "type": "string"
                                           }
                                         },
-                                        "required": [
-                                          "id",
-                                          "uniqueId",
-                                          "connector"
-                                        ],
+                                        "required": ["id", "uniqueId", "connector"],
                                         "type": "object"
                                       },
                                       "diameterIn": {
@@ -7178,12 +6496,7 @@
                                         "type": "array"
                                       },
                                       "shape": {
-                                        "enum": [
-                                          "round",
-                                          "rectangular",
-                                          "oval",
-                                          "other"
-                                        ],
+                                        "enum": ["round", "rectangular", "oval", "other"],
                                         "type": "string"
                                       },
                                       "widthIn": {
@@ -7218,12 +6531,7 @@
                                     "type": "string"
                                   }
                                 },
-                                "required": [
-                                  "element",
-                                  "port",
-                                  "signedCfm",
-                                  "source"
-                                ],
+                                "required": ["element", "port", "signedCfm", "source"],
                                 "type": "object"
                               },
                               "type": "array"
@@ -7253,10 +6561,7 @@
                                                     "type": "string"
                                                   }
                                                 },
-                                                "required": [
-                                                  "id",
-                                                  "uniqueId"
-                                                ],
+                                                "required": ["id", "uniqueId"],
                                                 "type": "object"
                                               },
                                               "port": {
@@ -7282,11 +6587,7 @@
                                                             "type": "string"
                                                           }
                                                         },
-                                                        "required": [
-                                                          "id",
-                                                          "uniqueId",
-                                                          "connector"
-                                                        ],
+                                                        "required": ["id", "uniqueId", "connector"],
                                                         "type": "object"
                                                       },
                                                       {
@@ -7374,17 +6675,11 @@
                                                 "type": "object"
                                               }
                                             },
-                                            "required": [
-                                              "element",
-                                              "port"
-                                            ],
+                                            "required": ["element", "port"],
                                             "type": "object"
                                           },
                                           "kind": {
-                                            "enum": [
-                                              "gauge",
-                                              "physical-boundary"
-                                            ],
+                                            "enum": ["gauge", "physical-boundary"],
                                             "type": "string"
                                           },
                                           "source": {
@@ -7395,12 +6690,7 @@
                                             "type": "number"
                                           }
                                         },
-                                        "required": [
-                                          "at",
-                                          "kind",
-                                          "totalPressureInWg",
-                                          "source"
-                                        ],
+                                        "required": ["at", "kind", "totalPressureInWg", "source"],
                                         "type": "object"
                                       },
                                       "type": "array"
@@ -7422,10 +6712,7 @@
                                                 "type": "string"
                                               }
                                             },
-                                            "required": [
-                                              "id",
-                                              "uniqueId"
-                                            ],
+                                            "required": ["id", "uniqueId"],
                                             "type": "object"
                                           },
                                           "flowCfm": {
@@ -7457,11 +6744,7 @@
                                                             "type": "string"
                                                           }
                                                         },
-                                                        "required": [
-                                                          "id",
-                                                          "uniqueId",
-                                                          "connector"
-                                                        ],
+                                                        "required": ["id", "uniqueId", "connector"],
                                                         "type": "object"
                                                       },
                                                       {
@@ -7578,11 +6861,7 @@
                                                             "type": "string"
                                                           }
                                                         },
-                                                        "required": [
-                                                          "id",
-                                                          "uniqueId",
-                                                          "connector"
-                                                        ],
+                                                        "required": ["id", "uniqueId", "connector"],
                                                         "type": "object"
                                                       },
                                                       {
@@ -7714,10 +6993,7 @@
                                                     "type": "string"
                                                   }
                                                 },
-                                                "required": [
-                                                  "id",
-                                                  "uniqueId"
-                                                ],
+                                                "required": ["id", "uniqueId"],
                                                 "type": "object"
                                               },
                                               "port": {
@@ -7743,11 +7019,7 @@
                                                             "type": "string"
                                                           }
                                                         },
-                                                        "required": [
-                                                          "id",
-                                                          "uniqueId",
-                                                          "connector"
-                                                        ],
+                                                        "required": ["id", "uniqueId", "connector"],
                                                         "type": "object"
                                                       },
                                                       {
@@ -7835,10 +7107,7 @@
                                                 "type": "object"
                                               }
                                             },
-                                            "required": [
-                                              "element",
-                                              "port"
-                                            ],
+                                            "required": ["element", "port"],
                                             "type": "object"
                                           },
                                           "portFlows": {
@@ -7862,10 +7131,7 @@
                                                           "type": "string"
                                                         }
                                                       },
-                                                      "required": [
-                                                        "id",
-                                                        "uniqueId"
-                                                      ],
+                                                      "required": ["id", "uniqueId"],
                                                       "type": "object"
                                                     },
                                                     "port": {
@@ -7983,20 +7249,14 @@
                                                       "type": "object"
                                                     }
                                                   },
-                                                  "required": [
-                                                    "element",
-                                                    "port"
-                                                  ],
+                                                  "required": ["element", "port"],
                                                   "type": "object"
                                                 },
                                                 "signedCfm": {
                                                   "type": "number"
                                                 }
                                               },
-                                              "required": [
-                                                "at",
-                                                "signedCfm"
-                                              ],
+                                              "required": ["at", "signedCfm"],
                                               "type": "object"
                                             },
                                             "minItems": 2,
@@ -8026,10 +7286,7 @@
                                                     "type": "string"
                                                   }
                                                 },
-                                                "required": [
-                                                  "id",
-                                                  "uniqueId"
-                                                ],
+                                                "required": ["id", "uniqueId"],
                                                 "type": "object"
                                               },
                                               "port": {
@@ -8055,11 +7312,7 @@
                                                             "type": "string"
                                                           }
                                                         },
-                                                        "required": [
-                                                          "id",
-                                                          "uniqueId",
-                                                          "connector"
-                                                        ],
+                                                        "required": ["id", "uniqueId", "connector"],
                                                         "type": "object"
                                                       },
                                                       {
@@ -8147,10 +7400,7 @@
                                                 "type": "object"
                                               }
                                             },
-                                            "required": [
-                                              "element",
-                                              "port"
-                                            ],
+                                            "required": ["element", "port"],
                                             "type": "object"
                                           },
                                           "totalPressureDifferenceInWg": {
@@ -8196,10 +7446,7 @@
                                                 "type": "string"
                                               }
                                             },
-                                            "required": [
-                                              "id",
-                                              "uniqueId"
-                                            ],
+                                            "required": ["id", "uniqueId"],
                                             "type": "object"
                                           },
                                           "ports": {
@@ -8226,11 +7473,7 @@
                                                           "type": "string"
                                                         }
                                                       },
-                                                      "required": [
-                                                        "id",
-                                                        "uniqueId",
-                                                        "connector"
-                                                      ],
+                                                      "required": ["id", "uniqueId", "connector"],
                                                       "type": "object"
                                                     },
                                                     {
@@ -8285,12 +7528,7 @@
                                                   "type": "array"
                                                 },
                                                 "shape": {
-                                                  "enum": [
-                                                    "round",
-                                                    "rectangular",
-                                                    "oval",
-                                                    "other"
-                                                  ],
+                                                  "enum": ["round", "rectangular", "oval", "other"],
                                                   "type": "string"
                                                 },
                                                 "widthIn": {
@@ -8325,11 +7563,7 @@
                                             "type": "string"
                                           }
                                         },
-                                        "required": [
-                                          "element",
-                                          "ports",
-                                          "source"
-                                        ],
+                                        "required": ["element", "ports", "source"],
                                         "type": "object"
                                       },
                                       "type": "array"
@@ -8384,10 +7618,7 @@
                                   "type": "string"
                                 }
                               },
-                              "required": [
-                                "id",
-                                "uniqueId"
-                              ],
+                              "required": ["id", "uniqueId"],
                               "type": "object"
                             },
                             "kind": {
@@ -8413,11 +7644,7 @@
                                   "type": "number"
                                 }
                               },
-                              "required": [
-                                "totalLossInWg",
-                                "flowCfm",
-                                "source"
-                              ],
+                              "required": ["totalLossInWg", "flowCfm", "source"],
                               "type": "object"
                             },
                             "ports": {
@@ -8445,11 +7672,7 @@
                                               "type": "string"
                                             }
                                           },
-                                          "required": [
-                                            "id",
-                                            "uniqueId",
-                                            "connector"
-                                          ],
+                                          "required": ["id", "uniqueId", "connector"],
                                           "type": "object"
                                         },
                                         {
@@ -8504,12 +7727,7 @@
                                       "type": "array"
                                     },
                                     "shape": {
-                                      "enum": [
-                                        "round",
-                                        "rectangular",
-                                        "oval",
-                                        "other"
-                                      ],
+                                      "enum": ["round", "rectangular", "oval", "other"],
                                       "type": "string"
                                     },
                                     "widthIn": {
@@ -8559,11 +7777,7 @@
                                               "type": "string"
                                             }
                                           },
-                                          "required": [
-                                            "id",
-                                            "uniqueId",
-                                            "connector"
-                                          ],
+                                          "required": ["id", "uniqueId", "connector"],
                                           "type": "object"
                                         },
                                         {
@@ -8618,12 +7832,7 @@
                                       "type": "array"
                                     },
                                     "shape": {
-                                      "enum": [
-                                        "round",
-                                        "rectangular",
-                                        "oval",
-                                        "other"
-                                      ],
+                                      "enum": ["round", "rectangular", "oval", "other"],
                                       "type": "string"
                                     },
                                     "widthIn": {
@@ -8658,13 +7867,7 @@
                               "type": "string"
                             }
                           },
-                          "required": [
-                            "kind",
-                            "element",
-                            "ports",
-                            "loss",
-                            "source"
-                          ],
+                          "required": ["kind", "element", "ports", "loss", "source"],
                           "type": "object"
                         },
                         {
@@ -8694,10 +7897,7 @@
                                   "type": "string"
                                 }
                               },
-                              "required": [
-                                "id",
-                                "uniqueId"
-                              ],
+                              "required": ["id", "uniqueId"],
                               "type": "object"
                             },
                             "inlet": {
@@ -8725,11 +7925,7 @@
                                               "type": "string"
                                             }
                                           },
-                                          "required": [
-                                            "id",
-                                            "uniqueId",
-                                            "connector"
-                                          ],
+                                          "required": ["id", "uniqueId", "connector"],
                                           "type": "object"
                                         },
                                         {
@@ -8784,12 +7980,7 @@
                                       "type": "array"
                                     },
                                     "shape": {
-                                      "enum": [
-                                        "round",
-                                        "rectangular",
-                                        "oval",
-                                        "other"
-                                      ],
+                                      "enum": ["round", "rectangular", "oval", "other"],
                                       "type": "string"
                                     },
                                     "widthIn": {
@@ -8851,11 +8042,7 @@
                                               "type": "string"
                                             }
                                           },
-                                          "required": [
-                                            "id",
-                                            "uniqueId",
-                                            "connector"
-                                          ],
+                                          "required": ["id", "uniqueId", "connector"],
                                           "type": "object"
                                         },
                                         {
@@ -8910,12 +8097,7 @@
                                       "type": "array"
                                     },
                                     "shape": {
-                                      "enum": [
-                                        "round",
-                                        "rectangular",
-                                        "oval",
-                                        "other"
-                                      ],
+                                      "enum": ["round", "rectangular", "oval", "other"],
                                       "type": "string"
                                     },
                                     "widthIn": {
@@ -8988,10 +8170,7 @@
                                   "type": "string"
                                 }
                               },
-                              "required": [
-                                "id",
-                                "uniqueId"
-                              ],
+                              "required": ["id", "uniqueId"],
                               "type": "object"
                             },
                             "flowCfm": {
@@ -9030,11 +8209,7 @@
                                       "type": "number"
                                     }
                                   },
-                                  "required": [
-                                    "totalLossInWg",
-                                    "flowCfm",
-                                    "source"
-                                  ],
+                                  "required": ["totalLossInWg", "flowCfm", "source"],
                                   "type": "object"
                                 },
                                 {
@@ -9066,11 +8241,7 @@
                                           "type": "string"
                                         }
                                       },
-                                      "required": [
-                                        "id",
-                                        "uniqueId",
-                                        "connector"
-                                      ],
+                                      "required": ["id", "uniqueId", "connector"],
                                       "type": "object"
                                     },
                                     {
@@ -9125,12 +8296,7 @@
                                   "type": "array"
                                 },
                                 "shape": {
-                                  "enum": [
-                                    "round",
-                                    "rectangular",
-                                    "oval",
-                                    "other"
-                                  ],
+                                  "enum": ["round", "rectangular", "oval", "other"],
                                   "type": "string"
                                 },
                                 "widthIn": {
@@ -9158,10 +8324,7 @@
                               "type": "object"
                             },
                             "role": {
-                              "enum": [
-                                "demand",
-                                "reference"
-                              ],
+                              "enum": ["demand", "reference"],
                               "type": "string"
                             },
                             "source": {
@@ -9193,18 +8356,13 @@
                               "type": "string"
                             }
                           },
-                          "required": [
-                            "kind",
-                            "source"
-                          ],
+                          "required": ["kind", "source"],
                           "type": "object"
                         }
                       ]
                     }
                   },
-                  "required": [
-                    "value"
-                  ],
+                  "required": ["value"],
                   "type": "object"
                 },
                 {
@@ -9254,20 +8412,13 @@
                       ]
                     },
                     "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
+                      "enum": ["human", "pea", "unknown"],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
+                          "enum": ["high", "low"],
                           "type": "string"
                         },
                         {
@@ -9296,15 +8447,11 @@
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "table"
-                      ],
+                      "required": ["table"],
                       "type": "object"
                     }
                   },
-                  "required": [
-                    "value"
-                  ],
+                  "required": ["value"],
                   "type": "object"
                 },
                 {
@@ -9340,20 +8487,13 @@
                       ]
                     },
                     "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
+                      "enum": ["human", "pea", "unknown"],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
+                          "enum": ["high", "low"],
                           "type": "string"
                         },
                         {
@@ -9382,15 +8522,11 @@
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "table"
-                      ],
+                      "required": ["table"],
                       "type": "object"
                     }
                   },
-                  "required": [
-                    "value"
-                  ],
+                  "required": ["value"],
                   "type": "object"
                 },
                 {
@@ -9439,20 +8575,13 @@
                       ]
                     },
                     "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
+                      "enum": ["human", "pea", "unknown"],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
+                          "enum": ["high", "low"],
                           "type": "string"
                         },
                         {
@@ -9486,11 +8615,7 @@
                           "type": "array"
                         },
                         "state": {
-                          "enum": [
-                            "proven",
-                            "assumed",
-                            "unproven"
-                          ],
+                          "enum": ["proven", "assumed", "unproven"],
                           "type": "string"
                         },
                         "text": {
@@ -9503,11 +8628,7 @@
                           "type": "string"
                         },
                         "verdict": {
-                          "enum": [
-                            "yes",
-                            "no",
-                            "not-this"
-                          ],
+                          "enum": ["yes", "no", "not-this"],
                           "type": "string"
                         },
                         "verdictAt": {
@@ -9518,18 +8639,11 @@
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "title",
-                        "text",
-                        "ids",
-                        "state"
-                      ],
+                      "required": ["title", "text", "ids", "state"],
                       "type": "object"
                     }
                   },
-                  "required": [
-                    "value"
-                  ],
+                  "required": ["value"],
                   "type": "object"
                 },
                 {
@@ -9565,20 +8679,13 @@
                       ]
                     },
                     "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
+                      "enum": ["human", "pea", "unknown"],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
+                          "enum": ["high", "low"],
                           "type": "string"
                         },
                         {
@@ -9612,11 +8719,7 @@
                           "type": "array"
                         },
                         "state": {
-                          "enum": [
-                            "proven",
-                            "assumed",
-                            "unproven"
-                          ],
+                          "enum": ["proven", "assumed", "unproven"],
                           "type": "string"
                         },
                         "text": {
@@ -9629,11 +8732,7 @@
                           "type": "string"
                         },
                         "verdict": {
-                          "enum": [
-                            "yes",
-                            "no",
-                            "not-this"
-                          ],
+                          "enum": ["yes", "no", "not-this"],
                           "type": "string"
                         },
                         "verdictAt": {
@@ -9644,18 +8743,11 @@
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "title",
-                        "text",
-                        "ids",
-                        "state"
-                      ],
+                      "required": ["title", "text", "ids", "state"],
                       "type": "object"
                     }
                   },
-                  "required": [
-                    "value"
-                  ],
+                  "required": ["value"],
                   "type": "object"
                 },
                 {
@@ -9705,20 +8797,13 @@
                       ]
                     },
                     "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
+                      "enum": ["human", "pea", "unknown"],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
+                          "enum": ["high", "low"],
                           "type": "string"
                         },
                         {
@@ -9750,15 +8835,11 @@
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "inWg"
-                      ],
+                      "required": ["inWg"],
                       "type": "object"
                     }
                   },
-                  "required": [
-                    "value"
-                  ],
+                  "required": ["value"],
                   "type": "object"
                 },
                 {
@@ -9794,20 +8875,13 @@
                       ]
                     },
                     "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
+                      "enum": ["human", "pea", "unknown"],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
+                          "enum": ["high", "low"],
                           "type": "string"
                         },
                         {
@@ -9839,15 +8913,11 @@
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "inWg"
-                      ],
+                      "required": ["inWg"],
                       "type": "object"
                     }
                   },
-                  "required": [
-                    "value"
-                  ],
+                  "required": ["value"],
                   "type": "object"
                 },
                 {
@@ -9897,20 +8967,13 @@
                     ]
                   },
                   "by": {
-                    "enum": [
-                      "human",
-                      "pea",
-                      "unknown"
-                    ],
+                    "enum": ["human", "pea", "unknown"],
                     "type": "string"
                   },
                   "confidence": {
                     "anyOf": [
                       {
-                        "enum": [
-                          "high",
-                          "low"
-                        ],
+                        "enum": ["high", "low"],
                         "type": "string"
                       },
                       {
@@ -9957,10 +9020,7 @@
                         "type": "number"
                       },
                       "splitPolicy": {
-                        "enum": [
-                          "even",
-                          "proportional"
-                        ],
+                        "enum": ["even", "proportional"],
                         "type": "string"
                       },
                       "terminalDropInWg": {
@@ -9985,9 +9045,7 @@
                     "type": "object"
                   }
                 },
-                "required": [
-                  "value"
-                ],
+                "required": ["value"],
                 "type": "object"
               },
               {
@@ -10023,20 +9081,13 @@
                     ]
                   },
                   "by": {
-                    "enum": [
-                      "human",
-                      "pea",
-                      "unknown"
-                    ],
+                    "enum": ["human", "pea", "unknown"],
                     "type": "string"
                   },
                   "confidence": {
                     "anyOf": [
                       {
-                        "enum": [
-                          "high",
-                          "low"
-                        ],
+                        "enum": ["high", "low"],
                         "type": "string"
                       },
                       {
@@ -10083,10 +9134,7 @@
                         "type": "number"
                       },
                       "splitPolicy": {
-                        "enum": [
-                          "even",
-                          "proportional"
-                        ],
+                        "enum": ["even", "proportional"],
                         "type": "string"
                       },
                       "terminalDropInWg": {
@@ -10111,9 +9159,7 @@
                     "type": "object"
                   }
                 },
-                "required": [
-                  "value"
-                ],
+                "required": ["value"],
                 "type": "object"
               },
               {
@@ -10156,20 +9202,13 @@
                     ]
                   },
                   "by": {
-                    "enum": [
-                      "human",
-                      "pea",
-                      "unknown"
-                    ],
+                    "enum": ["human", "pea", "unknown"],
                     "type": "string"
                   },
                   "confidence": {
                     "anyOf": [
                       {
-                        "enum": [
-                          "high",
-                          "low"
-                        ],
+                        "enum": ["high", "low"],
                         "type": "string"
                       },
                       {
@@ -10195,9 +9234,7 @@
                     "type": "number"
                   }
                 },
-                "required": [
-                  "value"
-                ],
+                "required": ["value"],
                 "type": "object"
               },
               {
@@ -10233,20 +9270,13 @@
                     ]
                   },
                   "by": {
-                    "enum": [
-                      "human",
-                      "pea",
-                      "unknown"
-                    ],
+                    "enum": ["human", "pea", "unknown"],
                     "type": "string"
                   },
                   "confidence": {
                     "anyOf": [
                       {
-                        "enum": [
-                          "high",
-                          "low"
-                        ],
+                        "enum": ["high", "low"],
                         "type": "string"
                       },
                       {
@@ -10272,9 +9302,7 @@
                     "type": "number"
                   }
                 },
-                "required": [
-                  "value"
-                ],
+                "required": ["value"],
                 "type": "object"
               },
               {
@@ -10317,20 +9345,13 @@
                       ]
                     },
                     "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
+                      "enum": ["human", "pea", "unknown"],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
+                          "enum": ["high", "low"],
                           "type": "string"
                         },
                         {
@@ -10362,15 +9383,11 @@
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "cfm"
-                      ],
+                      "required": ["cfm"],
                       "type": "object"
                     }
                   },
-                  "required": [
-                    "value"
-                  ],
+                  "required": ["value"],
                   "type": "object"
                 },
                 {
@@ -10406,20 +9423,13 @@
                       ]
                     },
                     "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
+                      "enum": ["human", "pea", "unknown"],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
+                          "enum": ["high", "low"],
                           "type": "string"
                         },
                         {
@@ -10451,15 +9461,11 @@
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "cfm"
-                      ],
+                      "required": ["cfm"],
                       "type": "object"
                     }
                   },
-                  "required": [
-                    "value"
-                  ],
+                  "required": ["value"],
                   "type": "object"
                 },
                 {
@@ -10509,20 +9515,13 @@
                       ]
                     },
                     "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
+                      "enum": ["human", "pea", "unknown"],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
+                          "enum": ["high", "low"],
                           "type": "string"
                         },
                         {
@@ -10551,15 +9550,11 @@
                           "type": "number"
                         }
                       },
-                      "required": [
-                        "inWg"
-                      ],
+                      "required": ["inWg"],
                       "type": "object"
                     }
                   },
-                  "required": [
-                    "value"
-                  ],
+                  "required": ["value"],
                   "type": "object"
                 },
                 {
@@ -10595,20 +9590,13 @@
                       ]
                     },
                     "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
+                      "enum": ["human", "pea", "unknown"],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
+                          "enum": ["high", "low"],
                           "type": "string"
                         },
                         {
@@ -10637,15 +9625,11 @@
                           "type": "number"
                         }
                       },
-                      "required": [
-                        "inWg"
-                      ],
+                      "required": ["inWg"],
                       "type": "object"
                     }
                   },
-                  "required": [
-                    "value"
-                  ],
+                  "required": ["value"],
                   "type": "object"
                 },
                 {
@@ -10695,20 +9679,13 @@
                       ]
                     },
                     "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
+                      "enum": ["human", "pea", "unknown"],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
+                          "enum": ["high", "low"],
                           "type": "string"
                         },
                         {
@@ -10740,15 +9717,11 @@
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "cfm"
-                      ],
+                      "required": ["cfm"],
                       "type": "object"
                     }
                   },
-                  "required": [
-                    "value"
-                  ],
+                  "required": ["value"],
                   "type": "object"
                 },
                 {
@@ -10784,20 +9757,13 @@
                       ]
                     },
                     "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
+                      "enum": ["human", "pea", "unknown"],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
+                          "enum": ["high", "low"],
                           "type": "string"
                         },
                         {
@@ -10829,15 +9795,11 @@
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "cfm"
-                      ],
+                      "required": ["cfm"],
                       "type": "object"
                     }
                   },
-                  "required": [
-                    "value"
-                  ],
+                  "required": ["value"],
                   "type": "object"
                 },
                 {
@@ -10887,20 +9849,13 @@
                       ]
                     },
                     "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
+                      "enum": ["human", "pea", "unknown"],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
+                          "enum": ["high", "low"],
                           "type": "string"
                         },
                         {
@@ -10936,15 +9891,11 @@
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "kind"
-                      ],
+                      "required": ["kind"],
                       "type": "object"
                     }
                   },
-                  "required": [
-                    "value"
-                  ],
+                  "required": ["value"],
                   "type": "object"
                 },
                 {
@@ -10980,20 +9931,13 @@
                       ]
                     },
                     "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
+                      "enum": ["human", "pea", "unknown"],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
+                          "enum": ["high", "low"],
                           "type": "string"
                         },
                         {
@@ -11029,15 +9973,11 @@
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "kind"
-                      ],
+                      "required": ["kind"],
                       "type": "object"
                     }
                   },
-                  "required": [
-                    "value"
-                  ],
+                  "required": ["value"],
                   "type": "object"
                 },
                 {
@@ -11087,20 +10027,13 @@
                     ]
                   },
                   "by": {
-                    "enum": [
-                      "human",
-                      "pea",
-                      "unknown"
-                    ],
+                    "enum": ["human", "pea", "unknown"],
                     "type": "string"
                   },
                   "confidence": {
                     "anyOf": [
                       {
-                        "enum": [
-                          "high",
-                          "low"
-                        ],
+                        "enum": ["high", "low"],
                         "type": "string"
                       },
                       {
@@ -11133,9 +10066,7 @@
                     ]
                   }
                 },
-                "required": [
-                  "value"
-                ],
+                "required": ["value"],
                 "type": "object"
               },
               {
@@ -11171,20 +10102,13 @@
                     ]
                   },
                   "by": {
-                    "enum": [
-                      "human",
-                      "pea",
-                      "unknown"
-                    ],
+                    "enum": ["human", "pea", "unknown"],
                     "type": "string"
                   },
                   "confidence": {
                     "anyOf": [
                       {
-                        "enum": [
-                          "high",
-                          "low"
-                        ],
+                        "enum": ["high", "low"],
                         "type": "string"
                       },
                       {
@@ -11217,9 +10141,7 @@
                     ]
                   }
                 },
-                "required": [
-                  "value"
-                ],
+                "required": ["value"],
                 "type": "object"
               },
               {
@@ -11262,20 +10184,13 @@
                       ]
                     },
                     "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
+                      "enum": ["human", "pea", "unknown"],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
+                          "enum": ["high", "low"],
                           "type": "string"
                         },
                         {
@@ -11348,11 +10263,7 @@
                                       ]
                                     }
                                   },
-                                  "required": [
-                                    "name",
-                                    "number",
-                                    "cfm"
-                                  ],
+                                  "required": ["name", "number", "cfm"],
                                   "type": "object"
                                 },
                                 "type": "array"
@@ -11368,26 +10279,17 @@
                                 ]
                               }
                             },
-                            "required": [
-                              "name",
-                              "tag",
-                              "cfm",
-                              "rooms"
-                            ],
+                            "required": ["name", "tag", "cfm", "rooms"],
                             "type": "object"
                           },
                           "type": "array"
                         }
                       },
-                      "required": [
-                        "systems"
-                      ],
+                      "required": ["systems"],
                       "type": "object"
                     }
                   },
-                  "required": [
-                    "value"
-                  ],
+                  "required": ["value"],
                   "type": "object"
                 },
                 {
@@ -11423,20 +10325,13 @@
                       ]
                     },
                     "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
+                      "enum": ["human", "pea", "unknown"],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
+                          "enum": ["high", "low"],
                           "type": "string"
                         },
                         {
@@ -11509,11 +10404,7 @@
                                       ]
                                     }
                                   },
-                                  "required": [
-                                    "name",
-                                    "number",
-                                    "cfm"
-                                  ],
+                                  "required": ["name", "number", "cfm"],
                                   "type": "object"
                                 },
                                 "type": "array"
@@ -11529,26 +10420,17 @@
                                 ]
                               }
                             },
-                            "required": [
-                              "name",
-                              "tag",
-                              "cfm",
-                              "rooms"
-                            ],
+                            "required": ["name", "tag", "cfm", "rooms"],
                             "type": "object"
                           },
                           "type": "array"
                         }
                       },
-                      "required": [
-                        "systems"
-                      ],
+                      "required": ["systems"],
                       "type": "object"
                     }
                   },
-                  "required": [
-                    "value"
-                  ],
+                  "required": ["value"],
                   "type": "object"
                 },
                 {
@@ -11598,20 +10480,13 @@
                       ]
                     },
                     "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
+                      "enum": ["human", "pea", "unknown"],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
+                          "enum": ["high", "low"],
                           "type": "string"
                         },
                         {
@@ -11637,9 +10512,7 @@
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "value"
-                  ],
+                  "required": ["value"],
                   "type": "object"
                 },
                 {
@@ -11675,20 +10548,13 @@
                       ]
                     },
                     "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
+                      "enum": ["human", "pea", "unknown"],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
+                          "enum": ["high", "low"],
                           "type": "string"
                         },
                         {
@@ -11714,9 +10580,7 @@
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "value"
-                  ],
+                  "required": ["value"],
                   "type": "object"
                 },
                 {
@@ -11773,20 +10637,13 @@
                       ]
                     },
                     "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
+                      "enum": ["human", "pea", "unknown"],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
+                          "enum": ["high", "low"],
                           "type": "string"
                         },
                         {
@@ -11811,22 +10668,15 @@
                       "additionalProperties": false,
                       "properties": {
                         "role": {
-                          "enum": [
-                            "fan",
-                            "passive"
-                          ],
+                          "enum": ["fan", "passive"],
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "role"
-                      ],
+                      "required": ["role"],
                       "type": "object"
                     }
                   },
-                  "required": [
-                    "value"
-                  ],
+                  "required": ["value"],
                   "type": "object"
                 },
                 {
@@ -11862,20 +10712,13 @@
                       ]
                     },
                     "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
+                      "enum": ["human", "pea", "unknown"],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
+                          "enum": ["high", "low"],
                           "type": "string"
                         },
                         {
@@ -11900,22 +10743,15 @@
                       "additionalProperties": false,
                       "properties": {
                         "role": {
-                          "enum": [
-                            "fan",
-                            "passive"
-                          ],
+                          "enum": ["fan", "passive"],
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "role"
-                      ],
+                      "required": ["role"],
                       "type": "object"
                     }
                   },
-                  "required": [
-                    "value"
-                  ],
+                  "required": ["value"],
                   "type": "object"
                 },
                 {
@@ -11965,20 +10801,13 @@
                       ]
                     },
                     "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
+                      "enum": ["human", "pea", "unknown"],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
+                          "enum": ["high", "low"],
                           "type": "string"
                         },
                         {
@@ -12007,15 +10836,11 @@
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "rule"
-                      ],
+                      "required": ["rule"],
                       "type": "object"
                     }
                   },
-                  "required": [
-                    "value"
-                  ],
+                  "required": ["value"],
                   "type": "object"
                 },
                 {
@@ -12051,20 +10876,13 @@
                       ]
                     },
                     "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
+                      "enum": ["human", "pea", "unknown"],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
+                          "enum": ["high", "low"],
                           "type": "string"
                         },
                         {
@@ -12093,15 +10911,11 @@
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "rule"
-                      ],
+                      "required": ["rule"],
                       "type": "object"
                     }
                   },
-                  "required": [
-                    "value"
-                  ],
+                  "required": ["value"],
                   "type": "object"
                 },
                 {
@@ -12151,20 +10965,13 @@
                       ]
                     },
                     "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
+                      "enum": ["human", "pea", "unknown"],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
+                          "enum": ["high", "low"],
                           "type": "string"
                         },
                         {
@@ -12193,15 +11000,11 @@
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "table"
-                      ],
+                      "required": ["table"],
                       "type": "object"
                     }
                   },
-                  "required": [
-                    "value"
-                  ],
+                  "required": ["value"],
                   "type": "object"
                 },
                 {
@@ -12237,20 +11040,13 @@
                       ]
                     },
                     "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
+                      "enum": ["human", "pea", "unknown"],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
+                          "enum": ["high", "low"],
                           "type": "string"
                         },
                         {
@@ -12279,15 +11075,11 @@
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "table"
-                      ],
+                      "required": ["table"],
                       "type": "object"
                     }
                   },
-                  "required": [
-                    "value"
-                  ],
+                  "required": ["value"],
                   "type": "object"
                 },
                 {
@@ -12336,20 +11128,13 @@
                       ]
                     },
                     "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
+                      "enum": ["human", "pea", "unknown"],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
+                          "enum": ["high", "low"],
                           "type": "string"
                         },
                         {
@@ -12380,9 +11165,7 @@
                       "type": "array"
                     }
                   },
-                  "required": [
-                    "value"
-                  ],
+                  "required": ["value"],
                   "type": "object"
                 },
                 {
@@ -12418,20 +11201,13 @@
                       ]
                     },
                     "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
+                      "enum": ["human", "pea", "unknown"],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
+                          "enum": ["high", "low"],
                           "type": "string"
                         },
                         {
@@ -12462,9 +11238,7 @@
                       "type": "array"
                     }
                   },
-                  "required": [
-                    "value"
-                  ],
+                  "required": ["value"],
                   "type": "object"
                 },
                 {
@@ -12514,20 +11288,13 @@
                     ]
                   },
                   "by": {
-                    "enum": [
-                      "human",
-                      "pea",
-                      "unknown"
-                    ],
+                    "enum": ["human", "pea", "unknown"],
                     "type": "string"
                   },
                   "confidence": {
                     "anyOf": [
                       {
-                        "enum": [
-                          "high",
-                          "low"
-                        ],
+                        "enum": ["high", "low"],
                         "type": "string"
                       },
                       {
@@ -12572,19 +11339,11 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "supply",
-                      "return",
-                      "exhaust",
-                      "fresh",
-                      "unknown"
-                    ],
+                    "required": ["supply", "return", "exhaust", "fresh", "unknown"],
                     "type": "object"
                   }
                 },
-                "required": [
-                  "value"
-                ],
+                "required": ["value"],
                 "type": "object"
               },
               {
@@ -12620,20 +11379,13 @@
                     ]
                   },
                   "by": {
-                    "enum": [
-                      "human",
-                      "pea",
-                      "unknown"
-                    ],
+                    "enum": ["human", "pea", "unknown"],
                     "type": "string"
                   },
                   "confidence": {
                     "anyOf": [
                       {
-                        "enum": [
-                          "high",
-                          "low"
-                        ],
+                        "enum": ["high", "low"],
                         "type": "string"
                       },
                       {
@@ -12678,19 +11430,11 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "supply",
-                      "return",
-                      "exhaust",
-                      "fresh",
-                      "unknown"
-                    ],
+                    "required": ["supply", "return", "exhaust", "fresh", "unknown"],
                     "type": "object"
                   }
                 },
-                "required": [
-                  "value"
-                ],
+                "required": ["value"],
                 "type": "object"
               },
               {
@@ -12733,20 +11477,13 @@
                       ]
                     },
                     "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
+                      "enum": ["human", "pea", "unknown"],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
+                          "enum": ["high", "low"],
                           "type": "string"
                         },
                         {
@@ -12778,15 +11515,11 @@
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "inWg"
-                      ],
+                      "required": ["inWg"],
                       "type": "object"
                     }
                   },
-                  "required": [
-                    "value"
-                  ],
+                  "required": ["value"],
                   "type": "object"
                 },
                 {
@@ -12822,20 +11555,13 @@
                       ]
                     },
                     "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
+                      "enum": ["human", "pea", "unknown"],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
+                          "enum": ["high", "low"],
                           "type": "string"
                         },
                         {
@@ -12867,15 +11593,11 @@
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "inWg"
-                      ],
+                      "required": ["inWg"],
                       "type": "object"
                     }
                   },
-                  "required": [
-                    "value"
-                  ],
+                  "required": ["value"],
                   "type": "object"
                 },
                 {
@@ -12925,20 +11647,13 @@
                     ]
                   },
                   "by": {
-                    "enum": [
-                      "human",
-                      "pea",
-                      "unknown"
-                    ],
+                    "enum": ["human", "pea", "unknown"],
                     "type": "string"
                   },
                   "confidence": {
                     "anyOf": [
                       {
-                        "enum": [
-                          "high",
-                          "low"
-                        ],
+                        "enum": ["high", "low"],
                         "type": "string"
                       },
                       {
@@ -12971,9 +11686,7 @@
                     ]
                   }
                 },
-                "required": [
-                  "value"
-                ],
+                "required": ["value"],
                 "type": "object"
               },
               {
@@ -13009,20 +11722,13 @@
                     ]
                   },
                   "by": {
-                    "enum": [
-                      "human",
-                      "pea",
-                      "unknown"
-                    ],
+                    "enum": ["human", "pea", "unknown"],
                     "type": "string"
                   },
                   "confidence": {
                     "anyOf": [
                       {
-                        "enum": [
-                          "high",
-                          "low"
-                        ],
+                        "enum": ["high", "low"],
                         "type": "string"
                       },
                       {
@@ -13055,9 +11761,7 @@
                     ]
                   }
                 },
-                "required": [
-                  "value"
-                ],
+                "required": ["value"],
                 "type": "object"
               },
               {

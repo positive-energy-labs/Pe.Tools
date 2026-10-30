@@ -13,7 +13,12 @@ const leg = (id: string, flowCfm: number, lossInWg: number | null, velocityFpm: 
   lossSource: { kind: "friction", ref: "test" },
   equivalentFt: 10,
 });
-const path = (legIds: string[], elementId: number, knownInWg: number, kind: SheetPath["end"]["kind"] = "terminal"): SheetPath => ({
+const path = (
+  legIds: string[],
+  elementId: number,
+  knownInWg: number,
+  kind: SheetPath["end"]["kind"] = "terminal",
+): SheetPath => ({
   side: "supply",
   legIds,
   end: { kind, elementId },
@@ -25,9 +30,21 @@ const path = (legIds: string[], elementId: number, knownInWg: number, kind: Shee
 // Trunk a feeds three runs; b feeds two of them; c, d and e are the branches.
 const sheet = {
   legs: Object.fromEntries(
-    [leg("a1", 300, 0.05, 950), leg("a2", 300, 0.02, 950), leg("b3", 200, 0.04, 800), leg("c4", 100, 0.03, 600), leg("d5", 100, null, 600), leg("e6", 100, 0.01, 500)].map((l) => [l.id, l]),
+    [
+      leg("a1", 300, 0.05, 950),
+      leg("a2", 300, 0.02, 950),
+      leg("b3", 200, 0.04, 800),
+      leg("c4", 100, 0.03, 600),
+      leg("d5", 100, null, 600),
+      leg("e6", 100, 0.01, 500),
+    ].map((l) => [l.id, l]),
   ),
-  paths: [path(["a1", "a2", "b3", "c4"], 40, 0.14), path(["a1", "a2", "b3", "d5"], 50, 0.11), path(["a1", "a2", "e6"], 60, 0.08), path(["a1", "x7"], 70, 0.05, "sibling-fan")],
+  paths: [
+    path(["a1", "a2", "b3", "c4"], 40, 0.14),
+    path(["a1", "a2", "b3", "d5"], 50, 0.11),
+    path(["a1", "a2", "e6"], 60, 0.08),
+    path(["a1", "x7"], 70, 0.05, "sibling-fan"),
+  ],
 } as unknown as Sheet;
 (sheet.legs as Record<string, Leg>).x7 = leg("x7", 0, 0, 0);
 
@@ -48,7 +65,11 @@ it("sections are where the run bundle keeps its count; residual and velocity-ove
   expect(sec("a2")).toMatchObject({ cfm: 300, overLegIds: ["a2"] });
 
   const run = (end: number) => w.runs.find((r) => r.end.elementId === end)!;
-  expect(run(40)).toMatchObject({ critical: true, residualInWg: 0, sectionIds: ["supply:a1", "supply:a2", "supply:b3", "supply:c4"] });
+  expect(run(40)).toMatchObject({
+    critical: true,
+    residualInWg: 0,
+    sectionIds: ["supply:a1", "supply:a2", "supply:b3", "supply:c4"],
+  });
   expect(run(60).residualInWg).toBeCloseTo(0.06);
   expect(run(60).overLegIds).toEqual(["a1", "a2"]);
   expect(run(70)).toMatchObject({ critical: false, residualInWg: null });
@@ -60,10 +81,14 @@ it("sections are where the run bundle keeps its count; residual and velocity-ove
 it("a leg merging back into a run starts a new section", () => {
   // Two runs share x, part at y/z, and the second leg of each is its own: no section spans a junction.
   const s = {
-    legs: Object.fromEntries([leg("x1", 2, 0, 0), leg("y2", 1, 0, 0), leg("z3", 1, 0, 0)].map((l) => [l.id, l])),
+    legs: Object.fromEntries(
+      [leg("x1", 2, 0, 0), leg("y2", 1, 0, 0), leg("z3", 1, 0, 0)].map((l) => [l.id, l]),
+    ),
     paths: [path(["x1", "y2"], 1, 0.1), path(["x1", "z3"], 2, 0.1)],
   } as unknown as Sheet;
-  expect(worksheet(s, { maxFpm: { supply: 900, return: 700 } }).supply.sections.map((x) => x.legIds)).toEqual([["x1"], ["y2"], ["z3"]]);
+  expect(
+    worksheet(s, { maxFpm: { supply: 900, return: 700 } }).supply.sections.map((x) => x.legIds),
+  ).toEqual([["x1"], ["y2"], ["z3"]]);
 });
 
 it("a side with no terminal: other fans' ports and streams it delivers to set the worst (UI5, MUAS-1 supply)", () => {

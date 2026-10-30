@@ -528,7 +528,12 @@ export const LOSS_RULES: readonly LossRule[] = [
       const abAc = f.takeoff ? tapAbAc(f) : areaOf(f.junction?.branch) / areaOf(common);
       const asAc = f.takeoff ? 1 : areaOf(f.junction?.straight) / areaOf(common);
       const refuse = pastCommon("ED5-3", abAc, asAc);
-      if (refuse) return { res: `${(f.junction?.leg ?? leg) === "Cs" ? "Cs" : "Cb"}${block}`, x: NaN, refuse };
+      if (refuse)
+        return {
+          res: `${(f.junction?.leg ?? leg) === "Cs" ? "Cs" : "Cb"}${block}`,
+          x: NaN,
+          refuse,
+        };
       if ((f.junction?.leg ?? leg) === "Cs") {
         const x = flows.qs! / flows.qc!;
         return {

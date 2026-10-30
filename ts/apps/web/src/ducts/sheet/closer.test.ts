@@ -83,33 +83,42 @@ it("an unknown drop takes the typed value, else the firm shim named in the verb"
     action: null,
   });
   // The firm's terminal drop seeds terminals only: a part's unknown drop is typed, never seeded.
-  const part = describeCloser({ ...blocker, detail: "equipment has no drop (inline equipment)" }, null, context);
-  expect(part).toMatchObject({ refusal: "Type the drop in in-wg", input: { placeholder: null }, action: null });
+  const part = describeCloser(
+    { ...blocker, detail: "equipment has no drop (inline equipment)" },
+    null,
+    context,
+  );
+  expect(part).toMatchObject({
+    refusal: "Type the drop in in-wg",
+    input: { placeholder: null },
+    action: null,
+  });
 });
 
 // Parsed through the contract, so a fixture the host could never send fails here.
-const census = (over: object): FittingPricing => fittingPricingSchema.parse({
-  key: "14513278",
-  elementId: 14513278,
-  family: "Round Elbow",
-  rule: null,
-  table: null,
-  ruleSource: "none",
-  tableSource: null,
-  options: [],
-  candidates: [
-    { rule: "elbow-1d-le10", words: "Round Elbow 1 D · D ≤ 10 in", tables: ["CD3-2", "CD3-21"] },
-    {
-      rule: "elbow-15d-45-le10",
-      words: "Round Elbow 1.5 D die stamped · 45 degrees, D ≤ 10 in",
-      tables: ["CD3-3", "CD3-1"],
-    },
-  ],
-  lossInWg: null,
-  unpriced: "no rule matches fitting Elbow (Round Elbow)",
-  typed: null,
-  ...over,
-}) as FittingPricing;
+const census = (over: object): FittingPricing =>
+  fittingPricingSchema.parse({
+    key: "14513278",
+    elementId: 14513278,
+    family: "Round Elbow",
+    rule: null,
+    table: null,
+    ruleSource: "none",
+    tableSource: null,
+    options: [],
+    candidates: [
+      { rule: "elbow-1d-le10", words: "Round Elbow 1 D · D ≤ 10 in", tables: ["CD3-2", "CD3-21"] },
+      {
+        rule: "elbow-15d-45-le10",
+        words: "Round Elbow 1.5 D die stamped · 45 degrees, D ≤ 10 in",
+        tables: ["CD3-3", "CD3-1"],
+      },
+    ],
+    lossInWg: null,
+    unpriced: "no rule matches fitting Elbow (Round Elbow)",
+    typed: null,
+    ...over,
+  }) as FittingPricing;
 const fittings = (...rows: FittingPricing[]): CloserContext => ({
   ...context,
   fittingOf: (key) => rows.find((r) => r.key === key) ?? null,
@@ -123,7 +132,12 @@ it("a not-priced elbow offers 'price with <table>' for its family's rules; the d
     fitting: "14513278",
   });
   const closer = describeCloser(blocker, null, fittings(census({})));
-  expect(closer).toMatchObject({ verb: "price with…", refusal: null, action: null, secondary: null });
+  expect(closer).toMatchObject({
+    verb: "price with…",
+    refusal: null,
+    action: null,
+    secondary: null,
+  });
   const cd33 = closer.choices!.find((c) => c.verb === "price with CD3-3")!;
   expect(cd33.action).toEqual({
     kind: "price",
@@ -135,7 +149,9 @@ it("a not-priced elbow offers 'price with <table>' for its family's rules; the d
   // The option says what the table means (its ASHRAE fitting), never "<rule> reads <table>".
   const titled = describeCloser(blocker, null, {
     ...fittings(census({})),
-    tableTitles: { "CD3-3": "CD3-3  Elbow, Die Stamped, 45 Degree, r/D = 1.5 (UMC 1985, Report SRF785)" },
+    tableTitles: {
+      "CD3-3": "CD3-3  Elbow, Die Stamped, 45 Degree, r/D = 1.5 (UMC 1985, Report SRF785)",
+    },
   });
   expect(titled.choices!.find((c) => c.verb === "price with CD3-3")!.detail).toMatch(
     /^Elbow, Die Stamped, 45 Degree, r\/D = 1\.5 · as /,
@@ -154,7 +170,14 @@ it("a not-priced elbow offers 'price with <table>' for its family's rules; the d
   const matched = describeCloser(
     blocker,
     null,
-    fittings(census({ rule: "elbow-1d-le10", ruleSource: "matched", table: "CD3-2", options: ["CD3-2", "CD3-21"] })),
+    fittings(
+      census({
+        rule: "elbow-1d-le10",
+        ruleSource: "matched",
+        table: "CD3-2",
+        options: ["CD3-2", "CD3-21"],
+      }),
+    ),
   );
   expect(matched.choices!.map((c) => c.action)).toEqual([
     { kind: "table", rule: "elbow-1d-le10", table: "CD3-21" },
@@ -175,7 +198,12 @@ it("a proposed fitting's path takes a typed drop for that path only, with no def
     elementId: null,
     family: "proposed join",
     candidates: [],
-    proposed: { pair: ["14122436:1", "14106988:1"], kind: "join", path: "branch", toward: 14106988 },
+    proposed: {
+      pair: ["14122436:1", "14106988:1"],
+      kind: "join",
+      path: "branch",
+      toward: 14106988,
+    },
   });
   const blank = describeCloser(blocker, null, fittings(join));
   expect(blank).toMatchObject({
@@ -193,12 +221,14 @@ it("a proposed fitting's path takes a typed drop for that path only, with no def
   const tee = describeCloser(
     blocker,
     0.04,
-    fittings(census({
-      ...join,
-      family: "proposed tee",
-      proposed: { ...join.proposed!, kind: "tee" },
-      candidates: [{ rule: "tap-std", words: "Round Takeoff Standard", tables: ["SD5-9"] }],
-    })),
+    fittings(
+      census({
+        ...join,
+        family: "proposed tee",
+        proposed: { ...join.proposed!, kind: "tee" },
+        candidates: [{ rule: "tap-std", words: "Round Takeoff Standard", tables: ["SD5-9"] }],
+      }),
+    ),
   );
   expect(tee.choices!.map((c) => c.action)).toEqual([
     { kind: "price", family: "proposed tee", rule: "tap-std", table: null },

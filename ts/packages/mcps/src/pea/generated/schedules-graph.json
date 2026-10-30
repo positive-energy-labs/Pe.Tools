@@ -5,9 +5,7 @@
       "groupOf": {
         "runtime": true
       },
-      "nouns": [
-        "column"
-      ],
+      "nouns": ["column"],
       "segment": "cells"
     }
   ],
@@ -89,11 +87,7 @@
       "role": "selection",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "enum": [
-          "suggestions",
-          "edits",
-          "all"
-        ],
+        "enum": ["suggestions", "edits", "all"],
         "type": "string"
       },
       "share": true,
@@ -113,10 +107,7 @@
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "spec",
-        "enum": [
-          "spec",
-          "output"
-        ],
+        "enum": ["spec", "output"],
         "type": "string"
       },
       "share": true,
@@ -199,10 +190,7 @@
         "items": {
           "properties": {
             "dir": {
-              "enum": [
-                "asc",
-                "desc"
-              ],
+              "enum": ["asc", "desc"],
               "type": "string"
             },
             "key": {
@@ -211,10 +199,7 @@
               "type": "string"
             }
           },
-          "required": [
-            "key",
-            "dir"
-          ],
+          "required": ["key", "dir"],
           "type": "object"
         },
         "maxItems": 8,
@@ -237,11 +222,7 @@
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "audit",
-        "enum": [
-          "audit",
-          "apply",
-          "history"
-        ],
+        "enum": ["audit", "apply", "history"],
         "type": "string"
       },
       "share": true,
@@ -290,11 +271,7 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "field",
-                "op",
-                "value"
-              ],
+              "required": ["field", "op", "value"],
               "type": "object"
             },
             "maxItems": 32,
@@ -306,11 +283,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "v",
-          "keywords",
-          "pills"
-        ],
+        "required": ["v", "keywords", "pills"],
         "type": "object"
       },
       "share": true,
@@ -330,11 +303,7 @@
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "",
-        "enum": [
-          "",
-          "recent",
-          "title"
-        ],
+        "enum": ["", "recent", "title"],
         "type": "string"
       },
       "share": true,
@@ -417,48 +386,28 @@
   "needs": "project",
   "panes": {
     "grid": {
-      "draws": [
-        "retained",
-        "saved",
-        "receipts",
-        "outcome"
-      ],
+      "draws": ["retained", "saved", "receipts", "outcome"],
       "label": "Schedule grid",
       "purpose": "Inspect and edit schedule cells",
       "verbs": []
     },
     "list": {
-      "draws": [
-        "catalog",
-        "retained",
-        "history"
-      ],
+      "draws": ["catalog", "retained", "history"],
       "label": "Schedules",
       "purpose": "Choose a schedule in this document",
-      "verbs": [
-        "read"
-      ]
+      "verbs": ["read"]
     },
     "spec": {
-      "draws": [
-        "pods"
-      ],
+      "draws": ["pods"],
       "label": "Schedule spec",
       "purpose": "Choose a saved schedule definition",
       "verbs": []
     },
     "work": {
-      "draws": [
-        "retained",
-        "saved",
-        "receipts",
-        "outcome"
-      ],
+      "draws": ["retained", "saved", "receipts", "outcome"],
       "label": "Schedule Work",
       "purpose": "Review proposed and edited cells",
-      "verbs": [
-        "bind"
-      ]
+      "verbs": ["bind"]
     }
   },
   "predicates": {
@@ -481,9 +430,7 @@
       "source": "schedules.history"
     },
     "outcome": {
-      "deps": [
-        "receipts"
-      ],
+      "deps": ["receipts"],
       "kind": "derive",
       "retire": "target",
       "source": "schedules.outcome"
@@ -523,41 +470,20 @@
       "title": "Mechanical equipment"
     }
   },
-  "stageOrder": [
-    "audit",
-    "apply",
-    "history"
-  ],
+  "stageOrder": ["audit", "apply", "history"],
   "stages": {
     "apply": {
-      "panes": [
-        "list",
-        "grid",
-        "work",
-        "spec"
-      ],
-      "verbs": [
-        "push",
-        "apply"
-      ],
+      "panes": ["list", "grid", "work", "spec"],
+      "verbs": ["push", "apply"],
       "word": "Applying"
     },
     "audit": {
-      "panes": [
-        "list",
-        "grid",
-        "work"
-      ],
-      "verbs": [
-        "capture"
-      ],
+      "panes": ["list", "grid", "work"],
+      "verbs": ["capture"],
       "word": "Auditing"
     },
     "history": {
-      "panes": [
-        "list",
-        "grid"
-      ],
+      "panes": ["list", "grid"],
       "verbs": [],
       "word": "History"
     }
@@ -592,11 +518,7 @@
                 "type": "string"
               }
             },
-            "required": [
-              "pod",
-              "path",
-              "sha256"
-            ],
+            "required": ["pod", "path", "sha256"],
             "type": "object"
           }
         },
@@ -622,10 +544,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "readingId",
-          "expectedRevision"
-        ],
+        "required": ["readingId", "expectedRevision"],
         "type": "object"
       },
       "kind": "query",
@@ -658,9 +577,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "pod"
-        ],
+        "required": ["pod"],
         "type": "object"
       },
       "kind": "command",
@@ -695,9 +612,7 @@
                 },
                 "value": {}
               },
-              "required": [
-                "path"
-              ],
+              "required": ["path"],
               "type": "object"
             },
             "type": "array"
@@ -714,10 +629,7 @@
             "default": null
           }
         },
-        "required": [
-          "patches",
-          "expectedRevision"
-        ],
+        "required": ["patches", "expectedRevision"],
         "type": "object"
       },
       "kind": "work",
@@ -791,9 +703,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "confirm"
-        ],
+        "required": ["confirm"],
         "type": "object"
       },
       "input": {
@@ -837,18 +747,13 @@
                       ]
                     }
                   },
-                  "required": [
-                    "key",
-                    "was"
-                  ],
+                  "required": ["key", "was"],
                   "type": "object"
                 },
                 "type": "array"
               }
             },
-            "required": [
-              "captureId"
-            ],
+            "required": ["captureId"],
             "type": "object"
           },
           {
@@ -888,20 +793,13 @@
                       ]
                     },
                     "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
+                      "enum": ["human", "pea", "unknown"],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
+                          "enum": ["high", "low"],
                           "type": "string"
                         },
                         {
@@ -936,18 +834,13 @@
                               "type": "string"
                             }
                           },
-                          "required": [
-                            "value",
-                            "unit"
-                          ],
+                          "required": ["value", "unit"],
                           "type": "object"
                         }
                       ]
                     }
                   },
-                  "required": [
-                    "value"
-                  ],
+                  "required": ["value"],
                   "type": "object"
                 },
                 {
@@ -983,20 +876,13 @@
                       ]
                     },
                     "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
+                      "enum": ["human", "pea", "unknown"],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
+                          "enum": ["high", "low"],
                           "type": "string"
                         },
                         {
@@ -1031,18 +917,13 @@
                               "type": "string"
                             }
                           },
-                          "required": [
-                            "value",
-                            "unit"
-                          ],
+                          "required": ["value", "unit"],
                           "type": "object"
                         }
                       ]
                     }
                   },
-                  "required": [
-                    "value"
-                  ],
+                  "required": ["value"],
                   "type": "object"
                 },
                 {

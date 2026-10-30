@@ -124,7 +124,10 @@ const EMPTY_INPUTS = {
   components: {},
   rulings: { joins: [], ends: [] },
   criteria: {
-    velocityLimitFpm: { supply: { value: 900, source: "firm" }, return: { value: 700, source: "firm" } },
+    velocityLimitFpm: {
+      supply: { value: 900, source: "firm" },
+      return: { value: 700, source: "firm" },
+    },
     terminalDropInWg: { value: 0.03, source: "firm" },
     autoJoinGapIn: { value: 3, source: "firm" },
     healBoxIn: { value: 36, source: "firm" },

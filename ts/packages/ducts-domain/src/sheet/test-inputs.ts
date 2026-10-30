@@ -95,7 +95,10 @@ export function inputsFor(snapshot: SheetSnapshot, s: InputsShorthand = {}): Duc
     (work.roles as Record<string, { role: "fan" | "passive" }>)[id] = { role };
   for (const [id, kind] of Object.entries(s.kinds ?? {})) {
     const n = byId.get(Number(id));
-    if (n) (work.kinds as Record<string, { kind: DuctUnitKind }>)[catalogLinkKey(n.family, n.type)] = { kind };
+    if (n)
+      (work.kinds as Record<string, { kind: DuctUnitKind }>)[catalogLinkKey(n.family, n.type)] = {
+        kind,
+      };
   }
   const snap = s.slot
     ? { ...snapshot, slots: { ...(snapshot.slots ?? {}), terminalFlow: s.slot } }

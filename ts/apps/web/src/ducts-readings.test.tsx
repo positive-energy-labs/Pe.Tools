@@ -166,7 +166,10 @@ test("browser retention has both count and byte bounds; failed loads are retryab
 
 test("returning to an earlier subject (slot A -> B -> A) shows A again instead of waiting forever", async () => {
   // The fan sheet's airflow slot switch: each slot is its own subject with its own revision.
-  const slotted = (slot: string): DuctsReadingRequest => ({ ...request, slots: { terminalFlow: slot } });
+  const slotted = (slot: string): DuctsReadingRequest => ({
+    ...request,
+    slots: { terminalFlow: slot },
+  });
   const revisionOf = (r: DuctsReadingRequest) =>
     r.kind === "ducts-snapshot" ? (r.slots?.terminalFlow ?? "") : "";
   const readings: Readings = {

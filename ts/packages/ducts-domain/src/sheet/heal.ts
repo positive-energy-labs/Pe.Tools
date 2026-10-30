@@ -60,12 +60,12 @@ export function proposeHeals(
         kind === "transition"
           ? `Remove end cap ${cap} and fit a transition; fitting loss required`
           : kind === "tee"
-          ? "Riskiest: replace occupied connection with a tee; fitting loss required"
-          : kind === "tap"
-            ? "Add a branch fitting at the duct body; fitting loss required"
-            : fittingChange
-              ? "Extend and turn or resize; fitting loss required"
-              : "Extend at the source section; extension friction included",
+            ? "Riskiest: replace occupied connection with a tee; fitting loss required"
+            : kind === "tap"
+              ? "Add a branch fitting at the duct body; fitting loss required"
+              : fittingChange
+                ? "Extend and turn or resize; fitting loss required"
+                : "Extend at the source section; extension friction included",
       assumedLegs: [],
     });
   };
@@ -91,7 +91,8 @@ export function proposeHeals(
       // An occupied mouth is offered only with an explicit fitting change, never as a join. A cap
       // there is removed for a transition (MUAS-1's intake 2.63 in from louver plenum 14106988's
       // capped end, cap 14107111); any other occupant needs a tee.
-      if (p.cappedBy != null) add("transition", target, c.index, c.point, p.gapIn, true, p.cappedBy);
+      if (p.cappedBy != null)
+        add("transition", target, c.index, c.point, p.gapIn, true, p.cappedBy);
       else if ("polyline" in target || target.connectors.length >= 3)
         add("tee", target, c.index, c.point, p.gapIn, true);
     } else {

@@ -327,7 +327,11 @@ it("a junction past ED5-3's edge is refused, never charged an extrapolated coeff
     connectors: [rectPort(0, 20, 20)],
     facts: [{ key: "takeoff", value: 1 }],
   } as unknown as Snap["nodes"][number];
-  const main = { id: 13973156, shape: "round", diameterIn: 6 } as unknown as Snap["segments"][number];
+  const main = {
+    id: 13973156,
+    shape: "round",
+    diameterIn: 6,
+  } as unknown as Snap["segments"][number];
   const p = priceLeg(
     {
       kind: "fitting",
@@ -522,7 +526,13 @@ it("a rectangular plain damper prices fully open on CR9-1 (Theta 0, H/W), a roun
 
 it("a round elbow read with centerRadius but no rOverD still finds its rule (live from/ids reads)", async () => {
   const { fittingFacts } = await import("./kernel/fitting-facts.ts");
-  const port = (index: number) => ({ index, kind: "end", shape: "round", diameterIn: 10, point: [0, 0, 0] });
+  const port = (index: number) => ({
+    index,
+    kind: "end",
+    shape: "round",
+    diameterIn: 10,
+    point: [0, 0, 0],
+  });
   const elbow = {
     id: 14606857,
     kind: "fitting",
@@ -535,7 +545,11 @@ it("a round elbow read with centerRadius but no rOverD still finds its rule (liv
       { key: "centerRadius", value: 7.5 },
     ],
   } as never;
-  const facts = fittingFacts({ fitting: elbow, inlet: (elbow as { connectors: never[] }).connectors[0], outlet: undefined } as never);
+  const facts = fittingFacts({
+    fitting: elbow,
+    inlet: (elbow as { connectors: never[] }).connectors[0],
+    outlet: undefined,
+  } as never);
   expect(facts.rOverD).toBe(0.75);
   expect(LOSS_RULES.find((r) => r.when(facts, { q: 100 } as never))?.key).toBe("elbow-075d");
 });

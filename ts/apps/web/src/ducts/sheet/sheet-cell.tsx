@@ -20,7 +20,12 @@ const showRung = (v: unknown): string =>
 
 /** The write's outcome as the cell's commit: nothing to refuse once it lands (the sheet shows refusals). */
 const settled = (out: void | Promise<unknown>) =>
-  out instanceof Promise ? out.then(() => undefined, () => undefined) : undefined;
+  out instanceof Promise
+    ? out.then(
+        () => undefined,
+        () => undefined,
+      )
+    : undefined;
 
 export function SheetCell({
   label,
@@ -85,29 +90,29 @@ export function SheetCell({
       onKeyDown={onDraft && ((event) => void (event.key === "Escape" && onDraft(undefined)))}
     >
       <span className="block min-w-0">
-      <StateCell
-        {...cellFromDraft(
-          cell,
-          refusal
-            ? { value: text, cap: "locked", capReason: refusal }
-            : { value: text, cap: "editable" },
-          showRung,
-        )}
-        scale="row"
-        unit={unit}
-        placeholder={placeholder}
-        onCommit={(typed: string) => {
-          const trimmed = typed.trim();
-          if (!trimmed) {
-            if (clearable) return value != null ? settled(onValue(null)) : undefined;
-            return "Type a number";
-          }
-          const n = Number(trimmed);
-          if (!Number.isFinite(n) || n < 0) return "Type a number of zero or more";
-          if (positive && n <= 0) return "Type a number above zero";
-          if (n !== value) return settled(onValue(n));
-        }}
-      />
+        <StateCell
+          {...cellFromDraft(
+            cell,
+            refusal
+              ? { value: text, cap: "locked", capReason: refusal }
+              : { value: text, cap: "editable" },
+            showRung,
+          )}
+          scale="row"
+          unit={unit}
+          placeholder={placeholder}
+          onCommit={(typed: string) => {
+            const trimmed = typed.trim();
+            if (!trimmed) {
+              if (clearable) return value != null ? settled(onValue(null)) : undefined;
+              return "Type a number";
+            }
+            const n = Number(trimmed);
+            if (!Number.isFinite(n) || n < 0) return "Type a number of zero or more";
+            if (positive && n <= 0) return "Type a number above zero";
+            if (n !== value) return settled(onValue(n));
+          }}
+        />
       </span>
       {source != null && (
         <span

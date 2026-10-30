@@ -145,12 +145,17 @@ export function BlockerRow({
               <SheetCell
                 label={`${blocker.kind} ${closer.input.unit}`}
                 value={typed}
-                unit={{ label: closer.input.unit, short: closer.input.unit === "in-wg" ? "wg" : undefined }}
+                unit={{
+                  label: closer.input.unit,
+                  short: closer.input.unit === "in-wg" ? "wg" : undefined,
+                }}
                 digits={closer.input.unit === "cfm" ? 0 : 4}
                 source={null}
                 refusal={null}
                 clearable
-                placeholder={closer.input.placeholder == null ? undefined : String(closer.input.placeholder)}
+                placeholder={
+                  closer.input.placeholder == null ? undefined : String(closer.input.placeholder)
+                }
                 className="block w-24"
                 onValue={(value) => {
                   setTyped(value);

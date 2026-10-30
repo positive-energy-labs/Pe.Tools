@@ -75,7 +75,8 @@ export interface RowContext {
   pathSubject?: (key: string) => SubjectPart[] | null;
 }
 
-export const sourceChip = ({ source, ref }: Resolved<unknown>) => `${source}${ref ? ` ${ref}` : ""}`;
+export const sourceChip = ({ source, ref }: Resolved<unknown>) =>
+  `${source}${ref ? ` ${ref}` : ""}`;
 const subjectIds = (parts: readonly SubjectPart[]) =>
   parts.flatMap((p) => (typeof p === "string" ? [] : [p.id]));
 const joinSubject = (pair: readonly string[]): SubjectPart[] => {
@@ -153,11 +154,31 @@ export function inputRows(ctx: RowContext): InputRow[] {
   }
   for (const [id, unit] of Object.entries(inputs.units)) {
     const n = Number(id);
-    number(`unit:${id}:cfm`, "units", "Unit airflow", n, unit.cfm, "cfm", 0, ctx.doc?.equipmentFlows[id],
-      (cfm) => ({ equipmentFlows: { [id]: { cfm } } }), { equipmentFlows: { [id]: null } });
+    number(
+      `unit:${id}:cfm`,
+      "units",
+      "Unit airflow",
+      n,
+      unit.cfm,
+      "cfm",
+      0,
+      ctx.doc?.equipmentFlows[id],
+      (cfm) => ({ equipmentFlows: { [id]: { cfm } } }),
+      { equipmentFlows: { [id]: null } },
+    );
     if (n === ctx.fanUnitId || unit.esp.source === "typed")
-      number(`unit:${id}:esp`, "units", "Unit ESP", n, unit.esp, "in-wg", 4, ctx.doc?.esp[id],
-        (inWg) => ({ esp: { [id]: { inWg } } }), { esp: { [id]: null } });
+      number(
+        `unit:${id}:esp`,
+        "units",
+        "Unit ESP",
+        n,
+        unit.esp,
+        "in-wg",
+        4,
+        ctx.doc?.esp[id],
+        (inWg) => ({ esp: { [id]: { inWg } } }),
+        { esp: { [id]: null } },
+      );
     if (unit.role.source === "typed")
       rows.push({
         key: `unit:${id}:role`,
@@ -172,14 +193,44 @@ export function inputRows(ctx: RowContext): InputRow[] {
       });
   }
   for (const [id, t] of Object.entries(inputs.terminals)) {
-    number(`terminal:${id}:cfm`, "terminals", "Terminal airflow", Number(id), t.cfm, "cfm", 0, ctx.doc?.flows[id],
-      (cfm) => ({ flows: { [id]: { cfm } } }), { flows: { [id]: null } });
-    number(`terminal:${id}:drop`, "terminals", "Terminal drop", Number(id), t.drop, "in-wg", 4, ctx.doc?.terminalDrops[id],
-      (inWg) => ({ terminalDrops: { [id]: { inWg } } }), { terminalDrops: { [id]: null } });
+    number(
+      `terminal:${id}:cfm`,
+      "terminals",
+      "Terminal airflow",
+      Number(id),
+      t.cfm,
+      "cfm",
+      0,
+      ctx.doc?.flows[id],
+      (cfm) => ({ flows: { [id]: { cfm } } }),
+      { flows: { [id]: null } },
+    );
+    number(
+      `terminal:${id}:drop`,
+      "terminals",
+      "Terminal drop",
+      Number(id),
+      t.drop,
+      "in-wg",
+      4,
+      ctx.doc?.terminalDrops[id],
+      (inWg) => ({ terminalDrops: { [id]: { inWg } } }),
+      { terminalDrops: { [id]: null } },
+    );
   }
   for (const [id, c] of Object.entries(inputs.components))
-    number(`component:${id}:drop`, "parts", "Part drop", Number(id), c.drop, "in-wg", 4, ctx.doc?.componentDrops[id],
-      (inWg) => ({ componentDrops: { [id]: { inWg } } }), { componentDrops: { [id]: null } });
+    number(
+      `component:${id}:drop`,
+      "parts",
+      "Part drop",
+      Number(id),
+      c.drop,
+      "in-wg",
+      4,
+      ctx.doc?.componentDrops[id],
+      (inWg) => ({ componentDrops: { [id]: { inWg } } }),
+      { componentDrops: { [id]: null } },
+    );
   for (const [key, drop] of Object.entries(inputs.fittingDrops)) {
     const subject = ctx.pathSubject?.(key) ?? [key];
     rows.push({

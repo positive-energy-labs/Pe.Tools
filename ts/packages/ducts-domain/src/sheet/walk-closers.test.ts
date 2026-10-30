@@ -59,8 +59,10 @@ function fixture(gapIn: number) {
 it("auto-joins exactly 3 inches, records sheet input and leg provenance, and obeys the settings threshold and rejection", () => {
   const snapshot = fixture(3);
   const sheetSnapshot1 = withHealth(snapshot);
-  const input = { roster: [],
-    snapshot: sheetSnapshot1, inputs: inputsFor(sheetSnapshot1),
+  const input = {
+    roster: [],
+    snapshot: sheetSnapshot1,
+    inputs: inputsFor(sheetSnapshot1),
     start: { elementId: 100, connector: 0 },
     end: { elementId: 200 },
     direction: "supply" as const,

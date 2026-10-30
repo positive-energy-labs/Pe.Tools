@@ -86,7 +86,9 @@ export function worksheet(sheet: Sheet, limits: WorksheetLimits): Worksheet {
       return l;
     };
     const over = (legs: readonly Leg[]) =>
-      legs.filter((l) => l.velocityFpm != null && l.velocityFpm > limits.maxFpm[s]).map((l) => l.id);
+      legs
+        .filter((l) => l.velocityFpm != null && l.velocityFpm > limits.maxFpm[s])
+        .map((l) => l.id);
     const seen = new Map<string, number>();
     const ids = paths.map((p) => {
       const base = `${s}:${p.end.kind}:${p.end.elementId}:${p.end.connector ?? ""}`;

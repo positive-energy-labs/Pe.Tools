@@ -12,11 +12,7 @@
         "kind": "open-end",
         "elementId": 1,
         "connector": 1,
-        "point": [
-          4.0,
-          0.0,
-          0.0
-        ],
+        "point": [4.0, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [
@@ -44,11 +40,7 @@
         "kind": "near-miss",
         "elementId": 1,
         "connector": 1,
-        "point": [
-          4.0,
-          0.0,
-          0.0
-        ],
+        "point": [4.0, 0.0, 0.0],
         "note": "vacant opposed 2:0 is 3 in away (auto-join gap 3 in)"
       },
       {
@@ -56,11 +48,7 @@
         "kind": "open-end",
         "elementId": 2,
         "connector": 0,
-        "point": [
-          4.25,
-          0.0,
-          0.0
-        ],
+        "point": [4.25, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [
@@ -88,11 +76,7 @@
         "kind": "near-miss",
         "elementId": 2,
         "connector": 0,
-        "point": [
-          4.25,
-          0.0,
-          0.0
-        ],
+        "point": [4.25, 0.0, 0.0],
         "note": "vacant opposed 1:1 is 3 in away (auto-join gap 3 in)"
       }
     ],
@@ -114,11 +98,7 @@
         "kind": "open-end",
         "elementId": 1,
         "connector": 1,
-        "point": [
-          4.0,
-          0.0,
-          0.0
-        ],
+        "point": [4.0, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [
@@ -146,11 +126,7 @@
         "kind": "open-end",
         "elementId": 2,
         "connector": 0,
-        "point": [
-          4.2508333333333335,
-          0.0,
-          0.0
-        ],
+        "point": [4.2508333333333335, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [
@@ -192,11 +168,7 @@
         "kind": "open-end",
         "elementId": 1,
         "connector": 1,
-        "point": [
-          4.0,
-          0.0,
-          0.0
-        ],
+        "point": [4.0, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [
@@ -231,11 +203,7 @@
         "id": "no-terminal-flow:54",
         "kind": "no-terminal-flow",
         "elementId": 54,
-        "point": [
-          0.0,
-          0.0,
-          0.0
-        ],
+        "point": [0.0, 0.0, 0.0],
         "note": "no design flow"
       },
       {
@@ -243,11 +211,7 @@
         "kind": "open-end",
         "elementId": 51,
         "connector": 1,
-        "point": [
-          0.0,
-          -5.0,
-          0.0
-        ],
+        "point": [0.0, -5.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [],
@@ -260,11 +224,7 @@
         "kind": "open-end",
         "elementId": 52,
         "connector": 1,
-        "point": [
-          10.0,
-          0.0,
-          0.0
-        ],
+        "point": [10.0, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [
@@ -292,11 +252,7 @@
         "kind": "near-miss",
         "elementId": 52,
         "connector": 1,
-        "point": [
-          10.0,
-          0.0,
-          0.0
-        ],
+        "point": [10.0, 0.0, 0.0],
         "note": "vacant opposed 53:0 is 0.4 in away (auto-join gap 3 in)"
       },
       {
@@ -304,11 +260,7 @@
         "kind": "open-end",
         "elementId": 53,
         "connector": 0,
-        "point": [
-          10.033333333333333,
-          0.0,
-          0.0
-        ],
+        "point": [10.033333333333333, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [
@@ -336,11 +288,7 @@
         "kind": "near-miss",
         "elementId": 53,
         "connector": 0,
-        "point": [
-          10.033333333333333,
-          0.0,
-          0.0
-        ],
+        "point": [10.033333333333333, 0.0, 0.0],
         "note": "vacant opposed 52:1 is 0.4 in away (auto-join gap 3 in)"
       }
     ],
@@ -356,11 +304,7 @@
         "kind": "open-end",
         "elementId": 1,
         "connector": 1,
-        "point": [
-          4.0,
-          0.0,
-          0.0
-        ],
+        "point": [4.0, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [
@@ -388,11 +332,7 @@
         "kind": "open-end",
         "elementId": 2,
         "connector": 0,
-        "point": [
-          5.0,
-          0.0,
-          0.0
-        ],
+        "point": [5.0, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [
@@ -436,22 +376,14 @@
         "id": "no-terminal-flow:70",
         "kind": "no-terminal-flow",
         "elementId": 70,
-        "point": [
-          0.0,
-          0.0,
-          0.0
-        ],
+        "point": [0.0, 0.0, 0.0],
         "note": "no design flow"
       },
       {
         "id": "no-terminal-flow:71",
         "kind": "no-terminal-flow",
         "elementId": 71,
-        "point": [
-          0.0,
-          0.0,
-          0.0
-        ],
+        "point": [0.0, 0.0, 0.0],
         "note": "no design flow"
       },
       {
@@ -459,11 +391,7 @@
         "kind": "open-end",
         "elementId": 64,
         "connector": 1,
-        "point": [
-          4.5,
-          4.0,
-          0.0
-        ],
+        "point": [4.5, 4.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [
@@ -495,11 +423,7 @@
         "kind": "open-end",
         "elementId": 65,
         "connector": 1,
-        "point": [
-          5.5,
-          4.0,
-          0.0
-        ],
+        "point": [5.5, 4.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [
@@ -539,11 +463,7 @@
         "kind": "open-end",
         "elementId": 1,
         "connector": 1,
-        "point": [
-          4.0,
-          0.0,
-          0.0
-        ],
+        "point": [4.0, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [],
@@ -553,11 +473,7 @@
               "segmentId": 2,
               "gapIn": 8.0,
               "tapGapIn": 8.000000000000004,
-              "tapPoint": [
-                4.666666666666667,
-                0.0,
-                0.0
-              ]
+              "tapPoint": [4.666666666666667, 0.0, 0.0]
             }
           ]
         }
@@ -575,11 +491,7 @@
         "kind": "open-end",
         "elementId": 1,
         "connector": 1,
-        "point": [
-          4.0,
-          0.0,
-          0.0
-        ],
+        "point": [4.0, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [
@@ -632,11 +544,7 @@
         "kind": "open-end",
         "elementId": 250,
         "connector": 0,
-        "point": [
-          4.1,
-          0.0,
-          0.0
-        ],
+        "point": [4.1, 0.0, 0.0],
         "note": "terminal not connected",
         "near": {
           "ports": [
@@ -677,11 +585,7 @@
         "kind": "near-miss",
         "elementId": 250,
         "connector": 0,
-        "point": [
-          4.1,
-          0.0,
-          0.0
-        ],
+        "point": [4.1, 0.0, 0.0],
         "note": "vacant opposed 1:1 is 1.2 in away (auto-join gap 3 in)"
       },
       {
@@ -689,11 +593,7 @@
         "kind": "open-end",
         "elementId": 1,
         "connector": 1,
-        "point": [
-          4.0,
-          0.0,
-          0.0
-        ],
+        "point": [4.0, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [
@@ -730,11 +630,7 @@
         "kind": "near-miss",
         "elementId": 1,
         "connector": 1,
-        "point": [
-          4.0,
-          0.0,
-          0.0
-        ],
+        "point": [4.0, 0.0, 0.0],
         "note": "vacant opposed 250:0 is 1.2 in away (auto-join gap 3 in)"
       },
       {
@@ -742,11 +638,7 @@
         "kind": "open-end",
         "elementId": 2,
         "connector": 0,
-        "point": [
-          5.0,
-          0.0,
-          0.0
-        ],
+        "point": [5.0, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [
@@ -800,11 +692,7 @@
         "kind": "open-end",
         "elementId": 100,
         "connector": 0,
-        "point": [
-          0.0,
-          0.0,
-          0.0
-        ],
+        "point": [0.0, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [
@@ -836,11 +724,7 @@
         "kind": "open-end",
         "elementId": 200,
         "connector": 0,
-        "point": [
-          1.0,
-          0.0,
-          0.0
-        ],
+        "point": [1.0, 0.0, 0.0],
         "note": "terminal not connected",
         "near": {
           "ports": [
@@ -895,11 +779,7 @@
         "kind": "open-end",
         "elementId": 1,
         "connector": 1,
-        "point": [
-          4.0,
-          0.0,
-          0.0
-        ],
+        "point": [4.0, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [
@@ -927,11 +807,7 @@
         "kind": "open-end",
         "elementId": 2,
         "connector": 0,
-        "point": [
-          4.25,
-          0.0,
-          0.0
-        ],
+        "point": [4.25, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [
@@ -973,11 +849,7 @@
         "kind": "open-end",
         "elementId": 1,
         "connector": 1,
-        "point": [
-          4.0,
-          0.0,
-          0.0
-        ],
+        "point": [4.0, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [
@@ -1005,11 +877,7 @@
         "kind": "open-end",
         "elementId": 2,
         "connector": 0,
-        "point": [
-          4.166666666666667,
-          0.0,
-          0.0
-        ],
+        "point": [4.166666666666667, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [
@@ -1045,11 +913,7 @@
         "kind": "open-end",
         "elementId": 1,
         "connector": 1,
-        "point": [
-          4.0,
-          0.0,
-          0.0
-        ],
+        "point": [4.0, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [],
@@ -1069,22 +933,14 @@
         "id": "no-terminal-flow:70",
         "kind": "no-terminal-flow",
         "elementId": 70,
-        "point": [
-          0.0,
-          0.0,
-          0.0
-        ],
+        "point": [0.0, 0.0, 0.0],
         "note": "no design flow"
       },
       {
         "id": "no-terminal-flow:71",
         "kind": "no-terminal-flow",
         "elementId": 71,
-        "point": [
-          0.0,
-          0.0,
-          0.0
-        ],
+        "point": [0.0, 0.0, 0.0],
         "note": "no design flow"
       },
       {
@@ -1092,11 +948,7 @@
         "kind": "open-end",
         "elementId": 64,
         "connector": 1,
-        "point": [
-          4.9,
-          4.0,
-          0.0
-        ],
+        "point": [4.9, 4.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [
@@ -1128,11 +980,7 @@
         "kind": "near-miss",
         "elementId": 64,
         "connector": 1,
-        "point": [
-          4.9,
-          4.0,
-          0.0
-        ],
+        "point": [4.9, 4.0, 0.0],
         "note": "vacant opposed 65:1 is 2.4 in away (auto-join gap 3 in)"
       },
       {
@@ -1140,11 +988,7 @@
         "kind": "open-end",
         "elementId": 65,
         "connector": 1,
-        "point": [
-          5.1,
-          4.0,
-          0.0
-        ],
+        "point": [5.1, 4.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [
@@ -1176,11 +1020,7 @@
         "kind": "near-miss",
         "elementId": 65,
         "connector": 1,
-        "point": [
-          5.1,
-          4.0,
-          0.0
-        ],
+        "point": [5.1, 4.0, 0.0],
         "note": "vacant opposed 64:1 is 2.4 in away (auto-join gap 3 in)"
       }
     ],
@@ -1196,11 +1036,7 @@
         "kind": "air-type-change",
         "elementId": 200,
         "connector": 0,
-        "point": [
-          8.0,
-          0.0,
-          0.0
-        ],
+        "point": [8.0, 0.0, 0.0],
         "note": "SupplyAir meets ReturnAir at 2:1"
       },
       {
@@ -1208,11 +1044,7 @@
         "kind": "air-type-change",
         "elementId": 900,
         "connector": 0,
-        "point": [
-          5.0,
-          0.0,
-          0.0
-        ],
+        "point": [5.0, 0.0, 0.0],
         "note": "SupplyAir meets ReturnAir at 2:0"
       },
       {
@@ -1220,11 +1052,7 @@
         "kind": "open-end",
         "elementId": 1,
         "connector": 1,
-        "point": [
-          4.0,
-          0.0,
-          0.0
-        ],
+        "point": [4.0, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [
@@ -1262,11 +1090,7 @@
         "kind": "air-type-change",
         "elementId": 2,
         "connector": 0,
-        "point": [
-          5.0,
-          0.0,
-          0.0
-        ],
+        "point": [5.0, 0.0, 0.0],
         "note": "ReturnAir meets SupplyAir at 900:0"
       },
       {
@@ -1274,11 +1098,7 @@
         "kind": "air-type-change",
         "elementId": 2,
         "connector": 1,
-        "point": [
-          8.0,
-          0.0,
-          0.0
-        ],
+        "point": [8.0, 0.0, 0.0],
         "note": "ReturnAir meets SupplyAir at 200:0"
       }
     ],
@@ -1300,11 +1120,7 @@
         "kind": "open-end",
         "elementId": 1,
         "connector": 1,
-        "point": [
-          4.0,
-          0.0,
-          0.0
-        ],
+        "point": [4.0, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [
@@ -1340,11 +1156,7 @@
         "kind": "open-end",
         "elementId": 100,
         "connector": 0,
-        "point": [
-          0.0,
-          0.0,
-          0.0
-        ],
+        "point": [0.0, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [
@@ -1376,11 +1188,7 @@
         "kind": "open-end",
         "elementId": 101,
         "connector": 0,
-        "point": [
-          1.0,
-          0.0,
-          0.0
-        ],
+        "point": [1.0, 0.0, 0.0],
         "note": "terminal not connected",
         "near": {
           "ports": [
@@ -1428,11 +1236,7 @@
         "id": "no-terminal-flow:73",
         "kind": "no-terminal-flow",
         "elementId": 73,
-        "point": [
-          10.0,
-          0.0,
-          0.0
-        ],
+        "point": [10.0, 0.0, 0.0],
         "note": "no design flow"
       },
       {
@@ -1440,11 +1244,7 @@
         "kind": "open-end",
         "elementId": 72,
         "connector": 1,
-        "point": [
-          7.0025,
-          0.0,
-          0.0
-        ],
+        "point": [7.0025, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [
@@ -1472,11 +1272,7 @@
               "segmentId": 71,
               "gapIn": 0.0,
               "tapGapIn": 0.0,
-              "tapPoint": [
-                7.0025,
-                0.0,
-                0.0
-              ]
+              "tapPoint": [7.0025, 0.0, 0.0]
             }
           ]
         }
@@ -1486,11 +1282,7 @@
         "kind": "open-end",
         "elementId": 72,
         "connector": 2,
-        "point": [
-          6.9975,
-          0.0,
-          0.0
-        ],
+        "point": [6.9975, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [],
@@ -1501,11 +1293,7 @@
               "gapIn": -4.0,
               "opposed": false,
               "atFt": 6.9975,
-              "point": [
-                6.9975,
-                0.0,
-                0.0
-              ]
+              "point": [6.9975, 0.0, 0.0]
             }
           ],
           "bodies": [
@@ -1513,11 +1301,7 @@
               "segmentId": 71,
               "gapIn": 0.0,
               "tapGapIn": 0.0,
-              "tapPoint": [
-                6.9975,
-                0.0,
-                0.0
-              ]
+              "tapPoint": [6.9975, 0.0, 0.0]
             }
           ]
         }
@@ -1526,30 +1310,19 @@
         "id": "no-component-drop:72",
         "kind": "no-component-drop",
         "elementId": 72,
-        "point": [
-          7.0,
-          0.0,
-          0.0
-        ],
+        "point": [7.0, 0.0, 0.0],
         "note": "Damper_Volume_Round states no pressure drop"
       },
       {
         "id": "inline:72",
         "kind": "inline",
         "elementId": 72,
-        "point": [
-          7.0,
-          0.0,
-          0.0
-        ],
+        "point": [7.0, 0.0, 0.0],
         "note": "Damper_Volume_Round lies inside duct 71, 7.00 ft along it and aligned with it, with neither end connected",
         "inline": {
           "segmentId": 71,
           "atFt": 7.0,
-          "ports": [
-            2,
-            1
-          ]
+          "ports": [2, 1]
         }
       }
     ],
@@ -1565,11 +1338,7 @@
         "kind": "open-end",
         "elementId": 9,
         "connector": 1,
-        "point": [
-          4.0025,
-          0.0,
-          0.0
-        ],
+        "point": [4.0025, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [],
@@ -1580,11 +1349,7 @@
               "gapIn": -3.0,
               "opposed": false,
               "atFt": 4.0025,
-              "point": [
-                4.0025,
-                0.0,
-                0.0
-              ]
+              "point": [4.0025, 0.0, 0.0]
             }
           ],
           "bodies": [
@@ -1592,11 +1357,7 @@
               "segmentId": 1,
               "gapIn": 0.0,
               "tapGapIn": 0.0,
-              "tapPoint": [
-                4.0025,
-                0.0,
-                0.0
-              ]
+              "tapPoint": [4.0025, 0.0, 0.0]
             }
           ]
         }
@@ -1606,11 +1367,7 @@
         "kind": "open-end",
         "elementId": 9,
         "connector": 2,
-        "point": [
-          3.9975,
-          0.0,
-          0.0
-        ],
+        "point": [3.9975, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [],
@@ -1620,11 +1377,7 @@
               "segmentId": 1,
               "gapIn": 0.0,
               "tapGapIn": 0.0,
-              "tapPoint": [
-                3.9975,
-                0.0,
-                0.0
-              ]
+              "tapPoint": [3.9975, 0.0, 0.0]
             }
           ]
         }
@@ -1633,11 +1386,7 @@
         "id": "no-component-drop:9",
         "kind": "no-component-drop",
         "elementId": 9,
-        "point": [
-          4.0,
-          0.0,
-          0.0
-        ],
+        "point": [4.0, 0.0, 0.0],
         "note": "Damper_Volume_Round states no pressure drop"
       },
       {
@@ -1645,11 +1394,7 @@
         "kind": "open-end",
         "elementId": 1,
         "connector": 1,
-        "point": [
-          0.0,
-          0.0,
-          0.0
-        ],
+        "point": [0.0, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [],
@@ -1662,11 +1407,7 @@
         "kind": "open-end",
         "elementId": 3,
         "connector": 2,
-        "point": [
-          20.0,
-          0.0,
-          0.0
-        ],
+        "point": [20.0, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [],
@@ -1678,19 +1419,12 @@
         "id": "inline:9",
         "kind": "inline",
         "elementId": 9,
-        "point": [
-          4.0,
-          0.0,
-          0.0
-        ],
+        "point": [4.0, 0.0, 0.0],
         "note": "Damper_Volume_Round lies inside duct 1, 4.00 ft along it and aligned with it, with neither end connected",
         "inline": {
           "segmentId": 1,
           "atFt": 4.0,
-          "ports": [
-            2,
-            1
-          ]
+          "ports": [2, 1]
         }
       }
     ],
@@ -1706,11 +1440,7 @@
         "kind": "open-end",
         "elementId": 9,
         "connector": 1,
-        "point": [
-          4.0025,
-          0.0,
-          0.0
-        ],
+        "point": [4.0025, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [],
@@ -1721,11 +1451,7 @@
               "gapIn": -3.0,
               "opposed": false,
               "atFt": 4.0025,
-              "point": [
-                4.0025,
-                0.0,
-                0.0
-              ]
+              "point": [4.0025, 0.0, 0.0]
             }
           ],
           "bodies": [
@@ -1733,11 +1459,7 @@
               "segmentId": 1,
               "gapIn": 0.0,
               "tapGapIn": 0.0,
-              "tapPoint": [
-                4.0025,
-                0.0,
-                0.0
-              ]
+              "tapPoint": [4.0025, 0.0, 0.0]
             }
           ]
         }
@@ -1747,11 +1469,7 @@
         "kind": "open-end",
         "elementId": 9,
         "connector": 2,
-        "point": [
-          3.9975,
-          0.0,
-          0.0
-        ],
+        "point": [3.9975, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [],
@@ -1761,11 +1479,7 @@
               "segmentId": 1,
               "gapIn": 0.0,
               "tapGapIn": 0.0,
-              "tapPoint": [
-                3.9975,
-                0.0,
-                0.0
-              ]
+              "tapPoint": [3.9975, 0.0, 0.0]
             }
           ]
         }
@@ -1774,11 +1488,7 @@
         "id": "no-component-drop:9",
         "kind": "no-component-drop",
         "elementId": 9,
-        "point": [
-          4.0,
-          0.0,
-          0.0
-        ],
+        "point": [4.0, 0.0, 0.0],
         "note": "Damper_Volume_Round states no pressure drop"
       },
       {
@@ -1786,11 +1496,7 @@
         "kind": "open-end",
         "elementId": 1,
         "connector": 1,
-        "point": [
-          0.0,
-          0.0,
-          0.0
-        ],
+        "point": [0.0, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [],
@@ -1803,11 +1509,7 @@
         "kind": "open-end",
         "elementId": 1,
         "connector": 2,
-        "point": [
-          10.0,
-          0.0,
-          0.0
-        ],
+        "point": [10.0, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [],
@@ -1819,19 +1521,12 @@
         "id": "inline:9",
         "kind": "inline",
         "elementId": 9,
-        "point": [
-          4.0,
-          0.0,
-          0.0
-        ],
+        "point": [4.0, 0.0, 0.0],
         "note": "Damper_Volume_Round lies inside duct 1, 4.00 ft along it and aligned with it, with neither end connected",
         "inline": {
           "segmentId": 1,
           "atFt": 4.0,
-          "ports": [
-            2,
-            1
-          ]
+          "ports": [2, 1]
         }
       }
     ],
@@ -1847,11 +1542,7 @@
         "kind": "open-end",
         "elementId": 9,
         "connector": 1,
-        "point": [
-          4.0025,
-          0.0,
-          0.0
-        ],
+        "point": [4.0025, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [],
@@ -1862,11 +1553,7 @@
               "gapIn": -3.0,
               "opposed": false,
               "atFt": 4.0025,
-              "point": [
-                4.0025,
-                0.0,
-                0.0
-              ]
+              "point": [4.0025, 0.0, 0.0]
             }
           ],
           "bodies": [
@@ -1874,11 +1561,7 @@
               "segmentId": 1,
               "gapIn": 0.0,
               "tapGapIn": 0.0,
-              "tapPoint": [
-                4.0025,
-                0.0,
-                0.0
-              ]
+              "tapPoint": [4.0025, 0.0, 0.0]
             }
           ]
         }
@@ -1888,11 +1571,7 @@
         "kind": "open-end",
         "elementId": 9,
         "connector": 2,
-        "point": [
-          3.9975,
-          0.0,
-          0.0
-        ],
+        "point": [3.9975, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [],
@@ -1902,11 +1581,7 @@
               "segmentId": 1,
               "gapIn": 0.0,
               "tapGapIn": 0.0,
-              "tapPoint": [
-                3.9975,
-                0.0,
-                0.0
-              ]
+              "tapPoint": [3.9975, 0.0, 0.0]
             }
           ]
         }
@@ -1915,11 +1590,7 @@
         "id": "no-component-drop:9",
         "kind": "no-component-drop",
         "elementId": 9,
-        "point": [
-          4.0,
-          0.0,
-          0.0
-        ],
+        "point": [4.0, 0.0, 0.0],
         "note": "Damper_Volume_Round states no pressure drop"
       },
       {
@@ -1927,11 +1598,7 @@
         "kind": "open-end",
         "elementId": 1,
         "connector": 1,
-        "point": [
-          0.0,
-          0.0,
-          0.0
-        ],
+        "point": [0.0, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [],
@@ -1944,11 +1611,7 @@
         "kind": "open-end",
         "elementId": 3,
         "connector": 2,
-        "point": [
-          20.0,
-          0.0,
-          0.0
-        ],
+        "point": [20.0, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [],
@@ -1960,19 +1623,12 @@
         "id": "inline:9",
         "kind": "inline",
         "elementId": 9,
-        "point": [
-          4.0,
-          0.0,
-          0.0
-        ],
+        "point": [4.0, 0.0, 0.0],
         "note": "Damper_Volume_Round lies inside duct 1, 4.00 ft along it and aligned with it, with neither end connected",
         "inline": {
           "segmentId": 1,
           "atFt": 4.0,
-          "ports": [
-            2,
-            1
-          ]
+          "ports": [2, 1]
         }
       }
     ],
@@ -1988,11 +1644,7 @@
         "kind": "open-end",
         "elementId": 1,
         "connector": 1,
-        "point": [
-          4.0,
-          0.0,
-          0.0
-        ],
+        "point": [4.0, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [
@@ -2037,11 +1689,7 @@
         "kind": "open-end",
         "elementId": 1,
         "connector": 1,
-        "point": [
-          4.0,
-          0.0,
-          0.0
-        ],
+        "point": [4.0, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [
@@ -2073,11 +1721,7 @@
               "facingDot": -1.0,
               "opposed": true,
               "atFt": 0.0,
-              "point": [
-                4.216666666666667,
-                0.0,
-                0.0
-              ]
+              "point": [4.216666666666667, 0.0, 0.0]
             }
           ],
           "bodies": [
@@ -2101,11 +1745,7 @@
         "kind": "air-type-change",
         "elementId": 200,
         "connector": 0,
-        "point": [
-          8.0,
-          0.0,
-          0.0
-        ],
+        "point": [8.0, 0.0, 0.0],
         "note": "SupplyAir meets ReturnAir at 2:1"
       },
       {
@@ -2113,11 +1753,7 @@
         "kind": "air-type-change",
         "elementId": 900,
         "connector": 0,
-        "point": [
-          5.0,
-          0.0,
-          0.0
-        ],
+        "point": [5.0, 0.0, 0.0],
         "note": "SupplyAir meets ReturnAir at 2:0"
       },
       {
@@ -2125,11 +1761,7 @@
         "kind": "open-end",
         "elementId": 1,
         "connector": 1,
-        "point": [
-          4.0,
-          0.0,
-          0.0
-        ],
+        "point": [4.0, 0.0, 0.0],
         "note": "nothing attached",
         "near": {
           "ports": [
@@ -2166,11 +1798,7 @@
         "kind": "air-type-change",
         "elementId": 2,
         "connector": 0,
-        "point": [
-          5.0,
-          0.0,
-          0.0
-        ],
+        "point": [5.0, 0.0, 0.0],
         "note": "ReturnAir meets SupplyAir at 900:0"
       },
       {
@@ -2178,11 +1806,7 @@
         "kind": "air-type-change",
         "elementId": 2,
         "connector": 1,
-        "point": [
-          8.0,
-          0.0,
-          0.0
-        ],
+        "point": [8.0, 0.0, 0.0],
         "note": "ReturnAir meets SupplyAir at 200:0"
       }
     ],

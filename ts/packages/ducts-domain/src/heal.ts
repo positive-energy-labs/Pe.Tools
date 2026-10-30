@@ -136,7 +136,8 @@ function build(snapshot: DuctSnapshot, raw: DuctsRouteDocument | null): HealPlan
   // bounded read is still known: an end it marks auto-join faces a vacant port within autoJoinGapIn.
   const facingOf = new Map(
     snapshot.issues.flatMap((i) => {
-      const port = i.kind === "open-end" && i.connector != null ? i.near?.ports.find((p) => p.autoJoin) : null;
+      const port =
+        i.kind === "open-end" && i.connector != null ? i.near?.ports.find((p) => p.autoJoin) : null;
       return port ? [[`${i.elementId}:${i.connector}` as string, port] as const] : [];
     }),
   );

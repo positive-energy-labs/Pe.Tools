@@ -100,7 +100,8 @@ export function flowsOf(
   const inflowOf = (e: Walk["ends"][number]): Omit<Inflow, "end"> => {
     const fan = e.end.fan ?? null;
     if (!fan) return { fan, cfm: 0, source: "unnamed stream; unknown; 0 assumed" };
-    if (fan.unitId === unitId) return { fan, cfm: 0, source: "this fan's own port; unknown; 0 assumed" };
+    if (fan.unitId === unitId)
+      return { fan, cfm: 0, source: "this fan's own port; unknown; 0 assumed" };
     const design = opts.unitCfm?.(fan.unitId);
     if (design) return { fan, cfm: design.cfm, source: design.source };
     const assumed = opts.receivingAssumedCfm?.get(`${fan.unitId}:${fan.portIndex}`);
@@ -189,7 +190,9 @@ export function flowsOf(
     } else if (e.end.kind === "terminal") {
       const flow = shareAt(e, i);
       [cfm, source] =
-        flow != null ? [flow, drawOn(i) ? "terminal less sibling draws" : "terminal"] : [null, null];
+        flow != null
+          ? [flow, drawOn(i) ? "terminal less sibling draws" : "terminal"]
+          : [null, null];
     } else if (isFanEnd(e)) {
       const own = portShare(e);
       const at = untyped.indexOf(e);
@@ -226,12 +229,12 @@ export function flowsOf(
             : terminal && terminalAt(e) != null
               ? `shared terminal ${e.end.elementId} states ${terminalAt(e)} cfm, less than its siblings draw (${drawOn(i) ?? "unknown"})`
               : terminal
-              ? `terminal ${e.end.elementId} has no design flow: nothing typed, no load, and its airflow slot is empty`
-              : remainder != null && remainder < 0
-                ? "the receiving units' design flows at their ports: their total exceeds this unit's design flow; no nonnegative remainder to split"
-                : fanEnds === 1
-                  ? `the fan's own flow into ${e.end.elementId} has no typed share or unit design-flow value`
-                  : `the fan's own flow splits across ${fanEnds} receiving fan/merge ends; no unit design flow or complete typed shares are available`,
+                ? `terminal ${e.end.elementId} has no design flow: nothing typed, no load, and its airflow slot is empty`
+                : remainder != null && remainder < 0
+                  ? "the receiving units' design flows at their ports: their total exceeds this unit's design flow; no nonnegative remainder to split"
+                  : fanEnds === 1
+                    ? `the fan's own flow into ${e.end.elementId} has no typed share or unit design-flow value`
+                    : `the fan's own flow splits across ${fanEnds} receiving fan/merge ends; no unit design flow or complete typed shares are available`,
           closer: {
             kind: terminal ? "default" : "ruling",
             note: terminal
@@ -291,7 +294,10 @@ export function flowsOf(
         ...(s.end.connector == null ? {} : { connector: s.end.connector }),
         effectInWg: null,
         detail: `sibling ${s.end.fan!.unitId} draws from shared terminal ${w.ends[d.terminal]!.end.elementId}; its design flow is unknown`,
-        closer: { kind: "ruling", note: "set the unit design-flow parameter, or type the unit's flow" },
+        closer: {
+          kind: "ruling",
+          note: "set the unit design-flow parameter, or type the unit's flow",
+        },
       });
       s.blockerIds.push(id);
       unknown.set(d.sibling, id);

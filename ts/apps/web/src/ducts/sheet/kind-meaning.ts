@@ -14,17 +14,19 @@ type Unit = DuctsInputs["units"][string];
 
 const sideWord = (classification: string | null | undefined) =>
   (
-    {
+    ({
       supplyair: "supply",
       returnair: "return",
       exhaustair: "exhaust",
       outdoorair: "outdoor",
-    } as Record<string, string>
+    }) as Record<string, string>
   )[(classification ?? "").toLowerCase().replace(/[^a-z]/g, "")] ?? "unclassified";
 
 const portWord = (node: Node, index: number) => {
   const c = node.connectors.find((p) => p.index === index);
-  return c ? `${sideWord(c.classification)} ${c.direction === "out" ? "out" : "in"} c${index}` : `c${index}`;
+  return c
+    ? `${sideWord(c.classification)} ${c.direction === "out" ? "out" : "in"} c${index}`
+    : `c${index}`;
 };
 
 /** The role a kind gives the unit: a typed role stands; else the engine's suggestion under that kind. */

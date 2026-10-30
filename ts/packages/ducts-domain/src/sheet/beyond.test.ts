@@ -28,7 +28,10 @@ const node = (id: number, kind: Kind, ports: [P, number][]) => ({
 const seg = (id: number, a: [P, number], b: [P, number] | P) => ({
   id,
   polyline: [a[0], Array.isArray(b[0]) ? b[0] : b],
-  connectors: [port(0, a[0], a[1]), ...(Array.isArray(b[0]) ? [port(1, b[0] as P, b[1] as number)] : [])],
+  connectors: [
+    port(0, a[0], a[1]),
+    ...(Array.isArray(b[0]) ? [port(1, b[0] as P, b[1] as number)] : []),
+  ],
 });
 /**
  * fan 1 -2- ERV 3 (the stop). ERV 3's other ports: duct 4 (5 ft) to grille 5; duct 6 (30 ft) to
@@ -96,7 +99,9 @@ it("a terminal end is not a stop, and an element past two stops is listed once",
     [3, [4, 5, 6, 9, 10]],
     [9, [11]],
   ]);
-  expect(stoppingUnits({ ...sheet, paths: [end("terminal", 5, 3)] } as unknown as Sheet)).toEqual([]);
+  expect(stoppingUnits({ ...sheet, paths: [end("terminal", 5, 3)] } as unknown as Sheet)).toEqual(
+    [],
+  );
 });
 
 const CHADDS =
@@ -141,7 +146,15 @@ it.skipIf(!existsSync(CHADDS))(
       expect(priced.has(id)).toBe(false);
     }
     console.log(
-      JSON.stringify(beyond.map((b) => ({ unit: b.unitId, mark: b.mark, n: b.elementIds.length, cuts: b.cuts.length, terminals: b.elementIds.filter((id) => kinds.get(id) === "terminal").length }))),
+      JSON.stringify(
+        beyond.map((b) => ({
+          unit: b.unitId,
+          mark: b.mark,
+          n: b.elementIds.length,
+          cuts: b.cuts.length,
+          terminals: b.elementIds.filter((id) => kinds.get(id) === "terminal").length,
+        })),
+      ),
     );
   },
   120_000,

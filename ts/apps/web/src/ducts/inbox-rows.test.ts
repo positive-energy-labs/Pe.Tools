@@ -245,7 +245,12 @@ describe("a heal in a shared group belongs to the systems of the ends it heals",
   // Chadds 2026-10-30: one group carried FA 20 and RA 37; its caps were all on RA 37's ducts, and the
   // row read "Heal FA 20, FA 27" on FA 20's view.
   const seg = (id: number, systemName: string) =>
-    ({ id, groupId: "gS", systemName, connectors: [] }) as unknown as TriageInput["snapshot"]["segments"][number];
+    ({
+      id,
+      groupId: "gS",
+      systemName,
+      connectors: [],
+    }) as unknown as TriageInput["snapshot"]["segments"][number];
   const shared: TriageInput["snapshot"] = {
     groups: [{ ...group("gS", []), systemNames: ["FA 20", "RA 37"] }],
     nodes: [],
@@ -266,11 +271,25 @@ describe("a heal in a shared group belongs to the systems of the ends it heals",
     hard: new Map(),
   };
   const scope = (name: string, members: number[]) =>
-    ({ name, groups: ["gS"], pricing: new Set(["gS"]), shared: new Map(), terminals: new Set(), units: new Set(), prices: new Set(members), members: new Set(members) }) as SystemScope;
+    ({
+      name,
+      groups: ["gS"],
+      pricing: new Set(["gS"]),
+      shared: new Map(),
+      terminals: new Set(),
+      units: new Set(),
+      prices: new Set(members),
+      members: new Set(members),
+    }) as SystemScope;
   const rows = (s: SystemScope | null) =>
-    inboxRows({ ...base, snapshot: shared, findings: [], scope: s, heal, groupLabel: () => "FA 20, FA 27" }).fix.filter(
-      (r) => r.kind === "heal",
-    );
+    inboxRows({
+      ...base,
+      snapshot: shared,
+      findings: [],
+      scope: s,
+      heal,
+      groupLabel: () => "FA 20, FA 27",
+    }).fix.filter((r) => r.kind === "heal");
 
   it("is titled by the healed ends' systems, not the group's label", () =>
     expect(rows(null).map((r) => r.title)).toEqual(["Heal RA 37: 2 caps"]));

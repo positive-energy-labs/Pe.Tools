@@ -116,7 +116,13 @@ test.skipIf(!existsSync(retained))(
     // Context only (kaitpw 2026-10-30, "yes show"): one `from` read per unit MUAS-1 stops at, and
     // RV-15's and RV-7's other ports come back as stubs, none of it walked (so none of it priced).
     expect(requests).toContainEqual({
-      selector: { kind: "from", unitId: 6105264, maxHops: 12, autoJoinGapIn: 3, candidateBoxIn: 36 },
+      selector: {
+        kind: "from",
+        unitId: 6105264,
+        maxHops: 12,
+        autoJoinGapIn: 3,
+        candidateBoxIn: 36,
+      },
     });
     if (elements.kind === "elements") {
       expect(elements.beyond.map((b) => [b.unitId, b.mark])).toEqual(
@@ -282,11 +288,11 @@ test("sheet inputs survive host recreation in document Work; project criteria go
     const source: DuctsSheetSources = {
       call: async (key, request) => {
         if ("ids" in request) tableIds.push(request.ids);
-        if (key === "ducts.snapshot") snapshotSlots.push("slots" in request ? request.slots : undefined);
+        if (key === "ducts.snapshot")
+          snapshotSlots.push("slots" in request ? request.slots : undefined);
         // The native read measures under the slot the request names; the host must send Work's
         // protocol slot (C# never reads Work), else the document's stored slot stands.
-        const slot =
-          ("slots" in request ? request.slots?.terminalFlow : undefined) ?? "named";
+        const slot = ("slots" in request ? request.slots?.terminalFlow : undefined) ?? "named";
         return Response.json(
           key === "ducts.snapshot"
             ? { ...snapshot, slots: { terminalFlow: slot } }

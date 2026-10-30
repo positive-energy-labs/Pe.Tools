@@ -252,24 +252,25 @@ export function SheetPicture({
       { meta: "no fan open" },
     );
   const esp = sheet.overview.totals?.requiredEspInWg ?? null;
-  const summary = hoveredBeyond != null ? (
-    <span data-sheet-picture-beyond="" className="text-ink-2">
-      {nameOf(hoveredBeyond)}
-    </span>
-  ) : (
-    <span data-sheet-picture-state="">
-      {fan.mark} · port {fan.portIndex} ·{" "}
-      {esp == null ? (
-        // An incomplete sheet has no required ESP: missing reads as missing, never a number.
-        <span className="text-ink-2">incomplete: no required ESP</span>
-      ) : (
-        <>
-          required ESP <span className="face-mono">{fmt(esp)} in-wg</span>
-        </>
-      )}{" "}
-      · {blockers.length} blocker{blockers.length === 1 ? "" : "s"}
-    </span>
-  );
+  const summary =
+    hoveredBeyond != null ? (
+      <span data-sheet-picture-beyond="" className="text-ink-2">
+        {nameOf(hoveredBeyond)}
+      </span>
+    ) : (
+      <span data-sheet-picture-state="">
+        {fan.mark} · port {fan.portIndex} ·{" "}
+        {esp == null ? (
+          // An incomplete sheet has no required ESP: missing reads as missing, never a number.
+          <span className="text-ink-2">incomplete: no required ESP</span>
+        ) : (
+          <>
+            required ESP <span className="face-mono">{fmt(esp)} in-wg</span>
+          </>
+        )}{" "}
+        · {blockers.length} blocker{blockers.length === 1 ? "" : "s"}
+      </span>
+    );
   return (
     <Picture
       selection={props.selection}

@@ -214,7 +214,12 @@ test("a choice cell greys a disabled option with its reason and refuses to pick 
   const pick = vi.fn();
   const options = [
     { key: "erv", label: "erv", description: "fan: two ports" },
-    { key: "air-handler", label: "air-handler", description: "fan: one port", disabled: "no fan port: 2 outlets" },
+    {
+      key: "air-handler",
+      label: "air-handler",
+      description: "fan: one port",
+      disabled: "no fan port: 2 outlets",
+    },
     { key: "other", label: "other", description: "passive" },
   ];
   const { container } = render(

@@ -9,7 +9,15 @@ it("Enter then blur commits once while the write is in flight (2026-10-30: the s
   let land!: () => void;
   const onValue = vi.fn(() => new Promise<void>((resolve) => (land = resolve)));
   const { container } = render(
-    <SheetCell label="Terminal drop in-wg" value={0.03} unit={{ label: "in-wg" }} digits={4} source="firm seed" refusal={null} onValue={onValue} />,
+    <SheetCell
+      label="Terminal drop in-wg"
+      value={0.03}
+      unit={{ label: "in-wg" }}
+      digits={4}
+      source="firm seed"
+      refusal={null}
+      onValue={onValue}
+    />,
   );
   const input = container.querySelector("input")!;
   await act(async () => input.focus());
