@@ -20,7 +20,7 @@ import {
 } from "#/revit/element-target";
 import { observedElements, useNativeObservation } from "#/revit/observation";
 
-import { airflowPatches } from "../../airflow";
+import { DuctsOwner } from "../../pane-context";
 import { rulingPatches, verdictPatches } from "../../assumptions";
 import { VERDICTS, type Verdict } from "../../claims";
 import {
@@ -119,6 +119,7 @@ export function Inbox({
   address?: ListPersist<"name" | "status">;
   cells: (row: { segment: string; key: string }) => ReactNode;
 }) {
+  const owner = useContext(DuctsOwner);
   const observation = useNativeObservation();
   const subjects = useContext(SubjectTextContext);
   const registry = useContext(RegistryContext);
@@ -196,7 +197,11 @@ export function Inbox({
               options={verb.options}
               noun={verb.of === "unit" ? "units" : "grilles"}
               where="in this scope"
-              onPick={(slot) => void work.write(airflowPatches(work.doc, slot, verb.of))}
+              onPick={(slot) =>
+                void owner?.settings
+                  .set({ [verb.of === "unit" ? "fanFlow" : "terminalFlow"]: slot })
+                  .catch(() => {})
+              }
             />
           ) : null;
         case "focus":
@@ -250,7 +255,7 @@ export function Inbox({
         }
       }
     },
-    [work, nameOf, heal, fan, onFocusCell, onVerdict, cells, observation, selecting],
+    [owner, work, nameOf, heal, fan, onFocusCell, onVerdict, cells, observation, selecting],
   );
   const verbsOf = useCallback(
     (item: InboxItem, worded: boolean) =>

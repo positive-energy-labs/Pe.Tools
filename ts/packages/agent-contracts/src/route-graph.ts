@@ -24,6 +24,7 @@ export type FieldRole =
   | "query"
   | "draft"
   | "device"
+  | "setting"
   | "transient";
 
 export interface FieldPolicy {
@@ -34,7 +35,7 @@ export interface FieldPolicy {
 
 /** RouteField owns schema and codec. False explicitly opts out of a role's projection default. */
 export type FieldDecl<S extends z.ZodType = z.ZodType> = Omit<RouteField<S>, keyof FieldPolicy> &
-  Partial<FieldPolicy>;
+  Partial<FieldPolicy> & { label?: string; control?: "color" };
 
 export const fieldRoleDefaults: Readonly<Record<FieldRole, Readonly<FieldPolicy>>> = {
   subject: { url: "push", share: true, agent: "set" },
@@ -44,11 +45,13 @@ export const fieldRoleDefaults: Readonly<Record<FieldRole, Readonly<FieldPolicy>
   query: { url: "replace", share: true, agent: "set" },
   draft: { url: "replace", share: false, agent: "set" },
   device: { url: false, share: false, agent: "read" },
+  setting: { url: false, share: false, agent: "set" },
   transient: { url: false, share: false, agent: false },
 };
 
 export function graphFieldPolicy(field: Partial<FieldPolicy> & { role: FieldRole }): FieldPolicy {
   const defaults = fieldRoleDefaults[field.role];
+  if (field.role === "setting") return defaults;
   return {
     url: field.url ?? defaults.url,
     share: field.share ?? defaults.share,
@@ -234,7 +237,9 @@ export interface RouteGraph<P = Record<string, unknown>, W = unknown> {
   key: string;
   address: string;
   name: string;
-  fields: { readonly [K in keyof P]-?: FieldDecl<z.ZodType<P[K]>> & { role: FieldRole } };
+  fields: {
+    readonly [K in keyof P]-?: FieldDecl<z.ZodType<P[K]>> & { role: FieldRole };
+  } & Readonly<Record<string, FieldDecl & { role: FieldRole }>>;
   readings: Readonly<Record<string, ReadingDecl<P>>>;
   verbs: Readonly<Record<string, VerbDecl>>;
   panes: Readonly<Record<string, PaneDecl>>;

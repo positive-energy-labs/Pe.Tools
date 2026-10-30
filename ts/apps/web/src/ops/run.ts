@@ -1,47 +1,27 @@
-/**
- * The two lanes one host call can take. A read is `POST /call` and returns a value with no
- * identity. A mutation is admitted to the host action journal under an id, and the receipt read
- * back by that id is the truth of what happened (`ActionReceiptView`).
- */
-import { actionAdmissionSchema, type ExecutionTarget } from "@pe/agent-contracts";
-import {
-  isAnyOperationKey,
-  isTsOnlyOperationKey,
-  type OpRequestOf,
-} from "@pe/host-contracts/operation-types";
+import type { ExecutionTarget } from "@pe/agent-contracts";
+import { isAnyOperationKey, type OpRequestOf } from "@pe/host-contracts/operation-types";
+import type { HostCaller } from "#/route/manifest";
+import { isMutation, type HostOperationCatalogEntry } from "./manifest";
 
-import { submitAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
-import type { HostCaller } from "#/route";
-import { isMutation, type HostOperationCatalogEntry } from "#/ops/manifest";
-
-export type RunOutcome =
-  | { kind: "value"; value: unknown; elapsedMs: number }
-  | { kind: "action"; id: string; state: string };
-
+export const RAW_MUTATION_GAP =
+  "Raw mutations are unavailable here; use the operation's semantic command";
+/** Read-only catalog execution. Raw mutations cannot bypass the kernel's admission door. */
 export async function runOp(input: {
   op: HostOperationCatalogEntry;
   request: unknown;
   target: ExecutionTarget;
   call: HostCaller;
-  base?: string;
-}): Promise<RunOutcome> {
+}) {
   const started = performance.now();
   const key = input.op.key;
   if (!isAnyOperationKey(key))
     throw Error(`Operation ${key} is absent from this client's contract; regenerate the catalog.`);
-  if (!isMutation(input.op))
-    return {
-      kind: "value",
-      // The catalog form supplies JSON; the host validates it against this declared key's schema.
-      value: await input.call(key, input.request as OpRequestOf<typeof key>),
-      elapsedMs: Math.round(performance.now() - started),
-    };
-  const admission = actionAdmissionSchema.parse({
-    id: crypto.randomUUID(),
-    key: input.op.key,
-    target: isTsOnlyOperationKey(input.op.key) ? { kind: "host" } : input.target,
-    input: input.request ?? {},
-  });
-  const action = await submitAction(admission, input.base, 30_000);
-  return { kind: "action", id: action.id, state: action.state };
+  if (isMutation(input.op)) throw Error(RAW_MUTATION_GAP);
+  if (input.op.intent?.toLowerCase() !== "read")
+    throw Error("Operation readiness metadata is unavailable");
+  return {
+    kind: "value" as const,
+    value: await input.call(key, input.request as OpRequestOf<typeof key>),
+    elapsedMs: Math.round(performance.now() - started),
+  };
 }

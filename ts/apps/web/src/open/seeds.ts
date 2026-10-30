@@ -21,7 +21,7 @@ import type {
   UpdateRevit,
 } from "@pe/host-contracts/pe-revit-contract";
 
-import type { OpenReading } from "#/open/manifest";
+type OpenReading = "machine" | "recents";
 
 const AT = "2026-10-08T17:12:00.000Z";
 const STARTED = "2026-10-08T14:10:00.000Z";

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import {
   canonicalRouteInput,
+  ductsParameterSlots,
   DUCTS_BODY_VERSION_HEADER,
   ductsDocumentSchema,
   ductsSheetInputsSchema,
@@ -36,6 +37,7 @@ import { BridgeError } from "./bridge.ts";
 /** The near-miss tolerance C# measures model health under (one home, ducts LEDGER 2026-10-29); absent, its default. */
 type Tolerances = { autoJoinGapIn?: number };
 type SnapshotRequest = {
+  slots?: ReturnType<typeof ductsParameterSlots>;
   selector:
     | { kind: "document" }
     | { kind: "roster" }
@@ -72,6 +74,7 @@ function mergeSnapshots(a: DuctSnapshot, b: DuctSnapshot): DuctSnapshot {
   };
 }
 export interface DuctsSheetSources {
+  settings?: () => Readonly<Record<string, unknown>>;
   call: (
     key: "ducts.snapshot" | "ducts.tables",
     request: SnapshotRequest | { ids: string[] },
@@ -220,7 +223,9 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
         ...(doc?.sheetDefaults.edit?.value.terminalDropInWg !== undefined
           ? { terminalDropSource: "route settings terminal drop" }
           : {}),
-        slot: doc?.parameters.terminalFlow?.edit?.value,
+        slot: ductsParameterSlots(sources.settings?.()).terminalFlow,
+        // All slot choices participate in the retained sheet's freshness basis.
+        routeSlots: ductsParameterSlots(sources.settings?.()),
       },
     };
   }
@@ -247,7 +252,14 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
     target: DocumentRef,
     version?: string,
   ) {
-    const response = await sources.call(key, request, target, version);
+    const response = await sources.call(
+      key,
+      key === "ducts.snapshot"
+        ? { ...request, slots: ductsParameterSlots(sources.settings?.()) }
+        : request,
+      target,
+      version,
+    );
     if (!response.ok)
       throw new BridgeError(await response.text(), response.status, { notDispatched: true });
     return response;

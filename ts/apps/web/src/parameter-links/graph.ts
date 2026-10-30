@@ -5,7 +5,6 @@ import {
   gate,
   pane,
   parameterLinkProfileSchema,
-  parameterLinkDefinitionSchema,
   parameterLinksRouteState,
   split,
   stagedParameterProfile,
@@ -13,23 +12,13 @@ import {
   type ParameterLinksDocument,
   type RouteGraph,
 } from "@pe/agent-contracts";
-import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { parameterLinksAddress } from "../../../../packages/agent-contracts/src/routes/parameter-links";
 import { commandVerb, queryVerb, workVerb } from "#/shell/verbs";
 import type { BindingScope } from "#/shell/mount-owner";
-import { applyRefusal, profileSummary, sameProfile } from "./model";
+import { applyRefusal, profileSummary } from "./model";
 
-// A local buffer can temporarily have no definitions. Saving still validates the Work contract.
-const bufferProfile = parameterLinkProfileSchema.extend({
-  definitions: z.array(parameterLinkDefinitionSchema),
-});
-const bufferSchema = z
-  .object({ profile: bufferProfile, revision: z.number().int() })
-  .nullable()
-  .default(null);
 export const parameterLinksPageSchema = z.object({
   rail: parameterLinksAddress.fields.rail.schema,
-  buffer: bufferSchema,
 });
 export type ParameterLinksPage = z.output<typeof parameterLinksPageSchema>;
 export type ParameterLinksScope = BindingScope<ParameterLinksPage, ParameterLinksDocument>;
@@ -43,15 +32,10 @@ export function latestLinks(value: unknown) {
   );
 }
 
-export function parameterLinksBinding(id: string, _row: unknown, scope: ParameterLinksScope) {
+export function parameterLinksBinding(id: string, row: unknown, scope: ParameterLinksScope) {
   const saved = scope.work ? stagedParameterProfile(scope.work.doc) : null;
-  const buffer = scope.page.buffer;
-  const dirty = buffer !== null && !sameProfile(buffer.profile, saved);
   const capture = latestLinks(scope.readings.links?.value ?? scope.readings.links?.previous);
   const reading = capture?.reading.kind === "parameter-links" ? capture.reading.value : null;
-  const unsaved = dirty
-    ? "unsaved local edits — save the draft, then preview exactly what you will apply"
-    : null;
   const refusal =
     scope.target.kind !== "document"
       ? "An open project document is required"
@@ -61,20 +45,16 @@ export function parameterLinksBinding(id: string, _row: unknown, scope: Paramete
   return {
     subject: null,
     args:
-      id === "save"
-        ? {
-            profile: buffer?.profile ?? saved,
-            expectedRevision: buffer?.revision ?? -1,
-            refusal:
-              refusal ??
-              (!dirty ? "no unsaved local edits — the shared document already matches" : null),
-          }
+      id === "edit"
+        ? { ...(row as object), refusal }
         : id === "apply"
           ? {
               readingId: reading?.evaluated ? (capture?.id ?? null) : null,
               refusal:
                 refusal ??
-                unsaved ??
+                (!reading?.evaluated || !capture?.id
+                  ? "Preview this draft before applying."
+                  : null) ??
                 (!scope.readings.links?.current
                   ? "Preview this draft before applying."
                   : applyRefusal(scope.work?.doc ?? null, reading)),
@@ -83,7 +63,9 @@ export function parameterLinksBinding(id: string, _row: unknown, scope: Paramete
               refusal:
                 refusal ??
                 (id === "preview"
-                  ? (unsaved ?? (!saved ? "save a draft first" : null))
+                  ? !saved
+                    ? "Author a draft profile first."
+                    : null
                   : id === "previewProposal" && !scope.work?.doc.profile.suggestion
                     ? "Pea has proposed no profile"
                     : null),
@@ -102,7 +84,6 @@ const read = (label: string, evaluate: boolean, subject: "edit" | "suggestion" =
     },
   );
 
-/** Cutover waits for kernel pre-read Work writes and hosted Target/URL isolation. */
 export const parameterLinksGraph: RouteGraph<ParameterLinksPage, ParameterLinksDocument> = {
   key: "parameter-links",
   address: "parameter-links",
@@ -111,10 +92,6 @@ export const parameterLinksGraph: RouteGraph<ParameterLinksPage, ParameterLinksD
   work: parameterLinksRouteState.schema,
   fields: {
     rail: { ...parameterLinksAddress.fields.rail, role: "pose", agent: false },
-    buffer: {
-      ...field(bufferSchema, {}, { encode: JSON.stringify, decode: JSON.parse }),
-      role: "transient",
-    },
   },
   cells: [
     {
@@ -131,16 +108,15 @@ export const parameterLinksGraph: RouteGraph<ParameterLinksPage, ParameterLinksD
     options: {
       kind: "use",
       source: "parameter-links.options",
-      retire: "page",
-      args: (page) => page.buffer,
+      retire: "target",
     },
   },
   verbs: {
-    save: workVerb(
+    edit: workVerb(
       {
-        label: "save draft",
+        label: "edit profile",
         input: guarded.extend({
-          profile: parameterLinkProfileSchema,
+          profile: parameterLinkProfileSchema.nullable(),
           expectedRevision: z.number().int(),
         }),
       },
@@ -149,9 +125,11 @@ export const parameterLinksGraph: RouteGraph<ParameterLinksPage, ParameterLinksD
           input.refusal ??
           (scope.snapshot.work?.handle.revision === input.expectedRevision
             ? null
-            : "Work changed; your local edits are kept"),
+            : "Work changed; review and retry"),
         patches: (_, input) =>
-          transitionPatches([], "profile", {}, { kind: "set", rung: { value: input.profile } }),
+          input.profile
+            ? transitionPatches([], "profile", {}, { kind: "set", rung: { value: input.profile } })
+            : transitionPatches([], "profile", {}, { kind: "clear" }),
       },
     ),
     refresh: read("refresh", false),
@@ -162,11 +140,17 @@ export const parameterLinksGraph: RouteGraph<ParameterLinksPage, ParameterLinksD
       {
         label: "apply links",
         review: "none",
-        input: guarded.extend({ readingId: z.string().regex(/^[a-f0-9]{64}$/) }),
+        input: guarded.extend({
+          readingId: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .nullable(),
+        }),
       },
       {
-        ready: (_, input) => input.refusal,
-        intent: (_, input) => ({ readingId: input.readingId }),
+        ready: (_, input) =>
+          input.refusal ?? (!input.readingId ? "Preview this draft before applying." : null),
+        intent: (_, input) => ({ readingId: input.readingId! }),
       },
     ),
   },
@@ -175,9 +159,7 @@ export const parameterLinksGraph: RouteGraph<ParameterLinksPage, ParameterLinksD
       label: "profile",
       purpose: "Edit and review the shared parameter linkage profile",
       draws: ["links", "receipts", "options"],
-      verbs: Object.assign((row: unknown) => (row === "profile" ? [] : ["save"]), {
-        ids: ["save"],
-      }),
+      verbs: [],
     },
     evaluation: {
       label: "evaluation",

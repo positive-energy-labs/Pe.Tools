@@ -78,6 +78,12 @@ export const familyCaptureSchema = z.object({
   ]),
 });
 export type FamilyCapture = z.infer<typeof familyCaptureSchema>;
+export const familyLiveReadSchema = z.object({
+  reading: z.string(),
+  takenAt: z.iso.datetime(),
+  executionContext: documentRefSchema,
+  process: nativeProcessSchema,
+});
 /** Where a capture lands: the route's current pod, and a new member path the host may choose. */
 const captureInto = { pod: z.string().min(1), path: z.string().min(1).optional() };
 /**
@@ -255,6 +261,22 @@ export const familyActions = {
   },
 } as const;
 export const familyReads = {
+  "family.read": {
+    says: "Read the open family's spec into the draft baseline; preserve staged cells and proposals and file no Pod member.",
+    dirties: [],
+    needs: "family-document",
+    effect: "query",
+    input: z.strictObject({ readId: z.uuid(), expectedRevision: z.number().int().nonnegative() }),
+    result: familyLiveReadSchema,
+  },
+  "family.cancel-read": {
+    says: "Cancel this exact running Family read.",
+    dirties: [],
+    needs: "family-document",
+    effect: "query",
+    input: z.strictObject({ readId: z.uuid() }),
+    result: z.object({ cancelled: z.literal(true) }),
+  },
   "family.saved": {
     says: "Read an immutable saved Family reading, including historical citation IDs, without Revit.",
     dirties: [],

@@ -26,6 +26,7 @@ function fixture() {
     workKey: { binding: "open", route: "ducts", target: null, open: { session: "s", openId: "d" } },
     workRevision: host.revision,
     work: host.doc,
+    settings: { terminalFlow: "PE_M_Grd_AirFlow" },
     page: ductsPageSchema.parse({ system: ["SA"] }),
   };
   const logs: unknown[] = [];
@@ -37,7 +38,7 @@ function fixture() {
   releases.push(() => graph.dispose());
   return { scope, graph, logs };
 }
-test("subscription bodies and the pricing worker answer the exact Work; only parameter edits reacquire networks", async () => {
+test("subscription bodies and the pricing worker answer the exact Work; only slot settings reacquire networks", async () => {
   const { graph, scope } = fixture();
   releases.push(graph.mount(["pricing"]));
   await waitFor(() => expect(graph.get("pricing").current).toBe(true));
@@ -61,9 +62,8 @@ test("subscription bodies and the pricing worker answer the exact Work; only par
   graph.update({
     ...scope,
     workRevision: 3,
-    work: ductsRouteState.schema.parse({
-      parameters: { terminalFlow: { edit: { value: "Design CFM" } } },
-    }),
+    work: ductsRouteState.schema.parse({}),
+    settings: { terminalFlow: "Design CFM" },
   });
   await waitFor(() =>
     expect(

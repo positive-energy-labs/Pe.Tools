@@ -1,23 +1,22 @@
 import { z } from "zod";
-import { pane, split, type RouteGraph } from "@pe/agent-contracts";
+import {
+  pane,
+  split,
+  dataTableDraftSchema,
+  dataTablesWorkSchema,
+  type RouteGraph,
+} from "@pe/agent-contracts";
 import { dataTablesAddress } from "../../../../packages/agent-contracts/src/routes/data-tables";
-import { workVerb } from "#/shell/verbs";
+import { workVerb, queryVerb, commandVerb } from "#/shell/verbs";
+import { NATIVE_APPLY_WAIT_S } from "#/route/waits";
+import { openTable, tableSchema } from "./sources";
 
-const column = z.object({ heading: z.string(), kind: z.enum(["Text", "Number"]) });
-const row = z.object({ key: z.string(), values: z.array(z.string().nullable()) });
-export const draftSchema = z.object({
-  name: z.string(),
-  isNew: z.boolean(),
-  columns: z.array(column),
-  rows: z.array(row),
-});
+export const draftSchema = dataTableDraftSchema;
 export type Draft = z.output<typeof draftSchema>;
 export type ColumnKind = Draft["columns"][number]["kind"];
-export const tableSchema = draftSchema.omit({ isNew: true }).extend({
-  placements: z.array(z.object({ sheetNumber: z.string() })),
-});
+export { tableSchema };
 export type TableHandle = z.output<typeof tableSchema>;
-export const dataTablesWorkSchema = z.object({ draft: draftSchema.nullable().default(null) });
+export { dataTablesWorkSchema };
 export type DataTablesWork = z.output<typeof dataTablesWorkSchema>;
 export type DataTablesPage = { table: string };
 export const rowKey = () => `row-${crypto.randomUUID().slice(0, 8)}`;
@@ -44,11 +43,15 @@ export function pruneReview(draft: Draft, tables: readonly TableHandle[]) {
     summary: `Apply ${draft.name}. Prune deletes ${deletedKeys.length} rows from this table in Revit.`,
     deletedRows: deletedKeys.length,
     deletedKeys,
-    table: { name: draft.name, columns: draft.columns, rows: draft.rows, pruneMissingRows: true },
+    table: {
+      name: draft.name,
+      columns: draft.columns,
+      rows: draft.rows,
+      pruneMissingRows: true as const,
+    },
   };
 }
 
-// TODO: Complete data-table command registration and kernel selection/settlement hooks before cutover.
 export const dataTablesGraph: RouteGraph<DataTablesPage, DataTablesWork> = {
   key: "data-tables",
   address: "data-tables",
@@ -62,9 +65,45 @@ export const dataTablesGraph: RouteGraph<DataTablesPage, DataTablesWork> = {
       { label: "New table", input: z.object({}) },
       { patches: () => [{ path: ["draft"], value: blank() }] },
     ),
-    open: workVerb(
-      { label: "Open table", input: z.object({ table: tableSchema }) },
-      { patches: (_, input) => [{ path: ["draft"], value: draftFrom(input.table) }] },
+    open: queryVerb(
+      openTable,
+      { label: "Open table", input: openTable.input, review: "none" },
+      {
+        patches: (_, result) => [{ path: ["draft"], value: draftFrom(tableSchema.parse(result)) }],
+      },
+    ),
+    apply: commandVerb(
+      "data-table.apply",
+      {
+        label: "Apply",
+        input: z.object({}),
+        review: "required",
+        answers: z.object({}),
+        chord: "Mod+Enter",
+      },
+      {
+        waitSeconds: NATIVE_APPLY_WAIT_S,
+        ready: (scope) => {
+          if (scope.snapshot.target.kind !== "document") return "Choose a document first";
+          if (!scope.readings.tables?.current)
+            return "Read the current tables before reviewing Apply";
+          const draft = (scope.snapshot.work?.doc as DataTablesWork | undefined)?.draft;
+          return !draft
+            ? "Choose a table or start a new one first"
+            : !draft.name.trim()
+              ? "Name the table first"
+              : null;
+        },
+        prepare: (scope) =>
+          pruneReview(
+            (scope.snapshot.work!.doc as DataTablesWork).draft!,
+            scope.readings.tables!.value as TableHandle[],
+          ),
+        intent: (_, __, ___, ticket) => ({
+          table: (ticket!.evidence as ReturnType<typeof pruneReview>).table,
+        }),
+        lands: (result) => ({ table: (result as { name: string }).name }),
+      },
     ),
     edit: workVerb(
       {
@@ -94,7 +133,7 @@ export const dataTablesGraph: RouteGraph<DataTablesPage, DataTablesWork> = {
     edit: {
       word: "Editing",
       panes: ["tables", "draft"],
-      verbs: ["new"],
+      verbs: ["new", "apply"],
       teach:
         "Choose a table or start a new draft. Apply upserts by name and row key and prunes missing rows.",
     },

@@ -712,6 +712,27 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
     /** Query `after`, `kind`, `thread`, `limit`: one page of the host log after a cursor. */
     "log.read": route("GET", "/pe/log", none, hostLogPageSchema, "read", "pe", "read"),
     "work.list": route("GET", "/pe/route-state", none, z.array(object), "read", "pe", "read"),
+    "route-settings.get": route(
+      "GET",
+      "/pe/route-settings/:route",
+      none,
+      object,
+      "read",
+      "pe",
+      "read",
+    ),
+    "route-settings.set": route(
+      "POST",
+      "/pe/route-settings/:route",
+      z.strictObject({
+        patch: z.record(z.string(), z.json()),
+        expectedRevision: z.number().int().nonnegative(),
+      }),
+      object,
+      "human-or-pea",
+      "pe",
+      "human-or-pea",
+    ),
     "work.get": route("GET", "/pe/route-state/:route", none, object, "read", "pe", "read"),
     "work.salvage": route(
       "GET",

@@ -52,11 +52,24 @@ export function scopeFor(doc: DuctsRouteDocument): BindingScope<DuctsPage, Ducts
     },
   };
 }
-test("the product graph is admitted, projects all twelve cell families and uses the Work spec's schema object", () => {
+test("the product graph separates settings from eleven Work cell families", () => {
   expect(ductsGraph.work).toBe(ductsRouteState.schema);
   expect(validateRouteGraph(ductsGraph)).toEqual([]);
   const graph = projectRouteGraph(ductsGraph);
-  expect(graph.cells).toHaveLength(12);
+  expect(graph.cells).toHaveLength(11);
+  expect(graph.cells?.some((family) => family.segment === "parameters")).toBe(false);
+  expect(graph.fields.terminalFlow).toMatchObject({
+    role: "setting",
+    url: false,
+    share: false,
+    agent: "set",
+  });
+  expect(graph.fields.supplyColour).toMatchObject({
+    role: "setting",
+    url: false,
+    share: false,
+    agent: "set",
+  });
   expect(graph.stageOrder).toEqual(["network", "sheet"]);
   expect(graph.pick).toBe(false);
   expect(graph.verbs.price).toMatchObject({ does: "ducts.apply-losses", review: "shown" });
@@ -91,6 +104,21 @@ test("the price request is scoped and stable for one reading basis; standing Set
     refusal: expect.stringContaining("Pricing is refreshing"),
   });
 });
+test("native writes keep the observed settings slots even when historical Work has another slot", () => {
+  const scope = scopeFor(
+    ductsRouteState.schema.parse({
+      parameters: { terminalFlow: { edit: { value: "Historical flow" } } },
+      flows: { "4": { edit: { value: { cfm: 100, source: "override" } } } },
+    }),
+  );
+  const observed = { ...snapshot, slots: { ...snapshot.slots, terminalFlow: "Settings flow" } };
+  scope.readings = { ...scope.readings, ducts: state(observed) };
+  expect(ductsBinding("price", undefined, scope).args).toMatchObject({
+    refusal: null,
+    request: { slots: { terminalFlow: "Settings flow" } },
+  });
+});
+
 test("system changes retain a shared camera and selection, clear them for a different subject, and cap open order", () => {
   const current = {
     ...ductsPageSchema.parse({ system: ["SA"], selected: "4" }),

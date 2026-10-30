@@ -17,6 +17,7 @@ import {
   type PictureOverlayFrame,
   type PictureStrand,
 } from "#/scene/picture/picture";
+import { useDuctSettings } from "../pane-context";
 import { coloursOf } from "../colours";
 import { encodingFor } from "../encoding";
 import { DuctsOverlay, linesOf, useEquipment } from "../picture-content";
@@ -142,7 +143,7 @@ export function SheetPicture({
   );
   const lines = useMemo(() => linesOf(scene), [scene]);
   const routePaint = useMemo(() => paintOfDucts(snapshot, focusIds, NO_IDS), [snapshot, focusIds]);
-  const kinds = coloursOf(work.doc);
+  const kinds = coloursOf(useDuctSettings());
   const colour = page.layers.includes("system-colours") ? "firm" : "mono";
   const { paint, ports } = useEquipment(scene, routePaint, kinds, colour);
   const layers = useMemo<PictureLayer[]>(

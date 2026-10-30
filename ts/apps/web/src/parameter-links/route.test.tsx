@@ -2,20 +2,14 @@
 import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { createMemoryHistory, createRouter, RouterContextProvider } from "@tanstack/react-router";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import {
-  actionReceiptSchema,
-  familyCaptureSchema,
-  stagedParameterProfile,
-  type ParameterLinksDocument,
-} from "@pe/agent-contracts";
-import { Input } from "@pe/kit/lang/input";
-import { EvaluationView } from "./Evaluation";
-import { routeFromGraph, type MountBody, type RouteAdapters } from "#/shell/mount";
-import { subscriptionSource } from "#/shell/readings-use";
+import { routeFromGraph, mountRoute, type MountBody } from "#/shell/mount";
+import type { ParameterLinksDocument } from "@pe/agent-contracts";
 import { Route as root } from "../routes/__root";
-import { parameterLinksBinding, parameterLinksGraph, type ParameterLinksPage } from "./graph";
-import { parameterLinksOptionsSource } from "./sources";
+import { parameterLinksGraph, type ParameterLinksPage } from "./graph";
+import { parameterLinksAdapters } from "./route";
+import { parameterLinksSources } from "./sources";
 import { ParameterLinksHostFixture } from "./host.fixture";
+import { familyQueries } from "../../../../packages/mcps/src/shared/query-client";
 
 vi.mock("../routes/__root", async () => {
   const { createRootRoute, Outlet } = await import("@tanstack/react-router");
@@ -44,111 +38,43 @@ afterEach(async () => {
   cleanup();
   for (const release of releases.splice(0)) release();
   await new Promise((resolve) => setTimeout(resolve, 450));
-  // Work atoms are app-owned and retained; every graph-owned acquisition must release.
-  expect(
-    [...host.subscriptions].filter((subscription) => subscription.request.kind !== "work"),
-  ).toEqual([]);
+  expect([...host.subscriptions].filter((entry) => entry.request.kind !== "work")).toEqual([]);
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
 type Body = MountBody<ParameterLinksPage, ParameterLinksDocument>;
-test.todo(
-  "kernel gap: one Preview invocation CAS-saves the unsaved buffer before evaluating; conflict retains it and never reads",
-);
-test.todo(
-  "kernel gap: a hosted graph uses its thread target and never projects Page into the containing chat URL",
-);
-test.todo(
-  "kernel gap: a production links source receives the structured WorkKey without decoding its opaque identity",
-);
-/** Fixture bodies exercise the graph before product cutover; the production editor stays intact. */
-function FixtureProfile({ owner, page, verbs }: Body) {
-  const work = owner.snapshot().work;
-  const profile = page.buffer?.profile ?? (work ? stagedParameterProfile(work.doc) : null);
-  return (
-    <>
-      <Input
-        aria-label="fixture definition id"
-        value={profile?.definitions[0]?.id ?? ""}
-        onChange={(event) => {
-          if (!profile || !work) return;
-          owner.view.setPage({
-            buffer: {
-              revision: page.buffer?.revision ?? work.handle.revision,
-              profile: {
-                ...profile,
-                definitions: profile.definitions.map((definition, index) =>
-                  index === 0 ? { ...definition, id: event.target.value } : definition,
-                ),
-              },
-            },
-          });
-        }}
-      />
-      {verbs(undefined)}
-      <div role="group" aria-label="profile proposal">
-        {verbs("profile")}
-      </div>
-    </>
-  );
-}
-function FixtureEvaluation({ owner }: Body) {
-  const captures = owner.readings.get("links").value as
-    | ReturnType<typeof familyCaptureSchema.array>["_output"]
-    | undefined;
-  const reading = captures?.[0]?.reading;
-  return (
-    <EvaluationView
-      evaluation={reading?.kind === "parameter-links" ? (reading.value.evaluation ?? null) : null}
-    />
-  );
-}
-async function mounted(search = "") {
+async function mounted(search = "", hosted = false) {
   const wrap = vi.fn((_owner, children) => children);
-  const adapters: RouteAdapters<ParameterLinksPage, ParameterLinksDocument> = {
-    binding: parameterLinksBinding,
-    sources: {
-      // Full WorkKey is fixture-owned. Production acquisition awaits structured kernel source scope.
-      "parameter-links.links": subscriptionSource({
-        request: () => ({ kind: "family-readings", work: host.key }),
-        decode: (value) => familyCaptureSchema.array().parse(value),
-        resources: host.resources,
-      }),
-      "parameter-links.receipts": subscriptionSource({
-        request: () => ({ kind: "receipts", work: host.key }),
-        decode: (value) => actionReceiptSchema.array().parse(value),
-        resources: host.resources,
-      }),
-      "parameter-links.options": parameterLinksOptionsSource(host.resources),
-    },
-    cell: (row, scope) =>
-      row === "profile" && scope.work
-        ? { type: "cell:profile", id: "profile", path: ["profile"], work: scope.work.handle.key }
-        : null,
-    verbDepends: { apply: ["links"] },
-    bodies: { profile: FixtureProfile, evaluation: FixtureEvaluation },
+  const adapters = {
+    ...parameterLinksAdapters,
+    sources: parameterLinksSources(host.resources),
     wrap,
   };
   const route = routeFromGraph(parameterLinksGraph, adapters, "/parameter-links");
   const router = createRouter({
     routeTree: root.addChildren([route]),
     history: createMemoryHistory({
-      initialEntries: [`/parameter-links?target=${host.target.session}${search}`],
+      initialEntries: [
+        `/parameter-links?target=${hosted ? "containing-chat-target" : host.target.session}${search}`,
+      ],
     }),
   });
   releases.push(router.history.subscribe(router.load));
   await router.load();
-  const Component = route.options.component!;
+  const Component = hosted ? mountRoute(parameterLinksGraph, adapters) : route.options.component!;
   const view = render(
     <RouterContextProvider router={router}>
-      <Component />
+      <Component
+        {...(hosted ? { thread: "thread-links", target: host.target.session, url: false } : {})}
+      />
     </RouterContextProvider>,
   );
   await view.findByLabelText("Situation");
   const owner = () => wrap.mock.calls.at(-1)![0] as Body["owner"];
   await waitFor(() => expect(owner().snapshot().work?.handle.revision).toBe(host.revision));
   await waitFor(() => expect(owner().readings.get("links").status).toBe("ready"));
+  await view.findByLabelText("definition id");
   return { view, router, owner, situation: within(view.getByLabelText("Situation")) };
 }
 async function readyButton(scope: ReturnType<typeof within>, name: string) {
@@ -159,29 +85,34 @@ async function readyButton(scope: ReturnType<typeof within>, name: string) {
   });
 }
 
-test("a CAS race refuses save and keeps the exact local buffer without evaluating it", async () => {
+test("kernel gap: a stale Work write keeps its edit for retry", async () => {
   const { view, owner } = await mounted();
-  fireEvent.change(view.getByLabelText("fixture definition id"), {
-    target: { value: "local-change" },
-  });
-  const buffer = structuredClone(owner().view.read().page.buffer);
   host.conflictOnWrite = true;
-  fireEvent.click(await readyButton(within(view.container), "save draft"));
-  await waitFor(() => expect(owner().results.get("save")?.state).toBe("stale"));
+  fireEvent.change(view.getByLabelText("definition id"), { target: { value: "local-change" } });
+  await waitFor(() => expect(owner().results.get("edit")?.state).toBe("stale"));
   expect(host.writeRequests[0]?.expectedRevision).toBe(1);
   expect(host.doc.profile.edit?.value.definitions[0]?.id).toBe("supply-flow");
-  expect(owner().view.read().page.buffer).toEqual(buffer);
-  expect((view.getByLabelText("fixture definition id") as HTMLInputElement).value).toBe(
-    "local-change",
-  );
   expect(host.writes).toEqual([]);
-  await act(async () => {
-    await owner().control("preview").run();
+  // Kernel seam: retain the rejected intent without treating it as accepted Work.
+  expect(view.queryByRole("button", { name: /retry/i })).not.toBeNull();
+  expect(view.queryByRole("button", { name: /discard/i })).not.toBeNull();
+  act(() => owner().reread());
+  await waitFor(() => expect(owner().snapshot().work?.handle.revision).toBe(host.revision));
+  const retry = await waitFor(() => {
+    const button = view.getByRole("button", { name: /retry/i });
+    expect(button.getAttribute("aria-disabled")).not.toBe("true");
+    return button;
   });
-  expect(host.reads).toEqual([]);
+  fireEvent.click(retry);
+  await waitFor(() => expect(host.writes).toHaveLength(1));
+  expect(host.writeRequests[1]?.expectedRevision).toBe(2);
+  expect(host.doc.profile.edit?.value).toEqual({
+    ...host.profile,
+    definitions: [{ ...host.profile.definitions[0]!, id: "local-change" }],
+  });
 });
 
-test("a suggestion preview cannot arm Apply even after taking the profile; edit Preview arms its own reading id", async () => {
+test("an agent suggestion preview cannot arm human Apply even after take; accepted Preview arms its own reading id", async () => {
   host.doc.profile.suggestion = {
     value: {
       ...host.profile,
@@ -192,31 +123,45 @@ test("a suggestion preview cannot arm Apply even after taking the profile; edit 
     },
   };
   const { view, situation, owner } = await mounted();
-  fireEvent.click(await readyButton(situation, "preview Pea's suggestion"));
-  await waitFor(() => expect(owner().results.get("previewProposal")?.state).toBe("done"));
+  // An agent's read lands through the shared source, outside this human mount's invocation.
+  await act(async () => {
+    await familyQueries["parameter-links.read"].run(
+      { evaluate: true, subject: "suggestion" },
+      { target: owner().snapshot().target, work: owner().snapshot().work!.handle },
+    );
+  });
+  expect(owner().results.get("previewProposal")).toBeUndefined();
   expect(host.captures[0]?.reading).toMatchObject({
     kind: "parameter-links",
     value: { subject: "suggestion" },
   });
+  expect(view.getByText("preview of Pea's suggestion — not edit")).toBeTruthy();
   expect(owner().control("apply").refusal).toContain("suggestion preview");
   await act(async () => {
     await owner().control("apply").run();
   });
   expect(host.actions).toEqual([]);
-  const row = view.getByRole("group", { name: "profile proposal" });
-  fireEvent.click(await readyButton(within(row), "take"));
+  fireEvent.click(await readyButton(situation, "preview Pea's suggestion"));
+  await waitFor(() => expect(owner().results.get("previewProposal")?.state).toBe("done"));
+  fireEvent.click(
+    await readyButton(within(view.getByRole("group", { name: "profile proposal" })), "take"),
+  );
   await waitFor(() => expect(host.doc.profile.edit?.value.definitions[0]?.reducer).toBe("max"));
   expect(owner().control("apply").refusal).toContain("suggestion preview");
   fireEvent.click(await readyButton(situation, "preview"));
   await waitFor(() => expect(owner().results.get("preview")?.state).toBe("done"));
   const id = host.captures[0]!.id;
   await waitFor(() => expect(owner().control("apply").refusal).toBeNull());
-  await act(async () => {
-    await owner().control("apply").run();
+  fireEvent.change(view.getByRole("textbox", { name: "reason for this write" }), {
+    target: { value: "Reconcile reviewed links" },
   });
-  expect(owner().results.get("apply")).toMatchObject({ state: "done", kind: "command" });
+  fireEvent.click(await readyButton(within(view.container), "apply"));
+  await waitFor(() =>
+    expect(owner().results.get("apply")).toMatchObject({ state: "done", kind: "command" }),
+  );
   expect(host.actions[0]?.input).toMatchObject({ readingId: id });
   expect(host.reads.map((request) => request.input)).toEqual([
+    { evaluate: true, subject: "suggestion" },
     { evaluate: true, subject: "suggestion" },
     { evaluate: true, subject: "edit" },
   ]);
@@ -225,7 +170,7 @@ test("a suggestion preview cannot arm Apply even after taking the profile; edit 
   ).toBe(true);
 });
 
-test("Apply requires an evaluated reading id and a fresh basis matching the saved profile", async () => {
+test("Apply requires an evaluated reading id and a fresh basis matching current Work", async () => {
   host.capture(false);
   const { view, owner, situation } = await mounted();
   expect(owner().control("apply").refusal).not.toBeNull();
@@ -236,17 +181,27 @@ test("Apply requires an evaluated reading id and a fresh basis matching the save
   fireEvent.click(await readyButton(situation, "preview"));
   await waitFor(() => expect(owner().results.get("preview")?.state).toBe("done"));
   await waitFor(() => expect(owner().control("apply").refusal).toBeNull());
-  fireEvent.change(view.getByLabelText("fixture definition id"), {
+  const retainedApply = owner().control("apply");
+  fireEvent.change(view.getByLabelText("definition id"), {
     target: { value: "changed-after-preview" },
   });
-  expect(owner().control("apply").refusal).toContain("unsaved local edits");
-  fireEvent.click(await readyButton(within(view.container), "save draft"));
-  await waitFor(() => expect(owner().results.get("save")?.state).toBe("done"));
-  expect(owner().control("apply").refusal).toContain("Preview this draft");
+  await waitFor(() => expect(owner().results.get("edit")?.state).toBe("done"));
+  await waitFor(() => expect(owner().control("apply").refusal).toContain("Preview this draft"));
+  await act(async () => {
+    await retainedApply.run();
+  });
   expect(host.actions).toEqual([]);
+  expect(host.reads).toHaveLength(1);
+  fireEvent.click(await readyButton(situation, "preview"));
+  await waitFor(() => expect(host.reads).toHaveLength(2));
+  await waitFor(() => expect(owner().control("apply").refusal).toBeNull());
+  await act(async () => {
+    await owner().control("apply").run();
+  });
+  expect(host.actions[0]?.input).toMatchObject({ readingId: host.captures[0]!.id });
 });
 
-test("option demand follows the unsaved profile and preserves exact document and compatibility filters", async () => {
+test("production edits write Work immediately; option demand follows Work with exact document and compatibility filters", async () => {
   const { view, owner } = await mounted("&demo=does-not-exist");
   await waitFor(() =>
     expect(
@@ -272,26 +227,47 @@ test("option demand follows the unsaved profile and preserves exact document and
       }),
     ]),
   );
+  expect(view.queryByRole("button", { name: "save draft" })).toBeNull();
+  expect(owner().view.read().page).not.toHaveProperty("buffer");
+  fireEvent.change(view.getByLabelText("definition id"), { target: { value: "work-edit" } });
+  await waitFor(() => expect(host.doc.profile.edit?.value.definitions[0]?.id).toBe("work-edit"));
+  await waitFor(() => expect(owner().snapshot().work?.handle.revision).toBe(2));
+  expect(host.writes).toHaveLength(1);
+  expect(host.writeRequests[0]?.expectedRevision).toBe(1);
   await act(async () => {
-    owner().view.setPage({
-      buffer: {
-        revision: host.revision,
-        profile: {
-          ...host.profile,
-          definitions: host.profile.definitions.map((definition) => ({
-            ...definition,
-            sourceCategoryId: -2000151,
-          })),
-        },
-      },
-    });
+    await owner().control("preview").run();
+  });
+  expect(host.writeRequests).toHaveLength(1);
+  expect(host.reads).toHaveLength(1);
+  const next = {
+    ...host.doc.profile.edit!.value,
+    definitions: host.doc.profile.edit!.value.definitions.map((definition) => ({
+      ...definition,
+      sourceCategoryId: -2000151,
+    })),
+  };
+  await act(async () => {
+    await owner().control("edit", { profile: next, expectedRevision: host.revision }).run();
   });
   await waitFor(() =>
     expect(host.optionRequests.some((request) => request.context?.CategoryId === "-2000151")).toBe(
       true,
     ),
   );
-  expect(host.writes).toEqual([]);
-  expect(host.reads).toEqual([]);
-  expect(view.getByLabelText("fixture definition id")).toBeTruthy();
+  for (const entry of host.subscriptions) {
+    if (entry.request.kind === "family-readings" || entry.request.kind === "receipts")
+      expect(entry.request.work).toEqual(host.key);
+  }
+});
+
+test("the hosted production graph uses its binding and keeps Page out of the containing chat URL", async () => {
+  const { router, owner, situation } = await mounted("&rail=folded", true);
+  expect(owner().snapshot().target).toEqual({ kind: "document", ref: host.target });
+  expect(owner().view.read().page.rail).toBe("open");
+  const before = router.state.location.href;
+  act(() => owner().view.setPage({ rail: "folded" }));
+  expect(router.state.location.href).toBe(before);
+  fireEvent.click(await readyButton(situation, "preview"));
+  await waitFor(() => expect(host.reads).toHaveLength(1));
+  expect(host.reads[0]?.target).toEqual(host.target);
 });

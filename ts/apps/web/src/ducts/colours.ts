@@ -1,14 +1,14 @@
-import type { DuctsRouteDocument, DuctSystemColours } from "@pe/agent-contracts";
+import { DUCT_AIR_TYPES, type DuctSystemColours } from "@pe/agent-contracts";
+import { defaultDuctSettings } from "./settings";
 
-// UNPROVEN: sampled plan convention, awaiting kaitpw's verdict after use. Editable in Settings.
-// Pixel census: .artifacts/runs/ducts-multisystem-20261024/b1/colours/sample-and-census.json.
-export const FIRM_COLOURS: Readonly<DuctSystemColours> = Object.freeze({
-  supply: "#0569a5",
-  return: "#02bba4",
-  exhaust: "#fea665",
-  fresh: "#1cbcd5",
-  unknown: "#808080", // Neutral fallback, not a sampled firm convention.
-});
-
-export const coloursOf = (doc: DuctsRouteDocument | null): Readonly<DuctSystemColours> =>
-  doc?.systemColours?.edit?.value ?? FIRM_COLOURS;
+/** Palette settings affect the picture only; they never enter Work or native requests. */
+export const coloursOf = (
+  settings: Readonly<Record<string, unknown>> | null,
+): Readonly<DuctSystemColours> =>
+  Object.fromEntries(
+    DUCT_AIR_TYPES.map((type) => [
+      type,
+      settings?.[`${type}Colour`] ?? defaultDuctSettings[`${type}Colour`],
+    ]),
+  ) as DuctSystemColours;
+export const FIRM_COLOURS = Object.freeze(coloursOf(null));

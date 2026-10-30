@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { graphSettings, type SettingsOwner } from "./settings";
 import {
   canonicalRouteInput,
   commands,
@@ -81,6 +82,7 @@ export type BindingScope<P, W> = MountScope<W> & {
 };
 
 export interface MountAdapters<P, W> {
+  settings?: SettingsOwner;
   /**
    * Immutable external-store snapshot; Page is owned by the mount's existing ViewOwner. This and
    * the three host ports below come from the kernel's `useWorkScope`; only tests inject fakes.
@@ -182,9 +184,14 @@ export function createGraphMount<P, W>(
   const refusals = mountRefusals(graph, adapters);
   if (refusals.length) throw new Error(refusals.map((r) => `${r.path}: ${r.message}`).join("\n"));
   const schema = z.object(
-    Object.fromEntries(graphFields(graph).map(([id, f]) => [id, f.schema])),
+    Object.fromEntries(
+      graphFields(graph)
+        .filter(([, f]) => f.role !== "setting")
+        .map(([id, f]) => [id, f.schema]),
+    ),
   ) as z.ZodType<P>;
   const initialPage = schema.parse({ ...adapters.initialPage, ...initial });
+  const settings = adapters.settings ?? graphSettings(graph);
   // Validation ran above: cell verb ids cannot collide with graph verbs, so a plain spread is safe.
   const kernel = kernelCellVerbs(graph);
   const verbs: Readonly<Record<string, VerbDecl>> = {
@@ -249,6 +256,7 @@ export function createGraphMount<P, W>(
     workRevision: scope.work?.handle.revision ?? null,
     work: scope.work?.doc ?? null,
     page: view.read().page,
+    settings: settings.read().values,
   });
   // Page is a built-in graph input, not a host reading or a second writable Page.
   const needsPage =
@@ -652,6 +660,7 @@ export function createGraphMount<P, W>(
   };
   return {
     registry,
+    settings,
     view,
     readings,
     timeline,
@@ -806,6 +815,12 @@ export function createGraphMount<P, W>(
       };
       for (const journal of journals.values()) journalFor(journal.key);
       releases = [
+        settings.connect(),
+        settings.subscribe(() => {
+          cancelReviews();
+          readings.update(readScope());
+          notify();
+        }),
         adapters.subscribe(update),
         view.subscribe(() => {
           readings.update(readScope());

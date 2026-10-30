@@ -15,7 +15,8 @@ import {
 import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { roomsAddress } from "../../../../packages/agent-contracts/src/routes/rooms";
 import { threadListFields } from "../../../../packages/agent-contracts/src/routes/shared";
-import { commandVerb, workVerb } from "#/shell/verbs";
+import { commandVerb, workVerb, queryVerb } from "#/shell/verbs";
+import { roomsQueries } from "./refresh";
 import { NATIVE_APPLY_WAIT_S } from "#/route/waits";
 
 export const roomsPageSchema = routeAddress("rooms").schema.extend({
@@ -132,6 +133,12 @@ export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = {
     receipts: { kind: "use", source: "rooms.receipts", retire: "target" },
   },
   verbs: {
+    refresh: queryVerb(roomsQueries["rooms.refresh"], {
+      label: "refresh",
+      input: z.object({}),
+      review: "none",
+      says: "Re-read Rooms and Work",
+    }),
     edit: workVerb(
       {
         label: "Edit rooms Work",
@@ -270,14 +277,14 @@ export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = {
     partition: {
       word: "Partitioning rooms",
       panes: ["scope", "plan", "regions"],
-      verbs: ["partition"],
+      verbs: ["partition", "refresh"],
     },
     review: {
       word: "Reviewing rooms",
       panes: ["scope", "plan", "feedback", "regions"],
-      verbs: ["apply", "merge"],
+      verbs: ["apply", "merge", "refresh"],
     },
-    history: { word: "History", panes: ["history"], verbs: [] },
+    history: { word: "History", panes: ["history"], verbs: ["refresh"] },
   },
   stageOrder: ["partition", "review", "history"],
 };

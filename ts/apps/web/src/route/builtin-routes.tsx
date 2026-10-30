@@ -1,26 +1,26 @@
 import { lazy, type ComponentType } from "react";
 import { createRouteRegistry } from "@pe/kit/route-registry";
-import { openManifest } from "#/open/manifest";
-import { manifest as parameterLinks } from "#/parameter-links/manifest";
-import { manifest as pods } from "#/routes/pods";
+import { openGraph } from "#/open/graph";
+import { parameterLinksGraph } from "#/parameter-links/graph";
+import { podsGraph } from "#/pods/graph";
 import { takeoffGraph } from "#/takeoff/graph";
 import { roomsGraph } from "#/rooms/graph";
 import { familyGraph } from "#/family/graph";
 import { familiesGraph } from "#/families/graph";
 import { schedulesGraph } from "#/schedules/graph";
+import { settingsGraph } from "#/settings/graph";
 import { ductsGraph } from "#/ducts/graph";
 import { mountRoute, type MountRouteProps } from "#/shell/mount";
 
 /** A route body stays out of the shell chunk until a pane mounts it. */
 const named = <K extends string, P>(load: () => Promise<Record<K, ComponentType<P>>>, name: K) =>
   lazy(() => load().then((module) => ({ default: module[name] })));
-const PodsRouteContent = named(() => import("#/routes/pods"), "PodsRouteContent");
-const ParameterLinksRouteContent = named(
-  () => import("#/routes/parameter-links"),
-  "ParameterLinksRouteContent",
-);
+const PodsRoute = named(() => import("#/pods/route"), "PodsRoute");
+const ParameterLinksRoute = named(() => import("#/parameter-links/route"), "ParameterLinksRoute");
 const TakeoffsPane = named(() => import("#/takeoff/pane"), "TakeoffsPane");
-const OpenPage = named(() => import("#/open/route"), "OpenPage");
+const OpenPage = lazy(async () => ({
+  default: mountRoute(openGraph, (await import("#/open/route")).openAdapters),
+}));
 const RoomsRoute = named(() => import("#/rooms/route"), "RoomsRoute");
 const FamilyRoute = lazy(async () => ({
   default: mountRoute(familyGraph, (await import("#/family/route")).familyAdapters),
@@ -35,8 +35,12 @@ const DuctsRoute = lazy(async () => ({
   default: mountRoute(ductsGraph, (await import("#/ducts/route")).ductsAdapters),
 }));
 
+const SettingsRoute = lazy(async () => ({
+  default: mountRoute(settingsGraph, (await import("#/settings/route")).settingsAdapters),
+}));
 export const publicRoutes = createRouteRegistry();
-publicRoutes.register({ manifest: openManifest, hosted: () => <OpenPage /> });
+publicRoutes.registerGraph(settingsGraph, hosted(SettingsRoute));
+publicRoutes.registerGraph(openGraph, hosted(OpenPage));
 publicRoutes.registerGraph(takeoffGraph, ({ visible, ...binding }) => (
   <TakeoffsPane {...binding} hidden={!visible} url={false} />
 ));
@@ -56,15 +60,5 @@ publicRoutes.registerGraph(familyGraph, hosted(FamilyRoute));
 publicRoutes.registerGraph(familiesGraph, hosted(FamiliesRoute));
 publicRoutes.registerGraph(schedulesGraph, hosted(SchedulesRoute));
 publicRoutes.registerGraph(ductsGraph, hosted(DuctsRoute));
-publicRoutes.register({
-  manifest: pods,
-  hosted: ({ thread, visible }) => <HostedPods thread={thread} visible={visible} />,
-});
-publicRoutes.register({
-  manifest: parameterLinks,
-  hosted: ({ thread }) => <ParameterLinksRouteContent thread={thread} />,
-});
-/** A chat pane owns its Page without the address (`url={false}`), like Ducts. */
-function HostedPods({ thread, visible }: { thread: string; visible: boolean }) {
-  return <PodsRouteContent thread={thread} url={false} visible={visible} />;
-}
+publicRoutes.registerGraph(parameterLinksGraph, hosted(ParameterLinksRoute));
+publicRoutes.registerGraph(podsGraph, hosted(PodsRoute));

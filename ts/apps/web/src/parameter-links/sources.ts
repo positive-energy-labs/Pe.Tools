@@ -1,6 +1,8 @@
 import { z } from "zod";
 import {
+  actionReceiptSchema,
   canonicalRouteInput,
+  familyCaptureSchema,
   stagedParameterProfile,
   type ParameterLinksDocument,
   type ReadingRequest,
@@ -8,8 +10,7 @@ import {
 import type { Readings } from "#/readings";
 import type { FieldOption, FieldOptionStatus } from "#/host/field-options";
 import { subscriptionSource } from "#/shell/readings-use";
-import type { UseSource } from "#/shell/readings";
-import type { ParameterLinksPage } from "./graph";
+import type { ReadingSource, UseSource } from "#/shell/readings";
 
 const optionSchema = z.object({
   value: z.string(),
@@ -28,11 +29,39 @@ export const profileOptions = (
   context: Record<string, string> = {},
 ) => options[optionKey(key, context)] ?? emptyOptions;
 
-/** All option demand is scoped to the mounted profile, including unsaved category/parameter edits. */
+function workSource<T>(
+  kind: "family-readings" | "receipts",
+  schema: z.ZodType<T[]>,
+  resources?: Readings,
+): UseSource<T[]> {
+  return {
+    kind: "use",
+    open(ctx, deliver) {
+      const work = ctx.workKey;
+      if (!work) return deliver({ kind: "complete", value: [], revision: 0 });
+      return subscriptionSource({
+        request: () => ({ kind, work }),
+        decode: (value) => schema.parse(value),
+        resources,
+      }).open(ctx, deliver);
+    },
+  };
+}
+
+export function parameterLinksSources(
+  resources?: Readings,
+): Readonly<Record<string, ReadingSource>> {
+  return {
+    "parameter-links.links": workSource("family-readings", familyCaptureSchema.array(), resources),
+    "parameter-links.receipts": workSource("receipts", actionReceiptSchema.array(), resources),
+    "parameter-links.options": parameterLinksOptionsSource(resources),
+  };
+}
+
+/** Option demand follows the accepted Work profile; panes only project this reading. */
 export function parameterLinksOptionsSource(resources?: Readings): UseSource<ProfileOptions> {
-  const profileOf = (scope: { page: unknown; work: unknown }) =>
-    (scope.page as ParameterLinksPage).buffer?.profile ??
-    (scope.work ? stagedParameterProfile(scope.work as ParameterLinksDocument) : null);
+  const profileOf = (scope: { work: unknown }) =>
+    scope.work ? stagedParameterProfile(scope.work as ParameterLinksDocument) : null;
   return {
     kind: "use",
     key: profileOf,

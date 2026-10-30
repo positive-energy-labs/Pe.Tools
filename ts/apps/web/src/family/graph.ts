@@ -101,6 +101,21 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = {
     pods: { kind: "use", source: "family.pods", retire: "never" },
   },
   verbs: {
+    read: queryVerb(
+      familyQueries["family.read"],
+      { label: "Read family", review: "none", input: z.strictObject({ refusal }) },
+      {
+        ready: (_, input) => input.refusal,
+        intent: (scope) => ({
+          readId: crypto.randomUUID(),
+          expectedRevision: scope.snapshot.work!.handle.revision,
+        }),
+        cancel: {
+          key: familyQueries["family.cancel-read"],
+          input: (request) => ({ readId: request.readId }),
+        },
+      },
+    ),
     "close-inspector": pageVerb(
       { label: "Close inspector", input: z.object({}).default({}), chord: "Escape" },
       { page: () => ({ inspector: "" }) },
@@ -215,7 +230,7 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = {
       label: "Family anatomy",
       purpose: "Inspect authored family geometry",
       draws: ["profile", "receipts", "applyReceipt", "captureReceipt", "buildReceipt"],
-      verbs: [],
+      verbs: ["read"],
     },
     table: {
       label: "Family parameters",

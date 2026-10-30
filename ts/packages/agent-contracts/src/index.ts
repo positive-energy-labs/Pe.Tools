@@ -72,4 +72,5 @@ export * from "./list-search.ts";
 export * from "./scene-view.ts";
 export { threadSearchDefault } from "./routes/shared.ts";
 export * from "./route-graph.ts";
+export * from "./route-settings.ts";
 export * from "./ducts-sheet.ts";

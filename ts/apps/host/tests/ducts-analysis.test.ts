@@ -18,6 +18,7 @@ import { price, applyRequest } from "@pe/ducts-domain/pricing";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { createDuctsAnalysis, type DuctsAnalysisSources } from "../src/ducts-analysis.ts";
+import { createRouteSettings } from "../src/route-settings.ts";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -173,6 +174,27 @@ function fixture() {
 }
 const read = (source: unknown, selector: unknown = { kind: "document" }, extra: object = {}) =>
   ductsAnalysisRequestSchema.parse({ source, selector, ...extra });
+
+test("headless acquisition uses persisted route slots instead of historical Work slots", async () => {
+  const f = fixture();
+  const settings = createRouteSettings(join(f.root, "settings"));
+  settings.set("ducts", { terminalFlow: "User flow" }, 0);
+  f.sources.settings = () => settings.read("ducts").values;
+  f.sources.readWork = async () => ({
+    revision: 1,
+    doc: ductsDocumentSchema.parse({
+      parameters: { terminalFlow: { edit: { value: "Old flow" } } },
+    }),
+  });
+  const call = f.sources.call;
+  let requested: unknown;
+  f.sources.call = async (key, request, target) => {
+    if (key === "ducts.snapshot") requested = request;
+    return call(key, request, target);
+  };
+  await f.api.read(read({ kind: "fresh", target: f.target }));
+  expect(requested).toMatchObject({ slots: { terminalFlow: "User flow" } });
+});
 
 test("historical selectors and pagination make zero acquisitions; corruption and wrong cursors refuse", async () => {
   const f = fixture();
@@ -854,7 +876,7 @@ test("apply-request builds a canonical immutable candidate without reacquiring",
       [],
     ),
   );
-  expect(plan.payload).toEqual(expected);
+  expect(plan.payload).toEqual({ ...expected, slots: input.snapshot.slots });
   expect(plan.payloadSha256).toBe(hashJson(plan.payload));
   expect(plan.payloadByteSize).toBe(Buffer.byteLength(JSON.stringify(plan.payload)));
   expect(plan.source.work).toMatchObject({ revision: 7, jsonSha256: hashJson(input.work) });

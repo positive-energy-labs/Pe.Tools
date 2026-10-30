@@ -8,6 +8,7 @@ import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Button } from "@pe/kit/lang/button";
 import { routeTree } from "./routeTree.gen";
+import { settingsRoute } from "./settings/route";
 import { ductsRoute } from "./ducts/route";
 import { ductLossRoute } from "./duct-loss/route";
 import { grillesRoute } from "./grilles/route";
@@ -17,6 +18,13 @@ import { familyRoute } from "./family/route";
 import { roomsRoute } from "./rooms/route";
 import { spaceRoute } from "./space/route";
 import { takeoffsRoute } from "./takeoff/route";
+import { podsRoute } from "./pods/route";
+import { parameterLinksRoute } from "./parameter-links/route";
+import { dataTablesRoute } from "./data-tables/route";
+import { bindRoute } from "./pages-bind/route";
+import { capturesRoute } from "./captures/route";
+import { opsRoute } from "./ops/route";
+import { openRoute } from "./open/route";
 import { Route as rootRoute } from "./routes/__root";
 import { publicRoutes } from "./route/builtin-routes";
 import { ShellProbe, ShellProbeRoute, shellProbe } from "./route/shell-probe";
@@ -27,6 +35,9 @@ import { ShellProbe, ShellProbeRoute, shellProbe } from "./route/shell-probe";
 const pathOf = (route: AnyRoute) => (route.options as { path?: string }).path;
 const codeRoutes: AnyRoute[] = [
   ShellProbeRoute,
+  settingsRoute,
+  opsRoute,
+  openRoute,
   ductLossRoute,
   grillesRoute,
   ductsRoute,
@@ -36,6 +47,11 @@ const codeRoutes: AnyRoute[] = [
   roomsRoute,
   spaceRoute,
   takeoffsRoute,
+  podsRoute,
+  parameterLinksRoute,
+  dataTablesRoute,
+  bindRoute,
+  capturesRoute,
 ];
 const codePaths = new Set(codeRoutes.map(pathOf));
 const fileRoutes = (routeTree.children as unknown as AnyRoute[]).filter(
@@ -51,6 +67,9 @@ const appRouteTree = rootRoute.addChildren([
   ...codeRoutes,
 ] as unknown as FileChildren & {
   ShellProbeRoute: typeof ShellProbeRoute;
+  settingsRoute: typeof settingsRoute;
+  opsRoute: typeof opsRoute;
+  openRoute: typeof openRoute;
   ductLossRoute: typeof ductLossRoute;
   grillesRoute: typeof grillesRoute;
   ductsRoute: typeof ductsRoute;
@@ -60,6 +79,11 @@ const appRouteTree = rootRoute.addChildren([
   roomsRoute: typeof roomsRoute;
   spaceRoute: typeof spaceRoute;
   takeoffsRoute: typeof takeoffsRoute;
+  podsRoute: typeof podsRoute;
+  parameterLinksRoute: typeof parameterLinksRoute;
+  dataTablesRoute: typeof dataTablesRoute;
+  bindRoute: typeof bindRoute;
+  capturesRoute: typeof capturesRoute;
 });
 const unregisterProbe = publicRoutes.register({
   manifest: shellProbe.manifest,

@@ -15,6 +15,7 @@ export const familyWorkRefusal = (scope: FamilyScope) =>
 export function familyBinding(id: string, row: unknown, scope: FamilyScope) {
   const value = (row ?? {}) as Record<string, unknown>;
   const blocked = familyWorkRefusal(scope);
+  if (id === "read") return { subject: null, args: { refusal: blocked } };
   if (id === "edit") return { subject: null, args: { ...value, refusal: blocked } };
   if (id === "saved")
     return { subject: null, args: { request: { id: value.readingId ?? "" }, refusal: null } };

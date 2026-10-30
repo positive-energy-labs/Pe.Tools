@@ -1,4 +1,6 @@
 import { createScheduledTasks } from "./scheduled-tasks.ts";
+import { createRouteSettings } from "./route-settings.ts";
+import { productRouteSettingsPath } from "./product-paths.ts";
 import { createDuctsSheets, sheetNativeRead, type DuctsSheetSources } from "./ducts-sheet.ts";
 import { eligibleThreads, threadHistory } from "./thread-history.ts";
 import { productRoot } from "@pe/host-contracts/service-identity";
@@ -157,6 +159,7 @@ export interface HostWork {
 }
 
 export interface PeRoutesOptions {
+  routeSettings?: ReturnType<typeof createRouteSettings>;
   workspace?: RouteWorkspace;
   registrations: readonly RouteWorkspaceRegistration[];
   store: RouteDocumentStore;
@@ -187,6 +190,7 @@ const message = (error: unknown) => (error instanceof Error ? error.message : St
 
 /** The route-document, Reading, capability and Families-view surface, host-owned. */
 export function createPeRoutes(options: PeRoutesOptions) {
+  const settings = options.routeSettings ?? createRouteSettings(productRouteSettingsPath());
   const work =
     options.workspace ??
     new RouteWorkspace({ registrations: options.registrations, store: options.store });
@@ -250,26 +254,30 @@ export function createPeRoutes(options: PeRoutesOptions) {
   const analysis = options.ductsAnalysis
     ? createDuctsAnalysis({
         ...options.ductsAnalysis,
+        settings: () => settings.read("ducts").values,
         readWork: (key) => work.readRaw(key, "ducts"),
       })
     : null;
   const sheets = options.ductsSheets
-    ? createDuctsSheets(options.ductsSheets, {
-        workspace: work,
-        author: () => (currentCaller().kind === "pea" ? "pea" : "human"),
-        key: async (target) => {
-          const documents = options.navigation
-            ? z
-                .array(documentRefSchema.extend({ address: addressSchema.nullable() }))
-                .parse(await options.navigation.documents())
-            : null;
-          const doc = documents?.find(
-            (d) => d.session === target.session && d.openId === target.openId,
-          );
-          if (documents && !doc) throw new Error("Sheet Work target is no longer open");
-          return bindWork("ducts", doc?.address ?? null, undefined, target);
+    ? createDuctsSheets(
+        { ...options.ductsSheets, settings: () => settings.read("ducts").values },
+        {
+          workspace: work,
+          author: () => (currentCaller().kind === "pea" ? "pea" : "human"),
+          key: async (target) => {
+            const documents = options.navigation
+              ? z
+                  .array(documentRefSchema.extend({ address: addressSchema.nullable() }))
+                  .parse(await options.navigation.documents())
+              : null;
+            const doc = documents?.find(
+              (d) => d.session === target.session && d.openId === target.openId,
+            );
+            if (documents && !doc) throw new Error("Sheet Work target is no longer open");
+            return bindWork("ducts", doc?.address ?? null, undefined, target);
+          },
         },
-      })
+      )
     : null;
   const views = new RouteViewStore();
   const workReads = new OwnerReads();
@@ -298,7 +306,15 @@ export function createPeRoutes(options: PeRoutesOptions) {
     const releaseViews = views.subscribe((intent) =>
       publish({ kind: "event", key: readingKey(request), value: intent }),
     );
+    const releaseSettings = settings.subscribe((route) =>
+      publish({
+        kind: "event",
+        key: readingKey(request),
+        value: { type: "route-settings-changed", route },
+      }),
+    );
     return () => {
+      releaseSettings();
       releaseViews();
       release();
     };
@@ -334,6 +350,18 @@ export function createPeRoutes(options: PeRoutesOptions) {
     const method = request.method;
     const declared = matchPeRoute(method, url.pathname);
     if (!declared || declared.route.owner !== "pe") return json({ error: "Unknown Pe route" }, 404);
+    if (declared.id === "route-settings.get" || declared.id === "route-settings.set") {
+      try {
+        const route = declared.params.route!;
+        if (declared.id === "route-settings.get") return json(settings.read(route));
+        const { patch, expectedRevision } = peRoutes["route-settings.set"].body.parse(
+          await request.json(),
+        );
+        return json(settings.set(route, patch, expectedRevision));
+      } catch (error) {
+        return json({ error: message(error) }, error instanceof z.ZodError ? 400 : 409);
+      }
+    }
     if (declared.id === "space.scene-artifact") {
       const id = declared.params.id!;
       if (!/^[a-f0-9]{64}$/.test(id)) return json({ error: "Invalid scene id" }, 400);

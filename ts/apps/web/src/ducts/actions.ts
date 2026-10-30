@@ -94,7 +94,10 @@ export function priceRequest(scope: Scope) {
 
   if (bySystem.has(active)) return bySystem.get(active)!;
 
-  let request = applyRequest(snapshot, result.priced, new Date().toISOString(), groups);
+  let request = {
+    ...applyRequest(snapshot, result.priced, new Date().toISOString(), groups),
+    slots: snapshot.slots,
+  };
 
   if (stagedEsp(doc)) {
     const priced = result.priced;

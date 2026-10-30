@@ -194,7 +194,42 @@ import { scheduleGridRouteState } from "./schedule-grid-data.ts";
 import { takeoffsRouteState } from "./takeoffs.ts";
 import { roomsRouteState } from "./rooms.ts";
 import { ductsRouteState } from "./ducts.ts";
+export const dataTableDraftSchema = z.object({
+  name: z.string(),
+  isNew: z.boolean(),
+  columns: z.array(z.object({ heading: z.string(), kind: z.enum(["Text", "Number"]) })),
+  rows: z.array(z.object({ key: z.string(), values: z.array(z.string().nullable()) })),
+});
+export const dataTablesWorkSchema = z.object({
+  draft: dataTableDraftSchema.nullable().default(null),
+});
 export const tools = {
+  "data-tables": {
+    name: "data-tables",
+    says: "Draft synthetic table columns and keyed rows in the selected document, then apply with pruning.",
+    work: {
+      route: "data-tables",
+      title: "Data Tables",
+      description: "One document's editable synthetic table draft.",
+      schema: dataTablesWorkSchema,
+      editable: [],
+    },
+    commands: {
+      "data-table.apply": workCommand("data-tables", {
+        native: ["data-table.apply"],
+        says: "Upsert the reviewed table by name and row key; prune rows absent from the draft.",
+        needs: "project-document",
+        effect: "command",
+        input: z.object({
+          table: dataTableDraftSchema.omit({ isNew: true }).extend({
+            name: z.string().refine((name) => name.trim().length > 0, "Name the table first"),
+            pruneMissingRows: z.literal(true),
+          }),
+        }),
+        dirties: ["schedules"],
+      }),
+    },
+  },
   pods: {
     name: "pods",
     says: settingsRouteState.description,
@@ -348,6 +383,7 @@ export const tools = {
   },
 } satisfies Record<string, Tool>;
 export const commands = {
+  ...tools["data-tables"].commands,
   ...tools.pods.commands,
   ...tools.family.commands,
   ...tools.families.commands,

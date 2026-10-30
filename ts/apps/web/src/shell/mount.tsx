@@ -37,6 +37,7 @@ import {
   type MountAdapters,
 } from "./mount-owner";
 import { graphUrlPage, readLayoutState, writeLayoutState } from "./mount-page";
+import { settingFields } from "./settings";
 import { useWorkScope, type WorkScopeStatus } from "./use-work-scope";
 
 export type { GraphMount, MountAdapters, MountScope, MountBinding } from "./mount-owner";
@@ -157,7 +158,11 @@ export function useGraphRoute<P, W>(
   const current = useRouteCurrent();
   const live = useScopeLive();
   // An unresolved or closed document's route still draws and reads; it arms no verb.
-  const armed = !graph.needs || scope.status.resolution.kind === "resolved";
+  const settings = owner.settings.read();
+  const settingsReady =
+    !Object.keys(settingFields(graph)).length ||
+    (settings.revision >= 0 && !settings.pending && !settings.error);
+  const armed = settingsReady && (!graph.needs || scope.status.resolution.kind === "resolved");
   owner.setAvailable(() => armed && !hidden && visible && live && current());
   return {
     owner,

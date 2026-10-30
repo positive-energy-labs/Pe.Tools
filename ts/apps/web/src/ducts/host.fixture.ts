@@ -1,5 +1,7 @@
 import {
   actionReceiptSchema,
+  ductsSettingFields,
+  settingsSchema,
   applyPatches,
   bindWork,
   ductsRouteState,
@@ -166,6 +168,8 @@ export class DuctsHostFixture {
     const url = new URL(input instanceof Request ? input.url : String(input), "http://fixture");
     const body =
       typeof init?.body === "string" ? (JSON.parse(init.body) as Record<string, unknown>) : {};
+    if (url.pathname === "/pe/route-settings/ducts")
+      return Response.json({ revision: 0, values: settingsSchema(ductsSettingFields).parse({}) });
     if (url.pathname === "/pe/ducts/catalogs") return Response.json({ tables: {}, findings: [] });
     if (url.pathname === "/pe/ducts/roster")
       return Response.json({ ...sheetFixture.roster, target: { session: "s", openId: "d" } });

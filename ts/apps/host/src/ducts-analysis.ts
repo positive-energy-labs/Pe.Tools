@@ -10,6 +10,7 @@ import { join } from "node:path";
 import {
   addressSchema,
   canonicalRouteInput,
+  ductsParameterSlots,
   bindWork,
   ductsDocumentSchema,
   ductsApplyRequestArtifactSchema,
@@ -50,6 +51,7 @@ type Observation = {
   provenance: unknown;
 };
 export interface DuctsAnalysisSources {
+  settings?: () => Readonly<Record<string, unknown>>;
   root: string;
   catalogs?: () => Promise<{ tables: Catalogs; findings: string[] }>;
   producer: unknown;
@@ -347,7 +349,7 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
       return JSON.parse(bodyUtf8) as unknown;
     }
     const staged = stagedDucts(work);
-    const slots = staged.parameters;
+    const slots = ductsParameterSlots(sources.settings?.());
     const snapshot = (await read("ducts.snapshot", {
       ...(Object.keys(slots).length ? { slots } : {}),
       ...(staged.labelParameter ? { labelParameter: staged.labelParameter } : {}),
@@ -373,7 +375,8 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
       beforeMark !== sources.marks.changedAt(target) ||
       observedSince !== sources.marks.observedSince ||
       owned?.revision !== afterWork?.revision ||
-      JSON.stringify(owned?.doc) !== JSON.stringify(afterWork?.doc);
+      JSON.stringify(owned?.doc) !== JSON.stringify(afterWork?.doc) ||
+      JSON.stringify(slots) !== JSON.stringify(ductsParameterSlots(sources.settings?.()));
     const fresh = observedSince !== undefined && observedSince <= began;
     return {
       format: "ducts-analysis-v5",
@@ -478,9 +481,10 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
         "Apply request outputs differ from the retained producer; no historical result was replaced",
       );
     const createdAt = new Date().toISOString();
-    const payload = ductsApplyInputSchema.parse(
-      applyRequest(input.snapshot, priced, createdAt, group ? [group] : []),
-    );
+    const payload = ductsApplyInputSchema.parse({
+      ...applyRequest(input.snapshot, priced, createdAt, group ? [group] : []),
+      slots: input.snapshot.slots,
+    });
     const payloadJson = JSON.stringify(payload);
     const unpriced = Object.keys(priced.edit.rules)
       .sort()

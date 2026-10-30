@@ -59,7 +59,7 @@ import type { ProtoProps } from "../props";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
 import { BarRules, systemNoteCount, systemRowParts } from "./bar";
 
-import { DuctSettings } from "./settings";
+import { DesignFriction } from "./design-friction";
 import { FanFacts, fanFacts, type FanFact } from "./fan-sections";
 import { DuctsPicture } from "./picture";
 import { grilleLabels } from "./labels";
@@ -857,12 +857,16 @@ function LoadedScreenBody({
   const panes = {
     "e-systems": (
       <BarRules snapshot={drawn} work={work} priced={priced}>
-        <DuctSettings work={work} rate={designRate} snapshot={snapshot} scope={scope} />
         {systemsPane}
       </BarRules>
     ),
     "e-sidebar": treePane,
-    "e-inputs": inputsPane,
+    "e-inputs": (
+      <>
+        <DesignFriction work={work} rate={designRate} />
+        {inputsPane}
+      </>
+    ),
     "e-rules-all": rulesPanes[1],
     "e-rules": rulesPanes[0],
     "e-picture": picturePane,

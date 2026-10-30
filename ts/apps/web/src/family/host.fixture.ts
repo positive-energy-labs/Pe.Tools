@@ -64,6 +64,12 @@ export class FamilyHostFixture {
   writes: WorkWriteAck[] = [];
   actions: ActionReceipt[] = [];
   reads: Record<string, unknown>[] = [];
+  live = {
+    reading: this.raw.replaceAll("Original", "Live"),
+    takenAt: "2026-10-30T05:00:00Z",
+    executionContext: this.target,
+    process: { pid: 42, processStartUtc: "2026-10-30T04:00:00Z", executable: "C:/Revit.exe" },
+  };
   readFailure: string | null = null;
   workRequests: ReadingRequest[] = [];
   unreadable = false;
@@ -161,7 +167,7 @@ export class FamilyHostFixture {
       }
     };
   };
-  write = async (write: WorkWrite): Promise<RouteStateWriteResult> => {
+  write = async (write: WorkWrite, trusted = false): Promise<RouteStateWriteResult> => {
     const before = this.doc;
     const result = applyPatches(
       familyDraftRouteState,
@@ -169,7 +175,7 @@ export class FamilyHostFixture {
       "human",
       write.patches,
       write.expectedRevision,
-      false,
+      trusted,
       write.kind === "restore",
     );
     if (!result.ok) return result;
@@ -177,14 +183,14 @@ export class FamilyHostFixture {
     this.revision = result.envelope.revision;
     const ack: WorkWriteAck = {
       key: this.key,
-      kind: write.kind,
+      kind: trusted ? "publish" : write.kind,
       by: "human",
       press: write.press,
       base: write.expectedRevision,
       revision: this.revision,
       patches: routeDocDelta(before, this.doc),
       inverse: routeDocDelta(this.doc, before),
-      undoable: true,
+      undoable: !trusted,
     };
     this.writes.push(ack);
     this.emit("work");
@@ -230,6 +236,24 @@ export class FamilyHostFixture {
     if (url.pathname === "/family/readings") {
       this.reads.push(body);
       if (this.readFailure) return Response.json({ error: this.readFailure }, { status: 409 });
+      if (body.key === "family.read") {
+        const written = await this.write(
+          {
+            kind: "apply",
+            press: null,
+            expectedRevision: (body.input as { expectedRevision: number }).expectedRevision,
+            patches: [
+              { path: ["reading"], value: this.live.reading },
+              { path: ["takenAt"], value: this.live.takenAt },
+            ],
+          },
+          true,
+        );
+        if (!written.ok)
+          return Response.json({ error: "Baseline publication refused" }, { status: 409 });
+        return Response.json(this.live);
+      }
+      if (body.key === "family.cancel-read") return Response.json({ cancelled: true });
       return Response.json(this.saved);
     }
     if (url.pathname === "/actions" && init?.method === "POST") {

@@ -66,12 +66,17 @@ function Editor({ owner }: Body) {
 
 export const dataTablesAdapters: RouteAdapters<DataTablesPage, DataTablesWork> = {
   sources: dataTablesSources(),
-  binding: (id, row) => ({
+  verbDepends: { apply: ["tables"] },
+  binding: (id, row, scope) => ({
     subject: null,
-    args: id === "open" ? { table: row } : id === "edit" ? row : {},
+    args:
+      id === "open"
+        ? { name: (row as TableHandle | undefined)?.name ?? scope.page.table }
+        : id === "edit"
+          ? row
+          : {},
   }),
   bodies: { tables: (body) => <Tables {...body} />, draft: (body) => <Editor {...body} /> },
 };
 
-/** Not registered until the kernel can preserve selection, reset and required Apply review. */
 export const dataTablesRoute = routeFromGraph(dataTablesGraph, dataTablesAdapters);

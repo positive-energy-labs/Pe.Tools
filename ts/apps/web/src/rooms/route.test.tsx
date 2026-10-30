@@ -428,3 +428,21 @@ test("hosted Rooms binds its explicit target and keeps Page out of the enclosing
   expect(router.history.location.href).toBe(href);
   expect(owner().snapshot().target).toMatchObject({ kind: "document", ref: host.target });
 });
+
+test("manual refresh rereads Rooms and Work without exporting the view image", async () => {
+  const { owner, situation } = await mounted();
+  const count = (key: string) => host.calls.filter((call) => call.key === key).length;
+  const before = {
+    snapshot: count("rooms.snapshot"),
+    trace: count("rooms.trace"),
+    image: count("revit.context.view-image"),
+  };
+  fireEvent.click(await liveButton(situation, "refresh"));
+  await waitFor(() =>
+    expect(owner().results.get("refresh")).toMatchObject({ state: "done", kind: "query" }),
+  );
+  await waitFor(() => expect(count("rooms.snapshot")).toBeGreaterThan(before.snapshot));
+  await waitFor(() => expect(count("rooms.trace")).toBeGreaterThan(before.trace));
+  expect(count("revit.context.view-image")).toBe(before.image);
+  expect(host.writes).toEqual([]);
+});

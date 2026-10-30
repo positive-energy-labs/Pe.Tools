@@ -10,16 +10,8 @@
 
 import { Route as rootRouteImport } from "./routes/__root";
 import { Route as IndexRouteImport } from "./routes/index";
-import { Route as BindRouteImport } from "./routes/bind";
-import { Route as CapturesRouteImport } from "./routes/captures";
-import { Route as DataTablesRouteImport } from "./routes/data-tables";
 import { Route as DesignSystemRouteImport } from "./routes/design-system";
-import { Route as OpenRouteImport } from "./routes/open";
-import { Route as OpsRouteImport } from "./routes/ops";
-import { Route as ParameterLinksRouteImport } from "./routes/parameter-links";
 import { Route as PeaRouteImport } from "./routes/pea";
-import { Route as PodsRouteImport } from "./routes/pods";
-import { Route as SettingsRouteImport } from "./routes/settings";
 import { Route as DesignSystemArmingRouteImport } from "./routes/design-system_.arming";
 import { Route as DesignSystemBandRouteImport } from "./routes/design-system_.band";
 import { Route as DesignSystemControlSurfaceRouteImport } from "./routes/design-system_.control-surface";
@@ -37,54 +29,14 @@ const IndexRoute = IndexRouteImport.update({
   path: "/",
   getParentRoute: () => rootRouteImport,
 } as any);
-const BindRoute = BindRouteImport.update({
-  id: "/bind",
-  path: "/bind",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const CapturesRoute = CapturesRouteImport.update({
-  id: "/captures",
-  path: "/captures",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const DataTablesRoute = DataTablesRouteImport.update({
-  id: "/data-tables",
-  path: "/data-tables",
-  getParentRoute: () => rootRouteImport,
-} as any);
 const DesignSystemRoute = DesignSystemRouteImport.update({
   id: "/design-system",
   path: "/design-system",
   getParentRoute: () => rootRouteImport,
 } as any);
-const OpenRoute = OpenRouteImport.update({
-  id: "/open",
-  path: "/open",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const OpsRoute = OpsRouteImport.update({
-  id: "/ops",
-  path: "/ops",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const ParameterLinksRoute = ParameterLinksRouteImport.update({
-  id: "/parameter-links",
-  path: "/parameter-links",
-  getParentRoute: () => rootRouteImport,
-} as any);
 const PeaRoute = PeaRouteImport.update({
   id: "/pea",
   path: "/pea",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const PodsRoute = PodsRouteImport.update({
-  id: "/pods",
-  path: "/pods",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const SettingsRoute = SettingsRouteImport.update({
-  id: "/settings",
-  path: "/settings",
   getParentRoute: () => rootRouteImport,
 } as any);
 const DesignSystemArmingRoute = DesignSystemArmingRouteImport.update({
@@ -147,16 +99,8 @@ const ApiPdfAuditParseParseIdRoute = ApiPdfAuditParseParseIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   "/": typeof IndexRoute;
-  "/bind": typeof BindRoute;
-  "/captures": typeof CapturesRoute;
-  "/data-tables": typeof DataTablesRoute;
   "/design-system": typeof DesignSystemRoute;
-  "/open": typeof OpenRoute;
-  "/ops": typeof OpsRoute;
-  "/parameter-links": typeof ParameterLinksRoute;
   "/pea": typeof PeaRoute;
-  "/pods": typeof PodsRoute;
-  "/settings": typeof SettingsRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/band": typeof DesignSystemBandRoute;
   "/design-system/control-surface": typeof DesignSystemControlSurfaceRoute;
@@ -171,16 +115,8 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   "/": typeof IndexRoute;
-  "/bind": typeof BindRoute;
-  "/captures": typeof CapturesRoute;
-  "/data-tables": typeof DataTablesRoute;
   "/design-system": typeof DesignSystemRoute;
-  "/open": typeof OpenRoute;
-  "/ops": typeof OpsRoute;
-  "/parameter-links": typeof ParameterLinksRoute;
   "/pea": typeof PeaRoute;
-  "/pods": typeof PodsRoute;
-  "/settings": typeof SettingsRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/band": typeof DesignSystemBandRoute;
   "/design-system/control-surface": typeof DesignSystemControlSurfaceRoute;
@@ -196,16 +132,8 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport;
   "/": typeof IndexRoute;
-  "/bind": typeof BindRoute;
-  "/captures": typeof CapturesRoute;
-  "/data-tables": typeof DataTablesRoute;
   "/design-system": typeof DesignSystemRoute;
-  "/open": typeof OpenRoute;
-  "/ops": typeof OpsRoute;
-  "/parameter-links": typeof ParameterLinksRoute;
   "/pea": typeof PeaRoute;
-  "/pods": typeof PodsRoute;
-  "/settings": typeof SettingsRoute;
   "/design-system_/arming": typeof DesignSystemArmingRoute;
   "/design-system_/band": typeof DesignSystemBandRoute;
   "/design-system_/control-surface": typeof DesignSystemControlSurfaceRoute;
@@ -222,16 +150,8 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath;
   fullPaths:
     | "/"
-    | "/bind"
-    | "/captures"
-    | "/data-tables"
     | "/design-system"
-    | "/open"
-    | "/ops"
-    | "/parameter-links"
     | "/pea"
-    | "/pods"
-    | "/settings"
     | "/design-system/arming"
     | "/design-system/band"
     | "/design-system/control-surface"
@@ -246,16 +166,8 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo;
   to:
     | "/"
-    | "/bind"
-    | "/captures"
-    | "/data-tables"
     | "/design-system"
-    | "/open"
-    | "/ops"
-    | "/parameter-links"
     | "/pea"
-    | "/pods"
-    | "/settings"
     | "/design-system/arming"
     | "/design-system/band"
     | "/design-system/control-surface"
@@ -270,16 +182,8 @@ export interface FileRouteTypes {
   id:
     | "__root__"
     | "/"
-    | "/bind"
-    | "/captures"
-    | "/data-tables"
     | "/design-system"
-    | "/open"
-    | "/ops"
-    | "/parameter-links"
     | "/pea"
-    | "/pods"
-    | "/settings"
     | "/design-system_/arming"
     | "/design-system_/band"
     | "/design-system_/control-surface"
@@ -295,16 +199,8 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute;
-  BindRoute: typeof BindRoute;
-  CapturesRoute: typeof CapturesRoute;
-  DataTablesRoute: typeof DataTablesRoute;
   DesignSystemRoute: typeof DesignSystemRoute;
-  OpenRoute: typeof OpenRoute;
-  OpsRoute: typeof OpsRoute;
-  ParameterLinksRoute: typeof ParameterLinksRoute;
   PeaRoute: typeof PeaRoute;
-  PodsRoute: typeof PodsRoute;
-  SettingsRoute: typeof SettingsRoute;
   DesignSystemArmingRoute: typeof DesignSystemArmingRoute;
   DesignSystemBandRoute: typeof DesignSystemBandRoute;
   DesignSystemControlSurfaceRoute: typeof DesignSystemControlSurfaceRoute;
@@ -326,27 +222,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof IndexRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/bind": {
-      id: "/bind";
-      path: "/bind";
-      fullPath: "/bind";
-      preLoaderRoute: typeof BindRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/captures": {
-      id: "/captures";
-      path: "/captures";
-      fullPath: "/captures";
-      preLoaderRoute: typeof CapturesRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/data-tables": {
-      id: "/data-tables";
-      path: "/data-tables";
-      fullPath: "/data-tables";
-      preLoaderRoute: typeof DataTablesRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
     "/design-system": {
       id: "/design-system";
       path: "/design-system";
@@ -354,46 +229,11 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof DesignSystemRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/open": {
-      id: "/open";
-      path: "/open";
-      fullPath: "/open";
-      preLoaderRoute: typeof OpenRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/ops": {
-      id: "/ops";
-      path: "/ops";
-      fullPath: "/ops";
-      preLoaderRoute: typeof OpsRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/parameter-links": {
-      id: "/parameter-links";
-      path: "/parameter-links";
-      fullPath: "/parameter-links";
-      preLoaderRoute: typeof ParameterLinksRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
     "/pea": {
       id: "/pea";
       path: "/pea";
       fullPath: "/pea";
       preLoaderRoute: typeof PeaRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/pods": {
-      id: "/pods";
-      path: "/pods";
-      fullPath: "/pods";
-      preLoaderRoute: typeof PodsRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/settings": {
-      id: "/settings";
-      path: "/settings";
-      fullPath: "/settings";
-      preLoaderRoute: typeof SettingsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/design-system_/arming": {
@@ -489,16 +329,8 @@ const ApiPdfAuditParseRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  BindRoute: BindRoute,
-  CapturesRoute: CapturesRoute,
-  DataTablesRoute: DataTablesRoute,
   DesignSystemRoute: DesignSystemRoute,
-  OpenRoute: OpenRoute,
-  OpsRoute: OpsRoute,
-  ParameterLinksRoute: ParameterLinksRoute,
   PeaRoute: PeaRoute,
-  PodsRoute: PodsRoute,
-  SettingsRoute: SettingsRoute,
   DesignSystemArmingRoute: DesignSystemArmingRoute,
   DesignSystemBandRoute: DesignSystemBandRoute,
   DesignSystemControlSurfaceRoute: DesignSystemControlSurfaceRoute,

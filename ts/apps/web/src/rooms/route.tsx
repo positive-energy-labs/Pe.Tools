@@ -317,7 +317,7 @@ export const roomsAdapters: RouteAdapters<RoomsPage, RoomsRouteDocument> = {
       : null;
   },
   subjects: {},
-  verbReadings: {},
+  verbReadings: { refresh: ["snapshot", "trace"] },
   verbDepends: {
     partition: ["snapshot"],
     apply: ["snapshot"],

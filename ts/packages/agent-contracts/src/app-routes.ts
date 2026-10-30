@@ -212,7 +212,7 @@ export const APP_ROUTES: readonly AppRoute[] = [
     task: "Coordinate model data",
     exposure: "Preview",
     aliases: "Revit data",
-    runtimeNeed: "Revit for model actions; browsing saved data is separate",
+    runtimeNeed: "Host retained view images",
     directory: true,
   },
   {
@@ -221,7 +221,7 @@ export const APP_ROUTES: readonly AppRoute[] = [
     title: "Ops Playground",
     label: "Host API",
     iconKey: "Terminal",
-    description: "Call any host operation directly and inspect the raw response.",
+    description: "Inspect operation requests and action receipts, and run host reads.",
     task: "Explore / maintain",
     exposure: "Preview",
     aliases: "host api operations playground",
@@ -278,11 +278,11 @@ export const APP_ROUTES: readonly AppRoute[] = [
     label: "Settings",
     iconKey: "Settings2",
     description:
-      "This machine and this app: Revit sessions, update, sharing, Pea providers and approvals, host, notifications, appearance, and diagnostics.",
+      "This machine and every route's user settings: Revit sessions, update, sharing, Pea providers and approvals, host, notifications, appearance, diagnostics, and route preferences.",
     task: "Explore / maintain",
     exposure: "Main",
     aliases:
-      "machine Revit update share providers sign-in approvals host startup diagnostics theme",
+      "machine Revit update share providers sign-in approvals host startup diagnostics theme route preferences slots colours",
     runtimeNeed: "Host machine configuration",
     directory: true,
   },

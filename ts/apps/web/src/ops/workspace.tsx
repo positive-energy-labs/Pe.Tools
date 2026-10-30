@@ -1,35 +1,18 @@
-/**
- * The Ops body. The URL is the page: `?op` names the operation, `?target` the session and
- * document (the shell's one target grammar), `?actionId` the journaled receipt to show. Form
- * values and a read's value are render state and die with the tab: a request being typed is a
- * draft, not a place.
- */
-import { useEffect, useMemo, useState } from "react";
-
-import { ActionReceiptView } from "#/actions/receipt";
+import type { ReadingState } from "#/shell/readings";
+import { useEffect } from "react";
 import { FactChip } from "@pe/kit/lang/chip";
 import { EmptyState } from "@pe/kit/lang/empty";
-import { Pane } from "@pe/kit/lang/pane";
 import { Button } from "@pe/kit/lang/button";
-import { Provenance } from "@pe/kit/lang/section";
-import { Surface } from "@pe/kit/lang/surface";
-import { previousOf, useReading } from "#/readings";
-import { RouteShell, useRoute, type AddressPage } from "#/route";
-import { Ladder } from "#/route/ladder";
-import { useChooseTarget } from "#/route/shell";
-import { Situation } from "#/route/situation";
-import { useDocumentLadder } from "#/route/situation-ladder";
-import { SituationCell } from "#/route/situation-marks";
-import { OpForm, requestOf, seedValues, type FormValues } from "#/ops/form";
-import { isMutation, opsManifest, type HostOperationCatalogEntry } from "#/ops/manifest";
-import { outputRenderers } from "#/ops/renderers";
-import { runOp } from "#/ops/run";
 import { Code, stringify } from "@pe/kit/lang/code";
-import type { DocumentRef } from "@pe/agent-contracts";
+import { Ladder } from "#/route/ladder";
 import { NativeObservationScope } from "#/revit/observation";
-
-type Catalog = { operations?: HostOperationCatalogEntry[]; bridgeCatalogError?: string };
-/** `document` is the target the value was read from: the displayed observation's scope (N4). */
+import type { DocumentRef } from "@pe/agent-contracts";
+import type { MountBody } from "#/shell/mount";
+import { OpForm, seedValues, type FormValues } from "./form";
+import { isMutation } from "./manifest";
+import { outputRenderers } from "./renderers";
+import type { OpsPage } from "./graph";
+import type { OpsCatalog } from "./sources";
 type Value = {
   op: string;
   request: unknown;
@@ -37,206 +20,112 @@ type Value = {
   elapsedMs: number;
   document: DocumentRef | null;
 };
-
-export function OpsRoute({ page }: { page: AddressPage<"ops"> }) {
-  const [{ op, actionId: receipt }, setPage] = page;
-  const actionId = receipt || null;
-  const [chosen] = useChooseTarget();
-  const [values, setValues] = useState<FormValues>({});
-  const [value, setValue] = useState<Value | null>(null);
-
-  // The catalogue is session-scoped: bridge ops list only once the sentence names a session.
-  // First resolve a plain session-needing manifest for the ladder, then narrow by what it found.
-  const ladderHandle = useRoute(
-    useMemo(() => opsManifest(), []),
-    { target: chosen },
-  );
-  const resolved =
-    ladderHandle.resolution.kind === "resolved" ? ladderHandle.resolution.target : null;
-  const sessionId =
-    resolved?.kind === "session"
-      ? resolved.session
-      : resolved?.kind === "document"
-        ? resolved.ref.session
-        : undefined;
-  const catalog = useReading<Catalog>({
-    kind: "ops-catalog",
-    ...(sessionId ? { session: sessionId } : {}),
-  });
-  const observed = previousOf(catalog);
-  const operations = useMemo(() => observed?.operations ?? [], [observed]);
-  const selected = operations.find((entry) => entry.key === op);
-
-  useEffect(() => {
-    setValues(
-      seedValues(
-        selected?.requestSchemaJson,
-        selected?.requestExamples?.[0]?.json ?? selected?.safeDefaultRequestJson ?? undefined,
-      ),
-    );
-    setValue(null);
-  }, [selected?.key]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const manifest = useMemo(
-    () =>
-      opsManifest({
-        ...(selected ? { selected } : {}),
-        run: async (ctx) => {
-          if (!selected) return;
-          const request = requestOf(values);
-          const outcome = await runOp({
-            op: selected,
-            request,
-            target: ctx.target,
-            call: ctx.call,
-          });
-          if (outcome.kind === "value")
-            setValue({
-              op: selected.key,
-              request,
-              ...outcome,
-              document: ctx.target.kind === "document" ? ctx.target.ref : null,
-            });
-          else {
-            setPage({ actionId: outcome.id });
-            // I1: the receipt below names the action; the error says which op, not its id.
-            if (outcome.state !== "succeeded") throw Error(`${selected.key} ${outcome.state}`);
-          }
-        },
-      }),
-    [selected, values, actionId, setPage],
-  );
-  const handle = useRoute(manifest, { target: chosen });
-  const ladder = useDocumentLadder(handle);
-
-  const opLevel = {
-    key: "op",
-    label: selected ? (selected.displayName ?? selected.key) : null,
-    placeholder: "choose an operation",
-    options: operations.map((entry) => ({
-      id: entry.key,
-      label: entry.displayName ?? entry.key,
-      sub: `${entry.intent ?? "unknown"} · ${entry.needs}`,
-    })),
-    note: catalog.state === "failed" ? catalog.message : observed?.bridgeCatalogError,
-    picked: (id: string) => id === op,
-    pick: (id: string) => setPage({ op: id, actionId: "" }),
-  };
+export function OpsBody({ owner, page }: MountBody<OpsPage, unknown>) {
+  const catalog = owner.readings.get("catalog") as ReadingState<OpsCatalog>;
+  const observed = catalog.value ?? catalog.previous;
+  const operations = observed?.operations ?? [];
+  const selected = operations.find((entry) => entry.key === page.op);
+  const values = page.values;
+  const setValues = (values: FormValues) => owner.view.setPage({ values });
+  const value = page.result as Value | null;
   const Output = value ? outputRenderers[value.op] : undefined;
-
+  useEffect(() => {
+    if (selected)
+      owner.view.setPage({
+        values: seedValues(
+          selected.requestSchemaJson,
+          selected.requestExamples?.[0]?.json ?? selected.safeDefaultRequestJson ?? undefined,
+        ),
+        result: null,
+      });
+  }, [owner, selected?.key]);
   return (
-    <Surface
-      head={
-        <RouteShell
-          manifest={manifest}
-          handle={handle}
-          situation={
-            <Situation
-              handle={handle}
-              target={{ session: ladder.sessionWord, document: ladder.docWord }}
-              sentence={
-                <>
-                  runs{" "}
-                  <SituationCell io="r" empty={!selected}>
-                    <Ladder levels={[opLevel]} />
-                  </SituationCell>{" "}
-                  on{" "}
-                  <SituationCell
-                    io={selected && isMutation(selected) ? "w" : "r"}
-                    empty={!ladder.docWord}
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
+      <Ladder
+        levels={[
+          {
+            key: "op",
+            label: selected?.displayName ?? selected?.key ?? null,
+            placeholder: "choose an operation",
+            options: operations.map((entry) => ({
+              id: entry.key,
+              label: entry.displayName ?? entry.key,
+              sub: `${entry.intent ?? "unknown"} / ${entry.needs}`,
+            })),
+            note: catalog.error ?? observed?.bridgeCatalogError,
+            picked: (id) => id === page.op,
+            pick: (op) => owner.view.setPage({ op }),
+          },
+        ]}
+      />
+      {selected ? (
+        <section className="flex flex-col gap-4">
+          <header>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1>{selected.displayName ?? selected.key}</h1>
+              <FactChip
+                tone={isMutation(selected) ? "caution" : undefined}
+                title={isMutation(selected) ? "changes external state" : "read-only"}
+              >
+                {selected.intent ?? "unknown intent"}
+              </FactChip>
+              <FactChip title="host-declared cost tier">
+                {selected.costTier ?? "unknown cost"}
+              </FactChip>
+            </div>
+            <p>{selected.key}</p>
+            <p className="max-w-2xl">{selected.description}</p>
+          </header>
+          <section className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <h2>Request</h2>
+              <span className="flex gap-1">
+                {(selected.requestExamples ?? []).map((example) => (
+                  <Button
+                    key={example.name}
+                    label={example.name}
+                    reason={example.description}
+                    onClick={() => setValues(seedValues(selected.requestSchemaJson, example.json))}
                   >
-                    <Ladder levels={ladder.levels} />
-                  </SituationCell>
-                  .
-                </>
-              }
+                    {example.name}
+                  </Button>
+                ))}
+              </span>
+            </div>
+            <OpForm
+              schemaJson={selected.requestSchemaJson}
+              values={values}
+              onChange={setValues}
+              target={owner.snapshot().target}
             />
-          }
-        />
-      }
-    >
-      <Pane title="operation">
-        <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
-          {actionId ? <ActionReceiptView id={actionId} /> : null}
-          {selected ? (
-            <section className="flex flex-col gap-4">
-              <header>
-                <div className="flex flex-wrap items-center gap-2">
-                  <h1>{selected.displayName ?? selected.key}</h1>
-                  <FactChip
-                    tone={isMutation(selected) ? "caution" : undefined}
-                    title={isMutation(selected) ? "changes external state" : "read-only"}
-                  >
-                    {selected.intent ?? "unknown intent"}
-                  </FactChip>
-                  <FactChip title="host-declared cost tier">
-                    {selected.costTier ?? "unknown cost"}
-                  </FactChip>
-                </div>
-                <p>{selected.key}</p>
-                <p className="max-w-2xl">{selected.description}</p>
-              </header>
-              <section className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <h2>Request</h2>
-                  <span className="flex gap-1">
-                    {(selected.requestExamples ?? []).map((example) => (
-                      <Button
-                        key={example.name}
-                        label={example.name}
-                        reason={example.description}
-                        onClick={() =>
-                          setValues(seedValues(selected.requestSchemaJson, example.json))
-                        }
-                      >
-                        {example.name}
-                      </Button>
-                    ))}
-                  </span>
-                </div>
-                <OpForm
-                  schemaJson={selected.requestSchemaJson}
-                  values={values}
-                  onChange={setValues}
-                  target={
-                    handle.resolution.kind === "resolved"
-                      ? handle.resolution.target
-                      : { kind: "host" }
-                  }
-                />
-              </section>
-              {value ? (
-                <section className="flex flex-col gap-2">
-                  <h2>
-                    Result <span className="t-small face-mono text-ink-2">{value.elapsedMs}ms</span>
-                  </h2>
-                  {Output ? (
-                    <NativeObservationScope
-                      value={{ scope: { document: value.document, source: "native" } }}
-                    >
-                      <Output data={value.value} opKey={value.op} request={value.request} />
-                    </NativeObservationScope>
-                  ) : null}
-                  <details open={!Output}>
-                    <summary className="cursor-pointer">raw response</summary>
-                    <Code code={stringify(value.value)} lang="json" />
-                  </details>
-                </section>
+          </section>
+          {value ? (
+            <section className="flex flex-col gap-2">
+              <h2>
+                Result <span className="t-small face-mono text-ink-2">{value.elapsedMs}ms</span>
+              </h2>
+              {Output ? (
+                <NativeObservationScope
+                  value={{ scope: { document: value.document, source: "native" } }}
+                >
+                  <Output data={value.value} opKey={value.op} request={value.request} />
+                </NativeObservationScope>
               ) : null}
+              <details open={!Output}>
+                <summary className="cursor-pointer">raw response</summary>
+                <Code code={stringify(value.value)} lang="json" />
+              </details>
             </section>
-          ) : (
-            <EmptyState
-              story="scope"
-              exit="choose an operation in the sentence; a session lists its Revit ops"
-            >
-              no operation selected
-            </EmptyState>
-          )}
-          <Provenance>
-            catalog = host.ops.catalog · mutations use the host action journal
-          </Provenance>
-        </div>
-      </Pane>
-    </Surface>
+          ) : null}
+        </section>
+      ) : (
+        <EmptyState
+          story="scope"
+          exit="choose an operation in the sentence; a session lists its Revit ops"
+        >
+          no operation selected
+        </EmptyState>
+      )}
+    </div>
   );
 }

@@ -14,6 +14,7 @@ export interface ReadingScope<P = unknown, W = unknown> {
   workRevision: number | null;
   page: Readonly<P>;
   work: Readonly<W> | null;
+  settings?: Readonly<Record<string, unknown>>;
 }
 
 export interface ReadingAttempt {

@@ -1,3 +1,4 @@
+import type { ReadingState } from "#/shell/readings";
 /**
  * THE PATCH BAY (host MAP round 4, promoted 2026-10-12): documents are jacks on the left (the
  * master table with its filters), Revits are sockets on the right (one `SessionCard` each, plus a
@@ -38,15 +39,13 @@ import { Scroll } from "@pe/kit/lang/scroll";
 import { docKey, heldRowParts, SessionCard, type SessionDocument } from "#/components/lang/session";
 import { Switcher } from "@pe/kit/lang/switcher";
 import type { QueryCommand } from "@pe/kit/table/model";
-import { queryWords, readClause, useTableState, visibleRows } from "@pe/kit/table/view";
-import { ActionOutcome } from "#/actions/receipt";
+import { queryWords, readClause, visibleRows } from "@pe/kit/table/view";
 import { useRouteDemo } from "#/route/activity";
 import { keyOf, pidOf, processOf, selectionOf } from "#/machine/session";
 import { demoRecents } from "#/machine/use-machine";
-import { dirty, previousOf, useAction, useReading } from "#/readings";
-import { harnessClient } from "#/workbench/provider/harness-client";
-import { resolveWorkbenchConfig } from "#/workbench/config";
-import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import { OpenControlScope, outcomeOf, useOpenKernel, useOpenOwner } from "./kernel";
+import type { OutcomeKind } from "@pe/kit/lang/outcome";
+import type { TableState } from "@pe/kit/table/model";
 
 import { documentColumns, ModelTable } from "./documents";
 import { factsOf, useLifecycle } from "./lifecycle";
@@ -72,26 +71,18 @@ export function useThreadSummaries(
   enabled: boolean,
   fixture: readonly HarnessThreadSummary[] | null,
 ) {
-  const [threads, setThreads] = useState<readonly HarnessThreadSummary[] | null>(null);
-  useEffect(() => {
-    if (!enabled) return;
-    return harnessClient(resolveWorkbenchConfig().origin).summaries(setThreads, () => {});
-  }, [enabled]);
-  return enabled ? threads : fixture;
+  const owner = useOpenKernel();
+  useEffect(() => (enabled ? owner.readings.mount(["threads"]) : undefined), [owner, enabled]);
+  const reading = owner.readings.get("threads") as ReadingState<readonly HarnessThreadSummary[]>;
+  return enabled ? (reading.value ?? reading.previous ?? null) : fixture;
 }
 
 export type BayLayout = "row" | "stack";
 
 /** After a verb: the action whose receipt the line follows, or the refusal that stopped it. */
-type Outcome = { action: string } | { refused: string };
-
+type Outcome = { kind: OutcomeKind; label: string };
 function OutcomeOf({ outcome }: { outcome: Outcome | null }) {
-  if (!outcome) return null;
-  return "action" in outcome ? (
-    <ActionOutcome id={outcome.action} />
-  ) : (
-    <OutcomeLine kind="refused" label={outcome.refused} />
-  );
+  return outcome ? <OutcomeLine {...outcome} /> : null;
 }
 
 /**
@@ -102,19 +93,21 @@ function OutcomeOf({ outcome }: { outcome: Outcome | null }) {
 export function useBayReadings(machine: Machine | null, fixture: boolean) {
   const routeDemo = useRouteDemo();
   const demo = fixture ? routeDemo : null;
-  const live = useReading<{ result?: { recents?: RecentDocument[] } }>(
-    fixture ? null : { kind: "sdk", read: "recents" },
-  );
+  const owner = useOpenKernel();
+  useEffect(() => (!fixture ? owner.readings.mount(["recents"]) : undefined), [owner, fixture]);
+  const reading = owner.readings.get("recents") as ReadingState<{
+    result?: { recents?: RecentDocument[] };
+  }>;
   const recents = fixture
     ? demoRecents(demo ?? "").result.recents
-    : (previousOf(live)?.result?.recents ?? []);
+    : ((reading.value ?? reading.previous)?.result?.recents ?? []);
   const sessions = machine?.revit.sessions ?? null;
   const rows = useMemo(() => modelRows(sessions ?? [], recents), [sessions, recents]);
   const threads = useThreadSummaries(!fixture, fixture ? BAY_THREADS : null);
   return { rows, threads, loading: sessions === null };
 }
 
-export function PatchBay({
+function PatchBayBody({
   machine,
   loading,
   rows,
@@ -122,7 +115,6 @@ export function PatchBay({
   fixture,
   layout,
   refusal: shellRefusal = null,
-  onNote,
 }: {
   machine: Machine | null;
   loading: boolean;
@@ -133,16 +125,20 @@ export function PatchBay({
   layout: BayLayout;
   /** The shell's own refusal (the host stopped answering): every verb refuses with it. */
   refusal?: string | null;
-  /** Where a receipt or a refusal also lands (the route's page log). */
-  onNote?: (label: string, detail: string, caution: boolean, receipt?: { id: string }) => void;
 }) {
-  const [draft, setDraft] = useState<LaunchDraft>(EMPTY_DRAFT);
+  const owner = useOpenOwner();
+  const draft = owner.view.read().page.draft;
+  const setDraft = (next: LaunchDraft | ((was: LaunchDraft) => LaunchDraft)) =>
+    owner.view.setPage({
+      draft: typeof next === "function" ? next(owner.view.read().page.draft) : next,
+    });
   const [arrowed, setArrowed] = useState(false);
   const [hover, setHover] = useState<string | null>(null);
   const [held, setHeld] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [bay, setBay] = useState<HTMLDivElement | null>(null);
-  const [state, setState] = useTableState();
+  const state = owner.view.read().page.table;
+  const setState = (table: TableState) => owner.view.setPage({ table });
   const columns = useMemo(() => documentColumns(layout), [layout]);
   // A pasted path becomes a jack the table does not list, so it can be patched like any other.
   const allRows = useMemo(() => {
@@ -180,34 +176,20 @@ export function PatchBay({
   const patchNew = (year: number | null) =>
     setDraft((was) => ({ ...was, target: "new", year: year ?? was.year }));
 
-  const launch = useAction(async () => {
-    const planned = plan.launch;
-    if (!planned) return;
-    try {
-      const receipt = await runSemanticAction(
-        planned.key,
-        instancesActions[planned.key].input.parse(planned.input),
-        undefined,
-        undefined,
-        "",
-        crypto.randomUUID(),
-        30_000,
-      );
-      // The line follows the receipt; the page log keeps what the reply said.
-      setOutcome({ action: receipt.id });
-      onNote?.(`${planned.key} ${receipt.state}`, "receipt", receipt.state !== "succeeded", {
-        id: receipt.id,
-      });
-      dirty({ kind: "machine" });
-      unplug();
-    } catch (caught) {
-      setOutcome({ refused: `${planned.key} refused: ${String(caught)}` });
-      onNote?.(`${planned.key} refused`, String(caught), true);
-    }
-  });
   const blocked = refusal ?? plan.refusal ?? plan.waiting;
-  const commit = () => {
-    if (!blocked && plan.launch) launch.mutate(undefined);
+  const busy = owner.busy() !== null;
+  const commit = async () => {
+    const planned = plan.launch;
+    if (blocked || !planned) return;
+    const id = planned.key === "instances.start" ? "start" : "open";
+    const result = await owner
+      .control(id, {
+        request: instancesActions[planned.key].input.parse(planned.input),
+        refusal: blocked,
+      })
+      .run();
+    setOutcome(outcomeOf(result));
+    if (result.state === "done") unplug();
   };
 
   /* ── The command line: tokens and chips derive from the draft; a take is a click ─────────── */
@@ -442,7 +424,7 @@ export function PatchBay({
       draft={draft}
       setDraft={setDraft}
       blocked={blocked}
-      busy={launch.isPending}
+      busy={busy}
       onCommit={commit}
       onCancel={unplug}
     />
@@ -860,42 +842,31 @@ function CableControls({
   const cloud =
     document.persistence === "cloud" ||
     ("isWorkshared" in document && document.isWorkshared === true);
-  const action = useAction(
-    async (verb: { kind: "close"; unsaved: "keep" | "discard" } | { kind: "reload" }) => {
-      try {
-        const selection = selectionOf(session.row);
-        const key = verb.kind === "close" ? "instances.close" : "instances.open";
-        const input =
-          verb.kind === "close"
-            ? instancesActions["instances.close"].input.parse({
-                session: { selection, process: nativeProcessSchema.parse(process) },
-                document: { source: "sdk", session: selection, openId: document.openId },
-                unsaved: verb.unsaved,
-              })
-            : instancesActions["instances.open"].input.parse({
-                source: document.openId,
-                into: { session: selection },
-                reload: true,
-              });
-        const receipt = await runSemanticAction(
-          key,
-          input,
-          undefined,
-          undefined,
-          "",
-          crypto.randomUUID(),
-          30_000,
-        );
-        setOutcome({ action: receipt.id });
-        dirty({ kind: "machine" });
-      } catch (caught) {
-        setOutcome({ refused: `${verb.kind} refused: ${String(caught)}` });
-      } finally {
-        setArmed(null);
-      }
-    },
-  );
-  const busy = action.isPending;
+  const owner = useOpenOwner();
+  const run = async (verb: { kind: "close"; unsaved: "keep" | "discard" } | { kind: "reload" }) => {
+    const selection = selectionOf(session.row);
+    const request =
+      verb.kind === "close"
+        ? instancesActions["instances.close"].input.parse({
+            session: { selection, process: nativeProcessSchema.parse(process) },
+            document: { source: "sdk", session: selection, openId: document.openId },
+            unsaved: verb.unsaved,
+          })
+        : instancesActions["instances.open"].input.parse({
+            source: document.openId,
+            into: { session: selection },
+            reload: true,
+          });
+    setOutcome(
+      outcomeOf(
+        await owner
+          .control(verb.kind === "close" ? "close" : "open", { request, refusal: blocked })
+          .run(),
+      ),
+    );
+    setArmed(null);
+  };
+  const busy = owner.busy() !== null;
   const gate = (says: string) => ({ reason: blocked ?? says, refusal: blocked });
   const title = document.title ?? document.path ?? "document";
   return (
@@ -909,7 +880,7 @@ function CableControls({
             {...gate(
               `pe-revit doc open ${document.openId} --reload: reload the latest central changes into it`,
             )}
-            onClick={() => action.mutate({ kind: "reload" })}
+            onClick={() => run({ kind: "reload" })}
           >
             reload
           </Button>
@@ -937,14 +908,14 @@ function CableControls({
           state={{ phase: "arming" }}
           busy={busy}
           refusal={blocked}
-          onCommit={() => action.mutate({ kind: "close", unsaved: "keep" })}
+          onCommit={() => run({ kind: "close", unsaved: "keep" })}
           onCancel={() => setArmed(null)}
           alternatives={
             <Button
               label="close, discard edits"
               kind="framed"
               {...gate(`pe-revit doc close ${document.openId} --unsaved discard`)}
-              onClick={() => action.mutate({ kind: "close", unsaved: "discard" })}
+              onClick={() => run({ kind: "close", unsaved: "discard" })}
             >
               close, discard edits
             </Button>
@@ -953,5 +924,14 @@ function CableControls({
       ) : null}
       <OutcomeOf outcome={outcome} />
     </div>
+  );
+}
+
+/** Shared machine/composer mounts keep the same graph-owned draft and verbs. */
+export function PatchBay(props: Parameters<typeof PatchBayBody>[0]) {
+  return (
+    <OpenControlScope>
+      <PatchBayBody {...props} />
+    </OpenControlScope>
   );
 }

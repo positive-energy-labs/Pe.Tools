@@ -28,10 +28,10 @@ const context: InputContext = {
   element: null,
 };
 
-it("carries every census row (68 rows in the 2026-10-28 census) plus the project split override and the end rulings, each in one group", () => {
+it("keeps calculation and provenance rows in the sheet; the colour palette moved to route settings", () => {
   const fields = inputFields(context);
-  expect(fields).toHaveLength(70);
-  expect(new Set(fields.map((f) => f.census)).size).toBe(70);
+  expect(fields).toHaveLength(63);
+  expect(new Set(fields.map((f) => f.census)).size).toBe(63);
   for (const group of INPUT_GROUPS)
     expect(fields.filter((f) => f.group === group.key).length).toBeGreaterThan(0);
   for (const field of fields) expect(field.live && field.reason).toBeFalsy();
@@ -109,9 +109,9 @@ it("R2: rulings, drops and end cfm are project inputs; the element group reads t
   }, {});
   expect(states).toEqual({
     "firm:live": 3,
-    "firm:no-op": 24,
+    "firm:no-op": 20,
     "project:live": 4,
-    "project:no-op": 16,
+    "project:no-op": 13,
     "project:read-out": 5,
     "fan:no-op": 7,
     "fan:read-out": 2,

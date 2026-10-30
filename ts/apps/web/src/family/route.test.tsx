@@ -241,10 +241,79 @@ test("a saved Family query executes at its explicit row without a Work write or 
 });
 
 test("kernel gap: Family live read is a query at its row", async () => {
-  const { view } = await mounted();
+  host.doc.reading = null;
+  host.doc.takenAt = null;
+  host.doc = familyDraftRouteState.schema.parse({
+    ...host.doc,
+    cells: { [host.cell]: { edit: { value: "Staged" }, suggestion: { value: "Proposed" } } },
+  });
+  const cells = structuredClone(host.doc.cells);
+  const { view, owner } = await mounted();
   expect(familyReads).toHaveProperty("family.read");
+  expect(host.reads).toEqual([]);
+  expect(host.writes).toEqual([]);
   fireEvent.click(await liveButton(within(view.container), "Read family"));
-  await waitFor(() => expect(host.reads[0]).toMatchObject({ key: "family.read" }));
+  await waitFor(() =>
+    expect(owner().results.get("read"), JSON.stringify(owner().results.get("read"))).toMatchObject({
+      state: "done",
+      kind: "query",
+    }),
+  );
+  expect(host.reads[0]).toMatchObject({ key: "family.read", scope: host.key, target: host.target });
+  expect(host.actions).toEqual([]);
+  expect(host.writes).toHaveLength(1);
+  expect(host.writes[0]).toMatchObject({ kind: "publish", undoable: false });
+  expect(host.writes[0]!.patches).toEqual([
+    { path: ["reading"], value: host.live.reading },
+    { path: ["takenAt"], value: host.live.takenAt },
+  ]);
+  expect(host.doc).toMatchObject({ reading: host.live.reading, takenAt: host.live.takenAt, cells });
+});
+
+test("a refused Family live read preserves the draft and the host's reason", async () => {
+  host.readFailure = "The exact family is no longer open";
+  const before = structuredClone(host.doc);
+  const { view, owner } = await mounted();
+  fireEvent.click(await liveButton(within(view.container), "Read family"));
+  await waitFor(() =>
+    expect(owner().results.get("read")).toMatchObject({
+      state: "refused",
+      refusal: { message: host.readFailure },
+    }),
+  );
+  expect(host.doc).toEqual(before);
+  expect(host.writes).toEqual([]);
+});
+
+test("Family Stop cancels the live query by its read id without changing Work", async () => {
+  let finish!: (response: Response) => void;
+  const held = new Promise<Response>((resolve) => {
+    finish = resolve;
+  });
+  let request: Record<string, unknown> | undefined;
+  vi.stubGlobal("fetch", (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+    const body = typeof init?.body === "string" ? JSON.parse(init.body) : {};
+    if (body.key === "family.read") {
+      request = body;
+      return held;
+    }
+    return host.fetch(input, init);
+  });
+  const { view, owner } = await mounted();
+  fireEvent.click(await liveButton(within(view.container), "Read family"));
+  await waitFor(() => expect(request).toBeDefined());
+  act(() => owner().stop());
+  await waitFor(() =>
+    expect(host.reads[0]).toMatchObject({
+      key: "family.cancel-read",
+      input: { readId: (request!.input as { readId: string }).readId },
+      scope: host.key,
+      target: host.target,
+    }),
+  );
+  finish(Response.json({ error: "Family read cancelled" }, { status: 409 }));
+  await waitFor(() => expect(owner().busy()).toBeNull());
+  expect(host.writes).toEqual([]);
 });
 
 test("Family saved-query refusals retain the host's exact reason", async () => {

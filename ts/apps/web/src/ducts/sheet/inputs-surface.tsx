@@ -128,14 +128,6 @@ export function inputFields(ctx: InputContext): InputField[] {
       reason: "no-op: engine only",
     },
     {
-      census: "Web DEFAULT_SLOT",
-      group: "firm",
-      sub: "airflow slots",
-      label: "web fallback slots",
-      value: "PE_M_Grd_AirFlow · PE_M_Fan_AirFlowDesign",
-      reason: "no-op: not in contract",
-    },
-    {
       census: "Split-policy default",
       group: "firm",
       sub: "airflow slots",
@@ -160,30 +152,6 @@ export function inputFields(ctx: InputContext): InputField[] {
       value: fan ? `${text(projectInputs.unitCfm?.[String(fan.unitId)])} cfm` : "—",
     },
     // equipment slots
-    {
-      census: "Terminal drop slot",
-      group: "firm",
-      sub: "equipment slots",
-      label: "terminal drop slot",
-      value: text(slots?.terminalDrop),
-      reason: "no-op: C# only",
-    },
-    {
-      census: "Component drop slot",
-      group: "firm",
-      sub: "equipment slots",
-      label: "component drop slot",
-      value: text(slots?.componentDrop),
-      reason: "no-op: C# only",
-    },
-    {
-      census: "Fitting coefficient slot",
-      group: "firm",
-      sub: "equipment slots",
-      label: "fitting coefficient slot",
-      value: `${text(slots?.fittingCoefficient)} · not read by the sheet`,
-      reason: "no-op: C# only",
-    },
     {
       census: "Roster kind / passive heuristics",
       group: "firm",
@@ -372,14 +340,6 @@ export function inputFields(ctx: InputContext): InputField[] {
       value: `${ctx.slots.length} candidates in the picker`,
     },
     {
-      census: "parameters.terminalFlow",
-      group: "project",
-      sub: "airflow slots",
-      label: "Settings grille airflow",
-      value: text(edit(doc?.parameters.terminalFlow)),
-      reason: "no-op: not in contract",
-    },
-    {
       census: "Snapshot slots.terminalFlow",
       group: "project",
       sub: "airflow slots",
@@ -412,14 +372,6 @@ export function inputFields(ctx: InputContext): InputField[] {
       reason: "no-op: no home",
     },
     // equipment slots
-    {
-      census: "parameters.fanFlow",
-      group: "project",
-      sub: "equipment slots",
-      label: "Settings unit airflow",
-      value: text(edit(doc?.parameters.fanFlow)),
-      reason: "no-op: not in contract",
-    },
     {
       census: "Label parameter",
       group: "project",
@@ -532,14 +484,6 @@ export function inputFields(ctx: InputContext): InputField[] {
       sub: "basis",
       label: "working phase",
       value: text(edit(doc?.workingPhase)),
-      reason: "no-op: not in contract",
-    },
-    {
-      census: "systemColours",
-      group: "project",
-      sub: "basis",
-      label: "system colours",
-      value: `${count(edit(doc?.systemColours))} hexes`,
       reason: "no-op: not in contract",
     },
     {
