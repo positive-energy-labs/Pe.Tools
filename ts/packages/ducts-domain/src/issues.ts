@@ -13,6 +13,9 @@ export const ISSUE_BLOCKS: Record<IssueKind, Blocks> = {
   "implausible-size": "none",
   // Always rides on its connector's `open-end` (DuctHealth.cs), which already blocks the walk.
   "near-miss": "none",
+  // The route splices it in series (proximity.ts tolerate, sheet/walk.ts graphOf); its drop is a
+  // `no-component-drop` of its own when unstated.
+  inline: "none",
   "air-type-change": "none",
   "high-velocity": "none",
 };

@@ -1,6 +1,8 @@
 import { expect, it } from "vite-plus/test";
 import {
   applyRulings,
+  kindFanPorts,
+  kindStripsFanPort,
   rosterCensus,
   suggestRoster,
   type RosterRuling,
@@ -152,15 +154,19 @@ it("never promotes passive equipment or uses fan-parameter presence as a kind he
   ];
   for (const node of nodes)
     node.facts.push({ key: "fanFlow", value: 400, unit: "cfm", provenance: "designer-stated" });
+  // Ports first (ducts LEDGER 2026-10-29): a nameless unit with a supply discharge and a return
+  // inlet is suggested a fan coil, as a suggestion; the passive chassis, heater, damper and
+  // silencer are never promoted, fan parameters or not.
   expect(
     suggestRoster(
       { nodes },
       nodes.slice(0, 4).map((n) => ruling(n.id, 1)),
     ),
-  ).toEqual({ fans: [], suggestions: [] });
-  expect(rosterCensus({ nodes }).unclassified).toEqual([
-    { unitId: 8, family: "Unclassified", type: "Standard" },
-  ]);
+  ).toMatchObject({
+    fans: [],
+    suggestions: [{ unitId: 8, kind: "fan-coil", source: "heuristic" }],
+  });
+  expect(rosterCensus({ nodes }).unclassified).toEqual([]);
 });
 
 it("uses firm tag before mark, ignores arbitrary label overrides, and preserves inputs", () => {
@@ -234,4 +240,20 @@ it("reports port counts separately from unit counts and names missing base-equip
     byKind: { "air-handler": 1, erv: 2, dehumidifier: 0 },
     bySource: { "base-equipment": 0, ruling: 0, heuristic: 3 },
   });
+});
+
+it("a kind strips the fan port exactly when the roster would find none for it", () => {
+  // The two-outlet ERV: an air handler takes exactly one outlet, so it loses every fan port.
+  expect(kindStripsFanPort(erv, "air-handler")).toBe(true);
+  expect(kindStripsFanPort(erv, "erv")).toBe(false);
+  // One outlet keeps an air handler's port; `other` and `dehumidifier` are never "stripped".
+  expect(kindStripsFanPort(ahu, "air-handler")).toBe(false);
+  expect(kindStripsFanPort(ahu, "other")).toBe(false);
+  expect(kindStripsFanPort(erv, "dehumidifier")).toBe(false);
+  // The roster uses the same rule: no strip, a port; strip, none.
+  for (const kind of ["air-handler", "erv", "fan-coil", "muas"] as const) {
+    const roster = suggestRoster({ nodes: [erv] }, [], { kinds: { [String(erv.id)]: kind } });
+    expect(roster.fans.length + roster.suggestions.length).toBe(kindFanPorts(erv, kind).length);
+    expect(kindStripsFanPort(erv, kind)).toBe(kindFanPorts(erv, kind).length === 0);
+  }
 });

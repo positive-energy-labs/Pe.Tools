@@ -314,6 +314,37 @@ it("a small collar off ER5-1's Ab/Ac axis is read at the table's edge on the vel
   ]);
 });
 
+it("a junction past ED5-3's edge is refused, never charged an extrapolated coefficient (FC-23 13771256)", async () => {
+  const { priceLeg } = await import("./kernel/price-leg.ts");
+  // Live FC-23 (2026-10-29): the proposed tap from 13771256:0, a 20x20 collar, onto the 6 in round
+  // duct 13973156, carrying 50 cfm one way (Qb = Qc). Ab/Ac 14.2 clamps to ED5-3's 1; Cb there is
+  // -262998, and charging it on the collar's 18 fpm multiplied it by 200 to about -5.3e7.
+  const tap = {
+    id: 13771256,
+    kind: "fitting",
+    family: "proposed tap",
+    partType: "Tap",
+    connectors: [rectPort(0, 20, 20)],
+    facts: [{ key: "takeoff", value: 1 }],
+  } as unknown as Snap["nodes"][number];
+  const main = { id: 13973156, shape: "round", diameterIn: 6 } as unknown as Snap["segments"][number];
+  const p = priceLeg(
+    {
+      kind: "fitting",
+      fitting: tap,
+      facts: await tapFacts(tap, main),
+      flows: { through: 50, branch: 50, upstreamMain: 50, downstreamMain: 0 },
+      leg: "Cb",
+    },
+    CONVERGING,
+  );
+  expect(p.lossInWg).toBeNull();
+  expect(p.implausible).toBeUndefined();
+  expect(p.unpriced).toBe(
+    "ED5-3 Cb not read: Ab/Ac 14.147, As/Ac 1: a branch or straight larger than its round common is outside ED5-3, which states area ratios up to 1",
+  );
+});
+
 it("without ER5-1 served, ER5-2 prices at its own Ab/Ac 0.5 and says so; an assigned table is never swapped", async () => {
   const { priceLeg } = await import("./kernel/price-leg.ts");
   const { friction } = await import("./loss-physics.ts");
@@ -456,6 +487,26 @@ it("a bullhead (entered from its branch, the main bringing air both ways) prices
       (rule) => rule.key,
     ),
   ).toEqual(["bullhead-converging-round"]);
+});
+
+it("a supply bullhead (collar air dividing both ways along a round main) reads SD5-18 Cb1 per path, never SD5-9", async () => {
+  // MUAS-1 takeoff 14806947: 115 cfm up a 6 in collar dividing 50 / 65 along an 8 in main.
+  const round = {
+    id: 9,
+    kind: "fitting",
+    family: "Round Takeoff",
+    partType: "Tap",
+    connectors: [{ index: 0, shape: "round", diameterIn: 6 }],
+    facts: [{ key: "takeoff", value: 1 }],
+  } as unknown as Snap["nodes"][number];
+  const main = { id: 10, shape: "round", diameterIn: 8 } as unknown as Snap["segments"][number];
+  const rf = await tapFacts(round, main, { converging: false, bullhead: true });
+  const flows = { q: 115, qb: 65, qc: 115, qs: 50 };
+  const matched = LOSS_RULES.filter((rule) => rule.when(rf, flows));
+  expect(matched.map((rule) => rule.key)).toEqual(["bullhead-diverging-round"]);
+  const input = matched[0]!.input(rf, flows, "SD5-18", "Cb");
+  expect(input).toMatchObject({ res: "Cb1", x: 65 / 115 });
+  expect(input.y).toBeCloseTo(8 ** 2 / 6 ** 2, 12);
 });
 
 it("a rectangular plain damper prices fully open on CR9-1 (Theta 0, H/W), a round one on CD9-1", () => {

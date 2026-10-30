@@ -17,20 +17,24 @@ import {
   type Node,
   type Segment,
 } from "../kernel/fitting-facts.ts";
-import type { ConnectorPairRuling } from "../kernel/inferred-joins.ts";
-import { equivalentFeet, priceLeg, type Choices, type PricedLeg } from "../kernel/price-leg.ts";
-import { LOSS_RULES } from "../loss-rules.ts";
-import { flowsOf, legKey, stateFlow, type FlowOptions, type Flows } from "./flow.ts";
+import {
+  equivalentFeet,
+  priceLeg,
+  type Choices,
+  type LegInput,
+  type PricedLeg,
+} from "../kernel/price-leg.ts";
+import { LOSS_RULES, ruleByKey, ruleWords, type FittingFacts, type LossRule } from "../loss-rules.ts";
+import { flowsOf, legKey, sharedTerminal, stateFlow, type FlowOptions, type Flows } from "./flow.ts";
 import {
   SHEET_ENGINE_VERSION,
   type Blocker,
   type Chain,
-  type EndRuling,
   type FanPortRef,
+  type FittingPricing,
   type Leg,
-  type HealProposal,
   type Sheet,
-  type SheetInput,
+  type SheetNote,
   type SheetPath,
   type Side,
   type SideTotals,
@@ -40,6 +44,7 @@ import {
   foreignOwners,
   graphOf,
   isSegment,
+  legId,
   legsOf,
   lineage,
   markSiblings,
@@ -49,49 +54,24 @@ import {
   type Walk,
 } from "./walk.ts";
 import { assumedFanFlows, type AssumedFlow } from "./assumed-flow.ts";
+import type { DuctsInputs, Resolved } from "@pe/agent-contracts";
+import { PROPOSED_KEY, terminalCfmOf } from "./inputs.ts";
+import { REVIT_FLOW_SLOT, slotFlowOf } from "../kernel/terminal-flow.ts";
 
 /** Issues and tolerances are C#'s model health (ducts LEDGER 2026-10-29); absent, no open end has a measured neighbourhood. */
 export type SheetSnapshot = Pick<DuctSnapshot, "nodes" | "segments" | "document"> &
   Partial<Pick<DuctSnapshot, "slots" | "issues" | "tolerances">>;
 
-// SHIM(ducts-terminal-drop): 0.03 in-wg is a placeholder pending the firm's per-family table.
-export const SHIM_TERMINAL_DROP_IN_WG = 0.03;
-
 export interface PricingInput {
   snapshot: SheetSnapshot;
   grids: Grids;
-  choices?: Choices;
-  /** Typed drops, in-wg, by element id; they replace any rule or parameter. */
-  drops?: Readonly<Record<number, number>>;
-  /** Firm defaults; a terminal with no typed or catalog drop takes `terminalDropInWg`. */
-  defaults?: {
-    terminalDropInWg?: number;
-    terminalDropSource?: string;
-    splitPolicy?: "even" | "proportional";
-    slot?: string;
-    /** Route setting; the host passes it to the C# read (`selector.autoJoinGapIn`), which measures under it. */
-    autoJoinMaxGapIn?: number;
-    version?: string;
-  };
-  roster?: readonly FanPort[];
-  rulings?: readonly ConnectorPairRuling[];
-  /** R-CAP: open ends a person ruled capped. */
-  endRulings?: readonly EndRuling[];
-  /** Typed; the host passes it to the C# read (`selector.candidateBoxIn`), which measures under it. */
-  candidateBoxIn?: number;
+  /** Everything the engine prices from, resolved by the host (`resolveInputs`); the engine defaults nothing. */
+  inputs: DuctsInputs;
+  roster: readonly FanPort[];
 }
 
 export interface BuildSheetInput extends PricingInput {
   fan: FanPortRef;
-  roster: readonly FanPort[];
-  /** The confirmed airflow slot; the snapshot's terminal-flow slot when absent. */
-  slot?: string;
-  /** Typed flow at an end, cfm, by element id: a terminal's, or what this fan delivers into another fan's port. */
-  endCfm?: Readonly<Record<number, number>>;
-  /** A side-stream unit's own flow, cfm, carried at the one roster fan port it feeds. */
-  sideStreamCfm?: number;
-  splitPolicy?: "even" | "proportional";
-  allowanceInWg?: { supply?: number; return?: number };
   /** Proof switch: compare topology assumptions with/without derived fan flow. Known is unaffected. */
   assumeServedFlow?: boolean;
 }
@@ -100,7 +80,7 @@ export interface BuildChainInput extends PricingInput {
   start: { elementId: number; connector?: number };
   end: { elementId: number };
   direction: Side;
-  /** The flow the chain carries, cfm; the chain has no terminals of its own to sum. */
+  /** The chain's asserted flow, cfm; request-scoped, not a design value. */
   flowCfm?: number;
 }
 
@@ -112,38 +92,46 @@ const fnv = (text: string) => {
 const basisOf = (snapshot: SheetSnapshot, rest: object) =>
   `${SHEET_ENGINE_VERSION}:${fnv(JSON.stringify([snapshot.document.title, snapshot.document.readAt, SHEET_ENGINE_VERSION, rest]))}`;
 const round = (n: number) => +n.toFixed(6);
-const factOf = (n: Node, key: string) => n.facts.find((f) => f.key === key)?.value ?? null;
 
-const familyDrops = new WeakMap<
-  SheetSnapshot,
-  Map<string, { inWg: number; count: number } | null>
->();
+/** A resolved value's provenance as a leg's `lossSource.ref` reads it. */
+const provenance = (v: Resolved<unknown>) => `${v.source}${v.ref ? `:${v.ref}` : ""}`;
+const positive = (v: number | null | undefined) => (v != null && v > 0 ? v : null);
+
 /**
- * A drop parameter identical on every instance of a family (two or more) is the family's
- * placeholder, not a design value: Chadds' 302 volume dampers all carry 1.0 in-wg (2026-10-28).
- * ponytail: counts only the bounded `from` read, so two dampers on one walk that were really
- * typed alike would be demoted too; a document-wide family census in `ducts.snapshot` is the fix.
+ * The rules a person may price a fitting with: those of its own sort (a round elbow's elbow rules, a
+ * takeoff's takeoff and junction rules), else those naming its family.
  */
-function familyDefault(snapshot: SheetSnapshot, node: Node) {
-  if (!node.family) return null;
-  let byFamily = familyDrops.get(snapshot);
-  if (!byFamily) {
-    const values = new Map<string, (number | null)[]>();
-    for (const n of snapshot.nodes)
-      if (n.family)
-        values.set(n.family, [...(values.get(n.family) ?? []), factOf(n, "pressureDrop")]);
-    byFamily = new Map(
-      [...values].map(([family, vs]) => [
-        family,
-        vs.length > 1 && vs[0] != null && vs.every((v) => v === vs[0])
-          ? { inWg: vs[0], count: vs.length }
-          : null,
-      ]),
-    );
-    familyDrops.set(snapshot, byFamily);
-  }
-  return byFamily.get(node.family) ?? null;
+function candidatesFor(f: FittingFacts): FittingPricing["candidates"] {
+  const fits = (r: LossRule) =>
+    f.takeoff
+      ? /^(tap|bullhead|junction)-/.test(r.key)
+      : f.partType === "Tee"
+        ? /^(tee|junction)-/.test(r.key)
+        : f.partType === "Elbow"
+          ? r.key.startsWith("elbow-") && (f.inlet.shape === "round") === r.family.startsWith("Round")
+          : f.partType === "Transition"
+            ? r.key.startsWith("trx-")
+            : r.family === f.family;
+  return LOSS_RULES.filter(fits).map((r) => ({
+    rule: r.key,
+    words: ruleWords(r),
+    tables: [...new Set([r.table, ...r.options])],
+  }));
 }
+
+/** A priced leg's source as a leg row reads it. */
+function lossSourceOf(src: NonNullable<PricedLeg["source"]>, note = ""): Leg["lossSource"] {
+  return src.kind === "friction"
+    ? { kind: "friction", ref: `Altshul-Tsal, roughness ${src.roughnessFt} ft${note}` }
+    : src.kind === "rule"
+      ? {
+          kind: "rule",
+          ref: `${src.rule} ${src.table} ${src.inputs.res}=${round(src.coefficient)}${note}`,
+        }
+      : { kind: src.source.startsWith("firm default") ? "default" : "drop", ref: src.source };
+}
+
+type ProposedPath = NonNullable<FittingPricing["proposed"]>;
 
 /** Shared state of one build: every leg priced once, every blocker keyed once. */
 class Pricer {
@@ -151,15 +139,39 @@ class Pricer {
   priced = new Map<string, { blockerIds: string[]; p: PricedLeg | null }>();
   blockers = new Map<string, Blocker>();
   autoJoinNotes = new Set<string>();
-  /** Families whose drop parameter is one value on every instance (`familyDefault`). */
-  demoted = new Map<string, { inWg: number; count: number }>();
   healNotes = new Set<string>();
+  /** Every fitting priced, by census key (element id, or a proposed fitting's path key). */
+  fittings = new Map<string, FittingPricing>();
+  /**
+   * The census keys each leg priced: a fitting leg its own, a duct leg the taps it passes (Cs), a
+   * proposed fitting's path leg its path key. The census keeps only fittings a path of this sheet
+   * crosses (`fittingsOn`): a heal or a branch the walk priced past another fan's cut is not this
+   * fan's (MUAS-1 listed FC-23's assumed tee 13771256|13771267, 2026-10-29).
+   */
+  private censusOf = new Map<string, Set<string>>();
+  private pricingLeg: string | undefined;
+  private onLeg(legId: string, key: string) {
+    this.censusOf.set(legId, (this.censusOf.get(legId) ?? new Set()).add(key));
+  }
+  /** The census rows the given paths cross, in census order. */
+  fittingsOn(paths: readonly SheetPath[]): FittingPricing[] {
+    const keys = new Set(paths.flatMap((p) => p.legIds.flatMap((id) => [...(this.censusOf.get(id) ?? [])])));
+    return [...this.fittings.values()].filter((f) => keys.has(f.key));
+  }
+  /** A heal's proposed-fitting leg per main element its branch path continues into. */
+  private healPaths = new Map<string, Map<number, string>>();
   /** R-B: the cause of the leg being priced, stamped on every blocker it raises. */
   private cause: string | undefined;
+  /** Loss-rule key to table, where a person swapped one (`inputs.tables`). */
+  readonly choices: Choices;
   constructor(
     readonly input: PricingInput,
     readonly g: Graph,
-  ) {}
+  ) {
+    this.choices = Object.fromEntries(
+      Object.entries(input.inputs.tables).map(([key, table]) => [key, table.value]),
+    );
+  }
 
   block = (b: Omit<Blocker, "id">) => {
     const id = `${b.kind}:${b.elementId}${b.connector == null ? "" : `:${b.connector}`}`;
@@ -170,7 +182,11 @@ class Pricer {
   };
 
   /** A kernel result as a leg's loss, or the blocker that withholds it. */
-  private take(p: PricedLeg, el: number): { lossInWg: number | null; ids: string[] } {
+  private take(
+    p: PricedLeg,
+    el: number,
+    census = p.kind === "fitting" && this.fittings.has(String(el)) ? String(el) : undefined,
+  ): { lossInWg: number | null; ids: string[] } {
     if (p.implausible) {
       const pv = p.source?.kind === "rule" ? p.source.pv : 0;
       return {
@@ -178,10 +194,12 @@ class Pricer {
         ids: [
           this.block({
             kind: "implausible-loss",
-            elementId: p.elementId,
+            // The element the leg is charged to: a proposed transition's stand-in node has no id.
+            elementId: el,
             effectInWg: round(p.implausible.coefficient * pv),
             detail: p.unpriced!,
             closer: { kind: "ruling", note: "type the fitting's drop or assign another table" },
+            ...(census ? { fitting: census } : {}),
           }),
         ],
       };
@@ -200,27 +218,83 @@ class Pricer {
               note:
                 p.kind === "drop"
                   ? "type a drop or take the firm default"
-                  : "assign a rule or type the drop",
+                  : "price it with a table (a rule for its family) or type the drop",
             },
+            ...(census ? { fitting: census } : {}),
           }),
         ],
       };
     return { lossInWg: p.lossInWg, ids: [] };
   }
 
-  /** Price the leg of state `s` leaving by `out`. */
-  leg(w: Walk, flows: Flows, side: Side, s: number, out: number | undefined): string[] {
+  /**
+   * Price the leg of state `s` leaving by `out`. `share`: one path through a takeoff entered from
+   * its branch whose air divides both ways along the main (`splitShare`), keyed by the main element
+   * the path continues into and carrying that path's own flow.
+   */
+  leg(
+    w: Walk,
+    flows: Flows,
+    side: Side,
+    s: number,
+    out: number | undefined,
+    share?: { toward: number; cfm: number | null },
+  ): { id: string; blockerIds: string[] } {
     const st = w.states[s]!;
     const e = st.el;
-    const id = `${e.id}:${st.in ?? ""}>${out ?? ""}`;
+    const id = `${e.id}:${st.in ?? ""}>${out ?? ""}${share ? `>${share.toward}` : ""}`;
     const done = this.priced.get(id);
-    if (done) return done.blockerIds;
+    if (done) return { id, blockerIds: done.blockerIds };
     this.cause = st.causedBy;
+    const outer = this.pricingLeg;
+    this.pricingLeg = id;
     try {
-      return this.legOnce(w, flows, side, s, out, id);
+      return { id, blockerIds: this.legOnce(w, flows, side, s, out, id, share) };
     } finally {
       this.cause = undefined;
+      this.pricingLeg = outer;
     }
+  }
+
+  /**
+   * The landing a takeoff entered from its branch hands its air to (R-Q4 split: the landing is a
+   * walked child), and the flow on each way out of it along the main.
+   */
+  private landingOf(w: Walk, flows: Flows, s: number) {
+    const st = w.states[s]!;
+    const tap = st.el;
+    if (s === 0 || isSegment(tap) || !isTap(tap)) return null;
+    const parent = w.states[st.parent]!;
+    const fromSide =
+      isSegment(parent.el) && parent.el.connectors.find((c) => c.index === st.via)?.kind === "curve";
+    if (fromSide) return null;
+    const mainPort = tap.connectors.find((c) => c.index !== st.in);
+    const landing = w.states.findIndex((x, i) => i > 0 && x.parent === s && x.via === mainPort?.index);
+    if (landing < 0) return null;
+    const ways = w.states[landing]!.el.connectors
+      .filter((c) => c.index !== w.states[landing]!.in)
+      .map((c) => ({ out: c.index, cfm: flows.leg.get(legKey(landing, c.index))?.cfm ?? 0 }));
+    return { landing, ways };
+  }
+
+  /**
+   * On the supply, the path's own share through a takeoff entered from its branch whose collar air
+   * divides both ways along the main: the main element it continues into and the flow it carries
+   * there. Null for every other leg (one shared leg prices them).
+   */
+  private splitShare(w: Walk, flows: Flows, side: Side, chain: number[], k: number, e: End) {
+    if (side !== "supply") return null;
+    const at = this.landingOf(w, flows, chain[k]!);
+    if (!at || at.ways.filter((x) => x.cfm == null || x.cfm > 0).length < 2) return null;
+    if (chain[k + 1] !== at.landing) return null;
+    const el = w.states[at.landing]!.el;
+    const out = k + 2 < chain.length ? w.states[chain[k + 2]!]!.via : e.out;
+    const way = at.ways.find((x) => x.out === out);
+    if (!way) return null;
+    return {
+      toward: el.connectors.find((c) => c.index === out)?.connectedTo?.elementId ?? el.id,
+      cfm: way.cfm,
+    };
   }
 
   private legOnce(
@@ -230,11 +304,12 @@ class Pricer {
     s: number,
     out: number | undefined,
     id: string,
+    share?: { toward: number; cfm: number | null },
   ): string[] {
     const st = w.states[s]!;
     const e = st.el;
     const f = flows.leg.get(legKey(s, out));
-    const cfm = f ? f.cfm : 0;
+    const cfm = share ? share.cfm : f ? f.cfm : 0;
     const kind: Leg["kind"] = isSegment(e) ? "duct" : e.kind === "cap" ? "fitting" : e.kind;
     const leg: Leg = {
       id,
@@ -252,6 +327,7 @@ class Pricer {
     this.legs[id] = leg;
     const ids = [...(f?.missing ?? [])];
     let p: PricedLeg | null = null;
+    if (cfm == null) this.unknownFlowRow(w, side, s, out);
     if (cfm === 0) {
       leg.lossInWg = 0;
       leg.lossSource = { kind: "default", ref: "carries none of this fan's flow" };
@@ -259,27 +335,16 @@ class Pricer {
       const r = this.price(w, flows, side, s, out, cfm);
       p = r.p;
       ids.push(...r.ids);
+      if (r.cfm != null && r.cfm !== cfm) {
+        leg.flowCfm = r.cfm;
+        leg.flowSource = `${leg.flowSource ?? "flow"}; ${round(r.cfm)} cfm where it enters, ${round(cfm)} cfm leaves by connector ${out ?? "none"}`;
+      }
       if (r.p) {
         const t = r.ids.length ? { lossInWg: null } : { lossInWg: r.p.lossInWg };
         leg.lossInWg = t.lossInWg;
         leg.velocityFpm = r.p.velocityFpm;
         const src = r.p.source;
-        leg.lossSource = !src
-          ? leg.lossSource
-          : src.kind === "friction"
-            ? {
-                kind: "friction",
-                ref: `Altshul-Tsal, roughness ${src.roughnessFt} ft${r.note ?? ""}`,
-              }
-            : src.kind === "rule"
-              ? {
-                  kind: "rule",
-                  ref: `${src.rule} ${src.table} ${src.inputs.res}=${round(src.coefficient)}${r.note ?? ""}`,
-                }
-              : {
-                  kind: src.source.startsWith("firm default") ? "default" : "drop",
-                  ref: src.source,
-                };
+        leg.lossSource = !src ? leg.lossSource : lossSourceOf(src, r.note ?? "");
       }
     }
     for (const join of w.autoJoins) {
@@ -295,6 +360,42 @@ class Pricer {
     return ids;
   }
 
+  /**
+   * A fitting on a leg whose flow is unknown stays in the census, unpriced, under the rule it would
+   * match: the path's no-flow blockers withhold it, never a not-priced blocker of its own. Without
+   * this row the census silently lost every fitting of a fan whose flow went unknown (MUAS-1 at
+   * cloud Chadds r22: 44 rows to 1 after two kind rulings, 2026-10-30).
+   */
+  private unknownFlowRow(w: Walk, side: Side, s: number, out: number | undefined) {
+    const st = w.states[s]!;
+    const e = st.el;
+    if (isSegment(e) || e.kind !== "fitting") return;
+    const key = String(e.id);
+    if (this.pricingLeg) this.onLeg(this.pricingLeg, key);
+    if (this.fittings.has(key)) return;
+    const conn = (i: number | undefined) => e.connectors.find((c) => c.index === i);
+    const [inlet, outlet] = side === "supply" ? [conn(st.in), conn(out)] : [conn(out), conn(st.in)];
+    const facts = fittingFacts({ fitting: e, inlet, outlet });
+    // Elbows and transitions match on geometry alone; a junction rule reading flow ratios may not
+    // match at a nominal flow, and then the row names no rule (it is priced once the flow is known).
+    const rule = facts.inputError ? undefined : LOSS_RULES.find((r) => r.when(facts, { q: 1 }));
+    const chosen = rule ? this.input.inputs.tables[rule.key] : undefined;
+    this.fittings.set(key, {
+      key,
+      elementId: e.id,
+      family: facts.family,
+      rule: rule?.key ?? null,
+      table: rule ? (chosen?.value.toUpperCase() ?? rule.table) : null,
+      ruleSource: rule ? "matched" : "none",
+      tableSource: rule ? (chosen ? (chosen.source === "stored" ? "stored" : "typed") : "default") : null,
+      options: rule ? [...new Set([rule.table, ...rule.options])] : [],
+      candidates: candidatesFor(facts),
+      lossInWg: null,
+      unpriced: "its flow is unknown",
+      typed: null,
+    });
+  }
+
   private price(
     w: Walk,
     flows: Flows,
@@ -302,39 +403,25 @@ class Pricer {
     s: number,
     out: number | undefined,
     cfm: number,
-  ): { p: PricedLeg | null; ids: string[]; note?: string } {
-    const { grids, choices = {}, drops = {}, defaults = {} } = this.input;
+  ): { p: PricedLeg | null; ids: string[]; note?: string; cfm?: number } {
+    const { grids } = this.input;
     const st = w.states[s]!;
     const e = st.el;
-    const typed = drops[e.id];
     const drop = (inWg: number | null, source: string) => {
       const p = priceLeg({ kind: "drop", element: e as Node, cfm, inWg, source }, grids);
       return { p, ids: this.take(p, e.id).ids };
     };
-    if (typed != null) return drop(typed, "typed");
+    const stated = this.input.inputs.components[String(e.id)]?.drop;
+    if (stated && stated.value != null) return drop(stated.value, provenance(stated));
     if (isSegment(e)) return this.duct(w, flows, side, s, out, cfm);
     const conn = (i: number | undefined) => e.connectors.find((c) => c.index === i);
     if (e.kind === "terminal") {
-      const catalog = e.terminalDrop?.catalogDropInWg;
-      if (catalog != null)
-        return drop(
-          catalog,
-          `parameter:${this.input.snapshot.slots?.terminalDrop ?? "terminalDrop"}`,
-        );
-      if (defaults.terminalDropInWg != null)
-        return drop(
-          defaults.terminalDropInWg,
-          defaults.terminalDropSource ?? `firm default ${defaults.version ?? "unversioned"}`,
-        );
-      return drop(SHIM_TERMINAL_DROP_IN_WG, "SHIM placeholder");
+      const t = this.input.inputs.terminals[String(e.id)];
+      return t ? drop(t.drop.value, provenance(t.drop)) : drop(null, "terminal not in inputs");
     }
-    if (e.kind === "equipment")
-      return drop(null, "inline equipment; no typed drop and no firm default yet");
-    const stated = e.kind === "accessory" ? factOf(e, "pressureDrop") : null;
-    // A value every instance of the family carries is the family's default, not a design value.
-    const placeholder = stated != null ? familyDefault(this.input.snapshot, e) : null;
-    if (placeholder) this.demoted.set(e.family!, placeholder);
-    if (stated != null && stated > 0 && !placeholder) return drop(stated, "parameter:pressureDrop");
+    if (e.kind === "equipment") return drop(null, "inline equipment; no typed drop");
+    // The resolver records a family placeholder as a stated null with its ref (Chadds' 302 dampers at 1.0).
+    const placeholder = stated && stated.value == null ? stated.ref : undefined;
     if (isTap(e)) return this.tap(w, flows, side, s, cfm);
     // A tee walked in at its run: the run port faces the fan on both sides. On the return the air
     // leaves by that port, so the branch and straight converge into it.
@@ -354,16 +441,68 @@ class Pricer {
     const facts = fittingFacts({ fitting: e, inlet, outlet, converging });
     if (e.partType === "Tee" && !tee) delete facts.junction;
     if (placeholder && !LOSS_RULES.some((r) => r.when(facts, ruleFlows(legFlows))))
-      return drop(
-        null,
-        `family default ${placeholder.inWg} in-wg on all ${placeholder.count} instances; type the real drop`,
-      );
-    const p = priceLeg(
-      { kind: "fitting", fitting: e, facts, flows: legFlows, leg: "C" },
-      grids,
-      choices,
-    );
+      return drop(null, `${placeholder}; type the real drop`);
+    const p = this.fit({ kind: "fitting", fitting: e, facts, flows: legFlows, leg: "C" });
     return { p, ids: this.take(p, e.id).ids };
+  }
+
+  /**
+   * Price a fitting leg and record it in the census. The rule's own match prices it; where none
+   * matches, the rule a person assigned its family (ducts LEDGER 2026-10-29: `ruleAssignments` by
+   * family, then the rule's own match). The sheet reads an assignment only where no rule matches, so
+   * closing one unmatched elbow never reprices the family's matched ones; `inputs.tables` swaps the
+   * table either reads.
+   */
+  private fit(
+    input: Extract<LegInput, { kind: "fitting" }>,
+    key = String(input.fitting.id),
+    proposed?: ProposedPath,
+  ): PricedLeg {
+    if (this.pricingLeg && !proposed) this.onLeg(this.pricingLeg, key);
+    const flows = ruleFlows(input.flows);
+    const matched = input.facts.inputError
+      ? undefined
+      : LOSS_RULES.find((r) => r.when(input.facts, flows));
+    const family = input.facts.family;
+    const assigned = !matched && family ? this.input.inputs.assignments[family] : undefined;
+    const p = priceLeg(
+      assigned ? { ...input, ruleKey: assigned.value } : input,
+      this.input.grids,
+      this.choices,
+    );
+    const src = p.source?.kind === "rule" ? p.source : null;
+    const rule = src ? ruleByKey(src.rule) : assigned ? ruleByKey(assigned.value) : matched;
+    const chosen = rule ? this.input.inputs.tables[rule.key] : undefined;
+    // A proposed fitting is no element: its identity is its path key and pair (a transition's
+    // stand-in node has no id), never a sentinel element id.
+    const identity = proposed
+      ? { key, elementId: null, proposed }
+      : { key, elementId: input.fitting.id };
+    const row: FittingPricing = {
+      ...identity,
+      family,
+      rule: rule?.key ?? null,
+      table: src?.table ?? null,
+      ruleSource: matched ? "matched" : assigned ? "assigned" : "none",
+      tableSource: !src
+        ? null
+        : chosen && chosen.value.toUpperCase() === src.table
+          ? chosen.source === "stored"
+            ? "stored"
+            : "typed"
+          : src.table === rule?.table
+            ? "default"
+            : "fallback",
+      options: rule ? [...new Set([rule.table, ...rule.options])] : [],
+      candidates: candidatesFor(input.facts),
+      lossInWg: p.unpriced || p.implausible ? null : p.lossInWg,
+      unpriced: p.unpriced,
+      typed: null,
+    };
+    // One fitting may be priced on several legs; an unpriced leg is what the census must show.
+    const had = this.fittings.get(key);
+    if (!had || had.unpriced == null) this.fittings.set(key, row);
+    return p;
   }
 
   /** Taps on duct state `s` with their branch flow; null when a branch's flow is unknown. */
@@ -387,7 +526,7 @@ class Pricer {
   }
 
   private duct(w: Walk, flows: Flows, side: Side, s: number, out: number | undefined, cfm: number) {
-    const { grids, choices = {} } = this.input;
+    const { grids } = this.input;
     const st = w.states[s]!;
     const duct = st.el as Segment;
     const inC = duct.connectors.find((c) => c.index === st.in);
@@ -406,24 +545,20 @@ class Pricer {
         x.kind !== "tap-straight"
           ? []
           : [
-              priceLeg(
-                {
-                  kind: "fitting",
+              this.fit({
+                kind: "fitting",
+                fitting: x.tap,
+                leg: "Cs",
+                flows: x.flows,
+                facts: fittingFacts({
                   fitting: x.tap,
-                  leg: "Cs",
-                  flows: x.flows,
-                  facts: fittingFacts({
-                    fitting: x.tap,
-                    inlet: x.tap.connectors.find((c) => c.connectedTo?.elementId === duct.id),
-                    outlet: undefined,
-                    main: duct,
-                    // On the return the walk runs against the air: a tap passed is a branch joining.
-                    converging: side === "return",
-                  }),
-                },
-                grids,
-                choices,
-              ),
+                  inlet: x.tap.connectors.find((c) => c.connectedTo?.elementId === duct.id),
+                  outlet: undefined,
+                  main: duct,
+                  // On the return the walk runs against the air: a tap passed is a branch joining.
+                  converging: side === "return",
+                }),
+              }),
             ],
       );
     } else {
@@ -482,6 +617,10 @@ class Pricer {
       p,
       ids,
       note: `, ${round(length)} ft${cs.length ? `, ${cs.length} tap(s) passed (Cs)` : ""}`,
+      // The flow the leg is priced at where it enters, the same piece its velocity is read from: a
+      // duct left by a tap on its side carries the upstream flow up to that tap (RV-15's tap on
+      // 14682079 is fed 150 cfm through 4.93 ft of the 10 in main), never the branch's 35.
+      ...(head && pieces[0] ? { cfm: pieces[0].cfm } : {}),
     };
   }
 
@@ -492,7 +631,6 @@ class Pricer {
     s: number,
     cfm: number,
   ): { p: PricedLeg | null; ids: string[]; note?: string } {
-    const { grids, choices = {} } = this.input;
     const st = w.states[s]!;
     const tap = st.el as Node;
     const parent = w.states[st.parent]!;
@@ -500,18 +638,16 @@ class Pricer {
     const fromSide = main && main.connectors.find((c) => c.index === st.via)?.kind === "curve";
     if (!main || !fromSide) {
       // Entered from the branch. R-Q4 split: the landing duct is a walked child, so the main's
-      // flow is the larger direction the model carries. Q4 merge (foreign landing): the receiving
-      // stream is not this fan's to invent; its connector flow metadata, else the branch is unpriced.
+      // flows are the ones the walk carries each way along it. Q4 merge (foreign landing): the
+      // receiving stream is not this fan's to invent; its connector flow metadata, else the branch
+      // is unpriced.
       const mainPort = tap.connectors.find((c) => c.index !== st.in);
       const receiving = mainPort?.connectedTo && this.g.byId.get(mainPort.connectedTo.elementId);
-      const landing = w.states.findIndex((x) => x.parent === s && x.via === mainPort?.index);
-      const directions =
-        landing > 0
-          ? w.states[landing]!.el.connectors.filter((c) => c.index !== w.states[landing]!.in).map(
-              (c) => flows.leg.get(legKey(landing, c.index))?.cfm ?? 0,
-            )
-          : [];
+      const directions = (this.landingOf(w, flows, s)?.ways ?? []).map((x) => x.cfm ?? 0);
       const modelled = directions.length ? Math.max(...directions) : 0;
+      const active = directions.filter((v) => v > 0);
+      const total = active.reduce((a, v) => a + v, 0);
+      const twoWay = active.length > 1;
       const mainCfm =
         modelled > 0
           ? modelled
@@ -520,12 +656,18 @@ class Pricer {
             : 0;
       // Air direction at the junction: a merge on the supply is this fan's branch joining the
       // receiving main (converging); on the return the branch draws from that main (diverging).
-      // A split (the landing walked by this fan) carries air both ways along the main from the
-      // collar. On the return the two streams meet in the collar: a converging bullhead tee, branch
-      // 1 the larger stream (ER5-5 / ED5-4). On the supply the collar's air divides both ways, which
-      // no rule here states, so the diverging tap table prices it and the row says so.
+      // A split (the landing walked by this fan) carries air along the main from the collar. On
+      // the return the streams meet in the collar: a converging bullhead tee, branch 1 the larger
+      // stream (ER5-5 / ED5-4). On the supply, when the collar's air divides both ways, each path is
+      // its own leg (`splitShare`) at its own share of the real collar total, a diverging bullhead
+      // (SD5-18, loss-rules' bullhead-diverging-round), never one leg charged on both paths at a
+      // main flow invented beside the collar (MUAS-1 takeoff 14806947, fix6 4). One way along the
+      // main on the supply, the same rule with one path on the tap table: Qc is the real collar
+      // total, never the branch plus the main it turns into (2x the collar flow, FC-23's 13885163,
+      // 9448322, 9448375; fix6, coordinator ruling 2026-10-29).
       const split = modelled > 0;
       const bullhead = split && side === "return";
+      const divides = split && side === "supply";
       if (!receiving || !isSegment(receiving) || mainCfm <= 0)
         return {
           p: {
@@ -541,30 +683,38 @@ class Pricer {
           },
           ids: [],
         };
-      const p = priceLeg(
-        {
+      const p = this.fit({
           kind: "fitting",
           fitting: tap,
           leg: "Cb",
           flows: bullhead
             ? { through: cfm, branch: modelled, upstreamMain: cfm, downstreamMain: cfm - modelled }
-            : { through: cfm, branch: cfm, upstreamMain: mainCfm + cfm, downstreamMain: mainCfm },
+            : divides
+              ? { through: cfm, branch: cfm, upstreamMain: total, downstreamMain: total - cfm }
+              : { through: cfm, branch: cfm, upstreamMain: mainCfm + cfm, downstreamMain: mainCfm },
           facts: fittingFacts({
             fitting: tap,
             inlet: tap.connectors.find((c) => c.index === st.in),
             outlet: undefined,
             main: receiving,
             converging: split ? side === "return" : side === "supply",
-            bullhead,
+            // With loss-rules' bullhead-diverging-round (SD5-18), the two-way supply split is a
+            // diverging bullhead per path.
+            bullhead: bullhead || (divides && twoWay),
           }),
-        },
-        grids,
-        choices,
-      );
+      });
       return {
         p,
         ids: this.take(p, tap.id).ids,
-        ...(split ? { note: ", entered from its branch and split both ways along the main" } : {}),
+        ...(split
+          ? {
+              note: divides
+                ? twoWay
+                  ? `, entered from its branch; collar air divides both ways, this path ${round(cfm)} of ${round(total)} cfm`
+                  : `, entered from its branch; all ${round(total)} cfm turns one way along the main`
+                : ", entered from its branch and split both ways along the main",
+            }
+          : {}),
       };
     }
     const parentIn = main.connectors.find((c) => c.index === parent.in);
@@ -584,24 +734,20 @@ class Pricer {
       branch?.kind === "tap-branch"
         ? branch.flows
         : { through: cfm, branch: cfm, upstreamMain: up ?? cfm, downstreamMain: (up ?? cfm) - cfm };
-    const p = priceLeg(
-      {
-        kind: "fitting",
+    const p = this.fit({
+      kind: "fitting",
+      fitting: tap,
+      leg: "Cb",
+      flows: legFlows,
+      facts: fittingFacts({
         fitting: tap,
-        leg: "Cb",
-        flows: legFlows,
-        facts: fittingFacts({
-          fitting: tap,
-          inlet: tap.connectors.find((c) => c.index === st.in),
-          outlet: undefined,
-          main,
-          // Walked main to branch: on the return the air runs branch to main, converging.
-          converging: side === "return",
-        }),
-      },
-      grids,
-      choices,
-    );
+        inlet: tap.connectors.find((c) => c.index === st.in),
+        outlet: undefined,
+        main,
+        // Walked main to branch: on the return the air runs branch to main, converging.
+        converging: side === "return",
+      }),
+    });
     return { p, ids: this.take(p, tap.id).ids };
   }
 
@@ -624,7 +770,7 @@ class Pricer {
       ];
       this.cause = h.cause;
       try {
-        this.heal(h.proposal, w.states[h.state]!.el, cfm, sources.join(" + "), h.state === 0);
+        this.heal(w, flows, side, h, cfm, sources.join(" + "));
       } finally {
         this.cause = undefined;
       }
@@ -633,18 +779,29 @@ class Pricer {
       const legIds = legsOf(w, e);
       const chain = lineage(w, e.state);
       const blockerIds = new Set<string>(e.blockerIds);
+      for (const x of this.straightRuns(w, flows, chain, legIds)) {
+        legIds.splice(legIds.indexOf(x.after) + 1, 0, x.id);
+        this.priced.get(x.id)?.blockerIds.forEach((b) => blockerIds.add(b));
+      }
       chain.forEach((s, k) => {
         w.states[s]!.blockerIds.forEach((b) => blockerIds.add(b));
         const out = k + 1 < chain.length ? w.states[chain[k + 1]!]!.via : e.out;
-        this.leg(w, flows, side, s, out).forEach((b) => blockerIds.add(b));
+        const share = this.splitShare(w, flows, side, chain, k, e) ?? undefined;
+        const leg = this.leg(w, flows, side, s, out, share);
+        if (share) legIds[legIds.indexOf(legId(w.states[s]!.el.id, w.states[s]!.in, out))] = leg.id;
+        leg.blockerIds.forEach((b) => blockerIds.add(b));
       });
       for (const h of w.heals.filter((h) => uses(e, h))) {
         const after = h.state === 0 ? -1 : chain.indexOf(h.state);
         const id = after < 0 ? null : legsOf(w, e)[after];
         const at = id == null ? 0 : legIds.indexOf(id) + 1;
-        legIds.splice(at, 0, ...h.proposal.assumedLegs.map((l) => l.id));
-        for (const l of h.proposal.assumedLegs)
-          this.priced.get(l.id)?.blockerIds.forEach((b) => blockerIds.add(b));
+        // The extension, then the one path through its proposed fitting this end takes.
+        const own = [`heal:${h.proposal.pair.join("|")}:extension`];
+        const toward = this.towardOf(w, h, chain, e);
+        const fitting = toward == null ? undefined : this.healPaths.get(h.proposal.pair.join("|"))?.get(toward);
+        if (fitting) own.push(fitting);
+        legIds.splice(at, 0, ...own);
+        for (const l of own) this.priced.get(l)?.blockerIds.forEach((b) => blockerIds.add(b));
       }
       const priced = legIds.map((id) => this.priced.get(id)?.p ?? null);
       const eq = equivalentFeet(
@@ -678,12 +835,15 @@ class Pricer {
   }
 
   private heal(
-    proposal: HealProposal,
-    source: Node | Segment,
+    w: Walk,
+    flows: Flows,
+    side: Side,
+    h: Walk["heals"][number],
     cfm: number | null,
     flowSource: string,
-    root: boolean,
   ) {
+    const { proposal } = h;
+    const source = w.states[h.state]!.el;
     const key = `heal:${proposal.pair.join("|")}`;
     const note = `${proposal.kind} ${proposal.pair.join(" to ")}; ${proposal.risk}`;
     this.healNotes.add(note);
@@ -717,58 +877,429 @@ class Pricer {
     this.legs[extension.id] = extension;
     this.priced.set(extension.id, { p, blockerIds: ids });
     const legs = [extension];
+    const paths = new Map<number, string>();
     if (proposal.fittingChange) {
-      // A typed element drop includes its proposed fitting change, charged once on that element.
-      const typed = this.input.drops?.[source.id] != null;
-      const fitting: Leg = {
-        ...extension,
-        id: `${key}:fitting`,
-        kind: "fitting",
-        equivalentFt: null,
-        lossInWg: typed ? (root ? this.input.drops![source.id]! : 0) : null,
-        velocityFpm: null,
-        lossSource: {
-          kind: "drop",
-          ref: typed
-            ? `${root ? "typed root-port fitting drop" : "included in typed element drop"} ${source.id}`
-            : `unknown proposed ${proposal.kind} fitting drop; ${note}`,
-        },
-      };
-      const blockerIds = typed
-        ? []
-        : [
-            this.block({
-              kind: "unknown-drop",
-              elementId: source.id,
-              connector: proposal.from.connector,
-              detail: `proposed ${proposal.kind} needs a fitting change; type a combined drop for element ${source.id} and its new fitting`,
-              effectInWg: null,
-              closer: {
-                kind: "default",
-                note: "type the combined element/fitting drop; no coefficient is assumed",
-              },
-            }),
-          ];
-      this.legs[fitting.id] = fitting;
-      this.priced.set(fitting.id, { p: null, blockerIds });
-      legs.push(fitting);
+      // kaitpw 2026-10-29: a proposed tee or tap is an ordinary fitting with two sides, priced per
+      // path from the flows on its main and branch, never one combined number charged on the source
+      // element (which keeps its own loss). Walked from its open end, every path this fan takes
+      // through it is a branch path, one per main side it continues into; the run through it is
+      // priced where a fan crosses the occupied connection (`straightRuns`).
+      const directions = this.healDirections(w, flows, h);
+      // A transition's one direction is its landing: one straight path, keyed `>straight`.
+      for (const d of directions) {
+        const leg = this.proposedBranch(side, h, source, d, directions, flowSource);
+        paths.set(d.toward, leg.id);
+        legs.push(leg);
+      }
     }
+    this.healPaths.set(proposal.pair.join("|"), paths);
     proposal.assumedLegs = legs;
+  }
+
+  /**
+   * The main sides a heal's branch path continues into, with this fan's flow on each: a tee's two
+   * entered elements (the occupied connection's both sides), a tap's landing duct both ways along
+   * its body, a join's one target.
+   */
+  private healDirections(w: Walk, flows: Flows, h: Walk["heals"][number]) {
+    const kids = w.states.flatMap((st, i) =>
+      i > 0 && st.parent === h.state && st.via === h.out ? [i] : [],
+    );
+    if (h.proposal.kind === "tap") {
+      const landing = kids[0];
+      if (landing == null) return [];
+      const el = w.states[landing]!.el;
+      return el.connectors.flatMap((c) =>
+        flows.leg.has(legKey(landing, c.index))
+          ? [{ toward: c.connectedTo?.elementId ?? el.id, cfm: crossing(w, flows, landing, c.index) }]
+          : [],
+      );
+    }
+    return kids.map((k) => {
+      // Every leg leaving the kid; a terminal's has no out connector (`${k}>`).
+      const outs = [...flows.leg.keys()]
+        .filter((key) => key.startsWith(`${k}>`))
+        .map((key) => key.slice(key.indexOf(">") + 1))
+        .map((o) => (o === "" ? undefined : Number(o)));
+      const each = outs.map((o) => crossing(w, flows, k, o));
+      return {
+        toward: w.states[k]!.el.id,
+        cfm: each.some((v) => v == null) ? null : each.reduce<number>((a, v) => a + v!, 0),
+      };
+    });
+  }
+
+  /** The main element an end's path continues into past a heal's proposed fitting. */
+  private towardOf(w: Walk, h: Walk["heals"][number], chain: number[], e: End): number | null {
+    const at = chain.findIndex((s) => w.states[s]!.parent === h.state && w.states[s]!.via === h.out);
+    if (at < 0) return null;
+    const kid = w.states[chain[at]!]!;
+    if (h.proposal.kind !== "tap") return kid.el.id;
+    const out = at + 1 < chain.length ? w.states[chain[at + 1]!]!.via : e.out;
+    return kid.el.connectors.find((c) => c.index === out)?.connectedTo?.elementId ?? kid.el.id;
+  }
+
+  /**
+   * One branch path through a heal's proposed fitting: a takeoff whose collar is the open end's
+   * section and whose main is the landing's, priced by the takeoff and junction rules (or the rule
+   * a person assigned `proposed tee` / `proposed tap`) from this fan's flow on each main side. A
+   * typed drop on this path stands in only where a person typed one; there is no default.
+   * A proposed transition (C3: a capped landing, the cap removed) has one path, `straight`, priced
+   * by the transition rules between the open end's and the landing's sections.
+   */
+  private proposedBranch(
+    side: Side,
+    h: Walk["heals"][number],
+    source: Node | Segment,
+    d: { toward: number; cfm: number | null },
+    directions: readonly { toward: number; cfm: number | null }[],
+    flowSource: string,
+  ): Leg {
+    const { proposal } = h;
+    const pairText = proposal.pair.join(" to ");
+    const straight = proposal.kind === "transition";
+    const key = PROPOSED_KEY(proposal.pair, straight ? "straight" : d.toward);
+    const proposed: ProposedPath = {
+      pair: proposal.pair,
+      kind: proposal.kind,
+      path: straight ? "straight" : "branch",
+      toward: straight ? null : d.toward,
+    };
+    const leg: Leg = {
+      id: `heal:${proposal.pair.join("|")}:fitting>${d.toward}`,
+      elementId: source.id,
+      kind: "fitting",
+      flowCfm: d.cfm,
+      flowSource: `${flowSource || "flow unavailable"}; continued heal walk`,
+      velocityFpm: null,
+      lossInWg: null,
+      lossSource: { kind: "drop", ref: "" },
+      equivalentFt: null,
+    };
+    this.legs[leg.id] = leg;
+    this.onLeg(leg.id, key);
+    // The same proposal may be priced on both walks; a path some walk could not price stays shown.
+    const census = (row: Partial<Omit<FittingPricing, "key" | "elementId" | "proposed">>) =>
+      this.fittings.get(key)?.unpriced != null ||
+      this.fittings.set(key, {
+        key,
+        elementId: null,
+        family: `proposed ${proposal.kind}`,
+        proposed,
+        rule: null,
+        table: null,
+        ruleSource: "none",
+        tableSource: null,
+        options: [],
+        candidates: [],
+        lossInWg: null,
+        unpriced: null,
+        typed: null,
+        ...row,
+      });
+    const settle = (blockerIds: string[], p: PricedLeg | null = null) =>
+      this.priced.set(leg.id, { p, blockerIds });
+    const typed = this.input.inputs.fittingDrops[key];
+    if (typed) {
+      leg.lossInWg = typed.value;
+      leg.lossSource = { kind: "drop", ref: `typed ${key}` };
+      census({ lossInWg: typed.value, typed: typed.value });
+      settle([]);
+      return leg;
+    }
+    if (d.cfm == null) {
+      // The path's own no-flow blockers withhold it; the fitting is priced once the flow is known.
+      leg.lossSource.ref = `proposed ${proposal.kind} ${pairText} branch toward ${d.toward}: flow unknown`;
+      census({ unpriced: "this path's flow is unknown" });
+      settle([]);
+      return leg;
+    }
+    if (d.cfm === 0) {
+      leg.lossInWg = 0;
+      leg.lossSource = { kind: "default", ref: "carries none of this fan's flow" };
+      census({ lossInWg: 0 });
+      settle([]);
+      return leg;
+    }
+    const unpriced = (
+      reason: string,
+      row: Partial<Omit<FittingPricing, "key" | "elementId" | "proposed">> = {},
+    ) => {
+      leg.lossSource.ref = `proposed ${proposal.kind} ${pairText} branch toward ${d.toward}: ${reason}`;
+      const had = this.fittings.get(key);
+      if (!had) census({ ...row, unpriced: reason });
+      else if (had.unpriced == null) this.fittings.set(key, { ...had, ...row, unpriced: reason });
+      settle([
+        this.block({
+          kind: "not-priced",
+          elementId: source.id,
+          connector: proposal.from.connector,
+          detail: `proposed ${proposal.kind} ${pairText}, branch path toward ${d.toward}: ${reason}`,
+          effectInWg: null,
+          closer: { kind: "ruling", note: "price it with a table, or type this path's drop" },
+          fitting: key,
+        }),
+      ]);
+      return leg;
+    };
+    if (proposal.kind === "join")
+      return unpriced(
+        "a proposed join's turn or size change has no fitting geometry to read a table from; type its drop",
+      );
+    const port = source.connectors.find((c) => c.index === proposal.from.connector);
+    const target = this.g.byId.get(proposal.to.elementId);
+    // A tap lands on a duct body (the duct's section); a tee on an occupied connector (its section).
+    const landing =
+      proposal.kind === "tap"
+        ? target && isSegment(target)
+          ? target
+          : undefined
+        : target?.connectors.find((c) => c.index === proposal.to.connector);
+    if (!port || !landing) return unpriced("the proposal's collar or main is not in the read");
+    if (straight) {
+      const t = proposedTransition(side, port, landing as typeof port, proposal.gapIn);
+      const p = this.fit(
+        {
+          kind: "fitting",
+          fitting: t.node,
+          leg: "C",
+          flows: { through: d.cfm },
+          facts: fittingFacts({ fitting: t.node, inlet: t.inlet, outlet: t.outlet }),
+        },
+        key,
+        proposed,
+      );
+      if (p.unpriced && !p.implausible) return unpriced(p.unpriced, this.fittings.get(key));
+      const taken = this.take(p, source.id, key);
+      leg.lossInWg = taken.lossInWg;
+      leg.velocityFpm = p.velocityFpm;
+      if (p.source)
+        leg.lossSource = lossSourceOf(p.source, `; proposed transition ${pairText}, ${t.note}`);
+      settle(taken.ids, p);
+      return leg;
+    }
+    const collar = { ...port, index: 0, connectedTo: undefined };
+    const main = {
+      shape: landing.shape,
+      diameterIn: landing.diameterIn,
+      widthIn: landing.widthIn,
+      heightIn: landing.heightIn,
+    } as Segment;
+    const node = {
+      id: source.id,
+      kind: "fitting",
+      category: "Duct Fittings",
+      family: `proposed ${proposal.kind}`,
+      type: proposal.kind,
+      partType: "Tap",
+      point: proposal.to.point,
+      connectors: [collar],
+      facts: [{ key: "takeoff", value: 1, provenance: "assumed" }],
+    } as unknown as Node;
+    const active = directions.filter((x) => (x.cfm ?? 0) > 0);
+    const total = active.reduce((a, x) => a + x.cfm!, 0);
+    const largest = Math.max(...active.map((x) => x.cfm!));
+    // One main side carrying this fan's air: the air turns between branch and main (converging on
+    // the supply, the branch drawing from the main on the return). Both sides: a bullhead on the
+    // return (the larger stream's Cb1, as a real takeoff entered from its branch); on the supply the
+    // collar's air divides, each path read on the diverging takeoff table at its own share.
+    const twoWay = active.length > 1;
+    const legFlows: LegFlows = !twoWay
+      ? { through: d.cfm, branch: d.cfm, upstreamMain: d.cfm, downstreamMain: 0 }
+      : side === "return"
+        ? { through: total, branch: largest, upstreamMain: total, downstreamMain: total - largest }
+        : { through: d.cfm, branch: d.cfm, upstreamMain: total, downstreamMain: total - d.cfm };
+    const p = this.fit(
+      {
+        kind: "fitting",
+        fitting: node,
+        leg: "Cb",
+        flows: legFlows,
+        facts: fittingFacts({
+          fitting: node,
+          inlet: collar,
+          outlet: undefined,
+          main,
+          converging: twoWay ? side === "return" : side === "supply",
+          bullhead: twoWay && side === "return",
+        }),
+      },
+      key,
+      proposed,
+    );
+    if (p.unpriced && !p.implausible) return unpriced(p.unpriced, this.fittings.get(key));
+    const t = this.take(p, source.id, key);
+    leg.lossInWg = t.lossInWg;
+    leg.velocityFpm = p.velocityFpm;
+    if (p.source)
+      leg.lossSource = lossSourceOf(
+        p.source,
+        `; proposed ${proposal.kind} ${pairText}, branch toward ${d.toward}${
+          twoWay ? (side === "return" ? "; bullhead, both main sides feed it" : "; collar air divides both ways") : ""
+        }`,
+      );
+    settle(t.ids, p);
+    return leg;
+  }
+
+  private sites?: { pair: [string, string]; ends: [string, string] }[];
+  /** Accepted tees: the occupied connection each replaces (both sides), from the join rulings alone. */
+  private teeSites() {
+    if (this.sites) return this.sites;
+    const parse = (k: string) => {
+      const [id, c] = k.split(":").map(Number);
+      return Number.isInteger(id) && Number.isInteger(c) ? { id: id!, c: c! } : null;
+    };
+    this.sites = this.input.inputs.rulings.joins
+      .filter((j) => j.verdict === "accept")
+      .flatMap(({ pair }) => {
+        for (const [a, b] of [pair, [pair[1], pair[0]]] as const) {
+          const at = parse(a);
+          const other = parse(b);
+          const port = at && this.g.byId.get(at.id)?.connectors.find((c) => c.index === at.c);
+          if (port?.connectedTo && other && this.g.byId.has(other.id))
+            return [
+              {
+                pair: [pair[0], pair[1]] as [string, string],
+                ends: [a, `${port.connectedTo.elementId}:${port.connectedTo.connector}`] as [
+                  string,
+                  string,
+                ],
+              },
+            ];
+        }
+        return [];
+      });
+    return this.sites;
+  }
+
+  /**
+   * The straight path through an accepted tee: a fan crossing the occupied connection the tee
+   * replaces. Its branch is the other side's open end, which carries none of this fan's air, so the
+   * run is passed without a Cs leg, as a real takeoff with no branch flow is (`splitTappedDuct`);
+   * a typed drop on the straight path is charged where a person typed one.
+   * ponytail: a fan that also reaches the branch (both paths its own) is not priced Cs here.
+   */
+  private straightRuns(w: Walk, flows: Flows, chain: number[], legIds: string[]) {
+    const sites = this.teeSites();
+    if (!sites.length) return [];
+    const runs: { after: string; id: string }[] = [];
+    for (let k = 1; k < chain.length; k++) {
+      const parent = w.states[chain[k - 1]!]!;
+      const kid = w.states[chain[k]!]!;
+      const from = `${parent.el.id}:${kid.via}`;
+      const into = `${kid.el.id}:${kid.in}`;
+      const site = sites.find((x) => x.ends.includes(from) && x.ends.includes(into));
+      if (!site) continue;
+      const key = PROPOSED_KEY(site.pair, "straight");
+      const id = `tee:${site.pair.join("|")}:straight`;
+      const cfm = flows.leg.get(legKey(chain[k - 1]!, kid.via))?.cfm ?? null;
+      const typed = this.input.inputs.fittingDrops[key];
+      const loss = typed ? typed.value : cfm == null ? null : 0;
+      this.legs[id] = {
+        id,
+        elementId: kid.el.id,
+        kind: "fitting",
+        flowCfm: cfm,
+        flowSource: null,
+        velocityFpm: null,
+        lossInWg: loss,
+        lossSource: typed
+          ? { kind: "drop", ref: `typed ${key}` }
+          : {
+              kind: "default",
+              ref: `proposed tee ${site.pair.join(" to ")} straight run: its branch carries none of this fan's flow, so no Cs (as a real takeoff passed)`,
+            },
+        equivalentFt: null,
+      };
+      this.priced.set(id, { p: null, blockerIds: [] });
+      this.onLeg(id, key);
+      this.fittings.set(key, {
+        key,
+        elementId: null,
+        family: "proposed tee",
+        proposed: { pair: site.pair, kind: "tee", path: "straight", toward: null },
+        rule: null,
+        table: null,
+        ruleSource: "none",
+        tableSource: null,
+        options: [],
+        candidates: [],
+        lossInWg: loss,
+        unpriced: null,
+        typed: typed?.value ?? null,
+      });
+      runs.push({ after: legIds[k - 1]!, id });
+    }
+    return runs;
   }
 }
 
-const terminalDropInputs = (pricer: Pricer): SheetInput[] =>
-  Object.values(pricer.legs).some((l) => l.lossSource.ref.includes("SHIM"))
-    ? [
-        {
-          name: "SHIM terminal drop in-wg",
-          value: SHIM_TERMINAL_DROP_IN_WG,
-          source: "SHIM placeholder",
-        },
-      ]
-    : [];
-
 const dist = (p: number[], q: number[]) => Math.hypot(...p.map((v, k) => v - q[k]!));
+
+/**
+ * The flow on leg (`s`, `out`) that crossed into `s` from its parent: the leg's flow less the
+ * R-SHARE draws whose junction is `s` itself. A sibling joining at `s` (the four ERVs at plenum
+ * 14106988) draws its air from there out to the shared terminal; that air never crosses what feeds
+ * `s`, so a proposed fitting in front of `s` carries this fan's own flow, not the section's sum.
+ */
+function crossing(w: Walk, flows: Flows, s: number, out: number | undefined): number | null {
+  const f = flows.leg.get(legKey(s, out));
+  if (!f || f.cfm == null) return f ? null : 0;
+  let cfm = f.cfm;
+  for (const d of flows.draws) {
+    if (d.junction !== s || d.cfm == null) continue;
+    const t = w.ends[d.terminal]!;
+    const chain = lineage(w, t.state);
+    const k = chain.indexOf(s);
+    if ((k + 1 < chain.length ? w.states[chain[k + 1]!]!.via : t.out) === out) cfm -= d.cfm;
+  }
+  return cfm;
+}
+
+type Port = Node["connectors"][number];
+/**
+ * The virtual fitting a proposed transition prices (C3): one In and one Out connector in the air's
+ * direction (supply leaves by the landing, return arrives through it) and an included angle taken
+ * from the proposal's own geometry, the transition filling the gap it closes: per axis
+ * 2 atan(|size difference| / 2 gap), the larger axis (ASHRAE SD4/SR4 use the larger angle), 180 deg
+ * (abrupt) at a zero gap. That is a geometric reading of the proposal, not a type-name guess
+ * (geometry.ts); a longer transition is gentler, so a person swaps the table or types the drop.
+ * Equal sections state no angle and price nothing.
+ */
+function proposedTransition(side: Side, source: Port, landing: Port, gapIn: number) {
+  const dims = (c: Port) =>
+    c.shape === "round" ? [c.diameterIn ?? NaN, c.diameterIn ?? NaN] : [c.widthIn ?? NaN, c.heightIn ?? NaN];
+  const [a, b] = [dims(source), dims(landing)];
+  const half = Math.max(...a.map((v, i) => Math.abs(v - b[i]!) / 2));
+  const angleDeg =
+    Number.isFinite(half) && half > 0
+      ? Math.min(180, (2 * Math.atan2(half, gapIn) * 180) / Math.PI)
+      : null;
+  const [inlet, outlet] = side === "supply" ? [source, landing] : [landing, source];
+  const port = (c: Port, index: number, direction: "in" | "out") =>
+    ({ ...c, index, direction, connectedTo: undefined }) as Port;
+  const node = {
+    id: 0,
+    kind: "fitting",
+    category: "Duct Fittings",
+    family: "proposed transition",
+    type: "transition",
+    partType: "Transition",
+    point: landing.point,
+    connectors: [port(inlet, 0, "in"), port(outlet, 1, "out")],
+    facts:
+      angleDeg == null
+        ? []
+        : [{ key: "angle", value: +angleDeg.toFixed(1), unit: "deg", provenance: "assumed" }],
+  } as unknown as Node;
+  return {
+    node,
+    inlet: node.connectors[0],
+    outlet: node.connectors[1],
+    note: `angle ${angleDeg == null ? "none" : angleDeg.toFixed(1)} deg assumed from the ${gapIn.toFixed(2)} in gap it fills`,
+  };
+}
 
 function totals(pricer: Pricer, paths: SheetPath[], allowanceInWg: number): SideTotals {
   const complete = paths.length > 0 && paths.every((p) => p.complete);
@@ -899,8 +1430,8 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
         : undefined;
   const opts = {
     roster: input.roster,
-    rulings: input.rulings ?? [],
-    endRulings: input.endRulings ?? [],
+    rulings: input.inputs.rulings.joins,
+    endRulings: input.inputs.rulings.ends,
     assumeHeals,
     owners: foreignOwners(g, input.roster, unit),
   };
@@ -917,14 +1448,15 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
     bRule && aRule.score !== bRule.score
       ? `ends: discharge ${swap ? bRule.source : aRule.source}; paired side is inlet`
       : "port metadata tie-break: ends do not distinguish the paired sides";
-  const slot =
-    input.slot ?? input.defaults?.slot ?? input.snapshot.slots?.terminalFlow ?? "terminalFlow";
-  // The side-stream exception uses the unit design parameter; terminal-led fan flow remains a sum.
-  const design = factOf(unit, "fanFlow");
-  const designCfm = design != null && design > 0 ? design : null;
+  // The unit's own flow: typed is the side-stream exception's asserted flow, a Revit or stored value
+  // its design parameter; absent both, an ordinary fan's flow is the sum of its ends (never an input).
+  const unitCfm = input.inputs.units[String(unit.id)]?.cfm;
+  const typedCfm = unitCfm?.source === "typed" ? unitCfm.value : null;
+  const designCfm = unitCfm && unitCfm.source !== "typed" ? positive(unitCfm.value) : null;
+  const terminalCfm = (id: number) => terminalCfmOf(input.inputs, id);
   const derived =
     assumeHeals && input.assumeServedFlow !== false
-      ? assumedFanFlows(input.snapshot, input.roster, slot, {
+      ? assumedFanFlows(input.snapshot, input.roster, terminalCfm, fnv(JSON.stringify(input.inputs.terminals)), {
           rulings: opts.rulings,
           endRulings: opts.endRulings,
         })
@@ -933,30 +1465,42 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
   const known = (f: AssumedFlow | undefined) => (f && f.cfm > 0 ? f : null);
   const assumedDesign = known(derived.get(`${unit.id}:${input.fan.portIndex}`));
   // A-INFLOW / A-COMPLETE: an ordinary fan's flow is the sum of its ends; other-fan ends are sources.
-  const ordinary = designCfm == null && input.sideStreamCfm == null;
-  // R-SIB: on an ordinary fan, other fans reached at the port that shares this side's trunk are siblings.
-  if (ordinary) {
-    markSiblings(swap ? b! : a, "supply");
-    if (b) markSiblings(swap ? a : b, "return");
-  }
+  const ordinary = designCfm == null && typedCfm == null;
+  // R-SIB: other fans reached at the port that shares this side's trunk are siblings. Departs from
+  // R-SIB's "ordinary fans only" (2026-10-28) under R-SHARE (ducts LEDGER 2026-10-29, receiving
+  // design flows weight the split): a side-stream unit's intake shares its louver with other units'
+  // inlets, and those are co-consumers drawing their own flow, not receivers of this unit's flow.
+  // What still holds: a sibling never takes a share of this fan's flow.
+  markSiblings(swap ? b! : a, "supply");
+  if (b) markSiblings(swap ? a : b, "return");
   const flowOpts: FlowOptions = {
-    slot,
+    terminalCfm,
+    // Whatever its source: a receiving unit's design flow read from Revit weights the split exactly
+    // as a typed one does (ducts LEDGER 2026-10-29). A typed 0 is a share; an untyped 0 is unset.
+    unitCfm: (unitId) => {
+      const u = input.inputs.units[String(unitId)]?.cfm;
+      return u?.value != null && (u.source === "typed" || u.value > 0)
+        ? { cfm: u.value, source: provenance(u) }
+        : null;
+    },
     ordinary,
-    endCfm: input.endCfm ?? {},
     sideStream:
-      input.sideStreamCfm != null
-        ? { cfm: input.sideStreamCfm, source: "typed" }
+      typedCfm != null
+        ? { cfm: typedCfm, source: "typed" }
         : designCfm == null
           ? (assumedDesign ?? null)
-          : { cfm: designCfm, source: `parameter:${input.snapshot.slots?.fanFlow ?? "fanFlow"}` },
-    splitPolicy: input.splitPolicy ?? input.defaults?.splitPolicy ?? "even",
+          : { cfm: designCfm, source: provenance(unitCfm!) },
+    splitPolicy: input.inputs.criteria.splitPolicy.value,
     receivingDesignCfm: Object.fromEntries(
-      input.snapshot.nodes.map((n) => {
-        const value = factOf(n, "fanFlow");
-        return [n.id, value != null && value > 0 ? value : null];
-      }),
+      Object.entries(input.inputs.units).map(([id, u]) => [Number(id), positive(u.cfm.value)]),
     ),
     receivingAssumedCfm: derived,
+    siblingCfm: (fan) => {
+      const u = input.inputs.units[String(fan.unitId)]?.cfm;
+      if (u?.value != null && u.value > 0) return { cfm: u.value, source: provenance(u) };
+      const assumed = known(derived.get(`${fan.unitId}:${fan.portIndex}`));
+      return assumed ? { cfm: assumed.cfm, source: assumed.source } : null;
+    },
   };
   const supply = { w: swap ? b! : a };
   const ret = b ? { w: swap ? a : b } : null;
@@ -964,11 +1508,17 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
     if (w) {
       for (const [id, blocker] of w.blockers) pricer.blockers.set(id, blocker);
     }
-  // A side whose one end carries nothing (an intake, an open end) carries the other side's flow.
-  const single = (w: Walk) =>
-    w.ends.length === 1 && !carrying(w.ends[0]!) && w.ends[0]!.end.kind !== "sibling-fan";
+  // A side whose one end carries nothing (an intake, an open end) carries the other side's flow;
+  // so does a side whose one end is a terminal its siblings share (R-SHARE: its stated flow is a
+  // cross-check). Siblings are not this fan's ends. The lone end's index, else null.
+  const lone = (w: Walk) => {
+    const own = w.ends.flatMap((e, i) => (e.end.kind === "sibling-fan" ? [] : [i]));
+    const i = own.length === 1 ? own[0]! : null;
+    return i != null && (!carrying(w.ends[i]!) || sharedTerminal(w, i)) ? i : null;
+  };
+  const single = (w: Walk) => lone(w) != null;
   const onSide = (w: Walk): FlowOptions =>
-    designCfm == null && input.sideStreamCfm == null && assumeHeals
+    designCfm == null && typedCfm == null && assumeHeals
       ? {
           ...flowOpts,
           sideStream: known(
@@ -980,7 +1530,7 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
     single(w) && other
       ? {
           ...onSide(w),
-          only: { end: 0, cfm: other, source: `balance; splitPolicy:${flowOpts.splitPolicy}` },
+          only: { end: lone(w)!, cfm: other, source: `balance; splitPolicy:${flowOpts.splitPolicy}` },
         }
       : onSide(w);
   const retFirst = !!ret && single(supply.w);
@@ -1010,8 +1560,8 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
       },
     });
   const allowance = {
-    supply: input.allowanceInWg?.supply ?? 0,
-    return: input.allowanceInWg?.return ?? 0,
+    supply: input.inputs.criteria.allowanceInWg.supply.value,
+    return: input.inputs.criteria.allowanceInWg.return.value,
   };
   const sT = totals(pricer, supplyPaths, allowance.supply);
   const rT = ret
@@ -1033,65 +1583,32 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
   const walked = new Set<number>();
   for (const w of [supply.w, ret?.w]) if (w) for (const id of w.depth.keys()) walked.add(id);
 
-  const inputs: SheetInput[] = [
-    {
-      name: "auto-join maximum gap in",
-      value: input.snapshot.tolerances?.autoJoinGapIn ?? null,
-      source: !input.snapshot.tolerances
-        ? "not measured: the read carries no model health"
-        : input.defaults?.autoJoinMaxGapIn == null
-          ? "default"
-          : "route settings",
-    },
-    ...(input.defaults?.terminalDropInWg == null ||
-    input.defaults.terminalDropSource === "SHIM placeholder"
-      ? []
-      : [
-          {
-            name: "terminal drop in-wg",
-            value: input.defaults.terminalDropInWg,
-            source:
-              input.defaults.terminalDropSource ??
-              `firm default ${input.defaults.version ?? "unversioned"}`,
-          },
-        ]),
-    {
-      name: "split policy",
-      value: flowOpts.splitPolicy ?? "even",
-      source: input.splitPolicy
-        ? "typed"
-        : input.defaults?.splitPolicy
-          ? "route settings"
-          : "default",
-    },
-    {
-      name: "unit design cfm",
-      value: flowOpts.sideStream?.cfm ?? null,
-      source: flowOpts.sideStream?.source ?? "missing design-flow parameter",
-    },
+  const note = (kind: SheetNote["kind"], text: string, value: SheetNote["value"] = null): SheetNote => ({
+    kind,
+    text,
+    value,
+  });
+  const tagOf = (unitId: number) => input.roster.find((p) => p.unitId === unitId)?.tag;
+  const notes: SheetNote[] = [
+    note("direction", `inlet ${inlet ?? "none"}, discharge ${discharge}: ${directionSource}`),
     ...[...derived.entries()]
       .filter(([ref]) =>
         [unit.id, ...[...a.ends, ...(b?.ends ?? [])].map((e) => e.end.fan?.unitId)].includes(
           Number(ref.split(":")[ref.startsWith("port:") ? 1 : 0]),
         ),
       )
-      .map(([ref, flow]) => ({
-        name: `fan ${ref} cfm (assumed)`,
-        value: flow.cfm,
-        source: flow.source,
-      })),
+      .map(([ref, flow]) => note("assumed-flow", `fan ${ref} cfm (assumed): ${flow.source}`, flow.cfm)),
     ...[
       ...supplyFlows.inflows.map((x) => [supply.w, x] as const),
       ...(returnFlows ? returnFlows.inflows.map((x) => [ret!.w, x] as const) : []),
     ].map(([w, x]) => {
       const e = w.ends[x.end]!.end;
-      const tag = x.fan ? input.roster.find((p) => p.unitId === x.fan!.unitId)?.tag : undefined;
-      const from = x.fan ? `${tag || "unit"} ${x.fan.unitId}:${x.fan.portIndex}` : `unnamed stream`;
-      return {
-        name: `inflow from ${from} at ${e.elementId} cfm${assumeHeals ? " (assumed)" : ""}`,
-        value: x.cfm,
-        source: x.source,
-      };
+      const from = x.fan ? `${tagOf(x.fan.unitId) || "unit"} ${x.fan.unitId}:${x.fan.portIndex}` : "unnamed stream";
+      return note(
+        "inflow",
+        `inflow from ${from} at ${e.elementId}${assumeHeals ? " (assumed)" : ""}: ${x.source}`,
+        x.cfm,
+      );
     }),
     // R-SIB: one line per sibling end, named for the fan and where it was reached.
     ...[
@@ -1101,53 +1618,59 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
       .filter(([e]) => e.end.kind === "sibling-fan")
       .map(([e, side]) => {
         const fan = e.end.fan!;
-        const tag = input.roster.find((p) => p.unitId === fan.unitId)?.tag;
-        return {
-          name: `sibling ${tag || "unit"} ${fan.unitId}:${fan.portIndex} at ${e.end.elementId}: not on this fan's path`,
-          value: null,
-          source: `reached at its ${e.reached} on this fan's ${side} side; shares the trunk`,
-        };
+        return note(
+          "sibling",
+          `sibling ${tagOf(fan.unitId) || "unit"} ${fan.unitId}:${fan.portIndex} at ${e.end.elementId}: reached at its ${e.reached} on this fan's ${side} side; shares the trunk`,
+        );
       }),
+    // R-SHARE: each sibling's draw on a shared terminal, then each shared terminal's consumers
+    // summed against the flow it states (a cross-check, not the source).
+    ...[
+      [supply.w, supplyFlows] as const,
+      ...(ret ? [[ret.w, returnFlows!] as const] : []),
+    ].flatMap(([w, f]) => [
+      ...f.draws.map((d) => {
+        const fan = w.ends[d.sibling]!.end.fan!;
+        return note(
+          "sibling",
+          `sibling ${tagOf(fan.unitId) || "unit"} ${fan.unitId}:${fan.portIndex} draws ${d.cfm == null ? "an unknown flow" : `${round(d.cfm)} cfm`} from shared terminal ${w.ends[d.terminal]!.end.elementId}: ${d.source ?? "no design flow"}`,
+          d.cfm == null ? null : round(d.cfm),
+        );
+      }),
+      ...[...new Set(f.draws.map((d) => d.terminal))].flatMap((k) => {
+        const own = f.end[k];
+        const drawn = f.draws.filter((d) => d.terminal === k);
+        const id = w.ends[k]!.end.elementId;
+        // The flow the terminal states: its resolved design value, else Revit's own connector flow.
+        // History 6 bars Revit's flow as a per-terminal source; a cross-check only reads it (the
+        // Chadds louver 14088043 states 1120 there while its airflow slot is empty).
+        const resolved = input.inputs.terminals[String(id)]?.cfm;
+        const node = g.byId.get(id);
+        const revit = node && !isSegment(node) ? slotFlowOf(node, REVIT_FLOW_SLOT).cfm : null;
+        const stated: Resolved<number | null> | null =
+          resolved?.value != null
+            ? resolved
+            : revit != null
+              ? { value: revit, source: "revit", ref: "connector Flow" }
+              : null;
+        if (own == null || drawn.some((d) => d.cfm == null) || stated?.value == null) return [];
+        const sum = round(own + drawn.reduce((a, d) => a + d.cfm!, 0));
+        if (Math.abs(sum - stated.value) < 0.5) return [];
+        return [
+          note(
+            "sibling",
+            `shared terminal ${id}: consumers sum ${sum} cfm (this fan ${round(own)}, siblings ${drawn.map((d) => round(d.cfm!)).join(" + ")}); the terminal states ${stated.value} (${provenance(stated)})`,
+            sum,
+          ),
+        ];
+      }),
+    ]),
     // R-CAP: every open end the walk skipped on a person's capped ruling.
     ...[
       ...new Map(
         [...a.capped, ...(b?.capped ?? [])].map((c) => [`${c.elementId}:${c.connector}`, c]),
       ).values(),
-    ].map((c) => ({
-      name: `open end ${c.elementId}:${c.connector} ruled capped`,
-      value: null,
-      source: "end ruling",
-    })),
-    {
-      name: "airflow slot",
-      value: slot,
-      source: input.slot ? "typed" : input.defaults?.slot ? "route settings" : "snapshot slots",
-    },
-    {
-      name: "supply allowance in-wg",
-      value: allowance.supply,
-      source: input.allowanceInWg?.supply == null ? "default 0" : "typed",
-    },
-    {
-      name: "return allowance in-wg",
-      value: allowance.return,
-      source: input.allowanceInWg?.return == null ? "default 0" : "typed",
-    },
-    { name: "inlet connector", value: inlet, source: directionSource },
-    { name: "discharge connector", value: discharge, source: directionSource },
-    {
-      name: "candidate box in",
-      value: input.snapshot.tolerances?.candidateBoxIn ?? null,
-      source: !input.snapshot.tolerances
-        ? "not measured: the read carries no model health"
-        : input.candidateBoxIn == null
-          ? "default"
-          : "typed",
-    },
-    ...(input.sideStreamCfm == null
-      ? []
-      : [{ name: "side-stream cfm", value: input.sideStreamCfm, source: "typed" }]),
-    ...terminalDropInputs(pricer),
+    ].map((c) => note("capped", `open end ${c.elementId}:${c.connector} ruled capped`)),
     // Every auto-join the walks took, priced leg or not: a join that closes two walked stubs
     // into a loop (R-FACE) leaves no leg on any path, and is still a closure the engine took.
     ...[
@@ -1155,65 +1678,20 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
         ...pricer.autoJoinNotes,
         ...[...a.autoJoins, ...(b?.autoJoins ?? [])].map((j) => j.note),
       ]),
-    ].map((note) => ({
-      name: note,
-      value: null,
-      source: "default auto-join",
-    })),
-    ...[...pricer.healNotes].map((note) => ({
-      name: note,
-      value: null,
-      source: assumeHeals ? "assumed heal" : "accepted connector-pair ruling",
-    })),
-    ...[...pricer.demoted].map(([family, d]) => ({
-      name: `${family} pressure drop in-wg`,
-      value: d.inWg,
-      source: `family default on all ${d.count} instances; not priced as designer-stated`,
-    })),
+    ].map((text) => note("auto-join", text)),
+    ...[...pricer.healNotes].map((text) =>
+      note("heal", `${text}: ${assumeHeals ? "assumed heal" : "accepted connector-pair ruling"}`),
+    ),
     ...Object.values(pricer.legs)
       .filter((l) => l.lossSource.ref.startsWith("merge boundary"))
-      .map((l) => ({
-        name: `merge ${l.elementId} branch loss in-wg`,
-        value: null,
-        source: l.lossSource.ref,
-      })),
-    ...Object.entries(input.endCfm ?? {}).map(([id, v]) => ({
-      name: `end ${id} cfm`,
-      value: v,
-      source: "typed",
-    })),
-    ...Object.entries(input.drops ?? {}).map(([id, v]) => ({
-      name: `element ${id} drop in-wg`,
-      value: v,
-      source: "typed",
-    })),
-    ...Object.entries(input.choices ?? {}).map(([k, v]) => ({
-      name: `table for ${k}`,
-      value: v,
-      source: "typed",
-    })),
+      .map((l) => note("merge", `merge ${l.elementId} branch loss: ${l.lossSource.ref}`)),
   ];
   // R3 (kaitpw 2026-10-28): `externalStatic` is PE_M_Fan_ExternalStaticPressure, the required ESP slot Pe writes; the page labels it "required (written)".
-  const ratedEsp = factOf(unit, "externalStatic");
+  const ratedEsp = input.inputs.units[String(unit.id)]?.esp.value ?? null;
   const cited = new Set([...supplyPaths, ...returnPaths].flatMap((p) => p.blockerIds));
   return {
     engineVersion: SHEET_ENGINE_VERSION,
-    basis: basisOf(input.snapshot, [
-      input.fan,
-      inlet,
-      input.rulings,
-      input.endRulings,
-      input.endCfm,
-      input.drops,
-      input.defaults,
-      input.sideStreamCfm,
-      input.allowanceInWg,
-      input.choices,
-      slot,
-      input.splitPolicy,
-      input.candidateBoxIn,
-      input.assumeServedFlow,
-    ]),
+    basis: basisOf(input.snapshot, [input.fan, inlet, input.inputs, input.assumeServedFlow]),
     fan: {
       unitId: unit.id,
       portIndex: input.fan.portIndex,
@@ -1237,7 +1715,8 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
     blockers: [...pricer.blockers.values()].filter(
       (b) => cited.has(b.id) || b.elementId === unit.id,
     ),
-    inputs,
+    notes,
+    fittings: pricer.fittingsOn([...supplyPaths, ...returnPaths]),
     walkedElementIds: [...walked].sort((a, b) => a - b),
   };
 }
@@ -1259,11 +1738,16 @@ export function buildSheet(input: BuildSheetInput): Sheet {
         l.id.startsWith(`heal:${b.proposal!.pair.join("|")}:`),
       );
     }
-  known.inputs.push(
-    ...assumed.inputs.filter(
-      (i) => i.source === "assumed heal" || i.name.endsWith("cfm (assumed)"),
-    ),
+  known.notes.push(
+    ...assumed.notes.filter((n) => n.kind === "heal" || n.kind === "assumed-flow"),
   );
+  // One row per fitting across both passes: the known pass's, unless the assumed pass could not
+  // price it (an assumed-only blocker cites that row, so the row must say why).
+  const rows = new Map(known.fittings.map((f) => [f.key, f]));
+  for (const f of assumed.fittings)
+    if (!rows.has(f.key) || (f.unpriced != null && rows.get(f.key)!.unpriced == null))
+      rows.set(f.key, f);
+  known.fittings = [...rows.values()];
   known.walkedElementIds = [
     ...new Set([...known.walkedElementIds, ...assumed.walkedElementIds]),
   ].sort((a, b) => a - b);
@@ -1278,10 +1762,10 @@ export function buildChain(input: BuildChainInput): Chain {
   if (!start) throw new Error(`start ${input.start.elementId} is not in the snapshot`);
   // ponytail: the start element is the root and is not priced; start at the unit or terminal itself.
   const w = walkFrom(g, start, input.start.connector, {
-    roster: input.roster ?? [],
-    rulings: input.rulings ?? [],
-    endRulings: input.endRulings ?? [],
-    owners: foreignOwners(g, input.roster ?? [], start),
+    roster: input.roster,
+    rulings: input.inputs.rulings.joins,
+    endRulings: input.inputs.rulings.ends,
+    owners: foreignOwners(g, input.roster, start),
   });
   for (const [id, b] of w.blockers) pricer.blockers.set(id, b);
   terminateMerges(w);
@@ -1302,18 +1786,6 @@ export function buildChain(input: BuildChainInput): Chain {
       at = w.ends.length - 1;
     }
   }
-  const inputs: SheetInput[] = [
-    {
-      name: "chain cfm",
-      value: input.flowCfm ?? null,
-      source: input.flowCfm == null ? "none" : "typed",
-    },
-    ...Object.entries(input.drops ?? {}).map(([id, v]) => ({
-      name: `element ${id} drop in-wg`,
-      value: v,
-      source: "typed",
-    })),
-  ];
   let path: SheetPath | null = null;
   if (at < 0)
     pricer.block({
@@ -1326,7 +1798,7 @@ export function buildChain(input: BuildChainInput): Chain {
   else {
     const flows = flowsOf(
       w,
-      { slot: "", only: { end: at, cfm: input.flowCfm ?? null, source: "typed" } },
+      { terminalCfm: () => null, only: { end: at, cfm: input.flowCfm ?? null, source: "typed" } },
       pricer.block,
     );
     path = pricer.paths(w, flows, input.direction, [w.ends[at]!])[0]!;
@@ -1335,31 +1807,14 @@ export function buildChain(input: BuildChainInput): Chain {
   for (const id of path?.legIds ?? []) legs[id] = pricer.legs[id]!;
   return {
     engineVersion: SHEET_ENGINE_VERSION,
-    basis: basisOf(input.snapshot, [
-      input.start,
-      input.end,
-      input.direction,
-      input.flowCfm,
-      input.rulings,
-      input.endRulings,
-      input.drops,
-      input.choices,
-      input.defaults,
-    ]),
+    basis: basisOf(input.snapshot, [input.start, input.end, input.direction, input.flowCfm, input.inputs]),
     start: input.start,
     direction: input.direction,
     path,
     legs,
     blockers: [...pricer.blockers.values()].filter((b) => !path || path.blockerIds.includes(b.id)),
-    inputs: [
-      ...inputs,
-      ...terminalDropInputs(pricer),
-      ...[...pricer.autoJoinNotes].map((note) => ({
-        name: note,
-        value: null,
-        source: "default auto-join",
-      })),
-    ],
+    notes: [...pricer.autoJoinNotes].map((text) => ({ kind: "auto-join" as const, text, value: null })),
+    fittings: path ? pricer.fittingsOn([path]) : [...pricer.fittings.values()],
     walkedElementIds: [...w.depth.keys()].sort((a, b) => a - b),
   };
 }

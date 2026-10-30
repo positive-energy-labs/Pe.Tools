@@ -159,6 +159,7 @@ export function priceLeg(input: LegInput, grids: Grids, choices: Choices = {}): 
     !chosen && rule.fallback && !grids[rule.table] && grids[rule.fallback] ? rule.fallback : null;
   const table = chosen ?? fallback ?? rule.table;
   const lookup = rule.input(facts, flows, table, leg);
+  if (lookup.refuse) return unpriced(input, `${table} ${lookup.res} not read: ${lookup.refuse}`);
   const grid = grids[table]?.[lookup.res];
   if (!grid) return unpriced(input, `${table} ${lookup.res} is not loaded`);
   let found;
@@ -243,6 +244,12 @@ export function priceLeg(input: LegInput, grids: Grids, choices: Choices = {}): 
  * its own length; a rule-priced fitting leg is `dp / rate x 100` at the rate of the nearest duct
  * leg before it on the path, else after it, else `designRate`. A typed drop stays in in-wg
  * (null); so does an unpriced leg.
+ *
+ * A fitting that gains pressure (a converging tap's branch, ER5-1 Cb below zero at a low branch
+ * velocity) counts 0 ft, not a negative length: equivalent length is Manual D's sizing convenience
+ * and never negative there, and the reference rate is the neighbouring duct's, so a small rate
+ * blew FC-23's return run to -577 ft and MUAS-1's to -1049 ft (2026-10-29). The signed loss stays
+ * on the leg and still sums into the path's in-wg and the required ESP; only the feet clamp.
  */
 export function equivalentFeet(
   legs: readonly PricedLeg[],
@@ -258,6 +265,6 @@ export function equivalentFeet(
     if (l.lossInWg == null) return null;
     if (l.kind === "duct") return l.lengthFt ?? 0;
     if (l.source?.kind !== "rule") return null;
-    return (l.lossInWg / refRate(i)) * 100;
+    return Math.max(0, (l.lossInWg / refRate(i)) * 100);
   });
 }

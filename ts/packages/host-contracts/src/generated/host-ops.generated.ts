@@ -774,6 +774,7 @@ export namespace DuctsSnapshot {
     export type DuctIssueKind =
       | "open-end"
       | "near-miss"
+      | "inline"
       | "loop"
       | "stub"
       | "air-type-change"
@@ -1006,7 +1007,8 @@ export namespace DuctsSnapshot {
     }
     /**
      * One model-health finding. Id is "kind:elementId" plus ":connector" when Connector is set; an assumption verdict
-     * keys on it. Near is set on an open end: what lies within the candidate box of it.
+     * keys on it. Near is set on an open end: what lies within the candidate box of it. A `roster` or `ids` read does not
+     * measure it (null there) and so reports no near miss.
      *
      */
     export interface DuctIssue {
@@ -1017,6 +1019,7 @@ export namespace DuctsSnapshot {
       point?: number[] | null;
       note: string;
       near?: null | DuctNear;
+      inline?: null | DuctInline;
     }
     /**
      * The neighbourhood of one open end, measured from its connector (point, outward axis), never decided: which of
@@ -1034,7 +1037,8 @@ export namespace DuctsSnapshot {
     /**
      * Another connector near an open end. GapIn: centre to centre. FacingDot: cosine of the two outward axes (null
      * when either is unknown). Opposed: the cosine is at most -0.9. Aligned: opposed, ahead of the end and within
-     * 0.5 in of its axis. AutoJoin: vacant, opposed and within AutoJoinGapIn: the near-miss partner.
+     * 0.5 in of its axis. AutoJoin: vacant, opposed and within AutoJoinGapIn: the near-miss partner. CappedBy: the end
+     * cap occupying this connector (a fact of the model); a heal there replaces the cap with a transition.
      *
      */
     export interface DuctNearPort {
@@ -1045,6 +1049,7 @@ export namespace DuctsSnapshot {
       opposed: boolean;
       aligned: boolean;
       autoJoin: boolean;
+      cappedBy?: number | null;
     }
     /**
      * The end's axis landing on a face within 2 in. Kind "collar": an open connector's mouth (Connector set);
@@ -1070,6 +1075,16 @@ export namespace DuctsSnapshot {
       gapIn: number;
       tapGapIn?: null | number;
       tapPoint?: number[] | null;
+    }
+    /**
+     * Where an inline part sits: SegmentId the straight duct whose body holds both its open ports, AtFt along that duct
+     * from its first polyline point, Ports the part's two connector indices, the one facing the duct's first point first.
+     *
+     */
+    export interface DuctInline {
+      segmentId: number;
+      atFt: number;
+      ports: number[];
     }
     /**
      * One real query, printed verbatim in Query, and how much of the model it answered.

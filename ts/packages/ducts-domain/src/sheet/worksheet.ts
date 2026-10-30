@@ -39,9 +39,9 @@ export interface WorksheetRun {
   telFt: number;
   knownInWg: number;
   complete: boolean;
-  /** The worst terminal run's known loss minus this one's: what this run's balancing must burn. Terminal runs only. */
+  /** The worst delivering run's known loss minus this one's: what this run's balancing must burn. Delivering runs only. */
   residualInWg: number | null;
-  /** The worst known terminal run on its side. */
+  /** The worst known delivering run on its side. */
   critical: boolean;
   maxFpm: number | null;
   overLegIds: string[];
@@ -60,6 +60,15 @@ export interface WorksheetSide {
 }
 
 export type Worksheet = Record<Side, WorksheetSide>;
+
+/**
+ * A run that delivers this fan's air to a design end: a terminal, another fan's port it feeds, or
+ * another fan's stream it joins (build.ts `carrying`). MUAS-1's supply ends at RV-15's and RV-7's
+ * inlets and FC-23's return, no terminal at all, so a terminal-only worst read "—" over three
+ * priced runs (UI5, 2026-10-29). Open ends and siblings deliver nothing and never set the worst.
+ */
+export const delivers = (end: SheetPath["end"]) =>
+  end.kind === "terminal" || end.kind === "roster-fan-port" || end.kind === "joins-other-fan";
 
 const sum = (legs: readonly Leg[], pick: (l: Leg) => number | null) =>
   legs.reduce((a, l) => a + (pick(l) ?? 0), 0);
@@ -119,7 +128,9 @@ export function worksheet(sheet: Sheet, limits: WorksheetLimits): Worksheet {
     });
     for (const sec of sections.values()) {
       const legs = sec.legIds.map(leg);
-      sec.cfm = legs[0]?.flowCfm ?? null;
+      // The flow the section delivers, as a run's: its first leg may be the main piece up to the
+      // tap the section leaves by, which carries the main's flow (build.ts, a duct leg's flow).
+      sec.cfm = legs.at(-1)?.flowCfm ?? null;
       sec.knownInWg = sum(legs, (l) => l.lossInWg);
       sec.unpricedLegs = legs.filter((l) => l.lossInWg == null).length;
       sec.telFt = sum(legs, (l) => l.equivalentFt);
@@ -127,11 +138,11 @@ export function worksheet(sheet: Sheet, limits: WorksheetLimits): Worksheet {
       sec.overLegIds = over(legs);
     }
 
-    const terminals = paths.filter((p) => p.end.kind === "terminal");
-    const worst = terminals.length ? Math.max(...terminals.map((p) => p.knownInWg)) : null;
+    const delivering = paths.filter((p) => delivers(p.end));
+    const worst = delivering.length ? Math.max(...delivering.map((p) => p.knownInWg)) : null;
     const runs = paths.map((p, i): WorksheetRun => {
       const legs = p.legIds.map(leg);
-      const terminal = p.end.kind === "terminal";
+      const carries = delivers(p.end);
       return {
         id: ids[i]!,
         side: s,
@@ -142,8 +153,8 @@ export function worksheet(sheet: Sheet, limits: WorksheetLimits): Worksheet {
         telFt: sum(legs, (l) => l.equivalentFt),
         knownInWg: p.knownInWg,
         complete: p.complete,
-        residualInWg: terminal && worst != null ? worst - p.knownInWg : null,
-        critical: terminal && p.knownInWg === worst,
+        residualInWg: carries && worst != null ? worst - p.knownInWg : null,
+        critical: carries && p.knownInWg === worst,
         maxFpm: maxOf(legs),
         overLegIds: over(legs),
       };

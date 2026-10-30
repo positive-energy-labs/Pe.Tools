@@ -1,4 +1,3 @@
-import { slotFlowOf } from "../kernel/terminal-flow.ts";
 import type { FanPort } from "../roster.ts";
 import type { SheetSnapshot } from "./build.ts";
 import {
@@ -31,11 +30,14 @@ const designed = (unit: Graph["all"][number]) =>
 export function assumedFanFlows(
   snapshot: SheetSnapshot,
   roster: readonly FanPort[],
-  slot: string,
+  /** A terminal's resolved design flow (`inputs.terminals`). */
+  terminalCfm: (elementId: number) => number | null,
+  /** A digest of the resolved terminal flows, so one snapshot caches per inputs variant. */
+  cfmKey: string,
   options: Omit<WalkOptions, "roster" | "owners">,
 ): Map<string, AssumedFlow> {
   const key = JSON.stringify([
-    slot,
+    cfmKey,
     roster.map((p) => [p.unitId, p.portIndex, p.inletPortIndex, p.kind]),
     options,
   ]);
@@ -84,7 +86,7 @@ export function assumedFanFlows(
       for (const e of w.ends) {
         const n = g.byId.get(e.end.elementId);
         if (e.end.kind === "terminal" && n && !isSegment(n)) {
-          const flow = slotFlowOf(n, slot).cfm;
+          const flow = terminalCfm(n.id);
           if (flow != null && flow > 0) terminals.set(n.id, flow);
         }
         // Borrow only where this unit's discharge lands on another unit's intake (MUAS into an ERV inlet).
@@ -142,7 +144,7 @@ export function assumedFanFlows(
     if (cfm > 0)
       result.set(ref, {
         cfm,
-        source: `derived from served terminals (assumed); ${terminals.size} covered terminals, slot:${slot}${direct.get(ref)?.size ? "" : "; via receiving fan"}`,
+        source: `derived from served terminals (assumed); ${terminals.size} covered terminals${direct.get(ref)?.size ? "" : "; via receiving fan"}`,
       });
     else if (fan.kind === "erv") result.set(ref, unknownErv(ref));
     else if (connectorFlow > 0)
@@ -169,7 +171,7 @@ export function assumedFanFlows(
     if (cfm > 0)
       result.set(key, {
         cfm,
-        source: `derived from served terminals (assumed); side ${key}, ${terminals.size} covered terminals, slot:${slot}${side.terminals.size ? "" : paired.size ? "; via paired side" : "; via receiving fan"}`,
+        source: `derived from served terminals (assumed); side ${key}, ${terminals.size} covered terminals${side.terminals.size ? "" : paired.size ? "; via paired side" : "; via receiving fan"}`,
       });
     else if (side.erv) result.set(key, unknownErv(side.ref));
     else if (connectorFlow > 0)
@@ -178,7 +180,7 @@ export function assumedFanFlows(
         source: "unit connector flowCfm (assumed); served terminal sum unavailable",
       });
   }
-  // A snapshot is immutable for a read; bound alternative slot/ruling combinations.
+  // A snapshot is immutable for a read; bound alternative inputs/ruling combinations.
   if (variants.size >= 8) variants.delete(variants.keys().next().value!);
   variants.set(key, result);
   return result;

@@ -54,11 +54,13 @@ export function slotCoverage(
   named: readonly (string | null | undefined)[],
 ): { slot: string; covered: number; total: number }[] {
   const terminals = nodes.filter((n) => n.kind === "terminal");
+  // One row per slot: the active slot may itself be the built-in Flow slot.
   const slots = [
     ...new Set(
-      [...named, ...terminals.map((t) => t.flowParameter)].filter((s): s is string => !!s),
+      [...named, ...terminals.map((t) => t.flowParameter), REVIT_FLOW_SLOT].filter(
+        (s): s is string => !!s,
+      ),
     ),
-    REVIT_FLOW_SLOT,
   ];
   return slots
     .map((slot) => ({

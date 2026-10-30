@@ -17,7 +17,7 @@ import { DUCT_PARAMETER_KEYS } from "./ducts.ts";
 /** Which elements `ducts.snapshot` reads (ducts MAP 2026-10-27, "Where the data comes from" row 1). */
 export const ductsSnapshotSelectorSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("document") }),
-  /** The fan roster's read: every HVAC equipment node and air terminal, and Revit's systems without sections. */
+  /** The fan roster's read: every HVAC equipment node and air terminal, and Revit's systems without sections. Health without open-end neighbourhoods (as `ids`). */
   z.strictObject({ kind: z.literal("roster") }),
   z.strictObject({ kind: z.literal("ids"), ids: z.array(z.number().int()).min(1) }),
   /** The named Revit systems' groups, whole, in the document read's cooked shape: the network page's read. */

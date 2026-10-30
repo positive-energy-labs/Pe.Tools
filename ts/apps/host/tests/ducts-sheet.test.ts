@@ -101,7 +101,9 @@ test.skipIf(!existsSync(retained))(
     expect(overview.paths.return.paths.length).toBeLessThanOrEqual(5);
     expect(overview.blockers.length).toBeGreaterThan(0);
     expect(overview.totals?.requiredEspInWg).toBeNull();
-    expect(requests).toContainEqual({ selector: { kind: "from", unitId: 14577391 } });
+    expect(requests).toContainEqual({
+      selector: { kind: "from", unitId: 14577391, autoJoinGapIn: 3, candidateBoxIn: 36 },
+    });
     const reads = requests.length;
     const detail = await post("sheet", {
       ...request,
@@ -111,6 +113,23 @@ test.skipIf(!existsSync(retained))(
     expect(detail.status).toBe(200);
     const elements = ductsSheetResponseSchema.parse(await detail.json());
     expect(elements.kind === "elements" && elements.walkedElementIds).toContain(14577391);
+    // Context only (kaitpw 2026-10-30, "yes show"): one `from` read per unit MUAS-1 stops at, and
+    // RV-15's and RV-7's other ports come back as stubs, none of it walked (so none of it priced).
+    expect(requests).toContainEqual({
+      selector: { kind: "from", unitId: 6105264, maxHops: 12, autoJoinGapIn: 3, candidateBoxIn: 36 },
+    });
+    if (elements.kind === "elements") {
+      expect(elements.beyond.map((b) => [b.unitId, b.mark])).toEqual(
+        expect.arrayContaining([
+          [6105264, "RV-15"],
+          [6953852, "RV-7"],
+        ]),
+      );
+      const walked = new Set(elements.walkedElementIds);
+      const beyond = elements.beyond.flatMap((b) => b.elementIds);
+      expect(beyond.length).toBeGreaterThan(0);
+      expect(beyond.filter((id) => walked.has(id))).toEqual([]);
+    }
     const legs = await post("sheet", {
       ...request,
       basis: overview.basis,
@@ -124,7 +143,36 @@ test.skipIf(!existsSync(retained))(
       detail: overview.next.inputs,
     });
     expect(inputs.status).toBe(200);
-    expect(ductsSheetResponseSchema.parse(await inputs.json()).kind).toBe("inputs");
+    const census = ductsSheetResponseSchema.parse(await inputs.json());
+    expect(census.kind).toBe("inputs");
+    // Every table a person may pick is requested, so each option prices and is named by its title
+    // (an option the rules only list, like CD3-9, was never served before 2026-10-30).
+    const tableIds = requests.flatMap((r) => (r as { ids?: string[] }).ids ?? []);
+    expect(tableIds).toEqual(expect.arrayContaining(["CD3-2", "CD3-9", "CD3-10", "SD5-10"]));
+    expect(census.kind === "inputs" && census.tableTitles).toEqual({});
+    // UI5: the census is this fan's. The whole-document acquisition resolves every unit on Chadds;
+    // the detail returns only the elements the sheet walked, its fan and its blockers' elements, so
+    // the page's element snapshot names every row (MUAS-1 listed UH-3 7939081 "unnamed element").
+    if (census.kind === "inputs" && elements.kind === "elements") {
+      const reach = new Set([
+        ...elements.walkedElementIds,
+        fan.unitId,
+        ...census.blockers.flatMap((b) =>
+          [b.elementId, b.closer.candidate?.toElementId, b.proposal?.to.elementId].filter(
+            (id): id is number => id != null,
+          ),
+        ),
+      ]);
+      const keys = [
+        ...Object.keys(census.inputs.units),
+        ...Object.keys(census.inputs.terminals),
+        ...Object.keys(census.inputs.components),
+      ].map(Number);
+      expect(keys.length).toBeGreaterThan(0);
+      expect(keys.filter((id) => !reach.has(id))).toEqual([]);
+      const documentUnits = snapshot.nodes.filter((n) => n.kind === "equipment").length;
+      expect(Object.keys(census.inputs.units).length).toBeLessThan(documentUnits);
+    }
     const warm = ductsRosterResponseSchema.parse(await (await post("roster", { target })).json());
     expect(
       warm.rows.find((row) => row.unitId === fan.unitId && row.portIndex === fan.portIndex),
@@ -181,7 +229,7 @@ test.skipIf(!existsSync(retained))(
   60_000,
 );
 
-test("sheet inputs survive host recreation in document Work; one project cell governs all fans and defaults come from route settings", async () => {
+test("sheet inputs survive host recreation in document Work; project criteria govern all fans over firm defaults", async () => {
   const dir = await mkdtemp(join(tmpdir(), "ducts-sheet-inputs-"));
   try {
     const target = { session: "session", openId: "doc-a" };
@@ -230,12 +278,23 @@ test("sheet inputs survive host recreation in document Work; one project cell go
       slots: { terminalFlow: "named" },
     } as unknown as DuctSnapshot;
     const tableIds: string[][] = [];
+    const snapshotSlots: unknown[] = [];
     const source: DuctsSheetSources = {
       call: async (key, request) => {
         if ("ids" in request) tableIds.push(request.ids);
-        return Response.json(key === "ducts.snapshot" ? snapshot : { tables: {} }, {
-          headers: { [DUCTS_BODY_VERSION_HEADER]: key },
-        });
+        if (key === "ducts.snapshot") snapshotSlots.push("slots" in request ? request.slots : undefined);
+        // The native read measures under the slot the request names; the host must send Work's
+        // protocol slot (C# never reads Work), else the document's stored slot stands.
+        const slot =
+          ("slots" in request ? request.slots?.terminalFlow : undefined) ?? "named";
+        return Response.json(
+          key === "ducts.snapshot"
+            ? { ...snapshot, slots: { terminalFlow: slot } }
+            : { tables: {} },
+          {
+            headers: { [DUCTS_BODY_VERSION_HEADER]: key },
+          },
+        );
       },
     };
     const registrations = [{ spec: ductsRouteState }];
@@ -249,7 +308,7 @@ test("sheet inputs survive host recreation in document Work; one project cell go
         "human",
         [
           {
-            path: ["sheetDefaults", "edit"],
+            path: ["criteria", "edit"],
             value: { value: { terminalDropInWg: 0.06, splitPolicy: "proportional" } },
           },
           { path: ["parameters", "terminalFlow", "edit"], value: { value: "revit:Flow" } },
@@ -275,6 +334,18 @@ test("sheet inputs survive host recreation in document Work; one project cell go
           body: JSON.stringify(body),
         }),
       );
+    const setSlot = async (slot: string) => {
+      const saved = await workspace.readRaw(scope, "ducts");
+      expect(
+        await workspace.apply(
+          scope,
+          "ducts",
+          "human",
+          [{ path: ["parameters", "terminalFlow", "edit"], value: { value: slot } }],
+          saved!.revision,
+        ),
+      ).toMatchObject({ ok: true });
+    };
     const request = { target, mode: "fan", unitId: 100, portIndex: 0 };
     const settings = ductsSheetOverviewSchema.parse(await (await post("sheet", request)).json());
     expect(settings.fan!.flowCfm).toBe(200);
@@ -284,20 +355,23 @@ test("sheet inputs survive host recreation in document Work; one project cell go
         await post("sheet", { ...request, basis: settings.basis, detail: { kind: "inputs" } })
       ).json(),
     );
-    expect(firstInputs.kind === "inputs" && firstInputs.inputs).toContainEqual({
-      name: "split policy",
+    expect(firstInputs.kind === "inputs" && firstInputs.inputs.criteria.splitPolicy).toEqual({
       value: "proportional",
-      source: "route settings",
+      source: "project",
     });
-    const inputs = {
-      slot: "named",
-      splitPolicy: "even",
-      endCfm: { 101: 70 },
-      drops: { 102: 0.09 },
-      rulings: [{ pair: ["11:0", "12:1"], verdict: "reject" }],
+    expect(firstInputs.kind === "inputs" && firstInputs.firm).toMatchObject({
+      version: "seed",
+      present: false,
+    });
+    const edits = {
+      criteria: { splitPolicy: "even" },
+      flows: { 101: { cfm: 70 } },
+      terminalDrops: { 102: { inWg: 0.09 } },
+      joins: [{ pair: ["11:0", "12:1"], verdict: "reject" }],
     };
+    await setSlot("named");
     const written = ductsSheetOverviewSchema.parse(
-      await (await post("sheet", { ...request, inputs })).json(),
+      await (await post("sheet", { ...request, edits })).json(),
     );
     expect(written.fan!.flowCfm).toBe(70);
     expect(written.totals!.requiredEspInWg).toBeCloseTo(0.15);
@@ -314,10 +388,9 @@ test("sheet inputs survive host recreation in document Work; one project cell go
         await post("sheet", { ...request, basis: reloaded.basis, detail: { kind: "inputs" } })
       ).json(),
     );
-    expect(provenance.kind === "inputs" && provenance.inputs).toContainEqual({
-      name: "airflow slot",
-      value: "named",
-      source: "Work edit",
+    expect(provenance.kind === "inputs" && provenance.inputs.terminals["101"]!.cfm).toEqual({
+      value: 70,
+      source: "typed",
     });
     const other = ductsSheetOverviewSchema.parse(
       await (await post("sheet", { ...request, unitId: 200 })).json(),
@@ -331,10 +404,30 @@ test("sheet inputs survive host recreation in document Work; one project cell go
         { slot: "revit:Flow", covered: 4, total: 4 },
       ]),
     );
+    // The fan-flow slot is protocol like the terminal slot: Work's `parameters.fanFlow` rides on
+    // both the roster read and the sheet's own read (C# reads no Work).
+    const fanSaved = await workspace.readRaw(scope, "ducts");
+    expect(
+      await workspace.apply(
+        scope,
+        "ducts",
+        "human",
+        [{ path: ["parameters", "fanFlow", "edit"], value: { value: "PE_M_Fan_AirFlow" } }],
+        fanSaved!.revision,
+      ),
+    ).toMatchObject({ ok: true });
+    const fanSlot = { fanFlow: "PE_M_Fan_AirFlow", terminalFlow: "named" };
+    snapshotSlots.length = 0;
+    await post("roster", { target });
+    // The roster's own read comes first; freshness probes of sheets cached before the edit replay
+    // their own requests and are then discarded.
+    expect(snapshotSlots[0]).toEqual(fanSlot);
+    snapshotSlots.length = 0;
+    await post("sheet", { ...request, unitId: 200 });
+    expect(snapshotSlots.at(-1)).toEqual(fanSlot);
+    await setSlot("revit:Flow");
     const changed = ductsSheetOverviewSchema.parse(
-      await (
-        await post("sheet", { ...request, unitId: 200, inputs: { slot: "revit:Flow" } })
-      ).json(),
+      await (await post("sheet", { ...request, unitId: 200 })).json(),
     );
     expect(changed.fan!.flowCfm).toBe(200);
     expect(
@@ -343,13 +436,14 @@ test("sheet inputs survive host recreation in document Work; one project cell go
     ).toBe(409);
     const override = ductsSheetOverviewSchema.parse(
       await (
-        await post("sheet", { ...request, inputs: { endCfm: { 101: 90 }, drops: { 101: 0.02 } } })
+        await post("sheet", {
+          ...request,
+          edits: { flows: { 101: { cfm: 90 } }, terminalDrops: { 101: { inWg: 0.02 } } },
+        })
       ).json(),
     );
     expect(override.fan!.flowCfm).toBe(90);
     expect(override.totals!.requiredEspInWg).toBeCloseTo(0.11); // Keeps saved drop on 102.
-    const noInlet = await post("sheet", { ...request, inputs: { inletPortIndex: 1 } });
-    expect(noInlet.status).toBe(400);
     for (const ids of tableIds)
       expect(ids).toEqual(expect.arrayContaining(["CR3-1", "CD3-3", "SD5-9"]));
     const raw = await new RouteWorkspace({
@@ -357,21 +451,18 @@ test("sheet inputs survive host recreation in document Work; one project cell go
       store: fileRouteDocumentStore(dir),
     }).readRaw(scope, "ducts");
     expect(raw!.doc).toMatchObject({
-      sheetInputs: {
-        project: {
-          edit: {
-            value: {
-              slot: "revit:Flow",
-              splitPolicy: "even",
-              rulings: inputs.rulings,
-              endCfm: { 101: 90 },
-              drops: { 101: 0.02, 102: 0.09 },
-            },
-          },
-        },
+      parameters: { terminalFlow: { edit: { value: "revit:Flow" } } },
+      criteria: { edit: { value: { terminalDropInWg: 0.06, splitPolicy: "even" } } },
+      flows: { 101: { edit: { value: { cfm: 90 } } } },
+      terminalDrops: {
+        101: { edit: { value: { inWg: 0.02 } } },
+        102: { edit: { value: { inWg: 0.09 } } },
+      },
+      assumptions: {
+        "join:11:0|12:1": { edit: { value: { kind: "verdict", verdict: "ignore" } } },
       },
     });
-    expect(raw!.doc).not.toHaveProperty(["sheetInputs", "fan:100:0"]);
+    expect(raw!.doc).not.toHaveProperty("sheetInputs");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -481,7 +572,9 @@ test("proposal accept/reject is basis-bound, persists in document Work, and repl
         .status,
     ).toBe(409);
     const reset = ductsSheetOverviewSchema.parse(
-      await (await post({ ...request, inputs: { rulings: [] } })).json(),
+      await (
+        await post({ ...request, edits: { joins: [{ pair: proposal.pair, verdict: "clear" }] } })
+      ).json(),
     );
     const accepted = ductsSheetOverviewSchema.parse(
       await (
@@ -499,15 +592,22 @@ test("proposal accept/reject is basis-bound, persists in document Work, and repl
       store: fileRouteDocumentStore(dir),
     }).readRaw(scope, "ducts");
     expect(raw!.doc).toMatchObject({
-      sheetInputs: {
-        project: { edit: { value: { rulings: [{ pair: proposal.pair, verdict: "accept" }] } } },
+      assumptions: {
+        [`join:${[...proposal.pair].sort().join("|")}`]: {
+          edit: { value: { kind: "verdict", verdict: "connect" } },
+        },
       },
     });
-    // R-CAP: an end ruling persists in the same project cell; the capped port is neither an end
+    // R-CAP: an end ruling persists in Work assumptions; the capped port is neither an end
     // nor a blocker, so the supply side has nothing left to price and ESP stays withheld.
     const endRulings = [{ end: { elementId: 100, connector: 0 }, verdict: "capped" }];
     const capped = ductsSheetOverviewSchema.parse(
-      await (await post({ ...request, inputs: { rulings: [], endRulings } })).json(),
+      await (
+        await post({
+          ...request,
+          edits: { joins: [{ pair: proposal.pair, verdict: "clear" }], ends: endRulings },
+        })
+      ).json(),
     );
     expect(capped.basis).not.toBe(accepted.basis);
     expect(capped.blockers.some((b) => b.elementId === 100)).toBe(false);
@@ -516,18 +616,24 @@ test("proposal accept/reject is basis-bound, persists in document Work, and repl
     const cappedInputs = ductsSheetResponseSchema.parse(
       await (await post({ ...request, basis: capped.basis, detail: { kind: "inputs" } })).json(),
     );
-    expect(cappedInputs.kind === "inputs" && cappedInputs.inputs).toContainEqual({
-      name: "open end 100:0 ruled capped",
+    expect(cappedInputs.kind === "inputs" && cappedInputs.notes).toContainEqual({
+      kind: "capped",
+      text: "open end 100:0 ruled capped",
       value: null,
-      source: "end ruling",
     });
-    expect(cappedInputs.kind === "inputs" && cappedInputs.edits.endRulings).toEqual(endRulings);
+    expect(cappedInputs.kind === "inputs" && cappedInputs.inputs.rulings).toEqual({
+      joins: [],
+      ends: endRulings,
+    });
     const rawCapped = await new RouteWorkspace({
       registrations,
       store: fileRouteDocumentStore(dir),
     }).readRaw(scope, "ducts");
     expect(rawCapped!.doc).toMatchObject({
-      sheetInputs: { project: { edit: { value: { rulings: [], endRulings } } } },
+      assumptions: {
+        [`join:${[...proposal.pair].sort().join("|")}`]: { edit: { delete: true } },
+        "open-end:100:0": { edit: { value: { kind: "verdict", verdict: "capped" } } },
+      },
     });
     expect(snapshot.nodes[0]!.connectors[0]!.connectedTo).toBeNull();
   } finally {

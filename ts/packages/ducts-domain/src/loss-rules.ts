@@ -103,6 +103,8 @@ export interface LossRule {
     z?: number;
     factor?: number | ((at: LookupPoint) => number);
     note?: string;
+    /** Why this fitting lies outside the table, which is then never read (the leg is not priced). */
+    refuse?: string;
   };
   /** The table priced when the default's grid is not served and no one assigned another. */
   fallback?: string;
@@ -151,6 +153,20 @@ const areaOf = (p: Port | null | undefined) => p?.section?.areaFt2 ?? NaN;
 /** A takeoff's branch over its main: Revit's own ratio when it states one, else the two sections. */
 const tapAbAc = (f: FittingFacts) => f.abOverAc ?? areaOf(f.inlet) / areaOf(f.main);
 const ratio = (v: number) => +v.toFixed(3);
+/**
+ * A round junction whose branch or straight is larger than its common is outside ED5-3 (area
+ * ratios up to 1) and outside what can be built: no collar is wider than the round main it taps.
+ * ASHRAE tables do not extrapolate, and ED5-3's edge is no stand-in there (its Qb/Qc 0.01 and 1
+ * columns run to +-2.6e5): FC-23's proposed tap at 13771256, a 20x20 collar on the 6 in duct
+ * 13973156 (Ab/Ac 14.2), read Cb -262998 at the edge and, charged on the collar's 18 fpm, about
+ * -5.3e7 (2026-10-29). Refused, the leg is not priced; a person types its drop or picks a table.
+ * A small collar (below the axis) still reads at the edge, and ER5-1 keeps its clamp: a
+ * rectangular collar on a main's long face can exceed the main's section (Chadds has 7 that do).
+ */
+const pastCommon = (table: string, abAc: number, asAc = 1) =>
+  abAc > 1 + 1e-6 || asAc > 1 + 1e-6
+    ? `Ab/Ac ${ratio(abAc)}, As/Ac ${ratio(asAc)}: a branch or straight larger than its round common is outside ${table}, which states area ratios up to 1`
+    : undefined;
 
 /**
  * The factor that charges a leg's coefficient on the velocity its table's geometry implies at the
@@ -314,7 +330,14 @@ export const LOSS_RULES: readonly LossRule[] = [
     table: "SD5-9",
     options: TAPS,
     basis: "branch leg: Pv of the branch; straight leg: Pv of the main downstream",
-    when: (f, flows) => f.takeoff && !f.converging && (flows.qb ?? 0) > 0 && flows.qc! > 0,
+    // A round supply bullhead (collar air dividing both ways) is SD5-18's (bullhead-diverging-round),
+    // never a tap; a rectangular one stays here, as SD5-18 is round-only and nothing better exists.
+    when: (f, flows) =>
+      f.takeoff &&
+      !f.converging &&
+      !(f.bullhead && f.main?.shape === "round") &&
+      (flows.qb ?? 0) > 0 &&
+      flows.qc! > 0,
     input: (f, flows, _t, leg) => {
       const qc = flows.qc!;
       if (leg === "Cs") return { res: "Cs", x: flows.qs! / qc, y: 1 };
@@ -328,6 +351,40 @@ export const LOSS_RULES: readonly LossRule[] = [
       leg === "Cs"
         ? { section: f.main?.section ?? null, cfm: flows.qs! }
         : { section: f.inlet.section, cfm: flows.qb! },
+  },
+  {
+    key: "bullhead-diverging-round",
+    family: "Round Takeoff",
+    type: "bullhead, diverging",
+    cond: "entered from its branch on the supply; the collar's air divides both ways along a round main",
+    table: "SD5-18",
+    options: ["SD5-18", "SD5-19"],
+    basis: "Pv of this path's main side at its own flow (branch 1)",
+    // fix6 defect 4 (MUAS-1 takeoff 14806947, 115 cfm dividing 50 / 65): SD5-18 (Sepsy 1969,
+    // bullhead tee without vanes, diverging) states Cb1 by Qb1/Qc and Ab1/Ac, the stem c being the
+    // collar. Each path is its own branch 1 (the sheet prices one leg per main side); a straight
+    // main is the same size both ways, so Ab1/Ac is the main over the collar.
+    // Basis verified 2026-10-30 against Revit's shipped Sd5-18.tbl: Cb1 is 1.02 on the diagonal
+    // (Qb1/Qc = Ab1/Ac, so Vb1 = Vc) and grows as (Vc/Vb1)^2 off it (Ab1/Ac 1, Qb1/Qc 0.01: 10028),
+    // i.e. a loss near 1.02 Pv_c written on branch 1's Pv: Cb1 multiplies Pv of branch 1.
+    when: (f, flows) =>
+      !!f.bullhead &&
+      !f.converging &&
+      f.main?.shape === "round" &&
+      (flows.qb ?? 0) > 0 &&
+      (flows.qc ?? 0) > 0,
+    input: (f, flows) => {
+      const x = flows.qb! / flows.qc!;
+      const a = areaOf(f.main) / areaOf(f.inlet);
+      return {
+        res: "Cb1",
+        x,
+        y: a,
+        factor: atTableVelocity(x, a, (at) => [at.x, at.y]),
+        note: `bullhead, diverging: this path is branch 1; Ab1/Ac ${ratio(a)}`,
+      };
+    },
+    basisOf: (f, flows) => ({ section: f.main?.section ?? null, cfm: flows.qb! }),
   },
   {
     key: "bullhead-converging-rect",
@@ -470,6 +527,8 @@ export const LOSS_RULES: readonly LossRule[] = [
       const block = (common?.section?.dhIn ?? NaN) > 10 ? "#2" : "";
       const abAc = f.takeoff ? tapAbAc(f) : areaOf(f.junction?.branch) / areaOf(common);
       const asAc = f.takeoff ? 1 : areaOf(f.junction?.straight) / areaOf(common);
+      const refuse = pastCommon("ED5-3", abAc, asAc);
+      if (refuse) return { res: `${(f.junction?.leg ?? leg) === "Cs" ? "Cs" : "Cb"}${block}`, x: NaN, refuse };
       if ((f.junction?.leg ?? leg) === "Cs") {
         const x = flows.qs! / flows.qc!;
         return {
