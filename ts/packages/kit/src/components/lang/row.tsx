@@ -256,7 +256,13 @@ function ListRow({
               <span className={slots.meta()}>
                 {fact}
                 {props.actions != null ? (
-                  <span className={slots.actions()} onClick={(event) => event.stopPropagation()}>
+                  <span
+                    className={slots.actions()}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => event.stopPropagation()}
+                    onKeyUp={(event) => event.stopPropagation()}
+                  >
                     {props.actions}
                   </span>
                 ) : null}
