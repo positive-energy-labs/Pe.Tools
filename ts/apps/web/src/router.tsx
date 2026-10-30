@@ -26,15 +26,12 @@ import { capturesRoute } from "./captures/route";
 import { opsRoute } from "./ops/route";
 import { openRoute } from "./open/route";
 import { Route as rootRoute } from "./routes/__root";
-import { publicRoutes } from "./route/builtin-routes";
-import { ShellProbe, ShellProbeRoute, shellProbe } from "./route/shell-probe";
 
 // Use the unannotated root: the generated tree's file-only type map excludes code routes.
 // `addChildren` mutates the root and returns it, so `routeTree.children` already holds the code
 // routes once this module re-evaluates (SSR runner, HMR); re-adding by path keeps the tree idempotent.
 const pathOf = (route: AnyRoute) => (route.options as { path?: string }).path;
 const codeRoutes: AnyRoute[] = [
-  ShellProbeRoute,
   settingsRoute,
   opsRoute,
   openRoute,
@@ -66,7 +63,6 @@ const appRouteTree = rootRoute.addChildren([
   ...fileRoutes,
   ...codeRoutes,
 ] as unknown as FileChildren & {
-  ShellProbeRoute: typeof ShellProbeRoute;
   settingsRoute: typeof settingsRoute;
   opsRoute: typeof opsRoute;
   openRoute: typeof openRoute;
@@ -85,12 +81,6 @@ const appRouteTree = rootRoute.addChildren([
   bindRoute: typeof bindRoute;
   capturesRoute: typeof capturesRoute;
 });
-const unregisterProbe = publicRoutes.register({
-  manifest: shellProbe.manifest,
-  hosted: () => <ShellProbe />,
-});
-if (import.meta.hot) import.meta.hot.dispose(unregisterProbe);
-
 function NotFound() {
   return (
     <main className="grid min-h-screen place-items-center">

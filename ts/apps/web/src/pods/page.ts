@@ -9,7 +9,6 @@ export const podsPageSchema = routeAddress("pods").schema.extend({
   mode: z.enum(["form", "raw"]).default("form"),
   pluginEpoch: z.number().default(0),
   pendingDraft: z.boolean().default(false),
-  live: z.unknown().optional(),
 });
 export type PodsPage = z.output<typeof podsPageSchema>;
 export const podsFields = {
@@ -18,7 +17,6 @@ export const podsFields = {
   pod: { ...podsAddress.fields.pod, role: "subject" as const },
   path: { ...podsAddress.fields.path, role: "subject" as const },
   runs: { ...podsAddress.fields.runs, role: "query" as const },
-  demo: { ...podsAddress.fields.demo, role: "transient" as const },
   member: {
     ...field(podsPageSchema.shape.member, {}),
     role: "transient" as const,
@@ -37,11 +35,6 @@ export const podsFields = {
   },
   pendingDraft: {
     ...field(podsPageSchema.shape.pendingDraft, {}),
-    role: "transient" as const,
-    url: false as const,
-  },
-  live: {
-    ...field(podsPageSchema.shape.live, {}, { encode: String, decode: (value) => value }),
     role: "transient" as const,
     url: false as const,
   },

@@ -121,12 +121,8 @@ const documentAddress = (
  */
 function useThreadHead(handle: ChatHandle) {
   const { currentThreadId, draftTarget, setDraftTarget } = useWorkbench();
-  const scope = useThreadScope(
-    currentThreadId,
-    !handle.view.read().page.demo,
-    chatReading(handle, "head"),
-  );
-  if (currentThreadId || handle.view.read().page.demo) return scope;
+  const scope = useThreadScope(currentThreadId, !handle.fixture, chatReading(handle, "head"));
+  if (currentThreadId || handle.fixture) return scope;
   const set = async (targets: Parameters<typeof scope.set>[0]) => {
     setDraftTarget(targets.at(-1)?.request ?? null);
     return true;

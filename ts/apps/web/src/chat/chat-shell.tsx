@@ -37,7 +37,7 @@ import {
   useChatSituation,
 } from "#/chat/composer-head";
 import { useGraphRoute, GraphRouteView } from "#/shell/mount";
-import { appAtomRegistry } from "#/route/route-owner";
+import { appAtomRegistry } from "#/shell/owner";
 import { PagePaletteButton } from "#/route/situation-marks";
 import { PrimaryRouteControls, usePublishPagePalette } from "#/navigation/route-controls";
 import { useSurfaceHost } from "#/navigation/surface-host";
@@ -289,7 +289,7 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
           id="transcript"
           name
           titleAlign="center"
-          meta={handle.view.read().page.demo ? "Fixture" : switching ? "reading" : undefined}
+          meta={handle.fixture ? "Fixture" : switching ? "reading" : undefined}
           title={
             selectTitle(chat) ||
             threads.find((thread) => thread.id === currentThreadId)?.title ||

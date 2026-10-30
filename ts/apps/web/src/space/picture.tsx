@@ -9,7 +9,7 @@ import { Button } from "@pe/kit/lang/button";
 import type { FloaterSpec } from "@pe/kit/lang/floater";
 import { StageGlobe } from "#/scene/stage-globe";
 import { Pane } from "@pe/kit/lang/pane";
-import type { PageMove } from "#/route/manifest";
+import type { PageMove } from "#/shell/page";
 import { PictureStage, stageViewport } from "#/scene/stage-controller";
 import { boundsOfInstances, center, frame, type OrbitViewport } from "#/scene/orbit";
 import {

@@ -28,7 +28,10 @@
       "groupOf": {
         "runtime": true
       },
-      "nouns": ["parameter", "family"],
+      "nouns": [
+        "parameter",
+        "family"
+      ],
       "segment": "cells",
       "show": {
         "runtime": true
@@ -36,26 +39,6 @@
     }
   ],
   "fields": {
-    "demo": {
-      "agent": false,
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "transient",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": "",
-        "maxLength": 200,
-        "type": "string"
-      },
-      "share": false,
-      "url": "replace"
-    },
     "draft": {
       "agent": "set",
       "codec": {
@@ -95,7 +78,11 @@
               },
               "placement": {
                 "default": "PlacedOnly",
-                "enum": ["AllLoaded", "PlacedOnly", "UnplacedOnly"],
+                "enum": [
+                  "AllLoaded",
+                  "PlacedOnly",
+                  "UnplacedOnly"
+                ],
                 "type": "string"
               }
             },
@@ -148,7 +135,11 @@
       "role": "selection",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "enum": ["suggestions", "edits", "all"],
+        "enum": [
+          "suggestions",
+          "edits",
+          "all"
+        ],
         "type": "string"
       },
       "share": true,
@@ -168,7 +159,10 @@
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "spec",
-        "enum": ["spec", "output"],
+        "enum": [
+          "spec",
+          "output"
+        ],
         "type": "string"
       },
       "share": true,
@@ -271,7 +265,10 @@
         "items": {
           "properties": {
             "dir": {
-              "enum": ["asc", "desc"],
+              "enum": [
+                "asc",
+                "desc"
+              ],
               "type": "string"
             },
             "key": {
@@ -280,7 +277,10 @@
               "type": "string"
             }
           },
-          "required": ["key", "dir"],
+          "required": [
+            "key",
+            "dir"
+          ],
           "type": "object"
         },
         "maxItems": 8,
@@ -303,7 +303,11 @@
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "audit",
-        "enum": ["audit", "apply", "history"],
+        "enum": [
+          "audit",
+          "apply",
+          "history"
+        ],
         "type": "string"
       },
       "share": true,
@@ -352,7 +356,11 @@
                   "type": "string"
                 }
               },
-              "required": ["field", "op", "value"],
+              "required": [
+                "field",
+                "op",
+                "value"
+              ],
               "type": "object"
             },
             "maxItems": 32,
@@ -364,7 +372,11 @@
             "type": "integer"
           }
         },
-        "required": ["v", "keywords", "pills"],
+        "required": [
+          "v",
+          "keywords",
+          "pills"
+        ],
         "type": "object"
       },
       "share": true,
@@ -384,7 +396,11 @@
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "",
-        "enum": ["", "recent", "title"],
+        "enum": [
+          "",
+          "recent",
+          "title"
+        ],
         "type": "string"
       },
       "share": true,
@@ -468,35 +484,55 @@
   "needs": "project",
   "panes": {
     "history": {
-      "draws": ["archive"],
+      "draws": [
+        "archive"
+      ],
       "label": "Past family reads",
       "purpose": "Choose an immutable saved family read",
       "verbs": []
     },
     "matrix": {
-      "draws": ["matrix", "saved", "archive", "receipts"],
+      "draws": [
+        "matrix",
+        "saved",
+        "archive",
+        "receipts"
+      ],
       "label": "Family matrix",
       "purpose": "Inspect and edit parameters across family types",
       "verbs": []
     },
     "scope": {
-      "draws": ["categories", "catalog"],
+      "draws": [
+        "categories",
+        "catalog"
+      ],
       "label": "Family scope",
       "purpose": "Draft the next read without reading Revit",
-      "verbs": ["read", "cancel-read"]
+      "verbs": [
+        "read",
+        "cancel-read"
+      ]
     },
     "spec": {
-      "draws": ["pods"],
+      "draws": [
+        "pods"
+      ],
       "label": "Family spec",
       "purpose": "Choose an exact saved Family Foundry source",
       "verbs": []
     },
     "work": {
-      "draws": ["matrix", "receipts"],
+      "draws": [
+        "matrix",
+        "receipts"
+      ],
       "label": "Family Work",
       "purpose": "Review scope, patches, keyed cells and receipts",
       "verbs": {
-        "ids": ["exclude"],
+        "ids": [
+          "exclude"
+        ],
         "runtime": true
       }
     }
@@ -547,7 +583,9 @@
       "args": {
         "runtime": true
       },
-      "deps": ["archive"],
+      "deps": [
+        "archive"
+      ],
       "kind": "use",
       "retire": "page",
       "source": "families.saved"
@@ -556,20 +594,49 @@
   "salvage": {
     "runtime": true
   },
-  "stageOrder": ["audit", "apply", "history"],
+  "seeds": {
+    "apply": {
+      "title": "Plan family changes"
+    },
+    "audit": {
+      "title": "Loaded family matrix"
+    }
+  },
+  "stageOrder": [
+    "audit",
+    "apply",
+    "history"
+  ],
   "stages": {
     "apply": {
-      "panes": ["scope", "matrix", "work", "spec"],
-      "verbs": ["apply", "save-draft"],
+      "panes": [
+        "scope",
+        "matrix",
+        "work",
+        "spec"
+      ],
+      "verbs": [
+        "apply",
+        "save-draft"
+      ],
       "word": "Applying"
     },
     "audit": {
-      "panes": ["scope", "matrix", "work"],
-      "verbs": ["capture"],
+      "panes": [
+        "scope",
+        "matrix",
+        "work"
+      ],
+      "verbs": [
+        "capture"
+      ],
       "word": "Auditing"
     },
     "history": {
-      "panes": ["history", "matrix"],
+      "panes": [
+        "history",
+        "matrix"
+      ],
       "verbs": [],
       "word": "History"
     }
@@ -605,7 +672,11 @@
                 "type": "string"
               }
             },
-            "required": ["pod", "path", "sha256"],
+            "required": [
+              "pod",
+              "path",
+              "sha256"
+            ],
             "type": "object"
           }
         },
@@ -643,11 +714,15 @@
                 "type": "string"
               }
             },
-            "required": ["readId"],
+            "required": [
+              "readId"
+            ],
             "type": "object"
           }
         },
-        "required": ["request"],
+        "required": [
+          "request"
+        ],
         "type": "object"
       },
       "kind": "query",
@@ -683,7 +758,10 @@
             "default": null
           }
         },
-        "required": ["pod", "familyIds"],
+        "required": [
+          "pod",
+          "familyIds"
+        ],
         "type": "object"
       },
       "kind": "command",
@@ -718,7 +796,9 @@
                 },
                 "value": {}
               },
-              "required": ["path"],
+              "required": [
+                "path"
+              ],
               "type": "object"
             },
             "type": "array"
@@ -735,7 +815,10 @@
             "default": null
           }
         },
-        "required": ["patches", "expectedRevision"],
+        "required": [
+          "patches",
+          "expectedRevision"
+        ],
         "type": "object"
       },
       "kind": "work",
@@ -763,7 +846,9 @@
             "default": null
           }
         },
-        "required": ["name"],
+        "required": [
+          "name"
+        ],
         "type": "object"
       },
       "kind": "work",
@@ -787,7 +872,11 @@
                 "type": "string"
               }
             },
-            "required": ["familyName", "typeName", "parameter"],
+            "required": [
+              "familyName",
+              "typeName",
+              "parameter"
+            ],
             "type": "object"
           },
           "current": {
@@ -808,7 +897,13 @@
             "additionalProperties": false,
             "properties": {
               "storageType": {
-                "enum": ["String", "Integer", "Double", "ElementId", "None"],
+                "enum": [
+                  "String",
+                  "Integer",
+                  "Double",
+                  "ElementId",
+                  "None"
+                ],
                 "type": "string"
               },
               "unit": {
@@ -819,11 +914,18 @@
                 "type": "string"
               }
             },
-            "required": ["value", "storageType"],
+            "required": [
+              "value",
+              "storageType"
+            ],
             "type": "object"
           }
         },
-        "required": ["address", "value", "current"],
+        "required": [
+          "address",
+          "value",
+          "current"
+        ],
         "type": "object"
       },
       "kind": "work",
@@ -872,11 +974,19 @@
                     "type": "array"
                   },
                   "placementScope": {
-                    "enum": ["AllLoaded", "PlacedOnly", "UnplacedOnly"],
+                    "enum": [
+                      "AllLoaded",
+                      "PlacedOnly",
+                      "UnplacedOnly"
+                    ],
                     "type": "string"
                   }
                 },
-                "required": ["categoryNames", "familyNames", "placementScope"],
+                "required": [
+                  "categoryNames",
+                  "familyNames",
+                  "placementScope"
+                ],
                 "type": "object"
               },
               "readId": {
@@ -885,11 +995,16 @@
                 "type": "string"
               }
             },
-            "required": ["filter", "readId"],
+            "required": [
+              "filter",
+              "readId"
+            ],
             "type": "object"
           }
         },
-        "required": ["request"],
+        "required": [
+          "request"
+        ],
         "type": "object"
       },
       "kind": "query",
@@ -918,7 +1033,9 @@
             "default": null
           }
         },
-        "required": ["pod"],
+        "required": [
+          "pod"
+        ],
         "type": "object"
       },
       "kind": "command",
@@ -935,7 +1052,9 @@
             "type": "boolean"
           }
         },
-        "required": ["confirm"],
+        "required": [
+          "confirm"
+        ],
         "type": "object"
       },
       "input": {
@@ -960,7 +1079,9 @@
             "type": "boolean"
           }
         },
-        "required": ["confirm"],
+        "required": [
+          "confirm"
+        ],
         "type": "object"
       },
       "input": {
@@ -1012,13 +1133,20 @@
                       ]
                     },
                     "by": {
-                      "enum": ["human", "pea", "unknown"],
+                      "enum": [
+                        "human",
+                        "pea",
+                        "unknown"
+                      ],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": ["high", "low"],
+                          "enum": [
+                            "high",
+                            "low"
+                          ],
                           "type": "string"
                         },
                         {
@@ -1043,7 +1171,13 @@
                       "additionalProperties": false,
                       "properties": {
                         "storageType": {
-                          "enum": ["String", "Integer", "Double", "ElementId", "None"],
+                          "enum": [
+                            "String",
+                            "Integer",
+                            "Double",
+                            "ElementId",
+                            "None"
+                          ],
                           "type": "string"
                         },
                         "unit": {
@@ -1054,11 +1188,16 @@
                           "type": "string"
                         }
                       },
-                      "required": ["value", "storageType"],
+                      "required": [
+                        "value",
+                        "storageType"
+                      ],
                       "type": "object"
                     }
                   },
-                  "required": ["value"],
+                  "required": [
+                    "value"
+                  ],
                   "type": "object"
                 },
                 {
@@ -1094,13 +1233,20 @@
                       ]
                     },
                     "by": {
-                      "enum": ["human", "pea", "unknown"],
+                      "enum": [
+                        "human",
+                        "pea",
+                        "unknown"
+                      ],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": ["high", "low"],
+                          "enum": [
+                            "high",
+                            "low"
+                          ],
                           "type": "string"
                         },
                         {
@@ -1125,7 +1271,13 @@
                       "additionalProperties": false,
                       "properties": {
                         "storageType": {
-                          "enum": ["String", "Integer", "Double", "ElementId", "None"],
+                          "enum": [
+                            "String",
+                            "Integer",
+                            "Double",
+                            "ElementId",
+                            "None"
+                          ],
                           "type": "string"
                         },
                         "unit": {
@@ -1136,11 +1288,16 @@
                           "type": "string"
                         }
                       },
-                      "required": ["value", "storageType"],
+                      "required": [
+                        "value",
+                        "storageType"
+                      ],
                       "type": "object"
                     }
                   },
-                  "required": ["value"],
+                  "required": [
+                    "value"
+                  ],
                   "type": "object"
                 },
                 {
@@ -1162,11 +1319,17 @@
           "additionalProperties": false,
           "properties": {
             "by": {
-              "enum": ["human", "pea", "unknown"],
+              "enum": [
+                "human",
+                "pea",
+                "unknown"
+              ],
               "type": "string"
             }
           },
-          "required": ["by"],
+          "required": [
+            "by"
+          ],
           "type": "object"
         },
         "default": {},
@@ -1226,13 +1389,20 @@
                     ]
                   },
                   "by": {
-                    "enum": ["human", "pea", "unknown"],
+                    "enum": [
+                      "human",
+                      "pea",
+                      "unknown"
+                    ],
                     "type": "string"
                   },
                   "confidence": {
                     "anyOf": [
                       {
-                        "enum": ["high", "low"],
+                        "enum": [
+                          "high",
+                          "low"
+                        ],
                         "type": "string"
                       },
                       {
@@ -1269,11 +1439,16 @@
                         "type": "string"
                       }
                     },
-                    "required": ["path", "content"],
+                    "required": [
+                      "path",
+                      "content"
+                    ],
                     "type": "object"
                   }
                 },
-                "required": ["value"],
+                "required": [
+                  "value"
+                ],
                 "type": "object"
               },
               {
@@ -1309,13 +1484,20 @@
                     ]
                   },
                   "by": {
-                    "enum": ["human", "pea", "unknown"],
+                    "enum": [
+                      "human",
+                      "pea",
+                      "unknown"
+                    ],
                     "type": "string"
                   },
                   "confidence": {
                     "anyOf": [
                       {
-                        "enum": ["high", "low"],
+                        "enum": [
+                          "high",
+                          "low"
+                        ],
                         "type": "string"
                       },
                       {
@@ -1352,11 +1534,16 @@
                         "type": "string"
                       }
                     },
-                    "required": ["path", "content"],
+                    "required": [
+                      "path",
+                      "content"
+                    ],
                     "type": "object"
                   }
                 },
-                "required": ["value"],
+                "required": [
+                  "value"
+                ],
                 "type": "object"
               },
               {
@@ -1403,13 +1590,20 @@
                     ]
                   },
                   "by": {
-                    "enum": ["human", "pea", "unknown"],
+                    "enum": [
+                      "human",
+                      "pea",
+                      "unknown"
+                    ],
                     "type": "string"
                   },
                   "confidence": {
                     "anyOf": [
                       {
-                        "enum": ["high", "low"],
+                        "enum": [
+                          "high",
+                          "low"
+                        ],
                         "type": "string"
                       },
                       {
@@ -1445,15 +1639,25 @@
                         "type": "array"
                       },
                       "placementScope": {
-                        "enum": ["AllLoaded", "PlacedOnly", "UnplacedOnly"],
+                        "enum": [
+                          "AllLoaded",
+                          "PlacedOnly",
+                          "UnplacedOnly"
+                        ],
                         "type": "string"
                       }
                     },
-                    "required": ["categoryNames", "familyNames", "placementScope"],
+                    "required": [
+                      "categoryNames",
+                      "familyNames",
+                      "placementScope"
+                    ],
                     "type": "object"
                   }
                 },
-                "required": ["value"],
+                "required": [
+                  "value"
+                ],
                 "type": "object"
               },
               {
@@ -1489,13 +1693,20 @@
                     ]
                   },
                   "by": {
-                    "enum": ["human", "pea", "unknown"],
+                    "enum": [
+                      "human",
+                      "pea",
+                      "unknown"
+                    ],
                     "type": "string"
                   },
                   "confidence": {
                     "anyOf": [
                       {
-                        "enum": ["high", "low"],
+                        "enum": [
+                          "high",
+                          "low"
+                        ],
                         "type": "string"
                       },
                       {
@@ -1531,15 +1742,25 @@
                         "type": "array"
                       },
                       "placementScope": {
-                        "enum": ["AllLoaded", "PlacedOnly", "UnplacedOnly"],
+                        "enum": [
+                          "AllLoaded",
+                          "PlacedOnly",
+                          "UnplacedOnly"
+                        ],
                         "type": "string"
                       }
                     },
-                    "required": ["categoryNames", "familyNames", "placementScope"],
+                    "required": [
+                      "categoryNames",
+                      "familyNames",
+                      "placementScope"
+                    ],
                     "type": "object"
                   }
                 },
-                "required": ["value"],
+                "required": [
+                  "value"
+                ],
                 "type": "object"
               },
               {

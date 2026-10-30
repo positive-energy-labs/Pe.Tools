@@ -1,6 +1,5 @@
 import { field, text, type RouteDeclaration } from "../route-field.ts";
 import { entityFields, tableFields, workLinesField } from "./entity.ts";
-import { demo } from "./shared.ts";
 
 /** The Families query a page opens with: its filter clauses that default on (web `FAMILIES_FILTERS`). */
 export const FAMILIES_DEFAULT_QUERY = "!empty !absent";
@@ -14,7 +13,6 @@ export const familiesAddress = {
     lines: workLinesField,
     /** History's picked past read (a saved matrix reading id); empty = the newest. */
     past: field(text(128), { url: "push", agent: "set" }),
-    demo,
   },
   agent: {
     finds: ["history", "past read", "rules", "query", "columns"],

@@ -22,9 +22,9 @@ import { NATIVE_APPLY_WAIT_S } from "#/route/waits";
 export const roomsPageSchema = routeAddress("rooms").schema.extend({
   selected: z.array(z.string()).default([]),
   epoch: z.number().default(0),
-  live: z.unknown().optional(),
 });
 export type RoomsPage = z.output<typeof roomsPageSchema>;
+import { roomsSeeds } from "./graph-seeds";
 const fields = { ...threadListFields, ...roomsAddress.fields };
 const request = <S extends z.ZodType>(schema: S) =>
   z.strictObject({
@@ -47,6 +47,7 @@ export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = {
   key: "rooms",
   address: "rooms",
   name: "Rooms",
+  seeds: roomsSeeds,
   needs: "project",
   work: roomsRouteState.schema,
   fields: {
@@ -59,15 +60,6 @@ export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = {
     show: { ...fields.show, role: "query", agent: false },
     card: { ...fields.card, role: "selection", agent: false },
     viewport: { ...fields.viewport, role: "pose" },
-    demo: { ...fields.demo, role: "transient", url: fields.demo.url ?? false },
-    live: {
-      ...field(
-        roomsPageSchema.shape.live,
-        { url: "replace" },
-        { encode: String, decode: (value) => value },
-      ),
-      role: "transient",
-    },
     selected: {
       ...field(
         roomsPageSchema.shape.selected,
@@ -116,19 +108,19 @@ export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = {
       kind: "use",
       source: "rooms.snapshot",
       retire: "page",
-      args: (p) => [p.view, p.epoch, p.demo, p.live],
+      args: (p) => [p.view, p.epoch],
     },
     trace: {
       kind: "use",
       source: "rooms.trace",
       retire: "page",
-      args: (p) => [p.view, p.epoch, p.demo, p.live],
+      args: (p) => [p.view, p.epoch],
     },
     plan: {
       kind: "use",
       source: "rooms.plan",
       retire: "page",
-      args: (p) => [p.view, p.demo, p.live],
+      args: (p) => p.view,
     },
     receipts: { kind: "use", source: "rooms.receipts", retire: "target" },
   },

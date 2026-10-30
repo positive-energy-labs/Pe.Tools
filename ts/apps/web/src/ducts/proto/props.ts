@@ -6,7 +6,7 @@ import type { price } from "@pe/ducts-domain/pricing";
 import type { readiness } from "@pe/ducts-domain/readiness";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { ReactNode } from "react";
-import type { PageMove } from "#/route/manifest";
+import type { PageMove } from "#/shell/page";
 
 import type { DuctsPage } from "../graph";
 import type { Claim, Run } from "../legs";
@@ -35,7 +35,7 @@ export interface ProtoProps {
   onVerdict: (claim: Claim, verdict: NonNullable<Claim["verdict"]>) => void;
   /** The chosen system's claims (every claim when no system is chosen). */
   claims: readonly Claim[];
-  /** The claim cells keyed by id as the Work (or the `?demo=scene` fixture) holds them. */
+  /** The claim cells keyed by id as the Work (or the `?fixture=scene` fixture) holds them. */
   claimCells: Record<string, DuctClaim>;
   /** Route page state (selected, issue, system, level, layers, encoding, picture, viewport, ...). */
   page: DuctsPage;

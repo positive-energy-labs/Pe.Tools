@@ -20,7 +20,7 @@ import { subscriptionSource } from "#/shell/readings-use";
 import type { GraphMount, RouteAdapters } from "#/shell/mount";
 import type { ReadingState } from "#/shell/readings";
 import { targetClosure } from "./thread-navigation";
-import { CHAT_SEEDS } from "./seeds";
+import { chatSeeds } from "./graph-seeds";
 import { emptyPrompt } from "#/workbench/prompt";
 import type { PromptRequest } from "#/workbench/provider/harness-client";
 
@@ -38,7 +38,7 @@ export interface ChatRouteDeps {
   providerName?: string;
   draftTarget?: DocumentRequest | null;
 }
-export type ChatPage = { thread: string; mode: "threads" | "world"; demo: string };
+export type ChatPage = { thread: string; mode: "threads" | "world" };
 export type ChatHandle = GraphMount<ChatPage, unknown>;
 const { id: _requestId, ...promptFields } = promptRequestSchema.shape;
 const promptInput = z.object(promptFields);
@@ -67,7 +67,7 @@ export function chatGraph(deps: () => ChatRouteDeps, minOtherSize?: number): Rou
       },
       { label, caller: "human", review: "none", input: noInput },
       {
-        ready: (scope) => (scope.page.demo ? "Fixture: no thread command is sent" : ready()),
+        ready: () => ready(),
         intent: (scope) => ({ thread: String(scope.page.thread) }),
       },
     );
@@ -75,8 +75,8 @@ export function chatGraph(deps: () => ChatRouteDeps, minOtherSize?: number): Rou
     key: "chat",
     address: "pea",
     name: "Pea",
+    seeds: chatSeeds,
     fields: {
-      demo: { ...field(z.string().default(""), {}), role: "transient", url: "replace" },
       thread: { ...field(z.string().default(""), {}), role: "transient" },
       mode: { ...field(z.enum(["threads", "world"]).default("threads"), {}), role: "pose" },
     },
@@ -85,15 +85,15 @@ export function chatGraph(deps: () => ChatRouteDeps, minOtherSize?: number): Rou
         kind: "use",
         source: "head",
         retire: "page",
-        args: (page) => [page.thread, page.demo],
+        args: (page) => page.thread,
       },
-      machine: { kind: "use", source: "machine", retire: "page", args: (page) => page.demo },
-      receipts: { kind: "use", source: "receipts", retire: "page", args: (page) => page.demo },
+      machine: { kind: "use", source: "machine", retire: "page", args: (page) => page.thread },
+      receipts: { kind: "use", source: "receipts", retire: "page", args: (page) => page.thread },
       capabilities: {
         kind: "use",
         source: "capabilities",
         retire: "page",
-        args: (page) => page.demo,
+        args: (page) => page.thread,
       },
     },
     verbs: {
@@ -112,7 +112,6 @@ export function chatGraph(deps: () => ChatRouteDeps, minOtherSize?: number): Rou
           intent: (scope, input) => ({ thread: String(scope.page.thread), prompt: input }),
           ready: (scope, input) => {
             const current = deps();
-            if (scope.page.demo) return "Fixture: no prompt is sent";
             if (!current.send) return "Chat is not ready";
             if (!current.ready || scope.page.thread !== current.thread)
               return "Thread state is loading";
@@ -211,23 +210,7 @@ export function chatAdapters(navigate: () => void): RouteAdapters<ChatPage, unkn
               : { kind: id },
           decode: (value) => value,
         });
-        return [
-          id,
-          {
-            ...live,
-            open: (
-              ctx: Parameters<typeof live.open>[0],
-              deliver: Parameters<typeof live.open>[1],
-            ) => {
-              const seed = CHAT_SEEDS[(ctx.page as ChatPage).demo as keyof typeof CHAT_SEEDS];
-              if (seed) {
-                deliver({ kind: "complete", value: seed.readings[id], revision: 1 });
-                return;
-              }
-              return live.open(ctx, deliver);
-            },
-          },
-        ];
+        return [id, live];
       }),
     ),
     binding: (_id, row) => ({ subject: null, args: row ?? {} }),

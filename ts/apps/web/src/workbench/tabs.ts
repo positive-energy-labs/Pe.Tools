@@ -70,9 +70,9 @@ const focus = (id: string | null) => {
 function place(route: RouteKey, search: Record<string, unknown>, local: boolean) {
   const { page, carry } = routeAddress(route).read(search);
   const link = routeAddress(route).link(page, { target: carry.target, work: carry.work });
-  // A `?demo=` seed rides its fixture Place.
-  return local && typeof search.demo === "string"
-    ? `${link}${link.includes("?") ? "&" : "?"}demo=${encodeURIComponent(search.demo)}`
+  // A `?fixture=` seed rides its fixture Place.
+  return local && typeof search.fixture === "string"
+    ? `${link}${link.includes("?") ? "&" : "?"}fixture=${encodeURIComponent(search.fixture)}`
     : link;
 }
 
@@ -305,7 +305,7 @@ export function useRouteTabs() {
           work: explicit !== undefined ? explicit.work : carry.work,
         }),
       );
-      // Reuse only the Place with this exact binding (the `?demo=` fixture keeps one per route).
+      // Reuse only the Place with this exact binding (the `?fixture=` fixture keeps one per route).
       const existing =
         !duplicate &&
         read().find(

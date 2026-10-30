@@ -197,7 +197,7 @@ export function useFamiliesStore(owner: FamiliesMount) {
     plan,
     applyData,
     draft,
-    demo: !!page.demo,
+    fixture: !!owner.fixture,
     table,
     picker,
     setPage: owner.view.setPage,

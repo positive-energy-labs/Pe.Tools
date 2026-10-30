@@ -21,15 +21,3 @@ export const manifestChords = (handle: AnyHandle): ScopeKey[] =>
   Object.entries(handle.actions)
     .filter(([, action]) => action.chord !== undefined)
     .map(([name, action]) => actionKey(handle, name, action.chord as Chord));
-
-/**
- * The stage node's chords: a stage owns them (`route/stage.ts`, `StageDecl.keys`) and the manifest
- * carries none, so a chord bound in one stage is dead the moment another stage draws.
- */
-export const stageChords = (
-  handle: AnyHandle,
-  keys: Readonly<Record<string, Chord | undefined>>,
-): ScopeKey[] =>
-  Object.entries(keys).flatMap(([name, hotkey]) =>
-    hotkey === undefined ? [] : [actionKey(handle, name, hotkey)],
-  );

@@ -2,6 +2,7 @@ import { pane, type RouteGraph } from "@pe/agent-contracts";
 import { settingsAddress } from "../../../../packages/agent-contracts/src/routes/settings";
 import { z } from "zod";
 import { pageVerb } from "#/shell/verbs";
+import { openSeeds } from "#/open/graph-seeds";
 
 export type SettingsPage = {
   [K in keyof typeof settingsAddress.fields]: z.output<
@@ -12,6 +13,20 @@ export const settingsGraph: RouteGraph<SettingsPage> = {
   key: "settings",
   address: "settings",
   name: "Settings",
+  seeds: Object.fromEntries(
+    Object.entries(openSeeds).map(([name, seed]) => [
+      name,
+      {
+        title: seed.title,
+        readings: {
+          machine: {
+            reading: { state: "ready", observation: seed.readings.machine },
+            fixture: true,
+          },
+        },
+      },
+    ]),
+  ),
   fields: {
     section: { ...settingsAddress.fields.section, role: "pose" },
     session: { ...settingsAddress.fields.session, role: "pose" },

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   threadWorkSnapshotSchema,
   type Reading,
@@ -6,7 +6,7 @@ import {
   type ThreadWorkSnapshot,
   type WorkResume,
 } from "@pe/agent-contracts";
-import { CHAT_SEED_THREAD_WORK } from "#/chat/seeds";
+import { fixtureThreadWork, useFixtureName } from "#/shell/fixture-services";
 import { peClient } from "#/host/pe-client";
 import { previousOf, useReading } from "#/readings";
 
@@ -15,15 +15,13 @@ import { previousOf, useReading } from "#/readings";
 const threadWorksOf = (reading: Reading<unknown>): ThreadWorkSnapshot | null =>
   threadWorkSnapshotSchema.safeParse(previousOf(reading)).data ?? null;
 
-/** One snapshot for the whole sidebar, indexed by thread; rows look up, never read. `?demo=` keeps
+/** One snapshot for the whole sidebar, indexed by thread; rows look up, never read. `?fixture=` keeps
  *  its fixture and asks the host nothing. */
 export function useThreadWorks() {
-  // `?demo=` is read once at mount, as the workbench reads its seed.
-  const [demo] = useState(
-    () => typeof location !== "undefined" && new URLSearchParams(location.search).has("demo"),
-  );
+  const name = useFixtureName();
+  const demo = name !== null;
   const reading = useReading(demo ? null : { kind: "thread-work" });
-  const snapshot = demo ? CHAT_SEED_THREAD_WORK : threadWorksOf(reading);
+  const snapshot = name !== null ? fixtureThreadWork(name) : threadWorksOf(reading);
   return useMemo(
     () => ({
       demo,

@@ -20,7 +20,6 @@ import {
 } from "#/families/matrix-columns";
 import type { PlanEntry } from "#/route";
 import { createLocator, FamiliesWorkspaceProvider } from "#/families/workspace-context";
-import { DEMO_FAMILIES } from "#/families/seeds";
 import { familyCellEntries } from "#/families/staged";
 import { familyVerdicts } from "#/families/verdict";
 import { typeRowKey } from "#/families/picks";
@@ -313,6 +312,6 @@ export function FamiliesProvider({
   children: ReactNode;
 }) {
   const store = useFamiliesStore(owner);
-  const model = useFamiliesWorkspaceModel(store, store.demo ? DEMO_FAMILIES : undefined);
+  const model = useFamiliesWorkspaceModel(store);
   return <FamiliesWorkspaceProvider value={model}>{children}</FamiliesWorkspaceProvider>;
 }

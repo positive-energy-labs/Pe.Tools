@@ -1,12 +1,13 @@
 import * as React from "react";
 import * as kit from "@pe/kit";
 import { z } from "zod";
-import { podRouteWorkSpec, parseContributionKey, message } from "@pe/agent-contracts";
+import { podRouteWorkSpec, parseContributionKey, message, workKey } from "@pe/agent-contracts";
 import { isAnyOperationKey } from "@pe/host-contracts/operation-types";
 import { peClient } from "#/host/pe-client";
 import { callHostRpc } from "#/host/client";
 import { defineRoute, type Ctx } from "./manifest";
-import { RouteShell, useChooseTarget } from "./shell";
+import { RouteShell } from "./shell";
+import { useChooseTarget } from "#/shell/binding";
 import { useRoute } from "./use-route";
 import { useDocumentLadder, LadderPicker } from "./situation-ladder";
 import { usePublishPagePalette } from "#/navigation/route-controls";
@@ -141,7 +142,7 @@ export function makePodRoute(row: PodRouteDescriptor, bundle: PodRouteBundle) {
     const [page, setPage] = handle.page;
     usePublishPagePalette(row.workRoute, page.palette, (palette) => setPage({ palette }));
     React.useEffect(() => {
-      const key = JSON.stringify(handle.work.key);
+      const key = workKey(handle.work.key);
       if (queued.current?.key !== key) queued.current = null;
       if (
         handle.work.current &&
@@ -165,14 +166,14 @@ export function makePodRoute(row: PodRouteDescriptor, bundle: PodRouteBundle) {
         useState: () => ({
           state: latest.current.work.doc?.state ?? bundle.initial,
           fire: (event) => {
-            const expectedKey = JSON.stringify(latest.current.work.key);
+            const expectedKey = workKey(latest.current.work.key);
             const run = queue.current.then(async () => {
               const h = latest.current;
-              if (!active.current || JSON.stringify(h.work.key) !== expectedKey)
+              if (!active.current || workKey(h.work.key) !== expectedKey)
                 throw Error("This route's Work changed before the edit; choose it again.");
               if (!h.work.current || h.work.refusal)
                 throw Error(h.work.refusal ?? "Work is not current.");
-              const identity = JSON.stringify(h.work.key);
+              const identity = workKey(h.work.key);
               const prior = queued.current?.key === identity ? queued.current : null;
               const next = bundle.reducer(
                 prior?.state ?? h.work.doc?.state ?? bundle.initial,
@@ -193,7 +194,7 @@ export function makePodRoute(row: PodRouteDescriptor, bundle: PodRouteBundle) {
           },
         }),
         getState: () =>
-          queued.current?.key === JSON.stringify(latest.current.work.key) &&
+          queued.current?.key === workKey(latest.current.work.key) &&
           queued.current.revision >= (latest.current.work.revision ?? 0)
             ? queued.current.state
             : (latest.current.work.doc?.state ?? bundle.initial),

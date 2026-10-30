@@ -98,7 +98,7 @@ export function RouteRetention({
   if (route) {
     const pathname = routeAddress(route).path;
     const search = location.search as Record<string, unknown>;
-    const source = JSON.stringify([search.demo ?? null, search.live ?? null]);
+    const source = JSON.stringify(search.fixture ?? null);
     let entry = retained.current.find(
       (item) =>
         item.route === route &&

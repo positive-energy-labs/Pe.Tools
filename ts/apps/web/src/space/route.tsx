@@ -39,7 +39,7 @@ import { spaceGraph, spaceBinding, answerKeys, type SpacePage } from "./graph";
 import type { SpaceAnswers, SpaceReadResult } from "./reads";
 import { routeFromGraph, type GraphMount, type RouteAdapters, type MountBody } from "#/shell/mount";
 import { useRouteLease } from "#/route/view-bridge";
-import type { PageMove } from "#/route/manifest";
+import type { PageMove } from "#/shell/page";
 import { SpacePicture } from "./picture";
 import { rowAt } from "./layers";
 
@@ -56,7 +56,7 @@ function SpaceMount({ owner, children }: { owner: Owner; children: ReactNode }) 
   const page = owner.view.read().page;
   const read = owner.readings.get("scene");
   const scene = matchingScene(page, read);
-  const demo = page.demo === "fixture";
+  const demo = !!owner.fixture;
   const target = owner.snapshot().target;
   const doc = target.kind === "document" ? target.ref : null;
   const [error, setError] = useState<string | null>(null);
@@ -174,10 +174,10 @@ function SpaceBody({ owner, page }: MountBody<SpacePage, null>) {
   const scene = matchingScene(page, read);
   const meshes = scene?.meshes ?? null;
   const metadata: Psc1Metadata | null = scene?.metadata ?? null;
-  const demo = page.demo === "fixture";
+  const demo = !!owner.fixture;
   const target = owner.snapshot().target;
   const doc = target.kind === "document" ? target.ref : null;
-  const answers = answersFor(owner, page);
+  const answers = answersFor(owner);
   const rows = answers.rows?.response ?? null;
   const on = useMemo(() => new Set<SpaceLayer>(page.layers), [page.layers]);
   const legend = useMemo(() => (rows ? legendOf(rows, page.encoding) : []), [rows, page.encoding]);
@@ -326,13 +326,10 @@ function SpaceBody({ owner, page }: MountBody<SpacePage, null>) {
   );
 }
 
-function answersFor(owner: Owner, page: SpacePage): SpaceAnswers {
+function answersFor(owner: Owner): SpaceAnswers {
   const target = owner.snapshot().target;
   const doc = target.kind === "document" ? target.ref : null;
-  const demoAnswers =
-    page.demo === "fixture"
-      ? (owner.readings.get("demoAnswers").value as SpaceAnswers | null)
-      : null;
+  const seededAnswers = owner.readings.get("answers").value as SpaceAnswers | null;
   return Object.fromEntries(
     answerKeys.map((key) => {
       const result = owner.results.get(key);
@@ -342,7 +339,7 @@ function answersFor(owner: Owner, page: SpacePage): SpaceAnswers {
           : null;
       const valid =
         value && value.document.session === doc?.session && value.document.openId === doc.openId;
-      return [key, valid ? value : (demoAnswers?.[key] ?? null)];
+      return [key, valid ? value : (seededAnswers?.[key] ?? null)];
     }),
   ) as SpaceAnswers;
 }
@@ -350,7 +347,7 @@ function answersFor(owner: Owner, page: SpacePage): SpaceAnswers {
 function FactsBody({ owner, page, verbs }: MountBody<SpacePage, null>) {
   const { setPage, setError } = useContext(SpaceContext)!;
   const meshes = matchingScene(page, owner.readings.get("scene"))?.meshes;
-  const answers = answersFor(owner, page);
+  const answers = answersFor(owner);
   const on = new Set(page.layers);
   return (
     <div className="flex flex-col gap-3">

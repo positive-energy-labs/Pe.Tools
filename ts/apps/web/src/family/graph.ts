@@ -20,7 +20,8 @@ import { threadListFields } from "../../../../packages/agent-contracts/src/route
 import { commandVerb, prepareCommand, queryVerb, workVerb, pageVerb } from "#/shell/verbs";
 import { NATIVE_APPLY_WAIT_S } from "#/route/waits";
 
-export const FAMILY_MODEL_SCHEMA = "/schemas/settings/FamilyFoundry/models.json";
+export { FAMILY_MODEL_SCHEMA } from "./seeds";
+import { familySeeds } from "./graph-seeds";
 export const familyPageSchema = routeAddress("family").schema;
 export type FamilyPage = z.output<typeof familyPageSchema>;
 const fields = { ...threadListFields, ...familyAddress.fields };
@@ -35,6 +36,7 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = {
   key: familyDraftRouteState.route,
   address: "family",
   name: "Family",
+  seeds: familySeeds,
   needs: "family",
   work: familyDraftRouteState.schema,
   // A saved member is input to the document-owned draft, not a different Work.
@@ -52,7 +54,6 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = {
     drill: { ...fields.drill, role: "selection" },
     inspector: { ...fields.inspector, role: "selection" },
     doc: { ...fields.doc, role: "pose" },
-    demo: { ...fields.demo, role: "transient", url: fields.demo.url ?? false },
   },
   cells: [
     {

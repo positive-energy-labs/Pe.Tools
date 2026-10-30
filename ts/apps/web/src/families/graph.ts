@@ -28,6 +28,7 @@ import { commandVerb, prepareCommand, queryVerb, workVerb } from "#/shell/verbs"
 import { NATIVE_APPLY_WAIT_S } from "#/route/waits";
 import { filterWords } from "./filters";
 import { familiesGroupOf } from "./staged";
+import { familiesSeeds } from "./graph-seeds";
 
 export const FAMILIES_SPEC_SCHEMAS = [
   "/schemas/settings/FamilyFoundry/patches.json",
@@ -50,6 +51,7 @@ const refusal = z.string().nullable().default(null);
 const guarded = <S extends z.ZodType>(request: S) => z.strictObject({ request, refusal });
 
 export const familiesGraph: RouteGraph<FamiliesPage, FamiliesRouteDocument> = {
+  seeds: familiesSeeds,
   key: familiesRouteState.route,
   address: "families",
   name: "Families",
@@ -67,7 +69,6 @@ export const familiesGraph: RouteGraph<FamiliesPage, FamiliesRouteDocument> = {
     hidden: { ...fields.hidden, role: "pose" },
     lines: { ...fields.lines, role: "selection" },
     past: { ...fields.past, role: "selection" },
-    demo: { ...fields.demo, role: "transient", url: fields.demo.url ?? false },
     draft: {
       ...field(draft, {}, { encode: JSON.stringify, decode: (text) => JSON.parse(text) }),
       role: "draft",

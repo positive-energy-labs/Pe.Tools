@@ -28,7 +28,7 @@ import { machineFixture } from "../../../../packages/agent-contracts/tests/machi
 import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { peReadings } from "#/readings";
 import { Route as appRoot } from "../routes/__root";
-import { routeSearch } from "../route/route-owner";
+import { routeSearch } from "#/shell/owner";
 import { createGraphMount, type GraphMount } from "./mount-owner";
 import { routeFromGraph } from "./mount";
 import { queryVerb, workVerb } from "./verbs";

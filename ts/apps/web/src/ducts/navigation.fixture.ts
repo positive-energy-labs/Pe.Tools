@@ -1,4 +1,4 @@
-/** Explicit synthetic network for /ducts?demo=navigation; production pricing builds every view. */
+/** Explicit synthetic network for /ducts?fixture=navigation; production pricing builds every view. */
 import type { DuctClaim } from "@pe/agent-contracts";
 import type { Grids } from "@pe/ducts-domain/loss-grid";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";

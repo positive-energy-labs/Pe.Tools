@@ -20,6 +20,7 @@ import { threadListFields } from "../../../../packages/agent-contracts/src/route
 import { commandVerb, queryVerb, workVerb } from "#/shell/verbs";
 import { NATIVE_APPLY_WAIT_S } from "#/route/waits";
 
+import { schedulesSeeds } from "./graph-seeds";
 export const SCHEDULE_SPEC_SCHEMA = "/schemas/settings/CmdScheduleManager/schedules.json";
 const fields = { ...threadListFields, ...schedulesAddress.fields };
 export const schedulesPageSchema = routeAddress("schedules").schema.extend({
@@ -45,6 +46,7 @@ export const schedulesGraph: RouteGraph<SchedulesPage, ScheduleGridDocument> = {
   key: scheduleGridRouteState.route,
   address: "schedules",
   name: "Schedules",
+  seeds: schedulesSeeds,
   needs: "project",
   work: scheduleGridRouteState.schema,
   // A schedule's Work is its subject's: picking a schedule or reading one moves this field.
@@ -62,7 +64,6 @@ export const schedulesGraph: RouteGraph<SchedulesPage, ScheduleGridDocument> = {
     hidden: { ...fields.hidden, role: "pose" },
     lines: { ...fields.lines, role: "selection" },
     cell: { ...fields.cell, role: "selection" },
-    demo: { ...fields.demo, role: "transient", url: fields.demo.url ?? false },
     captureId: {
       ...field(z.string().default(""), {}, { encode: String, decode: String }),
       role: "selection",

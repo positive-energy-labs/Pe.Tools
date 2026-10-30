@@ -290,6 +290,39 @@ test("interleaved overlapping presses refuse instead of overwriting an interveni
   expect(f.requests).toEqual([]);
 });
 
+test("labels and opaque metadata survive undo, redo and late annotation; a stale row restore refuses", async () => {
+  const f = fixture();
+  await f.apply([{ path: ["settings", "width"], value: 20 }], "clear-width");
+  const detail = { label: "clear width", meta: { row: "width", was: 10, totals: [1, 2] } };
+  f.journal.describe("clear-width", detail);
+  detail.meta.totals[0] = 99;
+  expect(f.journal.read().undo[0]).toMatchObject({
+    label: "clear width",
+    meta: { totals: [1, 2] },
+  });
+  expect(await f.journal.undo(f.writer, "another-press")).toMatchObject({
+    ok: false,
+    code: "entry-changed",
+  });
+  expect(f.requests).toEqual([]);
+  expect(await f.journal.undo(f.writer, "clear-width")).toMatchObject({ ok: true });
+  expect(f.journal.read().last).toMatchObject({ kind: "undo", step: { label: "clear width" } });
+  f.journal.describe("clear-width", { meta: { row: "width", was: 10, totals: [1, 3] } });
+  expect(await f.journal.redo(f.writer)).toMatchObject({ ok: true });
+  const exposed = f.journal.read();
+  expect(exposed.last).toMatchObject({
+    kind: "redo",
+    step: { label: "clear width", meta: { totals: [1, 3] } },
+  });
+  exposed.undo[0]!.label = "changed reader";
+  expect(f.journal.read().undo[0]!.label).toBe("clear width");
+  await f.apply([{ path: ["settings", "height"], value: 8 }], "newer-row");
+  expect(await f.journal.undo(f.writer, "clear-width")).toMatchObject({
+    ok: false,
+    code: "entry-changed",
+  });
+});
+
 test("a held conflict is a barrier: no undo or redo until it is released", async () => {
   const f = fixture();
   await f.apply([{ path: ["settings", "width"], value: 20 }], "human-1");

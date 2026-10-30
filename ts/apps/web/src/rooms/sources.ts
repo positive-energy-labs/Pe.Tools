@@ -15,7 +15,6 @@ import { subscriptionSource } from "#/shell/readings-use";
 import type { ReadingContext, ReadingSource, UseSource } from "#/shell/readings";
 import type { TakeoffPlanImage } from "#/takeoff/level-plan";
 import type { PlanRefusal } from "#/takeoff/plan";
-import { DEMO_PLAN, DEMO_ROOMS, DEMO_TRACE } from "./demo";
 import { NO_TRACE, type TraceRead } from "./layers";
 import type { RoomsPage } from "./graph";
 
@@ -40,8 +39,6 @@ export function roomsSnapshotSource(): UseSource<RoomsSnapshot.Res.Response | nu
     kind: "use",
     dirties: ["rooms", "snapshot"],
     open(ctx, deliver) {
-      if (page(ctx).demo === "plan" && page(ctx).live === undefined)
-        return deliver({ kind: "complete", value: DEMO_ROOMS, revision: 0 });
       if (ctx.target.kind !== "document")
         return deliver({ kind: "complete", value: null, revision: 0 });
       let serial = 0;
@@ -107,8 +104,6 @@ export function roomsSources(): Readonly<Record<string, ReadingSource>> {
       kind: "use",
       dirties: ["rooms", "snapshot"],
       async open(ctx, deliver) {
-        if (page(ctx).demo === "plan" && page(ctx).live === undefined)
-          return deliver({ kind: "complete", value: DEMO_TRACE, revision: 0 });
         if (ctx.target.kind !== "document" || !page(ctx).view)
           return deliver({ kind: "complete", value: { data: null, none: null }, revision: 0 });
         try {
@@ -140,8 +135,6 @@ export function roomsSources(): Readonly<Record<string, ReadingSource>> {
       // Re-export only when the target/view changes; room writes leave the expensive underlay alone.
       dirties: ["rooms-plan"],
       async open(ctx, deliver) {
-        if (page(ctx).demo === "plan" && page(ctx).live === undefined)
-          return deliver({ kind: "complete", value: { plan: DEMO_PLAN }, revision: 0 });
         if (ctx.target.kind !== "document" || !page(ctx).view)
           return deliver({ kind: "complete", value: null, revision: 0 });
         try {

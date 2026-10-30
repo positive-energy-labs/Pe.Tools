@@ -6,7 +6,7 @@ import { workKey } from "@pe/agent-contracts";
 import { Route as root } from "../routes/__root";
 import { podsRoute, PodsRoute } from "./route";
 import { PodsHostFixture } from "./host.fixture";
-import { appAtomRegistry } from "../route/route-owner";
+import { appAtomRegistry } from "#/shell/owner";
 
 let host: PodsHostFixture;
 const releases: (() => void)[] = [];
@@ -45,7 +45,7 @@ async function mounted({ hosted = false, hidden = false, demo = false } = {}) {
   const url = hosted
     ? "/pods?thread=chat-address&pod=unrelated"
     : demo
-      ? "/pods?demo=browse"
+      ? "/pods?fixture=browse"
       : `/pods?pod=${host.member.pod}&path=${host.member.path}`;
   const router = createRouter({
     routeTree: root.addChildren([podsRoute]),

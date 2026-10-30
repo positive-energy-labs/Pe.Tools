@@ -236,6 +236,8 @@ export const salvageVerb = {
 } as const satisfies VerbDecl;
 
 export interface RouteGraph<P = Record<string, unknown>, W = unknown> {
+  /** Browser-only states, selected uniformly by ?fixture=<name>. Values are data, never transports. */
+  seeds?: Readonly<Record<string, GraphSeed<P, W>>>;
   key: string;
   address: string;
   name: string;
@@ -287,6 +289,19 @@ export interface RouteGraph<P = Record<string, unknown>, W = unknown> {
   stageOrder?: readonly string[];
 }
 
+export interface GraphSeed<P, W> {
+  title: string;
+  page?: Partial<P>;
+  work?: W;
+  /** Optional initial documents keyed by the graph workSubject (e.g. Pod members). */
+  works?: Readonly<Record<string, W>>;
+  target?: import("./target.ts").ExecutionTarget;
+  /** Keys are graph reading ids. Missing readings fail explicitly in the fixture lane. */
+  readings: Readonly<Record<string, unknown>>;
+  /** Keys are query identities (verb.does). Commands and RPCs always refuse. */
+  queries?: Readonly<Record<string, unknown>>;
+}
+
 export type GraphJsonValue =
   | null
   | boolean
@@ -299,6 +314,7 @@ type GraphJsonObject = { readonly [key: string]: GraphJsonValue };
 /** Executable bindings are marked, never stringified or invoked. Pod admission also hashes
  * the module: this descriptor alone cannot attest the behavior of functions or codecs. */
 export interface RouteGraphJson {
+  readonly seeds?: Readonly<Record<string, { readonly title: string }>>;
   readonly key: string;
   readonly address: string;
   readonly name: string;
@@ -354,6 +370,12 @@ export function projectRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphJson
   );
   return sortedJson({
     ...graph,
+    // Pea discovers fixture names; browser-only meshes and canned readings stay out of its contract.
+    seeds:
+      graph.seeds &&
+      Object.fromEntries(
+        Object.entries(graph.seeds).map(([name, seed]) => [name, { title: seed.title }]),
+      ),
     // Kernel-owned verbs are part of what Pea may invoke; the cell verbs derive from `cells`.
     verbs: graph.work
       ? {

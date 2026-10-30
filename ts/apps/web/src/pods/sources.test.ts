@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { waitFor } from "@testing-library/react";
 import { memberWork } from "@pe/agent-contracts";
-import { createRouteOwner, makeAtomRegistry } from "#/route/route-owner";
+import { createRouteOwner, makeAtomRegistry } from "#/shell/owner";
 import {
   createReadingGraph,
   type ReadingContext,
@@ -16,6 +16,7 @@ import { podsPageSchema } from "./page";
 import { podsGraph } from "./graph";
 import { podsBinding, podsTransition } from "./actions";
 import { PodsHostFixture } from "./host.fixture";
+import { createFixtureMount } from "#/shell/fixture";
 import { graphUrlPage } from "#/shell/mount-page";
 
 let host: PodsHostFixture;
@@ -204,29 +205,13 @@ test("mounted reading demand recomposes only the new Work candidate after an edi
 
 test("fixture and plain source reads preserve their lanes without host calls", async () => {
   const env = environment();
-  const page = podsPageSchema.parse({ demo: "browse" });
-  const read = async (id: string) => {
-    const source = env.sources[podsGraph.readings[id]!.source] as UseSource;
-    const publications: unknown[] = [];
-    await source.open(
-      {
-        ...env.scope(),
-        page,
-        inputs: {},
-        args: null,
-        attempt: { target: { kind: "host" }, workKey: null, generation: 1 },
-        signal: new AbortController().signal,
-        trigger: { kind: "demand" },
-      },
-      (publication) => publications.push(publication),
-    );
-    return publications;
-  };
-  await read("pods");
-  await read("member");
-  await read("composition");
-  await read("runs");
-  await read("plugins");
+  const owner = createFixtureMount(podsGraph, "browse");
+  const disconnect = owner.connect();
+  const demand = owner.readings.mount(Object.keys(podsGraph.readings));
+  expect(owner.readings.get("pods").status).toBe("ready");
+  demand();
+  disconnect();
+  owner.dispose();
   expect(host.calls).toEqual([]);
   expect(host.actions).toEqual([]);
   await env.run("select", { pod: host.member.pod, path: "src/tool.cs" });

@@ -14,14 +14,11 @@ import type { ReadingContext, ReadingSource, ReadingScope } from "#/shell/readin
 import type { PodsPage } from "./page";
 import {
   draftOf,
-  fixturePage,
   readingValue,
   selectedMember,
   type CompositionRead,
   type MemberRead,
 } from "./model";
-import { DEMO_BROWSE, DEMO_MEMBER_SPECS } from "./seeds";
-import { DEMO_RUN } from "#/route/seeds";
 
 const decode = <S extends Schema.ConstraintDecoder<unknown, never>>(schema: S) =>
   z.unknown().transform((value) => Schema.decodeUnknownSync(schema)(value));
@@ -45,7 +42,6 @@ export function podsSources(): Readonly<Record<string, ReadingSource>> {
       kind: "use",
       effects: () => [],
       open(ctx, deliver) {
-        if (fixturePage(page(ctx))) return deliver({ kind: "complete", value: null, revision: 0 });
         return subscriptionSource({
           request: () => ({ kind: "host-status" }),
           decode: (value) => value,
@@ -57,8 +53,6 @@ export function podsSources(): Readonly<Record<string, ReadingSource>> {
       effects: () => [],
       dirties: ["pods"],
       async open(ctx, deliver) {
-        if (fixturePage(page(ctx)))
-          return deliver({ kind: "complete", value: DEMO_BROWSE, revision: 0 });
         try {
           const result = await requestJson(
             { path: "/call", body: { key: "pod.list", request: {} } },
@@ -82,21 +76,6 @@ export function podsSources(): Readonly<Record<string, ReadingSource>> {
         const ref = selectedMember(page(ctx));
         if (!ref || !ref.path.endsWith(".json"))
           return deliver({ kind: "complete", value: null, revision: 0 });
-        if (fixturePage(page(ctx))) {
-          const fixture = DEMO_MEMBER_SPECS.get(`${ref.pod}|${ref.path}`);
-          return deliver({
-            kind: "complete",
-            value: fixture
-              ? {
-                  member: ref,
-                  content: fixture.content,
-                  sha256: "demo",
-                  schemaJson: fixture.schema,
-                }
-              : null,
-            revision: 0,
-          });
-        }
         try {
           const read = await requestJson(
             { path: "/call", body: { key: "pod.member.read", request: ref } },
@@ -121,7 +100,7 @@ export function podsSources(): Readonly<Record<string, ReadingSource>> {
       async open(ctx, deliver) {
         const ref = selectedMember(page(ctx));
         const member = readingValue<MemberRead>(ctx.inputs.member);
-        if (fixturePage(page(ctx)) || !ref || !member || !ref.path.endsWith(".json"))
+        if (!ref || !member || !ref.path.endsWith(".json"))
           return deliver({ kind: "complete", value: null, revision: 0 });
         let draft: string;
         try {
@@ -157,12 +136,6 @@ export function podsSources(): Readonly<Record<string, ReadingSource>> {
         const ref = selectedMember(page(ctx));
         const pod = ref?.pod || page(ctx).pod;
         const path = page(ctx).runs === "pod" || !ref ? undefined : ref.path;
-        if (fixturePage(page(ctx)))
-          return deliver({
-            kind: "complete",
-            value: path === undefined || path === DEMO_RUN.receipt!.memberPath ? [DEMO_RUN] : [],
-            revision: 0,
-          });
         if (!pod) return deliver({ kind: "complete", value: [], revision: 0 });
         try {
           const result = await requestJson(
@@ -183,7 +156,6 @@ export function podsSources(): Readonly<Record<string, ReadingSource>> {
       kind: "use",
       effects: () => [],
       async open(ctx, deliver) {
-        if (fixturePage(page(ctx))) return deliver({ kind: "complete", value: null, revision: 0 });
         try {
           const [statuses, routes] = await Promise.all([
             peClient.call("plugins.list", {}),

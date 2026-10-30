@@ -6,7 +6,7 @@ import { Button } from "@pe/kit/lang/button";
 import { Switcher } from "@pe/kit/lang/switcher";
 import { Inspect, inspectableOf } from "./inspect";
 import type { RouteManifest } from "./manifest";
-import type { LogEntry } from "./route-owner";
+import type { LogEntry } from "#/shell/owner";
 import { Label } from "./situation-verbs";
 
 /** Label gutter shared by every grid on the board, so columns line up across rows. */

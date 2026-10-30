@@ -1,37 +1,84 @@
-/**
- * Undo and redo for sheet input edits (kaitpw 2026-10-30: "strong distrust for whether i'd be able
- * to redo from scratch what i had just undone"). Work keeps no history: the host stores one
- * envelope, and the composer's only revert clears every edit. So the page keeps its own: before an
- * edit it snapshots the exact Work cells the edit writes (`editCells`, absence included), undo
- * writes them back through the route's Work writer (revision-bound, so a stale page is refused,
- * never merged), and redo sends the same edits again. Each step keeps the open fan's totals
- * before and after, so every edit says what it did to the numbers.
- * The history lives in this page; a reload starts it empty, and the words say so.
- */
+/** Sheet presentation on the kernel's in-memory Work journal; the route owns no undo stack. */
+import { z } from "zod";
+import { ductsSheetOverviewSchema } from "@pe/agent-contracts";
 import type { DuctsSheetEdits, DuctsSheetOverview, RouteStatePatch } from "@pe/agent-contracts";
+import type { ReadingState } from "#/shell/readings";
+import type { WorkJournal } from "#/shell/journal";
+import type { SheetReading } from "../sources";
 
 export type Totals = DuctsSheetOverview["totals"];
 
-export type Step = {
-  label: string;
-  /** The input row or fitting group the edit came from; it offers "restore" while this step is last. */
-  rowKey: string | null;
-  /** A clear: the row returned to its source underneath. */
-  clear: boolean;
-  edits: DuctsSheetEdits;
-  /** A step written straight to Work (take or unsuggest of a Pea suggestion): redo writes these again. */
-  patches?: RouteStatePatch[];
-  cells: string[][];
-  /** Each cell as it was before the edit; undefined where the cell did not exist. */
-  before: unknown[];
-  /** What the row showed before (for a cleared row that leaves the list, the restore line names it). */
-  was: string;
-  effect: { before: Totals; after: Totals } | null;
-};
+export const editMetaSchema = z.strictObject({
+  label: z.string(),
+  rowKey: z.string().nullable().optional(),
+  clear: z.boolean().optional(),
+  was: z.string().optional(),
+});
+export type EditMeta = z.infer<typeof editMetaSchema>;
+export const inputHistoryMetaSchema = editMetaSchema.omit({ label: true }).extend({
+  kind: z.literal("ducts-input"),
+  effect: z.object({
+    before: ductsSheetOverviewSchema.shape.totals,
+    after: ductsSheetOverviewSchema.shape.totals.optional(),
+  }),
+});
+type Readings = Readonly<Record<string, ReadingState>>;
+const totals = (readings: Readings): Totals =>
+  (readings.sheet?.value as SheetReading | undefined)?.open?.overview.totals ?? null;
+
+export function describeInputHistory(before: Readings, detail: EditMeta, after?: Readings) {
+  const { label, ...meta } = detail;
+  return {
+    label,
+    meta: {
+      ...meta,
+      kind: "ducts-input",
+      effect: { before: totals(before), ...(after && { after: totals(after) }) },
+    },
+  };
+}
+
+export function presentInputHistory(
+  journal: ReturnType<WorkJournal["read"]> | null,
+  refusal: string | null,
+) {
+  const undo = journal?.undo.at(-1);
+  const redo = journal?.redo.at(-1);
+  const cleared = inputHistoryMetaSchema.safeParse(undo?.meta);
+  const last = journal?.last;
+  const meta = inputHistoryMetaSchema.safeParse(last?.step.meta);
+  const effect = meta.success ? meta.data.effect : null;
+  return {
+    undoLabel: undo ? (undo.label ?? "input edit") : null,
+    redoLabel: redo ? (redo.label ?? "input edit") : null,
+    cleared:
+      undo && cleared.success && cleared.data.clear
+        ? {
+            press: undo.press,
+            rowKey: cleared.data.rowKey ?? null,
+            was: cleared.data.was ?? undo.label ?? "input",
+          }
+        : null,
+    last: refusal
+      ? { label: "restore", words: "", refusal }
+      : last && effect
+        ? {
+            label: `${last.kind === "undo" ? "undid " : last.kind === "redo" ? "redid " : ""}${last.step.label}`,
+            words:
+              effect.after === undefined
+                ? "Waiting for this fan's totals"
+                : last.kind === "undo"
+                  ? effectWords(effect.after, effect.before)
+                  : effectWords(effect.before, effect.after),
+          }
+        : null,
+  };
+}
 
 const at = (doc: unknown, path: readonly string[]) =>
   path.reduce<unknown>(
-    (node, key) => (node && typeof node === "object" ? (node as Record<string, unknown>)[key] : undefined),
+    (node, key) =>
+      node && typeof node === "object" ? (node as Record<string, unknown>)[key] : undefined,
     doc,
   );
 
@@ -42,12 +89,21 @@ export const cellsAt = (doc: unknown, cells: readonly string[][]): unknown[] =>
   });
 
 /** Patches that put each cell back as it was: a value where one existed, a delete where none did. */
-export const restorePatches = (cells: readonly string[][], values: readonly unknown[]): RouteStatePatch[] =>
-  cells.map((path, i) => (values[i] === undefined ? { path: [...path] } : { path: [...path], value: values[i] }));
+export const restorePatches = (
+  cells: readonly string[][],
+  values: readonly unknown[],
+): RouteStatePatch[] =>
+  cells.map((path, i) =>
+    values[i] === undefined ? { path: [...path] } : { path: [...path], value: values[i] },
+  );
 
 type Side = NonNullable<Totals>["supply"];
 const side = (s: Side | undefined) =>
-  !s ? "—" : s.complete && s.worstPath != null ? s.worstPath.toFixed(4) : `≥${s.knownInWg.toFixed(4)}`;
+  !s
+    ? "—"
+    : s.complete && s.worstPath != null
+      ? s.worstPath.toFixed(4)
+      : `≥${s.knownInWg.toFixed(4)}`;
 const esp = (t: Totals) => (t?.requiredEspInWg == null ? "—" : t.requiredEspInWg.toFixed(4));
 
 /**

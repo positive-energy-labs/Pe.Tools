@@ -151,7 +151,7 @@ export const DEMO_FRAGMENTS: Record<string, DemoSpec> = {
   ]),
 };
 
-/** `/pods?demo=browse`: the demo pods, the schedule spec open, its run beside it. */
+/** `/pods?fixture=browse`: the demo pods, the schedule spec open, its run beside it. */
 export const PODS_SEEDS = {
   browse: { title: "two pods, a schedule spec and its run", work: null, readings: {}, page: {} },
 };

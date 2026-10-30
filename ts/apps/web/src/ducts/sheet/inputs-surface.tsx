@@ -15,7 +15,7 @@ import { airflowOptions, type AirflowOption } from "../airflow";
 import { ChoiceCell, type CellAct } from "./choice-cell";
 import { criterionLabel } from "./criterion-words";
 import { fittingGroups, memberSubject, type FittingGroup } from "./fitting-groups";
-import type { Step } from "./input-history";
+import type { EditMeta } from "./input-history";
 import { inputRows, SECTION_WORDS, type InputRow, type InputSection } from "./input-rows";
 import { SheetCell, type WorkCell } from "./sheet-cell";
 import type { OpenSheet } from "../sources";
@@ -37,17 +37,18 @@ export interface InputContext {
 }
 
 /** What an edit is, for the history line and the row that offers its restore. */
-export type EditMeta = { label: string; rowKey?: string | null; clear?: boolean; was?: string };
+export type { EditMeta } from "./input-history";
 
-/** This page's undo and redo (`input-history.ts`) as the surface draws them. */
+/** The kernel's Work journal as the Inputs surface draws it. */
 export interface InputsHistory {
   undoLabel: string | null;
   redoLabel: string | null;
   last: { label: string; words: string; refusal?: string } | null;
   /** The last edit when it was a clear: its row offers "restore" until the next edit. */
-  cleared: Step | null;
+  cleared: { press: string; rowKey: string | null; was: string } | null;
   undo: () => void;
   redo: () => void;
+  restore: (press: string) => void;
 }
 
 const sourceChip = ({ source, ref }: Resolved<unknown>) => `${source}${ref ? ` ${ref}` : ""}`;
@@ -308,7 +309,7 @@ function RowVerb({
         label={`Restore ${history.cleared.was}`}
         reason={`Cleared ${history.cleared.was}; restore puts it back (the undo of the last edit)`}
         refusal={refusal}
-        onPress={history.undo}
+        onPress={() => history.restore(history.cleared!.press)}
       >
         restore
       </Button>
@@ -734,7 +735,11 @@ export function InputsSurface({
         {orphan && (
           <p className="flex items-baseline gap-2" data-inputs-orphan="">
             <span className="min-w-0 truncate">cleared {orphan.was}</span>
-            <Button label={`Restore ${orphan.was}`} refusal={refusal} onPress={history.undo}>
+            <Button
+              label={`Restore ${orphan.was}`}
+              refusal={refusal}
+              onPress={() => history.restore(orphan.press)}
+            >
               restore
             </Button>
           </p>

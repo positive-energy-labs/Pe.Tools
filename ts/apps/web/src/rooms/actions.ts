@@ -25,11 +25,7 @@ export function roomsBinding(id: string, row: unknown, scope: RoomsScope): Mount
       expectedRevision: scope.work?.handle.revision ?? -1,
       refusal,
     });
-  const native =
-    scope.page.demo === "plan" && scope.page.live === undefined
-      ? "The fixture plan cannot write Revit"
-      : null;
-  const ready = refusal ?? native;
+  const ready = refusal;
   if (id === "partition") {
     const rejected = Object.values(scope.work?.doc.marks ?? {})
       .map((cell) => cell.edit?.value)

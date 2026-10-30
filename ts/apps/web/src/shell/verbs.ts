@@ -22,10 +22,26 @@ import {
   submitAction,
   recoverAction,
 } from "../../../../packages/mcps/src/shared/takeoff-action-client";
-import type { createRouteOwner } from "../route/route-owner";
+import type { createRouteOwner } from "#/shell/owner";
 import { refuse, writeRefusal, type Refusal } from "../route/refusal";
 import { DEFAULT_WAIT_S } from "../route/waits";
 import type { ReadingState } from "./readings";
+import type { JournalDetail } from "./journal";
+
+export interface WorkHistory<I> {
+  /** Complete the metadata only from fresh Readings of the acknowledged Work revision. */
+  readings?: readonly string[];
+  describe(
+    before: VerbScope,
+    input: I,
+    after?: Readonly<Record<string, ReadingState>>,
+  ): JournalDetail;
+}
+export interface PendingWorkHistory {
+  entry: JournalDetail;
+  readings: readonly string[];
+  complete(after: Readonly<Record<string, ReadingState>>): JournalDetail;
+}
 
 export type Caller = "human" | "agent";
 /** Paths address keyed Work members, never their current position in a rendered row array. */
@@ -53,6 +69,7 @@ export interface VerbSnapshot {
   readonly salvage?: readonly RouteStatePatch[] | null;
 }
 export interface VerbContext<C extends Caller = Caller> {
+  readonly fixture?: { name: string; queries: Readonly<Record<string, unknown>> };
   readonly caller: C;
   readonly receipt?: (receipt: Exclude<HostReceipt, { state: "detached" }>, press: string) => void;
   readonly page?: () => Readonly<Record<string, unknown>>;
@@ -71,6 +88,7 @@ export interface VerbContext<C extends Caller = Caller> {
   readonly write: (
     key: WorkKey,
     envelope: { patches: RouteStatePatch[]; expectedRevision: number; press: string },
+    history?: PendingWorkHistory,
   ) => Promise<RouteStateWriteResult>;
   readonly changed?: (state: InvocationState, press: string | null) => void;
   readonly waitSeconds?: number;
@@ -193,6 +211,7 @@ interface Binding {
   lands?: (result: unknown) => Record<string, unknown>;
   ready?: (scope: VerbScope, input: unknown) => string | null;
   patches?: (scope: VerbScope, input: unknown) => readonly RouteStatePatch[];
+  history?: WorkHistory<unknown>;
   command?: SemanticActionKey;
   intent?: (
     scope: VerbScope,
@@ -280,6 +299,7 @@ export function workVerb<S extends z.ZodType>(
   implementation: {
     ready?: (scope: VerbScope, input: z.output<S>) => string | null;
     patches: (scope: VerbScope, input: z.output<S>) => readonly RouteStatePatch[];
+    history?: WorkHistory<z.output<S>>;
   },
 ): VerbDecl<S> {
   const verb = { ...declaration, kind: "work" as const, review: "none" as const };
@@ -288,6 +308,11 @@ export function workVerb<S extends z.ZodType>(
       implementation.ready &&
       ((scope, input) => implementation.ready!(scope, input as z.output<S>)),
     patches: (scope, input) => implementation.patches(scope, input as z.output<S>),
+    history: implementation.history && {
+      readings: implementation.history.readings,
+      describe: (scope, input, after) =>
+        implementation.history!.describe(scope, input as z.output<S>, after),
+    },
   });
   return verb;
 }
@@ -561,6 +586,11 @@ async function invokeCore<C extends Caller>(
   phase: InvocationPhase<C> = { kind: "press" },
   rendered?: VerbSnapshot,
 ): Promise<InvocationResult> {
+  if (ctx.fixture && verb.kind === "command")
+    return failure(
+      "refused",
+      `Fixture '${ctx.fixture.name}': ${verb.kind} verbs do not call the host`,
+    );
   const binding = bindings.get(verb);
   if (!binding) return failure("refused", "This verb has no executable binding");
   if (phase.kind === "commit" || phase.kind === "cancel") {
@@ -661,7 +691,11 @@ async function invokeCore<C extends Caller>(
             let answers: unknown;
             let ticket: ReviewTicket | undefined;
             if (verb.review !== "none" && (!binding.raw || binding.raw(scope, input))) {
-              const evidence = steps ? copy(steps[step]) : await binding.prepare?.(scope, input);
+              const evidence = ctx.fixture
+                ? { fixture: ctx.fixture.name }
+                : steps
+                  ? copy(steps[step])
+                  : await binding.prepare?.(scope, input);
               const prepared = ctx.snapshot();
               if (
                 !equal(snapshot.target, prepared.target) ||
@@ -761,14 +795,24 @@ async function invokeCore<C extends Caller>(
               ) as Record<string, unknown>;
               let value: unknown;
               // Stop sends the declared cancel for this very request; the native read ends, not just the wait.
-              if (binding.queryCancel) {
+              if (binding.queryCancel && !ctx.fixture) {
                 const cancel = binding.queryCancel;
                 cancelWith(async () => {
                   await runQuery(cancel.key, cancel.input(request), current);
                 });
               }
               try {
-                value = await runQuery(binding.query, request, current);
+                if (ctx.fixture) {
+                  if (!Object.hasOwn(ctx.fixture.queries, binding.query.key))
+                    return finish(
+                      failure(
+                        "refused",
+                        `Fixture '${ctx.fixture.name}' has no answer for '${binding.query.key}'`,
+                        press,
+                      ),
+                    );
+                  value = structuredClone(ctx.fixture.queries[binding.query.key]);
+                } else value = await runQuery(binding.query, request, current);
               } catch (cause) {
                 // A 4xx is the host refusing this read, in its own words; anything else failed.
                 const status = (cause as { status?: unknown } | null)?.status;
@@ -824,11 +868,21 @@ async function invokeCore<C extends Caller>(
             if (verb.kind === "work") {
               if (!current.work || !binding.patches)
                 return finish(failure("refused", "Work has not been read yet", press));
-              const result = await ctx.write(current.work.handle.key, {
-                patches: structuredClone(binding.patches(fresh, input)) as RouteStatePatch[],
-                expectedRevision: current.work.handle.revision,
-                press,
-              });
+              const history = binding.history;
+              const before = history ? structuredClone(fresh) : fresh;
+              const result = await ctx.write(
+                current.work.handle.key,
+                {
+                  patches: structuredClone(binding.patches(fresh, input)) as RouteStatePatch[],
+                  expectedRevision: current.work.handle.revision,
+                  press,
+                },
+                history && {
+                  entry: history.describe(before, input),
+                  readings: history.readings ?? [],
+                  complete: (after) => history.describe(before, input, after),
+                },
+              );
               const refused = writeRefusal(result);
               if (refused) return finish(resultOf(refused, press));
               if (result.ok)
@@ -1007,6 +1061,8 @@ export function bind<C extends Caller, S extends z.ZodType>(
     label: verb.label,
     chord: verb.chord,
     get refusal() {
+      if (ctx.fixture && verb.kind === "command")
+        return `Fixture '${ctx.fixture.name}': commands and RPCs do not call the host`;
       const implementation = bindings.get(verb);
       if (!implementation) return "This verb has no executable binding";
       const current = copy(ctx.snapshot());

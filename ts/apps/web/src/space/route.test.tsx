@@ -198,9 +198,9 @@ test("capture admits one exact-document scene; visibility uses Page and foreign 
   expect(calls).toHaveLength(1);
 });
 
-test("the fixture is a source-owned answer set and never creates a native target", async () => {
-  const { view, owner } = await mounted({ demo: "fixture" });
-  await waitFor(() => expect(owner().readings.get("demoAnswers").value).toEqual(FIXTURE_ANSWERS));
+test("the fixture is a graph-declared answer set and never creates a native target", async () => {
+  const { view, owner } = await mounted({ fixture: "fixture" });
+  await waitFor(() => expect(owner().readings.get("answers").value).toEqual(FIXTURE_ANSWERS));
   expect(view.getByLabelText("native target").textContent).toBe("none");
   expect(artifacts).toEqual([]);
   expect(calls).toEqual([]);

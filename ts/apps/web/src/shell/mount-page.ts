@@ -64,6 +64,7 @@ export function graphUrlPage<P, W>(graph: RouteGraph<P, W>, rest: Partial<P> = {
     Object.fromEntries(
       fields.map(([id, field]) => {
         const raw = search[id];
+        if (raw === undefined && id in rest) return [id, rest[id]];
         const typed = field.schema.safeParse(raw);
         // The router JSON-parses search values, so `?level=30` arrives as a number and `?on=true`
         // as a boolean; a scalar re-enters the one string grammar. Objects and arrays never do.

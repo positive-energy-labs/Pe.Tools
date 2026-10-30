@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Button } from "@pe/kit/lang/button";
 import { publicRoutes } from "#/route/builtin-routes";
 import { usePodRoutes } from "#/route/pod-routes";
-import { useRouteThread } from "#/route/shell";
+import { useRouteThread } from "#/shell/binding";
 import { peClient } from "#/host/pe-client";
 import { Code } from "@pe/kit/lang/code";
 import { PaneErrorBoundary } from "@pe/kit/lang/pane";

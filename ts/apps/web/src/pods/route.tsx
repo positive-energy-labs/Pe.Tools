@@ -23,7 +23,6 @@ import { podsBinding, podsCell, editRefusal } from "./actions";
 import { podsSources, type PluginsRead } from "./sources";
 import {
   draftOf,
-  fixturePage,
   readingValue,
   sameMember,
   selectedMember,
@@ -31,7 +30,6 @@ import {
   type MemberRead,
   type CompositionRead,
 } from "./model";
-import { DEMO_MEMBER_SPECS } from "./seeds";
 import type { PodsPage } from "./page";
 
 type Body = MountBody<PodsPage, SettingsRouteDocument>;
@@ -56,7 +54,7 @@ function Members(body: Body) {
   const ref = selectedMember(page);
   return (
     <>
-      {!fixturePage(page) && (
+      {!owner.fixture && (
         <div aria-label="Pod activation">
           {pods.map((pod) => {
             const plugin = plugins?.statuses.find((status) => status.id === `pod:${pod.id}`);
@@ -131,7 +129,6 @@ function ProductLink({ body, schema }: { body: Body; schema: string | null | und
     routeAddress(product.route).link({
       stage: "apply",
       ...ref,
-      ...(body.page.demo ? { demo: "apply" } : {}),
     }),
     "http://pe.invalid",
   );
@@ -139,6 +136,7 @@ function ProductLink({ body, schema }: { body: Body; schema: string | null | und
     to: url.pathname,
     search: {
       ...Object.fromEntries(url.searchParams),
+      ...(body.owner.fixture ? { fixture: Object.keys(product.graph.seeds ?? {})[0] } : {}),
       ...(body.thread && { thread: body.thread }),
     },
   };
@@ -270,7 +268,6 @@ function Spec(body: Body) {
   const compositionRead = readingValue<CompositionRead>(scope.readings.composition);
   const composed = sameMember(compositionRead?.member, ref) ? compositionRead : null;
   const work = scope.work?.doc;
-  const fixture = ref && fixturePage(page) ? DEMO_MEMBER_SPECS.get(`${ref.pod}|${ref.path}`) : null;
   let draft = "";
   let failure: string | null = null;
   try {
@@ -280,7 +277,7 @@ function Spec(body: Body) {
     const raw = work?.fields[""]?.edit?.value;
     draft = typeof raw === "string" ? raw : (work?.basis?.rawContent ?? read?.content ?? "");
   }
-  const fields = fixture?.fields ?? work?.fields ?? {};
+  const fields = work?.fields ?? {};
   const schema = composed?.result.schemaJson ?? read?.schemaJson ?? null;
   const issues = composed?.draft === draft ? composed.result.diagnostics : [];
   if (!ref)
@@ -301,7 +298,7 @@ function Spec(body: Body) {
         {ref.pod} · {ref.path}
       </span>{" "}
       <ProductLink body={body} schema={member?.schema} />
-      {fixturePage(page) && (
+      {body.owner.fixture && (
         <FactChip tone="caution" dashed title="Fixture members and runs; read-only.">
           fixture
         </FactChip>

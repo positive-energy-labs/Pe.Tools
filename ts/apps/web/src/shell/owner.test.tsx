@@ -4,8 +4,8 @@ import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { Activity, StrictMode } from "react";
 import * as Atom from "effect/unstable/reactivity/Atom";
-import { makeAtomRegistry, useOwned, useRouteOwner } from "./route-owner";
-import { RouteActivity, type RouteActivityScope } from "./activity";
+import { makeAtomRegistry, useOwned, useRouteOwner } from "#/shell/owner";
+import { RouteActivity, type RouteActivityScope } from "../route/activity";
 
 afterEach(cleanup);
 

@@ -4,7 +4,6 @@ import type { ReadingSource, ReadingState } from "#/shell/readings";
 import { sceneData } from "#/scene/scene-data";
 import type { SceneMeshes } from "#/scene/types";
 import type { Psc1Metadata } from "#/scene/psc1";
-import { FIXTURE_ANSWERS, FIXTURE_SCENE } from "./fixture";
 import type { SpacePage } from "./graph";
 import { spaceSceneMembers } from "./members";
 
@@ -31,12 +30,6 @@ export const spaceSources: Readonly<Record<string, ReadingSource>> = {
     kind: "use",
     open(ctx, deliver) {
       const page = ctx.page as SpacePage;
-      if (page.demo === "fixture")
-        return deliver({
-          kind: "complete",
-          value: loadedScene(page.scene, FIXTURE_SCENE),
-          revision: 0,
-        });
       if (!page.scene) return deliver({ kind: "complete", value: null, revision: 0 });
       // Artifact restoration has no capture branch. The kernel owns this subscription's lifetime.
       const source = sceneData({ kind: "artifact", id: page.scene });
@@ -57,9 +50,9 @@ export const spaceSources: Readonly<Record<string, ReadingSource>> = {
       return release;
     },
   },
-  "space.demo-answers": {
+  "space.answers": {
     kind: "derive",
-    derive: ({ page }) => ((page as SpacePage).demo === "fixture" ? FIXTURE_ANSWERS : null),
+    derive: () => null,
   },
 };
 

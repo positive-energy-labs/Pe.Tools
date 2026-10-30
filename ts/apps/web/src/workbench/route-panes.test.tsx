@@ -12,14 +12,14 @@ import {
 } from "@tanstack/react-router";
 import { address, routeAddress, type ThreadTab, type WorkKey } from "@pe/agent-contracts";
 import { RegistryContext } from "@effect/atom-react";
-import { appAtomRegistry } from "#/route/route-owner";
+import { appAtomRegistry } from "#/shell/owner";
 import { createChatPageStore } from "./store";
 import { RouteDock } from "./route-panes";
 import { useRouteCurrent } from "#/route/activity";
 import { useRouteLease } from "#/route/view-bridge";
 import { defineRoute } from "#/route/manifest";
 import { useRoute } from "#/route/use-route";
-import { useRouteThread } from "#/route/shell";
+import { useRouteThread } from "#/shell/binding";
 
 const store = createChatPageStore({
   registry: appAtomRegistry,

@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { instancesActions, pane, split, type RouteGraph } from "@pe/agent-contracts";
-import { field, text } from "../../../../packages/agent-contracts/src/route-field";
+import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { commandVerb, pageVerb } from "#/shell/verbs";
 import { EMPTY_DRAFT } from "./model";
+import { openSeeds } from "./graph-seeds";
 
 const draft = z
   .object({
@@ -23,8 +24,6 @@ const table = z
   })
   .default(() => ({ query: "", sorts: [] }));
 export const openPageSchema = z.object({
-  demo: text(),
-  live: text(),
   epoch: z.number().default(0),
   draft,
   table,
@@ -44,17 +43,8 @@ export const openGraph: RouteGraph<OpenPageState> = {
   key: "instances",
   address: "open",
   name: "Open",
+  seeds: openSeeds,
   fields: {
-    demo: {
-      ...field(text(), {}, { encode: String, decode: String }),
-      role: "transient",
-      url: "replace",
-    },
-    live: {
-      ...field(text(), {}, { encode: String, decode: String }),
-      role: "transient",
-      url: "replace",
-    },
     epoch: {
       ...field(openPageSchema.shape.epoch, {}, { encode: String, decode: Number }),
       role: "transient",
@@ -78,22 +68,22 @@ export const openGraph: RouteGraph<OpenPageState> = {
       kind: "use",
       source: "open.machine",
       retire: "page",
-      args: (p) => [p.demo, p.live, p.epoch],
+      args: (p) => p.epoch,
     },
     recents: {
       kind: "use",
       source: "open.recents",
       retire: "page",
-      args: (p) => [p.demo, p.live, p.epoch],
+      args: (p) => p.epoch,
     },
-    threads: { kind: "use", source: "open.threads", retire: "page", args: (p) => [p.demo, p.live] },
+    threads: { kind: "use", source: "open.threads", retire: "page", args: (p) => p.epoch },
     receipts: {
       kind: "use",
       source: "open.receipts",
       retire: "page",
-      args: (p) => [p.demo, p.live, p.epoch],
+      args: (p) => p.epoch,
     },
-    world: { kind: "feed", source: "open.world", retire: "page", args: (p) => [p.demo, p.live] },
+    world: { kind: "feed", source: "open.world", retire: "page", args: (p) => p.epoch },
   },
   verbs: {
     refresh: pageVerb(

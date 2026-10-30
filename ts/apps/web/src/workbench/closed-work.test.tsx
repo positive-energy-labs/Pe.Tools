@@ -12,7 +12,7 @@ import { address, ductsRouteState, readingKey, routeAddress } from "@pe/agent-co
 import { z } from "zod";
 import { peReadings } from "#/readings";
 import { defineRoute } from "#/route/manifest";
-import { routeSearch } from "#/route/route-owner";
+import { routeSearch } from "#/shell/owner";
 import { useRoute } from "#/route/use-route";
 import { urlPage } from "#/route/url";
 

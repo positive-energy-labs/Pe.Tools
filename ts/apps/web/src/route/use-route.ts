@@ -5,7 +5,7 @@
  * structured Refusals (`route/refusal.ts`).
  */
 import * as Atom from "effect/unstable/reactivity/Atom";
-import { useRouteCurrent, useRouteDemo } from "./activity";
+import { useRouteCurrent, useRouteFixture } from "./activity";
 import { useMemo, useRef, useState } from "react";
 import {
   UNREADABLE_WORK,
@@ -29,7 +29,8 @@ import {
 } from "#/readings";
 import { useWork } from "@pe/kit/lang/work";
 import { situationCells } from "./cells";
-import { DEFAULT_WAIT_S, type PageMove, type RouteManifest } from "./manifest";
+import { DEFAULT_WAIT_S, type RouteManifest } from "./manifest";
+import type { PageMove } from "#/shell/page";
 import { urlPage, useInitialUrlPage, useUrlPage } from "./url";
 import { createViewOwner } from "./view-owner";
 import { actionFacts, staticNeed } from "./facts";
@@ -47,8 +48,9 @@ import {
   useOwned,
   usePageLogNotes,
   useRouteOwner,
-} from "./route-owner";
-import { docAtom, docWriter, notHydrated } from "./route-work";
+} from "#/shell/owner";
+import { docWriter, notHydrated } from "./route-work";
+import { docAtom } from "#/shell/work-document";
 import { useRouteTarget } from "./route-target";
 import type { ActionHandle, RouteHandle, RouteOutcome } from "./handle";
 import { bindCommands } from "./presentation";
@@ -68,7 +70,7 @@ export function useRoute<W, R extends string, P, A extends string>(
     url?: boolean;
   } = {},
 ): RouteHandle<W, R, P, A> {
-  const demo = useRouteDemo();
+  const demo = useRouteFixture();
   const current = useRouteCurrent();
   const seed = demo ? manifest.seeds?.[demo as A] : undefined;
   const ownsUrl = options.url !== false && !seed;

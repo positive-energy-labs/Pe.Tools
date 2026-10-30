@@ -22,7 +22,7 @@ import {
 import { reduceLayout } from "../../../../packages/kit/src/components/lang/layout-graph";
 import { PrimaryRouteControls } from "../navigation/route-controls";
 import { RouteVisibility, useRouteCurrent, useRouteSearchSlice } from "../route/activity";
-import { routeSearch, useRouteOwner } from "../route/route-owner";
+import { routeSearch, useRouteOwner } from "#/shell/owner";
 import { Ladder } from "../route/ladder";
 import type { RouteHandle } from "../route/handle";
 import { LadderPicker, useDocumentLadder } from "../route/situation-ladder";
@@ -41,6 +41,8 @@ import { settingFields } from "./settings";
 import { useWorkScope, type WorkScopeStatus } from "./use-work-scope";
 import { useRouteLease } from "../route/view-bridge";
 import { workKey } from "@pe/agent-contracts";
+import { fixtureEnvironment, fixtureName } from "./fixture";
+import { useRouter } from "@tanstack/react-router";
 
 export type { GraphMount, MountAdapters, MountScope, MountBinding } from "./mount-owner";
 export { createGraphMount } from "./mount-owner";
@@ -120,9 +122,16 @@ export function mountRoute<P, W>(graph: RouteGraph<P, W>, adapters: RouteAdapter
     };
   return function MountedRoute(props: MountRouteProps) {
     const mount = useGraphRoute(graph, adapters, props);
+    if (mount.owner.fixture && mount.status.failure)
+      return (
+        <>
+          <FixtureChrome graph={graph} name={mount.owner.fixture.name} />
+          <p role="alert">{mount.status.failure}</p>
+        </>
+      );
     return (
       <>
-        {adapters.lease && (
+        {adapters.lease && !mount.owner.fixture && (
           <GraphLease
             graph={graph}
             owner={mount.owner}
@@ -164,11 +173,16 @@ export function useGraphRoute<P, W>(
   adapters: RouteAdapters<P, W>,
   { hidden = false, url: projectUrl = true, thread, target, work }: MountRouteProps = {},
 ) {
+  const fixture = useRouteSearchSlice(fixtureName);
+  const lane = useMemo(
+    () => (fixture === null ? null : fixtureEnvironment(graph, fixture)),
+    [graph, fixture],
+  );
   const addressThread = useRouteSearchSlice((search) => (projectUrl ? search.thread : undefined));
   const boundThread = thread ?? addressThread;
   const url = useMemo(
-    () => graphUrlPage(graph, adapters.initialPage),
-    [graph, adapters.initialPage],
+    () => graphUrlPage(graph, { ...adapters.initialPage, ...lane?.adapters.initialPage }),
+    [graph, adapters.initialPage, lane],
   );
   const addressPage = useInitialUrlPage(projectUrl ? url : null);
   const initial = {
@@ -178,13 +192,22 @@ export function useGraphRoute<P, W>(
   // The door follows the owner's Page (its workSubject); before the owner exists, the URL's.
   // The mount re-renders on every Page change, so the next render reads the moved field.
   const mounted = useRef<GraphMount<P, W> | null>(null);
-  const scope = useWorkScope(graph, mounted.current?.view.read().page ?? initial, {
-    target,
-    work,
-    thread: boundThread,
-    url: projectUrl,
-  });
-  const owner = useRouteOwner(() => createGraphMount(graph, { ...adapters, ...scope }, initial));
+  const scope = useWorkScope(
+    graph,
+    mounted.current?.view.read().page ?? initial,
+    {
+      target,
+      work,
+      thread: boundThread,
+      url: projectUrl,
+    },
+    lane?.ports,
+  );
+  const owner = useRouteOwner(
+    () =>
+      createGraphMount(lane?.graph ?? graph, { ...adapters, ...scope, ...lane?.adapters }, initial),
+    lane,
+  );
   mounted.current = owner;
   useEffect(() => owner.connect(), [owner]);
   useEffect(() => {
@@ -245,10 +268,50 @@ export function routeFromGraph<P, W, const Path extends string>(
       const present = Object.fromEntries(
         Object.entries(typed).filter(([id]) => id in search),
       ) as Partial<P>;
-      return { ...routeSearch(search), ...present };
+      return {
+        ...routeSearch(search),
+        ...present,
+        ...(fixtureName(search) !== null ? { fixture: fixtureName(search)! } : {}),
+      };
     },
     component: mountRoute(graph, adapters),
   });
+}
+
+function FixtureChrome<P, W>({ graph, name }: { graph: RouteGraph<P, W>; name: string }) {
+  const router = useRouter({ warn: false });
+  return (
+    <section aria-label="Fixture lane" data-tone="caution">
+      <b>Fixture · {name}</b> <span>In-memory Work · host commands disabled</span>
+      <label>
+        Seed{" "}
+        <select
+          aria-label="Fixture seed"
+          value={name}
+          onChange={(event) => {
+            const fixture = event.target.value;
+            if (router)
+              void router.navigate({
+                to: router.state.location.pathname,
+                search: { fixture },
+              } as never);
+            else {
+              const url = new URL(location.href);
+              url.search = new URLSearchParams({ fixture }).toString();
+              location.assign(url);
+            }
+          }}
+        >
+          {!graph.seeds?.[name] && <option value={name}>{name} (unavailable)</option>}
+          {Object.entries(graph.seeds ?? {}).map(([id, seed]) => (
+            <option key={id} value={id}>
+              {id} · {seed.title}
+            </option>
+          ))}
+        </select>
+      </label>
+    </section>
+  );
 }
 
 function nativeUndo(event: KeyboardEvent) {
@@ -452,6 +515,7 @@ export function GraphRouteView<P, W>({
           aria-label={`${graph.name} route`}
           className="flex h-full min-h-0 flex-col"
         >
+          {owner.fixture && <FixtureChrome graph={graph} name={owner.fixture.name} />}
           {situation !== undefined ? (
             situation
           ) : (
@@ -618,7 +682,7 @@ function GraphSituation<P, W>({
       className="flex flex-wrap items-center gap-2"
     >
       <b>{graph.name}</b>
-      {graph.needs && <GraphTarget status={status} disabled={!enabled} />}
+      {graph.needs && !owner.fixture && <GraphTarget status={status} disabled={!enabled} />}
       {graph.pick !== false && stageField && Object.keys(graph.stages).length > 1 ? (
         <Ladder
           disabled={!enabled}

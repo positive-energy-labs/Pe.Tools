@@ -3,6 +3,8 @@ import {
   applyPatches,
   bindWork,
   ductsRouteState,
+  ductsInputsSchema,
+  ductsSheetOverviewSchema,
   readingKey,
   readingRequestSchema,
   routeDocDelta,
@@ -28,6 +30,8 @@ import sheetFixture from "./sheet/sheet.fixture.json";
 /** Only transport stands in: real parsers, patch authority, pricing and kernel remain in the test. */
 export class DuctsHostFixture {
   snapshot = structuredClone(baseSnapshot);
+  sheetInputs = ductsInputsSchema.parse(sheetFixture.inputs.inputs);
+  sheetOverview = ductsSheetOverviewSchema.parse(sheetFixture.overview);
   doc: DuctsRouteDocument = ductsRouteState.schema.parse({
     flows: { "4": { edit: { value: { cfm: 100, source: "override" } } } },
   });
@@ -177,9 +181,10 @@ export class DuctsHostFixture {
           { error: { code: "bridge", message: "Stale sheet basis; read a new overview" } },
           { status: 409 },
         );
-      const base = { target: { session: "s", openId: "d" }, basis: sheetFixture.overview.basis };
-      if (!detail) return Response.json({ ...sheetFixture.overview, ...base });
-      if (detail.kind === "inputs") return Response.json({ ...sheetFixture.inputs, ...base });
+      const base = { target: { session: "s", openId: "d" }, basis: this.sheetOverview.basis };
+      if (!detail) return Response.json({ ...this.sheetOverview, ...base });
+      if (detail.kind === "inputs")
+        return Response.json({ ...sheetFixture.inputs, inputs: this.sheetInputs, ...base });
       if (detail.kind === "elements") return Response.json({ ...sheetFixture.elements, ...base });
       if (detail.kind === "worksheet")
         return Response.json({

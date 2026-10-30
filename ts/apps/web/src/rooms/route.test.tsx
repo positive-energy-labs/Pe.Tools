@@ -200,7 +200,7 @@ test("returning window focus re-reads rooms without exporting the expensive plan
 });
 
 test("fixture reads never call a native operation and every native write is refused", async () => {
-  const { view, situation } = await mounted({ demo: "plan" });
+  const { view, situation } = await mounted({ fixture: "plan" });
   await view.findByRole("grid", { name: "room regions" });
   expect(host.calls).toEqual([]);
   expect(situation.getByRole("button", { name: "apply" }).getAttribute("aria-disabled")).toBe(
@@ -291,9 +291,9 @@ test("notes use a rungless delete verb and undo restores their anchor, text and 
   expect(host.doc).toEqual(before);
 });
 
-test("live explicitly overrides the synthetic plan lane", async () => {
-  await mounted({ demo: "plan", live: "1" });
-  expect(host.calls.some((row) => row.key === "rooms.snapshot")).toBe(true);
+test("live cannot override the kernel fixture lane", async () => {
+  await mounted({ fixture: "plan", live: "1" });
+  expect(host.calls).toEqual([]);
 });
 
 test("targeting another plan view re-reads rooms, trace and image and clears the old view selection", async () => {

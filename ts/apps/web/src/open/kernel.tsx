@@ -13,11 +13,9 @@ export const openControlAdapters: RouteAdapters<OpenPageState, unknown> = {
     const input = row as { request?: unknown; refusal?: string | null } | undefined;
     const machine = scope.readings.machine;
     const refusal =
-      scope.page.demo && !scope.page.live
-        ? "Frozen demos do not change Revit"
-        : machine?.status !== "absent" && !machine?.current
-          ? "Refresh the machine reading before changing Revit"
-          : (input?.refusal ?? null);
+      machine?.status !== "absent" && !machine?.current
+        ? "Refresh the machine reading before changing Revit"
+        : (input?.refusal ?? null);
     return { subject: null, args: { ...input, refusal } };
   },
   verbDepends: Object.fromEntries(

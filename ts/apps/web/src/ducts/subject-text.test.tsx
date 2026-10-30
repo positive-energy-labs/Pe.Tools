@@ -6,7 +6,7 @@ import snapshot from "./fixtures/synthetic-snapshot.json";
 import { subjectNamer } from "./subject-text";
 import { SubjectText, subjectDocument } from "@pe/kit/lang/subject-text";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
-import { makeAtomRegistry } from "#/route/route-owner";
+import { makeAtomRegistry } from "#/shell/owner";
 import { TestAttention } from "#/test-attention";
 import { citation } from "@pe/kit/lang/attention";
 

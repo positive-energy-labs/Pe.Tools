@@ -11,7 +11,7 @@ import { afterEach, expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { routeAddress } from "@pe/agent-contracts";
 import { routeFile, useAddressPage } from "./address-page";
-import { createRouteOwner, makeAtomRegistry, useOwned } from "./route-owner";
+import { createRouteOwner, makeAtomRegistry, useOwned } from "#/shell/owner";
 import { createViewOwner } from "./view-owner";
 import { useUrlPage } from "./url";
 import { familyGraph, familyPageSchema } from "#/family/graph";

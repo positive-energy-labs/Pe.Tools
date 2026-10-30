@@ -357,6 +357,7 @@ function sheets(): UseSource<SheetReading> {
 
 export function ductsSources(): Readonly<Record<string, ReadingSource>> {
   return {
+    "ducts.meshes": { kind: "derive", derive: () => null },
     "ducts.roster": ductsBodySource({
       request: (ctx) =>
         target(ctx)

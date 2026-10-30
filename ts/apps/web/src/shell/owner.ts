@@ -1,5 +1,5 @@
 /** The route owner: one per route and registry; it holds the log, the runner and the page. */
-import type { InspectableRef } from "./inspect";
+import type { InspectableRef } from "../route/inspect";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import * as Reactivity from "effect/unstable/reactivity/Reactivity";
@@ -7,9 +7,9 @@ import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import type { ExecutionTarget, CellLike } from "@pe/agent-contracts";
 import { Layer } from "effect";
 import { inspectAtomRegistry, type OwnerReferences } from "#/state/atom-inspect";
-import { causeRefusal, refuse, type Refusal } from "./refusal";
+import { causeRefusal, refuse, type Refusal } from "../route/refusal";
 import { cancelRunningAdmissions } from "../../../../packages/mcps/src/shared/takeoff-action-client";
-import { useRouteActivity } from "./activity";
+import { useRouteActivity } from "../route/activity";
 
 /** A resolved Target is only ever two headers on the one `/call` endpoint. */
 export const targetHeaders = (target: ExecutionTarget) =>
@@ -20,7 +20,7 @@ export const targetHeaders = (target: ExecutionTarget) =>
       : {};
 
 /**
- * The one place a registry is constructed (fable law 5). `?demo=` owners get their own isolated
+ * The one place a registry is constructed (fable law 5). `?fixture=` owners get their own isolated
  * registry from here rather than reaching for `AtomRegistry.make` a second time.
  */
 export const makeAtomRegistry = (options?: Parameters<typeof AtomRegistry.make>[0]) =>
@@ -414,6 +414,7 @@ export function useRouteOwner<T extends { dispose(): void; registry: AtomRegistr
  * association.
  */
 export function routeSearch(search: Record<string, unknown>): {
+  fixture?: string;
   target?: string;
   work?: string;
   thread?: string;
@@ -431,6 +432,7 @@ export function routeSearch(search: Record<string, unknown>): {
   const work = typeof search.work === "string" ? search.work.trim() : "";
   const thread = typeof search.thread === "string" ? search.thread.trim() : "";
   return {
+    ...(typeof search.fixture === "string" ? { fixture: search.fixture } : {}),
     ...(target ? { target } : {}),
     ...(work ? { work } : {}),
     ...(thread ? { thread } : {}),

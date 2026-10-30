@@ -1,7 +1,6 @@
 {
   "apps/web/src/actions/receipt.tsx": 1,
   "apps/web/src/host/client.ts": 1,
-  "apps/web/src/host/demo-client.ts": 1,
   "apps/web/src/host/install.ts": 1,
   "apps/web/src/host/machine.ts": 1,
   "apps/web/src/host/measured-parse.ts": 1,

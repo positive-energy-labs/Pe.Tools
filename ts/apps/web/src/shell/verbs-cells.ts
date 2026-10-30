@@ -79,6 +79,11 @@ export function kernelCellVerbs<W>(graph: { readonly cells?: readonly CellsDecl<
             return family.admit?.(scope.snapshot.work!.doc as W, patches(scope))?.message ?? null;
           },
           patches,
+          history: {
+            describe: (scope) => ({
+              label: `${kind} ${family.label?.(scope.subject!.id) ?? scope.subject!.id}`,
+            }),
+          },
         },
       );
     }

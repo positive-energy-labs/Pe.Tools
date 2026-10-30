@@ -25,9 +25,9 @@ import {
   subscribeAcceptedDeltas,
   writeRouteWork,
 } from "../route/host";
-import { appAtomRegistry, useOwned } from "../route/route-owner";
+import { appAtomRegistry, useOwned } from "#/shell/owner";
 import { useRouteTarget, parseTarget } from "../route/route-target";
-import { docAtom } from "../route/route-work";
+import { docAtom } from "./work-document";
 import type { MountScope } from "./mount-owner";
 
 const CLOSED_WORK = "its document is closed; this Work only reads";
@@ -69,6 +69,7 @@ export function useWorkScope<P, W>(
   graph: RouteGraph<P, W>,
   page?: Readonly<Partial<P>>,
   binding?: { target?: string; work?: string; thread?: string; url?: boolean },
+  fixture?: WorkScopePorts<W>,
 ): WorkScopePorts<W> {
   const carry = useRouteSearchSlice((search) =>
     binding?.url === false
@@ -77,17 +78,17 @@ export function useWorkScope<P, W>(
   );
   const threadAtom = useMemo(
     () =>
-      graph.optionalTarget && binding?.thread
+      !fixture && graph.optionalTarget && binding?.thread
         ? readingAtom({ kind: "thread-head", thread: binding.thread }, peReadings)
         : null,
-    [graph.optionalTarget, binding?.thread],
+    [graph.optionalTarget, binding?.thread, fixture],
   );
   const threadReading = useOwned(appAtomRegistry, threadAtom);
   const head = threadHeadSchema.safeParse(threadReading && previousOf(threadReading));
   const threadTarget =
     head.success && head.data.targets.length === 1 ? head.data.targets[0]!.request : null;
   const pin = carry.target ?? (threadTarget ? JSON.stringify(threadTarget) : null);
-  const needs = graph.needs ?? (pin ? graph.optionalTarget : undefined);
+  const needs = fixture ? undefined : (graph.needs ?? (pin ? graph.optionalTarget : undefined));
   const sessionAtom = useMemo(
     () => (needs === "session" ? readingAtom({ kind: "inventory" }, peReadings) : null),
     [needs],
@@ -147,10 +148,10 @@ export function useWorkScope<P, W>(
   const key = useMemo(() => JSON.parse(keyText) as WorkKey, [keyText]);
   const spec = useMemo(
     (): RouteStateSpec<NonNullable<typeof graph.work>> | null =>
-      graph.work
+      graph.work && !fixture
         ? { route: graph.key, title: graph.name, description: graph.name, schema: graph.work }
         : null,
-    [graph],
+    [graph, fixture],
   );
   // Target-owned Work never falls back to the shared host key while its document is unresolved.
   const readable =
@@ -262,5 +263,5 @@ export function useWorkScope<P, W>(
     }),
     [statusText, closed, unreadable, failure], // eslint-disable-line react-hooks/exhaustive-deps
   );
-  return useMemo(() => ({ ...ports, status }), [ports, status]);
+  return useMemo(() => fixture ?? { ...ports, status }, [ports, status, fixture]);
 }

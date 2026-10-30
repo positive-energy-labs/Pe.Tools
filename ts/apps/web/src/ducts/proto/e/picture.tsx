@@ -27,7 +27,7 @@ import {
   type PictureLayer,
   type PictureOverlayFrame,
 } from "#/scene/picture/picture";
-import { frozenDemo } from "#/host/demo-client";
+import { DuctsOwner } from "../../pane-context";
 import { VisibleRouteResource } from "#/route/activity";
 
 import type { Ruling } from "../../annotations";
@@ -58,7 +58,6 @@ import { RulingBody, useMarks } from "./rulings";
 import { noRunParts } from "../../subject-text";
 import { stubLabels } from "../../stub-labels";
 import { coloursOf } from "../../colours";
-import { COLOURS_FIXTURE } from "../../colours.fixture";
 
 const fmt = (n: number | null | undefined, d = 3) => (n == null ? "—" : n.toFixed(d));
 const NO_FOCUS: PictureContent["focus"] = { walked: [], near: [] };
@@ -180,6 +179,7 @@ function Content({
     () => stubLabels(snapshot, neighbours, opened),
     [snapshot, neighbours, opened],
   );
+  const meshes = useContext(DuctsOwner)?.readings.get("meshes").value as SceneMeshes | undefined;
   const meshCuts = useMemo(() => {
     const cuts = new Map<number, (typeof neighbours)[number]["cuts"]>();
     for (const id of stubs) {
@@ -195,10 +195,9 @@ function Content({
   const capture = useMemo(
     () => ({
       cuts: meshCuts,
-      meshes:
-        import.meta.env.DEV && frozenDemo() === "colours" ? COLOURS_FIXTURE.meshes : undefined,
+      meshes,
     }),
-    [meshCuts],
+    [meshCuts, meshes],
   );
   const lines = useMemo(() => linesOf(scene), [scene]);
 

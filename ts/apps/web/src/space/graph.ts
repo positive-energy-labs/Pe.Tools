@@ -79,10 +79,12 @@ const read = (key: SpaceReadKey, label: string) =>
             : null,
     },
   );
+import { spaceSeeds } from "./graph-seeds";
 export const spaceGraph: RouteGraph<SpacePage, null> = {
   key: "space",
   address: "space",
   name: "Space",
+  seeds: spaceSeeds,
   needs: "document",
   fields: {
     threadSearch: { ...threadListFields.threadSearch, role: "pose" },
@@ -96,7 +98,6 @@ export const spaceGraph: RouteGraph<SpacePage, null> = {
     hidden: { ...fields.hidden, role: "pose" },
     isolated: { ...fields.isolated, role: "pose" },
     layers: { ...fields.layers, role: "pose" },
-    demo: { ...fields.demo, role: "transient", url: fields.demo.url ?? false },
     encoding: { ...fields.encoding, role: "pose" },
     row: { ...fields.row, role: "pose", url: false },
     treeInput: { ...fields.treeInput, role: "pose" },
@@ -108,13 +109,13 @@ export const spaceGraph: RouteGraph<SpacePage, null> = {
     scene: {
       kind: "use",
       source: "space.scene",
-      args: ({ scene, demo }) => ({ scene, demo }),
+      args: ({ scene }) => scene,
       retire: "page",
     },
-    demoAnswers: {
+    answers: {
       kind: "derive",
-      source: "space.demo-answers",
-      args: ({ demo }) => demo,
+      source: "space.answers",
+      args: ({ scene }) => scene,
       retire: "page",
     },
   },
@@ -132,13 +133,13 @@ export const spaceGraph: RouteGraph<SpacePage, null> = {
     picture: {
       label: "Space",
       purpose: "Inspect captured geometry, cuts and query answers",
-      draws: ["scene", "demoAnswers"],
+      draws: ["scene", "answers"],
       verbs: [],
     },
     facts: {
       label: "Space facts",
       purpose: "Edit axis cuts and read answer layers",
-      draws: ["scene", "demoAnswers"],
+      draws: ["scene", "answers"],
       verbs: Object.assign((row: { verb: string }) => [row.verb], {
         ids: ["status", "rows", "tree", "slice", "probe", "sweep"],
       }),
@@ -163,7 +164,7 @@ export const spaceGraph: RouteGraph<SpacePage, null> = {
       panes: ["picture", "facts"],
       verbs: ["capture", "context"],
       teach:
-        "Capture host element ids or load their context, then orbit, pick, hide, isolate and cut. Saved scene links reopen artifacts without capturing. Keys 1–4 switch 3D, Top, North and East. Escape returns an axis to its saved 3D pose. Each cut constrains the picture by intersection.",
+        "Capture host element ids or load their context, then orbit, pick, hide, isolate and cut. Saved scene links reopen artifacts without capturing. Keys 1â€“4 switch 3D, Top, North and East. Escape returns an axis to its saved 3D pose. Each cut constrains the picture by intersection.",
     },
   },
   pick: false,

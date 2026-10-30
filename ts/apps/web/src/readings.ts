@@ -1,3 +1,4 @@
+import { currentFixture } from "#/shell/fixture-lane";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { hostFetch, runtimeStreamUrl } from "#/host/runtime";
 /**
@@ -227,6 +228,14 @@ export class PeReadings {
   subscribe(raw: ReadingRequest, listener: (frame: Frame) => void): () => void {
     if (this.closed) throw Error("This Pe reading owner is retired");
     const request = readingRequestSchema.parse(raw);
+    if (currentFixture() !== null) {
+      listener({
+        kind: "failure",
+        key: readingKey(request),
+        error: "Fixture lane: use the graph seed reading",
+      });
+      return () => {};
+    }
     const key = readingKey(request);
     let entry = this.entries.get(key);
     if (!entry) {

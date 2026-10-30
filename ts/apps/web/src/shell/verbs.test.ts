@@ -16,7 +16,7 @@ import {
   type RouteStateSpec,
   type WorkKey,
 } from "@pe/agent-contracts";
-import { createRouteOwner, makeAtomRegistry } from "../route/route-owner";
+import { createRouteOwner, makeAtomRegistry } from "#/shell/owner";
 import {
   bind,
   commandVerb,

@@ -23,7 +23,7 @@ import {
   type VerbDecl,
   type WorkWriteAck,
 } from "@pe/agent-contracts";
-import { createRouteOwner, makeAtomRegistry } from "../route/route-owner";
+import { createRouteOwner, makeAtomRegistry } from "#/shell/owner";
 import { createViewOwner } from "../route/view-owner";
 import { causeRefusal, refuse, writeRefusal } from "../route/refusal";
 import {
@@ -47,6 +47,7 @@ import {
   type ReviewTicket,
   type VerbContext,
   type VerbSubject,
+  type PendingWorkHistory,
 } from "./verbs";
 
 export const graphFields = <P, W>(graph: RouteGraph<P, W>) =>
@@ -83,6 +84,7 @@ export type BindingScope<P, W> = MountScope<W> & {
 };
 
 export interface MountAdapters<P, W> {
+  fixture?: { name: string; queries: Readonly<Record<string, unknown>>; select?(page: P): void };
   settings?: SettingsOwner;
   /**
    * Immutable external-store snapshot; Page is owned by the mount's existing ViewOwner. This and
@@ -217,6 +219,7 @@ export function createGraphMount<P, W>(
             : {},
         })),
   });
+  adapters.fixture?.select?.(initialPage);
   let raw = adapters.getSnapshot();
   let scope = raw;
   // One count per Target/Work-key change: a verb's result is admitted only into the generation it started in.
@@ -394,6 +397,44 @@ export function createGraphMount<P, W>(
     return journal;
   };
   if (scope.work) journalFor(scope.work.handle.key);
+  const historyCompletions = new Map<
+    string,
+    {
+      key: WorkKey;
+      revision: number;
+      generation: number;
+      epoch: number;
+      history: PendingWorkHistory;
+    }
+  >();
+  const completeHistory = () => {
+    for (const [press, pending] of historyCompletions) {
+      if (
+        pending.generation !== generation ||
+        pending.epoch !== view.read().epoch ||
+        (scope.work && scope.work.handle.revision > pending.revision)
+      ) {
+        historyCompletions.delete(press);
+        continue;
+      }
+      if (!scope.work || scope.work.handle.revision !== pending.revision) continue;
+      const after = Object.fromEntries(
+        pending.history.readings.map((id) => [id, readings.get(id)]),
+      );
+      if (
+        !Object.values(after).every(
+          (state) =>
+            state.current &&
+            state.basis?.workRevision === pending.revision &&
+            state.basis.attempt.workKey &&
+            workKey(state.basis.attempt.workKey) === workKey(pending.key),
+        )
+      )
+        continue;
+      journalFor(pending.key).describe(press, pending.history.complete(after));
+      historyCompletions.delete(press);
+    }
+  };
   const unTimeline = timeline.subscribe((entry) => {
     const key =
       entry.basis && typeof entry.basis === "object" && "workKey" in entry.basis
@@ -460,6 +501,7 @@ export function createGraphMount<P, W>(
     });
   };
   const context: VerbContext<"human"> = {
+    fixture: adapters.fixture,
     caller: "human",
     receipt: (receipt, press) => {
       acceptReceipt(receipt, dispatches.get(press)?.key ?? null, press, false);
@@ -485,7 +527,27 @@ export function createGraphMount<P, W>(
         salvage: salvagePatches(),
       },
     }),
-    write: (key, envelope) => write(key, { ...envelope, kind: "apply" }),
+    write: async (key, envelope, history) => {
+      const started = generation;
+      const epoch = view.read().epoch;
+      const result = await write(key, { ...envelope, kind: "apply" });
+      if (result.ok && !disposed && history) {
+        journalFor(key).describe(envelope.press, history.entry);
+        journalRefusal = null;
+        if (history.readings.length) {
+          historyCompletions.set(envelope.press, {
+            key,
+            revision: result.write.revision,
+            generation: started,
+            epoch,
+            history,
+          });
+          completeHistory();
+        }
+        notify();
+      }
+      return result;
+    },
     recover: async (key) => {
       if (!adapters.startFresh)
         return { ok: false, kind: "refused", error: "This route has no recovery door", hint: "" };
@@ -741,6 +803,7 @@ export function createGraphMount<P, W>(
   return {
     registry,
     settings,
+    fixture: adapters.fixture,
     view,
     readings,
     timeline,
@@ -870,10 +933,10 @@ export function createGraphMount<P, W>(
     },
     stage,
     journal: journalFor,
-    async restore(direction: "undo" | "redo") {
+    async restore(direction: "undo" | "redo", press?: string) {
       if (!scope.work || disposed || !available()) return null;
       const key = structuredClone(scope.work.handle.key);
-      const result = await journalFor(key)[direction]((request) => write(key, request));
+      const result = await journalFor(key)[direction]((request) => write(key, request), press);
       journalRefusal = result.ok ? null : result.message;
       notify();
       return result;
@@ -944,10 +1007,16 @@ export function createGraphMount<P, W>(
         }),
         adapters.subscribe(update),
         view.subscribe(() => {
+          adapters.fixture?.select?.(view.read().page);
           readings.update(readScope());
           notify();
         }),
-        ...Object.keys(graph.readings).map((id) => readings.subscribe(id, notify)),
+        ...Object.keys(graph.readings).map((id) =>
+          readings.subscribe(id, () => {
+            completeHistory();
+            notify();
+          }),
+        ),
       ];
       if (adapters.subscribeDocumentChanged)
         releases.push(adapters.subscribeDocumentChanged((ref) => readings.documentChanged(ref)));
@@ -969,6 +1038,7 @@ export function createGraphMount<P, W>(
       for (const release of deltas.values()) release();
       deltas.clear();
       unTimeline();
+      historyCompletions.clear();
       for (const release of releaseJournals) release();
       readings.dispose();
       view.dispose();

@@ -3,14 +3,14 @@ import { selectedMember } from "./model";
 import type { PodsPage } from "./page";
 
 export const podsReadings = {
-  pods: { kind: "use", source: "pods.list", retire: "page", args: (p) => [p.demo, p.live] },
+  pods: { kind: "use", source: "pods.list", retire: "page", args: () => [] },
   member: {
     kind: "use",
     source: "pods.member",
     retire: "page",
-    args: (p) => [selectedMember(p), p.demo, p.live],
+    args: (p) => [selectedMember(p)],
   },
-  status: { kind: "use", source: "pods.status", retire: "page", args: (p) => [p.demo, p.live] },
+  status: { kind: "use", source: "pods.status", retire: "page", args: () => [] },
   composition: {
     kind: "use",
     source: "pods.composition",
@@ -21,13 +21,13 @@ export const podsReadings = {
     kind: "use",
     source: "pods.runs",
     retire: "page",
-    args: (p) => [selectedMember(p), p.pod, p.runs, p.demo, p.live],
+    args: (p) => [selectedMember(p), p.pod, p.runs],
   },
   plugins: {
     kind: "use",
     source: "pods.plugins",
     retire: "page",
-    args: (p) => [p.demo, p.live, p.pluginEpoch],
+    args: (p) => p.pluginEpoch,
   },
 } satisfies RouteGraph<PodsPage>["readings"];
 

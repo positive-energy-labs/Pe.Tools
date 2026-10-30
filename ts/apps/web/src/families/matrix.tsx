@@ -1,6 +1,6 @@
 import { FactChip } from "@pe/kit/lang/chip";
 import { EmptyState } from "@pe/kit/lang/empty";
-import { routeAddress, type FamiliesReadProgress } from "@pe/agent-contracts";
+import { type FamiliesReadProgress } from "@pe/agent-contracts";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { FamiliesPivot } from "#/families/pivot";
 import { filterWords, standingFilterProposal } from "#/families/scope-band";
@@ -123,7 +123,7 @@ export function FamiliesMatrix() {
               <FactChip dashed title="Fixture review: no Revit capture behind these values">
                 fixture
               </FactChip>
-              <a href={routeAddress("families").link({ demo: "apply" })}>plan fixture</a>
+              <a href={"/families?fixture=apply"}>plan fixture</a>
             </p>
           )}
         </>

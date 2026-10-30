@@ -16,7 +16,7 @@ import {
   type RouteWorkspaceEvent,
 } from "../../../../packages/runtime/src/route-workspace";
 import { docWriter } from "./route-work";
-import { makeAtomRegistry, type Slice } from "./route-owner";
+import { makeAtomRegistry, type Slice } from "#/shell/owner";
 
 const transport = vi.hoisted(() => ({ response: vi.fn() }));
 vi.mock("#/host/pe-client", () => ({ peClient: transport }));

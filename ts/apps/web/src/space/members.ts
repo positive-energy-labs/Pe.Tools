@@ -56,7 +56,6 @@ export function spaceObservation(
 ): NativeObservation {
   const scene = read.value as LoadedSpaceScene | undefined;
   if (
-    page.demo === "fixture" ||
     !read.current ||
     !scene ||
     scene.id !== page.scene ||

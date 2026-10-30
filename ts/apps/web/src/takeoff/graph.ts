@@ -18,7 +18,7 @@ import { withEditBases } from "./projections";
 import { takeoffVerbs } from "./graph-actions";
 
 export const takeoffGraphPageSchema = takeoffPageSchema
-  .omit({ demo: true, panel: true, syncReview: true })
+  .omit({ panel: true, syncReview: true })
   .extend({ work: z.string().default(""), fileText: z.boolean().default(false) });
 export type TakeoffGraphPage = z.output<typeof takeoffGraphPageSchema>;
 const json = <S extends z.ZodType>(schema: S) =>
@@ -28,10 +28,34 @@ const rowPartitions = Object.assign(
   (row: unknown) => ((row as { zone?: string })?.zone ? ["partition"] : []),
   { ids: ["partition"] },
 );
+import { takeoffSeeds, DEMO_CANDIDATES } from "./seeds";
 export const takeoffGraph: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> = {
   key: "takeoffs",
   address: "takeoffs",
   name: "Takeoffs",
+  seeds: Object.fromEntries(
+    Object.entries(takeoffSeeds).map(([name, seed]) => [
+      name,
+      {
+        ...seed,
+        queries: {
+          "takeoffs.snapshot": seed.readings.snapshot,
+          "rhvac.open": { path: "C:/Fixtures/projectA.r10" },
+        },
+        readings: {
+          candidates: DEMO_CANDIDATES,
+          ownerCrops: null,
+          plan: null,
+          rhvacVersion: null,
+          receipts: [],
+          captures: [],
+          saved: null,
+          text: null,
+          ...seed.readings,
+        },
+      },
+    ]),
+  ),
   needs: "project",
   work: takeoffsRouteState.schema,
   capture: "work",

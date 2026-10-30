@@ -155,7 +155,7 @@ test("the mounted bay patches a document and dispatches its exact semantic inten
   expect(fetch).not.toHaveBeenCalled();
 });
 test("stale machine evidence refuses an armed stop and hosted Page stays off the URL", async () => {
-  const { view, owner, router } = await mounted("/open?demo=refresh", true);
+  const { view, owner, router } = await mounted("/open?thread=kept", true);
   const card = within(view.getByRole("group", { name: "Revit 2025 started from the Revit icon" }));
   fireEvent.click(card.getByRole("button", { name: "stop" }));
   act(() => publishMachine({ kind: "stale" }));
@@ -165,8 +165,8 @@ test("stale machine evidence refuses an armed stop and hosted Page stays off the
     target: { value: "clinic" },
   });
   await waitFor(() => expect(owner().view.read().page.table.query).toBe("clinic"));
-  expect(router.state.location.search).toEqual({ demo: "refresh" });
-  expect(owner().view.read().page.demo).toBe("");
+  expect(router.state.location.search).toEqual({ thread: "kept" });
+  expect(owner().view.read().page).not.toHaveProperty("fixture");
   expect(fetch).not.toHaveBeenCalled();
 });
 

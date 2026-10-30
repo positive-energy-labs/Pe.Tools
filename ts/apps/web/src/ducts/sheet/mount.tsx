@@ -17,6 +17,7 @@ import { sheetState } from "./state";
 import { describeCloser, type Closer } from "./closer";
 import type { DuctsSheetEdits, RouteStatePatch } from "@pe/agent-contracts";
 import type { SheetReading } from "../sources";
+import { editLabel, presentInputHistory, type EditMeta } from "./input-history";
 
 const SheetPanes = createContext<Readonly<Record<string, ReactNode>>>({});
 export function SheetPane({ id }: { id: string }) {
@@ -47,18 +48,23 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
     [props.attentionDoc, nameOf, props.onSelect, refProps],
   );
   const busy = ["pending", "partial"].includes(reading.status);
-  const changeInputs = (edits: DuctsSheetEdits) => {
-    return owner
+  const changeInputs = async (
+    edits: DuctsSheetEdits,
+    history: EditMeta = { label: editLabel(edits, nameOf) },
+  ) => {
+    const result = await owner
       .control("sheet-inputs", {
         edits,
+        history,
         expectedRevision: props.work.revision,
         basis: sheet?.overview.basis ?? null,
       })
       .run();
+    return "refusal" in result ? { message: result.refusal.message } : undefined;
   };
-  const write = async (patches: RouteStatePatch[]) => {
+  const write = async (patches: RouteStatePatch[], history: EditMeta) => {
     const result = await owner
-      .control("edit", { patches, expectedRevision: props.work.revision })
+      .control("edit", { patches, history, expectedRevision: props.work.revision })
       .run();
     return "refusal" in result ? result.refusal : null;
   };
@@ -159,20 +165,16 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
         };
   const work = owner.snapshot().work;
   const journal = work ? owner.journal(work.handle.key).read() : null;
-  // Kernel gap: row labels, cleared-row Restore and total deltas need journal metadata.
-  // The red route.test.tsx records it; this body must not keep a second undo journal.
   const history = {
-    undoLabel: journal?.undo.length ? "input edit" : null,
-    redoLabel: journal?.redo.length ? "input edit" : null,
-    last: owner.journalRefusal()
-      ? { label: "restore", words: "", refusal: owner.journalRefusal()! }
-      : null,
-    cleared: null,
+    ...presentInputHistory(journal, owner.journalRefusal()),
     undo: () => {
       void owner.restore("undo");
     },
     redo: () => {
       void owner.restore("redo");
+    },
+    restore: (press: string) => {
+      void owner.restore("undo", press);
     },
   };
   const fanReading = fans.value as { slots: SheetViewProps["slots"]; activeSlot: string } | null;
@@ -209,7 +211,7 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
       owner.view.setPage({ sheetPath });
     },
     closerOf,
-    close: (closer) => changeInputs(editsFor([closer])),
+    close: (closer) => changeInputs(editsFor([closer]), { label: closer.verb }),
     closeMany: (closers) => changeInputs(editsFor(closers)),
     focusedBlocker: props.page.issue || null,
     focusBlocker: (issue) => {
@@ -248,13 +250,16 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
               kind: "set",
               rung: { value: slot },
             }),
+            { label: `${key} → ${slot}` },
           );
         }}
         apply={changeInputs}
         history={history}
         nameOf={nameOf}
-        act={(path, cell, kind) =>
-          write(transitionPatches(path.slice(0, -1), path.at(-1)!, cell, { kind }))
+        act={(path, cell, kind, label) =>
+          write(transitionPatches(path.slice(0, -1), path.at(-1)!, cell, { kind }), {
+            label: `${kind === "take" ? "take" : "unsuggest"} Pea's ${label}`,
+          })
         }
       />
     ),

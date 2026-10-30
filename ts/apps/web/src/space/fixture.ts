@@ -1,5 +1,5 @@
 /**
- * `?demo=fixture`: a synthetic room (slab, two walls, a duct run, a linked beam, a DWG import),
+ * `?fixture=fixture`: a synthetic room (slab, two walls, a duct run, a linked beam, a DWG import),
  * written as real PSC1 bytes and read back by the real decoder, with one answer per space op shaped
  * as the generated DTOs declare. No Revit, no host: every fact here is invented and says so.
  */

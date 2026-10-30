@@ -1,6 +1,6 @@
 /**
  * Machine and Open fixtures: recorded moments of the host's one `Machine` reading and the SDK's
- * recents, in the generated wire shapes, never a second model. The tests, the `/open?demo=` seed
+ * recents, in the generated wire shapes, never a second model. The tests, the `/open?fixture=` seed
  * and the design-system specimen all draw these. A fixture is a `Reading<Machine>` because the
  * honest gap (the host went away) is a reading state, not a field.
  */

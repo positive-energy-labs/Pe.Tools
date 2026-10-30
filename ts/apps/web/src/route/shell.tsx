@@ -7,8 +7,8 @@ import { ButtonGroup } from "@pe/kit/lang/button-group";
  * No connected-or-not lamp: those states left product chrome (host ledger 2026-10-09). Machine
  * state and repair actions live on the canonical Machine route; configuration lives in Settings.
  */
-import { useCallback, useContext, type ReactNode } from "react";
-import { useRouteNavigate, useRouteSearchSlice } from "./activity";
+import { useContext, type ReactNode } from "react";
+import { useChooseTarget } from "#/shell/binding";
 
 import {
   PrimaryRouteControls,
@@ -66,40 +66,6 @@ export interface ShellProps<W, R extends string, P, A extends string> {
   /** A Situation owns the whole head row (name, chain lamp, verbs); the shell draws none of it. */
   situation?: ReactNode;
   children?: ReactNode;
-}
-
-/**
- * The one `?target` reader/writer every shell and route shares. Grammar lives in `parseTarget`.
- * A person's pick is a named move and pushes (N5: Back returns to the previous target); only a
- * pick the page makes for them (auto-binding the one open document) replaces.
- */
-export function useChooseTarget(): [
-  string | null,
-  (target: string | null, history?: "push" | "replace") => void,
-] {
-  const navigate = useRouteNavigate();
-  const target = useRouteSearchSlice((search) => search.target);
-  const choose = useCallback(
-    (target: string | null, history: "push" | "replace" = "push") =>
-      void navigate({
-        to: ".",
-        search: (previous: Record<string, unknown>) => ({
-          ...previous,
-          target: target || undefined,
-        }),
-        replace: history === "replace",
-      }),
-    [navigate],
-  );
-  return [target ?? null, choose];
-}
-
-/**
- * The selected conversation, from `?thread`; null when none. A tool route never mints or writes
- * one: only Pea's composer starts a draft, and its first Send promotes it.
- */
-export function useRouteThread(): string | null {
-  return useRouteSearchSlice((search) => search.thread) ?? null;
 }
 
 export function RouteShell<W, R extends string, P, A extends string>(

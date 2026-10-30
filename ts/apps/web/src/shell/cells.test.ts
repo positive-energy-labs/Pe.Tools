@@ -12,7 +12,7 @@ import {
   type WorkKey,
   type WorkWriteAck,
 } from "@pe/agent-contracts";
-import { createRouteOwner, makeAtomRegistry } from "../route/route-owner";
+import { createRouteOwner, makeAtomRegistry } from "#/shell/owner";
 import { createWorkJournal, type JournalWriter } from "./journal";
 import { invoke, type VerbContext } from "./verbs";
 import { kernelCellVerbs } from "./verbs-cells";

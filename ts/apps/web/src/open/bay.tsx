@@ -40,9 +40,9 @@ import { docKey, heldRowParts, SessionCard, type SessionDocument } from "#/compo
 import { Switcher } from "@pe/kit/lang/switcher";
 import type { QueryCommand } from "@pe/kit/table/model";
 import { queryWords, readClause, visibleRows } from "@pe/kit/table/view";
-import { useRouteDemo } from "#/route/activity";
+import { useRouteFixture } from "#/route/activity";
 import { keyOf, pidOf, processOf, selectionOf } from "#/machine/session";
-import { demoRecents } from "#/machine/use-machine";
+import { fixtureRecents } from "#/shell/fixture-services";
 import { OpenControlScope, outcomeOf, useOpenKernel, useOpenOwner } from "./kernel";
 import type { OutcomeKind } from "@pe/kit/lang/outcome";
 import type { TableState } from "@pe/kit/table/model";
@@ -91,7 +91,7 @@ function OutcomeOf({ outcome }: { outcome: Outcome | null }) {
  * the fixture threads and opens no transport.
  */
 export function useBayReadings(machine: Machine | null, fixture: boolean) {
-  const routeDemo = useRouteDemo();
+  const routeDemo = useRouteFixture();
   const demo = fixture ? routeDemo : null;
   const owner = useOpenKernel();
   useEffect(() => (!fixture ? owner.readings.mount(["recents"]) : undefined), [owner, fixture]);
@@ -99,7 +99,7 @@ export function useBayReadings(machine: Machine | null, fixture: boolean) {
     result?: { recents?: RecentDocument[] };
   }>;
   const recents = fixture
-    ? demoRecents(demo ?? "").result.recents
+    ? fixtureRecents(demo ?? "").result.recents
     : ((reading.value ?? reading.previous)?.result?.recents ?? []);
   const sessions = machine?.revit.sessions ?? null;
   const rows = useMemo(() => modelRows(sessions ?? [], recents), [sessions, recents]);

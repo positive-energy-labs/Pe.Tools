@@ -3,7 +3,6 @@ import type { BindingScope } from "#/shell/mount-owner";
 import type { PodsPage } from "./page";
 import {
   draftOf,
-  fixturePage,
   readingValue,
   sameMember,
   selectedMember,
@@ -17,7 +16,6 @@ import type { PluginsRead } from "./sources";
 export type PodsScope = BindingScope<PodsPage, SettingsRouteDocument>;
 export function memberWorkRefusal(scope: PodsScope) {
   const ref = selectedMember(scope.page);
-  if (fixturePage(scope.page)) return "The demo member is read-only.";
   if (!ref || !ref.path.endsWith(".json")) return "Pick a JSON member first.";
   return !scope.work || scope.work.handle.key.work !== memberWork(ref)
     ? "Select this member's Work first."
@@ -106,15 +104,13 @@ export function podsBinding(id: string, row: unknown, scope: PodsScope) {
       subject: null,
       args: {
         ...args,
-        refusal: fixturePage(scope.page)
-          ? "Demo activation is read-only."
-          : !scope.readings.plugins?.current
-            ? "Reading this Pod's activation."
-            : !plugin
-              ? "This host lists no activation for this Pod."
-              : plugin.status === "error"
-                ? (plugin.error ?? "This Pod failed to activate.")
-                : null,
+        refusal: !scope.readings.plugins?.current
+          ? "Reading this Pod's activation."
+          : !plugin
+            ? "This host lists no activation for this Pod."
+            : plugin.status === "error"
+              ? (plugin.error ?? "This Pod failed to activate.")
+              : null,
       },
     };
   }

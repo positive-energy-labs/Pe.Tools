@@ -15,7 +15,12 @@ type Transition = {
   inverse: RouteStatePatch[];
   paths: RouteStatePatch["path"][];
 };
-type Step = {
+/** Route-owned presentation only; never part of the host's patch or inverse authority. */
+export interface JournalDetail {
+  label?: string;
+  meta?: unknown;
+}
+type Step = JournalDetail & {
   press: string;
   transitions: Transition[];
   /** Number of transitions currently applied; a failed multi-write replay resumes here. */
@@ -27,7 +32,7 @@ export type JournalResult =
   | { ok: true; press: string; revision: number }
   | {
       ok: false;
-      code: "empty" | "barrier" | "busy" | "write-refused" | "interrupted";
+      code: "empty" | "barrier" | "busy" | "write-refused" | "interrupted" | "entry-changed";
       message: string;
       barrier?: TimelineBarrier;
     };
@@ -70,6 +75,7 @@ export function createWorkJournal(key: WorkKey) {
   let revision: number | null = null;
   let undo: Step[] = [];
   let redo: Step[] = [];
+  let last: { kind: "apply" | "undo" | "redo"; step: Step } | null = null;
   let pending: { direction: "undo" | "redo"; step: Step } | null = null;
   let sending: WorkWrite | null = null;
   let busy = false;
@@ -80,6 +86,7 @@ export function createWorkJournal(key: WorkKey) {
   const clear = () => {
     undo = [];
     redo = [];
+    last = null;
     pending = null;
     generation++;
   };
@@ -156,11 +163,13 @@ export function createWorkJournal(key: WorkKey) {
       undo.splice(index, 1);
       undo.push(prior);
     } else undo.push({ press: ack.press, transitions: [transition], cursor: 1 });
+    last = { kind: "apply", step: undo.at(-1)! };
   };
 
   const replay = async (
     direction: "undo" | "redo",
     write: JournalWriter,
+    press?: string,
   ): Promise<JournalResult> => {
     if (busy)
       return { ok: false, code: "busy", message: "The journal is already restoring a step" };
@@ -175,6 +184,12 @@ export function createWorkJournal(key: WorkKey) {
     const step = pending?.step ?? source.at(-1);
     if (!step || revision === null)
       return { ok: false, code: "empty", message: `Nothing to ${direction}` };
+    if (press !== undefined && step.press !== press)
+      return {
+        ok: false,
+        code: "entry-changed",
+        message: "The selected history entry is no longer last",
+      };
     const blocked = (): JournalResult | null =>
       step.barrier
         ? {
@@ -232,6 +247,7 @@ export function createWorkJournal(key: WorkKey) {
       source.splice(index, 1);
       (direction === "undo" ? redo : undo).push(step);
       pending = null;
+      last = { kind: direction, step };
       return { ok: true, press: step.press, revision };
     } catch (cause) {
       return {
@@ -250,15 +266,20 @@ export function createWorkJournal(key: WorkKey) {
   return {
     key: structuredClone(key),
     accept,
+    /** Attach cloneable presentation to an accepted press, including a late Reading result. */
+    describe(press: string, detail: JournalDetail) {
+      const step = [...undo, ...redo].find((entry) => entry.press === press);
+      if (step) Object.assign(step, structuredClone(detail));
+    },
     /** Subscribe this to the route timeline before dispatching commands; retain barriers after its log is trimmed. */
     record,
     /** The mount's conflict flag: while held, undo and redo refuse with a barrier. */
     hold(on: boolean) {
       held = on;
     },
-    undo: (write: JournalWriter) => replay("undo", write),
-    redo: (write: JournalWriter) => replay("redo", write),
-    read: () => structuredClone({ revision, undo, redo, busy }),
+    undo: (write: JournalWriter, press?: string) => replay("undo", write, press),
+    redo: (write: JournalWriter, press?: string) => replay("redo", write, press),
+    read: () => structuredClone({ revision, undo, redo, busy, last }),
   };
 }
 

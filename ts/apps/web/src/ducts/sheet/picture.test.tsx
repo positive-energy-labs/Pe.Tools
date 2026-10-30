@@ -11,7 +11,7 @@ import { RegistryContext } from "@effect/atom-react";
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { attention, elementKey, setHovered, type SubjectKey } from "@pe/kit/lang/attention";
-import { makeAtomRegistry } from "#/route/route-owner";
+import { makeAtomRegistry } from "#/shell/owner";
 import { AttentionRoot } from "#/attention";
 import type { ModelPicture } from "#/scene/picture/model";
 import type { PictureStage } from "#/scene/stage-controller";

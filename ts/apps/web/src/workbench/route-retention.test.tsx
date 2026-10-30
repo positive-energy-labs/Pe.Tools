@@ -21,9 +21,9 @@ import {
 import { z } from "zod";
 import { peClient } from "#/host/pe-client";
 import { peReadings } from "#/readings";
-import { useRouteSearch, useRouteDemo, useRouteNavigate } from "#/route/activity";
+import { useRouteSearch, useRouteFixture, useRouteNavigate } from "#/route/activity";
 import { defineRoute } from "#/route/manifest";
-import { appAtomRegistry, routeSearch, useRouteOwner } from "#/route/route-owner";
+import { appAtomRegistry, routeSearch, useRouteOwner } from "#/shell/owner";
 import { useRoute } from "#/route/use-route";
 import { urlPage } from "#/route/url";
 import { applyPageIntent } from "#/route/view-owner";
@@ -109,7 +109,7 @@ function DuctProbe() {
   const [draft, setDraft] = useState("");
   const handle = useDuct(String(search.target ?? "A"));
   const [page, setPage] = handle.page;
-  const demo = useRouteDemo();
+  const demo = useRouteFixture();
   const navigate = useRouteNavigate();
   const owner = useRouteOwner(() => ({ registry: appAtomRegistry, dispose: vi.fn() }));
   probes.set(id, { handle, instance, search, demo, navigate, disposed: owner.dispose });
@@ -490,7 +490,7 @@ test("enrollment and lazy promotion preserve the initial Page, draft, and identi
   await act(() =>
     router.navigate({
       to: "/ducts",
-      search: { ...router.state.location.search, demo: "scene" },
+      search: { ...router.state.location.search, fixture: "scene" },
       state: router.state.location.state,
       replace: true,
     } as never),

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import { createPodRouteLoader, verifyBundle } from "./pod-loader";
 import { actionReceiptSchema, podRouteDescriptorSchema, bindWork } from "@pe/agent-contracts";
-import { executePodAction } from "./pod-view";
+import { executePodAction, makePodRoute } from "./pod-view";
 
 const row = podRouteDescriptorSchema.parse({
   key: "route:@test/routes/tool/index.js",
@@ -98,4 +98,16 @@ describe("Pod route byte custody", () => {
       verifyBundle(new TextEncoder().encode("export const version = 2;"), trusted.sha256),
     ).rejects.toThrow("changed");
   });
+});
+
+// G4 blocks retiring useRoute: verified bundles still produce another executable manifest.
+it("kernel gap: a verified Pod bundle registers one executable RouteGraph", () => {
+  const registration = makePodRoute(row, {
+    version: 1,
+    initial: { value: 1 },
+    reducer: (state) => state,
+    create: () => () => null,
+  });
+  expect(registration).toHaveProperty("graph");
+  expect(Reflect.get(registration, "graph")).toBe(registration.manifest);
 });

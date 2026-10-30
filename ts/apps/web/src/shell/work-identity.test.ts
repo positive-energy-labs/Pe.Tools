@@ -11,8 +11,8 @@ import {
   type WorkKey,
 } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../../../../packages/runtime/src/route-workspace";
-import { docAtom } from "../route/route-work";
-import { makeAtomRegistry } from "../route/route-owner";
+import { docAtom } from "./work-document";
+import { makeAtomRegistry } from "#/shell/owner";
 import { previousOf, type Readings } from "../readings";
 import { createGraphMount } from "./mount-owner";
 import { workVerb } from "./verbs";

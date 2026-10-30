@@ -172,7 +172,7 @@ export function RoomsPlan({
   overlay,
 }: {
   renderPane: PaneApi;
-  /** A synthetic plan (`?demo=plan`): said in the pane's meta, where the view is named. */
+  /** A synthetic plan (`?fixture=plan`): said in the pane's meta, where the view is named. */
   fixture?: boolean;
   lease?: RoomsPlanLease;
   /** Drawn over the plan in screen px (the feedback layer), given the plan's frame. */

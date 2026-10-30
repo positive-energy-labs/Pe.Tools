@@ -11,7 +11,7 @@ import { ElementMenu } from "#/revit/element-menu";
 import { NativeObservationScope } from "#/revit/observation";
 import { Annotations } from "./annotations";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
-import { makeAtomRegistry } from "#/route/route-owner";
+import { makeAtomRegistry } from "#/shell/owner";
 import { TestAttention } from "#/test-attention";
 import { citation, cite, elementKey } from "@pe/kit/lang/attention";
 

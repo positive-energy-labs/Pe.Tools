@@ -19,7 +19,7 @@ import {
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { SubjectText } from "@pe/kit/lang/subject-text";
 import { Row } from "@pe/kit/lang/row";
-import { makeAtomRegistry } from "#/route/route-owner";
+import { makeAtomRegistry } from "#/shell/owner";
 import { inspectAtomRegistry } from "#/state/atom-inspect";
 import { AttentionScope, AttentionRoot, useElementAttention, useHoveredIssue } from "#/attention";
 import { Annotations } from "#/ducts/annotations";
@@ -238,4 +238,3 @@ it("SubjectText in another React root lights the ducts picture set and projected
   picture.unmount();
   registry.dispose();
 });
-

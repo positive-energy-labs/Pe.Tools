@@ -40,7 +40,7 @@ export function AtlasVisual({ visible, thread }: { visible: boolean; thread?: st
             (store.source === "saved" || store.snapshot.state === "ready"),
           page: store.handle.page,
           context: {
-            source: store.handle.demo ? "fixture" : store.source,
+            source: store.handle.fixture ? "fixture" : store.source,
             captureId: store.displayedCapture?.id,
             capturedAt: store.displayedCapture?.capturedAt,
             observedDocument: store.displayedCapture?.provenance.target,

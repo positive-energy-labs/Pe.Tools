@@ -8,7 +8,7 @@ import { openGraph, type OpenPageState } from "./graph";
 import { OpenOwnerContext, openControlAdapters } from "./kernel";
 import { modelRows } from "./model";
 import type { Recents } from "./sources";
-function BayBody({ owner, page }: MountBody<OpenPageState, unknown>) {
+function BayBody({ owner }: MountBody<OpenPageState, unknown>) {
   const container = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = useState<BayLayout>("stack");
   useLayoutEffect(() => {
@@ -51,7 +51,7 @@ function BayBody({ owner, page }: MountBody<OpenPageState, unknown>) {
         refusal={reading.current ? null : "Refresh the machine reading before changing Revit"}
         rows={rows}
         threads={threads}
-        fixture={!!page.demo && !page.live}
+        fixture={!!owner.fixture}
         layout={layout}
       />
     </Scroll>

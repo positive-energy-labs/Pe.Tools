@@ -1,4 +1,5 @@
 import { field } from "../../../../packages/agent-contracts/src/route-field";
+import { ductsSeeds } from "./seeds";
 import { z } from "zod";
 
 import {
@@ -29,6 +30,7 @@ import { capped } from "./selection";
 
 import { editPatches } from "@pe/ducts-domain/sheet/index";
 import { CRITERION_WORDS } from "./sheet/criterion-words";
+import { describeInputHistory, editLabel, editMetaSchema } from "./sheet/input-history";
 import { NATIVE_APPLY_WAIT_S } from "#/route/waits";
 import { commandVerb, workVerb, prepareCommand } from "#/shell/verbs";
 
@@ -107,6 +109,7 @@ const ductCells = (families: CellsDecl<DuctsRouteDocument>[]): CellsDecl<DuctsRo
   });
 
 export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
+  seeds: ductsSeeds,
   key: "ducts",
   address: "ducts",
   name: "Ducts",
@@ -369,6 +372,7 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
   ]),
 
   readings: {
+    meshes: { kind: "derive", source: "ducts.meshes", retire: "never" },
     roster: { kind: "use", source: "ducts.roster", retire: "target" },
 
     ducts: {
@@ -386,7 +390,7 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
     pricing: {
       kind: "worker",
       source: "ducts.pricing",
-      deps: ["ducts", "tables", "catalogs"],
+      deps: ["ducts", "tables", "catalogs", "meshes"],
       retire: "target",
     },
 
@@ -468,6 +472,7 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
         label: "Edit sheet inputs",
         input: z.strictObject({
           edits: ductsSheetEditsSchema,
+          history: editMetaSchema.optional(),
           basis: z.string().nullable(),
           expectedRevision: z.number().int(),
         }),
@@ -487,6 +492,15 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
               : null,
         patches: (scope, input) =>
           editPatches(input.edits, scope.snapshot.work!.doc as DuctsRouteDocument),
+        history: {
+          readings: ["sheet"],
+          describe: (scope, input, after) =>
+            describeInputHistory(
+              scope.readings,
+              input.history ?? { label: editLabel(input.edits, () => null) },
+              after,
+            ),
+        },
       },
     ),
     edit: workVerb(
@@ -494,6 +508,7 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
         label: "Edit",
         input: z.strictObject({
           patches: z.array(routeStatePatchSchema),
+          history: editMetaSchema.optional(),
           expectedRevision: z.number().int(),
         }),
       },
@@ -503,6 +518,13 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
             ? null
             : "Work changed; edit the current cell",
         patches: (_, input) => input.patches,
+        history: {
+          readings: ["sheet"],
+          describe: (scope, input, after) =>
+            input.history
+              ? describeInputHistory(scope.readings, input.history, after)
+              : { label: "Edit" },
+        },
       },
     ),
   },

@@ -20,7 +20,7 @@ export function TakeoffAttention({
   const target = store.handle.resolution;
   const doc = store.savedCapture
     ? `capture:takeoffs:${store.savedCapture.id}`
-    : !store.handle.demo && target.kind === "resolved" && target.target.kind === "document"
+    : !store.handle.fixture && target.kind === "resolved" && target.target.kind === "document"
       ? `${target.target.ref.session}/${target.target.ref.openId}`
       : "fixture:takeoffs:plan";
   const selected = useMemo(

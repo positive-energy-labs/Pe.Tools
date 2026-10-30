@@ -168,7 +168,7 @@ export function useTakeoffStore(owner: TakeoffMount) {
     work,
     handle: {
       resolution,
-      demo: false,
+      fixture: !!owner.fixture,
       thread: undefined,
       registry: owner.registry,
       pageState: owner.view.state,

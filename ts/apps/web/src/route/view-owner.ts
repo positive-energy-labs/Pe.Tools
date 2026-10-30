@@ -2,8 +2,8 @@ import * as Atom from "effect/unstable/reactivity/Atom";
 import { deepEqual } from "@tanstack/react-router";
 import { routeAddress, type RouteKey } from "@pe/agent-contracts";
 import type { z } from "zod";
-import type { PageMove, PageTransition, PageTransitionOrigin } from "./manifest";
-import type { createRouteOwner } from "./route-owner";
+import type { PageMove, PageTransition, PageTransitionOrigin } from "#/shell/page";
+import type { createRouteOwner } from "#/shell/owner";
 import { causeRefusal, refuse, type Refusal } from "./refusal";
 
 type Origin = PageTransitionOrigin;

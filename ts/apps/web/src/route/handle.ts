@@ -12,9 +12,10 @@ import type {
 } from "@pe/agent-contracts";
 
 import type { ActionFacts } from "./facts";
-import type { PageMove, RouteManifest } from "./manifest";
+import type { RouteManifest } from "./manifest";
+import type { PageMove } from "#/shell/page";
 import type { Refusal } from "./refusal";
-import type { LogEntry, RouteNote } from "./route-owner";
+import type { LogEntry, RouteNote } from "#/shell/owner";
 import type { BindingLost, TargetProvenance } from "./route-target";
 
 export interface ActionHandle extends ActionFacts {

@@ -5,7 +5,6 @@
  * TanStack `Route`, so the type is `RouteManifest` and the per-route export is `manifest`.
  */
 import type { Inspectable, InspectableRef } from "./inspect";
-import type { OpKey, OpCallArgs, OpResponseOf } from "@pe/host-contracts/operation-types";
 import type { ReactNode } from "react";
 import { z } from "zod";
 import type { Chord } from "@pe/kit/keys";
@@ -15,7 +14,6 @@ import {
   type WorkHandle,
   type Reading,
   type ReadingRequest,
-  type History,
   type RouteKey,
   type RouteStatePatch,
   type RouteStateSpec,
@@ -25,6 +23,8 @@ import {
 import type { ActionIdentity } from "./facts";
 import type { Refusal } from "./refusal";
 import type { Cells } from "./cells";
+import type { HostCaller } from "#/shell/host-call";
+import type { PageMove, PageTransition } from "#/shell/page";
 import type { GlobalOption, PageOption } from "#/settings/option-state";
 import { registerGlobalOptions } from "#/settings/option-catalogue";
 
@@ -33,12 +33,6 @@ export type ReadingSpec<P> = ReadingRequest | ((page: P, work: WorkKey) => Readi
 
 /** What Work a route owns: the route-state spec that already carries schema and commands. */
 type WorkSpec<W> = RouteStateSpec<z.ZodType<W>>;
-
-/** A call bound to a resolved ExecutionTarget. */
-export type HostCaller = <K extends OpKey>(
-  operation: K,
-  ...args: OpCallArgs<K, never>
-) => Promise<OpResponseOf<K>>;
 
 /** What `ready` and `run` receive. No React, no render state. */
 export interface Ctx<W, R extends string, P> {
@@ -68,28 +62,6 @@ export interface Ctx<W, R extends string, P> {
   /** One page-log line from inside the verb: what its result says beside its outcome. */
   readonly note: (label: string, says: string, refused?: boolean, link?: InspectableRef) => void;
 }
-
-/**
- * How a page move lands in history: a named move (frame, preset, a Pea patch) pushes one entry; a
- * continuous gesture (wheel, drag, orbit, typing) replaces it. `guard` drops the move when one of
- * those fields changed since the action began (a bare array is the guard alone).
- */
-export interface PageMove<P> {
-  readonly history?: History;
-  readonly guard?: readonly (keyof P)[];
-}
-
-export type PageTransitionOrigin = "page" | "action" | "pea" | "url" | "initial";
-
-/** Pure coupled Page rules. The owner validates the normalized patch as one complete candidate.
- * Restores reset dependents too. The owner preserves explicitly restored fields atomically;
- * evidence-dependent guards defer URL/initial membership checks until the Reading arrives.
- */
-export type PageTransition<P> = (
-  current: Readonly<P>,
-  patch: Readonly<Partial<P>>,
-  origin: PageTransitionOrigin,
-) => { readonly patch: Partial<P> } | { readonly refusal: Refusal };
 
 import { DEFAULT_WAIT_S, HOST_READ_WAIT_S } from "./waits";
 export { DEFAULT_WAIT_S, HOST_READ_WAIT_S };

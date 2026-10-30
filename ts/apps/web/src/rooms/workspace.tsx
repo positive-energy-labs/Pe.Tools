@@ -9,7 +9,6 @@ import { NativeObservationScope, type NativeObservation } from "#/revit/observat
 import type { GraphMount } from "#/shell/mount";
 import { readingValue } from "./actions";
 import { inboxCards } from "./cards";
-import { DEMO_VIEW } from "./demo";
 import type { RoomsPage } from "./graph";
 import { railsOf, type TraceRead } from "./layers";
 import { roomRows } from "./table";
@@ -21,8 +20,8 @@ export const useRoomsWorkspace = () => useContext(Workspace)!;
 
 function useWorkspace(owner: RoomsOwner) {
   const page = owner.view.read().page;
-  const fixture = page.demo === "plan" && page.live === undefined;
-  const view = page.view || (fixture ? DEMO_VIEW : "");
+  const fixture = !!owner.fixture;
+  const view = page.view;
   const state = owner.readings.get("snapshot");
   const snapshot = readingValue<RoomsSnapshot.Res.Response>(state);
   const error = state.status === "failed" ? (state.error ?? "unknown error") : null;

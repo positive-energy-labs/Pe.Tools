@@ -8,7 +8,7 @@ import { ductsGraph } from "./graph";
 import { ductsRoute, ductsAdapters } from "./route";
 import { DuctsHostFixture } from "./host.fixture";
 import { writeRouteWork } from "#/route/host";
-import { createRouteOwner, makeAtomRegistry } from "#/route/route-owner";
+import { createRouteOwner, makeAtomRegistry } from "#/shell/owner";
 import { kernelCellVerbs } from "#/shell/verbs-cells";
 import { invoke, type VerbContext } from "#/shell/verbs";
 import { ductsPageSchema } from "./graph";
@@ -58,7 +58,7 @@ async function mounted(
     );
   return { view, router, situation: within(view.getByLabelText("Situation")) };
 }
-const liveButton = async (scope: ReturnType<typeof within>, name: string) =>
+const liveButton = async (scope: ReturnType<typeof within>, name: string | RegExp) =>
   waitFor(() => {
     const button = scope.getByRole("button", { name, exact: true });
     expect(button.getAttribute("aria-disabled")).not.toBe("true");
@@ -149,10 +149,14 @@ test("a fresh sheet URL opens a fan and edits its criteria through one kernel Wo
   await waitFor(() => expect(host.doc.criteria.edit?.value.terminalDropInWg).toBe(0.11));
   expect(host.writes).toHaveLength(1);
   expect(host.writes[0]).toMatchObject({ kind: "apply", by: "human", base: 1, revision: 2 });
-  fireEvent.click(await liveButton(within(view.getByLabelText("Sheet inputs")), "Undo input edit"));
+  fireEvent.click(
+    await liveButton(within(view.getByLabelText("Sheet inputs")), "Undo criteria terminalDropInWg"),
+  );
   await waitFor(() => expect(host.writes).toHaveLength(2));
   expect(host.doc).toEqual(before);
-  fireEvent.click(await liveButton(within(view.getByLabelText("Sheet inputs")), "Redo input edit"));
+  fireEvent.click(
+    await liveButton(within(view.getByLabelText("Sheet inputs")), "Redo criteria terminalDropInWg"),
+  );
   await waitFor(() => expect(host.doc.criteria.edit?.value.terminalDropInWg).toBe(0.11));
   expect(host.writes).toHaveLength(3);
 });
@@ -237,7 +241,12 @@ test("taking an assumptions row is one acknowledged journal step and Mod+Z resto
   expect(host.doc).toEqual(before);
 });
 
-test("kernel gap: sheet input history retains row labels, restore metadata and before/after totals", async () => {
+test("sheet input history retains row labels, restore metadata and before/after totals", async () => {
+  host.sheetInputs.terminals["4"] = {
+    cfm: { value: 100, source: "typed" },
+    drop: { value: 0.03, source: "firm" },
+  };
+  host.sheetOverview.totals!.requiredEspInWg = 0.2;
   const { view } = await mounted("/ducts?target=s&stage=sheet&picture=schematic&layers=", false);
   expect(within(view.getByLabelText("Situation")).getByText("Pricing fans")).toBeTruthy();
   await waitFor(() => {
@@ -260,13 +269,40 @@ test("kernel gap: sheet input history retains row labels, restore metadata and b
     true,
   );
   const input = (await view.findByLabelText("Default terminal drop in-wg")).querySelector("input")!;
+  // Transport supplies distinct totals; the real kernel must bind them to the accepted revision.
+  host.sheetOverview.totals!.requiredEspInWg = 0.4;
   await act(async () => input.focus());
   fireEvent.change(input, { target: { value: "0.11" } });
   fireEvent.blur(input);
   await waitFor(() => expect(host.doc.criteria.edit?.value.terminalDropInWg).toBe(0.11));
-  // The sheet's history previously named the edit. Kernel steps expose only press and patches;
-  // the route must not recreate a second journal to recover its label, cleared row and totals.
   expect(view.getByRole("button", { name: "Undo criteria terminalDropInWg" })).toBeTruthy();
+  const inputs = within(view.getByLabelText("Sheet inputs"));
+  const effect = () => view.container.querySelector("[data-inputs-effect]")!.textContent;
+  await waitFor(() => expect(effect()).toContain("required ESP 0.2000 → 0.4000"));
+  const beforeClear = structuredClone(host.doc);
+  host.sheetInputs.terminals["4"].cfm = { value: 80, source: "revit" };
+  host.sheetOverview.totals!.requiredEspInWg = 0.3;
+  fireEvent.click(inputs.getByRole("button", { name: /^Clear Terminal airflow / }));
+  await waitFor(() => expect(host.doc.flows["4"]).toBeUndefined());
+  await waitFor(() => expect(effect()).toContain("required ESP 0.4000 → 0.3000"));
+  const restore = await inputs.findByRole("button", {
+    name: /^Restore Terminal airflow .*100 cfm/,
+  });
+  host.sheetInputs.terminals["4"].cfm = { value: 100, source: "typed" };
+  host.sheetOverview.totals!.requiredEspInWg = 0.4;
+  fireEvent.click(restore);
+  await waitFor(() => expect(host.doc).toEqual(beforeClear));
+  expect(host.writes.at(-1)).toMatchObject({ kind: "restore", press: null });
+  await waitFor(() => expect(effect()).toContain("required ESP 0.3000 → 0.4000"));
+  expect(effect()).toContain("undid clear Terminal airflow");
+  const redo = await liveButton(inputs, /^Redo clear Terminal airflow /);
+  host.sheetInputs.terminals["4"].cfm = { value: 80, source: "revit" };
+  host.sheetOverview.totals!.requiredEspInWg = 0.3;
+  fireEvent.click(redo);
+  await waitFor(() => expect(host.doc.flows["4"]).toBeUndefined());
+  await waitFor(() => expect(effect()).toContain("required ESP 0.4000 → 0.3000"));
+  expect(effect()).toContain("redid clear Terminal airflow");
+  expect(host.writes).toHaveLength(4);
 });
 
 test("criteria and unit kinds take and revert through the graph's kernel cell verbs", async () => {

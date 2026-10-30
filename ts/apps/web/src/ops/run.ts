@@ -1,6 +1,6 @@
 import type { ExecutionTarget } from "@pe/agent-contracts";
 import { isAnyOperationKey, type OpRequestOf } from "@pe/host-contracts/operation-types";
-import type { HostCaller } from "#/route/manifest";
+import type { HostCaller } from "#/shell/host-call";
 import { isMutation, type HostOperationCatalogEntry } from "./manifest";
 
 /** Read-only catalog execution. Raw mutations cannot bypass the kernel's admission door. */

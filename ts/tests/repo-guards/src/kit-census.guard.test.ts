@@ -325,8 +325,6 @@ const RULES: Rule[] = [
       "workbench/moments.tsx": "Reader opens reasoning or a chat rendering failure.",
       "workbench/world/lane.tsx": "Reader explicitly expands a tool-result payload.",
       "route/help.tsx": "Tutorial body explains the route.",
-      "route/flow.tsx": "Reader opens runtime relation inspection.",
-      "route/situation-lamp.tsx": "Reader opens state inspection.",
       "route/situation-marks.tsx": "Reader opens state details.",
     }), max: {
       [W + "duct-loss/route.tsx"]: 7,
@@ -338,8 +336,6 @@ const RULES: Rule[] = [
       [W + "workbench/moments.tsx"]: 2,
       [W + "workbench/world/lane.tsx"]: 1,
       [W + "route/help.tsx"]: 1,
-      [W + "route/flow.tsx"]: 1,
-      [W + "route/situation-lamp.tsx"]: 1,
       [W + "route/situation-marks.tsx"]: 1,
     }, cannotSee: "Unclassed prose and whether a sentence belongs in Tutorial." },
   { id: "nav-list-kit", doctrine: "N3", pattern: /<ul\b|<li\b|role=["']list["']/g,

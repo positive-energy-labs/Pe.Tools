@@ -1,4 +1,4 @@
-import { makeAtomRegistry } from "#/route/route-owner";
+import { makeAtomRegistry } from "#/shell/owner";
 import { TestAttention } from "#/test-attention";
 // @vitest-environment jsdom
 import { act, fireEvent, render } from "@testing-library/react";

@@ -104,11 +104,11 @@ test("the frozen Open route renders the bay and patches without opening a host t
   vi.stubGlobal("EventSource", Source);
   const fetch = vi.fn();
   vi.stubGlobal("fetch", fetch);
-  history.replaceState(null, "", "/open?demo=refresh");
+  history.replaceState(null, "", "/open?fixture=refresh");
   try {
     const router = createRouter({
       routeTree: createRootRoute({ component: OpenPage }),
-      history: createMemoryHistory({ initialEntries: ["/open?demo=refresh"] }),
+      history: createMemoryHistory({ initialEntries: ["/open?fixture=refresh"] }),
     });
     await router.load();
     render(<RouterProvider router={router} />);
