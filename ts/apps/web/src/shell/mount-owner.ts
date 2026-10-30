@@ -421,6 +421,11 @@ export function createGraphMount<P, W>(
         ),
     },
   };
+  /** The core sees one verb at a time; its snapshot basis is that verb's declared readings. */
+  const ctxFor = (id: string): VerbContext<"human"> => ({
+    ...context,
+    snapshot: () => context.snapshot(id),
+  });
   const consume = (id: string, result: InvocationResult) => {
     if (disposed) return result;
     results.set(id, result);
@@ -533,13 +538,13 @@ export function createGraphMount<P, W>(
     active = id;
     activeOrigin = origin;
     const result = review
-      ? await commit(context, verb, review.ticket, answers)
-      : await invoke(context, verb, bound.subject, bound.args);
+      ? await commit(ctxFor(id), verb, review.ticket, answers)
+      : await invoke(ctxFor(id), verb, bound.subject, bound.args);
     return consume(id, result);
   };
   const cancelReviews = () => {
     for (const { verb, ticket } of reviews.values())
-      void invoke(context, verbs[verb]!, ticket.subject, ticket.input, {
+      void invoke(ctxFor(verb), verbs[verb]!, ticket.subject, ticket.input, {
         kind: "cancel",
         ticket,
       }).then((result) => consume(verb, result));
@@ -609,7 +614,7 @@ export function createGraphMount<P, W>(
       // reads current readings and Work, so args change after a write while the review must stay
       // at its control for the core staleness check to run. Cross-row commits stay refused.
       const origin = canonicalRouteInput([place, row ?? null, bound.subject]);
-      const control = bind(verbs[id]!, { ctx: context, ...bound });
+      const control = bind(verbs[id]!, { ctx: ctxFor(id), ...bound });
       const reason = () =>
         blocked(id) ??
         (reviews.has(id)
