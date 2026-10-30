@@ -54,13 +54,13 @@ test("overlapping focus refreshes cannot deliver an older snapshot or publish af
   const controller = new AbortController();
   const context: ReadingContext = {
     target: { kind: "document", ref: { session: "rooms", openId: "document-A" } },
-    workKey: "rooms/target:model",
+    workKey: { binding: "host", route: "rooms", target: null },
     workRevision: 1,
     work: {},
     page: roomsPageSchema.parse({ view: DEMO_VIEW }),
     attempt: {
       target: { kind: "document", ref: { session: "rooms", openId: "document-A" } },
-      workKey: "rooms/target:model",
+      workKey: { binding: "host", route: "rooms", target: null },
       generation: 1,
     },
     trigger: { kind: "demand" },

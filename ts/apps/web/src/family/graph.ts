@@ -1,3 +1,4 @@
+import { familyQueries } from "../../../../packages/mcps/src/shared/query-client";
 import { z } from "zod";
 import {
   commands,
@@ -16,7 +17,7 @@ import {
 } from "@pe/agent-contracts";
 import { familyAddress } from "../../../../packages/agent-contracts/src/routes/family";
 import { threadListFields } from "../../../../packages/agent-contracts/src/routes/shared";
-import { commandVerb, prepareCommand, queryVerb, workVerb } from "#/shell/verbs";
+import { commandVerb, prepareCommand, queryVerb, workVerb, pageVerb } from "#/shell/verbs";
 import { NATIVE_APPLY_WAIT_S } from "#/route/waits";
 
 export const FAMILY_MODEL_SCHEMA = "/schemas/settings/FamilyFoundry/models.json";
@@ -100,6 +101,10 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = {
     pods: { kind: "use", source: "family.pods", retire: "never" },
   },
   verbs: {
+    "close-inspector": pageVerb(
+      { label: "Close inspector", input: z.object({}).default({}), chord: "Escape" },
+      { page: () => ({ inspector: "" }) },
+    ),
     edit: workVerb(
       {
         label: "Edit family cells",
@@ -119,7 +124,7 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = {
       },
     ),
     saved: queryVerb(
-      "family.saved",
+      familyQueries["family.saved"],
       {
         label: "Read saved family",
         review: "none",
@@ -174,6 +179,12 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = {
       {
         ready: (_, input) => input.refusal,
         intent: (_, input) => ({ pod: input.pod, ...(input.spec ? { spec: input.spec } : {}) }),
+        lands: (result) => {
+          const member = z
+            .object({ member: z.object({ pod: z.string(), path: z.string() }) })
+            .parse(result).member;
+          return { pod: member.pod, path: member.path };
+        },
       },
     ),
     build: commandVerb(
@@ -274,14 +285,14 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = {
     audit: {
       word: "Auditing",
       panes: ["anatomy", "table", "doc", "work", "spec"],
-      verbs: ["capture"],
+      verbs: ["capture", "close-inspector"],
     },
     apply: {
       word: "Applying",
       panes: ["anatomy", "table", "doc", "work", "spec"],
-      verbs: ["apply", "build", "capture"],
+      verbs: ["apply", "build", "capture", "close-inspector"],
     },
-    history: { word: "History", panes: ["history"], verbs: [] },
+    history: { word: "History", panes: ["history"], verbs: ["close-inspector"] },
   },
   stageOrder: ["audit", "apply", "history"],
 };

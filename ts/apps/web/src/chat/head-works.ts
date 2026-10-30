@@ -1,13 +1,20 @@
 /**
- * The Works the Chat head summarizes: every plugin route's Work, read by the key its manifest
+ * The Works the Chat head summarizes: every plugin route's Work, read by the key its graph
  * declares (`useRouteWorks`, the same Work atom the route's pane reads), one head Work per declared
  * cell head with pending cells. Every exit opens that route in the plugin pane.
  */
 import { useState, useSyncExternalStore, useMemo } from "react";
-import type { Address, DocumentRef, RouteStatePatch, CellLike, WorkKey } from "@pe/agent-contracts";
+import {
+  bindWork,
+  type Address,
+  type DocumentRef,
+  type RouteStatePatch,
+  type CellLike,
+  type WorkKey,
+  type RouteGraph,
+  type CellsDecl,
+} from "@pe/agent-contracts";
 
-import type { Cells } from "#/route/cells";
-import type { RouteManifest } from "#/route/manifest";
 import { useRouteWorks } from "#/route/route-work";
 import {
   capturedPlace,
@@ -27,22 +34,14 @@ export interface HeadExits {
 }
 
 type Doc = Record<string, unknown>;
-type Manifest = RouteManifest<Doc, string, unknown, string>;
+type Manifest = RouteGraph<any, Doc>;
 
 const keyOf = (
   manifest: Manifest,
   address: Address | null,
   document: DocumentRef | null,
 ): WorkKey | null =>
-  manifest.workKey ??
-  (address
-    ? {
-        binding: "address" as const,
-        route: manifest.key,
-        target: address,
-        ...(document ? { from: document } : {}),
-      }
-    : null);
+  address || document ? bindWork(manifest.key, address, undefined, document ?? undefined) : null;
 
 const pending = (cell: CellLike | undefined) =>
   cell != null && (cell.suggestion != null || cell.edit != null);
@@ -60,15 +59,19 @@ export function useHeadWorks(
   );
   const headed = useMemo(
     () =>
-      publicRoutes.entries().flatMap(({ manifest: registered }) => {
-        const manifest = registered as unknown as Manifest;
-        return manifest.work && manifest.cells?.length && manifest.workKey !== null
+      publicRoutes.entries().flatMap(({ graph: manifest }) => {
+        return manifest?.work && manifest.cells?.length
           ? [
               {
                 route: manifest.key,
                 manifest,
                 cells: manifest.cells,
-                spec: manifest.work,
+                spec: {
+                  route: manifest.key,
+                  title: manifest.name,
+                  description: manifest.name,
+                  schema: manifest.work,
+                },
                 key: keyOf(manifest, address, document),
               },
             ]
@@ -106,7 +109,7 @@ export function useHeadWorks(
       else
         exits.open(at ? { ...place, page: { ...place.page, ...at } as typeof place.page } : place);
     };
-    return heads.flatMap((head: Cells<Doc>): HeadWork[] => {
+    return heads.flatMap((head: CellsDecl<Doc>): HeadWork[] => {
       const cells = (
         head.segment === null ? { [head.key!]: doc[head.key!] } : (doc[head.segment] ?? {})
       ) as Record<string, CellLike | undefined>;

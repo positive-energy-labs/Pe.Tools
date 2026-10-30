@@ -10,7 +10,7 @@ import { fmtNum } from "@pe/kit/table/model";
 import { Pane } from "@pe/kit/lang/pane";
 import { RoomPanelFromStore } from "#/takeoff/room-panel";
 import { listOf } from "@pe/kit/lang/collection";
-import type { AtlasRow as Row } from "#/takeoff/controller";
+import type { AtlasRow as Row } from "#/takeoff/projections";
 import { useAtlasWorkspace } from "#/takeoff/atlas-context";
 import { ScopeKeys } from "@pe/kit/keys";
 

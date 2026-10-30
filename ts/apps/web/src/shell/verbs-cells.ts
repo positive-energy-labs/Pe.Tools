@@ -47,9 +47,16 @@ export function kernelCellVerbs<W>(graph: { readonly cells?: readonly CellsDecl<
       const patches = (scope: VerbScope) => {
         const cell = scope.value as CellLike;
         const key = scope.subject!.id;
-        return kind === "delete"
-          ? [{ path: [...prefix, key] }]
-          : transitionPatches(prefix, key, cell, { kind: transitions[kind] });
+        const transition =
+          kind === "delete"
+            ? [{ path: [...prefix, key] }]
+            : transitionPatches(prefix, key, cell, { kind: transitions[kind] });
+        return kind === "take"
+          ? [
+              ...transition,
+              ...(family.take?.(scope.snapshot.work!.doc as W, key, scope.readings) ?? []),
+            ]
+          : transition;
       };
       const id = cellVerbId(family, kind);
       placement[type]!.push(id);

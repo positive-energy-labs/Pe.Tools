@@ -10,13 +10,12 @@ import {
   useState,
   useContext,
   type CSSProperties,
-  type ReactNode,
 } from "react";
 import { useRouteSearchSlice } from "#/route/activity";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { NewThreadButton, ThreadsSidebar, ThreadPane } from "#/chat/thread-palette";
 import { useWorkbench } from "#/workbench/provider";
-import { MODES, type Mode } from "#/workbench/depth";
+import { type Mode } from "#/workbench/depth";
 import { useCacheView } from "#/workbench/world";
 import { SessionStrip } from "#/workbench/world";
 import {
@@ -37,22 +36,21 @@ import {
   ComposerWork,
   useChatSituation,
 } from "#/chat/composer-head";
-import { RouteShell, useRoute } from "#/route";
+import { useGraphRoute, GraphRouteView } from "#/shell/mount";
 import { appAtomRegistry } from "#/route/route-owner";
-import { useScopeKeys } from "@pe/kit/keys";
 import { PagePaletteButton } from "#/route/situation-marks";
 import { PrimaryRouteControls, usePublishPagePalette } from "#/navigation/route-controls";
 import { useSurfaceHost } from "#/navigation/surface-host";
 import { Ledger } from "#/navigation/ledger";
 import { LEDGER_PRESENTATIONS } from "#/navigation/ledger-model";
-import { chatManifest } from "#/chat/manifest";
+import { chatGraph, chatAdapters, type ChatRouteDeps } from "./graph";
 import { readThreadTarget } from "#/chat/thread-navigation";
 import "#/workbench/lens.css";
 import "./chat-shell.css";
 import { CurrentThreadViewOwner } from "#/workbench/thread-view";
-import { Pane, PaneSplit, type PaneSide } from "@pe/kit/lang/pane";
+import { Pane } from "@pe/kit/lang/pane";
+import { type GraphLayoutState } from "../../../../packages/kit/src/components/lang/graph-layout";
 import { Work } from "@pe/kit/lang/work";
-import { Surface as PageSurface } from "@pe/kit/lang/surface";
 import { ThreadBody } from "#/workbench/lens/thread-body";
 import { ComposerBank } from "#/chat/composer-bank";
 import { useThreadPresence } from "#/machine/os-notices";
@@ -65,8 +63,6 @@ type ChatShellProps = { target?: string; docked?: boolean };
 /** Whether ThreadsSplit is drawing the thread sidebar open beside Pea's column right now. */
 const SidebarShown = createContext(false);
 
-/** The thread sidebar's default width, and its folded rail. */
-const SIDEBAR = 300;
 /** Pea's floor in px: the chat column's reading measure (`--chat-measure` in chat-shell.css: 76ch
  *  of the prose face at 0.577em a character, plus both gutters) between its two side lanes (lens
  *  and context bar). Read from the same tokens, so density moves it too. */
@@ -185,50 +181,39 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
       });
     },
   };
-  const urlMode = useRouterState({ select: (state) => state.location.search.mode });
-  const [dockMode, setDockMode] = useState<Mode>("threads");
-  const mode = docked ? dockMode : urlMode === "world" ? "world" : "threads";
-  const setMode = (next: Mode) => {
-    if (docked) setDockMode(next);
-    else
-      void navigate({
-        to: ".",
-        search: (previous: Record<string, unknown>) => ({ ...previous, mode: next }),
-      });
+  const liveDeps = useRef<ChatRouteDeps>({ thread: currentThreadId });
+  liveDeps.current = {
+    thread: currentThreadId,
+    ready: !loading,
+    running: isRunning,
+    send: sendPrompt,
+    cancel,
+    newThread: () => newThread(),
+    forkThread: () => forkThread(),
+    sendRefusal,
+    promptCapabilities: chat.promptCapabilities,
+    providerName: chat.providerName,
+    draftTarget,
   };
-  // The route, re-declared with this thread and the provider's verbs bound.
-  const manifest = useMemo(
-    () =>
-      chatManifest({
-        thread: currentThreadId,
-        ready: !loading,
-        running: isRunning,
-        send: sendPrompt,
-        cancel,
-        newThread: () => newThread(),
-        forkThread: () => forkThread(),
-        sendRefusal,
-        promptCapabilities: chat.promptCapabilities,
-        providerName: chat.providerName,
-        draftTarget,
-      }),
-    [
-      currentThreadId,
-      loading,
-      isRunning,
-      sendPrompt,
-      cancel,
-      newThread,
-      forkThread,
-      sendRefusal,
-      chat.promptCapabilities,
-      chat.providerName,
-      draftTarget,
-    ],
+  const navigator = useRef<() => void>(() => {});
+  const graph = useMemo(() => chatGraph(() => liveDeps.current, peaFloor()), []);
+  const adapters = useMemo(
+    () => ({
+      ...chatAdapters(() => navigator.current()),
+      initialPage: { thread: liveDeps.current.thread },
+    }),
+    [],
   );
-  // The handle is owned here, not inside the shell: Chat has no route head, and its composer
-  // head is the Situation, which needs the same handle the shell's chords run through.
-  const handle = useRoute(manifest, { thread: currentThreadId, url: false });
+  const mount = useGraphRoute(graph, adapters, { thread: currentThreadId, url: !docked });
+  const handle = mount.owner;
+  useEffect(() => {
+    handle.view.setPage({ thread: currentThreadId });
+  }, [handle, currentThreadId]);
+  const mode = handle.view.read().page.mode;
+  const setMode = (mode: Mode) => {
+    handle.view.setPage({ mode });
+  };
+  const [layoutSizes, setLayoutSizes] = useState<GraphLayoutState>({});
   const situation = useChatSituation(handle);
   // The live inventory decides what a saved target is: a request that may be closed.
   const sidebarThreads = useMemo(
@@ -248,7 +233,8 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
     store.actions.revealThreads();
     setSearchSerial((serial) => serial + 1);
   };
-  usePublishPagePalette(handle.manifest.key, false, (open) => open && findThread());
+  navigator.current = findThread;
+  usePublishPagePalette(graph.key, false, (open) => open && findThread());
 
   // N6: a thread switch keeps the last read transcript, inert and dimmed under a progress mark,
   // until the next body reads. The boundary turns over with the body it shows, so an old failure
@@ -269,24 +255,6 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
   );
   const cache = useCacheView(breakdown, userTurns);
   const retryBody = useAtomRefresh(bodyAtom);
-
-  // Surface chords, not manifest actions: they move Page state and never refuse. They bind on
-  // whatever scope node the chat surface sits in, so help lists them beside the route's chords.
-  useScopeKeys([
-    {
-      hotkey: "Mod+K",
-      callback: findThread,
-      options: { ignoreInputs: false },
-      label: "find a thread",
-      says: "focus the thread list's search: switch what this page shows",
-    },
-    ...(["Mod+1", "Mod+2"] as const).map((hotkey, i) => ({
-      hotkey,
-      callback: () => setMode(MODES[i]!),
-      label: `${MODES[i]} mode`,
-      says: `switch the chat to ${MODES[i]}`,
-    })),
-  ]);
 
   const runStatus = selectRunStatus(chat);
   const silentFor = selectWaitingSeconds(chat);
@@ -321,7 +289,7 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
           id="transcript"
           name
           titleAlign="center"
-          meta={handle.demo ? "Fixture" : switching ? "reading" : undefined}
+          meta={handle.view.read().page.demo ? "Fixture" : switching ? "reading" : undefined}
           title={
             selectTitle(chat) ||
             threads.find((thread) => thread.id === currentThreadId)?.title ||
@@ -424,32 +392,47 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
           <ChatSituationHead handle={handle} situation={situation} status={status} />
         </PrimaryRouteControls>
       )}
-      {/* The route shell owns the chords and the remaining-height conversation column. Chat has
-          no generic route head: its global Situation observes the composer owners. */}
-      <RouteShell manifest={manifest} handle={handle} situation={<></>}>
-        <PageSurface>
-          <ThreadsSplit
-            collapsed={threadFold}
-            onCollapsedChange={store.actions.setThreadFold}
-            threads={threadPane}
-          >
-            {activity ? (
-              <Ledger
-                presentation={LEDGER_PRESENTATIONS.tray}
-                head={
-                  <p className="m-0 flex justify-end px-2 py-1 hairline-b">
-                    <Button label="Start a new Pea thread" onClick={() => void newThread()}>
-                      New thread
-                    </Button>
-                  </p>
-                }
-              />
-            ) : (
-              chatColumn
-            )}
-          </ThreadsSplit>
-        </PageSurface>
-      </RouteShell>
+      <SidebarShown.Provider value={threadFold !== "start"}>
+        <GraphRouteView
+          graph={graph}
+          {...mount}
+          situation={null}
+          device={{
+            panes: {
+              ...layoutSizes,
+              threads: { ...layoutSizes.threads, folded: threadFold === "start" },
+              chat: { ...layoutSizes.chat, folded: threadFold === "end" },
+            },
+            onChange: (next) => {
+              setLayoutSizes(next);
+              store.actions.setThreadFold(
+                next.threads?.folded ? "start" : next.chat?.folded ? "end" : null,
+              );
+            },
+          }}
+          adapters={{
+            ...adapters,
+            bodies: {
+              threads: () => threadPane,
+              chat: () =>
+                activity ? (
+                  <Ledger
+                    presentation={LEDGER_PRESENTATIONS.tray}
+                    head={
+                      <p className="m-0 flex justify-end px-2 py-1 hairline-b">
+                        <Button label="Start a new Pea thread" onClick={() => void newThread()}>
+                          New thread
+                        </Button>
+                      </p>
+                    }
+                  />
+                ) : (
+                  chatColumn
+                ),
+            },
+          }}
+        />
+      </SidebarShown.Provider>
     </main>
   );
 }
@@ -484,42 +467,5 @@ function ContextBar({
         style={{ "--context-share": share } as CSSProperties}
       />
     </TooltipHint>
-  );
-}
-
-/** The split owns fitting and exclusive reveal; both sides retain their contents behind rails. */
-export function ThreadsSplit({
-  collapsed,
-  onCollapsedChange,
-  threads,
-  children,
-}: {
-  collapsed: PaneSide | null;
-  onCollapsedChange: (side: PaneSide | null) => void;
-  threads: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <SidebarShown.Provider value={collapsed !== "start"}>
-      <PaneSplit
-        axis="horizontal"
-        grow
-        resize={{
-          target: "start",
-          defaultSize: SIDEBAR,
-          minSize: 240,
-          minOtherSize: peaFloor(),
-          persist: "pe.sideWidth",
-          collapse: {
-            collapsed,
-            onCollapsedChange,
-            start: { title: "threads" },
-            end: { title: "chat" },
-          },
-        }}
-        start={threads}
-        end={children}
-      />
-    </SidebarShown.Provider>
   );
 }

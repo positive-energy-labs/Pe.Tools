@@ -52,6 +52,7 @@ async function fixture() {
     route: scope.route,
     title: "Restore",
     description: "Work write proof",
+    schemaVersion: 2,
     schema,
     reconcileEdit: (raw: unknown) => {
       const doc = raw as z.infer<typeof schema>;
@@ -216,7 +217,12 @@ test("ordinary restore still validates the inverse against the current Work sche
 
 test("startFresh returns the set-aside inverse and recovery restores the unparsed document", async () => {
   const h = await fixture();
-  const original = { version: 1, revision: 7, doc: { legacy: true, old: [1, 2] } };
+  const original = {
+    version: 1,
+    schemaVersion: 1,
+    revision: 7,
+    doc: { legacy: true, old: [1, 2] },
+  };
   await h.store.setState({ targetKey: workKey(h.scope), route: h.scope.route, value: original });
   const fresh = await h.post({}, human, "start-fresh");
   expect(fresh.write).toMatchObject({
@@ -240,18 +246,15 @@ test("startFresh returns the set-aside inverse and recovery restores the unparse
   expect(await h.stored()).toEqual({ ...original, revision: 9 });
 });
 
-test("startFresh marks a malformed envelope non-undoable and keeps its exact aside", async () => {
+test("startFresh refuses an unmarked malformed envelope and preserves its exact bytes", async () => {
   const h = await fixture();
   await h.store.setState({
     targetKey: workKey(h.scope),
     route: h.scope.route,
     value: "unreadable envelope",
   });
-  const fresh = await h.post({}, human, "start-fresh");
-  expect(fresh.write).toMatchObject({ kind: "start-fresh", undoable: false, inverse: [] });
-  expect(await h.store.getState({ targetKey: workKey(h.scope), route: fresh.write.aside })).toBe(
-    "unreadable envelope",
-  );
+  expect(await h.post({}, human, "start-fresh")).toMatchObject({ ok: false });
+  expect(await h.stored()).toBe("unreadable envelope");
 });
 
 test("the wire requires a press field and a human apply requires a nonempty dispatch identity", async () => {

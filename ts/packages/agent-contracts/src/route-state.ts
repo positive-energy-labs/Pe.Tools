@@ -14,6 +14,8 @@ export interface RouteStateSpec<TSchema extends z.ZodType> {
   /** Search words for this route's edit door. */
   finds?: readonly string[];
   schema: TSchema;
+  /** Monotonic authored-Work schema age, independent of the transport envelope version. */
+  schemaVersion?: number;
   editable?: readonly import("./command.ts").WorkPath[];
   /** Domain-derived bookkeeping after an authored edit, before validation. */
   reconcileEdit?: (next: unknown, patches: readonly RouteStatePatch[]) => unknown;

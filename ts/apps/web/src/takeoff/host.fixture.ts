@@ -207,6 +207,7 @@ export class TakeoffHostFixture {
         this.emit("takeoff-reading");
         return Response.json(this.capture.snapshot);
       }
+      if (body.key === "rhvac.launch") return Response.json({ launched: true });
       if (body.key === "rhvac.open") return Response.json({ path: body.request.path });
     }
     if (url.pathname === "/takeoffs/observations")

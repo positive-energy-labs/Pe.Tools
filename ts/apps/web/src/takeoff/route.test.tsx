@@ -118,44 +118,42 @@ test("adoption, detector verdicts and shape flags are single undoable Work verbs
     expect(host.doc).toEqual(before);
   }
 });
-test("kernel proposal take refuses a missing first-edit base, then preserves its exact suggestion through undo", async () => {
+test("kernel proposal take captures its first base and undo restores both exact cells and bases", async () => {
   const room = host.capture.snapshot.world.zones[0]!.rooms[0]!;
   const key = takeoffEditKey(room.guid, "people");
   host.doc = takeoffsRouteState.schema.parse({ edits: { [key]: { suggestion: { value: 3 } } } });
-  const { owner } = await mounted();
-  expect(await run(owner, "cell:edits.take", { segment: "edits", key })).toMatchObject({
-    state: "refused",
-    refusal: { message: expect.stringContaining("first room baseline") },
-  });
-  expect(host.writes).toEqual([]);
-  await run(owner, "room", { id: room.guid, next: { people: 2 } });
   const before = structuredClone(host.doc);
+  const { owner } = await mounted();
   expect(await run(owner, "cell:edits.take", { segment: "edits", key })).toMatchObject({
     state: "done",
   });
+  expect(host.writes).toHaveLength(1);
+  expect(host.doc.bases[room.guid]?.name).toBe(room.name);
+  expect(host.doc.edits[key]?.edit?.value).toBe(3);
   await act(async () => {
     await owner().restore("undo");
   });
   expect(host.doc).toEqual(before);
 });
-test("partition refuses a multi-zone press and dispatches the exact single-zone command", async () => {
+
+test("partition reviews every zone in order under one press", async () => {
   const { owner } = await mounted();
-  const zones = host.capture.snapshot.world.zones;
-  act(() => owner().view.setPage({ zones: zones.slice(0, 2).map((zone) => zone.zone.guid) }));
-  expect(await run(owner, "partition")).toMatchObject({
-    state: "refused",
-    refusal: { message: expect.stringContaining("one zone at a time") },
-  });
-  expect(host.actions).toEqual([]);
-  expect(await run(owner, "partition", { zone: zones[0]!.zone.guid })).toMatchObject({
-    state: "done",
-  });
-  expect(host.actions[0]).toMatchObject({
-    key: "takeoffs.partition",
-    target: { kind: "document", ref: host.target },
-    input: { zoneGuid: zones[0]!.zone.guid, zoneRegion: zones[0]!.zone.elementId },
-  });
+  const zones = host.capture.snapshot.world.zones.slice(0, 2);
+  act(() => owner().view.setPage({ zones: zones.map((zone) => zone.zone.guid) }));
+  let result = await run(owner, "partition");
+  const press = result.press;
+  for (const [step, zone] of zones.entries()) {
+    expect(result).toMatchObject({ state: "review", press, ticket: { step } });
+    expect(host.actions).toHaveLength(step);
+    result = await run(owner, "partition");
+    expect(host.actions[step]).toMatchObject({
+      key: "takeoffs.partition",
+      input: { zoneGuid: zone.zone.guid, zoneRegion: zone.zone.elementId },
+    });
+  }
+  expect(result).toMatchObject({ state: "done", press });
 });
+
 test("a capture stays read-only even while its original document is open", async () => {
   const { owner, view } = await mounted({ work: host.capture.id });
   await waitFor(() => expect(owner().snapshot().work).not.toBeNull());
@@ -204,8 +202,8 @@ test("level, zone and room navigate by URL; native reads carry the exact documen
   expect(host.requests.find((request) => request.key === "rhvac.open")?.request).toEqual({
     path: "C:/Fixtures/retry.r10",
   });
-  expect(await run(owner, "launch")).toMatchObject({ state: "refused" });
-  expect(host.requests.some((request) => request.key === "rhvac.launch")).toBe(false);
+  expect(await run(owner, "launch")).toMatchObject({ state: "done", kind: "rpc" });
+  expect(host.requests.some((request) => request.key === "rhvac.launch")).toBe(true);
 });
 
 function syncReady() {

@@ -22,6 +22,28 @@ import {
 
 const fields = ductLoss.fields;
 
+test("Page verbs validate without Work or review and reject command semantics", () => {
+  const close: VerbDecl = {
+    kind: "page",
+    label: "Close",
+    input: z.object({}),
+    review: "none",
+    chord: "Escape",
+  };
+  const graph = (patch: Partial<VerbDecl> = {}) => ({
+    ...ductLoss,
+    verbs: { close: { ...close, ...patch } },
+  });
+  expect(validateRouteGraph(graph())).toEqual([]);
+  expect(projectRouteGraph(graph()).verbs.close).toMatchObject({ kind: "page", chord: "Escape" });
+  for (const patch of [{ review: "required" as const }, { subject: "cell" }, { does: "apply" }])
+    expect(validateRouteGraph(graph(patch))).toContainEqual({
+      code: "invalid-graph",
+      path: "verbs.close",
+      message: "A Page verb has no Work subject, command, or review",
+    });
+});
+
 const verb = (label: string, chord = "Mod+Enter"): VerbDecl => ({
   kind: "command",
   label,

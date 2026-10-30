@@ -33,7 +33,12 @@ function project(layout: LayoutNode, panes: GraphLayoutViewProps["panes"]) {
     if (node.kind === "pane") {
       const declared = panes[node.id];
       if (!declared) throw new Error(`Missing pane declaration ${node.id}`);
-      return { id: node.id, label: declared.label, purpose: declared.purpose };
+      return {
+        id: node.id,
+        label: declared.label,
+        purpose: declared.purpose,
+        pane: declared.frame,
+      };
     }
     const children = node.children.map(visit);
     // PaneSplit is binary. Ordered n-ary splits lower to seams sizing each outer child.
@@ -51,6 +56,10 @@ function project(layout: LayoutNode, panes: GraphLayoutViewProps["panes"]) {
         axis: node.axis === "h" ? "horizontal" : "vertical",
         target: node.sized,
         size: node.size,
+        minSize: node.minSize,
+        maxSize: node.maxSize,
+        minOtherSize: node.minOtherSize,
+        persist: node.persist,
         start,
         end,
         rails: {

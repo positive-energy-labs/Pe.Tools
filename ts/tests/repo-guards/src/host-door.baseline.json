@@ -26,6 +26,5 @@
   "apps/web/src/scene/artifact.ts": 1,
   "apps/web/src/scene/scene-data.ts": 1,
   "apps/web/src/state/owner-inspector.tsx": 1,
-  "apps/web/src/takeoff/host.ts": 1,
   "apps/web/src/workbench/provider/harness-client.ts": 1
 }

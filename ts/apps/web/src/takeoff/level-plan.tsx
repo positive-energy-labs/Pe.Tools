@@ -145,7 +145,7 @@ export function LevelPlan({
   /** Zones the table's query keeps; the rest dim. null = no query. */
   shown: ReadonlySet<string> | null;
   stateOf: (room: ModelRoom) => RoomState;
-  rows: readonly import("./controller").AtlasRow[];
+  rows: readonly import("./projections").AtlasRow[];
   onSelectZone: (z: ModelZone | null) => void;
   onCursor: (z: ModelZone, guid: string) => void;
 }) {

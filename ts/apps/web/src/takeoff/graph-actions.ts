@@ -1,3 +1,4 @@
+import { takeoffQueries } from "./sources";
 import { z } from "zod";
 import {
   commands,
@@ -15,7 +16,8 @@ import {
   type TakeoffCapture,
   type RouteStatePatch,
 } from "@pe/agent-contracts";
-import { commandVerb, queryVerb, workVerb } from "#/shell/verbs";
+import { rhvacLaunchRpc } from "../../../../packages/mcps/src/shared/rpc-client";
+import { commandVerb, queryVerb, workVerb, rpcVerb, sequenceVerb } from "#/shell/verbs";
 import type { BindingScope, MountBinding } from "#/shell/mount-owner";
 import { NATIVE_APPLY_WAIT_S } from "#/route/waits";
 import { snapshotOfObservation, syncPlan } from "./actions";
@@ -37,8 +39,6 @@ export const captureOf = (scope: TakeoffScope): TakeoffCapture | undefined => {
       : undefined;
 };
 export const takeoffRefusal = (scope: TakeoffScope, current = false): string | null => {
-  // TODO: kernel capture custody must close Work even when its original document is open.
-  if (scope.page.work) return "Saved captures are read-only; return to the live document to act";
   if (scope.target.kind !== "document") return "Choose an open document first";
   if (!scope.work) return "Work has not been read yet";
   if (
@@ -163,9 +163,13 @@ export const takeoffVerbs = {
       waitSeconds: NATIVE_APPLY_WAIT_S,
     },
   ),
-  partition: commandVerb(
+  partition: sequenceVerb(
     "takeoffs.partition",
-    { label: "partition", review: "none", input: guarded(commands["takeoffs.partition"].input) },
+    {
+      label: "partition",
+      review: "shown",
+      input: guarded(z.array(commands["takeoffs.partition"].input)),
+    },
     {
       ready: (_, input) => input.refusal,
       intent: (_, input) => input.request,
@@ -173,12 +177,12 @@ export const takeoffVerbs = {
     },
   ),
   refresh: queryVerb(
-    "takeoffs.snapshot",
+    takeoffQueries["takeoffs.snapshot"],
     { label: "refresh", chord: "Mod+R", review: "none", input: guarded(z.strictObject({})) },
     { ready: (_, input) => input.refusal, intent: (_, input) => input.request },
   ),
   "retry-r10": queryVerb(
-    "rhvac.open",
+    takeoffQueries["rhvac.open"],
     { label: "retry .r10", review: "none", input: guarded(z.object({ path: z.string().min(1) })) },
     { ready: (_, input) => input.refusal, intent: (_, input) => input.request },
   ),
@@ -213,14 +217,11 @@ export const takeoffVerbs = {
       waitSeconds: NATIVE_APPLY_WAIT_S,
     },
   ),
-  // TODO: shell needs an admitted host-RPC command door for rhvac.launch, absent from commands.
-  launch: {
-    kind: "command",
-    does: "rhvac.launch",
-    label: "open in RHVAC",
-    review: "none",
-    input: z.strictObject({}),
-  } as const,
+  launch: rpcVerb(
+    rhvacLaunchRpc,
+    { label: "open in RHVAC", caller: "human", review: "none", input: z.strictObject({}) },
+    { intent: (scope) => ({ path: z.string().parse(scope.page.r10) }) },
+  ),
 };
 
 export function takeoffBinding(id: string, row: unknown, scope: TakeoffScope): MountBinding {
@@ -308,23 +309,20 @@ export function takeoffBinding(id: string, row: unknown, scope: TakeoffScope): M
   }
   if (id === "partition") {
     const ids = input.zone ? [input.zone] : scope.page.zones;
-    const zone = world?.zones.find((zone) => zone.zone.guid === ids[0]);
-    request = {
-      zoneGuid: ids[0] ?? "",
+    const zones = ids.map((id) => world?.zones.find((zone) => zone.zone.guid === id));
+    request = zones.map((zone) => ({
+      zoneGuid: zone?.zone.guid ?? "",
       zoneRegion: zone?.zone.elementId ?? 0,
       view: zone?.zone.lane.view ?? "",
       zoneName: zone?.name ?? "",
-    };
-    // TODO: kernel sequential command presses must stop after the first failed zone receipt.
+    }));
     why =
       takeoffRefusal(scope, true) ??
-      (ids.length > 1
-        ? "Partition one zone at a time; the kernel cannot yet sequence zone commands"
-        : !ids.length
-          ? "Select zones to partition"
-          : !zone || zone.zone.elementId === null
-            ? "Refresh the selected adopted zones"
-            : null);
+      (!ids.length
+        ? "Select zones to partition"
+        : zones.some((zone) => !zone || zone.zone.elementId === null)
+          ? "Refresh the selected adopted zones"
+          : null);
   }
   if (id === "refresh") request = {};
   if (id === "retry-r10") {

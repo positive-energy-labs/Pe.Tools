@@ -11,7 +11,6 @@ import {
   type DocumentRequest,
   type TargetResolution,
   type Machine,
-  type Reading,
 } from "@pe/agent-contracts";
 import { Check, Copy, X } from "lucide-react";
 import { Popover } from "@base-ui/react/popover";
@@ -22,14 +21,16 @@ import { Button } from "@pe/kit/lang/button";
 import { useCopy } from "@pe/kit/lib/use-copy";
 import { previousOf } from "#/readings";
 import { Ladder } from "#/route/ladder";
-import { Ledger, PageLog } from "#/route/situation-grids";
+import { Ledger } from "#/route/situation-grids";
 import { useDocumentLadder } from "#/route/situation-ladder";
-import { Cluster } from "#/route/situation-lamp";
 import { parseTarget } from "#/route/route-target";
-import type { ActionHandle, RouteHandle } from "#/route/handle";
-import type { ChatReading, ChatActionKey } from "#/chat/manifest";
+import type { RouteHandle } from "#/route/handle";
+import { chatReading, type ChatHandle } from "./graph";
+export type { ChatHandle } from "./graph";
+import { GraphHistory } from "#/shell/mount";
+import { PrimaryRouteControls } from "#/navigation/route-controls";
+import { RouteHelpButton } from "#/route/help";
 import { useThreadScope } from "#/chat/scope";
-import type { ChatPage } from "#/chat/seeds";
 import {
   selectApprovals,
   selectQuestions,
@@ -37,7 +38,6 @@ import {
   selectRunStatus,
   selectTitle,
   selectToolCalls,
-  type ChatState,
 } from "@pe/agent-contracts/chat-state";
 import { useWorkbench } from "#/workbench/provider";
 
@@ -51,29 +51,24 @@ import { emptyPrompt, type ChatDraft } from "#/workbench/prompt";
 import { usePublishSituationSignal } from "#/navigation/route-controls";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
-export type ChatHandle = RouteHandle<ChatState, ChatReading, ChatPage, ChatActionKey>;
-
 /**
  * Send, scoped to the composer draft: the one verb, whether pressed in the head or entered in the
- * textarea. The route declares it once (`chat/manifest.ts`); this only names its input.
+ * textarea. The route declares it once (`chat/graph.ts`); this only names its input.
  */
-export function useSend(
-  handle: ChatHandle,
-  draft: ChatDraft,
-  onSent?: (sent: ChatDraft) => void,
-): ActionHandle {
-  const send = handle.actions.send;
+export function useSend(handle: ChatHandle, draft: ChatDraft, onSent?: (sent: ChatDraft) => void) {
+  const send = handle.control("send", {
+    text: draft.text.trim(),
+    attachments: draft.attachments.length ? draft.attachments : undefined,
+    mentions: draft.mentions.length ? draft.mentions : undefined,
+  });
   return {
-    ...send,
+    label: handle.verbs.send!.label,
+    says: handle.verbs.send!.says,
     refusal: send.refusal ?? emptyPrompt(draft),
     run: async () => {
-      const result = await send.run({
-        text: draft.text.trim(),
-        attachments: draft.attachments.length ? draft.attachments : undefined,
-        mentions: draft.mentions.length ? draft.mentions : undefined,
-      });
-      if (!result) onSent?.(draft);
-      return result;
+      const result = await send.run();
+      if (result.state === "done") onSent?.(draft);
+      return "refusal" in result ? result.refusal : null;
     },
   };
 }
@@ -126,8 +121,12 @@ const documentAddress = (
  */
 function useThreadHead(handle: ChatHandle) {
   const { currentThreadId, draftTarget, setDraftTarget } = useWorkbench();
-  const scope = useThreadScope(currentThreadId, !handle.demo, handle.readings.head);
-  if (currentThreadId || handle.demo) return scope;
+  const scope = useThreadScope(
+    currentThreadId,
+    !handle.view.read().page.demo,
+    chatReading(handle, "head"),
+  );
+  if (currentThreadId || handle.view.read().page.demo) return scope;
   const set = async (targets: Parameters<typeof scope.set>[0]) => {
     setDraftTarget(targets.at(-1)?.request ?? null);
     return true;
@@ -146,7 +145,7 @@ function useThreadHead(handle: ChatHandle) {
 export function useChatSituation(handle: ChatHandle) {
   const { currentThreadId, threads, chat, missingThread } = useWorkbench();
   const head = useThreadHead(handle);
-  const machine = previousOf(handle.readings.machine as Reading<Machine>);
+  const machine = previousOf(chatReading<Machine>(handle, "machine"));
   const inventory = machineInventory(machine);
   const requests = headRequests(head);
   const resolution = resolveCallTarget({ needs: "document" }, requests, inventory);
@@ -159,14 +158,23 @@ export function useChatSituation(handle: ChatHandle) {
     const one = resolveCallTarget({ needs: "document" }, [request], inventory);
     return one.kind === "resolved" && one.target.kind === "document" ? [one.target.ref] : [];
   });
-  const ladder = useDocumentLadder(handle, undefined, {
-    bound,
-    targets,
-    bind: (ref) => {
-      const label = documentAddress(inventory, ref)?.split(/[\\/]/).at(-1);
-      void head.toggle({ kind: "open", ref }, label);
+  const ladder = useDocumentLadder(
+    { readings: { machine: chatReading<Machine>(handle, "machine") } } as unknown as RouteHandle<
+      unknown,
+      string,
+      unknown,
+      string
+    >,
+    undefined,
+    {
+      bound,
+      targets,
+      bind: (ref) => {
+        const label = documentAddress(inventory, ref)?.split(/[\\/]/).at(-1);
+        void head.toggle({ kind: "open", ref }, label);
+      },
     },
-  });
+  );
   // A thread with several targets is healthy: a call names one. Only a closed one complains.
   const health =
     requests.length && !(resolution.kind === "choose" && resolution.reason === "several-targets")
@@ -213,7 +221,6 @@ function ThreadIdentity({ id }: { id: string }) {
 
 /** The global head observes the same composer owners; Send keeps its controls locally. */
 export function ChatSituationHead({
-  handle,
   situation,
   status,
 }: {
@@ -229,7 +236,7 @@ export function ChatSituationHead({
       : status.text === "ready"
         ? "ready"
         : "busy";
-  usePublishSituationSignal(handle.manifest.key, {
+  usePublishSituationSignal("chat", {
     kind,
     tone:
       kind === "failure"
@@ -275,26 +282,30 @@ export function ChatCluster({
   situation: ChatSituation;
 }) {
   return (
-    <Cluster
-      handle={handle}
-      helpUtilities
-      // No lamp: the composer sentence names the target, and a hosted route draws its own.
-      lamp={null}
-      state={
-        <>
+    <>
+      <PrimaryRouteControls route="chat" slot="inspector">
+        <details>
+          <summary>History</summary>
           <Ledger
             rows={[
               ["thread", threadLabel],
               [
                 "target",
-                head.targets.length ? `r${head.revision}${head.stale ? " · stale" : ""}` : "none",
+                head.targets.length ? `r${head.revision}${head.stale ? " ? stale" : ""}` : "none",
               ],
             ]}
           />
-          <PageLog entries={handle.log} manifest={handle.manifest} />
-        </>
-      }
-    />
+          <GraphHistory owner={handle} />
+        </details>
+      </PrimaryRouteControls>
+      <PrimaryRouteControls route="chat">
+        <RouteHelpButton
+          name="Pea"
+          docs="Choose a thread, then send a prompt under its chosen target."
+          utilities
+        />
+      </PrimaryRouteControls>
+    </>
   );
 }
 

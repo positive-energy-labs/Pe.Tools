@@ -1,10 +1,6 @@
 {
-  "apps/web/src/chat/chat-shell.tsx": 1,
   "apps/web/src/ops/workspace.tsx": 1,
   "apps/web/src/routes/data-tables.tsx": 1,
   "apps/web/src/routes/parameter-links.tsx": 1,
-  "apps/web/src/routes/pods.tsx": 1,
-  "apps/web/src/takeoff/atlas-workspace.tsx": 1,
-  "apps/web/src/takeoff/route-workspace.tsx": 1,
-  "apps/web/src/workbench/route-panes.tsx": 1
+  "apps/web/src/routes/pods.tsx": 1
 }

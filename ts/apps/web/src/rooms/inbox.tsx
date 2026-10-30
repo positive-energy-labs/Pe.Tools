@@ -12,7 +12,7 @@ import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 import { useList, emptyListState } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
 import { Scroll } from "@pe/kit/lang/scroll";
-import { Pane } from "@pe/kit/lang/pane";
+import type { PaneApi } from "../../../../packages/kit/src/components/lang/graph-layout";
 import { Button } from "@pe/kit/lang/button";
 import { Switcher } from "@pe/kit/lang/switcher";
 import { tokenRef } from "@pe/kit/lib/token";
@@ -164,6 +164,7 @@ type Filter = RoomsPage["show"];
 
 /** The inbox pane: filter, rows, and the two exports (markdown to the clipboard, the plan PNG). */
 export function RoomsInbox({
+  renderPane,
   cards,
   regions,
   labelOf,
@@ -174,6 +175,7 @@ export function RoomsInbox({
   markdown,
   snap,
 }: {
+  renderPane: PaneApi;
   cards: readonly Card[];
   regions: readonly Region[];
   labelOf: (guid: string) => string | undefined;
@@ -216,13 +218,53 @@ export function RoomsInbox({
     onPick: (card) => onPin(card.id),
     select: "single",
   });
-  return (
-    <Pane
-      title="Feedback"
-      meta={said ?? `${cards.length}`}
-      scroll="clip"
-      flush
-      actions={
+  return renderPane(
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="px-1 py-1">
+        <Switcher<Filter>
+          ariaLabel="filter Feedback by state"
+          value={filter}
+          onChange={onShow}
+          options={[
+            { value: "all", label: `all ${cards.length}`, title: "every card on this view" },
+            ...CARD_STATES.filter((state) => count(state) > 0).map((state) => ({
+              value: state,
+              label: `${CARD_META[state].glyph}${count(state)}`,
+              title: CARD_META[state].says,
+            })),
+          ]}
+        />
+      </div>
+      <Scroll className="min-h-0 flex-1">
+        <ListView
+          list={list}
+          aria-label="Feedback"
+          empty={{
+            message: cards.length ? "No card in this state" : "No marks or notes on this view",
+            exit: cards.length
+              ? "Choose all in the filter"
+              : "Draw a mark or a note on the plan, or ask Pea",
+          }}
+          row={(card) => ({
+            lead: (
+              <span className="flex gap-1">
+                <Glyph state={card.state} />
+                <Tag card={card} />
+              </span>
+            ),
+            revit: regions
+              .filter((region) => card.guids.includes(region.guid))
+              .map((region) => region.elementId),
+            label: cardLine(card, labelOf),
+            meta: <Thumb card={card} regions={regions} width={32} />,
+          })}
+        />
+      </Scroll>
+    </div>,
+    {
+      title: "Feedback",
+      meta: said ?? `${cards.length}`,
+      actions: (
         <>
           <Button
             label="copy markdown"
@@ -246,50 +288,7 @@ export function RoomsInbox({
             snap PNG
           </Button>
         </>
-      }
-    >
-      <div className="flex min-h-0 flex-1 flex-col">
-        <div className="px-1 py-1">
-          <Switcher<Filter>
-            ariaLabel="filter Feedback by state"
-            value={filter}
-            onChange={onShow}
-            options={[
-              { value: "all", label: `all ${cards.length}`, title: "every card on this view" },
-              ...CARD_STATES.filter((state) => count(state) > 0).map((state) => ({
-                value: state,
-                label: `${CARD_META[state].glyph}${count(state)}`,
-                title: CARD_META[state].says,
-              })),
-            ]}
-          />
-        </div>
-        <Scroll className="min-h-0 flex-1">
-          <ListView
-            list={list}
-            aria-label="Feedback"
-            empty={{
-              message: cards.length ? "No card in this state" : "No marks or notes on this view",
-              exit: cards.length
-                ? "Choose all in the filter"
-                : "Draw a mark or a note on the plan, or ask Pea",
-            }}
-            row={(card) => ({
-              lead: (
-                <span className="flex gap-1">
-                  <Glyph state={card.state} />
-                  <Tag card={card} />
-                </span>
-              ),
-              revit: regions
-                .filter((region) => card.guids.includes(region.guid))
-                .map((region) => region.elementId),
-              label: cardLine(card, labelOf),
-              meta: <Thumb card={card} regions={regions} width={32} />,
-            })}
-          />
-        </Scroll>
-      </div>
-    </Pane>
+      ),
+    },
   );
 }

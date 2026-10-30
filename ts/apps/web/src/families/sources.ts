@@ -96,7 +96,7 @@ export function familiesMatrixSource(resources?: Readings): UseSource<FamiliesOb
         if (
           canonicalRouteInput(reading.document) !== canonicalRouteInput(target) ||
           canonicalRouteInput(reading.filter) !== canonicalRouteInput(filter) ||
-          workKey(reading.work) !== ctx.workKey
+          workKey(reading.work) !== (ctx.workKey ? workKey(ctx.workKey) : null)
         )
           return;
         const runId = reading.progress?.runId ?? reading.id;

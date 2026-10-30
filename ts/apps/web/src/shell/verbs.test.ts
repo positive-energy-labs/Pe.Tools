@@ -1,3 +1,8 @@
+import { pageBindRpc } from "../../../../packages/mcps/src/shared/rpc-client";
+import {
+  scheduleQueries,
+  familiesQueries,
+} from "../../../../packages/mcps/src/shared/query-client";
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
@@ -19,6 +24,9 @@ import {
   invoke,
   placements,
   queryVerb,
+  rpcVerb,
+  pageVerb,
+  sequenceVerb,
   workVerb,
   type Caller,
   type InvocationPhase,
@@ -575,7 +583,7 @@ test("a families read reaches the families client with the Work key and exact do
   const filter = { categoryNames: [], familyNames: [], placementScope: "AllLoaded" as const };
   const readId = crypto.randomUUID();
   const verb = queryVerb(
-    "families.read",
+    familiesQueries["families.read"],
     { label: "Read families", input: z.strictObject({}).default({}), review: "none" },
     { intent: () => ({ filter, readId }) },
   );
@@ -600,7 +608,7 @@ test("a query's final result is admitted only into the scope generation it start
     ...env.ctx,
     snapshot: () => ({ ...env.ctx.snapshot(), generation }),
   };
-  const verb = queryVerb("schedule.grid.catalog", {
+  const verb = queryVerb(scheduleQueries["schedule.grid.catalog"], {
     label: "Catalog",
     input: z.strictObject({}).default({}),
     review: "none",
@@ -617,7 +625,7 @@ test("a query's final result is admitted only into the scope generation it start
 
 test("a host refusal from a query reads refused; a server failure reads failed", async () => {
   const env = environment("human");
-  const verb = queryVerb("schedule.grid.catalog", {
+  const verb = queryVerb(scheduleQueries["schedule.grid.catalog"], {
     label: "Catalog",
     input: z.strictObject({}).default({}),
     review: "none",
@@ -631,4 +639,200 @@ test("a host refusal from a query reads refused; a server failure reads failed",
   });
   transport.schedule.mockRejectedValueOnce(Object.assign(Error("Host crashed"), { status: 500 }));
   expect(await invoke(env.ctx, verb, null, {})).toMatchObject({ state: "failed" });
+});
+
+test("K1.1: an unknown-to-kernel read owns its normalization and runner", async () => {
+  const env = environment("human");
+  const run = vi.fn(async (input) => ({ echo: input.n }));
+  const verb = queryVerb(
+    { key: "pod.future.read", input: z.object({ n: z.coerce.number() }), run },
+    { label: "Read", input: z.object({ n: z.string() }), review: "none" },
+  );
+  expect(await invoke(env.ctx, verb, null, { n: "7" })).toMatchObject({
+    state: "done",
+    receipt: { value: { echo: 7 } },
+  });
+  expect(run).toHaveBeenCalledWith(
+    { n: 7 },
+    { target: env.target, work: env.ctx.snapshot().work!.handle },
+  );
+});
+
+test("K1.2: a human-only RPC refuses agent binding and direct invocation before dispatch", async () => {
+  const run = vi.fn(async () => ({ ok: true }));
+  const verb = rpcVerb(
+    { key: "page.bind", input: z.object({}), run },
+    { label: "Bind", input: z.object({}), review: "none", caller: "human" },
+    { intent: () => ({}) },
+  );
+  const agent = environment("agent");
+  expect(bind(verb, { ctx: agent.ctx, subject: null, args: {} }).refusal).toContain(
+    "Only a person",
+  );
+  expect(await invoke(agent.ctx, verb, null, {})).toMatchObject({ state: "refused" });
+  expect(run).not.toHaveBeenCalled();
+  expect(await invoke(environment("human").ctx, verb, null, {})).toMatchObject({
+    state: "done",
+    kind: "rpc",
+  });
+  expect(run).toHaveBeenCalledTimes(1);
+});
+
+test("K1.4: readiness sees current Reading values without cloning native view objects", async () => {
+  const env = environment("human");
+  let ready = false;
+  const ctx = {
+    ...env.ctx,
+    readings: () => ({
+      scene: {
+        status: "ready" as const,
+        current: true,
+        complete: true,
+        version: 1,
+        basis: null,
+        value: { ready, pixels: new Uint8Array([1]) },
+      },
+    }),
+  };
+  const verb = workVerb(
+    { label: "Readiness", input: z.object({}) },
+    {
+      ready: (scope) =>
+        (scope.readings.scene?.value as { ready: boolean } | undefined)?.ready
+          ? null
+          : "Scene not ready",
+      patches: () => [{ path: ["rows", "slot", "value"], value: 5 }],
+    },
+  );
+  expect(await invoke(ctx, verb, null, {})).toMatchObject({ state: "refused" });
+  ready = true;
+  expect(await invoke(ctx, verb, null, {})).toMatchObject({ state: "done" });
+});
+
+test("K1.5: command lands its result and fences late Page changes after A-B-A", async () => {
+  const env = environment("human");
+  let generation = 1;
+  const ctx = { ...env.ctx, snapshot: () => ({ ...env.ctx.snapshot(), generation }) };
+  const verb = commandVerb(
+    "takeoffs.initialize",
+    { label: "Initialize", input: z.object({}), review: "none" },
+    {
+      intent: () => ({ stage: "sheet" }),
+      lands: (result) => ({ selected: (result as { wrote: boolean }).wrote }),
+    },
+  );
+  expect(await invoke(ctx, verb, null, {})).toMatchObject({
+    state: "done",
+    page: { selected: true },
+  });
+  let finish!: (receipt: ReturnType<typeof succeededReceipt>) => void;
+  transport.run.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const pending = invoke(ctx, verb, null, {});
+  await vi.waitFor(() => expect(finish).toBeDefined());
+  generation = 3;
+  finish(succeededReceipt());
+  expect(await pending).not.toHaveProperty("page");
+});
+
+test("K1.6: a sequence has one press, separate reviewed receipts, and stops at failure", async () => {
+  const env = environment("human");
+  const receipts = vi.fn();
+  const ctx = { ...env.ctx, receipt: receipts };
+  const verb = sequenceVerb(
+    "takeoffs.initialize",
+    { label: "Initialize all", input: z.object({}), review: "shown" },
+    {
+      intent: () => [{ stage: "first" }, { stage: "second" }, { stage: "third" }],
+    },
+  );
+  const first = reviewed(await invoke(ctx, verb, null, {}));
+  expect(first.ticket).toMatchObject({ step: 0, evidence: { stage: "first" } });
+  expect(transport.run).not.toHaveBeenCalled();
+  const second = reviewed(await commit(ctx, verb, first.ticket));
+  expect(second.press).toBe(first.press);
+  expect(second.ticket).toMatchObject({ step: 1, evidence: { stage: "second" } });
+  expect(receipts).toHaveBeenCalledTimes(1);
+  transport.run.mockResolvedValueOnce({
+    ...succeededReceipt(),
+    state: "failed",
+    error: "Zone refused",
+  });
+  expect(await commit(ctx, verb, second.ticket)).toMatchObject({
+    state: "failed",
+    press: first.press,
+  });
+  expect(transport.run).toHaveBeenCalledTimes(2);
+  expect(transport.run.mock.calls[0]![5]).not.toBe(transport.run.mock.calls[1]![5]);
+});
+
+test("K1.7: take-derived patches share the proposal's one write and inverse", async () => {
+  const env = environment("human");
+  const kernel = kernelCellVerbs({
+    cells: [
+      {
+        segment: "cells",
+        groupOf: (key) => [key],
+        take: () => [{ path: ["rows", "slot", "note"], value: "first base" }],
+      },
+    ],
+  });
+  const subject: VerbSubject = {
+    type: "cell:cells",
+    id: "first",
+    work: key,
+    path: ["cells", "first"],
+  };
+  const result = await invoke(
+    { ...env.ctx, subjects: kernel.subjects },
+    kernel.verbs["cell:cells.take"]!,
+    subject,
+    {},
+  );
+  expect(result).toMatchObject({ state: "done", kind: "work" });
+  expect(env.writes).toHaveLength(1);
+  expect(env.doc().rows.slot!.note).toBe("first base");
+  if (result.state !== "done" || result.kind !== "work") throw Error("missing ack");
+  expect(result.acknowledgement.inverse).toContainEqual({
+    path: ["rows", "slot", "note"],
+    value: "before",
+  });
+});
+
+test("Page verbs run without Work, host transport, or undo writes", async () => {
+  const env = environment("human");
+  const verb = pageVerb(
+    { label: "Close inspector", input: z.object({}), chord: "Escape" },
+    { page: () => ({ inspector: "" }) },
+  );
+  const ctx = {
+    ...env.ctx,
+    snapshot: () => ({ target: { kind: "host" as const }, work: null, basis: null, closed: true }),
+  };
+  expect(await invoke(ctx, verb, null, {})).toMatchObject({
+    state: "done",
+    kind: "page",
+    page: { inspector: "" },
+  });
+  expect(transport.run).not.toHaveBeenCalled();
+  expect(env.writes).toEqual([]);
+});
+
+test("K1.2: page.bind resolves its HTTP contract at invocation and validates before dispatch", async () => {
+  const fetch = vi.fn(async () => Response.json({ bound: true }));
+  vi.stubGlobal("fetch", fetch);
+  try {
+    await expect(pageBindRpc.run({ slug: "test", binding: { kind: "none" } })).resolves.toEqual({
+      bound: true,
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    await expect(pageBindRpc.run({ slug: "test", binding: { kind: "wrong" } })).rejects.toThrow();
+    expect(fetch).toHaveBeenCalledTimes(1);
+  } finally {
+    vi.unstubAllGlobals();
+  }
 });

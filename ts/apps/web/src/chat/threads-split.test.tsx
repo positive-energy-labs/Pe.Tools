@@ -1,9 +1,15 @@
 // @vitest-environment jsdom
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import type { PaneSide } from "@pe/kit/lang/pane";
-import { ThreadsSplit } from "./chat-shell";
+import { createGraphMount, GraphRouteView } from "#/shell/mount";
+import type { GraphLayoutState } from "../../../../packages/kit/src/components/lang/graph-layout";
+import { chatGraph } from "./graph";
+const owners: { dispose(): void }[] = [];
+vi.mock("../routes/__root", async () => {
+  const { createRootRoute } = await import("@tanstack/react-router");
+  return { Route: createRootRoute() };
+});
 
 vi.mock("#/navigation/surface-host", () => ({ useSurfaceHost: () => ({ surface: "web" }) }));
 
@@ -20,25 +26,63 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  for (const owner of owners.splice(0)) owner.dispose();
   vi.restoreAllMocks();
 });
 
 function Dock() {
-  const [collapsed, onCollapsedChange] = useState<PaneSide | null>(null);
+  const [panes, onChange] = useState<GraphLayoutState>({});
+  const graph = useMemo(() => chatGraph(() => ({ thread: "t" }), 643), []);
+  const adapters = useMemo(
+    () => ({
+      sources: Object.fromEntries(
+        Object.keys(graph.readings).map((id) => [id, { kind: "use" as const, open: () => {} }]),
+      ),
+      bodies: {
+        threads: () => (
+          <nav aria-label="Threads">
+            <div role="option" aria-selected={false} onClick={() => onChange({})}>
+              Office model
+            </div>
+          </nav>
+        ),
+        chat: () => <input aria-label="draft" defaultValue="kept" />,
+      },
+    }),
+    [graph],
+  );
+  const owner = useMemo(() => {
+    const owner = createGraphMount(graph, {
+      ...adapters,
+      getSnapshot: () => ({ target: { kind: "host" }, work: null }),
+      subscribe: () => () => {},
+      subscribeAcceptedDeltas: () => () => {},
+      write: async () => {
+        throw Error("No Work");
+      },
+    });
+    owners.push(owner);
+    return owner;
+  }, [graph, adapters]);
   return (
-    <ThreadsSplit
-      collapsed={collapsed}
-      onCollapsedChange={onCollapsedChange}
-      threads={
-        <nav aria-label="Threads">
-          <div role="option" aria-selected={false} onClick={() => onCollapsedChange(null)}>
-            Office model
-          </div>
-        </nav>
-      }
-    >
-      <input aria-label="draft" defaultValue="kept" />
-    </ThreadsSplit>
+    <GraphRouteView
+      graph={graph}
+      adapters={adapters}
+      owner={owner}
+      hidden={false}
+      current={() => true}
+      hosted
+      situation={null}
+      device={{ panes, onChange }}
+      status={{
+        resolution: { kind: "resolved", target: { kind: "host" } },
+        bindingLost: null,
+        targetProvenance: { source: "none" },
+        closed: false,
+        unreadable: false,
+        failure: null,
+      }}
+    />
   );
 }
 

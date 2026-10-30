@@ -2,23 +2,18 @@ import { useContext, useEffect, useMemo, useRef } from "react";
 import { AttentionDocument, elementKey, useAttention } from "@pe/kit/lang/attention";
 import {
   transitionPatches,
-  type ActionReceipt,
   type Mark,
   type RoomsNote,
   type RoomsRouteDocument,
 } from "@pe/agent-contracts";
-import { EmptyState } from "@pe/kit/lang/empty";
-import { useList } from "@pe/kit/lang/collection";
-import { ListView } from "@pe/kit/lang/list-view";
 import type { CellTransition } from "@pe/kit/lang/cell";
 import { Ladder } from "#/route/ladder";
-import { useRouteThread } from "#/route/shell";
 import type { CellWire } from "#/components/work/band";
 import { mountRoute, routeFromGraph, type MountBody, type RouteAdapters } from "#/shell/mount";
 import { cardsMarkdown, coverage, newestRun, type Card } from "./cards";
 import { cardLine, FeedbackCard, RoomsInbox } from "./inbox";
 import { roomsGraph, type RoomsPage } from "./graph";
-import { readingValue, roomsBinding, roomsWorkRefusal } from "./actions";
+import { roomsBinding, roomsWorkRefusal } from "./actions";
 import { roomsSources } from "./sources";
 import { RoomsProvider, useRoomsWorkspace, type RoomsOwner } from "./workspace";
 import { RoomsSketch, type Drop } from "./sketch";
@@ -26,6 +21,8 @@ import { snapPlan } from "./snap";
 import { focusOf, RoomsPlan } from "./plan";
 import { RoomsTable } from "./table";
 import type { Point2 } from "#/lib/affine-frame";
+
+import type { PaneApi } from "../../../../packages/kit/src/components/lang/graph-layout";
 
 type Body = MountBody<RoomsPage, RoomsRouteDocument>;
 const refusalOf = (result: Awaited<ReturnType<ReturnType<RoomsOwner["control"]>["run"]>>) =>
@@ -122,7 +119,14 @@ function RegionsBody({ owner }: Body) {
   );
 }
 
-function PlanBody({ owner, page, verbs }: Body) {
+function PlanBody({
+  owner,
+  page,
+  verbs,
+  thread,
+  visible,
+  renderPane,
+}: Body & { renderPane: PaneApi }) {
   const {
     work,
     rows,
@@ -141,7 +145,6 @@ function PlanBody({ owner, page, verbs }: Body) {
     pending,
     error,
   } = useRoomsWorkspace();
-  const thread = useRouteThread();
   const focused = useMemo(() => focusOf(rows, page.focus), [rows, page.focus]);
   const zoomTo = useMemo(() => focused.rows.map((row) => row.region.guid), [focused]);
   const applied = useRef("");
@@ -210,10 +213,11 @@ function PlanBody({ owner, page, verbs }: Body) {
   );
   return (
     <RoomsPlan
+      renderPane={renderPane}
       fixture={fixture}
       lease={{
         thread: thread ?? undefined,
-        ready: !!snapshot && !pending && !error,
+        ready: visible && !!snapshot && !pending && !error,
         context: {
           source: fixture ? "fixture" : "native",
           document: fixture ? null : document,
@@ -270,10 +274,11 @@ function PlanBody({ owner, page, verbs }: Body) {
   );
 }
 
-function FeedbackBody({ owner, page }: Body) {
+function FeedbackBody({ owner, page, renderPane }: Body & { renderPane: PaneApi }) {
   const { work, snapshot, cards, regions, labels, view } = useRoomsWorkspace();
   return (
     <RoomsInbox
+      renderPane={renderPane}
       cards={cards}
       regions={regions}
       labelOf={(guid) => labels.get(guid)}
@@ -283,41 +288,6 @@ function FeedbackBody({ owner, page }: Body) {
       onShow={(show) => owner.view.setPage({ show })}
       markdown={() => (work && snapshot ? cardsMarkdown(work.doc, snapshot) : "")}
       snap={() => snapPlan(view)}
-    />
-  );
-}
-
-function HistoryBody({ owner }: Body) {
-  const state = owner.readings.get("receipts");
-  const receipts = (readingValue<ActionReceipt[]>(state) ?? [])
-    .filter((receipt) => receipt.key.startsWith("rooms."))
-    .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
-  const list = useList({
-    items: receipts,
-    keyOf: (receipt) => receipt.id,
-    search: (receipt) => ({ text: [receipt.key, receipt.state] }),
-  });
-  if (!receipts.length)
-    return (
-      <EmptyState story="scope" exit="partition or apply from the other stages">
-        {state.status === "failed"
-          ? state.error
-          : !owner.snapshot().work
-            ? "no document bound"
-            : "no rooms actions on this document yet"}
-      </EmptyState>
-    );
-  return (
-    <ListView
-      list={list}
-      aria-label="rooms receipts"
-      empty={{ message: "No matching rooms actions", exit: "Clear the search" }}
-      row={(receipt) => ({
-        label: `${receipt.key} · ${receipt.state}`,
-        sub: "error" in receipt ? String(receipt.error) : undefined,
-        meta: <span className="face-mono">{receipt.startedAt}</span>,
-        failed: receipt.state === "failed" || receipt.state === "unknown",
-      })}
     />
   );
 }
@@ -357,12 +327,13 @@ export const roomsAdapters: RouteAdapters<RoomsPage, RoomsRouteDocument> = {
   receiptPaths: (receipt) =>
     receipt.consumes.flatMap((input) => (input.kind === "work" ? [...input.probe.paths] : [])),
   wrap: (owner, children) => <RoomsProvider owner={owner}>{children}</RoomsProvider>,
+  frames: {
+    plan: (body, renderPane) => <PlanBody {...body} renderPane={renderPane} />,
+    feedback: (body, renderPane) => <FeedbackBody {...body} renderPane={renderPane} />,
+  },
   bodies: {
     scope: (body) => <ScopeBody {...body} />,
-    plan: (body) => <PlanBody {...body} />,
-    feedback: (body) => <FeedbackBody {...body} />,
     regions: (body) => <RegionsBody {...body} />,
-    history: (body) => <HistoryBody {...body} />,
   },
 };
 export const roomsRoute = routeFromGraph(roomsGraph, roomsAdapters, "/rooms");

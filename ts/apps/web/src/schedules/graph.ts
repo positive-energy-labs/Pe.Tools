@@ -1,3 +1,4 @@
+import { scheduleQueries } from "../../../../packages/mcps/src/shared/query-client";
 import { z } from "zod";
 import {
   canonicalRouteInput,
@@ -168,7 +169,7 @@ export const schedulesGraph: RouteGraph<SchedulesPage, ScheduleGridDocument> = {
     ),
     // Host reads, never a fake authored Work edit (ADR 0026); a read selects its subject's Work.
     read: queryVerb(
-      "schedule.grid.snapshot",
+      scheduleQueries["schedule.grid.snapshot"],
       {
         label: "Read schedule",
         review: "none",
@@ -176,7 +177,7 @@ export const schedulesGraph: RouteGraph<SchedulesPage, ScheduleGridDocument> = {
       },
       { subject: (value) => (value as ScheduleReading).workspaceId },
     ),
-    bind: queryVerb("schedule.grid.bind", {
+    bind: queryVerb(scheduleQueries["schedule.grid.bind"], {
       label: "Bind schedule reading",
       review: "none",
       input: scheduleReads["schedule.grid.bind"].input,

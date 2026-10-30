@@ -5,11 +5,12 @@ import type {
   Effect,
   ExecutionTarget,
   ReadingDecl,
+  WorkKey,
 } from "@pe/agent-contracts";
 
 export interface ReadingScope<P = unknown, W = unknown> {
   target: ExecutionTarget;
-  workKey: string | null;
+  workKey: WorkKey | null;
   workRevision: number | null;
   page: Readonly<P>;
   work: Readonly<W> | null;
@@ -17,7 +18,7 @@ export interface ReadingScope<P = unknown, W = unknown> {
 
 export interface ReadingAttempt {
   readonly target: ExecutionTarget;
-  readonly workKey: string | null;
+  readonly workKey: WorkKey | null;
   readonly generation: number;
 }
 
@@ -531,7 +532,7 @@ export function createReadingGraph<P, W>(
       if (disposed) return;
       const previousPage = scope.page;
       const targetChanged = canonicalRouteInput(scope.target) !== canonicalRouteInput(next.target);
-      const workChanged = scope.workKey !== next.workKey;
+      const workChanged = canonicalRouteInput(scope.workKey) !== canonicalRouteInput(next.workKey);
       scope = structuredClone(next);
       batching = true;
       try {

@@ -23,7 +23,7 @@ const state = (value: unknown): ReadingState => ({
     workRevision: 1,
     attempt: {
       target: { kind: "document", ref: { session: "s", openId: "d" } },
-      workKey: "w",
+      workKey: { binding: "host", route: "ducts", target: null },
       generation: 1,
     },
     inputs: {},

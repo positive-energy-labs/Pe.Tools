@@ -10,6 +10,8 @@ import {
   refusalText,
   START_FRESH_ASIDE,
   UNREADABLE_WORK,
+  OLDER_WORK,
+  workSchemaAge,
   type WorkAuthor,
   type RouteEnvelope,
   type RouteRefusal,
@@ -67,7 +69,7 @@ export class RouteWorkspace {
   readonly #acceptedListeners = new Map<string, Set<(ack: WorkWriteAck) => void>>();
   readonly #inverses = new Map<
     string,
-    { write: WorkWriteAck; after: unknown; recovery?: { doc: unknown } }[]
+    { write: WorkWriteAck; after: unknown; recovery?: { doc: unknown; schemaVersion: number } }[]
   >();
 
   constructor(private readonly options: RouteWorkspaceOptions) {
@@ -79,6 +81,8 @@ export class RouteWorkspace {
   /** A trusted plugin's lifetime owns registration, never its saved Work bytes. */
   register(registration: RouteWorkspaceRegistration): () => void {
     const route = registration.spec.route;
+    const age = registration.spec.schemaVersion ?? 1;
+    if (!Number.isSafeInteger(age) || age < 1) throw new Error("Invalid Work schema version");
     if (route.includes(":")) throw new Error(`route name '${route}' cannot contain ':'`);
     if (this.#registry.has(route)) throw new Error(`duplicate route '${route}'`);
     toJsonSchema(registration.spec.schema);
@@ -192,6 +196,7 @@ export class RouteWorkspace {
       description: spec.description,
       doc: structuredClone(envelope.doc),
       revision: envelope.revision,
+      schemaVersion: envelope.schemaVersion ?? null,
       schema: toJsonSchema(spec.schema),
     };
   }
@@ -297,7 +302,10 @@ export class RouteWorkspace {
         return landed;
       }
 
-      await this.#persist(scope, route, landed.envelope);
+      await this.#persist(scope, route, {
+        ...landed.envelope,
+        schemaVersion: recorded?.recovery?.schemaVersion ?? registration.spec.schemaVersion ?? 1,
+      });
       const write: WorkWriteAck = {
         key: scope,
         kind,
@@ -356,6 +364,8 @@ export class RouteWorkspace {
       const raw = await this.options.store.getState({ targetKey, route });
       if (raw == null || readable(raw, spec))
         return refuse("refused", "this route's Work is readable", "Nothing to set aside.");
+      if (workSchemaAge(raw, spec) !== "older")
+        return refuse("refused", UNREADABLE_WORK, "Only a known older schema permits Start fresh.");
       let slot = 1;
       while ((await this.options.store.getState({ targetKey, route: aside(route, slot) })) != null)
         slot++;
@@ -378,7 +388,11 @@ export class RouteWorkspace {
         aside: aside(route, slot),
       };
       this.#inverses.delete(workKey(scope));
-      if (prior.success) this.#remember(write, fresh.doc, { doc: prior.data.doc });
+      if (prior.success)
+        this.#remember(write, fresh.doc, {
+          doc: prior.data.doc,
+          schemaVersion: (raw as { schemaVersion: number }).schemaVersion,
+        });
       this.#accept(write);
       await this.#publish({
         ...write,
@@ -519,7 +533,11 @@ export class RouteWorkspace {
     for (const listener of this.#listeners) listener(structuredClone(event));
   }
 
-  #remember(write: WorkWriteAck, after: unknown, recovery?: { doc: unknown }) {
+  #remember(
+    write: WorkWriteAck,
+    after: unknown,
+    recovery?: { doc: unknown; schemaVersion: number },
+  ) {
     const key = workKey(write.key);
     const records = this.#inverses.get(key) ?? [];
     // Foreign writes are barriers even if a later write happens to put the same values back.
@@ -595,7 +613,12 @@ function storedWorkKey(value: string, route: string): WorkKey | null {
 }
 
 function emptyEnvelope(spec: RouteStateSpec<z.ZodType>): RouteEnvelope<unknown> {
-  return { version: ENVELOPE_VERSION, revision: 0, doc: spec.schema.parse({}) };
+  return {
+    version: ENVELOPE_VERSION,
+    schemaVersion: spec.schemaVersion ?? 1,
+    revision: 0,
+    doc: spec.schema.parse({}),
+  };
 }
 
 function readable(raw: unknown, spec: RouteStateSpec<z.ZodType>): boolean {
@@ -610,13 +633,17 @@ function readable(raw: unknown, spec: RouteStateSpec<z.ZodType>): boolean {
 const aside = (route: string, slot: number) => `${route}${START_FRESH_ASIDE}${slot}`;
 
 function parseEnvelope(raw: unknown, spec: RouteStateSpec<z.ZodType>): RouteEnvelope<unknown> {
+  const age = workSchemaAge(raw, spec);
+  if (age === "newer") throw new Error(UNREADABLE_WORK);
+  const refusal = age === "older" ? OLDER_WORK : UNREADABLE_WORK;
   const parsed = envelopeSchema.safeParse(raw);
-  if (!parsed.success) throw new Error(UNREADABLE_WORK);
+  if (!parsed.success) throw new Error(refusal);
   const schema = spec.schema instanceof z.ZodObject ? spec.schema.strict() : spec.schema;
   const doc = schema.safeParse(parsed.data.doc);
-  if (!doc.success) throw new Error(UNREADABLE_WORK);
+  if (!doc.success) throw new Error(refusal);
   return {
     version: ENVELOPE_VERSION,
+    ...(age !== "unknown" && { schemaVersion: (raw as { schemaVersion: number }).schemaVersion }),
     revision: parsed.data.revision,
     doc: doc.data,
   };
@@ -624,10 +651,10 @@ function parseEnvelope(raw: unknown, spec: RouteStateSpec<z.ZodType>): RouteEnve
 
 /** A write over saved Work the schema refuses answers in the one sentence and writes nothing. */
 function unreadable(error: unknown): RouteRefusal {
-  if (error instanceof Error && error.message === UNREADABLE_WORK)
+  if (error instanceof Error && [UNREADABLE_WORK, OLDER_WORK].includes(error.message))
     return refuse(
       "refused",
-      UNREADABLE_WORK,
+      error.message,
       "Nothing was written; the saved Work is kept as it was.",
     );
   throw error;

@@ -20,6 +20,7 @@ import type { Psc1Metadata } from "#/scene/psc1";
 import { PictureReadout } from "@pe/kit/lang/readout";
 import type { Layer3D } from "#/scene/types";
 
+import { cutPolygons } from "./state";
 import { CutControls } from "./cut-controls";
 import { AnswerForms, EncodingLegend, PickFacts, SceneSummary, pickName } from "./facts";
 import {
@@ -41,7 +42,6 @@ import { useRouteLease } from "#/route/view-bridge";
 import type { PageMove } from "#/route/manifest";
 import { SpacePicture } from "./picture";
 import { rowAt } from "./layers";
-import { cutPolygons } from "./state";
 
 type Owner = GraphMount<SpacePage, null>;
 type SetPage = (patch: Partial<SpacePage>, move?: PageMove<SpacePage>) => void;
@@ -103,40 +103,8 @@ function SpaceMount({ owner, children }: { owner: Owner; children: ReactNode }) 
   }, [owner, page, scene]);
   const setPage = useCallback<SetPage>(
     (patch, move) => {
-      const current = owner.view.read().page;
-      const loaded = matchingScene(current, owner.readings.get("scene"));
-      // TODO: GraphTransition/VerbScope cannot read current Reading values. Move this loaded-scene
-      // admission into the kernel once transitions expose them; all body and lease writes use it now.
-      const candidate = { ...current, ...patch };
-      if (["selected", "hidden", "isolated", "cuts"].some((key) => Object.hasOwn(patch, key))) {
-        const named = [
-          candidate.selected,
-          ...candidate.hidden,
-          ...(candidate.isolated ?? []),
-        ].filter((key): key is string => key !== null);
-        if (
-          (named.length || Object.hasOwn(patch, "cuts")) &&
-          (!loaded || loaded.id !== candidate.scene)
-        ) {
-          setError("Load this scene before naming its elements or changing its cuts");
-          return;
-        }
-        const missing = named.find((key) => !loaded?.members.has(key));
-        if (missing) {
-          setError(`Element is not in this loaded scene: ${missing}`);
-          return;
-        }
-        if (loaded && Object.hasOwn(patch, "cuts")) {
-          try {
-            cutPolygons(candidate.cuts, loaded.metadata.bounds);
-          } catch (cause) {
-            setError((cause as Error).message);
-            return;
-          }
-        }
-      }
-      setError(null);
-      owner.view.setPage(patch, move);
+      const refused = owner.view.move(patch, move);
+      setError(refused?.message ?? null);
     },
     [owner],
   );

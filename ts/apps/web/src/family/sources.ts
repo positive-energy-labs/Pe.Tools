@@ -140,7 +140,9 @@ export function familySources(): Readonly<Record<string, ReadingSource>> {
                 (row) =>
                   row.consumes.some(
                     (input) =>
-                      input.kind === "work" && workKey(input.probe.handle.key) === ctx.workKey,
+                      input.kind === "work" &&
+                      ctx.workKey !== null &&
+                      workKey(input.probe.handle.key) === workKey(ctx.workKey),
                   ) &&
                   (row.target.kind !== "document" ||
                     (ctx.target.kind === "document" &&

@@ -1,14 +1,8 @@
 import { type ReactNode } from "react";
 import { RegistryContext } from "@effect/atom-react";
-import {
-  routeAddress,
-  receiptsForWork,
-  type ActionReceipt,
-  type TakeoffsRouteDocument,
-  type takeoffCaptureSummarySchema,
-} from "@pe/agent-contracts";
+import { type TakeoffsRouteDocument, type takeoffCaptureSummarySchema } from "@pe/agent-contracts";
 import type { z } from "zod";
-import { routeFromGraph, type RouteAdapters, type MountBody } from "#/shell/mount";
+import { GraphHistory, routeFromGraph, type RouteAdapters, type MountBody } from "#/shell/mount";
 import { NativeObservationScope } from "#/revit/observation";
 import { Ladder } from "#/route/ladder";
 import { Button } from "@pe/kit/lang/button";
@@ -151,12 +145,6 @@ function ScopeBody({ owner, page }: Body) {
           },
         ]}
       />
-      {page.stage === "sync" && (
-        <p role="status">
-          Opening RHVAC is unavailable until the kernel has an admitted host-RPC command door for
-          rhvac.launch.
-        </p>
-      )}
     </>
   );
 }
@@ -165,8 +153,6 @@ function ReviewBody({ owner, page, verbs }: Body) {
   const review = store.review;
   const text = owner.readings.get("text");
   const raw = text.value as { path: string; text: string } | undefined;
-  const receipts = (owner.readings.get("receipts").value ?? []) as ActionReceipt[];
-  const work = owner.snapshot().work;
   return (
     <>
       {review && (
@@ -186,13 +172,7 @@ function ReviewBody({ owner, page, verbs }: Body) {
             </div>
           )),
         )}
-      {(work ? receiptsForWork(receipts, work.handle.key) : [])
-        .filter((receipt) => receipt.key.startsWith("takeoffs."))
-        .map((receipt) => (
-          <a key={receipt.id} href={routeAddress("ops").link({ actionId: receipt.id })}>
-            {receipt.key} · {receipt.state}
-          </a>
-        ))}
+      <GraphHistory owner={owner} receipts="receipts" />
       {page.work && (
         <details onToggle={(event) => owner.view.setPage({ fileText: event.currentTarget.open })}>
           <summary>Saved capture · file text as stored</summary>
@@ -259,7 +239,7 @@ export const takeoffAdapters: RouteAdapters<TakeoffGraphPage, TakeoffsRouteDocum
     scope: (body) => <ScopeBody {...body} />,
     adoption: () => <AdoptionBody />,
     navigation: (body) => <NavigationBody {...body} />,
-    plan: () => <AtlasVisual />,
+    plan: ({ visible, thread }) => <AtlasVisual visible={visible} thread={thread} />,
     rooms: () => <AtlasTable />,
     room: () => <AtlasRoomPanel />,
     review: (body) => <ReviewBody {...body} />,

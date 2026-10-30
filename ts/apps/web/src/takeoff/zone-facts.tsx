@@ -4,7 +4,7 @@ import { regionKey } from "./attention";
 import { fmtNum } from "@pe/kit/table/model";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { SENSIBLE_CAP_BTUH } from "#/takeoff/world";
-import type { TakeoffsController } from "#/takeoff/controller";
+import type { TakeoffStore } from "./store";
 import { ZoneStateBar } from "#/takeoff/zone-state-bar";
 import type { ModelRoom, ModelSystem, ModelZone } from "#/takeoff/world";
 import { STAGE_BLURB, type RoomState } from "#/takeoff/room-state";
@@ -20,7 +20,7 @@ export function ZoneFacts({
   stateOf,
   systems,
 }: {
-  store: TakeoffsController;
+  store: TakeoffStore;
   zone: ModelZone;
   stateOf: (room: ModelRoom) => RoomState;
   systems: ModelSystem[];

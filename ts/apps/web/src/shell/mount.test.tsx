@@ -42,7 +42,7 @@ const door = vi.hoisted(() => ({ ports: null as object | null }));
 vi.mock("./use-work-scope", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./use-work-scope")>();
   return {
-    useWorkScope: (graph: never, page?: never) =>
+    useWorkScope: (graph: never, page?: never, binding?: never) =>
       door.ports
         ? {
             ...door.ports,
@@ -53,7 +53,7 @@ vi.mock("./use-work-scope", async (importOriginal) => {
               closed: false,
             },
           }
-        : actual.useWorkScope(graph, page),
+        : actual.useWorkScope(graph, page, binding),
   };
 });
 vi.mock("../routes/__root", async () => {
@@ -65,6 +65,14 @@ const cleanups: (() => void)[] = [];
 const noRead = (): (() => void) => () => {};
 let subscribed = vi.fn(noRead);
 beforeEach(() => {
+  const storage = new Map<string, string>();
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => storage.set(key, value),
+    removeItem: (key: string) => storage.delete(key),
+    clear: () => storage.clear(),
+  });
+  localStorage.clear();
   transport.run.mockReset();
   door.ports = null;
   subscribed = vi.fn(noRead);
@@ -848,4 +856,178 @@ test("a route mounted with no adapter ports gets the kernel's host Target and no
     ok: false,
     error: "This route has no Work",
   });
+});
+
+test("hosted Page is local, carries its thread to bodies, and never rewrites the chat URL", async () => {
+  const f = await fixture();
+  door.ports = f.adapters;
+  const seen: { thread?: string; visible?: boolean } = {};
+  const inputs = f.adapters.bodies.inputs!;
+  f.adapters.bodies = {
+    ...f.adapters.bodies,
+    inputs: (body) => {
+      Object.assign(seen, { thread: body.thread, visible: body.visible });
+      return inputs(body);
+    },
+  };
+  const Hosted = mountRoute(f.graph, f.adapters);
+  const route = routeFromGraph(f.graph, f.adapters, "/mount-proof");
+  route.update({ component: () => <Hosted thread="conversation-one" url={false} /> });
+  const router = createRouter({
+    routeTree: root.addChildren([route]),
+    history: createMemoryHistory({ initialEntries: ["/mount-proof?cfm=999&thread=outside"] }),
+  });
+  await router.load();
+  const view = render(<RouterProvider router={router} />);
+  await view.findByLabelText("Solved");
+  expect(f.owner().view.read().page.cfm).toBe(400);
+  expect(seen).toEqual({ thread: "conversation-one", visible: true });
+  const href = router.history.location.href;
+  act(() => {
+    f.owner().view.setPage({ cfm: 501 });
+  });
+  await waitFor(() => expect(view.getByLabelText("Solved").textContent).toBe("1002"));
+  expect(router.history.location.href).toBe(href);
+});
+
+test("kernel pane furniture has one frame and folded visibility survives a new mount", async () => {
+  const f = await fixture();
+  f.adapters.furniture = {
+    inputs: () => ({ meta: "Fixture meta", actions: <button>Instrument action</button> }),
+  };
+  const inputs = f.adapters.bodies.inputs!;
+  const visible: boolean[] = [];
+  f.adapters.bodies = {
+    ...f.adapters.bodies,
+    inputs: (body) => {
+      visible.push(body.visible);
+      return inputs(body);
+    },
+  };
+  localStorage.setItem(
+    "pe.route.mount-proof.layout",
+    JSON.stringify({ inputs: { folded: true, sizes: { '["top","inputs"]': 245 } } }),
+  );
+  const first = await mounted(f);
+  expect(visible.at(-1)).toBe(false);
+  expect(first.view.getByRole("button", { name: "Expand Inputs" })).toBeTruthy();
+  fireEvent.click(first.view.getByRole("button", { name: "Expand Inputs" }));
+  await waitFor(() => expect(visible.at(-1)).toBe(true));
+  expect(first.view.container.querySelectorAll('[data-pane-id="inputs"]')).toHaveLength(1);
+  expect(first.view.getByText("Fixture meta")).toBeTruthy();
+  expect(first.view.getByRole("button", { name: "Instrument action" })).toBeTruthy();
+  expect(JSON.parse(localStorage.getItem("pe.route.mount-proof.layout")!).inputs.folded).toBe(
+    false,
+  );
+  first.view.unmount();
+  const second = await mounted(await fixture());
+  expect(second.view.queryByRole("button", { name: "Expand Inputs" })).toBeNull();
+});
+
+test("a declared History pane renders kernel invocations and checkpoints without a route body", async () => {
+  const f = await fixture();
+  f.graph.panes.wheel!.history = {};
+  const { wheel: _wheel, ...bodies } = f.adapters.bodies;
+  f.adapters.bodies = bodies;
+  const { view } = await mounted(f);
+  const history = within(view.getByLabelText("History"));
+  expect(history.getByText("No activity yet")).toBeTruthy();
+  fireEvent.click(view.getByRole("button", { name: "Edit" }));
+  await waitFor(() => expect(history.getByText(/edit.*invocation/)).toBeTruthy());
+  act(() => {
+    f.owner().timeline.append({ kind: "checkpoint", at: 12, receiptId: "checkpoint-one" });
+  });
+  expect(history.getByText(/checkpoint.*12/)).toBeTruthy();
+});
+
+test("hook-derived furniture uses the kernel frame callback and retains pane hotkeys", async () => {
+  const f = await fixture();
+  const inputs = f.adapters.bodies.inputs!;
+  const { inputs: _inputs, ...bodies } = f.adapters.bodies;
+  f.adapters.bodies = bodies;
+  f.adapters.frames = { inputs: (body, pane) => pane(inputs(body), { meta: "Dynamic furniture" }) };
+  const { view } = await mounted(f);
+  expect(view.container.querySelectorAll('[data-pane-id="inputs"]')).toHaveLength(1);
+  expect(view.getByText("Dynamic furniture")).toBeTruthy();
+  expect(view.getByLabelText("Solved")).toBeTruthy();
+});
+
+test("a standalone graph passes its addressed thread to its pane body", async () => {
+  const f = await fixture();
+  door.ports = f.adapters;
+  const inputs = f.adapters.bodies.inputs!;
+  let thread: string | undefined;
+  f.adapters.bodies = {
+    ...f.adapters.bodies,
+    inputs: (body) => {
+      thread = body.thread;
+      return inputs(body);
+    },
+  };
+  const route = routeFromGraph(f.graph, f.adapters, "/mount-proof");
+  const router = createRouter({
+    routeTree: root.addChildren([route]),
+    history: createMemoryHistory({ initialEntries: ["/mount-proof?thread=addressed-thread"] }),
+  });
+  await router.load();
+  const view = render(<RouterProvider router={router} />);
+  await view.findByLabelText("Solved");
+  expect(thread).toBe("addressed-thread");
+});
+
+test("shared History scopes receipts to exact Work, links Ops, deduplicates events and says read failures", async () => {
+  const f = await fixture();
+  const receiptFor = (id: string, work: WorkKey) =>
+    actionReceiptSchema.parse({
+      ...receipt(),
+      id,
+      consumes: [
+        {
+          kind: "work",
+          probe: { handle: { key: work, revision: 0 }, paths: [["rows"]] },
+          expected: {},
+        },
+      ],
+    });
+  let deliver!: ReadingDelivery;
+  f.graph.readings = {
+    ...f.graph.readings,
+    history: { kind: "use", source: "history", retire: "target" },
+  };
+  f.graph.panes.wheel!.history = { receipts: "history" };
+  f.graph.panes.wheel!.draws = [];
+  f.adapters.sources = {
+    ...f.adapters.sources,
+    history: {
+      kind: "use",
+      open: (_context, send) => {
+        deliver = send;
+        send({
+          kind: "complete",
+          revision: 1,
+          value: [
+            receiptFor("ours", key),
+            receiptFor("other", { binding: "host", route: "other", target: null }),
+          ],
+        });
+      },
+    },
+  };
+  const { view } = await mounted(f);
+  const link = await view.findByRole("link", { name: "takeoffs.initialize" });
+  expect(link.getAttribute("href")).toContain("actionId=ours");
+  expect(view.queryAllByRole("link", { name: "takeoffs.initialize" })).toHaveLength(1);
+  act(() => f.owner().timeline.append({ kind: "checkpoint", at: 77, receiptId: "ours" }));
+  expect(view.queryByText(/checkpoint.*77/)).toBeNull();
+  act(() => deliver({ kind: "failure", error: "receipt service unavailable" }));
+  expect(await view.findByText("receipt service unavailable")).toBeTruthy();
+});
+
+test("a History pane naming an absent reading is refused before mounting", async () => {
+  const f = await fixture();
+  f.graph.panes.wheel!.history = { receipts: "missing" };
+  const Route = mountRoute(f.graph, f.adapters);
+  const view = render(<Route />);
+  expect(view.getByRole("alert").textContent).toContain("panes.wheel.history.receipts");
+  expect(f.subscriptions()).toEqual({ subscriptions: 0, deltaSubscriptions: 0 });
 });

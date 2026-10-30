@@ -1,7 +1,6 @@
 import { Suspense } from "react";
 import type { PlaneViewport } from "@pe/agent-contracts";
 import { stageViewport } from "#/scene/stage-controller";
-import { Button } from "@pe/kit/lang/button";
 import { Switcher } from "@pe/kit/lang/switcher";
 import { LevelPlan } from "#/takeoff/level-plan";
 import { LevelTotals } from "#/takeoff/level-totals";
@@ -10,12 +9,8 @@ import { PictureReadout } from "@pe/kit/lang/readout";
 import { useAtlasWorkspace } from "#/takeoff/atlas-context";
 import { ScopeKeys } from "@pe/kit/keys";
 import { levelsOf } from "#/takeoff/plan";
-import { useTakeoffKernel } from "./kernel-context";
-import { useRouteSearch } from "#/route/activity";
 
-export function AtlasVisual() {
-  const kernel = useTakeoffKernel();
-  const search = useRouteSearch();
+export function AtlasVisual({ visible, thread }: { visible: boolean; thread?: string }) {
   const {
     store,
     world,
@@ -23,11 +18,9 @@ export function AtlasVisual() {
     tableState,
     zoneKey,
     cursor,
-    planOpen,
     level,
     planImage,
     setLevel,
-    setPlanOpen,
     stateOf,
     zoneCalls,
     selected,
@@ -40,9 +33,9 @@ export function AtlasVisual() {
     <Suspense fallback={<div className="t-small t-upper p-2 text-ink-2">reading plan…</div>}>
       <LevelPlan
         lease={{
-          thread: store.handle.thread ?? search.thread,
+          thread,
           visible:
-            planOpen &&
+            visible &&
             !!store.displayedCapture &&
             (store.source === "saved" || store.snapshot.state === "ready"),
           page: store.handle.page,
@@ -97,24 +90,6 @@ export function AtlasVisual() {
                   };
                 })}
               />
-
-              {/* Kernel panes fold at their own rail. Embedded Atlas retains its toolbar control. */}
-              {!kernel && (
-                <span className="hairline-l ml-1 flex items-center gap-1 pl-1">
-                  <Button
-                    kind="framed"
-                    label={planOpen ? "▴ hide plan" : "▾ show plan"}
-                    onClick={() => setPlanOpen(!planOpen)}
-                    reason={
-                      planOpen
-                        ? "collapse the plan — give the table the full height"
-                        : "show the plan"
-                    }
-                  >
-                    <span className="face-mono">{planOpen ? "▴ hide plan" : "▾ show plan"}</span>
-                  </Button>
-                </span>
-              )}
             </div>
           </>
         }

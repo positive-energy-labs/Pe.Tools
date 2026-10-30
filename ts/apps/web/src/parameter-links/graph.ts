@@ -1,3 +1,4 @@
+import { familyQueries } from "../../../../packages/mcps/src/shared/query-client";
 import { z } from "zod";
 import {
   familyCaptureSchema,
@@ -93,7 +94,7 @@ export function parameterLinksBinding(id: string, _row: unknown, scope: Paramete
 const guarded = z.object({ refusal: z.string().nullable().default(null) });
 const read = (label: string, evaluate: boolean, subject: "edit" | "suggestion" = "edit") =>
   queryVerb(
-    "parameter-links.read",
+    familyQueries["parameter-links.read"],
     { label, review: "none", input: guarded },
     {
       ready: (_, input) => input.refusal,

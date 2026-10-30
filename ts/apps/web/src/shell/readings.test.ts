@@ -21,7 +21,7 @@ const target = (openId = "A", session = "session"): ExecutionTarget => ({
 });
 const scope = (overrides: Partial<ReadingScope<Page, { amount: number }>> = {}) => ({
   target: target(),
-  workKey: "work-A",
+  workKey: { binding: "workspace" as const, route: "test", target: null, work: "work-A" },
   workRevision: 1,
   page: { filter: "all", pose: 0 },
   work: { amount: 1 },
@@ -111,7 +111,9 @@ describe("reading graph", () => {
     );
     const release = graph.mount(["reading"]);
     const old = read.attempts[0];
-    graph.update(scope({ workKey: "work-2" }));
+    graph.update(
+      scope({ workKey: { binding: "workspace", route: "test", target: null, work: "work-2" } }),
+    );
     graph.update(scope());
     done(old.deliver, 1);
     expect(graph.get("reading").current).toBe(false);

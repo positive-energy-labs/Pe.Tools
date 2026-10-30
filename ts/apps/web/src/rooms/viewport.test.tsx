@@ -5,6 +5,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { DEMO_PLAN, DEMO_ROOMS, DEMO_VIEW } from "./demo";
 import { roomsPageSchema, type RoomsPage } from "./graph";
 import { RoomsPlan } from "./plan";
+import { Pane } from "@pe/kit/lang/pane";
 import { roomRows } from "./table";
 
 afterEach(() => {
@@ -34,6 +35,11 @@ test("a null viewport fits without a write, wheel preserves its cursor point, an
     navigate = (next) => set((previous) => ({ ...previous, ...next }));
     return (
       <RoomsPlan
+        renderPane={(body, furniture) => (
+          <Pane picture {...furniture}>
+            {body}
+          </Pane>
+        )}
         rows={rows}
         plan={DEMO_PLAN}
         planRefusal={null}

@@ -3,7 +3,7 @@ import { RegistryContext } from "@effect/atom-react";
 import { useMemo, type ReactNode } from "react";
 import { elementKey, type SubjectKey } from "@pe/kit/lang/attention";
 import { AttentionScope } from "#/attention";
-import type { TakeoffsController } from "./controller";
+import type { TakeoffStore } from "./store";
 
 // Like /rooms, zones and rooms carry Pe region GUIDs, not Revit UniqueIds.
 export const regionKey = (guid: string): SubjectKey => `room:${guid}`;
@@ -14,7 +14,7 @@ export function TakeoffAttention({
   store,
   children,
 }: {
-  store: Pick<TakeoffsController, "handle" | "world" | "savedCapture">;
+  store: Pick<TakeoffStore, "handle" | "world" | "savedCapture">;
   children: ReactNode;
 }) {
   const target = store.handle.resolution;

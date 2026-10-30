@@ -5,7 +5,6 @@ import { createReadingGraph } from "#/shell/readings";
 import { familiesGraph, familiesPageSchema } from "./graph";
 import { familiesMatrixSource, type FamiliesObservation } from "./sources";
 import { FamiliesHostFixture } from "./host.fixture";
-import { workKey } from "@pe/agent-contracts";
 
 afterEach(() => vi.unstubAllGlobals());
 test("successive progress revisions fetch each immutable family once within their originating attempt", async () => {
@@ -25,7 +24,7 @@ test("successive progress revisions fetch each immutable family once within thei
     {
       scope: {
         target: { kind: "document", ref: host.target },
-        workKey: workKey(host.key),
+        workKey: host.key,
         workRevision: 1,
         work: host.doc,
         page: familiesPageSchema.parse({

@@ -5,6 +5,7 @@ import { expect, test, vi } from "vite-plus/test";
 import { DEMO_PLAN, DEMO_ROOMS, DEMO_VIEW } from "./demo";
 import { roomsPageSchema } from "./graph";
 import { RoomsPlan } from "./plan";
+import { Pane } from "@pe/kit/lang/pane";
 import { RoomsTable, roomRows } from "./table";
 
 test("stagedRoomWrites sends edit values per guid and never a suggestion", () => {
@@ -72,6 +73,11 @@ test("a locked stale region keeps both facts in the plan, legend and table, and 
         empty={{ says: "empty", exit: "none" }}
       />
       <RoomsPlan
+        renderPane={(body, furniture) => (
+          <Pane picture {...furniture}>
+            {body}
+          </Pane>
+        )}
         rows={rows}
         plan={DEMO_PLAN}
         planRefusal={null}

@@ -1,3 +1,4 @@
+import { scheduleQueries } from "../../../../packages/mcps/src/shared/query-client";
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import {
@@ -15,6 +16,7 @@ import {
   readingKey,
   START_FRESH_VERB,
   UNREADABLE_WORK,
+  OLDER_WORK,
   workKey,
   type ReadingRequest,
   type RouteGraph,
@@ -70,6 +72,7 @@ const graph = (
 type Doc = { openId: string; title: string; address: string | null };
 // The host's own unreadable-Work failure, answered instead of a snapshot for Work reads.
 let unreadable = false;
+let failureMessage = OLDER_WORK;
 // What the host's Work read answers; a test moves it to model a write or a newer revision landing.
 let workRead = { revision: 3, doc: { note: "hydrated" } };
 let world: { sessions: Record<string, Doc[]>; machine: Record<string, Doc[]> };
@@ -101,13 +104,14 @@ const frame = (request: ReadingRequest) => {
           ? undefined
           : workRead;
   if (value === undefined)
-    return { kind: "failure", key: readingKey(request), error: UNREADABLE_WORK } as never;
+    return { kind: "failure", key: readingKey(request), error: failureMessage } as never;
   return { kind: "snapshot", key: readingKey(request), value } as never;
 };
 const requests: ReadingRequest[] = [];
 beforeEach(() => {
   world = { sessions: {}, machine: {} };
   unreadable = false;
+  failureMessage = OLDER_WORK;
   workRead = { revision: 3, doc: { note: "hydrated" } };
   requests.length = 0;
   host.write.mockReset();
@@ -384,7 +388,7 @@ const subjectGraph: RouteGraph<Subject, { note: string }> = {
       { patches: () => [{ path: ["note"], value: "human" }] },
     ),
     fill: queryVerb(
-      "schedule.grid.snapshot",
+      scheduleQueries["schedule.grid.snapshot"],
       {
         label: "Fill",
         review: "none",
@@ -393,7 +397,7 @@ const subjectGraph: RouteGraph<Subject, { note: string }> = {
       { patches: (_scope, result) => [{ path: ["note"], value: (result as { id: string }).id }] },
     ),
     read: queryVerb(
-      "schedule.grid.snapshot",
+      scheduleQueries["schedule.grid.snapshot"],
       {
         label: "Read",
         review: "none",
@@ -722,11 +726,10 @@ test("unreadable Work lists start-fresh and never carry-over; a Work with nothin
   await waitFor(() => expect(broken.owner().snapshot().unreadable).toBeDefined());
   await waitFor(() => expect(host.salvage).toHaveBeenCalled());
   expect(broken.owner().stageVerbs()).toEqual(["note", START_FRESH_VERB]);
-  expect(broken.owner().control("work.salvage").refusal).toBe(
-    "Start fresh first; the Work cannot take a write yet",
-  );
+  expect(broken.owner().control("work.salvage").refusal).toBe(OLDER_WORK);
   broken.view.unmount();
   unreadable = false;
+  failureMessage = OLDER_WORK;
   host.salvage.mockResolvedValue(null);
   const plain = await mountSalvage(`${pin({ kind: "open", ref })}&ws=plain-${id}`);
   await waitFor(() => expect(plain.owner().snapshot().work).not.toBeNull());
@@ -842,3 +845,23 @@ test("a query that writes Work waits out a conflict; a plain read still runs", a
   expect(owner().control("fill").refusal).toBe("Work changed; review and retry");
   expect(owner().control("read").refusal).toBeNull();
 });
+
+test.each([UNREADABLE_WORK, "Host is unavailable (503)"])(
+  "K1.9/10: %s stays closed to writes with no recovery",
+  async (message) => {
+    unreadable = true;
+    failureMessage = message;
+    const ref = { session: "failure", openId: "doc" };
+    world.sessions = { failure: [{ openId: "doc", title: "Failed", address: DOC }] };
+    const ports = await probe(noted, pin({ kind: "open", ref }));
+    await waitFor(() => expect(ports().status.failure).toBe(message));
+    expect(ports().status.unreadable).toBe(false);
+    const key = ports().getSnapshot().workKey!;
+    expect(await ports().startFresh(key)).toMatchObject({ ok: false });
+    expect(
+      await ports().write(key, { patches: [], expectedRevision: 0, press: "p", kind: "apply" }),
+    ).toMatchObject({ ok: false, error: message });
+    expect(host.fresh).not.toHaveBeenCalled();
+    expect(host.write).not.toHaveBeenCalled();
+  },
+);

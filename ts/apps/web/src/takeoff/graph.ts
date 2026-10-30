@@ -8,11 +8,13 @@ import {
   takeoffsRouteState,
   type RouteGraph,
   type TakeoffsRouteDocument,
+  type TakeoffObservation,
 } from "@pe/agent-contracts";
 import { field, text } from "../../../../packages/agent-contracts/src/route-field";
 import { threadListFields } from "../../../../packages/agent-contracts/src/routes/shared";
 import { takeoffsAddress } from "../../../../packages/agent-contracts/src/routes/takeoffs";
 import { takeoffPageSchema } from "./actions";
+import { withEditBases } from "./projections";
 import { takeoffVerbs } from "./graph-actions";
 
 export const takeoffGraphPageSchema = takeoffPageSchema
@@ -32,9 +34,10 @@ export const takeoffGraph: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> =
   name: "Takeoffs",
   needs: "project",
   work: takeoffsRouteState.schema,
+  capture: "work",
+  workSubject: "work",
+  resetOnTarget: ["views", "zones", "r10", "stage", "level", "zone", "room", "viewport"],
   fields: {
-    // TODO: kernel target transitions must reset the route action scope (views/zones/r10/stage)
-    // and level/zone/room/viewport, as the embedded controller's resetTarget still does.
     threadSearch: { ...threadListFields.threadSearch, role: "query" },
     threadSort: { ...threadListFields.threadSort, role: "query" },
     level: { ...a.level, role: "selection", agent: "read" },
@@ -63,22 +66,15 @@ export const takeoffGraph: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> =
       groupOf: (key) => [takeoffEditAddress(key).roomId],
       nouns: ["room"],
       noun: "room edits",
-      // TODO: a kernel cell take needs a derived-patch hook to carry the first accepted room base.
-      // Reading a base early changes drift semantics when a later capture precedes the first edit.
-      admit: (doc, patches) =>
-        patches.some(
-          (patch) =>
-            patch.path[0] === "edits" &&
-            patch.path[2] === "edit" &&
-            patch.value !== undefined &&
-            !doc.bases[takeoffEditAddress(String(patch.path[1])).roomId],
-        )
-          ? {
-              code: "not-ready",
-              message:
-                "Edit this room first; kernel proposal take cannot yet record its first room baseline",
-            }
-          : null,
+      take: (doc, key, readings) => {
+        const observation = readings.snapshot?.value as TakeoffObservation | undefined;
+        if (!readings.snapshot?.current || observation?.kind !== "ready")
+          throw Error("Read the current document before accepting a room proposal");
+        const patches = withEditBases(doc, observation.capture.snapshot.world, [
+          { path: ["edits", key, "edit"], value: {} },
+        ]);
+        return patches.filter((patch) => patch.path[0] === "bases");
+      },
     },
     { segment: "adopt", groupOf: (key) => [key.slice(0, key.lastIndexOf(":"))], noun: "adoption" },
     {
@@ -166,8 +162,6 @@ export const takeoffGraph: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> =
       verbs: [],
     },
   },
-  // TODO: kernel layout declarations need persisted seam limits and folded-pane visibility
-  // for the viewport lease; the embedded Atlas still owns those device-state policies.
   layout: split(
     "takeoff-body",
     { axis: "v", sized: "start", size: 72 },
@@ -178,18 +172,34 @@ export const takeoffGraph: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> =
       gate("adopt", pane("adoption")),
       split(
         "takeoff-atlas",
-        { axis: "h", sized: "start", size: 288 },
+        { axis: "h", sized: "start", size: 288, minSize: 200 },
         pane("navigation"),
         split(
           "takeoff-main",
-          { axis: "v", sized: "start", size: 354 },
+          {
+            axis: "v",
+            sized: "start",
+            size: 354,
+            minSize: 174,
+            maxSize: 754,
+            minOtherSize: 220,
+            persist: "pe.takeoffs.plan-height",
+          },
           pane("plan"),
           split(
             "takeoff-lower",
             { axis: "v", sized: "end", size: 180 },
             split(
               "takeoff-table",
-              { axis: "h", sized: "end", size: 288 },
+              {
+                axis: "h",
+                sized: "end",
+                size: 288,
+                minSize: 240,
+                maxSize: 520,
+                minOtherSize: 360,
+                persist: "pe.takeoffs.room-panel-width",
+              },
               pane("rooms"),
               pane("room"),
             ),

@@ -132,14 +132,17 @@ export function schedulesSources(): Readonly<Record<string, ReadingSource>> {
           ((ctx.inputs.receipts?.value ?? []) as ActionReceipt[]).filter(
             (row) =>
               row.consumes.some(
-                (input) => input.kind === "work" && workKey(input.probe.handle.key) === ctx.workKey,
+                (input) =>
+                  input.kind === "work" &&
+                  workKey(input.probe.handle.key) === (ctx.workKey ? workKey(ctx.workKey) : null),
               ) ||
               (row.refusal?.kind === "stale_revision" &&
-                workKey(row.refusal.handle.key) === ctx.workKey) ||
+                workKey(row.refusal.handle.key) === (ctx.workKey ? workKey(ctx.workKey) : null)) ||
               (row.refusal?.kind === "stale" &&
                 row.refusal.consumed.some(
                   (input) =>
-                    input.kind === "work" && workKey(input.probe.handle.key) === ctx.workKey,
+                    input.kind === "work" &&
+                    workKey(input.probe.handle.key) === (ctx.workKey ? workKey(ctx.workKey) : null),
                 )),
           ),
         ),

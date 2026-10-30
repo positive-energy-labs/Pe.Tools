@@ -32,6 +32,13 @@ const bodies = Object.fromEntries(
 );
 
 beforeEach(() => {
+  const storage = new Map<string, string>();
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => storage.set(key, value),
+    removeItem: (key: string) => storage.delete(key),
+    clear: () => storage.clear(),
+  });
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
     new DOMRect(0, 0, 900, 600),
   );
@@ -39,6 +46,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   expect(readTeaching()).toEqual([]);
 });
 
@@ -189,4 +197,53 @@ test("an empty projection removes all regions and can mount again", () => {
     <GraphLayoutView layout={conditional} panes={panes} active={() => true} bodies={bodies} />,
   );
   expect(view.container.querySelectorAll("[data-pane-id]")).toHaveLength(3);
+});
+
+test("graph layout owns picture furniture and bounded persisted resizing", () => {
+  localStorage.setItem("graph-layout-policy", "350");
+  const declaration = split(
+    "policy",
+    {
+      axis: "h",
+      sized: "start",
+      size: 320,
+      minSize: 300,
+      maxSize: 360,
+      minOtherSize: 400,
+      persist: "graph-layout-policy",
+    },
+    pane("plan"),
+    pane("regions"),
+  );
+  const view = render(
+    <GraphLayoutView
+      layout={declaration}
+      panes={{
+        ...panes,
+        plan: { ...panes.plan, frame: { picture: true, scroll: "clip", flush: true } },
+      }}
+      active={() => true}
+      bodies={{
+        ...bodies,
+        plan: (frame) =>
+          frame("Plan body", {
+            meta: "Plan metadata",
+            legend: <span>Plan legend</span>,
+            actions: <button>Layer action</button>,
+          }),
+      }}
+    />,
+  );
+  const seam = view.getByRole("separator");
+  expect(seam.getAttribute("aria-valuemin")).toBe("300");
+  expect(seam.getAttribute("aria-valuemax")).toBe("360");
+  expect(seam.getAttribute("aria-valuenow")).toBe("350");
+  fireEvent.keyDown(seam, { key: "ArrowRight" });
+  expect(seam.getAttribute("aria-valuenow")).toBe("360");
+  expect(localStorage.getItem("graph-layout-policy")).toBe("360");
+  expect(view.container.querySelectorAll('[data-pane-id="plan"]')).toHaveLength(1);
+  expect(view.getByText("Plan legend")).toBeTruthy();
+  expect(view.getByText("Plan metadata")).toBeTruthy();
+  expect(view.getByRole("button", { name: "Layer action" })).toBeTruthy();
+  localStorage.removeItem("graph-layout-policy");
 });

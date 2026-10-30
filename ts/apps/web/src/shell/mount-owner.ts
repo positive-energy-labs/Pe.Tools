@@ -51,6 +51,10 @@ export const graphFields = <P, W>(graph: RouteGraph<P, W>) =>
   Object.entries(graph.fields) as [keyof P & string, FieldDecl & { role: FieldRole }][];
 
 export interface MountScope<W> {
+  /** Resolved before hydration, so first Work delivery does not reacquire document readings. */
+  workKey?: WorkKey;
+  failure?: string | null;
+  closed?: boolean;
   target: ExecutionTarget;
   work: { handle: WorkHandle; doc: W } | null;
   /** The mount sets this: a write was refused as stale and nothing newer has been read or accepted since. */
@@ -191,12 +195,25 @@ export function createGraphMount<P, W>(
   };
   const registry = makeAtomRegistry();
   const base = createRouteOwner(graph.key, registry);
-  const view = createViewOwner(base, schema, initialPage, { transition: graph.transition });
+  let readings: ReturnType<typeof createReadingGraph<P, W>>;
+  const view = createViewOwner(base, schema, initialPage, {
+    transition:
+      graph.transition &&
+      ((current, patch, origin) =>
+        graph.transition!(current, patch, origin, {
+          readings: readings
+            ? Object.fromEntries(Object.keys(graph.readings).map((id) => [id, readings.get(id)]))
+            : {},
+        })),
+  });
   let raw = adapters.getSnapshot();
   let scope = raw;
   // One count per Target/Work-key change: a verb's result is admitted only into the generation it started in.
   let generation = 0;
-  let scopeId = canonicalRouteInput([raw.target, raw.work ? workKey(raw.work.handle.key) : null]);
+  let scopeId = canonicalRouteInput([
+    raw.target,
+    raw.workKey ? workKey(raw.workKey) : raw.work ? workKey(raw.work.handle.key) : null,
+  ]);
   // One Work per mount at a time: the stale write's key and the revision it was refused against.
   let conflict: { work: string; revision: number } | null = null;
   let disposed = false;
@@ -221,13 +238,14 @@ export function createGraphMount<P, W>(
   const paneRows = new Map<string, unknown>();
   const results = new Map<string, InvocationResult>();
   const unsettledWorks = new Map<string, WorkKey | null>();
+  const sequenceReceipts = new Map<string, ActionReceipt[]>();
   let active: string | null = null;
   let activeOrigin = "";
   let connected = false;
   let releases: (() => void)[] = [];
   const readScope = () => ({
     target: scope.target,
-    workKey: scope.work ? workKey(scope.work.handle.key) : null,
+    workKey: scope.workKey ?? scope.work?.handle.key ?? null,
     workRevision: scope.work?.handle.revision ?? null,
     work: scope.work?.doc ?? null,
     page: view.read().page,
@@ -235,7 +253,6 @@ export function createGraphMount<P, W>(
   // Page is a built-in graph input, not a host reading or a second writable Page.
   const needsPage =
     !graph.readings.page && Object.values(graph.readings).some((r) => r.deps?.includes("page"));
-  let readings: ReturnType<typeof createReadingGraph<P, W>>;
   try {
     readings = createReadingGraph(
       {
@@ -369,7 +386,12 @@ export function createGraphMount<P, W>(
     notify();
     return result;
   };
-  const acceptReceipt = (receipt: ActionReceipt, key: WorkKey | null, press?: string) => {
+  const acceptReceipt = (
+    receipt: ActionReceipt,
+    key: WorkKey | null,
+    press?: string,
+    invalidate = true,
+  ) => {
     if (disposed) return;
     if (receipt.state === "waiting" || receipt.state === "running") return;
     key = unsettledWorks.has(receipt.id)
@@ -379,7 +401,7 @@ export function createGraphMount<P, W>(
         : key;
     unsettledWorks.delete(receipt.id);
     const declaration = commands[receipt.key as keyof typeof commands];
-    readings.acceptReceipt(receipt, declaration?.dirties ?? []);
+    if (invalidate) readings.acceptReceipt(receipt, declaration?.dirties ?? []);
     const identity = key ? workKey(key) : null;
     if (key) journalFor(key);
     const stamp = canonicalRouteInput([receipt.id, receipt.state, receipt.effects]);
@@ -395,8 +417,17 @@ export function createGraphMount<P, W>(
   };
   const context: VerbContext<"human"> = {
     caller: "human",
+    receipt: (receipt, press) => {
+      acceptReceipt(receipt, dispatches.get(press)?.key ?? null, press, false);
+      sequenceReceipts.set(press, [...(sequenceReceipts.get(press) ?? []), receipt]);
+    },
+    page: () => view.read().page as Record<string, unknown>,
+    readings: () =>
+      Object.fromEntries(Object.keys(graph.readings).map((id) => [id, readings.get(id)])),
     subjects: { ...adapters.subjects, ...kernel.subjects },
     snapshot: (verb) => ({
+      failure: scope.failure,
+      closed: scope.closed,
       target: scope.target,
       work: scope.work,
       unreadable: scope.unreadable ?? null,
@@ -483,7 +514,18 @@ export function createGraphMount<P, W>(
       reviews.delete(id);
       if (result.press) {
         const dispatch = dispatches.get(result.press);
-        if (dispatch && result.state === "done" && result.kind === "query") {
+        if (
+          dispatch &&
+          result.state === "done" &&
+          (result.kind === "command" || result.kind === "rpc" || result.kind === "page") &&
+          result.page
+        )
+          view.setPage(result.page as Partial<P>);
+        if (
+          dispatch &&
+          result.state === "done" &&
+          (result.kind === "query" || result.kind === "rpc")
+        ) {
           timeline.append({
             kind: "receipt",
             at: Date.now(),
@@ -513,10 +555,17 @@ export function createGraphMount<P, W>(
             basis: { workKey: workKey(result.acknowledgement.key) },
           });
         if (dispatch) {
+          // This press's own intermediate effects retire readings after the ordered reviews end.
+          for (const receipt of sequenceReceipts.get(result.press) ?? [])
+            readings.acceptReceipt(
+              receipt,
+              commands[receipt.key as keyof typeof commands]?.dirties ?? [],
+            );
+          sequenceReceipts.delete(result.press);
           if (
             "receipt" in result &&
             result.receipt &&
-            !("kind" in result && result.kind === "query")
+            !("kind" in result && (result.kind === "query" || result.kind === "rpc"))
           ) {
             if (["detached", "waiting", "running"].includes(result.receipt.state))
               unsettledWorks.set(result.receipt.id, dispatch.key);
@@ -715,12 +764,32 @@ export function createGraphMount<P, W>(
       if (connected || disposed) return () => {};
       connected = true;
       const update = () => {
+        const previousTarget = raw.target;
         raw = adapters.getSnapshot();
         const seen = raw.work;
-        const id = canonicalRouteInput([raw.target, seen ? workKey(seen.handle.key) : null]);
+        const id = canonicalRouteInput([
+          raw.target,
+          raw.workKey ? workKey(raw.workKey) : seen ? workKey(seen.handle.key) : null,
+        ]);
         if (id !== scopeId) {
           scopeId = id;
           generation++;
+        }
+        if (
+          previousTarget.kind !== "host" &&
+          canonicalRouteInput(previousTarget) !== canonicalRouteInput(raw.target)
+        ) {
+          cancelReviews();
+          paneRows.clear();
+          results.clear();
+          present();
+          const reset = Object.fromEntries(
+            (graph.resetOnTarget ?? []).map((key) => [
+              key,
+              graph.fields[key].schema.parse(undefined),
+            ]),
+          );
+          if (Object.keys(reset).length) view.setPage(reset as Partial<P>);
         }
         // A newer read of the Work is the re-read that ends a conflict.
         if (

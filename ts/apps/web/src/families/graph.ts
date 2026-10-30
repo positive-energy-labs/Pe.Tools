@@ -1,3 +1,4 @@
+import { familiesQueries } from "../../../../packages/mcps/src/shared/query-client";
 import { z } from "zod";
 import {
   appliedScopeSchema,
@@ -241,7 +242,7 @@ export const familiesGraph: RouteGraph<FamiliesPage, FamiliesRouteDocument> = {
       },
     ),
     read: queryVerb(
-      "families.read",
+      familiesQueries["families.read"],
       {
         label: "Read families",
         review: "none",
@@ -252,7 +253,10 @@ export const familiesGraph: RouteGraph<FamiliesPage, FamiliesRouteDocument> = {
       {
         ready: (_, input) => input.refusal,
         intent: (_, input) => input.request,
-        cancel: { key: "families.cancel-read", input: (request) => ({ readId: request.readId }) },
+        cancel: {
+          key: familiesQueries["families.cancel-read"],
+          input: (request) => ({ readId: request.readId }),
+        },
         expectedRevision: (scope, value) =>
           familiesObservationSchema.parse(value).envelope?.revision ??
           scope.snapshot.work!.handle.revision,
@@ -265,7 +269,7 @@ export const familiesGraph: RouteGraph<FamiliesPage, FamiliesRouteDocument> = {
       },
     ),
     "cancel-read": queryVerb(
-      "families.cancel-read",
+      familiesQueries["families.cancel-read"],
       {
         label: "Stop family read",
         review: "none",

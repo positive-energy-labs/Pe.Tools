@@ -1,21 +1,15 @@
 import { routeAddress, takeoffDecisionKey } from "@pe/agent-contracts";
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import type { TableState } from "@pe/kit/table/model";
 import { visibleRows as viewRows } from "@pe/kit/table/view";
 import { useTableChips } from "#/components/anatomy";
 import type { ScopeKey } from "@pe/kit/keys";
-import {
-  atlasRoomState,
-  type AtlasRow as Row,
-  type TakeoffsController,
-} from "#/takeoff/controller";
+import { atlasRoomState, type AtlasRow as Row } from "./projections";
+import type { TakeoffStore } from "./store";
+import type { planOf } from "./plan";
 import { type RoomEdit, type ModelRoom, type ModelZone } from "#/takeoff/world";
-import { AtlasProvider } from "#/takeoff/atlas-context";
-import { AtlasWorkspace } from "#/takeoff/atlas-workspace";
 import { useAtlasColumns } from "#/takeoff/atlas-columns";
-import { planView, useOwnerCrops, usePlanImage } from "#/takeoff/plan-image";
-import { TakeoffAttention } from "./attention";
 
 export type Verdict = "accept" | "dismiss";
 
@@ -26,27 +20,24 @@ export interface AtlasActions {
 }
 
 export interface AtlasProps {
-  store: TakeoffsController;
-  headRail?: ReactNode;
-  sidePanel?: ReactNode;
-  readoutBand?: ReactNode;
+  store: TakeoffStore;
 }
 
-const createAtlasActions = (store: TakeoffsController): AtlasActions => ({
+const createAtlasActions = (store: TakeoffStore): AtlasActions => ({
   patch: (id, patch) => store.actions.patchRoom(id, patch),
   decide: (room, flag, verdict) => store.actions.decideRoom(room, flag, verdict),
   partition: () => store.actions.partition(),
 });
 
 export function useAtlasModel(
-  { store, headRail, sidePanel, readoutBand }: AtlasProps,
-  planImage: ReturnType<typeof useAtlasPlan>,
+  { store }: AtlasProps,
+  planImage: { image: ReturnType<typeof planOf> | null; note: string | null; error: string | null },
 ) {
   const world = store.world;
   const views = store.views;
   const live = store.source === "live";
   const busyState = store.busy;
-  const busy = busyState ? `${busyState.key} · ${busyState.seconds}s queued/running` : null;
+  const busy = busyState ? `${busyState.key} ? ${busyState.seconds}s queued/running` : null;
   const snapshot = store.snapshot;
   const geoReady = snapshot?.state === "ready";
   const actions = useMemo(() => createAtlasActions(store), [store]);
@@ -55,7 +46,6 @@ export function useAtlasModel(
   const cursor = store.cursor;
   // These are private widget mechanics. Remounting the Atlas intentionally resets them.
   const [fieldsMode, setFieldsMode] = useState<"columns" | "panel">("columns");
-  const [planOpen, setPlanOpen] = useState(true);
   const [tableState, setTableState] = useState<TableState>({
     sorts: [],
     query: "",
@@ -198,9 +188,6 @@ export function useAtlasModel(
 
   return {
     store,
-    headRail,
-    sidePanel,
-    readoutBand,
     world,
     live,
     busy,
@@ -212,14 +199,12 @@ export function useAtlasModel(
     cursor,
     fieldsMode,
     setFieldsMode,
-    planOpen,
     tableState,
     rows,
     visibleKeys,
     level,
     planImage,
     setLevel,
-    setPlanOpen,
     stateOf,
     zoneStates,
     zoneCalls,
@@ -245,42 +230,3 @@ export function useAtlasModel(
 }
 
 export type AtlasModel = ReturnType<typeof useAtlasModel>;
-
-function useAtlasPlan(store: TakeoffsController) {
-  const world = store.world;
-  const level =
-    store.level ||
-    world.lanes.find((lane) => lane.view === store.views[0])?.label ||
-    world.lanes[0]?.label ||
-    "";
-  const zones = world.zones.filter((zone) => zone.zone.lane.label === level);
-  const ownerCrops = useOwnerCrops(
-    store.handle.resolution,
-    zones.map((zone) => zone.zone.lane.view),
-  );
-  const pick = planView(
-    world.lanes,
-    store.views,
-    level,
-    zones.map((zone) => ({
-      view: zone.zone.lane.view,
-      name: zone.name,
-      ownerCrop: ownerCrops.crops
-        ? (ownerCrops.crops.get(`${zone.zone.lane.view}:${zone.zone.elementId}`) ?? null)
-        : undefined,
-    })),
-  );
-  const image = usePlanImage(store.handle.resolution, pick.view);
-  return { ...image, error: image.error ?? ownerCrops.error, note: pick.note ?? null };
-}
-
-export function Atlas(props: AtlasProps) {
-  const model = useAtlasModel(props, useAtlasPlan(props.store));
-  return (
-    <TakeoffAttention store={props.store}>
-      <AtlasProvider value={model}>
-        <AtlasWorkspace />
-      </AtlasProvider>
-    </TakeoffAttention>
-  );
-}

@@ -3,6 +3,19 @@ import type { History, RouteField } from "./route-field.ts";
 import type { RouteStatePatch } from "./route-state.ts";
 import type { RouteViewRefusalCode } from "./route-view.ts";
 
+/** Executable read entries are supplied by adapters; the kernel owns admission and validation. */
+export interface ReadEntry<S extends z.ZodType = z.ZodType, R = unknown> {
+  key: string;
+  input: S;
+  run(
+    input: z.output<S>,
+    context: {
+      target: import("./target.ts").ExecutionTarget;
+      work: import("./command.ts").WorkHandle | null;
+    },
+  ): Promise<R>;
+}
+
 export type FieldRole =
   | "subject"
   | "stage"
@@ -66,7 +79,8 @@ export type Chord = string;
  * no command.
  */
 export interface VerbDecl<S extends z.ZodType = z.ZodType> {
-  kind: "work" | "command" | "query" | "recovery";
+  caller?: "human" | "any";
+  kind: "work" | "command" | "query" | "recovery" | "page";
   /** Semantic command or host read identity, retained in the graph's agent projection. */
   does?: string;
   /** A query whose result names the subject Work the graph's `workSubject` field then selects. */
@@ -89,6 +103,15 @@ export type VerbPlacement<Row = never> =
   | (((row: Row) => readonly string[]) & { readonly ids: readonly string[] });
 
 export interface PaneDecl<Row = never> {
+  /** Presentation belongs to the kernel leaf, never a nested route-owned Pane. */
+  frame?: {
+    picture?: boolean;
+    scroll?: "auto" | "clip" | "visible";
+    flush?: boolean;
+    header?: false;
+  };
+  /** Render the kernel timeline, optionally joined to a declared receipt reading. */
+  history?: { receipts?: string };
   label: string;
   purpose: string;
   draws: readonly string[];
@@ -97,6 +120,11 @@ export interface PaneDecl<Row = never> {
 }
 
 export interface SplitOptions {
+  minSize?: number;
+  maxSize?: number;
+  minOtherSize?: number;
+  /** Device-only size persistence. Fold state is persisted by the mounted graph. */
+  persist?: string;
   axis: "h" | "v";
   sized: "start" | "end";
   size: number;
@@ -133,6 +161,9 @@ export type GraphTransition<P> = (
   current: Readonly<P>,
   patch: Readonly<Partial<P>>,
   origin: "page" | "action" | "pea" | "url" | "initial",
+  scope?: {
+    readings: Readonly<Record<string, { value?: unknown; current: boolean; status: string }>>;
+  },
 ) =>
   | { readonly patch: Partial<P> }
   | { readonly refusal: { readonly code: RouteViewRefusalCode; readonly message: string } };
@@ -143,6 +174,12 @@ export type CellVerbKind = (typeof CELL_VERB_KINDS)[number];
 
 /** One family of authored cells in a route's Work, as the Situation and the Chat head read it. */
 export interface CellsDecl<W = unknown> {
+  /** Extra patches accepted with a proposal, in the same CAS write and inverse journal step. */
+  take?: (
+    doc: W,
+    key: string,
+    readings: Readonly<Record<string, { value?: unknown; current: boolean }>>,
+  ) => readonly RouteStatePatch[];
   /** The Work segment holding the keyed cells; null = one root cell at `key` (`scope`, `launch`). */
   segment: string | null;
   key?: string;
@@ -216,6 +253,10 @@ export interface RouteGraph<P = Record<string, unknown>, W = unknown> {
    * Page selection. Empty falls back to the `?work=` carry, then the resolved document's Work.
    */
   workSubject?: keyof P & string;
+  /** A selected immutable capture closes every Work write, even when its document is open. */
+  capture?: keyof P & string;
+  /** Page scope owned by a Target; reset to field defaults on a subsequent Target change. */
+  resetOnTarget?: readonly (keyof P & string)[];
   /**
    * What the host's salvage read (`work.salvage`) carries over, as the patches this Work still
    * lacks: empty when everything is already here. The kernel applies them as one Work write.
@@ -433,6 +474,14 @@ export function validateRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphRef
         refuse("invalid-graph", "workSubject", `Unknown Page field '${graph.workSubject}'`);
     }
     for (const [id, verb] of Object.entries(graph.verbs)) {
+      if (!["work", "command", "query", "recovery", "page"].includes(verb.kind))
+        refuse("invalid-graph", `verbs.${id}.kind`, "Unknown verb kind");
+      if (verb.kind === "page" && (verb.review !== "none" || verb.subject || verb.does))
+        refuse(
+          "invalid-graph",
+          `verbs.${id}`,
+          "A Page verb has no Work subject, command, or review",
+        );
       if (verb.selects === "work" && graph.workSubject === undefined)
         refuse("invalid-graph", `verbs.${id}`, "A query that selects Work needs `workSubject`");
       if (verb.kind === "recovery")

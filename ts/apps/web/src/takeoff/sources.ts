@@ -1,3 +1,5 @@
+import { readTable } from "../../../../packages/mcps/src/shared/query-client";
+import { takeoffReads, readTakeoff } from "./queries";
 import { z } from "zod";
 import {
   actionReceiptSchema,
@@ -198,3 +200,7 @@ export function takeoffSources(): Readonly<Record<string, ReadingSource>> {
     }),
   };
 }
+
+export const takeoffQueries = readTable(takeoffReads, (key, input, ctx) =>
+  readTakeoff(key, input, ctx.target.kind === "document" ? ctx.target.ref : undefined),
+);

@@ -44,6 +44,7 @@ const spec: RouteStateSpec<typeof schema> = {
   title: "Journal spike",
   description: "S0b deterministic undo boundary",
   schema,
+  schemaVersion: 2,
   reconcileEdit: (draft) => {
     const doc = draft as Doc;
     return { ...doc, derived: doc.rows?.length ?? 0 };
@@ -255,12 +256,14 @@ test("S0b: real Work writes need exact inverses, verb-press identity and Pea pat
       .soft(stored.doc.settings.width, "Ctrl+Z must preserve Pea's width after its barrier")
       .toBe(99);
 
-    // Recovery returns a host-issued inverse for the unreadable preimage kept in the aside.
+    // Recovery returns a host-issued inverse for the unreadable preimage kept in the aside. Only a
+    // Work an OLDER schema wrote may be set aside (ADR 0026); unmarked or newer Work refuses.
     const unreadable = { legacy: true };
-    stored = { version: 1, revision: 7, doc: unreadable as unknown as Doc };
+    stored = { version: 1, schemaVersion: 1, revision: 7, doc: unreadable as unknown as Doc };
     expect(await writer.startFresh()).toBeNull();
     expect(asides.get(`${spec.route}:aside:1`)).toEqual({
       version: 1,
+      schemaVersion: 1,
       revision: 7,
       doc: unreadable,
     });

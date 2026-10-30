@@ -193,7 +193,9 @@ export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = {
       "rooms.merge",
       { ...command, label: "merge", input: merge },
       {
-        // TODO: shell/mount-owner needs a declared result-to-Page transition for the merged GUID selection.
+        lands: (result) => ({
+          selected: [z.object({ value: z.object({ guid: z.string() }) }).parse(result).value.guid],
+        }),
         waitSeconds: NATIVE_APPLY_WAIT_S,
         ready: (_, input) => input.refusal,
         prepare: (_, input) => input.request,
@@ -220,12 +222,14 @@ export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = {
     },
     plan: {
       label: "Plan",
+      frame: { picture: true, scroll: "clip", flush: true },
       purpose: "Inspect rooms, solver layers, callouts and sketch feedback",
       draws: ["snapshot", "trace", "plan"],
       verbs: feedbackVerbs,
     },
     feedback: {
       label: "Feedback",
+      frame: { scroll: "clip", flush: true },
       purpose: "Review anchored marks and notes",
       draws: ["snapshot"],
       verbs: feedbackVerbs,
@@ -238,6 +242,7 @@ export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = {
     },
     history: {
       label: "History",
+      history: { receipts: "receipts" },
       purpose: "Inspect this document's rooms receipts",
       draws: ["receipts"],
       verbs: [],

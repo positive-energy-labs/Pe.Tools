@@ -1,3 +1,5 @@
+import { readTable } from "../../../../packages/mcps/src/shared/query-client";
+import { spaceReads, readSpaceCapture } from "./reads";
 import type { ReadingSource, ReadingState } from "#/shell/readings";
 import { sceneData } from "#/scene/scene-data";
 import type { SceneMeshes } from "#/scene/types";
@@ -60,3 +62,7 @@ export const spaceSources: Readonly<Record<string, ReadingSource>> = {
     derive: ({ page }) => ((page as SpacePage).demo === "fixture" ? FIXTURE_ANSWERS : null),
   },
 };
+
+export const spaceQueries = readTable(spaceReads, (key, input, ctx) =>
+  readSpaceCapture(key, input, ctx.target.kind === "document" ? ctx.target.ref : undefined),
+);

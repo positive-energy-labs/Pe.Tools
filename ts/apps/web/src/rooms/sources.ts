@@ -14,7 +14,7 @@ import { requestJson, type JsonRequest } from "#/shell/readings-api";
 import { subscriptionSource } from "#/shell/readings-use";
 import type { ReadingContext, ReadingSource, UseSource } from "#/shell/readings";
 import type { TakeoffPlanImage } from "#/takeoff/level-plan";
-import type { PlanRefusal } from "#/takeoff/plan-image";
+import type { PlanRefusal } from "#/takeoff/plan";
 import { DEMO_PLAN, DEMO_ROOMS, DEMO_TRACE } from "./demo";
 import { NO_TRACE, type TraceRead } from "./layers";
 import type { RoomsPage } from "./graph";

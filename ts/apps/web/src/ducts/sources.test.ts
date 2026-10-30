@@ -23,7 +23,7 @@ afterEach(async () => {
 function fixture() {
   const scope: ReadingScope<DuctsPage, DuctsRouteDocument> = {
     target: { kind: "document", ref: { session: "s", openId: "d" } },
-    workKey: "ducts/open:s/d",
+    workKey: { binding: "open", route: "ducts", target: null, open: { session: "s", openId: "d" } },
     workRevision: host.revision,
     work: host.doc,
     page: ductsPageSchema.parse({ system: ["SA"] }),

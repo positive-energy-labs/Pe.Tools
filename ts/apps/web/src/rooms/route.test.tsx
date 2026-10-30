@@ -9,7 +9,7 @@ import {
 } from "@pe/host-contracts/operation-types";
 import { writeRouteWork } from "#/route/host";
 import { Route as root } from "../routes/__root";
-import { roomsAdapters, roomsRoute } from "./route";
+import { roomsAdapters, roomsRoute, RoomsRoute } from "./route";
 import { DEMO_VIEW } from "./demo";
 import { RoomsHostFixture } from "./host.fixture";
 
@@ -42,7 +42,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
-async function mounted(search: Record<string, string> = {}) {
+async function mounted(search: Record<string, string> = {}, hosted = false) {
   const wrap = vi.spyOn(roomsAdapters, "wrap");
   const url = `/rooms?${new URLSearchParams({ target: host.target.session, view: DEMO_VIEW, stage: "review", ...search })}`;
   const router = createRouter({
@@ -54,7 +54,11 @@ async function mounted(search: Record<string, string> = {}) {
   const Component = roomsRoute.options.component!;
   const view = render(
     <RouterContextProvider router={router}>
-      <Component />
+      {hosted ? (
+        <RoomsRoute url={false} thread="hosted-room-thread" target={host.target.session} />
+      ) : (
+        <Component />
+      )}
     </RouterContextProvider>,
   );
   await view.findByLabelText("Situation");
@@ -397,4 +401,30 @@ test("selection merge and anchored-mark merge each use the kernel review and exa
       key: "rooms.merge",
       input: { view: DEMO_VIEW, guids: ["fixture-1", "fixture-2"] },
     });
+});
+
+test("plan and feedback use one kernel frame each and History is the shared journal", async () => {
+  const { view, owner } = await mounted();
+  for (const id of ["plan", "feedback"]) {
+    const pane = view.container.querySelector(`[data-pane-id="${id}"]`)!;
+    expect(pane).toBeTruthy();
+    expect(pane.querySelector("[data-pane-id]")).toBeNull();
+  }
+  expect(view.getByRole("button", { name: "copy markdown" })).toBeTruthy();
+  act(() => {
+    owner().timeline.append({ kind: "checkpoint", at: 123, receiptId: "room-proof" });
+    owner().view.setPage({ stage: "history" });
+  });
+  expect(view.container.querySelector('[data-pane-id="history"]')).toBeTruthy();
+  expect(view.getByText(/checkpoint.*123/)).toBeTruthy();
+});
+
+test("hosted Rooms binds its explicit target and keeps Page out of the enclosing URL", async () => {
+  const { owner, router } = await mounted({ view: "foreign-view", stage: "history" }, true);
+  expect(owner().view.read().page.view).toBe("");
+  const href = router.history.location.href;
+  act(() => owner().view.setPage({ view: DEMO_VIEW, stage: "review" }));
+  await waitFor(() => expect(owner().view.read().page.view).toBe(DEMO_VIEW));
+  expect(router.history.location.href).toBe(href);
+  expect(owner().snapshot().target).toMatchObject({ kind: "document", ref: host.target });
 });

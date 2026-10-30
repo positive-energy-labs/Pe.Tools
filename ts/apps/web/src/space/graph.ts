@@ -1,3 +1,6 @@
+import { spaceQueries, matchingScene } from "./sources";
+import type { ReadingState } from "#/shell/readings";
+import { cutPolygons } from "./state";
 import { z } from "zod";
 import { gate, pane, split, routeAddress, type RouteGraph } from "@pe/agent-contracts";
 import { field } from "../../../../packages/agent-contracts/src/route-field";
@@ -61,7 +64,7 @@ export type SpacePage = z.output<typeof spacePageSchema>;
 
 const read = (key: SpaceReadKey, label: string) =>
   queryVerb(
-    key,
+    spaceQueries[key],
     {
       label,
       input: spaceReads[key].input,
@@ -164,7 +167,39 @@ export const spaceGraph: RouteGraph<SpacePage, null> = {
     },
   },
   pick: false,
-  transition: (current, patch, origin) => {
+  transition: (current, patch, origin, scope) => {
+    if (
+      origin !== "url" &&
+      origin !== "initial" &&
+      ["selected", "hidden", "isolated", "cuts"].some((key) => Object.hasOwn(patch, key))
+    ) {
+      const candidate = { ...current, ...patch };
+      const reading = scope?.readings.scene;
+      const loaded = reading ? matchingScene(current, reading as ReadingState) : null;
+      const named = [candidate.selected, ...candidate.hidden, ...(candidate.isolated ?? [])].filter(
+        (key): key is string => key !== null,
+      );
+      if (
+        (named.length || Object.hasOwn(patch, "cuts")) &&
+        (!loaded || loaded.id !== candidate.scene)
+      )
+        return {
+          refusal: refuse(
+            "not-ready",
+            "Load this scene before naming its elements or changing its cuts",
+          ),
+        };
+      const missing = named.find((key) => !loaded?.members.has(key));
+      if (missing)
+        return { refusal: refuse("not-ready", `Element is not in this loaded scene: ${missing}`) };
+      if (loaded && Object.hasOwn(patch, "cuts")) {
+        try {
+          cutPolygons(candidate.cuts, loaded.metadata.bounds);
+        } catch (cause) {
+          return { refusal: refuse("not-ready", (cause as Error).message) };
+        }
+      }
+    }
     const normalized =
       Object.hasOwn(patch, "mode") &&
       patch.mode !== current.mode &&

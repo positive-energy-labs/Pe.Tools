@@ -6,7 +6,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   bindWork,
-  UNREADABLE_WORK,
+  OLDER_WORK,
+  workKey,
   type RouteGraph,
   type RouteStateSpec,
   type RouteStateWriteResult,
@@ -47,6 +48,7 @@ export type WorkScopeStatus = Pick<
   closed: boolean;
   /** The host holds Work it cannot read: the kernel's start-fresh verb is the one recovery. */
   unreadable: boolean;
+  failure: string | null;
 };
 export interface WorkScopePorts<W> {
   getSnapshot(): MountScope<W>;
@@ -64,8 +66,13 @@ export interface WorkScopePorts<W> {
 export function useWorkScope<P, W>(
   graph: RouteGraph<P, W>,
   page?: Readonly<Partial<P>>,
+  binding?: { target?: string; work?: string; thread?: string; url?: boolean },
 ): WorkScopePorts<W> {
-  const carry = useRouteSearchSlice((search) => ({ target: search.target, work: search.work }));
+  const carry = useRouteSearchSlice((search) =>
+    binding
+      ? { target: binding.target, work: binding.work }
+      : { target: search.target, work: search.work },
+  );
   const field = graph.workSubject ? page?.[graph.workSubject] : undefined;
   // Page selection wins over the `?work=` carry: a pick moves the field, the carry stays behind.
   const work = typeof field === "string" && field ? field : carry.work;
@@ -83,8 +90,10 @@ export function useWorkScope<P, W>(
     target.targetProvenance,
   ]);
   const resolution = useMemo(() => target.resolution, [statusText]); // eslint-disable-line react-hooks/exhaustive-deps
+  const capture = !!graph.capture && !!(page?.[graph.capture] || carry.work);
   const closed =
-    !!graph.needs && ((workAddress !== null && resolvedAddress === null) || !!workOpen);
+    capture ||
+    (!!graph.needs && ((workAddress !== null && resolvedAddress === null) || !!workOpen));
   const bound =
     resolution.kind === "resolved" && resolution.target.kind === "document"
       ? resolution.target.ref
@@ -105,7 +114,8 @@ export function useWorkScope<P, W>(
   const atom = useMemo(() => (spec && readable ? docAtom(spec, key) : null), [spec, readable, key]);
   const reading = useOwned(appAtomRegistry, atom);
   // Only the host's own unreadable-Work failure offers recovery; a host that is down does not.
-  const unreadable = !closed && reading?.state === "failed" && reading.message === UNREADABLE_WORK;
+  const failure = reading?.state === "failed" ? reading.message : null;
+  const unreadable = !closed && failure === OLDER_WORK;
   // What the host set aside (or cannot read) for this Work; read again whenever its revision moves,
   // because start fresh and a carry-over both advance it.
   const [salvaged, setSalvaged] = useState<{ key: string; value: unknown } | null>(null);
@@ -128,16 +138,25 @@ export function useWorkScope<P, W>(
     const doc = seen?.doc ?? (empty?.success ? empty.data : undefined);
     // The raw set-aside value rides in the scope; the owner turns it into patches with the readings.
     return {
+      ...(spec && readable && { workKey: key }),
+      ...(closed && { closed: true }),
+      ...(failure && { failure }),
       target: resolution.kind === "resolved" ? resolution.target : { kind: "host" },
       work:
         seen && doc !== undefined ? { handle: { key, revision: seen.revision ?? 0 }, doc } : null,
       ...(unreadable && { unreadable: key }),
       ...(graph.salvage && salvaged?.key === keyText && { salvaged: salvaged.value }),
     };
-  }, [resolution, key, reading, graph, unreadable, salvaged, keyText]);
+  }, [resolution, key, reading, graph, unreadable, salvaged, keyText, spec, closed, failure]);
   // The mount captures its ports once; they read this store, so they never go stale.
   const store = useRef({ snapshot, closed, lost: "", listeners: new Set<() => void>() }).current;
-  Object.assign(store, { snapshot, closed, lost: target.bindingLost?.sentence ?? CLOSED_WORK });
+  Object.assign(store, {
+    snapshot,
+    closed,
+    lost: capture
+      ? "Saved captures are read-only; return to the live document to act"
+      : (target.bindingLost?.sentence ?? CLOSED_WORK),
+  });
   useEffect(() => {
     for (const notify of store.listeners) notify();
   }, [store, snapshot]);
@@ -152,13 +171,25 @@ export function useWorkScope<P, W>(
       },
       write: spec
         ? (key: WorkKey, write: WorkWrite) =>
-            store.closed
-              ? Promise.resolve(refused(store.lost, "Choose the document again to edit its Work"))
+            store.closed ||
+            store.snapshot.failure ||
+            !store.snapshot.workKey ||
+            workKey(key) !== workKey(store.snapshot.workKey)
+              ? Promise.resolve(
+                  refused(
+                    store.snapshot.failure ?? store.lost,
+                    "Read the current Work before writing",
+                  ),
+                )
               : writeRouteWork(key, write)
         : noWork,
       startFresh: spec
         ? async (key: WorkKey) => {
-            if (store.closed)
+            if (
+              store.closed ||
+              !store.snapshot.unreadable ||
+              workKey(key) !== workKey(store.snapshot.unreadable)
+            )
               return refused(store.lost, "Choose the document again to start its Work fresh");
             const result = await startFreshRouteWork(key);
             // The host advanced the revision: read the Work again.
@@ -180,8 +211,9 @@ export function useWorkScope<P, W>(
       targetProvenance: target.targetProvenance,
       closed,
       unreadable,
+      failure,
     }),
-    [statusText, closed, unreadable], // eslint-disable-line react-hooks/exhaustive-deps
+    [statusText, closed, unreadable, failure], // eslint-disable-line react-hooks/exhaustive-deps
   );
   return useMemo(() => ({ ...ports, status }), [ports, status]);
 }
