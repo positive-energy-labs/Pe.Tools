@@ -30,6 +30,7 @@ export function harnessClient(origin: string) {
     removeProvider: (id: string) => client.call("provider.remove", { params: { id } }),
     probe: (id: string) => client.call("provider.probe", { params: { id } }),
     openLogin: (id: string) => client.call("provider.login", { params: { id } }),
+    setAccess: (guarded: boolean) => client.call("access.set", { body: { guarded } }),
     threads: () => client.call("threads.list", {}),
     create: (providerId: string) => client.call("threads.create", { body: { providerId } }),
     body: (id: string, signal?: AbortSignal) =>

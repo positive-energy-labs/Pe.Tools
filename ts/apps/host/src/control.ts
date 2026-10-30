@@ -465,10 +465,8 @@ export function admitScript(
 /**
  * A script whose requested mode is ReadOnly (the contract default). Revit rolls back its changes to
  * the target document, so the target needs no write authority; the guard does not roll back a
- * commit on a sibling document, so `admitScript`'s K9 census still holds for every other open
- * document (ADR 0021 keeps it until a rollback group per open document is proven in Revit). It is
- * a read for a human and for a Page pinned by a human to this exact document. Pea scripts use
- * root-run consent because rollback does not prove sibling-document or filesystem purity.
+ * commit on a sibling document, so Pages and external devices still need sibling authority. It is
+ * a read for Pea, a human and a Page pinned by a human to this exact document.
  * External MCP keeps it a write. NoTransaction and WriteTransaction are always writes.
  */
 export const readsOnly = (key: string, input: unknown): boolean =>
@@ -489,7 +487,10 @@ export const consentedRead = (
   key: string,
   input: unknown,
   target?: DocumentRef,
-): boolean => caller.kind !== "pea" && readsOnly(key, input) && readConsent(caller, target);
+): boolean =>
+  // TODO(readonly-script-isolation): User ruling 2026-10-29: Pea ReadOnly scripts must run without
+  // approval. Revisit sibling-document/filesystem isolation later; do not restore blanket approval.
+  readsOnly(key, input) && readConsent(caller, target);
 
 /**
  * Admit one crossing at `door`, or throw `Refused`. Null means the crossing needs no basis: a
