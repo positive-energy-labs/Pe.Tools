@@ -208,7 +208,8 @@ test("a schedule workspaceId URL selects that subject's Work through the graph's
 
 test("the graph's native Read query executes at its declared row and selects its subject's Work", async () => {
   const { view } = await mounted();
-  const read = await view.findByRole("button", { name: "Read schedule" });
+  const row = await view.findByRole("option", { name: /Mechanical equipment/ });
+  const read = within(row).getByRole("button", { name: "Read schedule" });
   expect(
     read.getAttribute("aria-disabled"),
     "The kernel must bind schedule.grid.snapshot queries",
