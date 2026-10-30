@@ -97,6 +97,12 @@ export interface MountAdapters<P, W> {
   cell?(row: unknown, scope: BindingScope<P, W>): VerbSubject | null;
   /** Explicit captures only. Ordinary pane demand must not start an expensive operation. */
   verbReadings?: Readonly<Record<string, readonly string[]>>;
+  /**
+   * Readings whose change stales a verb's bound basis and its ticket. Distinct from `verbReadings`
+   * (captures the verb itself starts): a started capture changes version by the verb's own doing
+   * and never counts against it. Work revision and the Page epoch are always in the basis.
+   */
+  verbDepends?: Readonly<Record<string, readonly string[]>>;
   /** Native effects name their actual Work footprint; [[]] explicitly means the whole Work. */
   receiptPaths?(receipt: ActionReceipt, key: WorkKey): readonly RouteStatePatch["path"][];
   subscribeReceipts?(
@@ -115,7 +121,7 @@ export interface MountAdapters<P, W> {
 
 export function mountRefusals<P, W>(
   graph: RouteGraph<P, W>,
-  adapters?: Pick<MountAdapters<P, W>, "sources" | "verbReadings">,
+  adapters?: Pick<MountAdapters<P, W>, "sources" | "verbReadings" | "verbDepends">,
 ) {
   const refusals = validateRouteGraph(graph);
   // validateRouteGraph also handles malformed runtime inputs; do not traverse those again.
@@ -154,6 +160,11 @@ export function mountRefusals<P, W>(
     if (!graph.verbs[verb]) invalid(`verbReadings.${verb}`, `Unknown verb '${verb}'`);
     for (const id of readings)
       if (!graph.readings[id]) invalid(`verbReadings.${verb}`, `Unknown reading '${id}'`);
+  }
+  for (const [verb, readings] of Object.entries(adapters?.verbDepends ?? {})) {
+    if (!graph.verbs[verb]) invalid(`verbDepends.${verb}`, `Unknown verb '${verb}'`);
+    for (const id of readings)
+      if (!graph.readings[id]) invalid(`verbDepends.${verb}`, `Unknown reading '${id}'`);
   }
   return all;
 }
@@ -380,7 +391,7 @@ export function createGraphMount<P, W>(
       basis: {
         pageEpoch: view.read().epoch,
         // Only the readings this verb declares; see VerbContext.snapshot.
-        readings: verb ? basisFor(adapters.verbReadings?.[verb] ?? []) : basis(),
+        readings: verb ? basisFor(adapters.verbDepends?.[verb] ?? []) : basis(),
         unreadable: scope.unreadable ? workKey(scope.unreadable) : null,
         salvage: scope.salvage ?? null,
       },
