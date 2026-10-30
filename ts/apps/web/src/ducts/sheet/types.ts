@@ -4,7 +4,7 @@
  * the inputs surface. What is shared lives in this folder, once.
  */
 import type { ReactNode } from "react";
-import type { DuctsSheetInputs, DuctsSheetRequest } from "@pe/agent-contracts";
+import type { DuctsInputs, DuctsSheetEdits, DuctsSheetRequest } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
 import type { FanPort } from "./api";
@@ -12,20 +12,12 @@ import type { Closer } from "./closer";
 import type { OpenSheet } from "./use-sheet";
 import type { SheetBlocker, Tier } from "./tiers";
 
-/**
- * The defaults object the host pins into the basis hash, as the page can see it. R1 (kaitpw
- * 2026-10-28): in the long run a firm file on a network drive; today document Work `sheetDefaults`,
- * shown under "firm (file, not yet)".
- */
-export interface SheetDefaults {
-  /** The firm or route terminal drop; `SHIM` when the engine's placeholder is in force. */
-  terminalDropInWg: number | null;
-  terminalDropSource: string;
-  /** null until a sheet reports the gap its read was measured under. */
-  autoJoinMaxGapIn: number | null;
-  splitPolicy: "even" | "proportional";
-  /** The open sheet's basis hash: the one hash the defaults, inputs and tables are pinned into. */
-  basis: string | null;
+/** The open sheet's resolved criteria and firm layer (ducts LEDGER 2026-10-29), or null until a sheet's inputs land. */
+export type SheetCriteria = DuctsInputs["criteria"];
+export interface SheetFirm {
+  version: string;
+  path: string;
+  present: boolean;
 }
 
 export interface SheetViewProps {
@@ -42,9 +34,9 @@ export interface SheetViewProps {
   taken: readonly string[];
   slots: readonly { slot: string; covered: number; total: number }[];
   activeSlot: string;
-  defaults: SheetDefaults;
-  /** The project inputs (R2: one cell for every fan) as the host last merged them for the open sheet. */
-  projectInputs: DuctsSheetInputs;
+  /** Everything the open sheet priced from, resolved with sources; null until its inputs detail lands. */
+  inputs: DuctsInputs | null;
+  firm: SheetFirm | null;
   busy: boolean;
   loading: boolean;
   error: string | null;
@@ -54,13 +46,11 @@ export interface SheetViewProps {
   computeAll: () => void;
   cancel: () => void;
   refresh: () => void;
-  /** Project inputs edits through the open sheet (slot, split policy, typed cfm, typed drops, rulings). */
-  changeInputs: (inputs: DuctsSheetInputs) => void;
+  /** Edits on Work's own keys through the open sheet (typed cfm and drops, rulings, criteria); the host recomputes. */
+  changeInputs: (edits: DuctsSheetEdits) => void;
   /** A basis-bound calculation ruling on a heal proposal pair; never a Revit write. */
   rule: (proposal: NonNullable<DuctsSheetRequest["proposal"]>) => void;
   pickPath: (pathId: string) => void;
-  /** Write one field of the versioned defaults object to document Work. */
-  setDefaults: (next: Partial<Omit<SheetDefaults, "basis" | "terminalDropSource">>) => void;
   /** A blocker's closer: verb text, refusal (null when live), the inline input it needs and its
    * action; `typed` is the row's input value. `close` runs a live closer: a ruling on the pair
    * (a Revit heal write has no door yet, `SHIM(ducts-sheet-write)`), a typed drop, a typed cfm. */

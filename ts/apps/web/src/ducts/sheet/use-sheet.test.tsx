@@ -110,7 +110,7 @@ test("input recomputation writes the current fan and updates assumed roster ESP"
         basis: body.basis,
       });
     return json(
-      body.inputs
+      body.edits
         ? {
             ...fixture.overview,
             basis: "recomputed",
@@ -122,13 +122,13 @@ test("input recomputation writes the current fan and updates assumed roster ESP"
   const { result } = renderHook(() => useSheet(roster.target));
   await waitFor(() => expect(result.current.loading).toBe(false));
   await act(() => result.current.compute(roster.rows[0]!));
-  await act(() => result.current.changeInputs({ splitPolicy: "proportional" }));
+  await act(() => result.current.changeInputs({ criteria: { splitPolicy: "proportional" } }));
   expect(requests).toContainEqual({
     target: roster.target,
     mode: "fan",
     unitId: 14577391,
     portIndex: 2,
-    inputs: { splitPolicy: "proportional" },
+    edits: { criteria: { splitPolicy: "proportional" } },
   });
   expect(result.current.rows[0]?.requiredEspAssumedInWg).toBe(0.42);
   expect(result.current.sheet?.overview.basis).toBe("recomputed");

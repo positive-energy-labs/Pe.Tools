@@ -153,3 +153,85 @@ test("cell authorship comes from host provenance even when values match", () => 
     "unknown",
   );
 });
+
+const KINDS = [
+  { key: "erv", label: "erv", description: "fan: supply out c2 from supply in c4; exhaust out c3" },
+  { key: "other", label: "other", description: "passive: adds its drop and moves no air" },
+];
+
+test("a choice cell lists its options with what each means and commits the picked key", async () => {
+  const pick = vi.fn();
+  const { container } = render(
+    <StateCell value="erv" scale="row" choice={{ options: KINDS, current: "erv", pick }} />,
+  );
+  const trigger = container.querySelector<HTMLElement>(".dl-cell button")!;
+  expect(trigger.textContent).toContain("erv");
+  await act(async () => fireEvent.click(trigger));
+  expect(screen.getByText("passive: adds its drop and moves no air")).toBeTruthy();
+  await act(async () => fireEvent.click(screen.getByText("other")));
+  expect(pick).toHaveBeenCalledWith("other");
+});
+
+test("a Pea suggestion on a choice cell draws proposed with Pea's option, and take stages it", async () => {
+  const take = t("take");
+  const label = (v: unknown) => (v as { kind: string }).kind;
+  const drawn = cellFromDraft(
+    { suggestion: { value: { kind: "other" }, by: "pea" } },
+    { value: "erv", scale: "row" },
+    label,
+  );
+  const { container } = render(
+    <StateCell
+      {...drawn}
+      scale="row"
+      choice={{ options: KINDS, current: "erv", pick: vi.fn() }}
+      transitions={[take, t("unsuggest")]}
+    />,
+  );
+  const cell = container.querySelector<HTMLElement>(".dl-cell")!;
+  expect(cell.getAttribute("data-body")).toBe("proposed");
+  expect(cell.getAttribute("data-suggestion-author")).toBe("pea");
+  expect(cell.querySelector("button")!.textContent).toContain("other");
+  await act(async () => fireEvent.click(within(cell).getByRole("button", { name: "take" })));
+  expect(take.run).toHaveBeenCalledOnce();
+});
+
+test("a locked choice cell draws its value and opens no list", () => {
+  const { container } = render(
+    <StateCell
+      value="erv"
+      scale="row"
+      cap="locked"
+      capReason="wait for the element snapshot"
+      choice={{ options: KINDS, current: "erv", pick: vi.fn() }}
+    />,
+  );
+  expect(container.querySelector(".dl-cell")!.getAttribute("data-body")).toBe("locked");
+  expect(container.querySelector(".dl-cell button")).toBeNull();
+});
+
+test("a choice cell greys a disabled option with its reason and refuses to pick it", async () => {
+  const pick = vi.fn();
+  const options = [
+    { key: "erv", label: "erv", description: "fan: two ports" },
+    { key: "air-handler", label: "air-handler", description: "fan: one port", disabled: "no fan port: 2 outlets" },
+    { key: "other", label: "other", description: "passive" },
+  ];
+  const { container } = render(
+    <StateCell value="erv" scale="row" choice={{ options, current: "erv", pick }} />,
+  );
+  await act(async () => fireEvent.click(container.querySelector<HTMLElement>(".dl-cell button")!));
+  const row = screen.getByText("air-handler").closest<HTMLElement>("[role=option]")!;
+  expect(row.getAttribute("aria-disabled")).toBe("true");
+  expect(screen.getByText("no fan port: 2 outlets")).toBeTruthy();
+  expect(screen.queryByText("fan: one port")).toBeNull();
+  await act(async () => fireEvent.click(screen.getByText("air-handler")));
+  expect(pick).not.toHaveBeenCalled();
+  // The keyboard cannot reach it either: arrowing from erv skips to other.
+  const keys = screen.getByRole("listbox").parentElement!;
+  for (const key of ["ArrowDown", "ArrowDown", "ArrowDown", "Enter"])
+    await act(async () => fireEvent.keyDown(keys, { key }));
+  // Enter lands on the next enabled option, never the disabled one.
+  expect(pick).toHaveBeenCalledOnce();
+  expect(pick).toHaveBeenCalledWith("other");
+});

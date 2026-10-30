@@ -19,7 +19,7 @@ import { boundsOfPoints } from "#/scene/orbit";
 import { NAVIGATION_FIXTURE } from "../navigation.fixture";
 import type { ProtoProps } from "../proto/props";
 import type { OpenSheet } from "./use-sheet";
-import { SheetPicture } from "./picture";
+import { beyondPicture, SheetPicture } from "./picture";
 
 const seen = vi.hoisted(() => ({
   model: null as Parameters<typeof ModelPicture>[0] | null,
@@ -48,7 +48,7 @@ vi.mock("#/scene/stage-controller", async (original) => {
 afterEach(cleanup);
 
 const { snapshot } = NAVIGATION_FIXTURE;
-const [a, b] = snapshot.segments;
+const [a, b, c] = snapshot.segments;
 const sheet = {
   overview: { fan: { unitId: 999_001, portIndex: 0, mark: "AHU-1" }, totals: null, blockers: [] },
   inputs: null,
@@ -57,7 +57,7 @@ const sheet = {
   worstLegs: [{ pathId: "p1", legs: [{ elementId: a!.id }, { elementId: b!.id }] }],
 } as unknown as OpenSheet;
 
-function mount() {
+function mount(open: OpenSheet = sheet, layers = ["meshes", "halo", "findings"]) {
   if (typeof ResizeObserver === "undefined")
     vi.stubGlobal(
       "ResizeObserver",
@@ -76,7 +76,7 @@ function mount() {
   const pageOf = () => ({
     ...registry.get(page),
     viewport: null,
-    layers: ["meshes", "halo", "findings"],
+    layers,
     sceneView: { preset: "all", section: null },
     contextRadiusFt: 10,
     contextStyle: "glass",
@@ -100,7 +100,7 @@ function mount() {
         <SheetPicture
           props={props()}
           snapshot={snapshot}
-          sheet={sheet}
+          sheet={open}
           blockers={[]}
           renderPane={(body) => body}
         />
@@ -129,4 +129,46 @@ it("a hovered worst path lights its legs", () => {
   const { registry } = mount();
   act(() => setHovered(registry, { doc: "d", key: "path:p1" }));
   expect([...seen.model!.lit].sort((x, y) => x - y)).toEqual([a!.id, b!.id].sort((x, y) => x - y));
+});
+
+// Context only (kaitpw 2026-10-30, "yes show"): the network past a unit this fan stops at.
+const beyondSheet = {
+  ...sheet,
+  elements: {
+    walkedElementIds: [a!.id, b!.id],
+    beyond: [
+      {
+        unitId: 6105264,
+        mark: "RV-15",
+        elementIds: [b!.id, c!.id],
+        cuts: [{ id: c!.id, from: [0, 0, 0], at: [1, 0, 0] }],
+      },
+    ],
+  },
+} as unknown as OpenSheet;
+
+it("beyond draws only while context is, cut where the host cut it, and never on this fan's walk", () => {
+  const walked = new Set([a!.id, b!.id]);
+  const beyond = beyondSheet.elements!.beyond;
+  expect([...beyondPicture(beyond, walked, true).ids]).toEqual([c!.id]);
+  expect(beyondPicture(beyond, walked, true).markOf.get(c!.id)).toBe("RV-15");
+  expect([...beyondPicture(beyond, walked, true).cuts.keys()]).toEqual([c!.id]);
+  expect(beyondPicture(beyond, walked, false).ids.size).toBe(0);
+});
+
+it("hovering a context element names whose air it is and that this fan's calc leaves it out", () => {
+  const { registry } = mount(beyondSheet, ["meshes", "halo", "findings"]);
+  act(() => setHovered(registry, { doc: "d", key: elementKey(c!.id) }));
+  const readout = render(<>{seen.model!.readout}</>);
+  expect(readout.container.textContent).toContain(
+    "beyond RV-15 (its own fan); not in this fan's calc",
+  );
+  // A context element paints as the network stage's one-hop neighbour stub, never as a subject.
+  const paint = seen.model!.paint?.(null);
+  expect(
+    paint?.({ revitId: c!.id, focus: true, category: "Ducts" } as never),
+  ).toMatchObject({ tier: "stub", neighbour: true });
+  expect(paint?.({ revitId: a!.id, focus: true, category: "Ducts" } as never)).toMatchObject({
+    tier: "subject",
+  });
 });

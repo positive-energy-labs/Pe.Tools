@@ -751,13 +751,18 @@ export function useDuctsReading<T>(
             },
           );
           const latest = current.current;
+          // The consumer moved to another subject: this body is not shown, so a return to this
+          // subject must acquire again (the host's body cache makes that cheap).
+          if (latest.key !== at.key) return void attempts.current.delete(attempt);
           // HTTP may beat the ready SSE frame, but an older revision can never overwrite a newer body.
           if (
-            latest.key !== at.key ||
             latest.envelope?.revision !== decoded.nativeObservation.version ||
             !["idle", "loading", "ready"].includes(latest.envelope.state)
           )
             return;
+          // `body` holds one subject; once it is replaced by another, a return to this one
+          // (switching an edit slot A -> B -> A) must not find a settled attempt and wait forever.
+          attempts.current.delete(attempt);
           setBody({
             key: at.key!,
             data: decoded.data as T,

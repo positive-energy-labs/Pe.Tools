@@ -327,3 +327,27 @@ test("route transitions cap an ordered list and a write uses only its last syste
     verb("preview").run(ctxOf(ductsRouteState.schema.parse(flow)) as never),
   ).rejects.toThrow("No duct network in this snapshot carries Other");
 });
+
+test("the fan sheet's selection is admitted without the route's read; a system move still waits", () => {
+  const bound = bindDuctsManifest(() => null);
+  const sheet = manifest.page!.parse({ stage: "sheet" });
+  expect(bound.transition!(sheet, { selected: "14577391", issue: "" }, "page")).toMatchObject({
+    patch: { selected: "14577391" },
+  });
+  expect(bound.transition!(sheet, { system: ["SA"] }, "page")).toHaveProperty("refusal");
+  const network = manifest.page!.parse({ stage: "network" });
+  expect(bound.transition!(network, { selected: "14577391" }, "page")).toHaveProperty("refusal");
+});
+
+test("the review names criteria and kinds in the pane's words, a kind under its family and type", () => {
+  const cells = manifest.cells!;
+  const criteria = cells.find((c) => c.key === "criteria")!;
+  expect(criteria.show!({ velocityLimitFpm: { supply: 850, return: 700 }, splitPolicy: "even" })).toBe(
+    "velocity limit supply 850 return 700, split policy even",
+  );
+  // A cell holding one side names that side alone.
+  expect(criteria.show!({ velocityLimitFpm: { supply: 850 } })).toBe("velocity limit supply 850");
+  const kinds = cells.find((c) => c.segment === "kinds")!;
+  expect(kinds.groupOf(JSON.stringify(["Broan", "B210E75RT"]))).toEqual(["Broan", "B210E75RT"]);
+  expect(kinds.show!({ kind: "erv" })).toBe("erv");
+});

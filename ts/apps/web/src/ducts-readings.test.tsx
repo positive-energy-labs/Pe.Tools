@@ -163,3 +163,34 @@ test("browser retention has both count and byte bounds; failed loads are retryab
   );
   expect(await bodies.read("large", async () => decoded("large"))).toMatchObject({ bytes: 5 });
 });
+
+test("returning to an earlier subject (slot A -> B -> A) shows A again instead of waiting forever", async () => {
+  // The fan sheet's airflow slot switch: each slot is its own subject with its own revision.
+  const slotted = (slot: string): DuctsReadingRequest => ({ ...request, slots: { terminalFlow: slot } });
+  const revisionOf = (r: DuctsReadingRequest) =>
+    r.kind === "ducts-snapshot" ? (r.slots?.terminalFlow ?? "") : "";
+  const readings: Readings = {
+    subscribe: (subject, accept) => {
+      accept({
+        kind: "snapshot",
+        key: readingKey(subject),
+        value: envelope(revisionOf(subject as DuctsReadingRequest)),
+      });
+      return () => {};
+    },
+    dirty: () => {},
+  };
+  const fetchBody = vi.fn(async (_url: unknown, init?: RequestInit) =>
+    response(new Headers(init?.headers).get(DUCTS_BODY_VERSION_HEADER)!),
+  );
+  const hook = renderHook(
+    ({ slot }) => useDuctsReading<{ nodes: string[] }>(slotted(slot), readings, fetchBody as never),
+    { initialProps: { slot: "A" } },
+  );
+  await waitFor(() => expect(hook.result.current.data).toEqual({ nodes: ["A"] }));
+  hook.rerender({ slot: "B" });
+  await waitFor(() => expect(hook.result.current.data).toEqual({ nodes: ["B"] }));
+  hook.rerender({ slot: "A" });
+  await waitFor(() => expect(hook.result.current.data).toEqual({ nodes: ["A"] }));
+  expect(hook.result.current.pending).toBe(false);
+});

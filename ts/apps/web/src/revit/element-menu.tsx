@@ -44,6 +44,8 @@ export function useRevitSubjectProps() {
   );
 }
 const SELECTION_BOX_LABEL = "Selection Box in Revit";
+/** The right-click verb's name: it section-boxes Revit's {3D} view around the target. */
+const SECTION_BOX_LABEL = "Section Box";
 
 /** Box: select and section-box the {3D} view, then zoom to fit. Select: select only. */
 export async function showInRevit(
@@ -105,7 +107,7 @@ export async function showInRevit(
 }
 
 const VERBS = [
-  { key: "box", label: SELECTION_BOX_LABEL, selectOnly: false },
+  { key: "box", label: SECTION_BOX_LABEL, selectOnly: false },
   { key: "select", label: "Select", selectOnly: true },
 ] as const;
 
@@ -221,8 +223,8 @@ export function ElementMenu() {
           row={(verb) => ({
             label:
               verb.key === "box" ? (
-                <span>
-                  <span className="sr-only">{SELECTION_BOX_LABEL}</span>
+                <span className="inline-flex items-center gap-2">
+                  {SECTION_BOX_LABEL}
                   <span aria-hidden>
                     <SelectionBoxKey />
                   </span>
@@ -233,7 +235,7 @@ export function ElementMenu() {
             lead: verb.key === "select" ? <SelectInRevitIcon aria-hidden /> : undefined,
             title:
               verb.key === "box"
-                ? SELECTION_BOX_LABEL
+                ? SECTION_BOX_LABEL
                 : `select ${subject} in Revit; the view stays as it is`,
           })}
           onPick={(verb) => {

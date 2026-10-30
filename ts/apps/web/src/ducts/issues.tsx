@@ -84,6 +84,12 @@ export const ISSUE_KINDS: Record<IssueKind, IssueKindInfo> = {
     "An open end with a vacant, opposed connector within the auto-join gap.",
     5,
   ),
+  inline: kind(
+    "inline",
+    "inline part",
+    "A damper or fitting inside a duct, aligned with it, connected to nothing; priced in series on it.",
+    6,
+  ),
 };
 
 /**

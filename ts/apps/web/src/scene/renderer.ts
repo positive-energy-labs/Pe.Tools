@@ -415,6 +415,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     setVeilLook(veil, look.veil, contextRadiusFt);
     veil.subjectRim.value = look.depth.rim;
     veil.stubEndAlpha.value = look.subject.stubEndAlpha;
+    veil.stubContext.value.copy(grounds.context);
     contextMaterial.color.copy(ink);
     contextMaterial.opacity = look.veil.lineAlpha;
     outline.setWidths(look.outline);

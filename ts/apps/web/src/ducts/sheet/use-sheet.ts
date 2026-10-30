@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type {
   DocumentRef,
   DuctsSheetOverview,
-  DuctsSheetInputs,
+  DuctsSheetEdits,
   DuctsSheetRequest,
   DuctsRosterResponse,
 } from "@pe/agent-contracts";
@@ -69,7 +69,7 @@ export function useSheet(target: DocumentRef) {
   const overview = async (
     fan: Pick<FanPort, "unitId" | "portIndex">,
     signal: AbortSignal,
-    inputs?: DuctsSheetInputs,
+    edits?: DuctsSheetEdits,
     proposal?: DuctsSheetRequest["proposal"],
     basis?: string,
   ) => {
@@ -79,7 +79,7 @@ export function useSheet(target: DocumentRef) {
         mode: "fan",
         unitId: fan.unitId,
         portIndex: fan.portIndex,
-        inputs,
+        edits,
         proposal,
         basis,
       },
@@ -147,10 +147,11 @@ export function useSheet(target: DocumentRef) {
   };
   const compute = async (
     fan: Pick<FanPort, "unitId" | "portIndex">,
-    edits?: DuctsSheetInputs,
+    edits?: DuctsSheetEdits,
     proposal?: DuctsSheetRequest["proposal"],
-  ) => {
-    if (batchJob.current) return;
+    reread = false,
+  ): Promise<DuctsSheetOverview | null> => {
+    if (batchJob.current) return null;
     detailJob.current?.abort();
     const job = new AbortController();
     detailJob.current = job;
@@ -166,15 +167,33 @@ export function useSheet(target: DocumentRef) {
         proposal,
         proposal ? sheet?.overview.basis : undefined,
       );
-      if (edits?.slot) {
-        setActiveSlot(edits.slot);
+      // An edit moves the layers every fan is priced under: the roster's other rows go stale, so
+      // re-read them, then keep this fan's fresh numbers from the overview just computed.
+      if (edits || reread) {
         const roster = await readRoster(target, job.signal);
+        const fresh = base;
         if (!job.signal.aborted) {
-          setRows(roster.rows);
+          setRows(
+            roster.rows.map((row) =>
+              fanKey(row) === fanKey(fan)
+                ? {
+                    ...row,
+                    blockerCount: fresh.blockers.length,
+                    requiredEspInWg: fresh.totals?.requiredEspInWg ?? null,
+                    requiredEspAssumedInWg: fresh.totals?.requiredEspAssumedInWg ?? null,
+                    complete:
+                      fresh.totals != null &&
+                      fresh.totals.supply.complete &&
+                      fresh.totals.return.complete,
+                  }
+                : row,
+            ),
+          );
           setSlots(roster.slots);
+          setActiveSlot(roster.activeSlot);
         }
       }
-      if (job.signal.aborted) return;
+      if (job.signal.aborted) return null;
       setSheet(blank(base));
       const worst = (["supply", "return"] as const).flatMap((side) =>
         base!.totals?.[side].complete && base!.paths[side].paths[0]
@@ -196,6 +215,7 @@ export function useSheet(target: DocumentRef) {
           worstLegs,
           legs: worstLegs[0] ?? null,
         });
+      return job.signal.aborted ? null : base;
     } catch (cause) {
       if (!job.signal.aborted) {
         try {
@@ -208,6 +228,7 @@ export function useSheet(target: DocumentRef) {
     } finally {
       if (!job.signal.aborted) setBusy(false);
     }
+    return null;
   };
   const pickPath = async (pathId: string) => {
     if (!sheet || busy || batchJob.current) return;
@@ -270,10 +291,14 @@ export function useSheet(target: DocumentRef) {
     rows,
     slots,
     activeSlot,
-    changeInputs: (inputs: DuctsSheetInputs) =>
-      sheet?.overview.fan ? compute(sheet.overview.fan, inputs) : Promise.resolve(),
+    /** The open fan's overview after the edit lands; null when it failed or was cancelled. */
+    changeInputs: (edits: DuctsSheetEdits) =>
+      sheet?.overview.fan ? compute(sheet.overview.fan, edits) : Promise.resolve(null),
     ruleProposal: (proposal: NonNullable<DuctsSheetRequest["proposal"]>) =>
-      sheet?.overview.fan ? compute(sheet.overview.fan, undefined, proposal) : Promise.resolve(),
+      sheet?.overview.fan ? compute(sheet.overview.fan, undefined, proposal) : Promise.resolve(null),
+    /** Reprice the open fan over Work as it stands (after a Work write made elsewhere), roster included. */
+    recompute: () =>
+      sheet?.overview.fan ? compute(sheet.overview.fan, undefined, undefined, true) : Promise.resolve(null),
     sheet,
     error,
     loading,

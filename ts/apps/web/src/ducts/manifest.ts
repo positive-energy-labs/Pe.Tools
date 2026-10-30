@@ -50,6 +50,7 @@ import { healWords, networkWord, outcomeWords } from "@pe/ducts-domain/words";
 import { claimsForGroup } from "@pe/ducts-domain/claims";
 import { elementKey } from "@pe/kit/lang/attention";
 import { airflowOptions } from "./airflow";
+import { CRITERION_WORDS } from "./sheet/criterion-words";
 import { elementNamer } from "./claims";
 import { espWaits, fanRefusal, fanWords, holding, triage } from "./inbox-rows";
 import { activeSystem, capped, DUCTS_MULTI } from "./selection";
@@ -188,6 +189,11 @@ export function bindDuctsManifest(
       const candidate = { ...current, ...normalized.patch };
       const reading = read();
       if (!reading) {
+        // Exception to "moves validate against the displayed read": the fan sheet reads its own
+        // scoped snapshot (`sheet/mount.tsx`), never the route's, so every pick and footnote jump
+        // on it was refused here. Its selection is admitted unvalidated (the picture says when a
+        // subject is not drawn); a system move still waits for the route's read.
+        if (candidate.stage === "sheet" && !Object.hasOwn(patch, "system")) return normalized;
         // Page-only refreshes can fetch evidence; no named move borrows the previous target's read.
         if (Object.hasOwn(patch, "system") || Object.hasOwn(patch, "selected"))
           return {
@@ -600,6 +606,33 @@ export const manifest = presentation<
       nouns: ["slot"],
       noun: "parameter slots",
       show: (value) => String(value),
+    },
+    {
+      // Keyed JSON.stringify([family, type]): the family groups its types.
+      segment: "kinds",
+      groupOf: (key) => JSON.parse(key) as [string, string],
+      nouns: ["family", "type"],
+      noun: "unit kinds",
+      show: (value) => (value as { kind: string }).kind,
+    },
+    {
+      segment: null,
+      key: "criteria",
+      groupOf: () => ["design criteria"],
+      noun: "design criteria",
+      // "velocity limit supply 850, split policy even": only the sides the project layer holds.
+      show: (value) =>
+        Object.entries(value as Record<string, unknown>)
+          .map(([key, v]) => {
+            const word = CRITERION_WORDS[key as keyof typeof CRITERION_WORDS] ?? key;
+            return v !== null && typeof v === "object"
+              ? `${word} ${Object.entries(v)
+                  .filter(([, n]) => n !== undefined)
+                  .map(([side, n]) => `${side} ${n}`)
+                  .join(" ")}`
+              : `${word} ${v}`;
+          })
+          .join(", "),
     },
   ]),
   // Both are host reads the route owns (`host.ts`) and provides to the verbs: the snapshot keyed on

@@ -25,6 +25,7 @@ import { useLiveOrbit } from "@pe/kit/lang/live-orbit";
 import type { Chord } from "@pe/kit/keys";
 import { PictureReadout } from "@pe/kit/lang/readout";
 import { nameOrFallback } from "@pe/kit/lang/subject-text";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
 import { toggleLayer, type PicturePage } from "@pe/agent-contracts";
 import {
@@ -186,6 +187,16 @@ export const markPick = (target: IssueTarget) =>
   target.subject
     ? { selected: target.key, issue: "" }
     : { selected: String(target.elementId), issue: target.key };
+
+/** What a jump to `key` selects and frames. An element frames itself, not the section a pick
+ * widens it to (a footnote names the element); a group (a run, an issue, a path) selects itself
+ * and frames its element leaves. */
+export function jumpSubject(key: SubjectKey, members: Members) {
+  const id = idOf(key);
+  if (Number.isFinite(id) && id > 0) return { selected: String(id), ids: new Set([id]) };
+  const ids = leavesOf(members, key).map(idOf);
+  return { selected: key as string, ids: new Set(ids.filter((n) => Number.isFinite(n) && n > 0)) };
+}
 
 const landPicture = (node: HTMLDivElement | null) => {
   if (node) land(node);
@@ -398,6 +409,7 @@ export function Picture<L extends string, F extends string>({
     return b && project && rect ? projectBounds(b, project, rect) : null;
   };
   const pick = (id: number | null) => {
+    setAbsent(null);
     content.onPick?.(id == null ? null : elementKey(id));
     setPage({ selected: id == null ? "" : String(id), issue: "" }, { history: "push" });
   };
@@ -423,8 +435,8 @@ export function Picture<L extends string, F extends string>({
   const [landed, setLanded] = useState<{ box: DOMRect | null; back: string; n: number } | null>(
     null,
   );
-  const viewOf = (stage: ReturnType<typeof useStage>, ids: ReadonlySet<number>) =>
-    picture === "model" ? stage.poseOf(boundsOfIds(read.meshes, content.lines, ids)) : null;
+  // A jump whose subject has neither meshes nor a centreline here says so instead of doing nothing.
+  const [absent, setAbsent] = useState<string | null>(null);
   const markLanding = (ids: ReadonlySet<number>, back: string) => () => {
     const host = pictureHost?.getBoundingClientRect();
     const box = onScreen(boundsOfIds(read.meshes, content.lines, ids));
@@ -444,15 +456,20 @@ export function Picture<L extends string, F extends string>({
   };
   const backWord = () => (pickedKey ? content.name(pickedKey) : "the previous view");
   const jumpTo = (stage: ReturnType<typeof useStage>, key: SubjectKey) => {
-    const id = idOf(key);
-    if (!Number.isFinite(id)) return;
-    const ids = selectionOf(id);
-    const view = viewOf(stage, ids);
-    const same = String(id) === page.selected;
+    const { selected: next, ids } = jumpSubject(key, members);
+    const same = next === page.selected;
+    const box = ids.size ? boundsOfIds(read.meshes, content.lines, ids) : null;
     setLanded(null);
-    if (!view) return same ? undefined : setPage({ selected: String(id), issue: "" });
+    setAbsent(
+      picture === "model" && !box
+        ? `${Number.isFinite(idOf(key)) ? idOf(key) : key} is not in this picture`
+        : null,
+    );
+    const view = picture === "model" && box ? stage.poseOf(box) : null;
+    if (!view)
+      return same ? undefined : setPage({ selected: next, issue: "" }, { history: "push" });
     landing.current = markLanding(ids, same ? "the previous view" : backWord());
-    setPage(same ? { viewport: view } : { selected: String(id), issue: "", viewport: view }, {
+    setPage(same ? { viewport: view } : { selected: next, issue: "", viewport: view }, {
       history: "push",
     });
   };
@@ -480,7 +497,10 @@ export function Picture<L extends string, F extends string>({
         host: pictureHost,
         selectedBounds: boundsOfIds(read.meshes, content.lines, selected),
         clearSelection: clearPick,
-        onHistoryStep: () => setLanded(null),
+        onHistoryStep: () => {
+          setLanded(null);
+          setAbsent(null);
+        },
       }}
     >
       {(stage) => {
@@ -563,8 +583,10 @@ export function Picture<L extends string, F extends string>({
               className="relative flex size-full min-h-0 flex-col"
               onPointerDownCapture={(e) => {
                 // A gesture is the eye moving on: the landing marks and the way back go.
-                if (landed && !(e.target as Element).closest("[data-picture-readout]"))
-                  setLanded(null);
+                if (!(e.target as Element).closest("[data-picture-readout]")) {
+                  if (landed) setLanded(null);
+                  if (absent) setAbsent(null);
+                }
               }}
               onWheelCapture={(e) => {
                 // A pending native read withholds element actions, not local camera movement.
@@ -575,6 +597,13 @@ export function Picture<L extends string, F extends string>({
             >
               {picture === "model" || !flat ? model : flat.render("main", readout)}
 
+              {absent ? (
+                // The readout is a floater that may sit collapsed: the answer stands on the picture,
+                // where ModelPicture's own pick refusals stand.
+                <div data-picture-absent="" className="pointer-events-none absolute top-1 left-2">
+                  <OutcomeLine kind="advisory" label={absent} />
+                </div>
+              ) : null}
               {landed?.box ? (
                 <div
                   aria-hidden

@@ -98,7 +98,9 @@
             "knownInWg": 0,
             "complete": false,
             "legCount": 15,
-            "blockerIds": ["inferred-join:14122436:1"]
+            "blockerIds": [
+              "inferred-join:14122436:1"
+            ]
           }
         ],
         "rest": 0
@@ -145,13 +147,64 @@
     },
     "basis": "muas-fixture-basis",
     "kind": "inputs",
-    "inputs": [
-      {
-        "name": "allowance",
-        "value": 0.15,
-        "source": "typed fixture"
-      }
-    ],
+    "inputs": {
+      "terminals": {},
+      "units": {},
+      "components": {},
+      "rulings": {
+        "joins": [],
+        "ends": []
+      },
+      "criteria": {
+        "velocityLimitFpm": {
+          "supply": {
+            "value": 900,
+            "source": "firm",
+            "ref": "test"
+          },
+          "return": {
+            "value": 700,
+            "source": "firm",
+            "ref": "test"
+          }
+        },
+        "terminalDropInWg": {
+          "value": 0.03,
+          "source": "firm",
+          "ref": "test"
+        },
+        "autoJoinGapIn": {
+          "value": 3,
+          "source": "firm",
+          "ref": "test"
+        },
+        "healBoxIn": {
+          "value": 36,
+          "source": "firm",
+          "ref": "test"
+        },
+        "splitPolicy": {
+          "value": "even",
+          "source": "firm",
+          "ref": "test"
+        },
+        "allowanceInWg": {
+          "supply": {
+            "value": 0.15,
+            "source": "project",
+            "ref": "test"
+          },
+          "return": {
+            "value": 0,
+            "source": "firm",
+            "ref": "test"
+          }
+        }
+      },
+      "tables": {},
+      "assignments": {},
+      "fittingDrops": {}
+    },
     "blockers": [
       {
         "id": "inferred-join:14122436:1",
@@ -166,7 +219,6 @@
         }
       }
     ],
-    "edits": {},
     "ends": [
       {
         "kind": "roster-fan-port",
@@ -177,7 +229,21 @@
           "portIndex": 0
         }
       }
-    ]
+    ],
+    "fittings": [],
+    "tableTitles": {},
+    "notes": [
+      {
+        "kind": "auto-join",
+        "text": "auto-joined 1:1 to 2:0 across 2.000 in",
+        "value": null
+      }
+    ],
+    "firm": {
+      "version": "test",
+      "path": "",
+      "present": false
+    }
   },
   "elements": {
     "target": {
@@ -186,7 +252,11 @@
     },
     "basis": "muas-fixture-basis",
     "kind": "elements",
-    "walkedElementIds": [14577391, 14122436]
+    "walkedElementIds": [
+      14577391,
+      14122436
+    ],
+    "beyond": []
   },
   "legs": {
     "target": {

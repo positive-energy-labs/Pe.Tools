@@ -5,7 +5,7 @@
  * slot choice). `preview`: a Revit geometry write, previewed as ghost geometry, then consented.
  * One-click calc is "every gap at taken or accepted": a count going to zero, not a stage sequence.
  */
-import type { DuctsSheetOverview, DuctsSheetResponse } from "@pe/agent-contracts";
+import type { DuctsSheetOverview, DuctsSheetResponse, SheetNote } from "@pe/agent-contracts";
 import { verdictInk } from "@pe/kit/table/cells";
 
 export type Tier = "taken" | "accept" | "preview";
@@ -70,16 +70,9 @@ export function tierCounts(blockers: readonly (Compact | Detailed)[]): Record<Ti
   return counts;
 }
 
-type Input = { name: string; value: number | string | null; source: string };
-/** The closures the engine took silently, as the inputs detail records them: each is one `taken`. */
-export function takenClosures(inputs: readonly Input[]): string[] {
-  return inputs.flatMap((input) =>
-    input.source === "default auto-join"
-      ? [input.name]
-      : /^(firm default|route settings)/.test(input.source)
-        ? [`${input.name} ${input.value ?? ""} (${input.source})`.trim()]
-        : [],
-  );
+/** The closures the engine took silently, as the inputs detail's notes record them: each is one `taken`. */
+export function takenClosures(notes: readonly SheetNote[]): string[] {
+  return notes.filter((n) => n.kind === "auto-join").map((n) => n.text);
 }
 
 /** A tier's ink through the three-state verdict tones the claim pins already wear. */
