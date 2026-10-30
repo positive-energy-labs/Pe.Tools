@@ -7,6 +7,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
+import { UNREADABLE_WORK } from "@pe/agent-contracts";
 import type { RouteGraph, VerbDecl } from "@pe/agent-contracts";
 import { Route as rootRoute } from "../routes/__root";
 import { createRoute } from "@tanstack/react-router";
@@ -503,6 +504,8 @@ function GraphSituation<P, W>({
               />
             </Label>
           ))}
+        {/* The host's own sentence for Work it cannot read; recovery is the kernel review beside it. */}
+        {owner.snapshot().unreadable && <span role="alert">{UNREADABLE_WORK}</span>}
         {/* The stage's verbs, then each kernel recovery only while its predicate holds. */}
         {owner.stageVerbs().map((id) => (
           <GraphVerb key={id} id={id} verb={owner.verbs[id]!} owner={owner} enabled={enabled} />
