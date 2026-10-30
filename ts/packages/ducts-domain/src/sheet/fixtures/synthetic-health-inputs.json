@@ -1,0 +1,5860 @@
+{
+ "9c70b50f-1323": {
+  "nodes": [
+   {
+    "id": 100,
+    "kind": "equipment",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": {
+       "elementId": 1,
+       "connector": 0
+      }
+     }
+    ]
+   },
+   {
+    "id": 200,
+    "kind": "terminal",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       8,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": {
+       "elementId": 2,
+       "connector": 1
+      }
+     }
+    ]
+   }
+  ],
+  "segments": [
+   {
+    "id": 1,
+    "shape": "round",
+    "diameterIn": 8,
+    "polyline": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      4,
+      0,
+      0
+     ]
+    ],
+    "lengthFt": 4,
+    "roughness": {
+     "valueFt": 0.0003
+    },
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": {
+       "elementId": 100,
+       "connector": 0
+      }
+     },
+     {
+      "index": 1,
+      "point": [
+       4,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": null
+     }
+    ]
+   },
+   {
+    "id": 2,
+    "shape": "round",
+    "diameterIn": 8,
+    "polyline": [
+     [
+      4.25,
+      0,
+      0
+     ],
+     [
+      8,
+      0,
+      0
+     ]
+    ],
+    "lengthFt": 3.75,
+    "roughness": {
+     "valueFt": 0.0003
+    },
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       4.25,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": null
+     },
+     {
+      "index": 1,
+      "point": [
+       8,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": {
+       "elementId": 200,
+       "connector": 0
+      }
+     }
+    ]
+   }
+  ]
+ },
+ "3cd0381b-1365": {
+  "nodes": [
+   {
+    "id": 100,
+    "kind": "equipment",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": {
+       "elementId": 1,
+       "connector": 0
+      }
+     }
+    ]
+   },
+   {
+    "id": 200,
+    "kind": "terminal",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       8,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": {
+       "elementId": 2,
+       "connector": 1
+      }
+     }
+    ]
+   }
+  ],
+  "segments": [
+   {
+    "id": 1,
+    "shape": "round",
+    "diameterIn": 8,
+    "polyline": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      4,
+      0,
+      0
+     ]
+    ],
+    "lengthFt": 4,
+    "roughness": {
+     "valueFt": 0.0003
+    },
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": {
+       "elementId": 100,
+       "connector": 0
+      }
+     },
+     {
+      "index": 1,
+      "point": [
+       4,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": null
+     }
+    ]
+   },
+   {
+    "id": 2,
+    "shape": "round",
+    "diameterIn": 8,
+    "polyline": [
+     [
+      4.2508333333333335,
+      0,
+      0
+     ],
+     [
+      8,
+      0,
+      0
+     ]
+    ],
+    "lengthFt": 3.7491666666666665,
+    "roughness": {
+     "valueFt": 0.0003
+    },
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       4.2508333333333335,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": null
+     },
+     {
+      "index": 1,
+      "point": [
+       8,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": {
+       "elementId": 200,
+       "connector": 0
+      }
+     }
+    ]
+   }
+  ]
+ },
+ "e5dfc37b-1341": {
+  "nodes": [
+   {
+    "id": 100,
+    "kind": "equipment",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": {
+       "elementId": 1,
+       "connector": 0
+      }
+     }
+    ]
+   },
+   {
+    "id": 200,
+    "kind": "terminal",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       8,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": {
+       "elementId": 2,
+       "connector": 1
+      }
+     }
+    ]
+   }
+  ],
+  "segments": [
+   {
+    "id": 1,
+    "shape": "round",
+    "diameterIn": 8,
+    "polyline": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      4,
+      0,
+      0
+     ]
+    ],
+    "lengthFt": 4,
+    "roughness": {
+     "valueFt": 0.0003
+    },
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": {
+       "elementId": 100,
+       "connector": 0
+      }
+     },
+     {
+      "index": 1,
+      "point": [
+       4,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": null
+     }
+    ]
+   },
+   {
+    "id": 2,
+    "shape": "round",
+    "diameterIn": 8,
+    "polyline": [
+     [
+      5,
+      0,
+      0
+     ],
+     [
+      8,
+      0,
+      0
+     ]
+    ],
+    "lengthFt": 3,
+    "roughness": {
+     "valueFt": 0.0003
+    },
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       5,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": {
+       "elementId": 999,
+       "connector": 0
+      }
+     },
+     {
+      "index": 1,
+      "point": [
+       8,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": {
+       "elementId": 200,
+       "connector": 0
+      }
+     }
+    ]
+   }
+  ]
+ },
+ "7e2c2b54-2189": {
+  "nodes": [
+   {
+    "id": 500,
+    "kind": "equipment",
+    "category": "",
+    "point": [
+     0,
+     0,
+     0
+    ],
+    "groupId": "g1",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "kind": "end",
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 51,
+       "connector": 0
+      },
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     },
+     {
+      "index": 1,
+      "kind": "end",
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 52,
+       "connector": 0
+      },
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     }
+    ]
+   },
+   {
+    "id": 54,
+    "kind": "terminal",
+    "category": "",
+    "point": [
+     0,
+     0,
+     0
+    ],
+    "groupId": "g1",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "kind": "end",
+      "point": [
+       20,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 53,
+       "connector": 1
+      },
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     }
+    ]
+   }
+  ],
+  "segments": [
+   {
+    "id": 51,
+    "kind": "duct",
+    "curveKind": "line",
+    "shape": "round",
+    "size": "6",
+    "diameterIn": 6,
+    "lengthFt": 5,
+    "polyline": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      -5,
+      0
+     ]
+    ],
+    "groupId": "g1",
+    "roughness": {
+     "valueFt": 0.0003,
+     "provenance": "revit-default"
+    },
+    "revit": {},
+    "connectors": [
+     {
+      "index": 0,
+      "kind": "end",
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 500,
+       "connector": 0
+      },
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     },
+     {
+      "index": 1,
+      "kind": "end",
+      "point": [
+       0,
+       -5,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": null,
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     }
+    ]
+   },
+   {
+    "id": 52,
+    "kind": "duct",
+    "curveKind": "line",
+    "shape": "round",
+    "size": "6",
+    "diameterIn": 6,
+    "lengthFt": 10,
+    "polyline": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      10,
+      0,
+      0
+     ]
+    ],
+    "groupId": "g1",
+    "roughness": {
+     "valueFt": 0.0003,
+     "provenance": "revit-default"
+    },
+    "revit": {},
+    "connectors": [
+     {
+      "index": 0,
+      "kind": "end",
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 500,
+       "connector": 1
+      },
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     },
+     {
+      "index": 1,
+      "kind": "end",
+      "point": [
+       10,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": null,
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     }
+    ]
+   },
+   {
+    "id": 53,
+    "kind": "duct",
+    "curveKind": "line",
+    "shape": "round",
+    "size": "6",
+    "diameterIn": 6,
+    "lengthFt": 10,
+    "polyline": [
+     [
+      10.033333333333333,
+      0,
+      0
+     ],
+     [
+      20,
+      0,
+      0
+     ]
+    ],
+    "groupId": "g1",
+    "roughness": {
+     "valueFt": 0.0003,
+     "provenance": "revit-default"
+    },
+    "revit": {},
+    "connectors": [
+     {
+      "index": 0,
+      "kind": "end",
+      "point": [
+       10.033333333333333,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": null,
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     },
+     {
+      "index": 1,
+      "kind": "end",
+      "point": [
+       20,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 54,
+       "connector": 0
+      },
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     }
+    ]
+   }
+  ]
+ },
+ "e7d06859-1980": {
+  "nodes": [
+   {
+    "id": 100,
+    "kind": "equipment",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 1,
+       "connector": 0
+      }
+     },
+     {
+      "index": 1,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "ReturnAir",
+      "connectedTo": {
+       "elementId": 102,
+       "connector": 0
+      }
+     }
+    ]
+   },
+   {
+    "id": 102,
+    "kind": "terminal",
+    "facts": [
+     {
+      "key": "flow",
+      "value": 100
+     }
+    ],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "ReturnAir",
+      "connectedTo": {
+       "elementId": 100,
+       "connector": 1
+      }
+     }
+    ]
+   },
+   {
+    "id": 200,
+    "kind": "terminal",
+    "facts": [
+     {
+      "key": "flow",
+      "value": 100
+     }
+    ],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       8,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 2,
+       "connector": 1
+      }
+     }
+    ]
+   }
+  ],
+  "segments": [
+   {
+    "id": 1,
+    "shape": "round",
+    "diameterIn": 8,
+    "polyline": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      4,
+      0,
+      0
+     ]
+    ],
+    "lengthFt": 4,
+    "roughness": {
+     "valueFt": 0.0003
+    },
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 100,
+       "connector": 0
+      }
+     },
+     {
+      "index": 1,
+      "point": [
+       4,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": null
+     }
+    ]
+   },
+   {
+    "id": 2,
+    "shape": "round",
+    "diameterIn": 8,
+    "polyline": [
+     [
+      5,
+      0,
+      0
+     ],
+     [
+      8,
+      0,
+      0
+     ]
+    ],
+    "lengthFt": 3,
+    "roughness": {
+     "valueFt": 0.0003
+    },
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       5,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": null
+     },
+     {
+      "index": 1,
+      "point": [
+       8,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 200,
+       "connector": 0
+      }
+     }
+    ]
+   }
+  ]
+ },
+ "aa0488f5-3585": {
+  "nodes": [
+   {
+    "id": 600,
+    "kind": "equipment",
+    "category": "",
+    "point": [
+     0,
+     0,
+     0
+    ],
+    "groupId": "g1",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "kind": "end",
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 61,
+       "connector": 0
+      },
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     },
+     {
+      "index": 1,
+      "kind": "end",
+      "point": [
+       -1,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 71,
+       "connector": 0
+      },
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     }
+    ]
+   },
+   {
+    "id": 70,
+    "kind": "terminal",
+    "category": "",
+    "point": [
+     0,
+     0,
+     0
+    ],
+    "groupId": "g1",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "kind": "end",
+      "point": [
+       10,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 61,
+       "connector": 1
+      },
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     }
+    ]
+   },
+   {
+    "id": 71,
+    "kind": "terminal",
+    "category": "",
+    "point": [
+     0,
+     0,
+     0
+    ],
+    "groupId": "g1",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "kind": "end",
+      "point": [
+       -1,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 600,
+       "connector": 1
+      },
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     }
+    ]
+   },
+   {
+    "id": 62,
+    "kind": "fitting",
+    "category": "",
+    "point": [
+     0,
+     0,
+     0
+    ],
+    "groupId": "g1",
+    "facts": [],
+    "partType": "TapAdjustable",
+    "connectors": [
+     {
+      "index": 0,
+      "kind": "curve",
+      "point": [
+       3,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 61,
+       "connector": 2
+      },
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     },
+     {
+      "index": 1,
+      "kind": "end",
+      "point": [
+       3,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 64,
+       "connector": 0
+      },
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     }
+    ]
+   },
+   {
+    "id": 63,
+    "kind": "fitting",
+    "category": "",
+    "point": [
+     0,
+     0,
+     0
+    ],
+    "groupId": "g1",
+    "facts": [],
+    "partType": "TapAdjustable",
+    "connectors": [
+     {
+      "index": 0,
+      "kind": "curve",
+      "point": [
+       7,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 61,
+       "connector": 3
+      },
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     },
+     {
+      "index": 1,
+      "kind": "end",
+      "point": [
+       7,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 65,
+       "connector": 0
+      },
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     }
+    ]
+   }
+  ],
+  "segments": [
+   {
+    "id": 61,
+    "kind": "duct",
+    "curveKind": "line",
+    "shape": "round",
+    "size": "6",
+    "diameterIn": 6,
+    "lengthFt": 10,
+    "polyline": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      10,
+      0,
+      0
+     ]
+    ],
+    "groupId": "g1",
+    "roughness": {
+     "valueFt": 0.0003,
+     "provenance": "revit-default"
+    },
+    "revit": {},
+    "connectors": [
+     {
+      "index": 0,
+      "kind": "end",
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 600,
+       "connector": 0
+      },
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     },
+     {
+      "index": 1,
+      "kind": "end",
+      "point": [
+       10,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 70,
+       "connector": 0
+      },
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     },
+     {
+      "index": 2,
+      "kind": "curve",
+      "point": [
+       3,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 62,
+       "connector": 0
+      },
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     },
+     {
+      "index": 3,
+      "kind": "curve",
+      "point": [
+       7,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 63,
+       "connector": 0
+      },
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     }
+    ]
+   },
+   {
+    "id": 64,
+    "kind": "duct",
+    "curveKind": "line",
+    "shape": "round",
+    "size": "6",
+    "diameterIn": 6,
+    "lengthFt": 5.5,
+    "polyline": [
+     [
+      3,
+      0,
+      0
+     ],
+     [
+      3,
+      4,
+      0
+     ],
+     [
+      4.5,
+      4,
+      0
+     ]
+    ],
+    "groupId": "g1",
+    "roughness": {
+     "valueFt": 0.0003,
+     "provenance": "revit-default"
+    },
+    "revit": {},
+    "connectors": [
+     {
+      "index": 0,
+      "kind": "end",
+      "point": [
+       3,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 62,
+       "connector": 1
+      },
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     },
+     {
+      "index": 1,
+      "kind": "end",
+      "point": [
+       4.5,
+       4,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": null,
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     }
+    ]
+   },
+   {
+    "id": 65,
+    "kind": "duct",
+    "curveKind": "line",
+    "shape": "round",
+    "size": "6",
+    "diameterIn": 6,
+    "lengthFt": 5.5,
+    "polyline": [
+     [
+      7,
+      0,
+      0
+     ],
+     [
+      7,
+      4,
+      0
+     ],
+     [
+      5.5,
+      4,
+      0
+     ]
+    ],
+    "groupId": "g1",
+    "roughness": {
+     "valueFt": 0.0003,
+     "provenance": "revit-default"
+    },
+    "revit": {},
+    "connectors": [
+     {
+      "index": 0,
+      "kind": "end",
+      "point": [
+       7,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 63,
+       "connector": 1
+      },
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     },
+     {
+      "index": 1,
+      "kind": "end",
+      "point": [
+       5.5,
+       4,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": null,
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     }
+    ]
+   }
+  ]
+ },
+ "25029363-2552": {
+  "nodes": [
+   {
+    "id": 100,
+    "kind": "equipment",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 1,
+       "connector": 0
+      }
+     },
+     {
+      "index": 1,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "ReturnAir",
+      "connectedTo": {
+       "elementId": 102,
+       "connector": 0
+      }
+     }
+    ]
+   },
+   {
+    "id": 102,
+    "kind": "terminal",
+    "facts": [
+     {
+      "key": "flow",
+      "value": 100
+     }
+    ],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "ReturnAir",
+      "connectedTo": {
+       "elementId": 100,
+       "connector": 1
+      }
+     }
+    ]
+   },
+   {
+    "id": 200,
+    "kind": "terminal",
+    "facts": [
+     {
+      "key": "flow",
+      "value": 100
+     }
+    ],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       8,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 2,
+       "connector": 1
+      }
+     }
+    ]
+   },
+   {
+    "id": 300,
+    "kind": "terminal",
+    "facts": [
+     {
+      "key": "flow",
+      "value": 50
+     }
+    ],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       5,
+       -5,
+       0
+      ],
+      "facing": [
+       0,
+       1,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 2,
+       "connector": 0
+      }
+     }
+    ]
+   },
+   {
+    "id": 400,
+    "kind": "terminal",
+    "facts": [
+     {
+      "key": "flow",
+      "value": 50
+     }
+    ],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       5,
+       5,
+       0
+      ],
+      "facing": [
+       0,
+       -1,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 2,
+       "connector": 1
+      }
+     }
+    ]
+   }
+  ],
+  "segments": [
+   {
+    "id": 1,
+    "shape": "round",
+    "diameterIn": 8,
+    "polyline": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      4,
+      0,
+      0
+     ]
+    ],
+    "lengthFt": 4,
+    "roughness": {
+     "valueFt": 0.0003
+    },
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 100,
+       "connector": 0
+      }
+     },
+     {
+      "index": 1,
+      "point": [
+       4,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": null
+     }
+    ]
+   },
+   {
+    "id": 2,
+    "shape": "round",
+    "diameterIn": 8,
+    "polyline": [
+     [
+      5,
+      -5,
+      0
+     ],
+     [
+      5,
+      5,
+      0
+     ]
+    ],
+    "lengthFt": 10,
+    "roughness": {
+     "valueFt": 0.0003
+    },
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       5,
+       -5,
+       0
+      ],
+      "facing": [
+       0,
+       -1,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 300,
+       "connector": 0
+      }
+     },
+     {
+      "index": 1,
+      "point": [
+       5,
+       5,
+       0
+      ],
+      "facing": [
+       0,
+       1,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 400,
+       "connector": 0
+      }
+     }
+    ]
+   }
+  ]
+ },
+ "42b45913-2247": {
+  "nodes": [
+   {
+    "id": 100,
+    "kind": "equipment",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 1,
+       "connector": 0
+      }
+     },
+     {
+      "index": 1,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "ReturnAir",
+      "connectedTo": {
+       "elementId": 102,
+       "connector": 0
+      }
+     }
+    ]
+   },
+   {
+    "id": 102,
+    "kind": "terminal",
+    "facts": [
+     {
+      "key": "flow",
+      "value": 100
+     }
+    ],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "ReturnAir",
+      "connectedTo": {
+       "elementId": 100,
+       "connector": 1
+      }
+     }
+    ]
+   },
+   {
+    "id": 200,
+    "kind": "terminal",
+    "facts": [
+     {
+      "key": "flow",
+      "value": 100
+     }
+    ],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       8,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 2,
+       "connector": 1
+      }
+     }
+    ]
+   },
+   {
+    "id": 900,
+    "kind": "cap",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       5,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 2,
+       "connector": 0
+      }
+     }
+    ]
+   }
+  ],
+  "segments": [
+   {
+    "id": 1,
+    "shape": "round",
+    "diameterIn": 8,
+    "polyline": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      4,
+      0,
+      0
+     ]
+    ],
+    "lengthFt": 4,
+    "roughness": {
+     "valueFt": 0.0003
+    },
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 100,
+       "connector": 0
+      }
+     },
+     {
+      "index": 1,
+      "point": [
+       4,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": null
+     }
+    ]
+   },
+   {
+    "id": 2,
+    "shape": "round",
+    "diameterIn": 8,
+    "polyline": [
+     [
+      5,
+      0,
+      0
+     ],
+     [
+      8,
+      0,
+      0
+     ]
+    ],
+    "lengthFt": 3,
+    "roughness": {
+     "valueFt": 0.0003
+    },
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       5,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 900,
+       "connector": 0
+      }
+     },
+     {
+      "index": 1,
+      "point": [
+       8,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 200,
+       "connector": 0
+      }
+     }
+    ]
+   }
+  ]
+ },
+ "11175203-2006": {
+  "nodes": [
+   {
+    "id": 100,
+    "kind": "equipment",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 1,
+       "connector": 0
+      }
+     },
+     {
+      "index": 1,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "ReturnAir",
+      "connectedTo": {
+       "elementId": 102,
+       "connector": 0
+      }
+     }
+    ]
+   },
+   {
+    "id": 102,
+    "kind": "terminal",
+    "facts": [
+     {
+      "key": "flow",
+      "value": 100
+     }
+    ],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "ReturnAir",
+      "connectedTo": {
+       "elementId": 100,
+       "connector": 1
+      }
+     }
+    ]
+   },
+   {
+    "id": 200,
+    "kind": "terminal",
+    "facts": [
+     {
+      "key": "flow",
+      "value": 200,
+      "unit": "cfm",
+      "provenance": "designer-stated"
+     }
+    ],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       8,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 400,
+       "connector": 0
+      }
+     }
+    ]
+   },
+   {
+    "id": 400,
+    "kind": "equipment",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 1,
+      "point": [
+       4,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 1,
+       "connector": 1
+      }
+     },
+     {
+      "index": 0,
+      "point": [
+       8,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 200,
+       "connector": 0
+      }
+     }
+    ]
+   }
+  ],
+  "segments": [
+   {
+    "id": 1,
+    "shape": "round",
+    "diameterIn": 8,
+    "polyline": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      4,
+      0,
+      0
+     ]
+    ],
+    "lengthFt": 4,
+    "roughness": {
+     "valueFt": 0.0003
+    },
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 100,
+       "connector": 0
+      }
+     },
+     {
+      "index": 1,
+      "point": [
+       4,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 400,
+       "connector": 1
+      }
+     }
+    ]
+   }
+  ]
+ },
+ "03769b92-2228": {
+  "nodes": [
+   {
+    "id": 100,
+    "kind": "equipment",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 1,
+       "connector": 0
+      }
+     },
+     {
+      "index": 1,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "ReturnAir",
+      "connectedTo": {
+       "elementId": 102,
+       "connector": 0
+      }
+     }
+    ]
+   },
+   {
+    "id": 102,
+    "kind": "terminal",
+    "facts": [
+     {
+      "key": "flow",
+      "value": 100
+     }
+    ],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "ReturnAir",
+      "connectedTo": {
+       "elementId": 100,
+       "connector": 1
+      }
+     }
+    ]
+   },
+   {
+    "id": 200,
+    "kind": "terminal",
+    "facts": [
+     {
+      "key": "flow",
+      "value": 100
+     }
+    ],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       8,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 2,
+       "connector": 1
+      }
+     }
+    ]
+   },
+   {
+    "id": 250,
+    "kind": "terminal",
+    "facts": [
+     {
+      "key": "flow",
+      "value": 50
+     }
+    ],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       4.1,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": null
+     }
+    ]
+   }
+  ],
+  "segments": [
+   {
+    "id": 1,
+    "shape": "round",
+    "diameterIn": 8,
+    "polyline": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      4,
+      0,
+      0
+     ]
+    ],
+    "lengthFt": 4,
+    "roughness": {
+     "valueFt": 0.0003
+    },
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 100,
+       "connector": 0
+      }
+     },
+     {
+      "index": 1,
+      "point": [
+       4,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": null
+     }
+    ]
+   },
+   {
+    "id": 2,
+    "shape": "round",
+    "diameterIn": 8,
+    "polyline": [
+     [
+      5,
+      0,
+      0
+     ],
+     [
+      8,
+      0,
+      0
+     ]
+    ],
+    "lengthFt": 3,
+    "roughness": {
+     "valueFt": 0.0003
+    },
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       5,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": null
+     },
+     {
+      "index": 1,
+      "point": [
+       8,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 200,
+       "connector": 0
+      }
+     }
+    ]
+   }
+  ]
+ },
+ "8dcd298b-959": {
+  "nodes": [
+   {
+    "id": 100,
+    "kind": "equipment",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       0,
+       1,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": null
+     },
+     {
+      "index": 1,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "ReturnAir",
+      "connectedTo": {
+       "elementId": 102,
+       "connector": 0
+      }
+     }
+    ]
+   },
+   {
+    "id": 102,
+    "kind": "terminal",
+    "facts": [
+     {
+      "key": "flow",
+      "value": 100
+     }
+    ],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "ReturnAir",
+      "connectedTo": {
+       "elementId": 100,
+       "connector": 1
+      }
+     }
+    ]
+   },
+   {
+    "id": 200,
+    "kind": "terminal",
+    "facts": [
+     {
+      "key": "flow",
+      "value": 100
+     }
+    ],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       1,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": null
+     }
+    ]
+   }
+  ],
+  "segments": []
+ },
+ "bb27aef9-1356": {
+  "nodes": [
+   {
+    "id": 100,
+    "kind": "equipment",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": {
+       "elementId": 1,
+       "connector": 0
+      }
+     }
+    ]
+   },
+   {
+    "id": 200,
+    "kind": "terminal",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       8,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": {
+       "elementId": 2,
+       "connector": 1
+      }
+     }
+    ]
+   }
+  ],
+  "segments": [
+   {
+    "id": 1,
+    "shape": "round",
+    "diameterIn": 8,
+    "polyline": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      4,
+      0,
+      0
+     ]
+    ],
+    "lengthFt": 4,
+    "roughness": {
+     "valueFt": 0.0003
+    },
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": {
+       "elementId": 100,
+       "connector": 0
+      }
+     },
+     {
+      "index": 1,
+      "point": [
+       4,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": null
+     }
+    ]
+   },
+   {
+    "id": 2,
+    "shape": "round",
+    "diameterIn": 8,
+    "polyline": [
+     [
+      4.25,
+      0,
+      0
+     ],
+     [
+      8,
+      0,
+      0
+     ]
+    ],
+    "lengthFt": 3.75,
+    "roughness": {
+     "valueFt": 0.0003
+    },
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       4.25,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": null
+     },
+     {
+      "index": 1,
+      "point": [
+       8,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": {
+       "elementId": 200,
+       "connector": 0
+      }
+     }
+    ]
+   }
+  ],
+  "tolerances": {
+   "autoJoinGapIn": 2
+  }
+ },
+ "091ddc12-1361": {
+  "nodes": [
+   {
+    "id": 100,
+    "kind": "equipment",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": {
+       "elementId": 1,
+       "connector": 0
+      }
+     }
+    ]
+   },
+   {
+    "id": 200,
+    "kind": "terminal",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       8,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": {
+       "elementId": 2,
+       "connector": 1
+      }
+     }
+    ]
+   }
+  ],
+  "segments": [
+   {
+    "id": 1,
+    "shape": "round",
+    "diameterIn": 8,
+    "polyline": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      4,
+      0,
+      0
+     ]
+    ],
+    "lengthFt": 4,
+    "roughness": {
+     "valueFt": 0.0003
+    },
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": {
+       "elementId": 100,
+       "connector": 0
+      }
+     },
+     {
+      "index": 1,
+      "point": [
+       4,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": null
+     }
+    ]
+   },
+   {
+    "id": 2,
+    "shape": "round",
+    "diameterIn": 8,
+    "polyline": [
+     [
+      4.166666666666667,
+      0,
+      0
+     ],
+     [
+      8,
+      0,
+      0
+     ]
+    ],
+    "lengthFt": 3.833333333333333,
+    "roughness": {
+     "valueFt": 0.0003
+    },
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       4.166666666666667,
+       0,
+       0
+      ],
+      "facing": [
+       0,
+       1,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": null
+     },
+     {
+      "index": 1,
+      "point": [
+       8,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": {
+       "elementId": 200,
+       "connector": 0
+      }
+     }
+    ]
+   }
+  ]
+ },
+ "73e3656a-669": {
+  "nodes": [
+   {
+    "id": 100,
+    "kind": "equipment",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": {
+       "elementId": 1,
+       "connector": 0
+      }
+     }
+    ]
+   }
+  ],
+  "segments": [
+   {
+    "id": 1,
+    "shape": "round",
+    "diameterIn": 8,
+    "polyline": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      4,
+      0,
+      0
+     ]
+    ],
+    "lengthFt": 4,
+    "roughness": {
+     "valueFt": 0.0003
+    },
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": {
+       "elementId": 100,
+       "connector": 0
+      }
+     },
+     {
+      "index": 1,
+      "point": [
+       4,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": null
+     }
+    ]
+   }
+  ]
+ },
+ "e74ed2dd-3585": {
+  "nodes": [
+   {
+    "id": 600,
+    "kind": "equipment",
+    "category": "",
+    "point": [
+     0,
+     0,
+     0
+    ],
+    "groupId": "g1",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "kind": "end",
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 61,
+       "connector": 0
+      },
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     },
+     {
+      "index": 1,
+      "kind": "end",
+      "point": [
+       -1,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 71,
+       "connector": 0
+      },
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     }
+    ]
+   },
+   {
+    "id": 70,
+    "kind": "terminal",
+    "category": "",
+    "point": [
+     0,
+     0,
+     0
+    ],
+    "groupId": "g1",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "kind": "end",
+      "point": [
+       10,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 61,
+       "connector": 1
+      },
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     }
+    ]
+   },
+   {
+    "id": 71,
+    "kind": "terminal",
+    "category": "",
+    "point": [
+     0,
+     0,
+     0
+    ],
+    "groupId": "g1",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "kind": "end",
+      "point": [
+       -1,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 600,
+       "connector": 1
+      },
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     }
+    ]
+   },
+   {
+    "id": 62,
+    "kind": "fitting",
+    "category": "",
+    "point": [
+     0,
+     0,
+     0
+    ],
+    "groupId": "g1",
+    "facts": [],
+    "partType": "TapAdjustable",
+    "connectors": [
+     {
+      "index": 0,
+      "kind": "curve",
+      "point": [
+       3,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 61,
+       "connector": 2
+      },
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     },
+     {
+      "index": 1,
+      "kind": "end",
+      "point": [
+       3,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 64,
+       "connector": 0
+      },
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     }
+    ]
+   },
+   {
+    "id": 63,
+    "kind": "fitting",
+    "category": "",
+    "point": [
+     0,
+     0,
+     0
+    ],
+    "groupId": "g1",
+    "facts": [],
+    "partType": "TapAdjustable",
+    "connectors": [
+     {
+      "index": 0,
+      "kind": "curve",
+      "point": [
+       7,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 61,
+       "connector": 3
+      },
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     },
+     {
+      "index": 1,
+      "kind": "end",
+      "point": [
+       7,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 65,
+       "connector": 0
+      },
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     }
+    ]
+   }
+  ],
+  "segments": [
+   {
+    "id": 61,
+    "kind": "duct",
+    "curveKind": "line",
+    "shape": "round",
+    "size": "6",
+    "diameterIn": 6,
+    "lengthFt": 10,
+    "polyline": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      10,
+      0,
+      0
+     ]
+    ],
+    "groupId": "g1",
+    "roughness": {
+     "valueFt": 0.0003,
+     "provenance": "revit-default"
+    },
+    "revit": {},
+    "connectors": [
+     {
+      "index": 0,
+      "kind": "end",
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 600,
+       "connector": 0
+      },
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     },
+     {
+      "index": 1,
+      "kind": "end",
+      "point": [
+       10,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 70,
+       "connector": 0
+      },
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     },
+     {
+      "index": 2,
+      "kind": "curve",
+      "point": [
+       3,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 62,
+       "connector": 0
+      },
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     },
+     {
+      "index": 3,
+      "kind": "curve",
+      "point": [
+       7,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 63,
+       "connector": 0
+      },
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     }
+    ]
+   },
+   {
+    "id": 64,
+    "kind": "duct",
+    "curveKind": "line",
+    "shape": "round",
+    "size": "6",
+    "diameterIn": 6,
+    "lengthFt": 5.9,
+    "polyline": [
+     [
+      3,
+      0,
+      0
+     ],
+     [
+      3,
+      4,
+      0
+     ],
+     [
+      4.9,
+      4,
+      0
+     ]
+    ],
+    "groupId": "g1",
+    "roughness": {
+     "valueFt": 0.0003,
+     "provenance": "revit-default"
+    },
+    "revit": {},
+    "connectors": [
+     {
+      "index": 0,
+      "kind": "end",
+      "point": [
+       3,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 62,
+       "connector": 1
+      },
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     },
+     {
+      "index": 1,
+      "kind": "end",
+      "point": [
+       4.9,
+       4,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": null,
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     }
+    ]
+   },
+   {
+    "id": 65,
+    "kind": "duct",
+    "curveKind": "line",
+    "shape": "round",
+    "size": "6",
+    "diameterIn": 6,
+    "lengthFt": 5.9,
+    "polyline": [
+     [
+      7,
+      0,
+      0
+     ],
+     [
+      7,
+      4,
+      0
+     ],
+     [
+      5.1,
+      4,
+      0
+     ]
+    ],
+    "groupId": "g1",
+    "roughness": {
+     "valueFt": 0.0003,
+     "provenance": "revit-default"
+    },
+    "revit": {},
+    "connectors": [
+     {
+      "index": 0,
+      "kind": "end",
+      "point": [
+       7,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 63,
+       "connector": 1
+      },
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     },
+     {
+      "index": 1,
+      "kind": "end",
+      "point": [
+       5.1,
+       4,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": null,
+      "shape": "round",
+      "size": "6",
+      "diameterIn": 6
+     }
+    ]
+   }
+  ]
+ },
+ "2fa62873-2247": {
+  "nodes": [
+   {
+    "id": 100,
+    "kind": "equipment",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 1,
+       "connector": 0
+      }
+     },
+     {
+      "index": 1,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "ReturnAir",
+      "connectedTo": {
+       "elementId": 102,
+       "connector": 0
+      }
+     }
+    ]
+   },
+   {
+    "id": 102,
+    "kind": "terminal",
+    "facts": [
+     {
+      "key": "flow",
+      "value": 100
+     }
+    ],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "ReturnAir",
+      "connectedTo": {
+       "elementId": 100,
+       "connector": 1
+      }
+     }
+    ]
+   },
+   {
+    "id": 200,
+    "kind": "terminal",
+    "facts": [
+     {
+      "key": "flow",
+      "value": 100
+     }
+    ],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       8,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 2,
+       "connector": 1
+      }
+     }
+    ]
+   },
+   {
+    "id": 900,
+    "kind": "cap",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       5,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 2,
+       "connector": 0
+      }
+     }
+    ]
+   }
+  ],
+  "segments": [
+   {
+    "id": 1,
+    "shape": "round",
+    "diameterIn": 8,
+    "polyline": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      4,
+      0,
+      0
+     ]
+    ],
+    "lengthFt": 4,
+    "roughness": {
+     "valueFt": 0.0003
+    },
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 100,
+       "connector": 0
+      }
+     },
+     {
+      "index": 1,
+      "point": [
+       4,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": null
+     }
+    ]
+   },
+   {
+    "id": 2,
+    "shape": "round",
+    "diameterIn": 8,
+    "polyline": [
+     [
+      5,
+      0,
+      0
+     ],
+     [
+      8,
+      0,
+      0
+     ]
+    ],
+    "lengthFt": 3,
+    "roughness": {
+     "valueFt": 0.0003
+    },
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       5,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "ReturnAir",
+      "connectedTo": {
+       "elementId": 900,
+       "connector": 0
+      }
+     },
+     {
+      "index": 1,
+      "point": [
+       8,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "ReturnAir",
+      "connectedTo": {
+       "elementId": 200,
+       "connector": 0
+      }
+     }
+    ]
+   }
+  ]
+ },
+ "9aaa4aeb-1389": {
+  "nodes": [
+   {
+    "id": 100,
+    "kind": "equipment",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": {
+       "elementId": 1,
+       "connector": 0
+      }
+     }
+    ]
+   },
+   {
+    "id": 200,
+    "kind": "terminal",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       8,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": {
+       "elementId": 2,
+       "connector": 1
+      }
+     }
+    ]
+   }
+  ],
+  "segments": [
+   {
+    "id": 1,
+    "shape": "round",
+    "diameterIn": 8,
+    "polyline": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      4,
+      0,
+      0
+     ]
+    ],
+    "lengthFt": 4,
+    "roughness": {
+     "valueFt": 0.0003
+    },
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": {
+       "elementId": 100,
+       "connector": 0
+      }
+     },
+     {
+      "index": 1,
+      "point": [
+       4,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": null
+     }
+    ]
+   },
+   {
+    "id": 2,
+    "shape": "round",
+    "diameterIn": 8,
+    "polyline": [
+     [
+      4.166666666666667,
+      0,
+      0
+     ],
+     [
+      8,
+      0,
+      0
+     ]
+    ],
+    "lengthFt": 3.833333333333333,
+    "roughness": {
+     "valueFt": 0.0003
+    },
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       4.166666666666667,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": {
+       "elementId": 999,
+       "connector": 0
+      }
+     },
+     {
+      "index": 1,
+      "point": [
+       8,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "connectedTo": {
+       "elementId": 200,
+       "connector": 0
+      }
+     }
+    ]
+   }
+  ]
+ },
+ "e4592002-969": {
+  "nodes": [
+   {
+    "id": 100,
+    "kind": "equipment",
+    "family": "Air Handler",
+    "facts": [
+     {
+      "key": "mark",
+      "text": "F-100"
+     }
+    ],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "classification": "SupplyAir",
+      "connectedTo": null,
+      "shape": "round",
+      "diameterIn": 8,
+      "kind": "end",
+      "direction": "out"
+     },
+     {
+      "index": 1,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "classification": "ReturnAir",
+      "connectedTo": {
+       "elementId": 102,
+       "connector": 0
+      },
+      "shape": "round",
+      "diameterIn": 8,
+      "kind": "end",
+      "direction": "in"
+     }
+    ]
+   },
+   {
+    "id": 101,
+    "kind": "terminal",
+    "facts": [
+     {
+      "key": "flow",
+      "value": 100
+     }
+    ],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       1,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "classification": "SupplyAir",
+      "connectedTo": null,
+      "shape": "round",
+      "diameterIn": 8,
+      "kind": "end",
+      "direction": "out"
+     }
+    ]
+   },
+   {
+    "id": 102,
+    "kind": "terminal",
+    "facts": [
+     {
+      "key": "flow",
+      "value": 100
+     }
+    ],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "classification": "ReturnAir",
+      "connectedTo": {
+       "elementId": 100,
+       "connector": 1
+      },
+      "shape": "round",
+      "diameterIn": 8,
+      "kind": "end",
+      "direction": "in"
+     }
+    ]
+   }
+  ],
+  "segments": []
+ },
+ "7aba8a81-1458": {
+  "nodes": [
+   {
+    "id": 700,
+    "kind": "equipment",
+    "category": "",
+    "point": [
+     0,
+     0,
+     0
+    ],
+    "groupId": "g1",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "kind": "end",
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 71,
+       "connector": 0
+      },
+      "shape": "round",
+      "size": "8",
+      "diameterIn": 8
+     }
+    ]
+   },
+   {
+    "id": 73,
+    "kind": "terminal",
+    "category": "",
+    "point": [
+     10,
+     0,
+     0
+    ],
+    "groupId": "g1",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "kind": "end",
+      "point": [
+       10,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 71,
+       "connector": 1
+      },
+      "shape": "round",
+      "size": "8",
+      "diameterIn": 8
+     }
+    ]
+   },
+   {
+    "id": 72,
+    "kind": "accessory",
+    "category": "",
+    "point": [
+     7,
+     0,
+     0
+    ],
+    "groupId": "g1",
+    "facts": [],
+    "family": "Damper_Volume_Round",
+    "connectors": [
+     {
+      "index": 1,
+      "kind": "end",
+      "point": [
+       7.0025,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": null,
+      "shape": "round",
+      "size": "8",
+      "diameterIn": 8,
+      "facing": [
+       1,
+       0,
+       0
+      ]
+     },
+     {
+      "index": 2,
+      "kind": "end",
+      "point": [
+       6.9975,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": null,
+      "shape": "round",
+      "size": "8",
+      "diameterIn": 8,
+      "facing": [
+       -1,
+       0,
+       0
+      ]
+     }
+    ]
+   }
+  ],
+  "segments": [
+   {
+    "id": 71,
+    "kind": "duct",
+    "curveKind": "line",
+    "shape": "round",
+    "size": "8",
+    "diameterIn": 8,
+    "lengthFt": 10,
+    "polyline": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      10,
+      0,
+      0
+     ]
+    ],
+    "groupId": "g1",
+    "roughness": {
+     "valueFt": 0.0003,
+     "provenance": "revit-default"
+    },
+    "revit": {},
+    "connectors": [
+     {
+      "index": 0,
+      "kind": "end",
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 700,
+       "connector": 0
+      },
+      "shape": "round",
+      "size": "8",
+      "diameterIn": 8
+     },
+     {
+      "index": 1,
+      "kind": "end",
+      "point": [
+       10,
+       0,
+       0
+      ],
+      "direction": "out",
+      "connectedTo": {
+       "elementId": 73,
+       "connector": 0
+      },
+      "shape": "round",
+      "size": "8",
+      "diameterIn": 8
+     }
+    ]
+   }
+  ]
+ },
+ "7cd402fa-2085": {
+  "nodes": [
+   {
+    "id": 9,
+    "kind": "accessory",
+    "category": "Duct Accessories",
+    "family": "Damper_Volume_Round",
+    "type": "Round Volume Damper",
+    "partType": null,
+    "levelId": 1,
+    "point": [
+     4,
+     0,
+     0
+    ],
+    "groupId": "g9",
+    "systemName": "SA 1",
+    "classification": "Supply Air",
+    "connectors": [
+     {
+      "index": 1,
+      "kind": "end",
+      "point": [
+       4.0025,
+       0,
+       0
+      ],
+      "shape": "round",
+      "size": "6\"ø",
+      "diameterIn": 6,
+      "direction": "bidirectional",
+      "classification": "SupplyAir",
+      "connectedTo": null,
+      "areaFt2": 0.196
+     },
+     {
+      "index": 2,
+      "kind": "end",
+      "point": [
+       3.9975,
+       0,
+       0
+      ],
+      "shape": "round",
+      "size": "6\"ø",
+      "diameterIn": 6,
+      "direction": "bidirectional",
+      "classification": "SupplyAir",
+      "connectedTo": null,
+      "areaFt2": 0.196
+     }
+    ],
+    "facts": [],
+    "uniqueId": null
+   }
+  ],
+  "segments": [
+   {
+    "id": 1,
+    "kind": "duct",
+    "curveKind": "line",
+    "type": "Round Duct",
+    "shape": "round",
+    "size": "6\"ø",
+    "diameterIn": 6,
+    "lengthFt": 10,
+    "polyline": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      10,
+      0,
+      0
+     ]
+    ],
+    "levelId": 1,
+    "groupId": "g1",
+    "systemName": "SA 1",
+    "classification": "Supply Air",
+    "roughness": {
+     "valueFt": 0.0003,
+     "provenance": "revit-default"
+    },
+    "revit": {},
+    "connectors": [
+     {
+      "index": 1,
+      "kind": "end",
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "shape": "round",
+      "size": "6\"ø",
+      "diameterIn": 6,
+      "direction": "bidirectional",
+      "classification": "SupplyAir",
+      "connectedTo": null,
+      "areaFt2": 0.196
+     },
+     {
+      "index": 2,
+      "kind": "end",
+      "point": [
+       10,
+       0,
+       0
+      ],
+      "shape": "round",
+      "size": "6\"ø",
+      "diameterIn": 6,
+      "direction": "bidirectional",
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 3,
+       "connector": 1
+      },
+      "areaFt2": 0.196
+     }
+    ],
+    "uniqueId": null
+   },
+   {
+    "id": 3,
+    "kind": "duct",
+    "curveKind": "line",
+    "type": "Round Duct",
+    "shape": "round",
+    "size": "6\"ø",
+    "diameterIn": 6,
+    "lengthFt": 10,
+    "polyline": [
+     [
+      10,
+      0,
+      0
+     ],
+     [
+      20,
+      0,
+      0
+     ]
+    ],
+    "levelId": 1,
+    "groupId": "g1",
+    "systemName": "SA 1",
+    "classification": "Supply Air",
+    "roughness": {
+     "valueFt": 0.0003,
+     "provenance": "revit-default"
+    },
+    "revit": {},
+    "connectors": [
+     {
+      "index": 1,
+      "kind": "end",
+      "point": [
+       10,
+       0,
+       0
+      ],
+      "shape": "round",
+      "size": "6\"ø",
+      "diameterIn": 6,
+      "direction": "bidirectional",
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 1,
+       "connector": 2
+      },
+      "areaFt2": 0.196
+     },
+     {
+      "index": 2,
+      "kind": "end",
+      "point": [
+       20,
+       0,
+       0
+      ],
+      "shape": "round",
+      "size": "6\"ø",
+      "diameterIn": 6,
+      "direction": "bidirectional",
+      "classification": "SupplyAir",
+      "connectedTo": null,
+      "areaFt2": 0.196
+     }
+    ],
+    "uniqueId": null
+   }
+  ]
+ },
+ "ff579bf8-1346": {
+  "nodes": [
+   {
+    "id": 9,
+    "kind": "accessory",
+    "category": "Duct Accessories",
+    "family": "Damper_Volume_Round",
+    "type": "Round Volume Damper",
+    "partType": null,
+    "levelId": 1,
+    "point": [
+     4,
+     0,
+     0
+    ],
+    "groupId": "g9",
+    "systemName": "SA 1",
+    "classification": "Supply Air",
+    "connectors": [
+     {
+      "index": 1,
+      "kind": "end",
+      "point": [
+       4.0025,
+       0,
+       0
+      ],
+      "shape": "round",
+      "size": "6\"ø",
+      "diameterIn": 6,
+      "direction": "bidirectional",
+      "classification": "SupplyAir",
+      "connectedTo": null,
+      "areaFt2": 0.196
+     },
+     {
+      "index": 2,
+      "kind": "end",
+      "point": [
+       3.9975,
+       0,
+       0
+      ],
+      "shape": "round",
+      "size": "6\"ø",
+      "diameterIn": 6,
+      "direction": "bidirectional",
+      "classification": "SupplyAir",
+      "connectedTo": null,
+      "areaFt2": 0.196
+     }
+    ],
+    "facts": [],
+    "uniqueId": null
+   }
+  ],
+  "segments": [
+   {
+    "id": 1,
+    "kind": "duct",
+    "curveKind": "line",
+    "type": "Round Duct",
+    "shape": "round",
+    "size": "6\"ø",
+    "diameterIn": 6,
+    "lengthFt": 10,
+    "polyline": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      10,
+      0,
+      0
+     ]
+    ],
+    "levelId": 1,
+    "groupId": "g1",
+    "systemName": "SA 1",
+    "classification": "Supply Air",
+    "roughness": {
+     "valueFt": 0.0003,
+     "provenance": "revit-default"
+    },
+    "revit": {},
+    "connectors": [
+     {
+      "index": 1,
+      "kind": "end",
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "shape": "round",
+      "size": "6\"ø",
+      "diameterIn": 6,
+      "direction": "bidirectional",
+      "classification": "SupplyAir",
+      "connectedTo": null,
+      "areaFt2": 0.196
+     },
+     {
+      "index": 2,
+      "kind": "end",
+      "point": [
+       10,
+       0,
+       0
+      ],
+      "shape": "round",
+      "size": "6\"ø",
+      "diameterIn": 6,
+      "direction": "bidirectional",
+      "classification": "SupplyAir",
+      "connectedTo": null,
+      "areaFt2": 0.196
+     }
+    ],
+    "uniqueId": null
+   }
+  ]
+ },
+ "5cb7d2cd-2120": {
+  "nodes": [
+   {
+    "id": 9,
+    "kind": "accessory",
+    "category": "Duct Accessories",
+    "family": "Damper_Volume_Round",
+    "type": "Round Volume Damper",
+    "partType": null,
+    "levelId": 1,
+    "point": [
+     4,
+     0,
+     0
+    ],
+    "groupId": "g9",
+    "systemName": "SA 1",
+    "classification": "Supply Air",
+    "connectors": [
+     {
+      "index": 1,
+      "kind": "end",
+      "point": [
+       4.0025,
+       0,
+       0
+      ],
+      "shape": "round",
+      "size": "6\"ø",
+      "diameterIn": 6,
+      "direction": "bidirectional",
+      "classification": "SupplyAir",
+      "connectedTo": null,
+      "areaFt2": 0.196,
+      "facing": [
+       1,
+       0,
+       0
+      ]
+     },
+     {
+      "index": 2,
+      "kind": "end",
+      "point": [
+       3.9975,
+       0,
+       0
+      ],
+      "shape": "round",
+      "size": "6\"ø",
+      "diameterIn": 6,
+      "direction": "bidirectional",
+      "classification": "SupplyAir",
+      "connectedTo": null,
+      "areaFt2": 0.196,
+      "facing": [
+       -1,
+       0,
+       0
+      ]
+     }
+    ],
+    "facts": [],
+    "uniqueId": null
+   }
+  ],
+  "segments": [
+   {
+    "id": 1,
+    "kind": "duct",
+    "curveKind": "line",
+    "type": "Round Duct",
+    "shape": "round",
+    "size": "6\"ø",
+    "diameterIn": 6,
+    "lengthFt": 10,
+    "polyline": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      10,
+      0,
+      0
+     ]
+    ],
+    "levelId": 1,
+    "groupId": "g1",
+    "systemName": "SA 1",
+    "classification": "Supply Air",
+    "roughness": {
+     "valueFt": 0.0003,
+     "provenance": "revit-default"
+    },
+    "revit": {},
+    "connectors": [
+     {
+      "index": 1,
+      "kind": "end",
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "shape": "round",
+      "size": "6\"ø",
+      "diameterIn": 6,
+      "direction": "bidirectional",
+      "classification": "SupplyAir",
+      "connectedTo": null,
+      "areaFt2": 0.196
+     },
+     {
+      "index": 2,
+      "kind": "end",
+      "point": [
+       10,
+       0,
+       0
+      ],
+      "shape": "round",
+      "size": "6\"ø",
+      "diameterIn": 6,
+      "direction": "bidirectional",
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 3,
+       "connector": 1
+      },
+      "areaFt2": 0.196
+     }
+    ],
+    "uniqueId": null
+   },
+   {
+    "id": 3,
+    "kind": "duct",
+    "curveKind": "line",
+    "type": "Round Duct",
+    "shape": "round",
+    "size": "6\"ø",
+    "diameterIn": 6,
+    "lengthFt": 10,
+    "polyline": [
+     [
+      10,
+      0,
+      0
+     ],
+     [
+      20,
+      0,
+      0
+     ]
+    ],
+    "levelId": 1,
+    "groupId": "g1",
+    "systemName": "SA 1",
+    "classification": "Supply Air",
+    "roughness": {
+     "valueFt": 0.0003,
+     "provenance": "revit-default"
+    },
+    "revit": {},
+    "connectors": [
+     {
+      "index": 1,
+      "kind": "end",
+      "point": [
+       10,
+       0,
+       0
+      ],
+      "shape": "round",
+      "size": "6\"ø",
+      "diameterIn": 6,
+      "direction": "bidirectional",
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 1,
+       "connector": 2
+      },
+      "areaFt2": 0.196
+     },
+     {
+      "index": 2,
+      "kind": "end",
+      "point": [
+       20,
+       0,
+       0
+      ],
+      "shape": "round",
+      "size": "6\"ø",
+      "diameterIn": 6,
+      "direction": "bidirectional",
+      "classification": "SupplyAir",
+      "connectedTo": null,
+      "areaFt2": 0.196
+     }
+    ],
+    "uniqueId": null
+   }
+  ]
+ },
+ "2d2f275c-2251": {
+  "nodes": [
+   {
+    "id": 100,
+    "kind": "equipment",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 1,
+       "connector": 0
+      }
+     },
+     {
+      "index": 1,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "ReturnAir",
+      "connectedTo": {
+       "elementId": 102,
+       "connector": 0
+      }
+     }
+    ]
+   },
+   {
+    "id": 102,
+    "kind": "terminal",
+    "facts": [
+     {
+      "key": "flow",
+      "value": 100
+     }
+    ],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "ReturnAir",
+      "connectedTo": {
+       "elementId": 100,
+       "connector": 1
+      }
+     }
+    ]
+   },
+   {
+    "id": 200,
+    "kind": "terminal",
+    "facts": [
+     {
+      "key": "flow",
+      "value": 100
+     }
+    ],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       8,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 2,
+       "connector": 1
+      }
+     }
+    ]
+   },
+   {
+    "id": 900,
+    "kind": "fitting",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       5,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 2,
+       "connector": 0
+      }
+     }
+    ]
+   }
+  ],
+  "segments": [
+   {
+    "id": 1,
+    "shape": "round",
+    "diameterIn": 8,
+    "polyline": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      4,
+      0,
+      0
+     ]
+    ],
+    "lengthFt": 4,
+    "roughness": {
+     "valueFt": 0.0003
+    },
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 100,
+       "connector": 0
+      }
+     },
+     {
+      "index": 1,
+      "point": [
+       4,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": null
+     }
+    ]
+   },
+   {
+    "id": 2,
+    "shape": "round",
+    "diameterIn": 8,
+    "polyline": [
+     [
+      5,
+      0,
+      0
+     ],
+     [
+      8,
+      0,
+      0
+     ]
+    ],
+    "lengthFt": 3,
+    "roughness": {
+     "valueFt": 0.0003
+    },
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       5,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 900,
+       "connector": 0
+      }
+     },
+     {
+      "index": 1,
+      "point": [
+       8,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 200,
+       "connector": 0
+      }
+     }
+    ]
+   }
+  ]
+ },
+ "e2ea010e-2383": {
+  "nodes": [
+   {
+    "id": 100,
+    "kind": "equipment",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 1,
+       "connector": 0
+      }
+     },
+     {
+      "index": 1,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "ReturnAir",
+      "connectedTo": {
+       "elementId": 102,
+       "connector": 0
+      }
+     }
+    ]
+   },
+   {
+    "id": 102,
+    "kind": "terminal",
+    "facts": [
+     {
+      "key": "flow",
+      "value": 100
+     }
+    ],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "ReturnAir",
+      "connectedTo": {
+       "elementId": 100,
+       "connector": 1
+      }
+     }
+    ]
+   },
+   {
+    "id": 200,
+    "kind": "terminal",
+    "facts": [
+     {
+      "key": "flow",
+      "value": 100
+     }
+    ],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       8,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 2,
+       "connector": 1
+      }
+     }
+    ]
+   },
+   {
+    "id": 900,
+    "kind": "cap",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       4.216666666666667,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "rectangular",
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 2,
+       "connector": 0
+      },
+      "widthIn": 30,
+      "heightIn": 30
+     }
+    ]
+   }
+  ],
+  "segments": [
+   {
+    "id": 1,
+    "shape": "round",
+    "diameterIn": 8,
+    "polyline": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      4,
+      0,
+      0
+     ]
+    ],
+    "lengthFt": 4,
+    "roughness": {
+     "valueFt": 0.0003
+    },
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 100,
+       "connector": 0
+      }
+     },
+     {
+      "index": 1,
+      "point": [
+       4,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": null
+     }
+    ]
+   },
+   {
+    "id": 2,
+    "shape": "rectangular",
+    "polyline": [
+     [
+      4.216666666666667,
+      0,
+      0
+     ],
+     [
+      8,
+      0,
+      0
+     ]
+    ],
+    "lengthFt": 3.783333333333333,
+    "roughness": {
+     "valueFt": 0.0003
+    },
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       4.216666666666667,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "rectangular",
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 900,
+       "connector": 0
+      },
+      "widthIn": 30,
+      "heightIn": 30
+     },
+     {
+      "index": 1,
+      "point": [
+       8,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "rectangular",
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 200,
+       "connector": 0
+      },
+      "widthIn": 30,
+      "heightIn": 30
+     }
+    ],
+    "widthIn": 30,
+    "heightIn": 30
+   }
+  ]
+ },
+ "eca73154-2251": {
+  "nodes": [
+   {
+    "id": 100,
+    "kind": "equipment",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 1,
+       "connector": 0
+      }
+     },
+     {
+      "index": 1,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "ReturnAir",
+      "connectedTo": {
+       "elementId": 102,
+       "connector": 0
+      }
+     }
+    ]
+   },
+   {
+    "id": 102,
+    "kind": "terminal",
+    "facts": [
+     {
+      "key": "flow",
+      "value": 100
+     }
+    ],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "ReturnAir",
+      "connectedTo": {
+       "elementId": 100,
+       "connector": 1
+      }
+     }
+    ]
+   },
+   {
+    "id": 200,
+    "kind": "terminal",
+    "facts": [
+     {
+      "key": "flow",
+      "value": 100
+     }
+    ],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       8,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 2,
+       "connector": 1
+      }
+     }
+    ]
+   },
+   {
+    "id": 900,
+    "kind": "fitting",
+    "facts": [],
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       5,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 2,
+       "connector": 0
+      }
+     }
+    ]
+   }
+  ],
+  "segments": [
+   {
+    "id": 1,
+    "shape": "round",
+    "diameterIn": 8,
+    "polyline": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      4,
+      0,
+      0
+     ]
+    ],
+    "lengthFt": 4,
+    "roughness": {
+     "valueFt": 0.0003
+    },
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       0,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": {
+       "elementId": 100,
+       "connector": 0
+      }
+     },
+     {
+      "index": 1,
+      "point": [
+       4,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "SupplyAir",
+      "connectedTo": null
+     }
+    ]
+   },
+   {
+    "id": 2,
+    "shape": "round",
+    "diameterIn": 8,
+    "polyline": [
+     [
+      5,
+      0,
+      0
+     ],
+     [
+      8,
+      0,
+      0
+     ]
+    ],
+    "lengthFt": 3,
+    "roughness": {
+     "valueFt": 0.0003
+    },
+    "connectors": [
+     {
+      "index": 0,
+      "point": [
+       5,
+       0,
+       0
+      ],
+      "facing": [
+       -1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "ReturnAir",
+      "connectedTo": {
+       "elementId": 900,
+       "connector": 0
+      }
+     },
+     {
+      "index": 1,
+      "point": [
+       8,
+       0,
+       0
+      ],
+      "facing": [
+       1,
+       0,
+       0
+      ],
+      "kind": "end",
+      "direction": "bidirectional",
+      "shape": "round",
+      "diameterIn": 8,
+      "classification": "ReturnAir",
+      "connectedTo": {
+       "elementId": 200,
+       "connector": 0
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

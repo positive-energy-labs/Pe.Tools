@@ -48,6 +48,11 @@ const INSET_LABEL_W = 24;
 /** A tone's ink role: `mute` is the one tone with no role of its own name. */
 const inkOf = (tone: Tone | undefined) => tokenRef(tone ?? "ink-mute");
 const issueInk = (kind: IssueKind) => inkOf(ISSUE_KINDS[kind].color.tone);
+/**
+ * An extra root keeps the alarm ink the retired `multi-root` issue gave it (ducts LEDGER 2026-10-29
+ * retired the kind, not the drawing): the walk-blocking tone, the one `open-end` carries.
+ */
+const EXTRA_ROOT_INK = inkOf(ISSUE_KINDS["open-end"].color.tone);
 
 interface Placed {
   chain: Chain;
@@ -122,6 +127,7 @@ export interface SchematicProps {
   /** The opened groups, in section order; shared groups appear once. */
   groups: readonly string[];
   members?: ReadonlySet<number>;
+  targets?: ReadonlySet<number>;
   /** The model's encoding: an edge wears the stroke of its first segment under it. */
   encoding: Encoding;
   /** Element ids selected; an edge holding one is ringed, and a fold holding one unfolds. */
@@ -140,13 +146,14 @@ export function Schematic({
   index,
   groups,
   members,
+  targets,
   encoding,
   onSelect,
   size = "main",
 }: SchematicProps) {
   const mark = useMention();
   const { selected, lit: cited, hovered } = useElementAttention();
-  const lit = new Set([...cited, ...(hovered == null ? [] : [hovered])]);
+  const lit = new Set([...cited, ...(targets ?? []), ...(hovered == null ? [] : [hovered])]);
   const inset = size === "inset";
   const { snapshot } = index;
   const trees = useMemo(
@@ -260,6 +267,7 @@ export function Schematic({
                 <g
                   key={chain.to}
                   data-element={chain.members[0]}
+                  data-review-target={chain.members.some((id) => targets?.has(id)) ? "" : undefined}
                   data-selected={hot ? "" : undefined}
                   data-lit={glow ? "" : undefined}
                   className="cursor-pointer"
@@ -453,11 +461,11 @@ function Vertex({
             width={12}
             height={10}
             fill="none"
-            stroke={issueInk("multi-root")}
+            stroke={EXTRA_ROOT_INK}
             strokeWidth={1.5}
           />
           {labelled ? (
-            <text x={x + 9} y={y - 15 - i * 12} fill={issueInk("multi-root")}>
+            <text x={x + 9} y={y - 15 - i * 12} fill={EXTRA_ROOT_INK}>
               {`another root: equipment ${root.equipment} port ${root.port}`}
             </text>
           ) : null}

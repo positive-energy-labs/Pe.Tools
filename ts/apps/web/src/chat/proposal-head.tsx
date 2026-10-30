@@ -25,7 +25,7 @@ export interface HeadWork {
   cells: Record<string, CellLike>;
   /** How the cells are written; bound kinds carry `wire.revision`, the rendered revision. */
   wire: CellWire;
-  /** The route's full group path for a key; the head reads depth 1. */
+  /** The route's full group path for a key. */
   groupOf: (key: string) => string[];
   /** The route's own value formatter. */
   show?: (value: unknown) => string;
@@ -33,6 +33,11 @@ export interface HeadWork {
   /** A foreign write refused this Work's last bound write. */
   conflict?: boolean;
   reload?: () => void;
+  pending?: readonly {
+    press: string;
+    retry(): Promise<unknown>;
+    discard(this: void): void;
+  }[];
   /** The route's commit word ("apply"); pressing it opens the pane unscoped and runs it there. */
   commit: { word: string; run: () => void };
   /** A group's words when its path key is a machine key (a loss rule's key). */
@@ -51,17 +56,17 @@ const COMMIT_REASON =
   "Open the plan in the pane — staging is not applying; the confirmation lists every change before Revit changes";
 const pending = (cell: CellLike) => cell.suggestion != null || cell.edit != null;
 const showDefault = (value: unknown) => (typeof value === "string" ? value : JSON.stringify(value));
-/** Depth-1 groups, contested first, then by pending size, then label. */
+/** Full group paths, contested first, then by pending size, then label. */
 function headGroups(work: Pick<HeadWork, "cells" | "groupOf" | "wire">): CellGroup[] {
   const { groups } = workSummary(work.cells, {
     ...work.wire,
-    groupOf: (key) => work.groupOf(key).slice(0, 1),
+    groupOf: work.groupOf,
   });
   return groups.sort(
     (a, b) =>
       Number(b.contested > 0) - Number(a.contested > 0) ||
       b.proposed + b.staged - (a.proposed + a.staged) ||
-      String(a.path[0]).localeCompare(String(b.path[0])),
+      JSON.stringify(a.path).localeCompare(JSON.stringify(b.path)),
   );
 }
 /** `{P} proposed · {S} edit · {C} contested`, zeros omitted. */
@@ -94,7 +99,9 @@ function Counts({ proposed, edit, contested }: ReturnType<typeof tally>) {
 export function ProposalHead({ asks, works }: { asks: readonly ReactNode[]; works: HeadWork[] }) {
   const [all, setAll] = useState(false);
   const lines = new Map<string, HeadWork[]>();
-  for (const work of works.filter((one) => Object.values(one.cells).some(pending)))
+  for (const work of works.filter(
+    (one) => Object.values(one.cells).some(pending) || one.pending?.length,
+  ))
     lines.set(work.line ?? work.id, [...(lines.get(work.line ?? work.id) ?? []), work]);
   const live = [...lines.values()];
   if (!asks.length && !live.length) return null;
@@ -141,6 +148,9 @@ function WorkLine({ parts }: { parts: HeadWork[] }) {
   const work = parts[0]!;
   const groups = parts.map(headGroups);
   const counts = tally(groups.flat());
+  const pendingEdits = new Map(
+    parts.flatMap((part) => (part.pending ?? []).map((edit) => [edit.press, edit] as const)),
+  );
   return (
     <div className="flex flex-col" data-work={work.id}>
       <div className="flex min-h-(--control-h) min-w-0 flex-wrap items-center gap-x-2">
@@ -177,6 +187,22 @@ function WorkLine({ parts }: { parts: HeadWork[] }) {
             reload
           </Button>
         ) : null}
+        {[...pendingEdits.values()].map((edit) => (
+          <span key={edit.press} className="flex items-center gap-1">
+            <span data-tone="caution">unaccepted edit</span>
+            <Button
+              kind="framed"
+              label="retry edit"
+              refusal={work.conflict ? "Reload Work first" : null}
+              onClick={() => void edit.retry()}
+            >
+              retry
+            </Button>
+            <Button kind="framed" label="discard edit" onClick={edit.discard}>
+              discard
+            </Button>
+          </span>
+        ))}
         <span className="ml-auto">
           <Button
             kind="framed"
@@ -200,26 +226,26 @@ function Groups({ work, groups }: { work: HeadWork; groups: CellGroup[] }) {
   const more = groups.length - GROUP_ROWS;
   // One pass over the Work's pending cells per change, not one per group per render.
   const keysOf = useMemo(() => {
-    const byLabel = new Map<string, string[]>();
+    const byPath = new Map<string, string[]>();
     for (const [key, cell] of Object.entries(work.cells)) {
       if (!pending(cell)) continue;
-      const label = String(work.groupOf(key)[0]);
-      byLabel.set(label, [...(byLabel.get(label) ?? []), key]);
+      const path = JSON.stringify(work.groupOf(key));
+      byPath.set(path, [...(byPath.get(path) ?? []), key]);
     }
-    return byLabel;
+    return byPath;
   }, [work.cells, work.groupOf]);
   return (
     <div className="flex flex-col pl-4">
       {groups.slice(0, GROUP_ROWS).map((group) => {
-        const label = String(group.path[0]);
+        const path = JSON.stringify(group.path);
         return (
           <GroupRow
-            key={label}
+            key={path}
             work={work}
             group={group}
-            keys={keysOf.get(label) ?? NO_KEYS}
-            outcome={outcomes.get(label)}
-            done={(outcome) => setOutcomes(new Map(outcomes).set(label, outcome))}
+            keys={keysOf.get(path) ?? NO_KEYS}
+            outcome={outcomes.get(path)}
+            done={(outcome) => setOutcomes(new Map(outcomes).set(path, outcome))}
           />
         );
       })}
@@ -251,8 +277,8 @@ function GroupRow({
   done: (outcome: FanOutOutcome) => void;
 }) {
   const show = work.show ?? showDefault;
-  const label = String(group.path[0]);
-  const words = work.label?.(label) ?? label;
+  const label = JSON.stringify(group.path);
+  const words = group.path.map((part) => work.label?.(part) ?? part).join(" · ");
   // `{k}` is what the press would cover over these cells, bound to this revision. The dry runs
   // are memoized: they rerun only when the cells, the group's keys or the locks move.
   const { segment, lockOf } = work.wire;

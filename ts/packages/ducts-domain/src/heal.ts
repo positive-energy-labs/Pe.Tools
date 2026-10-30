@@ -5,7 +5,11 @@ import { subjectName } from "./words.ts";
 import { withStoredRulings } from "./rulings.ts";
 import type { DuctSnapshot } from "./types.ts";
 
-/** An open end with no same-class open end this close is dangling and takes a cap (ruling 2026-10-20). */
+/**
+ * An open end with no same-class open end this close is dangling and takes a cap (ruling 2026-10-20).
+ * Still measured here, not from C#'s 36 in `near`: kaitpw 2026-10-29 dropped porting the 60 in search
+ * (the heal box is the `healBoxIn` criterion); ducts LEDGER Owed "Model health, network stage".
+ */
 export const HEAL_DANGLING_IN = 60;
 /** Ends this close are coincident: ConnectTo alone. Mirrors DuctHealer.CoincidentIn. */
 export const HEAL_COINCIDENT_IN = 1 / 16;
@@ -128,11 +132,17 @@ function build(snapshot: DuctSnapshot, raw: DuctsRouteDocument | null): HealPlan
       e.groupId ?? null,
     ]),
   );
+  // C# measures each open end against the whole document (DuctHealth `near`), so a partner outside a
+  // bounded read is still known: an end it marks auto-join faces a vacant port within autoJoinGapIn.
+  const facingOf = new Map(
+    snapshot.issues.flatMap((i) => {
+      const port = i.kind === "open-end" && i.connector != null ? i.near?.ports.find((p) => p.autoJoin) : null;
+      return port ? [[`${i.elementId}:${i.connector}` as string, port] as const] : [];
+    }),
+  );
   const issueOf = new Map(
     snapshot.issues.flatMap((i) =>
-      i.kind === "open-end" && i.elementId != null
-        ? [[`${i.elementId}:${i.id.split(":").at(-1)}`, i.id]]
-        : [],
+      i.kind === "open-end" && i.connector != null ? [[`${i.elementId}:${i.connector}`, i.id]] : [],
     ),
   );
   const tapped = new Set([
@@ -189,6 +199,21 @@ function build(snapshot: DuctSnapshot, raw: DuctsRouteDocument | null): HealPlan
       continue;
     }
     const near = nearest(x);
+    // Air passes an end Revit gives a flow: it is where the system's air leaves or enters, never a cap
+    // (Chadds EX 1 11620957:1, EF-7's 444 cfm out; ducts LEDGER 2026-10-30). Its own words await kaitpw.
+    const flow = x.c.flowCfm ?? 0;
+    const facing = facingOf.get(x.k);
+    if (!near && facing) {
+      say(
+        x,
+        `${named(x)} faces ${facing.elementId}:${facing.connector} ${facing.gapIn.toFixed(2)} in away: a join, not a cap`,
+      );
+      continue;
+    }
+    if (!near && flow > 0) {
+      say(x, `${named(x)} carries ${Math.round(flow)} cfm in Revit; a cap would block its air`);
+      continue;
+    }
     if (!near) {
       if (straightDuct(x.e) || x.e.kind === "fitting") {
         items.push({

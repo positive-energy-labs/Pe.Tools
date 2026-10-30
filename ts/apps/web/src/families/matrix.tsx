@@ -1,6 +1,6 @@
 import { FactChip } from "@pe/kit/lang/chip";
 import { EmptyState } from "@pe/kit/lang/empty";
-import { routeAddress, type FamiliesReadProgress } from "@pe/agent-contracts";
+import { type FamiliesReadProgress } from "@pe/agent-contracts";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { FamiliesPivot } from "#/families/pivot";
 import { filterWords, standingFilterProposal } from "#/families/scope-band";
@@ -39,7 +39,7 @@ export function FamiliesMatrix() {
     matrixIssue,
     readProgress,
   } = useFamiliesWorkspace();
-  const scope = archived ? null : store.handle.work.doc?.scope;
+  const scope = archived ? null : store.work?.doc.scope;
   const proposed = scope ? standingFilterProposal(scope) : null;
   const empty = archived ? (
     matrixReading ? (
@@ -61,7 +61,7 @@ export function FamiliesMatrix() {
     )
   ) : workUnreadable ? (
     <p className="t-small text-ink-2">no matrix — the saved Work cannot be read</p>
-  ) : !connected && store.handle.readings.inventory.state === "ready" ? (
+  ) : !connected && store.documentTarget === null ? (
     <EmptyState story="scope" exit="choose a document in the sentence above">
       nothing to audit — no document chosen
     </EmptyState>
@@ -123,7 +123,7 @@ export function FamiliesMatrix() {
               <FactChip dashed title="Fixture review: no Revit capture behind these values">
                 fixture
               </FactChip>
-              <a href={routeAddress("families").link({ demo: "apply" })}>plan fixture</a>
+              <a href={"/families?fixture=apply"}>plan fixture</a>
             </p>
           )}
         </>

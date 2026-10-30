@@ -13,6 +13,8 @@ internal static class PeRoutes {
         internal static class Keys {
             public const string ThreadSearch = "threadSearch";
             public const string ThreadSort = "threadSort";
+            public const string Stage = "stage";
+            public const string Fan = "fan";
             public const string ContextRadiusFt = "contextRadiusFt";
             public const string SceneView = "sceneView";
             public const string System = "system";
@@ -50,7 +52,6 @@ internal static class PeRoutes {
             public const string Hidden = "hidden";
             public const string Lines = "lines";
             public const string Past = "past";
-            public const string Demo = "demo";
         }
     }
 
@@ -71,7 +72,6 @@ internal static class PeRoutes {
             public const string Drill = "drill";
             public const string Inspector = "inspector";
             public const string Doc = "doc";
-            public const string Demo = "demo";
         }
     }
 
@@ -91,7 +91,6 @@ internal static class PeRoutes {
             public const string Hidden = "hidden";
             public const string Lines = "lines";
             public const string Cell = "cell";
-            public const string Demo = "demo";
         }
     }
 
@@ -109,7 +108,6 @@ internal static class PeRoutes {
             public const string Show = "show";
             public const string Card = "card";
             public const string Viewport = "viewport";
-            public const string Demo = "demo";
         }
     }
 
@@ -124,7 +122,6 @@ internal static class PeRoutes {
             public const string Zone = "zone";
             public const string Room = "room";
             public const string Viewport = "viewport";
-            public const string Demo = "demo";
         }
     }
 
@@ -144,7 +141,6 @@ internal static class PeRoutes {
             public const string Hidden = "hidden";
             public const string Isolated = "isolated";
             public const string Layers = "layers";
-            public const string Demo = "demo";
         }
     }
 
@@ -158,7 +154,6 @@ internal static class PeRoutes {
             public const string Pod = "pod";
             public const string Path = "path";
             public const string Runs = "runs";
-            public const string Demo = "demo";
         }
     }
 

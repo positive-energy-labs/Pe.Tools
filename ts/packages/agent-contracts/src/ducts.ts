@@ -30,6 +30,7 @@
  * `ducts.apply` writes the edited rules, drops, flows, esp, slots and rulings to Revit.
  */
 import { z } from "zod";
+import { DUCT_UNIT_KINDS, ductsCriteriaLayerSchema } from "./ducts-sheet.ts";
 
 import { type RouteStateSpec } from "./route-state.ts";
 import { draftCellSchema } from "./draft.ts";
@@ -353,6 +354,12 @@ export type DuctPortPin = z.infer<typeof ductPortPinSchema>;
 
 export const ductsDocumentSchema = z
   .strictObject({
+    /** The project's design criteria over the firm file (ducts LEDGER 2026-10-29): one cell, each criterion and side optional, pending until apply. */
+    criteria: draftCellSchema(ductsCriteriaLayerSchema).default({}),
+    /** A unit kind ruled per family type, keyed JSON.stringify([family, type]); suggested from ports otherwise. */
+    kinds: z
+      .record(z.string().min(1), draftCellSchema(z.strictObject({ kind: z.enum(DUCT_UNIT_KINDS) })))
+      .default({}),
     calculation: z.record(z.string().min(1), draftCellSchema(ductCalculationSchema)).default({}),
     /** Deletable: a delete edit takes back the verdict the model's store holds at that key. */
     assumptions: z
@@ -477,6 +484,8 @@ export function stagedDucts(doc: DuctsRouteDocument | null) {
   return {
     calculation: stagedOf(doc?.calculation ?? {}),
     rules: stagedOf(doc?.rules ?? {}),
+    criteria: doc?.criteria?.edit?.value ?? {},
+    kinds: stagedOf(doc?.kinds ?? {}) as Record<string, { kind: (typeof DUCT_UNIT_KINDS)[number] }>,
     assumptions: stagedOf<DuctAssumption>(doc?.assumptions ?? {}),
     catalogs: stagedOf(doc?.catalogs ?? {}),
     ruleAssignments: stagedOf(doc?.ruleAssignments ?? {}),
@@ -689,6 +698,7 @@ export const DUCTS_FINDS = [
 ] as const;
 
 export const ductsRouteState = {
+  schemaVersion: 1,
   route: "ducts",
   title: "Ducts",
   description:

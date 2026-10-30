@@ -1,8 +1,8 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { familyCellValueSchema, type FamilyCellState } from "@pe/agent-contracts";
 
 import { runFanOut, type CellWire } from "#/components/work/band";
-import type { FamiliesStore } from "#/families/store";
+import { useFamiliesStore, type FamiliesStore, type FamiliesMount } from "#/families/store";
 import { useMeasuredParse } from "#/host/measured-parse";
 import {
   cellText,
@@ -20,12 +20,9 @@ import {
 } from "#/families/matrix-columns";
 import type { PlanEntry } from "#/route";
 import { createLocator, FamiliesWorkspaceProvider } from "#/families/workspace-context";
-import { FamiliesWorkspaceView } from "#/families/workspace-view";
-import { DEMO_FAMILIES } from "#/families/seeds";
 import { familyCellEntries } from "#/families/staged";
 import { familyVerdicts } from "#/families/verdict";
 import { typeRowKey } from "#/families/picks";
-import { FamiliesLease } from "./view-bridge";
 import { projectPatch } from "./patch-overlay";
 import type { RevitObservationScope } from "#/revit/element-target";
 
@@ -48,15 +45,7 @@ function useFamiliesWorkspaceModel(
     store.actions.setDraft((previous) => ({ ...previous, categories: next, families: null }));
   const setPickedFamilies = (next: string[] | null) =>
     store.actions.setDraft((previous) => ({ ...previous, families: next }));
-  const visibleReading = archived
-    ? store.archive.reading
-    : ([store.page.reading, store.retainedReading].find(
-        (reading) =>
-          reading &&
-          scope &&
-          reading.document.session === scope.bridgeSessionId &&
-          reading.document.openId === scope.openDocumentId,
-      ) ?? null);
+  const visibleReading = store.observation;
   const applied = archived
     ? (visibleReading?.filter ?? null)
     : fixtureFamilies
@@ -86,10 +75,7 @@ function useFamiliesWorkspaceModel(
   );
   // The resolved target came from this inventory subject. Requiring its current observation keeps
   // retained stale inventory from counting as a connected bridge.
-  const connected =
-    archived ||
-    fixture ||
-    (scope !== undefined && store.handle.readings.inventory.state === "ready");
+  const connected = archived || fixture || store.connected;
 
   // Cheap catalog feeds the chooser. The matrix waits for the explicit read action.
   const categories = useMemo(
@@ -202,7 +188,7 @@ function useFamiliesWorkspaceModel(
   const parse = useMeasuredParse(families, store.documentScope);
   const live = useLiveCells(cells, wire);
   // The native patch drawn on the reading it would land on; an archived reading ignores Work.
-  const patch = archived ? undefined : store.handle.work.doc?.patch;
+  const patch = archived ? undefined : store.work?.doc.patch;
   const overlay = useMemo(() => projectPatch(patch ?? {}, rows, params), [patch, rows, params]);
 
   const stagedFamilies = useMemo(() => new Set(edit.map((entry) => entry.familyName)).size, [edit]);
@@ -250,11 +236,7 @@ function useFamiliesWorkspaceModel(
       ? { title: "Couldn't load this past read", message: store.archive.error }
       : !archived && store.retainedError
         ? { title: "Couldn't load the last read", message: store.retainedError }
-        : store.handle.outcome?.key === "read" &&
-            store.handle.outcome.refusal &&
-            visibleReading?.progress?.state !== "cancelled"
-          ? { title: "Couldn't read families", message: store.handle.outcome.refusal.message }
-          : undefined;
+        : undefined;
   /** The matrix read is in flight: an empty table is "reading", never "resolved to none". */
   const readProgress = visibleReading?.progress;
   const matrixReading = archived
@@ -277,7 +259,7 @@ function useFamiliesWorkspaceModel(
     locator,
     /** The saved Work cannot be read: its refusal and start fresh are the only instruction, so
      * every Work-bearing control is inert and no empty-Work instruction is drawn (F-J6-1). */
-    workUnreadable: store.handle.work.refusal != null,
+    workUnreadable: store.workUnreadable,
     fixture,
     target,
     scope,
@@ -322,20 +304,14 @@ function useFamiliesWorkspaceModel(
 
 export type FamiliesWorkspaceModel = ReturnType<typeof useFamiliesWorkspaceModel>;
 
-export function FamiliesWorkspace({
-  store,
-  url = false,
-  visible = true,
+export function FamiliesProvider({
+  owner,
+  children,
 }: {
-  store: FamiliesStore;
-  url?: boolean;
-  visible?: boolean;
+  owner: FamiliesMount;
+  children: ReactNode;
 }) {
-  const model = useFamiliesWorkspaceModel(store, store.demo ? DEMO_FAMILIES : undefined);
-  return (
-    <FamiliesWorkspaceProvider value={model}>
-      <FamiliesLease model={model} url={url} visible={visible} />
-      <FamiliesWorkspaceView url={url} />
-    </FamiliesWorkspaceProvider>
-  );
+  const store = useFamiliesStore(owner);
+  const model = useFamiliesWorkspaceModel(store);
+  return <FamiliesWorkspaceProvider value={model}>{children}</FamiliesWorkspaceProvider>;
 }

@@ -7,6 +7,7 @@ import {
   commands,
   familyReads,
   familyCaptureSchema,
+  familyLiveReadSchema,
   familiesCaptureEvidenceSchema,
   familiesExcluded,
   type FfPlanEntry,
@@ -26,6 +27,9 @@ import {
   canonicalRouteInput,
   documentRefSchema,
   workKeySchema,
+  workKey,
+  bindWork,
+  address,
   type FamilyActionKey,
   type FamilyReadKey,
   type DocumentRef,
@@ -63,7 +67,7 @@ import {
   productPathNames,
   scriptingWorkspaceIdentity,
 } from "@pe/host-contracts/contracts";
-import { invokeBridge as invoke, type RevitBridge } from "./bridge.ts";
+import { CANCEL_OPERATION_KEY, invokeBridge as invoke, type RevitBridge } from "./bridge.ts";
 import { assertFresh, documentMarks } from "./document-marks.ts";
 import type { ActionExecution } from "./action-journal.ts";
 import {
@@ -1613,6 +1617,95 @@ export function familyExecutors(
   } satisfies Record<FamilyActionKey, CommandExecutor>;
 }
 
+const liveFamilyReads = new WeakMap<
+  RevitBridge["Service"],
+  Map<string, { owner: string; cancelled: boolean; active: boolean }>
+>();
+
+async function readLiveFamily(
+  key: "family.read" | "family.cancel-read",
+  input: unknown,
+  scope: unknown,
+  target: unknown,
+  bridge: RevitBridge["Service"],
+  deps: FamilyActionDependencies,
+) {
+  const { readId } = familyReads[key].input.parse(input);
+  const work = workKeySchema.parse(scope);
+  const document = documentRefSchema.parse(target);
+  if (work.route !== "family") throw refused("Family read requires Family Work");
+  const owner = canonicalRouteInput({ work, document });
+  let reads = liveFamilyReads.get(bridge);
+  if (!reads) liveFamilyReads.set(bridge, (reads = new Map()));
+  if (key === "family.cancel-read") {
+    const running = reads.get(readId);
+    if (!running || running.owner !== owner) throw refused("No matching running Family read");
+    running.cancelled = true;
+    if (running.active) await invoke(bridge, document, CANCEL_OPERATION_KEY, { requestId: readId });
+    return { cancelled: true as const };
+  }
+  if (reads.has(readId)) throw refused("Family read is already running");
+  const running = { owner, cancelled: false, active: false };
+  reads.set(readId, running);
+  try {
+    if (!deps.workspace) throw refused("Route Work is unavailable");
+    const { expectedRevision } = familyReads["family.read"].input.parse(input);
+    const { session, process } = await lifetime(bridge, document, true, deps);
+    const opened = session.state!.openDocuments.find((doc) => doc.openId === document.openId)!;
+    const bound = bindWork(
+      "family",
+      opened.address ? address(opened.address) : null,
+      undefined,
+      document,
+    );
+    const from =
+      work.binding === "address" ? work.from : work.binding === "open" ? work.open : null;
+    if (
+      workKey(work) !== workKey(bound) ||
+      (from && canonicalRouteInput(from) !== canonicalRouteInput(document))
+    )
+      throw refused("Family Work belongs to a different document");
+    const marks = documentMarks(bridge);
+    const takenAt = new Date().toISOString();
+    const fence = async () => {
+      if (running.cancelled) throw refused("Family read cancelled");
+      await current(bridge, document, true, process);
+      assertFresh(marks, document, takenAt);
+    };
+    await fence();
+    running.active = true;
+    const captured = await invoke<NativeFamilyCapture.Res.Response>(
+      bridge,
+      document,
+      "family.capture",
+      {},
+      readId,
+    );
+    running.active = false;
+    await fence();
+    const result = familyLiveReadSchema.parse({
+      reading: familyMember(captured.modelJson).content,
+      takenAt,
+      executionContext: document,
+      process,
+    });
+    // Baselines are host observations; the edit door deliberately refuses these paths.
+    const written = await deps.workspace.publish(
+      work,
+      "family",
+      [
+        { path: ["reading"], value: result.reading },
+        { path: ["takenAt"], value: result.takenAt },
+      ],
+      expectedRevision,
+    );
+    if (!written.ok) throw refused("error" in written ? written.error : written.agentHint);
+    return result;
+  } finally {
+    reads.delete(readId);
+  }
+}
+
 export async function readFamily(
   raw: { key: string; input?: unknown; target?: unknown; scope: unknown },
   captures: TakeoffCaptures,
@@ -1623,6 +1716,8 @@ export async function readFamily(
   const key = raw.key as FamilyReadKey;
   const input = familyReads[key].input.parse(raw.input ?? {});
   if (key === "family.saved") return captures.family(familyReads[key].input.parse(input).id);
+  if (key === "family.read" || key === "family.cancel-read")
+    return readLiveFamily(key, input, raw.scope, raw.target, bridge, deps);
   const scope = workKeySchema.parse(raw.scope);
   const target = documentRefSchema.parse(raw.target);
   // Parameter Links reads a project document, not a family document.

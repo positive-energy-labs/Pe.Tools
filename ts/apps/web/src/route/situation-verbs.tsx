@@ -11,7 +11,6 @@ import { FactChip } from "@pe/kit/lang/chip";
 import { KeyHint } from "@pe/kit/lang/key-hint";
 import { Button } from "@pe/kit/lang/button";
 import { changedInRevit } from "#/readings";
-import type { RouteAction } from "./manifest";
 import type { ActionHandle, RouteHandle } from "./handle";
 import { useSituationPresentation } from "#/navigation/route-controls";
 
@@ -201,7 +200,7 @@ export function ActionBoard({
   const meter = work ? <span className="t-small face-mono text-ink-mute">{work}</span> : null;
   const declared = (handle.manifest.actions ?? {}) as Record<
     string,
-    RouteAction<unknown, string, unknown, never> | undefined
+    { dirties: readonly string[] } | undefined
   >;
   const head = (
     <span className="w-[9rem]">

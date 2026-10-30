@@ -14,6 +14,8 @@ export interface RouteStateSpec<TSchema extends z.ZodType> {
   /** Search words for this route's edit door. */
   finds?: readonly string[];
   schema: TSchema;
+  /** Monotonic authored-Work schema age, independent of the transport envelope version. */
+  schemaVersion?: number;
   editable?: readonly import("./command.ts").WorkPath[];
   /** Domain-derived bookkeeping after an authored edit, before validation. */
   reconcileEdit?: (next: unknown, patches: readonly RouteStatePatch[]) => unknown;
@@ -90,7 +92,7 @@ export function workKey(key: WorkKey): string {
 export type RouteDocOf<TSpec> =
   TSpec extends RouteStateSpec<infer TSchema> ? z.infer<TSchema> : never;
 
-/** A single segment-array patch. Omit `value` to delete the key. */
+/** A segment-array patch. Omit `value` to delete. Host-issued restore may replace the root at []. */
 export const routeStatePatchSchema = z.object({
   path: z.array(z.union([z.string(), z.number()]), {
     error: 'must be a segment array, e.g. ["scope","suggestion"]',
@@ -99,10 +101,47 @@ export const routeStatePatchSchema = z.object({
 });
 export type RouteStatePatch = z.infer<typeof routeStatePatchSchema>;
 
+/** One invocation, never one identity per patch. Authorship comes from the host principal. */
+export const workWriteSchema = z.object({
+  patches: z.array(routeStatePatchSchema),
+  expectedRevision: z.number().int().nonnegative(),
+  press: z.string().min(1).nullable(),
+  kind: z.enum(["apply", "restore"]).default("apply"),
+});
+export type WorkWrite = z.infer<typeof workWriteSchema>;
+export type WorkWriteAck = {
+  key: WorkKey;
+  kind: "apply" | "restore" | "publish" | "start-fresh";
+  by: import("./route-doc.ts").WorkAuthor;
+  press: string | null;
+  base: number;
+  revision: number;
+  /** The accepted delta, including stamps, parent creation and reconciliation. */
+  patches: RouteStatePatch[];
+  inverse: RouteStatePatch[];
+  undoable: boolean;
+  /** Recovery keeps the unparsed envelope at this host-owned location. */
+  aside?: string;
+};
+
+/** The wire form of an accepted write: what the host stamped, validated where a browser receives it. */
+export const workWriteAckSchema: z.ZodType<WorkWriteAck> = z.object({
+  key: workKeySchema,
+  kind: z.enum(["apply", "restore", "publish", "start-fresh"]),
+  by: z.enum(["pea", "human"]),
+  press: z.string().min(1).nullable(),
+  base: z.number().int().nonnegative(),
+  revision: z.number().int().nonnegative(),
+  patches: z.array(routeStatePatchSchema),
+  inverse: z.array(routeStatePatchSchema),
+  undoable: z.boolean(),
+  aside: z.string().optional(),
+});
+
 export type RouteWriteKind = "error" | "refused" | "advisory" | "partial";
 
 export type RouteStateWriteResult =
-  | { ok: true; revision: number; doc?: unknown; result?: unknown }
+  | { ok: true; revision: number; doc?: unknown; result?: unknown; write: WorkWriteAck }
   | {
       ok: false;
       kind: RouteWriteKind;

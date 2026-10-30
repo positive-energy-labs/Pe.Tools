@@ -175,6 +175,26 @@ test("SDK alias and canonical bridge id resolve to one identity, ambiguity is re
   ).rejects.toMatchObject({ statusCode: 409 });
 });
 
+test("semantic refresh fences this document and its session tables, retaining another document", async () => {
+  const owner = new DuctsReadings();
+  const other = { ...snapshot, target: { ...target, openId: "other" } };
+  const a = await owner.read(snapshot, async () => native());
+  const b = await owner.read(tables, async () => native());
+  const c = await owner.read(other, async () => ({
+    ...native(),
+    target: { ...native().target, documentRef: other.target },
+  }));
+  owner.refresh(target);
+  await expect(
+    owner.read(snapshot, async () => native(), { version: a.version }),
+  ).rejects.toMatchObject({ statusCode: 409 });
+  await expect(
+    owner.read(tables, async () => native(), { version: b.version }),
+  ).rejects.toMatchObject({ statusCode: 409 });
+  expect(await owner.read(other, async () => native(), { version: c.version })).toBe(c);
+  expect((await owner.read(snapshot, async () => native())).version).not.toBe(a.version);
+});
+
 test("a silent acquisition reports failure to every subscriber and fences late success without releasing single-flight", async () => {
   vi.useFakeTimers();
   try {

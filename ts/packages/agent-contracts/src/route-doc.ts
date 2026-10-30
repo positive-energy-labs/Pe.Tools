@@ -11,6 +11,8 @@ export type RouteRefusalCode = "stale_revision";
 
 export interface RouteEnvelope<D> {
   version: 1;
+  /** Missing on existing Work: unknown age, never evidence that recovery is safe. */
+  schemaVersion?: number;
   revision: number;
   doc: D;
 }
@@ -20,6 +22,18 @@ export type WorkAuthor = "pea" | "human";
 /** Every path's answer when saved Work fails the route's schema: fail-closed, never migrated. */
 export const UNREADABLE_WORK =
   "This tool's saved Work is in a shape this version cannot read, so it was left untouched; it cannot be opened here.";
+export const OLDER_WORK = `${UNREADABLE_WORK} It was written by an older schema; Start fresh can set it aside.`;
+
+export function workSchemaAge(
+  raw: unknown,
+  spec: Pick<RouteStateSpec<z.ZodType>, "schemaVersion">,
+) {
+  const version = isRecord(raw) ? raw.schemaVersion : undefined;
+  if (typeof version !== "number" || !Number.isSafeInteger(version) || version < 1)
+    return "unknown";
+  const current = spec.schemaVersion ?? 1;
+  return version < current ? "older" : version > current ? "newer" : "current";
+}
 /**
  * The human-only verb offered on an UNREADABLE_WORK route: `POST <route-state>/:route/start-fresh`
  * with `{}`. The old document is kept, unparsed, at `<route>:aside:<n>` (routes never contain ':');
@@ -49,6 +63,7 @@ export function applyPatches<S extends z.ZodType>(
   patches: readonly RouteStatePatch[],
   expectedRevision: number,
   trusted = false,
+  restore = false,
 ): RouteLanded<z.infer<S>> | RouteRefusal {
   const stale = checkRevision(envelope, expectedRevision);
   if (stale) return stale;
@@ -60,17 +75,45 @@ export function applyPatches<S extends z.ZodType>(
       "Use the route's read or capture command.",
     );
 
-  const draft = structuredClone(envelope.doc) as Record<string, unknown>;
+  let draft = structuredClone(envelope.doc) as Record<string, unknown>;
   try {
-    for (const patch of patches) applyPatch(draft, patch);
+    for (const patch of patches) {
+      if (restore && patch.path.length === 0) draft = structuredClone(patch.value) as typeof draft;
+      else applyPatch(draft, structuredClone(patch));
+    }
   } catch (error) {
     return refuse("error", message(error), "patch paths must address plain document keys.");
   }
   return commitDoc(
     spec,
     envelope,
-    stampChanges(spec.reconcileEdit?.(draft, patches) ?? draft, envelope.doc, by, expectedRevision),
+    restore
+      ? draft
+      : stampChanges(
+          spec.reconcileEdit?.(draft, patches) ?? draft,
+          envelope.doc,
+          by,
+          expectedRevision,
+        ),
   );
+}
+
+/** Replace a container when its keys change, so inverse replay preserves key order as well. */
+export function routeDocDelta(
+  before: unknown,
+  after: unknown,
+  path: RouteStatePatch["path"] = [],
+): RouteStatePatch[] {
+  if (JSON.stringify(before) === JSON.stringify(after)) return [];
+  if (
+    isRecord(before) &&
+    isRecord(after) &&
+    JSON.stringify(Object.keys(before)) === JSON.stringify(Object.keys(after))
+  )
+    return Object.keys(before).flatMap((key) =>
+      routeDocDelta(before[key], after[key], [...path, key]),
+    );
+  return [{ path, ...(after === undefined ? {} : { value: structuredClone(after) }) }];
 }
 
 export function checkRevision(

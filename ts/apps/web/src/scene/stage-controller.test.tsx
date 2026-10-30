@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { createLiveOrbit } from "@pe/kit/lang/live-orbit";
 import { PictureStage, useStage, stageViewport, projectBounds } from "./stage-controller";
-import { makeAtomRegistry } from "#/route/route-owner";
+import { makeAtomRegistry } from "#/shell/owner";
 import { TestAttention } from "#/test-attention";
 import { mention } from "@pe/kit/lang/attention";
 import { Row } from "@pe/kit/lang/row";

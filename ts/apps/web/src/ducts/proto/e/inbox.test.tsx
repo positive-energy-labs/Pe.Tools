@@ -8,11 +8,10 @@ const search = (keywords = "", pills: Record<string, string> = {}) =>
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
-import type { ActionHandle } from "#/route/handle";
 import { ductClaimSchema, ductsDocumentSchema } from "@pe/agent-contracts";
 
 import { focusRow, inboxRows, type CellRef, type InboxItem } from "../../inbox-rows";
-import { manifest } from "../../manifest";
+import { ductsGraph } from "../../graph";
 import { Inbox } from "./inbox";
 
 afterEach(cleanup);
@@ -35,7 +34,7 @@ test("D18 requires a short claim title and keeps its sentence in the Evidence hi
     flows: new Map(),
     equipmentFlows: new Map(),
     claims: [claim],
-    write: { edit: 0, hasPreview: false, fresh: false, planned: null, refused: null, esp: 0 },
+    write: { edit: 0, esp: 0 },
   });
   mount({ check, focused: "claim:c1" });
   const row = document.querySelector<HTMLElement>('[data-key="claim:c1"]')!;
@@ -60,22 +59,13 @@ const item = (over: Partial<InboxItem> & Pick<InboxItem, "key" | "group">): Inbo
   verbs: [],
   ...over,
 });
-const handle = (refusal: string | null, label = "x"): ActionHandle =>
-  ({ label, refusal, count: null, run: vi.fn(async () => null) }) as unknown as ActionHandle;
-
 function mount(
   over: {
     held?: string | null;
-    apply?: string | null;
     onFocusCell?: (c: CellRef) => void;
-    healRefusal?: string | null;
-    previewed?: boolean;
-    healHeld?: boolean;
-    fanHeld?: boolean;
     set?: InboxItem[];
     diagnostics?: InboxItem[];
     store?: Parameters<typeof Inbox>[0]["work"]["store"];
-    fanRefusal?: string | null;
     selected?: number | null;
     focused?: string | null;
     onPick?: () => void;
@@ -84,9 +74,8 @@ function mount(
     address?: Parameters<typeof Inbox>[0]["address"];
   } = {},
 ) {
-  const apply = handle(over.apply ?? null, "write 3 to Revit");
-  const heal = { preview: handle(null), apply: handle(null), busy: false };
-  const fan = { preview: handle(null), apply: handle(null), busy: false };
+  const heal = { render: (_row: unknown) => <span>Heal control</span> };
+  const fan = { render: (_row: unknown) => <span>Fan control</span> };
   const pair = { unitId: 17, systemId: 19 };
   const write = vi.fn(async (_patches: unknown) => null);
   const groups = {
@@ -96,28 +85,14 @@ function mount(
         group: "fix",
         kind: "heal",
         title: "Heal SA 1: 2 caps",
-        status: "not previewed",
+        status: "3 edit",
         ids: [10],
         verbs: [
           {
-            kind: "preview",
+            kind: "command",
             on: { verb: "heal", group: "g1" },
-            label: "preview heal",
-            says: "Preview healing",
-            held: over.healHeld
-              ? {
-                  word: "heal · previewed 2",
-                  summary: "2 pass · 0 refused",
-                  lines: [{ key: "cap:1", text: "cap 10 (end 1)", state: "planned", reason: null }],
-                }
-              : null,
-            stale: null,
-            commit: {
-              label: "apply heal",
-              says: "Heal what passed",
-              refusal: over.healRefusal === undefined ? null : over.healRefusal,
-            },
-            outcome: null,
+            label: "Heal",
+            says: "Review repairs, then heal",
           },
         ],
       }),
@@ -127,20 +102,10 @@ function mount(
         title: "No duct path to a fan",
         verbs: [
           {
-            kind: "preview",
+            kind: "command",
             on: { verb: "fan", ...pair },
-            label: "preview: make FC-17 the fan of SA 19",
-            says: "Preview in Revit, rolled back",
-            held: over.fanHeld
-              ? { word: "make FC-17 the fan of SA 19 · previewed", summary: "planned", lines: [] }
-              : null,
-            stale: null,
-            commit: {
-              label: "make FC-17 the fan of SA 19",
-              says: "Make it the fan",
-              refusal: over.fanRefusal === undefined ? null : over.fanRefusal,
-            },
-            outcome: null,
+            label: "Assign fan",
+            says: "Review the assignment, then apply it",
           },
         ],
       }),
@@ -178,26 +143,10 @@ function mount(
       onSelect={() => {}}
       onFocusCell={over.onFocusCell ?? (() => {})}
       write={{
-        preview: handle(null, "preview"),
-        apply,
-        busy: false,
-        row: {
-          title: "Write to Revit",
-          status: "preview out of date",
-          held: over.held ?? null,
-        },
-        held: over.previewed
-          ? {
-              word: "previewed 3",
-              summary: "3 planned · 1 refused",
-              lines: [
-                { key: "a", text: "FC-17 · ESP: 0.5 → 0.9", state: "planned", reason: null },
-                { key: "b", text: "Pe store · slot", state: "refused", reason: "Revit says no" },
-              ],
-            }
-          : null,
-        stale: false,
+        control: <span>Price control</span>,
+        row: { title: "Write to Revit", status: "edit", held: over.held ?? null },
       }}
+      cells={() => <span>Cell controls</span>}
       heal={heal}
       fan={fan}
       selected={over.selected ?? null}
@@ -206,91 +155,8 @@ function mount(
       address={over.address}
     />,
   );
-  return { ...utils, apply, heal, fan, write };
+  return { ...utils, heal, fan, write };
 }
-
-test("a Heal row previews with its group, then its popover heals what the preview passed", async () => {
-  const first = mount();
-  fireEvent.click(screen.getByText("Heal SA 1: 2 caps"));
-  const detail = first.container.querySelector('[data-inbox-detail="heal:g1"]') as HTMLElement;
-  await act(async () =>
-    fireEvent.click(within(detail).getByRole("button", { name: "preview heal" })),
-  );
-  expect(first.heal.preview.run).toHaveBeenCalledWith({ group: "g1" });
-  expect(first.heal.apply.run).not.toHaveBeenCalled();
-  cleanup();
-  // A held preview wears the armed word and opens on a press, with its items and the commit.
-  const armed = mount({ healHeld: true });
-  fireEvent.click(screen.getByText("Heal SA 1: 2 caps"));
-  const open = armed.container.querySelector('[data-inbox-detail="heal:g1"]') as HTMLElement;
-  await act(async () =>
-    fireEvent.click(within(open).getByRole("button", { name: "heal · previewed 2" })),
-  );
-  expect(screen.getByText("2 pass · 0 refused")).toBeTruthy();
-  expect(screen.getByText("cap 10 (end 1)")).toBeTruthy();
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "apply heal" })));
-  expect(armed.heal.apply.run).toHaveBeenCalledWith({ group: "g1" });
-});
-
-test("a no-fan row previews making its one unit the fan, then commits from the popover", async () => {
-  const first = mount();
-  fireEvent.click(screen.getByText("No duct path to a fan"));
-  const detail = first.container.querySelector('[data-inbox-detail="f1"]') as HTMLElement;
-  await act(async () =>
-    fireEvent.click(
-      within(detail).getByRole("button", { name: "preview: make FC-17 the fan of SA 19" }),
-    ),
-  );
-  expect(first.fan.preview.run).toHaveBeenCalledWith({ unitId: 17, systemId: 19 });
-  expect(first.fan.apply.run).not.toHaveBeenCalled();
-  cleanup();
-  const armed = mount({ fanHeld: true });
-  fireEvent.click(screen.getByText("No duct path to a fan"));
-  const open = armed.container.querySelector('[data-inbox-detail="f1"]') as HTMLElement;
-  await act(async () =>
-    fireEvent.click(
-      within(open).getByRole("button", { name: "make FC-17 the fan of SA 19 · previewed" }),
-    ),
-  );
-  await act(async () =>
-    fireEvent.click(screen.getByRole("button", { name: "make FC-17 the fan of SA 19" })),
-  );
-  expect(armed.fan.apply.run).toHaveBeenCalledWith({ unitId: 17, systemId: 19 });
-});
-
-test("the Write row is one preview button; its popover lists the changes and writes", async () => {
-  const idle = mount();
-  const idleGroup = idle.container.querySelector('[aria-label="Write"]') as HTMLElement;
-  // Nothing held: the single idle button is the handle's own word, and the commit is not drawn.
-  expect(within(idleGroup).queryByRole("button", { name: "write 3 to Revit" })).toBeNull();
-  expect(within(idleGroup).getByRole("button", { name: "preview" })).toBeTruthy();
-  cleanup();
-  // Fix and Set rows standing hold back only the ESP: apply stays armed and the row says what waits.
-  const held = "1 edit ESP left out of this write: 1 to fix before the ESP writes";
-  const armed = mount({ held, previewed: true });
-  const group = armed.container.querySelector('[aria-label="Write"]') as HTMLElement;
-  fireEvent.click(screen.getByText("Write to Revit"));
-  await act(async () =>
-    fireEvent.click(within(group).getByRole("button", { name: "previewed 3" })),
-  );
-  expect(screen.getByText("3 planned · 1 refused")).toBeTruthy();
-  expect(screen.getByText("FC-17 · ESP: 0.5 → 0.9")).toBeTruthy();
-  expect(screen.getByText("refused: Revit says no")).toBeTruthy();
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "write 3 to Revit" })));
-  expect(armed.apply.run).toHaveBeenCalledTimes(1);
-  expect(armed.container.querySelector("[data-inbox-write-held]")?.textContent).toBe(held);
-  cleanup();
-  // The commit wears the handle's refusal.
-  const refusedMount = mount({ apply: "Preview first", previewed: true });
-  const refusedGroup = refusedMount.container.querySelector('[aria-label="Write"]') as HTMLElement;
-  await act(async () =>
-    fireEvent.click(within(refusedGroup).getByRole("button", { name: "previewed 3" })),
-  );
-  const refused = screen.getByRole("button", { name: "write 3 to Revit" });
-  expect(refused.getAttribute("aria-disabled")).toBe("true");
-  fireEvent.click(refused);
-  expect(refusedMount.apply.run).not.toHaveBeenCalled();
-});
 
 test("taking back a stored ignore stages a delete over it", () => {
   const { container, write } = mount({
@@ -335,7 +201,7 @@ test("taking back a stored ignore stages a delete over it", () => {
 // The chat head's "→ review" on a edit cell: the cell family's `focus` writes `issue`, the screen
 // resolves it with `focusRow` against the inbox's rows, and the Inbox opens and selects that row.
 const reviewPage = (segment: string, key: string) => {
-  const family = manifest.cells!.find((one) => one.segment === segment)!;
+  const family = ductsGraph.cells!.find((one) => one.segment === segment)!;
   return family.focus!(key);
 };
 const rowKeysOf = (over: NonNullable<Parameters<typeof mount>[0]>) =>
@@ -385,7 +251,7 @@ test("an issue id that names no Work cell lands nowhere extra", () => {
 });
 
 test("a loss-rule group reads as its family, type and condition", () => {
-  const family = manifest.cells!.find((one) => one.segment === "rules")!;
+  const family = ductsGraph.cells!.find((one) => one.segment === "rules")!;
   expect(family.label!("elbow-1d-le10")).toBe("Round Elbow 1 D · D ≤ 10 in");
   expect(family.label!("not-a-rule")).toBe("not-a-rule");
 });

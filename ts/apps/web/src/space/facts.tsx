@@ -2,17 +2,16 @@
  * What the picture is of, for its fixed readout (the scene's summary, or what the pick is: its
  * PrimRow or scene handle, Selection Box beside it, and the visibility verbs), and for the pane's
  * side the row encoding's legend and one small form per answer layer that is on.
- * Every read runs a manifest verb; its answer lands on the Page and the layer draws it.
+ * Every native read runs a kernel query; its receipt supplies the answer layer.
  */
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { Button } from "@pe/kit/lang/button";
-import { Input } from "@pe/kit/lang/input";
+import { Input, Label } from "@pe/kit/lang/input";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { tokenRef } from "@pe/kit/lib/token";
 import { Legend as KitLegend, legendWord } from "@pe/kit/lang/legend";
 import { Switcher } from "@pe/kit/lang/switcher";
-import type { ActionHandle } from "#/route/handle";
 import type { ElementTarget } from "#/revit/element-target";
 import { SelectionBoxButton } from "#/revit/element-menu";
 import { observedElements, useNativeObservation } from "#/revit/observation";
@@ -21,19 +20,66 @@ import { sceneTarget } from "#/scene/scene-target";
 import type { SceneInstance } from "#/scene/types";
 
 import { ENCODINGS, ENCODING_SAYS, rowAt, type Legend, type SpaceLayer } from "./layers";
-import type { SpacePage } from "./manifest";
+import type { SpacePage } from "./graph";
+import type { SpaceAnswers } from "./reads";
 
-type Verb =
-  | "status"
-  | "rows"
-  | "tree"
-  | "slice"
-  | "probe"
-  | "sweep"
-  | "hide"
-  | "isolate"
-  | "showAll";
 type Element = Psc1Metadata["elements"][number];
+
+/** Capture's authored scope: individual numeric identities, never the array's wire encoding. */
+export function HostIds({
+  page,
+  setPage,
+}: {
+  page: SpacePage;
+  setPage(this: void, patch: Partial<SpacePage>): void;
+}) {
+  const [draft, setDraft] = useState("");
+  const id = Number(draft);
+  const refusal =
+    !Number.isSafeInteger(id) || id <= 0
+      ? "Enter a positive whole host element ID"
+      : page.ids.includes(id)
+        ? "This host element is already named"
+        : null;
+  const add = () => {
+    if (refusal) return;
+    setPage({ ids: [...page.ids, id] });
+    setDraft("");
+  };
+  return (
+    <section aria-label="Host elements" className="flex flex-wrap items-center gap-1">
+      <Label>
+        Host element ID
+        <Input
+          aria-label="Host element ID"
+          type="number"
+          min={1}
+          step={1}
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter") return;
+            event.preventDefault();
+            event.stopPropagation();
+            add();
+          }}
+        />
+      </Label>
+      <Button label="Add host element ID" refusal={refusal} onClick={add}>
+        add
+      </Button>
+      {page.ids.map((id, index) => (
+        <Button
+          key={`${id}:${index}`}
+          label={`Remove host element ${id}`}
+          onClick={() => setPage({ ids: page.ids.filter((value) => value !== id) })}
+        >
+          {id} ×
+        </Button>
+      ))}
+    </section>
+  );
+}
 
 const Fact = ({ name, children }: { name: string; children: ReactNode }) => (
   <>
@@ -57,20 +103,46 @@ export const pickName = (h: {
     .filter(Boolean)
     .join(" · ");
 
-/** The visibility verbs; they change what the picture draws, never the model. */
-function VisibilityVerbs({ actions }: { actions: Record<Verb, ActionHandle> }) {
+/** Visibility is shareable Page state; these controls never touch the model. */
+function VisibilityControls({
+  page,
+  setPage,
+}: {
+  page: SpacePage;
+  setPage: (patch: Partial<SpacePage>) => void;
+}) {
   return (
     <>
-      {(["hide", "isolate", "showAll"] as const).map((verb) => (
-        <Button
-          key={verb}
-          label={actions[verb].label}
-          refusal={actions[verb].refusal}
-          onClick={() => void actions[verb].run()}
-        >
-          {actions[verb].label}
-        </Button>
-      ))}
+      <Button
+        label="hide"
+        refusal={page.selected ? null : "Pick an element"}
+        onClick={() =>
+          page.selected &&
+          setPage({ hidden: [...new Set([...page.hidden, page.selected])], selected: null })
+        }
+      >
+        hide
+      </Button>
+      <Button
+        label="isolate"
+        refusal={page.selected ? null : "Pick an element"}
+        onClick={() =>
+          page.selected &&
+          setPage({
+            isolated: [page.selected],
+            hidden: page.hidden.filter((key) => key !== page.selected),
+          })
+        }
+      >
+        isolate
+      </Button>
+      <Button
+        label="show all"
+        refusal={page.hidden.length || page.isolated !== null ? null : "Everything is shown"}
+        onClick={() => setPage({ hidden: [], isolated: null })}
+      >
+        show all
+      </Button>
     </>
   );
 }
@@ -79,11 +151,13 @@ function VisibilityVerbs({ actions }: { actions: Record<Verb, ActionHandle> }) {
 export function SceneSummary({
   metadata,
   demo,
-  actions,
+  page,
+  setPage,
 }: {
   metadata: Psc1Metadata;
   demo: boolean;
-  actions: Record<Verb, ActionHandle>;
+  page: SpacePage;
+  setPage: (patch: Partial<SpacePage>) => void;
 }) {
   const missing = metadata.unavailableElements;
   return (
@@ -113,7 +187,7 @@ export function SceneSummary({
         ) : null}
       </dl>
       <div className="flex flex-wrap items-center gap-1">
-        <VisibilityVerbs actions={actions} />
+        <VisibilityControls page={page} setPage={setPage} />
       </div>
     </section>
   );
@@ -125,17 +199,19 @@ export function PickFacts({
   element,
   instance,
   partition,
-  actions,
+  answers,
+  setPage,
 }: {
   page: SpacePage;
   element: Element | null;
   instance: SceneInstance | null;
   /** The pick's source kind, as the scene stamp names it. */
   partition: string | null;
-  actions: Record<Verb, ActionHandle>;
+  answers: SpaceAnswers;
+  setPage: (patch: Partial<SpacePage>) => void;
 }) {
   const observation = useNativeObservation();
-  const row = page.rows && page.row !== null ? rowAt(page.rows.response, page.row) : null;
+  const row = answers.rows && page.row !== null ? rowAt(answers.rows.response, page.row) : null;
   let target: ElementTarget | null = null;
   let facts: ReactNode = null;
   if (element && instance) {
@@ -201,7 +277,7 @@ export function PickFacts({
       {facts}
       <div className="flex flex-wrap items-center gap-1">
         {target ? <SelectionBoxButton target={target} /> : null}
-        <VisibilityVerbs actions={actions} />
+        <VisibilityControls page={page} setPage={setPage} />
       </div>
     </section>
   );
@@ -261,11 +337,20 @@ function Field({
   onChange: (v: string) => void;
   width?: string;
 }) {
+  const [text, setText] = useState(value);
+  useEffect(() => setText(value), [value]);
   return (
     <label className="flex items-center gap-1 t-small">
       {label}
       <span className={width}>
-        <Input aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} />
+        <Input
+          aria-label={label}
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value);
+            onChange(e.target.value);
+          }}
+        />
       </span>
     </label>
   );
@@ -275,37 +360,48 @@ function Field({
 export function AnswerForms({
   on,
   page,
-  actions,
+  answers,
+  setPage,
+  verbs,
 }: {
   on: ReadonlySet<SpaceLayer>;
   page: SpacePage;
-  actions: Record<Verb, ActionHandle>;
+  answers: SpaceAnswers;
+  setPage: (patch: Partial<SpacePage>) => void;
+  verbs: (row: { verb: string; input?: unknown }) => ReactNode;
 }) {
-  const [band, setBand] = useState({ z0: "0", z1: "10" });
-  const [tree, setTree] = useState({ source: "0", depth: "4" });
-  const [at, setAt] = useState("0,0,5");
-  const [path, setPath] = useState({
-    polyline: "0,0,9; 20,0,9",
-    width: "1",
-    height: "1",
-    clearance: "0.5",
-  });
-  const run = (verb: Verb, input?: unknown) => (
-    <Button
-      label={`read ${verb}`}
-      refusal={actions[verb].refusal}
-      onClick={() => void actions[verb].run(input)}
-    >
-      read
-    </Button>
-  );
+  const band = { z0: String(page.sliceInput.z0), z1: String(page.sliceInput.z1) };
+  const tree = { source: String(page.treeInput.source), depth: String(page.treeInput.maxDepth) };
+  const at = page.probeInput.at.join(",");
+  const path = {
+    polyline: page.sweepInput.polyline.map((v) => v.join(",")).join("; "),
+    width: String(page.sweepInput.widthFt),
+    height: String(page.sweepInput.heightFt),
+    clearance: String(page.sweepInput.clearanceFt),
+  };
+  const setBand = (next: typeof band) =>
+    setPage({ sliceInput: { z0: num(next.z0), z1: num(next.z1) } });
+  const setTree = (next: typeof tree) =>
+    setPage({ treeInput: { source: num(next.source), maxDepth: num(next.depth) } });
+  const setAt = (next: string) =>
+    setPage({ probeInput: { at: triple(next) as [number, number, number] } });
+  const setPath = (next: typeof path) =>
+    setPage({
+      sweepInput: {
+        polyline: next.polyline.split(";").map(triple) as [number, number, number][],
+        widthFt: num(next.width),
+        heightFt: num(next.height),
+        clearanceFt: num(next.clearance),
+      },
+    });
+  const run = (verb: string, input?: unknown) => verbs({ verb, input });
   const says = (text: string | null) =>
     text ? <span className="t-small text-ink-2">{text}</span> : null;
-  const s = page.status?.response;
-  const rows = page.rows?.response;
-  const sl = page.slice?.response;
-  const pr = page.probe?.response;
-  const sw = page.sweep?.response;
+  const s = answers.status?.response;
+  const rows = answers.rows?.response;
+  const sl = answers.slice?.response;
+  const pr = answers.probe?.response;
+  const sw = answers.sweep?.response;
   const hit = (
     h: { handle: { category: string; elementId: number }; z: number } | null | undefined,
   ) => (h ? `${h.handle.category} ${h.handle.elementId} at z ${h.z.toFixed(2)}` : "nothing");
@@ -343,7 +439,7 @@ export function AnswerForms({
             onChange={(depth) => setTree({ ...tree, depth })}
           />
           {run("tree", { source: num(tree.source), maxDepth: num(tree.depth) })}
-          {says(page.tree ? `${page.tree.response.nodes.length} nodes` : null)}
+          {says(answers.tree ? `${answers.tree.response.nodes.length} nodes` : null)}
         </div>
       )}
       {on.has("slice") && (

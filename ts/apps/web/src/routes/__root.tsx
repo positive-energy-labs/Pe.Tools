@@ -17,7 +17,7 @@ import { RegistryContext } from "@effect/atom-react";
 import { lazy, Suspense } from "react";
 
 import { inspectAtomRegistry } from "../state/atom-inspect";
-import { appAtomRegistry, routeSearch } from "../route/route-owner";
+import { appAtomRegistry, routeSearch } from "#/shell/owner";
 import { AppUtilities } from "../route/app-chrome";
 import { NoticeShell } from "#/machine/notice-shell";
 import { AppBar } from "#/navigation/app-bar";
@@ -57,7 +57,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
     shell: search.shell === "tray" || search.shell === "card" ? search.shell : undefined,
   }),
   // Resource identity crosses links; shell presentation belongs to the local surface adapter.
-  search: { middlewares: [retainSearchParams(["thread", "target", "work"])] },
+  search: { middlewares: [retainSearchParams(["thread", "target", "work", "fixture"])] },
   head: () => ({
     meta: [
       {

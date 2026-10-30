@@ -1,256 +1,103 @@
-/**
- * Family — the route's projections and its page memory, and nothing else.
- *
- * The owner, the registry, the Target resolution, busy, refusals, the pod and spec selection, and
- * capture/apply live in the route kernel (`family/manifest.ts` over `entityRoute`). What is
- * left here is what only Family knows: how the draft (the live reading and its proposals), the
- * capture evidence and the saved member a build needs become one lane, and which selections the
- * sheet holds while it is open.
- */
+/** Family's model projections and pane memory. The graph mount owns acquisition, Work and verbs. */
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import {
-  actionReceiptSchema,
-  familyCaptureSchema,
-  familyApplyResultSchema,
-  memberWork,
+  familyEvidenceSchema,
+  settingsCandidate,
   settingsFieldDirectives,
   settingsFieldSegments,
-  settingsCandidate,
   transitionPatches,
-  type FamilyCapture,
-  type FamilyDocument,
+  type ActionReceipt,
   type FamilyDraft,
   type PodMember,
-  type Reading,
-  type SettingsSnapshot,
 } from "@pe/agent-contracts";
-
-import type { CellWire } from "#/components/work/band";
+import { z } from "zod";
 import type { TableState } from "@pe/kit/table/model";
-import { projectBuildReceipt, type BuildFacts, type BuildRefusal } from "#/family/build";
-import type { EvidenceSlice, FamilySnapshot, FieldState } from "#/family/host";
-import { familySource } from "#/family/source";
-import { initialDraft, savedFrom, type Draft, type Focus, type Overlay } from "#/family/model";
-import { draftToPatches, FAMILY_CELLS } from "#/family/project";
-import { familyEditBuffer } from "./edit-buffer";
-import {
-  captureEvidence,
-  familyManifest,
-  latestApplyStatus,
-  latestBuildStatus,
-  latestCaptureStatus,
-  projectReadings,
-  type FamilyAuthoringFacts,
-  type FamilyPage,
-} from "#/family/manifest";
-import { previousOf, useReading } from "#/readings";
-import { useRoute, type EntityPage } from "#/route";
-import { actionResult } from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import type { CellWire } from "#/components/work/band";
+import type { GraphMount } from "#/shell/mount";
 import { useWork } from "@pe/kit/lang/work";
-import type { PageMove } from "#/route/manifest";
-import { openMember } from "#/route/spec-editor";
-import { displaySpec } from "#/family/spec";
-import { openSpec } from "#/family/host";
-import type { ParsedDocView } from "@pe/agent-contracts";
+import { familyGraph, type FamilyPage } from "./graph";
+import { readingValue, type FamilySpecReading } from "./sources";
+import { familySource } from "./source";
+import { initialDraft, savedFrom, type Draft, type Focus, type Overlay } from "./model";
+import { draftToPatches, FAMILY_CELLS } from "./project";
+import { familyEditBuffer } from "./edit-buffer";
+import { displaySpec } from "./spec";
+import { projectBuildReceipt } from "./build";
+import type { FamilySnapshot } from "./types";
 
+export type FamilyMount = GraphMount<FamilyPage, FamilyDraft>;
+export type Inspect = { kind: "part"; slug: string } | { kind: "param"; name: string } | null;
+export type Binding = { slug: string; property: string } | null;
+export type PickerState = { open: string | null; level: string | null; query: string };
 type Setter<A> = A | ((previous: A) => A);
 const next = <A>(value: Setter<A>, previous: A): A =>
   typeof value === "function" ? (value as (previous: A) => A)(previous) : value;
-
-export type Inspect = { kind: "part"; slug: string } | { kind: "param"; name: string } | null;
-/** The `inspector` field's text (`part:<slug>`, `param:<name>`, empty) as the inspector's subject. */
 const inspectOf = (text: string): Inspect =>
   text.startsWith("part:")
     ? { kind: "part", slug: text.slice(5) }
     : text.startsWith("param:")
       ? { kind: "param", name: text.slice(6) }
       : null;
-const inspectorOf = (inspect: Inspect) =>
-  !inspect ? "" : inspect.kind === "part" ? `part:${inspect.slug}` : `param:${inspect.name}`;
-export type Binding = { slug: string; property: string } | null;
-type ArmedBuild = { token: string | null; reason: string } | null;
-export type PickerState = { open: string | null; level: string | null; query: string };
+const inspectorOf = (value: Inspect) =>
+  !value ? "" : value.kind === "part" ? `part:${value.slug}` : `param:${value.name}`;
+const noEdit = { draft: null, failure: null };
+const noSubscribe = () => () => {};
 
-const emptyTable = (): TableState => ({ sorts: [], query: "" });
-
-/* ── Page memory ───────────────────────────────────────────────────────────── */
-
-/**
- * Gestures and transient focus: hover focus, pins, zoom, a collapsed pane, an open picker, the
- * drilled table's own view. What a person navigates to (the overlay, the table view, the drilled
- * type, the inspector, the doc mode) is a contract field on the Page (`routeAddress("family")`).
- */
-interface FamilyPageMemory {
-  readonly drill: TableState;
-  readonly docZoom: number;
-  readonly stageType: string;
-  readonly focus: Focus;
-  readonly focusedProposal: string | null;
-  readonly pinnedParam: string | null;
-  readonly anatomyCollapsed: boolean;
-  readonly binding: Binding;
-  readonly picker: PickerState;
-  readonly sharedEdit: { pointer: string; directives: string[] } | null;
-  readonly receipt: { verb: string; text: string; at: number } | null;
-}
-
-const initialMemory = (): FamilyPageMemory => ({
-  drill: emptyTable(),
-  docZoom: 1,
-  stageType: "Standard",
-  focus: null,
-  focusedProposal: null,
-  pinnedParam: null,
-  anatomyCollapsed: false,
-  binding: null,
-  picker: { open: null, level: null, query: "" },
-  sharedEdit: null,
-  receipt: null,
-});
-
-const absentFacts: FamilyAuthoringFacts = {
-  relativePath: null,
-  versionToken: null,
-  validation: null,
-  unsavedCount: 0,
-  stagedCount: 0,
-  current: false,
-};
-
-/* ── Pure projections ──────────────────────────────────────────────────────── */
-
-/** The last succeeded `family.apply` receipt, folded onto the projection. */
-function applyOnto(
-  projection: Omit<FamilyDocument, "plan">,
-  statuses: unknown,
-  receipts: unknown,
-  target: { session: string; openId: string },
-): Omit<FamilyDocument, "plan"> {
-  if (!statuses || !receipts) return projection;
-  const status = latestApplyStatus(statuses, target);
-  if (!status) return projection;
-  const row = actionReceiptSchema
-    .array()
-    .parse(receipts)
-    .find((entry) => entry.id === status.id);
-  if (row?.state === "succeeded") {
-    const result = familyApplyResultSchema.parse(row.result);
-    const outcomes = "results" in result ? result.results : [result];
-    projection.apply = {
-      receipts: outcomes.flatMap((outcome) => outcome.native.receipts),
-      diagnostics: outcomes.flatMap((outcome) => outcome.native.diagnostics),
-    };
-  }
-  return projection;
-}
-
-/** The saved member, as the Settings Work reads it: bytes first, then what the host made of them. */
-function useMemberObservation(member: PodMember | null, enabled: boolean) {
-  const [reading, setReading] = useState<Reading<SettingsSnapshot>>({ state: "absent" });
-  const key = member ? memberWork(member) : null;
-  useEffect(() => {
-    if (!enabled || !member) return setReading({ state: "absent" });
-    let live = true;
-    setReading((previous) =>
-      previous.state === "ready"
-        ? { state: "stale", previous: previous.observation, reason: "dirtied" }
-        : { state: "absent" },
-    );
-    openMember(member).then(
-      (observation) => live && setReading({ state: "ready", observation }),
-      (cause: unknown) =>
-        live &&
-        setReading({
-          state: "failed",
-          message: cause instanceof Error ? cause.message : String(cause),
-        }),
-    );
-    return () => {
-      live = false;
-    };
-    // `key` is the member's identity; the object is rebuilt every render.
-  }, [key, enabled]); // eslint-disable-line react-hooks/exhaustive-deps
-  return reading;
-}
-
-/* ── The hook ──────────────────────────────────────────────────────────────── */
-
-export function useFamilyStore(options: {
-  target?: string | null;
-  thread?: string;
-  /** The owner's live `pod.list`; the demo lane seeds its own. */
-  pods: Reading<unknown>;
-  /** False in a chat pane, which does not own the URL. */
-  url: boolean;
-}) {
-  const demo = useMemo(
-    () => new URLSearchParams(globalThis.location?.search ?? "").has("demo"),
-    [],
+export function useFamilyStore(owner: FamilyMount) {
+  const scope = {
+    ...owner.snapshot(),
+    page: owner.view.read().page,
+    readings: Object.fromEntries(
+      Object.keys(familyGraph.readings).map((id) => [id, owner.readings.get(id)]),
+    ),
+  };
+  const { page, work, target } = scope;
+  const member = useMemo<PodMember | null>(
+    () => (page.pod && page.path ? { pod: page.pod, path: page.path } : null),
+    [page.pod, page.path],
   );
-  // The build refusals read the member's authored state, which is only known after the member's
-  // Work mounts below; the manifest takes the facts one render later.
-  const [facts, setFacts] = useState<FamilyAuthoringFacts>(absentFacts);
-  const routeManifest = useMemo(() => familyManifest(facts), [facts]);
-
-  // The member the draft was opened from or saved as; only build reads its saved bytes.
-  const [pageForMember, setPageForMember] = useState<PodMember | null>(null);
-  const observed = useMemberObservation(pageForMember, !demo);
-  const provided = useMemo(
-    () => (demo ? { pods: options.pods } : { pods: options.pods, profile: observed }),
-    [demo, options.pods, observed],
-  );
-  const handle = useRoute(routeManifest, {
-    target: options.target ?? null,
-    thread: options.thread,
-    url: options.url,
-    provided,
-  });
-  const [page, setPage] = handle.page as unknown as readonly [
-    FamilyPage & EntityPage,
-    (next: Partial<FamilyPage & EntityPage>, move?: PageMove<FamilyPage & EntityPage>) => void,
-  ];
-  // The contract fields, as the workspace reads them.
-  const table = useMemo(
-    (): TableState => ({ sorts: page.sort, query: page.query, hiddenColumns: page.hidden }),
+  const table = useMemo<TableState>(
+    () => ({ sorts: page.sort, query: page.query, hiddenColumns: page.hidden }),
     [page.sort, page.query, page.hidden],
   );
   const inspect = useMemo(() => inspectOf(page.inspector), [page.inspector]);
   const drillType = page.drill || null;
-  const member = useMemo(
-    () => (page.pod && page.path ? { pod: page.pod, path: page.path } : null),
-    [page.pod, page.path],
+  const run = useCallback(
+    async (id: string, input: unknown = {}) => {
+      const result = await owner.control(id, input).run();
+      return "refusal" in result ? result.refusal : null;
+    },
+    [owner],
   );
-  useEffect(() => setPageForMember(member), [member]);
-
-  const profileObservation = previousOf(handle.readings.profile as Reading<SettingsSnapshot>);
-  // The draft: the live reading and the proposals on it, as the route's Work.
-  const draftDoc = handle.work.doc as FamilyDraft | null;
-  const draftRevision = handle.work.revision;
-  /** The person's input stays buffered until Work accepts its original-revision write. */
+  const write = useCallback<CellWire["write"]>(
+    (patches, expectedRevision = owner.snapshot().work?.handle.revision ?? -1) =>
+      run("edit", { patches, expectedRevision }),
+    [owner, run],
+  );
   const edits = useMemo(
-    () =>
-      familyEditBuffer(handle.work.key, async (patches, revision) => {
-        if (!draftDoc) throw Error("Read the family first.");
-        // The patches come built under the Work's own cell segment (FAMILY_CELLS).
-        return handle.work.write(patches, revision);
-      }),
-    [handle.work, draftDoc],
+    () => (work ? familyEditBuffer(work.handle.key, write) : null),
+    [work?.handle.key, write],
   );
-  const editState = useSyncExternalStore(edits.subscribe, edits.getSnapshot, edits.getSnapshot);
-  // The buffer is this store's own in-flight write; readings and verbs register in their hooks.
+  const editState = useSyncExternalStore(
+    edits?.subscribe ?? noSubscribe,
+    edits?.getSnapshot ?? (() => noEdit),
+    edits?.getSnapshot ?? (() => noEdit),
+  );
   useWork(editState.draft !== null && editState.failure === null, "saving…");
   useEffect(() => {
-    if (draftRevision != null) edits.observe(draftRevision);
-  }, [edits, draftRevision]);
-  const flush = edits.flush;
-  const fields = (draftDoc?.cells ?? {}) as Record<string, FieldState>;
+    if (work) edits?.observe(work.handle.revision);
+  }, [edits, work?.handle.revision]);
+  const flush = useCallback(async () => {
+    await edits?.flush();
+  }, [edits]);
+  const fields = work?.doc.cells ?? {};
   const draftSnapshot = useCallback(
-    (edit: boolean): FamilySnapshot | null => {
-      if (draftDoc?.reading == null) return null;
+    (edited: boolean): FamilySnapshot | null => {
+      if (!work?.doc.reading) return null;
       try {
-        const rawContent = edit
-          ? settingsCandidate(draftDoc.reading, draftDoc.cells)
-          : draftDoc.reading;
+        const rawContent = edited
+          ? settingsCandidate(work.doc.reading, work.doc.cells)
+          : work.doc.reading;
         return {
           ...(member ? { member } : {}),
           sha256: null,
@@ -262,7 +109,7 @@ export function useFamilyStore(options: {
         return {
           ...(member ? { member } : {}),
           sha256: null,
-          rawContent: draftDoc.reading,
+          rawContent: work.doc.reading,
           composedContent: null,
           validation: {
             isValid: false,
@@ -277,231 +124,135 @@ export function useFamilyStore(options: {
         };
       }
     },
-    [draftDoc, member],
+    [work?.doc, member],
   );
   const snapshot = useMemo(() => draftSnapshot(false), [draftSnapshot]);
-  const authored = useMemo(
-    (): unknown => (snapshot?.rawContent ? JSON.parse(snapshot.rawContent.replace(/^﻿/, "")) : null),
-    [snapshot],
-  );
-  /** Every Family cell's accept, deny and unstage: one wire over the draft Work's `cells`. */
-  const wire = useMemo(
-    (): CellWire => ({
+  const authored = useMemo((): unknown => {
+    try {
+      return snapshot ? JSON.parse(snapshot.rawContent.replace(/^\uFEFF/, "")) : null;
+    } catch {
+      return null;
+    }
+  }, [snapshot]);
+  const wire = useMemo<CellWire>(
+    () => ({
       segment: FAMILY_CELLS,
-      revision: draftRevision,
-      // Buffered typing lands first; a bound verb rendered before it then refuses as stale.
+      revision: work?.handle.revision ?? null,
       write: async (patches, revision) => {
         await flush();
-        return handle.work.write(patches, revision);
+        return write(patches, revision);
       },
-      lockOf: familyLockOf(authored),
+      lockOf: (key) =>
+        page.stage === "history" ? "History is inspection only" : familyLockOf(authored)(key),
     }),
-    [handle.work, draftRevision, flush, authored],
+    [work?.handle.revision, write, flush, authored, page.stage],
   );
-  const authoredLane = useMemo(() => familySource(snapshot, null, fields), [snapshot, fields]);
-  const authoredDraft = useMemo(
-    () => initialDraft(familySource(draftSnapshot(true), null).world),
-    [draftSnapshot],
-  );
-  const authoringFacts = useMemo(
-    (): FamilyAuthoringFacts => ({
-      relativePath: authoredLane.document?.relativePath ?? null,
-      versionToken: authoredLane.document?.versionToken ?? null,
-      validation: authoredLane.document ? (snapshot?.validation ?? null) : null,
-      unsavedCount: authoredLane.document
-        ? draftToPatches(
-            authoredLane.document.model,
-            authoredDraft,
-            initialDraft(authoredLane.world),
-          ).length
-        : 0,
-      stagedCount: Object.values(fields).filter((field) => field.edit != null).length,
-      current: handle.work.current,
-    }),
-    [authoredLane, authoredDraft, fields, snapshot?.validation, handle.work.current],
-  );
-  useEffect(() => {
-    setFacts((previous) =>
-      JSON.stringify(previous) === JSON.stringify(authoringFacts) ? previous : authoringFacts,
-    );
-  }, [authoringFacts]);
-
-  const [memory, setMemory] = useState<FamilyPageMemory>(initialMemory);
+  const [memory, setMemory] = useState({
+    drill: { sorts: [], query: "" } as TableState,
+    docZoom: 1,
+    stageType: "Standard",
+    focus: null as Focus,
+    focusedProposal: null as string | null,
+    pinnedParam: null as string | null,
+    binding: null as Binding,
+    picker: { open: null, level: null, query: "" } as PickerState,
+    sharedEdit: null as { pointer: string; directives: string[] } | null,
+    receipt: null as { verb: string; text: string; at: number } | null,
+  });
   const patch = useCallback(
-    (value: Partial<FamilyPageMemory>) => setMemory((current) => ({ ...current, ...value })),
+    (value: Partial<typeof memory>) => setMemory((current) => ({ ...current, ...value })),
     [],
   );
-
-  const target =
-    handle.resolution.kind === "resolved" && handle.resolution.target.kind === "document"
-      ? handle.resolution.target.ref
+  const capturedResult = readingValue<ActionReceipt[]>(scope.readings.captureReceipt)?.[0];
+  const captured = useMemo(() => {
+    const parsed = z
+      .object({
+        member: z.object({ pod: z.string(), path: z.string() }),
+        evidence: familyEvidenceSchema,
+      })
+      .safeParse(capturedResult?.state === "succeeded" ? capturedResult.result : null);
+    return parsed.success ? parsed.data : null;
+  }, [capturedResult]);
+  const evidence =
+    captured && captured.member.pod === member?.pod && captured.member.path === member.path
+      ? captured.evidence
       : null;
-  const targetLabel = target?.session ?? "";
-
-  /* ── Family Readings ────────────────────────────────────────────────────── */
-  const familyReading = handle.readings.family as Reading<unknown>;
-  const readings: FamilyCapture[] = useMemo(() => {
-    const raw = previousOf(familyReading);
-    return raw ? familyCaptureSchema.array().parse(raw) : [];
-  }, [familyReading]);
-  const statuses = previousOf(handle.readings.receipts as Reading<unknown>);
-  const receiptOf = (id: string | undefined) =>
-    !handle.demo && id ? ({ kind: "receipts", id } as const) : null;
-  const applyStatus = useMemo(
-    () => (target ? latestApplyStatus(statuses, target) : null),
-    [statuses, target],
-  );
-  const applyReceipt = previousOf(useReading<unknown>(receiptOf(applyStatus?.id)));
-  const captureStatus = useMemo(
-    () => (target ? latestCaptureStatus(statuses, target) : null),
-    [statuses, target],
-  );
-  const captureReceipt = previousOf(useReading<unknown>(receiptOf(captureStatus?.id)));
-  const familyDoc = useMemo(() => {
-    const projection = projectReadings(readings, target ?? undefined);
-    return target ? applyOnto(projection, statuses, applyReceipt, target) : projection;
-  }, [readings, target, statuses, applyReceipt]);
-  const buildStatus = useMemo(
-    () =>
-      target && profileObservation?.sha256
-        ? latestBuildStatus(statuses, target, {
-            target,
-            source: { ...profileObservation.member, sha256: profileObservation.sha256 },
-            reason: "",
-          })
-        : null,
-    [profileObservation, statuses, target],
-  );
-  const buildReceiptReading = useReading<unknown>(receiptOf(buildStatus?.id));
-  const buildReceipt = useMemo(
-    () =>
-      buildStatus ? projectBuildReceipt(previousOf(buildReceiptReading), buildStatus.id) : null,
-    [buildReceiptReading, buildStatus],
-  );
-
-  /* ── Derived lane ───────────────────────────────────────────────────────── */
-  const review = { revision: draftRevision };
-  /**
-   * What the latest capture from this document saw — coverage and unmodeled facts — shown beside
-   * the member it filed. Another member's capture is not this member's evidence.
-   */
-  const captured = useMemo(
-    () => (captureStatus ? captureEvidence(captureReceipt, captureStatus.id) : null),
-    [captureReceipt, captureStatus],
-  );
-  const evidence = useMemo((): EvidenceSlice | null => {
-    if (!captured || !member) return null;
-    if (captured.member.pod !== member.pod || captured.member.path !== member.path) return null;
-    // captureStatus is already this exact document lifetime; a family may have no path.
-    return captured.evidence;
-  }, [captured, member]);
-  const [fileSpec, setFileSpec] = useState<ParsedDocView | null>(null);
-  useEffect(() => {
-    let current = true;
-    setFileSpec(null);
-    if (member)
-      openSpec(member).then(
-        (doc) => {
-          if (current) setFileSpec(doc);
-        },
-        (error: unknown) => {
-          if (current) patch({ receipt: { verb: "spec", text: String(error), at: Date.now() } });
-        },
-      );
-    return () => {
-      current = false;
-    };
-  }, [member, patch]);
-  const attached = draftDoc?.spec;
+  const attached = work?.doc.spec;
+  const fileSpec = readingValue<FamilySpecReading>(scope.readings.spec);
   const spec = useMemo(() => {
     if (!member) return null;
     const doc =
       attached?.member.pod === member.pod && attached.member.path === member.path
         ? attached.doc
-        : fileSpec;
+        : fileSpec?.member.pod === member.pod && fileSpec.member.path === member.path
+          ? fileSpec.doc
+          : null;
     return doc ? displaySpec(doc, member) : null;
-  }, [member, attached, fileSpec]);
+  }, [attached, fileSpec, member]);
   const lane = useMemo(
-    () => familySource(snapshot, evidence, fields, spec ?? familyDoc.doc),
-    [snapshot, evidence, fields, spec, familyDoc.doc],
+    () => familySource(snapshot, evidence, fields, spec ?? undefined),
+    [snapshot, evidence, fields, spec],
   );
   const saved = useMemo(() => savedFrom(initialDraft(lane.world)), [lane]);
   const draft = useMemo(
     () => editState.draft ?? initialDraft(familySource(draftSnapshot(true), evidence).world),
     [editState.draft, draftSnapshot, evidence],
   );
-  const profile = member?.path ?? "";
-
-  /* ── Build ──────────────────────────────────────────────────────────────── */
-  const buildFacts: BuildFacts = {
-    relativePath: authoringFacts.relativePath,
-    versionToken: authoringFacts.versionToken,
-    validation: authoringFacts.validation,
-    unsavedCount: authoringFacts.unsavedCount,
-    stagedCount: authoringFacts.stagedCount,
-    boundTarget: targetLabel,
-    armedToken: page.buildReview?.source.sha256 ?? null,
-  };
-  const armedBuild: ArmedBuild = page.buildReview
-    ? { token: page.buildReview.source.sha256, reason: page.buildReview.reason }
+  const documentTarget = target.kind === "document" ? target.ref : null;
+  const documentScope = useMemo(
+    () =>
+      documentTarget
+        ? { bridgeSessionId: documentTarget.session, openDocumentId: documentTarget.openId }
+        : undefined,
+    [documentTarget?.session, documentTarget?.openId],
+  );
+  const buildReceipts = readingValue<ActionReceipt[]>(scope.readings.buildReceipt);
+  const buildReceipt = buildReceipts?.[0]
+    ? projectBuildReceipt(buildReceipts, buildReceipts[0].id)
     : null;
-  const buildOutcome: BuildRefusal | null =
-    handle.outcome?.key === "build" && handle.outcome.refusal
-      ? {
-          code: handle.outcome.refusal.code === "unknown" ? "unknown" : "host",
-          says: handle.outcome.refusal.message,
-        }
-      : null;
-
   const actions = useMemo(
     () => ({
-      /** Authored edits are edit into the settings Work; a pointer field refuses locally. */
       setDraft: (value: Setter<Draft>): string | void => {
+        if (page.stage === "history") return "History is inspection only";
+        if (!lane.document || !edits || !work) return "Read the family before editing fields";
         const previous = edits.getSnapshot().draft ?? draft;
-        const nextDraft = next(value, previous);
-        const raw = snapshot?.rawContent;
-        if (lane.document && raw) {
-          const authored: unknown = JSON.parse(raw.replace(/^﻿/, ""));
-          for (const entry of draftToPatches(lane.document.model, nextDraft, previous)) {
-            const pointer = String(entry.path[1]);
-            const directives = settingsFieldDirectives(authored, settingsFieldSegments(pointer));
-            if (directives) {
-              const text = `Edit the shared source for ${pointer}. The profile contains a pointer; no local edit was edit.`;
-              patch({
-                sharedEdit: { pointer, directives },
-                receipt: { verb: "page", text, at: Date.now() },
-              });
-              return text;
-            }
+        const updated = next(value, previous);
+        const patches = draftToPatches(lane.document.model, updated, previous);
+        for (const entry of patches) {
+          const pointer = String(entry.path[1]);
+          const directives = settingsFieldDirectives(authored, settingsFieldSegments(pointer));
+          if (directives) {
+            const text = `Edit the shared source for ${pointer}. The profile contains a pointer; no local edit was staged.`;
+            patch({
+              sharedEdit: { pointer, directives },
+              receipt: { verb: "page", text, at: Date.now() },
+            });
+            return text;
           }
         }
-        if (!lane.document) return "Read the family before editing fields.";
-        const patches = draftToPatches(lane.document.model, nextDraft, previous);
-        // A cleared suggestion is a deny: the edit buffer binds it to the revision it was seen at.
-        for (const id of nextDraft.cleared.filter((id) => !previous.cleared.includes(id)))
+        for (const id of updated.cleared.filter((id) => !previous.cleared.includes(id)))
           patches.push(
             ...transitionPatches([FAMILY_CELLS], id, fields[id] ?? {}, { kind: "unsuggest" }),
           );
-        if (draftRevision == null) return "Wait for the draft to finish loading.";
-        if (patches.length) setPage({ buildReview: null });
-        edits.stage(nextDraft, patches, draftRevision);
+        edits.stage(updated, patches, work.handle.revision);
       },
-      setOverlay: (value: Setter<Overlay>) => setPage({ overlay: next(value, page.overlay) }),
-      // Typing, a header sort and a column toggle are gestures: each rewrites this history entry.
+      setOverlay: (value: Setter<Overlay>) =>
+        owner.view.setPage({ overlay: next(value, page.overlay) }),
       setTable: (value: Setter<TableState>) => {
         const updated = next(value, table);
-        setPage(
+        owner.view.setPage(
           { query: updated.query, sort: updated.sorts, hidden: updated.hiddenColumns ?? [] },
           { history: "replace" },
         );
       },
       setDrill: (value: Setter<TableState>) =>
         setMemory((c) => ({ ...c, drill: next(value, c.drill) })),
-      setDocMode: (value: Setter<"text" | "sheet">) => setPage({ doc: next(value, page.doc) }),
+      setDocMode: (value: Setter<"text" | "sheet">) =>
+        owner.view.setPage({ doc: next(value, page.doc) }),
       setDocZoom: (value: Setter<number>) =>
         setMemory((c) => ({ ...c, docZoom: next(value, c.docZoom) })),
       setDrillType: (value: Setter<string | null>) =>
-        setPage({ drill: next(value, drillType) ?? "" }),
+        owner.view.setPage({ drill: next(value, drillType) ?? "" }),
       setStageType: (value: Setter<string>) =>
         setMemory((c) => ({ ...c, stageType: next(value, c.stageType) })),
       setFocus: (value: Setter<Focus>) => setMemory((c) => ({ ...c, focus: next(value, c.focus) })),
@@ -509,25 +260,14 @@ export function useFamilyStore(options: {
         setMemory((c) => ({ ...c, focusedProposal: next(value, c.focusedProposal) })),
       setPinnedParam: (value: Setter<string | null>) =>
         setMemory((c) => ({ ...c, pinnedParam: next(value, c.pinnedParam) })),
-      setAnatomyCollapsed: (value: Setter<boolean>) =>
-        setMemory((c) => ({ ...c, anatomyCollapsed: next(value, c.anatomyCollapsed) })),
       setInspect: (value: Setter<Inspect>) =>
-        setPage({ inspector: inspectorOf(next(value, inspect)) }),
+        owner.view.setPage({ inspector: inspectorOf(next(value, inspect)) }),
       setBinding: (value: Setter<Binding>) =>
         setMemory((c) => ({ ...c, binding: next(value, c.binding) })),
       setPicker: (value: Setter<PickerState>) =>
         setMemory((c) => ({ ...c, picker: next(value, c.picker) })),
-      armBuild: () =>
-        handle.actions.build.run({ reason: page.buildReview?.reason ?? "", arm: true }),
-      cancelBuild: () => setPage({ buildReview: null }),
-      setBuildReason: (reason: string) =>
-        setPage({
-          buildReview: page.buildReview ? { ...page.buildReview, reason } : null,
-        }),
       say: (text: string) => patch({ receipt: { verb: "page", text, at: Date.now() } }),
       flush,
-      /** Re-read the open family into the draft; the proposals stay on it. */
-      read: () => handle.actions.read.run(),
       async attachSpec(this: void, file: File) {
         if (!member) throw Error("Capture the family into a pod before attaching its cut sheet");
         const base64 = await new Promise<string>((resolve, reject) => {
@@ -537,107 +277,61 @@ export function useFamilyStore(options: {
           reader.onerror = () => reject(reader.error);
           reader.readAsDataURL(file);
         });
-        const refusal = await handle.actions.attach_spec.run({
+        const refused = await run("attach-spec", {
           member,
           source: { fileName: file.name, base64 },
         });
-        if (refusal) throw Error(refusal.message);
-      },
-      /** Opening a saved member puts its bytes in the draft as the reading; the page names it. */
-      async open(next: PodMember) {
-        await flush();
-        const source = await openMember(next);
-        if (!source.sha256) throw Error("Saved member has no readable content hash");
-        if (handle.resolution.kind !== "resolved") throw Error("pick a document");
-        actionResult(
-          await handle.commands["family.observe"]({ source: { ...next, sha256: source.sha256 } }),
-        );
-        setPage({ pod: next.pod, path: next.path, buildReview: null });
-      },
-      /** Capture files a new member (the kernel lands the page on it) and returns its evidence. */
-      capture: () => handle.actions.capture.run(),
-      async build() {
-        const result = await handle.actions.build.run();
-        return result?.message ?? null;
+        if (refused) throw Error(refused.message);
       },
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
-      member,
-      handle.actions,
-      handle.work,
-      draft,
+      page,
       lane,
-      snapshot,
-      draftRevision,
       edits,
-      editState.draft,
-      flush,
+      work,
+      draft,
+      fields,
+      authored,
       patch,
-      page.buildReview,
-      page.overlay,
-      page.doc,
+      owner,
       table,
-      inspect,
       drillType,
-      setPage,
+      inspect,
+      flush,
+      member,
+      run,
     ],
   );
   return {
-    handle,
-    manifest: routeManifest,
-    demo,
+    owner,
+    scope,
     member,
-    // Work + Readings, projected
-    ready: familyDoc,
-    readings,
-    profile,
-    target: targetLabel,
-    /** The exact document a read-only host call from this page must name. */
-    documentScope: target
-      ? { bridgeSessionId: target.session, openDocumentId: target.openId }
-      : undefined,
+    profile: member?.path ?? "",
+    target: documentTarget?.session ?? "",
+    documentScope,
     evidence,
     captured,
-    reconciliation: { apply: familyDoc.apply },
     lane,
     snapshot,
-    review,
+    review: { revision: work?.handle.revision ?? null },
     fields,
     wire,
     saved,
     draft,
-    buildFacts,
-    buildOutcome,
     buildReceipt,
-    // Page memory, flattened
+    ...memory,
     overlay: page.overlay,
     table,
-    drill: memory.drill,
     docMode: page.doc,
-    docZoom: memory.docZoom,
     drillType,
-    stageType: memory.stageType,
-    focus: memory.focus,
-    focusedProposal: memory.focusedProposal,
-    pinnedParam: memory.pinnedParam,
-    anatomyCollapsed: memory.anatomyCollapsed,
     inspect,
-    binding: memory.binding,
-    picker: memory.picker,
-    armedBuild,
-    sharedEdit: memory.sharedEdit,
-    receipt: memory.receipt,
-    busy: handle.busy,
-    failure: editState.failure ?? handle.failure,
+    busy: owner.busy(),
+    failure: editState.failure,
     editFailure: editState.failure,
     actions,
   };
 }
-
 export type FamilyStore = ReturnType<typeof useFamilyStore>;
-
-/** A field inside a shared-source pointer is locked: the profile holds the pointer, not the value. */
 export const familyLockOf =
   (authored: unknown) =>
   (key: string): string | null =>

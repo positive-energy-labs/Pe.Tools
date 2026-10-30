@@ -11,11 +11,8 @@ import type { AtlasActions } from "#/takeoff/atlas";
 import { TakeoffEditCell } from "#/takeoff/proposals";
 import { MANUAL_J } from "#/takeoff/room-actions";
 import { ROOM_STATES, STATE_META, STAGE_BLURB, stateMeta } from "#/takeoff/room-state";
-import {
-  ATLAS_COLUMN_SEMANTICS,
-  type AtlasRow as Row,
-  type TakeoffsController,
-} from "#/takeoff/controller";
+import { ATLAS_COLUMN_SEMANTICS, type AtlasRow as Row } from "#/takeoff/projections";
+import type { TakeoffStore } from "./store";
 import { STAGE_ORDER, type RoomType } from "#/takeoff/world";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
@@ -39,7 +36,7 @@ function RoomNameCell({
   row,
   onCommit,
 }: {
-  store: TakeoffsController;
+  store: TakeoffStore;
   row: Row;
   onCommit: (value: string) => void;
 }) {
@@ -104,7 +101,7 @@ export function useAtlasColumns({
   actions: AtlasActions;
   fieldsMode: "columns" | "panel";
   flagVocabulary: string[];
-  store: TakeoffsController;
+  store: TakeoffStore;
 }) {
   return useMemo<Column<Row>[]>(
     () => [

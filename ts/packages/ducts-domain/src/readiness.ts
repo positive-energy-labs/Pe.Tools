@@ -1,17 +1,16 @@
 /**
  * How far each duct group can be solved under shared Work assumptions. Derived on every render
  * and never stored: the facts and issues come from `ducts.snapshot`, the assumptions from Work.
- * - walkable: one root, no loop, every open end capped or ignored, every terminal with a flow
+ * - walkable: no loop, every open end capped or ignored, every terminal with a flow
  *   (or ignored). A pass-1 walk from the root reaches every terminal.
- * - budgetable: walkable, and every root's fan static and every accessory's pressure drop is
- *   known (stated in Revit or overridden). Flex on the rigid default roughness needs an override
+ * - budgetable: walkable, and every accessory's pressure drop is known (stated in Revit or
+ *   overridden). Flex on the rigid default roughness needs an override
  *   or an ignore.
  */
 import { ductOverrideKey, type DuctAssumption, type DuctsRouteDocument } from "@pe/agent-contracts";
 
 import { ISSUE_BLOCKS } from "./issues.ts";
 import { withStoredRulings } from "./rulings.ts";
-import { survey } from "./survey.ts";
 import type { DuctSnapshot } from "./types.ts";
 
 type DuctIssue = DuctSnapshot["issues"][number];
@@ -57,8 +56,6 @@ export function readiness(
 ): Record<string, GroupReadiness> {
   const doc = withStoredRulings(work, snapshot.store);
   const { issues, nodes, segments } = snapshotById(snapshot);
-  let surveyed: Set<string> | null = null;
-  const standing = () => (surveyed ??= new Set(survey(snapshot, work).findings.map((f) => f.id)));
   const verdict = (issue: DuctIssue) => {
     const value = edit(doc, issue.id);
     return value?.kind === "verdict" ? value.verdict : null;
@@ -74,13 +71,8 @@ export function readiness(
     switch (issue.kind) {
       case "open-end":
         return verdict(issue) === "capped" || verdict(issue) === "ignore";
-      case "multi-root":
-        // The survey's verdict: one fan left, or every fan ruled (`unit-roles.ts`).
-        return !standing().has(issue.id);
       case "no-terminal-flow":
         return verdict(issue) === "ignore";
-      case "no-fan-static":
-        return override("fan-static", element);
       case "no-component-drop":
         return override("component-drop", element === null ? null : nodes.get(element)?.family);
       case "default-flex-roughness":

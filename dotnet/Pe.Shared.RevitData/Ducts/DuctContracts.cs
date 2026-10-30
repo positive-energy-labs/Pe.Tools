@@ -46,34 +46,38 @@ public enum DuctShape {
     [EnumMember(Value = "other")] Other
 }
 
+/// <summary>
+///     Model health (ducts LEDGER 2026-10-29): what is true of the model whatever is calculated, keyed by element and
+///     connector, never by group. Pricing findings (leg flow, shared leg, flow mismatch, not priced, implausible loss,
+///     equipment pairing, velocity over) need a named fan and are the TypeScript sheet's.
+/// </summary>
 [JsonConverter(typeof(StringEnumConverter))]
 public enum DuctIssueKind {
-    /// <summary>A physical connector on a duct, fitting, accessory or terminal with nothing attached. Caps are not open ends.</summary>
+    /// <summary>A physical connector on a duct, fitting, accessory, terminal or equipment with nothing attached. Caps are not open ends. Carries <see cref="DuctNear" />.</summary>
     [EnumMember(Value = "open-end")] OpenEnd,
-    /// <summary>The group's graph has a cycle; the element closes one.</summary>
+    /// <summary>An open end whose vacant, opposed partner is within the auto-join gap: a joint drawn a hair apart.</summary>
+    [EnumMember(Value = "near-miss")] NearMiss,
+    /// <summary>
+    ///     A two-port accessory or fitting lying inside one straight duct's body, aligned with its run, neither port connected
+    ///     (a damper dropped into a duct). Keyed by the part; carries <see cref="DuctInline" />, the host it sits in.
+    /// </summary>
+    [EnumMember(Value = "inline")] Inline,
+    /// <summary>The read's connector graph (equipment cut out) has a cycle; the element closes one.</summary>
     [EnumMember(Value = "loop")] Loop,
     /// <summary>A duct shorter than 3 in: a connector stub between fittings.</summary>
     [EnumMember(Value = "stub")] Stub,
-    /// <summary>The group carries more than one system classification.</summary>
-    [EnumMember(Value = "mixed-classification")] MixedClassification,
+    /// <summary>A connected joint whose two connectors state different air classifications (supply meets return).</summary>
+    [EnumMember(Value = "air-type-change")] AirTypeChange,
     /// <summary>Round under 3 in or over 36 in; rectangular side under 2.5 in or aspect over 8.</summary>
     [EnumMember(Value = "implausible-size")] ImplausibleSize,
     /// <summary>A flex duct whose type roughness is the Revit default, which is the rigid galvanized value.</summary>
     [EnumMember(Value = "default-flex-roughness")] DefaultFlexRoughness,
-    /// <summary>Root equipment with no external static pressure stated.</summary>
-    [EnumMember(Value = "no-fan-static")] NoFanStatic,
-    /// <summary>An accessory in the path with no pressure drop stated.</summary>
+    /// <summary>An accessory with no pressure drop stated.</summary>
     [EnumMember(Value = "no-component-drop")] NoComponentDrop,
     /// <summary>A terminal with no design flow.</summary>
     [EnumMember(Value = "no-terminal-flow")] NoTerminalFlow,
-    /// <summary>A group with terminals and no equipment port.</summary>
-    [EnumMember(Value = "no-root")] NoRoot,
-    /// <summary>A group attached to more than one equipment port.</summary>
-    [EnumMember(Value = "multi-root")] MultiRoot,
     /// <summary>A segment whose Revit-reported velocity is 2000 fpm or more.</summary>
-    [EnumMember(Value = "high-velocity")] HighVelocity,
-    /// <summary>A tee, tap, wye or cross with a leg carrying no pass-1 flow: Revit's table route charges that leg 0 and the branch grid has no point there.</summary>
-    [EnumMember(Value = "no-flow-leg")] NoFlowLeg
+    [EnumMember(Value = "high-velocity")] HighVelocity
 }
 
 /// <summary>
@@ -83,7 +87,70 @@ public enum DuctIssueKind {
 /// </summary>
 public sealed record DuctSnapshotRequest(
     DuctParameterSlots? Slots = null,
-    string? LabelParameter = "PE_G___TagInstance"); // firm-default: PE_* names belong in firm config, not code (kaitpw 2026-10-20, later)
+    string? LabelParameter = "PE_G___TagInstance", // firm-default: PE_* names belong in firm config, not code (kaitpw 2026-10-20, later)
+    DuctSnapshotSelector? Selector = null);
+
+[JsonConverter(typeof(StringEnumConverter))]
+public enum DuctSelectorKind {
+    /// <summary>Every duct network in the document, grouped and analysed (the shape being replaced by the path engine, ducts MAP 2026-10-27).</summary>
+    [EnumMember(Value = "document")] Document,
+    /// <summary>Exactly the named elements, raw: no groups, roots, flows or systems; health without open-end neighbourhoods.</summary>
+    [EnumMember(Value = "ids")] Ids,
+    /// <summary>A connector walk from one element's HVAC ports (ducts MAP "Where the data comes from", row 1), raw, with open-end candidates.</summary>
+    [EnumMember(Value = "from")] From,
+    /// <summary>The fan roster's read: every HVAC equipment node and air terminal, raw, plus Revit's systems without sections; health without open-end neighbourhoods.</summary>
+    [EnumMember(Value = "roster")] Roster,
+    /// <summary>
+    ///     The named Revit systems' networks, grouped and analysed exactly as `document` is: the network page's read (the
+    ///     whole-document read outgrew the 16 MiB bridge frame on cloud Chadds, 2026-10-29).
+    /// </summary>
+    [EnumMember(Value = "systems")] Systems
+}
+
+/// <summary>
+///     Which elements the snapshot reads. Kind `document` is the default and the shape every existing caller gets. Kind
+///     `ids` reads Ids. Kind `from` walks Revit connectors outward from UnitId's HVAC ports (PortIndex names one
+///     connector id; absent walks every port) through ducts, flex, fittings, accessories and equipment (equipment is a
+///     leg, never a cut: the roster decides stops later), stopping at an air terminal, an open end, or MaxHops elements
+///     deep (default 2000). At every open end a box CandidateBoxIn inches on a side (default 36) around the connector is
+///     searched for MEP elements, which join the output marked `open-end-candidate` so a join can be inferred. Every kind
+///     reports model health (Issues) under CandidateBoxIn and AutoJoinGapIn (<see cref="DuctHealthTolerances" />). Kind
+///     `systems` reads SystemIds (MechanicalSystem ids): each system's DuctNetwork, Elements and base equipment, grown
+///     along connectors to whole groups (a group is a connected component, so one the systems touch is never cut), and
+///     answers in the `document` shape with Systems holding only the named systems.
+/// </summary>
+public sealed record DuctSnapshotSelector(
+    DuctSelectorKind Kind = DuctSelectorKind.Document,
+    IReadOnlyList<long>? Ids = null,
+    long? UnitId = null,
+    int? PortIndex = null,
+    int? MaxHops = null,
+    double? CandidateBoxIn = null,
+    IReadOnlyList<long>? SystemIds = null,
+    double? AutoJoinGapIn = null);
+
+/// <summary>Reason a node or segment is in a `from` snapshot: reached by the connector walk, or found in an open end's candidate box.</summary>
+public static class DuctWalkReason {
+    public const string Walked = "walked";
+    public const string OpenEndCandidate = "open-end-candidate";
+}
+
+/// <summary>
+///     The `from` walk's summary. Hops is the deepest element depth reached from the start; ElementsReached counts walked
+///     elements (the start included, candidates excluded); Truncated is true when MaxHops cut the walk or an open end's
+///     box held more than the candidate cap and was counted, not listed.
+/// </summary>
+public sealed record DuctWalk(
+    long StartId,
+    int Hops,
+    int ElementsReached,
+    int OpenEnds,
+    IReadOnlyList<DuctOpenEnd> Candidates,
+    bool Truncated,
+    long ElapsedMs);
+
+/// <summary>One open end the walk stopped at and what the candidate box around it held (CandidateCount first, cheap; CandidateIds only under the cap).</summary>
+public sealed record DuctOpenEnd(long ElementId, int Connector, double[] Point, int CandidateCount, IReadOnlyList<long> CandidateIds);
 
 /// <summary>
 ///     Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
@@ -144,7 +211,17 @@ public sealed record DuctSnapshotData(
     string? StoreError = null,
     DuctPhases? Phases = null,
     IReadOnlyList<DuctAirflowCandidate>? AirflowCandidates = null,
-    IReadOnlyList<DuctAirflowCandidate>? FanFlowCandidates = null);
+    IReadOnlyList<DuctAirflowCandidate>? FanFlowCandidates = null,
+    DuctWalk? Walk = null,
+    DuctHealthTolerances? Tolerances = null);
+
+/// <summary>
+///     The near-miss tolerances Issues were measured under, the one home for both (ducts LEDGER 2026-10-29).
+///     CandidateBoxIn: an open end's neighbourhood, inches either way of its connector (a duct body counts when its
+///     centerline comes within it plus half its largest side). AutoJoinGapIn: a vacant, opposed partner this close is a
+///     near miss the sheet may join without a ruling.
+/// </summary>
+public sealed record DuctHealthTolerances(double CandidateBoxIn, double AutoJoinGapIn);
 
 /// <summary>
 ///     One parameter a terminal's design airflow could be read from (pressure-drop ledger, 2026-10-20: the airflow read
@@ -248,7 +325,8 @@ public sealed record DuctLevel(long Id, string Name, double ElevationFt);
 
 /// <summary>
 ///     A connected duct network with equipment cut out: the unit a solver runs on. Id is "g" plus the smallest
-///     element id in it, stable while that element exists. RootIds are the equipment it hangs off.
+///     element id in it, stable while that element exists. RootIds are the equipment it hangs off. IssueIds index the
+///     health findings on its elements (issues are keyed by element, never by group).
 /// </summary>
 public sealed record DuctGroup(
     string Id,
@@ -321,7 +399,8 @@ public sealed record DuctNode(
     string? UniqueId = null,
     string? PhaseCreated = null,
     string? PhaseDemolished = null,
-    string? FlowParameter = null);
+    string? FlowParameter = null,
+    string? Reason = null);
 
 public sealed record DuctRoughness(double ValueFt, DuctProvenance Provenance);
 
@@ -341,7 +420,10 @@ public enum DuctCurveKind {
     [EnumMember(Value = "other")] Other
 }
 
-/// <summary>PhaseCreated and PhaseDemolished as on <see cref="DuctNode" />.</summary>
+/// <summary>
+///     PhaseCreated and PhaseDemolished as on <see cref="DuctNode" />. InsulationIn is the host's
+///     RBS_REFERENCE_INSULATION_THICKNESS in inches (null when none): the separate DuctInsulation element is never read.
+/// </summary>
 public sealed record DuctSegment(
     long Id,
     DuctSegmentKind Kind,
@@ -363,19 +445,63 @@ public sealed record DuctSegment(
     IReadOnlyList<DuctConnector> Connectors,
     string? UniqueId = null,
     string? PhaseCreated = null,
-    string? PhaseDemolished = null);
+    string? PhaseDemolished = null,
+    string? Reason = null,
+    double? InsulationIn = null);
 
 /// <summary>Pass-1 flow: terminal design flow summed up the tree from the single root. At a tapped duct it is the upstream-end flow.</summary>
 public sealed record DuctFlow(long SegmentId, double Cfm, DuctProvenance Provenance);
 
-/// <summary>Id is "kind:elementId" (open ends add ":connector"); an assumption verdict keys on it.</summary>
+/// <summary>
+///     One model-health finding. Id is "kind:elementId" plus ":connector" when Connector is set; an assumption verdict
+///     keys on it. Near is set on an open end: what lies within the candidate box of it. A `roster` or `ids` read does not
+///     measure it (null there) and so reports no near miss.
+/// </summary>
 public sealed record DuctIssue(
     string Id,
     DuctIssueKind Kind,
-    long? ElementId,
+    long ElementId,
+    int? Connector,
     double[]? Point,
-    string GroupId,
-    string Note);
+    string Note,
+    DuctNear? Near = null,
+    DuctInline? Inline = null);
+
+/// <summary>
+///     Where an inline part sits: SegmentId the straight duct whose body holds both its open ports, AtFt along that duct
+///     from its first polyline point, Ports the part's two connector indices, the one facing the duct's first point first.
+/// </summary>
+public sealed record DuctInline(long SegmentId, double AtFt, IReadOnlyList<int> Ports);
+
+/// <summary>
+///     The neighbourhood of one open end, measured from its connector (point, outward axis), never decided: which of
+///     these a calculation joins, and under which ruling, is the pricing engine's. Ports: every connector of every
+///     other element within CandidateBoxIn, vacant or not. Faces: where the end's axis lands on a duct side, a capped
+///     end or an open connector's mouth within 2 in. Bodies: each duct side piece nearby, with the closest distance
+///     and, when the end sits off the side away from its ends, the tap point on its surface within 24 in.
+/// </summary>
+public sealed record DuctNear(
+    IReadOnlyList<DuctNearPort> Ports,
+    IReadOnlyList<DuctNearFace> Faces,
+    IReadOnlyList<DuctNearBody> Bodies);
+
+/// <summary>
+///     Another connector near an open end. GapIn: centre to centre. FacingDot: cosine of the two outward axes (null
+///     when either is unknown). Opposed: the cosine is at most -0.9. Aligned: opposed, ahead of the end and within
+///     0.5 in of its axis. AutoJoin: vacant, opposed and within AutoJoinGapIn: the near-miss partner. CappedBy: the end
+///     cap occupying this connector (a fact of the model); a heal there replaces the cap with a transition.
+/// </summary>
+public sealed record DuctNearPort(long ElementId, int Connector, double GapIn, double? FacingDot, bool Opposed, bool Aligned, bool AutoJoin, long? CappedBy = null);
+
+/// <summary>
+///     The end's axis landing on a face within 2 in. Kind "collar": an open connector's mouth (Connector set);
+///     "tap": a duct side or an end a cap closes (Connector null, AtFt along the duct, Point on its centerline). GapIn
+///     is signed: negative is inside the face. Opposed as on <see cref="DuctNearPort" />.
+/// </summary>
+public sealed record DuctNearFace(string Kind, long ElementId, int? Connector, double GapIn, double? FacingDot, bool Opposed, double? AtFt, double[]? Point);
+
+/// <summary>One duct side piece near an end: GapIn its closest distance; TapGapIn and TapPoint the surface point a tap would land on.</summary>
+public sealed record DuctNearBody(long SegmentId, double GapIn, double? TapGapIn, double[]? TapPoint);
 
 public sealed record DuctCoverage(int Have, int Of);
 

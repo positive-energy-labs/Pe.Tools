@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { layersKey } from "../page-keys.ts";
 import { field, text, type RouteDeclaration } from "../route-field.ts";
-import { demo, planViewport } from "./shared.ts";
+import { planViewport } from "./shared.ts";
 
 /** The solver layers the Rooms plan draws, in strip order. */
 export const ROOMS_LAYERS = ["rails", "openings", "network", "faces"] as const;
@@ -36,7 +36,6 @@ export const roomsAddress = {
     /** The pinned inbox card (a mark or note id): its verbs are pressable and the plan projects it. */
     card: field(text(), { url: "replace" }),
     viewport: planViewport,
-    demo,
   },
   agent: {
     policy:

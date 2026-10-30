@@ -6,7 +6,6 @@ import { Switcher } from "@pe/kit/lang/switcher";
 import { Button } from "@pe/kit/lang/button";
 import { Table } from "@pe/kit/table/table";
 import { TableFrame } from "#/components/master-table/table-frame";
-import { Pane } from "@pe/kit/lang/pane";
 
 import { OVERLAY_LABEL, OVERLAY_TITLE, type PRow } from "#/family/model";
 import { useFamilyWorkspace } from "#/family/workspace-context";
@@ -14,8 +13,6 @@ import { cn } from "@pe/kit/lib/utils";
 
 export function FamilyWorkspaceTable() {
   const {
-    store,
-    lane,
     world,
     overlay,
     setOverlay,
@@ -35,12 +32,10 @@ export function FamilyWorkspaceTable() {
     unsavedCount,
     openProposals,
     captureAll,
-    capturing,
     columns,
     firstGhostKey,
     drillColumns,
   } = useFamilyWorkspace();
-  const captureRefusal = store.handle.actions.capture.refusal;
 
   const rowTint = (row: PRow) => {
     const focused =
@@ -84,7 +79,7 @@ export function FamilyWorkspaceTable() {
     <>
       <Button
         label="all types"
-        reason="Leave the drill-in and return to the cross-type table. Nothing is decided by leaving — every mark you did not settle is still standing. Esc does the same."
+        reason="Leave the drill-in and return to the cross-type table. Every undecided mark stays standing."
         kind="nav"
         direction="back"
         onClick={() => setDrillType(null)}
@@ -121,21 +116,6 @@ export function FamilyWorkspaceTable() {
         onClick={() => captureAll(world.typeNames)}
       >
         capture all
-      </Button>
-      <Button
-        label="capture live"
-        reason="Re-read the family open in Revit and re-stamp the evidence — this is what the ⇄ live overlay and the drift marks are readings OF. It moves nothing into the profile: that is capture all, under the overlay. Refuses in Revit's own words if no family document is active there."
-        kind="framed"
-        busy={capturing}
-        refusal={
-          captureRefusal ??
-          (lane.document == null
-            ? "The fixture lane has no session behind it — its live readings are checked into `src/family/world.ts`. Open a real family.json to read Revit."
-            : null)
-        }
-        onClick={() => void store.actions.capture().catch(() => undefined)}
-      >
-        capture live
       </Button>
     </>
   );
@@ -293,20 +273,5 @@ export function FamilyWorkspaceTable() {
     </TableFrame>
   ) : null;
 
-  const tablePane = (
-    <Pane id="parameters" flush scroll="clip">
-      {drillIn ?? crossType}
-    </Pane>
-  );
-
-  // ── the inspector: the doc pane's LOWER HALF ──────────────────────────────────────────────────
-  //
-  // Two subjects, one slot, because they are the same question: what is true of this THING, rather
-  // than of it at some type. A constituent's non-bindable metadata has no honest column — it does
-  // not vary by type, half of it is not a number, and half of THAT cannot be edited at all. A
-  // parameter's family-level value has no column either, since the one that was pretending to be a
-  // fourth type was removed. Both land here, and the pane keeps the spec above them so a citation
-  // never leaves the screen while you edit the number it justifies.
-
-  return tablePane;
+  return drillIn ?? crossType;
 }

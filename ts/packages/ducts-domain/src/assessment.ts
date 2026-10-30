@@ -108,7 +108,6 @@ export function assessDucts(
   const reason = (code: string, count: number, message: string) => {
     if (count) reasons.set(code, { code, count, message });
   };
-  const issues = new Map(snapshot.issues.map((issue) => [issue.id, issue]));
   reason(
     "selection",
     state === "matched" ? 0 : 1,
@@ -125,10 +124,7 @@ export function assessDucts(
     const tree = groupTree(snapshot, group.id);
     if (tree.rooted !== "port" || tree.extraRoots.length || tree.backEdges.length) topology++;
     const ready = solved.readiness[group.id];
-    // Fan rating is needed to compare capacity, never to compute required external static.
-    blockers +=
-      (ready?.walk.length ?? 0) +
-      (ready?.budget.filter((key) => issues.get(key)?.kind !== "no-fan-static").length ?? 0);
+    blockers += (ready?.walk.length ?? 0) + (ready?.budget.length ?? 0);
   }
   reason("topology", topology, "Stand-in roots, multiple roots or loops affect the selected graph");
   reason(

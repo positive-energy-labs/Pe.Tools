@@ -1,0 +1,1077 @@
+{
+  "address": "schedules",
+  "cells": [
+    {
+      "groupOf": {
+        "runtime": true
+      },
+      "nouns": [
+        "column"
+      ],
+      "segment": "cells"
+    }
+  ],
+  "fields": {
+    "captureId": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "selection",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "",
+        "type": "string"
+      },
+      "share": true,
+      "url": false
+    },
+    "cell": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "selection",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "",
+        "pattern": "^(\\d+::\\d+)?$",
+        "type": "string"
+      },
+      "share": true,
+      "url": "replace"
+    },
+    "hidden": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "pose",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": [],
+        "items": {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
+        "maxItems": 500,
+        "type": "array"
+      },
+      "share": true,
+      "url": "replace"
+    },
+    "lines": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "selection",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "enum": [
+          "suggestions",
+          "edits",
+          "all"
+        ],
+        "type": "string"
+      },
+      "share": true,
+      "url": "replace"
+    },
+    "pane": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "pose",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "spec",
+        "enum": [
+          "spec",
+          "output"
+        ],
+        "type": "string"
+      },
+      "share": true,
+      "url": false
+    },
+    "path": {
+      "agent": "read",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "subject",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "",
+        "maxLength": 1024,
+        "type": "string"
+      },
+      "share": true,
+      "url": "push"
+    },
+    "pod": {
+      "agent": "read",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "subject",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "",
+        "maxLength": 200,
+        "type": "string"
+      },
+      "share": true,
+      "url": "push"
+    },
+    "query": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "query",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "",
+        "maxLength": 4096,
+        "type": "string"
+      },
+      "share": true,
+      "url": "push"
+    },
+    "sort": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "query",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": [],
+        "items": {
+          "properties": {
+            "dir": {
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "type": "string"
+            },
+            "key": {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "key",
+            "dir"
+          ],
+          "type": "object"
+        },
+        "maxItems": 8,
+        "type": "array"
+      },
+      "share": true,
+      "url": "replace"
+    },
+    "stage": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "stage",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "audit",
+        "enum": [
+          "audit",
+          "apply",
+          "history"
+        ],
+        "type": "string"
+      },
+      "share": true,
+      "url": "push"
+    },
+    "threadSearch": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "query",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": {
+          "keywords": "",
+          "pills": [
+            {
+              "field": "scope",
+              "op": "=",
+              "value": "all"
+            }
+          ],
+          "v": 1
+        },
+        "description": "JSON {v:1,keywords:string,pills:[{field,op:'=',value}]}. Literal keywords and equality pills. Fields: target, provider, state, unread, scope. Scope values: attention, all, archived.",
+        "properties": {
+          "keywords": {
+            "maxLength": 4000,
+            "type": "string"
+          },
+          "pills": {
+            "items": {
+              "properties": {
+                "field": {
+                  "type": "string"
+                },
+                "op": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "field",
+                "op",
+                "value"
+              ],
+              "type": "object"
+            },
+            "maxItems": 32,
+            "type": "array"
+          },
+          "v": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "v",
+          "keywords",
+          "pills"
+        ],
+        "type": "object"
+      },
+      "share": true,
+      "url": "replace"
+    },
+    "threadSort": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "query",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "",
+        "enum": [
+          "",
+          "recent",
+          "title"
+        ],
+        "type": "string"
+      },
+      "share": true,
+      "url": "replace"
+    },
+    "workspaceId": {
+      "agent": "read",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "subject",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "",
+        "maxLength": 200,
+        "type": "string"
+      },
+      "share": true,
+      "url": "replace"
+    }
+  },
+  "key": "schedules",
+  "layout": {
+    "axis": "h",
+    "children": [
+      {
+        "id": "list",
+        "kind": "pane"
+      },
+      {
+        "axis": "v",
+        "children": [
+          {
+            "axis": "h",
+            "children": [
+              {
+                "id": "grid",
+                "kind": "pane"
+              },
+              {
+                "child": {
+                  "id": "spec",
+                  "kind": "pane"
+                },
+                "kind": "gate",
+                "when": "apply"
+              }
+            ],
+            "id": "schedule-spec",
+            "kind": "split",
+            "size": 420,
+            "sized": "end"
+          },
+          {
+            "child": {
+              "id": "work",
+              "kind": "pane"
+            },
+            "kind": "gate",
+            "when": "editing"
+          }
+        ],
+        "id": "schedule-main",
+        "kind": "split",
+        "size": 160,
+        "sized": "end"
+      }
+    ],
+    "id": "schedule-body",
+    "kind": "split",
+    "size": 240,
+    "sized": "start"
+  },
+  "name": "Schedules",
+  "needs": "project",
+  "panes": {
+    "grid": {
+      "draws": [
+        "retained",
+        "saved",
+        "receipts",
+        "outcome"
+      ],
+      "label": "Schedule grid",
+      "purpose": "Inspect and edit schedule cells",
+      "verbs": []
+    },
+    "list": {
+      "draws": [
+        "catalog",
+        "retained",
+        "history"
+      ],
+      "label": "Schedules",
+      "purpose": "Choose a schedule in this document",
+      "verbs": [
+        "read"
+      ]
+    },
+    "spec": {
+      "draws": [
+        "pods"
+      ],
+      "label": "Schedule spec",
+      "purpose": "Choose a saved schedule definition",
+      "verbs": []
+    },
+    "work": {
+      "draws": [
+        "retained",
+        "saved",
+        "receipts",
+        "outcome"
+      ],
+      "label": "Schedule Work",
+      "purpose": "Review proposed and edited cells",
+      "verbs": [
+        "bind"
+      ]
+    }
+  },
+  "predicates": {
+    "editing": {
+      "runtime": true
+    }
+  },
+  "readings": {
+    "catalog": {
+      "kind": "use",
+      "retire": "target",
+      "source": "schedules.catalog"
+    },
+    "history": {
+      "args": {
+        "runtime": true
+      },
+      "kind": "use",
+      "retire": "page",
+      "source": "schedules.history"
+    },
+    "outcome": {
+      "deps": [
+        "receipts"
+      ],
+      "kind": "derive",
+      "retire": "target",
+      "source": "schedules.outcome"
+    },
+    "pods": {
+      "kind": "use",
+      "retire": "never",
+      "source": "schedules.pods"
+    },
+    "receipts": {
+      "kind": "use",
+      "retire": "target",
+      "source": "schedules.receipts"
+    },
+    "retained": {
+      "args": {
+        "runtime": true
+      },
+      "kind": "use",
+      "retire": "page",
+      "source": "schedules.retained"
+    },
+    "saved": {
+      "args": {
+        "runtime": true
+      },
+      "kind": "use",
+      "retire": "page",
+      "source": "schedules.saved"
+    }
+  },
+  "seeds": {
+    "apply": {
+      "title": "Mechanical equipment"
+    },
+    "read": {
+      "title": "Mechanical equipment"
+    }
+  },
+  "stageOrder": [
+    "audit",
+    "apply",
+    "history"
+  ],
+  "stages": {
+    "apply": {
+      "panes": [
+        "list",
+        "grid",
+        "work",
+        "spec"
+      ],
+      "verbs": [
+        "push",
+        "apply"
+      ],
+      "word": "Applying"
+    },
+    "audit": {
+      "panes": [
+        "list",
+        "grid",
+        "work"
+      ],
+      "verbs": [
+        "capture"
+      ],
+      "word": "Auditing"
+    },
+    "history": {
+      "panes": [
+        "list",
+        "grid"
+      ],
+      "verbs": [],
+      "word": "History"
+    }
+  },
+  "verbs": {
+    "apply": {
+      "does": "schedule.apply",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "refusal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "source": {
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "pod": {
+                "type": "string"
+              },
+              "sha256": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "pod",
+              "path",
+              "sha256"
+            ],
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "kind": "command",
+      "label": "Apply spec",
+      "review": "none"
+    },
+    "bind": {
+      "does": "schedule.grid.bind",
+      "effect": "query",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "expectedRevision": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "readingId": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "readingId",
+          "expectedRevision"
+        ],
+        "type": "object"
+      },
+      "kind": "query",
+      "label": "Bind schedule reading",
+      "review": "none"
+    },
+    "capture": {
+      "does": "schedule.capture",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "pod": {
+            "type": "string"
+          },
+          "refusal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "scheduleId": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "pod"
+        ],
+        "type": "object"
+      },
+      "kind": "command",
+      "label": "Capture schedule",
+      "review": "none"
+    },
+    "edit": {
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "expectedRevision": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "patches": {
+            "items": {
+              "properties": {
+                "path": {
+                  "items": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ]
+                  },
+                  "type": "array"
+                },
+                "value": {}
+              },
+              "required": [
+                "path"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "refusal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "patches",
+          "expectedRevision"
+        ],
+        "type": "object"
+      },
+      "kind": "work",
+      "label": "Edit schedule cells",
+      "review": "none"
+    },
+    "push": {
+      "chord": "Mod+Enter",
+      "does": "schedule.grid.push",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "pod": {
+            "type": "string"
+          },
+          "refusal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "type": "object"
+      },
+      "kind": "command",
+      "label": "Apply cells",
+      "review": "shown",
+      "says": "Review these exact cell edits and their native bindings, then push them to Revit"
+    },
+    "read": {
+      "does": "schedule.grid.snapshot",
+      "effect": "query",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "maxRows": {
+            "default": 200,
+            "maximum": 2000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "scheduleId": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "scheduleName": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "kind": "query",
+      "label": "Read schedule",
+      "review": "none",
+      "selects": "work"
+    },
+    "work.start-fresh": {
+      "answers": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "confirm": {
+            "const": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "confirm"
+        ],
+        "type": "object"
+      },
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "default": {},
+        "properties": {},
+        "type": "object"
+      },
+      "kind": "recovery",
+      "label": "Start fresh",
+      "review": "required",
+      "says": "Set the unreadable Work aside and start it empty; its old bytes are kept beside it"
+    }
+  },
+  "work": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "basis": {
+        "anyOf": [
+          {
+            "properties": {
+              "captureId": {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              "stale": {
+                "items": {
+                  "properties": {
+                    "key": {
+                      "type": "string"
+                    },
+                    "was": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "was"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "captureId"
+            ],
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "cells": {
+        "additionalProperties": {
+          "additionalProperties": false,
+          "properties": {
+            "edit": {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "at": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "base": {
+                      "anyOf": [
+                        {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "by": {
+                      "enum": [
+                        "human",
+                        "pea",
+                        "unknown"
+                      ],
+                      "type": "string"
+                    },
+                    "confidence": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "high",
+                            "low"
+                          ],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "delete": {
+                      "not": {}
+                    },
+                    "note": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "value": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "properties": {
+                            "unit": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "unit"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "value"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "suggestion": {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "at": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "base": {
+                      "anyOf": [
+                        {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "by": {
+                      "enum": [
+                        "human",
+                        "pea",
+                        "unknown"
+                      ],
+                      "type": "string"
+                    },
+                    "confidence": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "high",
+                            "low"
+                          ],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "delete": {
+                      "not": {}
+                    },
+                    "note": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "value": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "properties": {
+                            "unit": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "unit"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "value"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "default": {},
+        "propertyNames": {
+          "type": "string"
+        },
+        "type": "object"
+      },
+      "takenAt": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      }
+    },
+    "type": "object"
+  },
+  "workSubject": "workspaceId"
+}

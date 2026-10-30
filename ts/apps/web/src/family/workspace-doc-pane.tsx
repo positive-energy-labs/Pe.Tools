@@ -8,7 +8,6 @@ import { FactChip, Tag } from "@pe/kit/lang/chip";
 import { List } from "@pe/kit/lang/list-popup";
 import { Switcher } from "@pe/kit/lang/switcher";
 import { Button } from "@pe/kit/lang/button";
-import { Pane } from "@pe/kit/lang/pane";
 import { SpecSheet, SpecText, ProposalCard } from "#/family/doc-pane";
 import { NavStateCell } from "#/family/marks";
 import { cellFromDraft } from "@pe/kit/lang/cell";
@@ -311,79 +310,67 @@ export function FamilyWorkspaceDocPane() {
   // ── the doc pane: ONE sidebar, two modes, proposals docked on top ──────────────────────────────
 
   const docPane = (
-    <Pane
-      flush
-      // The suggestion stack and camera scroll independently: locating a citation keeps its card visible.
-      scroll="clip"
-      // The pane is a COLUMN: the spec and its proposals scroll in the upper half, the inspector
-      // docks under them. Neither displaces the other — an inspector that replaced the spec would
-      // take away the evidence at the exact moment you edit the number it justifies.
-      title="doc"
-      meta={world.spec ? `${world.spec.fileName} · ${world.spec.blocks.length} blocks` : "no spec"}
-      help="The source document this profile cites. Citations resolve into its blocks, so what is attached here decides what a suggestion can point at."
-      actions={
-        <>
-          <FactChip
-            tone="pea"
-            title="Pea's readings still STANDING on this page — open, or accepted and now edit. They are ephemeral: page-scoped, never written, gone on reload. Accepting stages the value; denying clears the suggestion and the cell shows its real value again."
-          >
-            {openProposals.length} standing
-          </FactChip>
-          <Switcher
-            ariaLabel="doc mode"
-            value={docMode}
-            onChange={setDocMode}
-            options={[
-              {
-                value: "text",
-                label: "text",
-                title:
-                  "Show the spec as OCR read it: markdown blocks, checkable word for word. This is what a citation actually resolves to.",
-              },
-              {
-                value: "sheet",
-                label: "sheet",
-                title:
-                  "Show the rendered pages with measured block boxes. Focusing a suggestion locates its citation on the sheet.",
-              },
-            ]}
-          />
-          <input
-            ref={upload}
-            type="file"
-            accept="application/pdf"
-            className="hidden"
-            onChange={async (event) => {
-              const file = event.target.files?.[0];
-              event.target.value = "";
-              if (!file) return;
-              setAttaching(true);
-              try {
-                await attachSpec(file);
-                say(`attached ${file.name}`);
-              } catch (error) {
-                say(String(error));
-              } finally {
-                setAttaching(false);
-              }
-            }}
-          />
-          <Button
-            label={attaching ? "attaching" : "attach PDF"}
-            reason="Parse a cut sheet and save its pages and blocks beside the captured family"
-            kind="framed"
-            refusal={
-              attaching
-                ? "Parse a cut sheet and save its pages and blocks beside the captured family"
-                : null
+    <div className="flex size-full min-h-0 flex-col">
+      <div className="flex shrink-0 items-center gap-2">
+        <FactChip
+          tone="pea"
+          title="Standing Work proposals, open or accepted. Accept stages the proposed value; deny clears the suggestion."
+        >
+          {openProposals.length} standing
+        </FactChip>
+        <Switcher
+          ariaLabel="doc mode"
+          value={docMode}
+          onChange={setDocMode}
+          options={[
+            {
+              value: "text",
+              label: "text",
+              title:
+                "Show the spec as OCR read it: markdown blocks, checkable word for word. This is what a citation actually resolves to.",
+            },
+            {
+              value: "sheet",
+              label: "sheet",
+              title:
+                "Show the rendered pages with measured block boxes. Focusing a suggestion locates its citation on the sheet.",
+            },
+          ]}
+        />
+        <input
+          ref={upload}
+          type="file"
+          accept="application/pdf"
+          className="hidden"
+          onChange={async (event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (!file) return;
+            setAttaching(true);
+            try {
+              await attachSpec(file);
+              say(`attached ${file.name}`);
+            } catch (error) {
+              say(String(error));
+            } finally {
+              setAttaching(false);
             }
-            onClick={() => upload.current?.click()}
-          >
-            {attaching ? "attaching" : "attach PDF"}
-          </Button>
-        </>
-      }
-    >
+          }}
+        />
+        <Button
+          label={attaching ? "attaching" : "attach PDF"}
+          reason="Parse a cut sheet and save its pages and blocks beside the captured family"
+          kind="framed"
+          refusal={
+            attaching
+              ? "Parse a cut sheet and save its pages and blocks beside the captured family"
+              : null
+          }
+          onClick={() => upload.current?.click()}
+        >
+          {attaching ? "attaching" : "attach PDF"}
+        </Button>
+      </div>
       <div className="min-h-0 flex-1 flex flex-col">
         {/* proposals — margin annotations, docked as a stack above the spec */}
         <div
@@ -395,9 +382,7 @@ export function FamilyWorkspaceDocPane() {
               <span className="t-small t-upper" data-tone="pea">
                 pea
               </span>
-              <span className="t-small t-upper text-ink-2">
-                proposals · ephemeral · page-scoped
-              </span>
+              <span className="t-small t-upper text-ink-2">Work proposals</span>
             </div>
           </TooltipHint>
           {world.proposals.length === 0 ? (
@@ -454,7 +439,7 @@ export function FamilyWorkspaceDocPane() {
       </div>
 
       {inspectorPanel}
-    </Pane>
+    </div>
   );
 
   return docPane;

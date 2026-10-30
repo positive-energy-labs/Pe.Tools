@@ -1,0 +1,288 @@
+{
+  "roster": {
+    "target": {
+      "session": "retained-chadds",
+      "openId": "chadds-open"
+    },
+    "rows": [
+      {
+        "unitId": 14577391,
+        "portIndex": 2,
+        "mark": "MUAS-1",
+        "kind": "muas",
+        "side": "supply",
+        "ratedEspInWg": null,
+        "confirmed": false,
+        "blockerCount": 1,
+        "requiredEspInWg": null,
+        "complete": false
+      },
+      {
+        "unitId": 22,
+        "portIndex": 0,
+        "mark": "FC-23",
+        "kind": "fan-coil",
+        "side": "supply",
+        "ratedEspInWg": 0.4
+      },
+      {
+        "unitId": 23,
+        "portIndex": 1,
+        "mark": "AHU-1",
+        "kind": "air-handler",
+        "side": "return",
+        "ratedEspInWg": 0.5,
+        "blockerCount": 0,
+        "requiredEspInWg": 0.193,
+        "complete": true
+      }
+    ],
+    "slots": [
+      {
+        "slot": "revit:Flow",
+        "covered": 355,
+        "total": 394
+      }
+    ],
+    "activeSlot": "revit:Flow"
+  },
+  "overview": {
+    "target": {
+      "session": "retained-chadds",
+      "openId": "chadds-open"
+    },
+    "basis": "muas-fixture-basis",
+    "kind": "overview",
+    "mode": "fan",
+    "fan": {
+      "unitId": 14577391,
+      "portIndex": 2,
+      "mark": "MUAS-1",
+      "ratedEspInWg": null,
+      "inletPortIndex": 1,
+      "flowCfm": null,
+      "dischargePortIndex": 2
+    },
+    "totals": {
+      "supply": {
+        "worstPath": null,
+        "knownInWg": 0,
+        "allowanceInWg": 0.15,
+        "complete": false,
+        "telFt": 0,
+        "frictionRatePer100": null,
+        "assumedInWg": null
+      },
+      "return": {
+        "worstPath": null,
+        "knownInWg": 0,
+        "allowanceInWg": 0,
+        "complete": false,
+        "telFt": 0,
+        "frictionRatePer100": null,
+        "assumedInWg": null
+      },
+      "requiredEspInWg": null,
+      "requiredEspAssumedInWg": null
+    },
+    "paths": {
+      "supply": {
+        "paths": [
+          {
+            "pathId": "0",
+            "end": {
+              "kind": "open-end",
+              "elementId": 14122436,
+              "connector": 1
+            },
+            "knownInWg": 0,
+            "complete": false,
+            "legCount": 15,
+            "blockerIds": [
+              "inferred-join:14122436:1"
+            ]
+          }
+        ],
+        "rest": 0
+      },
+      "return": {
+        "paths": [],
+        "rest": 0
+      }
+    },
+    "blockers": [
+      {
+        "id": "inferred-join:14122436:1",
+        "kind": "inferred-join",
+        "elementId": 14122436,
+        "connector": 1,
+        "effectInWg": null,
+        "closer": "heal"
+      }
+    ],
+    "next": {
+      "hint": "Read with basis",
+      "legs": [
+        {
+          "kind": "legs",
+          "pathId": "0"
+        }
+      ],
+      "elements": {
+        "kind": "elements"
+      },
+      "inputs": {
+        "kind": "inputs"
+      },
+      "worksheet": {
+        "kind": "worksheet"
+      }
+    },
+    "assumedBlockers": []
+  },
+  "inputs": {
+    "target": {
+      "session": "retained-chadds",
+      "openId": "chadds-open"
+    },
+    "basis": "muas-fixture-basis",
+    "kind": "inputs",
+    "inputs": {
+      "terminals": {},
+      "units": {},
+      "components": {},
+      "rulings": {
+        "joins": [],
+        "ends": []
+      },
+      "criteria": {
+        "velocityLimitFpm": {
+          "supply": {
+            "value": 900,
+            "source": "firm",
+            "ref": "test"
+          },
+          "return": {
+            "value": 700,
+            "source": "firm",
+            "ref": "test"
+          }
+        },
+        "terminalDropInWg": {
+          "value": 0.03,
+          "source": "firm",
+          "ref": "test"
+        },
+        "autoJoinGapIn": {
+          "value": 3,
+          "source": "firm",
+          "ref": "test"
+        },
+        "healBoxIn": {
+          "value": 36,
+          "source": "firm",
+          "ref": "test"
+        },
+        "splitPolicy": {
+          "value": "even",
+          "source": "firm",
+          "ref": "test"
+        },
+        "allowanceInWg": {
+          "supply": {
+            "value": 0.15,
+            "source": "project",
+            "ref": "test"
+          },
+          "return": {
+            "value": 0,
+            "source": "firm",
+            "ref": "test"
+          }
+        }
+      },
+      "tables": {},
+      "assignments": {},
+      "fittingDrops": {}
+    },
+    "blockers": [
+      {
+        "id": "inferred-join:14122436:1",
+        "kind": "inferred-join",
+        "elementId": 14122436,
+        "connector": 1,
+        "effectInWg": null,
+        "detail": "Vacant opposed connector needs a join ruling",
+        "closer": {
+          "kind": "heal",
+          "note": "Preview the connector pair"
+        }
+      }
+    ],
+    "ends": [
+      {
+        "kind": "roster-fan-port",
+        "elementId": 22,
+        "connector": 1,
+        "fan": {
+          "unitId": 22,
+          "portIndex": 0
+        }
+      }
+    ],
+    "fittings": [],
+    "tableTitles": {},
+    "notes": [
+      {
+        "kind": "auto-join",
+        "text": "auto-joined 1:1 to 2:0 across 2.000 in",
+        "value": null
+      }
+    ],
+    "firm": {
+      "version": "test",
+      "path": "",
+      "present": false
+    }
+  },
+  "elements": {
+    "target": {
+      "session": "retained-chadds",
+      "openId": "chadds-open"
+    },
+    "basis": "muas-fixture-basis",
+    "kind": "elements",
+    "walkedElementIds": [
+      14577391,
+      14122436
+    ],
+    "beyond": []
+  },
+  "legs": {
+    "target": {
+      "session": "retained-chadds",
+      "openId": "chadds-open"
+    },
+    "basis": "muas-fixture-basis",
+    "kind": "legs",
+    "pathId": "0",
+    "legs": [
+      {
+        "id": "duct:14122436:0:1",
+        "elementId": 14122436,
+        "kind": "duct",
+        "inConnector": 0,
+        "outConnector": 1,
+        "flowCfm": 120,
+        "flowSource": "confirmed terminal slot",
+        "velocityFpm": 500,
+        "lossInWg": 0.012,
+        "lossSource": {
+          "kind": "friction",
+          "ref": "galvanized"
+        },
+        "equivalentFt": 12
+      }
+    ]
+  }
+}

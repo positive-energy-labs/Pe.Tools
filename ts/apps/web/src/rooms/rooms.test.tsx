@@ -3,8 +3,9 @@ import { roomEditKey, roomsRouteState, stagedRoomWrites } from "@pe/agent-contra
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { expect, test, vi } from "vite-plus/test";
 import { DEMO_PLAN, DEMO_ROOMS, DEMO_VIEW } from "./demo";
-import { manifest } from "./manifest";
+import { roomsPageSchema } from "./graph";
 import { RoomsPlan } from "./plan";
+import { Pane } from "@pe/kit/lang/pane";
 import { RoomsTable, roomRows } from "./table";
 
 test("stagedRoomWrites sends edit values per guid and never a suggestion", () => {
@@ -60,7 +61,7 @@ test("a locked stale region keeps both facts in the plan, legend and table, and 
     region.guid === "fixture-1" ? { ...region, stale: true } : region,
   );
   const rows = roomRows(regions, ["Fixture level"]);
-  const page = manifest.page!.parse({ view: DEMO_VIEW });
+  const page = roomsPageSchema.parse({ view: DEMO_VIEW });
   const onSelect = vi.fn();
   const view = render(
     <>
@@ -72,6 +73,11 @@ test("a locked stale region keeps both facts in the plan, legend and table, and 
         empty={{ says: "empty", exit: "none" }}
       />
       <RoomsPlan
+        renderPane={(body, furniture) => (
+          <Pane picture {...furniture}>
+            {body}
+          </Pane>
+        )}
         rows={rows}
         plan={DEMO_PLAN}
         planRefusal={null}

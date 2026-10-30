@@ -8,8 +8,8 @@ import { ListPopup } from "@pe/kit/lang/list-popup";
 import { TextCell } from "@pe/kit/table/cells";
 import type { Column } from "@pe/kit/table/model";
 import { Table } from "@pe/kit/table/table";
-import type { ColumnKind, Draft } from "#/routes/data-tables";
-import { rowKey } from "#/routes/data-tables";
+import type { ColumnKind, Draft } from "./graph";
+import { rowKey } from "./graph";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 type Line = { row: Draft["rows"][number]; index: number };

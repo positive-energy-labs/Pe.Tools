@@ -9,7 +9,7 @@ import { routeFile } from "#/route";
  *   turn   — turn number to focal-scroll on open/share (absent = tail)
  *   prompt — short composer draft; the composer drops it from the URL past the contract field's 200 characters or when
  *            attachments are present (attachments never serialize).
- * `?demo=<action>` is read by `useRoute`, not here: it mounts one seed in an isolated owner.
+ * `?fixture=<action>` is read by `useRoute`, not here: it mounts one seed in an isolated owner.
  */
 /**
  * The contract's defaults never reach the address, and a stale value (the old `mode=chat`) reads as

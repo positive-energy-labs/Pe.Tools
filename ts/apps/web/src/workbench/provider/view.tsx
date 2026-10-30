@@ -3,7 +3,7 @@ import { useNavigate, useSearch, useRouter } from "@tanstack/react-router";
 import { resolveWorkbenchConfig } from "../config";
 import { selectRunStatus, selectTurnFailure } from "@pe/agent-contracts/chat-state";
 import { previousOf, useHostStatusSlice } from "#/readings";
-import { appAtomRegistry, useRouteOwner } from "#/route/route-owner";
+import { appAtomRegistry, useRouteOwner } from "#/shell/owner";
 import { createChatPageStore } from "../store";
 import type { StoredThreadSummary, WorkbenchContextValue } from "./thread-summary";
 import { WorkbenchContext } from "./thread-summary";
@@ -11,11 +11,11 @@ import { chatLoading, useThreadStream } from "./thread-stream";
 import { harnessClient, notFound, type PromptRequest } from "./harness-client";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
-import { CHAT_SEEDS } from "#/chat/seeds";
 import { errorMessage } from "./use-workbench";
 import { EMPTY_HEAD, isReady, useProviders, type HeadDraft } from "./providers";
 import { routeAddress, targetKey, type DocumentRequest } from "@pe/agent-contracts";
 import { demoThreads } from "#/chat/thread-navigation";
+import { fixtureThread, useFixtureName } from "#/shell/fixture-services";
 import { mergeThreadRoster, mergeThreadSummary } from "./thread-merge";
 import { emptyPrompt } from "../prompt";
 import { soleUserDocument } from "#/chat/scope";
@@ -44,33 +44,36 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     }),
     structuralSharing: true,
   });
+  const fixture = useFixtureName();
   const addressedThread = search.thread ?? "";
   const currentThreadId = addressedThread;
-  const store = useRouteOwner(() =>
-    createChatPageStore({
-      registry: appAtomRegistry,
-      local: typeof location !== "undefined" && new URLSearchParams(location.search).has("demo"),
-      search: {
-        ...search,
-        mode: "mode" in search && typeof search.mode === "string" ? search.mode : "threads",
-        // A move of the address's own fields lands in history by the contract's rule (a draft or a
-        // mode tweak replaces); a thread move keeps its caller's choice, as it names another place.
-        patch: (partial, replace = false) => {
-          const pea = routeAddress("pea");
-          const before = pea.read(router.state.location.search).page;
-          const move = "thread" in partial;
-          const rule = move
-            ? null
-            : pea.history(before, { ...before, ...partial } as typeof before);
-          // Conversations are independent of the active tool, its Work and document.
-          return navigate({
-            to: ".",
-            search: (previous: Record<string, unknown>) => ({ ...previous, ...partial }),
-            replace: replace || rule === "replace",
-          });
+  const store = useRouteOwner(
+    () =>
+      createChatPageStore({
+        registry: appAtomRegistry,
+        local: fixture !== null,
+        search: {
+          ...search,
+          mode: "mode" in search && typeof search.mode === "string" ? search.mode : "threads",
+          // A move of the address's own fields lands in history by the contract's rule (a draft or a
+          // mode tweak replaces); a thread move keeps its caller's choice, as it names another place.
+          patch: (partial, replace = false) => {
+            const pea = routeAddress("pea");
+            const before = pea.read(router.state.location.search).page;
+            const move = "thread" in partial;
+            const rule = move
+              ? null
+              : pea.history(before, { ...before, ...partial } as typeof before);
+            // Conversations are independent of the active tool, its Work and document.
+            return navigate({
+              to: ".",
+              search: (previous: Record<string, unknown>) => ({ ...previous, ...partial }),
+              replace: replace || rule === "replace",
+            });
+          },
         },
-      },
-    }),
+      }),
+    fixture,
   );
 
   // The one `host-status` Reading; `previousOf` keeps the last good answer through a refetch.
@@ -83,7 +86,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       revit: info?.capabilities.revit,
       world: info?.world as WorkbenchContextValue["world"],
     };
-  });
+  }, fixture === null);
   const client = useMemo(() => harnessClient(config.origin), [config.origin]);
   const [threads, setThreads] = useState<StoredThreadSummary[]>([]);
   const [rosterRead, setRosterRead] = useState(false);
@@ -95,13 +98,8 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const draftTarget = chosenTarget === undefined ? soleDocument : chosenTarget;
   const [error, setError] = useState<string>();
 
-  // `?demo=<seed>`: the transcript shows that seed's thread and nothing is fetched.
-  const [demo] = useState(() =>
-    typeof location === "undefined"
-      ? undefined
-      : CHAT_SEEDS[new URLSearchParams(location.search).get("demo") as keyof typeof CHAT_SEEDS]
-          ?.work,
-  );
+  // `?fixture=<seed>`: the transcript shows that seed's thread and nothing is fetched.
+  const demo = fixture !== null ? fixtureThread(fixture) : undefined;
   const refreshThreads = useCallback(async () => {
     if (demo) return;
     const started = rosterEpoch.current;

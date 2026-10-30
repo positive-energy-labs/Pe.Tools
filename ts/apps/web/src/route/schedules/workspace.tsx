@@ -17,9 +17,7 @@ import { Table } from "@pe/kit/table/table";
 import { TableFrame } from "#/components/master-table/table-frame";
 import { emptyTableState } from "@pe/kit/table/view";
 import type { TableState } from "@pe/kit/table/model";
-import { Pane } from "@pe/kit/lang/pane";
 import { useMeasuredParse } from "#/host/measured-parse";
-import type { HostCallOptions } from "#/host/client";
 import type { CellWire } from "#/components/work/band";
 import {
   scheduleLock,
@@ -54,7 +52,7 @@ export interface ScheduleGridState {
    */
   freshness: "current" | "changed" | "disconnected";
   /** The document the drawn read came from; a measured parse is asked of exactly it. */
-  documentScope?: HostCallOptions;
+  documentScope?: { bridgeSessionId?: string; openDocumentId?: string };
   /** Native action provenance belongs to the displayed capture, independently of the selector. */
   nativeObservation?: NativeObservation;
   /** The grid's query, sorts and hidden columns: contract fields (`routeAddress("schedules")`). */
@@ -298,92 +296,90 @@ export function ScheduleGridWorkspace({
           if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onFocus.grid();
         }}
       >
-        <Pane id="schedule" flush scroll="clip">
-          <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <div className="flex min-h-0 flex-1 flex-col">
-              {snapshot ? (
-                <TableFrame
-                  // A schedule switch remounts the box: no draft or typed text outlives its schedule.
-                  key={snapshot.scheduleId}
-                  label="schedule rows"
-                  rows={snapshot.rows}
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="flex min-h-0 flex-1 flex-col">
+            {snapshot ? (
+              <TableFrame
+                // A schedule switch remounts the box: no draft or typed text outlives its schedule.
+                key={snapshot.scheduleId}
+                label="schedule rows"
+                rows={snapshot.rows}
+                columns={gridColumns}
+                rowKey={(row) => String(row.rowNumber)}
+                state={tableState}
+                onStateChange={setTableState}
+                search
+                actions={facts}
+              >
+                <Table
+                  // I2: a row Revit refused, or one moved under a edit value, blocks the push.
+                  rows={snapshot.rows.map((row) => {
+                    const keys = snapshot.columns.map((column) =>
+                      scheduleCellKey(row.rowNumber, column.columnNumber),
+                    );
+                    return {
+                      ...row,
+                      damage: keys.some((key) => refused[key])
+                        ? "refused"
+                        : keys.some((key) => stale.some((cell) => cell.key === key))
+                          ? "stale"
+                          : null,
+                    };
+                  })}
                   columns={gridColumns}
                   rowKey={(row) => String(row.rowNumber)}
+                  label="schedule rows"
                   state={tableState}
                   onStateChange={setTableState}
-                  search
-                  actions={facts}
-                >
-                  <Table
-                    // I2: a row Revit refused, or one moved under a edit value, blocks the push.
-                    rows={snapshot.rows.map((row) => {
-                      const keys = snapshot.columns.map((column) =>
-                        scheduleCellKey(row.rowNumber, column.columnNumber),
-                      );
-                      return {
-                        ...row,
-                        damage: keys.some((key) => refused[key])
-                          ? "refused"
-                          : keys.some((key) => stale.some((cell) => cell.key === key))
-                            ? "stale"
-                            : null,
-                      };
-                    })}
-                    columns={gridColumns}
-                    rowKey={(row) => String(row.rowNumber)}
-                    label="schedule rows"
-                    state={tableState}
-                    onStateChange={setTableState}
-                    activeKey={locatedRow}
-                    activeColumn={located ? `c${located.columnNumber}` : null}
-                    onActiveHidden={(why) =>
-                      onHidden?.(
-                        `row ${located!.rowNumber}, column ${located!.columnNumber} not shown: ${why}`,
-                      )
-                    }
-                    revit={(row) => row.subjectIds}
-                    cellEdit={cellEdit}
-                    gutter={(row) => {
-                      const owed = snapshot.columns.filter(
-                        (column) =>
-                          cells[scheduleCellKey(row.rowNumber, column.columnNumber)]?.suggestion !=
-                          null,
-                      ).length;
-                      return owed > 0
-                        ? {
-                            count: owed,
-                            tone: "caution" as const,
-                            title: `${owed} pea suggestion${owed === 1 ? "" : "s"} on this row await${owed === 1 ? "s" : ""} a verdict — accept stages, deny clears`,
-                          }
-                        : null;
-                    }}
-                    empty={
-                      <EmptyState
-                        story="scope"
-                        exit="press r to read it again, or Ctrl K for another"
-                      >
-                        this schedule has no rows
-                      </EmptyState>
-                    }
-                  />
-                </TableFrame>
-              ) : (
-                <div className="grid h-full place-items-center p-6">
-                  {hydrated ? (
+                  activeKey={locatedRow}
+                  activeColumn={located ? `c${located.columnNumber}` : null}
+                  onActiveHidden={(why) =>
+                    onHidden?.(
+                      `row ${located!.rowNumber}, column ${located!.columnNumber} not shown: ${why}`,
+                    )
+                  }
+                  revit={(row) => row.subjectIds}
+                  cellEdit={cellEdit}
+                  gutter={(row) => {
+                    const owed = snapshot.columns.filter(
+                      (column) =>
+                        cells[scheduleCellKey(row.rowNumber, column.columnNumber)]?.suggestion !=
+                        null,
+                    ).length;
+                    return owed > 0
+                      ? {
+                          count: owed,
+                          tone: "caution" as const,
+                          title: `${owed} pea suggestion${owed === 1 ? "" : "s"} on this row await${owed === 1 ? "s" : ""} a verdict — accept stages, deny clears`,
+                        }
+                      : null;
+                  }}
+                  empty={
                     <EmptyState
                       story="scope"
-                      exit="press Ctrl K to choose one (type to filter, ↑/↓ then Enter), or ask pea to open one"
+                      exit="press r to read it again, or Ctrl K for another"
                     >
-                      no schedule open
+                      this schedule has no rows
                     </EmptyState>
-                  ) : (
-                    <OutcomeLine kind="busy" label="connecting to the workbench" />
-                  )}
-                </div>
-              )}
-            </div>
-          </section>
-        </Pane>
+                  }
+                />
+              </TableFrame>
+            ) : (
+              <div className="grid h-full place-items-center p-6">
+                {hydrated ? (
+                  <EmptyState
+                    story="scope"
+                    exit="press Ctrl K to choose one (type to filter, ↑/↓ then Enter), or ask pea to open one"
+                  >
+                    no schedule open
+                  </EmptyState>
+                ) : (
+                  <OutcomeLine kind="busy" label="connecting to the workbench" />
+                )}
+              </div>
+            )}
+          </div>
+        </section>
       </div>
     </NativeObservationScope>
   );

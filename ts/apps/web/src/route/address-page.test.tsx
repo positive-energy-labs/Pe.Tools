@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
-import { useMemo } from "react";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -9,17 +8,15 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 import { afterEach, expect, test } from "vite-plus/test";
-import { z } from "zod";
 import { routeAddress } from "@pe/agent-contracts";
 import { routeFile, useAddressPage } from "./address-page";
-import { createRouteOwner, makeAtomRegistry, useOwned } from "./route-owner";
+import { createRouteOwner, makeAtomRegistry, useOwned } from "#/shell/owner";
 import { createViewOwner } from "./view-owner";
-import { urlPage, useUrlPage } from "./url";
-import { familyManifest } from "#/family/manifest";
-import { manifest as families } from "#/families/manifest";
-import { bindDuctsManifest } from "#/ducts/manifest";
-import { defineRoute } from "./manifest";
-import { useRoute } from "./use-route";
+import { useUrlPage } from "./url";
+import { familyGraph, familyPageSchema } from "#/family/graph";
+import { familiesGraph, familiesPageSchema } from "#/families/graph";
+import { ductsGraph, ductsPageSchema } from "#/ducts/graph";
+import { graphUrlPage } from "#/shell/mount-page";
 
 afterEach(cleanup);
 
@@ -72,12 +69,12 @@ test("a pick pushes an entry, a receipt replaces, and Back restores the pick", a
   await waitFor(() => expect(page()).toBe("revit.a|"));
 });
 
-test("a capture landing survives a refreshed Family manifest and still restores Back and Forward", async () => {
-  const manifest = familyManifest();
+test("a Family member selection uses the graph's stable URL policy and restores Back and Forward", async () => {
+  const manifest = familyGraph;
   const base = createRouteOwner("family", makeAtomRegistry());
   const owner = createViewOwner(
     base,
-    manifest.page,
+    familyPageSchema,
     { pod: "p" },
     {
       address: "family",
@@ -85,11 +82,9 @@ test("a capture landing survives a refreshed Family manifest and still restores 
     },
   );
   const path = "settings/family/captured.json";
+  const url = graphUrlPage(familyGraph);
   function Probe() {
     const snapshot = useOwned(base.registry, owner.state)!;
-    // Family refreshes its action facts when the captured member changes.
-    const dynamicManifest = useMemo(() => familyManifest(), [snapshot.page.path]);
-    const url = useMemo(() => urlPage(dynamicManifest), [dynamicManifest]);
     useUrlPage(url, owner);
     return (
       <>
@@ -128,20 +123,17 @@ test("a capture landing survives a refreshed Family manifest and still restores 
   }
 });
 
-test("restoring Families spec B after planning A closes A's confirmation in one publication", () => {
+test("restoring Families spec B is one Page publication and stores no preview in Page", () => {
   const route = createRouteOwner("families", makeAtomRegistry());
-  const url = urlPage(families)!;
+  const url = graphUrlPage(familiesGraph);
   const owner = createViewOwner(
     route,
-    families.page,
+    familiesPageSchema,
     url.read({ stage: "apply", pod: "p", path: "b.json" }),
-    { address: families.address, transition: families.transition },
+    { transition: familiesGraph.transition },
   );
   owner.setPage({ path: "a.json" });
-  owner.move({ confirming: true, sheet: { entries: [] } }, {}, "action");
-  expect(owner.read().page.confirming).toBe(true);
   owner.move(url.read({ stage: "apply", pod: "p", path: "a.json", query: "Wall" }), {}, "url");
-  expect(owner.read().page.confirming).toBe(true);
   const seen: ReturnType<typeof owner.read>[] = [];
   const unsubscribe = owner.subscribe(() => seen.push(owner.read()));
   try {
@@ -149,7 +141,9 @@ test("restoring Families spec B after planning A closes A's confirmation in one 
       owner.move(url.read({ stage: "apply", pod: "p", path: "b.json" }), {}, "url"),
     ).toBeNull();
     expect(seen).toHaveLength(1);
-    expect(seen[0]!.page).toMatchObject({ path: "b.json", confirming: false, sheet: null });
+    expect(seen[0]!.page).toMatchObject({ path: "b.json" });
+    expect(seen[0]!.page).not.toHaveProperty("confirming");
+    expect(seen[0]!.page).not.toHaveProperty("sheet");
   } finally {
     unsubscribe();
     owner.dispose();
@@ -158,12 +152,11 @@ test("restoring Families spec B after planning A closes A's confirmation in one 
 });
 
 test("a Ducts URL atomically restores system, selection and pose before its evidence loads", () => {
-  const manifest = bindDuctsManifest(() => null);
+  const graph = ductsGraph;
   const route = createRouteOwner("ducts", makeAtomRegistry());
-  const url = urlPage(manifest)!;
-  const owner = createViewOwner(route, manifest.page, url.read({ system: "A" }), {
-    address: manifest.address,
-    transition: manifest.transition,
+  const url = graphUrlPage(graph);
+  const owner = createViewOwner(route, ductsPageSchema, url.read({ system: "A" }), {
+    transition: graph.transition as never,
   });
   try {
     const restored = url.read({ system: "B", selected: "200", viewport: "orbit:45,30,1.25@0,0,0" });
@@ -171,7 +164,8 @@ test("a Ducts URL atomically restores system, selection and pose before its evid
     expect(owner.read().page).toMatchObject(restored);
     expect(owner.read().page.selected).toBe("200");
     expect(owner.read().page.viewport).not.toBeNull();
-    expect(owner.move({ system: ["C"] })).toMatchObject({ code: "not-ready" });
+    expect(owner.move({ system: ["C"] })).toBeNull();
+    expect(owner.read().page.system).toEqual(["C"]);
   } finally {
     owner.dispose();
     route.dispose();
@@ -184,36 +178,24 @@ async function pendingCapture() {
     complete = resolve;
   });
   let navigate!: (path: string) => void;
+  const base = createRouteOwner("family", makeAtomRegistry());
+  const owner = createViewOwner(base, familyPageSchema, { pod: "office" });
+  const url = graphUrlPage(familyGraph);
   function Family() {
-    // Family's authoring facts rebuild its behavior as observations arrive. The Page contract stays.
-    const handle = useRoute(
-      defineRoute({
-        key: "family",
-        name: "Family",
-        address: "family",
-        page: routeAddress("family").schema,
-        actions: {
-          capture: {
-            label: "capture",
-            says: "File the captured member",
-            needs: "host",
-            effect: "query",
-            input: z.void() as unknown as z.ZodType<never>,
-            dirties: [],
-            ready: () => null,
-            run: async (ctx) => {
-              await captured;
-              ctx.setPage({ path: "captures/new.json" });
-            },
-          },
-        },
-      }),
-    );
-    navigate = (path) => handle.page[1]({ path });
+    const snapshot = useOwned(base.registry, owner.state)!;
+    useUrlPage(url, owner);
+    navigate = (path) => {
+      owner.setPage({ path });
+    };
+    const capture = async () => {
+      const basis = owner.read();
+      await captured;
+      owner.move({ path: "captures/new.json" }, {}, "action", basis);
+    };
     return (
       <>
-        <output aria-label="member">{handle.page[0].path}</output>
-        <button onClick={() => void handle.actions.capture.run()}>capture</button>
+        <output aria-label="member">{snapshot.page.path}</output>
+        <button onClick={() => void capture()}>capture</button>
       </>
     );
   }
@@ -234,6 +216,11 @@ async function pendingCapture() {
     navigate: (path: string) => navigate(path),
     view,
     place: () => routeAddress("family").read(router.state.location.search).page,
+    dispose: () => {
+      view.unmount();
+      owner.dispose();
+      base.dispose();
+    },
   };
 }
 
@@ -243,6 +230,7 @@ test("a capture lands its member when observation-driven behavior refreshes the 
   await act(async () => probe.complete());
   await waitFor(() => expect(probe.place().path).toBe("captures/new.json"));
   expect(probe.view.getByLabelText("member").textContent).toBe("captures/new.json");
+  probe.dispose();
 });
 
 test("a capture never replaces a member the person navigated to while it ran", async () => {
@@ -253,4 +241,5 @@ test("a capture never replaces a member the person navigated to while it ran", a
   await act(async () => probe.complete());
   expect(probe.place().path).toBe("settings/chosen.json");
   expect(probe.view.getByLabelText("member").textContent).toBe("settings/chosen.json");
+  probe.dispose();
 });
