@@ -126,6 +126,7 @@ export const poseOf = (
 export function ModelPicture({
   readout,
   read,
+  capturing,
   bounds,
   orbit,
   wheelHost,
@@ -152,6 +153,7 @@ export function ModelPicture({
 }: {
   readout: ReactNode;
   read: SceneRead;
+  capturing: boolean;
   bounds: PictureBounds | null;
   orbit: LiveOrbit;
   wheelHost?: HTMLElement | null;
@@ -282,7 +284,7 @@ export function ModelPicture({
       : !meshes
         ? "no meshes: choose a system on a Revit document"
         : null);
-  useWork(read.pending, "capturing meshes…");
+  useWork(capturing, "capturing meshes…");
   return (
     <div
       ref={setHost}

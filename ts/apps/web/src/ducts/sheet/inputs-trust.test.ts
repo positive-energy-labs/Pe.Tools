@@ -40,7 +40,14 @@ const inputs = (extra: Partial<DuctsInputs> = {}): DuctsInputs =>
     ...extra,
   });
 const port = (index: number, direction: "in" | "out", classification: string) =>
-  ({ index, direction, classification, kind: "end", point: [0, 0, 0], connectedTo: null }) as unknown as Node["connectors"][number];
+  ({
+    index,
+    direction,
+    classification,
+    kind: "end",
+    point: [0, 0, 0],
+    connectedTo: null,
+  }) as unknown as Node["connectors"][number];
 // Broan B160E75RT as Chadds models it: supply and exhaust outlets, supply and exhaust inlets.
 const erv = (id: number): Node =>
   ({
@@ -72,7 +79,9 @@ it("a unit kind is one row per family and type, named by family and type and the
   const rows = inputRows({
     snapshot: { nodes: ids.map(erv) },
     doc: null,
-    inputs: inputs({ units: Object.fromEntries(ids.map((id) => [id, unit("air-handler", "typed")])) }),
+    inputs: inputs({
+      units: Object.fromEntries(ids.map((id) => [id, unit("air-handler", "typed")])),
+    }),
     fanUnitId: null,
   }).filter((r) => r.label === "Unit kind");
   expect(rows).toHaveLength(1);
@@ -83,8 +92,10 @@ it("a unit kind is one row per family and type, named by family and type and the
     typed: true,
     clear: { kinds: { [KEY]: null } },
   });
-  expect(JSON.stringify(rows[0]!.subject)).not.toContain("[\\\"Broan");
-  expect(rows[0]!.subject.filter((p) => typeof p !== "string")).toEqual(sorted.map((id) => ({ id })));
+  expect(JSON.stringify(rows[0]!.subject)).not.toContain('[\\"Broan');
+  expect(rows[0]!.subject.filter((p) => typeof p !== "string")).toEqual(
+    sorted.map((id) => ({ id })),
+  );
 });
 
 it("each kind option says what it means for this unit's ports, role and flow", () => {
@@ -94,7 +105,9 @@ it("each kind option says what it means for this unit's ports, role and flow", (
     "fan: supply out c2 from supply in c4; exhaust out c3 from exhaust in c1 · flow 35 cfm (revit PE_M_Fan_AirFlow)",
   );
   // The r22 choice: an air handler takes one outlet, so this unit loses its fan ports.
-  expect(kindMeaning(node, "air-handler", u)).toMatch(/^no fan port: 2 outlets \(supply out c2, exhaust out c3\)/);
+  expect(kindMeaning(node, "air-handler", u)).toMatch(
+    /^no fan port: 2 outlets \(supply out c2, exhaust out c3\)/,
+  );
   expect(kindMeaning(node, "other", u)).toMatch(/^passive: adds its drop and moves no air/);
 });
 
@@ -110,11 +123,17 @@ it("a row stays when its value is not typed, carrying the source underneath and 
     }),
     fanUnitId: null,
   });
-  expect(rows.find((r) => r.key === "terminal:7:cfm")).toMatchObject({ source: "revit Flow", typed: false, clear: null });
+  expect(rows.find((r) => r.key === "terminal:7:cfm")).toMatchObject({
+    source: "revit Flow",
+    typed: false,
+    clear: null,
+  });
   const typed = rows.find((r) => r.key === "terminal:8:cfm")!;
   expect(typed).toMatchObject({ typed: true, clear: { flows: { 8: null } } });
   if (typed.control.kind !== "number") throw new Error("number row");
-  expect(ductsSheetEditsSchema.parse(typed.control.edit(160))).toEqual({ flows: { 8: { cfm: 160 } } });
+  expect(ductsSheetEditsSchema.parse(typed.control.edit(160))).toEqual({
+    flows: { 8: { cfm: 160 } },
+  });
 });
 
 const fitting = (key: number, extra: Partial<FittingPricing>): FittingPricing =>
@@ -153,16 +172,24 @@ it("fittings group by rule: one header with the rule's name, table meaning and p
   expect(g!.members.map((m) => m.ids)).toEqual([[1], [2], [3]]);
   expect(g!.lossInWg).toBeCloseTo(0.003, 9);
   const other = g!.choices.find((c) => c.key === "CD3-21")!;
-  expect(other.sub).toBe("Elbow, Round, 5 Gore, 90 Degree · every fitting this rule matches in the document");
+  expect(other.sub).toBe(
+    "Elbow, Round, 5 Gore, 90 Degree · every fitting this rule matches in the document",
+  );
   expect(other.edits).toEqual({ tables: { "elbow-1d-le10": { table: "CD3-21" } } });
 });
 
 it("picking the rule's own table over a typed choice clears it instead of typing the default", () => {
   // r16 wrote "typed CD3-2" (the default), which changed nothing and read as a person's choice.
   const typedIn = inputs({ tables: { "elbow-1d-le10": { value: "CD3-21", source: "typed" } } });
-  const [g] = fittingGroups([fitting(1, { table: "CD3-21", tableSource: "typed" })], typedIn, TITLES);
+  const [g] = fittingGroups(
+    [fitting(1, { table: "CD3-21", tableSource: "typed" })],
+    typedIn,
+    TITLES,
+  );
   expect(g!.source).toBe("typed");
-  expect(g!.choices.find((c) => c.key === "CD3-2")!.edits).toEqual({ tables: { "elbow-1d-le10": null } });
+  expect(g!.choices.find((c) => c.key === "CD3-2")!.edits).toEqual({
+    tables: { "elbow-1d-le10": null },
+  });
   expect(g!.choices.find((c) => c.key === "CD3-21")).toMatchObject({ current: true, edits: null });
   expect(g!.clear).toEqual({ tables: { "elbow-1d-le10": null } });
 });
@@ -176,7 +203,13 @@ it("unmatched fittings group by family, and a choice in Work no fitting of this 
     options: [],
     lossInWg: null,
     unpriced: "no rule matches",
-    candidates: [{ rule: "elbow-15d-45-le10", words: "Round Elbow 1.5 D die stamped · 45 degrees", tables: ["CD3-3"] }],
+    candidates: [
+      {
+        rule: "elbow-15d-45-le10",
+        words: "Round Elbow 1.5 D die stamped · 45 degrees",
+        tables: ["CD3-3"],
+      },
+    ],
   });
   const groups = fittingGroups(
     [unmatched],
@@ -187,7 +220,9 @@ it("unmatched fittings group by family, and a choice in Work no fitting of this 
     ["family:Round Elbow", 1, "not priced"],
     ["rule:trx-round", 0, "typed"],
   ]);
-  expect(groups[0]!.choices[0]!.edits).toEqual({ assignments: { "Round Elbow": { rule: "elbow-15d-45-le10" } } });
+  expect(groups[0]!.choices[0]!.edits).toEqual({
+    assignments: { "Round Elbow": { rule: "elbow-15d-45-le10" } },
+  });
   expect(groups[1]!.clear).toEqual({ tables: { "trx-round": null } });
 });
 
@@ -197,17 +232,26 @@ it("ASHRAE titles read as the fitting, without the id and the source", () => {
 });
 
 it("undo restores the exact Work cells an edit wrote, a cell that did not exist by deleting it", () => {
-  const edits = { kinds: { [KEY]: { kind: "air-handler" as const } }, tables: { "elbow-1d-le10": null } };
+  const edits = {
+    kinds: { [KEY]: { kind: "air-handler" as const } },
+    tables: { "elbow-1d-le10": null },
+  };
   const cells = editCells(edits);
   expect(cells).toEqual([
     ["kinds", KEY],
     ["rules", "elbow-1d-le10"],
   ]);
-  const before = { kinds: {}, rules: { "elbow-1d-le10": { edit: { value: { table: "CD3-21" }, by: "human" } } } };
+  const before = {
+    kinds: {},
+    rules: { "elbow-1d-le10": { edit: { value: { table: "CD3-21" }, by: "human" } } },
+  };
   const saved = cellsAt(before, cells);
   expect(restorePatches(cells, saved)).toEqual([
     { path: ["kinds", KEY] },
-    { path: ["rules", "elbow-1d-le10"], value: { edit: { value: { table: "CD3-21" }, by: "human" } } },
+    {
+      path: ["rules", "elbow-1d-le10"],
+      value: { edit: { value: { table: "CD3-21" }, by: "human" } },
+    },
   ]);
 });
 
@@ -221,8 +265,18 @@ it("an edit's effect reads before → after on what moved, ≥ marking an incomp
     telFt: 0,
     frictionRatePer100: null,
   });
-  const r14 = { supply: side(null, 0.028054, false), return: side(0.046875, 0.046875, true), requiredEspInWg: null, requiredEspAssumedInWg: null };
-  const r20 = { supply: side(null, 0.016504, false), return: side(0.035566, 0.035566, true), requiredEspInWg: null, requiredEspAssumedInWg: null };
+  const r14 = {
+    supply: side(null, 0.028054, false),
+    return: side(0.046875, 0.046875, true),
+    requiredEspInWg: null,
+    requiredEspAssumedInWg: null,
+  };
+  const r20 = {
+    supply: side(null, 0.016504, false),
+    return: side(0.035566, 0.035566, true),
+    requiredEspInWg: null,
+    requiredEspAssumedInWg: null,
+  };
   expect(effectWords(r14, r20)).toBe("supply ≥0.0281 → ≥0.0165 · return 0.0469 → 0.0356");
   expect(effectWords(r14, r14)).toBe("no change to this fan's totals");
 });
@@ -242,7 +296,9 @@ it("a kind that would take the unit off the fan list is a disabled option; the r
   };
   // The B160's two outlets: an air handler takes exactly one, so it is disabled with its reason.
   const b160 = options(erv(6105264));
-  expect(b160["air-handler"]).toMatch(/^no fan port: 2 outlets \(supply out c2, exhaust out c3\).*leave the fan list/);
+  expect(b160["air-handler"]).toMatch(
+    /^no fan port: 2 outlets \(supply out c2, exhaust out c3\).*leave the fan list/,
+  );
   expect(b160.erv).toBeNull();
   expect(b160.other).toBeNull();
   expect(b160.dehumidifier).toBeNull();
@@ -256,6 +312,9 @@ it("a kind that would take the unit off the fan list is a disabled option; the r
   // A stale typed air-handler on the B160 stays the standing value, flagged disabled, clearable.
   const stale = rowFor(erv(6105264), "air-handler", "typed");
   expect(stale.control.kind === "kind" && stale.control.value).toBe("air-handler");
-  expect(stale.control.kind === "kind" && stale.control.options.find((o) => o.kind === "air-handler")?.disabled).toBeTruthy();
+  expect(
+    stale.control.kind === "kind" &&
+      stale.control.options.find((o) => o.kind === "air-handler")?.disabled,
+  ).toBeTruthy();
   expect(stale.clear).not.toBeNull();
 });

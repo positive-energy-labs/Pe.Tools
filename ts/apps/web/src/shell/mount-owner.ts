@@ -33,7 +33,8 @@ import {
   type ReadingSource,
   type ReadingState,
 } from "./readings";
-import { createWorkJournal, acquireWorkJournal } from "./journal";
+import type { WorkJournal } from "./journal";
+import { acquireWorkWriter, type WorkWriter } from "./work-writes";
 import { createRouteTimeline, type TimelineEntry } from "./timeline";
 import { validateGraphChords } from "./keys";
 import { kernelCellVerbs } from "./verbs-cells";
@@ -245,7 +246,8 @@ export function createGraphMount<P, W>(
     }
   };
   const timeline = createRouteTimeline();
-  const journals = new Map<string, ReturnType<typeof createWorkJournal>>();
+  const journals = new Map<string, WorkJournal>();
+  const writers = new Map<string, WorkWriter>();
   const releaseJournals: (() => void)[] = [];
   const deltas = new Map<string, () => void>();
   const dispatches = new Map<
@@ -368,30 +370,33 @@ export function createGraphMount<P, W>(
     const prior = conflict;
     if (prior?.work === next?.work && prior?.revision === next?.revision) return;
     conflict = next;
-    if (prior) journals.get(prior.work)?.hold(false);
-    if (next) journals.get(next.work)?.hold(true);
     present();
-  };
-  const settled = (key: WorkKey) => {
-    if (conflict?.work === workKey(key)) flag(null);
   };
   const journalFor = (key: WorkKey) => {
     const id = workKey(key);
     let journal = journals.get(id);
     if (!journal) {
-      const acquired = acquireWorkJournal(key);
-      journal = acquired.journal;
-      releaseJournals.push(acquired.release);
+      const acquired = acquireWorkWriter(key);
+      const writer = acquired.writer;
+      writers.set(id, writer);
+      journal = writer.journal;
+      releaseJournals.push(
+        acquired.release,
+        writer.subscribe(() => {
+          if (raw.work && workKey(raw.work.handle.key) === id)
+            flag(writer.conflict() ? { work: id, revision: raw.work.handle.revision } : null);
+          notify();
+        }),
+      );
       journals.set(id, journal);
-      if (conflict?.work === id) journal.hold(true);
+      if (writer.conflict() && raw.work && workKey(raw.work.handle.key) === id)
+        flag({ work: id, revision: raw.work.handle.revision });
     }
     if (connected && !disposed && !deltas.has(id))
       deltas.set(
         id,
         adapters.subscribeAcceptedDeltas(key, (ack) => {
-          journal!.accept(ack);
-          settled(key);
-          notify();
+          writers.get(id)!.accept(ack);
         }),
       );
     return journal;
@@ -445,7 +450,10 @@ export function createGraphMount<P, W>(
   });
   const write = async (key: WorkKey, request: WorkWrite) => {
     const invocation = request.press ? dispatches.get(request.press) : undefined;
-    const result = await adapters.write(key, request);
+    journalFor(key);
+    const result = await writers
+      .get(workKey(key))!
+      .write(scope, request, (key, request) => adapters.write(key, request), graph.cells);
     if (
       !disposed &&
       !result.ok &&
@@ -454,20 +462,6 @@ export function createGraphMount<P, W>(
       invocation?.input
     )
       rejected = structuredClone({ key, request, verb: invocation.verb, input: invocation.input });
-    if (result.ok && !disposed) {
-      journalFor(key).accept(result.write);
-      settled(key);
-    } else if (
-      !result.ok &&
-      !disposed &&
-      "code" in result &&
-      result.code === "stale_revision" &&
-      // Work already re-read past the refused revision is fresh: nothing is left to review.
-      scope.work &&
-      workKey(scope.work.handle.key) === workKey(key) &&
-      scope.work.handle.revision === request.expectedRevision
-    )
-      flag({ work: workKey(key), revision: request.expectedRevision });
     notify();
     return result;
   };
@@ -552,7 +546,10 @@ export function createGraphMount<P, W>(
       if (!adapters.startFresh)
         return { ok: false, kind: "refused", error: "This route has no recovery door", hint: "" };
       const result = await adapters.startFresh(key);
-      if (result.ok && !disposed) journalFor(key).accept(result.write);
+      if (result.ok && !disposed) {
+        journalFor(key);
+        writers.get(workKey(key))!.accept(result.write);
+      }
       return result;
     },
     changed: () => notify(),
@@ -834,6 +831,8 @@ export function createGraphMount<P, W>(
     rejected: () => rejected,
     retryRefusal,
     discard() {
+      if (rejected?.request.press)
+        writers.get(workKey(rejected.key))?.discard(rejected.request.press);
       rejected = null;
       notify();
     },
@@ -852,6 +851,7 @@ export function createGraphMount<P, W>(
             press,
           });
           if (result.ok) {
+            if (edit.request.press) writers.get(workKey(edit.key))?.discard(edit.request.press);
             if (rejected === edit) rejected = null;
             consume(edit.verb, {
               state: "done",
@@ -993,7 +993,10 @@ export function createGraphMount<P, W>(
         )
           flag(null);
         else present();
-        if (scope.work) journalFor(scope.work.handle.key);
+        if (scope.work) {
+          journalFor(scope.work.handle.key);
+          writers.get(workKey(scope.work.handle.key))!.observe(scope);
+        }
         readings.update(readScope());
         notify();
       };
@@ -1039,7 +1042,7 @@ export function createGraphMount<P, W>(
       deltas.clear();
       unTimeline();
       historyCompletions.clear();
-      for (const release of releaseJournals) release();
+      for (const release of releaseJournals.reverse()) release();
       readings.dispose();
       view.dispose();
       base.dispose();

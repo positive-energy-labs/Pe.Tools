@@ -79,12 +79,16 @@ const read = (key: SpaceReadKey, label: string) =>
             : null,
     },
   );
-import { spaceSeeds } from "./graph-seeds";
 export const spaceGraph: RouteGraph<SpacePage, null> = {
   key: "space",
   address: "space",
   name: "Space",
-  seeds: spaceSeeds,
+  seeds: {
+    fixture: {
+      title: "Spatial inspection",
+      load: () => import("./graph-seeds").then((m) => m.spaceSeeds["fixture"]!),
+    },
+  },
   needs: "document",
   fields: {
     threadSearch: { ...threadListFields.threadSearch, role: "pose" },

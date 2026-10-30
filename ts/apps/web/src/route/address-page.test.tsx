@@ -8,7 +8,6 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 import { afterEach, expect, test } from "vite-plus/test";
-import { z } from "zod";
 import { routeAddress } from "@pe/agent-contracts";
 import { routeFile, useAddressPage } from "./address-page";
 import { createRouteOwner, makeAtomRegistry, useOwned } from "#/shell/owner";
@@ -18,8 +17,6 @@ import { familyGraph, familyPageSchema } from "#/family/graph";
 import { familiesGraph, familiesPageSchema } from "#/families/graph";
 import { ductsGraph, ductsPageSchema } from "#/ducts/graph";
 import { graphUrlPage } from "#/shell/mount-page";
-import { defineRoute } from "./manifest";
-import { useRoute } from "./use-route";
 
 afterEach(cleanup);
 
@@ -181,36 +178,24 @@ async function pendingCapture() {
     complete = resolve;
   });
   let navigate!: (path: string) => void;
+  const base = createRouteOwner("family", makeAtomRegistry());
+  const owner = createViewOwner(base, familyPageSchema, { pod: "office" });
+  const url = graphUrlPage(familyGraph);
   function Family() {
-    // Family's authoring facts rebuild its behavior as observations arrive. The Page contract stays.
-    const handle = useRoute(
-      defineRoute({
-        key: "family",
-        name: "Family",
-        address: "family",
-        page: routeAddress("family").schema,
-        actions: {
-          capture: {
-            label: "capture",
-            says: "File the captured member",
-            needs: "host",
-            effect: "query",
-            input: z.void() as unknown as z.ZodType<never>,
-            dirties: [],
-            ready: () => null,
-            run: async (ctx) => {
-              await captured;
-              ctx.setPage({ path: "captures/new.json" });
-            },
-          },
-        },
-      }),
-    );
-    navigate = (path) => handle.page[1]({ path });
+    const snapshot = useOwned(base.registry, owner.state)!;
+    useUrlPage(url, owner);
+    navigate = (path) => {
+      owner.setPage({ path });
+    };
+    const capture = async () => {
+      const basis = owner.read();
+      await captured;
+      owner.move({ path: "captures/new.json" }, {}, "action", basis);
+    };
     return (
       <>
-        <output aria-label="member">{handle.page[0].path}</output>
-        <button onClick={() => void handle.actions.capture.run()}>capture</button>
+        <output aria-label="member">{snapshot.page.path}</output>
+        <button onClick={() => void capture()}>capture</button>
       </>
     );
   }
@@ -231,6 +216,11 @@ async function pendingCapture() {
     navigate: (path: string) => navigate(path),
     view,
     place: () => routeAddress("family").read(router.state.location.search).page,
+    dispose: () => {
+      view.unmount();
+      owner.dispose();
+      base.dispose();
+    },
   };
 }
 
@@ -240,6 +230,7 @@ test("a capture lands its member when observation-driven behavior refreshes the 
   await act(async () => probe.complete());
   await waitFor(() => expect(probe.place().path).toBe("captures/new.json"));
   expect(probe.view.getByLabelText("member").textContent).toBe("captures/new.json");
+  probe.dispose();
 });
 
 test("a capture never replaces a member the person navigated to while it ran", async () => {
@@ -250,4 +241,5 @@ test("a capture never replaces a member the person navigated to while it ran", a
   await act(async () => probe.complete());
   expect(probe.place().path).toBe("settings/chosen.json");
   expect(probe.view.getByLabelText("member").textContent).toBe("settings/chosen.json");
+  probe.dispose();
 });

@@ -28,34 +28,36 @@ const rowPartitions = Object.assign(
   (row: unknown) => ((row as { zone?: string })?.zone ? ["partition"] : []),
   { ids: ["partition"] },
 );
-import { takeoffSeeds, DEMO_CANDIDATES } from "./seeds";
 export const takeoffGraph: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> = {
   key: "takeoffs",
   address: "takeoffs",
   name: "Takeoffs",
-  seeds: Object.fromEntries(
-    Object.entries(takeoffSeeds).map(([name, seed]) => [
-      name,
-      {
-        ...seed,
-        queries: {
-          "takeoffs.snapshot": seed.readings.snapshot,
-          "rhvac.open": { path: "C:/Fixtures/projectA.r10" },
-        },
-        readings: {
-          candidates: DEMO_CANDIDATES,
-          ownerCrops: null,
-          plan: null,
-          rhvacVersion: null,
-          receipts: [],
-          captures: [],
-          saved: null,
-          text: null,
-          ...seed.readings,
-        },
-      },
-    ]),
-  ),
+  seeds: {
+    adopt: {
+      title: "project-a — regions drawn, nothing adopted",
+      load: () => import("./graph-seeds").then((m) => m.takeoffSeeds["adopt"]!),
+    },
+    partition: {
+      title: "project-a — zones adopted, ready to partition",
+      load: () => import("./graph-seeds").then((m) => m.takeoffSeeds["partition"]!),
+    },
+    refresh: {
+      title: "project-a — a stale model waiting for a re-read",
+      load: () => import("./graph-seeds").then((m) => m.takeoffSeeds["refresh"]!),
+    },
+    sync: {
+      title: "project-a — partitioned, .r10 bound, sync unreviewed",
+      load: () => import("./graph-seeds").then((m) => m.takeoffSeeds["sync"]!),
+    },
+    launch: {
+      title: "project-a — synced, RHVAC not open",
+      load: () => import("./graph-seeds").then((m) => m.takeoffSeeds["launch"]!),
+    },
+    "retry-r10": {
+      title: "project-a — the .r10 read failed",
+      load: () => import("./graph-seeds").then((m) => m.takeoffSeeds["retry-r10"]!),
+    },
+  },
   needs: "project",
   work: takeoffsRouteState.schema,
   capture: "work",

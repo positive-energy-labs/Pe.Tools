@@ -24,7 +24,9 @@ describe("route addresses match their manifests", () => {
   });
   it("Ducts projects URL policy from its graph fields", () => {
     const page = ductsPageSchema.parse({});
-    expect(graphUrlPage(ductsGraph).keys).toEqual(routeAddress("ducts").keys);
+    expect(graphUrlPage(ductsGraph).keys.toSorted()).toEqual(routeAddress("ducts").keys.toSorted());
+    expect(graphUrlPage(ductsGraph).keys).toContain("fan");
+    expect(ductsGraph.fields.fan).toMatchObject({ url: "push", agent: "set" });
     expect(Object.keys(page)).toEqual(
       expect.arrayContaining([...routeAddress("ducts").agent.keys]),
     );

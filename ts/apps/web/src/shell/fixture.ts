@@ -6,6 +6,7 @@ import {
   routeDocDelta,
   workKey,
   type RouteGraph,
+  type GraphSeedData,
   type WorkWriteAck,
 } from "@pe/agent-contracts";
 import { createGraphMount, type MountAdapters, type MountScope } from "./mount-owner";
@@ -15,9 +16,31 @@ import type { WorkScopePorts } from "./use-work-scope";
 
 export { fixtureName, currentFixture } from "./fixture-lane";
 
-export function fixtureEnvironment<P, W>(graph: RouteGraph<P, W>, name: string) {
-  const seed = graph.seeds?.[name];
-  const failure = seed ? null : `Fixture '${name}' is not declared by ${graph.name}`;
+export async function fixtureEnvironment<P, W>(graph: RouteGraph<P, W>, name: string) {
+  const declaration = graph.seeds?.[name];
+  if (!declaration)
+    return pendingFixtureEnvironment(
+      graph,
+      name,
+      `Fixture '${name}' is not declared by ${graph.name}`,
+    );
+  try {
+    return pendingFixtureEnvironment(graph, name, null, await declaration.load());
+  } catch (error) {
+    return pendingFixtureEnvironment(
+      graph,
+      name,
+      `Fixture '${name}' failed to load: ${String(error)}`,
+    );
+  }
+}
+
+export function pendingFixtureEnvironment<P, W>(
+  graph: RouteGraph<P, W>,
+  name: string,
+  failure: string | null = "Loading fixture…",
+  seed?: GraphSeedData<P, W>,
+) {
   // A fresh identity also keeps the shared journal separate from every real or previous Work.
   const isolatedAddress = address(`C:/Fixtures/${crypto.randomUUID()}.rvt`);
   let key = bindWork(graph.key, isolatedAddress, name);
@@ -200,12 +223,12 @@ export function fixtureEnvironment<P, W>(graph: RouteGraph<P, W>, name: string) 
 }
 
 /** The same owner used by the browser, convenient for deterministic route proofs. */
-export function createFixtureMount<P, W>(
+export async function createFixtureMount<P, W>(
   graph: RouteGraph<P, W>,
   name: string,
   adapters: Partial<MountAdapters<P, W>> = {},
   initial: Partial<P> = {},
 ) {
-  const lane = fixtureEnvironment(graph, name);
+  const lane = await fixtureEnvironment(graph, name);
   return createGraphMount(lane.graph, { ...adapters, ...lane.adapters }, initial);
 }

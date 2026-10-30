@@ -13,7 +13,7 @@ import { Route as rootRoute } from "../routes/__root";
 import { createRoute } from "@tanstack/react-router";
 import { KeyScope, ScopeKeys, actionScopeKeys, useScopeLive, type ScopeKey } from "@pe/kit/keys";
 import { Button } from "@pe/kit/lang/button";
-import { Input, Label, Textarea } from "@pe/kit/lang/input";
+import { Label, Textarea } from "@pe/kit/lang/input";
 import {
   GraphLayoutView,
   type GraphLayoutState,
@@ -28,6 +28,8 @@ import type { RouteHandle } from "../route/handle";
 import { LadderPicker, useDocumentLadder } from "../route/situation-ladder";
 import { useInitialUrlPage, useUrlPage } from "../route/url";
 import { bindGraphChords } from "./keys";
+import { SituationFields } from "./situation-fields";
+import { Switcher } from "@pe/kit/lang/switcher";
 import {
   CONFLICT_REFUSAL,
   createGraphMount,
@@ -41,7 +43,7 @@ import { settingFields } from "./settings";
 import { useWorkScope, type WorkScopeStatus } from "./use-work-scope";
 import { useRouteLease } from "../route/view-bridge";
 import { workKey } from "@pe/agent-contracts";
-import { fixtureEnvironment, fixtureName } from "./fixture";
+import { fixtureEnvironment, pendingFixtureEnvironment, fixtureName } from "./fixture";
 import { useRouter } from "@tanstack/react-router";
 
 export type { GraphMount, MountAdapters, MountScope, MountBinding } from "./mount-owner";
@@ -174,10 +176,25 @@ export function useGraphRoute<P, W>(
   { hidden = false, url: projectUrl = true, thread, target, work }: MountRouteProps = {},
 ) {
   const fixture = useRouteSearchSlice(fixtureName);
-  const lane = useMemo(
-    () => (fixture === null ? null : fixtureEnvironment(graph, fixture)),
+  const pendingLane = useMemo(
+    () => (fixture === null ? null : pendingFixtureEnvironment(graph, fixture)),
     [graph, fixture],
   );
+  const [loaded, setLoaded] = useState<{
+    pending: typeof pendingLane;
+    lane: Awaited<ReturnType<typeof fixtureEnvironment<P, W>>>;
+  } | null>(null);
+  useEffect(() => {
+    if (fixture === null) return;
+    let active = true;
+    void fixtureEnvironment(graph, fixture).then((lane) => {
+      if (active) setLoaded({ pending: pendingLane, lane });
+    });
+    return () => {
+      active = false;
+    };
+  }, [graph, fixture, pendingLane]);
+  const lane = loaded && loaded.pending === pendingLane ? loaded.lane : pendingLane;
   const addressThread = useRouteSearchSlice((search) => (projectUrl ? search.thread : undefined));
   const boundThread = thread ?? addressThread;
   const url = useMemo(
@@ -431,7 +448,7 @@ export function GraphRouteView<P, W>({
     (["undo", "redo"] as const).map((direction) => ({
       id: `${graph.key}.${direction}`,
       label: direction,
-      bindings: [direction === "undo" ? ("Mod+Z" as const) : ("Mod+Shift+Z" as const)],
+      bindings: direction === "undo" ? ["Mod+Z"] : ["Mod+Shift+Z", "Mod+Y"],
       options: { ignoreInputs: true, preventDefault: false, stopPropagation: false },
       invoke: (event?: KeyboardEvent) => {
         if (hidden || !current() || (event && nativeUndo(event))) return false;
@@ -700,29 +717,11 @@ function GraphSituation<P, W>({
             },
           ]}
         />
-      ) : (
+      ) : graph.subject ? null : (
         <span>{stage.word}</span>
       )}
-      {graphFields(graph)
-        .filter(
-          ([, field]) =>
-            field.editor !== "pane" &&
-            ["subject", "query", "selection", "draft"].includes(field.role),
-        )
-        .map(([id, field]) => (
-          <Label key={id}>
-            {id}
-            <Input
-              aria-label={id}
-              disabled={!enabled}
-              value={field.codec.encode(owner.view.read().page[id as keyof P])}
-              onChange={(e) => {
-                const parsed = field.schema.safeParse(field.codec.decode(e.target.value));
-                if (parsed.success) owner.view.setPage({ [id]: parsed.data } as Partial<P>);
-              }}
-            />
-          </Label>
-        ))}
+      {graph.subject && <span>{graph.subject(owner.view.read().page)}</span>}
+      <SituationFields graph={graph} owner={owner} enabled={enabled} />
       {/* The host's own sentence for Work it cannot read; recovery is the kernel review beside it. */}
       {status.failure && <span role="alert">{status.failure}</span>}
       {/* The stage's verbs, then each kernel recovery only while its predicate holds. */}
@@ -758,6 +757,7 @@ function GraphSituation<P, W>({
         </Button>
       )}
       {owner.journalRefusal() && <span role="status">{owner.journalRefusal()}</span>}
+      <SituationLog owner={owner} />
     </section>
   );
   return hosted ? (
@@ -769,13 +769,36 @@ function GraphSituation<P, W>({
   );
 }
 
+function SituationLog<P, W>({ owner }: { owner: GraphMount<P, W> }) {
+  const [kind, setKind] = useState<"all" | "work">("all");
+  return (
+    <section aria-label="Log" className="basis-full">
+      <span className="t-small t-upper">log</span>
+      <Switcher
+        ariaLabel="log kind"
+        value={kind}
+        onChange={setKind}
+        options={[
+          { value: "all", label: "all", title: "All route activity" },
+          { value: "work", label: "work", title: "Work edits" },
+        ]}
+      />
+      <GraphHistory owner={owner} workOnly={kind === "work"} label="Route log" />
+    </section>
+  );
+}
+
 /** One History presentation for graph panes: accepted calls and exact Work receipts. */
 export function GraphHistory<P, W>({
   owner,
   receipts,
+  workOnly = false,
+  label = "History",
 }: {
   owner: GraphMount<P, W>;
   receipts?: string;
+  workOnly?: boolean;
+  label?: string;
 }) {
   const [entries, setEntries] = useState(() => owner.timeline.read());
   useEffect(() => owner.timeline.subscribe(() => setEntries(owner.timeline.read())), [owner]);
@@ -783,15 +806,19 @@ export function GraphHistory<P, W>({
   const parsed = actionStatusSchema.array().safeParse(reading?.value ?? reading?.previous);
   const scope = owner.snapshot();
   const key = scope.work?.handle.key ?? scope.workKey ?? scope.unreadable;
-  const saved = parsed.success ? (key ? receiptsForWork(parsed.data, key) : parsed.data) : [];
+  const saved =
+    !workOnly && parsed.success ? (key ? receiptsForWork(parsed.data, key) : parsed.data) : [];
   const recorded = new Set(saved.map((receipt) => receipt.id));
+  const shown = entries.filter(
+    (entry) => !workOnly || owner.verbs[entry.verb ?? ""]?.kind === "work",
+  );
   return (
-    <section aria-label="History">
+    <section aria-label={label}>
       {reading?.status === "failed" && <p role="alert">{reading.error}</p>}
-      {!entries.length && !saved.length && <p>No activity yet</p>}
+      {!shown.length && !saved.length && <p>No activity yet</p>}
       <ol>
         {[
-          ...entries
+          ...shown
             .filter((entry) => {
               const receipt = (entry.basis as { receipt?: { id: string } } | undefined)?.receipt;
               return !recorded.has(receipt?.id ?? entry.receiptId ?? "");

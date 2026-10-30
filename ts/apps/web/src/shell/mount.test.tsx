@@ -16,6 +16,7 @@ import {
   type ActionReceipt,
 } from "@pe/agent-contracts";
 import { field } from "../../../../packages/agent-contracts/src/route-field";
+import { listSearchKey, listSearchCodec } from "@pe/agent-contracts";
 import { KeyScope, readRegistrations, readKeyMeta } from "@pe/kit/keys";
 import { RouteWorkspace } from "../../../../packages/runtime/src/route-workspace";
 import { Route as root } from "../routes/__root";
@@ -174,7 +175,7 @@ async function fixture(cells = false) {
       : {}),
     fields: {
       stage: { ...field(z.string().default("edit"), {}), role: "stage" },
-      cfm: { ...field(z.number().default(400), {}), role: "query" },
+      cfm: { ...field(z.number().default(400), {}), role: "query", editor: "situation" },
     },
     readings: {
       result: {
@@ -400,6 +401,10 @@ test("one graph mounts Page-derived layout and one stable owner; Work press, Mod
   expect(f.writes.at(-1)).toMatchObject({ kind: "restore", press: null, expectedRevision: 1 });
   chord(control, "z", true);
   await waitFor(() => expect(f.scope().work.doc.rows.slot!.n).toBe(2));
+  chord(control, "z");
+  await waitFor(() => expect(f.scope().work.doc.rows.slot!.n).toBe(1));
+  chord(control, "y");
+  await waitFor(() => expect(f.scope().work.doc.rows.slot!.n).toBe(2));
   fireEvent.change(view.getByLabelText("cfm"), { target: { value: "500" } });
   await waitFor(() => expect(view.getByLabelText("Solved").textContent).toBe("1000"));
   expect(f.owner()).toBe(owner);
@@ -412,6 +417,59 @@ test("one graph mounts Page-derived layout and one stable owner; Work press, Mod
   await act(async () => {});
   expect(f.scope().work.doc.rows.slot!.n).toBe(2);
   expect(f.subscriptions()).toEqual({ subscriptions: 1, deltaSubscriptions: 1 });
+});
+
+test("Situation renders declared subject, typed Page controls, verbs and a working log filter", async () => {
+  const f = await fixture();
+  const graph = f.graph as RouteGraph<any, Doc>;
+  Object.assign(graph, { subject: () => "Pricing fans on the fixture" });
+  Object.assign(graph.fields, {
+    mode: { ...field(z.enum(["all", "one"]).default("all"), {}), role: "subject" },
+    system: {
+      ...field(z.array(z.string()).default([]), {}),
+      role: "subject",
+      picker: {
+        reading: "capture",
+        placeholder: "choose a system",
+        options: () => [{ id: "SA", label: "Supply air" }],
+      },
+    },
+    search: { ...field(listSearchKey(), {}, listSearchCodec), role: "draft", editor: "situation" },
+    paneSearch: { ...field(z.string().default("local"), {}), role: "query" },
+    selected: { ...field(z.string().default("4"), {}), role: "selection" },
+  });
+  const { view } = await mounted(f);
+  const situation = within(view.getByLabelText("Situation"));
+  expect(situation.getByText("Pricing fans on the fixture")).toBeTruthy();
+  expect(situation.queryByLabelText("paneSearch")).toBeNull();
+  expect(situation.queryByLabelText("selected")).toBeNull();
+  expect(situation.getByRole("button", { name: "Edit" })).toBeTruthy();
+  expect(situation.getByRole("button", { name: "Choose mode" })).toBeTruthy();
+  fireEvent.click(situation.getByRole("button", { name: "Choose mode" }));
+  fireEvent.click(view.getByRole("option", { name: "one" }));
+  expect((f.owner().view.read().page as any).mode).toBe("one");
+  fireEvent.click(situation.getByRole("button", { name: "Choose system" }));
+  fireEvent.click(view.getByRole("option", { name: "Supply air" }));
+  expect((f.owner().view.read().page as any).system).toEqual(["SA"]);
+  const search = situation.getByLabelText("search");
+  expect((search as HTMLInputElement).value).toBe("");
+  fireEvent.change(search, { target: { value: "fans" } });
+  expect((f.owner().view.read().page as any).search.keywords).toBe("fans");
+  act(() =>
+    f.owner().view.setPage({
+      search: { v: 1, keywords: "fans", pills: [{ field: "kind", op: "=", value: "fan" }] },
+    } as any),
+  );
+  expect(situation.getByText("kind = fan")).toBeTruthy();
+  fireEvent.click(situation.getByRole("button", { name: "Remove kind filter" }));
+  expect((f.owner().view.read().page as any).search.pills).toEqual([]);
+  act(() => {
+    f.owner().timeline.append({ kind: "invocation", verb: "edit", at: 1 });
+    f.owner().timeline.append({ kind: "feed", subject: "external", at: 2 });
+  });
+  fireEvent.click(situation.getByRole("button", { name: "work" }));
+  expect(situation.getByLabelText("Route log").textContent).toContain("edit");
+  expect(situation.getByLabelText("Route log").textContent).not.toContain("external");
 });
 
 test("shown review stays at the same control; commit records one receipt and its barrier blocks undo", async () => {
@@ -1013,7 +1071,8 @@ test("shared History scopes receipts to exact Work, links Ops, deduplicates even
       },
     },
   };
-  const { view } = await mounted(f);
+  const mountedView = await mounted(f);
+  const view = within(mountedView.view.container.querySelector("[data-pane-id=wheel]")!);
   const link = await view.findByRole("link", { name: "takeoffs.initialize" });
   expect(link.getAttribute("href")).toContain("actionId=ours");
   expect(view.queryAllByRole("link", { name: "takeoffs.initialize" })).toHaveLength(1);

@@ -298,7 +298,7 @@ test("live cannot override the kernel fixture lane", async () => {
 
 test("targeting another plan view re-reads rooms, trace and image and clears the old view selection", async () => {
   host.snapshot.levels[0]!.views.push("Another plan");
-  const { view, owner, situation } = await mounted();
+  const { view, owner } = await mounted();
   await act(async () => {
     owner().view.setPage({ selected: ["fixture-1"] });
   });
@@ -308,7 +308,8 @@ test("targeting another plan view re-reads rooms, trace and image and clears the
       host.calls.filter((call) => call.key === key).length,
     ]),
   );
-  fireEvent.change(situation.getByLabelText("view"), { target: { value: "Another plan" } });
+  fireEvent.click(view.getByRole("button", { name: "Choose view" }));
+  fireEvent.click(await view.findByRole("option", { name: "Another plan" }));
   await waitFor(() =>
     expect(owner().view.read().page).toMatchObject({
       view: "Another plan",
@@ -415,8 +416,9 @@ test("plan and feedback use one kernel frame each and History is the shared jour
     owner().timeline.append({ kind: "checkpoint", at: 123, receiptId: "room-proof" });
     owner().view.setPage({ stage: "history" });
   });
-  expect(view.container.querySelector('[data-pane-id="history"]')).toBeTruthy();
-  expect(view.getByText(/checkpoint.*123/)).toBeTruthy();
+  const history = view.container.querySelector<HTMLElement>('[data-pane-id="history"]')!;
+  expect(history).toBeTruthy();
+  expect(within(history).getByText(/checkpoint.*123/)).toBeTruthy();
 });
 
 test("hosted Rooms binds its explicit target and keeps Page out of the enclosing URL", async () => {

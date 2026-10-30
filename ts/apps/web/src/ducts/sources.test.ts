@@ -109,7 +109,7 @@ test("the fan source pins detail to one overview basis and never writes Work fro
   await waitFor(() => expect(graph.get("sheet").current).toBe(true));
   graph.update({
     ...scope,
-    page: { ...scope.page, stage: "sheet", fanPort: { unitId: 14577391, portIndex: 2 } },
+    page: { ...scope.page, stage: "sheet", fan: "14577391:2" },
   });
   await waitFor(() =>
     expect((graph.get("sheet").value as SheetReading | undefined)?.open?.worksheet).toBeTruthy(),
@@ -134,7 +134,7 @@ test("stale sheet detail is a failure boundary with no current detail, without a
   await waitFor(() => expect(graph.get("sheet").current).toBe(true));
   graph.update({
     ...scope,
-    page: { ...scope.page, stage: "sheet", fanPort: { unitId: 14577391, portIndex: 2 } },
+    page: { ...scope.page, stage: "sheet", fan: "14577391:2" },
   });
   await waitFor(() => expect(graph.get("sheet").status).toBe("failed"));
   expect(graph.get("sheet").current).toBe(false);
@@ -165,7 +165,7 @@ test("fan reach includes beyond-unit context and a Work edit rereads roster and 
   const page = {
     ...scope.page,
     stage: "sheet" as const,
-    fanPort: { unitId: 14577391, portIndex: 2 },
+    fan: "14577391:2",
   };
   graph.update({ ...scope, page });
   releases.push(graph.mount(["sheetSnapshot"]));

@@ -61,11 +61,12 @@ export function presentInputHistory(
         : null,
     last: refusal
       ? { label: "restore", words: "", refusal }
-      : last && effect
+      : last && (effect || last.step.label)
         ? {
             label: `${last.kind === "undo" ? "undid " : last.kind === "redo" ? "redid " : ""}${last.step.label}`,
-            words:
-              effect.after === undefined
+            words: !effect
+              ? ""
+              : effect.after === undefined
                 ? "Waiting for this fan's totals"
                 : last.kind === "undo"
                   ? effectWords(effect.after, effect.before)

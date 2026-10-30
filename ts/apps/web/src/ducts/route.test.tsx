@@ -60,10 +60,52 @@ async function mounted(
 }
 const liveButton = async (scope: ReturnType<typeof within>, name: string | RegExp) =>
   waitFor(() => {
-    const button = scope.getByRole("button", { name, exact: true });
+    const button = scope.getByRole("button", { name });
     expect(button.getAttribute("aria-disabled")).not.toBe("true");
     return button;
   });
+
+test("Situation draws all declared network verbs and chooses systems from the roster", async () => {
+  const { view, situation, router } = await mounted();
+  for (const name of [
+    "Refresh",
+    "Preview",
+    "Write to Revit",
+    "Preview heal",
+    "Heal",
+    "Preview fan",
+    "Make the fan",
+  ])
+    expect(situation.getByRole("button", { name })).toBeTruthy();
+  expect(situation.queryByLabelText("systemSearch")).toBeNull();
+  expect(situation.queryByLabelText("selected")).toBeNull();
+  expect(situation.getByRole("group", { name: "log kind" })).toBeTruthy();
+  fireEvent.click(await liveButton(situation, "Preview"));
+  await waitFor(() =>
+    expect(host.actions.map((action) => action.key)).toEqual(["ducts.preview-losses"]),
+  );
+  fireEvent.click(situation.getByRole("button", { name: "Choose system" }));
+  fireEvent.click(await view.findByRole("option", { name: /SA/ }));
+  await waitFor(() => expect(router.state.location.search.system).toEqual([]));
+});
+
+test("opening a fan pushes its Page identity into a link that reopens the sheet", async () => {
+  const first = await mounted("/ducts?target=s&stage=sheet&picture=schematic&layers=", false);
+  await waitFor(() =>
+    expect(first.view.container.querySelector("[data-key='14577391:2']")).not.toBeNull(),
+  );
+  fireEvent.click(first.view.container.querySelector<HTMLElement>("[data-key='14577391:2']")!);
+  await first.view.findByRole("region", { name: "Required ESP" });
+  expect(first.router.state.location.search.fan).toBe("14577391:2");
+  const url = first.router.state.location.href;
+  first.view.unmount();
+  const reopened = await mounted(url, false);
+  await reopened.view.findByRole("region", { name: "Required ESP" });
+  expect(
+    reopened.view.container.querySelector("[data-key='14577391:2'][aria-selected='true']"),
+  ).not.toBeNull();
+  expect(host.writes).toEqual([]);
+});
 
 test("a URL field round-trips through kernel Page, its edit and a reopened URL", async () => {
   const first = await mounted("/ducts?target=s&system=SA&level=30&picture=schematic&layers=");
@@ -84,7 +126,7 @@ test("snapshot failure has one loading body and semantic Refresh reacquires and 
   expect(view.getAllByRole("region", { name: "Ducts loading" })).toHaveLength(1);
   host.snapshotFailure = null;
   fireEvent.click(await liveButton(situation, "Refresh"));
-  await liveButton(situation, "Price");
+  await liveButton(situation, "Write to Revit");
   await waitFor(() => expect(view.queryByRole("region", { name: "Ducts loading" })).toBeNull());
   expect(host.actions.map((action) => action.key)).toEqual(["ducts.refresh"]);
   expect(
@@ -96,8 +138,8 @@ test("snapshot failure has one loading body and semantic Refresh reacquires and 
 test("the ordered network and sheet stages have no picker and render only their graph panes", async () => {
   const { view, router, situation } = await mounted();
   expect(ductsGraph.stageOrder).toEqual(["network", "sheet"]);
-  expect(situation.getByText("Pricing systems")).toBeTruthy();
-  expect(situation.queryByRole("combobox")).toBeNull();
+  expect(situation.getByText(/^Pricing systems on /)).toBeTruthy();
+  expect(situation.queryByRole("button", { name: "Choose stage" })).toBeNull();
   expect(situation.queryByRole("button", { name: "Pricing systems" })).toBeNull();
   expect(view.container.querySelector("[data-pane-id='e-inbox']")).not.toBeNull();
   expect(view.container.querySelector("[data-pane-id='sheet-roster']")).toBeNull();
@@ -108,12 +150,23 @@ test("the ordered network and sheet stages have no picker and render only their 
     }),
   );
   await waitFor(() =>
-    expect(within(view.getByLabelText("Situation")).getByText("Pricing fans")).toBeTruthy(),
+    expect(within(view.getByLabelText("Situation")).getByText(/^Pricing fans on /)).toBeTruthy(),
   );
   expect(view.container.querySelector("[data-pane-id='e-inbox']")).toBeNull();
   for (const pane of ductsGraph.stages.sheet!.panes)
     expect(view.container.querySelector(`[data-pane-id='${pane}']`)).not.toBeNull();
-  expect(situation.queryByRole("combobox")).toBeNull();
+  const sheetSituation = within(view.getByLabelText("Situation"));
+  for (const name of [
+    "Refresh",
+    "Preview",
+    "Write to Revit",
+    "Preview heal",
+    "Heal",
+    "Preview fan",
+    "Make the fan",
+  ])
+    expect(sheetSituation.getByRole("button", { name })).toBeTruthy();
+  expect(situation.queryByRole("button", { name: "Choose stage" })).toBeNull();
   expect(
     host.requests.some((request) => request.key === "ducts.snapshot" && !request.request.selector),
   ).toBe(false);
@@ -122,7 +175,7 @@ test("the ordered network and sheet stages have no picker and render only their 
 test("a fresh sheet URL opens a fan and edits its criteria through one kernel Work journal step", async () => {
   const before = structuredClone(host.doc);
   const { view } = await mounted("/ducts?target=s&stage=sheet&picture=schematic&layers=", false);
-  expect(within(view.getByLabelText("Situation")).getByText("Pricing fans")).toBeTruthy();
+  expect(within(view.getByLabelText("Situation")).getByText(/^Pricing fans on /)).toBeTruthy();
   await waitFor(() => {
     const row = view.container.querySelector<HTMLElement>("[data-key='14577391:2']");
     expect(row).not.toBeNull();
@@ -163,11 +216,11 @@ test("a fresh sheet URL opens a fan and edits its criteria through one kernel Wo
 
 test("Price prepares one host preview, shows its kernel ticket, commits the same request and consumes a receipt", async () => {
   const { view, situation } = await mounted();
-  fireEvent.click(await liveButton(situation, "Price"));
-  const review = await situation.findByLabelText("Price review");
+  fireEvent.click(await liveButton(situation, "Write to Revit"));
+  const review = await situation.findByLabelText("Write to Revit review");
   expect(review.textContent).toContain('"planned":1');
   expect(host.actions.map((row) => row.key)).toEqual(["ducts.preview-losses"]);
-  fireEvent.click(await liveButton(situation, "Price"));
+  fireEvent.click(await liveButton(situation, "Write to Revit"));
   await waitFor(() =>
     expect(host.actions.map((row) => row.key)).toEqual([
       "ducts.preview-losses",
@@ -176,13 +229,13 @@ test("Price prepares one host preview, shows its kernel ticket, commits the same
   );
   expect(host.actions[1]!.state).toBe("succeeded");
   expect(host.actions[1]!.input).toEqual(host.actions[0]!.input);
-  await waitFor(() => expect(view.queryByLabelText("Price review")).toBeNull());
+  await waitFor(() => expect(view.queryByLabelText("Write to Revit review")).toBeNull());
 });
 
 test("a Work write invalidates an open ticket and commit cannot dispatch its apply", async () => {
   const { view, situation } = await mounted();
-  fireEvent.click(await liveButton(situation, "Price"));
-  await situation.findByLabelText("Price review");
+  fireEvent.click(await liveButton(situation, "Write to Revit"));
+  await situation.findByLabelText("Write to Revit review");
   await act(async () => {
     await writeRouteWork(
       host.key,
@@ -196,8 +249,8 @@ test("a Work write invalidates an open ticket and commit cannot dispatch its app
     );
   });
   await waitFor(() => expect(host.revision).toBe(2));
-  fireEvent.click(await liveButton(situation, "Price"));
-  await waitFor(() => expect(view.queryByLabelText("Price review")).toBeNull());
+  fireEvent.click(await liveButton(situation, "Write to Revit"));
+  await waitFor(() => expect(view.queryByLabelText("Write to Revit review")).toBeNull());
   await waitFor(() =>
     expect(
       within(view.getByLabelText("Situation"))
@@ -248,7 +301,7 @@ test("sheet input history retains row labels, restore metadata and before/after 
   };
   host.sheetOverview.totals!.requiredEspInWg = 0.2;
   const { view } = await mounted("/ducts?target=s&stage=sheet&picture=schematic&layers=", false);
-  expect(within(view.getByLabelText("Situation")).getByText("Pricing fans")).toBeTruthy();
+  expect(within(view.getByLabelText("Situation")).getByText(/^Pricing fans on /)).toBeTruthy();
   await waitFor(() => {
     const row = view.container.querySelector<HTMLElement>("[data-key='14577391:2']");
     expect(row).not.toBeNull();

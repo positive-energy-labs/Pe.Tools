@@ -5,7 +5,7 @@ import { useState, type ReactNode } from "react";
 import { Button } from "@pe/kit/lang/button";
 import { Switcher } from "@pe/kit/lang/switcher";
 import { Inspect, inspectableOf } from "./inspect";
-import type { RouteManifest } from "./manifest";
+import type { PresentationFacts } from "./facts";
 import type { LogEntry } from "#/shell/owner";
 import { Label } from "./situation-verbs";
 
@@ -46,7 +46,7 @@ export function PageLog({
   collapsible = false,
 }: {
   entries: readonly LogEntry[];
-  manifest: RouteManifest<any, any, any, any>;
+  manifest: PresentationFacts;
   collapsible?: boolean;
 }) {
   const [picked, setPicked] = useState("all");

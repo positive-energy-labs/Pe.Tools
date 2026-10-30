@@ -65,6 +65,7 @@ test.each(["edits", null])(
         { path: [...(segment === null ? [] : [segment]), "contested", "edit"] },
       ],
       8,
+      { press: expect.any(String) },
     );
     const remaining = { contested: { suggestion: { value: 3 } }, locked: { edit: { value: 4 } } };
     expect(envelope.doc).toEqual(segment === null ? remaining : { [segment]: remaining });

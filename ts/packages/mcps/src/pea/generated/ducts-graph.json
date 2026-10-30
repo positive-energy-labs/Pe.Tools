@@ -309,8 +309,8 @@
       "share": true,
       "url": "push"
     },
-    "fanPort": {
-      "agent": false,
+    "fan": {
+      "agent": "set",
       "codec": {
         "decode": {
           "runtime": true
@@ -319,38 +319,15 @@
           "runtime": true
         }
       },
-      "role": "transient",
+      "role": "selection",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "anyOf": [
-          {
-            "additionalProperties": false,
-            "properties": {
-              "portIndex": {
-                "maximum": 9007199254740991,
-                "minimum": -9007199254740991,
-                "type": "integer"
-              },
-              "unitId": {
-                "maximum": 9007199254740991,
-                "minimum": -9007199254740991,
-                "type": "integer"
-              }
-            },
-            "required": [
-              "unitId",
-              "portIndex"
-            ],
-            "type": "object"
-          },
-          {
-            "type": "null"
-          }
-        ],
-        "default": null
+        "default": "",
+        "pattern": "^(?:\\d+:\\d+)?$",
+        "type": "string"
       },
-      "share": false,
-      "url": false
+      "share": true,
+      "url": "push"
     },
     "inputSearch": {
       "agent": "set",
@@ -845,6 +822,13 @@
           "runtime": true
         }
       },
+      "picker": {
+        "options": {
+          "runtime": true
+        },
+        "placeholder": "choose a system",
+        "reading": "roster"
+      },
       "role": "subject",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -1328,12 +1312,18 @@
               ],
               "id": "drawing",
               "kind": "split",
+              "maxSize": 520,
+              "minOtherSize": 360,
+              "minSize": 260,
               "size": 340,
               "sized": "end"
             }
           ],
           "id": "sidebar",
           "kind": "split",
+          "maxSize": 760,
+          "minOtherSize": 628,
+          "minSize": 280,
           "size": 420,
           "sized": "start"
         },
@@ -1609,8 +1599,11 @@
       ],
       "verbs": [
         "refresh",
+        "preview",
         "price",
+        "heal-preview",
         "heal",
+        "fan-preview",
         "assign-fan"
       ],
       "word": "Pricing systems"
@@ -1623,10 +1616,19 @@
         "sheet-ledger"
       ],
       "verbs": [
-        "refresh"
+        "refresh",
+        "preview",
+        "price",
+        "heal-preview",
+        "heal",
+        "fan-preview",
+        "assign-fan"
       ],
       "word": "Pricing fans"
     }
+  },
+  "subject": {
+    "runtime": true
   },
   "transition": {
     "runtime": true
@@ -1674,7 +1676,7 @@
         "type": "object"
       },
       "kind": "command",
-      "label": "Assign fan",
+      "label": "Make the fan",
       "review": "shown"
     },
     "edit": {
@@ -1749,6 +1751,51 @@
       },
       "kind": "work",
       "label": "Edit",
+      "review": "none"
+    },
+    "fan-preview": {
+      "does": "ducts.preview-assign-fan",
+      "effect": "query",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "refusal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "request": {
+            "additionalProperties": false,
+            "properties": {
+              "systemId": {
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991,
+                "type": "integer"
+              },
+              "unitId": {
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "systemId",
+              "unitId"
+            ],
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "kind": "command",
+      "label": "Preview fan",
       "review": "none"
     },
     "heal": {
@@ -1834,6 +1881,660 @@
       "kind": "command",
       "label": "Heal",
       "review": "shown"
+    },
+    "heal-preview": {
+      "does": "ducts.preview-heal",
+      "effect": "query",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "refusal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "request": {
+            "additionalProperties": false,
+            "properties": {
+              "groups": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "group": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "items": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "end": {
+                            "pattern": "^\\d+:\\d+$",
+                            "type": "string"
+                          },
+                          "key": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "kind": {
+                            "enum": [
+                              "cap",
+                              "join"
+                            ],
+                            "type": "string"
+                          },
+                          "other": {
+                            "pattern": "^\\d+:\\d+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "kind",
+                          "end"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "group"
+                  ],
+                  "type": "object"
+                },
+                "minItems": 1,
+                "type": "array"
+              }
+            },
+            "required": [
+              "groups"
+            ],
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "kind": "command",
+      "label": "Preview heal",
+      "review": "none"
+    },
+    "preview": {
+      "does": "ducts.preview-losses",
+      "effect": "query",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "refusal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "request": {
+            "additionalProperties": false,
+            "properties": {
+              "components": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "maximum": 9007199254740991,
+                      "minimum": -9007199254740991,
+                      "type": "integer"
+                    },
+                    "inWg": {
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "source": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "inWg"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "equipment": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "externalStaticInWg": {
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "id": {
+                      "maximum": 9007199254740991,
+                      "minimum": -9007199254740991,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "externalStaticInWg"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "equipmentFlows": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "cfm": {
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "id": {
+                      "maximum": 9007199254740991,
+                      "minimum": -9007199254740991,
+                      "type": "integer"
+                    },
+                    "source": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "cfm"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "fittings": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "coefficient": {
+                      "type": "number"
+                    },
+                    "id": {
+                      "maximum": 9007199254740991,
+                      "minimum": -9007199254740991,
+                      "type": "integer"
+                    },
+                    "inputs": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "method": {
+                      "enum": [
+                        "pe-server",
+                        "specific-coefficient"
+                      ],
+                      "type": "string"
+                    },
+                    "ruleKey": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "table": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "method",
+                    "coefficient"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "slots": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "componentDrop": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "fanFlow": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "fanStatic": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "fittingCoefficient": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "terminalDrop": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "terminalFlow": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "store": {
+                "additionalProperties": {},
+                "properties": {
+                  "appliedAt": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "equipmentFlows": {
+                    "additionalProperties": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "appliedAt": {
+                          "type": "string"
+                        },
+                        "cfm": {
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "source": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "cfm",
+                        "appliedAt"
+                      ],
+                      "type": "object"
+                    },
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "type": "object"
+                  },
+                  "instances": {
+                    "additionalProperties": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "appliedAt": {
+                          "type": "string"
+                        },
+                        "coefficient": {
+                          "type": "number"
+                        },
+                        "inputs": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "table": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "coefficient",
+                        "appliedAt"
+                      ],
+                      "type": "object"
+                    },
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "type": "object"
+                  },
+                  "roles": {
+                    "additionalProperties": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "role": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "ruledAt": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "role",
+                        "ruledAt"
+                      ],
+                      "type": "object"
+                    },
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "type": "object"
+                  },
+                  "rules": {
+                    "additionalProperties": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "table": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "type": "object"
+                  },
+                  "slots": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "componentDrop": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "fanFlow": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "fanStatic": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "fittingCoefficient": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "terminalDrop": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "terminalFlow": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "terminalFlows": {
+                    "additionalProperties": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "appliedAt": {
+                          "type": "string"
+                        },
+                        "cfm": {
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "source": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "cfm",
+                        "appliedAt"
+                      ],
+                      "type": "object"
+                    },
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "type": "object"
+                  },
+                  "terminals": {
+                    "additionalProperties": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "appliedAt": {
+                          "type": "string"
+                        },
+                        "inWg": {
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "source": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "inWg",
+                        "appliedAt"
+                      ],
+                      "type": "object"
+                    },
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "type": "object"
+                  },
+                  "verdicts": {
+                    "additionalProperties": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "ruledAt": {
+                          "type": "string"
+                        },
+                        "verdict": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "verdict",
+                        "ruledAt"
+                      ],
+                      "type": "object"
+                    },
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "type": "object"
+                  },
+                  "version": {
+                    "maximum": 9007199254740991,
+                    "minimum": -9007199254740991,
+                    "type": "integer"
+                  },
+                  "workRevision": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              },
+              "terminalFlows": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "cfm": {
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "id": {
+                      "maximum": 9007199254740991,
+                      "minimum": -9007199254740991,
+                      "type": "integer"
+                    },
+                    "source": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "cfm"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "terminals": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "maximum": 9007199254740991,
+                      "minimum": -9007199254740991,
+                      "type": "integer"
+                    },
+                    "inWg": {
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "source": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "inWg"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "fittings",
+              "terminals",
+              "components",
+              "equipment",
+              "terminalFlows",
+              "equipmentFlows",
+              "store"
+            ],
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "kind": "command",
+      "label": "Preview",
+      "review": "none"
     },
     "price": {
       "does": "ducts.apply-losses",
@@ -2402,7 +3103,7 @@
         "type": "object"
       },
       "kind": "command",
-      "label": "Price",
+      "label": "Write to Revit",
       "review": "shown",
       "says": "Review the planned writes, then write them to Revit"
     },

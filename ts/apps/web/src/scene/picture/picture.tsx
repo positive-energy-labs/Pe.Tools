@@ -250,6 +250,23 @@ export function Picture<L extends string, F extends string>({
   const onIssueHover = useIssueHover();
   const observation = useNativeObservation();
   const native = source.native;
+  const [pictureHost, setPictureHost] = useState<HTMLDivElement | null>(null);
+  const [pictureSize, setPictureSize] = useState<{ width: number; height: number } | null>(null);
+  useEffect(() => {
+    if (!pictureHost) return;
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry!.contentRect;
+      setPictureSize((before) =>
+        before?.width === width && before.height === height
+          ? before
+          : width > 0 && height > 0
+            ? { width, height }
+            : null,
+      );
+    });
+    observer.observe(pictureHost);
+    return () => observer.disconnect();
+  }, [pictureHost]);
   const request = useMemo(
     () =>
       captureRequest(
@@ -267,7 +284,12 @@ export function Picture<L extends string, F extends string>({
       content.capture?.maxTriangles,
     ],
   );
-  const captured = useCapture(request, native, source.version, content.capture?.cuts);
+  const captured = useCapture(
+    pictureSize ? request : null,
+    native,
+    source.version,
+    content.capture?.cuts,
+  );
   const fixture = content.capture?.meshes;
   const capture = fixture ? { ...captured, meshes: fixture, focusMeshes: fixture } : captured;
   // Capture provenance owns visual retention; the bound document remains its fallback
@@ -291,23 +313,6 @@ export function Picture<L extends string, F extends string>({
     [content.members, strands],
   );
   useMembers(doc, members);
-  const [pictureHost, setPictureHost] = useState<HTMLDivElement | null>(null);
-  const [pictureSize, setPictureSize] = useState<{ width: number; height: number } | null>(null);
-  useEffect(() => {
-    if (!pictureHost) return;
-    const observer = new ResizeObserver(([entry]) => {
-      const { width, height } = entry!.contentRect;
-      setPictureSize((before) =>
-        before?.width === width && before.height === height
-          ? before
-          : width > 0 && height > 0
-            ? { width, height }
-            : null,
-      );
-    });
-    observer.observe(pictureHost);
-    return () => observer.disconnect();
-  }, [pictureHost]);
   const pose = useMemo(
     () => poseOf(page.viewport, bounds, pictureSize),
     [page.viewport, bounds, pictureSize],
@@ -553,6 +558,7 @@ export function Picture<L extends string, F extends string>({
             onContextRepresentation={native ? setContextRepresentation : undefined}
             readout={readout}
             read={read}
+            capturing={capture.pending}
             bounds={bounds}
             orbit={orbit}
             wheelHost={pictureHost?.closest<HTMLElement>("[data-slot='pane-field']")}

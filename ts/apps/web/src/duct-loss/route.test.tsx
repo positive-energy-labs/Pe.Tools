@@ -59,8 +59,18 @@ test("a shared URL restores every graph field and the real solve, and edits roun
   const search = () => router.state.location.search;
   expect(address.read(search()).page).toMatchObject(page);
   const situation = within(view.getByLabelText("Situation"));
-  for (const id of ["shape", "a", "b", "cfm", "length", "roughness", "density"] as const)
-    expect((situation.getByLabelText(id) as HTMLInputElement).value).toBe(String(page[id]));
+  expect(situation.getByRole("button", { name: "Choose shape" }).textContent).toBe("rect");
+  for (const [id, name] of [
+    ["a", /^width/],
+    ["b", /^height/],
+    ["cfm", /^airflow/],
+    ["length", /^length/],
+    ["roughness", /^roughness/],
+    ["density", /^density/],
+  ] as const)
+    expect((inputs.getByRole("spinbutton", { name }) as HTMLInputElement).value).toBe(
+      String(page[id]),
+    );
   expect(inputs.getByRole("button", { name: "residential" }).getAttribute("aria-pressed")).toBe(
     "true",
   );
@@ -73,9 +83,13 @@ test("a shared URL restores every graph field and the real solve, and edits roun
   fireEvent.change(inputs.getByRole("spinbutton", { name: /^airflow/ }), {
     target: { value: "2400" },
   });
-  expect((view.getByLabelText("cfm") as HTMLInputElement).value).toBe("2400");
+  expect((inputs.getByRole("spinbutton", { name: /^airflow/ }) as HTMLInputElement).value).toBe(
+    "2400",
+  );
   await waitFor(() => expect(Number(search().cfm)).toBe(2400));
-  expect((view.getByLabelText("cfm") as HTMLInputElement).value).toBe("2400");
+  expect((inputs.getByRole("spinbutton", { name: /^airflow/ }) as HTMLInputElement).value).toBe(
+    "2400",
+  );
   expect(view.getByLabelText("friction loss").textContent).toBe(
     `Δp ${fmt(solve({ ...page, cfm: 2400 }).loss, 3)} in. wg`,
   );
@@ -103,9 +117,9 @@ test("the graph supplies its stage and pane key scopes, with only kernel journal
       return meta?.scope === ductLossGraph.key ? [meta] : [];
     });
   expect(
-    bindings()
-      .map((entry) => entry.actionId)
-      .sort((a, b) => String(a).localeCompare(String(b))),
+    [...new Set(bindings().map((entry) => entry.actionId))].sort((a, b) =>
+      String(a).localeCompare(String(b)),
+    ),
   ).toEqual(["duct-loss.redo", "duct-loss.undo"]);
   expect(ductLossGraph.verbs).toEqual({});
   view.unmount();

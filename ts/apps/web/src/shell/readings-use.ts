@@ -1,6 +1,53 @@
 import type { ReadingRequest } from "@pe/agent-contracts";
 import type { Readings } from "../readings";
-import type { ReadingContext, UseSource } from "./readings";
+import type { ReadingContext, ReadingPublication, UseSource } from "./readings";
+
+/** Acquire one fresh result, retiring its lease before a caller can acquire the next batch. */
+export function acquireSource<T>(source: UseSource<T>, context: ReadingContext) {
+  type Complete = Extract<ReadingPublication<T>, { kind: "part" | "complete" }>;
+  let release: void | (() => void);
+  let settled = false;
+  const close = () => {
+    const own = release;
+    release = undefined;
+    own?.();
+  };
+  let abort = () => {};
+  let deliver!: (event: ReadingPublication<T>) => void;
+  const result = new Promise<Complete>((resolve, reject) => {
+    abort = () => {
+      settled = true;
+      reject(context.signal.reason);
+    };
+    deliver = (event) => {
+      if (settled) return;
+      if (event.kind === "failure") {
+        settled = true;
+        reject(event.error);
+      } else if (event.kind === "complete" && event.fresh !== false) {
+        settled = true;
+        resolve(event);
+      }
+    };
+  });
+  context.signal.addEventListener("abort", abort, { once: true });
+  const opened = Promise.resolve()
+    .then(() => {
+      context.signal.throwIfAborted();
+      return source.open(context, deliver);
+    })
+    .then((own) => {
+      release = own;
+      if (settled) close();
+    });
+  return Promise.all([opened, result])
+    .then(([, value]) => value)
+    .finally(() => {
+      settled = true;
+      close();
+      context.signal.removeEventListener("abort", abort);
+    });
+}
 
 /** Uses the existing acquisition door. Decoding stays typed and source-owned; no second transport. */
 export function subscriptionSource<T>(options: {

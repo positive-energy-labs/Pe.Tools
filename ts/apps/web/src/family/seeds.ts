@@ -1,6 +1,6 @@
 import { settingsFieldPointer, type SettingsFieldState } from "@pe/agent-contracts";
 import type { PodList } from "@pe/host-contracts/operation-types";
-export const FAMILY_MODEL_SCHEMA = "/schemas/settings/FamilyFoundry/models.json";
+import { FAMILY_MODEL_SCHEMA } from "./graph";
 import type { AuthoredFamilyName } from "./authored-families";
 
 export function familyDemoFields(raw: string): Record<string, SettingsFieldState> {

@@ -80,3 +80,30 @@ test("review separates every group level and acts only on the chosen type", asyn
   fireEvent.click(screen.getByRole("button", { name: `review ${family} · Small in Families` }));
   expect(open).toHaveBeenCalledWith("small");
 });
+
+test.each([false, true])(
+  "a refused edit remains actionable after its cells disappear, joined line %s",
+  async (joined) => {
+    const retry = vi.fn(async () => null);
+    const discard = vi.fn();
+    render(
+      <ProposalHead
+        asks={[]}
+        works={[
+          ...(joined ? [work({ id: "first", line: "plan" })] : []),
+          work({
+            id: "second",
+            line: "plan",
+            cells: {},
+            pending: [{ press: "retained", retry, discard }],
+          }),
+        ]}
+      />,
+    );
+    expect(screen.getByText("unaccepted edit")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "retry edit" }));
+    await waitFor(() => expect(retry).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole("button", { name: "discard edit" }));
+    expect(discard).toHaveBeenCalledOnce();
+  },
+);

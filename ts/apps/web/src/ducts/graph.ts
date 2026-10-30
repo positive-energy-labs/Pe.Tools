@@ -1,5 +1,4 @@
 import { field } from "../../../../packages/agent-contracts/src/route-field";
-import { ductsSeeds } from "./seeds";
 import { z } from "zod";
 
 import {
@@ -27,6 +26,7 @@ import { ruleByKey, ruleWords } from "@pe/ducts-domain/loss-rules";
 import { cellFocus } from "./inbox-rows";
 
 import { capped } from "./selection";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 import { editPatches } from "@pe/ducts-domain/sheet/index";
 import { CRITERION_WORDS } from "./sheet/criterion-words";
@@ -35,11 +35,6 @@ import { NATIVE_APPLY_WAIT_S } from "#/route/waits";
 import { commandVerb, workVerb, prepareCommand } from "#/shell/verbs";
 
 const fields = { ...threadListFields, ...ductsAddress.fields };
-
-const fanPort = z
-  .strictObject({ unitId: z.number().int(), portIndex: z.number().int() })
-  .nullable()
-  .default(null);
 
 const jsonCodec = {
   encode: (value: unknown) => JSON.stringify(value),
@@ -59,13 +54,11 @@ const transient = <S extends z.ZodType>(schema: S) => ({
 });
 
 export const ductsPageSchema = routeAddress("ducts").schema.extend({
-  fanPort,
   sheetPath: z.string().default(""),
   readAll: z.boolean().default(false),
   allFans: z.boolean().default(false),
 });
 export type DuctsPage = { [K in keyof typeof fields]: z.output<(typeof fields)[K]["schema"]> } & {
-  fanPort: z.output<typeof fanPort>;
   sheetPath: string;
   readAll: boolean;
   allFans: boolean;
@@ -109,10 +102,22 @@ const ductCells = (families: CellsDecl<DuctsRouteDocument>[]): CellsDecl<DuctsRo
   });
 
 export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
-  seeds: ductsSeeds,
+  seeds: {
+    scene: { title: "scene", load: () => import("./seeds").then((m) => m.ductsSeeds["scene"]!) },
+    colours: {
+      title: "colours",
+      load: () => import("./seeds").then((m) => m.ductsSeeds["colours"]!),
+    },
+    navigation: {
+      title: "navigation",
+      load: () => import("./seeds").then((m) => m.ductsSeeds["navigation"]!),
+    },
+  },
   key: "ducts",
   address: "ducts",
   name: "Ducts",
+  subject: (page) =>
+    `${page.stage === "sheet" ? "Pricing fans" : "Pricing systems"} on ${page.stage === "sheet" ? (page.fan ? `fan ${page.fan}` : "this document") : page.system.join(" + ") || "this document"}`,
   work: ductsRouteSchema,
   needs: "project",
 
@@ -129,7 +134,20 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
 
     sceneView: { ...fields.sceneView, role: "pose", url: fields.sceneView.url ?? false },
 
-    system: { ...fields.system, role: "subject", url: fields.system.url ?? false },
+    system: {
+      ...fields.system,
+      role: "subject",
+      url: fields.system.url ?? false,
+      picker: {
+        reading: "roster",
+        placeholder: "choose a system",
+        options: (value) =>
+          ((value as DuctSnapshot | undefined)?.systems ?? []).map((system) => ({
+            id: system.name,
+            label: system.name,
+          })),
+      },
+    },
 
     level: { ...fields.level, role: "subject", url: fields.level.url ?? false },
 
@@ -163,7 +181,7 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
 
     issue: { ...fields.issue, role: "selection", url: fields.issue.url ?? false },
 
-    fanPort: transient(fanPort),
+    fan: { ...fields.fan, role: "selection", url: fields.fan.url },
     sheetPath: transient(z.string().default("")),
     readAll: transient(z.boolean().default(false)),
     allFans: transient(z.boolean().default(false)),
@@ -400,7 +418,7 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
       kind: "use",
       source: "ducts.sheet",
       deps: ["fans"],
-      args: (p) => ({ fanPort: p.fanPort, path: p.sheetPath, all: p.allFans }),
+      args: (p) => ({ fan: p.fan, path: p.sheetPath, all: p.allFans }),
       retire: "page",
     },
 
@@ -413,6 +431,21 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
   },
 
   verbs: {
+    preview: commandVerb(
+      "ducts.preview-losses",
+      { label: "Preview", input: priceInput, review: "none", effect: "query" },
+      { ready: requestReady, intent: (_, input) => input.request! },
+    ),
+    "heal-preview": commandVerb(
+      "ducts.preview-heal",
+      { label: "Preview heal", input: healInput, review: "none", effect: "query" },
+      { ready: requestReady, intent: (_, input) => input.request! },
+    ),
+    "fan-preview": commandVerb(
+      "ducts.preview-assign-fan",
+      { label: "Preview fan", input: assignInput, review: "none", effect: "query" },
+      { ready: requestReady, intent: (_, input) => input.request! },
+    ),
     refresh: commandVerb(
       "ducts.refresh",
       { label: "Refresh", input: none, review: "none", effect: "query" },
@@ -422,7 +455,7 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
     price: commandVerb(
       "ducts.apply-losses",
       {
-        label: "Price",
+        label: "Write to Revit",
         input: priceInput,
         review: "shown",
         says: "Review the planned writes, then write them to Revit",
@@ -455,7 +488,7 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
 
     "assign-fan": commandVerb(
       "ducts.apply-assign-fan",
-      { label: "Assign fan", input: assignInput, review: "shown", effect: "command" },
+      { label: "Make the fan", input: assignInput, review: "shown", effect: "command" },
       {
         waitSeconds: NATIVE_APPLY_WAIT_S,
         ready: requestReady,
@@ -626,7 +659,7 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
       "network",
       split(
         "sidebar",
-        { axis: "h", sized: "start", size: 420 },
+        { axis: "h", sized: "start", size: 420, minSize: 280, maxSize: 760, minOtherSize: 628 },
 
         split(
           "stack",
@@ -657,7 +690,7 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
 
         split(
           "drawing",
-          { axis: "h", sized: "end", size: 340 },
+          { axis: "h", sized: "end", size: 340, minSize: 260, maxSize: 520, minOtherSize: 360 },
           pane("e-picture"),
           pane("e-inbox"),
         ),
@@ -705,13 +738,13 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
         "e-picture",
         "e-inbox",
       ],
-      verbs: ["refresh", "price", "heal", "assign-fan"],
+      verbs: ["refresh", "preview", "price", "heal-preview", "heal", "fan-preview", "assign-fan"],
     },
 
     sheet: {
       word: "Pricing fans",
       panes: ["sheet-roster", "sheet-inputs", "sheet-picture", "sheet-ledger"],
-      verbs: ["refresh"],
+      verbs: ["refresh", "preview", "price", "heal-preview", "heal", "fan-preview", "assign-fan"],
     },
   },
 

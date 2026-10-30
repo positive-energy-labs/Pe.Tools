@@ -8,46 +8,74 @@ import {
   createRouter,
   RouterProvider,
 } from "@tanstack/react-router";
-import { address, ductsRouteState, readingKey, routeAddress } from "@pe/agent-contracts";
+import { address, ductsRouteState, readingKey } from "@pe/agent-contracts";
 import { z } from "zod";
 import { peReadings } from "#/readings";
-import { defineRoute } from "#/route/manifest";
+import { useEffect } from "react";
+import { ductsGraph } from "#/ducts/graph";
+import { useGraphRoute } from "#/shell/mount";
+import { graphUrlPage } from "#/shell/mount-page";
+import { subscriptionSource } from "#/shell/readings-use";
+import { workVerb } from "#/shell/verbs";
 import { routeSearch } from "#/shell/owner";
-import { useRoute } from "#/route/use-route";
-import { urlPage } from "#/route/url";
 
 const DOC = address("C:/Review/Level 1.rvt");
 const run = vi.fn(async () => null);
-const action = (needs: "host" | "document") => ({
-  label: needs,
-  says: needs,
-  needs,
-
-  input: z.void() as unknown as z.ZodType<never>,
-  dirties: [],
-  requires: { work: true as const },
-  ready: () => null,
-  run,
-});
-const manifest = defineRoute({
-  key: "ducts",
-  name: "Ducts",
-  address: "ducts",
-  page: routeAddress("ducts").schema,
-  work: ductsRouteState,
-  needs: "document",
-  // A placeholder target binds only to the natively resolved document: the native scope.
-  readings: { takeoff: { kind: "takeoff-reading", target: { session: "", openId: "" } } },
-  actions: { host: action("host"), doc: action("document") },
-});
-const url = urlPage(manifest)!;
-
+const action = (label: string) =>
+  workVerb(
+    { label, input: z.object({}).default({}) },
+    {
+      patches: () => {
+        void run();
+        return [];
+      },
+    },
+  );
+const graph: typeof ductsGraph = {
+  ...ductsGraph,
+  fields: Object.fromEntries(
+    Object.entries(ductsGraph.fields).map(([id, value]) => [id, { ...value, picker: undefined }]),
+  ) as typeof ductsGraph.fields,
+  needs: "document" as const,
+  work: ductsRouteState.schema,
+  cells: undefined,
+  observe: undefined,
+  readings: { takeoff: { kind: "use" as const, source: "takeoff", retire: "target" as const } },
+  verbs: { host: action("host"), doc: action("document") },
+  layout: { kind: "pane" as const, id: "probe" },
+  panes: { probe: { label: "Probe", purpose: "Closed Work", draws: ["takeoff"], verbs: [] } },
+  stageOrder: ["probe"],
+  stages: { probe: { word: "Probe", panes: ["probe"], verbs: [] } },
+};
+const url = graphUrlPage(graph);
+const adapters = {
+  bodies: {},
+  sources: {
+    takeoff: {
+      kind: "use" as const,
+      open(
+        ctx: Parameters<ReturnType<typeof subscriptionSource>["open"]>[0],
+        deliver: Parameters<ReturnType<typeof subscriptionSource>["open"]>[1],
+      ) {
+        if (ctx.target.kind !== "document") return;
+        return subscriptionSource({
+          request: () => ({
+            kind: "takeoff-reading",
+            target: ctx.target.kind === "document" ? ctx.target.ref : { session: "", openId: "" },
+          }),
+          decode: (v) => v,
+        }).open(ctx, deliver);
+      },
+    },
+  },
+};
 let handle: ReturnType<typeof useDuct> | null = null;
-// A `?target` Address pin, as a route passes its chosen target.
 let pin: string = DOC;
-const useDuct = () => useRoute(manifest, { target: pin });
+const useDuct = () => useGraphRoute(graph, adapters, { target: pin });
 function Probe() {
   handle = useDuct();
+  const owner = handle.owner;
+  useEffect(() => owner.readings.mount(["takeoff"]), [owner]);
   return null;
 }
 
@@ -112,7 +140,7 @@ async function mount() {
   await router.load();
   render(<RouterProvider router={router} />);
   act(() => inventory.forEach((accept) => accept(inventorySnapshot())));
-  await waitFor(() => expect(handle?.resolution.kind).not.toBe("checking"));
+  await waitFor(() => expect(handle?.status.resolution.kind).not.toBe("checking"));
 }
 const workReads = () => requests.filter((item) => item.kind === "work");
 const nativeReads = () => requests.filter((item) => item.kind === "takeoff-reading");
@@ -120,25 +148,28 @@ const nativeReads = () => requests.filter((item) => item.kind === "takeoff-readi
 test("a closed document's Work reads through its Address and arms nothing", async () => {
   open = false;
   await mount();
-  await waitFor(() => expect(handle!.work.current).toBe(true));
-  expect(handle!.resolution).toMatchObject({ kind: "choose", reason: "document-closed" });
+  await waitFor(() => expect(handle!.owner.snapshot().work).not.toBeNull());
+  expect(handle!.status.resolution).toMatchObject({ kind: "choose", reason: "document-closed" });
   expect(workReads().at(-1)!.request).toMatchObject({ binding: "address", target: DOC });
-  expect(handle!.work.doc).not.toBeNull();
+  expect(handle!.owner.snapshot().work!.doc).not.toBeNull();
   // Nothing native: no bound reading, no runnable action, no write.
   expect(nativeReads()).toHaveLength(0);
-  expect(handle!.actions.host.refusal).toMatch(/closed/);
-  expect(handle!.actions.doc.refusal).not.toBeNull();
-  expect((await handle!.work.write([]))?.message).toMatch(/closed/);
+  expect(handle!.owner.control("host").refusal).toMatch(/closed|inactive/);
+  expect(handle!.owner.control("doc").refusal).not.toBeNull();
+  expect(
+    ((await handle!.owner.control("host").run()) as { refusal: { message: string } }).refusal
+      .message,
+  ).toMatch(/closed|inactive/);
   expect(run).not.toHaveBeenCalled();
 });
 
 test("an open document keys, binds and arms exactly as before", async () => {
   open = true;
   await mount();
-  await waitFor(() => expect(handle!.work.current).toBe(true));
-  expect(handle!.resolution).toMatchObject({ kind: "resolved" });
+  await waitFor(() => expect(handle!.owner.snapshot().work).not.toBeNull());
+  expect(handle!.status.resolution).toMatchObject({ kind: "resolved" });
   // The same persisted Work the closed document read, now carrying its live lifetime.
-  expect(handle!.work.key).toMatchObject({
+  expect(handle!.owner.snapshot().work!.handle.key).toMatchObject({
     binding: "address",
     target: DOC,
     from: { session: "s1", openId: "o1" },
@@ -148,8 +179,8 @@ test("an open document keys, binds and arms exactly as before", async () => {
       target: { session: "s1", openId: "o1" },
     }),
   );
-  expect(handle!.actions.host.refusal).toBeNull();
-  expect(handle!.actions.doc.refusal).toBeNull();
+  expect(handle!.owner.control("host").refusal).toBeNull();
+  expect(handle!.owner.control("doc").refusal).toBeNull();
 });
 
 test("closed open-bound Work: an exact open pin reads its own lifetime's Work and arms nothing", async () => {
@@ -157,19 +188,22 @@ test("closed open-bound Work: an exact open pin reads its own lifetime's Work an
   // The exact open request the page was bound to; its document is no longer in the inventory.
   pin = JSON.stringify({ kind: "open", ref: { session: "s1", openId: "o9" } });
   await mount();
-  await waitFor(() => expect(handle!.work.current).toBe(true));
-  expect(handle!.resolution.kind).not.toBe("resolved");
-  expect(handle!.work.key).toMatchObject({
+  await waitFor(() => expect(handle!.owner.snapshot().work).not.toBeNull());
+  expect(handle!.status.resolution.kind).not.toBe("resolved");
+  expect(handle!.owner.snapshot().work!.handle.key).toMatchObject({
     binding: "open",
     open: { session: "s1", openId: "o9" },
   });
-  expect(handle!.work.doc).not.toBeNull();
+  expect(handle!.owner.snapshot().work!.doc).not.toBeNull();
   // No native scope and nothing reachable: every action refuses, running one runs nothing.
   expect(nativeReads()).toHaveLength(0);
-  for (const action of Object.values(handle!.actions)) {
+  for (const action of [handle!.owner.control("host"), handle!.owner.control("doc")]) {
     expect(action.refusal).not.toBeNull();
     expect(await act(() => action.run())).not.toBeNull();
   }
   expect(run).not.toHaveBeenCalled();
-  expect((await handle!.work.write([]))?.message).toMatch(/closed|no longer open|pick it again/);
+  expect(
+    ((await handle!.owner.control("host").run()) as { refusal: { message: string } }).refusal
+      .message,
+  ).toMatch(/closed|no longer open|pick it again|inactive/);
 });

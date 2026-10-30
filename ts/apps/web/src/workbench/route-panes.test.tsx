@@ -17,8 +17,8 @@ import { createChatPageStore } from "./store";
 import { RouteDock } from "./route-panes";
 import { useRouteCurrent } from "#/route/activity";
 import { useRouteLease } from "#/route/view-bridge";
-import { defineRoute } from "#/route/manifest";
-import { useRoute } from "#/route/use-route";
+import { useGraphRoute } from "#/shell/mount";
+import { familiesGraph } from "#/families/graph";
 import { useRouteThread } from "#/shell/binding";
 
 const store = createChatPageStore({
@@ -98,16 +98,37 @@ const call = vi.hoisted(() =>
 );
 vi.mock("#/host/pe-client", () => ({ peClient: { call } }));
 
-const familiesManifest = defineRoute({
-  key: "families",
-  name: "Families",
-  address: "families",
-  page: routeAddress("families").schema,
-});
+const familiesProbeGraph: typeof familiesGraph = {
+  ...familiesGraph,
+  fields: Object.fromEntries(
+    Object.entries(familiesGraph.fields).map(([id, value]) => [
+      id,
+      { ...value, picker: undefined },
+    ]),
+  ) as typeof familiesGraph.fields,
+  work: undefined,
+  workSubject: undefined,
+  salvage: undefined,
+  observe: undefined,
+  needs: undefined,
+  readings: {},
+  verbs: {},
+  cells: undefined,
+  layout: { kind: "pane" as const, id: "probe" },
+  panes: { probe: { label: "Probe", purpose: "Retention proof", draws: [], verbs: [] } },
+  stageOrder: ["probe"],
+  stages: { probe: { word: "Probe", panes: ["probe"], verbs: [] } },
+};
+const familiesProbeAdapters = { sources: {}, bodies: {} };
 function FamiliesProbe() {
-  const handle = useRoute(familiesManifest, { thread: useRouteThread() });
-  useRouteLease("families", handle.page, { thread: handle.thread ?? undefined });
-  return <output data-families-probe="">{JSON.stringify(handle.page[0].sort ?? "")}</output>;
+  const handle = useGraphRoute(familiesProbeGraph, familiesProbeAdapters, {
+    thread: useRouteThread() ?? undefined,
+  });
+  const page = handle.owner.view.read().page;
+  useRouteLease("families", [page, (patch) => handle.owner.view.setPage(patch)], {
+    thread: handle.thread ?? undefined,
+  });
+  return <output data-families-probe="">{JSON.stringify(page.sort ?? "")}</output>;
 }
 
 let mounts = 0;

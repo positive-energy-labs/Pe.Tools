@@ -7,7 +7,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 
 import { Button } from "@pe/kit/lang/button";
-import { Input } from "@pe/kit/lang/input";
+import { Input, Label } from "@pe/kit/lang/input";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { tokenRef } from "@pe/kit/lib/token";
 import { Legend as KitLegend, legendWord } from "@pe/kit/lang/legend";
@@ -24,6 +24,62 @@ import type { SpacePage } from "./graph";
 import type { SpaceAnswers } from "./reads";
 
 type Element = Psc1Metadata["elements"][number];
+
+/** Capture's authored scope: individual numeric identities, never the array's wire encoding. */
+export function HostIds({
+  page,
+  setPage,
+}: {
+  page: SpacePage;
+  setPage(this: void, patch: Partial<SpacePage>): void;
+}) {
+  const [draft, setDraft] = useState("");
+  const id = Number(draft);
+  const refusal =
+    !Number.isSafeInteger(id) || id <= 0
+      ? "Enter a positive whole host element ID"
+      : page.ids.includes(id)
+        ? "This host element is already named"
+        : null;
+  const add = () => {
+    if (refusal) return;
+    setPage({ ids: [...page.ids, id] });
+    setDraft("");
+  };
+  return (
+    <section aria-label="Host elements" className="flex flex-wrap items-center gap-1">
+      <Label>
+        Host element ID
+        <Input
+          aria-label="Host element ID"
+          type="number"
+          min={1}
+          step={1}
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter") return;
+            event.preventDefault();
+            event.stopPropagation();
+            add();
+          }}
+        />
+      </Label>
+      <Button label="Add host element ID" refusal={refusal} onClick={add}>
+        add
+      </Button>
+      {page.ids.map((id, index) => (
+        <Button
+          key={`${id}:${index}`}
+          label={`Remove host element ${id}`}
+          onClick={() => setPage({ ids: page.ids.filter((value) => value !== id) })}
+        >
+          {id} ×
+        </Button>
+      ))}
+    </section>
+  );
+}
 
 const Fact = ({ name, children }: { name: string; children: ReactNode }) => (
   <>

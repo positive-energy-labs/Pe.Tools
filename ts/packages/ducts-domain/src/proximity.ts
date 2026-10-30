@@ -559,7 +559,10 @@ function infer(
    * classification, opposed and centred; else `stretched`.
    */
   const gradeJoint = (p: Port, q: Port, crossing: boolean): DuctInferenceGrade => {
-    if (crossing || (p.captured && q.captured && dot(p.axis!, q.axis!) >= AXIS_COS))
+    if (
+      crossing ||
+      (p.captured && q.captured && p.axis && q.axis && dot(p.axis, q.axis) >= AXIS_COS)
+    )
       return "anomalous";
     if (!p.axis || !q.axis || p.cls !== q.cls) return "stretched";
     const r = sub(q.point, p.point);

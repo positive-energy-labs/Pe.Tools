@@ -28,7 +28,6 @@ import { commandVerb, prepareCommand, queryVerb, workVerb } from "#/shell/verbs"
 import { NATIVE_APPLY_WAIT_S } from "#/route/waits";
 import { filterWords } from "./filters";
 import { familiesGroupOf } from "./staged";
-import { familiesSeeds } from "./graph-seeds";
 
 export const FAMILIES_SPEC_SCHEMAS = [
   "/schemas/settings/FamilyFoundry/patches.json",
@@ -51,7 +50,16 @@ const refusal = z.string().nullable().default(null);
 const guarded = <S extends z.ZodType>(request: S) => z.strictObject({ request, refusal });
 
 export const familiesGraph: RouteGraph<FamiliesPage, FamiliesRouteDocument> = {
-  seeds: familiesSeeds,
+  seeds: {
+    audit: {
+      title: "Loaded family matrix",
+      load: () => import("./graph-seeds").then((m) => m.familiesSeeds["audit"]!),
+    },
+    apply: {
+      title: "Plan family changes",
+      load: () => import("./graph-seeds").then((m) => m.familiesSeeds["apply"]!),
+    },
+  },
   key: familiesRouteState.route,
   address: "families",
   name: "Families",

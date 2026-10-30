@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Undo2 } from "lucide-react";
 import {
   availableTransitions,
@@ -128,7 +128,10 @@ export interface CellWire {
   write: (
     patches: RouteStatePatch[],
     expectedRevision?: number,
+    context?: { press: string },
   ) => Promise<{ code: string; message: string } | null>;
+  pending?: (press: string) => boolean;
+  discard?: (press: string) => void;
   revision: number | null;
   lockOf?: (key: string) => string | null;
   baselineOf?: (key: string) => unknown;
@@ -329,44 +332,116 @@ export function UnstageAll({
       }).covered.length,
     [cells, keys, wire],
   );
-  const [armed, setArmed] = useState(false);
+  const [armed, setArmed] = useState<{
+    press: string;
+    patches: RouteStatePatch[];
+    outcome: FanOutOutcome;
+    revision: number | null;
+    confirmed: boolean;
+    registered?: boolean;
+  } | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
+  const sending = useRef(false);
+  const cancel = () => {
+    if (armed) wire.discard?.(armed.press);
+    setArmed(null);
+    setFailure(null);
+  };
   useEffect(() => {
-    if (!armed) return;
-    const lapse = setTimeout(() => setArmed(false), CONFIRM_MS);
+    if (!armed || armed.confirmed) return;
+    const lapse = setTimeout(() => setArmed(null), CONFIRM_MS);
     return () => clearTimeout(lapse);
   }, [armed]);
+  useEffect(() => {
+    if (!armed?.confirmed || !wire.pending) return;
+    if (wire.pending(armed.press) && !armed.registered) setArmed({ ...armed, registered: true });
+    else if (!wire.pending(armed.press) && armed.registered && !sending.current) {
+      setArmed(null);
+      setFailure(null);
+    }
+  }, [armed, wire]);
   useScopeKeys(
     armed
       ? [
           {
             hotkey: "Escape",
-            callback: () => setArmed(false),
+            callback: cancel,
             label: "cancel unstage",
             says: "cancel the armed unstage-all before it writes",
-            options: { enabled: armed },
+            options: { enabled: !!armed },
           },
         ]
       : [],
   );
-  if (!edit) return null;
+  const count = armed?.outcome.covered.length ?? edit;
+  if (!count) return null;
   const title = armed
-    ? `Press again to clear your ${edit} edit values in one write; Escape cancels`
+    ? `Press again to clear your ${count} edit values in one write; Escape cancels`
     : `Clear your ${edit} edit values in one write (asks first); Pea's proposals stay`;
-  const press = () => {
-    if (!armed) return setArmed(true);
-    setArmed(false);
-    void runFanOut(wire, cells, keys, "clear").then(done);
+  const press = async () => {
+    if (sending.current) return;
+    if (!armed) {
+      const { covered, skipped } = fanOut(cells, keys, "clear", {
+        cellsPath: cellsPath(wire),
+        lockOf: wire.lockOf,
+      });
+      return setArmed({
+        press: crypto.randomUUID(),
+        confirmed: false,
+        revision: wire.revision,
+        patches: structuredClone(covered.map((key) => clearPatch(wire, key, cells[key]!))),
+        outcome: { kind: "clear", covered, skipped, refusal: null },
+      });
+    }
+    const intent = armed;
+    setArmed({ ...intent, confirmed: true });
+    sending.current = true;
+    try {
+      const revision = intent.confirmed ? wire.revision : intent.revision;
+      const refusal =
+        revision === null
+          ? {
+              code: "not-ready",
+              message: "Work has not been read yet; reload before retrying this revert",
+            }
+          : await wire.write(intent.patches, revision, { press: intent.press });
+      if (refusal) setFailure(refusal.message);
+      else {
+        setArmed(null);
+        setFailure(null);
+        done({ ...intent.outcome, refusal: null });
+      }
+    } catch (cause) {
+      setFailure(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      sending.current = false;
+    }
   };
-  return compact ? (
-    <Button kind="framed" icon={Undo2} label={`Revert ${edit} edit`} reason={title} onClick={press}>
-      <span className="face-mono">{armed ? `${edit}? again` : edit}</span>
-    </Button>
-  ) : (
-    <TooltipHint content={title}>
-      <Verdict kind="clear" onClick={press}>
-        {armed ? `unstage ${edit} edit? press again` : `unstage all (${edit})`}
-      </Verdict>
-    </TooltipHint>
+  return (
+    <>
+      {compact ? (
+        <Button
+          kind="framed"
+          icon={Undo2}
+          label={`Revert ${count} edit`}
+          reason={title}
+          onClick={() => void press()}
+        >
+          <span className="face-mono">{armed ? `${count}? again` : count}</span>
+        </Button>
+      ) : (
+        <TooltipHint content={title}>
+          <Verdict kind="clear" onClick={() => void press()}>
+            {armed ? `unstage ${count} edit? press again` : `unstage all (${count})`}
+          </Verdict>
+        </TooltipHint>
+      )}
+      {failure && (
+        <span role="alert" data-tone="caution">
+          Revert was not saved: {failure}. Press again to retry; Escape cancels.
+        </span>
+      )}
+    </>
   );
 }
 

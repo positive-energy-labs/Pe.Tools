@@ -136,6 +136,13 @@ export function priceRequest(scope: Scope) {
 /** Bind semantic intent over exactly the reading values the kernel currently admits. */
 
 export function ductsBinding(id: string, row: unknown, scope: Scope): MountBinding {
+  id =
+    (
+      { preview: "price", "heal-preview": "heal", "fan-preview": "assign-fan" } as Record<
+        string,
+        string
+      >
+    )[id] ?? id;
   if (id === "refresh") return { subject: null, args: {} };
 
   if (id === "edit" || id.startsWith("sheet-")) return { subject: null, args: row };

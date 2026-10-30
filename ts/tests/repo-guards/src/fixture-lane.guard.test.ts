@@ -52,3 +52,24 @@ test("D2: routes never read the retired demo URL key", () => {
   expect(violations).toEqual([]);
   expect(existsSync(resolve(ROOT, "apps/web/src/host/demo-client.ts"))).toBe(false);
 });
+
+test("D2: graph modules never eagerly import fixture payloads", () => {
+  const violations: string[] = [];
+  for (const path of productionFiles("apps/web/src").filter((path) => path.endsWith("/graph.ts"))) {
+    const ast = ts.createSourceFile(
+      path,
+      readFileSync(resolve(ROOT, path), "utf8"),
+      ts.ScriptTarget.Latest,
+      true,
+    );
+    for (const node of ast.statements) {
+      const specifier =
+        (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier;
+      if (specifier && ts.isStringLiteral(specifier) && /fixture|seeds|[?]raw/.test(specifier.text))
+        violations.push(
+          `${path}:${ast.getLineAndCharacterOfPosition(node.getStart()).line + 1}: ${specifier.text}`,
+        );
+    }
+  }
+  expect(violations).toEqual([]);
+});

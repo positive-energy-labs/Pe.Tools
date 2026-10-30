@@ -33,6 +33,11 @@ export interface HeadWork {
   /** A foreign write refused this Work's last bound write. */
   conflict?: boolean;
   reload?: () => void;
+  pending?: readonly {
+    press: string;
+    retry(): Promise<unknown>;
+    discard(this: void): void;
+  }[];
   /** The route's commit word ("apply"); pressing it opens the pane unscoped and runs it there. */
   commit: { word: string; run: () => void };
   /** A group's words when its path key is a machine key (a loss rule's key). */
@@ -94,7 +99,9 @@ function Counts({ proposed, edit, contested }: ReturnType<typeof tally>) {
 export function ProposalHead({ asks, works }: { asks: readonly ReactNode[]; works: HeadWork[] }) {
   const [all, setAll] = useState(false);
   const lines = new Map<string, HeadWork[]>();
-  for (const work of works.filter((one) => Object.values(one.cells).some(pending)))
+  for (const work of works.filter(
+    (one) => Object.values(one.cells).some(pending) || one.pending?.length,
+  ))
     lines.set(work.line ?? work.id, [...(lines.get(work.line ?? work.id) ?? []), work]);
   const live = [...lines.values()];
   if (!asks.length && !live.length) return null;
@@ -141,6 +148,9 @@ function WorkLine({ parts }: { parts: HeadWork[] }) {
   const work = parts[0]!;
   const groups = parts.map(headGroups);
   const counts = tally(groups.flat());
+  const pendingEdits = new Map(
+    parts.flatMap((part) => (part.pending ?? []).map((edit) => [edit.press, edit] as const)),
+  );
   return (
     <div className="flex flex-col" data-work={work.id}>
       <div className="flex min-h-(--control-h) min-w-0 flex-wrap items-center gap-x-2">
@@ -177,6 +187,22 @@ function WorkLine({ parts }: { parts: HeadWork[] }) {
             reload
           </Button>
         ) : null}
+        {[...pendingEdits.values()].map((edit) => (
+          <span key={edit.press} className="flex items-center gap-1">
+            <span data-tone="caution">unaccepted edit</span>
+            <Button
+              kind="framed"
+              label="retry edit"
+              refusal={work.conflict ? "Reload Work first" : null}
+              onClick={() => void edit.retry()}
+            >
+              retry
+            </Button>
+            <Button kind="framed" label="discard edit" onClick={edit.discard}>
+              discard
+            </Button>
+          </span>
+        ))}
         <span className="ml-auto">
           <Button
             kind="framed"

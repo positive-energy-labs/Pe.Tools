@@ -11,8 +11,6 @@
   "apps/web/src/revit/element-target.ts": 1,
   "apps/web/src/revit/observation.tsx": 1,
   "apps/web/src/route/inspect.tsx": 1,
-  "apps/web/src/route/pod-view.tsx": 1,
-  "apps/web/src/route/use-route.ts": 1,
   "apps/web/src/scene/artifact.ts": 1,
   "apps/web/src/scene/scene-data.ts": 1,
   "apps/web/src/state/owner-inspector.tsx": 1,

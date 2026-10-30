@@ -22,7 +22,7 @@ import type { Layer3D } from "#/scene/types";
 
 import { cutPolygons } from "./state";
 import { CutControls } from "./cut-controls";
-import { AnswerForms, EncodingLegend, PickFacts, SceneSummary, pickName } from "./facts";
+import { AnswerForms, EncodingLegend, HostIds, PickFacts, SceneSummary, pickName } from "./facts";
 import {
   boxesLayer,
   legendOf,
@@ -351,6 +351,7 @@ function FactsBody({ owner, page, verbs }: MountBody<SpacePage, null>) {
   const on = new Set(page.layers);
   return (
     <div className="flex flex-col gap-3">
+      <HostIds page={page} setPage={setPage} />
       {page.mode !== "3d" && meshes ? (
         <CutControls
           axis={page.mode}

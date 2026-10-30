@@ -152,8 +152,13 @@ export function createViewOwner<P>(
           ok: false,
           refusal: reject(refuse("not-ready", "A Pea intent cannot contain another intent")),
         };
+      if (disposed)
+        return {
+          ok: false,
+          refusal: refuse("not-ready", "This Page is no longer the one Pea leased"),
+        };
       const before = read();
-      if (disposed || before.page !== page)
+      if (before.page !== page)
         return {
           ok: false,
           refusal: refuse("not-ready", "This Page is no longer the one Pea leased"),

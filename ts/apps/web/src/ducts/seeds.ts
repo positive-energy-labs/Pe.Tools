@@ -1,4 +1,4 @@
-import { ductsRouteState, type GraphSeed, type DuctsRouteDocument } from "@pe/agent-contracts";
+import { ductsRouteState, type GraphSeedData, type DuctsRouteDocument } from "@pe/agent-contracts";
 import { EMPTY_CATALOGS } from "@pe/ducts-domain/catalog";
 import { SCENE_FIXTURE } from "./scene.fixture";
 import { COLOURS_FIXTURE } from "./colours.fixture";
@@ -22,8 +22,7 @@ export const ductsSeeds = Object.fromEntries(
       base: { snapshot: fixture.snapshot, grids: {}, catalogs: EMPTY_CATALOGS },
       doc: work,
     });
-    const seed: GraphSeed<DuctsPage, DuctsRouteDocument> = {
-      title: name,
+    const seed: GraphSeedData<DuctsPage, DuctsRouteDocument> = {
       work,
       page: { stage: "network" },
       readings: {

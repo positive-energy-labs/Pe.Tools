@@ -22,6 +22,7 @@ import {
   type RouteGraph,
   type WorkKey,
   type WorkWriteAck,
+  type WorkWrite,
   type ThreadHead,
 } from "@pe/agent-contracts";
 import { machineFixture } from "../../../../packages/agent-contracts/tests/machine-fixture.ts";
@@ -379,11 +380,21 @@ test("a stale write raises conflict; writing verbs and undo refuse until an acce
   expect(owner.journalRefusal()).toBe("Work changed; review and retry");
   deliver("work-acks", ack({ key }));
   expect(owner.snapshot().conflict).toBeUndefined();
-  host.write.mockResolvedValue({
+  workRead = { revision: 4, doc: { note: "pea" } };
+  landOnHost();
+  await waitFor(() => expect(owner.snapshot().work?.handle.revision).toBe(4));
+  host.write.mockImplementation(async (_key: WorkKey, request: WorkWrite) => ({
     ok: true,
     revision: 5,
-    write: ack({ key, by: "human", press: "p", base: 4, revision: 5, undoable: true }),
-  });
+    write: ack({
+      key,
+      by: "human",
+      press: request.press,
+      base: request.expectedRevision,
+      revision: 5,
+      undoable: true,
+    }),
+  }));
   expect(await owner.control("note").run()).toMatchObject({ state: "done" });
   expect(owner.journal(key).read().undo).toHaveLength(1);
   release();
@@ -533,10 +544,10 @@ const workspaceRead = (work: string) =>
     (request) =>
       request.kind === "work" && request.binding === "workspace" && request.work === work,
   );
-const acked = (key: WorkKey, revision: number) => ({
+const acked = (key: WorkKey, revision: number, press: string | null) => ({
   ok: true,
   revision,
-  write: ack({ key, by: "human", press: "p", base: 3, revision, undoable: true }),
+  write: ack({ key, by: "human", press, base: 3, revision, undoable: true }),
 });
 
 test("Page's workSubject selects the Work; a moved field moves the key and each key keeps its journal", async () => {
@@ -547,7 +558,9 @@ test("Page's workSubject selects the Work; a moved field moves the key and each 
   );
   expect(workspaceRead(`a-${id}`)).toBe(true);
   const first = owner().snapshot().work!.handle.key;
-  host.write.mockImplementation(async (key: WorkKey) => acked(key, 4));
+  host.write.mockImplementation(async (key: WorkKey, request: WorkWrite) =>
+    acked(key, 4, request.press),
+  );
   await act(async () => {
     expect(await owner().control("note").run()).toMatchObject({ state: "done" });
   });
@@ -762,7 +775,7 @@ test("carry-over is one undoable Work write, offered only while readable Work la
   const review = await situation.findByLabelText("Carry over review");
   expect(review.textContent).toContain('"members":[["note"]]');
   expect(host.write).not.toHaveBeenCalled();
-  host.write.mockImplementation(async (written: WorkKey) => {
+  host.write.mockImplementation(async (written: WorkKey, request: WorkWrite) => {
     workRead = { revision: 4, doc: { note: "old" } };
     return {
       ok: true,
@@ -770,8 +783,8 @@ test("carry-over is one undoable Work write, offered only while readable Work la
       write: ack({
         key: written,
         by: "human",
-        press: "p",
-        base: 3,
+        press: request.press,
+        base: request.expectedRevision,
         revision: 4,
         undoable: true,
         patches: [{ path: ["note"], value: "old" }],
@@ -874,14 +887,14 @@ test("a query's patches land as one undoable Work step through the normal write 
   await waitFor(() => expect(owner().snapshot().work).not.toBeNull());
   const key = owner().snapshot().work!.handle.key;
   host.read.mockResolvedValue({ id: "reading-1", workspaceId: `a-${id}` });
-  host.write.mockImplementation(async (written: WorkKey) => ({
+  host.write.mockImplementation(async (written: WorkKey, request: WorkWrite) => ({
     ok: true,
     revision: 4,
     write: ack({
       key: written,
       by: "human",
-      press: "p",
-      base: 3,
+      press: request.press,
+      base: request.expectedRevision,
       revision: 4,
       undoable: true,
       patches: [{ path: ["note"], value: "reading-1" }],

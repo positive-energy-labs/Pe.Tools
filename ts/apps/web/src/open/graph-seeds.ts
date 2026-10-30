@@ -1,10 +1,6 @@
 import { BAY_RECENTS, BAY_THREADS, MACHINE_SEEDS, OPEN_SEEDS } from "./seeds";
-export const openSeeds = {
-  refresh: {
-    ...OPEN_SEEDS.refresh,
-    readings: { ...OPEN_SEEDS.refresh.readings, threads: BAY_THREADS, receipts: [], world: [] },
-  },
-  ...Object.fromEntries(
+export const openSeeds = Object.assign(
+  Object.fromEntries(
     Object.entries(MACHINE_SEEDS).map(([name, reading]) => [
       name,
       {
@@ -24,4 +20,10 @@ export const openSeeds = {
       },
     ]),
   ),
-};
+  {
+    refresh: {
+      ...OPEN_SEEDS.refresh,
+      readings: { ...OPEN_SEEDS.refresh.readings, threads: BAY_THREADS, receipts: [], world: [] },
+    },
+  },
+);

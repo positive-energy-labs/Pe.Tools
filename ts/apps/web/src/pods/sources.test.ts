@@ -205,7 +205,7 @@ test("mounted reading demand recomposes only the new Work candidate after an edi
 
 test("fixture and plain source reads preserve their lanes without host calls", async () => {
   const env = environment();
-  const owner = createFixtureMount(podsGraph, "browse");
+  const owner = await createFixtureMount(podsGraph, "browse");
   const disconnect = owner.connect();
   const demand = owner.readings.mount(Object.keys(podsGraph.readings));
   expect(owner.readings.get("pods").status).toBe("ready");

@@ -35,7 +35,16 @@ export interface FieldPolicy {
 
 /** RouteField owns schema and codec. False explicitly opts out of a role's projection default. */
 export type FieldDecl<S extends z.ZodType = z.ZodType> = Omit<RouteField<S>, keyof FieldPolicy> &
-  Partial<FieldPolicy> & { label?: string; control?: "color"; editor?: "pane" };
+  Partial<FieldPolicy> & {
+    label?: string;
+    control?: "color";
+    editor?: "pane" | "situation";
+    picker?: {
+      reading: string;
+      placeholder: string;
+      options(value: unknown): readonly { id: string; label: string }[];
+    };
+  };
 
 export const fieldRoleDefaults: Readonly<Record<FieldRole, Readonly<FieldPolicy>>> = {
   subject: { url: "push", share: true, agent: "set" },
@@ -236,11 +245,13 @@ export const salvageVerb = {
 } as const satisfies VerbDecl;
 
 export interface RouteGraph<P = Record<string, unknown>, W = unknown> {
-  /** Browser-only states, selected uniformly by ?fixture=<name>. Values are data, never transports. */
+  /** Browser-only states, selected uniformly by ?fixture=<name>. Payloads load only when selected; titles remain available to discovery. */
   seeds?: Readonly<Record<string, GraphSeed<P, W>>>;
   key: string;
   address: string;
   name: string;
+  /** The Situation's sentence about the shareable subject; no reads or effects. */
+  subject?: (page: Readonly<P>) => string;
   fields: {
     readonly [K in keyof P]-?: FieldDecl<z.ZodType<P[K]>> & { role: FieldRole };
   } & Readonly<Record<string, FieldDecl & { role: FieldRole }>>;
@@ -291,6 +302,10 @@ export interface RouteGraph<P = Record<string, unknown>, W = unknown> {
 
 export interface GraphSeed<P, W> {
   title: string;
+  load(): Promise<GraphSeedData<P, W>>;
+}
+
+export interface GraphSeedData<P, W> {
   page?: Partial<P>;
   work?: W;
   /** Optional initial documents keyed by the graph workSubject (e.g. Pod members). */
@@ -318,6 +333,7 @@ export interface RouteGraphJson {
   readonly key: string;
   readonly address: string;
   readonly name: string;
+  readonly subject?: GraphJsonObject;
   readonly fields: Readonly<Record<string, GraphJsonObject>>;
   readonly readings: Readonly<Record<string, GraphJsonObject>>;
   readonly verbs: Readonly<Record<string, GraphJsonObject>>;
@@ -440,6 +456,13 @@ export function validateRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphRef
       refusals.push({ code, path, message });
   };
   try {
+    for (const [id, field] of Object.entries(graph.fields))
+      if (field.picker && !Object.hasOwn(graph.readings, field.picker.reading))
+        refuse(
+          "missing-reading",
+          `fields.${id}.picker`,
+          `Unknown reading '${field.picker.reading}'`,
+        );
     const checkVerb = (id: string, path: string) => {
       if (!Object.hasOwn(graph.verbs, id)) refuse("missing-verb", path, `Unknown verb '${id}'`);
     };

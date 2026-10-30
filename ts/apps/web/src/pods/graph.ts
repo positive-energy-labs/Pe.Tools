@@ -7,13 +7,17 @@ import { podsFields, type PodsPage } from "./page";
 import { podsVerbs } from "./verbs";
 import { podsReadings, podsPanes, podsLayout } from "./declarations";
 import { podsTransition } from "./actions";
-import { podsSeeds } from "./graph-seeds";
 
 export const podsGraph: RouteGraph<PodsPage, SettingsRouteDocument> = {
   key: "pods",
   address: "pods",
   name: "Pods",
-  seeds: podsSeeds,
+  seeds: {
+    browse: {
+      title: "Pods and family members",
+      load: () => import("./graph-seeds").then((m) => m.podsSeeds["browse"]!),
+    },
+  },
   work: settingsRouteState.schema,
   workSubject: "member",
   optionalTarget: "document",

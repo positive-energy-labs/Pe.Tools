@@ -6,16 +6,17 @@ import { roomsGraph } from "#/rooms/graph";
 import { useHeadWorks } from "./head-works";
 
 const reads = vi.hoisted(() => ({
-  entries: [] as { spec: { route: string; schema: unknown }; key: unknown }[],
+  entries: [] as { graph: { key: string; work: unknown }; key: unknown }[],
   doc: null as unknown,
 }));
-vi.mock("#/route/route-work", () => ({
-  useRouteWorks: (entries: typeof reads.entries) => {
+vi.mock("#/shell/use-work-handles", () => ({
+  useWorkHandles: (entries: typeof reads.entries) => {
     reads.entries = entries;
-    return entries.map(({ spec }) => ({
-      doc: spec.route === "rooms" ? reads.doc : null,
+    return entries.map(({ graph }) => ({
+      doc: graph.key === "rooms" ? reads.doc : null,
       revision: 3,
       stale: false,
+      pending: [],
       write: vi.fn(),
       reload: vi.fn(),
     }));
@@ -39,19 +40,19 @@ test("the chat head reads executable graph Work and cell families for addressed 
       target: address("C:/Models/Building.rvt") as ReturnType<typeof address> | null,
     },
   });
-  expect(reads.entries.find((entry) => entry.spec.route === "rooms")).toMatchObject({
-    spec: { schema: roomsGraph.work },
+  expect(reads.entries.find((entry) => entry.graph.key === "rooms")).toMatchObject({
+    graph: { work: roomsGraph.work },
     key: { binding: "address", route: "rooms", target: "C:/Models/Building.rvt", from: doc },
   });
   expect(
-    reads.entries.some((entry) => entry.spec.route === "pods" || entry.spec.route === "open"),
+    reads.entries.some((entry) => entry.graph.key === "pods" || entry.graph.key === "open"),
   ).toBe(false);
   const head = rendered.result.current.find((head) => head.route === "Rooms")!;
   expect(head.cells[key]?.suggestion?.value).toBe("Pantry");
   head.open?.();
   expect(exits.open).toHaveBeenCalledWith(expect.objectContaining({ route: "rooms", ok: true }));
   rendered.rerender({ target: null });
-  expect(reads.entries.find((entry) => entry.spec.route === "rooms")?.key).toEqual({
+  expect(reads.entries.find((entry) => entry.graph.key === "rooms")?.key).toEqual({
     binding: "open",
     route: "rooms",
     target: null,

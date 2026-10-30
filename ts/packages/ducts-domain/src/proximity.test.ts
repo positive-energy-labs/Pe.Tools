@@ -9,7 +9,7 @@
 import { expect, it } from "vite-plus/test";
 import { ductsDocumentSchema, type DuctsRouteDocument } from "@pe/agent-contracts";
 
-import { inferJoints, tolerate, MISSED_JOIN_MAX_IN } from "./proximity.ts";
+import { axisOf, inferJoints, tolerate, MISSED_JOIN_MAX_IN } from "./proximity.ts";
 import { withHealth } from "./sheet/health.fixture.ts";
 import { survey } from "./survey.ts";
 import { groupTree } from "./topology.ts";
@@ -123,6 +123,58 @@ const staging = (id: string, verdict: "ignore" | "connect"): DuctsRouteDocument 
     assumptions: { [id]: { edit: { value: { kind: "verdict", verdict } } } },
   });
 const ignoring = (id: string) => staging(id, "ignore");
+
+it.each([6311356, 7320242])(
+  "an opened Chadds side port with a captured facing joins terminal %s without an axis",
+  (terminalId) => {
+    // Geometry from Pe.Tools-sheet/.artifacts/tmp/netstage-census/chadds-snapshot-health.before.json:
+    // SA 27 terminal 6311356:1 and duct 7320241:3, opened here. The second id reverses pair order.
+    const point = [335.7205, 643.7165, -5.1667];
+    const main: Segment = rect(7320241, [335.4553, 643.9817, -5.1667], point, 8, 4, "g6311356");
+    const port: Connector = {
+      ...main.connectors[0]!,
+      index: 3,
+      kind: "curve",
+      point,
+      facing: [0.707, -0.707, 0],
+      widthAxis: [-0.707, -0.707, 0],
+    };
+    main.connectors = [port];
+    const terminal: Node = {
+      id: terminalId,
+      kind: "terminal",
+      category: "Air Terminals",
+      family: "Price LBP15A Supply",
+      type: "8 X 4 W",
+      point: [335.7829, 643.6541, -5.1667],
+      groupId: main.groupId,
+      systemName: "SA 27",
+      classification: "Supply Air",
+      connectors: [{ ...port, index: 1, kind: "end", facing: [-0.707, 0.707, 0] }],
+      facts: [],
+    };
+    const raw = snap([main], [terminal]);
+    expect(axisOf(main, port)).toBeNull();
+    const inference = inferJoints(raw);
+    expect(inference.joints).toMatchObject([{ grade: "stretched", gapIn: 0 }]);
+    expect(inference.taps).toEqual([]);
+    expect(inference.findings).toMatchObject([
+      {
+        kind: "joined-by-proximity",
+        grade: "stretched",
+        elementIds: expect.arrayContaining([main.id, terminalId]),
+      },
+    ]);
+    expect(tolerate(raw).links).toMatchObject([{ grade: "stretched", ruled: false }]);
+    expect(survey(raw, null).findings).toContainEqual(
+      expect.objectContaining({
+        kind: "joined-by-proximity",
+        clearer: "person",
+        assumed: expect.any(String),
+      }),
+    );
+  },
+);
 
 it("reports a facing 2.88 in gap without joining it, while a 1.5 in gap still infers", () => {
   const at = (gapIn: number) =>

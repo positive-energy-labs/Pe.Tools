@@ -29,6 +29,14 @@ const picture = pictureFields(
 const ductsFields = {
   /** The body under the Situation: the network picture (`network`) or the fan sheet (`sheet`). A view; it runs no verb. */
   stage: field(z.enum(["network", "sheet"]).default("network"), { url: "push", agent: "set" }),
+  /** The open fan sheet, unit id and port index; empty closes it. */
+  fan: field(
+    z
+      .string()
+      .regex(/^(?:\d+:\d+)?$/)
+      .default(""),
+    { url: "push", agent: "set" },
+  ),
   contextRadiusFt: picture.contextRadiusFt,
   sceneView: picture.sceneView,
   /**
@@ -174,7 +182,7 @@ export const ductsAddress = {
   agent: {
     finds: [...DUCTS_FINDS, "system", "level"],
     policy:
-      "Move the Ducts page in the person's open browser. Its subject: system (the Revit system names the person named, comma separated, such as SA 19 or SA 19,RA 1, as the person said them; each resolves against the view's system names; the last is the active one the write, heal and fan verbs act on, and the page keeps only its newest few, closing the oldest), level and selected element id; an empty string clears the key. The page shows every duct network each system is in, with its owned elements and shared fan-to-terminal paths; unopened branches at equipment, plenums and shared ducts show as short stubs. Set only the systems the person named, and never add one they did not name. Its picture: encoding, layers (comma separated: meshes, system-colours, stub-labels, halo, context, centrelines, no-run, labels, findings; system-colours tints each element by its own system; stub-labels names each stub; halo shows nearby context; context shows all captured context and wins when both are on; meshes, system-colours, stub-labels, halo, no-run, labels and findings are on by default; no-run highlights branches on no fan-to-terminal run; empty = none), picture (model or schematic), and either look (plan, iso, north, south, east or west: the shown picture turned about its pivot) or viewport (orbit:projection:yaw,elev,zoom@x,y,z (projection is perspective or parallel) in feet; empty fits the subject). issue selects one finding by id. Each set is one step the person can go Back from. No Work or Revit read.",
+      "Move the Ducts page in the person's open browser. Its open fan sheet is fan (unitId:portIndex, with stage=sheet; empty closes it). Its subject: system (the Revit system names the person named, comma separated, such as SA 19 or SA 19,RA 1, as the person said them; each resolves against the view's system names; the last is the active one the write, heal and fan verbs act on, and the page keeps only its newest few, closing the oldest), level and selected element id; an empty string clears the key. The page shows every duct network each system is in, with its owned elements and shared fan-to-terminal paths; unopened branches at equipment, plenums and shared ducts show as short stubs. Set only the systems the person named, and never add one they did not name. Its picture: encoding, layers (comma separated: meshes, system-colours, stub-labels, halo, context, centrelines, no-run, labels, findings; system-colours tints each element by its own system; stub-labels names each stub; halo shows nearby context; context shows all captured context and wins when both are on; meshes, system-colours, stub-labels, halo, no-run, labels and findings are on by default; no-run highlights branches on no fan-to-terminal run; empty = none), picture (model or schematic), and either look (plan, iso, north, south, east or west: the shown picture turned about its pivot) or viewport (orbit:projection:yaw,elev,zoom@x,y,z (projection is perspective or parallel) in feet; empty fits the subject). issue selects one finding by id. Each set is one step the person can go Back from. No Work or Revit read.",
     words: ductsWords,
     resolve: resolveDucts,
   },

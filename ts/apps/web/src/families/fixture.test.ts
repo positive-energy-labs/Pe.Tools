@@ -6,7 +6,7 @@ test("families graph seeds supply the matrix and editable in-memory Work", async
     throw Error("Host called");
   });
   vi.stubGlobal("fetch", fetch);
-  const owner = createFixtureMount(familiesGraph, "apply", {
+  const owner = await createFixtureMount(familiesGraph, "apply", {
     binding: (_, row) => ({ subject: null, args: row ?? {} }),
   });
   const release = owner.connect();

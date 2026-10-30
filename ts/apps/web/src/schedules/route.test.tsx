@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { scheduleGridRouteState, workWriteSchema } from "@pe/agent-contracts";
 import { writeRouteWork } from "#/route/host";
 import { Route as root } from "../routes/__root";
-import { schedulesRoute } from "./route";
+import { schedulesAdapters, schedulesRoute } from "./route";
 import { SchedulesHostFixture } from "./host.fixture";
 
 let host: SchedulesHostFixture;
@@ -27,6 +27,7 @@ afterEach(async () => {
   cleanup();
   for (const release of releases.splice(0)) release();
   await new Promise((resolve) => setTimeout(resolve, 450));
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -40,6 +41,7 @@ function routeUrl(search: Record<string, string> = {}, withWork = true) {
   })}`;
 }
 async function mounted(url = routeUrl()) {
+  const wrap = vi.spyOn(schedulesAdapters, "wrap");
   const router = createRouter({
     routeTree: root.addChildren([schedulesRoute]),
     history: createMemoryHistory({ initialEntries: [url] }),
@@ -54,7 +56,12 @@ async function mounted(url = routeUrl()) {
   );
   await view.findByLabelText("Situation");
   await waitFor(() => expect(host.workRequests.length).toBeGreaterThan(0));
-  return { view, router, situation: within(view.getByLabelText("Situation")) };
+  return {
+    view,
+    router,
+    owner: () => wrap.mock.calls.at(-1)![0],
+    situation: within(view.getByLabelText("Situation")),
+  };
 }
 const liveButton = async (scope: ReturnType<typeof within>, name: string) =>
   waitFor(() => {
@@ -67,18 +74,21 @@ test("a URL restores the grid view and an edit round-trips into a reopened URL",
   const first = await mounted(
     routeUrl({ query: "Model~Old", sort: "-c1", hidden: "c0", cell: "1::1" }),
   );
-  expect((first.situation.getByLabelText("query") as HTMLInputElement).value).toBe("Model~Old");
+  expect(first.owner().view.read().page.query).toBe("Model~Old");
+  expect(await first.view.findByRole("combobox", { name: "table query" })).toBeTruthy();
+  expect(first.situation.queryByLabelText("query")).toBeNull();
   expect(first.router.state.location.search).toMatchObject({
     sort: "-c1",
     hidden: "c0",
     cell: "1::1",
   });
-  fireEvent.change(first.situation.getByLabelText("query"), { target: { value: "Model~New" } });
+  act(() => first.owner().view.setPage({ query: "Model~New" }));
   await waitFor(() => expect(first.router.state.location.search.query).toBe("Model~New"));
   const url = first.router.state.location.href;
   first.view.unmount();
   const reopened = await mounted(url);
-  expect((reopened.situation.getByLabelText("query") as HTMLInputElement).value).toBe("Model~New");
+  expect(reopened.owner().view.read().page.query).toBe("Model~New");
+  expect(await reopened.view.findByRole("combobox", { name: "table query" })).toBeTruthy();
   expect(host.writes).toEqual([]);
 });
 

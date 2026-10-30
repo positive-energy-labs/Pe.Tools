@@ -1,7 +1,7 @@
 /**
  * ADR 0026, Seed and cutover: the count of old-kernel consumer files only decreases.
- * Kernel dirs exempt from this consumer census: ts/apps/web/src/route/ (old kernel),
- * ts/apps/web/src/shell/ (kernel), ts/packages/kit/.
+ * Kernel dirs exempt from this consumer census: ts/apps/web/src/shell/ and ts/packages/kit/.
+ * The retained route/ presentation and Pod adapters may not import retired execution either.
  * Production means app/package src, excluding tests, lab, prototypes and design-system,
  * as in kit-census. Each baseline value is one consumer file, not its import count.
  * Source census only: computed module specifiers and transitive wrappers are not visible.
@@ -25,6 +25,7 @@ const OLD = new Map(
   [
     ["entity-route", null],
     ["use-route", null],
+    ["route-work", null],
     ["manifest", null],
     ["presentation", null],
     ["keys", null],
@@ -43,6 +44,13 @@ const OLD = new Map(
 
 // This ratchet covers physical retirement too: an unused executor must not return unnoticed.
 const RETIRED = [
+  "route/use-route",
+  "route/shell",
+  "route/manifest",
+  "route/presentation",
+  "route/presentation.test",
+  "route/keys",
+  "route/route-work",
   "route/entity-route",
   "route/entity",
   "route/route-owner",
@@ -56,11 +64,14 @@ const RETIRED = [
   "route/surface-manifests",
   "route/shell-probe",
   "route/shell-probe.test",
+  "route/multi-work-gap.test",
   "takeoff/manifest",
 ];
 const LEGACY_EXPORTS = new Set([
   "RouteShell",
   "useRoute",
+  "useRouteWorks",
+  "docWriter",
   "defineRoute",
   "RouteManifest",
   "RouteAction",
@@ -76,6 +87,15 @@ it("retired kernel modules stay deleted (ADR 0026 D3/D7)", () => {
     (path) => existsSync(resolve(ROOT, path)),
   );
   expect(returned).toEqual([]);
+});
+
+it("retired Work writer imports stay forbidden", () => {
+  const file = WEB + "chat/head-works.ts";
+  expect(
+    imports("import { docWriter } from '#/route/route-work';", file).map((entry) =>
+      oldImport(file, entry),
+    ),
+  ).toEqual([true]);
 });
 
 function oldImport(file: string, entry: Import): boolean {
@@ -102,7 +122,6 @@ it("old-kernel consumer files can only shrink (ADR 0026)", () => {
   const actual = sources.filter(
     (file) =>
       !file.startsWith("packages/kit/") &&
-      !file.startsWith(WEB + "route/") &&
       !file.startsWith(WEB + "shell/") &&
       readImports(file).some((entry) => oldImport(file, entry)),
   );
@@ -111,7 +130,7 @@ it("old-kernel consumer files can only shrink (ADR 0026)", () => {
     "ADR 0026: migrate consumers to shell/; never add old-kernel.baseline.json entries. " +
       "When a file stops importing the old kernel, remove its entry to shrink the baseline.",
   ).toEqual({ violations: [], stale: [] });
-});
+}, 15_000);
 
 it("counts imported names before aliases, type imports and namespace access", () => {
   const file = WEB + "family/example.tsx";

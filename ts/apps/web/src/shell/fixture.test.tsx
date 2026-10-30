@@ -7,7 +7,7 @@ import { pane, projectRouteGraph, type RouteGraph } from "@pe/agent-contracts";
 import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { Route as root } from "../routes/__root";
 import { routeFromGraph, type GraphMount } from "./mount";
-import { createFixtureMount } from "./fixture";
+import { createFixtureMount, fixtureEnvironment } from "./fixture";
 import { commandVerb, queryVerb, rpcVerb, workVerb } from "./verbs";
 
 afterEach(async () => {
@@ -66,9 +66,11 @@ const graph: RouteGraph<{ stage: string }, { value: number }> = {
       name,
       {
         title: name,
-        work: { value: i + 1 },
-        readings: { use: 1, feed: 2, derive: 3, worker: 4, port: 5 },
-        queries: { "fixture.read": { answer: 42 } },
+        load: async () => ({
+          work: { value: i + 1 },
+          readings: { use: 1, feed: 2, derive: 3, worker: 4, port: 5 },
+          queries: { "fixture.read": { answer: 42 } },
+        }),
       },
     ]),
   ),
@@ -86,7 +88,7 @@ test("kernel fixture mounts an arbitrary graph, isolates every source, and resto
   const forbidden = vi.fn(() => {
     throw Error("Real adapter called");
   });
-  const owner = createFixtureMount(graph, "one", {
+  const owner = await createFixtureMount(graph, "one", {
     write: forbidden,
     getSnapshot: forbidden,
     subscribe: forbidden,
@@ -106,7 +108,7 @@ test("kernel fixture mounts an arbitrary graph, isolates every source, and resto
     expect((await owner.control("edit").run()).state).toBe("done");
     expect(owner.snapshot().work?.doc.value).toBe(7);
     await owner.restore("undo");
-    expect(owner.snapshot().work?.doc.value).toBe(1);
+    await waitFor(() => expect(owner.snapshot().work?.doc.value).toBe(1));
     await owner.restore("redo");
     expect(owner.snapshot().work?.doc.value).toBe(7);
     expect(await owner.control("query").run()).toMatchObject({
@@ -136,7 +138,7 @@ test.each(["", "unknown"])(
       throw Error("Real host called");
     });
     vi.stubGlobal("fetch", fetch);
-    const owner = createFixtureMount(graph, name);
+    const owner = await createFixtureMount(graph, name);
     const release = owner.connect();
     try {
       expect(owner.snapshot().failure).toContain("not declared");
@@ -203,7 +205,7 @@ test("URL fixture shows its seed and switches to a fresh memory Work without acq
   );
   try {
     await view.findByLabelText("Fixture lane");
-    expect(owner.snapshot().work?.doc.value).toBe(1);
+    await waitFor(() => expect(owner.snapshot().work?.doc.value).toBe(1));
     fireEvent.change(view.getByLabelText("Fixture seed"), { target: { value: "two" } });
     await waitFor(() => expect(owner.snapshot().work?.doc.value).toBe(2));
     expect(fetch).not.toHaveBeenCalled();
@@ -211,4 +213,48 @@ test("URL fixture shows its seed and switches to a fresh memory Work without acq
     cleanup();
     unsubscribe();
   }
+});
+
+test("seed discovery never loads payloads and fixture mounting awaits only the selected seed", async () => {
+  let deliver!: (value: { readings: Record<string, unknown>; work: { value: number } }) => void;
+  const load = vi.fn(
+    () =>
+      new Promise<{ readings: Record<string, unknown>; work: { value: number } }>((resolve) => {
+        deliver = resolve;
+      }),
+  );
+  const other = vi.fn(async () => ({ readings: {} }));
+  const lazy = {
+    ...graph,
+    seeds: { selected: { title: "Selected", load }, other: { title: "Other", load: other } },
+  };
+  expect(projectRouteGraph(lazy).seeds).toEqual({
+    selected: { title: "Selected" },
+    other: { title: "Other" },
+  });
+  expect(load).not.toHaveBeenCalled();
+  const pending = fixtureEnvironment(lazy, "selected");
+  expect(load).toHaveBeenCalledTimes(1);
+  expect(other).not.toHaveBeenCalled();
+  deliver({ readings: {}, work: { value: 9 } });
+  const lane = await pending;
+  expect(lane.ports.getSnapshot().work?.doc.value).toBe(9);
+});
+
+test("a failed seed import stays isolated and refuses Work", async () => {
+  const broken = {
+    ...graph,
+    seeds: {
+      broken: {
+        title: "Broken",
+        load: async () => {
+          throw Error("missing chunk");
+        },
+      },
+    },
+  };
+  const owner = await createFixtureMount(broken, "broken");
+  expect(owner.snapshot().failure).toContain("missing chunk");
+  expect((await owner.control("edit").run()).state).toBe("refused");
+  owner.dispose();
 });

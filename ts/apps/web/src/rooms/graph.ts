@@ -24,7 +24,6 @@ export const roomsPageSchema = routeAddress("rooms").schema.extend({
   epoch: z.number().default(0),
 });
 export type RoomsPage = z.output<typeof roomsPageSchema>;
-import { roomsSeeds } from "./graph-seeds";
 const fields = { ...threadListFields, ...roomsAddress.fields };
 const request = <S extends z.ZodType>(schema: S) =>
   z.strictObject({
@@ -47,7 +46,12 @@ export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = {
   key: "rooms",
   address: "rooms",
   name: "Rooms",
-  seeds: roomsSeeds,
+  seeds: {
+    plan: {
+      title: "Room plan",
+      load: () => import("./graph-seeds").then((m) => m.roomsSeeds["plan"]!),
+    },
+  },
   needs: "project",
   work: roomsRouteState.schema,
   fields: {

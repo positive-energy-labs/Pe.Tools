@@ -3,7 +3,6 @@ import { instancesActions, pane, split, type RouteGraph } from "@pe/agent-contra
 import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { commandVerb, pageVerb } from "#/shell/verbs";
 import { EMPTY_DRAFT } from "./model";
-import { openSeeds } from "./graph-seeds";
 
 const draft = z
   .object({
@@ -43,7 +42,60 @@ export const openGraph: RouteGraph<OpenPageState> = {
   key: "instances",
   address: "open",
   name: "Open",
-  seeds: openSeeds,
+  seeds: {
+    refresh: {
+      title: "the patch bay: your Revit 2025, two of Pea's, recents 2022 to 2027",
+      load: () => import("./graph-seeds").then((m) => m.openSeeds["refresh"]!),
+    },
+    "patch-bay": {
+      title: "patch-bay",
+      load: () => import("./graph-seeds").then((m) => m.openSeeds["patch-bay"]!),
+    },
+    "controlled-hot": {
+      title: "controlled-hot",
+      load: () => import("./graph-seeds").then((m) => m.openSeeds["controlled-hot"]!),
+    },
+    "observed-icon": {
+      title: "observed-icon",
+      load: () => import("./graph-seeds").then((m) => m.openSeeds["observed-icon"]!),
+    },
+    "background-booting": {
+      title: "background-booting",
+      load: () => import("./graph-seeds").then((m) => m.openSeeds["background-booting"]!),
+    },
+    "blocked-plan": {
+      title: "blocked-plan",
+      load: () => import("./graph-seeds").then((m) => m.openSeeds["blocked-plan"]!),
+    },
+    "waiting-plan": {
+      title: "waiting-plan",
+      load: () => import("./graph-seeds").then((m) => m.openSeeds["waiting-plan"]!),
+    },
+    "receipt-handoff": {
+      title: "receipt-handoff",
+      load: () => import("./graph-seeds").then((m) => m.openSeeds["receipt-handoff"]!),
+    },
+    "update-downloading": {
+      title: "update-downloading",
+      load: () => import("./graph-seeds").then((m) => m.openSeeds["update-downloading"]!),
+    },
+    "update-failed": {
+      title: "update-failed",
+      load: () => import("./graph-seeds").then((m) => m.openSeeds["update-failed"]!),
+    },
+    "update-check-failed": {
+      title: "update-check-failed",
+      load: () => import("./graph-seeds").then((m) => m.openSeeds["update-check-failed"]!),
+    },
+    disconnected: {
+      title: "disconnected",
+      load: () => import("./graph-seeds").then((m) => m.openSeeds["disconnected"]!),
+    },
+    "no-revit": {
+      title: "no-revit",
+      load: () => import("./graph-seeds").then((m) => m.openSeeds["no-revit"]!),
+    },
+  },
   fields: {
     epoch: {
       ...field(openPageSchema.shape.epoch, {}, { encode: String, decode: Number }),

@@ -97,20 +97,18 @@ test("a URL restores the family table and a query edit round-trips through a reo
   const first = await mounted(
     routeUrl({ query: "Model", sort: "-name", hidden: "kind", past: "old-read" }),
   );
-  expect((first.situation.getByLabelText("query") as HTMLInputElement).value).toBe("Model");
+  expect(first.owner().view.read().page.query).toBe("Model");
   expect(first.router.state.location.search).toMatchObject({
     sort: "-name",
     hidden: "kind",
     past: "old-read",
   });
-  fireEvent.change(first.situation.getByLabelText("query"), { target: { value: "Manufacturer" } });
+  act(() => first.owner().view.setPage({ query: "Manufacturer" }));
   await waitFor(() => expect(first.router.state.location.search.query).toBe("Manufacturer"));
   const url = first.router.state.location.href;
   first.view.unmount();
   const reopened = await mounted(url);
-  expect((reopened.situation.getByLabelText("query") as HTMLInputElement).value).toBe(
-    "Manufacturer",
-  );
+  expect(reopened.owner().view.read().page.query).toBe("Manufacturer");
   expect(host.writes).toEqual([]);
 });
 

@@ -1,9 +1,7 @@
 // @vitest-environment jsdom
 import { expect, test, vi } from "vite-plus/test";
-import * as Atom from "effect/unstable/reactivity/Atom";
 import { z } from "zod";
 import {
-  type Reading,
   type RouteEnvelope,
   type RouteStatePatch,
   type RouteStateSpec,
@@ -15,8 +13,8 @@ import {
   RouteWorkspace,
   type RouteWorkspaceEvent,
 } from "../../../../packages/runtime/src/route-workspace";
-import { docWriter } from "./route-work";
-import { makeAtomRegistry, type Slice } from "#/shell/owner";
+import { writeRouteWork, startFreshRouteWork } from "./host";
+import { writeRefusal } from "./refusal";
 
 const transport = vi.hoisted(() => ({ response: vi.fn() }));
 vi.mock("#/host/pe-client", () => ({ peClient: transport }));
@@ -70,7 +68,6 @@ const overlaps = (a: RouteStatePatch["path"], b: RouteStatePatch["path"]) =>
 test("S0b: real Work writes need exact inverses, verb-press identity and Pea path barriers", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-10-29T20:00:00.000Z"));
-  const registry = makeAtomRegistry();
   const initial = (): Doc =>
     schema.parse({
       settings: { width: 10, remove: "old", height: 4 },
@@ -102,12 +99,27 @@ test("S0b: real Work writes need exact inverses, verb-press identity and Pea pat
     events.push(event);
   });
   const key: WorkKey = { binding: "host", route: spec.route, target: null };
-  const slice = Atom.make<Reading<Slice<Doc>>>({
-    state: "ready",
-    observation: { doc: stored.doc, revision: 0 },
-  });
-  const release = registry.mount(slice);
-  const writer = docWriter(spec, key, registry, slice, Atom.make(false));
+  const writer = {
+    apply: async (
+      patches: RouteStatePatch[],
+      expectedRevision: number,
+      _ack?: unknown,
+      context = { press: crypto.randomUUID() },
+    ) =>
+      writeRefusal(
+        await writeRouteWork(key, {
+          kind: "apply",
+          patches,
+          expectedRevision,
+          press: context.press,
+        }),
+      ),
+    restore: async (patches: RouteStatePatch[], expectedRevision: number) =>
+      writeRefusal(
+        await writeRouteWork(key, { kind: "restore", patches, expectedRevision, press: null }),
+      ),
+    startFresh: async () => writeRefusal(await startFreshRouteWork(key)),
+  };
   type Packet = WorkWrite;
   const packets: Packet[] = [];
   let accepted: WorkWriteAck;
@@ -208,7 +220,7 @@ test("S0b: real Work writes need exact inverses, verb-press identity and Pea pat
       const before = structuredClone(stored.doc);
       const packet = await write(patches, press);
       expect
-        .soft(packet, "press id must survive docWriter and work.apply body parsing")
+        .soft(packet, "press id must survive the kernel host door and work.apply body parsing")
         .toHaveProperty("press", press);
       const previous = steps.at(-1);
       // Reference policy groups only a press id, never elapsed time. Missing ids are ambiguous.
@@ -279,8 +291,6 @@ test("S0b: real Work writes need exact inverses, verb-press identity and Pea pat
       .toBe(JSON.stringify(unreadable));
   } finally {
     unsubscribe();
-    release();
-    registry.dispose();
     transport.response.mockReset();
     vi.useRealTimers();
   }

@@ -1,6 +1,6 @@
 /**
  * The Works the Chat head summarizes: every plugin route's Work, read by the key its graph
- * declares (`useRouteWorks`, the same Work atom the route's pane reads), one head Work per declared
+ * declares, through the kernel's cross-Work handles, one head Work per declared
  * cell head with pending cells. Every exit opens that route in the plugin pane.
  */
 import { useState, useSyncExternalStore, useMemo } from "react";
@@ -9,14 +9,13 @@ import {
   workKey,
   type Address,
   type DocumentRef,
-  type RouteStatePatch,
   type CellLike,
   type WorkKey,
   type RouteGraph,
   type CellsDecl,
 } from "@pe/agent-contracts";
 
-import { useRouteWorks } from "#/route/route-work";
+import { useWorkHandles } from "#/shell/use-work-handles";
 import {
   capturedPlace,
   chatPluginTitle,
@@ -66,32 +65,18 @@ export function useHeadWorks(
               {
                 route: manifest.key,
                 manifest,
+                graph: manifest,
                 cells: manifest.cells,
-                spec: {
-                  route: manifest.key,
-                  title: manifest.name,
-                  description: manifest.name,
-                  schema: manifest.work,
-                },
                 key: keyOf(manifest, address, document),
+                closed: document === null,
               },
             ]
           : [];
       }),
     [revision, address, document?.session, document?.openId],
   );
-  const summaries = useRouteWorks(headed);
-  // A refused bound write is a foreign write landing first: say it, and offer reload.
-  const [conflicts, setConflicts] = useState<ReadonlySet<string>>(new Set());
+  const summaries = useWorkHandles(headed);
   const [openRefusal, setOpenRefusal] = useState<{ route: string; message: string } | null>(null);
-  const conflict = (route: string, on: boolean) =>
-    setConflicts((now) => {
-      if (now.has(route) === on) return now;
-      const next = new Set(now);
-      if (on) next.add(route);
-      else next.delete(route);
-      return next;
-    });
   const works = headed.map((one, index) => ({ ...one, work: summaries[index]! }));
   return works.flatMap(({ route, manifest, work, cells: heads }) => {
     const doc = work.doc as Doc | null;
@@ -114,7 +99,10 @@ export function useHeadWorks(
       const cells = (
         head.segment === null ? { [head.key!]: doc[head.key!] } : (doc[head.segment] ?? {})
       ) as Record<string, CellLike | undefined>;
-      if (!Object.values(cells).some(pending)) return [];
+      const unaccepted = work.pending.filter(({ patches }) =>
+        patches.some(({ path }) => !path.length || path[0] === (head.segment ?? head.key)),
+      );
+      if (!Object.values(cells).some(pending) && !unaccepted.length) return [];
       const plan = head.commit === "plan";
       return [
         {
@@ -125,23 +113,27 @@ export function useHeadWorks(
           wire: {
             segment: head.segment,
             revision: work.revision,
-            write: async (patches: RouteStatePatch[], expectedRevision?: number) => {
-              const refused = head.admit?.(doc, patches);
-              if (refused) return refused;
-              const refusal = await work.write(patches, expectedRevision);
-              conflict(route, refusal?.code === "stale-revision");
-              return refusal;
-            },
+            write: work.write,
+            pending: (press) => work.pending.some((request) => request.press === press),
+            discard: work.discard,
           },
           groupOf: head.groupOf,
           ...(head.label ? { label: head.label } : {}),
           ...(head.show ? { show: head.show } : {}),
           stale: work.stale,
-          conflict: conflicts.has(route),
-          reload: () => {
-            conflict(route, false);
-            work.reload();
-          },
+          conflict: work.conflict,
+          reload: work.reload,
+          pending: unaccepted.flatMap(({ press }) =>
+            press
+              ? [
+                  {
+                    press,
+                    retry: () => work.retry(press),
+                    discard: () => work.discard(press),
+                  },
+                ]
+              : [],
+          ),
           commit: plan
             ? { word: "apply", run: () => open(true) }
             : { word: "open", run: () => open(false) },

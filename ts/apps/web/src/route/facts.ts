@@ -1,66 +1,13 @@
-/**
- * THE FACTS OF A VERB — what a browser verb shows and needs, resolved from its host record
- * (`RouteAction.does`) or its own declaration, in one place.
- */
-import {
-  hostActions,
-  type Command,
-  type ActionNeed,
-  type HostActionKey,
-} from "@pe/agent-contracts";
-import type { Ctx, RouteAction } from "./manifest";
-
-/** The target a browser verb needs bound, from the host record's `needs`. */
+/** Facts consumed by shared presentation instruments; no route declaration or executor. */
 export type TargetNeed = "host" | "session" | "document" | "project" | "family";
-const targetNeeds = {
-  nothing: "host",
-  session: "session",
-  document: "document",
-  "project-document": "project",
-  "family-document": "family",
-} as const satisfies Record<ActionNeed, TargetNeed>;
-export const targetNeed = (need: ActionNeed): TargetNeed => targetNeeds[need];
-
-/** What a verb shows: its sentence, the target it needs, who may press it. */
 export interface ActionFacts {
   says: string;
   needs: TargetNeed;
   effect?: "query" | "command";
 }
-/** The slice of a host action record a browser verb projects. */
-export type HostRecord = Pick<Command, "says" | "needs" | "effect">;
-
-/**
- * What a verb is. A host verb names its record by key, or picks it at press time (Ops picks the
- * selected operation's); it never restates the record's facts. A browser-local verb, which no
- * host action backs (a page change, a Work edit), says its own.
- */
-export type ActionIdentity<W, R extends string, P> =
-  | {
-      does: HostActionKey | ((ctx: Ctx<W, R, P>) => HostRecord);
-      says?: never;
-      needs?: never;
-      effect?: never;
-    }
-  | ({ does?: never } & ActionFacts);
-
-/** The facts a verb shows now; the one place a `does` is looked up. */
-export const actionFacts = <W, R extends string, P>(
-  action: RouteAction<W, R, P, never>,
-  ctx: Ctx<W, R, P>,
-): ActionFacts => {
-  if (action.does === undefined)
-    return { says: action.says, needs: action.needs, effect: action.effect };
-  const record = typeof action.does === "string" ? hostActions[action.does] : action.does(ctx);
-  return { says: record.says, needs: targetNeed(record.needs), effect: record.effect };
-};
-
-/** The target need known before any press; undefined when the verb picks its record at press time. */
-export const staticNeed = <W, R extends string, P>(
-  action: RouteAction<W, R, P, never>,
-): TargetNeed | undefined =>
-  action.does === undefined
-    ? action.needs
-    : typeof action.does === "string"
-      ? targetNeed(hostActions[action.does].needs)
-      : undefined;
+export interface PresentationFacts<R extends string = string> {
+  key: string;
+  inspectables?: Readonly<Record<string, import("./inspect").Inspectable>>;
+  readings?: Readonly<Partial<Record<R, unknown>>>;
+  actions?: Readonly<Record<string, { dirties?: readonly R[]; rereads?: R | "work" }>>;
+}

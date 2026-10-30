@@ -1,7 +1,7 @@
 import {
   bindWork,
   familiesRouteState,
-  type GraphSeed,
+  type GraphSeedData,
   type FamiliesRouteDocument,
 } from "@pe/agent-contracts";
 import { DEMO_FAMILIES } from "./seeds";
@@ -22,8 +22,7 @@ const reading = {
   completedAt: "2026-10-30T00:00:00Z",
   result: { families: DEMO_FAMILIES, issues: [], page: null },
 };
-const seed: GraphSeed<FamiliesPage, FamiliesRouteDocument> = {
-  title: "Loaded family matrix",
+const seed: GraphSeedData<FamiliesPage, FamiliesRouteDocument> = {
   work: familiesRouteState.schema.parse({ scope: { edit: { value: filter } } }),
   readings: {
     matrix: reading,

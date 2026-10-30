@@ -93,7 +93,7 @@ test("Family URL state round-trips through a real mounted route", async () => {
     inspector: "param:Model",
     doc: "sheet",
   });
-  fireEvent.change(first.situation.getByLabelText("query"), { target: { value: "Changed" } });
+  act(() => first.owner().view.setPage({ query: "Changed" }));
   await waitFor(() => expect(first.router.state.location.search.query).toBe("Changed"));
   const url = first.router.state.location.href;
   first.view.unmount();

@@ -18,6 +18,7 @@ import { TABLE_IDS } from "@pe/ducts-domain/pricing";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 import { ductsBodySource, jsonSource, requestJson } from "#/shell/readings-api";
+import { acquireSource } from "#/shell/readings-use";
 
 import type { ReadingContext, ReadingSource, UseSource } from "#/shell/readings";
 
@@ -114,71 +115,42 @@ function networks(): UseSource<DuctSnapshot | null> {
 
       if (!wanted.length) return deliver({ kind: "complete", value: roster, revision: 0 });
 
-      const parts = new Map<string, { snapshot: DuctSnapshot; version: string; fresh: boolean }>();
-
-      const started = new Set<number>();
+      const parts: { snapshot: DuctSnapshot; version: string }[] = [];
       const completed = new Set<number>();
-
-      const releases = new Set<() => void>();
-
       let serial = 0;
-
-      const next = async () => {
-        if (ctx.signal.aborted) return;
-
-        const batch = nextSystemsRead(wanted, started);
-
-        if (!batch.length) return;
-        for (const id of batch) started.add(id);
-        const batchKey = batch.join(",");
-
-        const release = await ductsBodySource({
-          request: () => ({
-            kind: "ducts-snapshot",
-            target: ref,
-            ...slots(ctx),
-            selector: { kind: "systems", systemIds: batch },
-          }),
-
-          decode: (value) => snapshotSchema.parse(value),
-          absent: EMPTY_SNAPSHOT,
-        }).open(ctx, (event) => {
-          if (event.kind !== "complete") {
-            const part = parts.get(batchKey);
-            if (part) part.fresh = false;
-            if (event.kind !== "part") deliver(event);
-
-            return;
-          }
-
-          parts.set(batchKey, {
+      try {
+        while (!ctx.signal.aborted) {
+          const batch = nextSystemsRead(wanted, completed);
+          if (!batch.length) return;
+          const event = await acquireSource(
+            ductsBodySource({
+              request: () => ({
+                kind: "ducts-snapshot",
+                target: ref,
+                ...slots(ctx),
+                selector: { kind: "systems", systemIds: batch },
+              }),
+              decode: (value) => snapshotSchema.parse(value),
+              absent: EMPTY_SNAPSHOT,
+            }),
+            ctx,
+          );
+          if (ctx.signal.aborted) return;
+          parts.push({
             snapshot: event.value,
             version: event.sourceVersion ?? "",
-            fresh: true,
           });
           for (const id of batch) completed.add(id);
-
-          const current = [...parts.values()];
-
           deliver({
             kind: completed.size === wanted.length ? "complete" : "part",
-            value: mergeSnapshots(current.map((part) => part.snapshot)),
+            value: mergeSnapshots(parts.map((part) => part.snapshot)),
             revision: ++serial,
-            sourceVersion: current.map((part) => part.version).join("+"),
-            fresh: current.every((part) => part.fresh),
+            sourceVersion: parts.map((part) => part.version).join("+"),
           });
-
-          void next();
-        });
-
-        if (release) releases.add(release);
-      };
-
-      void next();
-
-      return () => {
-        for (const release of releases) release();
-      };
+        }
+      } catch (error) {
+        if (!ctx.signal.aborted) deliver({ kind: "failure", error });
+      }
     },
   };
 }
@@ -224,7 +196,10 @@ function sheets(): UseSource<SheetReading> {
 
       const empty: SheetReading = { open: null, rows: fans?.rows ?? [], progress: null };
 
-      if (!ref || (!page(ctx).fanPort && !page(ctx).allFans))
+      const [unitId, portIndex] = page(ctx).fan.split(":").map(Number);
+      const fanPort = page(ctx).fan ? { unitId: unitId!, portIndex: portIndex! } : null;
+
+      if (!ref || (!fanPort && !page(ctx).allFans))
         return deliver({ kind: "complete", value: empty, revision: 0 });
 
       let serial = 0;
@@ -232,7 +207,7 @@ function sheets(): UseSource<SheetReading> {
       let base: DuctsSheetOverview | null = null;
 
       try {
-        const chosen = page(ctx).allFans ? (fans?.rows ?? []) : [page(ctx).fanPort!];
+        const chosen = page(ctx).allFans ? (fans?.rows ?? []) : [fanPort!];
 
         let rows = [...empty.rows];
 

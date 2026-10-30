@@ -191,16 +191,16 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
     progress: value?.progress ?? null,
     open: (fan) => {
       owner.view.setPage({
-        fanPort: { unitId: fan.unitId, portIndex: fan.portIndex },
+        fan: `${fan.unitId}:${fan.portIndex}`,
         allFans: false,
         sheetPath: "",
       });
     },
     computeAll: () => {
-      owner.view.setPage({ allFans: true, fanPort: null });
+      owner.view.setPage({ allFans: true, fan: "" });
     },
     cancel: () => {
-      owner.view.setPage({ allFans: false, fanPort: null });
+      owner.view.setPage({ allFans: false, fan: "" });
     },
     refresh: () => {
       void owner.control("refresh").run();

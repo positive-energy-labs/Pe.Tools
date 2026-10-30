@@ -112,7 +112,8 @@ export function RosterVerbs({ props }: { props: SheetViewProps }) {
 function Sides({ props }: { props: SheetViewProps }) {
   const totals = props.sheet?.overview.totals;
   const fan = props.sheet?.overview.fan;
-  if (!fan || !totals) return <p className="t-small text-ink-2">No fan open.</p>;
+  if (!fan || !totals)
+    return props.busy || props.loading ? null : <p className="t-small text-ink-2">No fan open.</p>;
   // One aligned overview: the required ESP line, then a side per row with fixed numeric columns,
   // so the numbers read down a column instead of wrapping as run-on sentences.
   return (

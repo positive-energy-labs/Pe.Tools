@@ -8,12 +8,14 @@ import { peClient } from "#/host/pe-client";
 import { Code } from "@pe/kit/lang/code";
 import { PaneErrorBoundary } from "@pe/kit/lang/pane";
 import { message } from "@pe/agent-contracts";
+import { useRouteSearchSlice } from "#/route/activity";
 
 export const Route = createFileRoute("/tool/$key")({ component: PodTool });
 function PodTool() {
   const { key } = Route.useParams();
   const inventory = usePodRoutes();
   const thread = useRouteThread();
+  const carry = useRouteSearchSlice(({ target, work }) => ({ target, work }));
   const [error, setError] = useState<string | null>(null);
   const [source, setSource] = useState<{ hash: string; content: string } | null>(null);
   useSyncExternalStore(publicRoutes.subscribe, publicRoutes.revision, publicRoutes.revision);
@@ -24,7 +26,7 @@ function PodTool() {
   if (row && View)
     return (
       <PaneErrorBoundary what="Pod route" key={`${row.key}:${row.sha256}`}>
-        <View thread={thread ?? ""} visible />
+        <View thread={thread ?? ""} {...carry} visible />
       </PaneErrorBoundary>
     );
   return (

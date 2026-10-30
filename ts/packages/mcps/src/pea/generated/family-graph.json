@@ -8,31 +8,13 @@
       "groupOf": {
         "runtime": true
       },
-      "nouns": ["parameter"],
+      "nouns": [
+        "parameter"
+      ],
       "segment": "cells"
     }
   ],
   "fields": {
-    "demo": {
-      "agent": false,
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "transient",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": "",
-        "maxLength": 200,
-        "type": "string"
-      },
-      "share": false,
-      "url": "replace"
-    },
     "doc": {
       "agent": "set",
       "codec": {
@@ -47,7 +29,10 @@
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "text",
-        "enum": ["text", "sheet"],
+        "enum": [
+          "text",
+          "sheet"
+        ],
         "type": "string"
       },
       "share": true,
@@ -133,7 +118,11 @@
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "draft",
-        "enum": ["draft", "live", "saved"],
+        "enum": [
+          "draft",
+          "live",
+          "saved"
+        ],
         "type": "string"
       },
       "share": true,
@@ -153,7 +142,10 @@
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "spec",
-        "enum": ["spec", "output"],
+        "enum": [
+          "spec",
+          "output"
+        ],
         "type": "string"
       },
       "share": true,
@@ -236,7 +228,10 @@
         "items": {
           "properties": {
             "dir": {
-              "enum": ["asc", "desc"],
+              "enum": [
+                "asc",
+                "desc"
+              ],
               "type": "string"
             },
             "key": {
@@ -245,7 +240,10 @@
               "type": "string"
             }
           },
-          "required": ["key", "dir"],
+          "required": [
+            "key",
+            "dir"
+          ],
           "type": "object"
         },
         "maxItems": 8,
@@ -268,7 +266,11 @@
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "audit",
-        "enum": ["audit", "apply", "history"],
+        "enum": [
+          "audit",
+          "apply",
+          "history"
+        ],
         "type": "string"
       },
       "share": true,
@@ -317,7 +319,11 @@
                   "type": "string"
                 }
               },
-              "required": ["field", "op", "value"],
+              "required": [
+                "field",
+                "op",
+                "value"
+              ],
               "type": "object"
             },
             "maxItems": 32,
@@ -329,7 +335,11 @@
             "type": "integer"
           }
         },
-        "required": ["v", "keywords", "pills"],
+        "required": [
+          "v",
+          "keywords",
+          "pills"
+        ],
         "type": "object"
       },
       "share": true,
@@ -349,7 +359,11 @@
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "",
-        "enum": ["", "recent", "title"],
+        "enum": [
+          "",
+          "recent",
+          "title"
+        ],
         "type": "string"
       },
       "share": true,
@@ -454,13 +468,23 @@
   "needs": "family",
   "panes": {
     "anatomy": {
-      "draws": ["profile", "receipts", "applyReceipt", "captureReceipt", "buildReceipt"],
+      "draws": [
+        "profile",
+        "receipts",
+        "applyReceipt",
+        "captureReceipt",
+        "buildReceipt"
+      ],
       "label": "Family anatomy",
       "purpose": "Inspect authored family geometry",
-      "verbs": ["read"]
+      "verbs": [
+        "read"
+      ]
     },
     "doc": {
-      "draws": ["spec"],
+      "draws": [
+        "spec"
+      ],
       "label": "Family document",
       "purpose": "Inspect attached cut-sheet evidence",
       "verbs": []
@@ -470,27 +494,42 @@
       "label": "Saved family readings",
       "purpose": "Inspect immutable captures",
       "verbs": {
-        "ids": ["saved"],
+        "ids": [
+          "saved"
+        ],
         "runtime": true
       }
     },
     "spec": {
-      "draws": ["pods", "profile"],
+      "draws": [
+        "pods",
+        "profile"
+      ],
       "label": "Family members",
       "purpose": "Open a saved model into the family draft",
       "verbs": {
-        "ids": ["open"],
+        "ids": [
+          "open"
+        ],
         "runtime": true
       }
     },
     "table": {
-      "draws": ["profile", "receipts", "applyReceipt", "captureReceipt", "buildReceipt"],
+      "draws": [
+        "profile",
+        "receipts",
+        "applyReceipt",
+        "captureReceipt",
+        "buildReceipt"
+      ],
       "label": "Family parameters",
       "purpose": "Edit one family's parameters across its types",
       "verbs": []
     },
     "work": {
-      "draws": ["receipts"],
+      "draws": [
+        "receipts"
+      ],
       "label": "Family Work",
       "purpose": "Review keyed cells and original receipts",
       "verbs": []
@@ -503,7 +542,9 @@
   },
   "readings": {
     "applyReceipt": {
-      "deps": ["receipts"],
+      "deps": [
+        "receipts"
+      ],
       "kind": "use",
       "retire": "target",
       "source": "family.apply-receipt"
@@ -512,13 +553,18 @@
       "args": {
         "runtime": true
       },
-      "deps": ["receipts", "profile"],
+      "deps": [
+        "receipts",
+        "profile"
+      ],
       "kind": "use",
       "retire": "page",
       "source": "family.build-receipt"
     },
     "captureReceipt": {
-      "deps": ["receipts"],
+      "deps": [
+        "receipts"
+      ],
       "kind": "use",
       "retire": "target",
       "source": "family.capture-receipt"
@@ -550,21 +596,63 @@
       "source": "family.spec"
     }
   },
-  "stageOrder": ["audit", "apply", "history"],
+  "seeds": {
+    "bath": {
+      "title": "bath"
+    },
+    "box": {
+      "title": "box"
+    },
+    "grd": {
+      "title": "grd"
+    },
+    "refline": {
+      "title": "refline"
+    }
+  },
+  "stageOrder": [
+    "audit",
+    "apply",
+    "history"
+  ],
   "stages": {
     "apply": {
-      "panes": ["anatomy", "table", "doc", "work", "spec"],
-      "verbs": ["apply", "build", "capture", "close-inspector"],
+      "panes": [
+        "anatomy",
+        "table",
+        "doc",
+        "work",
+        "spec"
+      ],
+      "verbs": [
+        "apply",
+        "build",
+        "capture",
+        "close-inspector"
+      ],
       "word": "Applying"
     },
     "audit": {
-      "panes": ["anatomy", "table", "doc", "work", "spec"],
-      "verbs": ["capture", "close-inspector"],
+      "panes": [
+        "anatomy",
+        "table",
+        "doc",
+        "work",
+        "spec"
+      ],
+      "verbs": [
+        "capture",
+        "close-inspector"
+      ],
       "word": "Auditing"
     },
     "history": {
-      "panes": ["history"],
-      "verbs": ["close-inspector"],
+      "panes": [
+        "history"
+      ],
+      "verbs": [
+        "close-inspector"
+      ],
       "word": "History"
     }
   },
@@ -613,7 +701,10 @@
                 "type": "string"
               }
             },
-            "required": ["pod", "path"],
+            "required": [
+              "pod",
+              "path"
+            ],
             "type": "object"
           },
           "source": {
@@ -626,7 +717,9 @@
                     "type": "string"
                   }
                 },
-                "required": ["path"],
+                "required": [
+                  "path"
+                ],
                 "type": "object"
               },
               {
@@ -637,7 +730,9 @@
                     "type": "string"
                   }
                 },
-                "required": ["url"],
+                "required": [
+                  "url"
+                ],
                 "type": "object"
               },
               {
@@ -652,7 +747,10 @@
                     "type": "string"
                   }
                 },
-                "required": ["fileName", "base64"],
+                "required": [
+                  "fileName",
+                  "base64"
+                ],
                 "type": "object"
               }
             ]
@@ -680,7 +778,10 @@
                             "type": "string"
                           }
                         },
-                        "required": ["session", "openId"],
+                        "required": [
+                          "session",
+                          "openId"
+                        ],
                         "type": "object"
                       },
                       "open": {
@@ -698,7 +799,11 @@
                         "not": {}
                       }
                     },
-                    "required": ["route", "target", "binding"],
+                    "required": [
+                      "route",
+                      "target",
+                      "binding"
+                    ],
                     "type": "object"
                   },
                   {
@@ -719,7 +824,10 @@
                             "type": "string"
                           }
                         },
-                        "required": ["session", "openId"],
+                        "required": [
+                          "session",
+                          "openId"
+                        ],
                         "type": "object"
                       },
                       "route": {
@@ -734,7 +842,12 @@
                         "not": {}
                       }
                     },
-                    "required": ["route", "target", "open", "binding"],
+                    "required": [
+                      "route",
+                      "target",
+                      "open",
+                      "binding"
+                    ],
                     "type": "object"
                   },
                   {
@@ -760,7 +873,12 @@
                         "type": "string"
                       }
                     },
-                    "required": ["route", "target", "work", "binding"],
+                    "required": [
+                      "route",
+                      "target",
+                      "work",
+                      "binding"
+                    ],
                     "type": "object"
                   },
                   {
@@ -784,7 +902,11 @@
                         "not": {}
                       }
                     },
-                    "required": ["route", "target", "binding"],
+                    "required": [
+                      "route",
+                      "target",
+                      "binding"
+                    ],
                     "type": "object"
                   }
                 ]
@@ -795,11 +917,17 @@
                 "type": "integer"
               }
             },
-            "required": ["key", "revision"],
+            "required": [
+              "key",
+              "revision"
+            ],
             "type": "object"
           }
         },
-        "required": ["member", "source"],
+        "required": [
+          "member",
+          "source"
+        ],
         "type": "object"
       },
       "kind": "command",
@@ -842,7 +970,11 @@
                     "type": "string"
                   }
                 },
-                "required": ["pod", "path", "sha256"],
+                "required": [
+                  "pod",
+                  "path",
+                  "sha256"
+                ],
                 "type": "object"
               },
               {
@@ -851,7 +983,9 @@
             ]
           }
         },
-        "required": ["source"],
+        "required": [
+          "source"
+        ],
         "type": "object"
       },
       "kind": "command",
@@ -883,7 +1017,9 @@
             "type": "string"
           }
         },
-        "required": ["pod"],
+        "required": [
+          "pod"
+        ],
         "type": "object"
       },
       "kind": "command",
@@ -930,7 +1066,9 @@
                 },
                 "value": {}
               },
-              "required": ["path"],
+              "required": [
+                "path"
+              ],
               "type": "object"
             },
             "type": "array"
@@ -947,7 +1085,10 @@
             "default": null
           }
         },
-        "required": ["patches", "expectedRevision"],
+        "required": [
+          "patches",
+          "expectedRevision"
+        ],
         "type": "object"
       },
       "kind": "work",
@@ -988,11 +1129,17 @@
                 "type": "string"
               }
             },
-            "required": ["pod", "path", "sha256"],
+            "required": [
+              "pod",
+              "path",
+              "sha256"
+            ],
             "type": "object"
           }
         },
-        "required": ["source"],
+        "required": [
+          "source"
+        ],
         "type": "object"
       },
       "kind": "command",
@@ -1049,11 +1196,15 @@
                 "type": "string"
               }
             },
-            "required": ["id"],
+            "required": [
+              "id"
+            ],
             "type": "object"
           }
         },
-        "required": ["request"],
+        "required": [
+          "request"
+        ],
         "type": "object"
       },
       "kind": "query",
@@ -1070,7 +1221,9 @@
             "type": "boolean"
           }
         },
-        "required": ["confirm"],
+        "required": [
+          "confirm"
+        ],
         "type": "object"
       },
       "input": {
@@ -1122,13 +1275,20 @@
                       ]
                     },
                     "by": {
-                      "enum": ["human", "pea", "unknown"],
+                      "enum": [
+                        "human",
+                        "pea",
+                        "unknown"
+                      ],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": ["high", "low"],
+                          "enum": [
+                            "high",
+                            "low"
+                          ],
                           "type": "string"
                         },
                         {
@@ -1179,7 +1339,9 @@
                                 "type": "integer"
                               }
                             },
-                            "required": ["blockId"],
+                            "required": [
+                              "blockId"
+                            ],
                             "type": "object"
                           },
                           "type": "array"
@@ -1226,13 +1388,20 @@
                       ]
                     },
                     "by": {
-                      "enum": ["human", "pea", "unknown"],
+                      "enum": [
+                        "human",
+                        "pea",
+                        "unknown"
+                      ],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": ["high", "low"],
+                          "enum": [
+                            "high",
+                            "low"
+                          ],
                           "type": "string"
                         },
                         {
@@ -1283,7 +1452,9 @@
                                 "type": "integer"
                               }
                             },
-                            "required": ["blockId"],
+                            "required": [
+                              "blockId"
+                            ],
                             "type": "object"
                           },
                           "type": "array"
@@ -1347,7 +1518,12 @@
                                 "type": "number"
                               }
                             },
-                            "required": ["x", "y", "w", "h"],
+                            "required": [
+                              "x",
+                              "y",
+                              "w",
+                              "h"
+                            ],
                             "type": "object"
                           },
                           "type": "array"
@@ -1365,7 +1541,13 @@
                           "type": "number"
                         }
                       },
-                      "required": ["id", "page", "kind", "md", "bboxes"],
+                      "required": [
+                        "id",
+                        "page",
+                        "kind",
+                        "md",
+                        "bboxes"
+                      ],
                       "type": "object"
                     },
                     "type": "array"
@@ -1391,11 +1573,19 @@
                               "type": "number"
                             }
                           },
-                          "required": ["x", "y", "w", "h"],
+                          "required": [
+                            "x",
+                            "y",
+                            "w",
+                            "h"
+                          ],
                           "type": "object"
                         },
                         "category": {
-                          "enum": ["embedded", "layout"],
+                          "enum": [
+                            "embedded",
+                            "layout"
+                          ],
                           "type": "string"
                         },
                         "id": {
@@ -1408,7 +1598,13 @@
                           "type": "string"
                         }
                       },
-                      "required": ["id", "page", "category", "url", "bbox"],
+                      "required": [
+                        "id",
+                        "page",
+                        "category",
+                        "url",
+                        "bbox"
+                      ],
                       "type": "object"
                     },
                     "type": "array"
@@ -1444,13 +1640,25 @@
                           "type": "number"
                         }
                       },
-                      "required": ["page", "width", "height", "screenshotUrl", "markdown"],
+                      "required": [
+                        "page",
+                        "width",
+                        "height",
+                        "screenshotUrl",
+                        "markdown"
+                      ],
                       "type": "object"
                     },
                     "type": "array"
                   }
                 },
-                "required": ["jobId", "fileName", "pages", "blocks", "images"],
+                "required": [
+                  "jobId",
+                  "fileName",
+                  "pages",
+                  "blocks",
+                  "images"
+                ],
                 "type": "object"
               },
               "member": {
@@ -1462,11 +1670,17 @@
                     "type": "string"
                   }
                 },
-                "required": ["pod", "path"],
+                "required": [
+                  "pod",
+                  "path"
+                ],
                 "type": "object"
               }
             },
-            "required": ["member", "doc"],
+            "required": [
+              "member",
+              "doc"
+            ],
             "type": "object"
           },
           {

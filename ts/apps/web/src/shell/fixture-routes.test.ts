@@ -26,7 +26,7 @@ const routes: RouteGraph<any, any>[] = [
 ];
 test.each(routes.map((graph) => [graph.address, graph] as const))(
   "/%s mounts every declared seed through the kernel without host reads",
-  (_, graph) => {
+  async (_, graph) => {
     const fetch = vi.fn(() => {
       throw Error("Real host called");
     });
@@ -36,10 +36,10 @@ test.each(routes.map((graph) => [graph.address, graph] as const))(
       for (const verb of Object.values(graph.verbs))
         if (verb.kind === "query")
           expect(
-            Object.hasOwn(graph.seeds![name]!.queries ?? {}, verb.does!),
+            Object.hasOwn((await graph.seeds![name]!.load()).queries ?? {}, verb.does!),
             `${graph.key}/${name}/${verb.does}`,
           ).toBe(true);
-      const owner = createFixtureMount(graph, name);
+      const owner = await createFixtureMount(graph, name);
       const release = owner.connect();
       const demand = owner.readings.mount(Object.keys(graph.readings));
       try {
@@ -64,7 +64,7 @@ test("Pods switches seeded members, preserves their memory Work, and undoes edit
     throw Error("Real host called");
   });
   vi.stubGlobal("fetch", fetch);
-  const owner = createFixtureMount(podsGraph, "browse", { binding: podsBinding });
+  const owner = await createFixtureMount(podsGraph, "browse", { binding: podsBinding });
   const release = owner.connect();
   const demand = owner.readings.mount(["member"]);
   try {

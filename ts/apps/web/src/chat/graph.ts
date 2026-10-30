@@ -20,7 +20,6 @@ import { subscriptionSource } from "#/shell/readings-use";
 import type { GraphMount, RouteAdapters } from "#/shell/mount";
 import type { ReadingState } from "#/shell/readings";
 import { targetClosure } from "./thread-navigation";
-import { chatSeeds } from "./graph-seeds";
 import { emptyPrompt } from "#/workbench/prompt";
 import type { PromptRequest } from "#/workbench/provider/harness-client";
 
@@ -75,7 +74,45 @@ export function chatGraph(deps: () => ChatRouteDeps, minOtherSize?: number): Rou
     key: "chat",
     address: "pea",
     name: "Pea",
-    seeds: chatSeeds,
+    seeds: {
+      send: {
+        title: "an idle thread ready for a prompt",
+        load: () => import("./graph-seeds").then((m) => m.chatSeeds["send"]!),
+      },
+      new: {
+        title: "a thread to leave for a fresh one",
+        load: () => import("./graph-seeds").then((m) => m.chatSeeds["new"]!),
+      },
+      diagram: {
+        title: "pea drew a duct system, after one rejected diagram call",
+        load: () => import("./graph-seeds").then((m) => m.chatSeeds["diagram"]!),
+      },
+      attach: {
+        title: "the user attached a photo, a CSV and a PDF; pea read all three",
+        load: () => import("./graph-seeds").then((m) => m.chatSeeds["attach"]!),
+      },
+      skill: {
+        title: "the user ran a slash skill; the harness advertised its commands",
+        load: () => import("./graph-seeds").then((m) => m.chatSeeds["skill"]!),
+      },
+      mention: {
+        title: "the user mentioned a document and a skill with @; pea used their ids",
+        load: () => import("./graph-seeds").then((m) => m.chatSeeds["mention"]!),
+      },
+      closed: {
+        title:
+          "a thread whose bound session has closed; send refuses until a live document is chosen",
+        load: () => import("./graph-seeds").then((m) => m.chatSeeds["closed"]!),
+      },
+      granted: {
+        title: "a human added a second document to the thread; it targets two",
+        load: () => import("./graph-seeds").then((m) => m.chatSeeds["granted"]!),
+      },
+      stop: {
+        title: "pea mid-turn, with an approval owed",
+        load: () => import("./graph-seeds").then((m) => m.chatSeeds["stop"]!),
+      },
+    },
     fields: {
       thread: { ...field(z.string().default(""), {}), role: "transient" },
       mode: { ...field(z.enum(["threads", "world"]).default("threads"), {}), role: "pose" },

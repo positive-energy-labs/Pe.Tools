@@ -137,8 +137,26 @@ test("restoring a scene URL loads only the artifact; answers run as explicit ker
   await waitFor(() => expect(proof.owner().readings.get("scene").status).toBe("ready"));
   expect(artifacts).toEqual([`/pe/space/scenes/${sceneA}/artifact`]);
   expect(calls).toEqual([]);
-  fireEvent.change(proof.view.getByLabelText("ids"), { target: { value: "201,202" } });
+  for (const id of [201, 202]) {
+    fireEvent.change(proof.view.getByRole("spinbutton", { name: "Host element ID" }), {
+      target: { value: String(id) },
+    });
+    fireEvent.click(proof.view.getByRole("button", { name: "Add host element ID" }));
+  }
   await waitFor(() => expect(proof.owner().view.read().page.ids).toEqual([201, 202]));
+  const idInput = proof.view.getByRole("spinbutton", { name: "Host element ID" });
+  fireEvent.change(idInput, { target: { value: "201" } });
+  expect(
+    proof.view.getByRole("button", { name: "Add host element ID" }).getAttribute("aria-disabled"),
+  ).toBe("true");
+  fireEvent.change(idInput, { target: { value: "-1" } });
+  fireEvent.keyDown(idInput, { key: "Enter" });
+  expect(proof.owner().view.read().page.ids).toEqual([201, 202]);
+  fireEvent.click(proof.view.getByRole("button", { name: "Remove host element 201" }));
+  expect(proof.owner().view.read().page.ids).toEqual([202]);
+  fireEvent.change(idInput, { target: { value: "201" } });
+  fireEvent.keyDown(idInput, { key: "Enter" });
+  expect(proof.owner().view.read().page.ids).toEqual([202, 201]);
   expect(calls).toEqual([]);
   expect(proof.view.getByLabelText("native target").textContent).toBe("none");
   fireEvent.click(await enabled(proof.view, "read status"));
