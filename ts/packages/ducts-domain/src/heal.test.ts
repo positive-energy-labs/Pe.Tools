@@ -232,3 +232,10 @@ it("sends the native op keys, kinds and connector keys only, filtered to the app
   });
   expect(healRequestGroup(group, new Set(["cap:10:0"])).items).toHaveLength(1);
 });
+
+it("never caps an end Revit gives a flow: the air leaves there (Chadds EX 1 11620957:1)", () => {
+  const s = snap([duct(10, [0, 0, 0], [10, 0, 0])]);
+  s.segments[0]!.connectors[1]!.flowCfm = 444;
+  expect(items(s).map((i) => i.end)).toEqual(["10:0"]);
+  expect(healPlan(s).hard.get("open-end:10:1")?.note).toMatch(/carries 444 cfm in Revit; a cap would block its air/);
+});

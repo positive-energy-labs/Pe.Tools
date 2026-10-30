@@ -191,6 +191,13 @@ function build(snapshot: DuctSnapshot, raw: DuctsRouteDocument | null): HealPlan
       continue;
     }
     const near = nearest(x);
+    // Air passes an end Revit gives a flow: it is where the system's air leaves or enters, never a cap
+    // (Chadds EX 1 11620957:1, EF-7's 444 cfm out; ducts LEDGER 2026-10-30). Its own words await kaitpw.
+    const flow = x.c.flowCfm ?? 0;
+    if (!near && flow > 0) {
+      say(x, `${named(x)} carries ${Math.round(flow)} cfm in Revit; a cap would block its air`);
+      continue;
+    }
     if (!near) {
       if (straightDuct(x.e) || x.e.kind === "fitting") {
         items.push({
