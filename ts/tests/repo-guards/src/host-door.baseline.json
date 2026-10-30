@@ -24,7 +24,6 @@
   "apps/web/src/route/inspect.tsx": 1,
   "apps/web/src/route/pod-view.tsx": 1,
   "apps/web/src/route/pods.ts": 1,
-  "apps/web/src/route/schedules/workspace.tsx": 1,
   "apps/web/src/route/use-route.ts": 1,
   "apps/web/src/routes/data-tables.tsx": 1,
   "apps/web/src/scene/artifact.ts": 1,

@@ -36,7 +36,7 @@ import { SituationCell } from "#/route/situation-marks";
 import { podHost, usePodList, type Run } from "#/route/pods";
 import { familiesSpec } from "#/families/manifest";
 import { FAMILY_DEMO_PODS, familySpec } from "#/family/manifest";
-import { scheduleSpec } from "#/route/schedules/manifest";
+import { schedulesGraph, SCHEDULE_SPEC_SCHEMA } from "#/schedules/graph";
 import { familyFixtures } from "#/family/authored-families";
 import { familyDemoFields } from "#/family/manifest";
 import { DEMO_FAMILIES_SPEC } from "#/families/seeds";
@@ -64,7 +64,7 @@ export const manifest = defineRoute({
 
 /** Every entity route definition; `/family` joins when it is on the kernel. */
 const PRODUCT_ROUTES = [
-  { route: "schedules", def: scheduleSpec },
+  { route: "schedules", def: { name: schedulesGraph.name, schema: SCHEDULE_SPEC_SCHEMA } },
   // A family model is both routes' spec; the single-family route is its first home.
   { route: "family", def: familySpec },
   { route: "families", def: familiesSpec },

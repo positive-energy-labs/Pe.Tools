@@ -4,13 +4,12 @@ import { ductsGraph, ductsPageSchema } from "#/ducts/graph";
 import { graphUrlPage } from "#/shell/mount-page";
 import { manifest as families } from "#/families/manifest";
 import { familyManifest } from "#/family/manifest";
-import { schedulesManifest } from "#/route/schedules/manifest";
+import { schedulesGraph, schedulesPageSchema } from "#/schedules/graph";
 import { manifest as pods } from "#/routes/pods";
 import { urlPage } from "./url";
 
 const ROUTES = [
   ["families", families],
-  ["schedules", schedulesManifest()],
   ["family", familyManifest()],
   ["pods", pods],
 ] as const;
@@ -23,6 +22,13 @@ describe("route addresses match their manifests", () => {
     expect(Object.keys(page)).toEqual(
       expect.arrayContaining([...routeAddress("ducts").agent.keys]),
     );
+  });
+  it("Schedules projects URL and agent keys from its graph", () => {
+    expect(graphUrlPage(schedulesGraph).keys).toEqual(routeAddress("schedules").keys);
+    const page = schedulesPageSchema.parse({});
+    const { agent, defaults } = routeAddress("schedules");
+    for (const key of agent.keys)
+      expect(key in page || (defaults as Record<string, unknown>)[key] === undefined).toBe(true);
   });
   it("every url and agent key is a page field; the url keys are the manifest's", () => {
     for (const [route, manifest] of ROUTES) {
@@ -38,7 +44,7 @@ describe("route addresses match their manifests", () => {
   });
 
   it("an entity route's deep link reopens its view, and its own write is that link", () => {
-    const url = urlPage(schedulesManifest())!;
+    const url = graphUrlPage(schedulesGraph);
     const page = url.read({
       stage: "history",
       workspaceId: "w1",

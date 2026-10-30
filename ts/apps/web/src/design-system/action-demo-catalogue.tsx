@@ -8,7 +8,6 @@
 import type { Seed } from "@pe/agent-contracts";
 import { CHAT_SEEDS } from "#/chat/seeds";
 import { PODS_SEEDS } from "#/route/seeds";
-import { SCHEDULE_SEEDS } from "#/route/schedules/manifest";
 import { OPEN_SEEDS } from "#/open/seeds";
 import { manifest as takeoffManifest } from "#/takeoff/manifest";
 import { manifest as familyManifest } from "#/routes/family";
@@ -48,7 +47,6 @@ const rows = (route: string, path: string, seeds: AnySeeds): SeedRow[] =>
 const SEED_CATALOGUE: SeedRow[] = [
   ...rows("chat", "/pea", CHAT_SEEDS as AnySeeds),
   ...rows("pods", "/pods", PODS_SEEDS as AnySeeds),
-  ...rows("schedules", "/schedules", SCHEDULE_SEEDS as AnySeeds),
   ...rows("instances", "/open", OPEN_SEEDS as AnySeeds),
   ...rows("takeoffs", "/takeoffs", takeoffManifest.seeds as AnySeeds),
   ...rows("family", "/family", familyManifest.seeds as AnySeeds),

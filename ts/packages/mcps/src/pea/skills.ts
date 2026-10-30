@@ -2,6 +2,7 @@ import path from "node:path";
 import { browserSkillName, renderBrowserGuide } from "@pe/browser/guide";
 import { productHomePath } from "@pe/host-contracts/product-paths";
 import { renderDuctsSkill } from "./ducts-skill.ts";
+import { renderSchedulesSkill } from "./schedules-skill.ts";
 
 export interface BundledPeaSkill {
   name: string;
@@ -318,6 +319,7 @@ description: Edit shared tool Work and apply it through the same semantic comman
     name: "calc-duct-pressure-drop",
     content: renderDuctsSkill(),
   },
+  { name: "edit-schedule-grid", content: renderSchedulesSkill() },
   {
     name: "place-mep-ducts",
     content: String.raw`---

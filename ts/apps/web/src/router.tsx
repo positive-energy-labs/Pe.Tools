@@ -10,6 +10,7 @@ import { Button } from "@pe/kit/lang/button";
 import { routeTree } from "./routeTree.gen";
 import { ductsRoute } from "./ducts/route";
 import { ductLossRoute } from "./duct-loss/route";
+import { schedulesRoute } from "./schedules/route";
 import { Route as rootRoute } from "./routes/__root";
 import { publicRoutes } from "./route/builtin-routes";
 import { ShellProbe, ShellProbeRoute, shellProbe } from "./route/shell-probe";
@@ -18,7 +19,7 @@ import { ShellProbe, ShellProbeRoute, shellProbe } from "./route/shell-probe";
 // `addChildren` mutates the root and returns it, so `routeTree.children` already holds the code
 // routes once this module re-evaluates (SSR runner, HMR); re-adding by path keeps the tree idempotent.
 const pathOf = (route: AnyRoute) => (route.options as { path?: string }).path;
-const codeRoutes: AnyRoute[] = [ShellProbeRoute, ductLossRoute, ductsRoute];
+const codeRoutes: AnyRoute[] = [ShellProbeRoute, ductLossRoute, ductsRoute, schedulesRoute];
 const codePaths = new Set(codeRoutes.map(pathOf));
 const fileRoutes = (routeTree.children as unknown as AnyRoute[]).filter(
   (route) => !codePaths.has(pathOf(route)),
@@ -35,6 +36,7 @@ const appRouteTree = rootRoute.addChildren([
   ShellProbeRoute: typeof ShellProbeRoute;
   ductLossRoute: typeof ductLossRoute;
   ductsRoute: typeof ductsRoute;
+  schedulesRoute: typeof schedulesRoute;
 });
 const unregisterProbe = publicRoutes.register({
   manifest: shellProbe.manifest,
