@@ -61,7 +61,12 @@ export interface VerbContext<C extends Caller = Caller> {
   readonly caller: C;
   /** The existing owner mints the press and admits exactly one running invocation. */
   readonly owner: Pick<ReturnType<typeof createRouteOwner>, "runAction">;
-  readonly snapshot: () => VerbSnapshot;
+  /**
+   * The verb's view of the world. Its staleness basis is what the verb declares (Work revision,
+   * its `verbReadings`, the Page epoch); an undeclared reading never stales a ticket, so a verb's
+   * own preview receipt cannot stale its own review.
+   */
+  readonly snapshot: (verb?: string) => VerbSnapshot;
   readonly subjects: Readonly<
     Record<string, (value: unknown, subject: VerbSubject) => string | null>
   >;

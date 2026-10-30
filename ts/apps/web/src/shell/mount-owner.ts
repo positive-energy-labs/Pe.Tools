@@ -264,6 +264,13 @@ export function createGraphMount<P, W>(
     registry.dispose();
     throw cause;
   }
+  const basisFor = (ids: readonly string[]) =>
+    Object.fromEntries(
+      ids.map((id) => {
+        const state = readings.get(id);
+        return [id, { version: state.version, current: state.current, basis: state.basis }];
+      }),
+    );
   const basis = () =>
     Object.fromEntries(
       Object.keys(graph.readings).map((id) => {
@@ -364,7 +371,7 @@ export function createGraphMount<P, W>(
   const context: VerbContext<"human"> = {
     caller: "human",
     subjects: { ...adapters.subjects, ...kernel.subjects },
-    snapshot: () => ({
+    snapshot: (verb) => ({
       target: scope.target,
       work: scope.work,
       unreadable: scope.unreadable ?? null,
@@ -372,7 +379,8 @@ export function createGraphMount<P, W>(
       generation,
       basis: {
         pageEpoch: view.read().epoch,
-        readings: basis(),
+        // Only the readings this verb declares; see VerbContext.snapshot.
+        readings: verb ? basisFor(adapters.verbReadings?.[verb] ?? []) : basis(),
         unreadable: scope.unreadable ? workKey(scope.unreadable) : null,
         salvage: scope.salvage ?? null,
       },
