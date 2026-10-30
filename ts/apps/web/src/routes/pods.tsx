@@ -34,7 +34,7 @@ import { Situation } from "#/route/situation";
 import { LadderPicker, useDocumentLadder } from "#/route/situation-ladder";
 import { SituationCell } from "#/route/situation-marks";
 import { podHost, usePodList, type Run } from "#/route/pods";
-import { familiesSpec } from "#/families/manifest";
+import { familiesGraph, FAMILIES_SPEC_SCHEMAS } from "#/families/graph";
 import { FAMILY_DEMO_PODS, familySpec } from "#/family/manifest";
 import { schedulesGraph, SCHEDULE_SPEC_SCHEMA } from "#/schedules/graph";
 import { familyFixtures } from "#/family/authored-families";
@@ -67,7 +67,7 @@ const PRODUCT_ROUTES = [
   { route: "schedules", def: { name: schedulesGraph.name, schema: SCHEDULE_SPEC_SCHEMA } },
   // A family model is both routes' spec; the single-family route is its first home.
   { route: "family", def: familySpec },
-  { route: "families", def: familiesSpec },
+  { route: "families", def: { name: familiesGraph.name, schema: FAMILIES_SPEC_SCHEMAS } },
 ] as const;
 
 // `|` is illegal in Windows paths, so it cannot occur in a pod id or member path.

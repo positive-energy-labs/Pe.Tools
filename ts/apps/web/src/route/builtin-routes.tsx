@@ -1,6 +1,5 @@
 import { lazy, type ComponentType } from "react";
 import { createRouteRegistry } from "@pe/kit/route-registry";
-import { manifest as families } from "#/families/manifest";
 import { familyManifest } from "#/family/manifest";
 import { openManifest } from "#/open/manifest";
 import { manifest as parameterLinks } from "#/parameter-links/manifest";
@@ -13,7 +12,6 @@ const named = <K extends string, P>(load: () => Promise<Record<K, ComponentType<
   lazy(() => load().then((module) => ({ default: module[name] })));
 const FamilyRouteView = named(() => import("#/family/live"), "FamilyRouteView");
 const PodsRouteContent = named(() => import("#/routes/pods"), "PodsRouteContent");
-const FamiliesRouteContent = named(() => import("#/routes/families"), "FamiliesRouteContent");
 const ParameterLinksRouteContent = named(
   () => import("#/routes/parameter-links"),
   "ParameterLinksRouteContent",
@@ -33,10 +31,6 @@ publicRoutes.register({
   hosted: ({ thread, visible }) => (
     <FamilyRouteView thread={thread} url={false} visible={visible} />
   ),
-});
-publicRoutes.register({
-  manifest: families,
-  hosted: ({ thread, visible }) => <FamiliesRouteContent thread={thread} visible={visible} />,
 });
 publicRoutes.register({
   manifest: pods,

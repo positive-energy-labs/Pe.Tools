@@ -2,20 +2,26 @@ import { describe, expect, it } from "vite-plus/test";
 import { routeAddress } from "@pe/agent-contracts";
 import { ductsGraph, ductsPageSchema } from "#/ducts/graph";
 import { graphUrlPage } from "#/shell/mount-page";
-import { manifest as families } from "#/families/manifest";
+import { familiesGraph, familiesPageSchema } from "#/families/graph";
 import { familyManifest } from "#/family/manifest";
 import { schedulesGraph, schedulesPageSchema } from "#/schedules/graph";
 import { manifest as pods } from "#/routes/pods";
 import { urlPage } from "./url";
 
 const ROUTES = [
-  ["families", families],
   ["family", familyManifest()],
   ["pods", pods],
 ] as const;
 
 /** A route's contract fields are its Page's: the URL carries its url keys, Pea's lease its agent keys. */
 describe("route addresses match their manifests", () => {
+  it("Families projects URL and agent keys from its graph", () => {
+    expect(graphUrlPage(familiesGraph).keys).toEqual(routeAddress("families").keys);
+    const page = familiesPageSchema.parse({});
+    const { agent, defaults } = routeAddress("families");
+    for (const key of agent.keys)
+      expect(key in page || (defaults as Record<string, unknown>)[key] === undefined).toBe(true);
+  });
   it("Ducts projects URL policy from its graph fields", () => {
     const page = ductsPageSchema.parse({});
     expect(graphUrlPage(ductsGraph).keys).toEqual(routeAddress("ducts").keys);

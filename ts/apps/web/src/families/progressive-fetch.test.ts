@@ -1,39 +1,55 @@
-import { expect, test, vi } from "vite-plus/test";
-import { progressiveFamiliesObservation } from "./host";
+// @vitest-environment jsdom
+import { afterEach, expect, test, vi } from "vite-plus/test";
+import { waitFor } from "@testing-library/react";
+import { createReadingGraph } from "#/shell/readings";
+import { familiesGraph, familiesPageSchema } from "./graph";
+import { familiesMatrixSource, type FamiliesObservation } from "./sources";
+import { FamiliesHostFixture } from "./host.fixture";
+import { workKey } from "@pe/agent-contracts";
 
-const fetcher = vi.hoisted(() => vi.fn());
-vi.mock("#/host/runtime", () => ({ hostFetch: fetcher }));
-vi.mock("#/host/client", () => ({
-  hostUrl: (path: string) => `http://host${path}`,
-  callHostRpc: vi.fn(),
-}));
-
-test("successive progress revisions fetch each immutable family once and clear the cache for another run", async () => {
+afterEach(() => vi.unstubAllGlobals());
+test("successive progress revisions fetch each immutable family once within their originating attempt", async () => {
+  const host = new FamiliesHostFixture();
   const requested: string[] = [];
-  const family = (id: string) => ({ familyUniqueId: id });
-  fetcher.mockImplementation(async (url: string) => {
-    const query = new URL(url).searchParams;
-    const record = query.get("record");
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : input, "http://fixture");
+    const record = url.searchParams.get("record");
     if (record) {
       requested.push(record);
-      return Response.json(family(record));
+      return Response.json({ ...host.reading.result.families[0], familyUniqueId: record });
     }
-    const id = query.get("id")!;
-    return Response.json({
-      reading: {
-        id,
-        progress: { runId: id === "new-run" ? "two" : "one" },
-        result: { families: [] },
-      },
-      records: id === "first" ? ["a"] : ["a", "b"],
-    });
+    return host.fetch(input, init);
   });
-  const first = await progressiveFamiliesObservation("first");
-  const next = await progressiveFamiliesObservation("next");
-  expect(first.result.families).toEqual([family("a")]);
-  expect(next.result.families).toEqual([family("a"), family("b")]);
+  const graph = createReadingGraph(
+    { readings: { matrix: familiesGraph.readings.matrix! } },
+    {
+      scope: {
+        target: { kind: "document", ref: host.target },
+        workKey: workKey(host.key),
+        workRevision: 1,
+        work: host.doc,
+        page: familiesPageSchema.parse({
+          draft: { categories: host.filter.categoryNames, placement: "AllLoaded", families: null },
+        }),
+      },
+      sources: { "families.matrix": familiesMatrixSource(host.resources) },
+      log: () => {},
+    },
+  );
+  const release = graph.mount(["matrix"]);
+  await waitFor(() => expect(graph.get("matrix").current).toBe(true));
+  const progress = {
+    ...host.reading.progress!,
+    runId: crypto.randomUUID(),
+    state: "reading" as const,
+  };
+  host.save({ ...host.reading, id: "first", progress }, ["a"]);
+  await waitFor(() => expect((graph.get("matrix").value as FamiliesObservation).id).toBe("first"));
+  const first = (graph.get("matrix").value as FamiliesObservation).result.families[0];
+  host.save({ ...host.reading, id: "next", progress }, ["a", "b"]);
+  await waitFor(() => expect((graph.get("matrix").value as FamiliesObservation).id).toBe("next"));
   expect(requested).toEqual(["a", "b"]);
-  expect(next.result.families[0]).toBe(first.result.families[0]);
-  await progressiveFamiliesObservation("new-run");
-  expect(requested).toEqual(["a", "b", "a", "b"]);
+  expect((graph.get("matrix").value as FamiliesObservation).result.families[0]).toBe(first);
+  release();
+  graph.dispose();
 });

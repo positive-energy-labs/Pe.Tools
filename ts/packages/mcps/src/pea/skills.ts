@@ -3,6 +3,7 @@ import { browserSkillName, renderBrowserGuide } from "@pe/browser/guide";
 import { productHomePath } from "@pe/host-contracts/product-paths";
 import { renderDuctsSkill } from "./ducts-skill.ts";
 import { renderSchedulesSkill } from "./schedules-skill.ts";
+import { renderFamiliesSkill } from "./families-skill.ts";
 
 export interface BundledPeaSkill {
   name: string;
@@ -320,6 +321,7 @@ description: Edit shared tool Work and apply it through the same semantic comman
     content: renderDuctsSkill(),
   },
   { name: "edit-schedule-grid", content: renderSchedulesSkill() },
+  { name: "edit-loaded-families", content: renderFamiliesSkill() },
   {
     name: "place-mep-ducts",
     content: String.raw`---

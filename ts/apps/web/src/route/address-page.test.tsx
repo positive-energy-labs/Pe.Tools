@@ -16,7 +16,7 @@ import { createRouteOwner, makeAtomRegistry, useOwned } from "./route-owner";
 import { createViewOwner } from "./view-owner";
 import { urlPage, useUrlPage } from "./url";
 import { familyManifest } from "#/family/manifest";
-import { manifest as families } from "#/families/manifest";
+import { familiesGraph, familiesPageSchema } from "#/families/graph";
 import { ductsGraph, ductsPageSchema } from "#/ducts/graph";
 import { graphUrlPage } from "#/shell/mount-page";
 import { defineRoute } from "./manifest";
@@ -129,20 +129,17 @@ test("a capture landing survives a refreshed Family manifest and still restores 
   }
 });
 
-test("restoring Families spec B after planning A closes A's confirmation in one publication", () => {
+test("restoring Families spec B is one Page publication and stores no preview in Page", () => {
   const route = createRouteOwner("families", makeAtomRegistry());
-  const url = urlPage(families)!;
+  const url = graphUrlPage(familiesGraph);
   const owner = createViewOwner(
     route,
-    families.page,
+    familiesPageSchema,
     url.read({ stage: "apply", pod: "p", path: "b.json" }),
-    { address: families.address, transition: families.transition },
+    { transition: familiesGraph.transition },
   );
   owner.setPage({ path: "a.json" });
-  owner.move({ confirming: true, sheet: { entries: [] } }, {}, "action");
-  expect(owner.read().page.confirming).toBe(true);
   owner.move(url.read({ stage: "apply", pod: "p", path: "a.json", query: "Wall" }), {}, "url");
-  expect(owner.read().page.confirming).toBe(true);
   const seen: ReturnType<typeof owner.read>[] = [];
   const unsubscribe = owner.subscribe(() => seen.push(owner.read()));
   try {
@@ -150,7 +147,9 @@ test("restoring Families spec B after planning A closes A's confirmation in one 
       owner.move(url.read({ stage: "apply", pod: "p", path: "b.json" }), {}, "url"),
     ).toBeNull();
     expect(seen).toHaveLength(1);
-    expect(seen[0]!.page).toMatchObject({ path: "b.json", confirming: false, sheet: null });
+    expect(seen[0]!.page).toMatchObject({ path: "b.json" });
+    expect(seen[0]!.page).not.toHaveProperty("confirming");
+    expect(seen[0]!.page).not.toHaveProperty("sheet");
   } finally {
     unsubscribe();
     owner.dispose();

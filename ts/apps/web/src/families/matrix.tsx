@@ -39,7 +39,7 @@ export function FamiliesMatrix() {
     matrixIssue,
     readProgress,
   } = useFamiliesWorkspace();
-  const scope = archived ? null : store.handle.work.doc?.scope;
+  const scope = archived ? null : store.work?.doc.scope;
   const proposed = scope ? standingFilterProposal(scope) : null;
   const empty = archived ? (
     matrixReading ? (
@@ -61,7 +61,7 @@ export function FamiliesMatrix() {
     )
   ) : workUnreadable ? (
     <p className="t-small text-ink-2">no matrix — the saved Work cannot be read</p>
-  ) : !connected && store.handle.readings.inventory.state === "ready" ? (
+  ) : !connected && store.documentTarget === null ? (
     <EmptyState story="scope" exit="choose a document in the sentence above">
       nothing to audit — no document chosen
     </EmptyState>
