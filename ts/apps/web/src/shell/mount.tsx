@@ -955,16 +955,8 @@ function GraphReview<P, W>({
       open
       onOpenChange={(open, details) => {
         if (open) return;
-        // The original armed control still commits through its own binding and origin check.
-        if (
-          details.reason === "outside-press" &&
-          details.event.target instanceof Element &&
-          details.event.target.closest("[data-graph-verb]")?.getAttribute("data-graph-verb") === id
-        ) {
-          details.cancel();
-          return;
-        }
-        owner.stop();
+        if (details.reason === "escape-key") owner.stop();
+        else details.cancel();
       }}
     >
       <SubjectPopoverContent

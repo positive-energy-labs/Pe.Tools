@@ -29,6 +29,7 @@ test.each(["row", "Situation"])(
       return element!;
     });
     if (placement === "Situation") fireEvent.click(within(row).getByText(/^Heal RA 23/));
+    else expect(within(row).getAllByRole("button", { name: "Preview heal" })).toHaveLength(1);
     fireEvent.click(
       await liveButton(placement === "row" ? within(row) : situation, "Preview heal"),
     );
@@ -42,6 +43,14 @@ test.each(["row", "Situation"])(
       },
     });
     expect((host.actions[0]!.input as { groups: unknown[] }).groups).toHaveLength(1);
+    if (placement === "row") {
+      fireEvent.click(within(row).getByText(/^Heal RA 23/));
+      const detail = view.container.querySelector<HTMLElement>(
+        '[data-inbox-detail="heal:g6953999"]',
+      )!;
+      expect(within(detail).queryByRole("button", { name: "Preview heal" })).toBeNull();
+      expect(within(row).getAllByRole("button", { name: "Preview heal" })).toHaveLength(1);
+    }
     const targets = await view.findByLabelText("Heal targets");
     expect(targets.textContent).toContain("cap · 14663504 end 1");
     expect(targets.textContent).toContain("cap · 14663546 end 1");

@@ -497,6 +497,19 @@ test.each(["Cancel", "Escape"])(
   },
 );
 
+test("review survives window disturbances and outside presses", async () => {
+  const f = await fixture();
+  const { view } = await mounted(f);
+  fireEvent.click(view.getByRole("button", { name: "Apply" }));
+  await view.findByLabelText("Apply review");
+  fireEvent.blur(window);
+  fireEvent(document, new Event("visibilitychange"));
+  fireEvent.resize(window);
+  fireEvent.pointerDown(document.body);
+  expect(f.owner().reviews.size).toBe(1);
+  expect(view.getByLabelText("Apply review")).toBeTruthy();
+});
+
 test("shown review keeps its control armed; its portal commits one receipt and its barrier blocks undo", async () => {
   const f = await fixture();
   const { view } = await mounted(f);

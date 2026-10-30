@@ -205,7 +205,7 @@ export function Inbox({
           // A Heal row draws its glyph in the closed row; a fan's label names the unit and the
           // system, so it draws worded in the open row only.
           if (verb.on.verb !== "fan")
-            return (
+            return worded ? null : (
               <CommandVerb key={`p${i}`} verb={verb} pair={heal} icon={worded ? undefined : Eye} />
             );
           return worded ? <FanButton key={`n${i}`} verb={verb} fan={fan} /> : null;
