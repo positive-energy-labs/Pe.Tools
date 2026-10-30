@@ -12,7 +12,8 @@ namespace Pe.Revit.Global.Lib.Mep;
 ///     Caps a dangling end with its duct type's Caps routing rule (NewFamilyInstance, rotated and sized by hand: there
 ///     is no cap API), connects coincident ends, and bridges a small same-size gap with a union (two ducts) or by
 ///     extending the duct (duct to part). Each item runs in a SubTransaction and must pass our own post-check
-///     (connected, sizes equal, origins within <see cref="CheckTolIn" />, no system split or merged); Revit's
+///     (connected, sizes equal, origins within <see cref="CheckTolIn" />, no system split or merged, and Revit's own
+///     calculation of the system no worse: <see cref="DuctSystemHarm" />); Revit's
 ///     "connected" alone is not proof: it reports a 13.7 in extend as connected. A failing item rolls back alone.
 ///     Apply commits one transaction per group; preview commits them inside a TransactionGroup it rolls back, so the
 ///     failure processing a real commit meets is met in preview too.
@@ -94,6 +95,9 @@ public static class DuctHealer {
         // filtered out of the working phase and the end reads open again (Project A: cap in Future on a New
         // Construction duct). Read before the heal: a union may replace the owner.
         var phase = Try(() => Find(doc, item.End))?.Owner.CreatedPhaseId;
+        // Revit's own calculation of the end's system, read again after the item: a heal that cuts the air's way refuses.
+        var system = Try(() => Find(doc, item.End).MEPSystem as MechanicalSystem)?.Id;
+        var before = system is null ? null : Try(() => doc.GetElement(system) as MechanicalSystem) is { } m ? DuctSnapshots.RevitSystem(m) : null;
         using var sub = new SubTransaction(doc);
         _ = sub.Start();
         try {
@@ -106,6 +110,11 @@ public static class DuctHealer {
             if (phase is not null)
                 foreach (var made in done.Created.Select(id => doc.GetElement(id.ToElementId())).OfType<Element>())
                     if (made.CreatedPhaseId != phase) made.CreatedPhaseId = phase;
+            if (before is not null) {
+                doc.Regenerate();
+                var after = Try(() => doc.GetElement(system) as MechanicalSystem) is { } now ? DuctSnapshots.RevitSystem(now) : null;
+                if (after is not null && DuctSystemHarm.Of(before, after) is { } harm) throw new Refused(harm, done.How);
+            }
             _ = sub.Commit();
             return new DuctHealOutcome(item.Key, Word(item.Kind), done.How, preview ? "planned" : "healed", null, done.Created, done.Replaced, done.Check);
         } catch (Refused r) {
