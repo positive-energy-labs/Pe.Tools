@@ -178,6 +178,10 @@ interface Binding {
   ) => Record<string, unknown>;
   /** A query's Work edit from its result, applied as one write once the read is admitted. */
   queryPatches?: (scope: VerbScope, result: unknown) => readonly RouteStatePatch[];
+  queryCancel?: {
+    key: QueryKey;
+    input: (request: Record<string, unknown>) => Record<string, unknown>;
+  };
   prepare?: (scope: VerbScope, input: unknown) => unknown;
   answers?: z.ZodType;
   waitSeconds?: number;
@@ -265,6 +269,11 @@ export function queryVerb<K extends QueryKey, S extends z.ZodType>(
     subject?: (value: unknown) => string | null;
     /** Work edits from the admitted result: ONE write through the normal door, one undoable step. */
     patches?: (scope: VerbScope, result: unknown) => readonly RouteStatePatch[];
+    /** How Stop reaches the running read: the cancel query and its input, derived from the request sent. */
+    cancel?: {
+      key: QueryKey;
+      input: (request: Record<string, unknown>) => Record<string, unknown>;
+    };
   } = {},
 ): VerbDecl<S> {
   const { answers } = declaration;
@@ -281,6 +290,7 @@ export function queryVerb<K extends QueryKey, S extends z.ZodType>(
     answers,
     subject: implementation.subject,
     queryPatches: implementation.patches,
+    queryCancel: implementation.cancel,
     ready:
       implementation.ready &&
       ((scope, input) => implementation.ready!(scope, input as z.output<S>)),
@@ -499,7 +509,7 @@ async function invokeCore<C extends Caller>(
   void ctx.owner
     .runAction(
       verb.label,
-      async (_cancelWith, minted) => {
+      async (cancelWith, minted) => {
         press = minted;
         ctx.changed?.("preparing", press);
         try {
@@ -607,6 +617,13 @@ async function invokeCore<C extends Caller>(
               structuredClone(binding.intent(fresh, input, answers, ticket)),
             ) as Record<string, unknown>;
             let value: unknown;
+            // Stop sends the declared cancel for this very request; the native read ends, not just the wait.
+            if (binding.queryCancel) {
+              const cancel = binding.queryCancel;
+              cancelWith(async () => {
+                await runQuery(cancel.key, cancel.input(request), current);
+              });
+            }
             try {
               value = await runQuery(binding.query, request, current);
             } catch (cause) {
@@ -643,10 +660,11 @@ async function invokeCore<C extends Caller>(
             const patches = binding.queryPatches?.(fresh, value) ?? [];
             if (!patches.length) return finish({ state: "done", kind: "query", press, receipt });
             // The generation fence above already holds, so the Work is the one the read started on.
-            // Its revision may have moved while the read ran; these are path writes, the host arbitrates.
+            // The write carries the revision the read OBSERVED: a human edit that landed while the
+            // read ran makes this a stale refusal, never an overwrite (S0a envelope boundary).
             const written = await ctx.write(after.work!.handle.key, {
               patches: structuredClone(patches) as RouteStatePatch[],
-              expectedRevision: after.work!.handle.revision,
+              expectedRevision: current.work!.handle.revision,
               press,
             });
             const refused = writeRefusal(written);
