@@ -99,6 +99,18 @@ export const dataTablesGraph: RouteGraph<DataTablesPage, DataTablesWork> = {
             (scope.snapshot.work!.doc as DataTablesWork).draft!,
             scope.readings.tables!.value as TableHandle[],
           ),
+        present: (result) => {
+          const review = result as ReturnType<typeof pruneReview>;
+          return review.table
+            ? {
+                sentence: review.summary,
+                rows: [
+                  `Upsert ${review.table.rows.length} rows and ${review.table.columns.length} columns.`,
+                  ...review.deletedKeys.map((key) => `Delete row ${key}`),
+                ],
+              }
+            : { sentence: "Table applied.", rows: [] };
+        },
         intent: (_, __, ___, ticket) => ({
           table: (ticket!.evidence as ReturnType<typeof pruneReview>).table,
         }),

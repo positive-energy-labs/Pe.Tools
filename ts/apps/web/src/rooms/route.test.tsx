@@ -110,6 +110,10 @@ test("editing a real table cell makes one journal step and Mod+Z restores exact 
   );
   expect(host.writes).toHaveLength(1);
   expect(owner().journals.get(workKey(host.key))!.read().undo).toHaveLength(1);
+  await waitFor(() => {
+    expect(owner().snapshot().work?.handle.revision).toBe(host.revision);
+    expect(owner().journal(host.key).read().busy).toBe(false);
+  });
   fireEvent.keyDown(view.getByLabelText("Rooms route"), { key: "z", ctrlKey: true });
   await waitFor(() => expect(host.writes).toHaveLength(2));
   expect(host.doc).toEqual(before);
@@ -142,7 +146,9 @@ test("partition's one review button carries standing rejection polygons and re-r
   const images = host.calls.filter((row) => row.key === "revit.context.view-image").length;
   fireEvent.click(await liveButton(situation, "partition"));
   const review = await situation.findByLabelText("partition review");
-  expect(review.textContent).toContain("rejected");
+  expect(review.textContent).toContain("Partition this view into rooms.");
+  expect(review.textContent).toContain("Keep 1 rejected region excluded.");
+  expect(review.textContent).not.toContain('"rejected"');
   expect(host.actions).toEqual([]);
   fireEvent.click(await liveButton(situation, "partition"));
   await waitFor(() => expect(owner().results.get("partition")).toMatchObject({ state: "done" }));

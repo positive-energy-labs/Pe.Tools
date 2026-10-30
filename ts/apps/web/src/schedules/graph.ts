@@ -10,6 +10,7 @@ import {
   scheduleReads,
   split,
   splitScheduleCellKey,
+  showCellValue,
   type RouteGraph,
   type ScheduleGridDocument,
   type ScheduleReading,
@@ -147,6 +148,29 @@ export const schedulesGraph: RouteGraph<SchedulesPage, ScheduleGridDocument> = {
         prepare: (scope) => {
           const doc = scope.snapshot.work!.doc as ScheduleGridDocument;
           return { basis: doc.basis, cells: doc.cells };
+        },
+        present: (result, scope) => {
+          const prepared = result as Pick<ScheduleGridDocument, "basis" | "cells">;
+          if (!prepared.cells) return { sentence: "Schedule cells applied.", rows: [] };
+          const edits = Object.entries(prepared.cells).filter(
+            ([, cell]) => cell.edit && !cell.edit.delete,
+          );
+          const readings = [scope.readings.retained?.value, scope.readings.saved?.value] as (
+            | ScheduleReading
+            | undefined
+          )[];
+          const shown = readings.find((reading) => reading?.id === prepared.basis?.captureId);
+          return {
+            sentence: `Apply ${edits.length} edited schedule ${edits.length === 1 ? "cell" : "cells"}.`,
+            rows: edits.map(([key, cell]) => {
+              const { rowNumber, columnNumber } = splitScheduleCellKey(key);
+              const row = shown?.snapshot.rows.find((row) => row.rowNumber === rowNumber);
+              const column = shown?.snapshot.columns.find(
+                (column) => column.columnNumber === columnNumber,
+              );
+              return `${row?.values[0] ?? `Row ${rowNumber}`} · ${column?.headerText ?? `Column ${columnNumber}`}: ${showCellValue(row?.values[columnNumber])} → ${showCellValue(cell.edit?.value)}`;
+            }),
+          };
         },
         intent: (_, input) => (input.pod ? { pod: input.pod } : {}),
       },

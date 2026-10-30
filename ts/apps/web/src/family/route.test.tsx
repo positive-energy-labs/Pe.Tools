@@ -128,6 +128,10 @@ test("a Family table edit makes one journal step and Mod+Z restores the exact Wo
   await waitFor(() => expect(host.doc.cells[host.cell]?.edit?.value).toBe("Edited type"));
   expect(host.writes).toHaveLength(1);
   expect(proof.owner().journals.get(workKey(host.key))!.read().undo).toHaveLength(1);
+  await waitFor(() => {
+    expect(proof.owner().snapshot().work?.handle.revision).toBe(host.revision);
+    expect(proof.owner().journal(host.key).read().busy).toBe(false);
+  });
   fireEvent.keyDown(proof.view.getByLabelText("Family route"), { key: "z", ctrlKey: true });
   await waitFor(() => expect(host.writes).toHaveLength(2));
   expect(host.writes[1]!.kind).toBe("restore");
@@ -138,7 +142,9 @@ test("Family review seals a plan, commits its ticket and retains the original re
   const { view, situation, owner } = await mounted();
   fireEvent.click(await liveButton(situation, "Apply family"));
   const review = await situation.findByLabelText("Apply family review");
-  expect(review.textContent).toContain(`plan-${host.id}`);
+  expect(review.textContent).toContain("Review 1 family: 0 changes, 0 refusals.");
+  expect(review.textContent).toContain("Test family");
+  expect(review.textContent).not.toContain('"receipt"');
   expect(host.actions.map((row) => row.key)).toEqual(["family.plan"]);
   fireEvent.click(await liveButton(situation, "Apply family"));
   await waitFor(() =>
@@ -418,7 +424,9 @@ test("Family build reviews and commits the saved member's exact hash", async () 
   );
   fireEvent.click(await liveButton(situation, "Build .rfa"));
   const review = await situation.findByLabelText("Build .rfa review");
-  expect(review.textContent).toContain(host.sourceMember.sha256);
+  expect(review.textContent).toContain(`Build ${host.sourceMember.path}`);
+  expect(review.textContent).toContain(`SHA-256: ${host.sourceMember.sha256}`);
+  expect(review.textContent).not.toContain('"source"');
   expect(host.actions).toEqual([]);
   fireEvent.click(await liveButton(situation, "Build .rfa"));
   await waitFor(() =>

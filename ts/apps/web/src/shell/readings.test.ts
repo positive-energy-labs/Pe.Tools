@@ -13,6 +13,7 @@ import {
 import { workerSource, type ReadingWorkerPort, type ReadingWorkerRequest } from "./readings-worker";
 import { subscriptionSource } from "./readings-use";
 import type { Readings } from "../readings";
+import { DEFAULT_WAIT_S } from "#/route/waits";
 
 type Page = { filter: string; pose: number };
 const target = (openId = "A", session = "session"): ExecutionTarget => ({
@@ -73,6 +74,69 @@ const receipt = (
 });
 
 describe("reading graph", () => {
+  it.each(["use", "worker"] as const)(
+    "an unanswered %s fails at the deadline and only an explicit refresh retries",
+    (kind) => {
+      vi.useFakeTimers();
+      const source = controlled();
+      const { graph } = fixture(
+        { price: decl("price", { kind }) },
+        {
+          price:
+            kind === "use"
+              ? source.source
+              : {
+                  kind: "worker",
+                  algorithmVersion: "v1",
+                  connect: () => ({
+                    update: (context, deliver) => {
+                      void source.source.open(context, deliver);
+                    },
+                    stop: () => {},
+                  }),
+                },
+        },
+      );
+      const release = graph.mount(["price"]);
+      try {
+        vi.advanceTimersByTime(DEFAULT_WAIT_S * 1000);
+        expect(graph.get("price")).toMatchObject({
+          status: "failed",
+          error: `price sent no answer after ${DEFAULT_WAIT_S}s; explicitly refresh to retry`,
+        });
+        done(source.attempts[0]!.deliver, 1);
+        graph.update(scope());
+        vi.advanceTimersByTime(DEFAULT_WAIT_S * 2000);
+        expect(graph.get("price").status).toBe("failed");
+        expect(source.attempts).toHaveLength(1);
+        graph.start("price", "refresh");
+        done(source.attempts[1]!.deliver, 2);
+        expect(graph.get("price")).toMatchObject({ status: "ready", value: 2 });
+      } finally {
+        release();
+        graph.dispose();
+        vi.useRealTimers();
+      }
+    },
+  );
+  it("a failed prerequisite settles its dependent with the failure words even without a value", () => {
+    const input = controlled();
+    const derive = vi.fn(() => 1);
+    const { graph } = fixture(
+      { input: decl("input"), price: decl("price", { kind: "derive", deps: ["input"] }) },
+      { input: input.source, price: { kind: "derive", derive } },
+    );
+    const release = graph.mount(["price"]);
+    input.attempts[0]!.deliver({ kind: "failure", error: "No duct network" });
+    expect(graph.get("price")).toMatchObject({
+      status: "failed",
+      error: "input failed: No duct network",
+      current: false,
+    });
+    expect(derive).not.toHaveBeenCalled();
+    release();
+    graph.dispose();
+  });
   it("retains stale values, including null, while an explicit refresh is pending", () => {
     const read = controlled<number | null>();
     const { graph } = fixture({ matrix: decl("matrix") }, { matrix: read.source });

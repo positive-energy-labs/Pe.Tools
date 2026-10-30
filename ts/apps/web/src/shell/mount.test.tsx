@@ -203,7 +203,15 @@ async function fixture(cells = false) {
       apply: commandVerb(
         "takeoffs.initialize",
         { label: "Apply", chord: "Mod+Enter", input: z.object({}), review: "shown" },
-        { prepare: () => ({ summary: "Write this row" }), intent: () => ({ stage: "sheet" }) },
+        {
+          prepare: () => ({ summary: "Write this row", counts: { planned: 2 } }),
+          present: (result) => ({
+            sentence: (result as { summary: string }).summary,
+            rows: ["2 planned writes"],
+            page: { cfm: 412 },
+          }),
+          intent: () => ({ stage: "sheet" }),
+        },
       ),
     },
     panes: {
@@ -481,6 +489,9 @@ test("shown review stays at the same control; commit records one receipt and its
   fireEvent.click(apply);
   await view.findByLabelText("Apply review");
   expect(view.getByLabelText("Apply review").textContent).toContain("Write this row");
+  expect(view.getByLabelText("Apply review").textContent).toContain("2 planned writes");
+  expect(view.getByLabelText("Apply review").textContent).not.toContain('"summary"');
+  expect(f.owner().view.read().page.cfm).toBe(412);
   expect(transport.run).not.toHaveBeenCalled();
   expect(view.getByRole("button", { name: "Apply" })).toBe(apply);
   fireEvent.click(apply);
@@ -1090,3 +1101,37 @@ test("a History pane naming an absent reading is refused before mounting", async
   expect(view.getByRole("alert").textContent).toContain("panes.wheel.history.receipts");
   expect(f.subscriptions()).toEqual({ subscriptions: 0, deltaSubscriptions: 0 });
 });
+
+test.each(["shown", "required"] as const)(
+  "%s reviews without a presenter show counts and keep raw evidence sealed",
+  async (review) => {
+    const f = await fixture();
+    f.graph.verbs = {
+      ...f.graph.verbs,
+      apply: commandVerb(
+        "takeoffs.initialize",
+        {
+          label: "Apply",
+          input: z.object({}),
+          ...(review === "required"
+            ? { review, answers: z.object({ ok: z.literal(true) }) }
+            : { review }),
+        },
+        {
+          prepare: () => ({
+            counts: { planned: 3, refused: 1 },
+            secret: "private receipt details",
+          }),
+          intent: () => ({ stage: "sheet" }),
+        },
+      ),
+    };
+    const { view } = await mounted(f);
+    fireEvent.click(await view.findByRole("button", { name: "Apply" }));
+    const shown = await view.findByLabelText("Apply review");
+    expect(shown.textContent).toContain("3 planned · 1 refused");
+    expect(shown.textContent).not.toContain("private receipt details");
+    expect(shown.textContent).not.toContain("{");
+    expect(transport.run).not.toHaveBeenCalled();
+  },
+);

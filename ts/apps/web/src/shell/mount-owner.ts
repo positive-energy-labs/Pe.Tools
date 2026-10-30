@@ -44,6 +44,7 @@ import {
   invoke,
   recoveryOffered,
   recoveryVerb,
+  type WorkHistory,
   type InvocationResult,
   type ReviewTicket,
   type VerbContext,
@@ -95,6 +96,8 @@ export interface MountAdapters<P, W> {
   subscribe(notify: () => void): () => void;
   sources: Readonly<Record<string, ReadingSource>>;
   initialPage?: Partial<P>;
+  /** Derived history for all human writes, including composer and chat-head edits of this Work. */
+  workHistory?: WorkHistory<{ request: WorkWrite; label: string }>;
   write(key: WorkKey, write: WorkWrite): Promise<RouteStateWriteResult>;
   subscribeAcceptedDeltas(key: WorkKey, onAck: (ack: WorkWriteAck) => void): () => void;
   /** The recovery door behind the start-fresh verb (`useWorkScope`); absent only in tests that never reach unreadable Work. */
@@ -382,6 +385,50 @@ export function createGraphMount<P, W>(
       journal = writer.journal;
       releaseJournals.push(
         acquired.release,
+        writer.describeWrites((request, label) => {
+          const history = adapters.workHistory;
+          if (
+            !history ||
+            !connected ||
+            disposed ||
+            !available() ||
+            !scope.work ||
+            workKey(scope.work.handle.key) !== id ||
+            scope.work.handle.revision !== request.expectedRevision
+          )
+            return;
+          const before = structuredClone({
+            snapshot: context.snapshot(),
+            page: view.read().page as Readonly<Record<string, unknown>>,
+            subject: null,
+            value: scope.work.doc,
+            readings: Object.fromEntries(
+              Object.keys(graph.readings).map((id) => [id, readings.get(id)]),
+            ),
+          });
+          if (
+            history.readings?.some(
+              (id) =>
+                !before.readings[id]?.current ||
+                before.readings[id]?.basis?.workRevision !== request.expectedRevision,
+            )
+          )
+            return;
+          const input = { request, label };
+          const pending: PendingWorkHistory = {
+            entry: history.describe(before, input),
+            readings: history.readings ?? [],
+            complete: (after) => history.describe(before, input, after),
+          };
+          const started = generation;
+          const epoch = view.read().epoch;
+          return {
+            entry: pending.entry,
+            accepted: (ack) => {
+              if (!disposed) recordHistory(key, ack, pending, started, epoch);
+            },
+          };
+        }),
         writer.subscribe(() => {
           if (raw.work && workKey(raw.work.handle.key) === id)
             flag(writer.conflict() ? { work: id, revision: raw.work.handle.revision } : null);
@@ -440,6 +487,28 @@ export function createGraphMount<P, W>(
       historyCompletions.delete(press);
     }
   };
+  const recordHistory = (
+    key: WorkKey,
+    ack: WorkWriteAck,
+    history: PendingWorkHistory,
+    started: number,
+    epoch: number,
+  ) => {
+    if (!ack.press) return;
+    journalFor(key).describe(ack.press, history.entry);
+    journalRefusal = null;
+    if (history.readings.length) {
+      historyCompletions.set(ack.press, {
+        key,
+        revision: ack.revision,
+        generation: started,
+        epoch,
+        history,
+      });
+      completeHistory();
+    }
+    notify();
+  };
   const unTimeline = timeline.subscribe((entry) => {
     const key =
       entry.basis && typeof entry.basis === "object" && "workKey" in entry.basis
@@ -448,12 +517,23 @@ export function createGraphMount<P, W>(
     if (typeof key === "string") journals.get(key)?.record(entry);
     notify();
   });
-  const write = async (key: WorkKey, request: WorkWrite) => {
+  const write = async (key: WorkKey, request: WorkWrite, history?: PendingWorkHistory) => {
+    const started = generation;
+    const epoch = view.read().epoch;
     const invocation = request.press ? dispatches.get(request.press) : undefined;
     journalFor(key);
-    const result = await writers
-      .get(workKey(key))!
-      .write(scope, request, (key, request) => adapters.write(key, request), graph.cells);
+    const result = await writers.get(workKey(key))!.write(
+      scope,
+      request,
+      (key, request) => adapters.write(key, request),
+      graph.cells,
+      history && {
+        entry: history.entry,
+        accepted: (ack) => {
+          if (!disposed) recordHistory(key, ack, history, started, epoch);
+        },
+      },
+    );
     if (
       !disposed &&
       !result.ok &&
@@ -502,6 +582,7 @@ export function createGraphMount<P, W>(
       sequenceReceipts.set(press, [...(sequenceReceipts.get(press) ?? []), receipt]);
     },
     page: () => view.read().page as Record<string, unknown>,
+    landReview: (page) => view.setPage(page as Partial<P>),
     readings: () =>
       Object.fromEntries(Object.keys(graph.readings).map((id) => [id, readings.get(id)])),
     subjects: { ...adapters.subjects, ...kernel.subjects },
@@ -521,27 +602,7 @@ export function createGraphMount<P, W>(
         salvage: salvagePatches(),
       },
     }),
-    write: async (key, envelope, history) => {
-      const started = generation;
-      const epoch = view.read().epoch;
-      const result = await write(key, { ...envelope, kind: "apply" });
-      if (result.ok && !disposed && history) {
-        journalFor(key).describe(envelope.press, history.entry);
-        journalRefusal = null;
-        if (history.readings.length) {
-          historyCompletions.set(envelope.press, {
-            key,
-            revision: result.write.revision,
-            generation: started,
-            epoch,
-            history,
-          });
-          completeHistory();
-        }
-        notify();
-      }
-      return result;
-    },
+    write: (key, envelope, history) => write(key, { ...envelope, kind: "apply" }, history),
     recover: async (key) => {
       if (!adapters.startFresh)
         return { ok: false, kind: "refused", error: "This route has no recovery door", hint: "" };

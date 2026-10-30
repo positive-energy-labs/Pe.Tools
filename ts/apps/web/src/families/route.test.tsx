@@ -131,9 +131,17 @@ test("a family table cell edit is one journal step per press and Mod+Z restores 
   await waitFor(() => expect(host.doc.cells[host.cell]?.edit?.value.value).toBe("Second press"));
   expect(host.writes).toHaveLength(2);
   expect(proof.owner().journals.get(workKey(host.key))!.read().undo).toHaveLength(2);
+  await waitFor(() => {
+    expect(proof.owner().snapshot().work?.handle.revision).toBe(host.revision);
+    expect(proof.owner().journal(host.key).read().busy).toBe(false);
+  });
   fireEvent.keyDown(proof.view.getByLabelText("Families route"), { key: "z", ctrlKey: true });
   await waitFor(() => expect(host.writes).toHaveLength(3));
   expect(host.doc).toEqual(first);
+  await waitFor(() => {
+    expect(proof.owner().snapshot().work?.handle.revision).toBe(host.revision);
+    expect(proof.owner().journal(host.key).read().busy).toBe(false);
+  });
   fireEvent.keyDown(proof.view.getByLabelText("Families route"), { key: "z", ctrlKey: true });
   await waitFor(() => expect(host.writes).toHaveLength(4));
   expect(host.doc).toEqual(before);
@@ -146,7 +154,10 @@ test("kernel gap: prepared Families plan evidence reaches the real route's commi
   fireEvent.click(await liveButton(situation, "Apply families"));
   await waitFor(() => expect(owner().results.get("apply")).toMatchObject({ state: "review" }));
   const review = await situation.findByLabelText("Apply families review");
-  expect(review.textContent).toContain(`plan-${host.id}`);
+  expect(review.textContent).toContain("Review 1 family: 1 change, 0 refusals.");
+  expect(review.textContent).toContain("Fan Coil Unit - Ducted");
+  expect(review.textContent).toContain("FXMQ15 → Edited model");
+  expect(review.textContent).not.toContain('"receipt"');
   expect(host.actions.map((row) => row.key)).toEqual(["families.plan"]);
   fireEvent.click(await liveButton(situation, "Apply families"));
   await waitFor(() => expect(owner().results.get("apply")).toMatchObject({ state: "done" }));

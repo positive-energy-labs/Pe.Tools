@@ -214,25 +214,57 @@ export class DuctsHostFixture {
         recovery: [],
         startedAt: "2026-10-29T23:00:00Z",
         result: {
-          value: {
-            previewOnly: preview,
-            counts: {
-              planned: preview ? 1 : 0,
-              written: preview ? 0 : 1,
-              refused: 0,
-              unchanged: 0,
-            },
-            writes: [
-              {
-                kind: "terminal-flow",
-                id: 4,
-                outcome: preview ? "planned" : "written",
-                after: "100",
-              },
-            ],
-            systemsAfter: [],
-            storeRevision: preview ? 0 : 1,
-          },
+          value: admission.key.endsWith("heal")
+            ? {
+                previewOnly: preview,
+                counts: { planned: preview ? 1 : 0, healed: preview ? 0 : 1, refused: 0 },
+                groups: (
+                  admission.input.groups as {
+                    group: string;
+                    items: { key: string; kind: string }[];
+                  }[]
+                ).map((group) => ({
+                  group: group.group,
+                  outcome: preview ? "planned" : "healed",
+                  systemsBefore: [],
+                  systemsAfter: [],
+                  items: group.items.map((item) => ({
+                    ...item,
+                    how: item.kind,
+                    outcome: preview ? "planned" : "healed",
+                    created: [7001],
+                    replaced: [],
+                    check: "connection checked",
+                  })),
+                })),
+              }
+            : admission.key.endsWith("assign-fan")
+              ? {
+                  previewOnly: preview,
+                  unitId: admission.input.unitId,
+                  systemId: admission.input.systemId,
+                  outcome: preview ? "planned" : "assigned",
+                  check: "base equipment checked",
+                }
+              : {
+                  previewOnly: preview,
+                  counts: {
+                    planned: preview ? 1 : 0,
+                    written: preview ? 0 : 1,
+                    refused: 0,
+                    unchanged: 0,
+                  },
+                  writes: [
+                    {
+                      kind: "terminal-flow",
+                      id: 4,
+                      outcome: preview ? "planned" : "written",
+                      after: "100",
+                    },
+                  ],
+                  systemsAfter: [],
+                  storeRevision: preview ? 0 : 1,
+                },
         },
       });
       this.actions.push(row);

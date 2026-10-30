@@ -55,7 +55,10 @@ function fixture() {
   const timeline = createRouteTimeline();
   timeline.subscribe(journal.record);
   workspace.subscribe((event) => {
-    if (event.ok) journal.accept(event);
+    if (event.ok) {
+      journal.observe(stored.get(workKey(key)) as { revision: number; doc: unknown });
+      journal.accept(event, event.by === "human" ? { label: event.press ?? "Restore" } : undefined);
+    }
   });
   const requests: WorkWrite[] = [];
   const writer: JournalWriter = (write) => {
@@ -145,7 +148,7 @@ test("an overlapping Pea write is a named barrier even after Pea puts the old va
     code: "barrier",
     barrier: { receiptId: `work:${workKey(f.key)}:r2` },
   });
-  expect(!result.ok && result.message).toContain(`work:${workKey(f.key)}:r2`);
+  expect(!result.ok && result.message).toContain("human-1 was changed elsewhere at r2");
   expect(f.requests).toEqual([]);
 });
 
@@ -236,11 +239,13 @@ test("new human press clears redo, duplicate acks do not add steps, and Work ide
   expect(createWorkJournal(f.key).read().undo).toEqual([]); // No persistence or module-global route instance.
 });
 
-test("a missed accepted revision clears history rather than restoring across unknown writes", async () => {
+test("a missed accepted revision retains superseded history rather than restoring across unknown writes", async () => {
   const f = fixture();
   const ack = await f.apply([{ path: ["settings", "width"], value: 20 }], "human-1");
   f.journal.accept({ ...ack, kind: "publish", base: 3, revision: 4, press: null });
-  expect(f.journal.read().undo).toEqual([]);
+  expect(f.journal.read().undo[0]).toMatchObject({ press: "human-1", superseded: { revision: 4 } });
+  expect(await f.journal.undo(f.writer)).toMatchObject({ ok: false, code: "barrier" });
+  expect(f.requests).toEqual([]);
   expect(f.journal.read().revision).toBe(4);
 });
 
@@ -336,4 +341,59 @@ test("a held conflict is a barrier: no undo or redo until it is released", async
   expect(f.journal.read().undo).toHaveLength(1);
   f.journal.hold(false);
   expect(await f.journal.undo(f.writer)).toMatchObject({ ok: true, press: "human-1" });
+});
+
+test.each(["undo", "redo"] as const)(
+  "%s verifies current values independently of foreign delta marking",
+  async (direction) => {
+    const f = fixture();
+    await f.apply([{ path: ["settings", "width"], value: 20 }], "width");
+    if (direction === "redo") await f.journal.undo(f.writer);
+    const current = (await f.workspace.read(f.key, f.key.route))!;
+    f.journal.observe({
+      revision: current.revision,
+      doc: { ...f.initial, settings: { width: 99, height: 4 } },
+    });
+    f.requests.length = 0;
+    expect(await f.journal[direction](f.writer)).toMatchObject({
+      ok: false,
+      code: "barrier",
+      message: expect.stringContaining(`${direction} would overwrite it`),
+    });
+    expect(f.requests).toEqual([]);
+    expect(f.journal.read()[direction][0]).toMatchObject({
+      label: "width",
+      superseded: { path: ["settings", "width"] },
+    });
+    expect(await f.workspace.read(f.key, f.key.route)).toEqual(current);
+  },
+);
+
+test("a multi-write press verifies every transition before applying even a disjoint inverse", async () => {
+  const f = fixture();
+  await f.apply([{ path: ["settings", "width"], value: 20 }], "dimensions");
+  await f.apply([{ path: ["settings", "height"], value: 8 }], "dimensions");
+  f.journal.observe({ revision: 2, doc: { ...f.initial, settings: { width: 99, height: 8 } } });
+  expect(await f.journal.undo(f.writer)).toMatchObject({ ok: false });
+  expect(f.requests).toEqual([]);
+  expect(f.journal.read().undo[0]!.cursor).toBe(2);
+});
+
+test("a newer snapshot without its accepted delta refuses without losing the named entry", async () => {
+  const f = fixture();
+  await f.apply([{ path: ["settings", "width"], value: 20 }], "width");
+  f.journal.observe({ revision: 2, doc: f.initial });
+  expect(await f.journal.undo(f.writer)).toMatchObject({
+    ok: false,
+    message: expect.stringContaining("current Work values are unverified"),
+  });
+  expect(f.requests).toEqual([]);
+  expect(f.journal.read().undo[0]!.label).toBe("width");
+});
+
+test("empty descriptions cannot remove the accepted entry's required label", async () => {
+  const f = fixture();
+  await f.apply([{ path: ["settings", "width"], value: 20 }], "width");
+  f.journal.describe("width", { label: "  ", meta: { late: true } });
+  expect(f.journal.read().undo[0]).toMatchObject({ label: "width", meta: { late: true } });
 });

@@ -329,6 +329,127 @@
       "share": true,
       "url": "push"
     },
+    "heal": {
+      "agent": false,
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "transient",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "anyOf": [
+          {
+            "properties": {
+              "before": {
+                "properties": {
+                  "esp": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "ids": {
+                    "items": {
+                      "type": "number"
+                    },
+                    "type": "array"
+                  },
+                  "roots": {
+                    "items": {
+                      "type": "number"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "esp",
+                  "roots",
+                  "ids"
+                ],
+                "type": "object"
+              },
+              "group": {
+                "type": "string"
+              },
+              "mode": {
+                "enum": [
+                  "preview",
+                  "apply"
+                ],
+                "type": "string"
+              },
+              "response": {},
+              "rows": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "sentence": {
+                "type": "string"
+              },
+              "targets": {
+                "items": {
+                  "properties": {
+                    "findings": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "ids": {
+                      "items": {
+                        "type": "number"
+                      },
+                      "type": "array"
+                    },
+                    "key": {
+                      "type": "string"
+                    },
+                    "outcome": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "ids",
+                    "findings",
+                    "outcome"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "group",
+              "mode",
+              "response",
+              "before",
+              "targets",
+              "sentence",
+              "rows"
+            ],
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "share": false,
+      "url": false
+    },
     "inputSearch": {
       "agent": "set",
       "codec": {
@@ -1371,6 +1492,8 @@
           ],
           "id": "sheet-layout",
           "kind": "split",
+          "minOtherSize": 360,
+          "minSize": 280,
           "size": 420,
           "sized": "start"
         },
@@ -1571,6 +1694,9 @@
       "source": "ducts.tables"
     }
   },
+  "resetOnTarget": [
+    "heal"
+  ],
   "seeds": {
     "colours": {
       "title": "colours"
@@ -1697,6 +1823,34 @@
               },
               "label": {
                 "type": "string"
+              },
+              "row": {
+                "properties": {
+                  "ids": {
+                    "items": {
+                      "type": "number"
+                    },
+                    "type": "array"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "section": {
+                    "enum": [
+                      "units",
+                      "terminals",
+                      "parts",
+                      "rulings"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "label",
+                  "section",
+                  "ids"
+                ],
+                "type": "object"
               },
               "rowKey": {
                 "anyOf": [
@@ -3616,6 +3770,34 @@
               },
               "label": {
                 "type": "string"
+              },
+              "row": {
+                "properties": {
+                  "ids": {
+                    "items": {
+                      "type": "number"
+                    },
+                    "type": "array"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "section": {
+                    "enum": [
+                      "units",
+                      "terminals",
+                      "parts",
+                      "rulings"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "label",
+                  "section",
+                  "ids"
+                ],
+                "type": "object"
               },
               "rowKey": {
                 "anyOf": [

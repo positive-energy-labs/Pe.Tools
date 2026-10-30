@@ -73,6 +73,7 @@ export interface ProtoProps {
     read: number;
     of: number;
     reading: readonly string[];
+    report?: string;
     readAll: (() => void) | null;
   } | null;
 }

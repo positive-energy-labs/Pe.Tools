@@ -127,6 +127,7 @@ export interface SchematicProps {
   /** The opened groups, in section order; shared groups appear once. */
   groups: readonly string[];
   members?: ReadonlySet<number>;
+  targets?: ReadonlySet<number>;
   /** The model's encoding: an edge wears the stroke of its first segment under it. */
   encoding: Encoding;
   /** Element ids selected; an edge holding one is ringed, and a fold holding one unfolds. */
@@ -145,13 +146,14 @@ export function Schematic({
   index,
   groups,
   members,
+  targets,
   encoding,
   onSelect,
   size = "main",
 }: SchematicProps) {
   const mark = useMention();
   const { selected, lit: cited, hovered } = useElementAttention();
-  const lit = new Set([...cited, ...(hovered == null ? [] : [hovered])]);
+  const lit = new Set([...cited, ...(targets ?? []), ...(hovered == null ? [] : [hovered])]);
   const inset = size === "inset";
   const { snapshot } = index;
   const trees = useMemo(
@@ -265,6 +267,7 @@ export function Schematic({
                 <g
                   key={chain.to}
                   data-element={chain.members[0]}
+                  data-review-target={chain.members.some((id) => targets?.has(id)) ? "" : undefined}
                   data-selected={hot ? "" : undefined}
                   data-lit={glow ? "" : undefined}
                   className="cursor-pointer"

@@ -96,7 +96,8 @@ function environment() {
       undoable: !restore,
     };
     acks.push(write);
-    journal.accept(write);
+    journal.observe(envelope);
+    journal.accept(write, press ? { label: press } : undefined);
     return { ok: true, revision: envelope.revision, write };
   };
   const ctx: VerbContext<"human"> = {

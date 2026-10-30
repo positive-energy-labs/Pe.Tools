@@ -48,6 +48,26 @@ export function pricingJob() {
     try {
       if (request.base) base = request.base;
       if (!base) throw Error("Pricing has no snapshot or tables");
+      const unpriceable = base.snapshot.groups.filter(
+        (group) => group.rootIds.length && group.terminalCount === 0,
+      );
+      if (unpriceable.length && unpriceable.length === base.snapshot.groups.length) {
+        const names =
+          [...new Set(unpriceable.flatMap((group) => group.systemNames))].join(", ") ||
+          "This network";
+        const groups = new Set(unpriceable.map((group) => group.id));
+        const outlets = base.snapshot.segments
+          .filter(
+            (segment) =>
+              segment.groupId &&
+              groups.has(segment.groupId) &&
+              segment.connectors.some((port) => !port.connectedTo && (port.flowCfm ?? 0) > 0),
+          )
+          .map((segment) => segment.id);
+        throw Error(
+          `${names} has no terminal${outlets.length ? `: its air leaves at open end ${outlets.join(", ")}` : " and no fan-to-terminal path"}; nothing to price`,
+        );
+      }
       const priced = price(base.snapshot, base.grids, request.doc, base.catalogs);
       const heal = healPlan(base.snapshot, request.doc);
       return {

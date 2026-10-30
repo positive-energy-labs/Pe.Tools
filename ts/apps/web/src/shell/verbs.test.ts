@@ -265,6 +265,7 @@ test.each(["human", "agent"] as const)(
       target: env.target,
       basis: { work: { key, revision: 4 }, value: { readingVersion: 1 } },
       evidence: { lines: ["Writes shared parameters"] },
+      presentation: { sentence: "initialize: review the proposed changes.", rows: [] },
     });
     expect((await commit(env.ctx, verb, started.ticket)).state).toBe("refused");
     expect((await commit(env.ctx, verb, started.ticket, {})).state).toBe("refused");

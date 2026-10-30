@@ -24,6 +24,13 @@ import { threadListFields } from "../../../../packages/agent-contracts/src/route
 import { ruleByKey, ruleWords } from "@pe/ducts-domain/loss-rules";
 
 import { cellFocus } from "./inbox-rows";
+import {
+  presentHeal,
+  presentLosses,
+  presentFan,
+  healReviewSchema,
+  type HealReview,
+} from "./reviews";
 
 import { capped } from "./selection";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
@@ -54,11 +61,13 @@ const transient = <S extends z.ZodType>(schema: S) => ({
 });
 
 export const ductsPageSchema = routeAddress("ducts").schema.extend({
+  heal: healReviewSchema.nullable().default(null),
   sheetPath: z.string().default(""),
   readAll: z.boolean().default(false),
   allFans: z.boolean().default(false),
 });
 export type DuctsPage = { [K in keyof typeof fields]: z.output<(typeof fields)[K]["schema"]> } & {
+  heal: HealReview | null;
   sheetPath: string;
   readAll: boolean;
   allFans: boolean;
@@ -182,6 +191,7 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
     issue: { ...fields.issue, role: "selection", url: fields.issue.url ?? false },
 
     fan: { ...fields.fan, role: "selection", url: fields.fan.url },
+    heal: transient(healReviewSchema.nullable().default(null)),
     sheetPath: transient(z.string().default("")),
     readAll: transient(z.boolean().default(false)),
     allFans: transient(z.boolean().default(false)),
@@ -205,6 +215,8 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
       },
     };
   },
+
+  resetOnTarget: ["heal"],
 
   cells: ductCells([
     {
@@ -434,17 +446,17 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
     preview: commandVerb(
       "ducts.preview-losses",
       { label: "Preview", input: priceInput, review: "none", effect: "query" },
-      { ready: requestReady, intent: (_, input) => input.request! },
+      { ready: requestReady, present: presentLosses, intent: (_, input) => input.request! },
     ),
     "heal-preview": commandVerb(
       "ducts.preview-heal",
       { label: "Preview heal", input: healInput, review: "none", effect: "query" },
-      { ready: requestReady, intent: (_, input) => input.request! },
+      { ready: requestReady, present: presentHeal, intent: (_, input) => input.request! },
     ),
     "fan-preview": commandVerb(
       "ducts.preview-assign-fan",
       { label: "Preview fan", input: assignInput, review: "none", effect: "query" },
-      { ready: requestReady, intent: (_, input) => input.request! },
+      { ready: requestReady, present: presentFan, intent: (_, input) => input.request! },
     ),
     refresh: commandVerb(
       "ducts.refresh",
@@ -465,6 +477,7 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
         waitSeconds: NATIVE_APPLY_WAIT_S,
         ready: requestReady,
 
+        present: presentLosses,
         prepare: (scope, input) =>
           prepareCommand(scope, "ducts.preview-losses", input.request!, NATIVE_APPLY_WAIT_S),
 
@@ -479,6 +492,7 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
         waitSeconds: NATIVE_APPLY_WAIT_S,
         ready: requestReady,
 
+        present: presentHeal,
         prepare: (scope, input) =>
           prepareCommand(scope, "ducts.preview-heal", input.request!, NATIVE_APPLY_WAIT_S),
 
@@ -493,6 +507,7 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
         waitSeconds: NATIVE_APPLY_WAIT_S,
         ready: requestReady,
 
+        present: presentFan,
         prepare: (scope, input) =>
           prepareCommand(scope, "ducts.preview-assign-fan", input.request!, NATIVE_APPLY_WAIT_S),
 
@@ -701,7 +716,7 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
       "sheet",
       split(
         "sheet-layout",
-        { axis: "h", sized: "start", size: 420 },
+        { axis: "h", sized: "start", size: 420, minSize: 280, minOtherSize: 360 },
 
         split(
           "sheet-side",

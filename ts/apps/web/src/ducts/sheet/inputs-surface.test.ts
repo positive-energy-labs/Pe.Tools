@@ -1,4 +1,7 @@
-import { expect, it } from "vite-plus/test";
+// @vitest-environment jsdom
+import { expect, it, vi, afterEach } from "vite-plus/test";
+import { createElement } from "react";
+import { cleanup, fireEvent, render } from "@testing-library/react";
 import {
   ductsInputsSchema,
   ductsSheetEditsSchema,
@@ -6,7 +9,13 @@ import {
   type Resolved,
 } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { inputFields, protocolPickers, type InputContext } from "./inputs-surface";
+import {
+  InputsSurface,
+  inputFields,
+  protocolPickers,
+  type InputContext,
+  type InputsHistory,
+} from "./inputs-surface";
 import { EMPTY_SNAPSHOT } from "./scoped-snapshot";
 
 const firm = <T>(value: T): Resolved<T> => ({ value, source: "firm", ref: "seed" });
@@ -118,3 +127,46 @@ it("protocol: the fan-flow slot is a picker beside the terminal one, its candida
     ["PE_M_Fan_AirFlowDesign", 0, 3],
   ]);
 });
+
+afterEach(cleanup);
+it.each(["terminal:7:cfm", "join:1:0|2:0"])(
+  "cleared %s keeps Restore under typed-only until the next edit",
+  (rowKey) => {
+    const ctx = context();
+    ctx.sheet = { overview: { fan: null } } as unknown as NonNullable<InputContext["sheet"]>;
+    ctx.inputs!.terminals["7"] = { cfm: { value: 80, source: "revit" }, drop: firm(0.03) };
+    const restore = vi.fn();
+    const history: InputsHistory = {
+      undoLabel: "clear",
+      redoLabel: null,
+      undoSuperseded: null,
+      redoSuperseded: null,
+      last: null,
+      cleared: { press: "clear-1", rowKey, was: "100 cfm" },
+      undo: vi.fn(),
+      redo: vi.fn(),
+      restore,
+    };
+    const props = {
+      ctx,
+      busy: false,
+      elementName: null,
+      onSlot: vi.fn(),
+      apply: vi.fn(),
+      history,
+      nameOf: () => "DS-1",
+    };
+    const view = render(createElement(InputsSurface, props));
+    fireEvent.click(view.getByRole("button", { name: "Show typed inputs only" }));
+    const button = view.getByRole("button", { name: "Restore 100 cfm" });
+    expect(
+      button.closest(rowKey.startsWith("terminal") ? "[data-input-field]" : "[data-inputs-orphan]"),
+    ).not.toBeNull();
+    fireEvent.click(button);
+    expect(restore).toHaveBeenCalledWith("clear-1");
+    view.rerender(
+      createElement(InputsSurface, { ...props, history: { ...history, cleared: null } }),
+    );
+    expect(view.queryByRole("button", { name: "Restore 100 cfm" })).toBeNull();
+  },
+);

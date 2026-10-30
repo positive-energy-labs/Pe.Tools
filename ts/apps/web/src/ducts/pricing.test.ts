@@ -12,12 +12,23 @@ import { SCENE_FIXTURE } from "./scene.fixture";
 import { pricingJob, type PricingInput } from "./pricing-job";
 import { applyPricingDelta, pricingDelta } from "./pricing-delta";
 import { EMPTY_SNAPSHOT } from "./sheet/scoped-snapshot";
+import { noTerminalSnapshot } from "./no-terminal.fixture";
 
 const input = (): PricingInput => ({
   snapshot: SCENE_FIXTURE.snapshot,
   grids: {},
   catalogs: EMPTY_CATALOGS,
   doc: ductsRouteState.schema.parse({}),
+});
+test("a fan with no terminal fails pricing with its system and open outlet, rather than waiting", () => {
+  const response = pricingJob()({
+    id: 1,
+    doc: null,
+    base: { snapshot: noTerminalSnapshot(), grids: {}, catalogs: EMPTY_CATALOGS },
+  });
+  expect("error" in response && response.error).toBe(
+    "EX 1 has no terminal: its air leaves at open end 11620957; nothing to price",
+  );
 });
 test("worker result has full solve/readiness parity through structured clone, including nested Maps", () => {
   const original = input();

@@ -43,9 +43,12 @@ export type { EditMeta } from "./input-history";
 export interface InputsHistory {
   undoLabel: string | null;
   redoLabel: string | null;
+  /** Another writer changed the step's paths; the kernel refuses it in these words. */
+  undoSuperseded: string | null;
+  redoSuperseded: string | null;
   last: { label: string; words: string; refusal?: string } | null;
   /** The last edit when it was a clear: its row offers "restore" until the next edit. */
-  cleared: { press: string; rowKey: string | null; was: string } | null;
+  cleared: { press: string; rowKey: string | null; was: string; row?: EditMeta["row"] } | null;
   undo: () => void;
   redo: () => void;
   restore: (press: string) => void;
@@ -255,6 +258,7 @@ function HistoryLine({ history, refusal }: { history: InputsHistory; refusal: st
         label={history.undoLabel ? `Undo ${history.undoLabel}` : "Undo"}
         refusal={
           refusal ??
+          history.undoSuperseded ??
           (history.undoLabel ? null : "Nothing to undo: this page has made no edit since it loaded")
         }
         onPress={history.undo}
@@ -265,7 +269,9 @@ function HistoryLine({ history, refusal }: { history: InputsHistory; refusal: st
         kind="framed"
         icon={Redo2}
         label={history.redoLabel ? `Redo ${history.redoLabel}` : "Redo"}
-        refusal={refusal ?? (history.redoLabel ? null : "Nothing to redo")}
+        refusal={
+          refusal ?? history.redoSuperseded ?? (history.redoLabel ? null : "Nothing to redo")
+        }
         onPress={history.redo}
       >
         redo
@@ -294,6 +300,7 @@ function RowVerb({
   apply,
   label,
   was,
+  row,
 }: {
   rowKey: string;
   clear: DuctsSheetEdits | null;
@@ -302,6 +309,7 @@ function RowVerb({
   apply: (edits: DuctsSheetEdits, meta: EditMeta) => void;
   label: string;
   was: string;
+  row?: EditMeta["row"];
 }) {
   if (history.cleared?.rowKey === rowKey)
     return (
@@ -320,7 +328,7 @@ function RowVerb({
       label={`Clear ${label}`}
       reason="Return to the source underneath; restore stays offered until the next edit"
       refusal={refusal}
-      onPress={() => apply(clear, { label: `clear ${label}`, rowKey, clear: true, was })}
+      onPress={() => apply(clear, { label: `clear ${label}`, rowKey, clear: true, was, row })}
     >
       clear
     </Button>
@@ -478,7 +486,9 @@ function InputRowView({
     c.kind === "number"
       ? `${row.label} ${who} ${c.value ?? "—"}${c.unit ? ` ${c.unit}` : ""} (${row.source})`
       : `${row.label} ${who} ${c.value} (${row.source})`;
-  const meta = (label: string): EditMeta => ({ label, rowKey: row.key, was });
+  const retainedRow =
+    c.kind === "number" ? { label: row.label, section: row.section, ids: row.ids } : undefined;
+  const meta = (label: string): EditMeta => ({ label, rowKey: row.key, was, row: retainedRow });
   const name: ReactNode = row.title ? (
     <>
       <span
@@ -568,6 +578,7 @@ function InputRowView({
         apply={apply}
         label={`${row.label} ${who}`}
         was={was}
+        row={retainedRow}
       />
       {c.kind === "kind" && (
         // Kind decides role and fan ports (an `other` unit is passive and walked through); the row
@@ -607,6 +618,18 @@ export function InputsSurface({
 }): JSX.Element {
   const [typedOnly, setTypedOnly] = useState(false);
   const fields = inputFields(ctx);
+  const cleared = history.cleared;
+  if (cleared?.rowKey && cleared.row && !fields.rows.some((r) => r.key === cleared.rowKey)) {
+    fields.rows.push({
+      ...cleared.row,
+      key: cleared.rowKey,
+      subject: cleared.row.ids.map((id) => ({ id })),
+      source: "none",
+      typed: false,
+      control: { kind: "text", value: "none" },
+      clear: null,
+    });
+  }
   const refusal = !ctx.sheet ? "Open a fan first" : busy ? "Wait for the current read" : null;
   const criteriaRefusal = refusal ?? (ctx.inputs ? null : "Wait for inputs");
   const changeInputs = (edits: DuctsSheetEdits) =>

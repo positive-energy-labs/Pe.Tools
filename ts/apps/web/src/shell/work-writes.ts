@@ -7,7 +7,13 @@ import {
   type WorkWriteAck,
 } from "@pe/agent-contracts";
 import type { MountScope } from "./mount-owner";
-import { acquireWorkJournal } from "./journal";
+import { acquireWorkJournal, type JournalDetail } from "./journal";
+
+interface WriteHistory {
+  entry: JournalDetail;
+  accepted(ack: WorkWriteAck): void;
+}
+type DescribeWrite = (request: WorkWrite, label: string) => WriteHistory | undefined;
 
 function writeLabel<W>(request: WorkWrite, cells: readonly CellsDecl<W>[]) {
   const names = [
@@ -53,7 +59,8 @@ export function acquireWorkWriter(key: WorkKey) {
 function createWorkWriter(key: WorkKey, remove: () => void) {
   const identity = workKey(key);
   const held = acquireWorkJournal(key);
-  const pending = new Map<string, { request: WorkWrite; label: string }>();
+  const pending = new Map<string, { request: WorkWrite; label: string; history?: WriteHistory }>();
+  const historians = new Set<DescribeWrite>();
   const listeners = new Set<() => void>();
   let readers = 0;
   let running = 0;
@@ -75,10 +82,13 @@ function createWorkWriter(key: WorkKey, remove: () => void) {
   };
   const accept = (ack: WorkWriteAck) => {
     if (workKey(ack.key) !== identity) return;
-    held.journal.accept(ack);
+    const intent = ack.press ? pending.get(ack.press) : undefined;
+    held.journal.accept(ack, intent && { label: intent.label, ...intent.history?.entry });
     if (ack.press) {
-      const intent = pending.get(ack.press);
-      if (intent) held.journal.describe(ack.press, { label: intent.label });
+      if (intent) {
+        held.journal.describe(ack.press, { label: intent.label, ...intent.history?.entry });
+        intent.history?.accepted(ack);
+      }
       pending.delete(ack.press);
     }
     if (conflict !== null && ack.revision > conflict) settle();
@@ -86,8 +96,10 @@ function createWorkWriter(key: WorkKey, remove: () => void) {
   };
   const observe = (scope: MountScope<unknown>) => {
     const work = scope.work;
-    if (work && workKey(work.handle.key) === identity)
+    if (work && workKey(work.handle.key) === identity) {
       observedRevision = Math.max(observedRevision, work.handle.revision);
+      held.journal.observe({ revision: work.handle.revision, doc: work.doc });
+    }
     if (
       conflict !== null &&
       work &&
@@ -103,10 +115,11 @@ function createWorkWriter(key: WorkKey, remove: () => void) {
     request: WorkWrite,
     port: WritePort,
     cells: readonly CellsDecl<W>[] = [],
+    history?: WriteHistory,
   ): Promise<RouteStateWriteResult> => {
     request = structuredClone(request);
     if (request.kind === "apply" && request.press)
-      pending.set(request.press, { request, label: writeLabel(request, cells) });
+      pending.set(request.press, { request, label: writeLabel(request, cells), history });
     running++;
     observe(scope);
     let result: RouteStateWriteResult;
@@ -132,6 +145,14 @@ function createWorkWriter(key: WorkKey, remove: () => void) {
               .map((family) => family.admit?.(scope.work!.doc, request.patches))
               .find((reason) => reason != null)
           : null;
+      if (!failure && !domain && request.press) {
+        const intent = pending.get(request.press);
+        if (intent && !intent.history)
+          for (const describe of historians) {
+            intent.history = describe(request, intent.label);
+            if (intent.history) break;
+          }
+      }
       result =
         failure || domain ? refused(failure ?? domain!.message) : await port(current!, request);
       if (result.ok) {
@@ -143,7 +164,11 @@ function createWorkWriter(key: WorkKey, remove: () => void) {
           ack.press !== request.press
         )
           result = refused("The acknowledgement does not match this Work edit");
-        else accept(ack);
+        else {
+          if (Object.hasOwn(result, "doc"))
+            held.journal.observe({ revision: ack.revision, doc: result.doc });
+          accept(ack);
+        }
       } else if (
         result.code === "stale_revision" &&
         scope.work?.handle.revision === request.expectedRevision &&
@@ -164,6 +189,13 @@ function createWorkWriter(key: WorkKey, remove: () => void) {
   };
   const writer = {
     journal: held.journal,
+    /** The mounted route supplies derived history for the same writer chat and composer use. */
+    describeWrites(describe: DescribeWrite) {
+      historians.add(describe);
+      return () => {
+        historians.delete(describe);
+      };
+    },
     accept,
     observe,
     write,

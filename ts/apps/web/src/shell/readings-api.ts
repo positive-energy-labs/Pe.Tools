@@ -70,6 +70,7 @@ export function ductsBodySource<T>(options: {
       if (!request) return deliver({ kind: "complete", value: options.absent, revision: 0 });
       let latest = "";
       let serial = 0;
+      let retained: { version: string; value: T } | undefined;
       const attempts = new Set<string>();
       return subscriptionSource({
         request: () => request,
@@ -89,15 +90,26 @@ export function ductsBodySource<T>(options: {
           });
         if (envelope.state === "loading" || publication.fresh === false)
           return deliver({ kind: "stale" });
+        if (retained?.version === envelope.revision)
+          return deliver({
+            kind: "complete",
+            value: retained.value,
+            revision: ++serial,
+            sourceVersion: retained.version,
+          });
         if (attempts.has(envelope.revision)) return;
         attempts.add(envelope.revision);
         void readDuctsBody(request, envelope, { signal: context.signal }).then(
           (body) => {
             if (context.signal.aborted || latest !== body.nativeObservation.version) return;
             try {
+              retained = {
+                version: body.nativeObservation.version,
+                value: options.decode(body.data),
+              };
               deliver({
                 kind: "complete",
-                value: options.decode(body.data),
+                value: retained.value,
                 revision: ++serial,
                 sourceVersion: body.nativeObservation.version,
               });

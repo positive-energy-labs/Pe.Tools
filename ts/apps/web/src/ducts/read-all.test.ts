@@ -8,13 +8,20 @@ import { createReadingGraph, type ReadingScope } from "#/shell/readings";
 import { ductsGraph, ductsPageSchema, type DuctsPage } from "./graph";
 import { DuctsHostFixture } from "./host.fixture";
 import { ductsSources } from "./sources";
+import { systemReadCoverage, type NetworkSnapshot } from "./system-reads";
+import { noTerminalSnapshot } from "./no-terminal.fixture";
 
 let host: DuctsHostFixture;
 let owner: PeReadings;
 const releases: (() => void)[] = [];
+let missing: Set<number>;
+let renamed: Set<number>;
 
 beforeEach(() => {
   host = new DuctsHostFixture();
+  missing = new Set();
+  renamed = new Set();
+  vi.stubGlobal("Worker", host.worker);
   host.snapshot.systems = Array.from({ length: 369 }, (_, i) => ({
     ...host.snapshot.systems[0]!,
     id: i + 1,
@@ -30,9 +37,17 @@ beforeEach(() => {
     return Response.json(
       {
         ...snapshot,
-        systems: host.snapshot.systems.filter(
-          (system) => selector.kind === "roster" || selector.systemIds?.includes(system.id),
-        ),
+        systems: host.snapshot.systems
+          .filter(
+            (system) =>
+              selector.kind === "roster" ||
+              (selector.systemIds?.includes(system.id) && !missing.has(system.id)),
+          )
+          .map((system) =>
+            selector.kind !== "roster" && renamed.has(system.id)
+              ? { ...system, id: system.id + 1000, name: `Renamed ${system.name}` }
+              : system,
+          ),
       },
       { headers: response.headers },
     );
@@ -114,4 +129,76 @@ test("a cap refusal keeps completed progress and fails once without restarting d
   expect(graph.get("ducts").status).toBe("failed");
   expect(graph.get("ducts").basis?.attempt).toBe(attempt);
   expect(batches()).toHaveLength(3);
+});
+
+test.each(["missing", "renamed"])(
+  "369 requested systems finish once when ten are %s",
+  async (kind) => {
+    const ids = host.snapshot.systems.slice(-10).map((system) => system.id);
+    for (const id of ids) (kind === "missing" ? missing : renamed).add(id);
+    const { graph } = fixture();
+    releases.push(graph.mount(["pricing"]));
+    await waitFor(() => expect(graph.get("ducts").current).toBe(true), { timeout: 3000 });
+    const snapshot = graph.get("ducts").value as NetworkSnapshot;
+    expect(snapshot.systemReads).toEqual({
+      completed: host.snapshot.systems.map((system) => system.id),
+      missing: ids,
+    });
+    expect(systemReadCoverage(snapshot, host.snapshot)).toMatchObject({
+      read: 369,
+      of: 369,
+      report: expect.stringContaining("10 systems returned nothing: System 360"),
+    });
+    await waitFor(() => expect(graph.get("pricing").current).toBe(true));
+    expect(batches()).toHaveLength(24);
+  },
+);
+
+test("transport recovery of the same roster never restarts a finished sweep or strands pricing", async () => {
+  const { graph } = fixture();
+  releases.push(graph.mount(["pricing"]));
+  await waitFor(() => expect(graph.get("pricing").current).toBe(true), { timeout: 3000 });
+  expect(batches()).toHaveLength(24);
+  const attempt = graph.get("ducts").basis?.attempt;
+  owner.resync();
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  expect(graph.get("pricing").current).toBe(true);
+  expect(graph.get("ducts").basis?.attempt).toBe(attempt);
+  expect(batches()).toHaveLength(24);
+});
+
+test("a transport recovery during a sweep preserves progress and pricing settles", async () => {
+  const fetch = globalThis.fetch;
+  let interrupted = false;
+  vi.stubGlobal("fetch", async (...args: Parameters<typeof fetch>) => {
+    const response = await fetch(...args);
+    if (!interrupted && batches().length === 3) {
+      interrupted = true;
+      owner.resync();
+    }
+    return response;
+  });
+  const { graph } = fixture();
+  releases.push(graph.mount(["pricing"]));
+  await waitFor(() => expect(graph.get("pricing").current).toBe(true), { timeout: 3000 });
+  expect(interrupted).toBe(true);
+  expect(batches()).toHaveLength(24);
+  expect(graph.get("ducts").basis?.attempt.generation).toBe(1);
+});
+
+test("EX 1 pricing fails with words without read-all, retaining the native network", async () => {
+  host.snapshot = noTerminalSnapshot();
+  const { graph, scope } = fixture();
+  graph.update({ ...scope, page: { ...scope.page, system: ["EX 1"], readAll: false } });
+  releases.push(graph.mount(["pricing"]));
+  await waitFor(() => expect(graph.get("pricing").status).toBe("failed"));
+  expect(graph.get("pricing").error).toBe(
+    "EX 1 has no terminal: its air leaves at open end 11620957; nothing to price",
+  );
+  expect(graph.get("ducts").current).toBe(true);
+  const attempt = graph.get("pricing").basis?.attempt;
+  owner.resync();
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  expect(graph.get("pricing").status).toBe("failed");
+  expect(graph.get("pricing").basis?.attempt).toBe(attempt);
 });

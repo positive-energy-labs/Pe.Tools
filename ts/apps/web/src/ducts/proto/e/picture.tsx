@@ -37,7 +37,7 @@ import { NodeFactsView, SegmentFactsView } from "../../facts";
 import { labelOfNode, legsOf } from "../../legs";
 import { ductsFocus } from "../../page";
 import { activeSystem, paintOfDucts, stubIdsOf, withSystem } from "../../selection";
-import { findingLayers, findingShapes, noRunLayers } from "../../finding-layers";
+import { healReviewLayers, findingLayers, findingShapes, noRunLayers } from "../../finding-layers";
 import { GoToSubject } from "./go-to";
 import { RunDetail, runOf } from "./run-detail";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
@@ -234,9 +234,23 @@ function Content({
         : new Map(),
     [priced, page.system],
   );
+  const heal3d = useMemo(
+    () => healReviewLayers(snapshot, work.doc, page.heal),
+    [snapshot, work.doc, page.heal],
+  );
+  const reviewTargets = useMemo(
+    () => new Set(page.heal?.targets.flatMap((t) => t.ids) ?? []),
+    [page.heal],
+  );
   const findings3d = useMemo(
-    () => findingLayers(findingShapes(snapshot, annotated, work.doc, scope?.members), issues),
-    [snapshot, annotated, work.doc, scope, issues],
+    () =>
+      findingLayers(findingShapes(snapshot, annotated, work.doc, scope?.members), issues).filter(
+        (layer) =>
+          !layer.findings?.some((finding) =>
+            page.heal?.targets.some((target) => target.findings.includes(finding)),
+          ),
+      ),
+    [snapshot, annotated, work.doc, scope, issues, page.heal],
   );
   // Damage follows the shown meshes; the layer and the overlay's covered pins share one per read.
   const damageOf = useMemo(() => {
@@ -259,11 +273,11 @@ function Content({
       {
         key: "findings",
         toggle: "findings",
-        draw: ({ meshes }) => [...findings3d, ...damageOf(meshes)],
+        draw: ({ meshes }) => [...findings3d, ...heal3d, ...damageOf(meshes)],
       },
       ports,
     ],
-    [noRuns3d, findings3d, damageOf, ports],
+    [noRuns3d, findings3d, heal3d, damageOf, ports],
   );
 
   // Header facts: a system name (never a group id), Pe fan static, critical run total.
@@ -340,6 +354,7 @@ function Content({
       index={index}
       groups={groups}
       members={members}
+      targets={reviewTargets}
       encoding={scale.encoding}
       onSelect={(id) => pick(id)}
       size={size}
@@ -480,7 +495,7 @@ function Content({
       // A pin the 3D marks already carry is not drawn twice.
       covered={[
         ...(marksOn.has("no-run") ? noRuns3d : []),
-        ...(marksOn.has("findings") ? [...findings3d, ...damageOf(frame.meshes)] : []),
+        ...(marksOn.has("findings") ? [...findings3d, ...heal3d, ...damageOf(frame.meshes)] : []),
       ]}
       issues={issues}
       pointOf={pointOf}
@@ -519,7 +534,17 @@ function Content({
         layers,
         layerOptions: DUCTS_LAYER_OPTIONS,
         overlay,
-        readout: { subject: systemName ?? undefined, summary, idle, facts },
+        readout: {
+          subject: systemName ?? undefined,
+          summary: (
+            <>
+              {summary}
+              {page.heal && <output aria-label="Heal in picture"> · {page.heal.sentence}</output>}
+            </>
+          ),
+          idle,
+          facts,
+        },
         flat: { ...DUCTS_FLAT, render: schematic },
         goTo: (jumpTo) => (
           <GoToSubject

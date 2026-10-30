@@ -773,7 +773,8 @@ test("carry-over is one undoable Work write, offered only while readable Work la
   const button = situation.getByRole("button", { name: "Carry over" });
   fireEvent.click(button);
   const review = await situation.findByLabelText("Carry over review");
-  expect(review.textContent).toContain('"members":[["note"]]');
+  expect(review.textContent).toContain("Carry over: review the proposed changes.");
+  expect(review.textContent).not.toContain('"members"');
   expect(host.write).not.toHaveBeenCalled();
   host.write.mockImplementation(async (written: WorkKey, request: WorkWrite) => {
     workRead = { revision: 4, doc: { note: "old" } };

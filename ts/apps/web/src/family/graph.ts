@@ -19,6 +19,7 @@ import { familyAddress } from "../../../../packages/agent-contracts/src/routes/f
 import { threadListFields } from "../../../../packages/agent-contracts/src/routes/shared";
 import { commandVerb, prepareCommand, queryVerb, workVerb, pageVerb } from "#/shell/verbs";
 import { NATIVE_APPLY_WAIT_S } from "#/route/waits";
+import { presentFamilyPlan } from "./review";
 
 export const FAMILY_MODEL_SCHEMA = "/schemas/settings/FamilyFoundry/models.json";
 export const familyPageSchema = routeAddress("family").schema;
@@ -185,6 +186,7 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = {
       {
         waitSeconds: NATIVE_APPLY_WAIT_S,
         ready: (_, input) => input.refusal,
+        present: presentFamilyPlan,
         prepare: async (scope) => {
           const preview = await prepareCommand(scope, "family.plan", {}, NATIVE_APPLY_WAIT_S);
           return { ...preview, plan: familyPlanResultSchema.parse(preview.response) };
@@ -225,6 +227,15 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = {
         waitSeconds: NATIVE_APPLY_WAIT_S,
         ready: (_, input) => input.refusal,
         prepare: (scope, input) => ({ source: input.source, target: scope.snapshot.target }),
+        present: (result) => {
+          const source = (result as { source?: z.output<typeof podMemberSourceSchema> }).source;
+          return source
+            ? {
+                sentence: `Build ${source.path}`,
+                rows: [`Pod: ${source.pod}`, `SHA-256: ${source.sha256}`],
+              }
+            : { sentence: "Family build completed.", rows: [] };
+        },
         intent: (_scope, _input, _answers, ticket) => ({
           source: podMemberSourceSchema.parse((ticket?.evidence as { source?: unknown })?.source),
         }),

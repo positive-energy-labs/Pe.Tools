@@ -1,4 +1,5 @@
 import { canonicalRouteInput } from "@pe/agent-contracts";
+import { DEFAULT_WAIT_S } from "#/route/waits";
 import type {
   ActionReceipt,
   DocumentRef,
@@ -131,14 +132,16 @@ interface Node<P> {
   mounted: number;
   generation: number;
   revision: number;
+  sourceFresh: boolean;
   signature?: string;
-  /** What the last attempt ran against; a failed reading holds while this still matches. */
+  /** What the last attempt ran against; freshness ticks do not change these inputs. */
   launched?: { stable: string; values: unknown[] };
   context?: ReadingContext;
   trigger?: ReadingContext["trigger"];
   receiptHeld?: "capture" | "demand";
   release?: Release;
   controller?: AbortController;
+  wait?: ReturnType<typeof setTimeout>;
   worker?: WorkerChannel;
   invocation?: string;
   pin?: Release;
@@ -165,6 +168,7 @@ export function createReadingGraph<P, W>(
       mounted: 0,
       generation: 0,
       revision: -1,
+      sourceFresh: false,
       state: { status: "absent", current: false, complete: false, basis: null, version: 0 },
       listeners: new Set(),
       feedIds: new Set(),
@@ -216,13 +220,11 @@ export function createReadingGraph<P, W>(
     values: (node.decl.deps ?? []).map((id) => get(id).state.value),
   });
   /**
-   * A failed attempt stays failed until its inputs or scope change: a mere dependency tick (a new
-   * version over the same values) does not re-run it. A forced retire clears the signature, which
-   * always re-runs; a press (`start`) launches directly.
+   * A dependency tick over the same values changes freshness, never acquisition. A forced retire
+   * clears the signature; an explicit press launches directly, including after failure.
    */
-  const holdsFailure = (node: Node<P>) => {
-    if (node.state.status !== "failed" || node.signature === undefined || !node.launched)
-      return false;
+  const sameInputs = (node: Node<P>) => {
+    if (node.signature === undefined || !node.launched) return false;
     const now = inputsIdentity(node);
     return (
       now.stable === node.launched.stable &&
@@ -238,11 +240,23 @@ export function createReadingGraph<P, W>(
   const detach = (node: Node<P>) => {
     // Revoke permission before abort/cleanup: both may synchronously deliver a last frame.
     node.context = undefined;
+    clearTimeout(node.wait);
+    node.wait = undefined;
     node.controller?.abort();
     node.controller = undefined;
     const release = node.release;
     node.release = undefined;
     release?.();
+  };
+  const awaitProgress = (node: Node<P>) => {
+    clearTimeout(node.wait);
+    node.wait = setTimeout(() => {
+      if (node.context)
+        deliver(node, node.context, {
+          kind: "failure",
+          error: `${node.id} sent no answer after ${DEFAULT_WAIT_S}s; explicitly refresh to retry`,
+        });
+    }, DEFAULT_WAIT_S * 1000);
   };
   const stale = (node: Node<P>, clearPrior = false) => {
     detach(node);
@@ -264,6 +278,7 @@ export function createReadingGraph<P, W>(
       });
       return;
     }
+    if (node.state.status === "failed") return;
     if (publication.kind === "pending" && node.state.complete) {
       deps.log({
         kind: "drop",
@@ -307,9 +322,9 @@ export function createReadingGraph<P, W>(
         return;
       }
       node.revision = publication.revision;
+      node.sourceFresh = publication.fresh !== false;
       const complete = publication.kind === "complete";
-      const fresh =
-        publication.fresh !== false && Object.values(context.inputs).every((s) => s.current);
+      const fresh = node.sourceFresh && Object.values(inputsOf(node)).every((s) => s.current);
       put(node, {
         status: !fresh ? "stale" : complete ? "ready" : "partial",
         value: publication.value,
@@ -319,7 +334,7 @@ export function createReadingGraph<P, W>(
         basis: {
           attempt,
           inputs: Object.fromEntries(
-            Object.entries(context.inputs).map(([id, s]) => [id, s.version]),
+            Object.entries(inputsOf(node)).map(([id, s]) => [id, s.version]),
           ),
           workRevision: context.workRevision,
           ...(node.source.kind === "worker"
@@ -328,16 +343,27 @@ export function createReadingGraph<P, W>(
           sourceVersion: publication.sourceVersion,
         },
       });
+      if (complete && fresh) {
+        clearTimeout(node.wait);
+        node.wait = undefined;
+      } else if (publication.kind === "part" || !node.wait) awaitProgress(node);
     } else if (publication.kind === "failure") {
       const error =
         publication.error instanceof Error ? publication.error.message : String(publication.error);
       put(node, { ...node.state, status: "failed", complete: false, current: false, error });
+      clearTimeout(node.wait);
+      node.wait = undefined;
       deps.log({ kind: "failure", reading: node.id, attempt, message: error });
     } else {
+      node.sourceFresh = false;
       put(node, { ...node.state, status: publication.kind, complete: false, current: false });
+      if (!node.wait) awaitProgress(node);
     }
     flush();
     if (owned(node, attempt) && publication.kind === "failure") {
+      detach(node);
+      node.worker?.stop();
+      node.worker = undefined;
       node.invocation = undefined;
       const release = node.pin;
       node.pin = undefined;
@@ -368,9 +394,11 @@ export function createReadingGraph<P, W>(
       signal: controller.signal,
     };
     node.context = context;
+    awaitProgress(node);
     node.trigger = context.trigger;
     node.receiptHeld = undefined;
     node.revision = -1;
+    node.sourceFresh = false;
     put(node, {
       status: "pending",
       complete: false,
@@ -428,14 +456,47 @@ export function createReadingGraph<P, W>(
         if (!node.demand) continue;
         if (node.receiptHeld === "capture" || (node.receiptHeld === "demand" && !node.mounted))
           continue;
-        const inputs = Object.values(inputsOf(node));
+        const dependencies = inputsOf(node);
+        const inputs = Object.values(dependencies);
+        const failed = Object.entries(dependencies).find(([, input]) => input.status === "failed");
+        if (failed) {
+          const error = `${failed[0]} failed: ${failed[1].error ?? "unknown error"}`;
+          if (node.state.status !== "failed" || node.state.error !== error) {
+            detach(node);
+            node.worker?.stop();
+            node.worker = undefined;
+            node.signature = undefined;
+            put(node, { ...node.state, status: "failed", complete: false, current: false, error });
+          }
+          continue;
+        }
         if (inputs.some((input) => input.value === undefined)) {
           if (node.context && node.signature !== signatureOf(node)) stale(node);
           continue;
         }
         if (node.signature === signatureOf(node)) continue;
-        if (holdsFailure(node)) node.signature = signatureOf(node);
-        else launch(node);
+        if (sameInputs(node)) {
+          node.signature = signatureOf(node);
+          // A transport freshness tick fences evidence; it never starts another acquisition.
+          if (node.state.complete) {
+            const current = node.sourceFresh && inputs.every((input) => input.current);
+            put(node, {
+              ...node.state,
+              status: current ? "ready" : "stale",
+              current,
+              basis: node.state.basis && {
+                ...node.state.basis,
+                inputs: Object.fromEntries(
+                  Object.entries(dependencies).map(([id, state]) => [id, state.version]),
+                ),
+              },
+            });
+            if (current) {
+              clearTimeout(node.wait);
+              node.wait = undefined;
+            } else if (!node.wait) awaitProgress(node);
+          }
+        } else launch(node);
       }
       const notifications = [...changed];
       changed.clear();
@@ -599,7 +660,7 @@ export function createReadingGraph<P, W>(
       const effects = receipt.effects.length ? receipt.effects : targetEffects(receipt.target);
       invalidate((node) => {
         if (node.source.kind === "port") return false;
-        if (!node.context && !node.state.basis) return false;
+        if (!node.context && !node.state.basis && !node.launched) return false;
         const readingEffects = node.effects ?? [];
         const named =
           !dirties.length ||

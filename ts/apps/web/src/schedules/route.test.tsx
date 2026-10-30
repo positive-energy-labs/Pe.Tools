@@ -94,7 +94,7 @@ test("a URL restores the grid view and an edit round-trips into a reopened URL",
 
 test("a Work verb produces one journal step and Mod+Z restores the cells", async () => {
   const before = structuredClone(host.doc);
-  const { view } = await mounted();
+  const { view, owner } = await mounted();
   const input = await waitFor(() => {
     const input = view.container.querySelector<HTMLInputElement>("tbody input.dl-cell-input");
     expect(input).not.toBeNull();
@@ -106,6 +106,10 @@ test("a Work verb produces one journal step and Mod+Z restores the cells", async
   await waitFor(() => expect(host.doc.cells["1::1"]?.edit?.value).toBe("Edited model"));
   expect(host.writes).toHaveLength(1);
   expect(host.writes[0]).toMatchObject({ kind: "apply", by: "human", base: 1, revision: 2 });
+  await waitFor(() => {
+    expect(owner().snapshot().work?.handle.revision).toBe(host.revision);
+    expect(owner().journal(host.key).read().busy).toBe(false);
+  });
   fireEvent.keyDown(view.getByLabelText("Schedules route"), { key: "z", ctrlKey: true });
   await waitFor(() => expect(host.writes).toHaveLength(2));
   expect(host.writes[1]).toMatchObject({ kind: "restore", base: 2, revision: 3, press: null });
@@ -116,8 +120,9 @@ test("Apply cells shows a ticket then commits once and consumes its receipt", as
   const { view, situation } = await mounted();
   fireEvent.click(await liveButton(situation, "Apply cells"));
   const review = await situation.findByLabelText("Apply cells review");
-  expect(review.textContent).toContain(host.capture);
-  expect(review.textContent).toContain("New model");
+  expect(review.textContent).toContain("Apply 1 edited schedule cell.");
+  expect(review.textContent).toContain("IU-1 · Model: Old model → New model");
+  expect(review.textContent).not.toContain('"cells"');
   expect(host.actions).toEqual([]);
   fireEvent.click(await liveButton(situation, "Apply cells"));
   await waitFor(() => expect(host.actions).toHaveLength(1));
@@ -175,11 +180,15 @@ test("taking a cell row uses the kernel cell verb and one undo restores its prop
     cells: { "1::1": { suggestion: { value: "Proposed model" } } },
   });
   const before = structuredClone(host.doc);
-  const { view } = await mounted();
+  const { view, owner } = await mounted();
   const row = await view.findByRole("group", { name: "Cell 1::1" });
   fireEvent.click(await liveButton(within(row), "take"));
   await waitFor(() => expect(host.doc.cells["1::1"]?.edit?.value).toBe("Proposed model"));
   expect(host.writes).toHaveLength(1);
+  await waitFor(() => {
+    expect(owner().snapshot().work?.handle.revision).toBe(host.revision);
+    expect(owner().journal(host.key).read().busy).toBe(false);
+  });
   fireEvent.keyDown(view.getByLabelText("Schedules route"), { key: "z", ctrlKey: true });
   await waitFor(() => expect(host.writes).toHaveLength(2));
   expect(host.doc).toEqual(before);

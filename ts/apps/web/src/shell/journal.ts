@@ -17,7 +17,7 @@ type Transition = {
 };
 /** Route-owned presentation only; never part of the host's patch or inverse authority. */
 export interface JournalDetail {
-  label?: string;
+  label: string;
   meta?: unknown;
 }
 type Step = JournalDetail & {
@@ -26,6 +26,7 @@ type Step = JournalDetail & {
   /** Number of transitions currently applied; a failed multi-write replay resumes here. */
   cursor: number;
   barrier?: TimelineBarrier;
+  superseded?: { revision: number; path: RouteStatePatch["path"]; message: string };
 };
 
 export type JournalResult =
@@ -69,10 +70,37 @@ const overlaps = (a: RouteStatePatch["path"], b: RouteStatePatch["path"]) =>
 const footprint = (write: Pick<WorkWriteAck, "patches" | "inverse">) =>
   [...write.patches, ...write.inverse].map(({ path }) => path);
 
+const valueAt = (doc: unknown, path: RouteStatePatch["path"]): unknown =>
+  path.reduce<unknown>(
+    (value, part) =>
+      value !== null && typeof value === "object" && Object.hasOwn(value, part)
+        ? (value as Record<string, unknown>)[part]
+        : undefined,
+    doc,
+  );
+
+/** Project host-issued patches only, to verify an entire replay before its first write. */
+function project(doc: unknown, patches: RouteStatePatch[]): unknown {
+  for (const patch of patches) {
+    if (!patch.path.length) {
+      doc = structuredClone(patch.value);
+      continue;
+    }
+    let node = doc as Record<string, unknown>;
+    for (const part of patch.path.slice(0, -1))
+      node = (node[part] ??= {}) as Record<string, unknown>;
+    const part = patch.path.at(-1)!;
+    if (Object.hasOwn(patch, "value")) node[part] = structuredClone(patch.value);
+    else delete node[part];
+  }
+  return doc;
+}
+
 /** In-memory history for exactly one Work. Call accept for local acks AND accepted host deltas. */
 export function createWorkJournal(key: WorkKey) {
   const identity = workKey(key);
   let revision: number | null = null;
+  let current: { revision: number; doc: unknown } | null = null;
   let undo: Step[] = [];
   let redo: Step[] = [];
   let last: { kind: "apply" | "undo" | "redo"; step: Step } | null = null;
@@ -103,12 +131,20 @@ export function createWorkJournal(key: WorkKey) {
         step.barrier = barrier;
   };
 
-  const accept = (acknowledged: WorkWriteAck): void => {
+  const supersede = (step: Step, at: number, path: RouteStatePatch["path"]) => {
+    step.superseded ??= {
+      revision: at,
+      path: structuredClone(path),
+      message: `${step.label} was changed elsewhere at r${at}`,
+    };
+  };
+  const accept = (acknowledged: WorkWriteAck, detail?: JournalDetail): void => {
     if (workKey(acknowledged.key) !== identity) return;
     const ack = structuredClone(acknowledged);
     // Local callbacks and the host stream can deliver the same acknowledgement twice.
     if (revision !== null && ack.revision <= revision) return;
-    if (revision !== null && ack.base !== revision) clear();
+    if (revision !== null && ack.base !== revision)
+      for (const step of [...undo, ...redo]) supersede(step, ack.revision, []);
     revision = ack.revision;
     if (ack.kind === "start-fresh") {
       clear();
@@ -119,7 +155,13 @@ export function createWorkJournal(key: WorkKey) {
       sending?.expectedRevision === ack.base &&
       canonicalRouteInput(sending.patches) === canonicalRouteInput(ack.patches);
     if (ownRestore) return;
-    if (ack.by !== "human" || ack.kind !== "apply" || !ack.press || !ack.undoable) {
+    if (!detail || ack.by !== "human" || ack.kind !== "apply" || !ack.press || !ack.undoable) {
+      for (const step of [...undo, ...redo]) {
+        const path = step.transitions
+          .flatMap(({ paths }) => paths)
+          .find((path) => footprint(ack).some((other) => overlaps(path, other)));
+        if (path) supersede(step, ack.revision, path);
+      }
       record({
         kind: "receipt",
         at: Date.now(),
@@ -162,7 +204,16 @@ export function createWorkJournal(key: WorkKey) {
       prior.cursor++;
       undo.splice(index, 1);
       undo.push(prior);
-    } else undo.push({ press: ack.press, transitions: [transition], cursor: 1 });
+    } else
+      undo.push({
+        ...structuredClone(detail),
+        label:
+          detail.label.trim() ||
+          `Edit ${ack.patches.map(({ path }) => path.join(".") || "Work").join(", ")}`,
+        press: ack.press,
+        transitions: [transition],
+        cursor: 1,
+      });
     last = { kind: "apply", step: undo.at(-1)! };
   };
 
@@ -191,16 +242,63 @@ export function createWorkJournal(key: WorkKey) {
         message: "The selected history entry is no longer last",
       };
     const blocked = (): JournalResult | null =>
-      step.barrier
+      step.superseded
         ? {
             ok: false,
             code: "barrier",
-            message: `Cannot ${direction} '${step.press}': barrier '${step.barrier.receiptId ?? step.barrier.verb ?? step.barrier.at}' changed its paths`,
-            barrier: structuredClone(step.barrier),
+            message: `${step.superseded.message}; ${direction} would overwrite it`,
+            ...(step.barrier && { barrier: structuredClone(step.barrier) }),
           }
-        : null;
+        : step.barrier
+          ? {
+              ok: false,
+              code: "barrier",
+              message: `Cannot ${direction} '${step.press}': barrier '${step.barrier.receiptId ?? step.barrier.verb ?? step.barrier.at}' changed its paths`,
+              barrier: structuredClone(step.barrier),
+            }
+          : null;
     const refusal = blocked();
     if (refusal) return refusal;
+    const verify = (): JournalResult | null => {
+      if (!current || current.revision !== revision)
+        return {
+          ok: false,
+          code: "barrier",
+          message: `Cannot ${direction} ${step.label}: current Work values are unverified; re-read Work`,
+        };
+      let doc = structuredClone(current.doc);
+      const transitions =
+        direction === "undo"
+          ? step.transitions.slice(0, step.cursor).reverse()
+          : step.transitions.slice(step.cursor);
+      for (const transition of transitions) {
+        const expected = direction === "undo" ? transition.forward : transition.inverse;
+        const patches = direction === "undo" ? transition.inverse : transition.forward;
+        for (const { path } of patches) {
+          const before = expected.find(
+            (patch) => canonicalRouteInput(patch.path) === canonicalRouteInput(path),
+          );
+          if (
+            !before ||
+            canonicalRouteInput({ value: valueAt(doc, path) }) !==
+              canonicalRouteInput({ value: before.value })
+          ) {
+            supersede(step, revision!, path);
+            return blocked();
+          }
+        }
+        try {
+          doc = project(doc, patches);
+        } catch {
+          return {
+            ok: false,
+            code: "barrier",
+            message: `Cannot ${direction} ${step.label}: current Work paths are unverified; re-read Work`,
+          };
+        }
+      }
+      return null;
+    };
     busy = true;
     pending = { direction, step };
     const started = generation;
@@ -208,6 +306,8 @@ export function createWorkJournal(key: WorkKey) {
       while (direction === "undo" ? step.cursor > 0 : step.cursor < step.transitions.length) {
         const barrier = blocked();
         if (barrier) return barrier;
+        const precondition = verify();
+        if (precondition) return precondition;
         const transition = step.transitions[direction === "undo" ? step.cursor - 1 : step.cursor]!;
         sending = {
           kind: "restore",
@@ -228,6 +328,8 @@ export function createWorkJournal(key: WorkKey) {
             message: "Restore acknowledgement does not match this Work and revision",
           };
         accept(result.write);
+        if (Object.hasOwn(result, "doc") && (!current || result.write.revision >= current.revision))
+          current = { revision: result.write.revision, doc: structuredClone(result.doc) };
         if (started !== generation)
           return {
             ok: false,
@@ -266,10 +368,18 @@ export function createWorkJournal(key: WorkKey) {
   return {
     key: structuredClone(key),
     accept,
+    /** A read proves values only at its own revision; a newer acknowledgement invalidates it. */
+    observe(snapshot: { revision: number; doc: unknown }) {
+      if (!current || snapshot.revision >= current.revision) current = structuredClone(snapshot);
+    },
     /** Attach cloneable presentation to an accepted press, including a late Reading result. */
-    describe(press: string, detail: JournalDetail) {
+    describe(press: string, detail: Partial<JournalDetail>) {
       const step = [...undo, ...redo].find((entry) => entry.press === press);
-      if (step) Object.assign(step, structuredClone(detail));
+      if (step)
+        Object.assign(
+          step,
+          structuredClone({ ...detail, label: detail.label?.trim() || step.label }),
+        );
     },
     /** Subscribe this to the route timeline before dispatching commands; retain barriers after its log is trimmed. */
     record,

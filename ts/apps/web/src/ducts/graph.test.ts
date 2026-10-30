@@ -13,6 +13,7 @@ import { ductsBinding } from "./actions";
 import type { BindingScope } from "#/shell/mount-owner";
 import type { ReadingState } from "#/shell/readings";
 import { snapshot } from "./test-fixture";
+import { noTerminalSnapshot } from "./no-terminal.fixture";
 const state = (value: unknown): ReadingState => ({
   status: "ready",
   value,
@@ -52,6 +53,29 @@ export function scopeFor(doc: DuctsRouteDocument): BindingScope<DuctsPage, Ducts
     },
   };
 }
+test("Heal and Preview heal need a current network and Work, even when pricing failed", () => {
+  const scope = scopeFor(ductsRouteState.schema.parse({}));
+  scope.page = { ...scope.page, system: ["EX 1"] };
+  const network = noTerminalSnapshot();
+  network.segments[0]!.connectors[1]!.flowCfm = 0;
+  scope.readings = {
+    ducts: state(network),
+    pricing: {
+      ...state(undefined),
+      status: "failed",
+      current: false,
+      error: "EX 1 has no terminal; nothing to price",
+    },
+  };
+  for (const id of ["heal", "heal-preview"])
+    expect(ductsBinding(id, { group: "g1" }, scope).args).toMatchObject({
+      refusal: null,
+      request: { groups: [{ group: "g1" }] },
+    });
+  expect(ductsBinding("price", undefined, scope).args).toMatchObject({
+    refusal: "pricing failed: EX 1 has no terminal; nothing to price",
+  });
+});
 test("the product graph keeps all ducts inputs in Work across fourteen cell families", () => {
   expect(ductsGraph.work).toBe(ductsRouteState.schema);
   expect(validateRouteGraph(ductsGraph)).toEqual([]);

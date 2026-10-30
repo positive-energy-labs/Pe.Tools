@@ -12,6 +12,8 @@ import { createRouteOwner, makeAtomRegistry } from "#/shell/owner";
 import { kernelCellVerbs } from "#/shell/verbs-cells";
 import { invoke, type VerbContext } from "#/shell/verbs";
 import { ductsPageSchema } from "./graph";
+import { mountRoute } from "#/shell/mount";
+import { noTerminalSnapshot } from "./no-terminal.fixture";
 
 let host: DuctsHostFixture;
 const releases: (() => void)[] = [];
@@ -38,6 +40,7 @@ afterEach(async () => {
 async function mounted(
   url = "/ducts?target=s&system=SA&picture=schematic&layers=",
   waitForNative = true,
+  hosted = false,
 ) {
   const router = createRouter({
     routeTree: root.addChildren([ductsRoute]),
@@ -46,22 +49,32 @@ async function mounted(
   releases.push(router.history.subscribe(router.load));
   await router.load();
   const Component = ductsRoute.options.component!;
+  const Hosted = mountRoute(ductsGraph, {
+    ...ductsAdapters,
+    initialPage: { stage: "sheet", fan: "14577391:2", picture: "schematic", layers: [] },
+  });
   const view = render(
     <RouterContextProvider router={router}>
       <Component />
+      {hosted && (
+        <section aria-label="Hosted chat pane">
+          <Hosted thread="journal-proof" target="s" url={false} />
+        </section>
+      )}
     </RouterContextProvider>,
   );
-  await view.findByLabelText("Situation");
+  await view.findAllByLabelText("Situation");
   if (waitForNative)
     await waitFor(() =>
       expect(host.requests.some((request) => request.key === "ducts.snapshot")).toBe(true),
     );
-  return { view, router, situation: within(view.getByLabelText("Situation")) };
+  return { view, router, situation: within(view.getAllByLabelText("Situation")[0]!) };
 }
 const liveButton = async (scope: ReturnType<typeof within>, name: string | RegExp) =>
   waitFor(() => {
     const button = scope.getByRole("button", { name });
     expect(button.getAttribute("aria-disabled")).not.toBe("true");
+    expect(button.hasAttribute("disabled")).toBe(false);
     return button;
   });
 
@@ -133,6 +146,27 @@ test("snapshot failure has one loading body and semantic Refresh reacquires and 
     host.requests.filter((request) => request.key === "ducts.snapshot").length,
   ).toBeGreaterThan(1);
   expect(host.writes).toEqual([]);
+});
+
+test("a fan without terminals shows its pricing failure and native picture while Heal remains available", async () => {
+  host.snapshot = noTerminalSnapshot();
+  // A zero-flow dangling end is a valid cap repair. An outlet carrying air remains protected.
+  host.snapshot.segments[0]!.connectors[1]!.flowCfm = 0;
+  const { view, situation } = await mounted(
+    "/ducts?target=s&system=EX%201&picture=schematic&layers=",
+  );
+  await view.findByText("EX 1 has no terminal and no fan-to-terminal path; nothing to price", {
+    selector: "[role='alert']",
+  });
+  expect(view.queryByRole("region", { name: "Ducts loading" })).toBeNull();
+  expect(
+    view.container.querySelector("[data-schematic-group='g1'] [data-element='11620957']"),
+  ).not.toBeNull();
+  await liveButton(situation, "Heal");
+  fireEvent.click(await liveButton(situation, "Preview heal"));
+  await waitFor(() =>
+    expect(host.actions.map((action) => action.key)).toContain("ducts.preview-heal"),
+  );
 });
 
 test("the ordered network and sheet stages have no picker and render only their graph panes", async () => {
@@ -218,7 +252,9 @@ test("Price prepares one host preview, shows its kernel ticket, commits the same
   const { view, situation } = await mounted();
   fireEvent.click(await liveButton(situation, "Write to Revit"));
   const review = await situation.findByLabelText("Write to Revit review");
-  expect(review.textContent).toContain('"planned":1');
+  expect(review.textContent).toContain("1 planned");
+  expect(review.textContent).not.toContain('"receipt"');
+  expect(review.textContent).toContain("terminal flow");
   expect(host.actions.map((row) => row.key)).toEqual(["ducts.preview-losses"]);
   fireEvent.click(await liveButton(situation, "Write to Revit"));
   await waitFor(() =>
@@ -403,5 +439,156 @@ test("criteria and unit kinds take and revert through the graph's kernel cell ve
   } finally {
     owner.dispose();
     registry.dispose();
+  }
+});
+
+test("clearing the only part drop keeps its row under typed-only and restores through the journal", async () => {
+  host.doc.componentDrops["4"] = { edit: { value: { inWg: 0.12 } } };
+  host.sheetInputs.components["4"] = { drop: { value: 0.12, source: "typed" } };
+  const before = structuredClone(host.doc);
+  const { view } = await mounted("/ducts?target=s&stage=sheet&picture=schematic&layers=", false);
+  await waitFor(() =>
+    expect(view.container.querySelector("[data-key='14577391:2']")).not.toBeNull(),
+  );
+  fireEvent.click(view.container.querySelector<HTMLElement>("[data-key='14577391:2']")!);
+  await view.findByRole("region", { name: "Required ESP" });
+  const inputs = within(await view.findByLabelText("Sheet inputs"));
+  fireEvent.click(inputs.getByRole("button", { name: "Show typed inputs only" }));
+  const clear = await liveButton(inputs, /^Clear Part drop /);
+  delete host.sheetInputs.components["4"];
+  expect(clear.isConnected).toBe(true);
+  fireEvent.click(clear);
+  await waitFor(() => expect(host.doc.componentDrops["4"]).toBeUndefined());
+  const restore = await inputs.findByRole("button", { name: /^Restore Part drop / });
+  expect(restore.closest("[data-input-field]")?.getAttribute("data-input-field")).toBe(
+    "component:4:drop",
+  );
+  expect(restore.closest("[data-inputs-orphan]")).toBeNull();
+  host.sheetInputs.components["4"] = { drop: { value: 0.12, source: "typed" } };
+  fireEvent.click(restore);
+  await waitFor(() => expect(host.doc).toEqual(before));
+  expect(host.writes.at(-1)?.kind).toBe("restore");
+  expect(inputs.queryByRole("button", { name: /^Restore Part drop / })).toBeNull();
+});
+
+test.each(["Heal", "Preview heal"])(
+  "%s lands readable repairs and targets in the picture",
+  async (verb) => {
+    const segment = host.snapshot.segments[0]!;
+    segment.connectors.push({
+      ...segment.connectors[0]!,
+      index: 9,
+      point: [-10, 0, 0],
+      facing: [-1, 0, 0],
+      diameterIn: 8,
+      connectedTo: null,
+    });
+    host.snapshot.issues.push({
+      id: "open-end:1:9",
+      kind: "open-end",
+      elementId: 1,
+      connector: 9,
+      note: "open end",
+    });
+    const { view, situation } = await mounted();
+    const controls =
+      verb === "Heal"
+        ? within(view.container.querySelector<HTMLElement>("[data-pane-id='e-inbox']")!)
+        : situation;
+    fireEvent.click(await liveButton(controls, verb));
+    if (verb === "Heal") {
+      const review = await controls.findByLabelText("Heal review");
+      expect(review.textContent).toContain("1 planned");
+      expect(review.textContent).toContain("cap");
+      expect(review.textContent).not.toContain('"receipt"');
+    }
+    await waitFor(() =>
+      expect(
+        view.container.querySelector("[data-review-target]"),
+        view
+          .queryAllByRole("alert")
+          .map((n) => n.textContent)
+          .join(" "),
+      ).not.toBeNull(),
+    );
+    expect(view.getAllByLabelText("Heal in picture")[0]!.textContent).toContain("1 planned");
+    expect(host.actions.map((a) => a.key)).toEqual(["ducts.preview-heal"]);
+    if (verb === "Heal") {
+      fireEvent.click(await liveButton(controls, "Heal"));
+      await waitFor(() =>
+        expect(host.actions.map((a) => a.key)).toEqual(["ducts.preview-heal", "ducts.apply-heal"]),
+      );
+    }
+  },
+);
+
+test("page and hosted fan sheets bind journal chords once per focused mount without duplicate warnings", async () => {
+  const warn = vi.spyOn(console, "warn");
+  const wrap = vi.spyOn(ductsAdapters, "wrap");
+  try {
+    const { view } = await mounted(
+      "/ducts?target=s&stage=sheet&fan=14577391:2&picture=schematic&layers=",
+      false,
+      true,
+    );
+    const regions = view.getAllByRole("region", { name: "Ducts route" });
+    expect(regions).toHaveLength(2);
+    const page = within(regions[0]!);
+    const chat = within(regions[1]!);
+    await page.findByRole("region", { name: "Required ESP" });
+    await chat.findByRole("region", { name: "Required ESP" });
+    const owners = [...new Set(wrap.mock.calls.map((call) => call[0]))];
+    expect(owners).toHaveLength(2);
+    const edit = async (value: string, count: number) => {
+      await waitFor(() => {
+        for (const owner of owners) {
+          expect(owner.snapshot().work?.handle.revision).toBe(host.revision);
+          expect(owner.readings.get("sheet").current).toBe(true);
+        }
+      });
+      const input = page.getByLabelText("Default terminal drop in-wg").querySelector("input")!;
+      await act(async () => input.focus());
+      fireEvent.change(input, { target: { value } });
+      fireEvent.blur(input);
+      await waitFor(() => expect(host.writes).toHaveLength(count));
+    };
+    await edit("0.11", 1);
+    await edit("0.12", 2);
+    const restores = owners.map((owner) => vi.spyOn(owner, "restore"));
+    const undo = async (scope: ReturnType<typeof within>, count: number) => {
+      await waitFor(() => {
+        for (const owner of owners) {
+          expect(owner.snapshot().work?.handle.revision).toBe(host.revision);
+          expect(owner.journal(owner.snapshot().work!.handle.key).read().busy).toBe(false);
+        }
+      });
+      const button = scope.getByRole("button", { name: "Refresh" });
+      button.focus();
+      fireEvent.keyDown(button, { key: "z", code: "KeyZ", ctrlKey: true });
+      fireEvent.keyUp(button, { key: "z", code: "KeyZ", ctrlKey: true });
+      await waitFor(() =>
+        expect(host.writes, owners.map((owner) => owner.journalRefusal()).join("; ")).toHaveLength(
+          count,
+        ),
+      );
+    };
+    await undo(page, 3);
+    expect(host.doc.criteria.edit?.value.terminalDropInWg).toBe(0.11);
+    expect(restores[0]).toHaveBeenCalledTimes(1);
+    expect(restores[1]).not.toHaveBeenCalled();
+    await undo(chat, 4);
+    expect(host.doc.criteria.edit).toBeUndefined();
+    expect(restores[0]).toHaveBeenCalledTimes(1);
+    expect(restores[1]).toHaveBeenCalledTimes(1);
+    expect(host.writes.slice(2).every((write) => write.kind === "restore")).toBe(true);
+    expect(
+      warn.mock.calls.filter((args) =>
+        args.some((value) => String(value).includes("already registered")),
+      ),
+    ).toEqual([]);
+    for (const restore of restores) restore.mockRestore();
+  } finally {
+    wrap.mockRestore();
+    warn.mockRestore();
   }
 });

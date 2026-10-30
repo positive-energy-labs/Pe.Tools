@@ -123,6 +123,24 @@ const SHELL_LAYER = 6;
 const STUB_LAYER = 7;
 /** Stub seams draw after the stub fill, so they sit on top of it and never tint through it. */
 const STUB_SEAM_LAYER = 8;
+/** Every layer `drawScene` renders Lambert faces on alone (`shown.layers.set`): three only lights a
+ * pass with the lights whose layers meet the camera's, so each one needs the lights. */
+export const LIT_FACE_LAYERS = {
+  subject: 0,
+  context: CONTEXT_LAYER,
+  shell: SHELL_LAYER,
+  stub: STUB_LAYER,
+} as const;
+
+/** The scene's two lights, on every face-pass layer. */
+export function sceneLights() {
+  const hemisphere = new THREE.HemisphereLight();
+  const sun = new THREE.DirectionalLight();
+  sun.position.set(1, -1, 3);
+  for (const light of [hemisphere, sun])
+    for (const layer of Object.values(LIT_FACE_LAYERS)) light.layers.enable(layer);
+  return { hemisphere, sun };
+}
 /** Points per axis polygon the shader reads; `space/state.ts` packs its cuts against it. */
 export const CLIP_POINTS = 64;
 
@@ -209,7 +227,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
   const canvas = renderer.domElement;
   canvas.setAttribute(
     "aria-label",
-    "3D model. Drag orbits; Shift drag, right drag or two-finger scroll pans; wheel or pinch zooms to the cursor; double-click frames. Click an element to pick it; right click or BX shows it in Revit.",
+    "3D model. Drag orbits; Shift drag, right drag or two-finger scroll pans; wheel or pinch zooms to the cursor; double-click frames. Click an element to pick it. Right-click opens the element menu; choose a Revit action there, or B then X shows it in Revit.",
   );
   canvas.tabIndex = 0;
   canvas.className = "block size-full";
@@ -219,10 +237,8 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
   let bounds = meshes.bounds;
   const origin = new THREE.Vector3(...center(bounds));
   const scene = new THREE.Scene();
-  const hemisphere = new THREE.HemisphereLight();
+  const { hemisphere, sun } = sceneLights();
   scene.add(hemisphere);
-  const sun = new THREE.DirectionalLight();
-  sun.position.set(1, -1, 3);
   scene.add(sun);
   let camera = newCamera();
   const controls = createOrbitControls(camera, canvas);
@@ -394,10 +410,6 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
   applyClip(contextMaterial);
   veilMaterial(contextMaterial, veil, "line");
   let batch = new FaceBatches(undefined, undefined, []);
-  for (const light of [hemisphere, sun]) {
-    light.layers.enable(CONTEXT_LAYER);
-    light.layers.enable(SHELL_LAYER);
-  }
   const glow = createGlow(renderer);
   /** The occluded-mark alpha every highlight shares (`LOOK.depth.occludedAlpha`). */
   const occluded = { value: look.depth.occludedAlpha };

@@ -26,6 +26,7 @@ import {
 } from "../../../../packages/mcps/src/shared/families-client";
 import { commandVerb, prepareCommand, queryVerb, workVerb } from "#/shell/verbs";
 import { NATIVE_APPLY_WAIT_S } from "#/route/waits";
+import { presentFamilyPlan } from "../family/review";
 import { filterWords } from "./filters";
 import { familiesGroupOf } from "./staged";
 
@@ -298,6 +299,7 @@ export const familiesGraph: RouteGraph<FamiliesPage, FamiliesRouteDocument> = {
       {
         waitSeconds: NATIVE_APPLY_WAIT_S,
         ready: (_, input) => input.refusal,
+        present: presentFamilyPlan,
         prepare: async (scope, input) => {
           const preview = await prepareCommand(
             scope,

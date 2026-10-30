@@ -20,6 +20,8 @@ import { claimsOf, type Claim } from "./legs";
 import { verdictPatches } from "./claims";
 import type { ProtoProps } from "./proto/props";
 import { rememberAnalysis, type PricingResult } from "./pricing-job";
+import { describeInputHistory } from "./sheet/input-history";
+import { systemReadCoverage } from "./system-reads";
 
 /** Context-only view projection. The kernel owns Target, Work, Page, reading demand and invocations. */
 function DuctsProvider({
@@ -36,7 +38,7 @@ function DuctsProvider({
   const snapshot = (read.value ?? read.previous ?? null) as DuctSnapshot | null;
   const pricing = owner.readings.get("pricing");
   const priced =
-    page.stage === "network"
+    page.stage === "network" && pricing.status !== "failed"
       ? ((pricing.value ?? pricing.previous) as PricingResult | undefined)
       : undefined;
   const catalogs = owner.readings.get("catalogs").value as { findings?: string[] } | undefined;
@@ -102,7 +104,7 @@ function DuctsProvider({
   const subjectIds = scope?.groups
     .map((group) => edit.subject[group] ?? work?.doc.subject[group]?.suggestion?.value)
     .find((ids) => ids != null);
-  const current = read.current && (page.stage === "sheet" || pricing.current);
+  const current = read.current;
   const version = read.basis?.sourceVersion;
   const observation = useMemo<NativeObservation>(
     () => ({
@@ -115,7 +117,7 @@ function DuctsProvider({
     [current, doc?.session, doc?.openId, snapshot],
   );
   // Install the worker's exact analysis before any pane asks cached domain projections for it.
-  if (priced && snapshot && current) {
+  if (priced && snapshot && pricing.current) {
     const grids = owner.readings.get("tables").value as import("@pe/ducts-domain/loss-grid").Grids;
     const catalog = owner.readings.get("catalogs").value as {
       tables: import("@pe/ducts-domain/catalog").Catalogs;
@@ -131,10 +133,7 @@ function DuctsProvider({
     );
   }
   const roster = owner.readings.get("roster").value as DuctSnapshot | null;
-  const readSystems =
-    snapshot?.systems.filter((system) =>
-      snapshot.groups.some((group) => group.systemNames.includes(system.name)),
-    ).length ?? 0;
+  const coverage = roster ? systemReadCoverage(snapshot, roster) : null;
   const props: ProtoProps = {
     attentionDoc,
     selection,
@@ -171,28 +170,30 @@ function DuctsProvider({
     reading: {
       pending: read.status === "pending",
       error:
+        (page.stage === "network" ? owner.readings.get("roster").error : null) ??
         read.error ??
         (page.stage === "network"
-          ? (owner.readings.get("roster").error ??
-            owner.readings.get("tables").error ??
+          ? (owner.readings.get("tables").error ??
             owner.readings.get("catalogs").error ??
             pricing.error)
           : null) ??
         null,
-      refreshing: !current && !!snapshot,
+      refreshing:
+        (!read.current ||
+          (page.stage === "network" && pricing.status !== "failed" && !pricing.current)) &&
+        !!snapshot,
     },
     commands,
     cells: commands,
     busy: owner.busy() !== null,
     edit: pendingCount(work?.doc ?? null, snapshot?.store),
     coverage:
-      page.stage === "network" && roster
+      page.stage === "network" && coverage
         ? {
-            read: readSystems,
-            of: roster.systems.length,
+            ...coverage,
             reading: read.status === "pending" ? page.system : [],
             readAll:
-              page.readAll || readSystems === roster.systems.length
+              page.readAll || coverage.read === coverage.of
                 ? null
                 : () => setPage({ readAll: true }),
           }
@@ -215,6 +216,11 @@ function DuctsProvider({
 
 export const ductsAdapters: RouteAdapters<DuctsPage, DuctsRouteDocument> = {
   sources: ductsSources(),
+  workHistory: {
+    readings: ["sheet"],
+    describe: (scope, input, after) =>
+      describeInputHistory(scope.readings, { label: input.label }, after),
+  },
   binding: ductsBinding,
   cell: (row, scope) => {
     const value = row as { segment?: string | null; key?: string; id?: string | number } | null;

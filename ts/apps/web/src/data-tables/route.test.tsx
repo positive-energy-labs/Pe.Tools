@@ -211,6 +211,9 @@ test("Apply requires a prune review, refuses changed Work, and submits the seale
   fireEvent.click(f.view.getByRole("button", { name: "Apply" }));
   const review = await f.view.findByLabelText("Apply review");
   expect(review.textContent).toContain("Prune deletes 2 rows");
+  expect(review.textContent).toContain("Delete row a");
+  expect(review.textContent).toContain("Delete row b");
+  expect(review.textContent).not.toContain('"table"');
   expect(command.run).not.toHaveBeenCalled();
   await act(async () => {
     await f.write(f.key, {

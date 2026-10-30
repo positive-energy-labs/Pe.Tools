@@ -208,6 +208,21 @@ export const takeoffVerbs = {
         work: scope.snapshot.work?.handle,
         target: scope.snapshot.target,
       }),
+      present: (result) => {
+        const request = result as {
+          path?: string;
+          fileVersion?: string;
+          plan?: ReturnType<typeof syncPlan>;
+        };
+        if (!request.path || !request.plan) return { sentence: "RHVAC sync completed.", rows: [] };
+        return {
+          sentence: `Sync ${request.plan.inScope.length} ${request.plan.inScope.length === 1 ? "zone" : "zones"} to ${request.path}.`,
+          rows: [
+            `File version: ${request.fileVersion}`,
+            `${request.plan.linkedUpdates} room updates, ${request.plan.inserts.length} new rooms, ${request.plan.blockedZones.length} blocked zones.`,
+          ],
+        };
+      },
       intent: (_, { request }) => ({
         path: request.path,
         zones: request.zones,

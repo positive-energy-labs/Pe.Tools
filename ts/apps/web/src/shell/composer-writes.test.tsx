@@ -13,7 +13,7 @@ import {
 import { peClient } from "#/host/pe-client";
 import { peReadings, previousOf } from "#/readings";
 import { ProposalHead } from "#/chat/proposal-head";
-import { presentInputHistory } from "#/ducts/sheet/input-history";
+import { describeInputHistory, presentInputHistory } from "#/ducts/sheet/input-history";
 import { RouteWorkspace } from "../../../../packages/runtime/src/route-workspace";
 import { createGraphMount } from "./mount-owner";
 import { appAtomRegistry } from "./owner";
@@ -21,6 +21,7 @@ import { docAtom } from "./work-document";
 import { useWorkHandles } from "./use-work-handles";
 import { workVerb } from "./verbs";
 import { writeRouteWork } from "../route/host";
+import sheetFixture from "#/ducts/sheet/sheet.fixture.json";
 
 const RULE = "round-elbow-1d";
 const LABEL = "Round Elbow 1 D table";
@@ -37,7 +38,7 @@ async function scenario() {
     name: "Ducts",
     work: schema,
     fields: {},
-    readings: {},
+    readings: { sheet: { kind: "derive", source: "sheet", retire: "target" } },
     cells: [{ segment: "rules", groupOf: (key) => [key], label: () => LABEL, noun: "loss rules" }],
     verbs: {
       edit: workVerb(
@@ -46,7 +47,11 @@ async function scenario() {
           patches: (_scope, table) => [
             { path: ["rules", RULE, "edit"], value: { value: { table } } },
           ],
-          history: { describe: () => ({ label: `Edit ${LABEL}` }) },
+          history: {
+            readings: ["sheet"],
+            describe: (scope, _input, after) =>
+              describeInputHistory(scope.readings, { label: `Edit ${LABEL}` }, after),
+          },
         },
       ),
     },
@@ -138,12 +143,28 @@ async function scenario() {
       };
     },
     subscribe: (notify) => appAtomRegistry.subscribe(atom, notify),
-    sources: {},
+    sources: {
+      sheet: {
+        kind: "derive",
+        key: (scope) => scope.workRevision,
+        derive: (scope) => {
+          const totals = structuredClone(sheetFixture.overview.totals);
+          totals.supply.knownInWg = (scope.work as Work).rules[RULE]?.edit ? 2.0578 : 1.7582;
+          return { open: { overview: { totals } } };
+        },
+      },
+    },
+    workHistory: {
+      readings: ["sheet"],
+      describe: (scope, input, after) =>
+        describeInputHistory(scope.readings, { label: input.label }, after),
+    },
     write: writeRouteWork,
     binding: (_id, args) => ({ subject: null, args }),
     subscribeAcceptedDeltas: (key, accept) => workspace.observeAccepted(key, accept),
   });
   const disconnect = owner.connect();
+  const releaseSheet = owner.readings.mount(["sheet"]);
   await waitFor(() => expect(owner.snapshot().work?.handle.revision).toBe(52));
   const edit = async (table: string) => {
     await act(async () => {
@@ -187,6 +208,7 @@ async function scenario() {
     },
     close() {
       vi.useRealTimers();
+      releaseSheet();
       disconnect();
       owner.dispose();
       cleanup();
@@ -207,6 +229,12 @@ test("D8.7: edit → composer revert → edit → undo → undo names the restor
     fireEvent.click(revert);
     await waitFor(() => expect(one.doc().rules).toEqual({}));
     const reverted = one.owner.journal(one.owner.snapshot().work!.handle.key).read().undo.at(-1);
+    await waitFor(() =>
+      expect(
+        presentInputHistory(one.owner.journal(one.owner.snapshot().work!.handle.key).read(), null)
+          .last?.words,
+      ).toBe("supply ≥2.0578 → ≥1.7582"),
+    );
     await one.edit("CD3-3");
     await act(async () => {
       expect((await one.owner.restore("undo"))?.ok).toBe(true);

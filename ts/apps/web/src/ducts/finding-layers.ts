@@ -366,3 +366,28 @@ export function noRunLayers(
     ];
   });
 }
+
+/** A review draws only its admitted repairs; preview geometry remains a ghost. */
+export function healReviewLayers(
+  snapshot: DuctSnapshot,
+  work: DuctsRouteDocument | null,
+  review: import("./reviews").HealReview | null,
+): Layer3D[] {
+  if (!review) return [];
+  const findings = new Set(review.targets.flatMap((target) => target.findings));
+  const shapes = findingShapes(snapshot, findings, work);
+  for (const box of shapes.boxes)
+    box.ghost =
+      review.mode === "preview" ||
+      review.targets.some(
+        (target) => target.outcome === "refused" && target.findings.includes(box.finding),
+      );
+  return findingLayers(shapes, [
+    {
+      key: `heal:${review.group}`,
+      ids: review.targets.flatMap((t) => t.ids),
+      findings: [...findings],
+      damage: null,
+    },
+  ]);
+}

@@ -6,6 +6,41 @@
  */
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
+/** Requested IDs are completion evidence even when Revit returns no system or no network. */
+export type NetworkSnapshot = DuctSnapshot & {
+  systemReads?: { completed: number[]; missing: number[] };
+};
+
+export function systemReadCoverage(snapshot: NetworkSnapshot | null, roster: DuctSnapshot) {
+  const completed = new Set(
+    snapshot?.systemReads?.completed ?? snapshot?.systems.map((system) => system.id),
+  );
+  const missing = new Set(snapshot?.systemReads?.missing);
+  const absent = roster.systems.filter(
+    (system) => completed.has(system.id) && missing.has(system.id),
+  );
+  const empty = roster.systems.filter(
+    (system) =>
+      completed.has(system.id) &&
+      !missing.has(system.id) &&
+      !snapshot?.groups.some((group) => group.systemNames.includes(system.name)),
+  );
+  return {
+    read: completed.size,
+    of: roster.systems.length,
+    report: [
+      absent.length
+        ? `${absent.length} systems returned nothing: ${absent.map((system) => system.name).join(", ")}`
+        : null,
+      empty.length
+        ? `${empty.length} systems have no duct network: ${empty.map((system) => system.name).join(", ")}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(" · "),
+  };
+}
+
 /**
  * Systems per read. Cloud Chadds has 367 systems; 16 of them read 0.7 MB in 1.5 s (2026-10-29).
  * ponytail: a fixed count, not a byte budget; sixteen systems on one huge shared network could

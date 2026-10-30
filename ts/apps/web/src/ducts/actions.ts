@@ -150,12 +150,13 @@ export function ductsBinding(id: string, row: unknown, scope: Scope): MountBindi
   const named = (row ?? {}) as { group?: string; unitId?: number; systemId?: number };
 
   try {
-    const { snapshot, doc, grids, catalogs } = pricing(scope);
-
     let request: unknown;
 
     if (id === "price") request = priceRequest(scope);
     else if (id === "heal") {
+      if (!scope.work) throw Error("Read this document's Work before writing");
+      const snapshot = current<DuctSnapshot>(scope, "ducts");
+      const doc = scope.work.doc;
       const active = activeSystem(scope.page);
 
       const group = named.group ?? healTarget(snapshot, doc, active, scope.page.selected, null);
@@ -165,6 +166,7 @@ export function ductsBinding(id: string, row: unknown, scope: Scope): MountBindi
 
       request = { groups: [healRequestGroup(healOf(snapshot, doc, group))] };
     } else if (id === "assign-fan") {
+      const { snapshot, doc, grids, catalogs } = pricing(scope);
       const pair =
         named.unitId != null && named.systemId != null
           ? { unitId: named.unitId, systemId: named.systemId }

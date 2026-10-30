@@ -25,7 +25,7 @@ import type { ReadingContext, ReadingSource, UseSource } from "#/shell/readings"
 import type { ReadingWorkerPort } from "#/shell/readings-worker";
 import { workerSource } from "#/shell/readings-worker";
 
-import { mergeSnapshots, nextSystemsRead } from "./system-reads";
+import { mergeSnapshots, nextSystemsRead, type NetworkSnapshot } from "./system-reads";
 
 import { applyPricingDelta, type PricingDelta } from "./pricing-delta";
 
@@ -77,7 +77,7 @@ const saved: string | undefined = import.meta.env.DEV
 
 const snapshotSchema = z.custom<DuctSnapshot>();
 
-function networks(): UseSource<DuctSnapshot | null> {
+function networks(): UseSource<NetworkSnapshot | null> {
   return {
     kind: "use",
     dirties: ["snapshot"],
@@ -99,9 +99,13 @@ function networks(): UseSource<DuctSnapshot | null> {
 
       const names = page(ctx).system;
 
-      const wanted = (roster?.systems ?? [])
-        .filter((system) => page(ctx).readAll || names.includes(system.name))
-        .map((system) => system.id);
+      const wanted = [
+        ...new Set(
+          (roster?.systems ?? [])
+            .filter((system) => page(ctx).readAll || names.includes(system.name))
+            .map((system) => system.id),
+        ),
+      ];
 
       const unknown = names.filter(
         (name) => !roster?.systems.some((system) => system.name === name),
@@ -113,10 +117,16 @@ function networks(): UseSource<DuctSnapshot | null> {
           error: `System is not in this document: ${unknown.join(", ")}`,
         });
 
-      if (!wanted.length) return deliver({ kind: "complete", value: roster, revision: 0 });
+      if (!wanted.length)
+        return deliver({
+          kind: "complete",
+          value: roster && { ...roster, systemReads: { completed: [], missing: [] } },
+          revision: 0,
+        });
 
       const parts: { snapshot: DuctSnapshot; version: string }[] = [];
       const completed = new Set<number>();
+      const missing: number[] = [];
       let serial = 0;
       try {
         while (!ctx.signal.aborted) {
@@ -141,9 +151,15 @@ function networks(): UseSource<DuctSnapshot | null> {
             version: event.sourceVersion ?? "",
           });
           for (const id of batch) completed.add(id);
+          missing.push(
+            ...batch.filter((id) => !event.value.systems.some((system) => system.id === id)),
+          );
           deliver({
             kind: completed.size === wanted.length ? "complete" : "part",
-            value: mergeSnapshots(parts.map((part) => part.snapshot)),
+            value: {
+              ...mergeSnapshots(parts.map((part) => part.snapshot))!,
+              systemReads: { completed: [...completed], missing: [...missing] },
+            },
             revision: ++serial,
             sourceVersion: parts.map((part) => part.version).join("+"),
           });

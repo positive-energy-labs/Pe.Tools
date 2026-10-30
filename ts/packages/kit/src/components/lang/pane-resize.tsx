@@ -1,7 +1,9 @@
 import {
   Activity,
+  createContext,
   isValidElement,
   useCallback,
+  useContext,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -77,12 +79,13 @@ interface PaneSizeSpec {
 }
 
 function clampSize(size: number, spec: PaneSizeSpec, containerSize?: number) {
+  const minimum = Math.max(1, spec.minSize);
   const containerMax =
     containerSize == null || containerSize <= 0
       ? Number.POSITIVE_INFINITY
-      : Math.max(spec.minSize, containerSize - (spec.minOtherSize ?? spec.minSize));
+      : Math.max(minimum, containerSize - Math.max(1, spec.minOtherSize ?? spec.minSize));
   const max = Math.min(spec.maxSize ?? Number.POSITIVE_INFINITY, containerMax);
-  return Math.round(Math.max(spec.minSize, Math.min(max, size)));
+  return Math.round(Math.max(minimum, Math.min(max, size)));
 }
 
 function storedSize(spec: PaneSizeSpec) {
@@ -111,13 +114,8 @@ function usePaneSize(spec: PaneSizeSpec & { target: PaneSide }) {
   const paired = spec.collapse?.start != null && spec.collapse.end != null;
   const collapsed = chosen ?? (exclusive && paired ? opposite(lastOpen.current) : null);
 
-  const current = useRef(spec);
-  current.current = spec;
   // Container fitting never persists: a small window must not overwrite the chosen size.
   const fit = useCallback((containerSize: number) => setAvailable(containerSize), []);
-  useLayoutEffect(() => {
-    if (collapsed !== chosen) current.current.collapse?.onCollapsedChange(collapsed);
-  }, [collapsed, chosen]);
 
   const fold = (side: PaneSide) => {
     lastOpen.current = opposite(side);
@@ -172,6 +170,7 @@ function usePaneSize(spec: PaneSizeSpec & { target: PaneSide }) {
 function usePaneFit(
   ref: React.RefObject<HTMLDivElement | null>,
   measure: (rect: DOMRectReadOnly) => void,
+  minimumWidth: number,
 ) {
   const measureRef = useRef(measure);
   measureRef.current = measure;
@@ -185,7 +184,7 @@ function usePaneFit(
     });
     observer.observe(el);
     return () => observer.disconnect();
-  }, [ref]);
+  }, [ref, minimumWidth]);
 }
 
 /** Keep drawing buffers and projection observers at their committed layout until release. */
@@ -350,7 +349,28 @@ interface PaneSplitProps {
   grow?: boolean;
 }
 
-const NO_RESIZE = { defaultSize: 0, minSize: 0, target: "start" } as const;
+const NO_RESIZE: PaneSizeSpec & { target: PaneSide } = {
+  defaultSize: 0,
+  minSize: 0,
+  target: "start",
+};
+
+// Width requirements cross component/graph boundaries, including splits inside vertical panes.
+const PaneMinimum = createContext<((id: symbol, width: number) => () => void) | null>(null);
+function useChildMinimum() {
+  const widths = useRef(new Map<symbol, number>());
+  const [minimum, setMinimum] = useState(0);
+  const register = useCallback((id: symbol, width: number) => {
+    const update = () => setMinimum(Math.max(0, ...widths.current.values()));
+    widths.current.set(id, width);
+    update();
+    return () => {
+      widths.current.delete(id);
+      update();
+    };
+  }, []);
+  return [minimum, register] as const;
+}
 
 export const paneSplitRecipe = tv({
   base: "grid size-full min-h-0 min-w-0 overflow-visible",
@@ -362,21 +382,48 @@ export const paneSplitRecipe = tv({
 /** Binary compositional escape hatch. Null sides retain their wrappers but consume no track. */
 export function PaneSplit({ id, axis, start, end, resize, grow }: PaneSplitProps) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const state = usePaneSize(resize ?? NO_RESIZE);
+  const parentMinimum = useContext(PaneMinimum);
+  const minimumId = useRef(Symbol());
+  const [startMinimum, registerStart] = useChildMinimum();
+  const [endMinimum, registerEnd] = useChildMinimum();
+  const [gutter, setGutter] = useState(0);
+  const spec = resize ?? NO_RESIZE;
+  const ownMinimum = Math.max(spec.minSize, spec.target === "start" ? startMinimum : endMinimum);
+  const otherMinimum = Math.max(
+    spec.minOtherSize ?? spec.minSize,
+    spec.target === "start" ? endMinimum : startMinimum,
+  );
+  const effectiveResize =
+    axis === "horizontal" ? { ...spec, minSize: ownMinimum, minOtherSize: otherMinimum } : spec;
+  const state = usePaneSize(effectiveResize);
   const [stacked, setStacked] = useState(false);
+  const [autoFold, setAutoFold] = useState<PaneSide | null>(null);
   const horizontal = axis === "horizontal" && !stacked;
   const bothSides = start != null && end != null;
+  const minimumWidth = !bothSides
+    ? start != null
+      ? startMinimum
+      : endMinimum
+    : axis === "horizontal"
+      ? ownMinimum + otherMinimum + gutter
+      : Math.max(startMinimum, endMinimum);
+  useLayoutEffect(
+    () => parentMinimum?.(minimumId.current, minimumWidth),
+    [parentMinimum, minimumWidth],
+  );
   const target = resize?.target ?? "start";
-  const folded = bothSides && !stacked ? state.collapsed : null;
+  const folded = bothSides && !stacked ? (state.collapsed ?? autoFold) : null;
   const sized = folded == null ? "var(--pane-size)" : folded === target ? RAIL : "minmax(0, 1fr)";
   const rest = folded != null && folded !== target ? RAIL : "minmax(0, 1fr)";
   const tracks = !bothSides
     ? "minmax(0, 1fr)"
-    : resize == null || stacked
+    : stacked
       ? "minmax(0, 1fr) var(--gutter) minmax(0, 1fr)"
-      : target === "start"
-        ? `${sized} var(--gutter) ${rest}`
-        : `${rest} var(--gutter) ${sized}`;
+      : resize == null
+        ? `minmax(${horizontal ? startMinimum : 0}px, 1fr) var(--gutter) minmax(${horizontal ? endMinimum : 0}px, 1fr)`
+        : target === "start"
+          ? `${sized} var(--gutter) ${rest}`
+          : `${rest} var(--gutter) ${sized}`;
   const gridStyle = {
     "--pane-size": `${state.renderedSize}px`,
     [horizontal ? "gridTemplateColumns" : "gridTemplateRows"]: tracks,
@@ -391,29 +438,30 @@ export function PaneSplit({ id, axis, start, end, resize, grow }: PaneSplitProps
     return rect ? (horizontal ? rect.width : rect.height) - seamSize() : undefined;
   };
 
-  usePaneFit(rootRef, (rect) => {
-    const gutter = seamSize();
-    const constrained =
-      bothSides &&
-      axis === "horizontal" &&
-      resize != null &&
-      rect.width > 0 &&
-      rect.width < resize.minSize + (resize.minOtherSize ?? resize.minSize) + gutter;
-    // Focus/expansion chooses the survivor; splits without rails can still stack.
-    const rails = resize?.collapse;
-    const preferred = state.preferredFold();
-    const yields = rails?.[preferred]
-      ? preferred
-      : rails?.[target]
-        ? target
-        : rails?.[state.other]
-          ? state.other
-          : null;
-    const stack = constrained && yields == null;
-    setStacked(stack);
-    if (constrained && yields != null && state.collapsed == null) state.fold(yields);
-    if (!stack) state.fit((axis === "horizontal" ? rect.width : rect.height) - gutter);
-  });
+  usePaneFit(
+    rootRef,
+    (rect) => {
+      const gutter = seamSize();
+      setGutter(gutter);
+      const constrained =
+        bothSides && axis === "horizontal" && rect.width > 0 && rect.width < minimumWidth;
+      // Focus/expansion chooses the survivor; splits without rails can still stack.
+      const rails = resize?.collapse;
+      const preferred = state.preferredFold();
+      const yields = rails?.[preferred]
+        ? preferred
+        : rails?.[target]
+          ? target
+          : rails?.[state.other]
+            ? state.other
+            : null;
+      const stack = constrained && yields == null;
+      setStacked(stack);
+      setAutoFold(constrained ? yields : null);
+      if (!stack) state.fit((axis === "horizontal" ? rect.width : rect.height) - gutter);
+    },
+    minimumWidth,
+  );
 
   const renderSide = (side: PaneSide, child: ReactNode) => {
     const spec = resize?.collapse?.[side];
@@ -446,7 +494,13 @@ export function PaneSplit({ id, axis, start, end, resize, grow }: PaneSplitProps
                     : ChevronUp
               }
               refusal={spec.refusal}
-              onClick={() => state.expand(side)}
+              onClick={() => {
+                state.expand(side);
+                if (autoFold != null && !(resize?.collapse?.start && resize.collapse.end)) {
+                  setAutoFold(null);
+                  setStacked(true);
+                }
+              }}
             />
             <PaneRailTitle
               title={spec.title}
@@ -472,9 +526,13 @@ export function PaneSplit({ id, axis, start, end, resize, grow }: PaneSplitProps
           onFocusCapture={() => state.focus(side)}
           onPointerDownCapture={() => state.focus(side)}
         >
-          {/* Folded panes retain local state, but their effects and background updates must not
-              block the visible pane. Activity admits current props before revealing them. */}
-          <Activity mode={rail ? "hidden" : "visible"}>{child}</Activity>
+          {/* Responsive rails keep intrinsic measurements mounted so ancestors cannot oscillate.
+              Explicit folds release effects and retain edits until the person expands them. */}
+          <PaneMinimum value={side === "start" ? registerStart : registerEnd}>
+            <Activity mode={rail && resize?.collapse?.collapsed === side ? "hidden" : "visible"}>
+              {child}
+            </Activity>
+          </PaneMinimum>
         </div>
       </>
     );
@@ -487,6 +545,9 @@ export function PaneSplit({ id, axis, start, end, resize, grow }: PaneSplitProps
       data-layout-split={id}
       data-pane-folded={folded ?? undefined}
       data-pane-stacked={stacked || undefined}
+      data-pane-min-size={effectiveResize.minSize}
+      data-pane-min-other-size={effectiveResize.minOtherSize ?? effectiveResize.minSize}
+      data-pane-target={target}
       data-axis={horizontal ? "horizontal" : "vertical"}
       data-surface="page"
       className={paneSplitRecipe({ grow })}
@@ -502,7 +563,7 @@ export function PaneSplit({ id, axis, start, end, resize, grow }: PaneSplitProps
             axis={horizontal ? "horizontal" : "vertical"}
             split={rootRef}
             state={state}
-            spec={resize}
+            spec={effectiveResize}
             containerSize={measuredContainer}
           />
         </div>

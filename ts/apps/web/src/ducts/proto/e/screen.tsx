@@ -113,12 +113,13 @@ const partialWord = (coverage: ProtoProps["coverage"]) =>
 /** The scoped read's extent and its one verb: read every system, a few per read, into the panes. */
 function ReadCoverage({ coverage }: { coverage: ProtoProps["coverage"] }) {
   const partial = partialWord(coverage);
-  if (!coverage || !partial) return null;
+  if (!coverage || (!partial && !coverage.report)) return null;
   return (
     <p className="flex flex-wrap items-baseline gap-2 t-small text-ink-2" data-e-coverage="">
       <span>
-        {partial}
+        {partial ?? `${coverage.read} of ${coverage.of} systems read`}
         {coverage.reading.length ? ` · reading ${coverage.reading.join(", ")}…` : ""}
+        {coverage.report ? ` · ${coverage.report}` : ""}
       </span>
       {coverage.readAll ? (
         <Button
@@ -349,10 +350,24 @@ function LoadedScreenBody({
       props.work.revision,
     ],
   );
-  const inbox = useMemo(
-    () => baseInbox && { ...baseInbox, diagnostics: [...baseInbox.diagnostics, ...noRunRows] },
-    [baseInbox, noRunRows],
-  );
+  const inbox = useMemo(() => {
+    if (!baseInbox) return null;
+    const run = page.heal;
+    const reviewed = (row: InboxItem) =>
+      run && row.key === `heal:${run.group}`
+        ? {
+            ...row,
+            status: run.sentence,
+            note: run.rows.join("; "),
+            ids: [...new Set([...row.ids, ...run.targets.flatMap((t) => t.ids)])],
+          }
+        : row;
+    return {
+      ...baseInbox,
+      fix: baseInbox.fix.map(reviewed),
+      diagnostics: [...baseInbox.diagnostics.map(reviewed), ...noRunRows],
+    };
+  }, [baseInbox, noRunRows, page.heal]);
   // A unit whose role is fan while no Revit system names it base equipment offers to make it one.
   const fanHandles: FanVerbs = { render: props.commands };
   const owedBase = useMemo(
@@ -639,6 +654,11 @@ function LoadedScreenBody({
       <>
         <OpenSystems system={page.system} onChange={(system) => setPage({ system })} />
         <ReadCoverage coverage={props.coverage} />
+        {props.reading.error ? (
+          <p role="alert" data-tone="alarm">
+            {props.reading.error}
+          </p>
+        ) : null}
         <Scroll className="min-h-0 flex-1">
           <SystemsList
             systems={systems}
@@ -657,6 +677,7 @@ function LoadedScreenBody({
       census.priced,
       census.fix,
       props.coverage,
+      props.reading.error,
       systems,
       fansOf,
       nameOf,

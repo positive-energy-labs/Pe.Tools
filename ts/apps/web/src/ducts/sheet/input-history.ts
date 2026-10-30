@@ -13,6 +13,14 @@ export const editMetaSchema = z.strictObject({
   rowKey: z.string().nullable().optional(),
   clear: z.boolean().optional(),
   was: z.string().optional(),
+  /** A numeric row may have no underlying source after clear; retain its identity in the journal. */
+  row: z
+    .object({
+      label: z.string(),
+      section: z.enum(["units", "terminals", "parts", "rulings"]),
+      ids: z.array(z.number()),
+    })
+    .optional(),
 });
 export type EditMeta = z.infer<typeof editMetaSchema>;
 export const inputHistoryMetaSchema = editMetaSchema.omit({ label: true }).extend({
@@ -49,14 +57,18 @@ export function presentInputHistory(
   const meta = inputHistoryMetaSchema.safeParse(last?.step.meta);
   const effect = meta.success ? meta.data.effect : null;
   return {
-    undoLabel: undo ? (undo.label ?? "input edit") : null,
-    redoLabel: redo ? (redo.label ?? "input edit") : null,
+    undoLabel: undo ? undo.label : null,
+    redoLabel: redo ? redo.label : null,
+    /** A foreign write changed this step's paths: the kernel refuses it; say so before the press. */
+    undoSuperseded: undo?.superseded?.message ?? null,
+    redoSuperseded: redo?.superseded?.message ?? null,
     cleared:
       undo && cleared.success && cleared.data.clear
         ? {
             press: undo.press,
             rowKey: cleared.data.rowKey ?? null,
-            was: cleared.data.was ?? undo.label ?? "input",
+            was: cleared.data.was ?? undo.label,
+            row: cleared.data.row,
           }
         : null,
     last: refusal

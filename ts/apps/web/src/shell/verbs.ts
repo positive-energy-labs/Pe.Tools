@@ -73,6 +73,8 @@ export interface VerbContext<C extends Caller = Caller> {
   readonly caller: C;
   readonly receipt?: (receipt: Exclude<HostReceipt, { state: "detached" }>, press: string) => void;
   readonly page?: () => Readonly<Record<string, unknown>>;
+  /** Lands a review's declared Page patch before sealing its basis, so it cannot stale itself. */
+  readonly landReview?: (page: Record<string, unknown>) => void;
   readonly readings?: () => Readonly<Record<string, ReadingState>>;
   /** The existing owner mints the press and admits exactly one running invocation. */
   readonly owner: Pick<ReturnType<typeof createRouteOwner>, "runAction">;
@@ -102,7 +104,14 @@ export interface VerbScope {
   readonly value: unknown;
   readonly readings: Readonly<Record<string, ReadingState>>;
 }
+export interface VerbPresentation {
+  readonly sentence: string;
+  readonly rows: readonly string[];
+  /** Admitted Page state for a picture or other route view of the review. */
+  readonly page?: Record<string, unknown>;
+}
 export interface ReviewTicket<I = unknown> {
+  readonly presentation: Omit<VerbPresentation, "page">;
   readonly step?: number;
   readonly press: string;
   readonly subject: VerbSubject | null;
@@ -200,6 +209,7 @@ export type InvocationPhase<C extends Caller> =
 
 type Declaration<S extends z.ZodType> = Omit<VerbDecl<S>, "kind" | "review">;
 interface Binding {
+  present?: (result: unknown, scope: VerbScope) => VerbPresentation;
   receiptPage?: (receipt: HostReceipt) => Record<string, unknown>;
   raw?: (
     scope: VerbScope,
@@ -330,6 +340,8 @@ export function commandVerb<K extends SemanticActionKey, S extends z.ZodType>(
     ),
   implementation: {
     lands?: (result: unknown) => Record<string, unknown>;
+    /** Reads the prepared evidence for review, and the receipt result after success. */
+    present?: (result: unknown, scope: VerbScope) => VerbPresentation;
     waitSeconds?: number;
     ready?: (scope: VerbScope, input: z.output<S>) => string | null;
     prepare?: (scope: VerbScope, input: z.output<S>) => unknown;
@@ -346,6 +358,7 @@ export function commandVerb<K extends SemanticActionKey, S extends z.ZodType>(
   const verb = { does: command, ...declaration, kind: "command" as const };
   bindings.set(verb, {
     command,
+    present: implementation.present,
     lands: implementation.lands,
     waitSeconds: implementation.waitSeconds,
     answers,
@@ -485,6 +498,19 @@ export async function prepareCommand<K extends SemanticActionKey>(
   const answer = actionResult(receipt) as { value?: unknown };
   return { receipt, response: answer?.value ?? answer };
 }
+
+/** Unpresented evidence stays sealed in the ticket; only a short count summary reaches the UI. */
+const genericReview = (verb: VerbDecl, evidence: unknown): VerbPresentation => {
+  const result = evidence as { response?: { counts?: object }; counts?: object } | null;
+  const counts = result?.response?.counts ?? result?.counts;
+  const words = Object.entries(counts ?? {})
+    .filter(([, count]) => typeof count === "number" && count > 0)
+    .map(([word, count]) => `${count} ${word}`);
+  return {
+    sentence: `${verb.label}: ${words.join(" · ") || "review the proposed changes"}.`,
+    rows: [],
+  };
+};
 
 const frozen = <T>(value: T): T => {
   if (value !== null && typeof value === "object") {
@@ -665,7 +691,7 @@ async function invokeCore<C extends Caller>(
             return finish(failure("refused", "This sequence has no commands", press));
           for (let step = 0; step < (steps?.length ?? 1); step++) {
             if (terminal) return "refusal" in terminal ? terminal.refusal : null;
-            const snapshot = copy(ctx.snapshot());
+            let snapshot = copy(ctx.snapshot());
             if (
               snapshot.generation !== initialSnapshot.generation ||
               !equal(snapshot.target, initialSnapshot.target) ||
@@ -704,7 +730,28 @@ async function invokeCore<C extends Caller>(
                 return finish(
                   failure("stale", "The invocation basis changed during preparation", press),
                 );
+              const presentation =
+                binding.present?.(evidence, scope) ?? genericReview(verb, evidence);
+              const { page, ...words } = presentation;
+              if (page && ctx.landReview) {
+                ctx.landReview(copy(page));
+                const landed = copy(ctx.snapshot());
+                if (
+                  snapshot.generation !== landed.generation ||
+                  !equal(snapshot.target, landed.target) ||
+                  !equal(snapshot.work, landed.work)
+                )
+                  return finish(
+                    failure(
+                      "stale",
+                      "The Target or Work changed while presenting the review",
+                      press,
+                    ),
+                  );
+                snapshot = landed;
+              }
               ticket = copy({
+                presentation: words,
                 ...(steps && { step }),
                 press,
                 subject: boundSubject,
@@ -979,7 +1026,13 @@ async function invokeCore<C extends Caller>(
                 kind: "command",
                 press,
                 receipt,
-                ...(sameScope && binding.lands && { page: binding.lands(receipt.result) }),
+                ...(sameScope &&
+                  (binding.lands || binding.present) && {
+                    page: {
+                      ...binding.lands?.(receipt.result),
+                      ...binding.present?.(receipt.result, fresh).page,
+                    },
+                  }),
               });
             }
             const hostRefusal = "refusal" in receipt ? receipt.refusal : undefined;

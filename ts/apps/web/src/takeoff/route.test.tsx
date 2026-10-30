@@ -130,8 +130,10 @@ test("kernel proposal take captures its first base and undo restores both exact 
   expect(host.writes).toHaveLength(1);
   expect(host.doc.bases[room.guid]?.name).toBe(room.name);
   expect(host.doc.edits[key]?.edit?.value).toBe(3);
+  await waitFor(() => expect(owner().snapshot().work?.handle.revision).toBe(host.revision));
   await act(async () => {
-    await owner().restore("undo");
+    const restored = await owner().restore("undo");
+    expect(restored, restored && !restored.ok ? restored.message : "").toMatchObject({ ok: true });
   });
   expect(host.doc).toEqual(before);
 });
@@ -244,8 +246,10 @@ test("sync reviews the frozen scope in the kernel before dispatching its native 
   fireEvent.click(situation.getByRole("button", { name: "sync" }));
   await waitFor(() => expect(owner().results.get("sync")).toMatchObject({ state: "review" }));
   const review = situation.getByLabelText("sync review");
-  expect(review.textContent).toContain(host.capture.id);
-  expect(review.textContent).toContain("version-A");
+  expect(review.textContent).toContain("Sync 1 zone to C:/Fixtures/example.r10.");
+  expect(review.textContent).toContain("File version: version-A");
+  expect(review.textContent).toContain("new rooms");
+  expect(review.textContent).not.toContain('"captureId"');
   expect(host.actions).toEqual([]);
   fireEvent.click(situation.getByRole("button", { name: "sync" }));
   await waitFor(() => expect(host.actions).toHaveLength(1));

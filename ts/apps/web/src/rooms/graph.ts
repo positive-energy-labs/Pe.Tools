@@ -178,6 +178,14 @@ export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = {
         waitSeconds: NATIVE_APPLY_WAIT_S,
         ready: (_, input) => input.refusal,
         prepare: (_, input) => input.request,
+        present: (result) => {
+          const request = result as { rejected?: unknown[] };
+          const count = request.rejected?.length ?? 0;
+          return {
+            sentence: "Partition this view into rooms.",
+            rows: [`Keep ${count} rejected ${count === 1 ? "region" : "regions"} excluded.`],
+          };
+        },
         intent: (_, input) => input.request,
       },
     ),

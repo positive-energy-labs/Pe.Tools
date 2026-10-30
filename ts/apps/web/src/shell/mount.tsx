@@ -364,6 +364,7 @@ export function GraphRouteView<P, W>({
   situation?: ReactNode;
   device?: { panes: GraphLayoutState; onChange(next: GraphLayoutState): void };
 }) {
+  const mountElement = useRef<HTMLDivElement>(null);
   const stageId = owner.stage();
   const stage = graph.stages[stageId]!;
   const page = owner.view.read().page;
@@ -449,7 +450,7 @@ export function GraphRouteView<P, W>({
       id: `${graph.key}.${direction}`,
       label: direction,
       bindings: direction === "undo" ? ["Mod+Z"] : ["Mod+Shift+Z", "Mod+Y"],
-      options: { ignoreInputs: true, preventDefault: false, stopPropagation: false },
+      options: { ignoreInputs: true, preventDefault: false },
       invoke: (event?: KeyboardEvent) => {
         if (hidden || !current() || (event && nativeUndo(event))) return false;
         void owner.restore(direction);
@@ -521,13 +522,14 @@ export function GraphRouteView<P, W>({
     }),
   );
   return (
-    <KeyScope id={keys.tree.id} hidden={hidden}>
+    <KeyScope id={keys.tree.id} hidden={hidden} element={mountElement}>
       <ScopeKeys
         keys={[...keys.tree.keys, ...journalKeys, ...(adapters.navigate ? navigatorKeys : [])]}
       />
-      <KeyScope key={stageKeys.id} id={stageKeys.id}>
+      <KeyScope key={stageKeys.id} id={stageKeys.id} element={mountElement}>
         <ScopeKeys keys={stageKeys.keys} />
         <div
+          ref={mountElement}
           role="region"
           aria-label={`${graph.name} route`}
           className="flex h-full min-h-0 flex-col"
@@ -802,10 +804,13 @@ export function GraphHistory<P, W>({
 }) {
   const [entries, setEntries] = useState(() => owner.timeline.read());
   useEffect(() => owner.timeline.subscribe(() => setEntries(owner.timeline.read())), [owner]);
+  useSyncExternalStore(owner.subscribe, owner.version, owner.version);
   const reading = receipts ? owner.readings.get(receipts) : null;
   const parsed = actionStatusSchema.array().safeParse(reading?.value ?? reading?.previous);
   const scope = owner.snapshot();
   const key = scope.work?.handle.key ?? scope.workKey ?? scope.unreadable;
+  const journal = key ? owner.journals.get(workKey(key))?.read() : null;
+  const steps = journal ? [...journal.undo, ...journal.redo] : [];
   const saved =
     !workOnly && parsed.success ? (key ? receiptsForWork(parsed.data, key) : parsed.data) : [];
   const recorded = new Set(saved.map((receipt) => receipt.id));
@@ -815,8 +820,19 @@ export function GraphHistory<P, W>({
   return (
     <section aria-label={label}>
       {reading?.status === "failed" && <p role="alert">{reading.error}</p>}
-      {!shown.length && !saved.length && <p>No activity yet</p>}
+      {!shown.length && !saved.length && !steps.length && <p>No activity yet</p>}
       <ol>
+        {steps.map((step) => (
+          <li key={`work:${step.press}`}>
+            {step.label} ·{" "}
+            {step.superseded
+              ? `superseded at r${step.superseded.revision}`
+              : journal!.redo.some((entry) => entry.press === step.press)
+                ? "undone"
+                : "applied"}
+            {step.superseded && <> · {step.superseded.message}</>}
+          </li>
+        ))}
         {[
           ...shown
             .filter((entry) => {
@@ -897,7 +913,16 @@ function GraphVerb<P, W>({
       </Button>
       {review && (
         <span aria-label={`${verb.label} review`}>
-          <output>{JSON.stringify(review.ticket.evidence)}</output>
+          <output>{review.ticket.presentation.sentence}</output>
+          {review.ticket.presentation.rows.length > 0 && (
+            <span role="list" className="flex flex-col">
+              {review.ticket.presentation.rows.map((row, index) => (
+                <span role="listitem" key={index}>
+                  {row}
+                </span>
+              ))}
+            </span>
+          )}
           {verb.review === "required" && verb.kind !== "recovery" && (
             <Label>
               Review answers
