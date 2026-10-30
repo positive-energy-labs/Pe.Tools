@@ -130,10 +130,10 @@ export function routeFromGraph<P, W, const Path extends string>(
     // URL that spells out each default. Absent fields rest at their defaults in the mount.
     validateSearch: (search: Record<string, unknown>) => {
       const typed = url.read(search) as Record<string, unknown>;
-      return {
-        ...routeSearch(search),
-        ...Object.fromEntries(Object.entries(typed).filter(([id]) => id in search)),
-      };
+      const present = Object.fromEntries(
+        Object.entries(typed).filter(([id]) => id in search),
+      ) as Partial<P>;
+      return { ...routeSearch(search), ...present };
     },
     component: mountRoute(graph, adapters),
   });
