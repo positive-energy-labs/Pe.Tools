@@ -111,7 +111,7 @@ public static class DuctSnapshots {
             // The sheet's slot pickers (terminal flow, fan flow) list every air flow parameter the read's own terminals and
             // units carry, with coverage over them (ducts LEDGER 2026-10-29, protocol slots). Raw reads carry no groups.
             List<Element> RawOf(DuctNodeKind kind) => rawNodes.Where(n => n.Kind == kind)
-                .Select(n => doc.GetElement(new ElementId(n.Id))).OfType<Element>().ToList();
+                .Select(n => doc.GetElement(n.Id.ToElementId())).OfType<Element>().ToList();
             var ungrouped = new Dictionary<long, IReadOnlyList<string>>();
             return new DuctSnapshotData(
                 new DuctDocument(doc.Title, readAt, clock.ElapsedMilliseconds, network),
@@ -202,7 +202,7 @@ public static class DuctSnapshots {
         var boxes = new List<ElementFilter>();
         foreach (var c in ends) {
             if (c.ConnectedTo is { } to) {
-                if (!have.Contains(to.ElementId)) Reach(r.Doc.GetElement(new ElementId(to.ElementId)));
+                if (!have.Contains(to.ElementId)) Reach(r.Doc.GetElement(to.ElementId.ToElementId()));
                 continue;
             }
             if (c.Point.Length != 3) continue;
@@ -257,7 +257,7 @@ public static class DuctSnapshots {
         var ids = selector.SystemIds ?? throw new ArgumentException("selector.systemIds is required for kind systems");
         if (ids.Count == 0) throw new ArgumentException("selector.systemIds names no system.");
         var systems = ids.Distinct().Select(id =>
-                doc.GetElement(new ElementId(id)) as MechanicalSystem
+                doc.GetElement(id.ToElementId()) as MechanicalSystem
                 ?? throw new ArgumentException($"Element {id} is not a duct system in this document."))
             .OrderBy(m => m.Name, StringComparer.Ordinal).ToList();
         var members = new Dictionary<long, Element>();
@@ -287,7 +287,7 @@ public static class DuctSnapshots {
         var nodes = new List<DuctNode>();
         var segments = new List<DuctSegment>();
         foreach (var id in (selector.Ids ?? throw new ArgumentException("selector.ids is required for kind ids")).Distinct().OrderBy(id => id)) {
-            var e = r.Doc.GetElement(new ElementId(id)) ?? throw new ArgumentException($"Element {id} does not exist in this document.");
+            var e = r.Doc.GetElement(id.ToElementId()) ?? throw new ArgumentException($"Element {id} does not exist in this document.");
             if (!Walkable(e)) throw new ArgumentException($"Element {id} is {e.Category?.Name ?? e.GetType().Name}, not a duct, flex, fitting, accessory, terminal or mechanical equipment.");
             Build(r, e, null, nodes, segments);
         }
@@ -304,7 +304,7 @@ public static class DuctSnapshots {
     private static (List<DuctNode> Nodes, List<DuctSegment> Segments, DuctWalk Walk) Walk(Reader r, DuctSnapshotSelector s) {
         var clock = Stopwatch.StartNew();
         var startId = s.UnitId ?? throw new ArgumentException("selector.unitId is required for kind from");
-        var start = r.Doc.GetElement(new ElementId(startId)) ?? throw new ArgumentException($"Element {startId} does not exist in this document.");
+        var start = r.Doc.GetElement(startId.ToElementId()) ?? throw new ArgumentException($"Element {startId} does not exist in this document.");
         if (!Walkable(start)) throw new ArgumentException($"Element {startId} is {start.Category?.Name ?? start.GetType().Name}, not a duct, flex, fitting, accessory, terminal or mechanical equipment.");
         var startPorts = HvacConnectors(start).Where(c => s.PortIndex is not { } p || c.Id == p).ToList();
         if (startPorts.Count == 0) throw new ArgumentException($"Element {startId} has no HVAC port{(s.PortIndex is { } p ? $" {p}" : "")}.");
