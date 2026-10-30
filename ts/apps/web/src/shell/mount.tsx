@@ -89,7 +89,7 @@ export function mountRoute<P, W>(graph: RouteGraph<P, W>, adapters: RouteAdapter
     return function RefusedRoute() {
       return <Refused refusals={refusals} />;
     };
-  const url = graphUrlPage(graph);
+  const url = graphUrlPage(graph, adapters.initialPage);
   return function MountedRoute({ hidden = false }: MountRouteProps) {
     const initial = useInitialUrlPage(url);
     const scope = useWorkScope(graph);
@@ -122,7 +122,7 @@ export function routeFromGraph<P, W, const Path extends string>(
   adapters: RouteAdapters<P, W>,
   path: Path = `/${graph.address.replace(/^\//, "")}` as Path,
 ) {
-  const url = graphUrlPage(graph);
+  const url = graphUrlPage(graph, adapters.initialPage);
   return createRoute({
     getParentRoute: () => rootRoute,
     path,

@@ -19,3 +19,26 @@ describe("graphUrlPage.read", () => {
     });
   });
 });
+
+describe("graphUrlPage.write", () => {
+  test("a field at its resting value is absent from the URL", () => {
+    const codec = { encode: (v: unknown) => String(v), decode: (s: string) => s };
+    const url = graphUrlPage(
+      {
+        fields: {
+          level: { schema: z.string(), codec, role: "subject" },
+          cfm: { schema: z.string().default("1000"), codec, role: "query" },
+        },
+      } as never,
+      { level: "" } as never,
+    );
+    expect(url.write({ level: "", cfm: "1000" } as never)).toEqual({
+      level: undefined,
+      cfm: undefined,
+    });
+    expect(url.write({ level: "L2", cfm: "1000" } as never)).toEqual({
+      level: "L2",
+      cfm: undefined,
+    });
+  });
+});

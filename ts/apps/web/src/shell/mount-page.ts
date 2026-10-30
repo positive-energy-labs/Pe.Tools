@@ -8,7 +8,11 @@ import {
 import type { UrlPage } from "../route/url";
 
 /** Graph fields supply every codec and history policy; useUrlPage owns router sequencing. */
-export function graphUrlPage<P, W>(graph: RouteGraph<P, W>): UrlPage<P> {
+/**
+ * `rest` is each field's resting value when its schema has no default (the mount's initialPage);
+ * a field at rest is absent from the URL, so a shared link carries only what the user changed.
+ */
+export function graphUrlPage<P, W>(graph: RouteGraph<P, W>, rest: Partial<P> = {}): UrlPage<P> {
   const entries = Object.entries(graph.fields) as [
     keyof P & string,
     FieldDecl & { role: FieldRole },
@@ -38,9 +42,11 @@ export function graphUrlPage<P, W>(graph: RouteGraph<P, W>): UrlPage<P> {
         .map(([id, field]) => {
           const value = page[id];
           const initial = field.schema.safeParse(undefined);
+          const resting = initial.success ? initial.data : rest[id as keyof P];
           return [
             id,
-            initial.success && canonicalRouteInput(initial.data) === canonicalRouteInput(value)
+            (initial.success || id in rest) &&
+            canonicalRouteInput(resting) === canonicalRouteInput(value)
               ? undefined
               : field.codec.encode(value),
           ];
