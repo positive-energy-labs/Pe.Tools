@@ -11,7 +11,7 @@ import * as THREE from "three";
 
 import type { DuctsRouteDocument } from "@pe/agent-contracts";
 import { edgesOf, outlineOf, overhang, type Edge, type Outline } from "@pe/ducts-domain/faces";
-import { healPlan } from "@pe/ducts-domain/heal";
+import { healPlan, type HealItem } from "@pe/ducts-domain/heal";
 import {
   axisOf,
   CAP_THICKNESS_IN,
@@ -49,7 +49,7 @@ interface OrientedBox {
   center: number[];
   axes: [number[], number[], number[]];
   half: [number, number, number];
-  /** A heal not yet consented draws as a ghost (`markVolume`); the sheet sets this, /ducts never. */
+  /** A preview draws as a ghost (`markVolume`) until the repair is applied. */
   ghost?: boolean;
 }
 export interface FindingShapes {
@@ -87,6 +87,7 @@ export function findingShapes(
   work: DuctsRouteDocument | null,
   /** The raw system's mesh-capture scope, not its priced tree's shared equipment and other ports. */
   members?: ReadonlySet<number>,
+  repairs?: readonly Pick<HealItem, "end" | "other" | "how" | "covers">[],
 ): FindingShapes {
   work = withStoredRulings(work, snapshot.store);
   let cached = inferences.get(snapshot);
@@ -199,31 +200,35 @@ export function findingShapes(
   // A capped end of an element a drawn finding names is drawn amber, as the illustrations do.
   for (const cap of caps) if (named.has(cap.owner)) capOutline(cap, named.get(cap.owner)!);
 
-  for (const group of healPlan(snapshot, work).groups)
-    for (const item of group.items) {
-      if (!item.covers.some((id) => shown.has(id))) continue;
-      const at = end(item.end);
-      const face = at && faceOf(at.e, at.c);
-      if (!face) continue;
-      const n = face.normal;
-      const other = item.other ? end(item.other) : null;
-      // A cap adds its own thickness; a union or an extend adds the gap to the partner end.
-      const span =
-        item.how === "cap"
-          ? CAP_THICKNESS_IN / 12
-          : other
-            ? Math.abs(dot(sub(other.c.point, face.center), n))
-            : 0;
-      if (span <= 0) continue;
-      shapes.boxes.push({
-        finding: item.covers.find((id) => shown.has(id))!,
-        elementId: at!.e.id,
-        shape: face.round ? "cylinder" : "box",
-        center: add(face.center, n, span / 2),
-        axes: [face.x, face.y, n],
-        half: [face.w, face.h, span / 2],
-      });
+  for (const item of repairs ?? healPlan(snapshot, work).groups.flatMap((group) => group.items)) {
+    if (!item.covers.some((id) => shown.has(id))) continue;
+    const at = end(item.end);
+    const face = at && faceOf(at.e, at.c);
+    if (!face) continue;
+    const n = face.normal;
+    const finding = item.covers.find((id) => shown.has(id))!;
+    if (repairs) {
+      outline(item.end, "cap", finding);
+      if (item.other) outline(item.other, "cap", finding);
     }
+    const other = item.other ? end(item.other) : null;
+    // A cap adds its own thickness; a union or an extend adds the gap to the partner end.
+    const span =
+      item.how === "cap"
+        ? CAP_THICKNESS_IN / 12
+        : other
+          ? Math.abs(dot(sub(other.c.point, face.center), n))
+          : 0;
+    if (span <= 0) continue;
+    shapes.boxes.push({
+      finding,
+      elementId: at!.e.id,
+      shape: face.round ? "cylinder" : "box",
+      center: add(face.center, n, span / 2),
+      axes: [face.x, face.y, n],
+      half: [face.w, face.h, span / 2],
+    });
+  }
   return shapes;
 }
 
@@ -374,18 +379,17 @@ export function healReviewLayers(
   review: import("./reviews").HealReview | null,
 ): Layer3D[] {
   if (!review) return [];
-  const findings = new Set(review.targets.flatMap((target) => target.findings));
-  const shapes = findingShapes(snapshot, findings, work);
-  for (const box of shapes.boxes)
-    box.ghost =
-      review.mode === "preview" ||
-      review.targets.some(
-        (target) => target.outcome === "refused" && target.findings.includes(box.finding),
-      );
+  const targets = review.targets.filter(
+    (target) => target.outcome === "planned" || target.outcome === "healed",
+  );
+  const repairs = targets.map((target) => ({ ...target, covers: [target.key] }));
+  const findings = new Set(repairs.flatMap((target) => target.covers));
+  const shapes = findingShapes(snapshot, findings, work, undefined, repairs);
+  for (const box of shapes.boxes) box.ghost = review.mode === "preview";
   return findingLayers(shapes, [
     {
       key: `heal:${review.group}`,
-      ids: review.targets.flatMap((t) => t.ids),
+      ids: targets.flatMap((t) => t.ids),
       findings: [...findings],
       damage: null,
     },

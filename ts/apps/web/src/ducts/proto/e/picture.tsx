@@ -239,7 +239,12 @@ function Content({
     [snapshot, work.doc, page.heal],
   );
   const reviewTargets = useMemo(
-    () => new Set(page.heal?.targets.flatMap((t) => t.ids) ?? []),
+    () =>
+      new Set(
+        page.heal?.targets
+          .filter((t) => t.outcome === "planned" || t.outcome === "healed")
+          .flatMap((t) => t.ids) ?? [],
+      ),
     [page.heal],
   );
   const findings3d = useMemo(

@@ -1,5 +1,14 @@
 import { expect, test } from "vite-plus/test";
-import { createRouteTimeline, TIMELINE_LIMIT, timelineBarriers } from "./timeline";
+import { activityTime, createRouteTimeline, TIMELINE_LIMIT, timelineBarriers } from "./timeline";
+
+test("activity clocks accept ISO or epoch times, never echo invalid times, and omit negative durations", () => {
+  const at = 1793363026741;
+  expect(activityTime(at)).toBe(activityTime(new Date(at).toISOString()));
+  expect(activityTime(at)).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+  expect(activityTime(at + 8602, at)).toMatch(/ · 8.6 s$/);
+  expect(activityTime(at, at + 1)).toBe(activityTime(at));
+  expect(activityTime("invalid 1793363026741")).toBe("Time unavailable");
+});
 
 test("timeline preserves append order across invocation, receipt and checkpoint, independently of timestamps", () => {
   const timeline = createRouteTimeline();

@@ -26,6 +26,8 @@ import { ruleByKey, ruleWords } from "@pe/ducts-domain/loss-rules";
 import { cellFocus } from "./inbox-rows";
 import {
   presentHeal,
+  previewedHeal,
+  plannedHeal,
   presentLosses,
   presentFan,
   healReviewSchema,
@@ -493,10 +495,14 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
         ready: requestReady,
 
         present: presentHeal,
-        prepare: (scope, input) =>
-          prepareCommand(scope, "ducts.preview-heal", input.request!, NATIVE_APPLY_WAIT_S),
+        prepare: (scope, input) => {
+          const review = previewedHeal(scope, input.request!);
+          return review
+            ? { response: review.response }
+            : prepareCommand(scope, "ducts.preview-heal", input.request!, NATIVE_APPLY_WAIT_S);
+        },
 
-        intent: (_, input) => input.request!,
+        intent: (_, input, __, ticket) => plannedHeal(input.request!, ticket!.evidence),
       },
     ),
 
@@ -674,7 +680,15 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
       "network",
       split(
         "sidebar",
-        { axis: "h", sized: "start", size: 420, minSize: 280, maxSize: 760, minOtherSize: 628 },
+        {
+          axis: "h",
+          sized: "start",
+          size: 420,
+          minSize: 280,
+          maxSize: 760,
+          minOtherSize: 360,
+          rails: { start: { title: "Systems" } },
+        },
 
         split(
           "stack",
@@ -705,7 +719,15 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
 
         split(
           "drawing",
-          { axis: "h", sized: "end", size: 340, minSize: 260, maxSize: 520, minOtherSize: 360 },
+          {
+            axis: "h",
+            sized: "end",
+            size: 340,
+            minSize: 260,
+            maxSize: 520,
+            minOtherSize: 360,
+            rails: { end: { title: "Rulings" } },
+          },
           pane("e-picture"),
           pane("e-inbox"),
         ),
@@ -716,7 +738,14 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
       "sheet",
       split(
         "sheet-layout",
-        { axis: "h", sized: "start", size: 420, minSize: 280, minOtherSize: 360 },
+        {
+          axis: "h",
+          sized: "start",
+          size: 420,
+          minSize: 280,
+          minOtherSize: 360,
+          rails: { start: { title: "Fans" } },
+        },
 
         split(
           "sheet-side",

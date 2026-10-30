@@ -45,6 +45,7 @@ import { useRouteLease } from "../route/view-bridge";
 import { workKey } from "@pe/agent-contracts";
 import { fixtureEnvironment, pendingFixtureEnvironment, fixtureName } from "./fixture";
 import { useRouter } from "@tanstack/react-router";
+import { activityTime } from "./timeline";
 
 export type { GraphMount, MountAdapters, MountScope, MountBinding } from "./mount-owner";
 export { createGraphMount } from "./mount-owner";
@@ -841,7 +842,15 @@ export function GraphHistory<P, W>({
             })
             .map((entry, index) => (
               <li key={`event:${index}`}>
-                {entry.verb ?? entry.kind} · {entry.kind} · {String(entry.at)}
+                {entry.verb ?? entry.kind} · {entry.kind} ·{" "}
+                {activityTime(
+                  entry.at,
+                  entry.kind === "receipt" && entry.press
+                    ? entries.find(
+                        (start) => start.kind === "invocation" && start.press === entry.press,
+                      )?.at
+                    : undefined,
+                )}
                 {entry.kind === "feed" && <> · {JSON.stringify(entry.subject)}</>}
               </li>
             )),
@@ -850,7 +859,7 @@ export function GraphHistory<P, W>({
             .map((receipt) => (
               <li key={receipt.id}>
                 <a href={routeAddress("ops").link({ actionId: receipt.id })}>{receipt.key}</a> ·{" "}
-                {receipt.state} · {receipt.startedAt}
+                {receipt.state} · {activityTime(receipt.startedAt)}
                 {"error" in receipt && receipt.error ? ` · ${String(receipt.error)}` : ""}
               </li>
             )),

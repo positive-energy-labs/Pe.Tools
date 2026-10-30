@@ -1004,9 +1004,22 @@ test("a declared History pane renders kernel invocations and checkpoints without
   fireEvent.click(view.getByRole("button", { name: "Edit" }));
   await waitFor(() => expect(history.getByText(/edit.*invocation/)).toBeTruthy());
   act(() => {
-    f.owner().timeline.append({ kind: "checkpoint", at: 12, receiptId: "checkpoint-one" });
+    f.owner().timeline.append({
+      kind: "checkpoint",
+      at: 1793363026741,
+      receiptId: "checkpoint-one",
+    });
+    f.owner().timeline.append({
+      kind: "invocation",
+      at: 1793363026741,
+      press: "heal-time",
+      verb: "heal-preview",
+    });
+    f.owner().timeline.append({ kind: "receipt", at: 1793363035343, press: "heal-time" });
   });
-  expect(history.getByText(/checkpoint.*12/)).toBeTruthy();
+  expect(history.getByText(/checkpoint/).textContent).toMatch(/\d{2}:\d{2}:\d{2}/);
+  expect(history.getByText(/receipt/).textContent).toContain("8.6 s");
+  expect(history.getByText(/receipt/).textContent).not.toContain("1793363035343");
 });
 
 test("hook-derived furniture uses the kernel frame callback and retains pane hotkeys", async () => {

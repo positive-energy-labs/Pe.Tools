@@ -51,3 +51,19 @@ export function createRouteTimeline() {
 }
 
 export type RouteTimeline = ReturnType<typeof createRouteTimeline>;
+
+/** Clock time is local to the reader; elapsed time comes from the same press's invocation. */
+export function activityTime(at: TimelineEntry["at"], startedAt?: TimelineEntry["at"]) {
+  const date = new Date(at);
+  if (!Number.isFinite(date.getTime())) return "Time unavailable";
+  const clock = date.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  const elapsed = startedAt == null ? NaN : date.getTime() - new Date(startedAt).getTime();
+  return Number.isFinite(elapsed) && elapsed >= 0
+    ? `${clock} · ${(elapsed / 1000).toFixed(1)} s`
+    : clock;
+}

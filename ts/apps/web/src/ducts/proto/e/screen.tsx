@@ -21,6 +21,7 @@ import {
 } from "react";
 
 import { survey, unitFlowsIn } from "@pe/ducts-domain/survey";
+import { healPlan } from "@pe/ducts-domain/heal";
 import { fansOwedBase, type OwedBase } from "@pe/ducts-domain/fan-assignment";
 import { sectionsOf, systemOfGroup } from "@pe/ducts-domain/system-scope";
 import { neighboursOf, type Neighbour } from "@pe/ducts-domain/neighbours";
@@ -266,7 +267,7 @@ function LoadedScreenBody({
   );
 
   // What heals in Revit is planned over the raw snapshot (the tolerated one has bridged it already).
-  const heal = props.analysis?.heal ?? null;
+  const heal = useMemo(() => (snapshot ? healPlan(snapshot, doc) : null), [snapshot, doc]);
   const notes = props.analysis?.notes ?? NO_NOTES;
   // The document at a glance: how many systems price clean, and how many a person must fix first;
   // read by system, over the systems read so far, and it says so.
@@ -787,9 +788,23 @@ function LoadedScreenBody({
             }}
           />
         ) : null}
+        {page.heal && (
+          <section
+            aria-label={page.heal.mode === "preview" ? "Heal preview" : "Heal result"}
+            className="px-2 py-1"
+          >
+            <p>{page.heal.sentence}</p>
+            <ul>
+              {page.heal.rows.map((row, index) => (
+                <li key={index}>{row}</li>
+              ))}
+            </ul>
+          </section>
+        )}
       </>
     ),
     [
+      page.heal,
       inbox,
       inboxWork,
       nameOf,

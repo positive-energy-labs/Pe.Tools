@@ -356,12 +356,17 @@ const NO_RESIZE: PaneSizeSpec & { target: PaneSide } = {
 };
 
 // Width requirements cross component/graph boundaries, including splits inside vertical panes.
-const PaneMinimum = createContext<((id: symbol, width: number) => () => void) | null>(null);
+type PaneWidths = { open: number; compact: number };
+const PaneMinimum = createContext<((id: symbol, width: PaneWidths) => () => void) | null>(null);
 function useChildMinimum() {
-  const widths = useRef(new Map<symbol, number>());
-  const [minimum, setMinimum] = useState(0);
-  const register = useCallback((id: symbol, width: number) => {
-    const update = () => setMinimum(Math.max(0, ...widths.current.values()));
+  const widths = useRef(new Map<symbol, PaneWidths>());
+  const [minimum, setMinimum] = useState<PaneWidths>({ open: 0, compact: 0 });
+  const register = useCallback((id: symbol, width: PaneWidths) => {
+    const update = () =>
+      setMinimum({
+        open: Math.max(0, ...[...widths.current.values()].map((width) => width.open)),
+        compact: Math.max(0, ...[...widths.current.values()].map((width) => width.compact)),
+      });
     widths.current.set(id, width);
     update();
     return () => {
@@ -387,12 +392,18 @@ export function PaneSplit({ id, axis, start, end, resize, grow }: PaneSplitProps
   const [startMinimum, registerStart] = useChildMinimum();
   const [endMinimum, registerEnd] = useChildMinimum();
   const [gutter, setGutter] = useState(0);
+  const [railSize, setRailSize] = useState(32);
+  const [availableWidth, setAvailableWidth] = useState(0);
   const spec = resize ?? NO_RESIZE;
-  const ownMinimum = Math.max(spec.minSize, spec.target === "start" ? startMinimum : endMinimum);
-  const otherMinimum = Math.max(
-    spec.minOtherSize ?? spec.minSize,
-    spec.target === "start" ? endMinimum : startMinimum,
-  );
+  const own = spec.target === "start" ? startMinimum : endMinimum;
+  const other = spec.target === "start" ? endMinimum : startMinimum;
+  const ownOpen = Math.max(spec.minSize, own.open);
+  const otherOpen = Math.max(spec.minOtherSize ?? spec.minSize, other.open);
+  const ownCompact = Math.max(spec.minSize, own.compact);
+  const otherCompact = Math.max(spec.minOtherSize ?? spec.minSize, other.compact);
+  const openFits = availableWidth === 0 || availableWidth >= ownOpen + otherOpen + gutter;
+  const ownMinimum = openFits ? ownOpen : ownCompact;
+  const otherMinimum = openFits ? otherOpen : otherCompact;
   const effectiveResize =
     axis === "horizontal" ? { ...spec, minSize: ownMinimum, minOtherSize: otherMinimum } : spec;
   const state = usePaneSize(effectiveResize);
@@ -402,14 +413,31 @@ export function PaneSplit({ id, axis, start, end, resize, grow }: PaneSplitProps
   const bothSides = start != null && end != null;
   const minimumWidth = !bothSides
     ? start != null
-      ? startMinimum
-      : endMinimum
+      ? startMinimum.compact
+      : endMinimum.compact
     : axis === "horizontal"
       ? ownMinimum + otherMinimum + gutter
-      : Math.max(startMinimum, endMinimum);
+      : Math.max(startMinimum.compact, endMinimum.compact);
+  // Ancestors reserve the surviving subject, letting descendants yield before a whole branch.
+  const rails = resize?.collapse;
+  const fallback = rails?.[spec.target] ? spec.target : rails?.[state.other] ? state.other : null;
+  const survivorMinimum = fallback === spec.target ? otherCompact : ownCompact;
+  const compactWidth =
+    !bothSides || axis !== "horizontal"
+      ? minimumWidth
+      : fallback
+        ? survivorMinimum + gutter + railSize
+        : Math.max(ownCompact, otherCompact);
+  const openWidth = !bothSides
+    ? start != null
+      ? startMinimum.open
+      : endMinimum.open
+    : axis === "horizontal"
+      ? ownOpen + otherOpen + gutter
+      : Math.max(startMinimum.open, endMinimum.open);
   useLayoutEffect(
-    () => parentMinimum?.(minimumId.current, minimumWidth),
-    [parentMinimum, minimumWidth],
+    () => parentMinimum?.(minimumId.current, { open: openWidth, compact: compactWidth }),
+    [parentMinimum, openWidth, compactWidth],
   );
   const target = resize?.target ?? "start";
   const folded = bothSides && !stacked ? (state.collapsed ?? autoFold) : null;
@@ -420,7 +448,7 @@ export function PaneSplit({ id, axis, start, end, resize, grow }: PaneSplitProps
     : stacked
       ? "minmax(0, 1fr) var(--gutter) minmax(0, 1fr)"
       : resize == null
-        ? `minmax(${horizontal ? startMinimum : 0}px, 1fr) var(--gutter) minmax(${horizontal ? endMinimum : 0}px, 1fr)`
+        ? `minmax(${horizontal ? startMinimum.compact : 0}px, 1fr) var(--gutter) minmax(${horizontal ? endMinimum.compact : 0}px, 1fr)`
         : target === "start"
           ? `${sized} var(--gutter) ${rest}`
           : `${rest} var(--gutter) ${sized}`;
@@ -443,6 +471,13 @@ export function PaneSplit({ id, axis, start, end, resize, grow }: PaneSplitProps
     (rect) => {
       const gutter = seamSize();
       setGutter(gutter);
+      setAvailableWidth(rect.width);
+      setRailSize(
+        gutter +
+          (rootRef.current
+            ? parseFloat(getComputedStyle(rootRef.current).getPropertyValue("--control-h")) || 24
+            : 24),
+      );
       const constrained =
         bothSides && axis === "horizontal" && rect.width > 0 && rect.width < minimumWidth;
       // Focus/expansion chooses the survivor; splits without rails can still stack.

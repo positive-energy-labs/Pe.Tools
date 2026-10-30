@@ -345,6 +345,9 @@
         "anyOf": [
           {
             "properties": {
+              "basis": {
+                "type": "string"
+              },
               "before": {
                 "properties": {
                   "esp": {
@@ -387,6 +390,64 @@
                 ],
                 "type": "string"
               },
+              "request": {
+                "additionalProperties": false,
+                "properties": {
+                  "groups": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "group": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "items": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "end": {
+                                "pattern": "^\\d+:\\d+$",
+                                "type": "string"
+                              },
+                              "key": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "kind": {
+                                "enum": [
+                                  "cap",
+                                  "join"
+                                ],
+                                "type": "string"
+                              },
+                              "other": {
+                                "pattern": "^\\d+:\\d+$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "key",
+                              "kind",
+                              "end"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "group"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "groups"
+                ],
+                "type": "object"
+              },
               "response": {},
               "rows": {
                 "items": {
@@ -400,11 +461,23 @@
               "targets": {
                 "items": {
                   "properties": {
+                    "end": {
+                      "type": "string"
+                    },
                     "findings": {
                       "items": {
                         "type": "string"
                       },
                       "type": "array"
+                    },
+                    "how": {
+                      "enum": [
+                        "cap",
+                        "connect",
+                        "union",
+                        "extend"
+                      ],
+                      "type": "string"
                     },
                     "ids": {
                       "items": {
@@ -415,12 +488,17 @@
                     "key": {
                       "type": "string"
                     },
+                    "other": {
+                      "type": "string"
+                    },
                     "outcome": {
                       "type": "string"
                     }
                   },
                   "required": [
                     "key",
+                    "end",
+                    "how",
                     "ids",
                     "findings",
                     "outcome"
@@ -434,6 +512,8 @@
               "group",
               "mode",
               "response",
+              "basis",
+              "request",
               "before",
               "targets",
               "sentence",
@@ -1436,6 +1516,11 @@
               "maxSize": 520,
               "minOtherSize": 360,
               "minSize": 260,
+              "rails": {
+                "end": {
+                  "title": "Rulings"
+                }
+              },
               "size": 340,
               "sized": "end"
             }
@@ -1443,8 +1528,13 @@
           "id": "sidebar",
           "kind": "split",
           "maxSize": 760,
-          "minOtherSize": 628,
+          "minOtherSize": 360,
           "minSize": 280,
+          "rails": {
+            "start": {
+              "title": "Systems"
+            }
+          },
           "size": 420,
           "sized": "start"
         },
@@ -1494,6 +1584,11 @@
           "kind": "split",
           "minOtherSize": 360,
           "minSize": 280,
+          "rails": {
+            "start": {
+              "title": "Fans"
+            }
+          },
           "size": 420,
           "sized": "start"
         },

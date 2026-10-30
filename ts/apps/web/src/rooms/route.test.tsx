@@ -12,6 +12,7 @@ import { Route as root } from "../routes/__root";
 import { roomsAdapters, roomsRoute, RoomsRoute } from "./route";
 import { DEMO_VIEW } from "./demo";
 import { RoomsHostFixture } from "./host.fixture";
+import { activityTime } from "#/shell/timeline";
 
 // The app registry is another wave's cutover; this mounts the actual graph under a router root.
 vi.mock("../routes/__root", async () => {
@@ -424,7 +425,7 @@ test("plan and feedback use one kernel frame each and History is the shared jour
   });
   const history = view.container.querySelector<HTMLElement>('[data-pane-id="history"]')!;
   expect(history).toBeTruthy();
-  expect(within(history).getByText(/checkpoint.*123/)).toBeTruthy();
+  expect(within(history).getByText(new RegExp(`checkpoint.*${activityTime(123)}`))).toBeTruthy();
 });
 
 test("hosted Rooms binds its explicit target and keeps Page out of the enclosing URL", async () => {

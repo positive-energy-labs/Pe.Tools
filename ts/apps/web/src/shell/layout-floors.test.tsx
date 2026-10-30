@@ -28,7 +28,7 @@ afterEach(() => {
 
 for (const width of [720, 1280, 1920]) {
   for (const stage of ["network", "sheet"] as const) {
-    test(`ducts ${stage} at ${width}px keeps declared floors or stacks`, () => {
+    test(`ducts ${stage} at ${width}px keeps subject floors or named rails`, () => {
       document.documentElement.style.setProperty("--gutter", "8px");
       vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
         new DOMRect(0, 0, width, 900),
@@ -49,12 +49,10 @@ for (const width of [720, 1280, 1920]) {
         el.dataset.layoutSplit?.startsWith(`["${id}",`),
       )!;
       expect(split).toBeTruthy();
-      if (width < (stage === "network" ? 916 : 648)) expect(split.dataset.paneStacked).toBe("true");
-      else {
-        const size = Number.parseFloat(split.style.getPropertyValue("--pane-size"));
-        expect(size).toBeGreaterThanOrEqual(280);
-        expect(width - 8 - size).toBeGreaterThanOrEqual(stage === "network" ? 628 : 360);
-      }
+      expect(split.dataset.paneStacked).toBeUndefined();
+      const size = Number.parseFloat(split.style.getPropertyValue("--pane-size"));
+      expect(size).toBeGreaterThanOrEqual(280);
+      expect(width - 8 - size).toBeGreaterThanOrEqual(stage === "network" ? 400 : 360);
     });
   }
   test(`ops retains its panes at ${width}px`, () => {
@@ -105,8 +103,29 @@ test("persisted widths fit around the network drawing floors", () => {
   expect(720 - 8 - size).toBeGreaterThanOrEqual(360);
 });
 
+test("folding a leaf does not fold its containing support branch", () => {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
+    new DOMRect(0, 0, 1920, 1080),
+  );
+  const { container } = render(
+    <GraphLayoutView
+      layout={ductsGraph.layout}
+      panes={ductsGraph.panes}
+      active={(key) => key === "network" || key === "system"}
+      bodies={Object.fromEntries(
+        Object.keys(ductsGraph.panes).map((id) => [id, (frame: PaneApi) => frame(id)]),
+      )}
+      state={{ panes: { "e-systems": { folded: true } }, onChange: () => {} }}
+    />,
+  );
+  const sidebar = [...container.querySelectorAll<HTMLElement>("[data-layout-split]")].find(
+    (node) => node.dataset.layoutSplit === '["sidebar","e-systems"]',
+  )!;
+  expect(sidebar.dataset.paneFolded).toBeUndefined();
+});
+
 for (const width of [900, 1280]) {
-  test(`outer split fits nested minimum sums through vertical wrappers at ${width}px`, () => {
+  test(`outer split lets nested Rulings yield through vertical wrappers at ${width}px`, () => {
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
       new DOMRect(0, 0, width, 900),
     );
@@ -146,8 +165,8 @@ for (const width of [900, 1280]) {
       />,
     );
     const outer = container.querySelector<HTMLElement>('[data-layout-split="outer"]')!;
-    expect(outer.style.getPropertyValue("--pane-size")).toBe("628px");
-    expect(outer.dataset.paneStacked).toBe(width < 916 ? "true" : undefined);
+    expect(outer.style.getPropertyValue("--pane-size")).toBe(width < 916 ? "400px" : "628px");
+    expect(outer.dataset.paneStacked).toBeUndefined();
     expect(changed).not.toHaveBeenCalled();
   });
 }

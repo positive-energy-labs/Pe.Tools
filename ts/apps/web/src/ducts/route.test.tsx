@@ -14,6 +14,49 @@ import { invoke, type VerbContext } from "#/shell/verbs";
 import { ductsPageSchema } from "./graph";
 import { mountRoute } from "#/shell/mount";
 import { noTerminalSnapshot } from "./no-terminal.fixture";
+import { ra23Snapshot } from "./heal.fixture";
+
+test("RA 23 preview shows its cap review, then Heal uses exactly the admitted plan", async () => {
+  host.snapshot = ra23Snapshot();
+  const { view, situation } = await mounted(
+    "/ducts?target=s&system=RA%2023&picture=schematic&layers=",
+  );
+  fireEvent.click(await liveButton(situation, "Preview heal"));
+  const review = await view.findByLabelText("Heal preview");
+  expect(review.textContent).toMatch(/10002955.*end 9.*8 in round.*planned/);
+  await waitFor(() => expect(view.container.querySelector("[data-review-target]")).not.toBeNull());
+  const input = host.actions[0]!.input;
+  fireEvent.click(await liveButton(situation, "Heal"));
+  await situation.findByLabelText("Heal review");
+  fireEvent.click(await liveButton(situation, "Heal"));
+  await waitFor(() =>
+    expect(host.actions.map((a) => a.key)).toEqual(["ducts.preview-heal", "ducts.apply-heal"]),
+  );
+  expect(host.actions[1]!.input).toEqual(input);
+});
+
+test("the Fix list drops flowing caps while the new pricing job is still pending", async () => {
+  host.snapshot = ra23Snapshot();
+  const { view, situation } = await mounted(
+    "/ducts?target=s&system=RA%2023&picture=schematic&layers=",
+  );
+  await waitFor(() => expect(view.getAllByText(/^Heal RA 23/).length).toBeGreaterThan(0));
+  host.snapshot = structuredClone(host.snapshot);
+  host.snapshot.segments[0]!.connectors.at(-1)!.flowCfm = 444;
+  const pending = vi.spyOn(host.worker.prototype, "postMessage").mockImplementation(() => {});
+  try {
+    act(() => host.invalidate());
+    await waitFor(() => expect(pending).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(
+        situation.getByRole("button", { name: "Preview heal" }).getAttribute("aria-disabled"),
+      ).toBe("true"),
+    );
+    expect(view.queryByText(/^Heal RA 23/)).toBeNull();
+  } finally {
+    pending.mockRestore();
+  }
+});
 
 let host: DuctsHostFixture;
 const releases: (() => void)[] = [];

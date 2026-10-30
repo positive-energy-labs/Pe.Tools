@@ -3,7 +3,11 @@ import type { DuctsApply, DuctsAssignFan, DuctsHeal } from "@pe/host-contracts/g
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { healPlan } from "@pe/ducts-domain/heal";
 import { healWords, networkWord, outcomeWords } from "@pe/ducts-domain/words";
-import type { DuctsRouteDocument } from "@pe/agent-contracts";
+import {
+  canonicalRouteInput,
+  ductsHealInputSchema,
+  type DuctsRouteDocument,
+} from "@pe/agent-contracts";
 import type { VerbPresentation, VerbScope } from "#/shell/verbs";
 import { subjectNamer } from "./subject-text";
 import type { PricingResult } from "./pricing-job";
@@ -13,6 +17,10 @@ export const healReviewSchema = z.object({
   mode: z.enum(["preview", "apply"]),
   // Evidence remains host-owned; the picture consumes the typed targets and words below.
   response: z.unknown(),
+  basis: z.string(),
+  request: ductsHealInputSchema.extend({
+    groups: z.array(ductsHealInputSchema.shape.groups.element),
+  }),
   before: z.object({
     esp: z.number().nullable(),
     roots: z.array(z.number()),
@@ -21,6 +29,9 @@ export const healReviewSchema = z.object({
   targets: z.array(
     z.object({
       key: z.string(),
+      end: z.string(),
+      other: z.string().optional(),
+      how: z.enum(["cap", "connect", "union", "extend"]),
       ids: z.array(z.number()),
       findings: z.array(z.string()),
       outcome: z.string(),
@@ -36,6 +47,43 @@ const responseOf = <T>(result: unknown): T => {
 };
 const snapshotOf = (scope: VerbScope) => scope.readings.ducts?.value as DuctSnapshot | undefined;
 
+export const healReviewBasis = (scope: VerbScope) =>
+  canonicalRouteInput({
+    target: scope.snapshot.target,
+    work: scope.snapshot.work?.handle,
+    network: scope.readings.ducts?.basis?.sourceVersion ?? scope.readings.ducts?.version,
+  });
+
+export function previewedHeal(scope: VerbScope, request: z.output<typeof ductsHealInputSchema>) {
+  const review = scope.page.heal as HealReview | null;
+  if (review?.mode !== "preview" || !request.groups.some((g) => g.group === review.group))
+    return null;
+  if (!scope.readings.ducts?.current || review.basis !== healReviewBasis(scope))
+    throw Error("The network or Work changed since the heal preview; preview again");
+  return review;
+}
+
+export function plannedHeal(request: z.output<typeof ductsHealInputSchema>, evidence: unknown) {
+  const response = responseOf<DuctsHeal.Res.Response>(evidence);
+  const planned = {
+    ...request,
+    groups: request.groups
+      .map((group) => ({
+        ...group,
+        items: (group.items ?? []).filter((item) =>
+          response.groups.some(
+            (g) =>
+              g.group === group.group &&
+              g.items.some((i) => i.key === item.key && i.outcome === "planned"),
+          ),
+        ),
+      }))
+      .filter((group) => group.items.length),
+  };
+  if (!planned.groups.length) throw Error("Nothing passed the heal preview");
+  return planned;
+}
+
 export function presentHeal(result: unknown, scope: VerbScope): VerbPresentation {
   const response = responseOf<DuctsHeal.Res.Response>(result);
   const snapshot = snapshotOf(scope);
@@ -50,6 +98,9 @@ export function presentHeal(result: unknown, scope: VerbScope): VerbPresentation
         ?.items.find((i) => i.key === item.key);
       return {
         key: item.key,
+        end: proposed?.end ?? item.key.replace(/^(cap|join):/, "").split("|")[0]!,
+        other: proposed?.other,
+        how: proposed?.how ?? "cap",
         ids: [...(proposed?.ids ?? []), ...(response.previewOnly ? [] : item.created)],
         findings: proposed?.covers ?? [],
         outcome: item.outcome,
@@ -59,8 +110,22 @@ export function presentHeal(result: unknown, scope: VerbScope): VerbPresentation
   const rows = response.groups.flatMap((group) =>
     group.items.map((item) => {
       const target = targets.find((t) => t.key === item.key)!;
-      const subjects = target.ids.map((id) => name(id) ?? "duct element").join(" to ");
-      return `${item.how ?? item.kind}${subjects ? ` ${subjects}` : ""}: ${item.outcome}${item.reason || item.check ? ` · ${item.reason ?? item.check}` : ""}`;
+      const subjects = [target.end, target.other]
+        .filter((end): end is string => !!end)
+        .map((end) => {
+          const [id, index] = end.split(":").map(Number);
+          const element = [...(snapshot?.nodes ?? []), ...(snapshot?.segments ?? [])].find(
+            (e) => e.id === id,
+          );
+          const port = element?.connectors.find((c) => c.index === index);
+          const size =
+            port?.shape === "round"
+              ? `${port.diameterIn ?? "?"} in round`
+              : `${port?.widthIn ?? "?"}×${port?.heightIn ?? "?"} in`;
+          return `${name(id!) ?? "duct element"} (element ${id}, end ${index}, ${size})`;
+        })
+        .join(" to ");
+      return `${item.kind === "cap" ? "Place a cap on" : `Join by ${item.how ?? target.how}`} ${subjects}: ${item.outcome}${item.reason || item.check ? ` · ${item.reason ?? item.check}` : ""}`;
     }),
   );
   const group = response.groups[0]?.group ?? "";
@@ -69,6 +134,25 @@ export function presentHeal(result: unknown, scope: VerbScope): VerbPresentation
   const heal: HealReview = {
     group,
     response,
+    basis: healReviewBasis(scope),
+    request: {
+      groups: response.groups
+        .map((group) => ({
+          group: group.group,
+          items: group.items
+            .filter((item) => item.outcome === "planned")
+            .map((item) => {
+              const target = targets.find((t) => t.key === item.key)!;
+              return {
+                key: item.key,
+                kind: item.kind === "join" ? ("join" as const) : ("cap" as const),
+                end: target.end,
+                ...(target.other ? { other: target.other } : {}),
+              };
+            }),
+        }))
+        .filter((group) => group.items.length),
+    },
     targets,
     sentence,
     rows,

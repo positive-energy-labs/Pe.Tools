@@ -48,8 +48,8 @@ function project(layout: LayoutNode, panes: GraphLayoutViewProps["panes"]) {
       const end = node.sized === "end" ? children.at(-1)! : pair(children.slice(1));
       const owner = anchor(node.sized === "start" ? start : end, node.sized);
       const id = JSON.stringify([node.id, owner]);
-      const startId = "axis" in start ? undefined : start.id;
-      const endId = "axis" in end ? undefined : end.id;
+      const startId = "axis" in start ? (node.rails?.start ? start.id : undefined) : start.id;
+      const endId = "axis" in end ? (node.rails?.end ? end.id : undefined) : end.id;
       bindings.push({ id, owner, start: startId, end: endId });
       return {
         id,
@@ -62,7 +62,7 @@ function project(layout: LayoutNode, panes: GraphLayoutViewProps["panes"]) {
         persist: node.persist,
         start,
         end,
-        rails: {
+        rails: node.rails ?? {
           ...("axis" in start ? {} : { start: { title: start.label, collapseBelow: 1 } }),
           ...("axis" in end ? {} : { end: { title: end.label, collapseBelow: 1 } }),
         },

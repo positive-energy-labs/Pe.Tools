@@ -35,6 +35,7 @@ import { activeSystem } from "./selection";
 import type { DuctsPage } from "./graph";
 
 import type { PricingResult } from "./pricing-job";
+import { previewedHeal } from "./reviews";
 
 type Scope = BindingScope<DuctsPage, DuctsRouteDocument>;
 
@@ -136,6 +137,7 @@ export function priceRequest(scope: Scope) {
 /** Bind semantic intent over exactly the reading values the kernel currently admits. */
 
 export function ductsBinding(id: string, row: unknown, scope: Scope): MountBinding {
+  const applyingHeal = id === "heal";
   id =
     (
       { preview: "price", "heal-preview": "heal", "fan-preview": "assign-fan" } as Record<
@@ -165,6 +167,22 @@ export function ductsBinding(id: string, row: unknown, scope: Scope): MountBindi
         throw Error(`Open this network's system last to heal it; active system is ${active}`);
 
       request = { groups: [healRequestGroup(healOf(snapshot, doc, group))] };
+      if (applyingHeal) {
+        const review = previewedHeal(
+          {
+            page: scope.page,
+            snapshot: { ...scope, basis: null },
+            subject: null,
+            value: null,
+            readings: scope.readings,
+          },
+          request as NonNullable<DuctsPage["heal"]>["request"],
+        );
+        if (review) {
+          if (!review.request.groups.length) throw Error("Nothing passed the heal preview");
+          request = review.request;
+        }
+      }
     } else if (id === "assign-fan") {
       const { snapshot, doc, grids, catalogs } = pricing(scope);
       const pair =

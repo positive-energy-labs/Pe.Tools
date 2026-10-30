@@ -139,6 +139,8 @@ export interface SplitOptions {
   minOtherSize?: number;
   /** Device-only size persistence. Fold state is persisted by the mounted graph. */
   persist?: string;
+  /** Responsive fallback, deepest split first. Omit for named leaf rails. */
+  rails?: Partial<Record<"start" | "end", { title: string; collapseBelow?: number }>>;
   axis: "h" | "v";
   sized: "start" | "end";
   size: number;
