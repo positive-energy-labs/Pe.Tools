@@ -543,12 +543,15 @@ export function createGraphMount<P, W>(
     return subject;
   };
   const binding = (id: string, row?: unknown): MountBinding =>
+    // Kernel-owned verbs (cells, recovery) take kernel args; a route's binding never sees them.
     kernel.verbs[id]
       ? { subject: cellSubject(row), args: {} }
-      : (adapters.binding?.(id, row, bindingScope()) ?? {
-          subject: null,
-          args: {},
-        });
+      : verbs[id]?.kind === "recovery"
+        ? { subject: null, args: {} }
+        : (adapters.binding?.(id, row, bindingScope()) ?? {
+            subject: null,
+            args: {},
+          });
   // Writing verbs wait out a conflict; queries only read, so they still run.
   const blocked = (id: string) =>
     disposed || !available()
