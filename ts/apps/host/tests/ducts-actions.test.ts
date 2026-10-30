@@ -12,7 +12,15 @@ import { join } from "node:path";
 import { Context, Effect, Layer, Queue } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { expect, test } from "vite-plus/test";
-import type { DuctsActionKey, DuctsApplyInput } from "@pe/agent-contracts";
+import {
+  bindWork,
+  commands,
+  ductsRouteState,
+  type WorkKey,
+  type DuctsActionKey,
+  type DuctsApplyInput,
+} from "@pe/agent-contracts";
+import { RouteWorkspace } from "@pe/runtime";
 import { RevitBridge, RevitBridgeLive } from "../src/bridge.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { makeCallRoute } from "../src/call-route.ts";
@@ -69,10 +77,22 @@ const lane = <A>(body: (h: Harness) => Effect.Effect<A, unknown, never>, sdk = s
   Effect.gen(function* () {
     const dir = yield* Effect.promise(() => mkdtemp(join(tmpdir(), "pe-ducts-")));
     const { bridge, incoming, outgoing, target } = yield* connectTestBridge();
+    const rows = new Map<string, unknown>();
+    const work = new RouteWorkspace({
+      registrations: [{ spec: ductsRouteState }],
+      store: {
+        getState: async ({ targetKey, route }) => rows.get(targetKey + route),
+        setState: async ({ targetKey, route, value }) => {
+          rows.set(targetKey + route, structuredClone(value));
+        },
+      },
+    });
+    const workKey = bindWork("ducts", null, undefined, target);
     const owner = new ActionJournal(join(dir, "attempts.json"));
     const web = HttpRouter.toWebHandler(
       makeCallRoute(owner, new TakeoffCaptures(join(dir, "captures")), {
         sdk,
+        workspace: work,
       }).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
       { disableLogger: true },
     );
@@ -126,7 +146,7 @@ const lane = <A>(body: (h: Harness) => Effect.Effect<A, unknown, never>, sdk = s
       input: payload,
     });
     try {
-      return yield* body({ owner, outgoing, post, answer, intent });
+      return yield* body({ owner, outgoing, post, answer, intent, work, workKey });
     } finally {
       yield* Effect.promise(() => web.dispose());
       yield* Effect.promise(() => rm(dir, { recursive: true, force: true }));
@@ -136,6 +156,8 @@ const lane = <A>(body: (h: Harness) => Effect.Effect<A, unknown, never>, sdk = s
   );
 
 type Harness = {
+  work: RouteWorkspace;
+  workKey: WorkKey;
   owner: ActionJournal;
   outgoing: Queue.Queue<import("@pe/host-contracts/contracts").BridgeFrame>;
   post: (body: unknown) => Effect.Effect<Response>;
@@ -196,6 +218,78 @@ test("a request for another document lifetime, or with a caller's previewOnly, n
       const bad = yield* post({ ...smuggled, input: { ...input, previewOnly: false } });
       expect(bad.status).toBeGreaterThanOrEqual(400);
       expect(yield* Queue.size(outgoing)).toBe(0);
+    }),
+  ));
+
+test("semantic refresh yields a snapshot-dirty receipt without dispatching a native operation", () =>
+  lane(({ owner, outgoing, post, intent }) =>
+    Effect.gen(function* () {
+      expect((yield* post(intent("refresh-1", "ducts.refresh", undefined, {}))).status).toBe(202);
+      const row = yield* Effect.promise(() => owner.wait("refresh-1"));
+      expect(row?.state, JSON.stringify(row)).toBe("succeeded");
+      expect(commands["ducts.refresh"].dirties).toEqual(["snapshot"]);
+      expect(row).toMatchObject({ key: "ducts.refresh", effects: [] });
+      expect(yield* Queue.size(outgoing)).toBe(0);
+    }),
+  ));
+
+test("a successful apply retires landed consumed cells, retaining held ESP, refused drops and concurrent edits", () =>
+  lane(({ owner, outgoing, post, answer, intent, work, workKey }) =>
+    Effect.gen(function* () {
+      const staged = yield* Effect.promise(() =>
+        work.apply(
+          workKey,
+          "ducts",
+          "human",
+          [
+            { path: ["flows", "31", "edit"], value: { value: { cfm: 120 } } },
+            { path: ["flows", "32", "edit"], value: { value: { cfm: 130 } } },
+            { path: ["esp", "1", "edit"], value: { value: { inWg: 0.1 } } },
+            { path: ["terminalDrops", "31", "edit"], value: { value: { inWg: 0.08 } } },
+          ],
+          0,
+        ),
+      );
+      expect(staged.ok).toBe(true);
+      yield* post(
+        intent("retire-losses", "ducts.apply-losses", undefined, {
+          ...input,
+          equipment: [],
+          terminalFlows: [
+            { id: 31, cfm: 120 },
+            { id: 32, cfm: 130 },
+          ],
+          work: { key: workKey, revision: staged.revision },
+        }),
+      );
+      const frame = yield* Queue.take(outgoing);
+      const edited = yield* Effect.promise(() =>
+        work.apply(
+          workKey,
+          "ducts",
+          "human",
+          [{ path: ["flows", "31", "edit"], value: { value: { cfm: 150 } } }],
+          staged.revision!,
+        ),
+      );
+      expect(edited.ok).toBe(true);
+      yield* answer(frame.request!.requestId, {
+        ...writes("written"),
+        writes: [
+          { kind: "terminal-flow", id: 31, outcome: "written" },
+          { kind: "terminal-flow", id: 32, outcome: "unchanged" },
+          { kind: "terminal", id: 31, outcome: "refused", reason: "read only" },
+        ],
+      });
+      const receipt = yield* Effect.promise(() => owner.wait("retire-losses"));
+      expect(receipt?.state, JSON.stringify(receipt)).toBe("succeeded");
+      const current = yield* Effect.promise(() => work.read(workKey, "ducts"));
+      const doc = ductsRouteState.schema.parse(current!.doc);
+      expect(doc.flows["32"]?.edit).toBeNull();
+      expect(doc.flows["31"]?.edit?.value.cfm).toBe(150);
+      expect(doc.esp["1"]?.edit?.value.inWg).toBe(0.1);
+      expect(doc.terminalDrops["31"]?.edit?.value.inWg).toBe(0.08);
+      expect(receipt?.steps.filter((step) => step.key === "work.retire")).toHaveLength(1);
     }),
   ));
 

@@ -18,7 +18,7 @@ import type { PictureStage } from "#/scene/stage-controller";
 import { boundsOfPoints } from "#/scene/orbit";
 import { NAVIGATION_FIXTURE } from "../navigation.fixture";
 import type { ProtoProps } from "../proto/props";
-import type { OpenSheet } from "./use-sheet";
+import type { OpenSheet } from "../sources";
 import { SheetPicture } from "./picture";
 
 const seen = vi.hoisted(() => ({

@@ -18,9 +18,6 @@ interface PricingBase {
 }
 export interface PricingInput extends PricingBase {
   doc: DuctsRouteDocument | null;
-  revision: number | null;
-  epoch: number;
-  documentKey: string | null;
 }
 export interface PricingResult {
   priced: Priced;
@@ -32,15 +29,12 @@ export interface PricingResult {
     inference: ReturnType<typeof inferJoints>;
   };
 }
-export interface PricingObservation {
-  input: PricingInput;
-  result: PricingResult;
-}
 export interface PricingRequest {
   id: number;
   base?: PricingBase;
   doc: DuctsRouteDocument | null;
 }
+export type PricingPayload = Omit<PricingRequest, "id">;
 export type PricingResponse = { id: number } & (
   | { result: PricingResult }
   | { error: string }
@@ -89,12 +83,3 @@ export function rememberAnalysis(input: PricingInput, result: PricingResult) {
     result.analysis.inference,
   );
 }
-
-export const samePricingInput = (a: PricingInput, b: PricingInput) =>
-  a.snapshot === b.snapshot &&
-  a.grids === b.grids &&
-  a.catalogs === b.catalogs &&
-  a.doc === b.doc &&
-  a.revision === b.revision &&
-  a.epoch === b.epoch &&
-  a.documentKey === b.documentKey;

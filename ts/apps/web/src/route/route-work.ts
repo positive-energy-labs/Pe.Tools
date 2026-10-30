@@ -16,7 +16,7 @@ import {
 import { Equal, Hash, Option } from "effect";
 import { dirty, mapReading, readingAtom, peReadings, previousOf, type Readings } from "#/readings";
 import { causeRefusal, refuse, writeRefusal, type Refusal } from "./refusal";
-import { getRouteSalvage, postRouteWrite } from "./host";
+import { getRouteSalvage, postRouteWrite, routeInput } from "./host";
 import { type Slice, appAtomRegistry, isRecord, useOwned } from "./route-owner";
 
 class RouteAtomKey implements Equal.Equal {
@@ -36,17 +36,6 @@ class RouteAtomKey implements Equal.Equal {
   [Hash.symbol]() {
     return Hash.string(`${this.spec.route}\0${workKey(this.key)}`);
   }
-}
-
-function routeInput(route: string, key: WorkKey) {
-  const query: Record<string, string> = {};
-  if (key.work !== undefined) query.work = key.work;
-  else {
-    if (key.target !== null) query.target = key.target;
-    const open = key.binding === "address" ? key.from : key.open;
-    if (open) query.open = `${open.session}/${open.openId}`;
-  }
-  return { params: { route }, query };
 }
 
 const routeAtom = Atom.family((key: RouteAtomKey) => {

@@ -35,7 +35,7 @@ import { DuctsOverlay, linesOf, useEquipment } from "../../picture-content";
 import { elementNamer } from "../../claims";
 import { NodeFactsView, SegmentFactsView } from "../../facts";
 import { labelOfNode, legsOf } from "../../legs";
-import { ductsFocus } from "../../manifest";
+import { ductsFocus } from "../../page";
 import { activeSystem, paintOfDucts, stubIdsOf, withSystem } from "../../selection";
 import { findingLayers, findingShapes, noRunLayers } from "../../finding-layers";
 import { GoToSubject } from "./go-to";

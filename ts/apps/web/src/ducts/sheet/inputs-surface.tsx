@@ -23,10 +23,10 @@ import { Button } from "@pe/kit/lang/button";
 import { Input } from "@pe/kit/lang/input";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { SlotPicker } from "../proto/e/slot-picker";
-import { pressure } from "./api";
+import { pressure } from "./model";
 import type { SheetDefaults } from "./types";
-import { SHIM_TERMINAL_DROP_SOURCE } from "./use-fan-sheet";
-import type { OpenSheet } from "./use-sheet";
+import { SHIM_TERMINAL_DROP_SOURCE } from "./state";
+import type { OpenSheet } from "../sources";
 
 export type InputGroup = "firm" | "project" | "fan" | "element";
 export const INPUT_GROUPS: readonly { key: InputGroup; label: string }[] = [

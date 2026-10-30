@@ -1,6 +1,6 @@
 /**
  * The fan sheet view of /ducts (`?stage=sheet`, the head's "Pricing fans" stage; protoui rounds 1 to 3, 2026-10-28, variant A "Ledger"
- * promoted): on the house pane system (`SHEET_LAYOUT`, `TeachingLayoutView`, `ListView`), the
+ * promoted): pane bodies for the kernel's graph layout, using the house `ListView`. The
  * roster and the inputs fold share one full-height sidebar; the picture sits over the tier ledger on
  * the right, each in its own resizable pane. The ledger is ONE scroll with every tier's items
  * grouped taken / accept / preview, counts in each group header, one batch verb per group that runs
@@ -11,12 +11,9 @@ import { Button } from "@pe/kit/lang/button";
 import { emptyListState, useList, type ListState } from "@pe/kit/lang/collection";
 import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
 import { Scroll } from "@pe/kit/lang/scroll";
-import type { PaneSide } from "@pe/kit/lang/pane";
-import { TeachingLayoutView } from "@pe/kit/lang/teaching-layout";
-import { fanKey, pressure, type FanPort } from "./api";
+import { fanKey, pressure, type FanPort } from "./model";
 import { BlockerRow } from "./blocker-row";
 import type { Closer } from "./closer";
-import { SHEET_LAYOUT } from "./layout";
 import { subjectNamer } from "../subject-text";
 import {
   isConsequence,
@@ -41,7 +38,7 @@ const rosterSearch = (row: FanPort) => ({
   ids: [row.unitId],
 });
 
-function Roster({ props }: { props: SheetViewProps }) {
+export function Roster({ props }: { props: SheetViewProps }) {
   const openKey = props.sheet
     ? fanKey(props.sheet.overview.fan ?? { unitId: -1, portIndex: -1 })
     : null;
@@ -96,7 +93,7 @@ function Roster({ props }: { props: SheetViewProps }) {
   );
 }
 
-function RosterVerbs({ props }: { props: SheetViewProps }) {
+export function RosterVerbs({ props }: { props: SheetViewProps }) {
   const wait = props.busy || props.loading ? "Wait for the current read" : null;
   return (
     <span className="flex items-baseline gap-1">
@@ -178,7 +175,7 @@ function TierGroup({
             kind={batch ? "framed" : "commit"}
             label={`${verb} all ${live.length} ${tier} blockers`}
             refusal={batch}
-            onClick={() => live.forEach(props.close)}
+            onClick={() => props.closeMany(live)}
           >
             {verb} all {live.length}
             {live.length < blockers.length ? ` of ${blockers.length}` : ""}
@@ -222,7 +219,7 @@ function TierGroup({
   );
 }
 
-function Ledger({ props }: { props: SheetViewProps }) {
+export function Ledger({ props }: { props: SheetViewProps }) {
   // R-B: consequence rows nest under their cause; only cause rows take a tier and a verb.
   const present = presentIds(props.blockers);
   const causes = props.blockers.filter((b) => !isConsequence(b, present));
@@ -250,43 +247,6 @@ function Ledger({ props }: { props: SheetViewProps }) {
             props={props}
           />
         ))}
-    </div>
-  );
-}
-
-export function SheetView(props: SheetViewProps) {
-  const [sidebar, setSidebar] = useState<PaneSide | null>(null);
-  const [inputs, setInputs] = useState<PaneSide | null>(null);
-  const [picture, setPicture] = useState<PaneSide | null>(null);
-  const open = props.tiers.accept + props.tiers.preview;
-  const progress = props.progress
-    ? `${props.progress.done}/${props.progress.total} ${props.progress.mark}${props.progress.stopped ? " (stopped)" : ""}`
-    : `${props.roster.length} fan ports`;
-  return (
-    <div className="flex size-full min-h-0" data-sheet-variant-a="">
-      <TeachingLayoutView<typeof SHEET_LAYOUT>
-        layout={SHEET_LAYOUT}
-        content={{
-          "sheet-roster": (pane) =>
-            pane(<Roster props={props} />, {
-              meta: progress,
-              actions: <RosterVerbs props={props} />,
-            }),
-          "sheet-inputs": (pane) => pane(props.inputsSurface),
-          "sheet-picture": (pane) => props.picture(pane),
-          "sheet-ledger": (pane) =>
-            pane(<Ledger props={props} />, {
-              meta: props.sheet ? `${open} open · ${props.tiers.taken} taken` : "no fan open",
-            }),
-        }}
-        state={{
-          folds: {
-            sheet: { collapsed: sidebar, onChange: setSidebar },
-            "sheet-side": { collapsed: inputs, onChange: setInputs },
-            "sheet-main": { collapsed: picture, onChange: setPicture },
-          },
-        }}
-      />
     </div>
   );
 }

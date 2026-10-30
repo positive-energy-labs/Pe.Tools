@@ -10,9 +10,7 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { FactChip } from "@pe/kit/lang/chip";
 import { useList, emptyListState, type ListState, type ListPersist } from "@pe/kit/lang/collection";
 import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
-import { PreviewAction } from "@pe/kit/lang/preview-action";
-import { reviewTransitions, type CellWire } from "#/components/work/band";
-import type { ActionHandle } from "#/route/handle";
+
 import { showInRevit } from "#/revit/element-menu";
 import { SelectInRevitIcon } from "@pe/kit/lang/gesture-glyph";
 import {
@@ -38,7 +36,7 @@ import {
 } from "../../inbox-rows";
 import type { Claim } from "../../legs";
 import { inboxWriteRows, type WriteVerbs, type RulingRow } from "./inbox-write";
-import { PreviewLines } from "./preview-lines";
+
 import { SlotPicker } from "./slot-picker";
 import { SubjectText, subjectDocument } from "@pe/kit/lang/subject-text";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
@@ -52,67 +50,32 @@ type InboxWork = {
   store: DuctSnapshot["store"];
 };
 
-/** A preview verb's handles: the route's preview and apply, run with the row's target. */
-interface PreviewHandles {
-  preview: ActionHandle;
-  apply: ActionHandle;
-  busy: boolean;
+export interface FanVerbs {
+  render(row: unknown): ReactNode;
 }
-
-/** A fan verb's handles: the route's fan preview and apply, run with the verb's unit and system. */
-export type FanVerbs = PreviewHandles;
-
-/** A Heal row's verbs: the route's heal preview and heal, run with the row's group. */
-type HealVerbs = PreviewHandles;
-
-/**
- * One preview-then-do verb as a kit `PreviewAction`, run with the route's own preview and apply
- * handles and the row's target. The Heal row's glyph and `FanButton` draw it.
- */
-function PreviewVerb({
+function CommandVerb({
   verb,
   pair,
-  icon,
 }: {
-  verb: Extract<RowVerb, { kind: "preview" }>;
-  pair: PreviewHandles;
+  verb: Extract<RowVerb, { kind: "command" }>;
+  pair: FanVerbs;
   icon?: LucideIcon;
 }) {
-  const input =
+  return pair.render(
     verb.on.verb === "heal"
-      ? { group: verb.on.group }
-      : { unitId: verb.on.unitId, systemId: verb.on.systemId };
-  return (
-    <PreviewAction
-      label={verb.label}
-      says={verb.says}
-      refusal={pair.preview.refusal}
-      busy={pair.busy}
-      icon={icon}
-      held={verb.held && { ...verb.held, lines: <PreviewLines lines={verb.held.lines} /> }}
-      stale={verb.stale}
-      preview={() => pair.preview.run(input)}
-      commit={{
-        ...verb.commit,
-        refusal: verb.commit.refusal ?? pair.apply.refusal,
-        run: () => pair.apply.run(input),
-        done: verb.on.verb === "heal" ? "healed" : "done: the fan is Revit's now",
-      }}
-    />
+      ? { kind: "heal", group: verb.on.group }
+      : { kind: "assign-fan", unitId: verb.on.unitId, systemId: verb.on.systemId },
   );
 }
-
-/** One make-the-fan verb as a button; the Inputs pane and the no-fan row draw it the same way. */
 export function FanButton({
   verb,
   fan,
 }: {
-  verb: Extract<RowVerb, { kind: "preview" }>;
+  verb: Extract<RowVerb, { kind: "command" }>;
   fan: FanVerbs;
 }) {
-  return <PreviewVerb verb={verb} pair={fan} />;
+  return <CommandVerb verb={verb} pair={fan} />;
 }
-
 const VERDICT_ICON: Record<"capped" | "connect" | "ignore", LucideIcon> = {
   capped: Ban,
   connect: Link,
@@ -134,6 +97,7 @@ export function Inbox({
   onPick,
   hoveredIssue,
   address,
+  cells,
 }: {
   groups: Record<Exclude<InboxGroup, "write">, readonly InboxItem[]>;
   work: InboxWork;
@@ -143,7 +107,7 @@ export function Inbox({
   /** Select the element and focus its cell on the tree. */
   onFocusCell: (cell: CellRef) => void;
   write: WriteVerbs;
-  heal: HealVerbs;
+  heal: FanVerbs;
   fan: FanVerbs;
   /** The page's selected element: every row naming it opens. */
   selected: number | null;
@@ -153,20 +117,13 @@ export function Inbox({
   onPick: (key: string) => void;
   hoveredIssue?: string | null;
   address?: ListPersist<"name" | "status">;
+  cells: (row: { segment: string; key: string }) => ReactNode;
 }) {
   const observation = useNativeObservation();
   const subjects = useContext(SubjectTextContext);
   const registry = useContext(RegistryContext);
   const [nativeResult, setNativeResult] = useState<ShowElementsResult | null>(null);
   const [selecting, setSelecting] = useState(false);
-  const cellOf = useCallback(
-    (segment: string, key: string) =>
-      (work.doc as unknown as Record<string, Record<string, object> | undefined> | null)?.[
-        segment
-      ]?.[key] ?? {},
-    [work.doc],
-  );
-
   /** One verb as a button: the compact icon square, or the worded one in an open row. */
   const verbButton = useCallback(
     (verb: RowVerb, i: number, worded: boolean): ReactNode => {
@@ -244,12 +201,12 @@ export function Inbox({
           ) : null;
         case "focus":
           return make(`f${i}`, Pencil, verb.label, verb.says, () => onFocusCell(verb.cell));
-        case "preview":
+        case "command":
           // A Heal row draws its glyph in the closed row; a fan's label names the unit and the
           // system, so it draws worded in the open row only.
           if (verb.on.verb === "heal")
             return (
-              <PreviewVerb key={`p${i}`} verb={verb} pair={heal} icon={worded ? undefined : Eye} />
+              <CommandVerb key={`p${i}`} verb={verb} pair={heal} icon={worded ? undefined : Eye} />
             );
           return worded ? <FanButton key={`n${i}`} verb={verb} fan={fan} /> : null;
         case "claim":
@@ -266,24 +223,10 @@ export function Inbox({
               },
             ),
           );
-        case "stage": {
-          const wire: CellWire = {
-            segment: verb.segment as CellWire["segment"],
-            revision: work.revision,
-            write: work.write as CellWire["write"],
-          };
-          const kind = verb.move;
-          return make(
-            `s${i}${kind}`,
-            kind === "take" ? Check : X,
-            verb.label,
-            verb.says,
-            () =>
-              void reviewTransitions(wire, verb.key, cellOf(verb.segment, verb.key))
-                .find((t) => t.kind === kind)
-                ?.run(),
-          );
-        }
+        case "stage":
+          return verb.move === "take" ? (
+            <span key={`s${i}`}>{cells({ segment: verb.segment, key: verb.key })}</span>
+          ) : null;
         case "select": {
           const target = observedElements(observation, verb.ids);
           const prepared = prepareElements(target, true);
@@ -307,7 +250,7 @@ export function Inbox({
         }
       }
     },
-    [work, nameOf, heal, fan, onFocusCell, onVerdict, cellOf, observation, selecting],
+    [work, nameOf, heal, fan, onFocusCell, onVerdict, cells, observation, selecting],
   );
   const verbsOf = useCallback(
     (item: InboxItem, worded: boolean) =>

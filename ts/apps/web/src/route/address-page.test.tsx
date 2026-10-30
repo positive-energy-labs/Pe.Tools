@@ -17,7 +17,8 @@ import { createViewOwner } from "./view-owner";
 import { urlPage, useUrlPage } from "./url";
 import { familyManifest } from "#/family/manifest";
 import { manifest as families } from "#/families/manifest";
-import { bindDuctsManifest } from "#/ducts/manifest";
+import { ductsGraph, ductsPageSchema } from "#/ducts/graph";
+import { graphUrlPage } from "#/shell/mount-page";
 import { defineRoute } from "./manifest";
 import { useRoute } from "./use-route";
 
@@ -158,12 +159,11 @@ test("restoring Families spec B after planning A closes A's confirmation in one 
 });
 
 test("a Ducts URL atomically restores system, selection and pose before its evidence loads", () => {
-  const manifest = bindDuctsManifest(() => null);
+  const graph = ductsGraph;
   const route = createRouteOwner("ducts", makeAtomRegistry());
-  const url = urlPage(manifest)!;
-  const owner = createViewOwner(route, manifest.page, url.read({ system: "A" }), {
-    address: manifest.address,
-    transition: manifest.transition,
+  const url = graphUrlPage(graph);
+  const owner = createViewOwner(route, ductsPageSchema, url.read({ system: "A" }), {
+    transition: graph.transition as never,
   });
   try {
     const restored = url.read({ system: "B", selected: "200", viewport: "orbit:45,30,1.25@0,0,0" });
@@ -171,7 +171,8 @@ test("a Ducts URL atomically restores system, selection and pose before its evid
     expect(owner.read().page).toMatchObject(restored);
     expect(owner.read().page.selected).toBe("200");
     expect(owner.read().page.viewport).not.toBeNull();
-    expect(owner.move({ system: ["C"] })).toMatchObject({ code: "not-ready" });
+    expect(owner.move({ system: ["C"] })).toBeNull();
+    expect(owner.read().page.system).toEqual(["C"]);
   } finally {
     owner.dispose();
     route.dispose();

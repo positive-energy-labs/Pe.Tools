@@ -1,117 +1,173 @@
-/**
- * The sheet mount inside the /ducts shell (`?stage=sheet`, the head's "Pricing fans" stage): the route's data, params, auth and
- * subject plumbing stay; only the body under them is the sheet. `SheetViewProps` is assembled here,
- * once, from the spine (`use-fan-sheet`, `picture`, `inputs-surface`); the view receives it whole
- * and never reaches past it.
- */
-import { useEffect, useMemo, useState } from "react";
-import { stagedDucts } from "@pe/agent-contracts";
+import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { AttentionRoot } from "#/attention";
 import { useRevitSubjectProps } from "#/revit/element-menu";
+import { DuctsOwner } from "../pane-context";
 import type { ProtoProps } from "../proto/props";
-import { useDuctSnapshot } from "../host";
 import { subjectNamer } from "../subject-text";
-import { blockerElements } from "./layers";
-import { EMPTY_SNAPSHOT, sheetSnapshot } from "./scoped-snapshot";
+import { rosterOrder } from "./model";
+import { EMPTY_SNAPSHOT } from "./scoped-snapshot";
 import { InputsSurface } from "./inputs-surface";
 import { SheetPicture } from "./picture";
 import type { SheetViewProps } from "./types";
-import { SheetView } from "./view";
-import { useFanSheet } from "./use-fan-sheet";
+import { Roster, RosterVerbs, Ledger } from "./view";
+import { sheetState, SHIM_TERMINAL_DROP_SOURCE } from "./state";
+import { describeCloser, type Closer } from "./closer";
+import { mergeSheetInputs } from "./inputs";
+import type { DuctsSheetInputs } from "@pe/agent-contracts";
+import type { SheetReading } from "../sources";
 
-export function SheetScreen({ props }: { props: ProtoProps }) {
-  // The sheet needs a bound document only; it reads its own scoped snapshot (`scoped-snapshot.ts`).
-  if (!props.doc)
-    return (
-      <p className="p-3 text-ink-2" role="status">
-        {props.empty?.says ?? "no document bound"}
-      </p>
-    );
-  return (
-    <AttentionRoot doc={props.attentionDoc}>
-      <Loaded props={props} target={props.doc} />
-    </AttentionRoot>
-  );
+const SheetPanes = createContext<Readonly<Record<string, ReactNode>>>({});
+export function SheetPane({ id }: { id: string }) {
+  return useContext(SheetPanes)[id] ?? null;
 }
-
-function Loaded({ props, target }: { props: ProtoProps; target: NonNullable<ProtoProps["doc"]> }) {
-  const [nameOf, setNameOf] = useState(() => subjectNamer(EMPTY_SNAPSHOT));
-  const state = useFanSheet(target, props.work, nameOf);
-  const ids = useMemo(() => {
-    const sheet = state.sheet;
-    if (!sheet?.overview.fan) return [];
-    return [
-      ...new Set([
-        sheet.overview.fan.unitId,
-        ...(sheet.elements?.walkedElementIds ?? []),
-        ...state.blockers.flatMap(blockerElements),
-      ]),
-    ].sort((a, b) => a - b);
-  }, [state.sheet, state.blockers]);
-  const edit = useMemo(() => stagedDucts(props.work.doc), [props.work.doc]);
-  const read = useDuctSnapshot(
-    ids.length ? target : null,
-    props.page.epoch,
-    edit.parameters,
-    edit.labelParameter,
-    ids.length ? { kind: "ids", ids } : null,
+/** Shared spine only. The kernel owns reading demand, Work, Page, controls and layout. */
+export function SheetProvider({ props, children }: { props: ProtoProps; children: ReactNode }) {
+  const owner = useContext(DuctsOwner)!;
+  const reading = owner.readings.get("sheet");
+  const value = reading.value as SheetReading | undefined;
+  const sheet = value?.open ?? null;
+  const fans = owner.readings.get("fans");
+  const roster = rosterOrder(
+    value?.rows ?? (fans.value as { rows: import("./model").FanPort[] } | null)?.rows ?? [],
   );
-  const snapshot = useMemo(
-    () => sheetSnapshot(ids.length ? read.snapshot : null),
-    [ids, read.snapshot],
-  );
-  useEffect(() => setNameOf(() => subjectNamer(snapshot)), [snapshot]);
+  const snapshot = props.snapshot ?? EMPTY_SNAPSHOT;
+  const state = useMemo(() => sheetState(sheet, props.work.doc), [sheet, props.work.doc]);
+  const nameOf = useMemo(() => subjectNamer(snapshot), [snapshot]);
   const refProps = useRevitSubjectProps();
   const subjects = useMemo(
     () => ({ doc: props.attentionDoc, nameOf, go: props.onSelect, refProps }),
     [props.attentionDoc, nameOf, props.onSelect, refProps],
   );
-  const { page, setPage } = props;
-  const focusedBlocker = page.issue || null;
-  const focused = state.blockers.find((b) => b.id === focusedBlocker) ?? null;
-  // The element inputs follow the focused ledger row, else the selected element, so a complete
-  // sheet (no rows left) can still revise a typed drop or end cfm by selecting the element.
-  const selectedId = Number(String(page.selected ?? "").replaceAll('"', ""));
+  const busy = ["pending", "partial"].includes(reading.status);
+  const changeInputs = (edits: DuctsSheetInputs) => {
+    void owner.control("sheet-inputs", { edits, expectedRevision: props.work.revision }).run();
+  };
+  const closerOf = (blocker: import("./tiers").SheetBlocker, typed: number | null) =>
+    describeCloser(blocker, typed, {
+      defaults: state.defaults,
+      dropSource:
+        state.defaults.terminalDropSource === SHIM_TERMINAL_DROP_SOURCE
+          ? "firm shim"
+          : state.defaults.terminalDropSource,
+      nameOf,
+      wait: busy
+        ? "Wait for the current read"
+        : sheet?.inputs && reading.current
+          ? null
+          : "Reading inputs detail",
+      fan: sheet?.overview.fan
+        ? {
+            unitId: sheet.overview.fan.unitId,
+            name: sheet.overview.fan.mark || nameOf(sheet.overview.fan.unitId) || "unit",
+          }
+        : null,
+    });
+  const editsFor = (closers: readonly Closer[]) =>
+    closers.reduce<DuctsSheetInputs>((edits, closer) => {
+      if (closer.refusal || !closer.action) return edits;
+      const action = closer.action;
+      switch (action.kind) {
+        case "rule":
+          return {
+            ...edits,
+            rulings: [
+              ...(edits.rulings ?? state.projectInputs.rulings ?? []).filter(
+                (ruling) => !ruling.pair.every((end) => action.pair.includes(end)),
+              ),
+              { pair: action.pair, verdict: "accept" },
+            ],
+          };
+        case "cap":
+          return {
+            ...edits,
+            endRulings: [
+              ...(edits.endRulings ?? state.projectInputs.endRulings ?? []).filter(
+                (ruling) =>
+                  ruling.end.elementId !== action.end.elementId ||
+                  ruling.end.connector !== action.end.connector,
+              ),
+              { end: action.end, verdict: "capped" },
+            ],
+          };
+        case "drop":
+          return mergeSheetInputs(edits, { drops: { [action.elementId]: action.value } });
+        case "cfm":
+          return mergeSheetInputs(edits, { endCfm: { [action.elementId]: action.value } });
+        case "unitCfm":
+          return mergeSheetInputs(edits, { unitCfm: { [action.unitId]: action.value } });
+      }
+    }, {});
+  const selected = Number(props.page.selected.replaceAll('"', ""));
+  const focused = state.blockers.find((blocker) => blocker.id === props.page.issue);
   const elementId =
-    focused?.elementId ?? (Number.isInteger(selectedId) && selectedId > 0 ? selectedId : null);
+    focused?.elementId ?? (Number.isInteger(selected) && selected > 0 ? selected : null);
   const element =
     elementId == null
       ? null
-      : { id: elementId, family: snapshot.nodes.find((n) => n.id === elementId)?.family ?? null };
-  const busy = state.busy || state.loading;
+      : {
+          id: elementId,
+          family: snapshot.nodes.find((node) => node.id === elementId)?.family ?? null,
+        };
+  const setDefaults: SheetViewProps["setDefaults"] = (next) => {
+    void owner
+      .control("sheet-defaults", { edits: next, expectedRevision: props.work.revision })
+      .run();
+  };
+  const fanReading = fans.value as { slots: SheetViewProps["slots"]; activeSlot: string } | null;
   const spine: SheetViewProps = {
+    ...state,
     snapshot,
-    roster: state.roster,
-    sheet: state.sheet,
-    blockers: state.blockers,
-    tiers: state.tiers,
-    taken: state.taken,
-    slots: state.slots,
-    activeSlot: state.activeSlot,
-    defaults: state.defaults,
-    projectInputs: state.projectInputs,
-    busy: state.busy,
-    loading: state.loading,
-    error: state.error,
-    progress: state.progress,
-    open: (fan) => void state.compute(fan),
-    computeAll: () => void state.computeAll(),
-    cancel: state.cancel,
-    refresh: () => void state.refresh(),
-    changeInputs: (inputs) => void state.changeInputs(inputs),
-    rule: (proposal) => void state.ruleProposal(proposal),
-    pickPath: (pathId) => void state.pickPath(pathId),
-    setDefaults: state.setDefaults,
-    closerOf: state.closerOf,
-    close: state.close,
-    focusedBlocker,
-    focusBlocker: (id) => setPage({ issue: id ?? "" }, { history: "push" }),
+    roster,
+    sheet,
+    slots: fanReading?.slots ?? [],
+    activeSlot: state.projectInputs.slot ?? fanReading?.activeSlot ?? "",
+    busy,
+    loading: fans.status === "pending",
+    error: reading.error ?? fans.error ?? null,
+    progress: value?.progress ?? null,
+    open: (fan) => {
+      owner.view.setPage({
+        fanPort: { unitId: fan.unitId, portIndex: fan.portIndex },
+        allFans: false,
+        sheetPath: "",
+      });
+    },
+    computeAll: () => {
+      owner.view.setPage({ allFans: true, fanPort: null });
+    },
+    cancel: () => {
+      owner.view.setPage({ allFans: false, fanPort: null });
+    },
+    refresh: () => {
+      void owner.control("refresh").run();
+    },
+    changeInputs,
+    rule: (proposal) =>
+      changeInputs({
+        rulings: [
+          ...(state.projectInputs.rulings ?? []).filter(
+            (ruling) => !ruling.pair.every((end) => proposal.pair.includes(end)),
+          ),
+          proposal,
+        ],
+      }),
+    pickPath: (sheetPath) => {
+      owner.view.setPage({ sheetPath });
+    },
+    setDefaults,
+    closerOf,
+    close: (closer) => changeInputs(editsFor([closer])),
+    closeMany: (closers) => changeInputs(editsFor(closers)),
+    focusedBlocker: props.page.issue || null,
+    focusBlocker: (issue) => {
+      props.setPage({ issue: issue ?? "" }, { history: "push" });
+    },
     picture: (renderPane) => (
       <SheetPicture
         props={props}
         snapshot={snapshot}
-        sheet={state.sheet}
+        sheet={sheet}
         blockers={state.blockers}
         renderPane={renderPane}
       />
@@ -122,26 +178,37 @@ function Loaded({ props, target }: { props: ProtoProps; target: NonNullable<Prot
           snapshot,
           doc: props.work.doc,
           revision: props.work.revision,
-          sheet: state.sheet,
+          sheet,
           defaults: state.defaults,
           projectInputs: state.projectInputs,
-          slots: state.slots,
-          activeSlot: state.activeSlot,
+          slots: fanReading?.slots ?? [],
+          activeSlot: state.projectInputs.slot ?? fanReading?.activeSlot ?? "",
           element,
         }}
         busy={busy}
         elementName={element ? nameOf(element.id) : null}
-        onSlot={(slot) => void state.changeInputs({ slot })}
-        changeInputs={(inputs) => void state.changeInputs(inputs)}
-        setDefaults={state.setDefaults}
+        onSlot={(slot) => changeInputs({ slot })}
+        changeInputs={changeInputs}
+        setDefaults={setDefaults}
       />
     ),
   };
+  const panes = {
+    "sheet-roster": (
+      <>
+        <RosterVerbs props={spine} />
+        <Roster props={spine} />
+      </>
+    ),
+    "sheet-inputs": spine.inputsSurface,
+    "sheet-picture": spine.picture((body) => body),
+    "sheet-ledger": <Ledger props={spine} />,
+  };
   return (
-    <SubjectTextContext.Provider value={subjects}>
-      <div data-sheet-view="" className="flex size-full min-h-0">
-        <SheetView {...spine} />
-      </div>
-    </SubjectTextContext.Provider>
+    <AttentionRoot doc={props.attentionDoc}>
+      <SubjectTextContext.Provider value={subjects}>
+        <SheetPanes value={panes}>{children}</SheetPanes>
+      </SubjectTextContext.Provider>
+    </AttentionRoot>
   );
 }

@@ -9,7 +9,7 @@
 import { useContext, useState } from "react";
 import { AttentionDocument, mention, useAttention, type SubjectKey } from "@pe/kit/lang/attention";
 import { SubjectText } from "@pe/kit/lang/subject-text";
-import { pressure, type Detail } from "./api";
+import { pressure, type Detail } from "./model";
 
 type Ws = Detail<"worksheet">;
 type Side = "supply" | "return";

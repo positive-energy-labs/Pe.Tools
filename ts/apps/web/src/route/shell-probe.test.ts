@@ -4,6 +4,7 @@ import { act, cleanup, render } from "@testing-library/react";
 import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { ductLossRoute } from "../duct-loss/route";
+import { ductsRoute } from "../ducts/route";
 import { getRouter } from "../router";
 import { publicRoutes } from "./builtin-routes";
 import { ShellProbeRoute, shellProbe } from "./shell-probe";
@@ -59,6 +60,6 @@ test.each([
     expect(
       publicRoutes.entries().map(({ manifest }) => ({ key: manifest.key, name: manifest.name })),
     ).toContainEqual({ key: "shell-probe", name: "Shell probe" });
-    expect(publicRoutes.get("ducts")).toBeDefined();
+    expect(router.routesByPath["/ducts"]).toBe(ductsRoute);
   },
 );

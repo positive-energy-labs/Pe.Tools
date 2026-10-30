@@ -1,6 +1,5 @@
 {
   "apps/web/src/chat/chat-shell.tsx": 1,
-  "apps/web/src/ducts/route.tsx": 1,
   "apps/web/src/families/stage.ts": 1,
   "apps/web/src/families/workspace-view.tsx": 1,
   "apps/web/src/family/live.tsx": 1,

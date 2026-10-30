@@ -10,7 +10,6 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 import { slotWord, type AirflowOf, type AirflowOption } from "./airflow";
 import type { Claim } from "./legs";
-import type { DuctsFanRun, DuctsHealRun, DuctsPage } from "./manifest";
 
 export const INBOX_ORDER = ["fix", "set", "check", "write", "diagnostics"] as const;
 export type InboxGroup = (typeof INBOX_ORDER)[number];
@@ -34,25 +33,9 @@ export interface CellRef {
   id: number;
 }
 
-export interface PreviewState {
-  word: string;
-  summary: string;
-  lines: readonly PreviewLine[];
-}
-export interface PreviewLine {
-  key: string;
-  text: string;
-  state: "planned" | "refused" | null;
-  reason: string | null;
-}
-
-export const STALE_WORDS = "changed since preview";
-
 export function compactStatus(status: string): string {
   const read = /^(\d+) of (\d+) (?:terminals|units) read$/.exec(status);
   if (read) return `${read[1]}/${read[2]} read`;
-  const previewed = /^previewed: (\d+) pass · (\d+) refused/.exec(status);
-  if (previewed) return `${previewed[1]} pass · ${previewed[2]} refused`;
   return (
     COMPACT[status] ??
     status
@@ -65,7 +48,6 @@ export function compactStatus(status: string): string {
 }
 const COMPACT: Record<string, string> = {
   "outside priced paths": "off path",
-  "not previewed": "unpreviewed",
   "possible missed join": "missed join?",
   "priced per fan": "per fan",
   "priced as a tree": "as a tree",
@@ -73,7 +55,6 @@ const COMPACT: Record<string, string> = {
   "fix in Revit": "in Revit",
   "blocks the path": "blocks",
   "nothing edit": "none edit",
-  [STALE_WORDS]: "changed",
 };
 
 export type RowVerb =
@@ -87,16 +68,11 @@ export type RowVerb =
       on: boolean;
     }
   | { kind: "role"; id: number; role: "fan" | "passive"; label: string; says: string }
-  /** A fresh preview arms commit; stale previews refuse it. */
   | {
-      kind: "preview";
+      kind: "command";
       on: { verb: "heal"; group: string } | { verb: "fan"; unitId: number; systemId: number };
       label: string;
       says: string;
-      held: PreviewState | null;
-      stale: string | null;
-      commit: { label: string; says: string; refusal: string | null };
-      outcome: string | null;
     }
   | { kind: "focus"; cell: CellRef; label: string; says: string }
   | { kind: "claim"; claim: Claim }
@@ -128,19 +104,6 @@ export interface InboxItem {
   blocks?: false;
 }
 
-export interface HealRunView {
-  group: string;
-  mode: "preview" | "apply";
-  fresh: boolean;
-  planned: number;
-  healed: number;
-  refused: number;
-  refusals: ReadonlyMap<string, string>;
-  passed: readonly string[];
-  ids: readonly number[];
-  esp: { before: number | null; after: number | null } | null;
-}
-
 export interface TriageInput {
   snapshot: Pick<DuctSnapshot, "groups" | "nodes" | "segments"> &
     Partial<Pick<DuctSnapshot, "systems">>;
@@ -152,102 +115,30 @@ export interface TriageInput {
   nameOf?: (id: number) => string;
   groupLabel?: (id: string) => string;
   heal?: HealPlan | null;
-  healRun?: HealRunView | null;
   airflow?: { current: string; options: readonly AirflowOption[] };
   unitAirflow?: { current: string; options: readonly AirflowOption[] };
   roles?: ReadonlyMap<number, { role: "fan" | "passive"; why: string; reason: string }>;
-  fan?: { run: DuctsFanRun | null; epoch: number };
 }
 
 export function fanVerbs(
   a: FanAssignment,
   name: (id: number) => string,
-  fan: { run: DuctsFanRun | null; epoch: number } | undefined,
-): Extract<RowVerb, { kind: "preview" }>[] {
-  const run = fan?.run;
-  const mine = run?.unitId === a.unitId && run.systemId === a.systemId ? run : null;
+): Extract<RowVerb, { kind: "command" }>[] {
   const words = `make ${name(a.unitId)} the fan of ${a.system}`;
-  const previewed = mine?.mode === "preview" ? mine : null;
-  const fresh = previewed !== null && previewed.epoch === (fan?.epoch ?? 0);
   return [
     {
-      kind: "preview",
+      kind: "command",
       on: { verb: "fan", ...a },
-      label: `preview: ${words}`,
-      says: `Preview in Revit, rolled back: ${words} (its base equipment, Duct Systems > Select Equipment)`,
-      held:
-        previewed && fresh
-          ? {
-              word: `${words} · previewed`,
-              summary: fanWords(previewed.response),
-              lines: [],
-            }
-          : null,
-      stale: previewed && !fresh ? STALE_WORDS : null,
-      commit: {
-        label: words,
-        says: `${words[0]!.toUpperCase()}${words.slice(1)} in Revit; the system keeps its id, name and type`,
-        refusal: fanRefusal(
-          { fan: run ?? null, epoch: fan?.epoch ?? 0 },
-          { unitId: a.unitId, systemId: a.systemId },
-        ),
-      },
-      outcome: mine?.mode === "apply" ? `applied: ${fanWords(mine.response)}` : null,
+      label: words,
+      says: `Review ${words} in Revit, then commit the same request`,
     },
   ];
 }
 
-/** Revit may renumber groups after healing; recover the group by a measured root, else a held element. */
-export function healRunView(
-  run: DuctsHealRun,
-  snapshot: Pick<DuctSnapshot, "groups" | "nodes" | "segments">,
-  epoch: number,
-  espNow: (group: string) => number | null,
-): HealRunView {
-  const holder = new Map(
-    [...snapshot.nodes, ...snapshot.segments].map((e) => [e.id, e.groupId ?? null]),
-  );
-  // A unit sits in every group its ports reach (supply and return sides), so a root names the
-  // group only when the run's own id is gone and every root it measured from is there.
-  const group =
-    run.mode === "preview" || snapshot.groups.some((g) => g.id === run.group)
-      ? run.group
-      : (snapshot.groups.find((g) => run.before.roots.every((r) => g.rootIds.includes(r)))?.id ??
-        run.before.ids.map((id) => holder.get(id)).find((g): g is string => g != null) ??
-        run.group);
-  const items = run.response.groups.flatMap((g) => g.items);
-  return {
-    group,
-    mode: run.mode,
-    fresh: run.epoch === epoch,
-    planned: run.response.counts.planned,
-    healed: run.response.counts.healed,
-    refused: run.response.counts.refused,
-    refusals: new Map(
-      items.filter((i) => i.outcome === "refused").map((i) => [i.key, i.reason ?? "refused"]),
-    ),
-    passed: items.filter((i) => i.outcome === "planned").map((i) => i.key),
-    ids: run.mode === "apply" ? [...new Set(items.flatMap((i) => i.created))] : [],
-    esp: run.mode === "apply" ? { before: run.before.esp, after: espNow(group) } : null,
-  };
-}
-
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
-const inWg = (v: number | null) => (v == null ? "no path" : v.toFixed(3));
-
-function healRunWords(run: HealRunView) {
-  if (run.mode === "preview")
-    return `previewed: ${run.planned} pass · ${run.refused} refused${run.fresh ? "" : " · out of date"}`;
-  const esp = run.esp ? ` · ESP ${inWg(run.esp.before)} → ${inWg(run.esp.after)} in-wg` : "";
-  return `healed ${run.healed}${run.refused ? ` · ${run.refused} refused` : ""}${esp}`;
-}
-
-const HEAL_NOTE =
-  "Preview runs each repair and Pe's own check in Revit and rolls it all back; heal commits the group in one transaction, and an item that fails the check is refused and rolled back.";
 
 function healRow(
   g: HealGroup,
-  run: HealRunView | null,
   blocks: boolean,
   name: (id: number) => string,
   label: (id: string) => string,
@@ -262,59 +153,22 @@ function healRow(
     if (i.kind === "cap") return `cap ${a} (end ${i.end.split(":")[1]})`;
     return `${i.how} ${a} to ${b}${i.gapIn > 0 ? `, ${i.gapIn.toFixed(2)} in` : ""}`;
   };
-  const refused = run ? g.items.filter((i) => run.refusals.has(i.key)) : [];
-  const apply =
-    !run || run.mode !== "preview"
-      ? "Preview the heal first"
-      : !run.fresh
-        ? "The snapshot changed since the preview; preview again"
-        : !run.passed.length
-          ? "Nothing passed the preview"
-          : null;
   return {
     key: `heal:${g.group}`,
     findingIds: g.items.flatMap((item) => item.covers),
     group: "fix",
     kind: "heal",
     title: `Heal ${label(g.group)}: ${counts}`,
-    status: run ? healRunWords(run) : "not previewed",
+    status: "review repairs",
     ...(blocks ? { tone: "alarm" as const } : { blocks: false as const }),
-    ids: [...new Set([...g.items.flatMap((i) => i.ids), ...(run?.ids ?? [])])],
-    note: [
-      `${g.items.map(line).join("; ")}.`,
-      ...refused.map((i) => `Refused ${line(i)}: ${run!.refusals.get(i.key)}.`),
-      HEAL_NOTE,
-    ].join(" "),
+    ids: [...new Set(g.items.flatMap((i) => i.ids))],
+    note: `${g.items.map(line).join("; ")}. Review runs each repair and Pe's check in Revit and rolls it back; commit applies the same request.`,
     verbs: [
       {
-        kind: "preview",
+        kind: "command",
         on: { verb: "heal", group: g.group },
-        label: "preview heal",
-        says: `Preview healing ${counts} in Revit, rolled back`,
-        held:
-          run?.mode === "preview" && run.fresh
-            ? {
-                word: `heal · previewed ${run.passed.length}`,
-                summary: `${run.passed.length} pass · ${run.refused} refused`,
-                lines: g.items.map((i) => ({
-                  key: i.key,
-                  text: line(i),
-                  state: run.refusals.has(i.key)
-                    ? ("refused" as const)
-                    : run.passed.includes(i.key)
-                      ? ("planned" as const)
-                      : null,
-                  reason: run.refusals.get(i.key) ?? null,
-                })),
-              }
-            : null,
-        stale: run?.mode === "preview" && !run.fresh ? STALE_WORDS : null,
-        commit: {
-          label: "apply heal",
-          says: "Heal the items the preview passed, in one transaction",
-          refusal: apply,
-        },
-        outcome: null,
+        label: "heal",
+        says: `Review healing ${counts}, then commit in Revit`,
       },
       select(g.items.flatMap((i) => i.ids)),
     ],
@@ -394,7 +248,6 @@ export function triage(input: TriageInput) {
   });
 
   const heal = input.heal ?? null;
-  const run = input.healRun ?? null;
   // Heal rows lead Fix: what Pe can make real in Revit comes before what a person must.
   const blocking = new Set(
     findings.filter((f) => bin(f) === "blocking" && pricesSystem(f)).map((f) => f.id),
@@ -410,29 +263,11 @@ export function triage(input: TriageInput) {
     fix.push(
       healRow(
         g,
-        run?.group === g.group ? run : null,
         g.items.some((i) => i.covers.some((c) => blocking.has(c))),
         name,
         label,
       ),
     );
-  // An apply that healed its whole group leaves no Heal row to carry its result, so it keeps its own.
-  if (
-    run?.mode === "apply" &&
-    (!scope || inGroups.has(run.group)) &&
-    !healGroups.some((g) => g.group === run.group)
-  )
-    fix.push({
-      key: `heal:${run.group}`,
-      group: "fix",
-      kind: "heal",
-      title: `Healed ${label(run.group)}`,
-      status: healRunWords(run),
-      blocks: false,
-      ids: run.ids,
-      note: [...run.refusals].map(([key, why]) => `Refused ${key}: ${why}.`).join(" ") || null,
-      verbs: [select(run.ids)],
-    });
   for (const f of healFindings(findings, heal)) {
     if (!inScope(f) || f.kind === "no-flow" || f.kind === "no-terminal-flow") continue;
     if (f.findingIds.some((id) => heal?.covered.has(id))) continue;
@@ -621,7 +456,7 @@ export function triage(input: TriageInput) {
                 says: `Stage ${name(id)} as the fan; a group needs an air mover to price`,
               }),
             ),
-            ...based.flatMap((a) => fanVerbs(a, name, input.fan)),
+            ...based.flatMap((a) => fanVerbs(a, name)),
             select(f.elementIds),
           ],
         });
@@ -974,10 +809,6 @@ function checks(input: TriageInput & { claims: readonly Claim[] }): InboxItem[] 
 
 export interface WriteState {
   edit: number;
-  hasPreview: boolean;
-  fresh: boolean;
-  planned: number | null;
-  refused: number | null;
   esp: number;
 }
 
@@ -997,16 +828,8 @@ export interface WriteRow {
 function writeRow(left: { fix: number; set: number }, write: WriteState): WriteRow {
   const waits = write.esp ? espWaits(left) : null;
   return {
-    title: write.fresh && write.planned ? `Write ${write.planned} to Revit` : "Write to Revit",
-    status: `${
-      !write.edit
-        ? "nothing edit"
-        : !write.hasPreview
-          ? "not previewed"
-          : !write.fresh
-            ? "preview out of date"
-            : `${write.planned ?? 0} planned · ${write.refused ?? 0} refused`
-    }${waits ? " · ESP held" : ""}`,
+    title: "Write to Revit",
+    status: `${write.edit ? `${write.edit} edit` : "nothing edit"}${waits ? " · ESP held" : ""}`,
     held: waits ? `${plural(write.esp, "edit ESP")} left out of this write: ${waits}` : null,
   };
 }
@@ -1083,25 +906,6 @@ export function inboxRows(input: TriageInput & { claims: readonly Claim[]; write
     diagnostics,
   };
 }
-
-export const fanWords = (response: DuctsFanRun["response"]) =>
-  response.outcome === "refused"
-    ? `refused: ${response.reason ?? "refused"}`
-    : (response.check ?? response.outcome);
-
-export const fanRefusal = (
-  page: Pick<DuctsPage, "fan" | "epoch">,
-  pair: { unitId: number; systemId: number } | undefined,
-) => {
-  if (!pair) return null;
-  const run = page.fan;
-  if (run?.mode !== "preview" || run.unitId !== pair.unitId || run.systemId !== pair.systemId)
-    return "Preview it first";
-  if (run.epoch !== page.epoch) return "The snapshot changed since the preview; preview again";
-  return run.response.outcome === "planned"
-    ? null
-    : `The preview refused: ${run.response.reason ?? "refused"}`;
-};
 
 const FOCUS_SEGMENTS = new Set([
   "assumptions",

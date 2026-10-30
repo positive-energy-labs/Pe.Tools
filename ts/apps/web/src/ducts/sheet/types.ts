@@ -7,9 +7,9 @@ import type { ReactNode } from "react";
 import type { DuctsSheetInputs, DuctsSheetRequest } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
-import type { FanPort } from "./api";
+import type { FanPort } from "./model";
 import type { Closer } from "./closer";
-import type { OpenSheet } from "./use-sheet";
+import type { OpenSheet } from "../sources";
 import type { SheetBlocker, Tier } from "./tiers";
 
 /**
@@ -66,6 +66,7 @@ export interface SheetViewProps {
    * (a Revit heal write has no door yet, `SHIM(ducts-sheet-write)`), a typed drop, a typed cfm. */
   closerOf: (blocker: SheetBlocker, typed: number | null) => Closer;
   close: (closer: Closer) => void;
+  closeMany: (closers: readonly Closer[]) => void;
   /** The blocker whose row is focused (its pin was picked on the picture), by id. */
   focusedBlocker: string | null;
   focusBlocker: (id: string | null) => void;

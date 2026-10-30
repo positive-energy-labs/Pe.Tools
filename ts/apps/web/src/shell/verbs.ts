@@ -15,7 +15,10 @@ import {
   type WorkKey,
   type WorkWriteAck,
 } from "@pe/agent-contracts";
-import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import {
+  runSemanticAction,
+  actionResult,
+} from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import type { createRouteOwner } from "../route/route-owner";
 import { refuse, writeRefusal, type Refusal } from "../route/refusal";
 import { DEFAULT_WAIT_S } from "../route/waits";
@@ -97,6 +100,7 @@ interface Binding {
   intent?: (scope: VerbScope, input: unknown, answers: unknown) => Record<string, unknown>;
   prepare?: (scope: VerbScope, input: unknown) => unknown;
   answers?: z.ZodType;
+  waitSeconds?: number;
 }
 const bindings = new WeakMap<VerbDecl, Binding>();
 
@@ -129,15 +133,17 @@ export function commandVerb<K extends SemanticActionKey, S extends z.ZodType>(
       | { review: "none" | "shown"; answers?: z.ZodType }
     ),
   implementation: {
+    waitSeconds?: number;
     ready?: (scope: VerbScope, input: z.output<S>) => string | null;
     prepare?: (scope: VerbScope, input: z.output<S>) => unknown;
     intent: (scope: VerbScope, input: z.output<S>, answers: unknown) => CommandInput<K>;
   },
 ): VerbDecl<S> {
   const { answers, ...metadata } = declaration;
-  const verb = { ...metadata, kind: "command" as const };
+  const verb = { does: command, ...metadata, kind: "command" as const };
   bindings.set(verb, {
     command,
+    waitSeconds: implementation.waitSeconds,
     answers,
     ready:
       implementation.ready &&
@@ -149,6 +155,27 @@ export function commandVerb<K extends SemanticActionKey, S extends z.ZodType>(
       implementation.intent(scope, input as z.output<S>, reply) as Record<string, unknown>,
   });
   return verb;
+}
+
+/** Preview commands use the same admitted transport as commit, and return host-owned evidence. */
+export async function prepareCommand<K extends SemanticActionKey>(
+  scope: VerbScope,
+  key: K,
+  input: CommandInput<K>,
+  waitSeconds = DEFAULT_WAIT_S,
+) {
+  const receipt = await runSemanticAction(
+    key,
+    structuredClone(input) as Record<string, unknown>,
+    scope.snapshot.target,
+    scope.snapshot.work?.handle,
+    "",
+    crypto.randomUUID(),
+    waitSeconds * 1000,
+  );
+  if (receipt.state !== "succeeded") throw Error(`Preview ${receipt.state}; inspect its receipt`);
+  const answer = actionResult(receipt) as { value?: unknown };
+  return { receipt, response: answer?.value ?? answer };
 }
 
 const frozen = <T>(value: T): T => {
@@ -398,7 +425,7 @@ async function invokeCore<C extends Caller>(
             current.work?.handle,
             "",
             press,
-            (ctx.waitSeconds ?? DEFAULT_WAIT_S) * 1000,
+            (binding.waitSeconds ?? ctx.waitSeconds ?? DEFAULT_WAIT_S) * 1000,
           );
           if (receipt.state === "succeeded")
             return finish({ state: "done", kind: "command", press, receipt });

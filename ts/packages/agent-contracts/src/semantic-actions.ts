@@ -118,6 +118,13 @@ export const takeoffActions = definitions;
  * keys, so `operations call ducts.apply` still names the native op.
  */
 export const ductsActions = {
+  "ducts.refresh": {
+    says: "Read this document's duct snapshots and pricing inputs again.",
+    needs: "project-document",
+    effect: "query",
+    input: z.strictObject({}),
+    dirties: ["snapshot"],
+  },
   "ducts.preview-losses": {
     native: ["ducts.apply"],
     says: "Plan the staged duct loss writes (fitting coefficients, terminal and component drops, fan static) and report each write's outcome without changing Revit.",
@@ -301,9 +308,12 @@ export const tools = {
         ["workingPhase"],
         ["designFriction"],
         ["systemColours"],
+        ["sheetInputs", "*"],
+        ["sheetDefaults"],
       ],
     },
     commands: {
+      "ducts.refresh": ductsActions["ducts.refresh"],
       "ducts.preview-losses": workCommand("ducts", ductsActions["ducts.preview-losses"]),
       "ducts.apply-losses": workCommand("ducts", ductsActions["ducts.apply-losses"]),
       "ducts.preview-heal": workCommand("ducts", ductsActions["ducts.preview-heal"]),

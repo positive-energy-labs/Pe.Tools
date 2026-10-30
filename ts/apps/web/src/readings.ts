@@ -655,6 +655,80 @@ const bodiesOf = (source: Readings) => {
   return bodies;
 };
 
+/** Materialize an admitted immutable body; envelopes and native response headers own freshness. */
+export function readDuctsBody(
+  request: DuctsReadingRequest,
+  envelope: DuctsReadingEnvelope,
+  options: {
+    source?: Readings;
+    fetchBody?: typeof hostFetch;
+    signal?: AbortSignal;
+    refresh?: boolean;
+  } = {},
+): Promise<DuctsDecodedBody> {
+  const { revision, version, session, target } = envelope;
+  const { source = peReadings, fetchBody = hostFetch, signal, refresh = false } = options;
+  const headers: Record<string, string> = {
+    [HOST_RPC_BRIDGE_SESSION_HEADER]: session,
+    [HOST_RPC_ORIGIN_HEADER]: `web:${typeof window === "undefined" ? "/ducts" : window.location.pathname}`,
+  };
+  if (target) headers[HOST_RPC_DOCUMENT_HEADER] = target.openId;
+  if (refresh) headers[DUCTS_REFRESH_HEADER] = revision;
+  else if (version) headers[DUCTS_BODY_VERSION_HEADER] = version;
+  return bodiesOf(source).read(refresh ? `refresh:${revision}` : revision, async () => {
+    const response = await createPeClient(undefined, fetchBody).response(
+      "operation.call",
+      {
+        body:
+          request.kind === "ducts-snapshot"
+            ? {
+                key: "ducts.snapshot",
+                request: {
+                  ...(request.slots ? { slots: request.slots } : {}),
+                  ...(request.labelParameter ? { labelParameter: request.labelParameter } : {}),
+                  // The host keys the shared body on the selector too: without it a
+                  // scoped read reached Revit as the whole-document read.
+                  ...(request.selector ? { selector: request.selector } : {}),
+                },
+              }
+            : { key: "ducts.tables", request: { ids: request.ids } },
+      },
+      { headers, signal: signal ?? AbortSignal.timeout(120_000) },
+    );
+    if (!response.ok) {
+      const problem = (await response.json().catch(() => null)) as {
+        message?: string;
+        error?: string;
+      } | null;
+      throw Error(problem?.message ?? problem?.error ?? `Ducts read failed (${response.status})`);
+    }
+    const confirmedSession = response.headers.get("x-pe-resolved-session");
+    const confirmedOpenId = response.headers.get("x-pe-resolved-open-id");
+    const nativeRequestId = response.headers.get("x-pe-native-request-id");
+    const bodyVersion = response.headers.get(DUCTS_BODY_VERSION_HEADER);
+    if (
+      confirmedSession !== session ||
+      (target && decodeURIComponent(confirmedOpenId ?? "") !== target.openId) ||
+      !nativeRequestId ||
+      !bodyVersion ||
+      (version && !refresh && bodyVersion !== version)
+    )
+      throw Error("Ducts response did not confirm the requested observation");
+    const json = await response.text();
+    return {
+      data: JSON.parse(json) as unknown,
+      bytes: new TextEncoder().encode(json).byteLength,
+      nativeObservation: {
+        session,
+        document: target,
+        requestId: nativeRequestId,
+        version: bodyVersion,
+        reused: response.headers.get("x-pe-ducts-reused") === "true",
+      },
+    };
+  });
+}
+
 /** Tiny owner envelopes drive acquisition; a graph travels over admitted /call only when needed. */
 export function useDuctsReading<T>(
   request: DuctsReadingRequest | null,
@@ -679,77 +753,16 @@ export function useDuctsReading<T>(
     (refresh = false) => {
       const at = current.current;
       if (!request || !at.key || !at.envelope) return;
-      const { revision, version, session, target } = at.envelope;
+      const { revision } = at.envelope;
       const attempt = `${at.key}:${revision}:${refresh}`;
       if (attempts.current.has(attempt)) return;
-      const headers: Record<string, string> = {
-        [HOST_RPC_BRIDGE_SESSION_HEADER]: session,
-        [HOST_RPC_ORIGIN_HEADER]: `web:${window.location.pathname}`,
-      };
-      if (target) headers[HOST_RPC_DOCUMENT_HEADER] = target.openId;
-      if (refresh) headers[DUCTS_REFRESH_HEADER] = revision;
-      else if (version) headers[DUCTS_BODY_VERSION_HEADER] = version;
       const promise = (async () => {
         try {
-          const decoded = await bodiesOf(source).read(
-            refresh ? `refresh:${revision}` : revision,
-            async () => {
-              const response = await createPeClient(undefined, fetchBody).response(
-                "operation.call",
-                {
-                  body:
-                    request.kind === "ducts-snapshot"
-                      ? {
-                          key: "ducts.snapshot",
-                          request: {
-                            ...(request.slots ? { slots: request.slots } : {}),
-                            ...(request.labelParameter
-                              ? { labelParameter: request.labelParameter }
-                              : {}),
-                            // The host keys the shared body on the selector too: without it a
-                            // scoped read reached Revit as the whole-document read.
-                            ...(request.selector ? { selector: request.selector } : {}),
-                          },
-                        }
-                      : { key: "ducts.tables", request: { ids: request.ids } },
-                },
-                { headers, signal: AbortSignal.timeout(120_000) },
-              );
-              if (!response.ok) {
-                const problem = (await response.json().catch(() => null)) as {
-                  message?: string;
-                  error?: string;
-                } | null;
-                throw Error(
-                  problem?.message ?? problem?.error ?? `Ducts read failed (${response.status})`,
-                );
-              }
-              const confirmedSession = response.headers.get("x-pe-resolved-session");
-              const confirmedOpenId = response.headers.get("x-pe-resolved-open-id");
-              const nativeRequestId = response.headers.get("x-pe-native-request-id");
-              const bodyVersion = response.headers.get(DUCTS_BODY_VERSION_HEADER);
-              if (
-                confirmedSession !== session ||
-                (target && decodeURIComponent(confirmedOpenId ?? "") !== target.openId) ||
-                !nativeRequestId ||
-                !bodyVersion ||
-                (version && !refresh && bodyVersion !== version)
-              )
-                throw Error("Ducts response did not confirm the requested observation");
-              const json = await response.text();
-              return {
-                data: JSON.parse(json) as unknown,
-                bytes: new TextEncoder().encode(json).byteLength,
-                nativeObservation: {
-                  session,
-                  document: target,
-                  requestId: nativeRequestId,
-                  version: bodyVersion,
-                  reused: response.headers.get("x-pe-ducts-reused") === "true",
-                },
-              };
-            },
-          );
+          const decoded = await readDuctsBody(request, at.envelope!, {
+            source,
+            fetchBody,
+            refresh,
+          });
           const latest = current.current;
           // HTTP may beat the ready SSE frame, but an older revision can never overwrite a newer body.
           if (

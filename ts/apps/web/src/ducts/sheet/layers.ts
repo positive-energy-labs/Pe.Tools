@@ -16,7 +16,7 @@ import { markFrame, markLines } from "#/scene/marks";
 import type { Layer3D, SceneMeshes } from "#/scene/types";
 import { findingLayers, findingShapes, type FindingShapes } from "../finding-layers";
 import type { StageIssue } from "../inbox-rows";
-import type { Detail } from "./api";
+import type { Detail } from "./model";
 import { isConsequence, presentIds, type SheetBlocker } from "./tiers";
 
 type Kind = DuctsSheetOverview["blockers"][number]["kind"];

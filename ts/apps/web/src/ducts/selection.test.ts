@@ -12,7 +12,7 @@ import {
   toggleSystem,
   withSystem,
 } from "./selection";
-import { ductsFocus } from "./manifest";
+import { ductsFocus } from "./page";
 import { captureRequest } from "#/scene/picture/picture";
 afterEach(() => resetKnob());
 

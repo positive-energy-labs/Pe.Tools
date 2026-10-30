@@ -4,7 +4,6 @@ import { manifest as families } from "#/families/manifest";
 import { familyManifest } from "#/family/manifest";
 import { openManifest } from "#/open/manifest";
 import { manifest as parameterLinks } from "#/parameter-links/manifest";
-import { manifest as ducts } from "#/ducts/manifest";
 import { manifest as rooms } from "#/rooms/manifest";
 import { schedulesManifest } from "#/route/schedules/manifest";
 import { manifest as pods } from "#/routes/pods";
@@ -26,7 +25,6 @@ const ParameterLinksRouteContent = named(
 );
 const TakeoffsPane = named(() => import("#/takeoff/pane"), "TakeoffsPane");
 const OpenPage = named(() => import("#/open/route"), "OpenPage");
-const DuctsRoute = named(() => import("#/ducts/route"), "DuctsRoute");
 const RoomsRoute = named(() => import("#/rooms/route"), "RoomsRoute");
 
 export const publicRoutes = createRouteRegistry();
@@ -60,12 +58,6 @@ publicRoutes.register({
   ),
 });
 publicRoutes.register({ manifest: rooms, hosted: () => <HostedRooms /> });
-
-publicRoutes.register({ manifest: ducts, hosted: () => <HostedDucts /> });
-
-function HostedDucts() {
-  return <DuctsRoute url={false} />;
-}
 
 function HostedRooms() {
   return <RoomsRoute url={false} />;

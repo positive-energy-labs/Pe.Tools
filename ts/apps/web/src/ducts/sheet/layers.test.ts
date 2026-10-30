@@ -6,7 +6,7 @@ import * as THREE from "three";
 import { expect, it, vi } from "vite-plus/test";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { DuctsSheetOverview } from "@pe/agent-contracts";
-import type { Detail } from "./api";
+import type { Detail } from "./model";
 import {
   blockerShapes,
   centrelineLayers,

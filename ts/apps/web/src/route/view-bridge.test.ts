@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import { routeAddress } from "@pe/agent-contracts";
-import { manifest as ducts } from "#/ducts/manifest";
+import { ductsGraph, ductsPageSchema } from "#/ducts/graph";
+import { graphUrlPage } from "#/shell/mount-page";
 import { manifest as families } from "#/families/manifest";
 import { familyManifest } from "#/family/manifest";
 import { schedulesManifest } from "#/route/schedules/manifest";
@@ -9,7 +10,6 @@ import { urlPage } from "./url";
 
 const ROUTES = [
   ["families", families],
-  ["ducts", ducts],
   ["schedules", schedulesManifest()],
   ["family", familyManifest()],
   ["pods", pods],
@@ -17,6 +17,13 @@ const ROUTES = [
 
 /** A route's contract fields are its Page's: the URL carries its url keys, Pea's lease its agent keys. */
 describe("route addresses match their manifests", () => {
+  it("Ducts projects URL policy from its graph fields", () => {
+    const page = ductsPageSchema.parse({});
+    expect(graphUrlPage(ductsGraph).keys).toEqual(routeAddress("ducts").keys);
+    expect(Object.keys(page)).toEqual(
+      expect.arrayContaining([...routeAddress("ducts").agent.keys]),
+    );
+  });
   it("every url and agent key is a page field; the url keys are the manifest's", () => {
     for (const [route, manifest] of ROUTES) {
       expect(manifest.address).toBe(route);

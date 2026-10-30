@@ -27,8 +27,8 @@ import { paintOfDucts } from "../selection";
 import { subjectNamer } from "../subject-text";
 import { blockerElements, sheetIssues, sheetLayers } from "./layers";
 import type { SheetBlocker } from "./tiers";
-import type { Detail } from "./api";
-import type { OpenSheet } from "./use-sheet";
+import type { Detail } from "./model";
+import type { OpenSheet } from "../sources";
 
 const NONE: readonly never[] = [];
 

@@ -5,10 +5,10 @@ import type { DuctClaim, DuctsRouteDocument, OrbitViewport } from "@pe/agent-con
 import type { price } from "@pe/ducts-domain/pricing";
 import type { readiness } from "@pe/ducts-domain/readiness";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import type { ActionHandle } from "#/route/handle";
+import type { ReactNode } from "react";
 import type { PageMove } from "#/route/manifest";
 
-import type { DuctsPage } from "../manifest";
+import type { DuctsPage } from "../graph";
 import type { Claim, Run } from "../legs";
 import type { PricingResult } from "../pricing-job";
 
@@ -46,12 +46,11 @@ export interface ProtoProps {
   /** Selection / hover callbacks over element ids and claims. */
   onSelect: (id: number | null) => void;
   onSelectClaim: (claim: Claim) => void;
-  /** Work doc and its writer, as the views get them (`preview` is the last evaluation response). */
+  /** Work doc and its writer. Every write invokes the kernel Work verb. */
   work: {
     doc: DuctsRouteDocument | null;
     revision: number | null;
     write: (patches: never) => Promise<unknown> | void;
-    preview: unknown;
   };
   /** Empty-state words, or null when the snapshot is drawable. */
   empty: { says: string; exit: string } | null;
@@ -61,18 +60,10 @@ export interface ProtoProps {
   /** Loading state of the host reads. `refreshing`: a re-read is in flight or pricing, and the
    * screen draws the last priced read until it lands. */
   reading: { pending: boolean; error: string | null; refreshing: boolean };
-  /** The route's preview and apply as the handle arms or refuses them; the Write group draws both. */
-  actions: {
-    preview: ActionHandle;
-    apply: ActionHandle;
-    /** A group's heal preview and heal; the Heal row runs them with its group. */
-    healPreview: ActionHandle;
-    heal: ActionHandle;
-    /** Make a unit a system's fan (base equipment) in Revit: preview, then apply. */
-    fanPreview: ActionHandle;
-    fan: ActionHandle;
-    busy: boolean;
-  };
+  /** Pane placements render the kernel's controls; no preview state or lifecycle exists here. */
+  commands: (row?: unknown) => ReactNode;
+  cells: (row: { segment: string; key: string }) => ReactNode;
+  busy: boolean;
   /** How many changes a write would carry: edit cells and pending rulings. */
   edit: number;
   /** How many of the document's Revit systems the snapshot holds when the network stage reads by
