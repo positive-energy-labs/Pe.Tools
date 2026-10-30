@@ -736,7 +736,7 @@ test("unreadable Work lists start-fresh and never carry-over; a Work with nothin
   );
 });
 
-test("status counts what carrying over would add", async () => {
+test("the set-aside value rides in the scope; the owner derives carry-over patches with the readings", async () => {
   host.salvage.mockResolvedValue({ from: "aside:1", value: { note: "old" } });
   world.sessions = { s1: [{ openId: "o1", title: "Level 1", address: DOC }] };
   let ports: WorkScopePorts<{ note: string }> | null = null;
@@ -756,8 +756,8 @@ test("status counts what carrying over would add", async () => {
   });
   await router.load();
   render(<RouterProvider router={router} />);
-  await waitFor(() => expect(ports?.status.salvageable).toBe(1));
-  expect(ports!.getSnapshot().salvage).toEqual([{ path: ["note"], value: "old" }]);
+  await waitFor(() => expect(ports?.getSnapshot().salvaged).toEqual({ note: "old" }));
+  expect(ports!.getSnapshot()).not.toHaveProperty("salvage");
 });
 
 test("A -> B -> A while a query runs still reads stale: the generation, not the key, fences it", async () => {

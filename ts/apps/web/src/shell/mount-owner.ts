@@ -57,8 +57,8 @@ export interface MountScope<W> {
   conflict?: boolean;
   /** The kernel door sets this: the host holds Work it cannot read, so start-fresh is the one way out. */
   unreadable?: WorkKey;
-  /** The kernel door sets this: patches the host's set-aside Work would add here; `work.salvage` applies them as one write. */
-  salvage?: readonly RouteStatePatch[];
+  /** The kernel door sets this: what the host set aside for this Work, raw; the owner derives the patches with the readings. */
+  salvaged?: unknown;
 }
 export const CONFLICT_REFUSAL = "Work changed; review and retry";
 // One executable recovery for every mount; its declaration is the contract's, so Pea reads the same verb.
@@ -275,6 +275,20 @@ export function createGraphMount<P, W>(
     registry.dispose();
     throw cause;
   }
+  /** The route says what the set-aside Work still adds; a throwing hook offers nothing. */
+  const salvagePatches = (): readonly RouteStatePatch[] | null => {
+    if (!graph.salvage || !("salvaged" in scope)) return null;
+    try {
+      const patches = graph.salvage(scope.salvaged, scope.work?.doc ?? null, {
+        readings: Object.fromEntries(
+          Object.keys(graph.readings).map((id) => [id, readings.get(id)]),
+        ),
+      });
+      return patches.length ? patches : null;
+    } catch {
+      return null;
+    }
+  };
   const basisFor = (ids: readonly string[]) =>
     Object.fromEntries(
       ids.map((id) => {
@@ -386,14 +400,14 @@ export function createGraphMount<P, W>(
       target: scope.target,
       work: scope.work,
       unreadable: scope.unreadable ?? null,
-      salvage: scope.salvage ?? null,
+      salvage: salvagePatches(),
       generation,
       basis: {
         pageEpoch: view.read().epoch,
         // Only the readings this verb declares; see VerbContext.snapshot.
         readings: verb ? basisFor(adapters.verbDepends?.[verb] ?? []) : basis(),
         unreadable: scope.unreadable ? workKey(scope.unreadable) : null,
-        salvage: scope.salvage ?? null,
+        salvage: salvagePatches(),
       },
     }),
     write: (key, envelope) => write(key, { ...envelope, kind: "apply" }),

@@ -8,7 +8,6 @@ import {
   bindWork,
   UNREADABLE_WORK,
   type RouteGraph,
-  type RouteStatePatch,
   type RouteStateSpec,
   type RouteStateWriteResult,
   type WorkKey,
@@ -48,8 +47,6 @@ export type WorkScopeStatus = Pick<
   closed: boolean;
   /** The host holds Work it cannot read: the kernel's start-fresh verb is the one recovery. */
   unreadable: boolean;
-  /** How many patches the set-aside Work would add to this one; the kernel's `work.salvage` applies them. */
-  salvageable: number;
 };
 export interface WorkScopePorts<W> {
   getSnapshot(): MountScope<W>;
@@ -129,23 +126,15 @@ export function useWorkScope<P, W>(
     // Absent Work is the empty document at revision 0; only an authored write creates it.
     const empty = seen && seen.doc === null ? graph.work?.safeParse({}) : undefined;
     const doc = seen?.doc ?? (empty?.success ? empty.data : undefined);
-    // The route says what is still missing; a throwing hook offers nothing rather than breaking the mount.
-    let salvage: readonly RouteStatePatch[] = [];
-    if (graph.salvage && salvaged?.key === keyText)
-      try {
-        salvage = graph.salvage(salvaged.value, doc === undefined ? null : (doc as W));
-      } catch {
-        salvage = [];
-      }
+    // The raw set-aside value rides in the scope; the owner turns it into patches with the readings.
     return {
       target: resolution.kind === "resolved" ? resolution.target : { kind: "host" },
       work:
         seen && doc !== undefined ? { handle: { key, revision: seen.revision ?? 0 }, doc } : null,
       ...(unreadable && { unreadable: key }),
-      ...(salvage.length && { salvage }),
+      ...(graph.salvage && salvaged?.key === keyText && { salvaged: salvaged.value }),
     };
   }, [resolution, key, reading, graph, unreadable, salvaged, keyText]);
-  const salvageable = snapshot.salvage?.length ?? 0;
   // The mount captures its ports once; they read this store, so they never go stale.
   const store = useRef({ snapshot, closed, lost: "", listeners: new Set<() => void>() }).current;
   Object.assign(store, { snapshot, closed, lost: target.bindingLost?.sentence ?? CLOSED_WORK });
@@ -191,9 +180,8 @@ export function useWorkScope<P, W>(
       targetProvenance: target.targetProvenance,
       closed,
       unreadable,
-      salvageable,
     }),
-    [statusText, closed, unreadable, salvageable], // eslint-disable-line react-hooks/exhaustive-deps
+    [statusText, closed, unreadable], // eslint-disable-line react-hooks/exhaustive-deps
   );
   return useMemo(() => ({ ...ports, status }), [ports, status]);
 }

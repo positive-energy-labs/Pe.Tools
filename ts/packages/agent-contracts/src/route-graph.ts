@@ -220,7 +220,12 @@ export interface RouteGraph<P = Record<string, unknown>, W = unknown> {
    * What the host's salvage read (`work.salvage`) carries over, as the patches this Work still
    * lacks: empty when everything is already here. The kernel applies them as one Work write.
    */
-  salvage?: (salvaged: unknown, work: W | null) => readonly RouteStatePatch[];
+  salvage?: (
+    salvaged: unknown,
+    work: W | null,
+    /** The current reading states, so an ID-only carry-over can resolve names from the exact catalog. */
+    scope: { readings: Readonly<Record<string, { readonly current: unknown }>> },
+  ) => readonly RouteStatePatch[];
   /** Authored segments of the Work; the kernel owns take, reject, reopen and delete for them. */
   cells?: readonly CellsDecl<W>[];
   pick?: false;
