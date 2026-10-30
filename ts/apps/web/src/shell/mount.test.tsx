@@ -752,7 +752,10 @@ test("a detached command's later receipt uses its frozen Work even when the adap
 test("graph field policies project Page to URL and Back restores its stage without replaying Work", async () => {
   const f = await fixture();
   const { view, router } = await mounted(f);
-  expect(router.state.location.search).toMatchObject({ stage: "edit", cfm: 400 });
+  // Fields at rest are absent from the URL: a shared link carries only what the user changed.
+  expect(router.state.location.search).not.toHaveProperty("stage");
+  expect(router.state.location.search).not.toHaveProperty("cfm");
+  expect(f.owner().stage()).toBe("edit");
   const historyLength = router.history.length;
   fireEvent.change(view.getByLabelText("cfm"), { target: { value: "600" } });
   await waitFor(() => expect(router.state.location.search.cfm).toBe(600));

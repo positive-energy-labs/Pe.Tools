@@ -126,10 +126,15 @@ export function routeFromGraph<P, W, const Path extends string>(
   return createRoute({
     getParentRoute: () => rootRoute,
     path,
-    validateSearch: (search: Record<string, unknown>) => ({
-      ...routeSearch(search),
-      ...url.read(search),
-    }),
+    // Type only the keys the URL carries: returning every field makes the router redirect to a
+    // URL that spells out each default. Absent fields rest at their defaults in the mount.
+    validateSearch: (search: Record<string, unknown>) => {
+      const typed = url.read(search) as Record<string, unknown>;
+      return {
+        ...routeSearch(search),
+        ...Object.fromEntries(Object.entries(typed).filter(([id]) => id in search)),
+      };
+    },
     component: mountRoute(graph, adapters),
   });
 }
