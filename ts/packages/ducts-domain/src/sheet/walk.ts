@@ -39,16 +39,82 @@ export const graphOf = (
   s: Pick<DuctSnapshot, "nodes" | "segments"> &
     Partial<Pick<DuctSnapshot, "issues" | "tolerances">>,
 ): Graph => {
-  const all = [...s.nodes, ...s.segments];
+  const near = nearOf(s.issues);
+  const all = spliceInline([...s.nodes, ...s.segments], s.issues, near);
   return {
     all,
     byId: new Map(all.map((e) => [e.id, e])),
-    near: nearOf(s.issues),
+    near,
     candidateBoxIn: s.tolerances?.candidateBoxIn ?? null,
     autoJoinGapIn: s.tolerances?.autoJoinGapIn ?? null,
   };
 };
 export const isSegment = (e: Element): e is DuctSnapshot["segments"][number] => "polyline" in e;
+
+/**
+ * C#'s inline parts (ruling 2026-10-29: a damper dropped inside a duct, touching nothing, is on the
+ * path and its drop counts) wired in series at the host's nearer end: whatever that end met now
+ * meets the part, and the part's other port meets the host. Real ids only, so every leg names an
+ * element the person can select; the host still prices its whole length. An open nearer end hands
+ * its measured neighbourhood to the part's outer port, which is now the open end. Inputs are never
+ * mutated (the touched elements are copied).
+ * ponytail: a tap on the host between the part and that end is priced as if past the part; split
+ * the host at `atFt` if a model ever puts a branch there.
+ */
+function spliceInline(
+  all: Element[],
+  issues: DuctSnapshot["issues"] | undefined,
+  near: Map<string, Near>,
+): Element[] {
+  const byId = new Map(all.map((e) => [e.id, e]));
+  const copy = (id: number) => {
+    const e = byId.get(id)!;
+    const c = { ...e, connectors: e.connectors.map((x) => ({ ...x })) } as Element;
+    byId.set(id, c);
+    return c;
+  };
+  const port = (e: Element, index: number) => e.connectors.find((c) => c.index === index)!;
+  for (const issue of issues ?? []) {
+    if (issue.kind !== "inline" || !issue.inline) continue;
+    const { segmentId, atFt, ports } = issue.inline;
+    const partEl = byId.get(issue.elementId);
+    const hostEl = byId.get(segmentId);
+    if (!partEl || !hostEl || !isSegment(hostEl) || ports.length !== 2) continue;
+    if (
+      ports.some(
+        (i) => !partEl.connectors.find((c) => c.index === i) || port(partEl, i).connectedTo,
+      )
+    )
+      continue;
+    // Ports come first-point-facing first: at the first end the part's first port meets what that end met.
+    const first = atFt <= dist(hostEl.polyline[0]!, hostEl.polyline.at(-1)!) / 2;
+    const end = hostEl.connectors
+      .filter((c) => c.kind !== "curve")
+      .sort(
+        (a, b) =>
+          dist(a.point, hostEl.polyline[first ? 0 : hostEl.polyline.length - 1]!) -
+          dist(b.point, hostEl.polyline[first ? 0 : hostEl.polyline.length - 1]!),
+      )[0];
+    if (!end) continue;
+    const [outer, inner] = first ? [ports[0]!, ports[1]!] : [ports[1]!, ports[0]!];
+    const part = copy(partEl.id);
+    const host = copy(hostEl.id);
+    const was = port(host, end.index).connectedTo;
+    port(part, outer).connectedTo = was;
+    if (was && byId.has(was.elementId)) {
+      const other = copy(was.elementId);
+      const back = other.connectors.find((c) => c.index === was.connector);
+      if (back) back.connectedTo = { elementId: part.id, connector: outer };
+    }
+    const measured = was ? undefined : near.get(connectorKey(host.id, end.index));
+    if (measured) near.set(connectorKey(part.id, outer), measured);
+    port(part, inner).connectedTo = { elementId: host.id, connector: end.index };
+    port(host, end.index).connectedTo = { elementId: part.id, connector: inner };
+  }
+  return all.map((e) => byId.get(e.id)!);
+}
+const dist = (p: readonly number[], q: readonly number[]) =>
+  Math.hypot(...p.map((v, k) => v - q[k]!));
 
 /** One element entered once. The root (the fan) is state 0 and never a leg. */
 export interface State {

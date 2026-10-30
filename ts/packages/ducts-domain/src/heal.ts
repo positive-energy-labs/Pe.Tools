@@ -5,7 +5,11 @@ import { subjectName } from "./words.ts";
 import { withStoredRulings } from "./rulings.ts";
 import type { DuctSnapshot } from "./types.ts";
 
-/** An open end with no same-class open end this close is dangling and takes a cap (ruling 2026-10-20). */
+/**
+ * An open end with no same-class open end this close is dangling and takes a cap (ruling 2026-10-20).
+ * Still measured here, not from C#'s 36 in `near`: kaitpw 2026-10-29 dropped porting the 60 in search
+ * (the heal box is the `healBoxIn` criterion); ducts LEDGER Owed "Model health, network stage".
+ */
 export const HEAL_DANGLING_IN = 60;
 /** Ends this close are coincident: ConnectTo alone. Mirrors DuctHealer.CoincidentIn. */
 export const HEAL_COINCIDENT_IN = 1 / 16;

@@ -1,3 +1,4 @@
+import { inputsFor } from "./test-inputs.ts";
 import { expect, it } from "vite-plus/test";
 import type { DuctSnapshot } from "../types.ts";
 import { buildChain } from "./build.ts";
@@ -57,8 +58,9 @@ function fixture(gapIn: number) {
 
 it("auto-joins exactly 3 inches, records sheet input and leg provenance, and obeys the settings threshold and rejection", () => {
   const snapshot = fixture(3);
-  const input = {
-    snapshot: withHealth(snapshot),
+  const sheetSnapshot1 = withHealth(snapshot);
+  const input = { roster: [],
+    snapshot: sheetSnapshot1, inputs: inputsFor(sheetSnapshot1),
     start: { elementId: 100, connector: 0 },
     end: { elementId: 200 },
     direction: "supply" as const,
@@ -68,7 +70,7 @@ it("auto-joins exactly 3 inches, records sheet input and leg provenance, and obe
   const chain = buildChain(input);
   expect(chain.path!.complete).toBe(true);
   expect(
-    chain.inputs.some((i) => i.name === "auto-joined 1:1 to 2:0 across 3.000 in, default ≤3 in"),
+    chain.notes.some((i) => i.text === "auto-joined 1:1 to 2:0 across 3.000 in, default ≤3 in"),
   ).toBe(true);
   expect(chain.legs["2:0>1"]!.lossSource.ref).toContain("auto-joined 1:1 to 2:0");
   // The auto-join gap is a read tolerance (C#): the graph is measured under 2 in.

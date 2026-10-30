@@ -30,6 +30,8 @@ public static class DuctHealth {
     /// <summary>The least cosine between a landing connector's outward axis and the face's inward normal.</summary>
     private const double AxisCos = 0.7;
     private static readonly double AcrossCos = Math.Sqrt(1 - AxisCos * AxisCos);
+    /// <summary>The least |cos| between an inline part's port axes and its host duct's run (about 18 degrees).</summary>
+    private const double AlongCos = 0.95;
     /// <summary>A duct shorter than this is a stub, ft (3 in).</summary>
     private const double StubFt = 0.25;
 
@@ -39,13 +41,16 @@ public static class DuctHealth {
     /// <summary>
     ///     Every health finding on <paramref name="nodes" /> and <paramref name="segments" />. Context elements are
     ///     neighbours and joint partners only. Loops are the read's own cycles: a bounded read cannot see one it cut.
+    ///     Without <paramref name="measure" /> (the `roster` and `ids` reads, which need no joint geometry) an open end
+    ///     carries no <see cref="DuctNear" /> and no near miss or inline part is found; every element-level finding is the same.
     /// </summary>
     public static IReadOnlyList<DuctIssue> Assess(
         IReadOnlyList<DuctNode> nodes,
         IReadOnlyList<DuctSegment> segments,
         DuctHealthTolerances tolerances,
         IReadOnlyList<DuctNode>? contextNodes = null,
-        IReadOnlyList<DuctSegment>? contextSegments = null
+        IReadOnlyList<DuctSegment>? contextSegments = null,
+        bool measure = true
     ) {
         var own = nodes.Select(El.Of).Concat(segments.Select(El.Of)).ToList();
         var ownIds = new HashSet<long>(own.Select(e => e.Id));
@@ -57,12 +62,17 @@ public static class DuctHealth {
         var box = tolerances.CandidateBoxIn / 12;
         var grid = new Grid(all, box);
         var issues = new List<DuctIssue>();
-        void Add(DuctIssueKind kind, El e, int? connector, double[]? point, string note, DuctNear? near = null) =>
-            issues.Add(new DuctIssue($"{Slug(kind)}:{e.Id}{(connector is { } c ? ":" + c : "")}", kind, e.Id, connector, point, note, near));
+        void Add(DuctIssueKind kind, El e, int? connector, double[]? point, string note, DuctNear? near = null, DuctInline? inline = null) =>
+            issues.Add(new DuctIssue($"{Slug(kind)}:{e.Id}{(connector is { } c ? ":" + c : "")}", kind, e.Id, connector, point, note, near, inline));
 
         foreach (var e in own) {
             if (!e.IsCap)
                 foreach (var c in e.Connectors.Where(c => c.ConnectedTo is null)) {
+                    if (!measure) {
+                        Add(DuctIssueKind.OpenEnd, e, c.Index, c.Point,
+                            e.Node?.Kind == DuctNodeKind.Terminal ? "terminal not connected" : "nothing attached");
+                        continue;
+                    }
                     var near = Near(e, c, grid.Around(c.Point, box).Select(i => all[i]).ToList(), tolerances);
                     Add(DuctIssueKind.OpenEnd, e, c.Index, c.Point,
                         e.Node?.Kind == DuctNodeKind.Terminal ? "terminal not connected" : "nothing attached", near);
@@ -89,9 +99,44 @@ public static class DuctHealth {
             if (seg.Kind == DuctSegmentKind.Flex && seg.Roughness?.Provenance == DuctProvenance.RevitDefault)
                 Add(DuctIssueKind.DefaultFlexRoughness, e, null, Mid(seg), $"type {seg.Type} roughness {seg.Roughness.ValueFt} ft is the rigid default");
         }
+        if (measure)
+            foreach (var (part, host) in Inline(nodes, segments))
+                Add(DuctIssueKind.Inline, El.Of(part), null, part.Point,
+                    $"{part.Family ?? part.Kind.ToString().ToLowerInvariant()} lies inside duct {host.SegmentId}, {host.AtFt:0.00} ft along it and aligned with it, with neither end connected", inline: host);
         foreach (var x in LoopClosers(own))
             Add(DuctIssueKind.Loop, byId[x], null, byId[x].Point, "closes a loop");
         return issues;
+    }
+
+    /// <summary>
+    ///     Inline parts (ts proximity.ts rule 0, kaitpw 2026-10-19; Project A damper 13568060 inside duct 11275610): a two-port
+    ///     accessory or fitting, both ports open and facing opposite ways along the run, both inside one straight duct's
+    ///     body, of no other air class. ponytail: one part per duct, the first in <paramref name="parts" /> order. The
+    ///     collector also asks this of the document's unconnected parts around a bounded read, so the part joins the read.
+    /// </summary>
+    public static IReadOnlyList<(DuctNode Part, DuctInline Host)> Inline(IEnumerable<DuctNode> parts, IReadOnlyList<DuctSegment> segments) {
+        var straight = Sides(segments.Where(s => s is { Kind: DuctSegmentKind.Duct, Polyline.Count: 2 }).Select(El.Of));
+        var hosted = new HashSet<long>();
+        var found = new List<(DuctNode, DuctInline)>();
+        foreach (var n in parts) {
+            if (n.Kind is not (DuctNodeKind.Accessory or DuctNodeKind.Fitting) || n.Connectors.Count != 2) continue;
+            var (p, q) = (n.Connectors[0], n.Connectors[1]);
+            if (p.ConnectedTo is not null || q.ConnectedTo is not null || p.Point.Length != 3 || q.Point.Length != 3) continue;
+            var e = El.Of(n);
+            if (AxisOf(e, p) is not { } pa || AxisOf(e, q) is not { } qa || Dot(pa, qa) > -AlongCos) continue;
+            var cls = ClassOf(p.Classification) ?? ClassOf(q.Classification);
+            var host = straight.FirstOrDefault(f =>
+                !hosted.Contains(f.Segment.Id)
+                && Math.Abs(Dot(pa, f.U)) >= AlongCos
+                && !(cls is not null && SegmentClass(f.Segment) is { } sc && sc != cls)
+                && new[] { p, q }.All(x => (Depth(f, x.Point)?.D ?? 1) <= 0));
+            if (host is null) continue;
+            hosted.Add(host.Segment.Id);
+            var at = (Dot(Sub(p.Point, host.A), host.U) + Dot(Sub(q.Point, host.A), host.U)) / 2;
+            int[] ports = Dot(pa, host.U) < 0 ? [p.Index, q.Index] : [q.Index, p.Index];
+            found.Add((n, new DuctInline(host.Segment.Id, Math.Round(at, 4), ports)));
+        }
+        return found;
     }
 
     /// <summary>The groups with IssueIds indexing the issues on their elements.</summary>
@@ -123,6 +168,8 @@ public static class DuctHealth {
         var box = tolerances.CandidateBoxIn / 12;
         var nearby = around.Where(e => e.Id != self.Id && IsNear(e, port.Point, box)).ToList();
         var axis = AxisOf(self, port);
+        // A cap the read did not reach reads as unknown (null), so the heal stays a tee there.
+        var caps = new HashSet<long>(around.Where(e => e.IsCap).Select(e => e.Id));
         var ports = new List<DuctNearPort>();
         foreach (var e in nearby)
         foreach (var c in e.Connectors) {
@@ -139,7 +186,8 @@ public static class DuctHealth {
                 aligned = axial >= -1e-6 && lateral * 12 <= AlignedLateralIn;
             }
             var auto = c.ConnectedTo is null && facing <= -OpposedCos && gapIn <= tolerances.AutoJoinGapIn;
-            ports.Add(new DuctNearPort(e.Id, c.Index, gapIn, facing, facing <= -OpposedCos, aligned, auto));
+            var cappedBy = c.ConnectedTo is { } to && caps.Contains(to.ElementId) ? to.ElementId : (long?)null;
+            ports.Add(new DuctNearPort(e.Id, c.Index, gapIn, facing, facing <= -OpposedCos, aligned, auto, cappedBy));
         }
 
         var segments = nearby.Where(e => e.Segment is not null).ToList();

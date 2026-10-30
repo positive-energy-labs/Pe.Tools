@@ -1,0 +1,1567 @@
+{
+  "address": "families",
+  "cells": [
+    {
+      "commit": "plan",
+      "groupOf": {
+        "runtime": true
+      },
+      "key": "scope",
+      "segment": null,
+      "show": {
+        "runtime": true
+      }
+    },
+    {
+      "commit": "plan",
+      "groupOf": {
+        "runtime": true
+      },
+      "key": "patch",
+      "segment": null,
+      "show": {
+        "runtime": true
+      }
+    },
+    {
+      "commit": "plan",
+      "groupOf": {
+        "runtime": true
+      },
+      "nouns": ["parameter", "family"],
+      "segment": "cells",
+      "show": {
+        "runtime": true
+      }
+    }
+  ],
+  "fields": {
+    "demo": {
+      "agent": false,
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "transient",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "",
+        "maxLength": 200,
+        "type": "string"
+      },
+      "share": false,
+      "url": "replace"
+    },
+    "draft": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "draft",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "anyOf": [
+          {
+            "properties": {
+              "categories": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "families": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "placement": {
+                "default": "PlacedOnly",
+                "enum": ["AllLoaded", "PlacedOnly", "UnplacedOnly"],
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "share": false,
+      "url": false
+    },
+    "hidden": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "pose",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": [],
+        "items": {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
+        "maxItems": 500,
+        "type": "array"
+      },
+      "share": true,
+      "url": "replace"
+    },
+    "lines": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "selection",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "enum": ["suggestions", "edits", "all"],
+        "type": "string"
+      },
+      "share": true,
+      "url": "replace"
+    },
+    "pane": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "pose",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "spec",
+        "enum": ["spec", "output"],
+        "type": "string"
+      },
+      "share": true,
+      "url": false
+    },
+    "past": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "selection",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "",
+        "maxLength": 128,
+        "type": "string"
+      },
+      "share": true,
+      "url": "push"
+    },
+    "path": {
+      "agent": "read",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "subject",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "",
+        "maxLength": 1024,
+        "type": "string"
+      },
+      "share": true,
+      "url": "push"
+    },
+    "pod": {
+      "agent": "read",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "subject",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "",
+        "maxLength": 200,
+        "type": "string"
+      },
+      "share": true,
+      "url": "push"
+    },
+    "query": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "query",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "!empty !absent",
+        "maxLength": 4096,
+        "type": "string"
+      },
+      "share": true,
+      "url": "push"
+    },
+    "sort": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "query",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": [],
+        "items": {
+          "properties": {
+            "dir": {
+              "enum": ["asc", "desc"],
+              "type": "string"
+            },
+            "key": {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": ["key", "dir"],
+          "type": "object"
+        },
+        "maxItems": 8,
+        "type": "array"
+      },
+      "share": true,
+      "url": "replace"
+    },
+    "stage": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "stage",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "audit",
+        "enum": ["audit", "apply", "history"],
+        "type": "string"
+      },
+      "share": true,
+      "url": "push"
+    },
+    "threadSearch": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "query",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": {
+          "keywords": "",
+          "pills": [
+            {
+              "field": "scope",
+              "op": "=",
+              "value": "all"
+            }
+          ],
+          "v": 1
+        },
+        "description": "JSON {v:1,keywords:string,pills:[{field,op:'=',value}]}. Literal keywords and equality pills. Fields: target, provider, state, unread, scope. Scope values: attention, all, archived.",
+        "properties": {
+          "keywords": {
+            "maxLength": 4000,
+            "type": "string"
+          },
+          "pills": {
+            "items": {
+              "properties": {
+                "field": {
+                  "type": "string"
+                },
+                "op": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": ["field", "op", "value"],
+              "type": "object"
+            },
+            "maxItems": 32,
+            "type": "array"
+          },
+          "v": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": ["v", "keywords", "pills"],
+        "type": "object"
+      },
+      "share": true,
+      "url": "replace"
+    },
+    "threadSort": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "query",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "",
+        "enum": ["", "recent", "title"],
+        "type": "string"
+      },
+      "share": true,
+      "url": "replace"
+    }
+  },
+  "key": "families",
+  "layout": {
+    "axis": "h",
+    "children": [
+      {
+        "axis": "v",
+        "children": [
+          {
+            "child": {
+              "id": "scope",
+              "kind": "pane"
+            },
+            "kind": "gate",
+            "when": "editing"
+          },
+          {
+            "child": {
+              "id": "history",
+              "kind": "pane"
+            },
+            "kind": "gate",
+            "when": "history"
+          }
+        ],
+        "id": "families-scope",
+        "kind": "split",
+        "size": 240,
+        "sized": "start"
+      },
+      {
+        "axis": "v",
+        "children": [
+          {
+            "axis": "h",
+            "children": [
+              {
+                "id": "matrix",
+                "kind": "pane"
+              },
+              {
+                "child": {
+                  "id": "spec",
+                  "kind": "pane"
+                },
+                "kind": "gate",
+                "when": "apply"
+              }
+            ],
+            "id": "families-spec",
+            "kind": "split",
+            "size": 420,
+            "sized": "end"
+          },
+          {
+            "child": {
+              "id": "work",
+              "kind": "pane"
+            },
+            "kind": "gate",
+            "when": "editing"
+          }
+        ],
+        "id": "families-main",
+        "kind": "split",
+        "size": 180,
+        "sized": "end"
+      }
+    ],
+    "id": "families-body",
+    "kind": "split",
+    "size": 240,
+    "sized": "start"
+  },
+  "name": "Families",
+  "needs": "project",
+  "panes": {
+    "history": {
+      "draws": ["archive"],
+      "label": "Past family reads",
+      "purpose": "Choose an immutable saved family read",
+      "verbs": []
+    },
+    "matrix": {
+      "draws": ["matrix", "saved", "archive", "receipts"],
+      "label": "Family matrix",
+      "purpose": "Inspect and edit parameters across family types",
+      "verbs": []
+    },
+    "scope": {
+      "draws": ["categories", "catalog"],
+      "label": "Family scope",
+      "purpose": "Draft the next read without reading Revit",
+      "verbs": ["read", "cancel-read"]
+    },
+    "spec": {
+      "draws": ["pods"],
+      "label": "Family spec",
+      "purpose": "Choose an exact saved Family Foundry source",
+      "verbs": []
+    },
+    "work": {
+      "draws": ["matrix", "receipts"],
+      "label": "Family Work",
+      "purpose": "Review scope, patches, keyed cells and receipts",
+      "verbs": {
+        "ids": ["exclude"],
+        "runtime": true
+      }
+    }
+  },
+  "predicates": {
+    "editing": {
+      "runtime": true
+    }
+  },
+  "readings": {
+    "archive": {
+      "args": {
+        "runtime": true
+      },
+      "kind": "use",
+      "retire": "page",
+      "source": "families.archive"
+    },
+    "catalog": {
+      "kind": "use",
+      "retire": "target",
+      "source": "families.catalog"
+    },
+    "categories": {
+      "kind": "use",
+      "retire": "target",
+      "source": "families.categories"
+    },
+    "matrix": {
+      "args": {
+        "runtime": true
+      },
+      "kind": "use",
+      "retire": "page",
+      "source": "families.matrix"
+    },
+    "pods": {
+      "kind": "use",
+      "retire": "never",
+      "source": "families.pods"
+    },
+    "receipts": {
+      "kind": "use",
+      "retire": "target",
+      "source": "families.receipts"
+    },
+    "saved": {
+      "args": {
+        "runtime": true
+      },
+      "deps": ["archive"],
+      "kind": "use",
+      "retire": "page",
+      "source": "families.saved"
+    }
+  },
+  "salvage": {
+    "runtime": true
+  },
+  "stageOrder": ["audit", "apply", "history"],
+  "stages": {
+    "apply": {
+      "panes": ["scope", "matrix", "work", "spec"],
+      "verbs": ["apply", "save-draft"],
+      "word": "Applying"
+    },
+    "audit": {
+      "panes": ["scope", "matrix", "work"],
+      "verbs": ["capture"],
+      "word": "Auditing"
+    },
+    "history": {
+      "panes": ["history", "matrix"],
+      "verbs": [],
+      "word": "History"
+    }
+  },
+  "verbs": {
+    "apply": {
+      "chord": "Mod+Enter",
+      "does": "families.apply",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "refusal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "source": {
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "pod": {
+                "type": "string"
+              },
+              "sha256": {
+                "type": "string"
+              }
+            },
+            "required": ["pod", "path", "sha256"],
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "kind": "command",
+      "label": "Apply families",
+      "review": "shown",
+      "says": "Preview these exact Work bytes and held families, then apply the sealed plan"
+    },
+    "cancel-read": {
+      "does": "families.cancel-read",
+      "effect": "query",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "refusal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "request": {
+            "additionalProperties": false,
+            "properties": {
+              "readId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              }
+            },
+            "required": ["readId"],
+            "type": "object"
+          }
+        },
+        "required": ["request"],
+        "type": "object"
+      },
+      "kind": "query",
+      "label": "Stop family read",
+      "review": "none"
+    },
+    "capture": {
+      "does": "families.capture",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "familyIds": {
+            "items": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "pod": {
+            "type": "string"
+          },
+          "refusal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": ["pod", "familyIds"],
+        "type": "object"
+      },
+      "kind": "command",
+      "label": "Capture families",
+      "review": "none"
+    },
+    "edit": {
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "expectedRevision": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "patches": {
+            "items": {
+              "properties": {
+                "path": {
+                  "items": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ]
+                  },
+                  "type": "array"
+                },
+                "value": {}
+              },
+              "required": ["path"],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "refusal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": ["patches", "expectedRevision"],
+        "type": "object"
+      },
+      "kind": "work",
+      "label": "Edit family cells",
+      "review": "none"
+    },
+    "exclude": {
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "refusal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": ["name"],
+        "type": "object"
+      },
+      "kind": "work",
+      "label": "Hold family back",
+      "review": "none"
+    },
+    "propose": {
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "properties": {
+              "familyName": {
+                "type": "string"
+              },
+              "parameter": {
+                "type": "string"
+              },
+              "typeName": {
+                "type": "string"
+              }
+            },
+            "required": ["familyName", "typeName", "parameter"],
+            "type": "object"
+          },
+          "current": {
+            "type": "string"
+          },
+          "refusal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "value": {
+            "additionalProperties": false,
+            "properties": {
+              "storageType": {
+                "enum": ["String", "Integer", "Double", "ElementId", "None"],
+                "type": "string"
+              },
+              "unit": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              }
+            },
+            "required": ["value", "storageType"],
+            "type": "object"
+          }
+        },
+        "required": ["address", "value", "current"],
+        "type": "object"
+      },
+      "kind": "work",
+      "label": "Edit family value",
+      "review": "none"
+    },
+    "read": {
+      "chord": "R",
+      "does": "families.read",
+      "effect": "command",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "refusal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "request": {
+            "additionalProperties": false,
+            "properties": {
+              "expectedRevision": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "filter": {
+                "properties": {
+                  "categoryNames": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "familyNames": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "placementScope": {
+                    "enum": ["AllLoaded", "PlacedOnly", "UnplacedOnly"],
+                    "type": "string"
+                  }
+                },
+                "required": ["categoryNames", "familyNames", "placementScope"],
+                "type": "object"
+              },
+              "readId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              }
+            },
+            "required": ["filter", "readId"],
+            "type": "object"
+          }
+        },
+        "required": ["request"],
+        "type": "object"
+      },
+      "kind": "query",
+      "label": "Read families",
+      "review": "none",
+      "says": "Read the drafted scope from this exact document; picker changes do not read Revit"
+    },
+    "save-draft": {
+      "does": "families.save-draft",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "pod": {
+            "type": "string"
+          },
+          "refusal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": ["pod"],
+        "type": "object"
+      },
+      "kind": "command",
+      "label": "Save draft to pod",
+      "review": "none"
+    },
+    "work.salvage": {
+      "answers": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "confirm": {
+            "const": true,
+            "type": "boolean"
+          }
+        },
+        "required": ["confirm"],
+        "type": "object"
+      },
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "default": {},
+        "properties": {},
+        "type": "object"
+      },
+      "kind": "recovery",
+      "label": "Carry over",
+      "review": "required",
+      "says": "Carry what the set-aside Work held into this Work, as one undoable edit"
+    },
+    "work.start-fresh": {
+      "answers": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "confirm": {
+            "const": true,
+            "type": "boolean"
+          }
+        },
+        "required": ["confirm"],
+        "type": "object"
+      },
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "default": {},
+        "properties": {},
+        "type": "object"
+      },
+      "kind": "recovery",
+      "label": "Start fresh",
+      "review": "required",
+      "says": "Set the unreadable Work aside and start it empty; its old bytes are kept beside it"
+    }
+  },
+  "work": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "cells": {
+        "additionalProperties": {
+          "additionalProperties": false,
+          "properties": {
+            "edit": {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "at": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "base": {
+                      "anyOf": [
+                        {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "by": {
+                      "enum": ["human", "pea", "unknown"],
+                      "type": "string"
+                    },
+                    "confidence": {
+                      "anyOf": [
+                        {
+                          "enum": ["high", "low"],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "delete": {
+                      "not": {}
+                    },
+                    "note": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "value": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "storageType": {
+                          "enum": ["String", "Integer", "Double", "ElementId", "None"],
+                          "type": "string"
+                        },
+                        "unit": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["value", "storageType"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["value"],
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "suggestion": {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "at": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "base": {
+                      "anyOf": [
+                        {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "by": {
+                      "enum": ["human", "pea", "unknown"],
+                      "type": "string"
+                    },
+                    "confidence": {
+                      "anyOf": [
+                        {
+                          "enum": ["high", "low"],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "delete": {
+                      "not": {}
+                    },
+                    "note": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "value": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "storageType": {
+                          "enum": ["String", "Integer", "Double", "ElementId", "None"],
+                          "type": "string"
+                        },
+                        "unit": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["value", "storageType"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["value"],
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "default": {},
+        "propertyNames": {
+          "type": "string"
+        },
+        "type": "object"
+      },
+      "excluded": {
+        "additionalProperties": {
+          "additionalProperties": false,
+          "properties": {
+            "by": {
+              "enum": ["human", "pea", "unknown"],
+              "type": "string"
+            }
+          },
+          "required": ["by"],
+          "type": "object"
+        },
+        "default": {},
+        "propertyNames": {
+          "pattern": "\\D",
+          "type": "string"
+        },
+        "type": "object"
+      },
+      "executionOptions": {
+        "additionalProperties": false,
+        "properties": {
+          "enableCollectors": {
+            "type": "boolean"
+          },
+          "optimizeTypeOperations": {
+            "type": "boolean"
+          },
+          "singleTransaction": {
+            "type": "boolean"
+          },
+          "suppressWarnings": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "patch": {
+        "additionalProperties": false,
+        "default": {},
+        "properties": {
+          "edit": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "at": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "base": {
+                    "anyOf": [
+                      {
+                        "maximum": 9007199254740991,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "by": {
+                    "enum": ["human", "pea", "unknown"],
+                    "type": "string"
+                  },
+                  "confidence": {
+                    "anyOf": [
+                      {
+                        "enum": ["high", "low"],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "delete": {
+                    "not": {}
+                  },
+                  "note": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "value": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "content": {
+                        "type": "string"
+                      },
+                      "path": {
+                        "maxLength": 1024,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "pod": {
+                        "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["path", "content"],
+                    "type": "object"
+                  }
+                },
+                "required": ["value"],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "suggestion": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "at": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "base": {
+                    "anyOf": [
+                      {
+                        "maximum": 9007199254740991,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "by": {
+                    "enum": ["human", "pea", "unknown"],
+                    "type": "string"
+                  },
+                  "confidence": {
+                    "anyOf": [
+                      {
+                        "enum": ["high", "low"],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "delete": {
+                    "not": {}
+                  },
+                  "note": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "value": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "content": {
+                        "type": "string"
+                      },
+                      "path": {
+                        "maxLength": 1024,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "pod": {
+                        "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["path", "content"],
+                    "type": "object"
+                  }
+                },
+                "required": ["value"],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "pod": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "scope": {
+        "additionalProperties": false,
+        "default": {},
+        "properties": {
+          "edit": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "at": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "base": {
+                    "anyOf": [
+                      {
+                        "maximum": 9007199254740991,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "by": {
+                    "enum": ["human", "pea", "unknown"],
+                    "type": "string"
+                  },
+                  "confidence": {
+                    "anyOf": [
+                      {
+                        "enum": ["high", "low"],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "delete": {
+                    "not": {}
+                  },
+                  "note": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "value": {
+                    "properties": {
+                      "categoryNames": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "familyNames": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "placementScope": {
+                        "enum": ["AllLoaded", "PlacedOnly", "UnplacedOnly"],
+                        "type": "string"
+                      }
+                    },
+                    "required": ["categoryNames", "familyNames", "placementScope"],
+                    "type": "object"
+                  }
+                },
+                "required": ["value"],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "suggestion": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "at": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "base": {
+                    "anyOf": [
+                      {
+                        "maximum": 9007199254740991,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "by": {
+                    "enum": ["human", "pea", "unknown"],
+                    "type": "string"
+                  },
+                  "confidence": {
+                    "anyOf": [
+                      {
+                        "enum": ["high", "low"],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "delete": {
+                    "not": {}
+                  },
+                  "note": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "value": {
+                    "properties": {
+                      "categoryNames": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "familyNames": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "placementScope": {
+                        "enum": ["AllLoaded", "PlacedOnly", "UnplacedOnly"],
+                        "type": "string"
+                      }
+                    },
+                    "required": ["categoryNames", "familyNames", "placementScope"],
+                    "type": "object"
+                  }
+                },
+                "required": ["value"],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "takenAt": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      }
+    },
+    "type": "object"
+  }
+}

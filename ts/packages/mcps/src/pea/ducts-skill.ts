@@ -1,5 +1,5 @@
-import { ductsGraph } from "../../../../apps/web/src/ducts/graph.ts";
-import { DUCTS_SHEET_GUIDE, projectRouteGraph } from "@pe/agent-contracts";
+import ductsGraph from "./generated/ducts-graph.json" with { type: "json" };
+import { DUCTS_SHEET_GUIDE } from "@pe/agent-contracts";
 import { z } from "zod";
 
 export function renderDuctsSkill(): string {
@@ -15,7 +15,7 @@ export function renderDuctsSkill(): string {
     "",
     "The Ducts route graph (Work, Page, readings, semantic verbs and ordered stages):",
     "```json",
-    JSON.stringify(projectRouteGraph(ductsGraph), null, 2),
+    JSON.stringify(ductsGraph, null, 2),
     "```",
     "",
     ...DUCTS_SHEET_GUIDE.walk.map((step, i) => `${i + 1}. ${step}`),

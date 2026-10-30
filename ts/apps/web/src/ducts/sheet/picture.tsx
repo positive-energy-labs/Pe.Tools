@@ -4,10 +4,11 @@
  * its). The focused blocker is the page's `issue`, so a mark picked here focuses its row and a
  * row's hover lights its mark. Rendered through the layout's pane renderer, as `e-picture` is.
  */
-import { useMemo } from "react";
+import { useMemo, type RefObject } from "react";
 import { elementKey, type Members, type SubjectKey } from "@pe/kit/lang/attention";
 import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
 import { snapshotById } from "@pe/ducts-domain/readiness";
+import { useElementAttention } from "#/attention";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import {
   idOf,
@@ -70,8 +71,32 @@ export function worksheetPicture(ws: Detail<"worksheet"> | null) {
   };
   return { members, strands, over, widen };
 }
-const NO_IDS: ReadonlySet<number> = new Set();
 const fmt = (n: number) => n.toFixed(3);
+type Beyond = NonNullable<OpenSheet["elements"]>["beyond"];
+const NO_BEYOND: Beyond = [];
+
+/** What a context element past a stopping unit says wherever it is named: whose air it is, and that this fan's calc leaves it out. */
+export const beyondWords = (mark: string) => `beyond ${mark} (its own fan); not in this fan's calc`;
+
+/**
+ * Beyond as picture content (kaitpw 2026-10-30, "yes show"): a short stub from every port of each
+ * unit this fan stops at, by id, with that unit's mark, drawn while context is (the `halo` or
+ * `context` layer, the picture's own rule). It joins the capture as `near`, cut where the host cut
+ * it, and paints as a one-hop neighbour stub, the network stage's mark for a network that is not
+ * the one open; it is never walked, so no strand, finding or total stands on it.
+ */
+export function beyondPicture(beyond: Beyond, walked: ReadonlySet<number>, on: boolean) {
+  const markOf = new Map<number, string>();
+  const cuts = new Map<number, Beyond[number]["cuts"]>();
+  if (on)
+    for (const unit of beyond) {
+      for (const id of unit.elementIds)
+        if (!walked.has(id) && !markOf.has(id)) markOf.set(id, unit.mark);
+      for (const cut of unit.cuts)
+        if (markOf.get(cut.id) === unit.mark) cuts.set(cut.id, [...(cuts.get(cut.id) ?? []), cut]);
+    }
+  return { markOf, cuts, ids: new Set(markOf.keys()) as ReadonlySet<number> };
+}
 
 export function SheetPicture({
   props,
@@ -79,12 +104,15 @@ export function SheetPicture({
   sheet,
   blockers,
   renderPane,
+  jump,
 }: {
   props: ProtoProps;
   snapshot: DuctSnapshot;
   sheet: OpenSheet | null;
   blockers: readonly SheetBlocker[];
   renderPane: TeachingPaneRender;
+  /** Filled by the picture: a footnote press selects and flies to its subject. */
+  jump?: RefObject<((key: SubjectKey) => void) | null>;
 }) {
   const { page, setPage, work, priced } = props;
   const worstPathIds = useMemo(
@@ -103,10 +131,18 @@ export function SheetPicture({
       ]),
     [sheet, blockers, worstPathIds],
   );
-  // ponytail: `near` is empty; the sheet exposes no candidate-box context yet.
+  const contextOn = page.layers.includes("context") || page.layers.includes("halo");
+  const beyond = useMemo(
+    () => beyondPicture(sheet?.elements?.beyond ?? NO_BEYOND, focusIds, contextOn),
+    [sheet, focusIds, contextOn],
+  );
+  // `near` is the context past each stopping unit; the sheet exposes no candidate-box context yet.
   const focus = useMemo<PictureContent["focus"]>(
-    () => ({ walked: [...focusIds].map((id) => elementKey(id)), near: NONE }),
-    [focusIds],
+    () => ({
+      walked: [...focusIds].map((id) => elementKey(id)),
+      near: [...beyond.ids].map((id) => elementKey(id)),
+    }),
+    [focusIds, beyond],
   );
   const runs = useMemo(() => worksheetPicture(sheet?.worksheet ?? null), [sheet]);
   const members = useMemo<Members>(
@@ -141,7 +177,10 @@ export function SheetPicture({
     [snapshot, priced, focusIds],
   );
   const lines = useMemo(() => linesOf(scene), [scene]);
-  const routePaint = useMemo(() => paintOfDucts(snapshot, focusIds, NO_IDS), [snapshot, focusIds]);
+  const routePaint = useMemo(
+    () => paintOfDucts(snapshot, focusIds, beyond.ids),
+    [snapshot, focusIds, beyond],
+  );
   const kinds = coloursOf(work.doc);
   const colour = page.layers.includes("system-colours") ? "firm" : "mono";
   const { paint, ports } = useEquipment(scene, routePaint, kinds, colour);
@@ -171,7 +210,15 @@ export function SheetPicture({
   );
   const issues = useMemo(() => sheetIssues(blockers, null), [blockers]);
   const byId = useMemo(() => snapshotById(snapshot), [snapshot]);
-  const nameOf = useMemo(() => subjectNamer(snapshot), [snapshot]);
+  const namer = useMemo(() => subjectNamer(snapshot), [snapshot]);
+  const nameOf = (id: number) => {
+    const mark = beyond.markOf.get(id);
+    const name = namer(id);
+    return mark ? `${name ?? `element ${id}`} · ${beyondWords(mark)}` : name;
+  };
+  // Hovering a context element names it in the readout (no tooltip): whose air it is.
+  const { hovered } = useElementAttention();
+  const hoveredBeyond = hovered != null && beyond.markOf.has(hovered) ? hovered : null;
   const encoding = useMemo(() => encodingFor("none"), []);
   const pointOf = (id: number): readonly number[] | null => {
     const node = byId.nodes.get(id);
@@ -205,7 +252,11 @@ export function SheetPicture({
       { meta: "no fan open" },
     );
   const esp = sheet.overview.totals?.requiredEspInWg ?? null;
-  const summary = (
+  const summary = hoveredBeyond != null ? (
+    <span data-sheet-picture-beyond="" className="text-ink-2">
+      {nameOf(hoveredBeyond)}
+    </span>
+  ) : (
     <span data-sheet-picture-state="">
       {fan.mark} · port {fan.portIndex} ·{" "}
       {esp == null ? (
@@ -233,6 +284,7 @@ export function SheetPicture({
       setPage={setPage}
       renderPane={renderPane}
       onPose={props.onPose}
+      jump={jump}
       content={{
         focus,
         members,
@@ -248,6 +300,7 @@ export function SheetPicture({
         colour,
         layers,
         layerOptions: DUCTS_LAYER_OPTIONS,
+        capture: { cuts: beyond.cuts },
         overlay,
         readout: { subject: fan.mark, summary },
       }}

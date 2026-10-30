@@ -15,7 +15,9 @@ export const rulingFor = (
 ) => rulings.findLast((r) => r.pair.every((p) => pair.includes(p)))?.verdict;
 
 /**
- * Heals for one open end, ranked: join first, body tap second, occupied junction last; never an
+ * Heals for one open end, ranked: join, then replacing an end cap with a transition (C3: the
+ * target connector is capped, so the fix is remove cap and fit a transition sized from the two
+ * connectors, never a tee), then body tap, then occupied junction; never an
  * unaccepted air-type crossing. The neighbourhood is C#'s measurement (`near`, model health); the
  * proposal, its risk and its ranking are the sheet's.
  */
@@ -39,6 +41,7 @@ export function proposeHeals(
     point: number[],
     gapIn: number,
     fittingChange: boolean,
+    cap?: number,
   ) => {
     const pair: [string, string] = [
       connectorKey(from.id, port.index),
@@ -52,8 +55,11 @@ export function proposeHeals(
       pair,
       gapIn,
       fittingChange,
+      ...(cap != null ? { replaces: { elementId: cap } } : {}),
       risk:
-        kind === "tee"
+        kind === "transition"
+          ? `Remove end cap ${cap} and fit a transition; fitting loss required`
+          : kind === "tee"
           ? "Riskiest: replace occupied connection with a tee; fitting loss required"
           : kind === "tap"
             ? "Add a branch fitting at the duct body; fitting loss required"
@@ -82,8 +88,11 @@ export function proposeHeals(
     )
       continue;
     if (c.connectedTo) {
-      // An occupied mouth is offered only with an explicit fitting change, never as a join.
-      if ("polyline" in target || target.connectors.length >= 3)
+      // An occupied mouth is offered only with an explicit fitting change, never as a join. A cap
+      // there is removed for a transition (MUAS-1's intake 2.63 in from louver plenum 14106988's
+      // capped end, cap 14107111); any other occupant needs a tee.
+      if (p.cappedBy != null) add("transition", target, c.index, c.point, p.gapIn, true, p.cappedBy);
+      else if ("polyline" in target || target.connectors.length >= 3)
         add("tee", target, c.index, c.point, p.gapIn, true);
     } else {
       const sameSize =
@@ -100,7 +109,7 @@ export function proposeHeals(
     if (!sameAir(segmentClass(segment))) continue;
     add("tap", segment, null, b.tapPoint, b.tapGapIn, true);
   }
-  const priority = { join: 0, tap: 1, tee: 2 };
+  const priority = { join: 0, transition: 1, tap: 2, tee: 3 };
   return proposals.sort((a, b) => {
     const accepted = (p: HealProposal) => (rulingFor(p.pair, rulings) === "accept" ? 0 : 1);
     return (

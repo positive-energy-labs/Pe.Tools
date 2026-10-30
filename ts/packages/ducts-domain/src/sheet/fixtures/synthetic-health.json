@@ -599,7 +599,8 @@
               "facingDot": -1.0,
               "opposed": true,
               "aligned": true,
-              "autoJoin": false
+              "autoJoin": false,
+              "cappedBy": 900
             }
           ],
           "faces": [],
@@ -1243,7 +1244,8 @@
               "facingDot": -1.0,
               "opposed": true,
               "aligned": true,
-              "autoJoin": false
+              "autoJoin": false,
+              "cappedBy": 900
             }
           ],
           "faces": [],
@@ -1413,6 +1415,775 @@
           "faces": [],
           "bodies": []
         }
+      }
+    ],
+    "tolerances": {
+      "candidateBoxIn": 36.0,
+      "autoJoinGapIn": 3.0
+    }
+  },
+  "7aba8a81-1458": {
+    "issues": [
+      {
+        "id": "no-terminal-flow:73",
+        "kind": "no-terminal-flow",
+        "elementId": 73,
+        "point": [
+          10.0,
+          0.0,
+          0.0
+        ],
+        "note": "no design flow"
+      },
+      {
+        "id": "open-end:72:1",
+        "kind": "open-end",
+        "elementId": 72,
+        "connector": 1,
+        "point": [
+          7.0025,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [
+            {
+              "elementId": 73,
+              "connector": 0,
+              "gapIn": 35.97,
+              "opposed": false,
+              "aligned": false,
+              "autoJoin": false
+            },
+            {
+              "elementId": 71,
+              "connector": 1,
+              "gapIn": 35.97,
+              "facingDot": 1.0,
+              "opposed": false,
+              "aligned": false,
+              "autoJoin": false
+            }
+          ],
+          "faces": [],
+          "bodies": [
+            {
+              "segmentId": 71,
+              "gapIn": 0.0,
+              "tapGapIn": 0.0,
+              "tapPoint": [
+                7.0025,
+                0.0,
+                0.0
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "id": "open-end:72:2",
+        "kind": "open-end",
+        "elementId": 72,
+        "connector": 2,
+        "point": [
+          6.9975,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [],
+          "faces": [
+            {
+              "kind": "tap",
+              "elementId": 71,
+              "gapIn": -4.0,
+              "opposed": false,
+              "atFt": 6.9975,
+              "point": [
+                6.9975,
+                0.0,
+                0.0
+              ]
+            }
+          ],
+          "bodies": [
+            {
+              "segmentId": 71,
+              "gapIn": 0.0,
+              "tapGapIn": 0.0,
+              "tapPoint": [
+                6.9975,
+                0.0,
+                0.0
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "id": "no-component-drop:72",
+        "kind": "no-component-drop",
+        "elementId": 72,
+        "point": [
+          7.0,
+          0.0,
+          0.0
+        ],
+        "note": "Damper_Volume_Round states no pressure drop"
+      },
+      {
+        "id": "inline:72",
+        "kind": "inline",
+        "elementId": 72,
+        "point": [
+          7.0,
+          0.0,
+          0.0
+        ],
+        "note": "Damper_Volume_Round lies inside duct 71, 7.00 ft along it and aligned with it, with neither end connected",
+        "inline": {
+          "segmentId": 71,
+          "atFt": 7.0,
+          "ports": [
+            2,
+            1
+          ]
+        }
+      }
+    ],
+    "tolerances": {
+      "candidateBoxIn": 36.0,
+      "autoJoinGapIn": 3.0
+    }
+  },
+  "7cd402fa-2085": {
+    "issues": [
+      {
+        "id": "open-end:9:1",
+        "kind": "open-end",
+        "elementId": 9,
+        "connector": 1,
+        "point": [
+          4.0025,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [],
+          "faces": [
+            {
+              "kind": "tap",
+              "elementId": 1,
+              "gapIn": -3.0,
+              "opposed": false,
+              "atFt": 4.0025,
+              "point": [
+                4.0025,
+                0.0,
+                0.0
+              ]
+            }
+          ],
+          "bodies": [
+            {
+              "segmentId": 1,
+              "gapIn": 0.0,
+              "tapGapIn": 0.0,
+              "tapPoint": [
+                4.0025,
+                0.0,
+                0.0
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "id": "open-end:9:2",
+        "kind": "open-end",
+        "elementId": 9,
+        "connector": 2,
+        "point": [
+          3.9975,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [],
+          "faces": [],
+          "bodies": [
+            {
+              "segmentId": 1,
+              "gapIn": 0.0,
+              "tapGapIn": 0.0,
+              "tapPoint": [
+                3.9975,
+                0.0,
+                0.0
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "id": "no-component-drop:9",
+        "kind": "no-component-drop",
+        "elementId": 9,
+        "point": [
+          4.0,
+          0.0,
+          0.0
+        ],
+        "note": "Damper_Volume_Round states no pressure drop"
+      },
+      {
+        "id": "open-end:1:1",
+        "kind": "open-end",
+        "elementId": 1,
+        "connector": 1,
+        "point": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [],
+          "faces": [],
+          "bodies": []
+        }
+      },
+      {
+        "id": "open-end:3:2",
+        "kind": "open-end",
+        "elementId": 3,
+        "connector": 2,
+        "point": [
+          20.0,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [],
+          "faces": [],
+          "bodies": []
+        }
+      },
+      {
+        "id": "inline:9",
+        "kind": "inline",
+        "elementId": 9,
+        "point": [
+          4.0,
+          0.0,
+          0.0
+        ],
+        "note": "Damper_Volume_Round lies inside duct 1, 4.00 ft along it and aligned with it, with neither end connected",
+        "inline": {
+          "segmentId": 1,
+          "atFt": 4.0,
+          "ports": [
+            2,
+            1
+          ]
+        }
+      }
+    ],
+    "tolerances": {
+      "candidateBoxIn": 36.0,
+      "autoJoinGapIn": 3.0
+    }
+  },
+  "ff579bf8-1346": {
+    "issues": [
+      {
+        "id": "open-end:9:1",
+        "kind": "open-end",
+        "elementId": 9,
+        "connector": 1,
+        "point": [
+          4.0025,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [],
+          "faces": [
+            {
+              "kind": "tap",
+              "elementId": 1,
+              "gapIn": -3.0,
+              "opposed": false,
+              "atFt": 4.0025,
+              "point": [
+                4.0025,
+                0.0,
+                0.0
+              ]
+            }
+          ],
+          "bodies": [
+            {
+              "segmentId": 1,
+              "gapIn": 0.0,
+              "tapGapIn": 0.0,
+              "tapPoint": [
+                4.0025,
+                0.0,
+                0.0
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "id": "open-end:9:2",
+        "kind": "open-end",
+        "elementId": 9,
+        "connector": 2,
+        "point": [
+          3.9975,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [],
+          "faces": [],
+          "bodies": [
+            {
+              "segmentId": 1,
+              "gapIn": 0.0,
+              "tapGapIn": 0.0,
+              "tapPoint": [
+                3.9975,
+                0.0,
+                0.0
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "id": "no-component-drop:9",
+        "kind": "no-component-drop",
+        "elementId": 9,
+        "point": [
+          4.0,
+          0.0,
+          0.0
+        ],
+        "note": "Damper_Volume_Round states no pressure drop"
+      },
+      {
+        "id": "open-end:1:1",
+        "kind": "open-end",
+        "elementId": 1,
+        "connector": 1,
+        "point": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [],
+          "faces": [],
+          "bodies": []
+        }
+      },
+      {
+        "id": "open-end:1:2",
+        "kind": "open-end",
+        "elementId": 1,
+        "connector": 2,
+        "point": [
+          10.0,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [],
+          "faces": [],
+          "bodies": []
+        }
+      },
+      {
+        "id": "inline:9",
+        "kind": "inline",
+        "elementId": 9,
+        "point": [
+          4.0,
+          0.0,
+          0.0
+        ],
+        "note": "Damper_Volume_Round lies inside duct 1, 4.00 ft along it and aligned with it, with neither end connected",
+        "inline": {
+          "segmentId": 1,
+          "atFt": 4.0,
+          "ports": [
+            2,
+            1
+          ]
+        }
+      }
+    ],
+    "tolerances": {
+      "candidateBoxIn": 36.0,
+      "autoJoinGapIn": 3.0
+    }
+  },
+  "5cb7d2cd-2120": {
+    "issues": [
+      {
+        "id": "open-end:9:1",
+        "kind": "open-end",
+        "elementId": 9,
+        "connector": 1,
+        "point": [
+          4.0025,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [],
+          "faces": [
+            {
+              "kind": "tap",
+              "elementId": 1,
+              "gapIn": -3.0,
+              "opposed": false,
+              "atFt": 4.0025,
+              "point": [
+                4.0025,
+                0.0,
+                0.0
+              ]
+            }
+          ],
+          "bodies": [
+            {
+              "segmentId": 1,
+              "gapIn": 0.0,
+              "tapGapIn": 0.0,
+              "tapPoint": [
+                4.0025,
+                0.0,
+                0.0
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "id": "open-end:9:2",
+        "kind": "open-end",
+        "elementId": 9,
+        "connector": 2,
+        "point": [
+          3.9975,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [],
+          "faces": [],
+          "bodies": [
+            {
+              "segmentId": 1,
+              "gapIn": 0.0,
+              "tapGapIn": 0.0,
+              "tapPoint": [
+                3.9975,
+                0.0,
+                0.0
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "id": "no-component-drop:9",
+        "kind": "no-component-drop",
+        "elementId": 9,
+        "point": [
+          4.0,
+          0.0,
+          0.0
+        ],
+        "note": "Damper_Volume_Round states no pressure drop"
+      },
+      {
+        "id": "open-end:1:1",
+        "kind": "open-end",
+        "elementId": 1,
+        "connector": 1,
+        "point": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [],
+          "faces": [],
+          "bodies": []
+        }
+      },
+      {
+        "id": "open-end:3:2",
+        "kind": "open-end",
+        "elementId": 3,
+        "connector": 2,
+        "point": [
+          20.0,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [],
+          "faces": [],
+          "bodies": []
+        }
+      },
+      {
+        "id": "inline:9",
+        "kind": "inline",
+        "elementId": 9,
+        "point": [
+          4.0,
+          0.0,
+          0.0
+        ],
+        "note": "Damper_Volume_Round lies inside duct 1, 4.00 ft along it and aligned with it, with neither end connected",
+        "inline": {
+          "segmentId": 1,
+          "atFt": 4.0,
+          "ports": [
+            2,
+            1
+          ]
+        }
+      }
+    ],
+    "tolerances": {
+      "candidateBoxIn": 36.0,
+      "autoJoinGapIn": 3.0
+    }
+  },
+  "2d2f275c-2251": {
+    "issues": [
+      {
+        "id": "open-end:1:1",
+        "kind": "open-end",
+        "elementId": 1,
+        "connector": 1,
+        "point": [
+          4.0,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [
+            {
+              "elementId": 900,
+              "connector": 0,
+              "gapIn": 12.0,
+              "facingDot": 1.0,
+              "opposed": false,
+              "aligned": false,
+              "autoJoin": false
+            },
+            {
+              "elementId": 2,
+              "connector": 0,
+              "gapIn": 12.0,
+              "facingDot": -1.0,
+              "opposed": true,
+              "aligned": true,
+              "autoJoin": false
+            }
+          ],
+          "faces": [],
+          "bodies": [
+            {
+              "segmentId": 2,
+              "gapIn": 12.0
+            }
+          ]
+        }
+      }
+    ],
+    "tolerances": {
+      "candidateBoxIn": 36.0,
+      "autoJoinGapIn": 3.0
+    }
+  },
+  "e2ea010e-2383": {
+    "issues": [
+      {
+        "id": "open-end:1:1",
+        "kind": "open-end",
+        "elementId": 1,
+        "connector": 1,
+        "point": [
+          4.0,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [
+            {
+              "elementId": 900,
+              "connector": 0,
+              "gapIn": 2.6000000000000014,
+              "facingDot": 1.0,
+              "opposed": false,
+              "aligned": false,
+              "autoJoin": false
+            },
+            {
+              "elementId": 2,
+              "connector": 0,
+              "gapIn": 2.6000000000000014,
+              "facingDot": -1.0,
+              "opposed": true,
+              "aligned": true,
+              "autoJoin": false,
+              "cappedBy": 900
+            }
+          ],
+          "faces": [
+            {
+              "kind": "tap",
+              "elementId": 2,
+              "gapIn": 1.600000000000005,
+              "facingDot": -1.0,
+              "opposed": true,
+              "atFt": 0.0,
+              "point": [
+                4.216666666666667,
+                0.0,
+                0.0
+              ]
+            }
+          ],
+          "bodies": [
+            {
+              "segmentId": 2,
+              "gapIn": 2.6000000000000014
+            }
+          ]
+        }
+      }
+    ],
+    "tolerances": {
+      "candidateBoxIn": 36.0,
+      "autoJoinGapIn": 3.0
+    }
+  },
+  "eca73154-2251": {
+    "issues": [
+      {
+        "id": "air-type-change:200:0",
+        "kind": "air-type-change",
+        "elementId": 200,
+        "connector": 0,
+        "point": [
+          8.0,
+          0.0,
+          0.0
+        ],
+        "note": "SupplyAir meets ReturnAir at 2:1"
+      },
+      {
+        "id": "air-type-change:900:0",
+        "kind": "air-type-change",
+        "elementId": 900,
+        "connector": 0,
+        "point": [
+          5.0,
+          0.0,
+          0.0
+        ],
+        "note": "SupplyAir meets ReturnAir at 2:0"
+      },
+      {
+        "id": "open-end:1:1",
+        "kind": "open-end",
+        "elementId": 1,
+        "connector": 1,
+        "point": [
+          4.0,
+          0.0,
+          0.0
+        ],
+        "note": "nothing attached",
+        "near": {
+          "ports": [
+            {
+              "elementId": 900,
+              "connector": 0,
+              "gapIn": 12.0,
+              "facingDot": 1.0,
+              "opposed": false,
+              "aligned": false,
+              "autoJoin": false
+            },
+            {
+              "elementId": 2,
+              "connector": 0,
+              "gapIn": 12.0,
+              "facingDot": -1.0,
+              "opposed": true,
+              "aligned": true,
+              "autoJoin": false
+            }
+          ],
+          "faces": [],
+          "bodies": [
+            {
+              "segmentId": 2,
+              "gapIn": 12.0
+            }
+          ]
+        }
+      },
+      {
+        "id": "air-type-change:2:0",
+        "kind": "air-type-change",
+        "elementId": 2,
+        "connector": 0,
+        "point": [
+          5.0,
+          0.0,
+          0.0
+        ],
+        "note": "ReturnAir meets SupplyAir at 900:0"
+      },
+      {
+        "id": "air-type-change:2:1",
+        "kind": "air-type-change",
+        "elementId": 2,
+        "connector": 1,
+        "point": [
+          8.0,
+          0.0,
+          0.0
+        ],
+        "note": "ReturnAir meets SupplyAir at 200:0"
       }
     ],
     "tolerances": {

@@ -420,6 +420,7 @@ export function ductsSources(): Readonly<Record<string, ReadingSource>> {
     }),
 
     "ducts.fans": {
+      key: (scope) => scope.workRevision,
       ...jsonSource({
         request: (ctx) =>
           target(ctx) ? { path: "/pe/ducts/roster", body: { target: target(ctx) } } : null,
@@ -446,6 +447,7 @@ export function ductsSources(): Readonly<Record<string, ReadingSource>> {
             ...new Set([
               open.overview.fan.unitId,
               ...(open.elements?.walkedElementIds ?? []),
+              ...(open.elements?.beyond ?? []).flatMap((unit) => unit.elementIds),
               ...blockers.flatMap(blockerElements),
             ]),
           ].sort((a, b) => a - b);

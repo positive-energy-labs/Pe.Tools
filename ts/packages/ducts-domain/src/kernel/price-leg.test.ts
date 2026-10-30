@@ -313,6 +313,42 @@ it("prices the synthetic network leg by leg to the independently computed totals
   expect(eq[5]).toBeNull();
 });
 
+it("counts a pressure-gaining fitting as 0 ft and keeps its signed loss", () => {
+  // FC-23's return run on cloud Chadds (2026-10-29): ER5-1 branch Cb -2.649 at 144 fpm, fed by a
+  // 16 cfm duct at 0.000585 in-wg/100 ft, priced -0.003423 in-wg and converted to -584.8 ft.
+  const duct: PricedLeg = {
+    kind: "duct",
+    elementId: 1,
+    lossInWg: 0.0000585,
+    velocityFpm: 144,
+    source: { kind: "friction", f: 0.03, roughnessFt: 0.0003, rateInWgPer100Ft: 0.000585 },
+    unpriced: null,
+    lengthFt: 10,
+  };
+  const rule = (id: number, lossInWg: number, coefficient: number): PricedLeg => ({
+    kind: "fitting",
+    elementId: id,
+    lossInWg,
+    velocityFpm: 144,
+    source: {
+      kind: "rule",
+      rule: "tap-converging-rect",
+      table: "ER5-1",
+      coefficient,
+      pv: 0.001292,
+      inputs: { res: "Cb", x: 0.1, xLabel: "Qb/Qc" },
+      notes: [],
+    },
+    unpriced: null,
+  });
+  const legs = [duct, rule(2, -0.003423, -2.649), rule(3, 0.000585, 0.45)];
+  const eq = equivalentFeet(legs);
+  expect(eq[0]).toBe(10);
+  expect(eq[1]).toBe(0);
+  expect(eq[2]).toBeCloseTo(100, 6);
+  expect(legs[1]!.lossInWg).toBe(-0.003423);
+});
+
 it("names why a leg is unpriced: a table not loaded, a tap with no branch flow, a missing drop", () => {
   const tapFacts = fittingFacts({
     fitting: tap,

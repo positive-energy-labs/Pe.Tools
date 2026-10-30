@@ -111,7 +111,7 @@ export function blockerShapes(
   if (!elements.size) return { outlines: [], bars: [], missedBars: [], overhang: [], boxes: [] };
   const all = findingShapes(snapshot, new Set(), work, focus);
   const accepted = new Set(
-    (inputs?.edits.rulings ?? [])
+    (inputs?.inputs.rulings.joins ?? [])
       .filter((ruling) => ruling.verdict === "accept")
       .map((ruling) => ruling.pair.join("|")),
   );

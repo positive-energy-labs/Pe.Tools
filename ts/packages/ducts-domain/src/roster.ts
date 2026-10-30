@@ -34,16 +34,54 @@ const words = (text: string) =>
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
 const name = (node: Node) => words(`${node.family ?? ""} ${node.type ?? ""}`);
-const passive = (node: Node) => /\b(filter|chassis|silencer|heater|damper)\b/.test(name(node));
+const passiveName = (node: Node) => /\b(filter|chassis|silencer|heater|damper)\b/.test(name(node));
 
-function kindOf(node: Node): FanPort["kind"] {
+/** The family and type name read as a hint only (ducts LEDGER 2026-10-29: never a value of its own). */
+function nameKind(node: Node): FanPort["kind"] | null {
   const text = name(node);
   if (/\b(fan coil|fancoil|fcu)\b/.test(text)) return "fan-coil";
   if (/\b(muas?|make up air|makeup air)\b/.test(text)) return "muas";
   if (/\b(ahu|air handler|air handling|suntherm|mortex)\b/.test(text)) return "air-handler";
   if (/\b(erv|broan|renewaire)\b/.test(text)) return "erv";
   if (/\b(dehumidifier|aprilaire|santa fe)\b/.test(text)) return "dehumidifier";
-  return "other";
+  return null;
+}
+
+/**
+ * A unit's kind suggested from what its duct ports carry (ducts LEDGER 2026-10-29): supply and
+ * return with exhaust or outdoor is an ERV; outdoor into supply with no return is a make-up air
+ * unit; supply and return alone is a fan coil unless the name says air handler or dehumidifier;
+ * anything else falls to the name, then `other`. A ruling per family type overrides it.
+ */
+export function suggestKind(node: Node): { kind: FanPort["kind"]; ref: string } {
+  const classes = new Set(
+    node.connectors.flatMap((p) => {
+      const side = sideOf(p);
+      return side ? [side] : [];
+    }),
+  );
+  const hint = nameKind(node);
+  const has = (c: FanPort["side"]) => classes.has(c);
+  if (has("supply") && has("return") && (has("exhaust") || has("outdoor")))
+    return { kind: "erv", ref: "ports" };
+  if (has("supply") && has("outdoor") && !has("return")) return { kind: "muas", ref: "ports" };
+  // Supply and return alone fit several kinds: a name that says which wins over the fan-coil default.
+  if (has("supply") && has("return"))
+    return hint && hint !== "fan-coil"
+      ? { kind: hint, ref: "ports+name" }
+      : { kind: "fan-coil", ref: "ports" };
+  return hint ? { kind: hint, ref: "name" } : { kind: "other", ref: "none" };
+}
+
+/** A unit's role suggested from its name (a filter, heater or damper chassis is passive) and kind. */
+export function suggestRole(node: Node, kind: FanPort["kind"]): "fan" | "passive" {
+  return passiveName(node) || kind === "other" ? "passive" : "fan";
+}
+
+/** Resolved kinds and roles by unit element id (`resolveInputs`); absent, the suggestions. */
+export interface RosterInputs {
+  kinds?: Readonly<Record<string, FanPort["kind"]>>;
+  roles?: Readonly<Record<string, "fan" | "passive">>;
 }
 
 function sideOf(port: Port): FanPort["side"] | undefined {
@@ -66,6 +104,7 @@ function fanPort(
   port: Port,
   side: FanPort["side"],
   source: FanPort["source"],
+  kindOf: (node: Node) => FanPort["kind"],
 ): FanPort {
   const kind = kindOf(node);
   const inlets = node.connectors.filter(
@@ -92,17 +131,40 @@ function fanPort(
   };
 }
 
-function inferredPorts(node: Node, source: FanPort["source"]): FanPort[] {
+function inferredPorts(
+  node: Node,
+  source: FanPort["source"],
+  kindOf: (node: Node) => FanPort["kind"],
+): FanPort[] {
   const outlets = node.connectors.filter((p) => p.direction === "out");
   if (kindOf(node) === "erv") {
     return (["supply", "exhaust"] as const).flatMap((side) => {
       const matches = outlets.filter((p) => sideOf(p) === side);
-      return matches.length === 1 ? [fanPort(node, matches[0]!, side, source)] : [];
+      return matches.length === 1 ? [fanPort(node, matches[0]!, side, source, kindOf)] : [];
     });
   }
   const outlet = outlets.length === 1 ? outlets[0] : undefined;
   const side = outlet && sideOf(outlet);
-  return outlet && side ? [fanPort(node, outlet, side, source)] : [];
+  return outlet && side ? [fanPort(node, outlet, side, source, kindOf)] : [];
+}
+
+/**
+ * The fan ports a kind finds on a unit's own connectors: an ERV needs exactly one classified outlet
+ * per side, every other fan kind exactly one outlet, and `other` / `dehumidifier` are never
+ * proposed a fan. The one rule the roster and the sheet's kind options both read.
+ */
+export function kindFanPorts(node: Node, kind: FanPort["kind"]): FanPort[] {
+  if (kind === "other" || kind === "dehumidifier") return [];
+  return inferredPorts(node, "heuristic", () => kind);
+}
+
+/**
+ * True when ruling this kind would leave a unit that proposes fans with no fan port at all: the
+ * unit would drop off the fan list. `other` and `dehumidifier` never propose a fan, so they are
+ * a different story (passive, side-stream) and never "strip".
+ */
+export function kindStripsFanPort(node: Node, kind: FanPort["kind"]): boolean {
+  return kind !== "other" && kind !== "dehumidifier" && kindFanPorts(node, kind).length === 0;
 }
 
 /** Seeds are proposals, including Revit base equipment. Only a person's fan ruling confirms one. */
@@ -135,8 +197,13 @@ export function applyRulings(
 export function suggestRoster(
   snapshot: RosterSnapshot,
   rulings: readonly RosterRuling[] = [],
+  inputs: RosterInputs = {},
 ): Roster {
-  const equipment = snapshot.nodes.filter((node) => node.kind === "equipment" && !passive(node));
+  const kindOf = (node: Node) => inputs.kinds?.[String(node.id)] ?? suggestKind(node).kind;
+  const roleOf = (node: Node) => inputs.roles?.[String(node.id)] ?? suggestRole(node, kindOf(node));
+  const equipment = snapshot.nodes.filter(
+    (node) => node.kind === "equipment" && roleOf(node) !== "passive",
+  );
   const nodes = new Map(equipment.map((node) => [node.id, node]));
   const candidates = new Map<string, FanPort>();
   const add = (port: FanPort) => {
@@ -151,22 +218,22 @@ export function suggestRoster(
       );
       const side =
         port && sideOf({ ...port, classification: port.classification ?? system.classification });
-      if (port && side) add(fanPort(node, port, side, "base-equipment"));
+      if (port && side) add(fanPort(node, port, side, "base-equipment", kindOf));
     } else {
-      for (const port of inferredPorts(node, "base-equipment")) add(port);
+      for (const port of inferredPorts(node, "base-equipment", kindOf)) add(port);
     }
   }
   for (const ruling of rulings) {
     const node = nodes.get(ruling.unitId);
     const port = node?.connectors.find((p) => p.index === ruling.portIndex);
     const side = ruling.side ?? (port && sideOf(port));
-    if (node && port && side && ruling.decision === "fan") add(fanPort(node, port, side, "ruling"));
+    if (node && port && side && ruling.decision === "fan")
+      add(fanPort(node, port, side, "ruling", kindOf));
   }
   for (const node of equipment) {
     const kind = kindOf(node);
-    // A fan ruling is the explicit opt-in for a side-stream dehumidifier.
-    if (kind === "other" || kind === "dehumidifier") continue;
-    for (const port of inferredPorts(node, "heuristic")) add(port);
+    // A fan ruling is the explicit opt-in for a side-stream dehumidifier (`kindFanPorts` is empty for it).
+    for (const port of kindFanPorts(node, kind)) add(port);
   }
   return applyRulings([...candidates.values()], rulings);
 }
@@ -192,7 +259,10 @@ export function rosterCensus(snapshot: RosterSnapshot, rulings: readonly RosterR
     byKind[port.kind]++;
     bySource[port.source]++;
   }
-  const equipment = snapshot.nodes.filter((node) => node.kind === "equipment" && !passive(node));
+  const kindOf = (node: Node) => suggestKind(node).kind;
+  const equipment = snapshot.nodes.filter(
+    (node) => node.kind === "equipment" && suggestRole(node, kindOf(node)) !== "passive",
+  );
   return {
     units: new Set(ports.map((port) => port.unitId)).size,
     ports: ports.length,
@@ -212,7 +282,7 @@ export function rosterCensus(snapshot: RosterSnapshot, rulings: readonly RosterR
         return (
           kind !== "other" &&
           kind !== "dehumidifier" &&
-          inferredPorts(node, "heuristic").length !== (kind === "erv" ? 2 : 1)
+          inferredPorts(node, "heuristic", kindOf).length !== (kind === "erv" ? 2 : 1)
         );
       })
       .map((node) => ({ unitId: node.id, family: node.family ?? "", type: node.type ?? "" })),

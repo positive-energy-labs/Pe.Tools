@@ -217,9 +217,16 @@ export const ductsAdapters: RouteAdapters<DuctsPage, DuctsRouteDocument> = {
   sources: ductsSources(),
   binding: ductsBinding,
   cell: (row, scope) => {
-    const value = row as { segment?: string; key?: string; id?: string | number } | null;
+    const value = row as { segment?: string | null; key?: string; id?: string | number } | null;
     const segment = value?.segment;
     const key = value?.key ?? value?.id;
+    if (scope.work && segment === null && key === "criteria")
+      return {
+        type: "cell:criteria",
+        id: "criteria",
+        work: scope.work.handle.key,
+        path: ["criteria"],
+      };
     if (
       !scope.work ||
       !segment ||

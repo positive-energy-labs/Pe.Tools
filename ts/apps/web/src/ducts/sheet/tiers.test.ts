@@ -48,20 +48,14 @@ it("counts every tier, zero included, over compact and detailed rows alike", () 
   expect(tierCounts([])).toEqual({ taken: 0, accept: 0, preview: 0 });
 });
 
-it("reads the engine's silent closures from the inputs provenance as taken", () => {
+it("reads the engine's silent closures from the inputs detail's notes as taken", () => {
   expect(
     takenClosures([
-      { name: "auto-joined 1:1 to 2:0 across 0.500 in", value: null, source: "default auto-join" },
-      { name: "terminal drop in-wg", value: 0.04, source: "firm default firm-1" },
-      { name: "terminal drop in-wg", value: 0.05, source: "route settings terminal drop" },
-      { name: "SHIM terminal drop in-wg", value: 0.03, source: "SHIM placeholder" },
-      { name: "split policy", value: "even", source: "typed" },
+      { kind: "auto-join", text: "auto-joined 1:1 to 2:0 across 0.500 in", value: null },
+      { kind: "direction", text: "inlet 1, discharge 0: ends", value: null },
+      { kind: "heal", text: "tee 5:0 onto 6: assumed heal", value: null },
     ]),
-  ).toEqual([
-    "auto-joined 1:1 to 2:0 across 0.500 in",
-    "terminal drop in-wg 0.04 (firm default firm-1)",
-    "terminal drop in-wg 0.05 (route settings terminal drop)",
-  ]);
+  ).toEqual(["auto-joined 1:1 to 2:0 across 0.500 in"]);
 });
 
 it("R-B: a consequence of an assumed heal nests under its cause and takes no tier; an orphan stands alone", () => {

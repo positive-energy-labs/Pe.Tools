@@ -1,19 +1,20 @@
 /**
  * One blocker as a row: kind glyph, the element as a Subject (named by the snapshot, never a raw
  * id as the only noun; hover lights it, press goes to it), effect on the total ("—" until
- * recomputed), the inline number the closer needs (typed cfm or in-wg; Enter runs the verb), the
- * closer verb as a framed house button naming the action and value, and the refusal reason as
- * row text as well as the button's tooltip. Hovering the row lights the element and its mark on
- * the picture; the picture's pick of the mark focuses the row (`focused`).
+ * recomputed), the inline number the closer needs (typed cfm or in-wg; the verb is live as it is
+ * typed, Enter stages it), the closer verb as a framed house button naming the action and value,
+ * and the refusal reason as row text as well as the button's tooltip. Hovering the row lights the
+ * element and its mark on the picture; the picture's pick of the mark focuses the row (`focused`).
  * A `consequence` row (R-B: a blocker that exists only because of its cause row's assumed heal)
  * sits indented and muted under its cause with no input and no verb; its detail stands in.
  */
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@pe/kit/lang/button";
-import { Input } from "@pe/kit/lang/input";
+import { ListPopup } from "@pe/kit/lang/list-popup";
 import { SubjectText } from "@pe/kit/lang/subject-text";
 import { useElementAttention, useIssueHover } from "#/attention";
-import type { Closer } from "./closer";
+import type { Closer, PriceChoice } from "./closer";
+import { SheetCell } from "./sheet-cell";
 import type { SheetBlocker } from "./tiers";
 
 const GLYPH: Record<SheetBlocker["kind"], string> = {
@@ -49,7 +50,9 @@ export function BlockerRow({
   const attention = useElementAttention();
   const hoverIssue = useIssueHover();
   const [typed, setTyped] = useState<number | null>(null);
-  const closer = closerOf(blocker, typed);
+  // The box's uncommitted number: the verb is live while the person types (undefined: no draft).
+  const [draft, setDraft] = useState<number | null | undefined>(undefined);
+  const closer = closerOf(blocker, draft === undefined ? typed : draft);
   const row = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (focused) row.current?.scrollIntoView({ block: "nearest" });
@@ -85,7 +88,9 @@ export function BlockerRow({
       data-blocker={blocker.id}
       data-focused={focused ? "" : undefined}
       data-caused-by={consequence ? blocker.causedBy : undefined}
-      className={`grid grid-cols-[2.5rem_minmax(0,1fr)_7rem_auto_auto] items-baseline gap-x-3 py-1${consequence ? " pl-6 text-ink-2" : ""}`}
+      // Glyph, subject, effect on the first line; the input and verbs, then the refusal or the
+      // consequence detail, on lines under the subject, so a long verb never runs off the pane.
+      className={`grid grid-cols-[2.5rem_minmax(0,1fr)_auto] items-baseline gap-x-3 gap-y-0.5 py-1${consequence ? " pl-6 text-ink-2" : ""}`}
       onPointerEnter={() => {
         attention.onHover(blocker.elementId);
         hoverIssue(blocker.id);
@@ -96,7 +101,7 @@ export function BlockerRow({
       }}
       onClick={() => onFocus(focused ? null : blocker.id)}
     >
-      <span className="face-mono" aria-label={blocker.kind} title={blocker.kind}>
+      <span className="face-mono t-small text-ink-2" aria-label={blocker.kind} title={blocker.kind}>
         {GLYPH[blocker.kind]}
       </span>
       <span className="min-w-0 truncate">
@@ -121,57 +126,72 @@ export function BlockerRow({
           </>
         )}
       </span>
-      <span className="face-mono t-small text-ink-2" data-effect="">
+      <span className="face-mono t-small text-right text-ink-2" data-effect="">
         {effectWord(blocker.effectInWg)}
       </span>
       {consequence ? (
-        <>
-          <span />
-          <span className="t-small truncate" title={blocker.detail}>
-            {blocker.detail}
-          </span>
-        </>
+        <span className="t-small col-span-2 col-start-2 truncate" title={blocker.detail}>
+          {blocker.detail}
+        </span>
       ) : (
         <>
           {/* The input and verb act on the blocker, not the row's focus toggle. */}
-          <span className="flex items-baseline gap-2" onClick={(event) => event.stopPropagation()}>
+          <span
+            className="col-span-2 col-start-2 flex min-w-0 flex-wrap items-center gap-1"
+            onClick={(event) => event.stopPropagation()}
+          >
             {closer.input && (
-              <span className="flex w-28 items-baseline gap-1">
-                <Input
-                  aria-label={`${blocker.kind} ${closer.input.unit}`}
-                  type="number"
-                  min={0}
-                  step="any"
-                  face="mono"
-                  placeholder={
-                    closer.input.placeholder == null ? "" : String(closer.input.placeholder)
-                  }
-                  onChange={(event) => {
-                    const field = event.currentTarget;
-                    setTyped(
-                      field.value.trim() &&
-                        field.validity.valid &&
-                        Number.isFinite(field.valueAsNumber)
-                        ? field.valueAsNumber
-                        : null,
-                    );
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") onClose(closer);
-                  }}
-                />
-                <span className="t-small text-ink-2">{closer.input.unit}</span>
-              </span>
+              // The kit cell stages the number (Enter or leaving the box); the verb beside it runs.
+              <SheetCell
+                label={`${blocker.kind} ${closer.input.unit}`}
+                value={typed}
+                unit={{ label: closer.input.unit, short: closer.input.unit === "in-wg" ? "wg" : undefined }}
+                digits={closer.input.unit === "cfm" ? 0 : 4}
+                source={null}
+                refusal={null}
+                clearable
+                placeholder={closer.input.placeholder == null ? undefined : String(closer.input.placeholder)}
+                className="block w-24"
+                onValue={(value) => {
+                  setTyped(value);
+                  setDraft(undefined);
+                }}
+                onDraft={setDraft}
+              />
             )}
             {closer.crossing?.first && crossingVerb}
-            <Button
-              kind="framed"
-              label={`${closer.verb} for ${blocker.kind}`}
-              refusal={closer.refusal}
-              onClick={() => onClose(closer)}
-            >
-              {closer.verb}
-            </Button>
+            {closer.choices?.length ? (
+              // "price with…": each table the fitting may read, named with the rule it reads under.
+              <ListPopup<PriceChoice>
+                key={`${blocker.id}:${closer.refusal}`}
+                anchor="trigger"
+                face="control"
+                trigger={<span>{closer.verb}</span>}
+                triggerLabel={`${closer.verb} for ${blocker.kind}`}
+                aria-label={`${closer.verb} for ${blocker.kind}`}
+                disabled={closer.refusal != null}
+                title={closer.refusal ?? "Choose the table this fitting is priced with"}
+                items={[...closer.choices]}
+                keyOf={(choice) => `${choice.verb}|${choice.detail}`}
+                labelOf={(choice) => `${choice.verb} ${choice.detail}`}
+                empty="No tables"
+                select="single"
+                selected={[]}
+                row={(choice) => ({ label: choice.verb, sub: choice.detail, lines: 2 })}
+                onPick={(choice) =>
+                  onClose({ ...closer, verb: choice.verb, action: choice.action, choices: null })
+                }
+              />
+            ) : (
+              <Button
+                kind="framed"
+                label={`${closer.verb} for ${blocker.kind}`}
+                refusal={closer.refusal}
+                onClick={() => onClose(closer)}
+              >
+                {closer.verb}
+              </Button>
+            )}
             {closer.crossing && !closer.crossing.first && crossingVerb}
             {closer.secondary && (
               <Button
@@ -192,9 +212,15 @@ export function BlockerRow({
               </Button>
             )}
           </span>
-          <span className="t-small text-ink-2" data-refusal={closer.refusal ? "" : undefined}>
-            {closer.refusal ?? ""}
-          </span>
+          {closer.refusal && (
+            <span
+              className="t-small col-span-2 col-start-2 truncate text-ink-2"
+              title={closer.refusal}
+              data-refusal=""
+            >
+              {closer.refusal}
+            </span>
+          )}
         </>
       )}
     </div>

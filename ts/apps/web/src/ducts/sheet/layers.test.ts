@@ -118,15 +118,35 @@ const shared: SheetBlocker = detailOf({
   effectInWg: null,
   closer: "ruling",
 });
+const EMPTY_INPUTS = {
+  terminals: {},
+  units: {},
+  components: {},
+  rulings: { joins: [], ends: [] },
+  criteria: {
+    velocityLimitFpm: { supply: { value: 900, source: "firm" }, return: { value: 700, source: "firm" } },
+    terminalDropInWg: { value: 0.03, source: "firm" },
+    autoJoinGapIn: { value: 3, source: "firm" },
+    healBoxIn: { value: 36, source: "firm" },
+    splitPolicy: { value: "even", source: "firm" },
+    allowanceInWg: { supply: { value: 0, source: "firm" }, return: { value: 0, source: "firm" } },
+  },
+  tables: {},
+  assignments: {},
+  fittingDrops: {},
+} as const satisfies Detail<"inputs">["inputs"];
 const inputs = (
   rulings: { pair: [string, string]; verdict: "accept" | "reject" }[],
 ): Detail<"inputs"> => ({
   kind: "inputs",
   target: { session: "s", openId: "o" },
   basis: "b",
-  edits: { rulings },
+  inputs: { ...EMPTY_INPUTS, rulings: { joins: rulings, ends: [] } },
+  firm: { version: "test", path: "", present: false },
+  tableTitles: {},
   ends: [],
-  inputs: [],
+  fittings: [],
+  notes: [],
   blockers: [],
 });
 const overview = { blockers: [] } as unknown as DuctsSheetOverview;

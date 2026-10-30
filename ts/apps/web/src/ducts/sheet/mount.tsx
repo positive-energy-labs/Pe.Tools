@@ -1,4 +1,6 @@
-import { createContext, useContext, useMemo, type ReactNode } from "react";
+import { createContext, useContext, useMemo, useRef, type ReactNode } from "react";
+import { elementKey, type SubjectKey } from "@pe/kit/lang/attention";
+import { transitionPatches } from "@pe/agent-contracts";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { AttentionRoot } from "#/attention";
 import { useRevitSubjectProps } from "#/revit/element-menu";
@@ -11,10 +13,9 @@ import { InputsSurface } from "./inputs-surface";
 import { SheetPicture } from "./picture";
 import type { SheetViewProps } from "./types";
 import { Roster, RosterVerbs, Ledger } from "./view";
-import { sheetState, SHIM_TERMINAL_DROP_SOURCE } from "./state";
+import { sheetState } from "./state";
 import { describeCloser, type Closer } from "./closer";
-import { mergeSheetInputs } from "./inputs";
-import type { DuctsSheetInputs } from "@pe/agent-contracts";
+import type { DuctsSheetEdits, RouteStatePatch } from "@pe/agent-contracts";
 import type { SheetReading } from "../sources";
 
 const SheetPanes = createContext<Readonly<Record<string, ReactNode>>>({});
@@ -32,24 +33,38 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
     value?.rows ?? (fans.value as { rows: import("./model").FanPort[] } | null)?.rows ?? [],
   );
   const snapshot = props.snapshot ?? EMPTY_SNAPSHOT;
-  const state = useMemo(() => sheetState(sheet, props.work.doc), [sheet, props.work.doc]);
+  const state = useMemo(() => sheetState(sheet), [sheet]);
   const nameOf = useMemo(() => subjectNamer(snapshot), [snapshot]);
   const refProps = useRevitSubjectProps();
+  const jump = useRef<((key: SubjectKey) => void) | null>(null);
   const subjects = useMemo(
-    () => ({ doc: props.attentionDoc, nameOf, go: props.onSelect, refProps }),
+    () => ({
+      doc: props.attentionDoc,
+      nameOf,
+      go: (id: number) => (jump.current ? jump.current(elementKey(id)) : props.onSelect(id)),
+      refProps,
+    }),
     [props.attentionDoc, nameOf, props.onSelect, refProps],
   );
   const busy = ["pending", "partial"].includes(reading.status);
-  const changeInputs = (edits: DuctsSheetInputs) => {
-    void owner.control("sheet-inputs", { edits, expectedRevision: props.work.revision }).run();
+  const changeInputs = (edits: DuctsSheetEdits) => {
+    return owner
+      .control("sheet-inputs", {
+        edits,
+        expectedRevision: props.work.revision,
+        basis: sheet?.overview.basis ?? null,
+      })
+      .run();
+  };
+  const write = async (patches: RouteStatePatch[]) => {
+    const result = await owner
+      .control("edit", { patches, expectedRevision: props.work.revision })
+      .run();
+    return "refusal" in result ? result.refusal : null;
   };
   const closerOf = (blocker: import("./tiers").SheetBlocker, typed: number | null) =>
     describeCloser(blocker, typed, {
-      defaults: state.defaults,
-      dropSource:
-        state.defaults.terminalDropSource === SHIM_TERMINAL_DROP_SOURCE
-          ? "firm shim"
-          : state.defaults.terminalDropSource,
+      terminalDrop: state.inputs?.criteria.terminalDropInWg ?? null,
       nameOf,
       wait: busy
         ? "Wait for the current read"
@@ -62,40 +77,73 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
             name: sheet.overview.fan.mark || nameOf(sheet.overview.fan.unitId) || "unit",
           }
         : null,
+      receiving: ({ elementId, connector }) => {
+        const fan = sheet?.inputs?.ends.find(
+          (end) =>
+            end.kind !== "terminal" &&
+            end.elementId === elementId &&
+            (end.connector ?? null) === (connector ?? null),
+        )?.fan;
+        if (!fan || fan.unitId === sheet?.overview.fan?.unitId) return null;
+        const mark = roster.find((row) => row.unitId === fan.unitId)?.mark;
+        return { unitId: fan.unitId, name: mark || nameOf(fan.unitId) || `unit ${fan.unitId}` };
+      },
+      fittingOf: (key) => sheet?.inputs?.fittings.find((f) => f.key === key) ?? null,
+      tableTitles: sheet?.inputs?.tableTitles ?? {},
     });
   const editsFor = (closers: readonly Closer[]) =>
-    closers.reduce<DuctsSheetInputs>((edits, closer) => {
+    closers.reduce<DuctsSheetEdits>((edits, closer) => {
       if (closer.refusal || !closer.action) return edits;
       const action = closer.action;
       switch (action.kind) {
         case "rule":
           return {
             ...edits,
-            rulings: [
-              ...(edits.rulings ?? state.projectInputs.rulings ?? []).filter(
-                (ruling) => !ruling.pair.every((end) => action.pair.includes(end)),
-              ),
-              { pair: action.pair, verdict: "accept" },
-            ],
+            joins: [...(edits.joins ?? []), { pair: action.pair, verdict: "accept" }],
           };
         case "cap":
           return {
             ...edits,
-            endRulings: [
-              ...(edits.endRulings ?? state.projectInputs.endRulings ?? []).filter(
-                (ruling) =>
-                  ruling.end.elementId !== action.end.elementId ||
-                  ruling.end.connector !== action.end.connector,
-              ),
-              { end: action.end, verdict: "capped" },
-            ],
+            ends: [...(edits.ends ?? []), { end: action.end, verdict: "capped" }],
           };
         case "drop":
-          return mergeSheetInputs(edits, { drops: { [action.elementId]: action.value } });
+          return action.terminal
+            ? {
+                ...edits,
+                terminalDrops: {
+                  ...edits.terminalDrops,
+                  [action.elementId]: { inWg: action.value },
+                },
+              }
+            : {
+                ...edits,
+                componentDrops: {
+                  ...edits.componentDrops,
+                  [action.elementId]: { inWg: action.value },
+                },
+              };
         case "cfm":
-          return mergeSheetInputs(edits, { endCfm: { [action.elementId]: action.value } });
+          return { ...edits, flows: { ...edits.flows, [action.elementId]: { cfm: action.value } } };
         case "unitCfm":
-          return mergeSheetInputs(edits, { unitCfm: { [action.unitId]: action.value } });
+          return {
+            ...edits,
+            equipmentFlows: { ...edits.equipmentFlows, [action.unitId]: { cfm: action.value } },
+          };
+        case "price":
+          return {
+            ...edits,
+            assignments: { ...edits.assignments, [action.family]: { rule: action.rule } },
+            ...(action.table
+              ? { tables: { ...edits.tables, [action.rule]: { table: action.table } } }
+              : {}),
+          };
+        case "table":
+          return { ...edits, tables: { ...edits.tables, [action.rule]: { table: action.table } } };
+        case "pathDrop":
+          return {
+            ...edits,
+            fittingDrops: { ...edits.fittingDrops, [action.key]: { inWg: action.value } },
+          };
       }
     }, {});
   const selected = Number(props.page.selected.replaceAll('"', ""));
@@ -109,10 +157,23 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
           id: elementId,
           family: snapshot.nodes.find((node) => node.id === elementId)?.family ?? null,
         };
-  const setDefaults: SheetViewProps["setDefaults"] = (next) => {
-    void owner
-      .control("sheet-defaults", { edits: next, expectedRevision: props.work.revision })
-      .run();
+  const work = owner.snapshot().work;
+  const journal = work ? owner.journal(work.handle.key).read() : null;
+  // Kernel gap: row labels, cleared-row Restore and total deltas need journal metadata.
+  // The red route.test.tsx records it; this body must not keep a second undo journal.
+  const history = {
+    undoLabel: journal?.undo.length ? "input edit" : null,
+    redoLabel: journal?.redo.length ? "input edit" : null,
+    last: owner.journalRefusal()
+      ? { label: "restore", words: "", refusal: owner.journalRefusal()! }
+      : null,
+    cleared: null,
+    undo: () => {
+      void owner.restore("undo");
+    },
+    redo: () => {
+      void owner.restore("redo");
+    },
   };
   const fanReading = fans.value as { slots: SheetViewProps["slots"]; activeSlot: string } | null;
   const spine: SheetViewProps = {
@@ -121,7 +182,7 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
     roster,
     sheet,
     slots: fanReading?.slots ?? [],
-    activeSlot: state.projectInputs.slot ?? fanReading?.activeSlot ?? "",
+    activeSlot: fanReading?.activeSlot ?? "",
     busy,
     loading: fans.status === "pending",
     error: reading.error ?? fans.error ?? null,
@@ -143,19 +204,10 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
       void owner.control("refresh").run();
     },
     changeInputs,
-    rule: (proposal) =>
-      changeInputs({
-        rulings: [
-          ...(state.projectInputs.rulings ?? []).filter(
-            (ruling) => !ruling.pair.every((end) => proposal.pair.includes(end)),
-          ),
-          proposal,
-        ],
-      }),
+    rule: (proposal) => changeInputs({ joins: [proposal] }),
     pickPath: (sheetPath) => {
       owner.view.setPage({ sheetPath });
     },
-    setDefaults,
     closerOf,
     close: (closer) => changeInputs(editsFor([closer])),
     closeMany: (closers) => changeInputs(editsFor(closers)),
@@ -170,6 +222,7 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
         sheet={sheet}
         blockers={state.blockers}
         renderPane={renderPane}
+        jump={jump}
       />
     ),
     inputsSurface: (
@@ -179,17 +232,30 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
           doc: props.work.doc,
           revision: props.work.revision,
           sheet,
-          defaults: state.defaults,
-          projectInputs: state.projectInputs,
+          inputs: state.inputs,
+          firm: state.firm,
+          fittings: sheet?.inputs?.fittings ?? [],
+          tableTitles: sheet?.inputs?.tableTitles ?? {},
           slots: fanReading?.slots ?? [],
-          activeSlot: state.projectInputs.slot ?? fanReading?.activeSlot ?? "",
+          activeSlot: fanReading?.activeSlot ?? "",
           element,
         }}
         busy={busy}
         elementName={element ? nameOf(element.id) : null}
-        onSlot={(slot) => changeInputs({ slot })}
-        changeInputs={changeInputs}
-        setDefaults={setDefaults}
+        onSlot={(key, slot) => {
+          void write(
+            transitionPatches(["parameters"], key, props.work.doc?.parameters[key] ?? {}, {
+              kind: "set",
+              rung: { value: slot },
+            }),
+          );
+        }}
+        apply={changeInputs}
+        history={history}
+        nameOf={nameOf}
+        act={(path, cell, kind) =>
+          write(transitionPatches(path.slice(0, -1), path.at(-1)!, cell, { kind }))
+        }
       />
     ),
   };

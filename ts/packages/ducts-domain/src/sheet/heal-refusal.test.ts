@@ -1,3 +1,4 @@
+import { inputsFor } from "./test-inputs.ts";
 /**
  * R-A and R-B (kaitpw 2026-10-28) on the retained raw Chadds snapshot, FC-23 (unit 8732550,
  * port 1, slot `revit:Flow`). Skipped when the file is absent, like the host's ducts-sheet test.
@@ -54,17 +55,17 @@ it.skipIf(!existsSync(CHADDS))(
       fan: { unitId: FC23, portIndex: 1 },
       roster,
       grids,
-      slot: "revit:Flow",
+      inputs: inputsFor(snap, { slot: "revit:Flow" }),
     });
     // No assumed heal lands on another roster fan's network; a join may (its owner is not checked).
-    const heals = sheet.inputs
-      .filter((i) => i.source === "assumed heal")
-      .map((i) => /^(join|tap|tee) \S+ to (\d+)/.exec(i.name)!)
+    const heals = sheet.notes
+      .filter((i) => i.kind === "heal" && i.text.endsWith(": assumed heal"))
+      .map((i) => /^(join|tap|tee) \S+ to (\d+)/.exec(i.text)!)
       .map((m) => ({ kind: m[1]!, to: Number(m[2]) }));
     expect(heals.length).toBeGreaterThan(0);
     expect(heals.filter((h) => h.kind !== "join" && owners.has(h.to))).toEqual([]);
     expect(heals.some((h) => owners.get(h.to)?.unitId === OTHER_FC23)).toBe(false);
-    expect(sheet.inputs.some((i) => i.name.startsWith("tee 13756998:0"))).toBe(false);
+    expect(sheet.notes.some((i) => i.text.startsWith("tee 13756998:0"))).toBe(false);
     // Nothing on either pass reaches the other fan's grille branch.
     const all = [...sheet.blockers, ...sheet.assumed.blockers];
     expect(all.some((b) => b.elementId === 13885163)).toBe(false);
@@ -82,9 +83,11 @@ it.skipIf(!existsSync(CHADDS))(
     }
     // Before R-A (probe 2026-10-28): known 3, assumed 8 with the tee and a tap beyond it. After
     // R-A: 3 and 7. After R-Q4 the assumed tap heal at 8738359:1 walks on instead of ending as a
-    // merge, and its no-flow share is gone: 3 and 6.
+    // merge, and its no-flow share is gone: 3 and 6. 2026-10-29: a proposed join's turn is a
+    // per-path fitting, unpriced only where this fan's air crosses it and the flow is known; the
+    // three assumed joins carry none of it (two) or wait on the no-flow share (one): 3 and 3.
     expect(sheet.blockers.length).toBe(3);
-    expect(sheet.assumed.blockers.length).toBe(6);
+    expect(sheet.assumed.blockers.length).toBe(3);
   },
   120_000,
 );

@@ -1,6 +1,6 @@
 import { expect, test } from "vite-plus/test";
 import type { SubjectKey } from "@pe/kit/lang/attention";
-import { captureRequest, hoverGroupsOf, markPick, membersWithStrands } from "./picture";
+import { captureRequest, hoverGroupsOf, jumpSubject, markPick, membersWithStrands } from "./picture";
 
 test("focus captures walked and near once, sorted; context layers ask context", () => {
   const focus = {
@@ -47,4 +47,15 @@ test("reverse hover lights the smallest admitted group holding the element", () 
   expect(groups.get("e:1")).toEqual(["e:1", "e:2"]);
   expect(groups.get("e:4")).toEqual(["e:3", "e:4", "e:5"]);
   expect(hoverGroupsOf(members, () => true).get("e:1")).toEqual(["e:1"]);
+});
+
+test("a jump frames the named element alone, and a run by its element leaves", () => {
+  const members = new Map<SubjectKey, readonly SubjectKey[]>([
+    ["run:a", ["section:1", "e:30"]],
+    ["section:1", ["e:10", "e:20"]],
+  ]);
+  expect(jumpSubject("e:10", members)).toEqual({ selected: "10", ids: new Set([10]) });
+  expect(jumpSubject("run:a", members)).toEqual({ selected: "run:a", ids: new Set([10, 20, 30]) });
+  // An undeclared group has no elements to frame: the picture says it is not here.
+  expect(jumpSubject("run:gone", members).ids.size).toBe(0);
 });

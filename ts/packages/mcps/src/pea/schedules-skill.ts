@@ -1,5 +1,4 @@
-import { projectRouteGraph } from "@pe/agent-contracts";
-import { schedulesGraph } from "../../../../apps/web/src/schedules/graph.ts";
+import schedulesGraph from "./generated/schedules-graph.json" with { type: "json" };
 
 export function renderSchedulesSkill(): string {
   return [
@@ -17,7 +16,7 @@ export function renderSchedulesSkill(): string {
     "",
     "The Schedules route graph:",
     "```json",
-    JSON.stringify(projectRouteGraph(schedulesGraph), null, 2),
+    JSON.stringify(schedulesGraph, null, 2),
     "```",
     "",
   ].join("\n");

@@ -1,5 +1,4 @@
-import { projectRouteGraph } from "@pe/agent-contracts";
-import { familyGraph } from "../../../../apps/web/src/family/graph.ts";
+import familyGraph from "./generated/family-graph.json" with { type: "json" };
 
 export function renderFamilySkill(): string {
   return [
@@ -18,7 +17,7 @@ export function renderFamilySkill(): string {
     "",
     "The Family route graph:",
     "```json",
-    JSON.stringify(projectRouteGraph(familyGraph), null, 2),
+    JSON.stringify(familyGraph, null, 2),
     "```",
     "",
   ].join("\n");

@@ -52,11 +52,11 @@ export function scopeFor(doc: DuctsRouteDocument): BindingScope<DuctsPage, Ducts
     },
   };
 }
-test("the product graph keeps all ducts inputs in Work across twelve cell families", () => {
+test("the product graph keeps all ducts inputs in Work across fourteen cell families", () => {
   expect(ductsGraph.work).toBe(ductsRouteState.schema);
   expect(validateRouteGraph(ductsGraph)).toEqual([]);
   const graph = projectRouteGraph(ductsGraph);
-  expect(graph.cells).toHaveLength(12);
+  expect(graph.cells).toHaveLength(14);
   expect(graph.cells?.some((family) => family.segment === "parameters")).toBe(true);
   expect(graph.fields).not.toHaveProperty("terminalFlow");
   expect(graph.fields).not.toHaveProperty("fanStatic");
@@ -124,4 +124,33 @@ test("system changes retain a shared camera and selection, clear them for a diff
   expect(
     ductsGraph.transition!(current, { system: ["A", "B", "C", "D", "SA"] }, "page"),
   ).toMatchObject({ patch: { system: ["B", "C", "D", "SA"] } });
+});
+
+test("criteria and kinds review rows keep the sheet's words and grouping", () => {
+  const criteria = ductsGraph.cells!.find((c) => c.key === "criteria")!;
+  expect(
+    criteria.show!({ velocityLimitFpm: { supply: 850, return: 700 }, splitPolicy: "even" }),
+  ).toBe("velocity limit supply 850 return 700, split policy even");
+  expect(criteria.show!({ velocityLimitFpm: { supply: 850 } })).toBe("velocity limit supply 850");
+  const kinds = ductsGraph.cells!.find((c) => c.segment === "kinds")!;
+  expect(kinds.groupOf(JSON.stringify(["Broan", "B210E75RT"]))).toEqual(["Broan", "B210E75RT"]);
+  expect(kinds.show!({ kind: "erv" })).toBe("erv");
+  expect(ductsRouteState.schemaVersion).toBe(1);
+});
+
+test("fan-stage selection and framing remain Page fields without a network read", () => {
+  const current = ductsPageSchema.parse({ stage: "sheet" });
+  const patch = {
+    selected: "14577391",
+    viewport: {
+      kind: "orbit" as const,
+      yaw: 20,
+      elev: 30,
+      zoom: 2,
+      pivot: [0, 0, 0] as [number, number, number],
+    },
+  };
+  expect(ductsGraph.transition!(current, patch, "page")).toMatchObject({ patch });
+  expect(ductsGraph.fields.selected.url).not.toBe(false);
+  expect(ductsGraph.fields.viewport.url).not.toBe(false);
 });

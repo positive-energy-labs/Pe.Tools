@@ -10,6 +10,7 @@ import { expect, it } from "vite-plus/test";
 import { ductsDocumentSchema, type DuctsRouteDocument } from "@pe/agent-contracts";
 
 import { inferJoints, tolerate, MISSED_JOIN_MAX_IN } from "./proximity.ts";
+import { withHealth } from "./sheet/health.fixture.ts";
 import { survey } from "./survey.ts";
 import { groupTree } from "./topology.ts";
 import type { DuctSnapshot } from "./types.ts";
@@ -382,12 +383,19 @@ const damper = (id: number, at: number[], facing = false): Node => {
   };
 };
 
-it("a damper inside a duct's body, aligned with it, neither end connected, is inline on it", () => {
+/** C# finds inline parts (DuctHealth.Inline, ducts LEDGER 2026-10-29); the route only splices what it found. */
+const inlineSnap = (segments: Segment[], nodes: Node[]) => {
+  const s = snap(segments, nodes);
+  return { ...s, issues: withHealth(s).issues };
+};
+
+it("a damper C# finds inside a duct's body is spliced inline on it", () => {
   const host = duct(1, [0, 0, 0], [10, 0, 0], "g1");
   const next = duct(3, [10, 0, 0], [20, 0, 0], "g1");
   link(host, 2, next, 1);
-  for (const facing of [false, true]) {
-    const before = snap([host, next], [damper(9, [4, 0, 0], facing)]);
+  for (const before of [false, true].map((facing) =>
+    inlineSnap([host, next], [damper(9, [4, 0, 0], facing)]),
+  )) {
     const { inline, taps, joints, findings, links, snapshot } = tolerate(before);
     const id = "proximity:9|1";
     expect([taps, joints]).toEqual([[], []]);
@@ -435,36 +443,30 @@ it("a damper inside a duct's body, aligned with it, neither end connected, is in
       { elementId: 1, connector: 3 },
     ]);
     expect(snapshot.groups.map((g) => [g.id, g.elementCount])).toEqual([["g1", 4]]);
-    expect(snapshot.issues.map((i) => i.id)).toEqual(["open-end:1:1", "open-end:3:2"]);
+    expect(snapshot.issues.map((i) => i.id).filter((i) => i.startsWith("open-end:"))).toEqual([
+      "open-end:1:1",
+      "open-end:3:2",
+    ]);
+    expect(snapshot.issues.map((i) => i.id)).toContain("inline:9");
     const tree = groupTree(snapshot, "g1");
     expect([...tree.parts.keys()].sort((a, b) => a - b)).toEqual([-1, 1, 3, 9]);
     expect(before.segments[0]!.connectors).toHaveLength(2);
   }
 });
 
-it("an inline part is a person-ruled warning an ignore verdict withholds; a connected or misaligned one is not inline", () => {
+it("an inline part is a person-ruled warning an ignore verdict withholds; without C#'s record nothing is inline", () => {
+  // Which parts are inline (connected, across the run, outside the body) is C#'s: DuctHealthTests.
   const host = () => duct(1, [0, 0, 0], [10, 0, 0], "g1");
-  const findings = survey(snap([host()], [damper(9, [4, 0, 0])]), null).findings;
+  const findings = survey(inlineSnap([host()], [damper(9, [4, 0, 0])]), null).findings;
   expect(findings.find((f) => f.id === "proximity:9|1")).toMatchObject({
     kind: "inline-by-inference",
     clearer: "person",
     assumed: expect.stringContaining("neither end connected"),
   });
   expect(
-    inferJoints(snap([host()], [damper(9, [4, 0, 0])]), 1, ignoring("proximity:9|1")).inline,
+    inferJoints(inlineSnap([host()], [damper(9, [4, 0, 0])]), 1, ignoring("proximity:9|1")).inline,
   ).toEqual([]);
-  // One end connected: the rule needs both open.
-  const joined = damper(9, [4, 0, 0]);
-  const other = duct(2, [4, 5, 0], [4, 10, 0], "g9");
-  joined.connectors[0]!.connectedTo = { elementId: 2, connector: 1 };
-  other.connectors[0]!.connectedTo = { elementId: 9, connector: 1 };
-  expect(inferJoints(snap([host(), other], [joined])).inline).toEqual([]);
-  // Across the run, not along it.
-  const across = damper(9, [4, 0, 0], true);
-  across.connectors = across.connectors.map((c, i) => ({ ...c, facing: [0, i ? -1 : 1, 0] }));
-  expect(inferJoints(snap([host()], [across])).inline).toEqual([]);
-  // Outside the body: no host.
-  expect(inferJoints(snap([host()], [damper(9, [4, 1, 0])])).inline).toEqual([]);
+  expect(inferJoints(snap([host()], [damper(9, [4, 0, 0])])).inline).toEqual([]);
 });
 
 // ---- grades (pressure-drop ledger, 2026-10-19: inference may compute, never conclude) --------

@@ -116,16 +116,23 @@ export interface Blocker {
    * one. A consequence of the heal, not an independent gap; set only in the assumed pass.
    */
   causedBy?: string;
+  /** A not-priced fitting's census row (`Sheet.fittings`), by key: what a person prices it with. */
+  fitting?: string;
 }
+
+/** How one fitting, or one path through a proposed fitting, is priced (the wire type, W1-F). */
+export type FittingPricing = import("@pe/agent-contracts").FittingPricing;
 
 /** A calculation assumption, never a model write. Points use snapshot coordinates (feet). */
 export interface HealProposal {
-  kind: "join" | "tap" | "tee";
+  kind: "join" | "tap" | "tee" | "transition";
   from: { elementId: number; connector: number; point: number[] };
   to: { elementId: number; connector: number | null; point: number[] };
   pair: [string, string];
   gapIn: number;
   fittingChange: boolean;
+  /** The end cap a `transition` removes from the occupied target connector (C3, 2026-10-29). */
+  replaces?: { elementId: number };
   risk: string;
   /** Extension friction and any required fitting change, priced on the continued walk. */
   assumedLegs: Leg[];
@@ -146,11 +153,8 @@ export interface SideTotals {
   frictionRatePer100: number | null;
 }
 
-export interface SheetInput {
-  name: string;
-  value: number | string | null;
-  source: string;
-}
+/** A closure or reading the engine took on its own (a direction, an auto-join, an assumed heal): shown, never parsed. */
+export type SheetNote = import("@pe/agent-contracts").SheetNote;
 
 export interface Sheet {
   engineVersion: string;
@@ -179,7 +183,9 @@ export interface Sheet {
   /** Continued walk, including newly exposed ends and blockers; never substituted for known. */
   assumed: { paths: SheetPath[]; legs: Record<string, Leg>; blockers: Blocker[] };
   blockers: Blocker[];
-  inputs: SheetInput[];
+  notes: SheetNote[];
+  /** Every fitting priced (or not) on either pass, with its rule, table and their sources. */
+  fittings: FittingPricing[];
   walkedElementIds: number[];
 }
 
@@ -194,6 +200,7 @@ export interface Chain {
   path: SheetPath | null;
   legs: Record<string, Leg>;
   blockers: Blocker[];
-  inputs: SheetInput[];
+  notes: SheetNote[];
+  fittings: FittingPricing[];
   walkedElementIds: number[];
 }

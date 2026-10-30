@@ -20,7 +20,11 @@
  * edit `connect` verdict on its id joins it anyway.
  * An accessory or fitting lying inside one duct's body, aligned with it, neither end connected
  * (Project A damper 13568060 inside duct 11275610), is inline on that duct (kaitpw 2026-10-19):
+ * C# finds it (the snapshot's `inline` health record, DuctHealth.cs, ducts LEDGER 2026-10-29) and
  * `tolerate` splices it into the duct where it sits, so its loss prices, and it is a warning too.
+ * The joint, tap, collar, reversed-terminal and missed-join rules below still measure here: the
+ * network stage's detectors kept by kaitpw's ruling of 2026-10-29 (census: none lies on a fan sheet
+ * path), owed to C# in the ducts LEDGER line "Model health, network stage".
  * A connector faces the way the snapshot's `facing` (Revit's BasisZ) says, and a rectangular one
  * is rolled the way its `widthAxis` says; older snapshots without them fall back to geometry.
  * Inference may compute, never conclude (kaitpw 2026-10-19): every join carries a `grade` measured
@@ -145,7 +149,7 @@ export const CAP_THICKNESS_IN = 1;
 const AXIS_COS = 0.7;
 /** The most |cos| between an end's axis and a duct's run for the end, inside it, to point across it. */
 const ACROSS_COS = Math.sqrt(1 - AXIS_COS ** 2);
-/** The least |cos| between an inline part's port axes and its host duct's run (about 18 degrees). */
+/** The least |cos| between a reversed terminal's axis and its duct end's (about 18 degrees); C#'s DuctHealth.AlongCos is the inline rule's. */
 const ALONG_COS = 0.95;
 /**
  * Grade bounds (pressure-drop ledger, 2026-10-19). An open-to-open join is a `near-miss` within
@@ -593,35 +597,24 @@ function infer(
       });
     union(a, b);
   };
-  // (0) A two-port accessory or fitting inside one straight duct's body, its ports open and
-  // facing opposite ways along the run, is inline on it. ponytail: one inline part per duct.
+  // (0) C#'s inline parts (a two-port part inside one straight duct's body, ports open and along
+  // the run; DuctHealth.Inline), each one a person may rule on, kept while both ports are still open.
   const portOf = new Map(open.map((p) => [p.k, p]));
-  const hosted = new Set<number>();
-  const straight = sidesOf(
-    snapshot.segments.filter((s) => s.kind === "duct" && s.polyline.length === 2),
-  );
-  for (const n of snapshot.nodes) {
-    if ((n.kind !== "accessory" && n.kind !== "fitting") || n.connectors.length !== 2) continue;
-    const [p, q] = n.connectors.map((c) => portOf.get(key(n.id, c.index)));
-    if (!p?.axis || !q?.axis || dot(p.axis, q.axis) > -ALONG_COS) continue;
-    const host = straight.find(
-      (f) =>
-        !hosted.has(f.owner) &&
-        Math.abs(dot(p.axis!, f.u)) >= ALONG_COS &&
-        !differ(p.cls ?? q.cls, f.cls) &&
-        [p, q].every((x) => (depth(f, x.point)?.d ?? 1) <= 0),
-    );
-    if (!host) continue;
-    const id = `proximity:${n.id}|${host.owner}`;
+  for (const issue of snapshot.issues) {
+    const host = issue.kind === "inline" ? issue.inline : null;
+    const n = host ? byId.get(issue.elementId) : undefined;
+    if (!host || !n || "polyline" in n || !byId.has(host.segmentId)) continue;
+    const [p, q] = host.ports.map((index) => portOf.get(key(n.id, index)));
+    if (!p || !q) continue;
+    const id = `proximity:${n.id}|${host.segmentId}`;
     if (verdictOf(work, id) === "ignore") continue;
-    hosted.add(host.owner);
     used.add(p.k).add(q.k);
-    const at = (dot(sub(p.point, host.a), host.u) + dot(sub(q.point, host.a), host.u)) / 2;
-    const ports: [string, string] = dot(p.axis, host.u) < 0 ? [p.k, q.k] : [q.k, p.k];
+    const at = host.atFt;
+    const ports: [string, string] = [p.k, q.k];
     inline.push({
       id,
       node: n.id,
-      segment: host.owner,
+      segment: host.segmentId,
       kind: "inline-by-inference",
       ports,
       grade: "stretched",
@@ -629,11 +622,11 @@ function infer(
     findings.push({
       id,
       kind: "inline-by-inference",
-      elementIds: [n.id, host.owner],
-      note: `${subjectName(n.kind)}${n.family ? ` (${n.family})` : ""} lies inside duct ${host.owner}, ${at.toFixed(2)} ft along it and aligned with it, with neither end connected; counted inline on it`,
+      elementIds: [n.id, host.segmentId],
+      note: `${subjectName(n.kind)}${n.family ? ` (${n.family})` : ""} lies inside duct ${host.segmentId}, ${at.toFixed(2)} ft along it and aligned with it, with neither end connected; counted inline on it`,
       grade: "stretched",
     });
-    closes(id, n.id, host.owner);
+    closes(id, n.id, host.segmentId);
   }
   const pairs: { a: (typeof open)[number]; b: (typeof open)[number]; d: number }[] = [];
   // Each end's box is `tol` either way in a grid of `tol` cells: its own cell's list holds every

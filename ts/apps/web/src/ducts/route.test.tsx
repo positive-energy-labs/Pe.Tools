@@ -5,9 +5,13 @@ import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { ductsRouteState, workWriteSchema } from "@pe/agent-contracts";
 import { Route as root } from "../routes/__root";
 import { ductsGraph } from "./graph";
-import { ductsRoute } from "./route";
+import { ductsRoute, ductsAdapters } from "./route";
 import { DuctsHostFixture } from "./host.fixture";
 import { writeRouteWork } from "#/route/host";
+import { createRouteOwner, makeAtomRegistry } from "#/route/route-owner";
+import { kernelCellVerbs } from "#/shell/verbs-cells";
+import { invoke, type VerbContext } from "#/shell/verbs";
+import { ductsPageSchema } from "./graph";
 
 let host: DuctsHostFixture;
 const releases: (() => void)[] = [];
@@ -115,7 +119,7 @@ test("the ordered network and sheet stages have no picker and render only their 
   ).toBe(false);
 });
 
-test("a fresh sheet URL opens a fan and edits its defaults through one kernel Work journal step", async () => {
+test("a fresh sheet URL opens a fan and edits its criteria through one kernel Work journal step", async () => {
   const before = structuredClone(host.doc);
   const { view } = await mounted("/ducts?target=s&stage=sheet&picture=schematic&layers=", false);
   expect(within(view.getByLabelText("Situation")).getByText("Pricing fans")).toBeTruthy();
@@ -138,16 +142,19 @@ test("a fresh sheet URL opens a fan and edits its defaults through one kernel Wo
   expect(host.requests.some((request) => request.key === "sheet" && !!request.request.detail)).toBe(
     true,
   );
-  fireEvent.click(view.getByRole("button", { name: /firm \(file, not yet\)/ }));
-  const input = await view.findByLabelText("Terminal drop in-wg");
+  const input = (await view.findByLabelText("Default terminal drop in-wg")).querySelector("input")!;
+  await act(async () => input.focus());
   fireEvent.change(input, { target: { value: "0.11" } });
   fireEvent.blur(input);
-  await waitFor(() => expect(host.doc.sheetDefaults.edit?.value.terminalDropInWg).toBe(0.11));
+  await waitFor(() => expect(host.doc.criteria.edit?.value.terminalDropInWg).toBe(0.11));
   expect(host.writes).toHaveLength(1);
   expect(host.writes[0]).toMatchObject({ kind: "apply", by: "human", base: 1, revision: 2 });
-  fireEvent.keyDown(view.getByLabelText("Ducts route"), { key: "z", ctrlKey: true });
+  fireEvent.click(await liveButton(within(view.getByLabelText("Sheet inputs")), "Undo input edit"));
   await waitFor(() => expect(host.writes).toHaveLength(2));
   expect(host.doc).toEqual(before);
+  fireEvent.click(await liveButton(within(view.getByLabelText("Sheet inputs")), "Redo input edit"));
+  await waitFor(() => expect(host.doc.criteria.edit?.value.terminalDropInWg).toBe(0.11));
+  expect(host.writes).toHaveLength(3);
 });
 
 test("Price prepares one host preview, shows its kernel ticket, commits the same request and consumes a receipt", async () => {
@@ -228,4 +235,84 @@ test("taking an assumptions row is one acknowledged journal step and Mod+Z resto
   await waitFor(() => expect(host.writes).toHaveLength(2));
   expect(host.writes[1]).toMatchObject({ kind: "restore", base: 2, revision: 3, press: null });
   expect(host.doc).toEqual(before);
+});
+
+test("kernel gap: sheet input history retains row labels, restore metadata and before/after totals", async () => {
+  const { view } = await mounted("/ducts?target=s&stage=sheet&picture=schematic&layers=", false);
+  expect(within(view.getByLabelText("Situation")).getByText("Pricing fans")).toBeTruthy();
+  await waitFor(() => {
+    const row = view.container.querySelector<HTMLElement>("[data-key='14577391:2']");
+    expect(row).not.toBeNull();
+    expect(row!.getAttribute("aria-disabled")).not.toBe("true");
+  });
+  fireEvent.click(view.container.querySelector<HTMLElement>("[data-key='14577391:2']")!);
+  await waitFor(() =>
+    expect(
+      host.requests.some((request) => request.key === "sheet"),
+      JSON.stringify({
+        requests: host.requests,
+        alerts: view.queryAllByRole("alert").map((node) => node.textContent),
+      }),
+    ).toBe(true),
+  );
+  await view.findByRole("region", { name: "Required ESP" });
+  expect(host.requests.some((request) => request.key === "sheet" && !!request.request.detail)).toBe(
+    true,
+  );
+  const input = (await view.findByLabelText("Default terminal drop in-wg")).querySelector("input")!;
+  await act(async () => input.focus());
+  fireEvent.change(input, { target: { value: "0.11" } });
+  fireEvent.blur(input);
+  await waitFor(() => expect(host.doc.criteria.edit?.value.terminalDropInWg).toBe(0.11));
+  // The sheet's history previously named the edit. Kernel steps expose only press and patches;
+  // the route must not recreate a second journal to recover its label, cleared row and totals.
+  expect(view.getByRole("button", { name: "Undo criteria terminalDropInWg" })).toBeTruthy();
+});
+
+test("criteria and unit kinds take and revert through the graph's kernel cell verbs", async () => {
+  const kindKey = JSON.stringify(["Broan", "B210E75RT"]);
+  host.doc = ductsRouteState.schema.parse({
+    criteria: { suggestion: { value: { splitPolicy: "even" } } },
+    kinds: { [kindKey]: { suggestion: { value: { kind: "erv" } } } },
+  });
+  const registry = makeAtomRegistry();
+  const owner = createRouteOwner("ducts", registry);
+  const { verbs, subjects } = kernelCellVerbs(ductsGraph);
+  const context: VerbContext<"human"> = {
+    caller: "human",
+    owner,
+    subjects,
+    snapshot: () => ({
+      target: { kind: "document", ref: { session: "s", openId: "d" } },
+      work: { handle: { key: host.key, revision: host.revision }, doc: host.doc },
+      basis: null,
+    }),
+    write: (key, write) => writeRouteWork(key, { ...write, kind: "apply" }),
+  };
+  try {
+    for (const row of [
+      { segment: null, key: "criteria" },
+      { segment: "kinds", key: kindKey },
+    ]) {
+      const subject = ductsAdapters.cell!(row, {
+        target: context.snapshot().target,
+        work: { handle: { key: host.key, revision: host.revision }, doc: host.doc },
+        page: ductsPageSchema.parse({}),
+        readings: {},
+      })!;
+      expect(subject).not.toBeNull();
+      expect(
+        (await invoke(context, verbs[`${subject.type}.take`]!, subject, undefined)).state,
+      ).toBe("done");
+      expect(
+        (await invoke(context, verbs[`${subject.type}.reopen`]!, subject, undefined)).state,
+      ).toBe("done");
+    }
+    expect(host.doc.criteria.edit).toBeNull();
+    expect(host.doc.kinds[kindKey]?.edit).toBeNull();
+    expect(host.writes).toHaveLength(4);
+  } finally {
+    owner.dispose();
+    registry.dispose();
+  }
 });

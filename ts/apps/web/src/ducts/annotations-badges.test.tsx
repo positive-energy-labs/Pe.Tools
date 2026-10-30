@@ -216,7 +216,7 @@ it("one gap repair has one row, two named subjects, two pins and one evidence se
   ]);
 });
 
-it("pin pointer entry paints reach and right click exposes Select and Selection Box", async () => {
+it("pin pointer entry paints reach and right click exposes Select and Section Box", async () => {
   const pick = vi.fn();
   const props = {
     project: () => [100, 100],
@@ -254,6 +254,6 @@ it("pin pointer entry paints reach and right click exposes Select and Selection 
   expect(pick).toHaveBeenCalledOnce();
   fireEvent.contextMenu(pin);
   expect(await view.findByRole("option", { name: "Select" })).toBeTruthy();
-  expect(view.getByRole("option", { name: "Selection Box in Revit" })).toBeTruthy();
+  expect(view.getByRole("option", { name: "Section Box" })).toBeTruthy();
   expect(view.queryByRole("menu")).toBeNull();
 });

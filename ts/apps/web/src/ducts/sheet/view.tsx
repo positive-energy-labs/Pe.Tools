@@ -113,29 +113,46 @@ function Sides({ props }: { props: SheetViewProps }) {
   const totals = props.sheet?.overview.totals;
   const fan = props.sheet?.overview.fan;
   if (!fan || !totals) return <p className="t-small text-ink-2">No fan open.</p>;
+  // One aligned overview: the required ESP line, then a side per row with fixed numeric columns,
+  // so the numbers read down a column instead of wrapping as run-on sentences.
   return (
     <section aria-label="Required ESP" className="flex flex-col gap-1" data-sheet-esp="">
       <h3 className="t-head">
         {fan.mark} · port {fan.portIndex}
       </h3>
-      <div className="t-small face-mono">
-        required ESP{" "}
-        {totals.requiredEspInWg == null
-          ? "— (needs two complete sides)"
-          : `${pressure(totals.requiredEspInWg)} in-wg`}
-        {totals.requiredEspAssumedInWg != null &&
-          ` · with assumptions ${pressure(totals.requiredEspAssumedInWg)}`}
+      <div className="t-small grid grid-cols-[auto_minmax(0,1fr)] gap-x-3">
+        <span className="text-ink-2">required ESP</span>
+        <span className="face-mono truncate">
+          {totals.requiredEspInWg == null ? (
+            <span className="text-ink-2">— needs two complete sides</span>
+          ) : (
+            `${pressure(totals.requiredEspInWg)} in-wg`
+          )}
+          {totals.requiredEspAssumedInWg != null &&
+            ` · with assumptions ${pressure(totals.requiredEspAssumedInWg)}`}
+        </span>
         {/* R3: the unit's PE_M_Fan_ExternalStaticPressure value is the required ESP written, not a rating. */}
-        {" · required (written) "}
-        {pressure(fan.ratedEspInWg)}
+        <span className="text-ink-2">required (written)</span>
+        <span className="face-mono">{pressure(fan.ratedEspInWg)}</span>
       </div>
-      {(["supply", "return"] as const).map((side) => (
-        <div key={side} className="t-small face-mono" data-side={side}>
-          {side}: {totals[side].complete ? "complete" : "incomplete"} · worst{" "}
-          {pressure(totals[side].worstPath)} · allowance {pressure(totals[side].allowanceInWg)}{" "}
-          in-wg
-        </div>
-      ))}
+      <div className="t-small grid grid-cols-[4rem_5.5rem_repeat(2,minmax(0,6rem))] gap-x-3">
+        <span className="contents">
+          <span />
+          <span />
+          <span className="text-right text-ink-2">worst in-wg</span>
+          <span className="text-right text-ink-2">allowance</span>
+        </span>
+        {(["supply", "return"] as const).map((side) => (
+          <span key={side} className="contents" data-side={side}>
+            <span>{side}</span>
+            <span className={totals[side].complete ? "" : "text-ink-2"}>
+              {totals[side].complete ? "complete" : "incomplete"}
+            </span>
+            <span className="face-mono text-right">{pressure(totals[side].worstPath)}</span>
+            <span className="face-mono text-right">{pressure(totals[side].allowanceInWg)}</span>
+          </span>
+        ))}
+      </div>
     </section>
   );
 }
@@ -236,7 +253,12 @@ export function Ledger({ props }: { props: SheetViewProps }) {
       )}
       <Sides props={props} />
       {/* The worksheet is the body (ducts LEDGER 2026-10-29); the tiers below are the gaps to close. */}
-      {props.sheet && <Worksheet ws={props.sheet.worksheet} />}
+      {props.sheet && (
+        <Worksheet
+          ws={props.sheet.worksheet}
+          editing={{ inputs: props.inputs, changeInputs: props.changeInputs, busy: props.busy }}
+        />
+      )}
       {props.sheet &&
         TIERS.map((tier) => (
           <TierGroup
