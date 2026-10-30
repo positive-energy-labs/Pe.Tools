@@ -17,7 +17,7 @@ import {
   type RouteStatePatch,
 } from "@pe/agent-contracts";
 
-import { reviewTransitions, type CellWire } from "#/components/work/band";
+import type { CellWire } from "#/components/work/band";
 import { cellFromDraft, type StateCellProps } from "@pe/kit/lang/cell";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { CellListSelect } from "@pe/kit/lang/list-popup";
@@ -112,12 +112,14 @@ export function RoomsTable({
   rows,
   cells,
   wire,
+  transitions,
   onSelect,
   empty,
 }: {
   rows: readonly RoomRow[];
   cells: Cells;
   wire: CellWire;
+  transitions?: (key: string) => StateCellProps["transitions"];
   onSelect: (guids: ReadonlySet<string>) => void;
   empty: { says: string; exit: string };
 }) {
@@ -162,7 +164,7 @@ export function RoomsTable({
         ...(numeric ? { numeric: { min: 0, digits: 2 } } : {}),
         onCommit: (text: string) =>
           numeric ? stage(row.region, field, Number(text)) : stage(row.region, field, text),
-        transitions: reviewTransitions(wire, key, cell),
+        transitions: transitions?.(key),
       };
     };
     return [
@@ -296,7 +298,7 @@ export function RoomsTable({
         },
       },
     ];
-  }, [cells, wire, rows]);
+  }, [cells, wire, rows, transitions]);
 
   // The table is a collection like any list (SURFACE-PHILOSOPHY N3): one search, "/" focuses it.
   const [state, setState] = useState<TableState>({ sorts: [], query: "" });

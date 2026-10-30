@@ -9,7 +9,7 @@ import { Input } from "@pe/kit/lang/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@pe/kit/lang/dialog";
 import { fmtNum } from "@pe/kit/table/model";
 import { type CandidateRegion } from "#/takeoff/model";
-import { type TakeoffsController } from "#/takeoff/controller";
+import { type TakeoffsController, type EmbeddedTakeoffsController } from "#/takeoff/controller";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export interface AdoptRow {
@@ -146,7 +146,7 @@ export function AdoptRegions({ store }: { store: TakeoffsController }) {
   );
 }
 
-export function SyncPanel({ store }: { store: TakeoffsController }) {
+export function SyncPanel({ store }: { store: EmbeddedTakeoffsController }) {
   const { zones: zoneGuids, r10: r10Path } = store.selection;
   const { inScope, blockedZones, inserts, untagged, tags, linkedUpdates } = store.syncPlan;
   const busy = store.busy?.key ?? null;

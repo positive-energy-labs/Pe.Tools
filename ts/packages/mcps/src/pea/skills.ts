@@ -4,6 +4,7 @@ import { productHomePath } from "@pe/host-contracts/product-paths";
 import { renderDuctsSkill } from "./ducts-skill.ts";
 import { renderSchedulesSkill } from "./schedules-skill.ts";
 import { renderFamiliesSkill } from "./families-skill.ts";
+import { renderFamilySkill } from "./family-skill.ts";
 
 export interface BundledPeaSkill {
   name: string;
@@ -191,7 +192,7 @@ A family is a spatial claim. Counts and flexed formulas prove that numbers hold,
 
 ## Method
 
-1. Attach the sheet: pe_do key=route:family.attach_spec with the PDF. Tables give sizes; drawings give sides, offsets, and which openings exist. Read the page renders in the Pod spec folder as images, not only the text.
+1. Attach the sheet: pe_do key=family.attach-spec with the PDF. Tables give sizes; drawings give sides, offsets, and which openings exist. Read the page renders in the Pod spec folder as images, not only the text.
 2. Inventory before building, then align on it: every size column is a type; every opening drawn is a connector (supply, return, outside air, each pipe, drain, power); every option is a Yes/No toggle; every clearance zone is a block. A ruling about one axis never removes items on another: "no three-phase" removes electrical variants, not cabinet sizes. Ask.
 3. Parameters: search the parameters service cache for PE_ shared parameters first (PE_G_Dim_*, PE_M_Fan_AirFlow, PE_M_PerfCool_CapacityRated, PE_M_Fan_Filter, PE_E_*). Create a family parameter only when no PE parameter fits, and name it in your report. Sheet dimensions are type parameters.
 4. Clearances: nest the company clearance family (!Mechanical Equipment_Clearance_Rectangular_UH in the PE library, or the one the user names) once per zone, always on. Ask before modeling clearance as plain solids.
@@ -322,6 +323,7 @@ description: Edit shared tool Work and apply it through the same semantic comman
   },
   { name: "edit-schedule-grid", content: renderSchedulesSkill() },
   { name: "edit-loaded-families", content: renderFamiliesSkill() },
+  { name: "edit-family", content: renderFamilySkill() },
   {
     name: "place-mep-ducts",
     content: String.raw`---

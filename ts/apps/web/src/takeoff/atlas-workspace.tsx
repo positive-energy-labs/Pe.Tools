@@ -3,7 +3,7 @@ import { PaneSplit } from "@pe/kit/lang/pane";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Surface } from "@pe/kit/lang/surface";
 import { AtlasNavigation } from "#/takeoff/atlas-navigation";
-import { AtlasTable } from "#/takeoff/atlas-table";
+import { AtlasTable, AtlasRoomPanel } from "#/takeoff/atlas-table";
 import { AtlasVisual } from "#/takeoff/atlas-visual";
 import { useAtlasWorkspace } from "#/takeoff/atlas-context";
 
@@ -88,7 +88,21 @@ export function AtlasWorkspace() {
                   end={sidePanel}
                 />
               }
-              end={<AtlasTable />}
+              end={
+                <PaneSplit
+                  axis="horizontal"
+                  resize={{
+                    target: "end",
+                    defaultSize: 288,
+                    minSize: 240,
+                    maxSize: 520,
+                    minOtherSize: 360,
+                    persist: "pe.takeoffs.room-panel-width",
+                  }}
+                  start={<AtlasTable />}
+                  end={<AtlasRoomPanel />}
+                />
+              }
             />
           }
         />

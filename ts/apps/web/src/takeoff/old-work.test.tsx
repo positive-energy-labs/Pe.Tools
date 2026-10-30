@@ -14,6 +14,12 @@ import {
 } from "@tanstack/react-router";
 import { readingKey, type ReadingRequest } from "@pe/agent-contracts";
 
+// The retained embedded mount does not need app chrome or other routes mid-cutover.
+vi.mock("../routes/__root", async () => {
+  const { createRootRoute } = await import("@tanstack/react-router");
+  return { Route: createRootRoute() };
+});
+
 vi.mock("#/host/client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("#/host/client")>()),
   callHostRpc: (key: string) => Promise.reject(new Error(`no host in test: ${key}`)),

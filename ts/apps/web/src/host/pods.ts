@@ -2,7 +2,7 @@
  * The typed host-local pod reads. The host owns member I/O so the web works offline; `route/pods.ts`
  * turns these into the route layer's pod port and the `pods` Reading.
  */
-import type { MemberRef } from "#/route/entity-route";
+import type { PodMember as MemberRef } from "@pe/agent-contracts";
 
 import { callHostRpc } from "./client";
 

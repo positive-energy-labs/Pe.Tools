@@ -1,5 +1,4 @@
 export * from "./manifest";
-export * from "./entity-route";
 export * from "./url";
 export * from "./refusal";
 export * from "./use-route";

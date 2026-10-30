@@ -452,8 +452,13 @@ export async function readFamilyCapture(
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ key, input, scope, target }),
   });
-  if (!response.ok) throw Error(await response.text());
-  return familyCaptureSchema.parse(await response.json());
+  const value = await response.json();
+  if (!response.ok)
+    throw Object.assign(
+      Error((value as { error?: string }).error ?? `Family read failed (${response.status})`),
+      { status: response.status },
+    );
+  return familyCaptureSchema.parse(value);
 }
 
 export async function readActionStatuses(

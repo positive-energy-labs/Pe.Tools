@@ -1,6 +1,6 @@
 /**
  * The product map: every link from rooms to basis of design, what each needs, where its data is
- * stored and how ready it is. One source for the `/map` route, each route's help page, and later
+ * stored and how ready it is. One source for each route's help page, and later
  * Pea. Status is set by hand today; a route's own findings can set it later without changing this
  * shape. Ledger: `docs/features/ducts/LEDGER.md` (2026-10-16).
  */

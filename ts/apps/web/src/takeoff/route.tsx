@@ -1,7 +1,6 @@
 /**
- * The Takeoffs route mount. Target resolution, the owner, the readings and the actions are all
- * `useRoute(manifest)`; this file chooses live versus saved. The standalone owner syncs Page to
- * the URL; an embedded owner holds the same Page without that binding.
+ * Standalone /takeoffs uses the graph export below. These component exports still serve hosted
+ * tools and chat; TODO: remove their old owner when the kernel admits target/thread mounts.
  */
 import { useEffect, useState } from "react";
 import type { TakeoffCapture } from "@pe/agent-contracts";
@@ -42,3 +41,5 @@ export function TakeoffsControllerOwner({
   });
   return <TakeoffsPage store={store} />;
 }
+
+export { takeoffsRoute, takeoffAdapters } from "./graph-route";

@@ -9,10 +9,12 @@ import { ZoneFacts } from "#/takeoff/zone-facts";
 import { PictureReadout } from "@pe/kit/lang/readout";
 import { useAtlasWorkspace } from "#/takeoff/atlas-context";
 import { ScopeKeys } from "@pe/kit/keys";
-import { levelsOf } from "#/takeoff/plan-image";
+import { levelsOf } from "#/takeoff/plan";
+import { useTakeoffKernel } from "./kernel-context";
 import { useRouteSearch } from "#/route/activity";
 
 export function AtlasVisual() {
+  const kernel = useTakeoffKernel();
   const search = useRouteSearch();
   const {
     store,
@@ -96,20 +98,23 @@ export function AtlasVisual() {
                 })}
               />
 
-              <span className="hairline-l ml-1 flex items-center gap-1 pl-1">
-                <Button
-                  kind="framed"
-                  label={planOpen ? "▴ hide plan" : "▾ show plan"}
-                  onClick={() => setPlanOpen(!planOpen)}
-                  reason={
-                    planOpen
-                      ? "collapse the plan — give the table the full height"
-                      : "show the plan"
-                  }
-                >
-                  <span className="face-mono">{planOpen ? "▴ hide plan" : "▾ show plan"}</span>
-                </Button>
-              </span>
+              {/* Kernel panes fold at their own rail. Embedded Atlas retains its toolbar control. */}
+              {!kernel && (
+                <span className="hairline-l ml-1 flex items-center gap-1 pl-1">
+                  <Button
+                    kind="framed"
+                    label={planOpen ? "▴ hide plan" : "▾ show plan"}
+                    onClick={() => setPlanOpen(!planOpen)}
+                    reason={
+                      planOpen
+                        ? "collapse the plan — give the table the full height"
+                        : "show the plan"
+                    }
+                  >
+                    <span className="face-mono">{planOpen ? "▴ hide plan" : "▾ show plan"}</span>
+                  </Button>
+                </span>
+              )}
             </div>
           </>
         }

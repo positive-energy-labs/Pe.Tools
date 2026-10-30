@@ -10,8 +10,13 @@ import { Button } from "@pe/kit/lang/button";
 import { routeTree } from "./routeTree.gen";
 import { ductsRoute } from "./ducts/route";
 import { ductLossRoute } from "./duct-loss/route";
+import { grillesRoute } from "./grilles/route";
 import { schedulesRoute } from "./schedules/route";
 import { familiesRoute } from "./families/route";
+import { familyRoute } from "./family/route";
+import { roomsRoute } from "./rooms/route";
+import { spaceRoute } from "./space/route";
+import { takeoffsRoute } from "./takeoff/route";
 import { Route as rootRoute } from "./routes/__root";
 import { publicRoutes } from "./route/builtin-routes";
 import { ShellProbe, ShellProbeRoute, shellProbe } from "./route/shell-probe";
@@ -23,9 +28,14 @@ const pathOf = (route: AnyRoute) => (route.options as { path?: string }).path;
 const codeRoutes: AnyRoute[] = [
   ShellProbeRoute,
   ductLossRoute,
+  grillesRoute,
   ductsRoute,
   schedulesRoute,
   familiesRoute,
+  familyRoute,
+  roomsRoute,
+  spaceRoute,
+  takeoffsRoute,
 ];
 const codePaths = new Set(codeRoutes.map(pathOf));
 const fileRoutes = (routeTree.children as unknown as AnyRoute[]).filter(
@@ -42,9 +52,14 @@ const appRouteTree = rootRoute.addChildren([
 ] as unknown as FileChildren & {
   ShellProbeRoute: typeof ShellProbeRoute;
   ductLossRoute: typeof ductLossRoute;
+  grillesRoute: typeof grillesRoute;
   ductsRoute: typeof ductsRoute;
   schedulesRoute: typeof schedulesRoute;
   familiesRoute: typeof familiesRoute;
+  familyRoute: typeof familyRoute;
+  roomsRoute: typeof roomsRoute;
+  spaceRoute: typeof spaceRoute;
+  takeoffsRoute: typeof takeoffsRoute;
 });
 const unregisterProbe = publicRoutes.register({
   manifest: shellProbe.manifest,

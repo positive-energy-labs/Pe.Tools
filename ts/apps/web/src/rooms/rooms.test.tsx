@@ -3,7 +3,7 @@ import { roomEditKey, roomsRouteState, stagedRoomWrites } from "@pe/agent-contra
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { expect, test, vi } from "vite-plus/test";
 import { DEMO_PLAN, DEMO_ROOMS, DEMO_VIEW } from "./demo";
-import { manifest } from "./manifest";
+import { roomsPageSchema } from "./graph";
 import { RoomsPlan } from "./plan";
 import { RoomsTable, roomRows } from "./table";
 
@@ -60,7 +60,7 @@ test("a locked stale region keeps both facts in the plan, legend and table, and 
     region.guid === "fixture-1" ? { ...region, stale: true } : region,
   );
   const rows = roomRows(regions, ["Fixture level"]);
-  const page = manifest.page!.parse({ view: DEMO_VIEW });
+  const page = roomsPageSchema.parse({ view: DEMO_VIEW });
   const onSelect = vi.fn();
   const view = render(
     <>

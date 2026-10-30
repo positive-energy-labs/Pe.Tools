@@ -5,7 +5,8 @@ import { useRouteSearch } from "#/route/activity";
  * runs filed against the open member. It performs no Revit action; a spec links to the product
  * route its `$schema` names.
  */
-import { routeAddress } from "@pe/agent-contracts";
+import { routeAddress, type PodMember as MemberRef } from "@pe/agent-contracts";
+import type { PodRow } from "#/route/pods";
 import { routeSearch } from "#/route/route-owner";
 import { useRouteDemo } from "#/route/activity";
 import { useEffect, useState, type ReactNode } from "react";
@@ -20,25 +21,17 @@ import { Button } from "@pe/kit/lang/button";
 import { RunsList } from "#/route/runs-list";
 import { PodPlugins } from "#/route/pod-plugins";
 import { Surface } from "@pe/kit/lang/surface";
-import {
-  RouteShell,
-  defineRoute,
-  isSpecOf,
-  useRoute,
-  useRouteThread,
-  urlPage,
-  type MemberRef,
-  type PodRow,
-} from "#/route";
+import { RouteShell, defineRoute, isSpecOf, useRoute, useRouteThread, urlPage } from "#/route";
 import { Situation } from "#/route/situation";
 import { LadderPicker, useDocumentLadder } from "#/route/situation-ladder";
 import { SituationCell } from "#/route/situation-marks";
 import { podHost, usePodList, type Run } from "#/route/pods";
 import { familiesGraph, FAMILIES_SPEC_SCHEMAS } from "#/families/graph";
-import { FAMILY_DEMO_PODS, familySpec } from "#/family/manifest";
+import { familyGraph, FAMILY_MODEL_SCHEMA } from "#/family/graph";
+import { FAMILY_DEMO_PODS } from "#/family/seeds";
 import { schedulesGraph, SCHEDULE_SPEC_SCHEMA } from "#/schedules/graph";
 import { familyFixtures } from "#/family/authored-families";
-import { familyDemoFields } from "#/family/manifest";
+import { familyDemoFields } from "#/family/seeds";
 import { DEMO_FAMILIES_SPEC } from "#/families/seeds";
 import {
   DEMO_FAMILIES_SPEC_PATH,
@@ -62,11 +55,11 @@ export const manifest = defineRoute({
   seeds: PODS_SEEDS,
 });
 
-/** Every entity route definition; `/family` joins when it is on the kernel. */
+/** Each product route declares the saved schemas it can open. */
 const PRODUCT_ROUTES = [
   { route: "schedules", def: { name: schedulesGraph.name, schema: SCHEDULE_SPEC_SCHEMA } },
   // A family model is both routes' spec; the single-family route is its first home.
-  { route: "family", def: familySpec },
+  { route: "family", def: { name: familyGraph.name, schema: FAMILY_MODEL_SCHEMA } },
   { route: "families", def: { name: familiesGraph.name, schema: FAMILIES_SPEC_SCHEMAS } },
 ] as const;
 

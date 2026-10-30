@@ -367,9 +367,7 @@ const RULES: Rule[] = [
   { id: "crumb-handbuilt", doctrine: "I4", pattern: /data-e-crumb|^(?=[\s\S]*<ChevronRight\b)(?=[\s\S]*\b(?:crumb|breadcrumb)\b)/g,
     roots: [W + "**/*.{ts,tsx}"], allow: [], cannotSee: "Other glyphs and computed breadcrumbs." },
   { id: "picture-crumb-derived", doctrine: "I4", pattern: /<PaneCrumb\b[^>]*\bsegments\s*=/gs,
-    roots: [W + "**/*.tsx"], allow: allow({
-      "param-tables/variants/variant-e/view.tsx": "This table names a fixture substrate and parameter scope; it has no picture stage or readout from which to derive them.",
-    }), cannotSee: "Spread props and aliases. Picture panes derive their scope, subject and selection in kit." },
+    roots: [W + "**/*.tsx"], allow: [], cannotSee: "Spread props and aliases. Picture panes derive their scope, subject and selection in kit." },
   { id: "picture-subject-box", doctrine: "I5", pattern: /<SubjectBox\b/g,
     roots: [W + "**/*.tsx"], allow: [], cannotSee: "Aliases and spread-built providers; the picture pane supplies geometry through its reach channel." },
   { id: "scene-keys", doctrine: "N2",

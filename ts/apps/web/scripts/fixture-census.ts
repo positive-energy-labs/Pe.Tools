@@ -14,12 +14,10 @@ const canonicalFixtures: Record<
   "/pea": { canonicalReviewUrl: "/pea?demo=diagram", fixtureKind: "demo-fixture" },
   "/data-tables": { canonicalReviewUrl: "/data-tables", fixtureKind: "live-route" },
   "/ducts": { canonicalReviewUrl: "/ducts", fixtureKind: "live-route" },
-  "/doc-lab": { canonicalReviewUrl: "/doc-lab", fixtureKind: "inherent-static" },
   "/duct-loss": { canonicalReviewUrl: "/duct-loss", fixtureKind: "inherent-static" },
   "/families": { canonicalReviewUrl: "/families?demo=apply", fixtureKind: "demo-fixture" },
   "/family": { canonicalReviewUrl: "/family?demo=apply", fixtureKind: "demo-fixture" },
   "/grilles": { canonicalReviewUrl: "/grilles", fixtureKind: "inherent-static" },
-  "/map": { canonicalReviewUrl: "/map", fixtureKind: "inherent-static" },
   "/open": { canonicalReviewUrl: "/open?demo=refresh", fixtureKind: "demo-fixture" },
   "/ops": { canonicalReviewUrl: "/ops", fixtureKind: "live-route" },
   "/parameter-links": { canonicalReviewUrl: "/parameter-links", fixtureKind: "live-route" },
@@ -38,7 +36,6 @@ const canonicalFixtures: Record<
   },
 } as const;
 
-const explicitPrototypeRoutes = new Set(["/lab", "/param-tables"]);
 const compare = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0);
 
 export function censusFromRouteTree(routeTree: string) {
@@ -56,9 +53,7 @@ export function censusFromRouteTree(routeTree: string) {
   const discoveredRenderedRoutes = routes.filter(
     (route) => route !== "/api" && !route.startsWith("/api/"),
   );
-  const prototypeRoutes = discoveredRenderedRoutes.filter(
-    (route) => route.includes("-proto") || explicitPrototypeRoutes.has(route),
-  );
+  const prototypeRoutes = discoveredRenderedRoutes.filter((route) => route.includes("-proto"));
   const designSystemRoutes = discoveredRenderedRoutes.filter(
     (route) => route === "/design-system" || route.startsWith("/design-system/"),
   );

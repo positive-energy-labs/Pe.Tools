@@ -10,7 +10,6 @@ import { CHAT_SEEDS } from "#/chat/seeds";
 import { PODS_SEEDS } from "#/route/seeds";
 import { OPEN_SEEDS } from "#/open/seeds";
 import { manifest as takeoffManifest } from "#/takeoff/manifest";
-import { manifest as familyManifest } from "#/routes/family";
 import { Demo } from "./exhibit";
 
 interface SeedRow {
@@ -48,7 +47,6 @@ const SEED_CATALOGUE: SeedRow[] = [
   ...rows("pods", "/pods", PODS_SEEDS as AnySeeds),
   ...rows("instances", "/open", OPEN_SEEDS as AnySeeds),
   ...rows("takeoffs", "/takeoffs", takeoffManifest.seeds as AnySeeds),
-  ...rows("family", "/family", familyManifest.seeds as AnySeeds),
 ];
 
 export function ActionDemoCatalogue() {

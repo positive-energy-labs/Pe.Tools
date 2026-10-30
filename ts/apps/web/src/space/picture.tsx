@@ -28,9 +28,9 @@ import type { Layer3D, Pick, SceneMeshes } from "#/scene/types";
 import { CutOverlay, type Framed } from "./cuts";
 import { LAYER_SAYS, SPACE_LAYERS, rowUnder, type SpaceLayer } from "./layers";
 import { pickName } from "./facts";
-import type { SpacePage } from "./manifest";
+import type { SpacePage } from "./graph";
+import type { SpaceAnswers } from "./reads";
 import { cutPolygons, packPolygons, retained, type Cuts, type Polygons } from "./state";
-import { useRouteLease } from "#/route/view-bridge";
 import { spaceElementKey, toggleLayer } from "@pe/agent-contracts";
 
 type SetPage = (next: Partial<SpacePage>, move?: PageMove<SpacePage>) => void;
@@ -56,7 +56,8 @@ function useSize(host: HTMLElement | null) {
 }
 
 export function SpacePicture({
-  lease,
+  answers,
+  onFrame,
   meshes,
   metadata,
   page,
@@ -68,7 +69,8 @@ export function SpacePicture({
   legend,
   alias,
 }: {
-  lease?: { thread?: string; ready: boolean; context: Record<string, unknown> };
+  answers: SpaceAnswers;
+  onFrame?: (facts: Record<string, unknown> | null) => void;
   meshes: SceneMeshes | null;
   metadata: Psc1Metadata | null;
   page: SpacePage;
@@ -173,39 +175,15 @@ export function SpacePicture({
     );
   }, [meshes, on, page.isolated]);
 
-  useRouteLease("space", [page, setPage], {
-    thread: lease?.thread,
-    visible: !!lease?.ready && !!meshes && !!metadata && !!size,
-    context: { ...lease?.context, bounds, size },
-    facts: {
-      pose: axis ? (plane?.viewport ?? null) : pose,
+  useEffect(() => {
+    onFrame?.({
       size,
       bounds,
-      modes: ["3d", "top", "north", "east"],
-      layers: SPACE_LAYERS,
-      fresh: metadata?.stamp.fresh ?? false,
-      totalElements: metadata?.elements.length ?? 0,
-      omittedElements: metadata?.omittedElements ?? 0,
-      unavailableElements: metadata?.unavailableElements.length ?? 0,
-      truncated: (metadata?.elements.length ?? 0) > 200,
-      sources: (metadata?.stamp.sources ?? []).slice(0, 100),
-      totalSources: metadata?.stamp.sources.length ?? 0,
-      sourcesTruncated: (metadata?.stamp.sources.length ?? 0) > 100,
+      pose: axis ? (plane?.viewport ?? null) : pose,
       cutError: cut?.error ?? null,
-      visibilityMembersBeforeCuts:
-        meshes?.instances.filter(
-          (instance) => !hidden.has(instance.key) && (!isolated || isolated.has(instance.key)),
-        ).length ?? 0,
-      elements: (metadata?.elements ?? []).slice(0, 200).map((element) => ({
-        key: spaceElementKey(element.handle),
-        documentKey: element.handle.documentKey,
-        linkInstanceId: element.handle.linkInstanceId ?? null,
-        category: element.handle.category,
-        bounds: element.bounds,
-        focus: element.focus,
-      })),
-    },
-  });
+    });
+    return () => onFrame?.(null);
+  }, [onFrame, size, bounds, axis, plane, page.viewport, cut?.error]);
 
   // A click selects (a push, so Back undoes it) and never moves the camera; a click on nothing
   // keeps the selection, as on /ducts (Esc clears it).
@@ -216,7 +194,7 @@ export function SpacePicture({
         setPage({ selected: pick.instance.key, row: null }, push);
       return;
     }
-    const rows = page.rows?.response;
+    const rows = answers.rows?.response;
     if (rows && on.has("boxes") && framed && host) {
       const r = host.getBoundingClientRect();
       const ray = framed.ray(event.clientX - r.left, event.clientY - r.top);

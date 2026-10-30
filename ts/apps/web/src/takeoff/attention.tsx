@@ -26,7 +26,9 @@ export function TakeoffAttention({
   const selected = useMemo(
     () =>
       Atom.make((get): ReadonlySet<SubjectKey> => {
-        const { zone, room } = get(store.handle.pageState).page;
+        const { zone, room } = get<{ page: { zone: string; room: string } }>(
+          store.handle.pageState,
+        ).page;
         return new Set([zone, room].filter(Boolean).map(regionKey));
       }),
     [store.handle.pageState],

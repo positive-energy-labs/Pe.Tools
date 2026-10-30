@@ -25,6 +25,8 @@ import {
   readFamilyCapture,
 } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { readScheduleCapture } from "../../../../packages/mcps/src/shared/schedule-client";
+import { spaceReads, readSpaceCapture, type SpaceReadKey } from "../space/reads";
+import { takeoffReads, readTakeoff, type TakeoffReadKey } from "../takeoff/queries";
 import {
   familiesReads,
   readFamiliesCapture,
@@ -128,8 +130,8 @@ export type InvocationResult =
     };
 type HostReceipt = Awaited<ReturnType<typeof runSemanticAction>>;
 /** Host reads outside the command table: they run through the same invocation, never a route fetch. */
-export type QueryKey = ScheduleReadKey | FamilyReadKey | FamiliesReadKey;
-const reads = { ...scheduleReads, ...familyReads, ...familiesReads };
+export type QueryKey = ScheduleReadKey | FamilyReadKey | FamiliesReadKey | SpaceReadKey | TakeoffReadKey;
+const reads = { ...scheduleReads, ...familyReads, ...familiesReads, ...spaceReads, ...takeoffReads };
 /** Receipt-shaped so the timeline records a read like a command; `subject` is the Work it names. */
 export interface QueryReceipt {
   readonly id: string;
@@ -339,6 +341,10 @@ async function runQuery(key: QueryKey, input: Record<string, unknown>, snapshot:
   const target = snapshot.target.kind === "document" ? snapshot.target.ref : undefined;
   if (Object.hasOwn(scheduleReads, key))
     return readScheduleCapture(key as ScheduleReadKey, input, target);
+  if (Object.hasOwn(spaceReads, key))
+    return readSpaceCapture(key as SpaceReadKey, input, target);
+  if (Object.hasOwn(takeoffReads, key))
+    return readTakeoff(key as TakeoffReadKey, input, target);
   if (!snapshot.work) throw Error("Work has not been read yet");
   if (Object.hasOwn(familiesReads, key))
     return readFamiliesCapture(key as FamiliesReadKey, input, snapshot.work.handle.key, target);

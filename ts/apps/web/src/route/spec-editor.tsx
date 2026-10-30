@@ -39,7 +39,7 @@ import { schemaFormModel } from "#/settings/schema-form";
 import { actionResult } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
 import { useRouteDemo } from "./activity";
-import type { MemberRef } from "./entity-route";
+import type { PodMember as MemberRef } from "@pe/agent-contracts";
 import { Ladder } from "./ladder";
 import { ProposalReview } from "./proposal-review";
 import { podHost, type Composed } from "./pods";

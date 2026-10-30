@@ -8,7 +8,7 @@ import type { SettingsFieldState } from "@pe/agent-contracts";
 import { SCHEDULE_SEED_BYTES } from "./seed-schedule-content";
 import { SCHEDULE_SEED_CAPTURED_SCHEMA } from "./seed-schedule-schema";
 
-import type { PodRow } from "./entity-route";
+import type { PodRow } from "./pods";
 import type { Run } from "./pods";
 import type { DemoSpec } from "./spec-editor";
 

@@ -5,7 +5,7 @@
  */
 import { decodeScene, type Psc1Metadata } from "#/scene/psc1";
 
-import type { Answer } from "./manifest";
+import type { Answer } from "./reads";
 
 type Box = {
   id: number;
@@ -248,7 +248,8 @@ function psc1(): ArrayBuffer {
   return buffer;
 }
 
-export const FIXTURE_SCENE = decodeScene(psc1());
+export const fixtureSceneBytes = psc1;
+export const FIXTURE_SCENE = decodeScene(fixtureSceneBytes());
 
 const searched = { docs: 2, categories: 5, candidates: 7, examined: 7, skipped: 0 };
 const index = <T>(values: T[]) => {

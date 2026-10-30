@@ -3,18 +3,20 @@ import { routeAddress } from "@pe/agent-contracts";
 import { ductsGraph, ductsPageSchema } from "#/ducts/graph";
 import { graphUrlPage } from "#/shell/mount-page";
 import { familiesGraph, familiesPageSchema } from "#/families/graph";
-import { familyManifest } from "#/family/manifest";
+import { familyGraph, familyPageSchema } from "#/family/graph";
 import { schedulesGraph, schedulesPageSchema } from "#/schedules/graph";
 import { manifest as pods } from "#/routes/pods";
 import { urlPage } from "./url";
 
-const ROUTES = [
-  ["family", familyManifest()],
-  ["pods", pods],
-] as const;
+const ROUTES = [["pods", pods]] as const;
 
 /** A route's contract fields are its Page's: the URL carries its url keys, Pea's lease its agent keys. */
 describe("route addresses match their manifests", () => {
+  it("Family projects URL and agent keys from its graph", () => {
+    expect(graphUrlPage(familyGraph).keys).toEqual(routeAddress("family").keys);
+    const page = familyPageSchema.parse({});
+    for (const key of routeAddress("family").agent.keys) expect(key in page).toBe(true);
+  });
   it("Families projects URL and agent keys from its graph", () => {
     expect(graphUrlPage(familiesGraph).keys).toEqual(routeAddress("families").keys);
     const page = familiesPageSchema.parse({});

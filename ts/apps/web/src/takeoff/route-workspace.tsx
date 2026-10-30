@@ -5,7 +5,7 @@ import type { TakeoffCapture, takeoffCaptureSummarySchema } from "@pe/agent-cont
 import type { z } from "zod";
 import { Atlas } from "#/takeoff/atlas";
 import { previousOf, useReading } from "#/readings";
-import { type TakeoffsController } from "#/takeoff/controller";
+import { type EmbeddedTakeoffsController as TakeoffsController } from "#/takeoff/controller";
 import { RouteShell } from "#/route";
 import { Situation } from "#/route/situation";
 import { useDocumentLadder } from "#/route/situation-ladder";

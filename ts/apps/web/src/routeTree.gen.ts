@@ -14,21 +14,12 @@ import { Route as BindRouteImport } from "./routes/bind";
 import { Route as CapturesRouteImport } from "./routes/captures";
 import { Route as DataTablesRouteImport } from "./routes/data-tables";
 import { Route as DesignSystemRouteImport } from "./routes/design-system";
-import { Route as DocLabRouteImport } from "./routes/doc-lab";
-import { Route as FamilyRouteImport } from "./routes/family";
-import { Route as GrillesRouteImport } from "./routes/grilles";
-import { Route as LabRouteImport } from "./routes/lab";
-import { Route as MapRouteImport } from "./routes/map";
 import { Route as OpenRouteImport } from "./routes/open";
 import { Route as OpsRouteImport } from "./routes/ops";
-import { Route as ParamTablesRouteImport } from "./routes/param-tables";
 import { Route as ParameterLinksRouteImport } from "./routes/parameter-links";
 import { Route as PeaRouteImport } from "./routes/pea";
 import { Route as PodsRouteImport } from "./routes/pods";
-import { Route as RoomsRouteImport } from "./routes/rooms";
 import { Route as SettingsRouteImport } from "./routes/settings";
-import { Route as SpaceRouteImport } from "./routes/space";
-import { Route as TakeoffsRouteImport } from "./routes/takeoffs";
 import { Route as DesignSystemArmingRouteImport } from "./routes/design-system_.arming";
 import { Route as DesignSystemBandRouteImport } from "./routes/design-system_.band";
 import { Route as DesignSystemControlSurfaceRouteImport } from "./routes/design-system_.control-surface";
@@ -66,31 +57,6 @@ const DesignSystemRoute = DesignSystemRouteImport.update({
   path: "/design-system",
   getParentRoute: () => rootRouteImport,
 } as any);
-const DocLabRoute = DocLabRouteImport.update({
-  id: "/doc-lab",
-  path: "/doc-lab",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const FamilyRoute = FamilyRouteImport.update({
-  id: "/family",
-  path: "/family",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const GrillesRoute = GrillesRouteImport.update({
-  id: "/grilles",
-  path: "/grilles",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const LabRoute = LabRouteImport.update({
-  id: "/lab",
-  path: "/lab",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const MapRoute = MapRouteImport.update({
-  id: "/map",
-  path: "/map",
-  getParentRoute: () => rootRouteImport,
-} as any);
 const OpenRoute = OpenRouteImport.update({
   id: "/open",
   path: "/open",
@@ -99,11 +65,6 @@ const OpenRoute = OpenRouteImport.update({
 const OpsRoute = OpsRouteImport.update({
   id: "/ops",
   path: "/ops",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const ParamTablesRoute = ParamTablesRouteImport.update({
-  id: "/param-tables",
-  path: "/param-tables",
   getParentRoute: () => rootRouteImport,
 } as any);
 const ParameterLinksRoute = ParameterLinksRouteImport.update({
@@ -121,24 +82,9 @@ const PodsRoute = PodsRouteImport.update({
   path: "/pods",
   getParentRoute: () => rootRouteImport,
 } as any);
-const RoomsRoute = RoomsRouteImport.update({
-  id: "/rooms",
-  path: "/rooms",
-  getParentRoute: () => rootRouteImport,
-} as any);
 const SettingsRoute = SettingsRouteImport.update({
   id: "/settings",
   path: "/settings",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const SpaceRoute = SpaceRouteImport.update({
-  id: "/space",
-  path: "/space",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const TakeoffsRoute = TakeoffsRouteImport.update({
-  id: "/takeoffs",
-  path: "/takeoffs",
   getParentRoute: () => rootRouteImport,
 } as any);
 const DesignSystemArmingRoute = DesignSystemArmingRouteImport.update({
@@ -205,21 +151,12 @@ export interface FileRoutesByFullPath {
   "/captures": typeof CapturesRoute;
   "/data-tables": typeof DataTablesRoute;
   "/design-system": typeof DesignSystemRoute;
-  "/doc-lab": typeof DocLabRoute;
-  "/family": typeof FamilyRoute;
-  "/grilles": typeof GrillesRoute;
-  "/lab": typeof LabRoute;
-  "/map": typeof MapRoute;
   "/open": typeof OpenRoute;
   "/ops": typeof OpsRoute;
-  "/param-tables": typeof ParamTablesRoute;
   "/parameter-links": typeof ParameterLinksRoute;
   "/pea": typeof PeaRoute;
   "/pods": typeof PodsRoute;
-  "/rooms": typeof RoomsRoute;
   "/settings": typeof SettingsRoute;
-  "/space": typeof SpaceRoute;
-  "/takeoffs": typeof TakeoffsRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/band": typeof DesignSystemBandRoute;
   "/design-system/control-surface": typeof DesignSystemControlSurfaceRoute;
@@ -238,21 +175,12 @@ export interface FileRoutesByTo {
   "/captures": typeof CapturesRoute;
   "/data-tables": typeof DataTablesRoute;
   "/design-system": typeof DesignSystemRoute;
-  "/doc-lab": typeof DocLabRoute;
-  "/family": typeof FamilyRoute;
-  "/grilles": typeof GrillesRoute;
-  "/lab": typeof LabRoute;
-  "/map": typeof MapRoute;
   "/open": typeof OpenRoute;
   "/ops": typeof OpsRoute;
-  "/param-tables": typeof ParamTablesRoute;
   "/parameter-links": typeof ParameterLinksRoute;
   "/pea": typeof PeaRoute;
   "/pods": typeof PodsRoute;
-  "/rooms": typeof RoomsRoute;
   "/settings": typeof SettingsRoute;
-  "/space": typeof SpaceRoute;
-  "/takeoffs": typeof TakeoffsRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/band": typeof DesignSystemBandRoute;
   "/design-system/control-surface": typeof DesignSystemControlSurfaceRoute;
@@ -272,21 +200,12 @@ export interface FileRoutesById {
   "/captures": typeof CapturesRoute;
   "/data-tables": typeof DataTablesRoute;
   "/design-system": typeof DesignSystemRoute;
-  "/doc-lab": typeof DocLabRoute;
-  "/family": typeof FamilyRoute;
-  "/grilles": typeof GrillesRoute;
-  "/lab": typeof LabRoute;
-  "/map": typeof MapRoute;
   "/open": typeof OpenRoute;
   "/ops": typeof OpsRoute;
-  "/param-tables": typeof ParamTablesRoute;
   "/parameter-links": typeof ParameterLinksRoute;
   "/pea": typeof PeaRoute;
   "/pods": typeof PodsRoute;
-  "/rooms": typeof RoomsRoute;
   "/settings": typeof SettingsRoute;
-  "/space": typeof SpaceRoute;
-  "/takeoffs": typeof TakeoffsRoute;
   "/design-system_/arming": typeof DesignSystemArmingRoute;
   "/design-system_/band": typeof DesignSystemBandRoute;
   "/design-system_/control-surface": typeof DesignSystemControlSurfaceRoute;
@@ -307,21 +226,12 @@ export interface FileRouteTypes {
     | "/captures"
     | "/data-tables"
     | "/design-system"
-    | "/doc-lab"
-    | "/family"
-    | "/grilles"
-    | "/lab"
-    | "/map"
     | "/open"
     | "/ops"
-    | "/param-tables"
     | "/parameter-links"
     | "/pea"
     | "/pods"
-    | "/rooms"
     | "/settings"
-    | "/space"
-    | "/takeoffs"
     | "/design-system/arming"
     | "/design-system/band"
     | "/design-system/control-surface"
@@ -340,21 +250,12 @@ export interface FileRouteTypes {
     | "/captures"
     | "/data-tables"
     | "/design-system"
-    | "/doc-lab"
-    | "/family"
-    | "/grilles"
-    | "/lab"
-    | "/map"
     | "/open"
     | "/ops"
-    | "/param-tables"
     | "/parameter-links"
     | "/pea"
     | "/pods"
-    | "/rooms"
     | "/settings"
-    | "/space"
-    | "/takeoffs"
     | "/design-system/arming"
     | "/design-system/band"
     | "/design-system/control-surface"
@@ -373,21 +274,12 @@ export interface FileRouteTypes {
     | "/captures"
     | "/data-tables"
     | "/design-system"
-    | "/doc-lab"
-    | "/family"
-    | "/grilles"
-    | "/lab"
-    | "/map"
     | "/open"
     | "/ops"
-    | "/param-tables"
     | "/parameter-links"
     | "/pea"
     | "/pods"
-    | "/rooms"
     | "/settings"
-    | "/space"
-    | "/takeoffs"
     | "/design-system_/arming"
     | "/design-system_/band"
     | "/design-system_/control-surface"
@@ -407,21 +299,12 @@ export interface RootRouteChildren {
   CapturesRoute: typeof CapturesRoute;
   DataTablesRoute: typeof DataTablesRoute;
   DesignSystemRoute: typeof DesignSystemRoute;
-  DocLabRoute: typeof DocLabRoute;
-  FamilyRoute: typeof FamilyRoute;
-  GrillesRoute: typeof GrillesRoute;
-  LabRoute: typeof LabRoute;
-  MapRoute: typeof MapRoute;
   OpenRoute: typeof OpenRoute;
   OpsRoute: typeof OpsRoute;
-  ParamTablesRoute: typeof ParamTablesRoute;
   ParameterLinksRoute: typeof ParameterLinksRoute;
   PeaRoute: typeof PeaRoute;
   PodsRoute: typeof PodsRoute;
-  RoomsRoute: typeof RoomsRoute;
   SettingsRoute: typeof SettingsRoute;
-  SpaceRoute: typeof SpaceRoute;
-  TakeoffsRoute: typeof TakeoffsRoute;
   DesignSystemArmingRoute: typeof DesignSystemArmingRoute;
   DesignSystemBandRoute: typeof DesignSystemBandRoute;
   DesignSystemControlSurfaceRoute: typeof DesignSystemControlSurfaceRoute;
@@ -471,41 +354,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof DesignSystemRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/doc-lab": {
-      id: "/doc-lab";
-      path: "/doc-lab";
-      fullPath: "/doc-lab";
-      preLoaderRoute: typeof DocLabRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/family": {
-      id: "/family";
-      path: "/family";
-      fullPath: "/family";
-      preLoaderRoute: typeof FamilyRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/grilles": {
-      id: "/grilles";
-      path: "/grilles";
-      fullPath: "/grilles";
-      preLoaderRoute: typeof GrillesRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/lab": {
-      id: "/lab";
-      path: "/lab";
-      fullPath: "/lab";
-      preLoaderRoute: typeof LabRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/map": {
-      id: "/map";
-      path: "/map";
-      fullPath: "/map";
-      preLoaderRoute: typeof MapRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
     "/open": {
       id: "/open";
       path: "/open";
@@ -518,13 +366,6 @@ declare module "@tanstack/react-router" {
       path: "/ops";
       fullPath: "/ops";
       preLoaderRoute: typeof OpsRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/param-tables": {
-      id: "/param-tables";
-      path: "/param-tables";
-      fullPath: "/param-tables";
-      preLoaderRoute: typeof ParamTablesRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/parameter-links": {
@@ -548,32 +389,11 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof PodsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/rooms": {
-      id: "/rooms";
-      path: "/rooms";
-      fullPath: "/rooms";
-      preLoaderRoute: typeof RoomsRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
     "/settings": {
       id: "/settings";
       path: "/settings";
       fullPath: "/settings";
       preLoaderRoute: typeof SettingsRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/space": {
-      id: "/space";
-      path: "/space";
-      fullPath: "/space";
-      preLoaderRoute: typeof SpaceRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/takeoffs": {
-      id: "/takeoffs";
-      path: "/takeoffs";
-      fullPath: "/takeoffs";
-      preLoaderRoute: typeof TakeoffsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/design-system_/arming": {
@@ -673,21 +493,12 @@ const rootRouteChildren: RootRouteChildren = {
   CapturesRoute: CapturesRoute,
   DataTablesRoute: DataTablesRoute,
   DesignSystemRoute: DesignSystemRoute,
-  DocLabRoute: DocLabRoute,
-  FamilyRoute: FamilyRoute,
-  GrillesRoute: GrillesRoute,
-  LabRoute: LabRoute,
-  MapRoute: MapRoute,
   OpenRoute: OpenRoute,
   OpsRoute: OpsRoute,
-  ParamTablesRoute: ParamTablesRoute,
   ParameterLinksRoute: ParameterLinksRoute,
   PeaRoute: PeaRoute,
   PodsRoute: PodsRoute,
-  RoomsRoute: RoomsRoute,
   SettingsRoute: SettingsRoute,
-  SpaceRoute: SpaceRoute,
-  TakeoffsRoute: TakeoffsRoute,
   DesignSystemArmingRoute: DesignSystemArmingRoute,
   DesignSystemBandRoute: DesignSystemBandRoute,
   DesignSystemControlSurfaceRoute: DesignSystemControlSurfaceRoute,

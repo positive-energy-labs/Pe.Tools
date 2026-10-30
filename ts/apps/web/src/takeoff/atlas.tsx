@@ -35,10 +35,13 @@ export interface AtlasProps {
 const createAtlasActions = (store: TakeoffsController): AtlasActions => ({
   patch: (id, patch) => store.actions.patchRoom(id, patch),
   decide: (room, flag, verdict) => store.actions.decideRoom(room, flag, verdict),
-  partition: () => void store.handle.actions.partition.run(),
+  partition: () => store.actions.partition(),
 });
 
-function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) {
+export function useAtlasModel(
+  { store, headRail, sidePanel, readoutBand }: AtlasProps,
+  planImage: ReturnType<typeof useAtlasPlan>,
+) {
   const world = store.world;
   const views = store.views;
   const live = store.source === "live";
@@ -79,24 +82,6 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
   const firstBoundLane = world.lanes.find((lane) => lane.view === views[0]);
   const level = pageLevel || firstBoundLane?.label || world.lanes[0]?.label || "";
   const levelZones = world.zones.filter((z) => z.zone.lane.label === level);
-  const ownerCrops = useOwnerCrops(
-    store.handle.resolution,
-    levelZones.map((z) => z.zone.lane.view),
-  );
-  const pick = planView(
-    world.lanes,
-    views,
-    level,
-    levelZones.map((z) => ({
-      view: z.zone.lane.view,
-      name: z.name,
-      ownerCrop: ownerCrops.crops
-        ? (ownerCrops.crops.get(`${z.zone.lane.view}:${z.zone.elementId}`) ?? null)
-        : undefined,
-    })),
-  );
-  const image = usePlanImage(store.handle.resolution, pick.view);
-  const planImage = { ...image, error: image.error ?? ownerCrops.error, note: pick.note ?? null };
   const setLevel = useCallback((value: string) => store.actions.chooseLevel(value), [store]);
   const setCursor = useCallback((value: string | null) => store.actions.chooseRoom(value), [store]);
 
@@ -261,8 +246,36 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
 
 export type AtlasModel = ReturnType<typeof useAtlasModel>;
 
+function useAtlasPlan(store: TakeoffsController) {
+  const world = store.world;
+  const level =
+    store.level ||
+    world.lanes.find((lane) => lane.view === store.views[0])?.label ||
+    world.lanes[0]?.label ||
+    "";
+  const zones = world.zones.filter((zone) => zone.zone.lane.label === level);
+  const ownerCrops = useOwnerCrops(
+    store.handle.resolution,
+    zones.map((zone) => zone.zone.lane.view),
+  );
+  const pick = planView(
+    world.lanes,
+    store.views,
+    level,
+    zones.map((zone) => ({
+      view: zone.zone.lane.view,
+      name: zone.name,
+      ownerCrop: ownerCrops.crops
+        ? (ownerCrops.crops.get(`${zone.zone.lane.view}:${zone.zone.elementId}`) ?? null)
+        : undefined,
+    })),
+  );
+  const image = usePlanImage(store.handle.resolution, pick.view);
+  return { ...image, error: image.error ?? ownerCrops.error, note: pick.note ?? null };
+}
+
 export function Atlas(props: AtlasProps) {
-  const model = useAtlasModel(props);
+  const model = useAtlasModel(props, useAtlasPlan(props.store));
   return (
     <TakeoffAttention store={props.store}>
       <AtlasProvider value={model}>

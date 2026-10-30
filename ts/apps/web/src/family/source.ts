@@ -5,7 +5,7 @@ import {
   type SettingsFieldState,
 } from "@pe/agent-contracts";
 import { parameterText, type FamilyModel } from "#/family/family-model";
-import type { EvidenceSlice, FamilySnapshot } from "#/family/host";
+import type { EvidenceSlice, FamilySnapshot } from "#/family/types";
 import { type FamilyPageModel, buildFamilyPageModel } from "#/family/model";
 import { projectFamilyModel } from "#/family/project";
 import type { ProtoProposal } from "#/family/world";

@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
-import { useMemo } from "react";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -14,8 +13,8 @@ import { routeAddress } from "@pe/agent-contracts";
 import { routeFile, useAddressPage } from "./address-page";
 import { createRouteOwner, makeAtomRegistry, useOwned } from "./route-owner";
 import { createViewOwner } from "./view-owner";
-import { urlPage, useUrlPage } from "./url";
-import { familyManifest } from "#/family/manifest";
+import { useUrlPage } from "./url";
+import { familyGraph, familyPageSchema } from "#/family/graph";
 import { familiesGraph, familiesPageSchema } from "#/families/graph";
 import { ductsGraph, ductsPageSchema } from "#/ducts/graph";
 import { graphUrlPage } from "#/shell/mount-page";
@@ -73,12 +72,12 @@ test("a pick pushes an entry, a receipt replaces, and Back restores the pick", a
   await waitFor(() => expect(page()).toBe("revit.a|"));
 });
 
-test("a capture landing survives a refreshed Family manifest and still restores Back and Forward", async () => {
-  const manifest = familyManifest();
+test("a Family member selection uses the graph's stable URL policy and restores Back and Forward", async () => {
+  const manifest = familyGraph;
   const base = createRouteOwner("family", makeAtomRegistry());
   const owner = createViewOwner(
     base,
-    manifest.page,
+    familyPageSchema,
     { pod: "p" },
     {
       address: "family",
@@ -86,11 +85,9 @@ test("a capture landing survives a refreshed Family manifest and still restores 
     },
   );
   const path = "settings/family/captured.json";
+  const url = graphUrlPage(familyGraph);
   function Probe() {
     const snapshot = useOwned(base.registry, owner.state)!;
-    // Family refreshes its action facts when the captured member changes.
-    const dynamicManifest = useMemo(() => familyManifest(), [snapshot.page.path]);
-    const url = useMemo(() => urlPage(dynamicManifest), [dynamicManifest]);
     useUrlPage(url, owner);
     return (
       <>

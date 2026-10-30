@@ -14,7 +14,9 @@ import {
   submitAction,
   actionResult,
 } from "../../../../packages/mcps/src/shared/takeoff-action-client";
-import type { MemberRef, PodRow } from "./entity-route";
+import type { PodMember as MemberRef } from "@pe/agent-contracts";
+import type { PodList } from "@pe/host-contracts/operation-types";
+export type PodRow = PodList["pods"][number];
 export type Composed = PodMemberComposeResponse;
 
 /** A host-local mutation: admitted under an id, its receipt is the truth of what happened. */
