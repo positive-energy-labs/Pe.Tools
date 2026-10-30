@@ -250,7 +250,7 @@ function healRow(
   run: HealRunView | null,
   blocks: boolean,
   name: (id: number) => string,
-  label: (id: string) => string,
+  label: (g: HealGroup) => string,
 ): InboxItem {
   const caps = g.items.filter((i) => i.kind === "cap").length;
   const joins = g.items.length - caps;
@@ -276,7 +276,7 @@ function healRow(
     findingIds: g.items.flatMap((item) => item.covers),
     group: "fix",
     kind: "heal",
-    title: `Heal ${label(g.group)}: ${counts}`,
+    title: `Heal ${label(g)}: ${counts}`,
     status: run ? healRunWords(run) : "not previewed",
     ...(blocks ? { tone: "alarm" as const } : { blocks: false as const }),
     ids: [...new Set([...g.items.flatMap((i) => i.ids), ...(run?.ids ?? [])])],
@@ -399,13 +399,26 @@ export function triage(input: TriageInput) {
   const blocking = new Set(
     findings.filter((f) => bin(f) === "blocking" && pricesSystem(f)).map((f) => f.id),
   );
-  // The plan numbers the raw snapshot's groups; a survey that merged them still finds them by member.
+  // A system offers a heal only when one of its items is the system's (2026-10-21: only what prices the
+  // chosen system blocks it). A shared group is not membership, and its id changes with the read's scope.
   const healGroups = (heal?.groups ?? []).filter(
-    (g) =>
-      !scope ||
-      inGroups.has(g.group) ||
-      g.items.some((i) => i.ids.some((id) => scope.members.has(id))),
+    (g) => !scope || g.items.some((i) => i.ids.some((id) => scope.members.has(id))),
   );
+  const systemOf = new Map(
+    [...snapshot.nodes, ...snapshot.segments].map((e) => [e.id, e.systemName ?? null]),
+  );
+  // The title names the systems of the ends it heals, never the group's: "Heal RA 37: 5 caps".
+  const healed = (g: HealGroup) => {
+    const names = [
+      ...new Set(
+        g.items.flatMap((i) => i.ids.flatMap((id) => systemOf.get(id)?.split(",") ?? [])),
+      ),
+    ]
+      .map((n) => n.trim())
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    return names.length ? names.join(", ") : label(g.group);
+  };
   for (const g of healGroups)
     fix.push(
       healRow(
@@ -413,7 +426,7 @@ export function triage(input: TriageInput) {
         run?.group === g.group ? run : null,
         g.items.some((i) => i.covers.some((c) => blocking.has(c))),
         name,
-        label,
+        healed,
       ),
     );
   // An apply that healed its whole group leaves no Heal row to carry its result, so it keeps its own.
