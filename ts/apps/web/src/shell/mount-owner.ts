@@ -421,11 +421,19 @@ export function createGraphMount<P, W>(
         ),
     },
   };
-  /** The core sees one verb at a time; its snapshot basis is that verb's declared readings. */
-  const ctxFor = (id: string): VerbContext<"human"> => ({
-    ...context,
-    snapshot: () => context.snapshot(id),
-  });
+  /**
+   * The core sees one verb at a time; its snapshot basis is that verb's declared readings. One
+   * context per verb for the owner's life: the core keys open reviews by context identity.
+   */
+  const contexts = new Map<string, VerbContext<"human">>();
+  const ctxFor = (id: string): VerbContext<"human"> => {
+    let own = contexts.get(id);
+    if (!own) {
+      own = { ...context, snapshot: () => context.snapshot(id) };
+      contexts.set(id, own);
+    }
+    return own;
+  };
   const consume = (id: string, result: InvocationResult) => {
     if (disposed) return result;
     results.set(id, result);
