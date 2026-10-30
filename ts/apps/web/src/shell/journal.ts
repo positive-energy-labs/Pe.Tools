@@ -50,6 +50,8 @@ export function createWorkJournal(key: WorkKey) {
   let sending: WorkWrite | null = null;
   let busy = false;
   let generation = 0;
+  // A stale write marks the Work as changed under the person: nothing replays across it until it clears.
+  let held = false;
 
   const clear = () => {
     undo = [];
@@ -144,6 +146,7 @@ export function createWorkJournal(key: WorkKey) {
         code: "busy",
         message: `Finish the partial ${pending.direction} before ${direction}`,
       };
+    if (held) return { ok: false, code: "barrier", message: "Work changed; review and retry" };
     const source = direction === "undo" ? undo : redo;
     const step = pending?.step ?? source.at(-1);
     if (!step || revision === null)
@@ -225,6 +228,10 @@ export function createWorkJournal(key: WorkKey) {
     accept,
     /** Subscribe this to the route timeline before dispatching commands; retain barriers after its log is trimmed. */
     record,
+    /** The mount's conflict flag: while held, undo and redo refuse with a barrier. */
+    hold(on: boolean) {
+      held = on;
+    },
     undo: (write: JournalWriter) => replay("undo", write),
     redo: (write: JournalWriter) => replay("redo", write),
     read: () => structuredClone({ revision, undo, redo, busy }),

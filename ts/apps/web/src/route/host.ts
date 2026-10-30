@@ -38,6 +38,18 @@ export async function writeRouteWork(
     }
   );
 }
+/** The human recovery door for Work the host cannot read: it sets the old bytes aside and advances the revision. */
+export async function startFreshRouteWork(key: WorkKey): Promise<RouteStateWriteResult> {
+  const { result, status } = await postRouteWrite("start-fresh", routeInput(key.route, key), {});
+  return (
+    result ?? {
+      ok: false,
+      kind: "refused",
+      error: `Start fresh failed (${status})`,
+      hint: "Read the Work again before retrying",
+    }
+  );
+}
 export type RouteWriteResponse = { status: number; result: RouteStateWriteResult | null };
 type WorkInput = { params: { route: string }; query: Record<string, string> };
 

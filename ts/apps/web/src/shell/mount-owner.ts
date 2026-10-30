@@ -20,7 +20,7 @@ import {
 } from "@pe/agent-contracts";
 import { createRouteOwner, makeAtomRegistry } from "../route/route-owner";
 import { createViewOwner } from "../route/view-owner";
-import { refuse } from "../route/refusal";
+import { refuse, writeRefusal } from "../route/refusal";
 import {
   createReadingGraph,
   type ReadingLog,
@@ -47,7 +47,12 @@ export const graphFields = <P, W>(graph: RouteGraph<P, W>) =>
 export interface MountScope<W> {
   target: ExecutionTarget;
   work: { handle: WorkHandle; doc: W } | null;
+  /** The mount sets this: a write was refused as stale and nothing newer has been read or accepted since. */
+  conflict?: boolean;
+  /** The kernel door sets this: the host holds Work it cannot read, so `startFresh` is the one way out. */
+  unreadable?: WorkKey;
 }
+export const CONFLICT_REFUSAL = "Work changed; review and retry";
 export interface MountBinding {
   subject: VerbSubject | null;
   args: unknown;
@@ -69,6 +74,8 @@ export interface MountAdapters<P, W> {
   initialPage?: Partial<P>;
   write(key: WorkKey, write: WorkWrite): Promise<RouteStateWriteResult>;
   subscribeAcceptedDeltas(key: WorkKey, onAck: (ack: WorkWriteAck) => void): () => void;
+  /** The human recovery door (`useWorkScope`); absent only in tests that never reach unreadable Work. */
+  startFresh?(key: WorkKey): Promise<RouteStateWriteResult>;
   subjects?: VerbContext["subjects"];
   binding?(id: string, row: unknown, scope: BindingScope<P, W>): MountBinding;
   /** The cell subject (`cell:<seg|key>`) a pane row stands for, or null; the kernel's cell verbs follow it. */
@@ -154,7 +161,10 @@ export function createGraphMount<P, W>(
   const registry = makeAtomRegistry();
   const base = createRouteOwner(graph.key, registry);
   const view = createViewOwner(base, schema, initialPage, { transition: graph.transition });
-  let scope = adapters.getSnapshot();
+  let raw = adapters.getSnapshot();
+  let scope = raw;
+  // One Work per mount at a time: the stale write's key and the revision it was refused against.
+  let conflict: { work: string; revision: number } | null = null;
   let disposed = false;
   let available = () => true;
   let journalRefusal: string | null = null;
@@ -238,18 +248,39 @@ export function createGraphMount<P, W>(
         return [id, { version: state.version, current: state.current, basis: state.basis }];
       }),
     );
+  // Human and Pea reach the same flag: the host's stale refusal sets it, any accepted delta or a
+  // newer read of the Work clears it.
+  const present = () => {
+    scope =
+      conflict && raw.work && workKey(raw.work.handle.key) === conflict.work
+        ? { ...raw, conflict: true }
+        : raw;
+  };
+  const flag = (next: typeof conflict) => {
+    const prior = conflict;
+    if (prior?.work === next?.work && prior?.revision === next?.revision) return;
+    conflict = next;
+    if (prior) journals.get(prior.work)?.hold(false);
+    if (next) journals.get(next.work)?.hold(true);
+    present();
+  };
+  const settled = (key: WorkKey) => {
+    if (conflict?.work === workKey(key)) flag(null);
+  };
   const journalFor = (key: WorkKey) => {
     const id = workKey(key);
     let journal = journals.get(id);
     if (!journal) {
       journal = createWorkJournal(key);
       journals.set(id, journal);
+      if (conflict?.work === id) journal.hold(true);
     }
     if (connected && !disposed && !deltas.has(id))
       deltas.set(
         id,
         adapters.subscribeAcceptedDeltas(key, (ack) => {
           journal!.accept(ack);
+          settled(key);
           notify();
         }),
       );
@@ -266,7 +297,20 @@ export function createGraphMount<P, W>(
   });
   const write = async (key: WorkKey, request: WorkWrite) => {
     const result = await adapters.write(key, request);
-    if (result.ok && !disposed) journalFor(key).accept(result.write);
+    if (result.ok && !disposed) {
+      journalFor(key).accept(result.write);
+      settled(key);
+    } else if (
+      !result.ok &&
+      !disposed &&
+      "code" in result &&
+      result.code === "stale_revision" &&
+      // Work already re-read past the refused revision is fresh: nothing is left to review.
+      scope.work &&
+      workKey(scope.work.handle.key) === workKey(key) &&
+      scope.work.handle.revision === request.expectedRevision
+    )
+      flag({ work: workKey(key), revision: request.expectedRevision });
     notify();
     return result;
   };
@@ -388,12 +432,20 @@ export function createGraphMount<P, W>(
           subject: null,
           args: {},
         });
+  // Writing verbs wait out a conflict; queries only read, so they still run.
+  const blocked = (id: string) =>
+    disposed || !available()
+      ? "This route is inactive"
+      : conflict && scope.conflict && verbs[id]?.effect !== "query"
+        ? CONFLICT_REFUSAL
+        : null;
   const run = async (id: string, bound: MountBinding, origin: string, answers?: unknown) => {
-    if (disposed || !available())
+    const inactive = blocked(id);
+    if (inactive)
       return {
         state: "refused" as const,
         press: null,
-        refusal: refuse("not-ready", "This route is inactive"),
+        refusal: refuse("not-ready", inactive),
       };
     const verb = verbs[id];
     if (!verb) throw Error(`Unknown verb ${id}`);
@@ -405,6 +457,68 @@ export function createGraphMount<P, W>(
       ? await commit(context, verb, review.ticket, answers)
       : await invoke(context, verb, bound.subject, bound.args);
     return consume(id, result);
+  };
+  // The one recovery verb the kernel owns for Work the host cannot read (S1b: the old bytes go
+  // aside, the revision advances, the whole Work is a barrier). It is not a graph verb: it writes
+  // no Work patches and runs no command, so the verb core has no seam for it; it keeps the same
+  // review contract (a ticket, then explicit confirm) and is chord-free.
+  const freshAnswers = z.strictObject({ confirm: z.literal(true) });
+  let freshTicket: { press: string; key: string } | null = null;
+  const freshRefusal = (): string | null =>
+    disposed || !available()
+      ? "This route is inactive"
+      : !scope.unreadable || !adapters.startFresh
+        ? "This Work is readable; there is nothing to start fresh"
+        : null;
+  const startFresh = {
+    label: "Start fresh",
+    review: "required" as const,
+    answers: freshAnswers,
+    get refusal() {
+      return freshRefusal();
+    },
+    get ticket() {
+      return freshTicket;
+    },
+    /** Opens the review; nothing is written until `commit` carries `{ confirm: true }`. */
+    begin() {
+      const refusal = freshRefusal();
+      if (refusal)
+        return { state: "refused" as const, press: null, refusal: refuse("not-ready", refusal) };
+      freshTicket = { press: crypto.randomUUID(), key: workKey(scope.unreadable!) };
+      notify();
+      return { state: "review" as const, ticket: freshTicket };
+    },
+    cancel() {
+      freshTicket = null;
+      notify();
+    },
+    async commit(answers: unknown) {
+      const ticket = freshTicket;
+      const press = ticket?.press ?? null;
+      const refused = (message: string, code: "not-ready" | "stale-revision" = "not-ready") => ({
+        state: (code === "stale-revision" ? "stale" : "refused") as "stale" | "refused",
+        press,
+        refusal: refuse(code, message),
+      });
+      if (!ticket) return refused("Review the start-fresh first");
+      const checked = freshAnswers.safeParse(answers);
+      if (!checked.success) return refused("Confirm to start fresh");
+      const refusal = freshRefusal();
+      if (refusal) return refused(refusal);
+      if (workKey(scope.unreadable!) !== ticket.key) {
+        freshTicket = null;
+        return refused("The Work changed; review again", "stale-revision");
+      }
+      const key = structuredClone(scope.unreadable!);
+      freshTicket = null;
+      const result = await adapters.startFresh!(key);
+      if (result.ok && !disposed) journalFor(key).accept(result.write);
+      notify();
+      return result.ok
+        ? { state: "done" as const, press: ticket.press, acknowledgement: result.write }
+        : { state: "refused" as const, press: ticket.press, refusal: writeRefusal(result)! };
+    },
   };
   const cancelReviews = () => {
     for (const { verb, ticket } of reviews.values())
@@ -458,13 +572,12 @@ export function createGraphMount<P, W>(
       const origin = canonicalRouteInput([place, row ?? null, bound.subject]);
       const control = bind(verbs[id]!, { ctx: context, ...bound });
       const reason = () =>
-        disposed || !available()
-          ? "This route is inactive"
-          : reviews.has(id)
-            ? reviews.get(id)!.origin === origin
-              ? null
-              : "Finish this verb's review at its original control"
-            : control.refusal;
+        blocked(id) ??
+        (reviews.has(id)
+          ? reviews.get(id)!.origin === origin
+            ? null
+            : "Finish this verb's review at its original control"
+          : control.refusal);
       return {
         ...control,
         get refusal() {
@@ -496,6 +609,7 @@ export function createGraphMount<P, W>(
         : (graph.stageOrder ?? Object.keys(graph.stages))[0]!;
     },
     journal: journalFor,
+    startFresh,
     async restore(direction: "undo" | "redo") {
       if (!scope.work || disposed || !available()) return null;
       const key = structuredClone(scope.work.handle.key);
@@ -520,7 +634,17 @@ export function createGraphMount<P, W>(
       if (connected || disposed) return () => {};
       connected = true;
       const update = () => {
-        scope = adapters.getSnapshot();
+        raw = adapters.getSnapshot();
+        const seen = raw.work;
+        // A newer read of the Work is the re-read that ends a conflict.
+        if (
+          conflict &&
+          (!seen ||
+            workKey(seen.handle.key) !== conflict.work ||
+            seen.handle.revision !== conflict.revision)
+        )
+          flag(null);
+        else present();
         if (scope.work) journalFor(scope.work.handle.key);
         readings.update(readScope());
         notify();

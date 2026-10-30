@@ -289,3 +289,18 @@ test("interleaved overlapping presses refuse instead of overwriting an interveni
   });
   expect(f.requests).toEqual([]);
 });
+
+test("a held conflict is a barrier: no undo or redo until it is released", async () => {
+  const f = fixture();
+  await f.apply([{ path: ["settings", "width"], value: 20 }], "human-1");
+  f.journal.hold(true);
+  expect(await f.journal.undo(f.writer)).toEqual({
+    ok: false,
+    code: "barrier",
+    message: "Work changed; review and retry",
+  });
+  expect(f.requests).toEqual([]);
+  expect(f.journal.read().undo).toHaveLength(1);
+  f.journal.hold(false);
+  expect(await f.journal.undo(f.writer)).toMatchObject({ ok: true, press: "human-1" });
+});

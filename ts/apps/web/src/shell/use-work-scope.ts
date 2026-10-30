@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import {
   bindWork,
+  UNREADABLE_WORK,
   type RouteGraph,
   type RouteStateSpec,
   type RouteStateWriteResult,
@@ -13,9 +14,9 @@ import {
   type WorkWrite,
   type WorkWriteAck,
 } from "@pe/agent-contracts";
-import { previousOf } from "#/readings";
+import { dirty, previousOf } from "#/readings";
 import { useRouteSearchSlice } from "../route/activity";
-import { subscribeAcceptedDeltas, writeRouteWork } from "../route/host";
+import { startFreshRouteWork, subscribeAcceptedDeltas, writeRouteWork } from "../route/host";
 import { appAtomRegistry, useOwned } from "../route/route-owner";
 import { useRouteTarget } from "../route/route-target";
 import { docAtom } from "../route/route-work";
@@ -39,11 +40,15 @@ export type WorkScopeStatus = Pick<
 > & {
   /** Readable Work whose document is not live: shown, never armed (no writer, no verb). */
   closed: boolean;
+  /** The host holds Work it cannot read: the kernel's `startFresh` is the one recovery. */
+  unreadable: boolean;
 };
 export interface WorkScopePorts<W> {
   getSnapshot(): MountScope<W>;
   subscribe(notify: () => void): () => void;
   write(key: WorkKey, write: WorkWrite): Promise<RouteStateWriteResult>;
+  /** Human recovery for unreadable Work; refused when closed or when the route has no Work. */
+  startFresh(key: WorkKey): Promise<RouteStateWriteResult>;
   subscribeAcceptedDeltas(key: WorkKey, onAck: (ack: WorkWriteAck) => void): () => void;
   status: WorkScopeStatus;
 }
@@ -85,6 +90,8 @@ export function useWorkScope<P, W>(graph: RouteGraph<P, W>): WorkScopePorts<W> {
   const readable = carry.work !== undefined || workAddress !== null || key.binding === "open";
   const atom = useMemo(() => (spec && readable ? docAtom(spec, key) : null), [spec, readable, key]);
   const reading = useOwned(appAtomRegistry, atom);
+  // Only the host's own unreadable-Work failure offers recovery; a host that is down does not.
+  const unreadable = !closed && reading?.state === "failed" && reading.message === UNREADABLE_WORK;
   const snapshot = useMemo((): MountScope<W> => {
     const seen = reading ? previousOf(reading) : undefined;
     // Absent Work is the empty document at revision 0; only an authored write creates it.
@@ -94,8 +101,9 @@ export function useWorkScope<P, W>(graph: RouteGraph<P, W>): WorkScopePorts<W> {
       target: resolution.kind === "resolved" ? resolution.target : { kind: "host" },
       work:
         seen && doc !== undefined ? { handle: { key, revision: seen.revision ?? 0 }, doc } : null,
+      ...(unreadable && { unreadable: key }),
     };
-  }, [resolution, key, reading, graph]);
+  }, [resolution, key, reading, graph, unreadable]);
   // The mount captures its ports once; they read this store, so they never go stale.
   const store = useRef({ snapshot, closed, lost: "", listeners: new Set<() => void>() }).current;
   Object.assign(store, { snapshot, closed, lost: target.bindingLost?.sentence ?? CLOSED_WORK });
@@ -117,6 +125,16 @@ export function useWorkScope<P, W>(graph: RouteGraph<P, W>): WorkScopePorts<W> {
               ? Promise.resolve(refused(store.lost, "Choose the document again to edit its Work"))
               : writeRouteWork(key, write)
         : noWork,
+      startFresh: spec
+        ? async (key: WorkKey) => {
+            if (store.closed)
+              return refused(store.lost, "Choose the document again to start its Work fresh");
+            const result = await startFreshRouteWork(key);
+            // The host advanced the revision: read the Work again.
+            if (result.ok) dirty({ ...key, kind: "work" });
+            return result;
+          }
+        : noWork,
       subscribeAcceptedDeltas: spec
         ? (key: WorkKey, onAck: (ack: WorkWriteAck) => void) => subscribeAcceptedDeltas(key, onAck)
         : noDeltas,
@@ -129,8 +147,9 @@ export function useWorkScope<P, W>(graph: RouteGraph<P, W>): WorkScopePorts<W> {
       bindingLost: target.bindingLost,
       targetProvenance: target.targetProvenance,
       closed,
+      unreadable,
     }),
-    [statusText, closed], // eslint-disable-line react-hooks/exhaustive-deps
+    [statusText, closed, unreadable], // eslint-disable-line react-hooks/exhaustive-deps
   );
   return useMemo(() => ({ ...ports, status }), [ports, status]);
 }
