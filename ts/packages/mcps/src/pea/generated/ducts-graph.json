@@ -1613,6 +1613,7 @@
       "verbs": {
         "ids": [
           "price",
+          "heal-preview",
           "heal",
           "assign-fan"
         ],

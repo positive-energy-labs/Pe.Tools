@@ -6,11 +6,40 @@ import type { VerbScope } from "#/shell/verbs";
 import { snapshot } from "./test-fixture";
 import { presentHeal, presentFan, plannedHeal, previewedHeal, type HealReview } from "./reviews";
 import { healReviewLayers } from "./finding-layers";
-import { ra23Snapshot } from "./heal.fixture";
+import { ra23Snapshot, twoHealNetworksSnapshot } from "./heal.fixture";
+
+test("the two RA 37 caps name their ends' system instead of their shared group's systems and units", () => {
+  const ducts = twoHealNetworksSnapshot();
+  ducts.groups.find((group) => group.id === "g6953999")!.systemNames = ["FA 20", "FA 27"];
+  for (const segment of ducts.segments)
+    if (segment.groupId === "g6953999") segment.systemName = "RA 37";
+  const ctx = scope();
+  const presentation = presentHeal(
+    {
+      previewOnly: true,
+      counts: { planned: 2, healed: 0, refused: 0 },
+      groups: [
+        {
+          group: "g6953999",
+          items: [14663504, 14663546].map((id) => ({
+            key: `cap:${id}:1`,
+            kind: "cap",
+            outcome: "planned",
+            created: [],
+            replaced: [],
+          })),
+        },
+      ],
+    },
+    { ...ctx, readings: { ducts: { ...ctx.readings.ducts!, value: ducts } } },
+  );
+  expect(presentation.sentence).toBe("RA 37: 2 planned");
+});
 
 test("RA 23's one cap names its element, connector and size and draws without an issue id", () => {
   const ctx = scope();
   const ducts = ra23Snapshot();
+  ducts.groups[0]!.systemNames = ["FA 20", "FA 27"];
   const current = { ...ctx, readings: { ducts: { ...ctx.readings.ducts!, value: ducts } } };
   const response = {
     previewOnly: true,
@@ -25,6 +54,7 @@ test("RA 23's one cap names its element, connector and size and draws without an
     ],
   };
   const review = presentHeal({ value: response }, current).page!.heal as HealReview;
+  expect(review.sentence).toBe("RA 23: 1 planned");
   expect(review.rows[0]).toMatch(/10002955.*end 9.*8 in round.*planned/);
   expect(healReviewLayers(ducts, null, review)).toEqual(
     expect.arrayContaining([

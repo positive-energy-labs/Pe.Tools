@@ -638,9 +638,14 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
       verbs: Object.assign(
         (row: never) => {
           const kind = (row as { kind?: string } | undefined)?.kind;
-          return kind === "price" || kind === "heal" || kind === "assign-fan" ? [kind] : [];
+          return kind === "price" ||
+            kind === "heal" ||
+            kind === "heal-preview" ||
+            kind === "assign-fan"
+            ? [kind]
+            : [];
         },
-        { ids: ["price", "heal", "assign-fan"] },
+        { ids: ["price", "heal-preview", "heal", "assign-fan"] },
       ),
     },
 

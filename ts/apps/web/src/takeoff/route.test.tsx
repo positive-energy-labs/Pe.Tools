@@ -242,16 +242,16 @@ async function syncMounted() {
   };
 }
 test("sync reviews the frozen scope in the kernel before dispatching its native command", async () => {
-  const { owner, situation, zone } = await syncMounted();
+  const { view, owner, situation, zone } = await syncMounted();
   fireEvent.click(situation.getByRole("button", { name: "sync" }));
   await waitFor(() => expect(owner().results.get("sync")).toMatchObject({ state: "review" }));
-  const review = situation.getByLabelText("sync review");
+  const review = await view.findByRole("dialog", { name: "sync review" });
   expect(review.textContent).toContain("Sync 1 zone to C:/Fixtures/example.r10.");
   expect(review.textContent).toContain("File version: version-A");
   expect(review.textContent).toContain("new rooms");
   expect(review.textContent).not.toContain('"captureId"');
   expect(host.actions).toEqual([]);
-  fireEvent.click(situation.getByRole("button", { name: "sync" }));
+  fireEvent.click(within(review).getByRole("button", { name: "Commit sync" }));
   await waitFor(() => expect(host.actions).toHaveLength(1));
   expect(host.actions[0]).toMatchObject({
     key: "takeoffs.sync",
@@ -295,6 +295,19 @@ test.each(["Work", "capture", "file"] as const)(
           host.emit("rhvac-file-version");
         }
       });
+    // SSE delivery is batched to a frame; test the changed kernel basis, not a queued wire frame.
+    if (changed === "capture")
+      await waitFor(() =>
+        expect(owner().readings.get("snapshot").value).toMatchObject({
+          capture: { id: "1".repeat(64) },
+        }),
+      );
+    else if (changed === "file")
+      await waitFor(() =>
+        expect(owner().readings.get("rhvacVersion").value).toMatchObject({
+          fileVersion: "version-B",
+        }),
+      );
     expect(await run(owner, "sync")).toMatchObject({ state: "stale" });
     expect(host.actions).toEqual([]);
   },

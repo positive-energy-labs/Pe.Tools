@@ -161,7 +161,10 @@ export function ductsBinding(id: string, row: unknown, scope: Scope): MountBindi
       const doc = scope.work.doc;
       const active = activeSystem(scope.page);
 
-      const group = named.group ?? healTarget(snapshot, doc, active, scope.page.selected, null);
+      const selection = scope.page.issue.startsWith("heal:")
+        ? scope.page.issue
+        : scope.page.selected;
+      const group = named.group ?? healTarget(snapshot, doc, active, selection, null);
 
       if (active && !systemScope(snapshot, active).groups.includes(group))
         throw Error(`Open this network's system last to heal it; active system is ${active}`);

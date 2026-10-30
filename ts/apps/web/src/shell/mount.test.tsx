@@ -480,7 +480,24 @@ test("Situation renders declared subject, typed Page controls, verbs and a worki
   expect(situation.getByLabelText("Route log").textContent).not.toContain("external");
 });
 
-test("shown review stays at the same control; commit records one receipt and its barrier blocks undo", async () => {
+test.each(["Cancel", "Escape"])(
+  "%s cancels a shown review without dispatch and releases its reading pin",
+  async (cancel) => {
+    const f = await fixture();
+    const { view } = await mounted(f);
+    fireEvent.click(view.getByRole("button", { name: "Apply" }));
+    const review = await view.findByLabelText("Apply review");
+    const capture = f.captures.at(-1)!;
+    if (cancel === "Escape") fireEvent.keyDown(review, { key: "Escape" });
+    else fireEvent.click(within(review).getByRole("button", { name: "Cancel Apply" }));
+    await waitFor(() => expect(f.owner().reviews.size).toBe(0));
+    await waitFor(() => expect(view.queryByLabelText("Apply review")).toBeNull());
+    expect(capture.released).toBe(true);
+    expect(transport.run).not.toHaveBeenCalled();
+  },
+);
+
+test("shown review keeps its control armed; its portal commits one receipt and its barrier blocks undo", async () => {
   const f = await fixture();
   const { view } = await mounted(f);
   fireEvent.click(view.getByRole("button", { name: "Edit" }));
@@ -494,7 +511,7 @@ test("shown review stays at the same control; commit records one receipt and its
   expect(f.owner().view.read().page.cfm).toBe(412);
   expect(transport.run).not.toHaveBeenCalled();
   expect(view.getByRole("button", { name: "Apply" })).toBe(apply);
-  fireEvent.click(apply);
+  fireEvent.click(view.getByRole("button", { name: "Commit Apply" }));
   await waitFor(() => expect(transport.run).toHaveBeenCalledOnce());
   await waitFor(() => expect(f.owner().reviews.size).toBe(0));
   expect(
@@ -644,14 +661,14 @@ test("required answers stay in the same review until valid, and a different plac
   expect(f.owner().control("apply", undefined, "pane:charts").refusal).toContain(
     "original control",
   );
-  fireEvent.click(button);
+  fireEvent.click(view.getByRole("button", { name: "Commit Apply" }));
   await view.findByText("Answer the required review before committing");
   expect(f.owner().reviews.size).toBe(1);
   expect(transport.run).not.toHaveBeenCalled();
   fireEvent.change(view.getByLabelText("Apply answers"), {
     target: { value: '{"approved":true}' },
   });
-  fireEvent.click(button);
+  fireEvent.click(view.getByRole("button", { name: "Commit Apply" }));
   await waitFor(() => expect(f.owner().reviews.size).toBe(0));
   expect(transport.run).toHaveBeenCalledOnce();
   expect(

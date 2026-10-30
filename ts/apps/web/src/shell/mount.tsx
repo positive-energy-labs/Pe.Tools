@@ -13,6 +13,7 @@ import { Route as rootRoute } from "../routes/__root";
 import { createRoute } from "@tanstack/react-router";
 import { KeyScope, ScopeKeys, actionScopeKeys, useScopeLive, type ScopeKey } from "@pe/kit/keys";
 import { Button } from "@pe/kit/lang/button";
+import { Popover, SubjectPopoverContent } from "@pe/kit/lang/popover";
 import { Label, Textarea } from "@pe/kit/lang/input";
 import {
   GraphLayoutView,
@@ -536,6 +537,14 @@ export function GraphRouteView<P, W>({
           className="flex h-full min-h-0 flex-col"
         >
           {owner.fixture && <FixtureChrome graph={graph} name={owner.fixture.name} />}
+          {[...owner.reviews].map(([id, review]) => (
+            <GraphReview
+              key={review.ticket.press}
+              id={id}
+              owner={owner}
+              enabled={!hidden && current()}
+            />
+          ))}
           {situation !== undefined ? (
             situation
           ) : (
@@ -887,6 +896,44 @@ function GraphVerb<P, W>({
   const control = owner.control(id, row, pane ? `pane:${pane}` : "stage");
   const review = control.review;
   const result = owner.results.get(id);
+  return (
+    <span
+      role="group"
+      aria-label={verb.label}
+      onFocusCapture={() => {
+        if (pane && row !== undefined) owner.focusRow(pane, row);
+      }}
+    >
+      <Button
+        data-graph-verb={id}
+        kind={review ? "commit" : "framed"}
+        label={verb.label}
+        pressed={!!review}
+        refusal={!enabled ? "This route is inactive" : control.refusal}
+        onClick={() =>
+          void control.run(review && verb.kind === "recovery" ? { confirm: true } : undefined)
+        }
+      >
+        {review ? `Commit ${verb.label}` : verb.label}
+      </Button>
+      {result && "refusal" in result && <span role="status">{result.refusal.message}</span>}
+    </span>
+  );
+}
+
+/** One ticket gets one portal, even when several row controls represent its original placement. */
+function GraphReview<P, W>({
+  id,
+  owner,
+  enabled,
+}: {
+  id: string;
+  owner: GraphMount<P, W>;
+  enabled: boolean;
+}) {
+  const review = owner.reviews.get(id)!;
+  const verb = owner.verbs[id]!;
+  const [anchor] = useState(() => document.activeElement);
   const [answers, setAnswers] = useState("");
   const [error, setError] = useState<string | null>(null);
   const press = () => {
@@ -901,27 +948,32 @@ function GraphVerb<P, W>({
       }
     }
     setError(null);
-    void control.run(value);
+    void owner.commitReview(id, review.ticket, value);
   };
   return (
-    <span
-      role="group"
-      aria-label={verb.label}
-      onFocusCapture={() => {
-        if (pane && row !== undefined) owner.focusRow(pane, row);
+    <Popover
+      open
+      onOpenChange={(open, details) => {
+        if (open) return;
+        // The original armed control still commits through its own binding and origin check.
+        if (
+          details.reason === "outside-press" &&
+          details.event.target instanceof Element &&
+          details.event.target.closest("[data-graph-verb]")?.getAttribute("data-graph-verb") === id
+        ) {
+          details.cancel();
+          return;
+        }
+        owner.stop();
       }}
     >
-      <Button
-        kind={review ? "commit" : "framed"}
-        label={verb.label}
-        pressed={!!review}
-        refusal={!enabled ? "This route is inactive" : control.refusal}
-        onClick={press}
+      <SubjectPopoverContent
+        anchor={anchor}
+        aria-label={`${verb.label} review`}
+        className="flex max-h-(--available-height) flex-col gap-2"
+        onClick={(event) => event.stopPropagation()}
       >
-        {review ? `Commit ${verb.label}` : verb.label}
-      </Button>
-      {review && (
-        <span aria-label={`${verb.label} review`}>
+        <div className="min-h-0 overflow-y-auto">
           <output>{review.ticket.presentation.sentence}</output>
           {review.ticket.presentation.rows.length > 0 && (
             <span role="list" className="flex flex-col">
@@ -942,16 +994,22 @@ function GraphVerb<P, W>({
               />
             </Label>
           )}
+        </div>
+        {error && <span role="status">{error}</span>}
+        <div className="flex shrink-0 items-center justify-between gap-2">
+          <Button
+            kind="commit"
+            label={`Commit ${verb.label}`}
+            refusal={!enabled ? "This route is inactive" : null}
+            onClick={press}
+          >
+            Commit {verb.label}
+          </Button>
           <Button label={`Cancel ${verb.label}`} onClick={() => owner.stop()}>
             Cancel
           </Button>
-        </span>
-      )}
-      {(error || (result && "refusal" in result)) && (
-        <span role="status">
-          {error ?? (result && "refusal" in result ? result.refusal.message : "")}
-        </span>
-      )}
-    </span>
+        </div>
+      </SubjectPopoverContent>
+    </Popover>
   );
 }

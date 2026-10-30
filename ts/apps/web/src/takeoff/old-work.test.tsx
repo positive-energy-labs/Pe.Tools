@@ -5,7 +5,7 @@
  * answered by that test's retained Work Reading.
  */
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -118,8 +118,9 @@ test.each([OLDER_WORK, UNREADABLE_WORK])(
       return;
     }
     fireEvent.click(screen.getByRole("button", { name: "Start fresh" }));
-    await screen.findByText("Commit Start fresh");
-    fireEvent.click(screen.getByRole("button", { name: "Start fresh" }));
+    const review = await screen.findByRole("dialog", { name: "Start fresh review" });
+    expect(screen.getByText(message)).toBeTruthy();
+    fireEvent.click(within(review).getByRole("button", { name: "Commit Start fresh" }));
     await waitFor(() => expect(screen.queryByText(message)).toBeNull());
     expect(posts).toHaveLength(1);
     expect(new URL(posts[0]!, "http://host").pathname).toMatch(

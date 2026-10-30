@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { DuctsApply, DuctsAssignFan, DuctsHeal } from "@pe/host-contracts/generated";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { healPlan } from "@pe/ducts-domain/heal";
-import { healWords, networkWord, outcomeWords } from "@pe/ducts-domain/words";
+import { healSystems, healWords, networkWord, outcomeWords } from "@pe/ducts-domain/words";
 import {
   canonicalRouteInput,
   ductsHealInputSchema,
@@ -129,7 +129,19 @@ export function presentHeal(result: unknown, scope: VerbScope): VerbPresentation
     }),
   );
   const group = response.groups[0]?.group ?? "";
-  const sentence = `${snapshot ? networkWord(snapshot, group) : "Duct network"}: ${healWords(response)}`;
+  const system = snapshot
+    ? (healSystems(
+        snapshot,
+        targets
+          .filter((target) => target.outcome === "planned" || target.outcome === "healed")
+          .flatMap((target) =>
+            [target.end, target.other]
+              .filter((end): end is string => !!end)
+              .map((end) => Number(end.split(":")[0])),
+          ),
+      ) ?? networkWord(snapshot, group))
+    : "Duct network";
+  const sentence = `${system}: ${healWords(response)}`;
   const pricing = scope.readings.pricing?.value as PricingResult | undefined;
   const heal: HealReview = {
     group,

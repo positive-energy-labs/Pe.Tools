@@ -868,6 +868,11 @@ export function createGraphMount<P, W>(
     journals,
     results,
     reviews,
+    commitReview(id: string, ticket: ReviewTicket, answers?: unknown) {
+      const review = reviews.get(id);
+      if (review?.ticket !== ticket) return Promise.resolve(undefined);
+      return run(id, { subject: ticket.subject, args: ticket.input }, review.origin, answers);
+    },
     context,
     busy: () => registry.get(base.busy),
     journalRefusal: () => journalRefusal,

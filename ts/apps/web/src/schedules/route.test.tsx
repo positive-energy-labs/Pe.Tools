@@ -119,7 +119,7 @@ test("a Work verb produces one journal step and Mod+Z restores the cells", async
 test("Apply cells shows a ticket then commits once and consumes its receipt", async () => {
   const { view, situation } = await mounted();
   fireEvent.click(await liveButton(situation, "Apply cells"));
-  const review = await situation.findByLabelText("Apply cells review");
+  const review = await within(document.body).findByLabelText("Apply cells review");
   expect(review.textContent).toContain("Apply 1 edited schedule cell.");
   expect(review.textContent).toContain("IU-1 · Model: Old model → New model");
   expect(review.textContent).not.toContain('"cells"');
@@ -135,7 +135,7 @@ test("Apply cells shows a ticket then commits once and consumes its receipt", as
 test("a Work write makes the ticket stale and cannot dispatch a push", async () => {
   const { view, situation } = await mounted();
   fireEvent.click(await liveButton(situation, "Apply cells"));
-  await situation.findByLabelText("Apply cells review");
+  await within(document.body).findByLabelText("Apply cells review");
   await act(async () => {
     await writeRouteWork(
       host.key,
@@ -164,7 +164,7 @@ test("push refusals and unread readback counts are kernel readings, never Page o
   const before = structuredClone(host.doc);
   const { view, situation, router } = await mounted();
   fireEvent.click(await liveButton(situation, "Apply cells"));
-  await situation.findByLabelText("Apply cells review");
+  await within(document.body).findByLabelText("Apply cells review");
   fireEvent.click(await liveButton(situation, "Apply cells"));
   await view.findByText("Readback unavailable");
   expect(view.getByText(/1 refused as changed in Revit/)).toBeTruthy();

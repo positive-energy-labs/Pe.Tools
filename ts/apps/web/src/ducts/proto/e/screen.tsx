@@ -837,48 +837,63 @@ function LoadedScreenBody({
   );
 
   const picturePane = (
-    <div className="relative size-full min-w-0">
-      {" "}
-      <DuctsPicture
-        renderPane={(body) => body}
-        {...props}
-        membership={membership}
-        issueScope={issueScope}
-        annotated={annotated}
-        issues={issues}
-        scale={encoded}
-        nameOf={nameOf}
-        jump={jump}
-        groups={drawGroups}
-        members={displayMembers}
-        neighbours={neighbours}
-        lead={leadGroup}
-        identity={{
-          system: chosenRow,
-          census,
-          refreshing: props.reading.refreshing,
-          open: () => {},
-          breakdown:
-            activeCritical?.split && activeCritical.total
-              ? {
-                  split: activeCritical.split,
-                  scale: activeCritical.total,
-                  fans: () => (
-                    <FanFacts
-                      facts={fanFacts(
-                        priced,
-                        activeScope?.groups ?? [],
-                        nameOf,
-                        activeScope?.terminals,
-                      )}
-                      nameOf={nameOf}
-                    />
-                  ),
-                }
-              : null,
-          allSystems: () => setPage({ system: [] }),
-        }}
-      />
+    <div className="relative flex size-full min-w-0 flex-col">
+      {page.heal?.targets.some(
+        (target) => target.outcome === "planned" || target.outcome === "healed",
+      ) && (
+        <section aria-label="Heal targets" className="flex shrink-0 flex-col px-2 py-1 t-small">
+          {page.heal.targets
+            .filter((target) => target.outcome === "planned" || target.outcome === "healed")
+            .map((target) => (
+              <span key={target.key}>
+                {target.how} · {target.end.replace(":", " end ")}
+                {target.other ? ` to ${target.other.replace(":", " end ")}` : ""}
+              </span>
+            ))}
+        </section>
+      )}
+      <div className="relative min-h-0 flex-1">
+        <DuctsPicture
+          renderPane={(body) => body}
+          {...props}
+          membership={membership}
+          issueScope={issueScope}
+          annotated={annotated}
+          issues={issues}
+          scale={encoded}
+          nameOf={nameOf}
+          jump={jump}
+          groups={drawGroups}
+          members={displayMembers}
+          neighbours={neighbours}
+          lead={leadGroup}
+          identity={{
+            system: chosenRow,
+            census,
+            refreshing: props.reading.refreshing,
+            open: () => {},
+            breakdown:
+              activeCritical?.split && activeCritical.total
+                ? {
+                    split: activeCritical.split,
+                    scale: activeCritical.total,
+                    fans: () => (
+                      <FanFacts
+                        facts={fanFacts(
+                          priced,
+                          activeScope?.groups ?? [],
+                          nameOf,
+                          activeScope?.terminals,
+                        )}
+                        nameOf={nameOf}
+                      />
+                    ),
+                  }
+                : null,
+            allSystems: () => setPage({ system: [] }),
+          }}
+        />
+      </div>
     </div>
   );
   const loadingBody = (

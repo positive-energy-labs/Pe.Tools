@@ -14,6 +14,7 @@ import type { BindingScope } from "#/shell/mount-owner";
 import type { ReadingState } from "#/shell/readings";
 import { snapshot } from "./test-fixture";
 import { noTerminalSnapshot } from "./no-terminal.fixture";
+import { twoHealNetworksSnapshot } from "./heal.fixture";
 const state = (value: unknown): ReadingState => ({
   status: "ready",
   value,
@@ -74,6 +75,20 @@ test("Heal and Preview heal need a current network and Work, even when pricing f
     });
   expect(ductsBinding("price", undefined, scope).args).toMatchObject({
     refusal: "pricing failed: EX 1 has no terminal; nothing to price",
+  });
+});
+
+test("a pointed-at Heal row overrides an older element pick and never falls back to another network", () => {
+  const scope = scopeFor(ductsRouteState.schema.parse({}));
+  scope.page = { ...scope.page, system: ["RA 23"], selected: "10002955", issue: "heal:g6953999" };
+  scope.readings = { ducts: state(twoHealNetworksSnapshot()) };
+  expect(ductsBinding("heal-preview", undefined, scope).args).toMatchObject({
+    refusal: null,
+    request: { groups: [{ group: "g6953999" }] },
+  });
+  scope.page.issue = "heal:retired-network";
+  expect(ductsBinding("heal-preview", undefined, scope).args).toMatchObject({
+    refusal: expect.stringContaining("no longer available"),
   });
 });
 test("the product graph keeps all ducts inputs in Work across fourteen cell families", () => {

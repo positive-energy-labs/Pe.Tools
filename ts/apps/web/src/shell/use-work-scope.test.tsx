@@ -641,7 +641,7 @@ test("unreadable Work puts start-fresh on the stage; its review commits once thr
   const key = owner().snapshot().unreadable!;
   expect(key).toMatchObject({ binding: "workspace", work: `broken-${id}` });
   fireEvent.click(button);
-  await situation.findByLabelText("Start fresh review");
+  await view.findByLabelText("Start fresh review");
   expect(host.fresh).not.toHaveBeenCalled();
   host.fresh.mockResolvedValue({
     ok: true,
@@ -772,7 +772,7 @@ test("carry-over is one undoable Work write, offered only while readable Work la
   const key = owner().snapshot().work!.handle.key;
   const button = situation.getByRole("button", { name: "Carry over" });
   fireEvent.click(button);
-  const review = await situation.findByLabelText("Carry over review");
+  const review = await view.findByLabelText("Carry over review");
   expect(review.textContent).toContain("Carry over: review the proposed changes.");
   expect(review.textContent).not.toContain('"members"');
   expect(host.write).not.toHaveBeenCalled();

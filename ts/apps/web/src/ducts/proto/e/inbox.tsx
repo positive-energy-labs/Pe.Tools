@@ -62,9 +62,9 @@ function CommandVerb({
   icon?: LucideIcon;
 }) {
   return pair.render(
-    verb.on.verb === "heal"
-      ? { kind: "heal", group: verb.on.group }
-      : { kind: "assign-fan", unitId: verb.on.unitId, systemId: verb.on.systemId },
+    verb.on.verb === "fan"
+      ? { kind: "assign-fan", unitId: verb.on.unitId, systemId: verb.on.systemId }
+      : { kind: verb.on.verb, group: verb.on.group },
   );
 }
 export function FanButton({
@@ -204,7 +204,7 @@ export function Inbox({
         case "command":
           // A Heal row draws its glyph in the closed row; a fan's label names the unit and the
           // system, so it draws worded in the open row only.
-          if (verb.on.verb === "heal")
+          if (verb.on.verb !== "fan")
             return (
               <CommandVerb key={`p${i}`} verb={verb} pair={heal} icon={worded ? undefined : Eye} />
             );

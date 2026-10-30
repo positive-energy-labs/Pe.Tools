@@ -14,7 +14,70 @@ import { invoke, type VerbContext } from "#/shell/verbs";
 import { ductsPageSchema } from "./graph";
 import { mountRoute } from "#/shell/mount";
 import { noTerminalSnapshot } from "./no-terminal.fixture";
-import { ra23Snapshot } from "./heal.fixture";
+import { chaddsNearMissSnapshot, ra23Snapshot, twoHealNetworksSnapshot } from "./heal.fixture";
+
+test.each(["row", "Situation"])(
+  "%s Preview heal targets the pointed-at network among two",
+  async (placement) => {
+    host.snapshot = twoHealNetworksSnapshot();
+    const { view, situation } = await mounted(
+      "/ducts?target=s&system=RA%2023&selected=10002955&picture=schematic&layers=",
+    );
+    const row = await waitFor(() => {
+      const element = view.container.querySelector<HTMLElement>('[data-key="heal:g6953999"]');
+      expect(element).not.toBeNull();
+      return element!;
+    });
+    if (placement === "Situation") fireEvent.click(within(row).getByText(/^Heal RA 23/));
+    fireEvent.click(
+      await liveButton(placement === "row" ? within(row) : situation, "Preview heal"),
+    );
+    await waitFor(() => expect(host.actions).toHaveLength(1));
+    expect(host.actions[0]).toMatchObject({
+      key: "ducts.preview-heal",
+      input: {
+        groups: [
+          { group: "g6953999", items: [{ key: "cap:14663504:1" }, { key: "cap:14663546:1" }] },
+        ],
+      },
+    });
+    expect((host.actions[0]!.input as { groups: unknown[] }).groups).toHaveLength(1);
+    const targets = await view.findByLabelText("Heal targets");
+    expect(targets.textContent).toContain("cap · 14663504 end 1");
+    expect(targets.textContent).toContain("cap · 14663546 end 1");
+  },
+);
+
+test("Chadds autoJoin ends show their partner and measured gap in the row and Evidence", async () => {
+  host.snapshot = chaddsNearMissSnapshot();
+  const { view } = await mounted();
+  for (const [id, partner, gap] of [
+    [14517389, 14548688, "0.01"],
+    [14663504, 14663834, "2.25"],
+    [14663546, 14663850, "2.25"],
+  ] as const) {
+    const row = await waitFor(() => {
+      const element = view.container.querySelector<HTMLElement>(`[data-key="open-end:${id}:0"]`);
+      expect(element).not.toBeNull();
+      return element!;
+    });
+    const words = `faces ${partner}:1 ${gap} in away: a join, not a cap`;
+    expect(row.textContent).toContain(words);
+    fireEvent.click(within(row).getByText(words, { exact: false }));
+    const detail = view.container.querySelector<HTMLElement>(
+      `[data-inbox-detail="open-end:${id}:0"]`,
+    )!;
+    const hint = within(detail).getByRole("button", { name: "What is this?" });
+    fireEvent.pointerEnter(hint, { pointerType: "mouse" });
+    fireEvent.mouseEnter(hint);
+    fireEvent.mouseMove(hint);
+    expect((await view.findByRole("tooltip")).textContent).toContain(words);
+    fireEvent.pointerLeave(hint, { pointerType: "mouse" });
+    fireEvent.mouseLeave(hint);
+    await waitFor(() => expect(view.queryByRole("tooltip")).toBeNull());
+  }
+  expect(host.actions).toEqual([]);
+});
 
 test("RA 23 preview shows its cap review, then Heal uses exactly the admitted plan", async () => {
   host.snapshot = ra23Snapshot();
@@ -25,10 +88,11 @@ test("RA 23 preview shows its cap review, then Heal uses exactly the admitted pl
   const review = await view.findByLabelText("Heal preview");
   expect(review.textContent).toMatch(/10002955.*end 9.*8 in round.*planned/);
   await waitFor(() => expect(view.container.querySelector("[data-review-target]")).not.toBeNull());
+  expect(view.getByLabelText("Heal targets").textContent).toContain("cap · 10002955 end 9");
   const input = host.actions[0]!.input;
   fireEvent.click(await liveButton(situation, "Heal"));
-  await situation.findByLabelText("Heal review");
-  fireEvent.click(await liveButton(situation, "Heal"));
+  await view.findByLabelText("Heal review");
+  fireEvent.click(await liveButton(within(view.getByLabelText("Heal review")), "Commit Heal"));
   await waitFor(() =>
     expect(host.actions.map((a) => a.key)).toEqual(["ducts.preview-heal", "ducts.apply-heal"]),
   );
@@ -294,12 +358,12 @@ test("a fresh sheet URL opens a fan and edits its criteria through one kernel Wo
 test("Price prepares one host preview, shows its kernel ticket, commits the same request and consumes a receipt", async () => {
   const { view, situation } = await mounted();
   fireEvent.click(await liveButton(situation, "Write to Revit"));
-  const review = await situation.findByLabelText("Write to Revit review");
+  const review = await view.findByLabelText("Write to Revit review");
   expect(review.textContent).toContain("1 planned");
   expect(review.textContent).not.toContain('"receipt"');
   expect(review.textContent).toContain("terminal flow");
   expect(host.actions.map((row) => row.key)).toEqual(["ducts.preview-losses"]);
-  fireEvent.click(await liveButton(situation, "Write to Revit"));
+  fireEvent.click(await liveButton(within(review), "Commit Write to Revit"));
   await waitFor(() =>
     expect(host.actions.map((row) => row.key)).toEqual([
       "ducts.preview-losses",
@@ -314,7 +378,7 @@ test("Price prepares one host preview, shows its kernel ticket, commits the same
 test("a Work write invalidates an open ticket and commit cannot dispatch its apply", async () => {
   const { view, situation } = await mounted();
   fireEvent.click(await liveButton(situation, "Write to Revit"));
-  await situation.findByLabelText("Write to Revit review");
+  await view.findByLabelText("Write to Revit review");
   await act(async () => {
     await writeRouteWork(
       host.key,
@@ -540,7 +604,7 @@ test.each(["Heal", "Preview heal"])(
         : situation;
     fireEvent.click(await liveButton(controls, verb));
     if (verb === "Heal") {
-      const review = await controls.findByLabelText("Heal review");
+      const review = await view.findByLabelText("Heal review");
       expect(review.textContent).toContain("1 planned");
       expect(review.textContent).toContain("cap");
       expect(review.textContent).not.toContain('"receipt"');
@@ -557,7 +621,7 @@ test.each(["Heal", "Preview heal"])(
     expect(view.getAllByLabelText("Heal in picture")[0]!.textContent).toContain("1 planned");
     expect(host.actions.map((a) => a.key)).toEqual(["ducts.preview-heal"]);
     if (verb === "Heal") {
-      fireEvent.click(await liveButton(controls, "Heal"));
+      fireEvent.click(await liveButton(within(view.getByLabelText("Heal review")), "Commit Heal"));
       await waitFor(() =>
         expect(host.actions.map((a) => a.key)).toEqual(["ducts.preview-heal", "ducts.apply-heal"]),
       );

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { createMemoryHistory, createRouter, RouterProvider } from "@tanstack/react-router";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { actionReceiptSchema, workKey, type WorkKey } from "@pe/agent-contracts";
@@ -209,7 +209,7 @@ test("Apply requires a prune review, refuses changed Work, and submits the seale
   fireEvent.change(f.view.getByPlaceholderText("Table name"), { target: { value: "Loads" } });
   await waitFor(() => expect(f.scope().work?.doc.draft?.name).toBe("Loads"));
   fireEvent.click(f.view.getByRole("button", { name: "Apply" }));
-  const review = await f.view.findByLabelText("Apply review");
+  const review = await f.view.findByRole("dialog", { name: "Apply review" });
   expect(review.textContent).toContain("Prune deletes 2 rows");
   expect(review.textContent).toContain("Delete row a");
   expect(review.textContent).toContain("Delete row b");
@@ -227,7 +227,7 @@ test("Apply requires a prune review, refuses changed Work, and submits the seale
   await waitFor(() => expect(f.view.queryByLabelText("Apply review")).toBeNull());
   expect(command.run).not.toHaveBeenCalled();
   fireEvent.click(f.view.getByRole("button", { name: "Apply" }));
-  await f.view.findByLabelText("Apply review");
+  const currentReview = await f.view.findByRole("dialog", { name: "Apply review" });
   command.run.mockResolvedValue(
     actionReceiptSchema.parse({
       id: "applied",
@@ -246,8 +246,10 @@ test("Apply requires a prune review, refuses changed Work, and submits the seale
       startedAt: "2026-10-30T06:00:00Z",
     }),
   );
-  fireEvent.change(f.view.getByLabelText("Apply answers"), { target: { value: "{}" } });
-  fireEvent.click(f.view.getByRole("button", { name: "Apply" }));
+  fireEvent.change(within(currentReview).getByLabelText("Apply answers"), {
+    target: { value: "{}" },
+  });
+  fireEvent.click(within(currentReview).getByRole("button", { name: "Commit Apply" }));
   await waitFor(() =>
     expect(
       f.owner().results.get("apply"),

@@ -153,7 +153,7 @@ test("kernel gap: prepared Families plan evidence reaches the real route's commi
   const { view, situation, owner } = await mounted();
   fireEvent.click(await liveButton(situation, "Apply families"));
   await waitFor(() => expect(owner().results.get("apply")).toMatchObject({ state: "review" }));
-  const review = await situation.findByLabelText("Apply families review");
+  const review = await within(document.body).findByLabelText("Apply families review");
   expect(review.textContent).toContain("Review 1 family: 1 change, 0 refusals.");
   expect(review.textContent).toContain("Fan Coil Unit - Ducted");
   expect(review.textContent).toContain("FXMQ15 → Edited model");
@@ -175,7 +175,7 @@ test("kernel gap: prepared Families plan evidence reaches the real route's commi
 test("a Work write makes the Families review ticket stale and refuses native apply", async () => {
   const { view, situation } = await mounted();
   fireEvent.click(await liveButton(situation, "Apply families"));
-  await situation.findByLabelText("Apply families review");
+  await within(document.body).findByLabelText("Apply families review");
   await act(async () => {
     await writeRouteWork(
       host.key,
@@ -233,7 +233,7 @@ test("kernel gap: Families salvage uses the kernel recovery review and one undoa
   const before = structuredClone(host.doc);
   const { view, situation, owner } = await mounted();
   fireEvent.click(await liveButton(situation, "Carry over"));
-  await situation.findByLabelText("Carry over review");
+  await within(document.body).findByLabelText("Carry over review");
   expect(host.writes).toEqual([]);
   fireEvent.click(await liveButton(situation, "Carry over"));
   await waitFor(() => expect(owner().results.get("work.salvage")).toMatchObject({ state: "done" }));
@@ -256,7 +256,7 @@ test("kernel gap: Families ID-only salvage resolves exact-document catalog names
   const { situation } = await mounted();
   await waitFor(() => expect(host.catalogHeaders.length).toBeGreaterThan(0));
   fireEvent.click(await liveButton(situation, "Carry over"));
-  await situation.findByLabelText("Carry over review");
+  await within(document.body).findByLabelText("Carry over review");
   expect(host.writes).toEqual([]);
   fireEvent.click(await liveButton(situation, "Carry over"));
   await waitFor(() => expect(host.doc.excluded["Fan Coil Unit - Ducted"]).toEqual({ by: "human" }));
@@ -271,7 +271,7 @@ test("kernel gap: unreadable Families Work shows the host refusal and recovers o
     situation.getByRole("button", { name: "Apply families" }).getAttribute("aria-disabled"),
   ).toBe("true");
   fireEvent.click(await liveButton(situation, "Start fresh"));
-  await situation.findByLabelText("Start fresh review");
+  await within(document.body).findByLabelText("Start fresh review");
   expect(host.writes).toEqual([]);
   fireEvent.click(await liveButton(situation, "Start fresh"));
   await waitFor(() => expect(host.writes).toHaveLength(1));

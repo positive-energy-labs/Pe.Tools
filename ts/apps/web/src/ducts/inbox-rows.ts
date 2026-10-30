@@ -3,7 +3,7 @@ import type { DuctFinding, DuctsRouteDocument } from "@pe/agent-contracts";
 import { bin } from "@pe/ducts-domain/bins";
 import { fanCandidates, type FanAssignment } from "@pe/ducts-domain/fan-assignment";
 import { healFindings, type HealGroup, type HealItem, type HealPlan } from "@pe/ducts-domain/heal";
-import { findingLabel, subjectName } from "@pe/ducts-domain/words";
+import { findingLabel, healSystems, subjectName } from "@pe/ducts-domain/words";
 import { ruleByKey } from "@pe/ducts-domain/loss-rules";
 import type { SystemScope } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
@@ -70,7 +70,9 @@ export type RowVerb =
   | { kind: "role"; id: number; role: "fan" | "passive"; label: string; says: string }
   | {
       kind: "command";
-      on: { verb: "heal"; group: string } | { verb: "fan"; unitId: number; systemId: number };
+      on:
+        | { verb: "heal" | "heal-preview"; group: string }
+        | { verb: "fan"; unitId: number; systemId: number };
       label: string;
       says: string;
     }
@@ -106,7 +108,7 @@ export interface InboxItem {
 
 export interface TriageInput {
   snapshot: Pick<DuctSnapshot, "groups" | "nodes" | "segments"> &
-    Partial<Pick<DuctSnapshot, "systems">>;
+    Partial<Pick<DuctSnapshot, "systems" | "issues">>;
   scope: SystemScope | null;
   findings: readonly DuctFinding[];
   flows: ReadonlyMap<number, { cfm: number | null }>;
@@ -164,6 +166,12 @@ function healRow(
     ids: [...new Set(g.items.flatMap((i) => i.ids))],
     note: `${g.items.map(line).join("; ")}. Review runs each repair and Pe's check in Revit and rolls it back; commit applies the same request.`,
     verbs: [
+      {
+        kind: "command",
+        on: { verb: "heal-preview", group: g.group },
+        label: "Preview heal",
+        says: `Preview healing ${counts} in this network`,
+      },
       {
         kind: "command",
         on: { verb: "heal", group: g.group },
@@ -257,19 +265,12 @@ export function triage(input: TriageInput) {
   const healGroups = (heal?.groups ?? []).filter(
     (g) => !scope || g.items.some((i) => i.ids.some((id) => scope.members.has(id))),
   );
-  const systemOf = new Map(
-    [...snapshot.nodes, ...snapshot.segments].map((e) => [e.id, e.systemName ?? null]),
-  );
   // The title names the systems of the ends it heals, never the group's: "Heal RA 37: 5 caps".
-  const healed = (g: HealGroup) => {
-    const names = [
-      ...new Set(g.items.flatMap((i) => i.ids.flatMap((id) => systemOf.get(id)?.split(",") ?? []))),
-    ]
-      .map((n) => n.trim())
-      .filter(Boolean)
-      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-    return names.length ? names.join(", ") : label(g.group);
-  };
+  const healed = (g: HealGroup) =>
+    healSystems(
+      snapshot,
+      g.items.flatMap((item) => item.ids),
+    ) ?? label(g.group);
   for (const g of healGroups)
     fix.push(
       healRow(
@@ -474,11 +475,16 @@ export function triage(input: TriageInput) {
         break;
       }
       case "open-end": {
+        const autoJoin = snapshot.issues?.some(
+          (issue) => issue.id === f.id && issue.near?.ports.some((port) => port.autoJoin),
+        );
         const ruled = verdictOf(doc, f.id);
         const answered = ruled === "capped" || ruled === "ignore";
         const row = {
           ...item,
-          ...namedFinding("Open end", f.elementIds),
+          ...(autoJoin
+            ? { title: f.note, titleParts: [f.note] }
+            : namedFinding("Open end", f.elementIds)),
           status: answered ? `ruled: ${ruled}` : "fix in Revit",
           verbs: [
             select(f.elementIds),

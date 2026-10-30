@@ -141,7 +141,7 @@ test("a Family table edit makes one journal step and Mod+Z restores the exact Wo
 test("Family review seals a plan, commits its ticket and retains the original receipt", async () => {
   const { view, situation, owner } = await mounted();
   fireEvent.click(await liveButton(situation, "Apply family"));
-  const review = await situation.findByLabelText("Apply family review");
+  const review = await within(document.body).findByLabelText("Apply family review");
   expect(review.textContent).toContain("Review 1 family: 0 changes, 0 refusals.");
   expect(review.textContent).toContain("Test family");
   expect(review.textContent).not.toContain('"receipt"');
@@ -180,7 +180,7 @@ test("Family receipts exclude another document lifetime even when its action con
 test("a newer Family Work revision refuses the stale ticket without dispatching apply", async () => {
   const { view, situation } = await mounted();
   fireEvent.click(await liveButton(situation, "Apply family"));
-  await situation.findByLabelText("Apply family review");
+  await within(document.body).findByLabelText("Apply family review");
   await act(async () => {
     await writeRouteWork(
       host.key,
@@ -423,7 +423,7 @@ test("Family build reviews and commits the saved member's exact hash", async () 
     routeUrl({ pod: host.sourceMember.pod, path: host.sourceMember.path }),
   );
   fireEvent.click(await liveButton(situation, "Build .rfa"));
-  const review = await situation.findByLabelText("Build .rfa review");
+  const review = await within(document.body).findByLabelText("Build .rfa review");
   expect(review.textContent).toContain(`Build ${host.sourceMember.path}`);
   expect(review.textContent).toContain(`SHA-256: ${host.sourceMember.sha256}`);
   expect(review.textContent).not.toContain('"source"');
@@ -454,7 +454,7 @@ test("unreadable Family Work recovers only through the kernel's required review 
   const { view, situation, owner } = await mounted();
   expect(await situation.findByText(UNREADABLE_WORK, { exact: false })).toBeTruthy();
   fireEvent.click(await liveButton(situation, "Start fresh"));
-  await situation.findByLabelText("Start fresh review");
+  await within(document.body).findByLabelText("Start fresh review");
   expect(host.writes).toEqual([]);
   fireEvent.click(await liveButton(situation, "Start fresh"));
   await waitFor(() => expect(host.writes).toHaveLength(1));

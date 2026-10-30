@@ -146,7 +146,7 @@ test("partition's one review button carries standing rejection polygons and re-r
   await waitFor(() => expect(owner().readings.get("plan").current).toBe(true));
   const images = host.calls.filter((row) => row.key === "revit.context.view-image").length;
   fireEvent.click(await liveButton(situation, "partition"));
-  const review = await situation.findByLabelText("partition review");
+  const review = await within(document.body).findByLabelText("partition review");
   expect(review.textContent).toContain("Partition this view into rooms.");
   expect(review.textContent).toContain("Keep 1 rejected region excluded.");
   expect(review.textContent).not.toContain('"rejected"');
@@ -170,7 +170,7 @@ test("a Work change during native write review stales the kernel ticket before R
   });
   const { situation, owner } = await mounted();
   fireEvent.click(await liveButton(situation, "apply"));
-  await situation.findByLabelText("apply review");
+  await within(document.body).findByLabelText("apply review");
   await act(async () => {
     await writeRouteWork(
       host.key,
@@ -343,7 +343,7 @@ test("native field review submits edited values by GUID and excludes suggestions
   });
   const { situation, owner } = await mounted();
   fireEvent.click(await liveButton(situation, "apply"));
-  await situation.findByLabelText("apply review");
+  await within(document.body).findByLabelText("apply review");
   expect(host.actions).toEqual([]);
   fireEvent.click(await liveButton(situation, "apply"));
   await waitFor(() =>
@@ -384,7 +384,7 @@ test("selection merge and anchored-mark merge each use the kernel review and exa
     owner().view.setPage({ selected: ["fixture-1", "fixture-2"] });
   });
   fireEvent.click(await liveButton(situation, "merge"));
-  await situation.findByLabelText("merge review");
+  await within(document.body).findByLabelText("merge review");
   expect(host.actions).toEqual([]);
   fireEvent.click(await liveButton(situation, "merge"));
   await waitFor(() => expect(owner().results.get("merge")).toMatchObject({ state: "done" }));
