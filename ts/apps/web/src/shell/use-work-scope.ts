@@ -3,11 +3,12 @@
  * Work key -> Work document, as the old kernel resolves them, published as the graph mount's
  * immutable external-store ports plus its host write ports. Routes never supply these.
  */
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   bindWork,
   UNREADABLE_WORK,
   type RouteGraph,
+  type RouteStatePatch,
   type RouteStateSpec,
   type RouteStateWriteResult,
   type WorkKey,
@@ -16,7 +17,12 @@ import {
 } from "@pe/agent-contracts";
 import { dirty, previousOf } from "#/readings";
 import { useRouteSearchSlice } from "../route/activity";
-import { startFreshRouteWork, subscribeAcceptedDeltas, writeRouteWork } from "../route/host";
+import {
+  salvageRouteWork,
+  startFreshRouteWork,
+  subscribeAcceptedDeltas,
+  writeRouteWork,
+} from "../route/host";
 import { appAtomRegistry, useOwned } from "../route/route-owner";
 import { useRouteTarget } from "../route/route-target";
 import { docAtom } from "../route/route-work";
@@ -42,6 +48,8 @@ export type WorkScopeStatus = Pick<
   closed: boolean;
   /** The host holds Work it cannot read: the kernel's start-fresh verb is the one recovery. */
   unreadable: boolean;
+  /** How many patches the set-aside Work would add to this one; the kernel's `work.salvage` applies them. */
+  salvageable: number;
 };
 export interface WorkScopePorts<W> {
   getSnapshot(): MountScope<W>;
@@ -49,6 +57,8 @@ export interface WorkScopePorts<W> {
   write(key: WorkKey, write: WorkWrite): Promise<RouteStateWriteResult>;
   /** Human recovery for unreadable Work; refused when closed or when the route has no Work. */
   startFresh(key: WorkKey): Promise<RouteStateWriteResult>;
+  /** Ask the host for this Work again. */
+  reread(key: WorkKey): void;
   subscribeAcceptedDeltas(key: WorkKey, onAck: (ack: WorkWriteAck) => void): () => void;
   status: WorkScopeStatus;
 }
@@ -99,18 +109,43 @@ export function useWorkScope<P, W>(
   const reading = useOwned(appAtomRegistry, atom);
   // Only the host's own unreadable-Work failure offers recovery; a host that is down does not.
   const unreadable = !closed && reading?.state === "failed" && reading.message === UNREADABLE_WORK;
+  // What the host set aside (or cannot read) for this Work; read again whenever its revision moves,
+  // because start fresh and a carry-over both advance it.
+  const [salvaged, setSalvaged] = useState<{ key: string; value: unknown } | null>(null);
+  const revision = reading ? (previousOf(reading)?.revision ?? null) : null;
+  useEffect(() => {
+    if (!graph.salvage || !spec || !readable || closed) return setSalvaged(null);
+    let live = true;
+    salvageRouteWork(key).then(
+      (got) => live && setSalvaged(got ? { key: keyText, value: got.value } : null),
+      () => live && setSalvaged(null),
+    );
+    return () => {
+      live = false;
+    };
+  }, [graph, spec, readable, closed, key, keyText, revision, unreadable]);
   const snapshot = useMemo((): MountScope<W> => {
     const seen = reading ? previousOf(reading) : undefined;
     // Absent Work is the empty document at revision 0; only an authored write creates it.
     const empty = seen && seen.doc === null ? graph.work?.safeParse({}) : undefined;
     const doc = seen?.doc ?? (empty?.success ? empty.data : undefined);
+    // The route says what is still missing; a throwing hook offers nothing rather than breaking the mount.
+    let salvage: readonly RouteStatePatch[] = [];
+    if (graph.salvage && salvaged?.key === keyText)
+      try {
+        salvage = graph.salvage(salvaged.value, doc === undefined ? null : (doc as W));
+      } catch {
+        salvage = [];
+      }
     return {
       target: resolution.kind === "resolved" ? resolution.target : { kind: "host" },
       work:
         seen && doc !== undefined ? { handle: { key, revision: seen.revision ?? 0 }, doc } : null,
       ...(unreadable && { unreadable: key }),
+      ...(salvage.length && { salvage }),
     };
-  }, [resolution, key, reading, graph, unreadable]);
+  }, [resolution, key, reading, graph, unreadable, salvaged, keyText]);
+  const salvageable = snapshot.salvage?.length ?? 0;
   // The mount captures its ports once; they read this store, so they never go stale.
   const store = useRef({ snapshot, closed, lost: "", listeners: new Set<() => void>() }).current;
   Object.assign(store, { snapshot, closed, lost: target.bindingLost?.sentence ?? CLOSED_WORK });
@@ -142,6 +177,7 @@ export function useWorkScope<P, W>(
             return result;
           }
         : noWork,
+      reread: (key: WorkKey) => dirty({ ...key, kind: "work" }),
       subscribeAcceptedDeltas: spec
         ? (key: WorkKey, onAck: (ack: WorkWriteAck) => void) => subscribeAcceptedDeltas(key, onAck)
         : noDeltas,
@@ -155,8 +191,9 @@ export function useWorkScope<P, W>(
       targetProvenance: target.targetProvenance,
       closed,
       unreadable,
+      salvageable,
     }),
-    [statusText, closed, unreadable], // eslint-disable-line react-hooks/exhaustive-deps
+    [statusText, closed, unreadable, salvageable], // eslint-disable-line react-hooks/exhaustive-deps
   );
   return useMemo(() => ({ ...ports, status }), [ports, status]);
 }

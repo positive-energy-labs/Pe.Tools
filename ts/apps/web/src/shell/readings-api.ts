@@ -6,17 +6,24 @@ import { readDuctsBody } from "../readings";
 import type { ReadingContext, UseSource } from "./readings";
 import { subscriptionSource } from "./readings-use";
 
+/** A reading's host request; `headers` carry the exact document a route-scoped read needs. */
+export interface JsonRequest {
+  path: string;
+  body?: unknown;
+  headers?: Readonly<Record<string, string>>;
+}
+
 export async function requestJson<T>(
-  request: { path: string; body?: unknown },
+  request: JsonRequest,
   schema: z.ZodType<T>,
   signal: AbortSignal,
 ): Promise<T> {
   const response = await hostFetch(request.path, {
     ...(request.body === undefined
-      ? {}
+      ? request.headers && { headers: { ...request.headers } }
       : {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: { "content-type": "application/json", ...request.headers },
           body: JSON.stringify(request.body),
         }),
     signal,
@@ -27,7 +34,7 @@ export async function requestJson<T>(
 
 /** HTTP resources share the kernel's cancellation and generation fence with subscriptions. */
 export function jsonSource<T>(options: {
-  request(context: ReadingContext): { path: string; body?: unknown } | null;
+  request(context: ReadingContext): JsonRequest | null;
   schema: z.ZodType<T>;
   absent: T;
 }): UseSource<T> {

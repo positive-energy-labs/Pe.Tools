@@ -18,6 +18,7 @@ import {
   commit,
   invoke,
   placements,
+  queryVerb,
   workVerb,
   type Caller,
   type InvocationPhase,
@@ -27,10 +28,18 @@ import {
 } from "./verbs";
 import { kernelCellVerbs } from "./verbs-cells";
 
-const transport = vi.hoisted(() => ({ run: vi.fn() }));
+const transport = vi.hoisted(() => ({ run: vi.fn(), families: vi.fn(), schedule: vi.fn() }));
 vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({
   runSemanticAction: transport.run,
   cancelRunningAdmissions: vi.fn(async () => []),
+}));
+
+vi.mock("../../../../packages/mcps/src/shared/families-client", async (original) => ({
+  ...(await original<typeof import("../../../../packages/mcps/src/shared/families-client")>()),
+  readFamiliesCapture: transport.families,
+}));
+vi.mock("../../../../packages/mcps/src/shared/schedule-client", () => ({
+  readScheduleCapture: transport.schedule,
 }));
 
 const key: WorkKey = { binding: "workspace", route: "verb-proof", target: null, work: "one" };
@@ -65,6 +74,8 @@ const succeededReceipt = () =>
   });
 beforeEach(() => {
   transport.run.mockReset();
+  transport.families.mockReset();
+  transport.schedule.mockReset();
   transport.run.mockResolvedValue(succeededReceipt());
 });
 
@@ -538,4 +549,86 @@ test("reject uses unsuggest, and cell admission can refuse deletion", async () =
   expect(bound.refusal).toBe("This cell is locked");
   expect((await bound.run()).state).toBe("refused");
   expect(env.doc().cells.first).toBeDefined();
+});
+
+test("intent reads the evidence its review ticket froze, so an apply names the authentic preview", async () => {
+  const env = environment("human");
+  const verb = commandVerb(
+    "takeoffs.initialize",
+    { label: "initialize", input: z.object({ stage: z.string() }), review: "shown" },
+    {
+      prepare: () => ({ plan: { id: "plan-1" } }),
+      intent: (_scope, input, _answers, ticket) => ({
+        ...input,
+        stage: (ticket!.evidence as { plan: { id: string } }).plan.id,
+      }),
+    },
+  );
+  const { ticket } = reviewed(await invoke(env.ctx, verb, null, { stage: "ignored" }));
+  expect(ticket.evidence).toEqual({ plan: { id: "plan-1" } });
+  expect(await commit(env.ctx, verb, ticket)).toMatchObject({ state: "done", kind: "command" });
+  expect(transport.run.mock.calls[0]![1]).toEqual({ stage: "plan-1" });
+});
+
+test("a families read reaches the families client with the Work key and exact document", async () => {
+  const env = environment("human");
+  const filter = { categoryNames: [], familyNames: [], placementScope: "AllLoaded" as const };
+  const readId = crypto.randomUUID();
+  const verb = queryVerb(
+    "families.read",
+    { label: "Read families", input: z.strictObject({}).default({}), review: "none" },
+    { intent: () => ({ filter, readId }) },
+  );
+  transport.families.mockResolvedValue({ id: "observation" });
+  expect(await invoke(env.ctx, verb, null, {})).toMatchObject({
+    state: "done",
+    kind: "query",
+    receipt: { key: "families.read", value: { id: "observation" } },
+  });
+  expect(transport.families).toHaveBeenCalledWith(
+    "families.read",
+    { filter, readId },
+    key,
+    env.target.ref,
+  );
+});
+
+test("a query's final result is admitted only into the scope generation it started in", async () => {
+  const env = environment("human");
+  let generation = 1;
+  const moving: VerbContext<"human"> = {
+    ...env.ctx,
+    snapshot: () => ({ ...env.ctx.snapshot(), generation }),
+  };
+  const verb = queryVerb("schedule.grid.catalog", {
+    label: "Catalog",
+    input: z.strictObject({}).default({}),
+    review: "none",
+  });
+  let finish!: (value: unknown) => void;
+  transport.schedule.mockReturnValueOnce(new Promise((resolve) => (finish = resolve)));
+  const pressed = invoke(moving, verb, null, {});
+  await vi.waitFor(() => expect(transport.schedule).toHaveBeenCalled());
+  // A -> B -> A: the same Target and Work key come back, but as the third generation.
+  generation = 3;
+  finish({ schedules: [] });
+  expect(await pressed).toMatchObject({ state: "stale" });
+});
+
+test("a host refusal from a query reads refused; a server failure reads failed", async () => {
+  const env = environment("human");
+  const verb = queryVerb("schedule.grid.catalog", {
+    label: "Catalog",
+    input: z.strictObject({}).default({}),
+    review: "none",
+  });
+  transport.schedule.mockRejectedValueOnce(
+    Object.assign(Error("Open a document"), { status: 409 }),
+  );
+  expect(await invoke(env.ctx, verb, null, {})).toMatchObject({
+    state: "refused",
+    refusal: { message: "Open a document" },
+  });
+  transport.schedule.mockRejectedValueOnce(Object.assign(Error("Host crashed"), { status: 500 }));
+  expect(await invoke(env.ctx, verb, null, {})).toMatchObject({ state: "failed" });
 });

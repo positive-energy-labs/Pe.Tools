@@ -16,7 +16,7 @@ import {
 import { Equal, Hash, Option } from "effect";
 import { dirty, mapReading, readingAtom, peReadings, previousOf, type Readings } from "#/readings";
 import { causeRefusal, refuse, writeRefusal, type Refusal } from "./refusal";
-import { getRouteSalvage, postRouteWrite, routeInput } from "./host";
+import { postRouteWrite, routeInput, salvageRouteWork } from "./host";
 import { type Slice, appAtomRegistry, isRecord, useOwned } from "./route-owner";
 
 class RouteAtomKey implements Equal.Equal {
@@ -131,7 +131,7 @@ export function docWriter<S extends RouteStateSpec<any>>(
     startFresh: (onAccepted?: (base: number, revision: number, write: WorkWriteAck) => void) =>
       send(START_FRESH, {}, onAccepted),
     /** The human door only: what the route carries over from Work it can no longer read. */
-    salvage: () => getRouteSalvage(routeInput(spec.route, key)),
+    salvage: () => salvageRouteWork(key),
   };
 }
 

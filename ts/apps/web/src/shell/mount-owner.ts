@@ -2,6 +2,8 @@ import { z } from "zod";
 import {
   canonicalRouteInput,
   commands,
+  SALVAGE_VERB,
+  salvageVerb,
   START_FRESH_VERB,
   startFreshVerb,
   validateRouteGraph,
@@ -37,6 +39,7 @@ import {
   bind,
   commit,
   invoke,
+  recoveryOffered,
   recoveryVerb,
   type InvocationResult,
   type ReviewTicket,
@@ -54,11 +57,15 @@ export interface MountScope<W> {
   conflict?: boolean;
   /** The kernel door sets this: the host holds Work it cannot read, so start-fresh is the one way out. */
   unreadable?: WorkKey;
+  /** The kernel door sets this: patches the host's set-aside Work would add here; `work.salvage` applies them as one write. */
+  salvage?: readonly RouteStatePatch[];
 }
 export const CONFLICT_REFUSAL = "Work changed; review and retry";
 // One executable recovery for every mount; its declaration is the contract's, so Pea reads the same verb.
 const { kind: _kind, review: _review, ...freshDeclaration } = startFreshVerb;
 const startFresh = recoveryVerb("start-fresh", freshDeclaration);
+const { kind: _salvageKind, review: _salvageReview, ...salvageDeclaration } = salvageVerb;
+const salvage = recoveryVerb("salvage", salvageDeclaration);
 export interface MountBinding {
   subject: VerbSubject | null;
   args: unknown;
@@ -82,6 +89,8 @@ export interface MountAdapters<P, W> {
   subscribeAcceptedDeltas(key: WorkKey, onAck: (ack: WorkWriteAck) => void): () => void;
   /** The recovery door behind the start-fresh verb (`useWorkScope`); absent only in tests that never reach unreadable Work. */
   startFresh?(key: WorkKey): Promise<RouteStateWriteResult>;
+  /** Asks the host for this Work again (the conflict banner's one control); absent in tests that never conflict. */
+  reread?(key: WorkKey): void;
   subjects?: VerbContext["subjects"];
   binding?(id: string, row: unknown, scope: BindingScope<P, W>): MountBinding;
   /** The cell subject (`cell:<seg|key>`) a pane row stands for, or null; the kernel's cell verbs follow it. */
@@ -167,12 +176,16 @@ export function createGraphMount<P, W>(
     ...graph.verbs,
     ...kernel.verbs,
     ...(graph.work && { [START_FRESH_VERB]: startFresh }),
+    ...(graph.work && graph.salvage && { [SALVAGE_VERB]: salvage }),
   };
   const registry = makeAtomRegistry();
   const base = createRouteOwner(graph.key, registry);
   const view = createViewOwner(base, schema, initialPage, { transition: graph.transition });
   let raw = adapters.getSnapshot();
   let scope = raw;
+  // One count per Target/Work-key change: a verb's result is admitted only into the generation it started in.
+  let generation = 0;
+  let scopeId = canonicalRouteInput([raw.target, raw.work ? workKey(raw.work.handle.key) : null]);
   // One Work per mount at a time: the stale write's key and the revision it was refused against.
   let conflict: { work: string; revision: number } | null = null;
   let disposed = false;
@@ -355,14 +368,17 @@ export function createGraphMount<P, W>(
       target: scope.target,
       work: scope.work,
       unreadable: scope.unreadable ?? null,
+      salvage: scope.salvage ?? null,
+      generation,
       basis: {
         pageEpoch: view.read().epoch,
         readings: basis(),
         unreadable: scope.unreadable ? workKey(scope.unreadable) : null,
+        salvage: scope.salvage ?? null,
       },
     }),
     write: (key, envelope) => write(key, { ...envelope, kind: "apply" }),
-    recover: async (_recovery, key) => {
+    recover: async (key) => {
       if (!adapters.startFresh)
         return { ok: false, kind: "refused", error: "This route has no recovery door", hint: "" };
       const result = await adapters.startFresh(key);
@@ -434,7 +450,12 @@ export function createGraphMount<P, W>(
           if (result.receipt.subject !== null && graph.workSubject)
             view.setPage({ [graph.workSubject]: result.receipt.subject } as Partial<P>);
         }
-        if (dispatch && result.state === "done" && result.kind === "recovery")
+        if (
+          dispatch &&
+          result.state === "done" &&
+          result.kind === "recovery" &&
+          result.recovery === "start-fresh"
+        )
           // The whole Work is replaced: a root barrier on the timeline, and the journal holds no step.
           timeline.append({
             kind: "receipt",
@@ -516,6 +537,13 @@ export function createGraphMount<P, W>(
       }).then((result) => consume(verb, result));
     reviews.clear();
   };
+  const stage = () => {
+    const entry = graphFields(graph).find(([, f]) => f.role === "stage");
+    const value = entry ? view.read().page[entry[0] as keyof P] : undefined;
+    return typeof value === "string" && graph.stages[value]
+      ? value
+      : (graph.stageOrder ?? Object.keys(graph.stages))[0]!;
+  };
   return {
     registry,
     view,
@@ -530,6 +558,21 @@ export function createGraphMount<P, W>(
     paneRows,
     /** Graph verbs plus the kernel's cell verbs; the one table every lookup reads. */
     verbs,
+    /**
+     * The verb ids the Situation draws: the stage's own, then each kernel recovery only while its
+     * predicate holds (start-fresh on unreadable Work, carry-over on readable Work with a remainder).
+     */
+    stageVerbs(): readonly string[] {
+      const own = graph.stages[stage()]!.verbs;
+      const offered = [START_FRESH_VERB, SALVAGE_VERB].filter(
+        (id) => verbs[id] && recoveryOffered(verbs[id], context.snapshot()),
+      );
+      return [...own, ...offered];
+    },
+    /** Reads the current Work again, which is what ends a conflict. */
+    reread() {
+      if (scope.work) adapters.reread?.(scope.work.handle.key);
+    },
     /** Chord-free cell verb ids a row carries (palette and row menu only); [] when it is no cell. */
     cellVerbs: (row: unknown): readonly string[] => {
       const subject = cellSubject(row);
@@ -589,13 +632,7 @@ export function createGraphMount<P, W>(
         },
       };
     },
-    stage() {
-      const entry = graphFields(graph).find(([, f]) => f.role === "stage");
-      const value = entry ? view.read().page[entry[0] as keyof P] : undefined;
-      return typeof value === "string" && graph.stages[value]
-        ? value
-        : (graph.stageOrder ?? Object.keys(graph.stages))[0]!;
-    },
+    stage,
     journal: journalFor,
     async restore(direction: "undo" | "redo") {
       if (!scope.work || disposed || !available()) return null;
@@ -623,6 +660,11 @@ export function createGraphMount<P, W>(
       const update = () => {
         raw = adapters.getSnapshot();
         const seen = raw.work;
+        const id = canonicalRouteInput([raw.target, seen ? workKey(seen.handle.key) : null]);
+        if (id !== scopeId) {
+          scopeId = id;
+          generation++;
+        }
         // A newer read of the Work is the re-read that ends a conflict.
         if (
           conflict &&

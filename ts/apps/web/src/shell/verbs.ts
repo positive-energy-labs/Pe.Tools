@@ -25,6 +25,11 @@ import {
   readFamilyCapture,
 } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { readScheduleCapture } from "../../../../packages/mcps/src/shared/schedule-client";
+import {
+  familiesReads,
+  readFamiliesCapture,
+  type FamiliesReadKey,
+} from "../../../../packages/mcps/src/shared/families-client";
 import type { createRouteOwner } from "../route/route-owner";
 import { refuse, writeRefusal, type Refusal } from "../route/refusal";
 import { DEFAULT_WAIT_S } from "../route/waits";
@@ -44,6 +49,13 @@ export interface VerbSnapshot {
   readonly basis: unknown;
   /** Work the host holds but cannot read; only a recovery verb acts on it. */
   readonly unreadable?: WorkKey | null;
+  /**
+   * Advances every time the Target or Work key changes, so A -> B -> A is three generations: a
+   * result admitted for the first must not land in the third.
+   */
+  readonly generation?: number;
+  /** Patches the host's set-aside Work would add to this readable Work; only `work.salvage` acts on them. */
+  readonly salvage?: readonly RouteStatePatch[] | null;
 }
 export interface VerbContext<C extends Caller = Caller> {
   readonly caller: C;
@@ -59,8 +71,8 @@ export interface VerbContext<C extends Caller = Caller> {
   ) => Promise<RouteStateWriteResult>;
   readonly changed?: (state: InvocationState, press: string | null) => void;
   readonly waitSeconds?: number;
-  /** The kernel's recovery door; absent means no recovery verb can run. */
-  readonly recover?: (recovery: Recovery, key: WorkKey) => Promise<RouteStateWriteResult>;
+  /** The kernel's start-fresh door; absent means that recovery cannot run. Salvage is a plain Work write. */
+  readonly recover?: (key: WorkKey) => Promise<RouteStateWriteResult>;
 }
 export interface VerbScope {
   readonly snapshot: VerbSnapshot;
@@ -88,8 +100,21 @@ export type InvocationResult =
   | { state: "review"; press: string; ticket: ReviewTicket }
   | { state: "done"; press: string; kind: "work"; acknowledgement: WorkWriteAck }
   | { state: "done"; press: string; kind: "command"; receipt: HostReceipt }
-  | { state: "done"; press: string; kind: "query"; receipt: QueryReceipt }
-  | { state: "done"; press: string; kind: "recovery"; acknowledgement: WorkWriteAck }
+  | {
+      state: "done";
+      press: string;
+      kind: "query";
+      receipt: QueryReceipt;
+      /** Present when the verb's `patches` landed as one Work write. */
+      acknowledgement?: WorkWriteAck;
+    }
+  | {
+      state: "done";
+      press: string;
+      kind: "recovery";
+      recovery: Recovery;
+      acknowledgement: WorkWriteAck;
+    }
   | {
       state: "refused" | "failed" | "stale";
       press: string | null;
@@ -98,8 +123,8 @@ export type InvocationResult =
     };
 type HostReceipt = Awaited<ReturnType<typeof runSemanticAction>>;
 /** Host reads outside the command table: they run through the same invocation, never a route fetch. */
-export type QueryKey = ScheduleReadKey | FamilyReadKey;
-const reads = { ...scheduleReads, ...familyReads };
+export type QueryKey = ScheduleReadKey | FamilyReadKey | FamiliesReadKey;
+const reads = { ...scheduleReads, ...familyReads, ...familiesReads };
 /** Receipt-shaped so the timeline records a read like a command; `subject` is the Work it names. */
 export interface QueryReceipt {
   readonly id: string;
@@ -109,7 +134,25 @@ export interface QueryReceipt {
   readonly value: unknown;
   readonly subject: string | null;
 }
-export type Recovery = "start-fresh";
+export type Recovery = "start-fresh" | "salvage";
+/** Each recovery's own predicate: the stage lists its verb, and the verb refuses, only while it holds. */
+const offeredWhen: Record<Recovery, (snapshot: VerbSnapshot) => string | null> = {
+  "start-fresh": (snapshot) =>
+    snapshot.unreadable ? null : "This Work is readable; there is nothing to recover",
+  salvage: (snapshot) =>
+    snapshot.unreadable
+      ? "Start fresh first; the Work cannot take a write yet"
+      : !snapshot.work
+        ? "Work has not been read yet"
+        : snapshot.salvage?.length
+          ? null
+          : "Nothing set aside is missing from this Work",
+};
+/** Whether a kernel recovery verb belongs on the stage now. */
+export const recoveryOffered = (verb: VerbDecl, snapshot: VerbSnapshot): boolean => {
+  const recovery = bindings.get(verb)?.recover;
+  return recovery !== undefined && offeredWhen[recovery](snapshot) === null;
+};
 type Terminal = Exclude<InvocationResult, { state: "review" }>;
 export type InvocationPhase<C extends Caller> =
   | { kind: "press" }
@@ -122,7 +165,14 @@ interface Binding {
   ready?: (scope: VerbScope, input: unknown) => string | null;
   patches?: (scope: VerbScope, input: unknown) => readonly RouteStatePatch[];
   command?: SemanticActionKey;
-  intent?: (scope: VerbScope, input: unknown, answers: unknown) => Record<string, unknown>;
+  intent?: (
+    scope: VerbScope,
+    input: unknown,
+    answers: unknown,
+    ticket: ReviewTicket | undefined,
+  ) => Record<string, unknown>;
+  /** A query's Work edit from its result, applied as one write once the read is admitted. */
+  queryPatches?: (scope: VerbScope, result: unknown) => readonly RouteStatePatch[];
   prepare?: (scope: VerbScope, input: unknown) => unknown;
   answers?: z.ZodType;
   waitSeconds?: number;
@@ -164,11 +214,17 @@ export function commandVerb<K extends SemanticActionKey, S extends z.ZodType>(
     waitSeconds?: number;
     ready?: (scope: VerbScope, input: z.output<S>) => string | null;
     prepare?: (scope: VerbScope, input: z.output<S>) => unknown;
-    intent: (scope: VerbScope, input: z.output<S>, answers: unknown) => CommandInput<K>;
+    /** `ticket` is the review the person (or Pea) saw, with the evidence `prepare` sealed; absent when `review` is none. */
+    intent: (
+      scope: VerbScope,
+      input: z.output<S>,
+      answers: unknown,
+      ticket: ReviewTicket | undefined,
+    ) => CommandInput<K>;
   },
 ): VerbDecl<S> {
-  const { answers, ...metadata } = declaration;
-  const verb = { does: command, ...metadata, kind: "command" as const };
+  const { answers } = declaration;
+  const verb = { does: command, ...declaration, kind: "command" as const };
   bindings.set(verb, {
     command,
     waitSeconds: implementation.waitSeconds,
@@ -179,8 +235,8 @@ export function commandVerb<K extends SemanticActionKey, S extends z.ZodType>(
     prepare:
       implementation.prepare &&
       ((scope, input) => implementation.prepare!(scope, input as z.output<S>)),
-    intent: (scope, input, reply) =>
-      implementation.intent(scope, input as z.output<S>, reply) as Record<string, unknown>,
+    intent: (scope, input, reply, ticket) =>
+      implementation.intent(scope, input as z.output<S>, reply, ticket) as Record<string, unknown>,
   });
   return verb;
 }
@@ -202,20 +258,24 @@ export function queryVerb<K extends QueryKey, S extends z.ZodType>(
       answers: unknown,
     ) => z.input<(typeof reads)[K]["input"]>;
     subject?: (value: unknown) => string | null;
+    /** Work edits from the admitted result: ONE write through the normal door, one undoable step. */
+    patches?: (scope: VerbScope, result: unknown) => readonly RouteStatePatch[];
   } = {},
 ): VerbDecl<S> {
-  const { answers, ...metadata } = declaration;
+  const { answers } = declaration;
   const verb: VerbDecl<S> = {
     does: read,
-    ...metadata,
+    ...declaration,
     kind: "query",
-    effect: "query",
+    // A read that also edits Work waits out a conflict like any writing verb.
+    effect: implementation.patches ? "command" : "query",
     ...(implementation.subject && { selects: "work" as const }),
   };
   bindings.set(verb, {
     query: read,
     answers,
     subject: implementation.subject,
+    queryPatches: implementation.patches,
     ready:
       implementation.ready &&
       ((scope, input) => implementation.ready!(scope, input as z.output<S>)),
@@ -231,7 +291,7 @@ export function queryVerb<K extends QueryKey, S extends z.ZodType>(
   return verb;
 }
 
-/** A kernel recovery: no patches, no command; a required review whose answers the declaration states. */
+/** A kernel recovery: no route patches, no command; a required review whose answers the declaration states. */
 export function recoveryVerb<S extends z.ZodType>(
   recovery: Recovery,
   declaration: Omit<VerbDecl<S>, "kind" | "review" | "answers"> & { answers: z.ZodType },
@@ -240,9 +300,14 @@ export function recoveryVerb<S extends z.ZodType>(
   bindings.set(verb, {
     recover: recovery,
     answers: declaration.answers,
-    ready: (scope) =>
-      scope.snapshot.unreadable ? null : "This Work is readable; there is nothing to recover",
-    prepare: (scope) => ({ work: workKey(scope.snapshot.unreadable!) }),
+    ready: (scope) => offeredWhen[recovery](scope.snapshot),
+    prepare: (scope) =>
+      recovery === "salvage"
+        ? {
+            work: workKey(scope.snapshot.work!.handle.key),
+            members: scope.snapshot.salvage!.map((patch) => patch.path),
+          }
+        : { work: workKey(scope.snapshot.unreadable!) },
   });
   return verb;
 }
@@ -252,6 +317,8 @@ async function runQuery(key: QueryKey, input: Record<string, unknown>, snapshot:
   if (Object.hasOwn(scheduleReads, key))
     return readScheduleCapture(key as ScheduleReadKey, input, target);
   if (!snapshot.work) throw Error("Work has not been read yet");
+  if (Object.hasOwn(familiesReads, key))
+    return readFamiliesCapture(key as FamiliesReadKey, input, snapshot.work.handle.key, target);
   return readFamilyCapture(key as FamilyReadKey, input, snapshot.work.handle.key, target);
 }
 
@@ -449,6 +516,7 @@ async function invokeCore<C extends Caller>(
           const ready = binding.ready?.(scope, input);
           if (ready) return finish(failure("refused", ready, press));
           let answers: unknown;
+          let ticket: ReviewTicket | undefined;
           if (verb.review !== "none") {
             const evidence = await binding.prepare?.(scope, input);
             const prepared = ctx.snapshot();
@@ -459,7 +527,7 @@ async function invokeCore<C extends Caller>(
               return finish(
                 failure("stale", "The invocation basis changed during preparation", press),
               );
-            const ticket = copy({
+            ticket = copy({
               press,
               subject: boundSubject,
               input,
@@ -498,13 +566,28 @@ async function invokeCore<C extends Caller>(
           if (refusal) return finish(failure("refused", refusal, press));
           ctx.changed?.("applying", press);
           if (verb.kind === "recovery") {
-            if (!binding.recover || !ctx.recover || !current.unreadable)
+            if (!binding.recover)
               return finish(failure("refused", "This route has no recovery for this Work", press));
-            const result = await ctx.recover(binding.recover, structuredClone(current.unreadable));
+            let result: RouteStateWriteResult;
+            if (binding.recover === "salvage") {
+              // Carrying over is an ordinary Work write: one ack, one journal step, undoable.
+              result = await ctx.write(current.work!.handle.key, {
+                patches: structuredClone(current.salvage!) as RouteStatePatch[],
+                expectedRevision: current.work!.handle.revision,
+                press,
+              });
+            } else {
+              if (!ctx.recover || !current.unreadable)
+                return finish(
+                  failure("refused", "This route has no recovery for this Work", press),
+                );
+              result = await ctx.recover(structuredClone(current.unreadable));
+            }
             if (!result.ok) return finish(resultOf(writeRefusal(result)!, press));
             return finish({
               state: "done",
               kind: "recovery",
+              recovery: binding.recover,
               press,
               acknowledgement: result.write,
             });
@@ -512,23 +595,63 @@ async function invokeCore<C extends Caller>(
           if (verb.kind === "query") {
             if (!binding.query || !binding.intent)
               return finish(failure("refused", "This query has no read binding", press));
+            if (binding.queryPatches && !current.work)
+              return finish(failure("refused", "Work has not been read yet", press));
             // The read's own contract validates and normalizes what reaches the host.
             const request = reads[binding.query].input.parse(
-              structuredClone(binding.intent(fresh, input, answers)),
+              structuredClone(binding.intent(fresh, input, answers, ticket)),
             ) as Record<string, unknown>;
-            const value = await runQuery(binding.query, request, current);
+            let value: unknown;
+            try {
+              value = await runQuery(binding.query, request, current);
+            } catch (cause) {
+              // A 4xx is the host refusing this read, in its own words; anything else failed.
+              const status = (cause as { status?: unknown } | null)?.status;
+              const refusedByHost = typeof status === "number" && status >= 400 && status < 500;
+              return finish(
+                failure(
+                  refusedByHost ? "refused" : "failed",
+                  cause instanceof Error ? cause.message : String(cause),
+                  press,
+                ),
+              );
+            }
+            // A result for a Target or Work the person has left must not select anything now.
+            const after = ctx.snapshot();
+            if (
+              current.generation !== after.generation ||
+              !equal(current.target, after.target) ||
+              (current.work ? workKey(current.work.handle.key) : null) !==
+                (after.work ? workKey(after.work.handle.key) : null)
+            )
+              return finish(
+                failure("stale", "The Target or Work changed while the read ran", press),
+              );
+            const receipt = copy({
+              id: press,
+              key: binding.query,
+              state: "succeeded" as const,
+              input: request,
+              value,
+              subject: binding.subject?.(value) ?? null,
+            });
+            const patches = binding.queryPatches?.(fresh, value) ?? [];
+            if (!patches.length) return finish({ state: "done", kind: "query", press, receipt });
+            // The generation fence above already holds, so the Work is the one the read started on.
+            // Its revision may have moved while the read ran; these are path writes, the host arbitrates.
+            const written = await ctx.write(after.work!.handle.key, {
+              patches: structuredClone(patches) as RouteStatePatch[],
+              expectedRevision: after.work!.handle.revision,
+              press,
+            });
+            const refused = writeRefusal(written);
+            if (refused) return finish(resultOf(refused, press));
             return finish({
               state: "done",
               kind: "query",
               press,
-              receipt: copy({
-                id: press,
-                key: binding.query,
-                state: "succeeded" as const,
-                input: request,
-                value,
-                subject: binding.subject?.(value) ?? null,
-              }),
+              receipt,
+              ...(written.ok && { acknowledgement: written.write }),
             });
           }
           if (verb.kind === "work") {
@@ -552,7 +675,7 @@ async function invokeCore<C extends Caller>(
           // Domain intent stays above the existing semantic runner's Work association and admission.
           const receipt = await runSemanticAction(
             binding.command,
-            structuredClone(binding.intent(fresh, input, answers)),
+            structuredClone(binding.intent(fresh, input, answers, ticket)),
             current.target,
             current.work?.handle,
             "",

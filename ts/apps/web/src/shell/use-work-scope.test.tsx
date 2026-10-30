@@ -31,7 +31,12 @@ import { routeFromGraph } from "./mount";
 import { queryVerb, workVerb } from "./verbs";
 import { useWorkScope, type WorkScopePorts } from "./use-work-scope";
 
-const host = vi.hoisted(() => ({ write: vi.fn(), fresh: vi.fn(), read: vi.fn() }));
+const host = vi.hoisted(() => ({
+  write: vi.fn(),
+  fresh: vi.fn(),
+  read: vi.fn(),
+  salvage: vi.fn(),
+}));
 vi.mock("../../../../packages/mcps/src/shared/schedule-client", () => ({
   readScheduleCapture: host.read,
 }));
@@ -43,6 +48,7 @@ vi.mock("../route/host", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../route/host")>()),
   writeRouteWork: host.write,
   startFreshRouteWork: host.fresh,
+  salvageRouteWork: host.salvage,
 }));
 
 const DOC = address("C:/Jobs/Level 1.rvt");
@@ -64,6 +70,8 @@ const graph = (
 type Doc = { openId: string; title: string; address: string | null };
 // The host's own unreadable-Work failure, answered instead of a snapshot for Work reads.
 let unreadable = false;
+// What the host's Work read answers; a test moves it to model a write or a newer revision landing.
+let workRead = { revision: 3, doc: { note: "hydrated" } };
 let world: { sessions: Record<string, Doc[]>; machine: Record<string, Doc[]> };
 // Readings outlive one test in the shared registry: every subscriber is handed the current world.
 const accepts = new Map<string, { request: ReadingRequest; live: Set<(frame: never) => void> }>();
@@ -91,7 +99,7 @@ const frame = (request: ReadingRequest) => {
           )
         : unreadable && request.kind === "work"
           ? undefined
-          : { revision: 3, doc: { note: "hydrated" } };
+          : workRead;
   if (value === undefined)
     return { kind: "failure", key: readingKey(request), error: UNREADABLE_WORK } as never;
   return { kind: "snapshot", key: readingKey(request), value } as never;
@@ -100,10 +108,13 @@ const requests: ReadingRequest[] = [];
 beforeEach(() => {
   world = { sessions: {}, machine: {} };
   unreadable = false;
+  workRead = { revision: 3, doc: { note: "hydrated" } };
   requests.length = 0;
   host.write.mockReset();
   host.fresh.mockReset();
   host.read.mockReset();
+  host.salvage.mockReset();
+  host.salvage.mockResolvedValue(null);
   host.write.mockResolvedValue({ ok: false, kind: "refused", error: "host", hint: "" });
   vi.spyOn(peReadings, "subscribe").mockImplementation((request, accept) => {
     requests.push(request);
@@ -372,6 +383,15 @@ const subjectGraph: RouteGraph<Subject, { note: string }> = {
       { label: "note", input: z.strictObject({}).default({}) },
       { patches: () => [{ path: ["note"], value: "human" }] },
     ),
+    fill: queryVerb(
+      "schedule.grid.snapshot",
+      {
+        label: "Fill",
+        review: "none",
+        input: z.strictObject({ scheduleId: z.number().int().default(7) }),
+      },
+      { patches: (_scope, result) => [{ path: ["note"], value: (result as { id: string }).id }] },
+    ),
     read: queryVerb(
       "schedule.grid.snapshot",
       {
@@ -400,12 +420,16 @@ const subjectRoute = routeFromGraph(
   "/subject-proof",
 );
 const ref = { session: "s1", openId: "o1" };
-async function mountSubject(search: string) {
+async function mountSubject(
+  search: string,
+  route: typeof subjectRoute = subjectRoute,
+  path = "/subject-proof",
+) {
   world.sessions = { s1: [{ openId: "o1", title: "Level 1", address: DOC }] };
   latest = null;
   const router = createRouter({
-    routeTree: appRoot.addChildren([subjectRoute]),
-    history: createMemoryHistory({ initialEntries: [`/subject-proof${search}`] }),
+    routeTree: appRoot.addChildren([route]),
+    history: createMemoryHistory({ initialEntries: [`${path}${search}`] }),
   });
   await router.load();
   const view = render(<RouterProvider router={router} />);
@@ -529,4 +553,292 @@ test("unreadable Work puts start-fresh on the stage; its review commits once thr
   );
   expect(owner().timeline.read().at(-1)).toMatchObject({ paths: [[]] });
   expect(host.fresh).toHaveBeenCalledTimes(1);
+});
+
+// The same Work follows `ws`; the host's set-aside Work, once read, may add its note back.
+const salvageGraph: RouteGraph<Subject, { note: string }> = {
+  ...subjectGraph,
+  key: "salvage-proof",
+  address: "salvage-proof",
+  name: "Salvage proof",
+  salvage: (value, work) => {
+    const note = (value as { note?: string }).note;
+    return note && work?.note !== note ? [{ path: ["note"], value: note }] : [];
+  },
+};
+const salvageRoute = routeFromGraph(
+  salvageGraph,
+  {
+    sources: {},
+    bodies: {
+      only: ({ owner }) => {
+        latest = owner;
+        return <output aria-label="Body" />;
+      },
+    },
+  },
+  "/salvage-proof",
+);
+const mountSalvage = (search: string) =>
+  mountSubject(search, salvageRoute as never, "/salvage-proof");
+const landOnHost = () =>
+  act(() => {
+    for (const { request, live } of accepts.values())
+      for (const accept of live) accept(frame(request));
+  });
+
+test("a refused query reads refused with the host's reason; a server or network failure reads failed", async () => {
+  const id = crypto.randomUUID();
+  const { owner } = await mountSubject(`${pin({ kind: "open", ref })}&ws=a-${id}`);
+  await waitFor(() => expect(owner().snapshot().work).not.toBeNull());
+  host.read.mockRejectedValueOnce(Object.assign(Error("Schedule 7 is not open"), { status: 409 }));
+  await act(async () => {
+    expect(await owner().control("read").run()).toMatchObject({
+      state: "refused",
+      refusal: { code: "not-ready", message: "Schedule 7 is not open" },
+    });
+  });
+  host.read.mockRejectedValueOnce(Object.assign(Error("bridge down"), { status: 502 }));
+  await act(async () => {
+    expect(await owner().control("read").run()).toMatchObject({
+      state: "failed",
+      refusal: { message: "bridge down" },
+    });
+  });
+  host.read.mockRejectedValueOnce(new TypeError("fetch failed"));
+  await act(async () => {
+    expect(await owner().control("read").run()).toMatchObject({ state: "failed" });
+  });
+  expect(owner().view.read().page.ws).toBe(`a-${id}`);
+});
+
+test("a query result for a Work the person has since left is stale and selects nothing", async () => {
+  const id = crypto.randomUUID();
+  const { owner } = await mountSubject(`${pin({ kind: "open", ref })}&ws=a-${id}`);
+  await waitFor(() => expect(owner().snapshot().work).not.toBeNull());
+  let finish!: (value: unknown) => void;
+  host.read.mockReturnValue(new Promise((resolve) => (finish = resolve)));
+  const pressed = owner().control("read").run();
+  await waitFor(() => expect(host.read).toHaveBeenCalledTimes(1));
+  act(() => owner().view.setPage({ ws: `b-${id}` }));
+  await waitFor(() =>
+    expect(owner().snapshot().work?.handle.key).toMatchObject({ work: `b-${id}` }),
+  );
+  finish({ id: "late", workspaceId: `late-${id}` });
+  expect(await pressed).toMatchObject({ state: "stale" });
+  expect(owner().view.read().page.ws).toBe(`b-${id}`);
+});
+
+test("a conflict draws one caution line with the control that reads the Work again", async () => {
+  const id = crypto.randomUUID();
+  const { view, owner } = await mountSubject(`${pin({ kind: "open", ref })}&ws=a-${id}`);
+  await waitFor(() => expect(owner().snapshot().work).not.toBeNull());
+  const situation = within(await view.findByLabelText("Situation"));
+  expect(situation.queryByText(/Work changed; review and retry/)).toBeNull();
+  host.write.mockResolvedValue(STALE);
+  await act(async () => {
+    expect(await owner().control("note").run()).toMatchObject({ state: "stale" });
+  });
+  await situation.findByText(/Work changed; review and retry/);
+  // Writing verbs stay refused while the line is up.
+  expect(owner().control("note").refusal).toBe("Work changed; review and retry");
+  // The host moved on; reading the Work again is what hands the mount the newer revision.
+  const dirtied = vi.spyOn(peReadings, "dirty").mockImplementation((request) => {
+    expect(request).toMatchObject({ kind: "work", work: `a-${id}` });
+    workRead = { revision: 5, doc: { note: "theirs" } };
+    landOnHost();
+  });
+  fireEvent.click(situation.getByRole("button", { name: "Read Work again" }));
+  await waitFor(() => expect(situation.queryByText(/Work changed; review and retry/)).toBeNull());
+  expect(dirtied).toHaveBeenCalledTimes(1);
+  expect(owner().snapshot().work?.handle.revision).toBe(5);
+  expect(owner().control("note").refusal).toBeNull();
+});
+
+test("carry-over is one undoable Work write, offered only while readable Work lacks the set-aside members", async () => {
+  const id = crypto.randomUUID();
+  host.salvage.mockResolvedValue({ from: "aside:1", value: { note: "old" } });
+  const { view, owner } = await mountSalvage(`${pin({ kind: "open", ref })}&ws=a-${id}`);
+  const situation = within(await view.findByLabelText("Situation"));
+  await waitFor(() => expect(owner().stageVerbs()).toEqual(["note", "work.salvage"]));
+  expect(host.salvage).toHaveBeenCalledWith(
+    expect.objectContaining({ binding: "workspace", work: `a-${id}` }),
+  );
+  const key = owner().snapshot().work!.handle.key;
+  const button = situation.getByRole("button", { name: "Carry over" });
+  fireEvent.click(button);
+  const review = await situation.findByLabelText("Carry over review");
+  expect(review.textContent).toContain('"members":[["note"]]');
+  expect(host.write).not.toHaveBeenCalled();
+  host.write.mockImplementation(async (written: WorkKey) => {
+    workRead = { revision: 4, doc: { note: "old" } };
+    return {
+      ok: true,
+      revision: 4,
+      write: ack({
+        key: written,
+        by: "human",
+        press: "p",
+        base: 3,
+        revision: 4,
+        undoable: true,
+        patches: [{ path: ["note"], value: "old" }],
+        inverse: [{ path: ["note"], value: "hydrated" }],
+      }),
+    };
+  });
+  fireEvent.click(situation.getByRole("button", { name: "Carry over" }));
+  await waitFor(() =>
+    expect(owner().results.get("work.salvage")).toMatchObject({
+      state: "done",
+      kind: "recovery",
+      recovery: "salvage",
+    }),
+  );
+  expect(host.write).toHaveBeenCalledTimes(1);
+  expect(host.write.mock.calls[0]![0]).toEqual(key);
+  expect(host.write.mock.calls[0]![1]).toMatchObject({
+    kind: "apply",
+    expectedRevision: 3,
+    patches: [{ path: ["note"], value: "old" }],
+  });
+  // One journal step, undoable: no root barrier like start fresh.
+  expect(owner().journal(key).read().undo).toHaveLength(1);
+  expect(
+    owner()
+      .timeline.read()
+      .some((entry) => entry.paths?.some((p) => p.length === 0)),
+  ).toBe(false);
+  // Once the Work holds the members, the offer goes away.
+  landOnHost();
+  await waitFor(() => expect(owner().stageVerbs()).toEqual(["note"]));
+});
+
+test("unreadable Work lists start-fresh and never carry-over; a Work with nothing set aside lists neither", async () => {
+  const id = crypto.randomUUID();
+  unreadable = true;
+  host.salvage.mockResolvedValue({ from: "unreadable", value: { note: "old" } });
+  const broken = await mountSalvage(`${pin({ kind: "open", ref })}&ws=broken-${id}`);
+  await waitFor(() => expect(broken.owner().snapshot().unreadable).toBeDefined());
+  await waitFor(() => expect(host.salvage).toHaveBeenCalled());
+  expect(broken.owner().stageVerbs()).toEqual(["note", START_FRESH_VERB]);
+  expect(broken.owner().control("work.salvage").refusal).toBe(
+    "Start fresh first; the Work cannot take a write yet",
+  );
+  broken.view.unmount();
+  unreadable = false;
+  host.salvage.mockResolvedValue(null);
+  const plain = await mountSalvage(`${pin({ kind: "open", ref })}&ws=plain-${id}`);
+  await waitFor(() => expect(plain.owner().snapshot().work).not.toBeNull());
+  expect(plain.owner().stageVerbs()).toEqual(["note"]);
+  expect(plain.owner().control("work.salvage").refusal).toBe(
+    "Nothing set aside is missing from this Work",
+  );
+});
+
+test("status counts what carrying over would add", async () => {
+  host.salvage.mockResolvedValue({ from: "aside:1", value: { note: "old" } });
+  world.sessions = { s1: [{ openId: "o1", title: "Level 1", address: DOC }] };
+  let ports: WorkScopePorts<{ note: string }> | null = null;
+  const root = createRootRoute();
+  const route = createRoute({
+    getParentRoute: () => root,
+    path: "/probe",
+    validateSearch: routeSearch,
+    component: () => {
+      ports = useWorkScope({ ...noted, salvage: salvageGraph.salvage } as never) as never;
+      return null;
+    },
+  });
+  const router = createRouter({
+    routeTree: root.addChildren([route]),
+    history: createMemoryHistory({ initialEntries: [`/probe${pin({ kind: "open", ref })}`] }),
+  });
+  await router.load();
+  render(<RouterProvider router={router} />);
+  await waitFor(() => expect(ports?.status.salvageable).toBe(1));
+  expect(ports!.getSnapshot().salvage).toEqual([{ path: ["note"], value: "old" }]);
+});
+
+test("A -> B -> A while a query runs still reads stale: the generation, not the key, fences it", async () => {
+  const id = crypto.randomUUID();
+  const { owner } = await mountSubject(`${pin({ kind: "open", ref })}&ws=a-${id}`);
+  await waitFor(() => expect(owner().snapshot().work).not.toBeNull());
+  let finish!: (value: unknown) => void;
+  host.read.mockReturnValue(new Promise((resolve) => (finish = resolve)));
+  const pressed = owner().control("read").run();
+  await waitFor(() => expect(host.read).toHaveBeenCalledTimes(1));
+  for (const ws of [`b-${id}`, `a-${id}`]) {
+    act(() => owner().view.setPage({ ws }));
+    await waitFor(() => expect(owner().snapshot().work?.handle.key).toMatchObject({ work: ws }));
+  }
+  finish({ id: "late", workspaceId: `late-${id}` });
+  expect(await pressed).toMatchObject({ state: "stale" });
+  expect(owner().view.read().page.ws).toBe(`a-${id}`);
+});
+
+test("a query's patches land as one undoable Work step through the normal write door", async () => {
+  const id = crypto.randomUUID();
+  const { owner } = await mountSubject(`${pin({ kind: "open", ref })}&ws=a-${id}`);
+  await waitFor(() => expect(owner().snapshot().work).not.toBeNull());
+  const key = owner().snapshot().work!.handle.key;
+  host.read.mockResolvedValue({ id: "reading-1", workspaceId: `a-${id}` });
+  host.write.mockImplementation(async (written: WorkKey) => ({
+    ok: true,
+    revision: 4,
+    write: ack({
+      key: written,
+      by: "human",
+      press: "p",
+      base: 3,
+      revision: 4,
+      undoable: true,
+      patches: [{ path: ["note"], value: "reading-1" }],
+      inverse: [{ path: ["note"], value: "hydrated" }],
+    }),
+  }));
+  await act(async () => {
+    expect(await owner().control("fill").run()).toMatchObject({
+      state: "done",
+      kind: "query",
+      receipt: { value: { id: "reading-1" } },
+      acknowledgement: { revision: 4 },
+    });
+  });
+  expect(host.read).toHaveBeenCalledTimes(1);
+  expect(host.write).toHaveBeenCalledTimes(1);
+  expect(host.write.mock.calls[0]![0]).toEqual(key);
+  expect(host.write.mock.calls[0]![1]).toMatchObject({
+    kind: "apply",
+    expectedRevision: 3,
+    patches: [{ path: ["note"], value: "reading-1" }],
+  });
+  // One journal step and no barrier: the read is not a root replacement.
+  expect(owner().journal(key).read().undo).toHaveLength(1);
+  expect(
+    owner()
+      .timeline.read()
+      .some((entry) => entry.paths?.some((p) => p.length === 0)),
+  ).toBe(false);
+  // A refused write refuses the verb, with the host's words.
+  host.write.mockResolvedValue({ ok: false, kind: "refused", error: "locked", hint: "ask" });
+  await act(async () => {
+    expect(await owner().control("fill").run()).toMatchObject({
+      state: "refused",
+      refusal: { message: "locked: ask" },
+    });
+  });
+});
+
+test("a query that writes Work waits out a conflict; a plain read still runs", async () => {
+  const id = crypto.randomUUID();
+  const { owner } = await mountSubject(`${pin({ kind: "open", ref })}&ws=a-${id}`);
+  await waitFor(() => expect(owner().snapshot().work).not.toBeNull());
+  host.write.mockResolvedValue(STALE);
+  await act(async () => {
+    await owner().control("note").run();
+  });
+  expect(owner().snapshot().conflict).toBe(true);
+  expect(owner().control("fill").refusal).toBe("Work changed; review and retry");
+  expect(owner().control("read").refusal).toBeNull();
 });

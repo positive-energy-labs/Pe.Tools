@@ -7,7 +7,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
-import { START_FRESH_VERB, type RouteGraph, type VerbDecl } from "@pe/agent-contracts";
+import type { RouteGraph, VerbDecl } from "@pe/agent-contracts";
 import { Route as rootRoute } from "../routes/__root";
 import { createRoute } from "@tanstack/react-router";
 import { KeyScope, ScopeKeys, actionScopeKeys, useScopeLive, type ScopeKey } from "@pe/kit/keys";
@@ -27,6 +27,7 @@ import { LadderPicker, useDocumentLadder } from "../route/situation-ladder";
 import { useInitialUrlPage, useUrlPage } from "../route/url";
 import { bindGraphChords } from "./keys";
 import {
+  CONFLICT_REFUSAL,
   createGraphMount,
   mountRefusals,
   graphFields,
@@ -502,17 +503,17 @@ function GraphSituation<P, W>({
               />
             </Label>
           ))}
-        {stage.verbs.map((id) => (
+        {/* The stage's verbs, then each kernel recovery only while its predicate holds. */}
+        {owner.stageVerbs().map((id) => (
           <GraphVerb key={id} id={id} verb={owner.verbs[id]!} owner={owner} enabled={enabled} />
         ))}
-        {/* The kernel's recovery sits on the stage only while the host cannot read the Work. */}
-        {owner.snapshot().unreadable && (
-          <GraphVerb
-            id={START_FRESH_VERB}
-            verb={owner.verbs[START_FRESH_VERB]!}
-            owner={owner}
-            enabled={enabled}
-          />
+        {owner.snapshot().conflict && (
+          <span role="status">
+            {CONFLICT_REFUSAL}
+            <Button label="Read Work again" onClick={() => owner.reread()}>
+              Read again
+            </Button>
+          </span>
         )}
         {owner.busy() && (
           <Button label="Stop" onClick={() => owner.stop()}>

@@ -11,6 +11,7 @@ import {
   pane,
   projectRouteGraph,
   routeGraphHash,
+  SALVAGE_VERB,
   START_FRESH_VERB,
   validateRouteGraph,
   type CellsDecl,
@@ -433,4 +434,43 @@ test("every graph with Work projects the kernel's start-fresh recovery; its id a
   expect(validateRouteGraph(own as RouteGraph)).toEqual([
     { code: "reserved-verb", path: "verbs.mine", message: "Recovery verbs are kernel-owned" },
   ]);
+});
+
+test("a graph's salvage hook projects the carry-over recovery; its id is reserved and it needs Work", () => {
+  const salvaging = { ...withCells(rules), salvage: () => [] } as RouteGraph;
+  expect(validateRouteGraph(salvaging)).toEqual([]);
+  expect(projectRouteGraph(salvaging).verbs[SALVAGE_VERB]).toMatchObject({
+    kind: "recovery",
+    review: "required",
+    answers: expect.objectContaining({ required: ["confirm"] }),
+  });
+  // Without the hook there is nothing to carry over, so Pea is not offered the verb.
+  expect(projectRouteGraph(withCells(rules)).verbs[SALVAGE_VERB]).toBeUndefined();
+  expect(
+    validateRouteGraph({ ...withCells(rules), verbs: { [SALVAGE_VERB]: verb("Mine") } }),
+  ).toEqual([
+    {
+      code: "reserved-verb",
+      path: `verbs.${SALVAGE_VERB}`,
+      message: `'${SALVAGE_VERB}' is a kernel verb id`,
+    },
+  ]);
+  expect(validateRouteGraph({ ...ductLoss, salvage: () => [] } as unknown as RouteGraph)).toEqual([
+    {
+      code: "invalid-graph",
+      path: "salvage",
+      message: "Only a graph with Work can carry salvage over",
+    },
+  ]);
+});
+
+test("a verb's review answers project as JSON Schema; one that cannot convert refuses the projection", () => {
+  const answered = (answers: z.ZodType): RouteGraph => ({
+    ...withCells(rules),
+    verbs: { go: { ...verb("Go", "Mod+G"), answers } },
+  });
+  expect(
+    projectRouteGraph(answered(z.strictObject({ confirm: z.literal(true) }))).verbs.go,
+  ).toMatchObject({ answers: { required: ["confirm"] } });
+  expect(() => projectRouteGraph(answered(z.custom<string>(() => true)))).toThrow();
 });

@@ -179,6 +179,20 @@ export const startFreshVerb = {
   answers: z.strictObject({ confirm: z.literal(true) }),
 } as const satisfies VerbDecl;
 
+/**
+ * The kernel's carry-over of what the host set aside (or cannot read) into readable Work: one
+ * Work write, so one journal step. Declared on every graph whose `salvage` hook is set.
+ */
+export const SALVAGE_VERB = "work.salvage";
+export const salvageVerb = {
+  kind: "recovery",
+  label: "Carry over",
+  says: "Carry what the set-aside Work held into this Work, as one undoable edit",
+  review: "required",
+  input: z.strictObject({}).default({}),
+  answers: z.strictObject({ confirm: z.literal(true) }),
+} as const satisfies VerbDecl;
+
 export interface RouteGraph<P = Record<string, unknown>, W = unknown> {
   key: string;
   address: string;
@@ -202,6 +216,11 @@ export interface RouteGraph<P = Record<string, unknown>, W = unknown> {
    * Page selection. Empty falls back to the `?work=` carry, then the resolved document's Work.
    */
   workSubject?: keyof P & string;
+  /**
+   * What the host's salvage read (`work.salvage`) carries over, as the patches this Work still
+   * lacks: empty when everything is already here. The kernel applies them as one Work write.
+   */
+  salvage?: (salvaged: unknown, work: W | null) => readonly RouteStatePatch[];
   /** Authored segments of the Work; the kernel owns take, reject, reopen and delete for them. */
   cells?: readonly CellsDecl<W>[];
   pick?: false;
@@ -277,7 +296,13 @@ export function projectRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphJson
   return sortedJson({
     ...graph,
     // Kernel-owned verbs are part of what Pea may invoke; the cell verbs derive from `cells`.
-    verbs: graph.work ? { ...graph.verbs, [START_FRESH_VERB]: startFreshVerb } : graph.verbs,
+    verbs: graph.work
+      ? {
+          ...graph.verbs,
+          [START_FRESH_VERB]: startFreshVerb,
+          ...(graph.salvage && { [SALVAGE_VERB]: salvageVerb }),
+        }
+      : graph.verbs,
     fields,
     stageOrder: graph.stageOrder ?? Object.keys(graph.stages),
   }) as unknown as RouteGraphJson;
@@ -392,6 +417,10 @@ export function validateRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphRef
         `verbs.${START_FRESH_VERB}`,
         `'${START_FRESH_VERB}' is a kernel verb id`,
       );
+    if (graph.work && Object.hasOwn(graph.verbs, SALVAGE_VERB))
+      refuse("reserved-verb", `verbs.${SALVAGE_VERB}`, `'${SALVAGE_VERB}' is a kernel verb id`);
+    if (graph.salvage && !graph.work)
+      refuse("invalid-graph", "salvage", "Only a graph with Work can carry salvage over");
     if (graph.workSubject !== undefined) {
       if (!graph.work)
         refuse("invalid-graph", "workSubject", "Only a graph with Work can select it by subject");

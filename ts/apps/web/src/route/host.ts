@@ -80,6 +80,9 @@ export async function getRouteSalvage(
   return body;
 }
 
+/** What the host set aside (or cannot read) for this Work, as the route's own `salvage` reads it; null when none. */
+export const salvageRouteWork = (key: WorkKey) => getRouteSalvage(routeInput(key.route, key));
+
 /**
  * The host's accepted writes of one Work, as it stamped them (`by`, press, forward and inverse
  * patches, revision), over the one Readings stream. The host replays its retained window on every
