@@ -132,6 +132,14 @@ function build(snapshot: DuctSnapshot, raw: DuctsRouteDocument | null): HealPlan
       e.groupId ?? null,
     ]),
   );
+  // C# measures each open end against the whole document (DuctHealth `near`), so a partner outside a
+  // bounded read is still known: an end it marks auto-join faces a vacant port within autoJoinGapIn.
+  const facingOf = new Map(
+    snapshot.issues.flatMap((i) => {
+      const port = i.kind === "open-end" && i.connector != null ? i.near?.ports.find((p) => p.autoJoin) : null;
+      return port ? [[`${i.elementId}:${i.connector}` as string, port] as const] : [];
+    }),
+  );
   const issueOf = new Map(
     snapshot.issues.flatMap((i) =>
       i.kind === "open-end" && i.connector != null ? [[`${i.elementId}:${i.connector}`, i.id]] : [],
@@ -194,6 +202,14 @@ function build(snapshot: DuctSnapshot, raw: DuctsRouteDocument | null): HealPlan
     // Air passes an end Revit gives a flow: it is where the system's air leaves or enters, never a cap
     // (Chadds EX 1 11620957:1, EF-7's 444 cfm out; ducts LEDGER 2026-10-30). Its own words await kaitpw.
     const flow = x.c.flowCfm ?? 0;
+    const facing = facingOf.get(x.k);
+    if (!near && facing) {
+      say(
+        x,
+        `${named(x)} faces ${facing.elementId}:${facing.connector} ${facing.gapIn.toFixed(2)} in away: a join, not a cap`,
+      );
+      continue;
+    }
     if (!near && flow > 0) {
       say(x, `${named(x)} carries ${Math.round(flow)} cfm in Revit; a cap would block its air`);
       continue;
