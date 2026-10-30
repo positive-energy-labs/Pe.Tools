@@ -8,6 +8,7 @@ import {
   createRoute,
   createRouter,
   RouterProvider,
+  RouterContextProvider,
   useRouterState,
 } from "@tanstack/react-router";
 import {
@@ -68,6 +69,33 @@ type Probe = {
   disposed: ReturnType<typeof vi.fn>;
 };
 const probes = new Map<string, Probe>();
+
+test("retaining the tools index selects its leaf rather than the root with the same full path", async () => {
+  const root = createRootRoute({ component: () => <output>root shell</output> });
+  const index = createRoute({
+    getParentRoute: () => root,
+    path: "/",
+    component: () => <output>tools index</output>,
+  });
+  const router = createRouter({
+    routeTree: root.addChildren([index]),
+    history: createMemoryHistory({ initialEntries: ["/"] }),
+  });
+  await router.load();
+  const view = render(
+    <RouterContextProvider router={router}>
+      <RouteRetention
+        route="home"
+        active={null}
+        tabs={[]}
+        ready={false}
+        renderRoute={(body) => body}
+      />
+    </RouterContextProvider>,
+  );
+  expect(view.getByText("tools index")).toBeTruthy();
+  expect(view.queryByText("root shell")).toBeNull();
+});
 const running = new Set<string>();
 const frames = new Set<Parameters<typeof peReadings.subscribe>[1]>();
 const subscriptions: { kind: string; release: ReturnType<typeof vi.fn> }[] = [];

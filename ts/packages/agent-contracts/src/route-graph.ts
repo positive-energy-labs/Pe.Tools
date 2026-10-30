@@ -35,7 +35,7 @@ export interface FieldPolicy {
 
 /** RouteField owns schema and codec. False explicitly opts out of a role's projection default. */
 export type FieldDecl<S extends z.ZodType = z.ZodType> = Omit<RouteField<S>, keyof FieldPolicy> &
-  Partial<FieldPolicy> & { label?: string; control?: "color" };
+  Partial<FieldPolicy> & { label?: string; control?: "color"; editor?: "pane" };
 
 export const fieldRoleDefaults: Readonly<Record<FieldRole, Readonly<FieldPolicy>>> = {
   subject: { url: "push", share: true, agent: "set" },
@@ -68,6 +68,8 @@ export function graphFieldPolicy(field: Partial<FieldPolicy> & { role: FieldRole
 export interface ReadingDecl<P = unknown> {
   kind: "use" | "derive" | "worker" | "port" | "feed";
   source: string;
+  /** A query of this identity publishes directly into the reading when explicitly invoked. */
+  query?: string;
   args?: (page: Readonly<P>) => unknown;
   deps?: readonly string[];
   retire: "target" | "page" | "never";
@@ -248,9 +250,13 @@ export interface RouteGraph<P = Record<string, unknown>, W = unknown> {
   /**
    * What Target the kernel resolves before the route acts, with the old manifest's values and
    * meaning: absent = the host (no document read); otherwise a `?target` pin, else the machine's
-   * sole user document of that kind. Required with `work`: Work keys by the resolved document.
+   * sole user document of that kind. Host-owned Work needs no Revit Target.
    */
   needs?: "session" | "document" | "project" | "family";
+  /** Resolve available context without preventing host-only verbs when no Target is chosen. */
+  optionalTarget?: "session" | "document";
+  /** Review-free observation verbs, attempted once per visible Work identity. */
+  observe?: readonly string[];
   /** The Work document's schema; required to declare `cells`, whose segments it must contain. */
   work?: z.ZodType<W>;
   /**
@@ -303,6 +309,8 @@ export interface RouteGraphJson {
   readonly layout: GraphJsonObject;
   readonly stages: Readonly<Record<string, GraphJsonObject>>;
   readonly needs?: RouteGraph["needs"];
+  readonly optionalTarget?: RouteGraph["optionalTarget"];
+  readonly observe?: readonly string[];
   readonly work?: GraphJsonObject;
   readonly workSubject?: string;
   readonly cells?: readonly GraphJsonObject[];
@@ -460,8 +468,6 @@ export function validateRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphRef
         }
       }
     }
-    if (graph.work && !graph.needs)
-      refuse("invalid-graph", "needs", "A graph with Work must declare the Target it needs");
     if (graph.work && Object.hasOwn(graph.verbs, START_FRESH_VERB))
       refuse(
         "reserved-verb",
@@ -472,6 +478,14 @@ export function validateRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphRef
       refuse("reserved-verb", `verbs.${SALVAGE_VERB}`, `'${SALVAGE_VERB}' is a kernel verb id`);
     if (graph.salvage && !graph.work)
       refuse("invalid-graph", "salvage", "Only a graph with Work can carry salvage over");
+    for (const id of graph.observe ?? []) {
+      if (!graph.work || !graph.verbs[id] || graph.verbs[id]!.review !== "none")
+        refuse(
+          "invalid-graph",
+          "observe",
+          "Automatic Work observation requires a declared review-free verb",
+        );
+    }
     if (graph.workSubject !== undefined) {
       if (!graph.work)
         refuse("invalid-graph", "workSubject", "Only a graph with Work can select it by subject");

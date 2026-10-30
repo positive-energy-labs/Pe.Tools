@@ -105,8 +105,8 @@ export const opsAdapters: RouteAdapters<OpsPage, unknown> = {
         : !selected.intent
           ? "Operation readiness metadata is unavailable"
           : null;
-    if (selected && !isTsOnlyOperationKey(selected.key))
-      refusal = "Native operations are unavailable here until session targeting is connected";
+    if (selected && !isTsOnlyOperationKey(selected.key) && scope.target.kind === "host")
+      refusal = "Choose a session or document for this native operation";
     try {
       request = requestOf(scope.page.values);
     } catch (error) {

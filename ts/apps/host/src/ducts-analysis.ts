@@ -10,7 +10,6 @@ import { join } from "node:path";
 import {
   addressSchema,
   canonicalRouteInput,
-  ductsParameterSlots,
   bindWork,
   ductsDocumentSchema,
   ductsApplyRequestArtifactSchema,
@@ -51,7 +50,6 @@ type Observation = {
   provenance: unknown;
 };
 export interface DuctsAnalysisSources {
-  settings?: () => Readonly<Record<string, unknown>>;
   root: string;
   catalogs?: () => Promise<{ tables: Catalogs; findings: string[] }>;
   producer: unknown;
@@ -349,7 +347,7 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
       return JSON.parse(bodyUtf8) as unknown;
     }
     const staged = stagedDucts(work);
-    const slots = ductsParameterSlots(sources.settings?.());
+    const slots = staged.parameters;
     const snapshot = (await read("ducts.snapshot", {
       ...(Object.keys(slots).length ? { slots } : {}),
       ...(staged.labelParameter ? { labelParameter: staged.labelParameter } : {}),
@@ -375,8 +373,7 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
       beforeMark !== sources.marks.changedAt(target) ||
       observedSince !== sources.marks.observedSince ||
       owned?.revision !== afterWork?.revision ||
-      JSON.stringify(owned?.doc) !== JSON.stringify(afterWork?.doc) ||
-      JSON.stringify(slots) !== JSON.stringify(ductsParameterSlots(sources.settings?.()));
+      JSON.stringify(owned?.doc) !== JSON.stringify(afterWork?.doc);
     const fresh = observedSince !== undefined && observedSince <= began;
     return {
       format: "ducts-analysis-v5",

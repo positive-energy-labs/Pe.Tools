@@ -1,22 +1,49 @@
 import { expect, test, vi } from "vite-plus/test";
 import {
-  ductsSettingFields,
   graphFieldPolicy,
   settingsSchema,
   type RouteSettingsSnapshot,
+  type SettingField,
 } from "@pe/agent-contracts";
+import { z } from "zod";
+import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { createSettingsOwner } from "./settings";
 import { graphUrlPage } from "./mount-page";
 import { createGraphMount } from "./mount-owner";
 import { pane, type RouteGraph } from "@pe/agent-contracts";
 
-const defaults = settingsSchema(ductsSettingFields).parse({}) as RouteSettingsSnapshot["values"];
+// Test-local: no product route declares per-user settings yet.
+const proofSettingFields = {
+  terminalFlow: {
+    ...field(z.string().trim().min(1).default("PE_M_Grd_AirFlow"), {}),
+    role: "setting",
+    label: "Grille airflow",
+  },
+  fanFlow: {
+    ...field(z.string().trim().min(1).default("PE_M_Fan_AirFlowDesign"), {}),
+    role: "setting",
+    label: "Unit airflow",
+  },
+  supplyColour: {
+    ...field(
+      z
+        .string()
+        .regex(/^#[0-9a-f]{6}$/i)
+        .default("#0569a5"),
+      {},
+    ),
+    role: "setting",
+    label: "Supply air colour",
+    control: "color",
+  },
+} satisfies Record<string, SettingField>;
+const defaults = settingsSchema(proofSettingFields).parse({}) as RouteSettingsSnapshot["values"];
 test("settings cannot enter Page, URLs or shares, including explicit policy overrides", () => {
   const graph: RouteGraph<object> = {
     key: "settings-proof",
     address: "settings-proof",
     name: "Proof",
-    fields: { ...ductsSettingFields },
+    fields: { ...proofSettingFields },
     readings: {},
     verbs: {},
     panes: { body: { label: "Body", purpose: "proof", draws: [], verbs: [] } },
@@ -45,7 +72,7 @@ test("an agent notification updates the shared owner; late hydration cannot repl
   let notify!: () => void;
   let finish!: (snapshot: RouteSettingsSnapshot) => void;
   let saved = { revision: 0, values: defaults };
-  const owner = createSettingsOwner(ductsSettingFields, {
+  const owner = createSettingsOwner(proofSettingFields, {
     read: vi
       .fn()
       .mockResolvedValueOnce(saved)
@@ -83,7 +110,7 @@ test("invalid settings never reach the transport, and failed saves retain the ac
   const write = vi.fn(async () => {
     throw Error("host unavailable");
   });
-  const owner = createSettingsOwner(ductsSettingFields, {
+  const owner = createSettingsOwner(proofSettingFields, {
     read: async () => ({ revision: 0, values: defaults }),
     write,
     subscribe: () => () => {},
@@ -98,7 +125,7 @@ test("invalid settings never reach the transport, and failed saves retain the ac
 
 test("a background read cannot unlock an in-flight settings save", async () => {
   let finish!: (snapshot: RouteSettingsSnapshot) => void;
-  const owner = createSettingsOwner(ductsSettingFields, {
+  const owner = createSettingsOwner(proofSettingFields, {
     read: async () => ({ revision: 0, values: defaults }),
     write: () =>
       new Promise((resolve) => {

@@ -109,7 +109,9 @@ export function RouteRetention({
       entry = undefined;
     }
     if (!entry) {
-      const Component = router.routesById[pathname]?.options.component;
+      const Component = Object.values(router.routesById).find(
+        (entry) => !entry.isRoot && entry.fullPath === pathname,
+      )?.options.component;
       if (!Component) throw Error(`No route component registered for ${pathname}`);
       const owners = new Set<{ dispose(): void }>();
       const disposed = new WeakSet<object>();

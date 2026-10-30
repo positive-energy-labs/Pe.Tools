@@ -61,11 +61,13 @@ export const openGraph: RouteGraph<OpenPageState> = {
       url: false,
     },
     draft: {
+      editor: "pane",
       ...field(draft, {}, { encode: JSON.stringify, decode: JSON.parse }),
       role: "draft",
       url: false,
     },
     table: {
+      editor: "pane",
       ...field(table, {}, { encode: JSON.stringify, decode: JSON.parse }),
       role: "query",
       url: false,

@@ -12,13 +12,13 @@ import {
   ductsApplyRequestArtifactSchema,
   ductsApplyInputSchema,
   ductsRouteState,
+  DUCT_PARAMETER_KEYS,
   type DuctPortPin,
 } from "@pe/agent-contracts";
 import { price, applyRequest } from "@pe/ducts-domain/pricing";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { createDuctsAnalysis, type DuctsAnalysisSources } from "../src/ducts-analysis.ts";
-import { createRouteSettings } from "../src/route-settings.ts";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -175,15 +175,14 @@ function fixture() {
 const read = (source: unknown, selector: unknown = { kind: "document" }, extra: object = {}) =>
   ductsAnalysisRequestSchema.parse({ source, selector, ...extra });
 
-test("headless acquisition uses persisted route slots instead of historical Work slots", async () => {
+test("headless acquisition uses project Work slots", async () => {
   const f = fixture();
-  const settings = createRouteSettings(join(f.root, "settings"));
-  settings.set("ducts", { terminalFlow: "User flow" }, 0);
-  f.sources.settings = () => settings.read("ducts").values;
   f.sources.readWork = async () => ({
     revision: 1,
     doc: ductsDocumentSchema.parse({
-      parameters: { terminalFlow: { edit: { value: "Old flow" } } },
+      parameters: Object.fromEntries(
+        DUCT_PARAMETER_KEYS.map((key) => [key, { edit: { value: `Project ${key}` } }]),
+      ),
     }),
   });
   const call = f.sources.call;
@@ -193,7 +192,9 @@ test("headless acquisition uses persisted route slots instead of historical Work
     return call(key, request, target);
   };
   await f.api.read(read({ kind: "fresh", target: f.target }));
-  expect(requested).toMatchObject({ slots: { terminalFlow: "User flow" } });
+  expect(requested).toMatchObject({
+    slots: Object.fromEntries(DUCT_PARAMETER_KEYS.map((key) => [key, `Project ${key}`])),
+  });
 });
 
 test("historical selectors and pagination make zero acquisitions; corruption and wrong cursors refuse", async () => {

@@ -15,7 +15,9 @@ export const capturesGraph: RouteGraph<CapturesPage, never> = {
     sha: { ...capturesAddress.fields.sha, role: "selection" },
     open: { ...capturesAddress.fields.open, role: "pose" },
   },
-  readings: { captures: { kind: "use", source: "captures.list", retire: "never" } },
+  readings: {
+    captures: { kind: "use", source: "captures.list", query: "captures.list", retire: "never" },
+  },
   verbs: {
     refresh: queryVerb(captureQueries["captures.list"], {
       label: "refresh",

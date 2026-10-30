@@ -6,6 +6,7 @@
 import { useState, useSyncExternalStore, useMemo } from "react";
 import {
   bindWork,
+  workKey,
   type Address,
   type DocumentRef,
   type RouteStatePatch,
@@ -60,7 +61,7 @@ export function useHeadWorks(
   const headed = useMemo(
     () =>
       publicRoutes.entries().flatMap(({ graph: manifest }) => {
-        return manifest?.work && manifest.cells?.length
+        return manifest?.needs && manifest.work && manifest.cells?.length
           ? [
               {
                 route: manifest.key,
@@ -94,8 +95,8 @@ export function useHeadWorks(
   const works = headed.map((one, index) => ({ ...one, work: summaries[index]! }));
   return works.flatMap(({ route, manifest, work, cells: heads }) => {
     const doc = work.doc as Doc | null;
-    if (!doc || !publicRoutes.get(route)) return [];
     const key = keyOf(manifest, address, document);
+    if (!doc || !key || !publicRoutes.get(route)) return [];
     const place = capturedPlace(route, key, doc, undefined, false);
     // A review names a cell: the route's own page fields for it land on its place; a route that
     // declares none opens as before.
@@ -117,7 +118,7 @@ export function useHeadWorks(
       const plan = head.commit === "plan";
       return [
         {
-          id: `${JSON.stringify(key)}:${head.segment ?? head.key}`,
+          id: `${workKey(key)}:${head.segment ?? head.key}`,
           route: chatPluginTitle(route),
           subject: head.noun ?? subject,
           cells: cells as Record<string, CellLike>,
@@ -146,7 +147,7 @@ export function useHeadWorks(
             : { word: "open", run: () => open(false) },
           open: (cell) => open(false, cell && head.focus ? head.focus(cell) : undefined),
           // A planned Work commits whole: all its cells are one head line (F-B-4).
-          ...(plan ? { line: `${route}:${JSON.stringify(key)}` } : {}),
+          ...(plan ? { line: workKey(key) } : {}),
           ...(exits.planRefusal?.route === route ? { refusal: exits.planRefusal.message } : {}),
           ...(!place.ok ? { refusal: place.refusal } : {}),
           ...(openRefusal?.route === route ? { refusal: openRefusal.message } : {}),

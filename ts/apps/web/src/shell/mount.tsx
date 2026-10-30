@@ -7,7 +7,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
-import { actionReceiptSchema, receiptsForWork, routeAddress } from "@pe/agent-contracts";
+import { actionStatusSchema, receiptsForWork, routeAddress } from "@pe/agent-contracts";
 import type { RouteGraph, VerbDecl } from "@pe/agent-contracts";
 import { Route as rootRoute } from "../routes/__root";
 import { createRoute } from "@tanstack/react-router";
@@ -39,6 +39,8 @@ import {
 import { graphUrlPage, readLayoutState, writeLayoutState } from "./mount-page";
 import { settingFields } from "./settings";
 import { useWorkScope, type WorkScopeStatus } from "./use-work-scope";
+import { useRouteLease } from "../route/view-bridge";
+import { workKey } from "@pe/agent-contracts";
 
 export type { GraphMount, MountAdapters, MountScope, MountBinding } from "./mount-owner";
 export { createGraphMount } from "./mount-owner";
@@ -63,6 +65,10 @@ export type RouteAdapters<P, W> = Omit<
   furniture?: Readonly<Record<string, (body: MountBody<P, W>) => Parameters<PaneApi>[1]>>;
   /** Bodies with hook-derived furniture render through the same kernel frame. */
   frames?: Readonly<Record<string, (body: MountBody<P, W>, pane: PaneApi) => ReactNode>>;
+  lease?(owner: GraphMount<P, W>): {
+    context?: Record<string, unknown>;
+    facts?: Record<string, unknown>;
+  };
   /**
    * Shared view state for every pane body (attention, hover, one model projection computed once),
    * mounted once around the layout inside the owner's scopes. Context providers only: no host door,
@@ -114,8 +120,42 @@ export function mountRoute<P, W>(graph: RouteGraph<P, W>, adapters: RouteAdapter
     };
   return function MountedRoute(props: MountRouteProps) {
     const mount = useGraphRoute(graph, adapters, props);
-    return <GraphRouteView graph={graph} adapters={adapters} {...mount} />;
+    return (
+      <>
+        {adapters.lease && (
+          <GraphLease
+            graph={graph}
+            owner={mount.owner}
+            shown={adapters.lease(mount.owner)}
+            props={props}
+            visible={!mount.hidden}
+          />
+        )}
+        <GraphRouteView graph={graph} adapters={adapters} {...mount} />
+      </>
+    );
   };
+}
+
+function GraphLease<P, W>({
+  graph,
+  owner,
+  shown,
+  props,
+  visible,
+}: {
+  graph: RouteGraph<P, W>;
+  owner: GraphMount<P, W>;
+  shown: { context?: Record<string, unknown>; facts?: Record<string, unknown> };
+  props: MountRouteProps;
+  visible: boolean;
+}) {
+  useRouteLease(
+    graph.address as Parameters<typeof useRouteLease>[0],
+    [owner.view.read().page as object, (patch) => owner.view.setPage(patch as Partial<P>)],
+    { thread: props.thread, url: props.url, visible, ...shown },
+  );
+  return null;
 }
 
 /** Custom route chrome uses the same owner, target door, URL and availability as mountRoute. */
@@ -138,13 +178,12 @@ export function useGraphRoute<P, W>(
   // The door follows the owner's Page (its workSubject); before the owner exists, the URL's.
   // The mount re-renders on every Page change, so the next render reads the moved field.
   const mounted = useRef<GraphMount<P, W> | null>(null);
-  const scope = useWorkScope(
-    graph,
-    mounted.current?.view.read().page ?? initial,
-    projectUrl && target === undefined && work === undefined
-      ? undefined
-      : { target, work, thread: boundThread, url: projectUrl },
-  );
+  const scope = useWorkScope(graph, mounted.current?.view.read().page ?? initial, {
+    target,
+    work,
+    thread: boundThread,
+    url: projectUrl,
+  });
   const owner = useRouteOwner(() => createGraphMount(graph, { ...adapters, ...scope }, initial));
   mounted.current = owner;
   useEffect(() => owner.connect(), [owner]);
@@ -164,6 +203,21 @@ export function useGraphRoute<P, W>(
     (settings.revision >= 0 && !settings.pending && !settings.error);
   const armed = settingsReady && (!graph.needs || scope.status.resolution.kind === "resolved");
   owner.setAvailable(() => armed && !hidden && visible && live && current());
+  const active = armed && !hidden && visible && live && current();
+  const observed = useRef(new Set<string>());
+  useEffect(() => {
+    if (!active || owner.busy()) return;
+    for (const id of graph.observe ?? []) {
+      const key = owner.snapshot().work?.handle.key;
+      if (!key) continue;
+      const identity = `${id}:${workKey(key)}`;
+      const control = owner.control(id);
+      if (observed.current.has(identity) || control.refusal) continue;
+      observed.current.add(identity);
+      void control.run();
+      break;
+    }
+  });
   return {
     owner,
     hidden: hidden || !visible || !live || !current(),
@@ -586,7 +640,11 @@ function GraphSituation<P, W>({
         <span>{stage.word}</span>
       )}
       {graphFields(graph)
-        .filter(([, field]) => ["subject", "query", "selection", "draft"].includes(field.role))
+        .filter(
+          ([, field]) =>
+            field.editor !== "pane" &&
+            ["subject", "query", "selection", "draft"].includes(field.role),
+        )
         .map(([id, field]) => (
           <Label key={id}>
             {id}
@@ -612,6 +670,21 @@ function GraphSituation<P, W>({
           {CONFLICT_REFUSAL}
           <Button label="Read Work again" onClick={() => owner.reread()}>
             Read again
+          </Button>
+        </span>
+      )}
+      {owner.rejected() && (
+        <span role="status">
+          Unaccepted edit: {owner.verbs[owner.rejected()!.verb]?.label}
+          <Button
+            label="Retry edit"
+            refusal={!enabled ? "This route is inactive" : owner.retryRefusal()}
+            onClick={() => void owner.retry()}
+          >
+            Retry
+          </Button>
+          <Button label="Discard edit" onClick={() => owner.discard()}>
+            Discard
           </Button>
         </span>
       )}
@@ -643,9 +716,10 @@ export function GraphHistory<P, W>({
   const [entries, setEntries] = useState(() => owner.timeline.read());
   useEffect(() => owner.timeline.subscribe(() => setEntries(owner.timeline.read())), [owner]);
   const reading = receipts ? owner.readings.get(receipts) : null;
-  const parsed = actionReceiptSchema.array().safeParse(reading?.value);
-  const key = owner.snapshot().work?.handle.key;
-  const saved = parsed.success && key ? receiptsForWork(parsed.data, key) : [];
+  const parsed = actionStatusSchema.array().safeParse(reading?.value ?? reading?.previous);
+  const scope = owner.snapshot();
+  const key = scope.work?.handle.key ?? scope.workKey ?? scope.unreadable;
+  const saved = parsed.success ? (key ? receiptsForWork(parsed.data, key) : parsed.data) : [];
   const recorded = new Set(saved.map((receipt) => receipt.id));
   return (
     <section aria-label="History">
@@ -654,10 +728,14 @@ export function GraphHistory<P, W>({
       <ol>
         {[
           ...entries
-            .filter((entry) => !entry.receiptId || !recorded.has(entry.receiptId))
+            .filter((entry) => {
+              const receipt = (entry.basis as { receipt?: { id: string } } | undefined)?.receipt;
+              return !recorded.has(receipt?.id ?? entry.receiptId ?? "");
+            })
             .map((entry, index) => (
               <li key={`event:${index}`}>
                 {entry.verb ?? entry.kind} · {entry.kind} · {String(entry.at)}
+                {entry.kind === "feed" && <> · {JSON.stringify(entry.subject)}</>}
               </li>
             )),
           ...[...saved]

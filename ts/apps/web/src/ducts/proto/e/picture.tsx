@@ -57,7 +57,6 @@ import { DUCTS_FLAT, DUCTS_LAYER_OPTIONS } from "./teaching";
 import { RulingBody, useMarks } from "./rulings";
 import { noRunParts } from "../../subject-text";
 import { stubLabels } from "../../stub-labels";
-import { useDuctSettings } from "../../pane-context";
 import { coloursOf } from "../../colours";
 import { COLOURS_FIXTURE } from "../../colours.fixture";
 
@@ -172,7 +171,7 @@ function Content({
     [snapshot, page.system, members, stubs],
   );
   const systemColours = page.layers.includes("system-colours");
-  const colours = coloursOf(useDuctSettings());
+  const colours = coloursOf(work.doc);
   const routePaint = useMemo(
     () => paintOfDucts(snapshot, opened, stubs),
     [snapshot, opened, stubs],

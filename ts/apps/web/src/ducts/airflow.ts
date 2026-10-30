@@ -1,4 +1,17 @@
-/** ADR 0026 settings: parameter choices are per-user route settings; snapshots retain their observed slot provenance. */
+/**
+ * The airflow read slot as a walk step (pressure-drop ledger, 2026-10-20): projects carry a
+ * terminal's design airflow in whatever parameter the drafter used, so which one is read is a
+ * person's choice in the walk, never a hidden setting. `ducts.snapshot` lists every air flow
+ * parameter the terminals carry (`airflowCandidates`) with its coverage; the choice stages the
+ * person-owned `parameters.terminalFlow` slot, the snapshot re-reads under it, and a write keeps
+ * it in the model's store. A unit's design flow is the same step over equipment (2026-10-21):
+ * `fanFlowCandidates`, the `parameters.fanFlow` slot, coverage counted over the system's units.
+ */
+import {
+  transitionPatches,
+  type DuctsRouteDocument,
+  type RouteStatePatch,
+} from "@pe/agent-contracts";
 import type { SystemScope } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
@@ -17,11 +30,6 @@ export interface AirflowOption {
 /** Which elements a slot reads: terminals (`terminalFlow`) or units (`fanFlow`). */
 export type AirflowOf = "terminal" | "unit";
 
-// firm-default: the snapshot reports the slots it read; these are only for a snapshot that predates them.
-const DEFAULT_SLOT: Record<AirflowOf, string> = {
-  terminal: "PE_M_Grd_AirFlow",
-  unit: "PE_M_Fan_AirFlowDesign",
-};
 const NOUN: Record<AirflowOf, string> = { terminal: "terminal", unit: "unit" };
 
 /**
@@ -36,9 +44,7 @@ export function airflowOptions(
   scope: Pick<SystemScope, "groups" | "terminals" | "units"> | null,
   of: AirflowOf = "terminal",
 ): { current: string; options: AirflowOption[] } {
-  // A snapshot read before the slot was reported (or a test's partial one) reads the default.
-  const current =
-    (of === "unit" ? snapshot.slots?.fanFlow : snapshot.slots?.terminalFlow) ?? DEFAULT_SLOT[of];
+  const current = of === "unit" ? snapshot.slots.fanFlow : snapshot.slots.terminalFlow;
   const kind = of === "unit" ? "equipment" : "terminal";
   const members =
     (scope ? (of === "unit" ? scope.units : scope.terminals) : null) ??
@@ -82,3 +88,16 @@ export function airflowOptions(
     options: [...best.values()].sort((a, b) => b.have - a.have || a.label.localeCompare(b.label)),
   };
 }
+
+/** The patches choosing a slot makes: stage it on the person-owned `parameters.terminalFlow` (or `fanFlow`) cell. */
+export const airflowPatches = (
+  doc: DuctsRouteDocument | null,
+  slot: string,
+  of: AirflowOf = "terminal",
+): RouteStatePatch[] => {
+  const key = of === "unit" ? "fanFlow" : "terminalFlow";
+  return transitionPatches(["parameters"], key, doc?.parameters?.[key] ?? {}, {
+    kind: "set",
+    rung: { value: slot },
+  });
+};

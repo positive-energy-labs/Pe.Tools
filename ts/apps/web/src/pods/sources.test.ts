@@ -16,6 +16,7 @@ import { podsPageSchema } from "./page";
 import { podsGraph } from "./graph";
 import { podsBinding, podsTransition } from "./actions";
 import { PodsHostFixture } from "./host.fixture";
+import { graphUrlPage } from "#/shell/mount-page";
 
 let host: PodsHostFixture;
 const cleanups: (() => void)[] = [];
@@ -35,6 +36,13 @@ const ready = (value: unknown): ReadingState => ({
   complete: true,
   basis: null,
   version: 1,
+});
+
+test("Pods keeps its local live flag out of the route address", () => {
+  const url = graphUrlPage(podsGraph);
+  expect(url.keys).not.toContain("live");
+  expect(url.write(podsPageSchema.parse({ live: true }))).not.toHaveProperty("live");
+  expect(url.read({ live: "true" })).not.toHaveProperty("live");
 });
 function environment() {
   let page = podsPageSchema.parse({ ...host.member, member: memberWork(host.member) });

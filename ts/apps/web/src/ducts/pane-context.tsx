@@ -1,5 +1,4 @@
-import { createContext, useContext, useSyncExternalStore, type ReactNode } from "react";
-import { defaultDuctSettings } from "./settings";
+import { createContext, useContext, type ReactNode } from "react";
 import type { CellTransition } from "@pe/kit/lang/cell";
 import type { DuctsRouteDocument } from "@pe/agent-contracts";
 import type { MountBody, GraphMount } from "#/shell/mount";
@@ -7,13 +6,6 @@ import type { DuctsPage } from "./graph";
 
 export const PaneBody = createContext<MountBody<DuctsPage, DuctsRouteDocument> | null>(null);
 export const DuctsOwner = createContext<GraphMount<DuctsPage, DuctsRouteDocument> | null>(null);
-const noSettings = () => () => {};
-const defaultSettings = () => defaultDuctSettings;
-export function useDuctSettings() {
-  const owner = useContext(DuctsOwner);
-  const read = owner ? () => owner.settings.read().values : defaultSettings;
-  return useSyncExternalStore(owner?.settings.subscribe ?? noSettings, read, read);
-}
 export function PaneCommands({ row }: { row?: unknown }) {
   return useContext(PaneBody)?.verbs(row) ?? null;
 }

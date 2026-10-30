@@ -254,13 +254,12 @@ export function createPeRoutes(options: PeRoutesOptions) {
   const analysis = options.ductsAnalysis
     ? createDuctsAnalysis({
         ...options.ductsAnalysis,
-        settings: () => settings.read("ducts").values,
         readWork: (key) => work.readRaw(key, "ducts"),
       })
     : null;
   const sheets = options.ductsSheets
     ? createDuctsSheets(
-        { ...options.ductsSheets, settings: () => settings.read("ducts").values },
+        options.ductsSheets,
         {
           workspace: work,
           author: () => (currentCaller().kind === "pea" ? "pea" : "human"),

@@ -344,7 +344,7 @@ export function createReadingGraph<P, W>(
       release?.();
     }
   };
-  const launch = (node: Node<P>) => {
+  const launch = (node: Node<P>, acquire = true) => {
     if (node.state.status === "failed") {
       node.worker?.stop();
       node.worker = undefined;
@@ -375,11 +375,12 @@ export function createReadingGraph<P, W>(
       status: "pending",
       complete: false,
       current: false,
-      previous: node.state.complete ? node.state.value : node.state.previous,
+      previous: Object.hasOwn(node.state, "value") ? node.state.value : node.state.previous,
       basis: null,
     });
     // Consumers observe the verb's pending state before even a synchronous adapter answers.
     for (const notify of node.listeners) notify();
+    if (!acquire) return attempt;
     if (
       !owned(node, attempt) ||
       Object.values(context.inputs).some((input) => input.value === undefined)
@@ -499,7 +500,7 @@ export function createReadingGraph<P, W>(
       return retain(ids, true);
     },
     /** A press pins acquisition until its invocation finishes, fails, or is explicitly stopped. */
-    start(id: string, invocation: string): ReadingAttempt {
+    start(id: string, invocation: string, acquire = true): ReadingAttempt {
       if (disposed) throw new ReadingGraphRefusal("Reading graph is disposed");
       const node = get(id);
       const previousPin = node.pin;
@@ -512,12 +513,24 @@ export function createReadingGraph<P, W>(
         for (const input of closure(node.decl.deps ?? [])) {
           if (!input.context) launch(input);
         }
-        attempt = launch(node);
+        attempt = launch(node, acquire);
       } finally {
         batching = false;
       }
       flush();
       return attempt;
+    },
+    publish(id: string, invocation: string, attempt: ReadingAttempt, value: unknown) {
+      const node = get(id);
+      const context = node.context;
+      if (!context || node.invocation !== invocation || !owned(node, attempt)) return;
+      deliver(node, context, { kind: "complete", value, revision: node.revision + 1 });
+    },
+    fail(id: string, invocation: string, attempt: ReadingAttempt, error: string) {
+      const node = get(id);
+      const context = node.context;
+      if (!context || node.invocation !== invocation || !owned(node, attempt)) return;
+      deliver(node, context, { kind: "failure", error });
     },
     /** Release only the invocation's demand, after its result/basis has been consumed. */
     finish(id: string, invocation: string) {

@@ -52,24 +52,15 @@ export function scopeFor(doc: DuctsRouteDocument): BindingScope<DuctsPage, Ducts
     },
   };
 }
-test("the product graph separates settings from eleven Work cell families", () => {
+test("the product graph keeps all ducts inputs in Work across twelve cell families", () => {
   expect(ductsGraph.work).toBe(ductsRouteState.schema);
   expect(validateRouteGraph(ductsGraph)).toEqual([]);
   const graph = projectRouteGraph(ductsGraph);
-  expect(graph.cells).toHaveLength(11);
-  expect(graph.cells?.some((family) => family.segment === "parameters")).toBe(false);
-  expect(graph.fields.terminalFlow).toMatchObject({
-    role: "setting",
-    url: false,
-    share: false,
-    agent: "set",
-  });
-  expect(graph.fields.supplyColour).toMatchObject({
-    role: "setting",
-    url: false,
-    share: false,
-    agent: "set",
-  });
+  expect(graph.cells).toHaveLength(12);
+  expect(graph.cells?.some((family) => family.segment === "parameters")).toBe(true);
+  expect(graph.fields).not.toHaveProperty("terminalFlow");
+  expect(graph.fields).not.toHaveProperty("fanStatic");
+  expect(Object.values(graph.fields).some((field) => field.role === "setting")).toBe(false);
   expect(graph.stageOrder).toEqual(["network", "sheet"]);
   expect(graph.pick).toBe(false);
   expect(graph.verbs.price).toMatchObject({ does: "ducts.apply-losses", review: "shown" });
@@ -104,18 +95,18 @@ test("the price request is scoped and stable for one reading basis; standing Set
     refusal: expect.stringContaining("Pricing is refreshing"),
   });
 });
-test("native writes keep the observed settings slots even when historical Work has another slot", () => {
+test("native writes keep the observed Work slots even when historical Work has another slot", () => {
   const scope = scopeFor(
     ductsRouteState.schema.parse({
       parameters: { terminalFlow: { edit: { value: "Historical flow" } } },
       flows: { "4": { edit: { value: { cfm: 100, source: "override" } } } },
     }),
   );
-  const observed = { ...snapshot, slots: { ...snapshot.slots, terminalFlow: "Settings flow" } };
+  const observed = { ...snapshot, slots: { ...snapshot.slots, terminalFlow: "Observed flow" } };
   scope.readings = { ...scope.readings, ducts: state(observed) };
   expect(ductsBinding("price", undefined, scope).args).toMatchObject({
     refusal: null,
-    request: { slots: { terminalFlow: "Settings flow" } },
+    request: { slots: { terminalFlow: "Observed flow" } },
   });
 });
 

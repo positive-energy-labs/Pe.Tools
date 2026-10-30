@@ -185,6 +185,7 @@ function DraftInput({
   const baseline = schemaFormModel(basis, schemaJson);
   const raw = !form || body.page.mode === "raw";
   const control = body.owner.control("edit", { content: value });
+  const target = body.owner.snapshot().target;
   const commit = async () => {
     if (typed === null || typed === draft || refusal || !body.visible) return;
     const result = await control.run();
@@ -240,7 +241,7 @@ function DraftInput({
               baselineValues={baseline.baseline}
               values={form.parsedRaw}
               issues={[...issues]}
-              optionsFrom={null}
+              optionsFrom={target.kind === "document" ? target.ref : null}
               onChange={setAt}
             />
           </fieldset>
@@ -308,8 +309,14 @@ function Spec(body: Body) {
       <FactChip title={member?.schema ?? "Plain data; no library validates it."}>
         {member?.schema?.split("/").at(-1) ?? "no $schema"}
       </FactChip>
-      <FactChip title="No document: the form offers the schema's own options only.">
-        schema options only
+      <FactChip
+        title={
+          scope.target.kind === "document"
+            ? "Options come from the selected document."
+            : "No document: the form offers the schema's own options only."
+        }
+      >
+        {scope.target.kind === "document" ? "document options" : "schema options only"}
       </FactChip>
       <FactChip title="Composition and semantic validation are reported by the host.">
         {composed?.result.semanticValidation === "passed" ||
@@ -387,6 +394,16 @@ function Runs({ owner, page, visible }: Body) {
 }
 
 export const podsAdapters: RouteAdapters<PodsPage, SettingsRouteDocument> = {
+  lease: (owner) => ({
+    context: {
+      member: selectedMember(owner.view.read().page),
+      work: owner.snapshot().work?.handle ?? null,
+    },
+    facts: {
+      member: owner.readings.get("member").value ?? null,
+      composition: owner.readings.get("composition").value ?? null,
+    },
+  }),
   sources: podsSources(),
   binding: podsBinding,
   cell: podsCell,

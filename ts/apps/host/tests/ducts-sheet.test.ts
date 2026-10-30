@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RouteWorkspace } from "@pe/runtime";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
-import { existsSync, readFileSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { Effect } from "effect";
-import { afterEach, expect, test } from "vite-plus/test";
+import { expect, test } from "vite-plus/test";
 import {
   DUCTS_BODY_VERSION_HEADER,
   bindWork,
@@ -19,19 +19,8 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { withHealth } from "@pe/ducts-domain/sheet/health.fixture";
 import type { DuctsSheetSources } from "../src/ducts-sheet.ts";
 import { createPeRoutes } from "../src/pe-routes.ts";
-import { createRouteSettings } from "../src/route-settings.ts";
 import { DuctsReadings } from "../src/ducts-readings.ts";
 import type { RevitBridge } from "../src/bridge.ts";
-
-const settingsRoots: string[] = [];
-const settingsFixture = () => {
-  const root = mkdtempSync(join(tmpdir(), "sheet-route-settings-"));
-  settingsRoots.push(root);
-  return createRouteSettings(root);
-};
-afterEach(() => {
-  for (const root of settingsRoots.splice(0)) rmSync(root, { recursive: true, force: true });
-});
 
 const retained =
   "C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/tmp/ducts-sheet/chadds-snapshot-health.json";
@@ -57,7 +46,6 @@ test.skipIf(!existsSync(retained))(
         }),
     } as unknown as RevitBridge["Service"];
     const routes = createPeRoutes({
-      routeSettings: settingsFixture(),
       registrations: [],
       heads: { observe: () => () => {} },
       store: {
@@ -113,12 +101,7 @@ test.skipIf(!existsSync(retained))(
     expect(overview.paths.return.paths.length).toBeLessThanOrEqual(5);
     expect(overview.blockers.length).toBeGreaterThan(0);
     expect(overview.totals?.requiredEspInWg).toBeNull();
-    expect(requests).toContainEqual(
-      expect.objectContaining({
-        selector: { kind: "from", unitId: 14577391 },
-        slots: expect.objectContaining({ terminalFlow: "PE_M_Grd_AirFlow" }),
-      }),
-    );
+    expect(requests).toContainEqual({ selector: { kind: "from", unitId: 14577391 } });
     const reads = requests.length;
     const detail = await post("sheet", {
       ...request,
@@ -269,15 +252,13 @@ test("sheet inputs survive host recreation in document Work; one project cell go
             path: ["sheetDefaults", "edit"],
             value: { value: { terminalDropInWg: 0.06, splitPolicy: "proportional" } },
           },
+          { path: ["parameters", "terminalFlow", "edit"], value: { value: "revit:Flow" } },
         ],
         0,
       ),
     ).toMatchObject({ ok: true });
-    const routeSettings = createRouteSettings(join(dir, "route-settings"));
-    routeSettings.set("ducts", { terminalFlow: "revit:Flow" }, 0);
     const make = (workspace?: RouteWorkspace) =>
       createPeRoutes({
-        routeSettings: createRouteSettings(join(dir, "route-settings")),
         registrations,
         store: fileRouteDocumentStore(dir),
         ...(workspace ? { workspace } : {}),
@@ -391,19 +372,6 @@ test("sheet inputs survive host recreation in document Work; one project cell go
       },
     });
     expect(raw!.doc).not.toHaveProperty(["sheetInputs", "fan:100:0"]);
-    const beforeSettingsChange = ductsSheetOverviewSchema.parse(
-      await (await post("sheet", request)).json(),
-    );
-    routeSettings.set("ducts", { terminalDrop: "Changed drop source" }, 1);
-    expect(
-      (
-        await post("sheet", {
-          ...request,
-          basis: beforeSettingsChange.basis,
-          detail: { kind: "inputs" },
-        })
-      ).status,
-    ).toBe(409);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -464,10 +432,8 @@ test("proposal accept/reject is basis-bound, persists in document Work, and repl
       ],
     } as unknown as DuctSnapshot);
     const registrations = [{ spec: ductsRouteState }];
-    const routeSettings = settingsFixture();
     const make = () =>
       createPeRoutes({
-        routeSettings,
         registrations,
         store: fileRouteDocumentStore(dir),
         heads: { observe: () => () => {} },

@@ -2,10 +2,11 @@
 import { cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { createMemoryHistory, createRouter, RouterContextProvider } from "@tanstack/react-router";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import { memberWork, workKey } from "@pe/agent-contracts";
+import { workKey } from "@pe/agent-contracts";
 import { Route as root } from "../routes/__root";
 import { podsRoute, PodsRoute } from "./route";
 import { PodsHostFixture } from "./host.fixture";
+import { appAtomRegistry } from "../route/route-owner";
 
 let host: PodsHostFixture;
 const releases: (() => void)[] = [];
@@ -27,7 +28,16 @@ beforeEach(() => {
 afterEach(async () => {
   cleanup();
   for (const release of releases.splice(0)) release();
-  await new Promise((resolve) => setTimeout(resolve, 450));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  // Each fixture is a different host; retained application atoms must not cross that boundary.
+  appAtomRegistry.reset();
+  await waitFor(
+    () =>
+      expect(
+        [...host.subscriptions.values()].filter((sub) => sub.request.kind === "work"),
+      ).toHaveLength(0),
+    { timeout: 3000 },
+  );
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -36,7 +46,7 @@ async function mounted({ hosted = false, hidden = false, demo = false } = {}) {
     ? "/pods?thread=chat-address&pod=unrelated"
     : demo
       ? "/pods?demo=browse"
-      : `/pods?pod=${host.member.pod}&path=${host.member.path}&work=${encodeURIComponent(memberWork(host.member))}`;
+      : `/pods?pod=${host.member.pod}&path=${host.member.path}`;
   const router = createRouter({
     routeTree: root.addChildren([podsRoute]),
     history: createMemoryHistory({ initialEntries: [url] }),
@@ -53,7 +63,16 @@ async function mounted({ hosted = false, hidden = false, demo = false } = {}) {
   if (refused) throw Error(`Kernel gap: ${refused.textContent}`);
   await view.findByLabelText("Situation");
   await view.findByLabelText("pod members");
-  return { view, router };
+  return {
+    view,
+    router,
+    hide: () =>
+      view.rerender(
+        <RouterContextProvider router={router}>
+          <PodsRoute url={false} thread="conversation-one" hidden />
+        </RouterContextProvider>,
+      ),
+  };
 }
 const button = (view: ReturnType<typeof render>, name: string) =>
   waitFor(() => {
@@ -142,7 +161,7 @@ test("member selection updates the URL and run scope without writing Work", asyn
 });
 
 test("hosted selection stays local to chat and a hidden mount cannot activate a Pod", async () => {
-  const { view, router } = await mounted({ hosted: true });
+  const { view, router, hide } = await mounted({ hosted: true });
   const address = router.history.location.href;
   fireEvent.click(await view.findByText(host.member.path, { exact: true }));
   await view.findByLabelText("spec JSON");
@@ -157,10 +176,25 @@ test("hosted selection stays local to chat and a hidden mount cannot activate a 
   const toggle = await view.findByRole("switch", { name: "Fixture pod" });
   fireEvent.click(toggle);
   await waitFor(() => expect(host.activations).toEqual([{ enabled: false }]));
-  view.unmount();
-  const hidden = await mounted({ hosted: true, hidden: true });
-  fireEvent.click(await hidden.view.findByRole("switch", { name: "Fixture pod" }));
+  hide();
+  fireEvent.click(await view.findByRole("switch", { name: "Fixture pod" }));
   expect(host.activations).toHaveLength(1);
+});
+
+test("a visible member without a basis observes once and publishes its lease facts", async () => {
+  host.doc.basis = null;
+  const { view, hide } = await mounted({ hosted: true });
+  fireEvent.click(await view.findByText(host.member.path, { exact: true }));
+  await waitFor(() =>
+    expect(host.actions.filter((a) => a.key === "settings.observe")).toHaveLength(1),
+  );
+  await waitFor(() =>
+    expect(
+      host.leases.some((lease) => (lease.context as any)?.member?.path === host.member.path),
+    ).toBe(true),
+  );
+  hide();
+  await waitFor(() => expect(host.removedLeases).toBeGreaterThan(0));
 });
 
 test("fixture browsing keeps raw fragment bytes and makes no host or Work requests", async () => {

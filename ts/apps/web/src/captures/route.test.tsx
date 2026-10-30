@@ -49,7 +49,7 @@ async function mounted() {
   );
   return { view, router, open };
 }
-test("host-scoped refresh uses the generic query runner and reacquires the retained list", async () => {
+test("host-scoped refresh publishes its query without reacquiring the retained list", async () => {
   const run = vi.spyOn(captureQueries["captures.list"], "run").mockResolvedValue([]);
   const { view, router, open } = await mounted();
   await waitFor(() => expect(open).toHaveBeenCalled());
@@ -58,7 +58,8 @@ test("host-scoped refresh uses the generic query runner and reacquires the retai
   await waitFor(() =>
     expect(run).toHaveBeenCalledWith({}, { target: { kind: "host" }, work: null }),
   );
-  await waitFor(() => expect(open.mock.calls.length).toBeGreaterThan(before));
+  expect(run).toHaveBeenCalledTimes(1);
+  expect(open.mock.calls.length).toBe(before);
   expect(router.state.location.search.sha).toBe("abc");
   expect(view.queryByLabelText("Document")).toBeNull();
 });

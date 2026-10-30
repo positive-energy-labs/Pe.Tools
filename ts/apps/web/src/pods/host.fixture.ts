@@ -37,6 +37,8 @@ export class PodsHostFixture {
   actions: ActionReceipt[] = [];
   calls: { key: string; request: Record<string, unknown> }[] = [];
   activations: unknown[] = [];
+  leases: Record<string, unknown>[] = [];
+  removedLeases = 0;
   workRequests: ReadingRequest[] = [];
   invalid = false;
   pluginEnabled = true;
@@ -66,6 +68,7 @@ export class PodsHostFixture {
     for (const sub of this.subscriptions.values()) if (sub.request.kind === kind) sub.emit();
   }
   value(request: ReadingRequest) {
+    if (request.kind === "thread-head") return { revision: 0, targets: [] };
     if (request.kind === "host-status") return { bridgeIsConnected: false };
     if (request.kind === "work") {
       this.workRequests.push(request);
@@ -107,12 +110,14 @@ export class PodsHostFixture {
         queueMicrotask(() => {
           if (this.closed) return;
           this.onopen?.();
-          for (const raw of JSON.parse(new URL(url).searchParams.get("keys")!) as unknown[])
-            this.releases.push(
-              resources.subscribe(readingRequestSchema.parse(raw), (frame) => {
-                if (!this.closed) this.onmessage?.({ data: JSON.stringify(frame) });
-              }),
-            );
+          for (const raw of JSON.parse(new URL(url).searchParams.get("keys")!) as unknown[]) {
+            if (this.closed) break;
+            const release = resources.subscribe(readingRequestSchema.parse(raw), (frame) => {
+              if (!this.closed) this.onmessage?.({ data: JSON.stringify(frame) });
+            });
+            if (this.closed) release();
+            else this.releases.push(release);
+          }
         });
       }
       close() {
@@ -156,6 +161,16 @@ export class PodsHostFixture {
     const url = new URL(input instanceof Request ? input.url : String(input), "http://fixture");
     const body =
       typeof init?.body === "string" ? (JSON.parse(init.body) as Record<string, unknown>) : {};
+    if (url.pathname.startsWith("/pe/route-view/pods")) {
+      if (init?.method === "PUT") {
+        this.leases.push(body);
+        return Response.json({ revision: this.leases.length });
+      }
+      if (init?.method === "DELETE") {
+        this.removedLeases++;
+        return Response.json({ ok: true });
+      }
+    }
     if (url.pathname === "/call") {
       const call = body as { key: string; request: Record<string, unknown> };
       this.calls.push(call);

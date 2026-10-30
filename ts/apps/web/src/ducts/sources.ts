@@ -64,12 +64,10 @@ const target = (ctx: ReadingContext) => (ctx.target.kind === "document" ? ctx.ta
 
 const page = (ctx: ReadingContext) => ctx.page as DuctsPage;
 
-import { parameterSlots } from "./settings";
-
-const slots = (ctx: { work: unknown; settings?: Readonly<Record<string, unknown>> }) => {
+const slots = (ctx: { work: unknown }) => {
   const edit = stagedDucts(ctx.work as DuctsRouteDocument | null);
 
-  return { slots: parameterSlots(ctx.settings), labelParameter: edit.labelParameter ?? undefined };
+  return { slots: edit.parameters, labelParameter: edit.labelParameter ?? undefined };
 };
 
 const saved: string | undefined = import.meta.env.DEV

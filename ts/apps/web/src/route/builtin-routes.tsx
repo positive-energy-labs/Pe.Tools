@@ -10,6 +10,7 @@ import { familiesGraph } from "#/families/graph";
 import { schedulesGraph } from "#/schedules/graph";
 import { settingsGraph } from "#/settings/graph";
 import { ductsGraph } from "#/ducts/graph";
+import { dataTablesGraph } from "#/data-tables/graph";
 import { mountRoute, type MountRouteProps } from "#/shell/mount";
 
 /** A route body stays out of the shell chunk until a pane mounts it. */
@@ -33,6 +34,9 @@ const SchedulesRoute = lazy(async () => ({
 }));
 const DuctsRoute = lazy(async () => ({
   default: mountRoute(ductsGraph, (await import("#/ducts/route")).ductsAdapters),
+}));
+const DataTablesRoute = lazy(async () => ({
+  default: mountRoute(dataTablesGraph, (await import("#/data-tables/route")).dataTablesAdapters),
 }));
 
 const SettingsRoute = lazy(async () => ({
@@ -62,3 +66,4 @@ publicRoutes.registerGraph(schedulesGraph, hosted(SchedulesRoute));
 publicRoutes.registerGraph(ductsGraph, hosted(DuctsRoute));
 publicRoutes.registerGraph(parameterLinksGraph, hosted(ParameterLinksRoute));
 publicRoutes.registerGraph(podsGraph, hosted(PodsRoute));
+publicRoutes.registerGraph(dataTablesGraph, hosted(DataTablesRoute));

@@ -19,6 +19,8 @@ import {
 import {
   runSemanticAction,
   actionResult,
+  submitAction,
+  recoverAction,
 } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import type { createRouteOwner } from "../route/route-owner";
 import { refuse, writeRefusal, type Refusal } from "../route/refusal";
@@ -138,6 +140,7 @@ export type InvocationResult =
       press: string | null;
       refusal: Refusal;
       receipt?: HostReceipt;
+      page?: Record<string, unknown>;
     };
 type HostReceipt = Awaited<ReturnType<typeof runSemanticAction>>;
 /** Host reads outside the command table: they run through the same invocation, never a route fetch. */
@@ -179,6 +182,11 @@ export type InvocationPhase<C extends Caller> =
 
 type Declaration<S extends z.ZodType> = Omit<VerbDecl<S>, "kind" | "review">;
 interface Binding {
+  receiptPage?: (receipt: HostReceipt) => Record<string, unknown>;
+  raw?: (
+    scope: VerbScope,
+    input: unknown,
+  ) => { key: string; input: Record<string, unknown> } | null;
   sequence?: (scope: VerbScope, input: unknown) => readonly Record<string, unknown>[];
   page?: (scope: VerbScope, input: unknown) => Record<string, unknown>;
   rpc?: ReadEntry;
@@ -241,6 +249,29 @@ export function rpcVerb<R extends z.ZodType, S extends z.ZodType>(
     intent: (scope, input) =>
       implementation.intent(scope, input as z.output<S>) as Record<string, unknown>,
   });
+  return verb;
+}
+
+/** Catalog operations: reads use their read source; raw writes require human review and admission. */
+export function operationVerb<R extends z.ZodType, S extends z.ZodType>(
+  read: ReadEntry<R>,
+  declaration: Omit<Parameters<typeof rpcVerb<R, S>>[1], "caller" | "review">,
+  implementation: Parameters<typeof rpcVerb<R, S>>[2] & {
+    raw: (
+      scope: VerbScope,
+      input: z.output<S>,
+    ) => { key: string; input: Record<string, unknown> } | null;
+    receiptPage?: (receipt: HostReceipt) => Record<string, unknown>;
+  },
+): VerbDecl<S> {
+  const verb = rpcVerb(read, { ...declaration, caller: "human", review: "shown" }, implementation);
+  const binding = bindings.get(verb)!;
+  binding.raw = (scope, input) => implementation.raw(scope, input as z.output<S>);
+  binding.prepare = (scope, input) => ({
+    ...binding.raw!(scope, input),
+    target: scope.snapshot.target,
+  });
+  binding.receiptPage = implementation.receiptPage;
   return verb;
 }
 
@@ -629,7 +660,7 @@ async function invokeCore<C extends Caller>(
             if (ready) return finish(failure("refused", ready, press));
             let answers: unknown;
             let ticket: ReviewTicket | undefined;
-            if (verb.review !== "none") {
+            if (verb.review !== "none" && (!binding.raw || binding.raw(scope, input))) {
               const evidence = steps ? copy(steps[step]) : await binding.prepare?.(scope, input);
               const prepared = ctx.snapshot();
               if (
@@ -807,6 +838,37 @@ async function invokeCore<C extends Caller>(
                   press,
                   acknowledgement: result.write,
                 });
+            }
+            const raw = binding.raw?.(fresh, input);
+            if (raw) {
+              const wait = (binding.waitSeconds ?? ctx.waitSeconds ?? DEFAULT_WAIT_S) * 1000;
+              const receipt =
+                (await recoverAction(press, raw.key, raw.input, current.target, "", wait)) ??
+                (await submitAction({ id: press, ...raw, target: current.target }, "", wait));
+              const after = ctx.snapshot();
+              const page =
+                binding.receiptPage &&
+                current.generation === after.generation &&
+                equal(current.target, after.target)
+                  ? binding.receiptPage(receipt)
+                  : undefined;
+              if (receipt.state !== "succeeded")
+                return finish({
+                  ...failure(
+                    "failed",
+                    `Operation ${receipt.state}; inspect its original receipt`,
+                    press,
+                  ),
+                  receipt,
+                  page,
+                });
+              return finish({
+                state: "done",
+                kind: "command",
+                press,
+                receipt,
+                page,
+              });
             }
             if (binding.rpc && binding.intent) {
               const request = binding.rpc.input.parse(

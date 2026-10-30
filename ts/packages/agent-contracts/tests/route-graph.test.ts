@@ -363,20 +363,35 @@ test("kernel cell verb ids are reserved and a family may be declared once", () =
   ]);
 });
 
-test("a graph with Work declares the Target it needs; needs is projected and hashed", async () => {
+test("host-owned Work needs no Target; required and optional Targets are projected and hashed", async () => {
   const unscoped = { ...withCells(rules), needs: undefined } as RouteGraph;
-  expect(validateRouteGraph(unscoped)).toEqual([
-    {
-      code: "invalid-graph",
-      path: "needs",
-      message: "A graph with Work must declare the Target it needs",
-    },
-  ]);
+  expect(validateRouteGraph(unscoped)).toEqual([]);
   const json = projectRouteGraph(withCells(rules));
   expect(json.needs).toBe("document");
   const project = projectRouteGraph({ ...withCells(rules), needs: "project" } as RouteGraph);
   expect(await routeGraphHash(project)).not.toBe(await routeGraphHash(json));
   expect(projectRouteGraph(ductLoss).needs).toBeUndefined();
+  const optional = projectRouteGraph({ ...unscoped, optionalTarget: "session" });
+  expect(optional.optionalTarget).toBe("session");
+  expect(await routeGraphHash(optional)).not.toBe(
+    await routeGraphHash(projectRouteGraph(unscoped)),
+  );
+});
+
+test("automatic observation declares a review-free Work verb and is projected", () => {
+  const graph = {
+    ...withCells(rules),
+    verbs: { read: { ...verb("Read"), review: "none" as const } },
+    observe: ["read"],
+  };
+  expect(validateRouteGraph(graph)).toEqual([]);
+  expect(projectRouteGraph(graph).observe).toEqual(["read"]);
+  for (const invalid of [
+    { ...graph, work: undefined },
+    { ...graph, observe: ["missing"] },
+    { ...graph, verbs: { read: { ...verb("Read"), review: "shown" as const } } },
+  ])
+    expect(validateRouteGraph(invalid).some((refusal) => refusal.path === "observe")).toBe(true);
 });
 
 test("workSubject names a Page field of a graph with Work; it is projected and hashed", async () => {

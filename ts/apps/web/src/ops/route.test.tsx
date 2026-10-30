@@ -8,7 +8,6 @@ import { peReadings } from "#/readings";
 import { Route as root } from "../routes/__root";
 import type { ReadingSource } from "#/shell/readings";
 import { opsAdapters, opsRoute } from "./route";
-import { RAW_MUTATION_GAP } from "./run";
 vi.mock("../routes/__root", async () => ({
   Route: (await import("@tanstack/react-router")).createRootRoute(),
 }));
@@ -45,6 +44,7 @@ beforeEach(() => {
     "ops.catalog": fixed({
       operations: [
         op,
+        { ...op, key: "document.temporary.status", displayName: "Native status", needs: "session" },
         { ...op, key: "settings.save", displayName: "Raw mutation", intent: "Mutate" },
       ],
     }),
@@ -163,17 +163,97 @@ test("the real graph restores the operation URL, runs a read and lands its outpu
   ).toBe(true);
   expect(router.state.location.search.op).toBe("logs.tail");
   expect(router.state.location.search).not.toHaveProperty("result");
+  expect(view.queryByRole("textbox", { name: "values" })).toBeNull();
+  expect(view.getByRole("link", { name: "instances.stop" })).toBeTruthy();
 });
-test("receipt recovery uses a human RPC and raw mutations refuse before transport", async () => {
-  const { view, owner } = await mounted("/ops?target=session-a&op=logs.tail&actionId=original");
-  fireEvent.click(await view.findByRole("button", { name: "recover native receipt" }));
-  await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
-  expect(vi.mocked(fetch).mock.calls[0]![0]).toContain("/actions/recover");
-  await waitFor(() => expect(owner().busy()).toBeNull());
-  act(() => owner().view.setPage({ op: "settings.save" }));
-  await waitFor(() =>
-    expect(view.getByRole("button", { name: "Run" }).getAttribute("aria-disabled")).toBe("true"),
-  );
-  expect(owner().control("run").refusal).toBe(RAW_MUTATION_GAP);
-  expect(fetch).toHaveBeenCalledTimes(1);
+
+test("native reads use the selected session and never admit a mutation", async () => {
+  const { owner } = await mounted();
+  act(() => owner().view.setPage({ op: "document.temporary.status" }));
+  await waitFor(() => expect(owner().control("run").refusal).toBeNull());
+  await act(async () => {
+    await owner().control("run").run();
+  });
+  expect(owner().results.get("run")?.state).toBe("done");
+  const [, init] = vi.mocked(fetch).mock.calls[0]!;
+  expect(new Headers(init?.headers).get("x-pe-bridge-session-id")).toBe("session-a");
+  expect(
+    vi
+      .mocked(fetch)
+      .mock.calls.every(
+        ([url]) => !(url instanceof Request ? url.url : url.toString()).includes("/actions"),
+      ),
+  ).toBe(true);
 });
+test.each([
+  { loseAck: false, state: "succeeded" },
+  { loseAck: true, state: "succeeded" },
+  { loseAck: false, state: "failed" },
+  { loseAck: true, state: "unknown" },
+])(
+  "raw mutations retain their receipt after $state and acknowledgement loss=$loseAck",
+  async ({ loseAck, state }) => {
+    const { view, owner } = await mounted("/ops?target=session-a&op=logs.tail&actionId=original");
+    fireEvent.click(await view.findByRole("button", { name: "recover native receipt" }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(fetch).mock.calls[0]![0]).toContain("/actions/recover");
+    await waitFor(() => expect(owner().busy()).toBeNull());
+    let admitted: unknown;
+    let posts = 0;
+    vi.mocked(fetch).mockImplementation(async (url, init) => {
+      if (
+        init?.method === "POST" &&
+        (url instanceof Request ? url.url : url.toString()).endsWith("/actions")
+      ) {
+        posts++;
+        const admission = JSON.parse(init.body as string);
+        admitted = {
+          ...receipt,
+          ...admission,
+          state,
+          ...(state === "succeeded" && {
+            status: undefined,
+            error: undefined,
+            result: { saved: true },
+          }),
+        };
+        if (loseAck) throw Error("lost response after admission");
+        return Response.json(admitted);
+      }
+      if ((url instanceof Request ? url.url : url.toString()).includes("/actions"))
+        return Response.json(admitted ? [admitted] : []);
+      throw Error(`Unexpected fetch ${url instanceof Request ? url.url : url.toString()}`);
+    });
+    act(() => owner().view.setPage({ op: "settings.save" }));
+    await waitFor(() => expect(owner().control("run").refusal).toBeNull());
+    await act(async () => {
+      await owner().control("run").run();
+    });
+    expect(owner().reviews.has("run")).toBe(true);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(owner().reviews.get("run")!.ticket.evidence).toMatchObject({
+      key: "settings.save",
+      input: {},
+      target: { kind: "session", session: "session-a" },
+    });
+    const press = owner().reviews.get("run")!.ticket.press;
+    await act(async () => {
+      await owner().control("run").run();
+    });
+    await waitFor(() => expect(owner().view.read().page.actionId).toBe(press));
+    const post = vi
+      .mocked(fetch)
+      .mock.calls.find(
+        ([, init]) =>
+          init?.method === "POST" && typeof init.body === "string" && init.body.includes(press),
+      );
+    expect(JSON.parse(post![1]!.body as string)).toMatchObject({
+      id: press,
+      key: "settings.save",
+      target: { kind: "session", session: "session-a" },
+      input: {},
+    });
+    expect(posts).toBe(1);
+    expect(owner().results.get("run")?.state).toBe(state === "succeeded" ? "done" : "failed");
+  },
+);

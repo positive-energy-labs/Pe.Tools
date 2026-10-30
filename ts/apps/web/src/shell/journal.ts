@@ -33,6 +33,30 @@ export type JournalResult =
     };
 export type JournalWriter = (write: WorkWrite) => Promise<RouteStateWriteResult>;
 
+const shared = new Map<
+  string,
+  { journal: ReturnType<typeof createWorkJournal>; readers: number }
+>();
+/** Mounts of the same persisted Work share history, independent of transport provenance. */
+export function acquireWorkJournal(key: WorkKey) {
+  const id = workKey(key);
+  let entry = shared.get(id);
+  if (!entry) {
+    entry = { journal: createWorkJournal(key), readers: 0 };
+    shared.set(id, entry);
+  }
+  entry.readers++;
+  let released = false;
+  return {
+    journal: entry.journal,
+    release: () => {
+      if (released) return;
+      released = true;
+      if (--entry.readers === 0) shared.delete(id);
+    },
+  };
+}
+
 const overlaps = (a: RouteStatePatch["path"], b: RouteStatePatch["path"]) =>
   a
     .slice(0, Math.min(a.length, b.length))

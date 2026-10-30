@@ -137,6 +137,11 @@ export interface CellWire {
 /** Where a wire's cells sit in its Work: under its segment, or at the root. */
 const cellsPath = (wire: CellWire) => (wire.segment === null ? [] : [wire.segment]);
 
+/** Revert removes the edit; a cell with no standing proposal has no reason to remain in Work. */
+const clearPatch = (wire: CellWire, key: string, cell: CellLike): RouteStatePatch => ({
+  path: [...cellsPath(wire), key, ...(cell.suggestion != null ? ["edit"] : [])],
+});
+
 const DRAWN = new Set<string>(["take", "unsuggest", "clear"] satisfies CellTransitionKind[]);
 
 /** Every cell command carries the Work revision the person saw. */
@@ -164,7 +169,14 @@ export function reviewTransitions(wire: CellWire, key: string, cell: CellLike): 
     .map((kind) => ({
       kind,
       reason: reason[kind],
-      run: () => writeKind(wire, kind, transitionPatches(cellsPath(wire), key, cell, { kind })),
+      run: () =>
+        writeKind(
+          wire,
+          kind,
+          kind === "clear"
+            ? [clearPatch(wire, key, cell)]
+            : transitionPatches(cellsPath(wire), key, cell, { kind }),
+        ),
     }));
 }
 
@@ -190,7 +202,13 @@ export async function runFanOut(
 
     lockOf: wire.lockOf,
   });
-  const refusal = covered.length ? await writeKind(wire, kind, patches) : null;
+  const refusal = covered.length
+    ? await writeKind(
+        wire,
+        kind,
+        kind === "clear" ? covered.map((key) => clearPatch(wire, key, cells[key]!)) : patches,
+      )
+    : null;
   return { kind, covered, skipped, refusal };
 }
 

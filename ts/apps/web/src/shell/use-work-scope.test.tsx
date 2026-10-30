@@ -22,6 +22,7 @@ import {
   type RouteGraph,
   type WorkKey,
   type WorkWriteAck,
+  type ThreadHead,
 } from "@pe/agent-contracts";
 import { machineFixture } from "../../../../packages/agent-contracts/tests/machine-fixture.ts";
 import { field } from "../../../../packages/agent-contracts/src/route-field";
@@ -76,33 +77,36 @@ let failureMessage = OLDER_WORK;
 // What the host's Work read answers; a test moves it to model a write or a newer revision landing.
 let workRead = { revision: 3, doc: { note: "hydrated" } };
 let world: { sessions: Record<string, Doc[]>; machine: Record<string, Doc[]> };
+let threadHead: ThreadHead = { targets: [], revision: 0 };
 // Readings outlive one test in the shared registry: every subscriber is handed the current world.
 const accepts = new Map<string, { request: ReadingRequest; live: Set<(frame: never) => void> }>();
 const frame = (request: ReadingRequest) => {
   const value =
-    request.kind === "inventory"
-      ? {
-          sessions: Object.entries(world.sessions).map(([sessionId, docs]) => ({
-            sessionId,
-            connected: true,
-            openDocumentCount: docs.length,
-            openDocuments: docs.map((doc) => ({ ...doc, isFamilyDocument: false })),
-          })),
-        }
-      : request.kind === "machine"
-        ? machineFixture(
-            Object.entries(world.machine).map(([session, documents]) => ({
-              session,
-              documents: documents.map((doc) => ({
-                ...doc,
-                isFamilyDocument: false,
-                isActive: true,
-              })),
-            })) as never,
-          )
-        : unreadable && request.kind === "work"
-          ? undefined
-          : workRead;
+    request.kind === "thread-head"
+      ? threadHead
+      : request.kind === "inventory"
+        ? {
+            sessions: Object.entries(world.sessions).map(([sessionId, docs]) => ({
+              sessionId,
+              connected: true,
+              openDocumentCount: docs.length,
+              openDocuments: docs.map((doc) => ({ ...doc, isFamilyDocument: false })),
+            })),
+          }
+        : request.kind === "machine"
+          ? machineFixture(
+              Object.entries(world.machine).map(([session, documents]) => ({
+                session,
+                documents: documents.map((doc) => ({
+                  ...doc,
+                  isFamilyDocument: false,
+                  isActive: true,
+                })),
+              })) as never,
+            )
+          : unreadable && request.kind === "work"
+            ? undefined
+            : workRead;
   if (value === undefined)
     return { kind: "failure", key: readingKey(request), error: failureMessage } as never;
   return { kind: "snapshot", key: readingKey(request), value } as never;
@@ -110,6 +114,7 @@ const frame = (request: ReadingRequest) => {
 const requests: ReadingRequest[] = [];
 beforeEach(() => {
   world = { sessions: {}, machine: {} };
+  threadHead = { targets: [], revision: 0 };
   unreadable = false;
   failureMessage = OLDER_WORK;
   workRead = { revision: 3, doc: { note: "hydrated" } };
@@ -134,7 +139,11 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-async function probe(g: ReturnType<typeof graph>, search = "") {
+async function probe(
+  g: RouteGraph<any, { note: string }>,
+  search = "",
+  binding?: Parameters<typeof useWorkScope>[2],
+) {
   let ports: WorkScopePorts<{ note: string }> | null = null;
   const root = createRootRoute();
   const route = createRoute({
@@ -142,7 +151,7 @@ async function probe(g: ReturnType<typeof graph>, search = "") {
     path: "/probe",
     validateSearch: routeSearch,
     component: () => {
-      ports = useWorkScope(g);
+      ports = useWorkScope(g, undefined, binding);
       return null;
     },
   });
@@ -167,6 +176,85 @@ test("a Work-free graph resolves the host Target and reads no document", async (
   expect(ports().getSnapshot()).toEqual({ target: { kind: "host" }, work: null });
   expect(requests).toEqual([]);
   expect((await ports().write({} as never, {} as never)).ok).toBe(false);
+});
+
+test.each([0, 2])(
+  "an optional session Target resolves a session holding %i documents",
+  async (count) => {
+    world.sessions = {
+      "session-only": Array.from({ length: count }, (_, i) => ({
+        openId: `o${i}`,
+        title: `Doc ${i}`,
+        address: null,
+      })),
+    };
+    const ports = await probe({ ...graph(), optionalTarget: "session" }, "?target=session-only");
+    expect(ports().getSnapshot().target).toEqual({ kind: "session", session: "session-only" });
+    expect(ports().getSnapshot().work).toBeNull();
+  },
+);
+
+test("an optional Target with no pin keeps host operations available", async () => {
+  const ports = await probe({ ...graph(), optionalTarget: "session" });
+  expect(ports().getSnapshot().target).toEqual({ kind: "host" });
+  expect(requests).toEqual([]);
+});
+
+test("optional document context follows a hosted thread without changing host Work identity", async () => {
+  const ref = { session: "thread-session", openId: "thread-doc" };
+  world.sessions = {
+    "thread-session": [{ openId: ref.openId, title: "Thread doc", address: DOC }],
+  };
+  threadHead = { revision: 1, targets: [{ request: { kind: "open", ref }, admission: null }] };
+  const ports = await probe({ ...graph(), work: workSchema, optionalTarget: "document" }, "", {
+    thread: "a-thread",
+    url: false,
+    work: "member:one",
+  });
+  await waitFor(() => expect(ports().getSnapshot().target).toEqual({ kind: "document", ref }));
+  expect(ports().getSnapshot().workKey).toEqual({
+    binding: "workspace",
+    route: "scope-proof",
+    target: null,
+    work: "member:one",
+  });
+});
+
+test("optional document context never rekeys host-owned Work to the document", async () => {
+  const ref = { session: "context-session", openId: "context-doc" };
+  world.sessions = {
+    [ref.session]: [{ openId: ref.openId, title: "Context doc", address: DOC }],
+  };
+  const ports = await probe(
+    { ...graph(), work: workSchema, optionalTarget: "document" },
+    pin({ kind: "open", ref }),
+  );
+  await waitFor(() => expect(ports().getSnapshot().work).not.toBeNull());
+  expect(ports().getSnapshot().target).toEqual({ kind: "document", ref });
+  expect(ports().getSnapshot().workKey).toEqual({
+    binding: "host",
+    route: "scope-proof",
+    target: null,
+  });
+});
+
+test("optional context reads no Work until a host-owned subject is selected", async () => {
+  const ref = { session: "browse-session", openId: "browse-doc" };
+  world.sessions = {
+    [ref.session]: [{ openId: ref.openId, title: "Browse doc", address: DOC }],
+  };
+  const ports = await probe(
+    {
+      ...graph(),
+      fields: { member: { ...field(z.string().default(""), {}), role: "transient" } },
+      work: workSchema,
+      workSubject: "member",
+      optionalTarget: "document",
+    },
+    pin({ kind: "open", ref }),
+  );
+  expect(ports().getSnapshot().work).toBeNull();
+  expect(requests.some((request) => request.kind === "work")).toBe(false);
 });
 
 test("an exact ?target document keys its Work by Address and hydrates the Work snapshot", async () => {

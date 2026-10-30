@@ -1,7 +1,7 @@
 import type { RouteStatePatch } from "@pe/agent-contracts";
 
 export interface TimelineEntry {
-  kind: "invocation" | "receipt" | "checkpoint";
+  kind: "invocation" | "receipt" | "checkpoint" | "feed";
   at: string | number;
   press?: string;
   verb?: string;

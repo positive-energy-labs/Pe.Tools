@@ -85,12 +85,16 @@ async function readyButton(scope: ReturnType<typeof within>, name: string) {
   });
 }
 
-test("kernel gap: a stale Work write keeps its edit for retry", async () => {
+test("a stale Work write keeps its edit for retry", async () => {
   const { view, owner } = await mounted();
   host.conflictOnWrite = true;
   fireEvent.change(view.getByLabelText("definition id"), { target: { value: "local-change" } });
   await waitFor(() => expect(owner().results.get("edit")?.state).toBe("stale"));
   expect(host.writeRequests[0]?.expectedRevision).toBe(1);
+  expect(owner().rejected()).toMatchObject({
+    verb: "edit",
+    request: { expectedRevision: 1, patches: host.writeRequests[0]!.patches },
+  });
   expect(host.doc.profile.edit?.value.definitions[0]?.id).toBe("supply-flow");
   expect(host.writes).toEqual([]);
   // Kernel seam: retain the rejected intent without treating it as accepted Work.
@@ -106,10 +110,38 @@ test("kernel gap: a stale Work write keeps its edit for retry", async () => {
   fireEvent.click(retry);
   await waitFor(() => expect(host.writes).toHaveLength(1));
   expect(host.writeRequests[1]?.expectedRevision).toBe(2);
+  expect(owner().rejected()).toBeNull();
+  expect(owner().journal(owner().snapshot().work!.handle.key).read().undo).toHaveLength(1);
   expect(host.doc.profile.edit?.value).toEqual({
     ...host.profile,
     definitions: [{ ...host.profile.definitions[0]!, id: "local-change" }],
   });
+});
+
+test("a stale undo stays in the journal without becoming a rejected edit", async () => {
+  const { view, owner } = await mounted();
+  fireEvent.change(view.getByLabelText("definition id"), { target: { value: "accepted" } });
+  await waitFor(() => expect(host.writes).toHaveLength(1));
+  await waitFor(() => expect(owner().busy()).toBeNull());
+  host.conflictOnWrite = true;
+  await act(async () => {
+    await owner().restore("undo");
+  });
+  expect(owner().journalRefusal()).toBeTruthy();
+  expect(owner().rejected()).toBeNull();
+  expect(host.writes).toHaveLength(1);
+});
+
+test("discarding a stale edit leaves accepted Work untouched", async () => {
+  const { view, owner } = await mounted();
+  host.conflictOnWrite = true;
+  fireEvent.change(view.getByLabelText("definition id"), { target: { value: "discarded" } });
+  await waitFor(() => expect(owner().rejected()).not.toBeNull());
+  fireEvent.click(view.getByRole("button", { name: /discard/i }));
+  expect(owner().rejected()).toBeNull();
+  expect(view.queryByRole("button", { name: /retry/i })).toBeNull();
+  expect(host.writes).toEqual([]);
+  expect(host.doc.profile.edit?.value.definitions[0]?.id).toBe("supply-flow");
 });
 
 test("an agent suggestion preview cannot arm human Apply even after take; accepted Preview arms its own reading id", async () => {

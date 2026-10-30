@@ -4,7 +4,7 @@ import { z } from "zod";
 import { pane, type RouteGraph, type WorkKey } from "@pe/agent-contracts";
 import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { createGraphMount, type MountScope } from "./mount-owner";
-import { pageVerb } from "./verbs";
+import { pageVerb, queryVerb } from "./verbs";
 
 test("K1.3/11: hydration acquires an image once; a new Target resets declared scope and fences old deliveries", () => {
   type Page = { view: string; filter: string };
@@ -81,3 +81,126 @@ test("K1.3/11: hydration acquires an image once; a new Target resets declared sc
   disconnect();
   owner.dispose();
 });
+
+test("an admitted query publishes its result once; a failed refresh retains it without another source GET", async () => {
+  const run = vi.fn(async () => ["new"]);
+  const open = vi.fn((_ctx, emit) => emit({ kind: "complete", value: ["old"], revision: 1 }));
+  const graph: RouteGraph<Record<string, never>> = {
+    key: "query-proof",
+    address: "query-proof",
+    name: "Query",
+    fields: {},
+    readings: { list: { kind: "use", source: "list", query: "list", retire: "never" } },
+    verbs: {
+      refresh: queryVerb(
+        { key: "list", input: z.object({}), run },
+        { label: "Refresh", input: z.object({}), review: "none" },
+      ),
+    },
+    panes: { main: { label: "Main", purpose: "Test", draws: ["list"], verbs: [] } },
+    layout: pane("main"),
+    stages: { main: { word: "Main", panes: ["main"], verbs: ["refresh"] } },
+  };
+  const owner = createGraphMount(graph, {
+    getSnapshot: () => ({ target: { kind: "host" }, work: null }),
+    subscribe: () => () => {},
+    sources: { list: { kind: "use", open } },
+    verbReadings: { refresh: ["list"] },
+    write: vi.fn(),
+    subscribeAcceptedDeltas: () => () => {},
+  });
+  const disconnect = owner.connect(),
+    release = owner.readings.mount(["list"]);
+  try {
+    expect(owner.readings.get("list").value).toEqual(["old"]);
+    expect((await owner.control("refresh").run()).state).toBe("done");
+    expect(owner.readings.get("list")).toMatchObject({ value: ["new"], current: true });
+    run.mockRejectedValueOnce(Error("offline"));
+    expect((await owner.control("refresh").run()).state).toBe("failed");
+    expect(owner.readings.get("list")).toMatchObject({
+      previous: ["new"],
+      status: "failed",
+      current: false,
+    });
+    expect(run).toHaveBeenCalledTimes(2);
+    expect(open).toHaveBeenCalledTimes(1);
+  } finally {
+    release();
+    disconnect();
+    owner.dispose();
+  }
+});
+
+test.each([false, true])(
+  "a query cannot publish into a replaced dependency attempt (failed=%s)",
+  async (failed) => {
+    let settle!: (value: string[]) => void;
+    let reject!: (cause: Error) => void;
+    let dependency!: import("./readings").ReadingDelivery;
+    const graph: RouteGraph<Record<string, never>> = {
+      key: "query-race",
+      address: "query-race",
+      name: "Query race",
+      fields: {},
+      readings: {
+        dependency: { kind: "use", source: "dependency", retire: "never" },
+        list: { kind: "use", source: "list", query: "list", deps: ["dependency"], retire: "never" },
+      },
+      verbs: {
+        refresh: queryVerb(
+          {
+            key: "list",
+            input: z.object({}),
+            run: () =>
+              new Promise<string[]>((resolve, fail) => {
+                settle = resolve;
+                reject = fail;
+              }),
+          },
+          { label: "Refresh", input: z.object({}), review: "none" },
+        ),
+      },
+      panes: { main: { label: "Main", purpose: "Test", draws: ["list"], verbs: [] } },
+      layout: pane("main"),
+      stages: { main: { word: "Main", panes: ["main"], verbs: ["refresh"] } },
+    };
+    const owner = createGraphMount(graph, {
+      getSnapshot: () => ({ target: { kind: "host" }, work: null }),
+      subscribe: () => () => {},
+      sources: {
+        dependency: {
+          kind: "use",
+          open: (_, emit) => {
+            dependency = emit;
+            emit({ kind: "complete", value: "old", revision: 1 });
+          },
+        },
+        list: {
+          kind: "use",
+          open: (ctx, emit) =>
+            emit({ kind: "complete", value: [ctx.inputs.dependency!.value], revision: 1 }),
+        },
+      },
+      verbReadings: { refresh: ["list"] },
+      write: vi.fn(),
+      subscribeAcceptedDeltas: () => () => {},
+    });
+    const disconnect = owner.connect();
+    const release = owner.readings.mount(["list"]);
+    try {
+      const running = owner.control("refresh").run();
+      await vi.waitFor(() => expect(settle).toBeDefined());
+      dependency({ kind: "complete", value: "current", revision: 2 });
+      const current = owner.readings.get("list");
+      expect(current.value).toEqual(["current"]);
+      if (failed) reject(Error("old request failed"));
+      else settle(["obsolete"]);
+      await running;
+      expect(owner.readings.get("list")).toBe(current);
+    } finally {
+      release();
+      disconnect();
+      owner.dispose();
+    }
+  },
+);

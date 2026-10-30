@@ -73,6 +73,20 @@ const receipt = (
 });
 
 describe("reading graph", () => {
+  it("retains stale values, including null, while an explicit refresh is pending", () => {
+    const read = controlled<number | null>();
+    const { graph } = fixture({ matrix: decl("matrix") }, { matrix: read.source });
+    const release = graph.mount(["matrix"]);
+    read.attempts[0]!.deliver({ kind: "complete", value: 4, revision: 1 });
+    graph.start("matrix", "second");
+    read.attempts.at(-1)!.deliver({ kind: "complete", value: null, revision: 1 });
+    read.attempts.at(-1)!.deliver({ kind: "stale" });
+    graph.start("matrix", "refresh");
+    expect(graph.get("matrix")).toMatchObject({ status: "pending", previous: null });
+    release();
+    graph.dispose();
+  });
+
   it("fences all first-A deliveries after A → B → A, even with the same Work and args", () => {
     const read = controlled();
     const { graph, logs } = fixture({ matrix: decl("matrix") }, { matrix: read.source });

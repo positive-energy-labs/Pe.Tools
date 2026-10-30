@@ -6,12 +6,15 @@ import { paintOfDucts } from "./selection";
 import { kindHue } from "#/scene/kinds";
 import type { SceneInstance } from "#/scene/types";
 
-test("the settings palette supplies the kinds table and never enters Revit apply", () => {
+test("the edit palette persists with Work, supplies the kinds table and never enters Revit apply", () => {
   const palette = { ...FIRM_COLOURS, supply: "#123456" };
-  const settings = { supplyColour: "#123456" };
-  expect(coloursOf(settings)).toEqual(palette);
+  const saved = JSON.stringify(
+    ductsDocumentSchema.parse({ systemColours: { edit: { value: palette } } }),
+  );
+  const doc = ductsDocumentSchema.parse(JSON.parse(saved));
+  expect(coloursOf(doc)).toEqual(palette);
   expect(coloursOf(null)).toEqual(FIRM_COLOURS);
-  expect(stagedDucts(ductsDocumentSchema.parse({}))).not.toHaveProperty("systemColours");
+  expect(stagedDucts(doc)).not.toHaveProperty("systemColours");
   const { snapshot } = NAVIGATION_FIXTURE;
   const id = snapshot.segments[0]!.id;
   const instance = { revitId: id } as SceneInstance;
@@ -20,5 +23,5 @@ test("the settings palette supplies the kinds table and never enters Revit apply
     tier: "subject",
     kind: "supply",
   });
-  expect(kindHue(coloursOf(settings), "supply")?.getHexString()).toBe("123456");
+  expect(kindHue(coloursOf(doc), "supply")?.getHexString()).toBe("123456");
 });

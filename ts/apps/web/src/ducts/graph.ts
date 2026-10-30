@@ -2,7 +2,6 @@ import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { z } from "zod";
 
 import {
-  ductsSettingFields,
   pane,
   split,
   gate,
@@ -116,7 +115,6 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
   needs: "project",
 
   fields: {
-    ...ductsSettingFields,
     threadSearch: { ...fields.threadSearch, role: "query", url: fields.threadSearch.url },
     threadSort: { ...fields.threadSort, role: "query", url: fields.threadSort.url },
     stage: { ...fields.stage, role: "stage", url: fields.stage.url ?? false },
@@ -330,6 +328,17 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
       noun: "unit roles",
 
       show: (value) => (value as { role: string }).role,
+    },
+    {
+      segment: "parameters",
+
+      groupOf: (key) => [key],
+
+      nouns: ["slot"],
+
+      noun: "parameter slots",
+
+      show: (value) => String(value),
     },
   ]),
 

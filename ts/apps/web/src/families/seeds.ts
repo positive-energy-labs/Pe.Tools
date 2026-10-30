@@ -1,5 +1,5 @@
 import type { FamilySnapshotRecord, FamilyParameterSnapshot } from "#/host/loaded-families-view";
-import type { DemoSpec } from "#/route/spec-editor";
+import type { DemoSpec } from "#/route/seeds";
 const param = (name: string, values: Record<string, string | null>): FamilyParameterSnapshot => ({
   definition: {
     identity: { key: `name:${name}`, kind: "NameFallback", name },

@@ -26,7 +26,6 @@ function fixture() {
     workKey: { binding: "open", route: "ducts", target: null, open: { session: "s", openId: "d" } },
     workRevision: host.revision,
     work: host.doc,
-    settings: { terminalFlow: "PE_M_Grd_AirFlow" },
     page: ductsPageSchema.parse({ system: ["SA"] }),
   };
   const logs: unknown[] = [];
@@ -38,7 +37,7 @@ function fixture() {
   releases.push(() => graph.dispose());
   return { scope, graph, logs };
 }
-test("subscription bodies and the pricing worker answer the exact Work; only slot settings reacquire networks", async () => {
+test("subscription bodies and the pricing worker answer the exact Work; only parameter edits reacquire networks", async () => {
   const { graph, scope } = fixture();
   releases.push(graph.mount(["pricing"]));
   await waitFor(() => expect(graph.get("pricing").current).toBe(true));
@@ -62,8 +61,21 @@ test("subscription bodies and the pricing worker answer the exact Work; only slo
   graph.update({
     ...scope,
     workRevision: 3,
-    work: ductsRouteState.schema.parse({}),
-    settings: { terminalFlow: "Design CFM" },
+    work: ductsRouteState.schema.parse({
+      parameters: Object.fromEntries(
+        [
+          "terminalFlow",
+          "fanFlow",
+          "fanStatic",
+          "terminalDrop",
+          "componentDrop",
+          "fittingCoefficient",
+        ].map((key) => [
+          key,
+          { edit: { value: key === "terminalFlow" ? "Design CFM" : `Project ${key}` } },
+        ]),
+      ),
+    }),
   });
   await waitFor(() =>
     expect(
@@ -75,6 +87,16 @@ test("subscription bodies and the pricing worker answer the exact Work; only slo
     ).toBe(true),
   );
   await waitFor(() => expect(graph.get("pricing").basis?.workRevision).toBe(3));
+  expect(
+    host.requests.filter((request) => request.key === "ducts.snapshot").at(-1)?.request.slots,
+  ).toEqual({
+    terminalFlow: "Design CFM",
+    fanFlow: "Project fanFlow",
+    fanStatic: "Project fanStatic",
+    terminalDrop: "Project terminalDrop",
+    componentDrop: "Project componentDrop",
+    fittingCoefficient: "Project fittingCoefficient",
+  });
 });
 test("the fan source pins detail to one overview basis and never writes Work from a Reading", async () => {
   const { graph, scope } = fixture();

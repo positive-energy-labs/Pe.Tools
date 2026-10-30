@@ -153,6 +153,30 @@ export function inputFields(ctx: InputContext): InputField[] {
     },
     // equipment slots
     {
+      census: "Terminal drop slot",
+      group: "firm",
+      sub: "equipment slots",
+      label: "terminal drop slot",
+      value: text(slots?.terminalDrop),
+      reason: "no-op: C# only",
+    },
+    {
+      census: "Component drop slot",
+      group: "firm",
+      sub: "equipment slots",
+      label: "component drop slot",
+      value: text(slots?.componentDrop),
+      reason: "no-op: C# only",
+    },
+    {
+      census: "Fitting coefficient slot",
+      group: "firm",
+      sub: "equipment slots",
+      label: "fitting coefficient slot",
+      value: `${text(slots?.fittingCoefficient)} · not read by the sheet`,
+      reason: "no-op: C# only",
+    },
+    {
       census: "Roster kind / passive heuristics",
       group: "firm",
       sub: "equipment slots",
@@ -340,6 +364,14 @@ export function inputFields(ctx: InputContext): InputField[] {
       value: `${ctx.slots.length} candidates in the picker`,
     },
     {
+      census: "parameters.terminalFlow",
+      group: "project",
+      sub: "airflow slots",
+      label: "Work grille airflow",
+      value: text(edit(doc?.parameters.terminalFlow)),
+      reason: "no-op: not in contract",
+    },
+    {
       census: "Snapshot slots.terminalFlow",
       group: "project",
       sub: "airflow slots",
@@ -372,6 +404,14 @@ export function inputFields(ctx: InputContext): InputField[] {
       reason: "no-op: no home",
     },
     // equipment slots
+    {
+      census: "parameters.fanFlow",
+      group: "project",
+      sub: "equipment slots",
+      label: "Work unit airflow",
+      value: text(edit(doc?.parameters.fanFlow)),
+      reason: "no-op: not in contract",
+    },
     {
       census: "Label parameter",
       group: "project",
@@ -484,6 +524,14 @@ export function inputFields(ctx: InputContext): InputField[] {
       sub: "basis",
       label: "working phase",
       value: text(edit(doc?.workingPhase)),
+      reason: "no-op: not in contract",
+    },
+    {
+      census: "systemColours",
+      group: "project",
+      sub: "basis",
+      label: "system colours",
+      value: `${count(edit(doc?.systemColours))} hexes`,
       reason: "no-op: not in contract",
     },
     {

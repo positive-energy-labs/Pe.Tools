@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { createMemoryHistory, createRouter, RouterContextProvider } from "@tanstack/react-router";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import { actionReceiptSchema, type Machine } from "@pe/agent-contracts";
+import { actionReceiptSchema, actionStatusSchema, type Machine } from "@pe/agent-contracts";
 import { Route as root } from "../routes/__root";
 import type { ReadingDelivery, ReadingSource } from "#/shell/readings";
 import { openAdapters, openRoute, OpenPage } from "./route";
@@ -103,6 +103,17 @@ async function mounted(url = "/open", hosted = false) {
   return { view, router, owner: () => wrap.mock.calls.at(-1)![0] };
 }
 test("the mounted bay patches a document and dispatches its exact semantic intent through the kernel", async () => {
+  let history!: ReadingDelivery;
+  openAdapters.sources = {
+    ...openAdapters.sources,
+    "open.receipts": {
+      kind: "use",
+      open: (_, deliver) => {
+        history = deliver;
+        deliver({ kind: "complete", value: [], revision: 1 });
+      },
+    },
+  };
   const { view, owner, router } = await mounted();
   fireEvent.click(await view.findByText("Clinic-Fitout.rvt"));
   fireEvent.click(
@@ -133,7 +144,14 @@ test("the mounted bay patches a document and dispatches its exact semantic inten
     ).toBe(true),
   );
   await waitFor(() => expect(machineReads).toBeGreaterThan(1));
+  const receipt = await transport.run.mock.results[0]!.value;
+  act(() => history({ kind: "complete", value: [actionStatusSchema.parse(receipt)], revision: 2 }));
+  const activity = within(view.container.querySelector('section[aria-label="History"]')!);
+  expect(activity.getByRole("link", { name: "instances.open" })).toBeTruthy();
+  expect(activity.getAllByRole("listitem")).toHaveLength(2);
   expect(router.state.location.search).not.toHaveProperty("draft");
+  expect(view.queryByRole("textbox", { name: "draft" })).toBeNull();
+  expect(view.queryByRole("textbox", { name: "table" })).toBeNull();
   expect(fetch).not.toHaveBeenCalled();
 });
 test("stale machine evidence refuses an armed stop and hosted Page stays off the URL", async () => {
@@ -152,8 +170,7 @@ test("stale machine evidence refuses an armed stop and hosted Page stays off the
   expect(fetch).not.toHaveBeenCalled();
 });
 
-// TODO: shell/readings.ts must retain a stale Machine value when launch moves it to pending.
-test("kernel gap: refreshing stale Machine evidence keeps its Revit cards while pending", async () => {
+test("refreshing stale Machine evidence keeps its Revit cards while pending", async () => {
   const { view } = await mounted();
   act(() => publishMachine({ kind: "stale" }));
   const before = machineReads;
@@ -161,4 +178,42 @@ test("kernel gap: refreshing stale Machine evidence keeps its Revit cards while 
   fireEvent.click(view.getByRole("button", { name: "refresh" }));
   await waitFor(() => expect(machineReads).toBeGreaterThan(before));
   expect(view.getByRole("group", { name: "Revit 2025 started from the Revit icon" })).toBeTruthy();
+});
+
+test("world feed events enter shared History once and old deliveries cannot append after unmount", async () => {
+  let publish!: ReadingDelivery;
+  openAdapters.sources = {
+    ...openAdapters.sources,
+    "open.world": {
+      kind: "feed",
+      open: (_, deliver) => {
+        publish = deliver;
+        deliver({ kind: "complete", value: [], revision: 1 });
+      },
+    },
+  };
+  const { view, owner } = await mounted();
+  await waitFor(() => expect(publish).toBeDefined());
+  act(() => {
+    publish({ kind: "log", id: "world-1", value: { message: "Revit connected" } });
+    publish({ kind: "log", id: "world-1", value: { message: "Revit connected" } });
+  });
+  expect(
+    owner()
+      .timeline.read()
+      .filter((entry) => entry.kind === "feed"),
+  ).toHaveLength(1);
+  expect(
+    within(view.container.querySelector('section[aria-label="History"]')!).getByText(
+      /Revit connected/,
+    ),
+  ).toBeTruthy();
+  view.unmount();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  publish({ kind: "log", id: "world-2", value: "retired" });
+  expect(
+    owner()
+      .timeline.read()
+      .filter((entry) => entry.kind === "feed"),
+  ).toHaveLength(1);
 });

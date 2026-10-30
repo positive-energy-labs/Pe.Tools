@@ -8,6 +8,8 @@ import {
   bindWork,
   OLDER_WORK,
   workKey,
+  threadHeadSchema,
+  type TargetResolution,
   type RouteGraph,
   type RouteStateSpec,
   type RouteStateWriteResult,
@@ -15,7 +17,7 @@ import {
   type WorkWrite,
   type WorkWriteAck,
 } from "@pe/agent-contracts";
-import { dirty, previousOf } from "#/readings";
+import { dirty, previousOf, readingAtom, peReadings, targetInventory } from "#/readings";
 import { useRouteSearchSlice } from "../route/activity";
 import {
   salvageRouteWork,
@@ -24,7 +26,7 @@ import {
   writeRouteWork,
 } from "../route/host";
 import { appAtomRegistry, useOwned } from "../route/route-owner";
-import { useRouteTarget } from "../route/route-target";
+import { useRouteTarget, parseTarget } from "../route/route-target";
 import { docAtom } from "../route/route-work";
 import type { MountScope } from "./mount-owner";
 
@@ -69,19 +71,55 @@ export function useWorkScope<P, W>(
   binding?: { target?: string; work?: string; thread?: string; url?: boolean },
 ): WorkScopePorts<W> {
   const carry = useRouteSearchSlice((search) =>
-    binding
+    binding?.url === false
       ? { target: binding.target, work: binding.work }
-      : { target: search.target, work: search.work },
+      : { target: binding?.target ?? search.target, work: binding?.work ?? search.work },
   );
+  const threadAtom = useMemo(
+    () =>
+      graph.optionalTarget && binding?.thread
+        ? readingAtom({ kind: "thread-head", thread: binding.thread }, peReadings)
+        : null,
+    [graph.optionalTarget, binding?.thread],
+  );
+  const threadReading = useOwned(appAtomRegistry, threadAtom);
+  const head = threadHeadSchema.safeParse(threadReading && previousOf(threadReading));
+  const threadTarget =
+    head.success && head.data.targets.length === 1 ? head.data.targets[0]!.request : null;
+  const pin = carry.target ?? (threadTarget ? JSON.stringify(threadTarget) : null);
+  const needs = graph.needs ?? (pin ? graph.optionalTarget : undefined);
+  const sessionAtom = useMemo(
+    () => (needs === "session" ? readingAtom({ kind: "inventory" }, peReadings) : null),
+    [needs],
+  );
+  const sessionReading = useOwned(appAtomRegistry, sessionAtom);
+  const sessionResolution = useMemo((): TargetResolution | null => {
+    if (needs !== "session") return null;
+    const chosen = parseTarget(pin);
+    if (chosen?.kind !== "session") return null;
+    const inventory = targetInventory(
+      (sessionReading ?? { state: "absent" }) as Parameters<typeof targetInventory>[0],
+    );
+    if (inventory.kind !== "ready") return inventory;
+    const found = inventory.sessions[chosen.session];
+    return !found
+      ? { kind: "choose", reason: "session-gone" }
+      : found.kind !== "ready"
+        ? found
+        : { kind: "resolved", target: { kind: "session", session: chosen.session } };
+  }, [needs, pin, sessionReading]);
   const field = graph.workSubject ? page?.[graph.workSubject] : undefined;
   // Page selection wins over the `?work=` carry: a pick moves the field, the carry stays behind.
   const work = typeof field === "string" && field ? field : carry.work;
-  const target = useRouteTarget(
-    { needs: graph.needs },
+  const documentTarget = useRouteTarget(
+    { needs: needs === "session" ? "document" : needs },
     appAtomRegistry,
-    graph.needs ? undefined : HOST_ONLY,
-    carry.target ?? null,
+    needs && !sessionResolution ? undefined : HOST_ONLY,
+    pin,
   );
+  const target = sessionResolution
+    ? { ...documentTarget, resolution: sessionResolution }
+    : documentTarget;
   const { resolvedAddress, workAddress, workOpen } = target;
   // useRouteTarget answers fresh objects on some renders; the ports change only when their JSON does.
   const statusText = JSON.stringify([
@@ -99,7 +137,12 @@ export function useWorkScope<P, W>(
       ? resolution.target.ref
       : undefined;
   const keyText = JSON.stringify(
-    bindWork(graph.key, workAddress, work, bound ?? workOpen ?? undefined),
+    bindWork(
+      graph.key,
+      graph.needs ? workAddress : null,
+      work,
+      graph.needs ? (bound ?? workOpen ?? undefined) : undefined,
+    ),
   );
   const key = useMemo(() => JSON.parse(keyText) as WorkKey, [keyText]);
   const spec = useMemo(
@@ -110,7 +153,11 @@ export function useWorkScope<P, W>(
     [graph],
   );
   // Target-owned Work never falls back to the shared host key while its document is unresolved.
-  const readable = work !== undefined || workAddress !== null || key.binding === "open";
+  const readable =
+    work !== undefined ||
+    (graph.needs !== undefined && workAddress !== null) ||
+    key.binding === "open" ||
+    (!graph.needs && !graph.workSubject);
   const atom = useMemo(() => (spec && readable ? docAtom(spec, key) : null), [spec, readable, key]);
   const reading = useOwned(appAtomRegistry, atom);
   // Only the host's own unreadable-Work failure offers recovery; a host that is down does not.

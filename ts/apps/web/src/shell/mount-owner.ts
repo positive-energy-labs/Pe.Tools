@@ -25,14 +25,15 @@ import {
 } from "@pe/agent-contracts";
 import { createRouteOwner, makeAtomRegistry } from "../route/route-owner";
 import { createViewOwner } from "../route/view-owner";
-import { refuse } from "../route/refusal";
+import { causeRefusal, refuse, writeRefusal } from "../route/refusal";
 import {
   createReadingGraph,
   type ReadingLog,
+  type ReadingAttempt,
   type ReadingSource,
   type ReadingState,
 } from "./readings";
-import { createWorkJournal } from "./journal";
+import { createWorkJournal, acquireWorkJournal } from "./journal";
 import { createRouteTimeline, type TimelineEntry } from "./timeline";
 import { validateGraphChords } from "./keys";
 import { kernelCellVerbs } from "./verbs-cells";
@@ -190,7 +191,10 @@ export function createGraphMount<P, W>(
         .map(([id, f]) => [id, f.schema]),
     ),
   ) as z.ZodType<P>;
-  const initialPage = schema.parse({ ...adapters.initialPage, ...initial });
+  const parsedPage = schema.parse({ ...adapters.initialPage, ...initial });
+  const normalized = graph.transition?.(parsedPage, parsedPage, "initial", { readings: {} });
+  if (normalized && "refusal" in normalized) throw Error(normalized.refusal.message);
+  const initialPage = schema.parse({ ...parsedPage, ...normalized?.patch });
   const settings = adapters.settings ?? graphSettings(graph);
   // Validation ran above: cell verb ids cannot collide with graph verbs, so a plain spread is safe.
   const kernel = kernelCellVerbs(graph);
@@ -223,6 +227,9 @@ export function createGraphMount<P, W>(
   ]);
   // One Work per mount at a time: the stale write's key and the revision it was refused against.
   let conflict: { work: string; revision: number } | null = null;
+  let rejected: { key: WorkKey; request: WorkWrite; verb: string; input: MountBinding } | null =
+    null;
+  let invoking: { verb: string; input: MountBinding } | null = null;
   let disposed = false;
   let available = () => true;
   let journalRefusal: string | null = null;
@@ -236,10 +243,18 @@ export function createGraphMount<P, W>(
   };
   const timeline = createRouteTimeline();
   const journals = new Map<string, ReturnType<typeof createWorkJournal>>();
+  const releaseJournals: (() => void)[] = [];
   const deltas = new Map<string, () => void>();
   const dispatches = new Map<
     string,
-    { key: WorkKey | null; verb: string; readings: readonly string[]; origin: string }
+    {
+      key: WorkKey | null;
+      verb: string;
+      input: MountBinding | null;
+      readings: readonly string[];
+      attempts: Map<string, ReadingAttempt>;
+      origin: string;
+    }
   >();
   const reviews = new Map<string, { verb: string; ticket: ReviewTicket; origin: string }>();
   const paneRows = new Map<string, unknown>();
@@ -291,7 +306,17 @@ export function createGraphMount<P, W>(
             : {}),
         },
         scope: readScope(),
-        log: (entry) => adapters.logReading?.(entry),
+        log: (entry) => {
+          adapters.logReading?.(entry);
+          if (entry.kind === "feed")
+            timeline.append({
+              kind: "feed",
+              at: Date.now(),
+              verb: entry.reading,
+              subject: entry.value,
+              basis: { workKey: entry.attempt.workKey ? workKey(entry.attempt.workKey) : null },
+            });
+        },
       },
     );
   } catch (cause) {
@@ -351,7 +376,9 @@ export function createGraphMount<P, W>(
     const id = workKey(key);
     let journal = journals.get(id);
     if (!journal) {
-      journal = createWorkJournal(key);
+      const acquired = acquireWorkJournal(key);
+      journal = acquired.journal;
+      releaseJournals.push(acquired.release);
       journals.set(id, journal);
       if (conflict?.work === id) journal.hold(true);
     }
@@ -376,7 +403,16 @@ export function createGraphMount<P, W>(
     notify();
   });
   const write = async (key: WorkKey, request: WorkWrite) => {
+    const invocation = request.press ? dispatches.get(request.press) : undefined;
     const result = await adapters.write(key, request);
+    if (
+      !disposed &&
+      !result.ok &&
+      "code" in result &&
+      result.code === "stale_revision" &&
+      invocation?.input
+    )
+      rejected = structuredClone({ key, request, verb: invocation.verb, input: invocation.input });
     if (result.ok && !disposed) {
       journalFor(key).accept(result.write);
       settled(key);
@@ -467,7 +503,15 @@ export function createGraphMount<P, W>(
             const key = scope.work ? structuredClone(scope.work.handle.key) : null;
             if (key) journalFor(key);
             const ids = adapters.verbReadings?.[id] ?? [];
-            dispatches.set(press, { key, verb: id, readings: ids, origin: activeOrigin });
+            const attempts = new Map<string, ReadingAttempt>();
+            dispatches.set(press, {
+              key,
+              verb: id,
+              input: invoking?.verb === id ? structuredClone(invoking.input) : null,
+              readings: ids,
+              attempts,
+              origin: activeOrigin,
+            });
             timeline.append({
               kind: "invocation",
               at: Date.now(),
@@ -475,7 +519,18 @@ export function createGraphMount<P, W>(
               verb: id,
               basis: { workKey: key ? workKey(key) : null },
             });
-            for (const reading of ids) readings.start(reading, press);
+            for (const reading of ids)
+              attempts.set(
+                reading,
+                readings.start(
+                  reading,
+                  press,
+                  !(
+                    verbs[id]?.kind === "query" &&
+                    graph.readings[reading]?.query === verbs[id]?.does
+                  ),
+                ),
+              );
             return work(cancelWith, press);
           },
           keys,
@@ -522,13 +577,7 @@ export function createGraphMount<P, W>(
       reviews.delete(id);
       if (result.press) {
         const dispatch = dispatches.get(result.press);
-        if (
-          dispatch &&
-          result.state === "done" &&
-          (result.kind === "command" || result.kind === "rpc" || result.kind === "page") &&
-          result.page
-        )
-          view.setPage(result.page as Partial<P>);
+        if (dispatch && "page" in result && result.page) view.setPage(result.page as Partial<P>);
         if (
           dispatch &&
           result.state === "done" &&
@@ -543,6 +592,14 @@ export function createGraphMount<P, W>(
             basis: { workKey: dispatch.key ? workKey(dispatch.key) : null, query: result.receipt },
           });
           // A read that names its subject Work selects it through Page, the one carry the door follows.
+          for (const reading of dispatch.readings)
+            if (graph.readings[reading]?.query === result.receipt.key)
+              readings.publish(
+                reading,
+                result.press,
+                dispatch.attempts.get(reading)!,
+                result.receipt.value,
+              );
           if (result.receipt.subject !== null && graph.workSubject)
             view.setPage({ [graph.workSubject]: result.receipt.subject } as Partial<P>);
         }
@@ -580,7 +637,16 @@ export function createGraphMount<P, W>(
             else if (result.receipt.state !== "detached")
               acceptReceipt(result.receipt, dispatch.key, result.press);
           }
-          for (const reading of dispatch.readings) readings.finish(reading, result.press);
+          for (const reading of dispatch.readings) {
+            if (graph.readings[reading]?.query === verbs[id]?.does && "refusal" in result)
+              readings.fail(
+                reading,
+                result.press,
+                dispatch.attempts.get(reading)!,
+                result.refusal.message,
+              );
+            readings.finish(reading, result.press);
+          }
           dispatches.delete(result.press);
         }
       }
@@ -624,6 +690,19 @@ export function createGraphMount<P, W>(
       : conflict && scope.conflict && verbs[id]?.effect !== "query"
         ? CONFLICT_REFUSAL
         : failedDependency(id);
+  const retryRefusal = () => {
+    if (!rejected) return "There is no unaccepted edit";
+    if (scope.closed || scope.failure) return scope.failure ?? "This Work is closed";
+    const inactive = blocked(rejected.verb);
+    if (inactive) return inactive;
+    if (registry.get(base.busy)) return "Wait for the running verb";
+    const work = scope.work;
+    if (!work || workKey(work.handle.key) !== workKey(rejected.key))
+      return "Return to the Work that owns this edit";
+    return work.handle.revision <= rejected.request.expectedRevision
+      ? "Read current Work before retrying"
+      : null;
+  };
   const run = async (id: string, bound: MountBinding, origin: string, answers?: unknown) => {
     const inactive = blocked(id);
     if (inactive)
@@ -638,6 +717,7 @@ export function createGraphMount<P, W>(
     // Another press cannot steal the running invocation's identity.
     active = id;
     activeOrigin = origin;
+    invoking = { verb: id, input: structuredClone(bound) };
     const result = review
       ? await commit(ctxFor(id), verb, review.ticket, answers)
       : await invoke(ctxFor(id), verb, bound.subject, bound.args);
@@ -687,6 +767,47 @@ export function createGraphMount<P, W>(
     /** Reads the current Work again, which is what ends a conflict. */
     reread() {
       if (scope.work) adapters.reread?.(scope.work.handle.key);
+    },
+    rejected: () => rejected,
+    retryRefusal,
+    discard() {
+      rejected = null;
+      notify();
+    },
+    async retry() {
+      const edit = rejected;
+      const work = scope.work;
+      if (!edit || !work || retryRefusal()) return;
+      active = edit.verb;
+      activeOrigin = "retry";
+      invoking = { verb: edit.verb, input: edit.input };
+      await context.owner.runAction(edit.verb, async (_cancel, press) => {
+        try {
+          const result = await write(work.handle.key, {
+            ...edit.request,
+            expectedRevision: work.handle.revision,
+            press,
+          });
+          if (result.ok) {
+            if (rejected === edit) rejected = null;
+            consume(edit.verb, {
+              state: "done",
+              kind: "work",
+              press,
+              acknowledgement: result.write,
+            });
+            return null;
+          }
+          const refusal = writeRefusal(result)!;
+          consume(edit.verb, { state: "refused", press, refusal });
+          return refusal;
+        } catch (cause) {
+          const refusal = causeRefusal(cause);
+          consume(edit.verb, { state: "failed", press, refusal });
+          return refusal;
+        }
+      });
+      notify();
     },
     /** Chord-free cell verb ids a row carries (palette and row menu only); [] when it is no cell. */
     cellVerbs: (row: unknown): readonly string[] => {
@@ -848,6 +969,7 @@ export function createGraphMount<P, W>(
       for (const release of deltas.values()) release();
       deltas.clear();
       unTimeline();
+      for (const release of releaseJournals) release();
       readings.dispose();
       view.dispose();
       base.dispose();

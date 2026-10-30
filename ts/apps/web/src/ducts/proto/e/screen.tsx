@@ -60,6 +60,7 @@ import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length
 import { BarRules, systemNoteCount, systemRowParts } from "./bar";
 
 import { DesignFriction } from "./design-friction";
+import { ParameterSlots, SystemColours } from "./settings";
 import { FanFacts, fanFacts, type FanFact } from "./fan-sections";
 import { DuctsPicture } from "./picture";
 import { grilleLabels } from "./labels";
@@ -864,6 +865,8 @@ function LoadedScreenBody({
     "e-inputs": (
       <>
         <DesignFriction work={work} rate={designRate} />
+        <ParameterSlots work={work} snapshot={snapshot} scope={scope} />
+        <SystemColours work={work} />
         {inputsPane}
       </>
     ),

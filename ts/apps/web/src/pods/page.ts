@@ -41,11 +41,8 @@ export const podsFields = {
     url: false as const,
   },
   live: {
-    ...field(
-      podsPageSchema.shape.live,
-      { url: "replace" },
-      { encode: String, decode: (value) => value },
-    ),
+    ...field(podsPageSchema.shape.live, {}, { encode: String, decode: (value) => value }),
     role: "transient" as const,
+    url: false as const,
   },
 };

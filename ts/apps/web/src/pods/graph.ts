@@ -12,10 +12,10 @@ export const podsGraph: RouteGraph<PodsPage, SettingsRouteDocument> = {
   key: "pods",
   address: "pods",
   name: "Pods",
-  // TODO: Admit host-owned member Work without a Revit Target in validateRouteGraph.
   work: settingsRouteState.schema,
-  // TODO: Normalize initial Page through transition so pod/path deep links select this Work.
   workSubject: "member",
+  optionalTarget: "document",
+  observe: ["open"],
   fields: podsFields,
   transition: podsTransition,
   cells: [
