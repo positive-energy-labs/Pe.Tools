@@ -178,6 +178,7 @@ interface Binding {
   ) => Record<string, unknown>;
   /** A query's Work edit from its result, applied as one write once the read is admitted. */
   queryPatches?: (scope: VerbScope, result: unknown) => readonly RouteStatePatch[];
+  queryRevision?: (scope: VerbScope, result: unknown) => number;
   queryCancel?: {
     key: QueryKey;
     input: (request: Record<string, unknown>) => Record<string, unknown>;
@@ -269,6 +270,12 @@ export function queryVerb<K extends QueryKey, S extends z.ZodType>(
     subject?: (value: unknown) => string | null;
     /** Work edits from the admitted result: ONE write through the normal door, one undoable step. */
     patches?: (scope: VerbScope, result: unknown) => readonly RouteStatePatch[];
+    /**
+     * The Work revision the patches write expects. Default: the revision the read started on. A read
+     * whose host wrote the Work itself (and returned that baseline in its envelope) names it here, so
+     * the write lands iff nothing else moved the Work after the host did.
+     */
+    expectedRevision?: (scope: VerbScope, result: unknown) => number;
     /** How Stop reaches the running read: the cancel query and its input, derived from the request sent. */
     cancel?: {
       key: QueryKey;
@@ -291,6 +298,7 @@ export function queryVerb<K extends QueryKey, S extends z.ZodType>(
     subject: implementation.subject,
     queryPatches: implementation.patches,
     queryCancel: implementation.cancel,
+    queryRevision: implementation.expectedRevision,
     ready:
       implementation.ready &&
       ((scope, input) => implementation.ready!(scope, input as z.output<S>)),
@@ -664,7 +672,8 @@ async function invokeCore<C extends Caller>(
             // read ran makes this a stale refusal, never an overwrite (S0a envelope boundary).
             const written = await ctx.write(after.work!.handle.key, {
               patches: structuredClone(patches) as RouteStatePatch[],
-              expectedRevision: current.work!.handle.revision,
+              expectedRevision:
+                binding.queryRevision?.(fresh, value) ?? current.work!.handle.revision,
               press,
             });
             const refused = writeRefusal(written);
