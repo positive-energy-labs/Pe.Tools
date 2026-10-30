@@ -41,6 +41,9 @@ type Scope = BindingScope<DuctsPage, DuctsRouteDocument>;
 function current<T>(scope: Scope, id: string): T {
   const reading = scope.readings[id];
 
+  if (reading?.status === "failed")
+    throw Error(`${id} failed: ${reading.error ?? "unknown error"}`);
+
   if (!reading?.current || reading.value == null) throw Error(`Reading ${id} is refreshing`);
 
   return reading.value as T;

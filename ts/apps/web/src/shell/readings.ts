@@ -130,6 +130,8 @@ interface Node<P> {
   generation: number;
   revision: number;
   signature?: string;
+  /** What the last attempt ran against; a failed reading holds while this still matches. */
+  launched?: { stable: string; values: unknown[] };
   context?: ReadingContext;
   trigger?: ReadingContext["trigger"];
   receiptHeld?: "capture" | "demand";
@@ -202,6 +204,29 @@ export function createReadingGraph<P, W>(
       (node.decl.deps ?? []).map((id) => get(id).state.version),
       node.source.kind === "worker" ? [scope.workRevision, node.source.algorithmVersion] : null,
     ]);
+  /** Signature minus the dependency version ticks: the inputs' values by identity, the rest by key. */
+  const inputsIdentity = (node: Node<P>) => ({
+    stable: canonicalRouteInput([
+      node.source.key?.(scope),
+      node.decl.retire === "page" ? node.decl.args?.(scope.page) : null,
+      node.source.kind === "worker" ? [scope.workRevision, node.source.algorithmVersion] : null,
+    ]),
+    values: (node.decl.deps ?? []).map((id) => get(id).state.value),
+  });
+  /**
+   * A failed attempt stays failed until its inputs or scope change: a mere dependency tick (a new
+   * version over the same values) does not re-run it. A forced retire clears the signature, which
+   * always re-runs; a press (`start`) launches directly.
+   */
+  const holdsFailure = (node: Node<P>) => {
+    if (node.state.status !== "failed" || node.signature === undefined || !node.launched)
+      return false;
+    const now = inputsIdentity(node);
+    return (
+      now.stable === node.launched.stable &&
+      now.values.every((value, i) => value === node.launched!.values[i])
+    );
+  };
   const owned = (node: Node<P>, attempt: ReadingAttempt) =>
     !disposed && node.context?.attempt === attempt;
   const put = (node: Node<P>, state: Omit<ReadingState, "version">) => {
@@ -324,6 +349,7 @@ export function createReadingGraph<P, W>(
     }
     detach(node);
     node.signature = signatureOf(node);
+    node.launched = inputsIdentity(node);
     const controller = new AbortController();
     node.controller = controller;
     const attempt: ReadingAttempt = Object.freeze({
@@ -404,7 +430,9 @@ export function createReadingGraph<P, W>(
           if (node.context && node.signature !== signatureOf(node)) stale(node);
           continue;
         }
-        if (node.signature !== signatureOf(node)) launch(node);
+        if (node.signature === signatureOf(node)) continue;
+        if (holdsFailure(node)) node.signature = signatureOf(node);
+        else launch(node);
       }
       const notifications = [...changed];
       changed.clear();

@@ -68,6 +68,8 @@ export function pricingJob() {
         },
       };
     } catch (error) {
+      // The reply carries the message only; the stack stays in the worker console for diagnosis.
+      console.error(error);
       return { id: request.id, error: error instanceof Error ? error.message : String(error) };
     }
   };

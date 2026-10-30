@@ -11,6 +11,7 @@ import { withStoredRulings } from "@pe/ducts-domain/rulings";
 import { SCENE_FIXTURE } from "./scene.fixture";
 import { pricingJob, type PricingInput } from "./pricing-job";
 import { applyPricingDelta, pricingDelta } from "./pricing-delta";
+import { EMPTY_SNAPSHOT } from "./sheet/scoped-snapshot";
 
 const input = (): PricingInput => ({
   snapshot: SCENE_FIXTURE.snapshot,
@@ -113,4 +114,17 @@ test("unit-flow edits reuse topology; edit verdicts invalidate it", () => {
   });
   expect(inferJoints(snapshot, 1, ruled)).not.toBe(inference);
   expect(healPlan(snapshot, ruled)).not.toBe(heal);
+});
+
+test("a just-started-fresh Work (the schema's empty parse), no Work, and an empty snapshot all price", () => {
+  const fresh = ductsRouteState.schema.parse({});
+  for (const snapshot of [SCENE_FIXTURE.snapshot, EMPTY_SNAPSHOT])
+    for (const doc of [fresh, null]) {
+      const response = pricingJob()({
+        id: 1,
+        doc,
+        base: { snapshot, grids: {}, catalogs: EMPTY_CATALOGS },
+      });
+      expect(response).not.toHaveProperty("error");
+    }
 });

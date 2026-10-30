@@ -553,12 +553,20 @@ export function createGraphMount<P, W>(
             args: {},
           });
   // Writing verbs wait out a conflict; queries only read, so they still run.
+  /** A failed dependency names its failure; it never reads as "refreshing". */
+  const failedDependency = (id: string) => {
+    for (const reading of adapters.verbDepends?.[id] ?? []) {
+      const state = readings.get(reading);
+      if (state.status === "failed") return `${reading} failed: ${state.error ?? "unknown error"}`;
+    }
+    return null;
+  };
   const blocked = (id: string) =>
     disposed || !available()
       ? "This route is inactive"
       : conflict && scope.conflict && verbs[id]?.effect !== "query"
         ? CONFLICT_REFUSAL
-        : null;
+        : failedDependency(id);
   const run = async (id: string, bound: MountBinding, origin: string, answers?: unknown) => {
     const inactive = blocked(id);
     if (inactive)
