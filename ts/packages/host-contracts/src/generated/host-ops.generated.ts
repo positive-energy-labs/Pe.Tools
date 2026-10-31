@@ -6193,6 +6193,9 @@ export namespace RevitDetailSpaceScene {
       memory?: null | SceneMemory;
       acquiredTriangles: number;
       contextGeometryCalls: number;
+      phaseMilliseconds?: null | {
+        [k: string]: number;
+      };
     }
     export interface SceneMemory {
       startPrivateBytes: number;
@@ -6462,6 +6465,9 @@ export namespace RevitDetailSpaceScene {
       memory?: null | SceneMemory;
       acquiredTriangles: number;
       contextGeometryCalls: number;
+      phaseMilliseconds?: null | {
+        [k: string]: number;
+      };
     }
     export interface SceneMemory {
       startPrivateBytes: number;

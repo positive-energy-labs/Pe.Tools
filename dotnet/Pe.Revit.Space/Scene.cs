@@ -94,7 +94,7 @@ public sealed record SceneCompleteness(bool Complete, int? DeferredCandidates, i
 public sealed record SceneMemory(long StartPrivateBytes, long EndPrivateBytes, long PeakPrivateBytes, long ManagedBytes);
 public sealed record SceneWork(int BroadCandidates, int ExtractedElements, int ExtractedTriangles, double NativeMilliseconds,
     int PeakRetainedTriangles = 0, int NativeGeometryCalls = 0, SceneMemory? Memory = null,
-    int AcquiredTriangles = 0, int ContextGeometryCalls = 0);
+    int AcquiredTriangles = 0, int ContextGeometryCalls = 0, IReadOnlyDictionary<string, double>? PhaseMilliseconds = null);
 /// <summary>Bounded RPC receipt. Full membership, source transforms and unavailable identities live in PSC1.</summary>
 public sealed record SceneReceipt(string Format, string Frame, string HostDocumentKey, long Epoch, DateTime BuiltUtc, bool Fresh,
     Aabb Bounds, int Triangles, int Elements, int FocusElements, int ContextElements, int RequestedElements,
@@ -130,7 +130,15 @@ public static class Scene {
         if (context == SceneContextRepresentation.Meshes && ids.Count == 0 && request.Bounds is null)
             throw new ArgumentException("meshes context requires elementIds or explicit bounds.");
         var budget = new SceneBudget(request.MaxTriangles, cancellationToken);
-        var levels = Levels.Read(document, cancellationToken);
+        // Where native time goes, per phase (MAP step 3 cost split): levels, focus, reach, bounds, runs, family-frames,
+        // link-boxes, meshes. Stopwatch reads only; no behaviour depends on them.
+        var phases = new Dictionary<string, double>();
+        T Timed<T>(string phase, Func<T> work) {
+            var start = System.Diagnostics.Stopwatch.GetTimestamp();
+            try { return work(); }
+            finally { phases[phase] = phases.GetValueOrDefault(phase) + System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds; }
+        }
+        var levels = Timed("levels", () => Levels.Read(document, cancellationToken));
         var world = SpaceWorld.SceneSources(document);
         foreach (var partition in world.Partitions) partition.BeginScene(world.CurrentEpoch);
         var oriented = new Oriented(budget);
@@ -221,6 +229,7 @@ public static class Scene {
                 if (crop is null && reach.Count > 0) crop = reach.SelectMany(corners => corners)
                     .Aggregate(Aabb.Empty, (box, p) => box.Include(new Vector3((float)p.X, (float)p.Y, (float)p.Z)));
             }
+            phases["focus"] = clock.Elapsed.TotalMilliseconds - phases.GetValueOrDefault("levels");
             var focusGeometryCalls = budget.GeometryCalls;
             var index = new SceneFocusIndex(focus.Select(row => row.Row.Box).Concat(runs.Select(row => row.Bounds)).ToArray());
             var runIndex = new SceneFocusIndex(runs.Select(row => row.Bounds).ToArray());
@@ -271,10 +280,10 @@ public static class Scene {
                 if (crop is { } region && !bounds.Overlaps(region)) return;
                 if (!isFocus && limit == "acquisition-budget") { deferred++; Cut(partition); return; }
                 try {
-                    var box = run is null ? oriented.Family(element, partition.Transform) : null;
+                    var box = run is null ? Timed("family-frames", () => oriented.Family(element, partition.Transform)) : null;
                     if (!isFocus && run is null && box is null && context == SceneContextRepresentation.LinkBoxes
                         && partition.Kind != SourceKind.Host)
-                        box = oriented.Link(element, partition.Transform);
+                        box = Timed("link-boxes", () => oriented.Link(element, partition.Transform));
                     if (run is null && box is null) {
                         if (!isFocus && triangles >= request.MaxTriangles) {
                             deferred++; limit ??= "output-budget"; Cut(partition); return;
@@ -282,11 +291,10 @@ public static class Scene {
                         var envelope = !isFocus && context == SceneContextRepresentation.TriangleBoxes && element is DirectShape;
                         // An element's envelope needs its whole geometry, before the scene crop clips any triangles.
                         var miss = new Ingest.Miss();
-                        var captured = Capture(partition, element, envelope ? null : crop, miss);
-                        box = envelope ? TriangleBox.Fit(captured.Triangles, budget.Check) : null;
+                        var captured = Timed("meshes", () => Capture(partition, element, envelope ? null : crop, miss));
+                        box = envelope ? Timed("meshes", () => TriangleBox.Fit(captured.Triangles, budget.Check)) : null;
                         if (box is null) {
-                            var wrote = false;
-                            foreach (var meshRow in captured.Rows) wrote |= Write(partition, meshRow, captured.Triangles, isFocus);
+                            var wrote = Timed("meshes", () => captured.Rows.Aggregate(false, (any, meshRow) => Write(partition, meshRow, captured.Triangles, isFocus) | any));
                             // Only a native read that threw is missing geometry. Nothing to draw, or nothing inside the
                             // crop, is disclosed per source and leaves the picture complete (Cleremont 204, MAP step 3).
                             if (!wrote && miss.Failed) {
@@ -313,20 +321,20 @@ public static class Scene {
                 var candidates = new List<(Partition Source, long Id, Aabb Bounds, double Distance)>();
                 foreach (var partition in world.Partitions) {
                     budget.Check();
-                    var read = partition.Reach(reach, bound,
-                        context is SceneContextRepresentation.Oriented or SceneContextRepresentation.TriangleBoxes or SceneContextRepresentation.LinkBoxes);
+                    var read = Timed("reach", () => partition.Reach(reach, bound,
+                        context is SceneContextRepresentation.Oriented or SceneContextRepresentation.TriangleBoxes or SceneContextRepresentation.LinkBoxes));
                     reads[partition] = (read, 0, 0);
                     broad += read.Counted;
                     foreach (var element in read.Kept) {
                         budget.Check();
                         if (partition.Kind == SourceKind.Host && ids.Contains(element.Id.Value())) continue;
-                        var box = partition.SceneBounds(element);
+                        var box = Timed("bounds", () => partition.SceneBounds(element));
                         if (box is null) { omitted++; limit ??= "missing-bounds"; Cut(partition); continue; }
                         reads[partition] = reads[partition] with { Kept = reads[partition].Kept + 1 };
                         // ETW showed Revit retains native tessellation allocations; bound what we ask it to tessellate.
                         // Runs and proven family frames avoid tessellation. Unknown frames retain native meshes.
                         if (context is SceneContextRepresentation.Oriented or SceneContextRepresentation.TriangleBoxes or SceneContextRepresentation.LinkBoxes) {
-                            Primitive(partition, element, box.Value, ReadRun(element, partition.Transform), false);
+                            Primitive(partition, element, box.Value, Timed("runs", () => ReadRun(element, partition.Transform)), false);
                             continue;
                         }
                         candidates.Add((partition, element.Id.Value(), box.Value, index.DistanceSquared(box.Value)));
@@ -370,7 +378,7 @@ public static class Scene {
                     .ToList(), context == SceneContextRepresentation.None ? "focus" : "context", unavailable,
                 new SceneWork(broad, extracted, extractedTriangles, clock.Elapsed.TotalMilliseconds,
                     budget.PeakRetainedTriangles, budget.NativeCalls, budget.Diagnostics(), budget.NativeTriangles,
-                    budget.GeometryCalls - focusGeometryCalls),
+                    budget.GeometryCalls - focusGeometryCalls, phases),
                 new SceneCompleteness(limit is null, deferred, limited, limit), detached, levels);
         } finally {
             oriented.Meshes.Entries.Clear();
