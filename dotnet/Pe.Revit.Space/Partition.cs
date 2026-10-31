@@ -47,15 +47,16 @@ internal sealed class Partition {
         this.BuiltAtEpoch, this.Dirty, this._scene ? this._sceneElements : this._prims.Length,
         this._scene ? this._sceneTriangles : this._tris.Length, this.Skipped);
 
-    /// <summary>The one full ingest. Never called from a verb.</summary>
-    public void Build(long epoch) {
+    /// <summary>The verb ingest: every given element whole, curves included, then the query tree. Without
+    ///     <paramref name="elements" /> it walks the whole document, which only status, rows and tree ask for.</summary>
+    public void Build(long epoch, IEnumerable<Element>? elements = null, bool includeCurves = true) {
         using var cache = this._store?.Open();
         var sink = new List<Tri>();
         var rows = new List<PrimRow>();
         this.Skipped = 0;
-        foreach (var element in new FilteredElementCollector(this.Doc).WhereElementIsNotElementType()) {
+        foreach (var element in elements ?? new FilteredElementCollector(this.Doc).WhereElementIsNotElementType()) {
             if (!Ingest.Allowed(element)) { this.Skipped++; continue; }
-            if (this.ReadElement(element, sink, rows, true, null) == 0) this.Skipped++;
+            if (this.ReadElement(element, sink, rows, includeCurves, null) == 0) this.Skipped++;
         }
         // ponytail: List doubling means the sink peaks near 1.5x the final array before ToArray
         // trims it. That is transient garbage, not resident. A chunked writer would remove it.
@@ -140,7 +141,10 @@ internal sealed class Partition {
     /// </summary>
     /// <param name="reach">Host-frame boxes, each as its 8 corners; mapped into this instance's frame here.</param>
     /// <param name="bound">Host-frame box every reach box is clamped to, as 8 corners: nothing within reach lies outside it.</param>
-    internal SceneReach Reach(IReadOnlyList<XYZ[]> reach, XYZ[] bound, bool absorbRunInsulation = false) {
+    /// <param name="absorbRunInsulation">A scene read: a represented duct/pipe run absorbs its insulation (classified after load).</param>
+    /// <param name="obstacles">A verb's read: skip only the classes Ingest draws no triangle for, and keep
+    ///     insulation, CAD, planting and site, which a sweep or probe can hit.</param>
+    internal SceneReach Reach(IReadOnlyList<XYZ[]> reach, XYZ[] bound, bool absorbRunInsulation = false, bool obstacles = false) {
         var clock = System.Diagnostics.Stopwatch.StartNew();
         if (reach.Count == 0) return new SceneReach(0, [], new Dictionary<string, int>(), 0, 0, 0, 0, 0);
         using var inverse = this.Transform.Inverse;
@@ -164,9 +168,10 @@ internal sealed class Partition {
         // with every class, then each class counted over just what that pass excluded (3 of 32,715 in Chadds' IFC link).
         if (inside.Count > 0) {
             ICollection<ElementId> any;
-            using (var collector = new FilteredElementCollector(this.Doc, inside).WherePasses(AnyExclusion)) any = collector.ToElementIds();
+            using (var collector = new FilteredElementCollector(this.Doc, inside).WherePasses(obstacles ? AnyTriangleless : AnyExclusion))
+                any = collector.ToElementIds();
             keep.ExceptWith(any);
-            foreach (var (name, match) in any.Count == 0 ? [] : Exclusions) {
+            foreach (var (name, match) in any.Count == 0 ? [] : obstacles ? Triangleless : Exclusions) {
                 using var collector = new FilteredElementCollector(this.Doc, any).WherePasses(match);
                 var hits = collector.GetElementCount();
                 if (hits > 0) excluded[name] = hits;
@@ -234,6 +239,18 @@ internal sealed class Partition {
     ];
 
     private static readonly ElementFilter AnyExclusion = new LogicalOrFilter(Exclusions.Select(e => e.Match).ToList());
+
+    /// <summary>
+    ///     The context classes that yield no triangle (lines, datums, views, rooms; `Ingest.Allowed` refuses
+    ///     view-owned elements other than imports), so a verb's answer is the same without loading them.
+    /// </summary>
+    private static readonly (string Name, ElementFilter Match)[] Triangleless = [
+        .. Exclusions.Where(e => e.Name is "centre-line" or "sketch" or "curtain-grid" or "separation" or "origin" or "non-geometry"),
+        ("view-specific", new LogicalAndFilter(new ElementOwnerViewFilter(ElementId.InvalidElementId, true),
+            new ElementClassFilter(typeof(ImportInstance), true))),
+    ];
+
+    private static readonly ElementFilter AnyTriangleless = new LogicalOrFilter(Triangleless.Select(e => e.Match).ToList());
 
     private static (string, ElementFilter) OfCategories(string name, params BuiltInCategory[] categories) =>
         (name, new ElementMulticategoryFilter(categories.Distinct().ToList()));

@@ -134,7 +134,7 @@ SceneRequest   focus ids (the opened systems' members), reach ft, representation
                unavailable; outlier focus members far from the rest
 Cache          native geometry remains operation-owned; the existing disk pack reuses
                verb captures within one Revit process. No new resident geometry cache.
-               Step 6 re-measures the pack after scoped verbs; delete only if its benefit is gone.
+               Step 6 re-measured the pack after scoped verbs: kept (Chadds warm 2.59x faster with it).
 Verbs          Pea's Sweep/Slice/Probe/Partition read through the same scoped read
                (beta; follow-on, not this map's target)
 ```
@@ -151,6 +151,9 @@ Verbs          Pea's Sweep/Slice/Probe/Partition read through the same scoped re
   start. A watchdog stop is a boundary: name the consumer from a per-process memory log before
   holding again (a Chadds open on 2026-10-28 dropped machine free 16→1 GiB while the probe held
   1.9 GiB; cause UNPROVEN).
+- A Chadds hold needs about 20 GiB available before `session start`: the start (empty Revit plus host) takes about 4 GiB and the
+  open needs 16 (2026-10-31: two aborts at 15.0 and 16.0 GiB, cleared by closing Zed's tsserver, a screensaver, ChatGPT and Chrome).
+  `verbs.py`, like `run.py`, refuses to start below open floor + 3 GiB.
 - A Revit script's `Result()` is capped at 1 MiB: write rows and geometry to a file and return
   its path (two holds lost to this on 2026-10-28). Run every instrument offline over a saved
   artifact before it takes the slot.
@@ -186,19 +189,16 @@ Verbs          Pea's Sweep/Slice/Probe/Partition read through the same scoped re
    retain `LinkedGeometryStore` and `Dirty`/`Fresh`; the root linked-path fix, rollback-delta
    filter fix and harness custody logging landed.
    Loaded document version is falsified as an edit key. The pack reuses only within one process.
-Paused 2026-10-28 16:00Z for other work. Unlanded: step 3 (branch
-`t3/oriented-representation-module`, worktree `t3-5b8bc59c`) and step 6 (worktree `t3-ace23e92`).
-Each has a `RESUME.md` under its worktree's `.artifacts/`.
+Paused 2026-10-28 16:00Z for other work. Step 3 (branch `t3/oriented-representation-module`) is unlanded; step 6 landed 2026-10-31.
 
-6. Follow-on: Pea's verbs read through the scoped read, then re-measure the pack and delete it
-   only if its benefit is gone. The production Cleremont Sweep repeat bar is 11.307 s;
-   removing the pack before that migration costs 15.677 s (+38.6%) without a proved peak-memory win.
-   In flight (probe-v, unlanded): scoped Sweep on Cleremont 1.45 s cold / +113 MiB / peak 6.9 GiB,
-   repeats 0.77 and 0.41 s, against main's 27.5 s / +2.0 GiB / 8.7 GiB. PROVEN that the reach filter
-   loses nothing: of 2,961 elements in the region plus 5 ft, every one with geometry inside is
-   returned. Main's Slice and Census also return elements with no geometry in the region, because
-   of the axis-aligned box lie. The verb bar is therefore identical answers except those, each
-   proved by a witness to have no piece inside the region.
+6. Pea's verbs read through the scoped read (landed 2026-10-31). Sweep, Probe, Slice and Census prepare only their question's
+   scope; Partition and Takeoff read the zone's plan through every knee-probe's reach. PROVEN[session dev controlled, `probe-s6`,
+   2026-10-31; [evidence](READING-REVIT.md#u6-step-6-peas-spatial-verbs-read-only-their-questions-scope)]: Chadds Sweep first call 102.3 s,
+   +11.8 GiB, peak 14.0 GiB on main against 2.25 s, +236 MiB, peak 2.49 GiB scoped; Cleremont 37.1 s against 1.94 s. Sweep and Probe
+   answers identical to main; Slice identical; Census a subset, with an independent triangle-against-box witness that every
+   dropped element has no geometry in the region (Cleremont both regions, Chadds census0/census1 and slice0/slice1). Pack decision:
+   kept (Chadds no-pack warm median 35.5 s against 13.7 s; Cleremont 6.24 against 4.57 s); the measurement toggle is gone.
+   Still open: on the 9 dropped Chadds IFC elements, UNPROVEN that none lies within 0.05 ft of the region.
 
 ## Owed
 

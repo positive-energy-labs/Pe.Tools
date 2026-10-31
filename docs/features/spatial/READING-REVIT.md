@@ -156,7 +156,7 @@ operation cold and repeatedly on Cleremont, before and after disabling the store
 path is `SpaceOps.Sweep` → `Verbs.Sweep(Document, ...)` → `SpaceWorld.Prepare` → `Partition.Build`,
 which did read the pack; the dead `BuildElements` entrypoint does not mean production gained
 nothing. No resident geometry cache may be added in step 5. The later ruling below retains the
-existing disk pack until step 6 re-measures its benefit after moving verbs onto the scoped read.
+existing disk pack until step 6 re-measures its benefit after moving verbs onto the scoped read (done: [U6 step 6](#u6-step-6-peas-spatial-verbs-read-only-their-questions-scope), pack kept).
 Any future resident reuse requires a measured hard memory cap. The production comparison follows
 below; host-call elapsed time includes Prepare, while `SweepAnswer.Ms` times only the query.
 
@@ -439,6 +439,72 @@ axis-aligned body with the same extents. No proven cheap classifier is implement
 production reports the loose count as unmeasured, not zero. The measured tail identities
 come from the earlier geometry read. Its separate materialization cost remains pending.
 EX 7 cold cost, remaining model gates and final browser comparisons remain pending.
+
+### U6 step 6: Pea's spatial verbs read only their question's scope
+
+Build: branch `t3/spatial-step6-scoped-verb-reads`; Sweep, Probe, Slice and Census prepare a world scoped to their own question
+through the /ducts step-2 read (one quick filter per source placement, ids counted before loading), and refuse a question outside it.
+Instrument: `tools/space-proof/verbs.py` (identical pinned requests, `verbs-requests.json`: the two longest focus ducts of Cleremont SA 19
+and Chadds SA 7; per duct one Sweep, Probe, Slice and Census). Evidence (gitignored, in the step-6 worktree): `.artifacts/accept/space-verbs/`
+(`76254065-...-cleremont-h4a`, `a000aea8-...-cleremont-h4b`, `3bc26769-...-chadds-h5b`, `83b2798c-...-chadds,cleremont-h6`, and the witness
+runs `a000aea8-...-cleremont-witness`, `391e533a-...-chadds-witness`).
+Lane for every row: PROVEN[session dev, controlled `probe-s6`, headless, local copies, 2026-10-31 18:01-21:40Z]; the commit is the run
+directory's prefix. The measured bytes carried a `PE_SPACE_NO_PACK` env toggle that is off by default and removed at landing.
+Host seconds are the Pea host-call elapsed time (Revit work plus transport); "first touch" is the first call of a process.
+
+| First touch (request 0) | main Sweep | scoped Sweep | main Probe | scoped Probe | main Census | scoped Census |
+|---|---:|---:|---:|---:|---:|---:|
+| Cleremont (h4a) host s | 37.14 | 1.94 | 13.55 | 0.78 | 13.44 | 1.43 |
+| Chadds (h5b main, h6 scoped) host s | 102.29 | 2.25 | 19.94 | 1.21 | 19.59 | 4.26 |
+
+Chadds Sweep, first call in the process: main +11,768 MiB and a private-byte peak of 14.0 GiB (15.4 GiB across its next calls);
+scoped +236 MiB and a peak of 2.49 GiB; scoped's peak over all 16 calls was 4.37 GiB. Cleremont: main +1,118 MiB, peak 8.02 GiB (8.76 over
+all calls); scoped +188 MiB, peak 6.73 GiB (7.01). Main repeats cost 13.4-14.2 s (Cleremont) and 19.4-20.4 s (Chadds) per call.
+The Cleremont figures agree in direction and size with probe-v's earlier 27.5 s -> 1.45 s Sweep; UNPROVEN why this run's main first call took 37.1 s against 27.5 s.
+
+**Answers.** Sweep and Probe: identical to main on all four requests of both models (Chadds: request 0 only, main was run light because
+a whole-model call is 20-100 s). Slice: identical on Cleremont; on Chadds the returned elements and pieces are identical and both
+hit the 50,000-piece cap, with totals 765,642 (main) against 755,043 (scoped). Census: scoped is a subset of main, never a superset.
+Cleremont: 7 elements fewer in region 0 (Foundations 1, Framing 2, Walls 4) and 9 fewer in region 1 (Floors 3, Planting 1, Framing 3,
+Walls 2). Chadds region 0: 9 fewer, all in the IFC link (Generic Models 5, Structural Framing 4). The scoped build gives
+the same answers with the pack on or off (Chadds 8/8, Cleremont 8/8), and pass 6 equals pass 1 in every process.
+
+**Witness for the subset** (the coordinator's condition, 2026-10-31). `census-witness.cs.template` walks every model element of the host
+and each loaded link placement near the region, independent of the product's reach filter and row boxes, reads its Fine geometry
+through the placement's total transform, and tests every triangle against the region box by separating axes. The scoped Census is
+then re-run with every candidate that has no real geometry in the region excluded by id (no id was shared across placements: zero
+ambiguous). In every category the product counts, that count equals the number of elements with real geometry in the region, so the
+scoped answer contains every element whose geometry enters the region, and each element it dropped has none there:
+Cleremont regions 0 and 1, and Chadds regions census0 (10,123 intersecting of 31,153 candidates) and census1, and Slice regions slice0
+and slice1 (Census-shaped: xy clip x band). Per-category counts are in each run's `census-witness.json`. Two disclosures: Detail
+Items and Rooms intersect (up to 110 per region) but the product never counts them on main or scoped. And the walk's Fine
+tessellation can differ from the product's Medium one: for the dropped categories the Cleremont counts are equal at a 0.05 ft
+growth (no dropped element is within 0.05 ft), but on Chadds the IFC Structural Framing count is 7,706 exact against 7,723 grown and
+Generic Models 699 against 700, so UNPROVEN[which elements] that none of the 9 Chadds drops lies within 0.05 ft of the region.
+
+**The pack decision: keep it.** Rule (coordinator 2026-10-31): delete only if no-pack's median warm pass is within the scoped spread
+on both models. Each pass is the 8 requests; host seconds summed; 5 repeat passes per variant per model, one process each.
+
+| | scoped repeat passes | median / spread | no-pack repeat passes | median / spread | ratio |
+|---|---|---|---|---|---|
+| Chadds | 13.37, 13.11, 17.31, 13.73, 18.28 | 13.73 / 13.11-18.28 | 35.09, 36.25, 34.14, 35.51, 35.92 | 35.51 / 34.14-36.25 | **2.59** |
+| Cleremont | 4.57, 4.54, 6.87, 4.59, 4.56 | 4.57 / 4.54-6.87 | 6.32, 6.24, 6.16, 6.09, 6.51 | 6.24 / 6.09-6.51 | 1.37 |
+
+Chadds fails the rule by far: first-touch pass 31.2 s with the pack and 53.8 s without; per-verb medians (scoped / no-pack) Slice 2.87 /
+8.78 s, Census 2.40 / 5.88 s. Cleremont passes only through one scoped outlier (6.87 s); its tight clusters (4.54-4.59 against 6.09-6.51)
+do not overlap. Memory does not differ (peaks 4.31 vs 4.37 GiB on Chadds, 6.97 vs 7.01 on Cleremont). The cost is the on-disk pack:
+1,073,741,363 bytes (the 1 GiB `MaxStoreBytes`) in `cache\space-linked-geometry`, 149-154 files, pruned not growing. The toggle was
+verified to disable the pack by the directory staying byte-identical across the no-pack processes. Caveat: the variants ran in the
+order scoped then no-pack inside one hold, so a file-cache ordering effect is not excluded.
+
+**Native regressions.** PROVEN[attached over session dev controlled, `probe-s6` PID 13252, `48827e0d`, 2026-10-31 22:01-22:06Z]: 31 of 31 Space tests pass (filter `FullyQualifiedName~Space`), including the new `ScopedVerbsAnswerAsTheWholeModelAndReadOnlyTheirQuestion`. An earlier attached run (PID 57332, `bf40c428`) passed 30 of 31: that test had asserted equal closest points for a profile over a flat face, where every overlap point ties and BVH traversal order picks one ((1,1,1) whole against (1,0,1) scoped, same verdict, gap and nearest element); the test now compares verdict, gap, nearest and the point's z. A fresh-rung run of the same filter stopped at the unsigned add-in prompt before trust was granted and proves nothing.
+Deterministic: `Pe.Partition.Tests` 52/52; `Pe.Takeoff.Tests` 59 pass, 3 skipped, 8 fail, identically on main (`df45210a`) and on this
+branch: all 8 are `RhvacEvalTests` ignoring the absent private fixture `project-a/rhvac` inside a type initializer.
+
+**Codegen.** The step-6 branch's host-contracts codegen threw `FileNotFoundException` for RevitAPI at `OpsCatalogCommand.cs:44`: `Aabb`
+is a response type, and a new `Aabb.Corners()` returning `XYZ[]` made Newtonsoft resolve a Revit type while building the schema in a
+process that cannot load RevitAPI. `Corners` is now an extension. Rule: a type reachable from an op response keeps Revit types out of its
+members' signatures.
 
 ## Instrument
 

@@ -5714,7 +5714,7 @@ export namespace RevitDetailSpaceBuild {
   }
 }
 
-/** Count what the operation-owned world holds inside a box, by source, category, kind and DWG layer, plus the ten fattest elements by triangle count. */
+/** Count what lies inside a box, by source, category, kind and DWG layer, plus the ten fattest elements by triangle count. Reads only that box: an element is admitted when its own-frame box meets the box. */
 export namespace RevitDetailSpaceCensus {
   export namespace Req {
     /**
@@ -6549,7 +6549,7 @@ export namespace RevitDetailSpaceScene {
   }
 }
 
-/** Slice the operation-owned world with a horizontal band z0..z1: every triangle clipped to the band and flattened to convex xy pieces per element, the exact footprint the partition solver reads; capped at maxPieces with whole elements, and the answer says when it truncated and the total it found. xyClip rejects elements whose box misses the rectangle. */
+/** Slice the operation-owned world with a horizontal band z0..z1: every triangle clipped to the band and flattened to convex xy pieces per element, the exact footprint the partition solver reads; capped at maxPieces with whole elements, and the answer says when it truncated and the total it found. Reads only the band (within xyClip when given): an element is admitted when its own-frame box meets that region, and xyClip rejects elements whose box misses the rectangle. */
 export namespace RevitDetailSpaceSlice {
   export namespace Req {
     /**

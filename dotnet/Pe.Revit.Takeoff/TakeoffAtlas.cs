@@ -126,9 +126,10 @@ public static class TakeoffAtlas
         if (TakeoffCarriers.ReadIdentity(zone) != (TakeoffCarriers.RoleZoningRegion, request.ZoneGuid)
             || zone.OwnerViewId != FindView(doc, request.View).Id)
             throw new InvalidOperationException("Partition target does not match the adopted zone identity and view");
-        var world = Pe.Revit.Space.SpaceWorld.Prepare(doc);
-        return MaterializePartition(doc, request, Pe.Revit.Partition.Verbs.Partition(
-            doc, new Pe.Revit.Partition.PartitionRequest(request.ZoneRegion), world), world);
+        // The partition's own scope also holds every room label the measurement probes: rooms lie inside their zone.
+        var partition = new Pe.Revit.Partition.PartitionRequest(request.ZoneRegion);
+        var world = Pe.Revit.Partition.Verbs.PrepareSpace(doc, partition);
+        return MaterializePartition(doc, request, Pe.Revit.Partition.Verbs.Partition(doc, partition, world), world);
     }
 
     public static TakeoffPartitionResult MaterializePartition(

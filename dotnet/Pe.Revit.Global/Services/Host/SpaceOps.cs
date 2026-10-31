@@ -6,7 +6,7 @@ using ProjectDocument = Pe.Revit.Operations.ProjectDocument;
 
 namespace Pe.Revit.Global.Services.Host;
 
-/// <summary>Document-owned reads over the operation-owned spatial world. Each operation captures its own geometry.</summary>
+/// <summary>Document-owned reads over the operation-owned spatial world. Each operation captures only its own question's scope.</summary>
 internal static class SpaceOps {
     /// <summary>Read rows passing Filter; omitted axes use the resolved defaults in the answer stamp.</summary>
     public sealed record RowsRequest(FilterRequest? Filter = null);
@@ -49,11 +49,11 @@ internal static class SpaceOps {
     private static TreeAnswer Tree(TreeRequest request, ProjectDocument document) =>
         SpaceView.Tree(document.Value, request.Source ?? 0, request.MaxDepth ?? 8);
 
-    [Op("revit.detail.space-census", Does = "Count what the operation-owned world holds inside a box, by source, category, kind and DWG layer, plus the ten fattest elements by triangle count.", Title = "Census Space World", Finds = ["space", "census", "count", "categories", "box"], Cost = OpCost.Expensive)]
+    [Op("revit.detail.space-census", Does = "Count what lies inside a box, by source, category, kind and DWG layer, plus the ten fattest elements by triangle count. Reads only that box: an element is admitted when its own-frame box meets the box.", Title = "Census Space World", Finds = ["space", "census", "count", "categories", "box"], Cost = OpCost.Expensive)]
     private static CensusAnswer Census(CensusRequest request, ProjectDocument document) =>
         Verbs.Census(document.Value, Box(request.Box, nameof(request.Box)), (request.Filter ?? new FilterRequest()).ToFilter());
 
-    [Op("revit.detail.space-slice", Does = "Slice the operation-owned world with a horizontal band z0..z1: every triangle clipped to the band and flattened to convex xy pieces per element, the exact footprint the partition solver reads; capped at maxPieces with whole elements, and the answer says when it truncated and the total it found. xyClip rejects elements whose box misses the rectangle.", Title = "Slice Space World", Finds = ["space", "slice", "band", "footprint", "plan"], Cost = OpCost.Expensive)]
+    [Op("revit.detail.space-slice", Does = "Slice the operation-owned world with a horizontal band z0..z1: every triangle clipped to the band and flattened to convex xy pieces per element, the exact footprint the partition solver reads; capped at maxPieces with whole elements, and the answer says when it truncated and the total it found. Reads only the band (within xyClip when given): an element is admitted when its own-frame box meets that region, and xyClip rejects elements whose box misses the rectangle.", Title = "Slice Space World", Finds = ["space", "slice", "band", "footprint", "plan"], Cost = OpCost.Expensive)]
     private static SliceCapped Slice(SliceRequest request, ProjectDocument document) {
         Finite(request.Z0, nameof(request.Z0));
         Finite(request.Z1, nameof(request.Z1));

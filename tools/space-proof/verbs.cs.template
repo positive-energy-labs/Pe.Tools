@@ -1,0 +1,45 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using Autodesk.Revit.DB;
+using Autodesk.Revit.DB.Mechanical;
+using Newtonsoft.Json.Linq;
+
+// Space proof harness, verb requests. Read-only. From the pinned focus ids, picks the longest straight ducts (the same
+// elements a Pea Sweep would run along) and returns their host-frame end points and profile, so the four spatial verbs get
+// identical requests in every build. Profile = duct size plus twice its insulation (RBS_REFERENCE_INSULATION_THICKNESS).
+public sealed class VerbPicks : PeScriptContainer {
+    const string Request = @"__REQ__";
+
+    static double Param(Element e, BuiltInParameter p) {
+        var v = e.get_Parameter(p);
+        return v != null && v.HasValue ? v.AsDouble() : 0;
+    }
+
+    public override void Execute() {
+        var before = doc!.IsModified;
+        var req = JObject.Parse(File.ReadAllText(Request));
+        var take = (int)req["take"]!;
+        var picks = new List<(double Len, JObject Pick)>();
+        foreach (var token in (JArray)req["ids"]!) {
+            if (doc.GetElement(new ElementId((long)token)) is not Duct duct || duct.Location is not LocationCurve lc || lc.Curve is not Line line) continue;
+            var ins = Param(duct, BuiltInParameter.RBS_REFERENCE_INSULATION_THICKNESS);
+            double w = Param(duct, BuiltInParameter.RBS_CURVE_WIDTH_PARAM), h = Param(duct, BuiltInParameter.RBS_CURVE_HEIGHT_PARAM);
+            if (w <= 0 || h <= 0) w = h = Param(duct, BuiltInParameter.RBS_CURVE_DIAMETER_PARAM);
+            if (w <= 0 || h <= 0) continue;
+            var a = line.GetEndPoint(0);
+            var b = line.GetEndPoint(1);
+            picks.Add((line.Length, new JObject {
+                ["id"] = (long)token,
+                ["start"] = new JArray(a.X, a.Y, a.Z),
+                ["end"] = new JArray(b.X, b.Y, b.Z),
+                ["widthFt"] = w + 2 * ins,
+                ["heightFt"] = h + 2 * ins,
+                ["insulationFt"] = ins }));
+        }
+        var chosen = picks.OrderByDescending(p => p.Len).ThenBy(p => (long)p.Pick["id"]!).Take(take).Select(p => p.Pick).ToList();
+        if (doc.IsModified != before) throw new InvalidOperationException("IsModified changed");
+        Result(new JObject { ["picks"] = new JArray(chosen), ["ducts"] = picks.Count, ["isModifiedAfter"] = doc.IsModified });
+    }
+}
