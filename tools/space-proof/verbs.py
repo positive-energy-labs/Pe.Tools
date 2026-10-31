@@ -348,6 +348,158 @@ def cmd_report(args):
     print("\n".join(L))
 
 
+# ---------------------------------------------------------------- Census witness
+
+def bucket_sums(census_answer):
+    """(sourceKind, category) -> elements, kinds summed."""
+    out = {}
+    for b in census_answer["buckets"]:
+        k = (b["source"], b["category"])
+        out[k] = out.get(k, 0) + b["elements"]
+    return out
+
+
+def analyze_witness(cand_rows, main_b, scoped_b, excl_b):
+    """One region. cand_rows: [region, link|None, id, category, tris, hit, hitGrown, srcKind] for every candidate the independent
+    Revit walk found. The scoped Census was re-run with every candidate that has no real geometry in the region excluded by id, except
+    ids that also belong to an intersecting candidate somewhere (placements of one file share element ids): `excl_b` is what is left.
+    If excl_b equals the intersecting count per bucket, scoped returned every element with real geometry in the region."""
+    inter = {}
+    grown = {}
+    cand = {}
+    for _, link, eid, cat, tris, hit, hit_g, src in cand_rows:
+        k = (src, cat)
+        cand[k] = cand.get(k, 0) + 1
+        inter[k] = inter.get(k, 0) + hit
+        grown[k] = grown.get(k, 0) + hit_g
+    keys = sorted(set(main_b) | set(scoped_b) | set(inter) | set(excl_b) | set(cand), key=str)
+    rows = []
+    for k in keys:
+        rows.append({"source": k[0], "category": k[1], "main": main_b.get(k, 0), "scoped": scoped_b.get(k, 0), "dropped": main_b.get(k, 0) - scoped_b.get(k, 0),
+                     "candidates": cand.get(k, 0), "intersecting": inter.get(k, 0), "intersectingGrown": grown.get(k, 0), "scopedWithOnlyIntersectingAllowed": excl_b.get(k, 0)})
+    loss = [r for r in rows if r["scopedWithOnlyIntersectingAllowed"] < r["intersecting"]]
+    extra = [r for r in rows if r["scopedWithOnlyIntersectingAllowed"] > r["intersecting"]]
+    return {"rows": rows, "possibleLoss": loss, "keptWithoutRealGeometryOrAmbiguousId": extra,
+            "mainNotCandidates": [r for r in rows if r["main"] > r["candidates"]]}
+
+
+def exclusion_ids(cand_rows, exclude_id):
+    """Ids to exclude from the witness Census: candidates with no real geometry in the region, minus ids shared with an intersecting one."""
+    keep = {r[2] for r in cand_rows if r[5] == 1}
+    none = {r[2] for r in cand_rows if r[5] == 0}
+    return sorted((none - keep) | {exclude_id}), len(none & keep)
+
+
+def run_witness(args, out, results, pins):
+    name = args.model
+    file_, systems = R.MODELS[name]
+    path = R.DETACHED / file_
+    for _ in range(60):
+        if psutil.virtual_memory().available / 2**30 >= 13:
+            break
+        time.sleep(5)
+    ev = out / "ev" / name / "witness"
+    ev.mkdir(parents=True, exist_ok=True)
+    R.ensure_backend_host()
+    os.environ.pop("PE_SPACE_NO_PACK", None)
+    s = R.Session(ev)
+    proc = {"variant": "scoped", "purpose": "census witness", "startedUtc": R.utc(), "reads": []}
+    results["processes"].append(proc)
+    try:
+        proc.update(s.start(f"{name}-witness", R.GUARD_FLOOR_GIB))
+        R.slot_log(f"OPENING {name} census witness; PID {s.pid}; free {psutil.virtual_memory().available / 2**30:.1f} GiB")
+        code, env = s.sdk("open", "doc", "open", str(path), "--id", R.SID, "--window", "headless")
+        if code != 0:
+            raise RuntimeError(f"open exit {code}")
+        s.doc = env["result"]["document"]["openId"]
+        R.slot_log(f"OPENED {name} census witness; PID {s.pid}")
+        ps = psutil.Process(s.pid)
+        time.sleep(args.settle)
+        reqs = [r for r in build_requests(pins[name]["picks"][: args.take]) if r["verb"] == "census"]
+        regions = [{"id": r["id"], "box": r["request"]["box"], "excludeId": r["request"]["filter"]["excludeElementIds"][0]} for r in reqs]
+        rowsf = ev / "witness.rows.json"
+        reqf = ev / "witness.req.json"
+        reqf.write_text(json.dumps({"regions": regions, "pad": 10.0, "tol": 0.05, "out": str(rowsf)}), encoding="utf8")
+        cs = ev / "witness.cs"
+        cs.write_text((HERE / "census-witness.cs.template").read_text(encoding="utf8").replace("__REQ__", str(reqf)), encoding="utf8")
+        before = ps.memory_info().private
+        code, res, wall = s.pea("witness-script", ["script", "execute", "--file", str(cs), "--permission-mode", "NoTransaction", "--timeout-seconds", "3000", "--open-document-id", s.doc, "--json"])
+        mod = s.modified()
+        proc["script"] = {"status": (res or {}).get("status"), "wallS": round(wall, 1), "deltaMiB": round((ps.memory_info().private - before) / MIB, 1), "data": (res or {}).get("data"), "isModified": mod}
+        if res is None or res.get("status") != "Succeeded" or mod is None or any(mod):
+            raise RuntimeError(f"witness script: exit {code} {json.dumps(res)[:800] if res else None} isModified {mod}")
+        rows = json.loads(rowsf.read_text(encoding="utf8"))
+        h4 = Path(args.h4)
+        h4res = json.loads((h4 / "results.json").read_text(encoding="utf8"))
+        main_ans = answers(h4, h4res, "main")
+        scoped_ans = answers(h4, h4res, "scoped")
+        out_analysis = {}
+        for r in reqs:
+            cand = [x for x in rows if x[0] == r["id"]]
+            excl, ambiguous = exclusion_ids(cand, r["request"]["filter"]["excludeElementIds"][0])
+            req = {**r["request"], "filter": {"excludeElementIds": excl}}
+            rf = ev / f"req-{r['id']}-witness.json"
+            rf.write_text(json.dumps(req), encoding="utf8")
+            code, resp, wall = s.pea(f"{r['id']}-witness", ["host", "call", "--key", "revit.detail.space-census", "--open-document-id", s.doc, "--request-file", str(rf), "--verbosity", "full"])
+            if resp is None or "response" not in resp:
+                raise RuntimeError(f"{r['id']} witness census: exit {code} {json.dumps(resp)[:500] if resp else None}")
+            a = analyze_witness(cand, bucket_sums(main_ans[r["id"]][1]), bucket_sums(scoped_ans[r["id"]][1]), bucket_sums(resp["response"]))
+            a.update({"region": r["request"]["box"], "candidates": len(cand), "excludedIds": len(excl), "ambiguousIdsKept": ambiguous,
+                      "intersecting": sum(x[5] for x in cand), "intersectingGrown": sum(x[6] for x in cand), "noGeometryCandidates": sum(1 for x in cand if x[4] == 0)})
+            out_analysis[r["id"]] = a
+        (out / "census-witness.json").write_text(json.dumps(out_analysis, indent=1), encoding="utf8")
+        mod = s.modified()
+        if mod is None or any(mod):
+            raise RuntimeError(f"IsModified {mod} at end")
+        proc["endedUtc"] = R.utc()
+    finally:
+        try:
+            proc["revitPidGone"] = s.stop(discard=True)
+        except Exception as error:
+            proc["stopError"] = str(error)
+            proc["revitPidGone"] = not (s.pid and psutil.pid_exists(s.pid))
+        (out / "results.json").write_text(json.dumps(results, indent=1, default=str), encoding="utf8")
+        if not proc["revitPidGone"]:
+            raise RuntimeError(f"Own Revit PID {s.pid} remains alive; keep slot and backend for SDK recovery")
+
+
+def cmd_witness(args):
+    head = git("rev-parse", "HEAD")
+    pins = read_pins()
+    out = R.CHECKOUT / ".artifacts" / "accept" / "space-verbs" / f"{git('rev-parse', '--short', 'HEAD')}-{R.utc()}-{args.model}-witness"
+    print(json.dumps({"out": str(out), "h4": args.h4, "dirty": git("status", "--porcelain", "--", "dotnet", "ts")}))
+    if args.plan:
+        return
+    try:
+        R.acquire_slot()
+    except (OSError, RuntimeError) as error:
+        sys.exit(f"Slot not acquired: {error}")
+    (R.LOCK / "holder").write_text(f"{R.SID} {R.CHECKOUT} {R.utc()} census witness {args.model}\n")
+    out.mkdir(parents=True)
+    results = {"run": {"head": head, "utc": R.utc(), "label": "witness", "model": args.model}, "processes": []}
+    failed = None
+    try:
+        run_witness(args, out, results, pins)
+    except Exception as e:
+        failed = f"{type(e).__name__}: {e}"
+        results["aborted"] = failed
+        print("ABORTED:", failed, flush=True)
+    finally:
+        alive = [p for p in results["processes"] if p.get("revitPidGone") is False]
+        if alive:
+            print(f"SLOT KEPT: probe Revit still alive: {[p.get('pid') for p in alive]}", flush=True)
+        else:
+            results["devHostStopped"] = R.stop_dev_host()
+            for f in ("owner.txt", "holder"):
+                (R.LOCK / f).unlink(missing_ok=True)
+            R.LOCK.rmdir()
+            R.slot_log(f"RELEASE slot-1; census witness {args.model}; own Revit PIDs gone, backend stopped; evidence {out}")
+        (out / "results.json").write_text(json.dumps(results, indent=1, default=str), encoding="utf8")
+        print(f"results: {out}", flush=True)
+    if failed:
+        sys.exit(1)
+
+
 def cmd_selftest(_):
     picks = [{"id": 1, "start": [0, 0, 10], "end": [20, 0, 10], "widthFt": 1.0, "heightFt": 0.5}, {"id": 2, "start": [5, 5, 12], "end": [5, 35, 12], "widthFt": 2.0, "heightFt": 2.0}]
     reqs = build_requests(picks)
@@ -370,6 +522,13 @@ def cmd_selftest(_):
     assert not same and dominated("slice", d) and d["onlyInA"] == [[None, 2, "Ducts", "Solid", None]]
     pa = {"floor": {"handle": h(3), "distanceFt": 2.0, "z": 8.0}, "ceiling": None, "maxDistanceFt": 200.0, "purpose": "Obstructions", "ms": 3}
     assert compare_answers("probe", pa, json.loads(json.dumps(pa)))[0]
+    cand = [["c0", None, 1, "Walls", 10, 1, 1, "Host"], ["c0", 7, 2, "Walls", 10, 0, 0, "RevitLink"], ["c0", 7, 3, "Walls", 10, 1, 1, "RevitLink"], ["c0", 8, 3, "Walls", 5, 0, 0, "RevitLink"]]
+    excl, amb = exclusion_ids(cand, 99)
+    assert excl == [2, 99] and amb == 1, (excl, amb)
+    a = analyze_witness(cand, {("RevitLink", "Walls"): 3, ("Host", "Walls"): 1}, {("RevitLink", "Walls"): 2, ("Host", "Walls"): 1}, {("RevitLink", "Walls"): 2, ("Host", "Walls"): 1})
+    assert not a["possibleLoss"] and not a["mainNotCandidates"], a
+    a = analyze_witness(cand, {("RevitLink", "Walls"): 3}, {("RevitLink", "Walls"): 1}, {("RevitLink", "Walls"): 1})
+    assert a["possibleLoss"], a
     print("selftest ok")
 
 
@@ -388,9 +547,15 @@ def main():
     r.add_argument("--plan", action="store_true")
     c = sub.add_parser("compare"); c.add_argument("run"); c.add_argument("a"); c.add_argument("b")
     p = sub.add_parser("report"); p.add_argument("run")
+    w = sub.add_parser("witness")
+    w.add_argument("--model", default="cleremont")
+    w.add_argument("--h4", required=True, help="h4a run dir holding the main and scoped census answers")
+    w.add_argument("--take", type=int, default=2)
+    w.add_argument("--settle", type=int, default=90)
+    w.add_argument("--plan", action="store_true")
     sub.add_parser("selftest")
     args = ap.parse_args()
-    {"run": cmd_run, "compare": cmd_compare, "report": cmd_report, "selftest": cmd_selftest}[args.cmd](args)
+    {"run": cmd_run, "compare": cmd_compare, "report": cmd_report, "selftest": cmd_selftest, "witness": cmd_witness}[args.cmd](args)
 
 
 if __name__ == "__main__":

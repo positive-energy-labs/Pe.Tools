@@ -1,0 +1,125 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using Autodesk.Revit.DB;
+using Newtonsoft.Json.Linq;
+
+// Space proof harness, Census witness. Read-only, independent of the product's reach filter and row boxes.
+// For each Census region (host internal feet): every model element of the host and of each loaded link placement whose Revit
+// bounding box meets the region grown by Pad, with its real geometry (Fine detail, instance geometry through the link
+// placement's total transform) tested triangle against the region box by separating axes. Rows go to a file (Result is capped at 1 MiB):
+//   [region, link|null, elementId, category, triangles, hits (0/1), hitsGrown (0/1, box grown by Tol), sourceKind]
+// A candidate with hits == 0 is an axis-aligned false positive: its geometry never enters the region.
+public sealed class CensusWitness : PeScriptContainer {
+    const string Request = @"__REQ__";
+
+    static bool TriBox(XYZ a, XYZ b, XYZ c, double[] lo, double[] hi) {
+        // Separating-axis test of one triangle against an axis-aligned box [lo, hi].
+        var cx = (lo[0] + hi[0]) / 2; var cy = (lo[1] + hi[1]) / 2; var cz = (lo[2] + hi[2]) / 2;
+        double hx = (hi[0] - lo[0]) / 2, hy = (hi[1] - lo[1]) / 2, hz = (hi[2] - lo[2]) / 2;
+        double[] v0 = { a.X - cx, a.Y - cy, a.Z - cz }, v1 = { b.X - cx, b.Y - cy, b.Z - cz }, v2 = { c.X - cx, c.Y - cy, c.Z - cz };
+        double[] h = { hx, hy, hz };
+        for (var i = 0; i < 3; i++) {
+            if (Math.Min(v0[i], Math.Min(v1[i], v2[i])) > h[i] || Math.Max(v0[i], Math.Max(v1[i], v2[i])) < -h[i]) return false;
+        }
+        double[] e0 = { v1[0] - v0[0], v1[1] - v0[1], v1[2] - v0[2] }, e1 = { v2[0] - v1[0], v2[1] - v1[1], v2[2] - v1[2] }, e2 = { v0[0] - v2[0], v0[1] - v2[1], v0[2] - v2[2] };
+        double[] n = { e0[1] * e1[2] - e0[2] * e1[1], e0[2] * e1[0] - e0[0] * e1[2], e0[0] * e1[1] - e0[1] * e1[0] };
+        var d = n[0] * v0[0] + n[1] * v0[1] + n[2] * v0[2];
+        var r = hx * Math.Abs(n[0]) + hy * Math.Abs(n[1]) + hz * Math.Abs(n[2]);
+        if (Math.Abs(d) > r) return false;
+        foreach (var e in new[] { e0, e1, e2 }) {
+            for (var k = 0; k < 3; k++) {
+                // axis = box axis k x edge e
+                double[] ax = k == 0 ? new[] { 0.0, -e[2], e[1] } : k == 1 ? new[] { e[2], 0.0, -e[0] } : new[] { -e[1], e[0], 0.0 };
+                if (Math.Abs(ax[0]) + Math.Abs(ax[1]) + Math.Abs(ax[2]) < 1e-12) continue;
+                var p0 = ax[0] * v0[0] + ax[1] * v0[1] + ax[2] * v0[2];
+                var p1 = ax[0] * v1[0] + ax[1] * v1[1] + ax[2] * v1[2];
+                var p2 = ax[0] * v2[0] + ax[1] * v2[1] + ax[2] * v2[2];
+                var rad = hx * Math.Abs(ax[0]) + hy * Math.Abs(ax[1]) + hz * Math.Abs(ax[2]);
+                if (Math.Min(p0, Math.Min(p1, p2)) > rad || Math.Max(p0, Math.Max(p1, p2)) < -rad) return false;
+            }
+        }
+        return true;
+    }
+
+    // Visits every triangle of the element's geometry in the link document's frame; `visit` gets host-frame vertices.
+    static int Triangles(GeometryElement g, Transform t, Action<XYZ, XYZ, XYZ> visit) {
+        var n = 0;
+        foreach (var o in g) {
+            switch (o) {
+                case Solid s when s.Faces.Size > 0:
+                    foreach (Face f in s.Faces) {
+                        using var m = f.Triangulate(0.5);
+                        for (var i = 0; i < m.NumTriangles; i++) {
+                            var tri = m.get_Triangle(i);
+                            visit(t.OfPoint(tri.get_Vertex(0)), t.OfPoint(tri.get_Vertex(1)), t.OfPoint(tri.get_Vertex(2)));
+                            n++;
+                        }
+                    }
+                    break;
+                case Mesh mesh:
+                    for (var i = 0; i < mesh.NumTriangles; i++) {
+                        var tri = mesh.get_Triangle(i);
+                        visit(t.OfPoint(tri.get_Vertex(0)), t.OfPoint(tri.get_Vertex(1)), t.OfPoint(tri.get_Vertex(2)));
+                        n++;
+                    }
+                    break;
+                case GeometryInstance gi:
+                    n += Triangles(gi.GetInstanceGeometry(), t, visit);
+                    break;
+            }
+        }
+        return n;
+    }
+
+    public override void Execute() {
+        var before = doc!.IsModified;
+        var req = JObject.Parse(File.ReadAllText(Request));
+        var pad = (double)req["pad"]!;
+        var tol = (double)req["tol"]!;
+        var rows = new JArray();
+        var summary = new JArray();
+        var links = new FilteredElementCollector(doc).OfClass(typeof(RevitLinkInstance)).Cast<RevitLinkInstance>().ToList();
+        foreach (var region in (JArray)req["regions"]!) {
+            var box = region["box"]!.Select(x => (double)x).ToArray();
+            var lo = new[] { box[0], box[1], box[2] }; var hi = new[] { box[3], box[4], box[5] };
+            var loT = new[] { lo[0] - tol, lo[1] - tol, lo[2] - tol }; var hiT = new[] { hi[0] + tol, hi[1] + tol, hi[2] + tol };
+            var exclude = (long)region["excludeId"]!;
+            var sources = new List<(long? Link, Document D, Transform T)> { (null, doc, Transform.Identity) };
+            foreach (var li in links) if (li.GetLinkDocument() is { } ld) sources.Add((li.Id.Value, ld, li.GetTotalTransform()));
+            int candidates = 0, hits = 0, noGeometry = 0;
+            foreach (var (link, d, t) in sources) {
+                var inv = t.Inverse;
+                var corners = new List<XYZ>();
+                foreach (var x in new[] { lo[0], hi[0] }) foreach (var y in new[] { lo[1], hi[1] }) foreach (var z in new[] { lo[2], hi[2] }) corners.Add(inv.OfPoint(new XYZ(x, y, z)));
+                var outline = new Outline(
+                    new XYZ(corners.Min(p => p.X) - pad, corners.Min(p => p.Y) - pad, corners.Min(p => p.Z) - pad),
+                    new XYZ(corners.Max(p => p.X) + pad, corners.Max(p => p.Y) + pad, corners.Max(p => p.Z) + pad));
+                using var collector = new FilteredElementCollector(d).WhereElementIsNotElementType().WherePasses(new BoundingBoxIntersectsFilter(outline));
+                foreach (var e in collector) {
+                    if (e.Category == null || e.Category.CategoryType != CategoryType.Model) continue;
+                    if (link == null && e.Id.Value == exclude) continue;
+                    candidates++;
+                    var hit = false; var hitGrown = false; var tris = 0;
+                    try {
+                        using var opt = new Options { DetailLevel = ViewDetailLevel.Fine, ComputeReferences = false };
+                        using var g = e.get_Geometry(opt);
+                        if (g != null) tris = Triangles(g, t, (a, b, c) => {
+                            if (!hit && TriBox(a, b, c, lo, hi)) hit = true;
+                            if (!hitGrown && TriBox(a, b, c, loT, hiT)) hitGrown = true;
+                        });
+                    } catch { }
+                    if (tris == 0) noGeometry++;
+                    if (hit) hits++;
+                    rows.Add(new JArray((string)region["id"]!, link == null ? null : (JToken)link.Value, e.Id.Value, e.Category.Name, tris, hit ? 1 : 0, hitGrown ? 1 : 0,
+                        link == null ? "Host" : d.Title.IndexOf(".ifc", StringComparison.OrdinalIgnoreCase) >= 0 ? "IfcLink" : "RevitLink"));
+                }
+            }
+            summary.Add(new JObject { ["region"] = region["id"], ["sources"] = sources.Count, ["candidates"] = candidates, ["intersecting"] = hits, ["noGeometry"] = noGeometry });
+        }
+        if (doc.IsModified != before) throw new InvalidOperationException("IsModified changed");
+        File.WriteAllText((string)req["out"]!, rows.ToString(Newtonsoft.Json.Formatting.None));
+        Result(new JObject { ["summary"] = summary, ["rows"] = rows.Count, ["isModifiedAfter"] = doc.IsModified });
+    }
+}
