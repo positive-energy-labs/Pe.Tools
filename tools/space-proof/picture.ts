@@ -48,7 +48,7 @@ try {
           // Short evaluates only: never wait inside one.
           last = await page.evaluate((want: string) => {
             // The advisory names the drawn representation (model.tsx); a busy control means a read is in flight.
-            const text = document.body.textContent ?? "";
+            const text = document.body?.textContent ?? "";
             const canvas = document.querySelector("canvas");
             const pending = !!document.querySelector("[data-scene-pending]");
             const busy = !!document.querySelector('button[aria-busy="true"]');
