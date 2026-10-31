@@ -359,6 +359,8 @@ def page_requests(ids, context):
 
 def run_model(name, args, out: Path, fixture, results):
     file_, systems = MODELS[name]
+    if args.systems:  # one system per hold keeps a Chadds hold inside the slot's turn
+        systems = [x for x in systems if x in args.systems.split(",")]
     path = DETACHED / file_
     if not path.exists():
         raise FileNotFoundError(path)
@@ -474,6 +476,26 @@ def run_model(name, args, out: Path, fixture, results):
                         if call == "context" and temp == "cold":
                             model.setdefault("_meta", {})[system] = meta
                             (ev / f"artifact-{system.replace(' ', '')}.id").write_text(art["id"])
+            metas = {}
+
+            def post(system, meta, acc, ps_path):
+                mf = ev / f"artifact-{system.replace(' ', '')}.metadata.json"
+                mf.write_text(json.dumps(meta), encoding="utf8")
+                cs2 = ev / f"post-{Path(ps_path).stem}-{system.replace(' ', '')}.cs"
+                text = Path(ps_path).read_text(encoding="utf8").replace("__METADATA__", str(mf)).replace("__CACHE__", str(CACHE))
+                for token in args.post_token:
+                    key, _, value = token.partition("=")
+                    text = text.replace(f"__{key}__", value)
+                cs2.write_text(text, encoding="utf8")
+                before = ps.memory_info().private
+                code, res, wall = s.pea(f"post-{Path(ps_path).stem}-{system.replace(' ', '')}", ["script", "execute", "--file", str(cs2), "--permission-mode", "NoTransaction", "--timeout-seconds", "3000", "--open-document-id", s.doc, "--json"])
+                mod = s.modified()
+                acc.setdefault("postScripts", []).append({"file": str(ps_path), "status": (res or {}).get("status"), "wallS": round(wall, 1),
+                                                          "privateDeltaMiB": round((ps.memory_info().private - before) / MIB, 1), "isModified": mod,
+                                                          "output": (res or {}).get("output"), "data": (res or {}).get("data")})
+                if res is None or res.get("status") != "Succeeded" or mod is None or any(mod):
+                    raise RuntimeError(f"post-script {ps_path}: exit {code} status {(res or {}).get('status')} isModified {mod}")
+
             # accuracy pass after all reads so its own cost never lands in a read's delta
             for system in group:
                 meta = model["_meta"].pop(system)
@@ -504,24 +526,10 @@ def run_model(name, args, out: Path, fixture, results):
                 acc.update({"scriptWallS": round(wall, 1), "privateDeltaMiB": round((ps.memory_info().private - before) / MIB, 1),
                             "frameSources": frames["sources"], "isModifiedAfter": frames["isModifiedAfter"]})
                 model["accuracy"][system] = acc
+                metas[system] = (meta, acc)
                 for ps_path in args.post_script:  # per artifact, after the frames pass: __METADATA__ becomes the decoded PSC1 metadata json
-                    mf = ev / f"artifact-{system.replace(' ', '')}.metadata.json"
-                    mf.write_text(json.dumps(meta), encoding="utf8")
-                    cs2 = ev / f"post-{Path(ps_path).stem}-{system.replace(' ', '')}.cs"
-                    text = Path(ps_path).read_text(encoding="utf8").replace("__METADATA__", str(mf)).replace("__CACHE__", str(CACHE))
-                    for token in args.post_token:
-                        name, _, value = token.partition("=")
-                        text = text.replace(f"__{name}__", value)
-                    cs2.write_text(text, encoding="utf8")
-                    before = ps.memory_info().private
-                    code, res, wall = s.pea(f"post-{Path(ps_path).stem}-{system.replace(' ', '')}", ["script", "execute", "--file", str(cs2), "--permission-mode", "NoTransaction", "--timeout-seconds", "3000", "--open-document-id", s.doc, "--json"])
-                    mod = s.modified()
-                    acc.setdefault("postScripts", []).append({"file": str(ps_path), "status": (res or {}).get("status"), "wallS": round(wall, 1),
-                                                              "privateDeltaMiB": round((ps.memory_info().private - before) / MIB, 1), "isModified": mod,
-                                                              "output": (res or {}).get("output"), "data": (res or {}).get("data")})
-                    if res is None or res.get("status") != "Succeeded" or mod is None or any(mod):
-                        raise RuntimeError(f"post-script {ps_path}: exit {code} status {(res or {}).get('status')} isModified {mod}")
-            if args.pictures:  # after every timed read and witness, so browser reads never land in a measured delta
+                    post(system, meta, acc, ps_path)
+            if args.pictures:  # after every timed read and early post-script, so browser reads never land in a measured delta
                 tf = ev / "target.json"
                 tf.write_text(json.dumps(model.get("target")), encoding="utf8")
                 for system in group:
@@ -531,6 +539,9 @@ def run_model(name, args, out: Path, fixture, results):
                     (ev / f"pictures-{system.replace(' ', '')}.log").write_text(r.stdout + r.stderr, encoding="utf8")
                     model.setdefault("pictures", {})[system] = {"exit": r.returncode, "wallS": round(time.monotonic() - t, 1), "tail": (r.stdout + r.stderr)[-1500:]}
                     print(f"  pictures {system}: exit {r.returncode} {time.monotonic() - t:.1f}s", flush=True)
+            for system in group:  # late scripts (the witness) run after the pictures: they materialize every element
+                for ps_path in args.late_script:
+                    post(system, *metas[system], ps_path)
             mod = s.modified()
             if mod is None or any(mod):
                 raise RuntimeError(f"IsModified {mod} at end")
@@ -627,6 +638,8 @@ def main():
     r.add_argument("--pre-script", action="append", default=[], help="read-only .cs script run once per process before the first scene read (repeatable)")
     r.add_argument("--pictures", help="web origin serving this checkout's built /ducts (vp preview, borrowed host = this checkout): same-camera pictures per system after the reads")
     r.add_argument("--picture-reps", default="link-boxes,triangle-boxes,oriented")
+    r.add_argument("--late-script", action="append", default=[], help="like --post-script, but after the pictures (use for the witness: it materializes every element)")
+    r.add_argument("--systems", help="comma list: only these of the model's systems")
     r.add_argument("--post-token", action="append", default=[], help="NAME=VALUE: replace __NAME__ in every post-script (repeatable); __CACHE__ is the scene cache dir")
     d = sub.add_parser("diff"); d.add_argument("a"); d.add_argument("b")
     m = sub.add_parser("merge", help="one table from the models of several runs (later runs win a model)")
