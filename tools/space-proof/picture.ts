@@ -38,6 +38,19 @@ try {
   for (const rep of reps) {
     const started = Date.now();
     const page = await browser.page({ url: "about:blank" });
+    // Every host call the page makes, so a re-capture loop names its trigger (Chadds SA 7 triangle-boxes, 2026-10-31).
+    const calls: unknown[] = [];
+    const t0 = Date.now();
+    await page.send("Network.enable", {});
+    const unsubscribe = page.subscribe((event) => {
+      const e = event as { method?: string; params?: { request?: { url?: string; postData?: string; headers?: Record<string, string> }; requestId?: string; response?: { status?: number; url?: string } } };
+      const url = e.params?.request?.url ?? e.params?.response?.url ?? "";
+      if (!/\/call|\/captures|\/events|space-scenes/.test(url)) return;
+      if (e.method === "Network.requestWillBeSent")
+        calls.push({ t: (Date.now() - t0) / 1000, id: e.params?.requestId, url, body: (e.params?.request?.postData ?? "").slice(0, 600) });
+      else if (e.method === "Network.responseReceived")
+        calls.push({ t: (Date.now() - t0) / 1000, id: e.params?.requestId, status: e.params?.response?.status });
+    });
     try {
       await page.send("Emulation.setDeviceMetricsOverride", { ...size, deviceScaleFactor: 1, mobile: false });
       // Pane sizes are the product's own persisted widths (workbench pe.toolsWidth, ducts proto-e-sidebar): set once,
@@ -92,6 +105,8 @@ try {
       receipts.push({ system, rep, file, url, viewport: size, state, seconds: (Date.now() - started) / 1000 });
       console.log(`${system} ${rep}: ${file} (${((Date.now() - started) / 1000).toFixed(1)} s)`);
     } finally {
+      unsubscribe();
+      await writeFile(resolve(outDir, `${stem}-${rep}-calls.json`), JSON.stringify(calls, null, 1));
       await page.close();
     }
   }
