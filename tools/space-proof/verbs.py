@@ -456,7 +456,7 @@ def run_witness(args, out, results, pins):
             code, resp, wall = s.pea(f"{r['id']}-witness", ["host", "call", "--key", "revit.detail.space-census", "--open-document-id", s.doc, "--request-file", str(rf), "--verbosity", "full"])
             if resp is None or "response" not in resp:
                 raise RuntimeError(f"{r['id']} witness census: exit {code} {json.dumps(resp)[:500] if resp else None}")
-            a = analyze_witness(cand, bucket_sums(main_ans[r["id"]][1]) if r["id"] in main_ans else {}, bucket_sums(scoped_ans[r["id"]][1]) if r["id"] in scoped_ans else {}, bucket_sums(resp["response"]))
+            a = analyze_witness(cand, bucket_sums(main_ans[r["id"]][1]) if r["id"].startswith("census") and r["id"] in main_ans else {}, bucket_sums(scoped_ans[r["id"]][1]) if r["id"].startswith("census") and r["id"] in scoped_ans else {}, bucket_sums(resp["response"]))
             a.update({"region": r["request"]["box"], "candidates": len(cand), "excludedIds": len(excl), "ambiguousIdsKept": ambiguous,
                       "intersecting": sum(x[5] for x in cand), "intersectingGrown": sum(x[6] for x in cand), "noGeometryCandidates": sum(1 for x in cand if x[4] == 0)})
             out_analysis[r["id"]] = a
