@@ -10,7 +10,8 @@ headless SDK-controlled session on the model's local copy. Variants are builds o
     main    the Space files exactly as on `main` (whole-model Prepare per verb call), via `git checkout main -- <files>`
     scoped  HEAD (scoped read, pack on)
     nopack  HEAD with PE_SPACE_NO_PACK=1 in the Revit process's environment (the pack is not opened); its effect is witnessed by the
-            pack directory not growing (files/bytes recorded around every process)
+            pack directory not growing (files/bytes recorded around every process). The toggle existed only in commits 1e356467..76254065..;
+            it was removed with the pack decision, so this variant refuses to run unless Partition.cs still reads PE_SPACE_NO_PACK.
 The driver restores the tree to HEAD at the end and refuses to finish if `git diff HEAD` is not empty.
 Requests are pinned in tools/space-proof/verbs-requests.json: first run on a model reads the longest focus ducts through verbs.cs.template
 and writes the pins. Per request: the four verbs, in this order, pass 1 (first touch in the process) then pass 2 (repeat). Every call records
@@ -255,6 +256,8 @@ def cmd_run(args):
     print(json.dumps(plan, indent=1))
     if args.plan:
         return
+    if "nopack" in variants and "PE_SPACE_NO_PACK" not in (R.CHECKOUT / "dotnet/Pe.Revit.Space/Partition.cs").read_text(encoding="utf8"):
+        sys.exit("the nopack variant needs the PE_SPACE_NO_PACK toggle, which this checkout no longer has (see this file's header)")
     if plan["dirty"]:
         sys.exit("working tree has uncommitted product changes; commit them first so every variant is a named commit")
     others = plan["otherRevit"]

@@ -6,9 +6,6 @@ internal sealed class Partition {
     private PrimRow[] _prims = [];
     private int[] _start = [0];
     private readonly LinkedGeometryStore? _store;
-    // MEASUREMENT TOGGLE (step 6 pack decision, remove with the decision): the pack's rule is that it benefits repeats within one
-    // process (MAP step 5). This env var turns it off so scoped reads can be timed with and without it in identical bytes.
-    private static readonly bool NoPack = Environment.GetEnvironmentVariable("PE_SPACE_NO_PACK") == "1";
     private bool _scene;
     private int _sceneElements, _sceneTriangles;
 
@@ -20,7 +17,7 @@ internal sealed class Partition {
         this.Transform = transform;
         this.DocumentKey = doc.GetDocumentKey();
         this.Bvh = Bvh.Build([]);
-        this._store = generation is null || NoPack ? null : LinkedGeometryStore.For(doc, linkInstanceId, transform, generation);
+        this._store = generation is null ? null : LinkedGeometryStore.For(doc, linkInstanceId, transform, generation);
     }
 
     public int Source { get; }
