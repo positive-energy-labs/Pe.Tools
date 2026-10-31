@@ -1,0 +1,49 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using Autodesk.Revit.DB;
+using Newtonsoft.Json.Linq;
+
+// Space proof, MAP Owed IFC tail: what materializing only the loose link-box tail costs, on top of the link-box read
+// that just ran in this process. Read-only post-script; run it BEFORE the primitive witness (which materializes every
+// DirectShape). __IDS__[system].loose = [{link, id, ratio}] (link-frame / triangle-fit envelope volume > 1.5).
+// Each element is read the way Ingest reads a mesh context element: get_Geometry at Medium, Solid faces triangulated,
+// Mesh, GeometryInstance through GetSymbolGeometry. Reports seconds, private bytes and triangle counts.
+public sealed class TailCost : PeScriptContainer {
+    const string MetadataPath = @"__METADATA__";
+    const string IdsPath = @"__IDS__";
+
+    public override void Execute() {
+        var before = doc!.IsModified;
+        var system = Path.GetFileName(MetadataPath).Replace("artifact-", "").Replace(".metadata.json", "");
+        var list = JObject.Parse(File.ReadAllText(IdsPath))[system]?["loose"] as JArray ?? throw new InvalidOperationException("no tail for " + system);
+        var process = Process.GetCurrentProcess();
+        process.Refresh(); var privateBefore = process.PrivateMemorySize64;
+        var clock = Stopwatch.StartNew();
+        long triangles = 0; int read = 0, absent = 0, failed = 0;
+        var links = new Dictionary<long, Document>();
+        using var options = new Options { DetailLevel = ViewDetailLevel.Medium, ComputeReferences = false, IncludeNonVisibleObjects = false };
+        void Walk(GeometryElement g) {
+            foreach (var o in g) using (o) switch (o) {
+                case Solid s: using (var faces = s.Faces) foreach (Face f in faces) using (f) { try { using var m = f.Triangulate(); if (m is not null) triangles += m.NumTriangles; } catch { failed++; } } break;
+                case Mesh m: triangles += m.NumTriangles; break;
+                case GeometryInstance gi: try { using var inner = gi.GetSymbolGeometry(); if (inner is not null) Walk(inner); } catch { failed++; } break;
+            }
+        }
+        foreach (var item in list) {
+            var link = (long)item["link"]!; var id = (long)item["id"]!;
+            if (!links.TryGetValue(link, out var source)) links[link] = source = (doc.GetElement(new ElementId(link)) as RevitLinkInstance)?.GetLinkDocument();
+            var e = source?.GetElement(new ElementId(id));
+            if (e is null) { absent++; continue; }
+            try { using var g = e.get_Geometry(options); if (g is not null) Walk(g); read++; } catch { failed++; }
+        }
+        clock.Stop();
+        process.Refresh(); var privateAfter = process.PrivateMemorySize64;
+        if (doc.IsModified != before) throw new InvalidOperationException("IsModified changed");
+        Result(new JObject { ["system"] = system, ["tailElements"] = list.Count, ["read"] = read, ["absent"] = absent, ["failed"] = failed,
+            ["triangles"] = triangles, ["seconds"] = clock.Elapsed.TotalSeconds, ["privateBefore"] = privateBefore, ["privateAfter"] = privateAfter,
+            ["privateDeltaMiB"] = (privateAfter - privateBefore) / 1048576.0, ["isModifiedBefore"] = before, ["isModifiedAfter"] = doc.IsModified });
+    }
+}
