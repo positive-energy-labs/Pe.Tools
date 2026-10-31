@@ -61,7 +61,7 @@ def _num(x, nd=6):
 
 
 def _handle(h):
-    return None if h is None else (h["linkInstanceId"], h["elementId"], h["category"], h["kind"], h.get("layer"))
+    return None if h is None else (h.get("linkInstanceId"), h["elementId"], h["category"], h["kind"], h.get("layer"))
 
 
 def canonical(verb, ans):
@@ -312,7 +312,11 @@ def answers(d, res, variant, pas=1):
             continue
         for r in p["reads"]:
             if r["pass"] == pas and "error" not in r:
-                resp = json.loads((d / "ev" / res["run"]["model"] / variant / r["file"]).read_text(encoding="utf8"))
+                # r["file"] carries a count taken after the IsModified sdk call, so it is off by one; the tag is the identity.
+                tag = f'{r["id"]}-p{r["pass"]}'
+                path = next((d / "ev" / res["run"]["model"] / variant).glob(f"*-{tag}.stdout"))
+                text = path.read_text(encoding="utf8")
+                resp = json.loads(text[text.index("{"):])
                 out[r["id"]] = (r["verb"], resp["response"])
     return out
 
