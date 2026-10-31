@@ -33,7 +33,8 @@ def volume(e):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("link"); ap.add_argument("triangles"); ap.add_argument("oriented"); ap.add_argument("cache")
-    ap.add_argument("--ratio", type=float, default=1.5)
+    ap.add_argument("--ratio", type=float, default=1.5, help="loose rule: link box over this times its triangle-fit envelope; 0 disables")
+    ap.add_argument("--categories", default="", help="comma list: also mesh link boxes of these categories (e.g. Walls,Doors,Windows)")
     a = ap.parse_args()
     L, Lv = read(a.link)
     T, _ = read(a.triangles)
@@ -56,7 +57,10 @@ def main():
     for e in L["elements"]:
         k = key(e)
         box = e.get("orientedBox") or {}
-        loose = not e["focus"] and box.get("frame") == "link" and tri.get(k) and volume(e) / tri[k] > a.ratio
+        linked = not e["focus"] and box.get("frame") == "link"
+        by_ratio = a.ratio > 0 and linked and tri.get(k) and volume(e) / tri[k] > a.ratio
+        by_category = linked and e["handle"].get("category") in set(filter(None, a.categories.split(",")))
+        loose = by_ratio or by_category
         if loose:
             tail += 1
             if k in meshes:
@@ -69,7 +73,7 @@ def main():
     meta = dict(L)
     meta["elements"] = out
     meta["triangles"] = len(verts) // 36
-    meta["composite"] = {"rule": f"link-boxes; link boxes over {a.ratio}x their triangle-fit envelope drawn as native meshes",
+    meta["composite"] = {"rule": f"link-boxes; native meshes for link boxes" + (f" over {a.ratio}x their triangle-fit envelope" if a.ratio > 0 else "") + (f" or in categories {a.categories}" if a.categories else ""),
                          "linkArtifact": Path(a.link).name, "triangleArtifact": Path(a.triangles).name, "orientedArtifact": Path(a.oriented).name,
                          "tail": tail, "swapped": swapped, "tailWithoutMesh": missing}
     body = json.dumps(meta, separators=(",", ":")).encode()

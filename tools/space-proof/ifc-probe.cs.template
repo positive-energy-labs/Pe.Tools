@@ -1,0 +1,78 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using Autodesk.Revit.DB;
+using Newtonsoft.Json.Linq;
+
+// Space proof, MAP Owed IFC ruling spike (read-only, no geometry). For each link placement drawn as link-frame boxes:
+//   1. the RevitLinkType's external file reference (path type, user path, load status)
+//   2. IFC identity on 200 sampled DirectShapes: built-in IFC_GUID and any IfcGUID-like string parameter
+//   3. the importer's TEXT quantities (BaseQuantities.GrossVolume / NetVolume / Length) on every link box, with its
+//      link-frame bounding box, so the offline pass can test "bbox volume / IFC volume > 1.5" against __TAIL__[system].loose.
+// Rows go to <metadata>.ifc-probe.json.
+public sealed class IfcProbe : PeScriptContainer {
+    const string MetadataPath = @"__METADATA__";
+    const string TailPath = @"__TAIL__";
+
+    static double? Number(string s) {
+        if (string.IsNullOrWhiteSpace(s)) return null;
+        var head = new string(s.Trim().TakeWhile(c => char.IsDigit(c) || c == '.' || c == '-' || c == 'E' || c == 'e' || c == '+').ToArray());
+        return double.TryParse(head, NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : null;
+    }
+
+    public override void Execute() {
+        var before = doc!.IsModified;
+        var meta = JObject.Parse(File.ReadAllText(MetadataPath));
+        var system = Path.GetFileName(MetadataPath).Replace("artifact-", "").Replace(".metadata.json", "");
+        var loose = JObject.Parse(File.ReadAllText(TailPath))[system]?["loose"] is JArray tail
+            ? new HashSet<(long, long)>(tail.Select(e => ((long)e["link"]!, (long)e["id"]!))) : new HashSet<(long, long)>();
+        var targets = ((JArray)meta["elements"]!).Where(e => !(bool)e["focus"]! && e["orientedBox"] is JObject box && (string)box["frame"] == "link")
+            .Select(e => ((long)e["handle"]!["linkInstanceId"]!, (long)e["handle"]!["elementId"]!)).ToList();
+        var links = new JObject();
+        foreach (var link in targets.Select(t => t.Item1).Distinct()) {
+            var instance = doc.GetElement(new ElementId(link)) as RevitLinkInstance;
+            var type = instance is null ? null : doc.GetElement(instance.GetTypeId()) as RevitLinkType;
+            var row = new JObject { ["type"] = type?.Name };
+            try {
+                var reference = type?.GetExternalFileReference();
+                row["pathType"] = reference?.PathType.ToString();
+                row["status"] = reference?.GetLinkedFileStatus().ToString();
+                row["userPath"] = reference is null ? null : ModelPathUtils.ConvertModelPathToUserVisiblePath(reference.GetAbsolutePath());
+            } catch (Exception ex) { row["referenceError"] = ex.GetType().Name + ": " + ex.Message; }
+            row["documentPath"] = instance?.GetLinkDocument()?.PathName;
+            links[link.ToString()] = row;
+        }
+        var clock = Stopwatch.StartNew();
+        var docs = new Dictionary<long, Document>();
+        var rows = new JArray(); var guidSample = new JArray(); int guided = 0, sampled = 0, withVolume = 0;
+        foreach (var (link, id) in targets) {
+            if (!docs.TryGetValue(link, out var source)) docs[link] = source = (doc.GetElement(new ElementId(link)) as RevitLinkInstance)?.GetLinkDocument();
+            var e = source?.GetElement(new ElementId(id));
+            if (e is null) continue;
+            string Text(string name) { var p = e.LookupParameter(name); return p is null || !p.HasValue ? null : p.StorageType == StorageType.String ? p.AsString() : p.AsValueString(); }
+            var gross = Number(Text("BaseQuantities.GrossVolume")); var net = Number(Text("BaseQuantities.NetVolume")); var length = Number(Text("BaseQuantities.Length"));
+            if (gross is not null || net is not null) withVolume++;
+            using var bb = e.get_BoundingBox(null);
+            rows.Add(new JObject { ["link"] = link, ["id"] = id, ["loose"] = loose.Contains((link, id)), ["category"] = e.Category?.Name,
+                ["bbox"] = bb is null ? null : new JArray(bb.Max.X - bb.Min.X, bb.Max.Y - bb.Min.Y, bb.Max.Z - bb.Min.Z),
+                ["grossVolume"] = gross, ["netVolume"] = net, ["length"] = length,
+                ["grossText"] = Text("BaseQuantities.GrossVolume") });
+            if (sampled < 200) {
+                sampled++;
+                var builtIn = e.get_Parameter(BuiltInParameter.IFC_GUID)?.AsString();
+                var named = Text("IfcGUID");
+                if (!string.IsNullOrEmpty(builtIn ?? named)) guided++;
+                guidSample.Add(new JObject { ["link"] = link, ["id"] = id, ["ifcGuid"] = builtIn, ["IfcGUID"] = named, ["typeIfcGuid"] = (source.GetElement(e.GetTypeId()))?.get_Parameter(BuiltInParameter.IFC_TYPE_GUID)?.AsString() });
+            }
+        }
+        clock.Stop();
+        if (doc.IsModified != before) throw new InvalidOperationException("IsModified changed");
+        var outPath = MetadataPath + ".ifc-probe.json";
+        File.WriteAllText(outPath, new JObject { ["links"] = links, ["guidSample"] = guidSample, ["rows"] = rows }.ToString(Newtonsoft.Json.Formatting.None));
+        Result(new JObject { ["system"] = system, ["links"] = links, ["linkBoxes"] = rows.Count, ["withVolume"] = withVolume, ["guidSampled"] = sampled, ["guidPresent"] = guided,
+            ["seconds"] = clock.Elapsed.TotalSeconds, ["out"] = outPath, ["isModifiedBefore"] = before, ["isModifiedAfter"] = doc.IsModified });
+    }
+}
