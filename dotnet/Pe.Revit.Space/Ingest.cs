@@ -127,7 +127,8 @@ internal static class Ingest {
 
         using (ge) {
             budget?.AfterNative();
-            if (ge is not null) Walk(ge, xf, prim, sink, ref sawSolid, region, xf.HasReflection, budget, symbols,
+            // Winding keeps native-copy parity; the caller's link transform is never corrected (SpaceSymbolGeometryProofTests).
+            if (ge is not null) Walk(ge, xf, prim, sink, ref sawSolid, region, false, budget, symbols,
                 symbols is null ? "" : e.Document.GetDocumentKey(), o.DetailLevel, miss);
         }
     }
