@@ -25,7 +25,7 @@ import { readFamily, type FamilyActionDependencies } from "./family-actions.ts";
 import { actionAdmissionSchema, workKeySchema } from "@pe/agent-contracts";
 import { z } from "zod";
 import { fileVersion } from "./takeoff-actions.ts";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Exit, Layer, Schema } from "effect";
 import {
   addressSchema,
   sameAddress,
@@ -149,6 +149,66 @@ export function makeCallRoute(
     (composition?.dispatch ?? dispatchTsOnlyOperation)(...args);
   const observations = () => (captures ??= hostTakeoffCaptures());
   const owner = () => operations;
+  type NativeAnswer = Effect.Success<ReturnType<RevitBridge["Service"]["invoke"]>>;
+  /**
+   * Native Reads in flight, by exact target and input. Revit runs one op at a time, so a twin of
+   * a running read (a browser resubscribe, a retry) joins it instead of queueing behind it, and a
+   * read every caller abandoned is cancelled (queued: dropped at the gate; running: `op.cancel`)
+   * instead of running to completion for nobody. On 2026-10-31 a 60 s scene read was aborted
+   * and re-asked every 31 s; each abandoned twin still ran, 18 in 10 minutes.
+   */
+  const nativeReads = new Map<
+    string,
+    { readonly requestId: string; readonly answer: Promise<NativeAnswer>; callers: number }
+  >();
+  const sharedRead = (
+    bridge: RevitBridge["Service"],
+    key: string,
+    input: unknown,
+    session: string | undefined,
+    openId: string | null | undefined,
+    requestId: string,
+  ) => {
+    const identity = JSON.stringify([session ?? null, openId ?? null, key, input]);
+    let read = nativeReads.get(identity);
+    if (!read) {
+      // Detached from the caller: a client abort interrupting the bridge turn would open the FIFO
+      // gate while Revit still runs it. The turn ends when Revit answers (or answers cancelled).
+      const created = {
+        requestId,
+        answer: Effect.runPromise(bridge.invoke(key, input, session, openId, requestId)),
+        callers: 0,
+      };
+      const forget = () => {
+        if (nativeReads.get(identity) === created) nativeReads.delete(identity);
+      };
+      created.answer.then(forget, forget);
+      nativeReads.set(identity, created);
+      read = created;
+    }
+    const joined = read;
+    joined.callers++;
+    return Effect.logInfo(
+      joined.requestId === requestId
+        ? `Native read dispatched op=${key} request=${requestId}`
+        : `Native read joined op=${key} request=${joined.requestId} callers=${joined.callers}`,
+    ).pipe(
+      Effect.andThen(Effect.tryPromise({ try: () => joined.answer, catch: (error) => error })),
+      Effect.map((answer) => ({ ...answer, nativeRequestId: joined.requestId })),
+      Effect.onExit((exit) => {
+        if (--joined.callers > 0 || !Exit.hasInterrupts(exit)) return Effect.void;
+        if (nativeReads.get(identity) === joined) nativeReads.delete(identity);
+        void Effect.runPromise(
+          Effect.ignore(
+            bridge.invoke(CANCEL_OPERATION_KEY, { requestId: joined.requestId }, session),
+          ),
+        );
+        return Effect.logInfo(
+          `Native read abandoned op=${key} request=${joined.requestId}: every caller left; cancel sent`,
+        );
+      }),
+    );
+  };
   const admit = async (raw: unknown, _bridge: RevitBridge["Service"], caller: Caller) => {
     const input = actionAdmissionSchema.parse(raw);
     const crossing = {
@@ -241,6 +301,7 @@ export function makeCallRoute(
         originClass,
         requestId,
       };
+      let intent: string | undefined;
       if (
         key !== "takeoffs.snapshot" &&
         key !== "host.ops.catalog" &&
@@ -254,7 +315,7 @@ export function makeCallRoute(
           resolvedSession && typeof openDocumentId === "string"
             ? { session: resolvedSession.sessionId, openId: openDocumentId }
             : undefined;
-        const intent = consentedRead(caller, key, request, ref) ? "Read" : definition.intent;
+        intent = consentedRead(caller, key, request, ref) ? "Read" : definition.intent;
         if (intent === "Mutate" && !humanDoor) {
           return yield* Effect.fail(
             new BridgeError(
@@ -415,7 +476,21 @@ export function makeCallRoute(
               catch: (error) =>
                 error instanceof BridgeError ? error : new BridgeError(String(error), 409),
             })
-          : yield* bridge.invoke(key, request ?? {}, bridgeSessionId, openDocumentId, requestId);
+          : intent === "Read"
+            ? yield* sharedRead(
+                bridge,
+                key,
+                request ?? {},
+                bridgeSessionId,
+                openDocumentId,
+                requestId,
+              )
+            : yield* bridge.invoke(key, request ?? {}, bridgeSessionId, openDocumentId, requestId);
+      // A joined Read names the dispatch that actually ran, never this caller's unsent id.
+      const nativeRequestId =
+        "nativeRequestId" in result && typeof result.nativeRequestId === "string"
+          ? result.nativeRequestId
+          : requestId;
       const kept =
         key === VIEW_IMAGE_KEY
           ? yield* registerViewImage(
@@ -432,7 +507,8 @@ export function makeCallRoute(
       // what was touched rather than the selector that was typed. Headers, not a payload wrapper.
       // A TS-only op touched no Revit, so it stamps nothing rather than the latest session.
       const headers = result.target ? resolvedTargetHeaders(result.target) : {};
-      if (!op.tsOnly && key !== CANCEL_OPERATION_KEY) headers["x-pe-native-request-id"] = requestId;
+      if (!op.tsOnly && key !== CANCEL_OPERATION_KEY)
+        headers["x-pe-native-request-id"] = nativeRequestId;
       if (captureId) headers["x-pe-takeoff-capture-id"] = captureId;
       if (kept)
         Object.assign(headers, { "x-pe-capture-id": kept.id, "x-pe-capture-url": kept.url });
