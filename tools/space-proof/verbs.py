@@ -416,7 +416,16 @@ def run_witness(args, out, results, pins):
         R.slot_log(f"OPENED {name} census witness; PID {s.pid}")
         ps = psutil.Process(s.pid)
         time.sleep(args.settle)
-        reqs = [r for r in build_requests(pins[name]["picks"][: args.take]) if r["verb"] == "census"]
+        # A region is a Census-shaped question. Slice regions (xyClip rectangle x band) ask the same thing of the same admission rule:
+        # which elements have real geometry inside it. Main-independent: the claim is that scoped returns all of them.
+        reqs = []
+        for r in build_requests(pins[name]["picks"][: args.take]):
+            ex = r["request"].get("filter")
+            if r["verb"] == "census":
+                reqs.append({"id": r["id"], "request": r["request"]})
+            elif r["verb"] == "slice" and "slice" in args.regions:
+                c = r["request"]["xyClip"]
+                reqs.append({"id": r["id"], "request": {"box": [c[0], c[1], r["request"]["z0"], c[3], c[4], r["request"]["z1"]], "filter": ex}})
         regions = [{"id": r["id"], "box": r["request"]["box"], "excludeId": r["request"]["filter"]["excludeElementIds"][0]} for r in reqs]
         rowsf = ev / "witness.rows.json"
         reqf = ev / "witness.req.json"
@@ -430,10 +439,13 @@ def run_witness(args, out, results, pins):
         if res is None or res.get("status") != "Succeeded" or mod is None or any(mod):
             raise RuntimeError(f"witness script: exit {code} {json.dumps(res)[:800] if res else None} isModified {mod}")
         rows = json.loads(rowsf.read_text(encoding="utf8"))
-        h4 = Path(args.h4)
-        h4res = json.loads((h4 / "results.json").read_text(encoding="utf8"))
-        main_ans = answers(h4, h4res, "main")
-        scoped_ans = answers(h4, h4res, "scoped")
+        def load_answers(dirname, variant):
+            if not dirname:
+                return {}
+            d_, res_ = load_run(dirname)
+            return answers(d_, res_, variant, 1, name)
+        main_ans = load_answers(args.h4, "main")
+        scoped_ans = load_answers(args.scoped_dir, "scoped")
         out_analysis = {}
         for r in reqs:
             cand = [x for x in rows if x[0] == r["id"]]
@@ -444,7 +456,7 @@ def run_witness(args, out, results, pins):
             code, resp, wall = s.pea(f"{r['id']}-witness", ["host", "call", "--key", "revit.detail.space-census", "--open-document-id", s.doc, "--request-file", str(rf), "--verbosity", "full"])
             if resp is None or "response" not in resp:
                 raise RuntimeError(f"{r['id']} witness census: exit {code} {json.dumps(resp)[:500] if resp else None}")
-            a = analyze_witness(cand, bucket_sums(main_ans[r["id"]][1]), bucket_sums(scoped_ans[r["id"]][1]), bucket_sums(resp["response"]))
+            a = analyze_witness(cand, bucket_sums(main_ans[r["id"]][1]) if r["id"] in main_ans else {}, bucket_sums(scoped_ans[r["id"]][1]) if r["id"] in scoped_ans else {}, bucket_sums(resp["response"]))
             a.update({"region": r["request"]["box"], "candidates": len(cand), "excludedIds": len(excl), "ambiguousIdsKept": ambiguous,
                       "intersecting": sum(x[5] for x in cand), "intersectingGrown": sum(x[6] for x in cand), "noGeometryCandidates": sum(1 for x in cand if x[4] == 0)})
             out_analysis[r["id"]] = a
@@ -593,7 +605,9 @@ def main():
     p = sub.add_parser("report"); p.add_argument("run")
     w = sub.add_parser("witness")
     w.add_argument("--model", default="cleremont")
-    w.add_argument("--h4", required=True, help="h4a run dir holding the main and scoped census answers")
+    w.add_argument("--h4", default=None, help="run dir holding the main census answers (optional)")
+    w.add_argument("--scoped-dir", default=None, help="run dir holding the scoped census answers (optional; default none)")
+    w.add_argument("--regions", default="census", help="census, or census,slice")
     w.add_argument("--take", type=int, default=2)
     w.add_argument("--settle", type=int, default=90)
     w.add_argument("--plan", action="store_true")
