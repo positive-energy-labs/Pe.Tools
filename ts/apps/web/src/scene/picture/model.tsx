@@ -390,8 +390,8 @@ export function ModelPicture({
               .join(" / ")}
           />
           {onContextRepresentation && contextMode !== "off" ? (
-            // The IFC comparison buttons are withheld (coordinator, 2026-10-31): a context read over 30 s
-            // re-captures in a loop (owned by probe-loop). The other representations stay request options.
+            // Only link-boxes and meshes are offered; triangle-boxes stays a request option. The IFC default
+            // is kaitpw's open ruling (docs/features/spatial/LEDGER.md Owed).
             <Button
               label={
                 contextRepresentation !== "meshes"
