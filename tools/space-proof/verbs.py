@@ -203,14 +203,15 @@ def run_variant(variant, name, args, out, results, pins):
         ids = fixture[name][systems[0]]["ids"]
         pin = get_or_pin_picks(s, name, ev, ids, pins, args.take)
         reqs = build_requests(pin["picks"][: args.take])
-        if args.first_only:
+        light = args.main_light and variant == "main"  # whole-model Prepare on Chadds is ~220 s per call: main gets request 0 once
+        if args.first_only or light:
             reqs = [r for r in reqs if r["idx"] == 0]
         for r in reqs:
             (ev / f"req-{r['id']}.json").write_text(json.dumps(r["request"]), encoding="utf8")
         proc["requests"] = [r["id"] for r in reqs]
         proc["packAfterOpen"] = pack_state()
         # pass 1 is first touch in the process; passes 2..repeats+1 repeat it (spread needs several)
-        for pas in range(1, (1 if args.no_repeat else args.repeats) + 2):
+        for pas in range(1, (1 if args.no_repeat or light else args.repeats) + 2):
             for r in reqs:
                 before = ps.memory_info().private
                 peak = R.Peak(s.pid)
@@ -579,6 +580,7 @@ def main():
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run")
     r.add_argument("--model", required=True, help="cleremont, chadds, or both comma-separated (one hold)")
+    r.add_argument("--main-light", action="store_true", help="the main variant runs request 0 of each verb once, whatever --repeats says")
     r.add_argument("--repeats", type=int, default=1, help="repeat passes after the first-touch pass")
     r.add_argument("--variants", default="main,scoped,nopack")
     r.add_argument("--label", default="verbs")
