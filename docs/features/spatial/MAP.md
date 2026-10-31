@@ -211,6 +211,9 @@ Each has a `RESUME.md` under its worktree's `.artifacts/`.
   the link transform) 8.5 s, +0.5 GiB, containing by construction, volume within 1.07× of the
   triangle fit for 90% and over 1.5× for 9.5% (elements rotated inside the link, max 518×).
   Interim default: link-boxes, with the loose tail disclosed.
+  2026-10-31: all three models gate green on the step 3 branch; SA 7 triangle-boxes 72.7 s / +3.4 GiB, the 2,834-element tail
+  itself +1.09 s / +145 MiB, but no cheap tail classifier yet (bbox shape and numeric IFC parameters falsified; the IFC file is
+  all B-rep with no openings). [Evidence](READING-REVIT.md#step-3-gates-and-ifc-ruling-evidence-2026-10-31).
 - How much of Cleremont's 7 GB open cost is its links.
 - Link behaviour on a machine without Desktop Connector.
 - CAD as building context: on Manuella, model-level DWG plans are the only building geometry
