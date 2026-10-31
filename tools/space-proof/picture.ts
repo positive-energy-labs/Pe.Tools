@@ -96,7 +96,7 @@ try {
         if (!clicked) throw Error(`${system} ${rep}: no "${button}" button`);
         await new Promise((r) => setTimeout(r, 1500));
       }
-      const state = await settle(LABEL[rep]!, 600_000);
+      const state = await settle(LABEL[rep]!, 240_000); // cold triangle-boxes 79 s, meshes 64 s on Chadds SA 7 (10-28)
       await new Promise((r) => setTimeout(r, 2000)); // let the last frame paint
       const clip = (state as { clip: { x: number; y: number; width: number; height: number } | null }).clip;
       const shot = (await page.send("Page.captureScreenshot", { format: "png", ...(clip ? { clip: { ...clip, scale: 1 } } : {}) })) as { data: string };
