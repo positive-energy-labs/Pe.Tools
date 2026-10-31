@@ -561,7 +561,7 @@ def run_model(name, args, out: Path, fixture, results):
                     model.setdefault("pictures", {})[system] = {"exit": r.returncode, "wallS": round(time.monotonic() - t, 1), "tail": (r.stdout + r.stderr)[-1500:]}
                     print(f"  pictures {system}: exit {r.returncode} {time.monotonic() - t:.1f}s", flush=True)
             for system in group:  # late scripts (the witness) run after the pictures: they materialize every element
-                for ps_path in args.late_script:
+                for ps_path in ([] if system in args.late_skip.split(",") else args.late_script):
                     post(system, *metas[system], ps_path)
             mod = s.modified()
             if mod is None or any(mod):
@@ -661,6 +661,7 @@ def main():
     r.add_argument("--picture-reps", default="link-boxes,triangle-boxes,oriented")
     r.add_argument("--late-script", action="append", default=[], help="like --post-script, but after the pictures (use for the witness: it materializes every element)")
     r.add_argument("--systems", help="comma list: only these of the model's systems")
+    r.add_argument("--late-skip", default="", help="comma list of systems whose late scripts are skipped (already witnessed on the same product)")
     r.add_argument("--extra-reps", default="", help="comma list of other context representations to read per system after the timed reads (cost + artifact ids)")
     r.add_argument("--post-token", action="append", default=[], help="NAME=VALUE: replace __NAME__ in every post-script (repeatable); __CACHE__ is the scene cache dir")
     d = sub.add_parser("diff"); d.add_argument("a"); d.add_argument("b")
