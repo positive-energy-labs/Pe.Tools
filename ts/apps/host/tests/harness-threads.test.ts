@@ -1328,6 +1328,58 @@ for (const harness of ["claude", "codex"] as const) {
       await h.close();
     }
   }, 15000);
+  test(`${harness}: a Pea MCP tool of kind other reaches the permission card instead of a refusal`, async () => {
+    // Claude's ACP adapter reports every MCP tool, Pea's pe_find included, as kind "other".
+    // 2aecd374's kind-only allowlist refused them all and Pea could read nothing (2026-10-27).
+    const h = host(),
+      call = caller(h),
+      read = reader(h);
+    try {
+      const id = (await call("POST", "/pe/threads", { providerId: harness })).json.id as string;
+      await until(read, id, (body) => body.models.length > 0);
+      await call("POST", `/pe/threads/${id}/prompt`, { text: "permission mcp" });
+      const body = await until(read, id, (body) => openAsks(body).length === 1);
+      expect(
+        body.events.some(
+          (event) =>
+            event.kind === "update" &&
+            String(event.update.title).includes("writes are unsupported"),
+        ),
+      ).toBe(false);
+      await call("POST", `/pe/threads/${id}/cancel`);
+      await until(read, id, (body) => !body.running);
+    } finally {
+      await h.close();
+    }
+  });
+  test(`${harness}: unguarded access answers an MCP ask without a card`, async () => {
+    // The Agent approvals switch off: Pea's own tool calls run without asking (2026-10-27 verdict).
+    const h = host(),
+      call = caller(h),
+      read = reader(h);
+    try {
+      expect((await call("PUT", "/pe/access", { guarded: false })).json).toEqual({
+        guarded: false,
+      });
+      const id = (await call("POST", "/pe/threads", { providerId: harness })).json.id as string;
+      await until(read, id, (body) => body.models.length > 0);
+      await call("POST", `/pe/threads/${id}/prompt`, { text: "permission mcp" });
+      const body = await until(read, id, (body) => !body.running && turnEnds(body).length === 1);
+      expect(openAsks(body)).toHaveLength(0);
+      expect(body.events.some((event) => event.kind === "permission_request")).toBe(false);
+      expect(
+        body.events.some(
+          (event) =>
+            event.kind === "update" &&
+            event.update.sessionUpdate === "agent_message_chunk" &&
+            String((event.update.content as { text?: string })?.text).includes("chose yes"),
+        ),
+      ).toBe(true);
+    } finally {
+      await call("PUT", "/pe/access", { guarded: true });
+      await h.close();
+    }
+  });
   test(`${harness}: a native write approval is refused with the host-command boundary`, async () => {
     const h = host(),
       call = caller(h),

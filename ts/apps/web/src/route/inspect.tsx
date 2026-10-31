@@ -6,13 +6,10 @@
  */
 import { useState, type ReactNode } from "react";
 import { useRouter } from "@tanstack/react-router";
-import { routeAddress, actionAdmissionSchema } from "@pe/agent-contracts";
+import { routeAddress } from "@pe/agent-contracts";
 
 import { Button } from "@pe/kit/lang/button";
-import {
-  submitAction,
-  actionResult,
-} from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import { hostShellOpenRpc } from "../../../../packages/mcps/src/shared/rpc-client";
 
 export interface Inspectable {
   label: (id: string) => string;
@@ -85,22 +82,6 @@ export function noteCaptured(
   );
 }
 
-/** Opening a path on the host is a host-local mutation, so it needs a journaled human admission. */
-async function openOnHost(path: string): Promise<void> {
-  actionResult(
-    await submitAction(
-      actionAdmissionSchema.parse({
-        id: crypto.randomUUID(),
-        key: "host.shell.open",
-        target: { kind: "host" },
-        input: { path },
-      }),
-      "",
-      30_000,
-    ),
-  );
-}
-
 /** One inspectable, opened by its kind's policy; a refused shell open says why on hover. */
 export function Inspect({
   spec,
@@ -155,7 +136,7 @@ export function Inspect({
       data-tone={refusal ? "caution" : undefined}
       reason={refusal ?? `Open ${path} in the host's default app. Nothing is copied.`}
       onClick={() =>
-        void openOnHost(path).then(
+        void hostShellOpenRpc.run({ path }).then(
           () => setRefusal(null),
           (error: unknown) => setRefusal(error instanceof Error ? error.message : String(error)),
         )

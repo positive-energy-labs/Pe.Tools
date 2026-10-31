@@ -1,11 +1,11 @@
 /**
- * `?demo=fixture`: a synthetic room (slab, two walls, a duct run, a linked beam, a DWG import),
+ * `?fixture=fixture`: a synthetic room (slab, two walls, a duct run, a linked beam, a DWG import),
  * written as real PSC1 bytes and read back by the real decoder, with one answer per space op shaped
  * as the generated DTOs declare. No Revit, no host: every fact here is invented and says so.
  */
 import { decodeScene, SCENE_FORMAT, type Psc1Metadata } from "#/scene/psc1";
 
-import type { Answer } from "./manifest";
+import type { Answer } from "./reads";
 
 type Box = {
   id: number;
@@ -249,7 +249,8 @@ function psc1(): ArrayBuffer {
   return buffer;
 }
 
-export const FIXTURE_SCENE = decodeScene(psc1());
+export const fixtureSceneBytes = psc1;
+export const FIXTURE_SCENE = decodeScene(fixtureSceneBytes());
 
 const searched = { docs: 2, categories: 5, candidates: 7, examined: 7, skipped: 0 };
 const index = <T>(values: T[]) => {

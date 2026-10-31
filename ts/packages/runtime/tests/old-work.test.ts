@@ -174,7 +174,11 @@ test.each(["human", "pea"] as const)(
     const key = (route: string) => `${workKey(scope)}\0${route}`;
     const state = new Map<string, unknown>();
     const module = new RouteWorkspace({
-      registrations: [{ spec: familiesRouteState as unknown as RouteStateSpec<z.ZodType> }],
+      registrations: [
+        {
+          spec: { ...familiesRouteState, schemaVersion: 2 } as unknown as RouteStateSpec<z.ZodType>,
+        },
+      ],
       store: {
         getState: async ({ targetKey, route }) =>
           structuredClone(state.get(`${targetKey}\0${route}`)),
@@ -182,20 +186,22 @@ test.each(["human", "pea"] as const)(
           void state.set(`${targetKey}\0${route}`, structuredClone(value)),
       },
     });
-    const bytes = JSON.stringify(oldFamilies);
+    const bytes = JSON.stringify({ ...oldFamilies, schemaVersion: 1 });
     state.set(key("families"), JSON.parse(bytes));
 
+    // ADR 0026: a fresh Work advances the revision past the set-aside one, so a stale
+    // expectedRevision from before the start-fresh can never match after it.
     expect(await module.startFresh(scope, "families", actor)).toMatchObject({
       ok: true,
-      revision: 0,
+      revision: oldFamilies.revision + 1,
     });
     expect(JSON.stringify(state.get(key(`families${START_FRESH_ASIDE}1`)))).toBe(bytes);
-    expect((await module.read(scope, "families"))!.revision).toBe(0);
+    expect((await module.read(scope, "families"))!.revision).toBe(oldFamilies.revision + 1);
     // Readable Work has nothing to set aside.
     expect(await module.startFresh(scope, "families", actor)).toMatchObject({ ok: false });
 
     // Unreadable again: the second aside takes the next slot, the first keeps its bytes.
-    const second = JSON.stringify({ ...oldFamilies, revision: 8 });
+    const second = JSON.stringify({ ...oldFamilies, schemaVersion: 1, revision: 8 });
     state.set(key("families"), JSON.parse(second));
     expect(await module.startFresh(scope, "families", actor)).toMatchObject({ ok: true });
     expect(JSON.stringify(state.get(key(`families${START_FRESH_ASIDE}1`)))).toBe(bytes);
@@ -210,7 +216,11 @@ test.each(["human", "pea"] as const)(
     const key = (route: string) => `${workKey(scope)}\0${route}`;
     const state = new Map<string, unknown>();
     const module = new RouteWorkspace({
-      registrations: [{ spec: familiesRouteState as unknown as RouteStateSpec<z.ZodType> }],
+      registrations: [
+        {
+          spec: { ...familiesRouteState, schemaVersion: 2 } as unknown as RouteStateSpec<z.ZodType>,
+        },
+      ],
       store: {
         getState: async ({ targetKey, route }) =>
           structuredClone(state.get(`${targetKey}\0${route}`)),
@@ -221,6 +231,7 @@ test.each(["human", "pea"] as const)(
     expect(await module.salvage(scope, "families")).toBeNull();
     const bytes = JSON.stringify({
       ...oldFamilies,
+      schemaVersion: 1,
       doc: { ...oldFamilies.doc, excludedIds: [3102, 7] },
     });
     state.set(key("families"), JSON.parse(bytes));
@@ -236,6 +247,7 @@ test.each(["human", "pea"] as const)(
     // The id-keyed record Mission 11 wrote is old Work too; the newest aside answers.
     state.set(key("families"), {
       version: 1,
+      schemaVersion: 1,
       revision: 2,
       doc: { excluded: { "41": { by: "person" } } },
     });

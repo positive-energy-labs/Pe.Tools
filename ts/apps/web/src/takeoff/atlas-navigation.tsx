@@ -11,7 +11,7 @@ import { ZoneStateBar } from "#/takeoff/zone-state-bar";
 import { ZoneThumb } from "#/takeoff/zone-plan";
 import { useAtlasWorkspace } from "#/takeoff/atlas-context";
 import { ScopeKeys } from "@pe/kit/keys";
-import { levelsOf } from "#/takeoff/plan-image";
+import { levelsOf } from "#/takeoff/plan";
 import type { ModelZone } from "#/takeoff/world";
 
 /**

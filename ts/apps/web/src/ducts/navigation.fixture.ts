@@ -1,4 +1,4 @@
-/** Explicit synthetic network for /ducts?demo=navigation; production pricing builds every view. */
+/** Explicit synthetic network for /ducts?fixture=navigation; production pricing builds every view. */
 import type { DuctClaim } from "@pe/agent-contracts";
 import type { Grids } from "@pe/ducts-domain/loss-grid";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
@@ -120,13 +120,14 @@ function network(base: number, names: string[], x: number, label: string) {
     });
   }
   // The extra open port is a deliberate shared finding, not a fabricated inbox row.
-  nodes[1]!.connectors.push(connector(nodes[1]!.connectors.length, point, null));
+  const open = nodes[1]!.connectors.length;
+  nodes[1]!.connectors.push(connector(open, point, null));
   const issue: DuctSnapshot["issues"][number] = {
-    id: `open-end:${base + 2}`,
+    id: `open-end:${base + 2}:${open}`,
     kind: "open-end",
     elementId: base + 2,
+    connector: open,
     point,
-    groupId: group,
     note: `${label} shared plenum has an open fixture test port.`,
   };
   return {

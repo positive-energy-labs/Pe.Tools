@@ -7,6 +7,9 @@ const authoredSources = /* AUTHORED SOURCES */ {};
 export const version = SCHEMA_VERSION;
 export const initial = initialCircuitState;
 export const reducer = circuitReduce;
+export const fixtures = {
+  calculator: { title: "Manual voltage drop calculator", state: initialCircuitState },
+};
 export const fields = {
   reading: 'Circuit reading', selectedId: 'Selected circuit', overrides: 'Calculation overrides',
   inputs: 'Manual inputs', target: 'Design target', tab: 'Artifact view', theme: 'Theme',

@@ -4,14 +4,8 @@ import { cellFromDraft, StateCell } from "@pe/kit/lang/cell";
 import { SectionLabel } from "#/families/readout-primitives";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
 
-const PLACEMENT_LABELS = {
-  AllLoaded: "all loaded",
-  PlacedOnly: "placed only",
-  UnplacedOnly: "unplaced only",
-} as const;
-
-export const filterWords = (scope: AppliedFilter) =>
-  `${scope.categoryNames.join(", ") || "every category"} · ${scope.familyNames.join(", ") || "every family"} · ${PLACEMENT_LABELS[scope.placementScope as keyof typeof PLACEMENT_LABELS]}`;
+import { filterWords } from "./filters";
+export { filterWords };
 
 export const standingFilterProposal = (scope: FamiliesRouteDocument["scope"]) =>
   scope.suggestion && !sameValue(scope.suggestion, scope.edit) ? scope.suggestion.value : null;
@@ -19,7 +13,7 @@ export const standingFilterProposal = (scope: FamiliesRouteDocument["scope"]) =>
 /** Pea's Work suggestion stays visible while the person's next read is prepared in the target. */
 export function FamiliesScopeProposal() {
   const { store, wire, workUnreadable } = useFamiliesWorkspace();
-  const scope = store.handle.work.doc?.scope;
+  const scope = store.work?.doc.scope;
   const proposed = scope && !workUnreadable ? standingFilterProposal(scope) : null;
   const value = proposed ?? (!workUnreadable ? scope?.edit?.value : null);
   if (!scope || !value) return null;

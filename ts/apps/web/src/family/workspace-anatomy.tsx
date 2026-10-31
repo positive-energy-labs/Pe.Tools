@@ -1,5 +1,3 @@
-import { Pane } from "@pe/kit/lang/pane";
-import { Button } from "@pe/kit/lang/button";
 import { AnatomyDrawing } from "#/family/anatomy";
 import { useFamilyWorkspace } from "#/family/workspace-context";
 
@@ -12,64 +10,24 @@ export function FamilyWorkspaceAnatomy() {
     setFocus,
     focusedParts,
     focusedParams,
-    anatomyCollapsed,
-    setAnatomyCollapsed,
     inspect,
     setInspect,
     fields,
     transitionsAt,
   } = useFamilyWorkspace();
   return (
-    <Pane
-      scroll="clip"
-      flush
-      title="anatomy"
-      meta={anatomyCollapsed ? "collapsed" : stageType}
-      help={
-        anatomyCollapsed
-          ? "The drawing is collapsed. Its header strip stays, so the drawing is one click away and nothing about the page's shape changes."
-          : `Drawn from the ${stageType} type's own numbers in the profile — a reading of the document, not a render of Revit. Planes move with labeled and locked dimensions; the rest sit at their captured seeds. Formula labels, nested geometry and non-orthogonal forms require Revit.`
-      }
-      actions={
-        <Button
-          label={anatomyCollapsed ? "show" : "hide"}
-          reason={
-            anatomyCollapsed
-              ? "Show the drawing again. It is drawn from the profile's own numbers for the type on stage — it is a reading of the document, not a render of Revit."
-              : "Collapse the drawing. Its header strip stays, so nothing about the page's shape changes except the height."
-          }
-          kind="framed"
-          onClick={() => setAnatomyCollapsed((current) => !current)}
-        >
-          {anatomyCollapsed ? "show" : "hide"}
-        </Button>
-      }
-    >
-      <AnatomyDrawing
-        world={world}
-        draft={draft}
-        typeName={stageType}
-        model={lane.drawingModel}
-        focusedParts={focusedParts}
-        focusedParams={focusedParams}
-        onFocus={setFocus}
-        onInspect={(slug) => setInspect({ kind: "part", slug })}
-        inspecting={inspect?.kind === "part" ? inspect.slug : null}
-        fields={fields}
-        transitionsAt={transitionsAt}
-      />
-    </Pane>
+    <AnatomyDrawing
+      world={world}
+      draft={draft}
+      typeName={stageType}
+      model={lane.drawingModel}
+      focusedParts={focusedParts}
+      focusedParams={focusedParams}
+      onFocus={setFocus}
+      onInspect={(slug) => setInspect({ kind: "part", slug })}
+      inspecting={inspect?.kind === "part" ? inspect.slug : null}
+      fields={fields}
+      transitionsAt={transitionsAt}
+    />
   );
-
-  // ── the table pane, in whichever mode ─────────────────────────────────────────────────────────
-
-  /**
-   * Ghost rows are ORDINARY to the focus and rail laws and marked to the eye, and both halves of
-   * that matter. The hairline opens the section; the muted band says "everything below here is a
-   * number nothing can reach".
-   *
-   * That claim survives SORTING: both sortable columns carry a pin rank in front of their key
-   * (see pinnedSort), so the partition holds in both directions and the hairline always means the
-   * same thing.
-   */
 }

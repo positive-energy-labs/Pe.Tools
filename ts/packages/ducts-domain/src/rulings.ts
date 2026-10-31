@@ -18,9 +18,22 @@ import {
 } from "@pe/agent-contracts";
 
 import type { DuctSnapshot } from "./types.ts";
+import type { RosterRuling } from "./roster.ts";
 
 type Store = DuctSnapshot["store"];
 export type RulingSegment = "assumptions" | "roles";
+export type StoreRulingSegment = RulingSegment | "roster";
+
+/** Store shape only; the C# writer does not persist roster rulings yet. Keys are unitId:portIndex. */
+export type RosterStore = { roster: Record<string, RosterRuling> };
+export type StoreRulingDelta =
+  | RulingDelta
+  | {
+      segment: "roster";
+      key: string;
+      from: RosterRuling | null;
+      to: RosterRuling | null;
+    };
 
 /** One change a write makes to the store's rulings; null is no ruling (an unruled end, a proposed role). */
 export interface RulingDelta {

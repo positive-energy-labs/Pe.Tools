@@ -1,9 +1,10 @@
 import { mention, elementKey, useMention, type Ref } from "./attention";
 import { reachProps } from "./reach";
 import { useState, type CSSProperties, type ReactNode } from "react";
-import { ChevronRight, Flame } from "lucide-react";
+import { ChevronRight, Ellipsis, Flame } from "lucide-react";
 
 import { tv } from "../../lib/tv";
+import { ButtonIcon } from "./button";
 import { TooltipHint } from "./tooltip";
 import { rowRevit, useRevitTarget, type RevitElementReference } from "./revit-target";
 import type { StateCellProps } from "./cell-state";
@@ -256,8 +257,14 @@ function ListRow({
               <span className={slots.meta()}>
                 {fact}
                 {props.actions != null ? (
-                  <span className={slots.actions()} onClick={(event) => event.stopPropagation()}>
-                    {props.actions}
+                  <span
+                    className={slots.actions()}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => event.stopPropagation()}
+                    onKeyUp={(event) => event.stopPropagation()}
+                  >
+                    <ButtonIcon value={Ellipsis}>{props.actions}</ButtonIcon>
                   </span>
                 ) : null}
               </span>

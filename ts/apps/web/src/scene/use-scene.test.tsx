@@ -59,7 +59,7 @@ it("forwards capture completeness with the decoded meshes and clears it for an i
       },
     },
   });
-  const request = sceneRequest([71], false);
+  const request = sceneRequest([71], false, 15, "link-boxes");
   const view = renderHook(
     ({ active }) => useScene(active ? request : null, { session: "test", openId: "doc" }, 0),
     { initialProps: { active: true } },

@@ -8,14 +8,14 @@
 import { routeAddress, type RouteKey, type RoutePage } from "@pe/agent-contracts";
 import type { SearchSchemaInput } from "@tanstack/react-router";
 import type { z } from "zod";
-import type { PageMove } from "./manifest";
+import type { PageMove } from "#/shell/page";
 import {
   appAtomRegistry,
   createRouteOwner,
   routeSearch,
   useOwned,
   useRouteOwner,
-} from "./route-owner";
+} from "#/shell/owner";
 import { routeUrlPage, useInitialUrlPage, useUrlPage } from "./url";
 import { createViewOwner } from "./view-owner";
 

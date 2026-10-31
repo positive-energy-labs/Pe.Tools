@@ -15,9 +15,8 @@ import {
 } from "@pe/agent-contracts";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import { readingAtom, peReadings, inventoryOf, previousOf, targetInventory } from "#/readings";
-import { type RouteManifest } from "./manifest";
 import { soleUserDocument } from "#/chat/scope";
-import { useOwned } from "./route-owner";
+import { useOwned } from "#/shell/owner";
 
 export interface BindingLost {
   readonly ref: { readonly session: string; readonly openId: string };
@@ -83,7 +82,7 @@ export type TargetProvenance =
  * existing freshness/admission. The selected conversation never defaults it.
  */
 export function useRouteTarget(
-  manifest: Pick<RouteManifest<any, any, any, any>, "needs">,
+  manifest: { readonly needs?: "session" | "document" | "project" | "family" },
   registry: AtomRegistry.AtomRegistry,
   seed: { target?: ExecutionTarget } | undefined,
   target: string | null,

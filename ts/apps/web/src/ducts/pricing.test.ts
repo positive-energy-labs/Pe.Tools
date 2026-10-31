@@ -9,46 +9,27 @@ import { systemList } from "./system-list";
 import { inferJoints } from "@pe/ducts-domain/proximity";
 import { withStoredRulings } from "@pe/ducts-domain/rulings";
 import { SCENE_FIXTURE } from "./scene.fixture";
-import { pricingClient, type PricingPort } from "./pricing-client";
-import {
-  pricingJob,
-  type PricingInput,
-  type PricingRequest,
-  type PricingResponse,
-} from "./pricing-job";
+import { pricingJob, type PricingInput } from "./pricing-job";
 import { applyPricingDelta, pricingDelta } from "./pricing-delta";
+import { EMPTY_SNAPSHOT } from "./sheet/scoped-snapshot";
+import { noTerminalSnapshot } from "./no-terminal.fixture";
 
-const input = (revision = 1): PricingInput => ({
+const input = (): PricingInput => ({
   snapshot: SCENE_FIXTURE.snapshot,
   grids: {},
   catalogs: EMPTY_CATALOGS,
   doc: ductsRouteState.schema.parse({}),
-  revision,
-  epoch: 0,
-  documentKey: "s/d",
 });
-function port() {
-  const requests: PricingRequest[] = [];
-  let terminated = false;
-  const worker: PricingPort = {
-    postMessage: (request) => {
-      requests.push(structuredClone(request));
-    },
-    terminate: () => {
-      terminated = true;
-    },
-    onmessage: null,
-    onerror: null,
-  };
-  return {
-    worker,
-    requests,
-    stopped: () => terminated,
-    respond: (response: PricingResponse) =>
-      worker.onmessage!({ data: response } as MessageEvent<PricingResponse>),
-  };
-}
-
+test("a fan with no terminal fails pricing with its system and open outlet, rather than waiting", () => {
+  const response = pricingJob()({
+    id: 1,
+    doc: null,
+    base: { snapshot: noTerminalSnapshot(), grids: {}, catalogs: EMPTY_CATALOGS },
+  });
+  expect("error" in response && response.error).toBe(
+    "EX 1 has no terminal: its air leaves at open end 11620957; nothing to price",
+  );
+});
 test("worker result has full solve/readiness parity through structured clone, including nested Maps", () => {
   const original = input();
   const run = pricingJob();
@@ -146,79 +127,15 @@ test("unit-flow edits reuse topology; edit verdicts invalidate it", () => {
   expect(healPlan(snapshot, ruled)).not.toBe(heal);
 });
 
-test("obsolete deltas advance the private base without publishing stale Work", () => {
-  const fake = port();
-  const published: PricingResponse[] = [];
-  const client = pricingClient(fake.worker, (_input, response) => published.push(response));
-  const first = input();
-  client.update(first);
-  client.update({ ...first, revision: 2 });
-  fake.respond({ id: 1, delta: { kind: "replace", value: { stable: 7, value: 1 } } });
-  expect(published).toEqual([]);
-  fake.respond({
-    id: 2,
-    delta: { kind: "object", edits: [["value", { kind: "replace", value: 2 }]], removed: [] },
-  });
-  expect(published).toEqual([{ id: 2, result: { stable: 7, value: 2 } }]);
-  client.stop();
-});
-
-test("rapid Work edits coalesce; obsolete and out-of-order responses never publish; base is reused", () => {
-  const fake = port();
-  const published: number[] = [];
-  const client = pricingClient(fake.worker, (input) => published.push(input.revision!));
-  const first = input();
-  client.update(first);
-  client.update({ ...first, revision: 2 });
-  client.update({ ...first, revision: 3 });
-  expect(fake.requests).toHaveLength(1);
-  fake.respond({ id: 99, error: "wrong id" });
-  expect(fake.requests).toHaveLength(1);
-  fake.respond({ id: 1, error: "obsolete" });
-  expect(published).toEqual([]);
-  expect(fake.requests).toHaveLength(2);
-  expect(fake.requests[1]).not.toHaveProperty("base");
-  fake.respond({ id: 1, error: "duplicate" });
-  fake.respond({ id: 2, error: "current" });
-  expect(published).toEqual([3]);
-  client.stop();
-  expect(fake.stopped()).toBe(true);
-  fake.respond({ id: 2, error: "after stop" });
-  expect(published).toEqual([3]);
-});
-
-test("document/snapshot/catalog changes resend the base and fence a running old result", () => {
-  const fake = port();
-  const published: PricingInput[] = [];
-  const client = pricingClient(fake.worker, (input) => published.push(input));
-  const first = input();
-  client.update(first);
-  client.update(null);
-  fake.respond({ id: 1, error: "no longer displayed" });
-  expect(published).toEqual([]);
-  const next = {
-    ...first,
-    snapshot: structuredClone(first.snapshot),
-    catalogs: {},
-    documentKey: "s/other",
-  };
-  client.update(next);
-  expect(fake.requests[1]).toHaveProperty("base");
-  fake.respond({ id: 2, error: "current" });
-  expect(published).toEqual([next]);
-  client.stop();
-});
-
-test("worker errors are explicit and terminate the failed worker", () => {
-  const fake = port();
-  const errors: PricingResponse[] = [];
-  const client = pricingClient(fake.worker, (_input, response) => errors.push(response));
-  client.update(input());
-  fake.worker.onerror!({ message: "worker failed" } as ErrorEvent);
-  expect(errors).toEqual([{ id: 1, error: "worker failed" }]);
-  expect(fake.stopped()).toBe(true);
-  expect(pricingJob()({ id: 1, doc: null })).toEqual({
-    id: 1,
-    error: "Pricing has no snapshot or tables",
-  });
+test("a just-started-fresh Work (the schema's empty parse), no Work, and an empty snapshot all price", () => {
+  const fresh = ductsRouteState.schema.parse({});
+  for (const snapshot of [SCENE_FIXTURE.snapshot, EMPTY_SNAPSHOT])
+    for (const doc of [fresh, null]) {
+      const response = pricingJob()({
+        id: 1,
+        doc,
+        base: { snapshot, grids: {}, catalogs: EMPTY_CATALOGS },
+      });
+      expect(response).not.toHaveProperty("error");
+    }
 });

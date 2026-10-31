@@ -77,6 +77,13 @@ export const healTarget = (
     )
     .map((g) => g.group);
   if (!groups.length) throw Error(`Nothing in ${where} heals in Revit`);
+  if (selected.startsWith("heal:")) {
+    const group = selected.slice("heal:".length);
+    if (groups.includes(group)) return group;
+    throw Error(
+      "The selected Heal row is no longer available in this system; choose its network again",
+    );
+  }
   if (groups.length === 1) return groups[0]!;
   const id = selectedId(selected);
   const holder = [...snapshot.nodes, ...snapshot.segments].find((e) => e.id === id)?.groupId;

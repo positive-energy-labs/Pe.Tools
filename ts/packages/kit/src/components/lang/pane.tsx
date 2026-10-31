@@ -122,7 +122,8 @@ function PaneGestureLegend({
 // `useScopeKeys` binds while focus is inside it. Empty chrome draws no header.
 export const paneRecipe = tv({
   slots: {
-    root: "relative flex size-full min-h-0 min-w-0 flex-col overflow-visible",
+    // Pane overflow belongs to its body; an ancestor scrollbar would steal a sibling's floor.
+    root: "relative flex size-full min-h-0 min-w-0 flex-col overflow-clip",
     // A column, so a call site docks a region under a scroller without a second scroller.
     body: "relative flex min-h-0 min-w-0 flex-1 flex-col",
     // The padded field inside the scroller, so the scrollbar strip runs the body's full height.

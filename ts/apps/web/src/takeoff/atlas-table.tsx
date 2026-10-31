@@ -7,10 +7,10 @@ import { Button } from "@pe/kit/lang/button";
 import { Table } from "@pe/kit/table/table";
 import { TableFrame } from "#/components/master-table/table-frame";
 import { fmtNum } from "@pe/kit/table/model";
-import { Pane, PaneSplit } from "@pe/kit/lang/pane";
+import { Pane } from "@pe/kit/lang/pane";
 import { RoomPanelFromStore } from "#/takeoff/room-panel";
 import { listOf } from "@pe/kit/lang/collection";
-import type { AtlasRow as Row } from "#/takeoff/controller";
+import type { AtlasRow as Row } from "#/takeoff/projections";
 import { useAtlasWorkspace } from "#/takeoff/atlas-context";
 import { ScopeKeys } from "@pe/kit/keys";
 
@@ -19,8 +19,6 @@ export function AtlasTable() {
   const {
     store,
     world,
-    live,
-    actions,
     cursor,
     fieldsMode,
     setFieldsMode,
@@ -30,13 +28,10 @@ export function AtlasTable() {
     setTableState,
     selectTableRow,
     visibleRows,
-    cursorRow,
-    decide,
     columns,
     chips,
     scopeCalls,
     scopeSqft,
-    proposedUrl,
     reviewShortcuts,
   } = useAtlasWorkspace();
   const rowKey = (row: Row) => row.room.guid;
@@ -53,112 +48,101 @@ export function AtlasTable() {
       <Pane id="rooms" flush scroll="clip">
         <ScopeKeys keys={reviewShortcuts} />
 
-        <PaneSplit
-          axis="horizontal"
-          resize={{
-            target: "end",
-            defaultSize: 288,
-            minSize: 240,
-            maxSize: 520,
-            minOtherSize: 360,
-            persist: "pe.takeoffs.room-panel-width",
-          }}
-          start={
-            <TableFrame
-              label="rooms in scope"
-              rows={rows}
-              columns={columns}
-              rowKey={rowKey}
-              state={tableState}
-              onStateChange={setTableState}
-              summary={
-                <>
-                  <span className="text-ink">
-                    {visibleRows.length} rooms · {fmtNum(scopeSqft, 0)} sf
-                  </span>
-                  {scopeCalls > 0 && (
-                    <FactChip
-                      tone="alarm"
-                      title={`${scopeCalls} room${scopeCalls === 1 ? "" : "s"} in the visible table need a human verdict`}
-                    >
-                      {scopeCalls} open call{scopeCalls === 1 ? "" : "s"}
-                    </FactChip>
-                  )}
-                </>
-              }
-              search
-              chips={chips}
-              modes={
-                <Button
-                  kind="framed"
-                  label={`fields · ${fieldsMode}`}
-                  onClick={() => setFieldsMode(fieldsMode === "panel" ? "columns" : "panel")}
-                  reason={
-                    fieldsMode === "panel"
-                      ? "Manual J fields are edited in the room panel for the cursor row; the table stays narrow. Click to move them back into the table as columns."
-                      : "Manual J fields are table columns. Click to edit them in the room panel instead and narrow the table."
-                  }
+        <TableFrame
+          label="rooms in scope"
+          rows={rows}
+          columns={columns}
+          rowKey={rowKey}
+          state={tableState}
+          onStateChange={setTableState}
+          summary={
+            <>
+              <span className="text-ink">
+                {visibleRows.length} rooms · {fmtNum(scopeSqft, 0)} sf
+              </span>
+              {scopeCalls > 0 && (
+                <FactChip
+                  tone="alarm"
+                  title={`${scopeCalls} room${scopeCalls === 1 ? "" : "s"} in the visible table need a human verdict`}
                 >
-                  fields · {fieldsMode}
-                </Button>
+                  {scopeCalls} open call{scopeCalls === 1 ? "" : "s"}
+                </FactChip>
+              )}
+            </>
+          }
+          search
+          chips={chips}
+          modes={
+            <Button
+              kind="framed"
+              label={`fields · ${fieldsMode}`}
+              onClick={() => setFieldsMode(fieldsMode === "panel" ? "columns" : "panel")}
+              reason={
+                fieldsMode === "panel"
+                  ? "Manual J fields are edited in the room panel for the cursor row; the table stays narrow. Click to move them back into the table as columns."
+                  : "Manual J fields are table columns. Click to edit them in the room panel instead and narrow the table."
               }
             >
-              <Table
-                {...listOf(
-                  store.source === "saved" && store.displayedCapture
-                    ? { state: "ready", observation: store.displayedCapture.snapshot }
-                    : store.snapshot,
-                  () => rows,
-                )}
-                columns={columns}
-                rowKey={rowKey}
-                label="rooms in scope"
-                state={tableState}
-                onStateChange={setTableState}
-                activeKey={cursor}
-                visibleKeys={visibleKeys}
-                onRowClick={selectTableRow}
-                subject={(row) => ({ doc, key: regionKey(row.room.guid) })}
-                // A call blocks sync and export until a person decides (I2): the kit burn.
-                gutter={gutter}
-                empty={
-                  rows.length > 0 ? (
-                    <EmptyState story="filter" exit="clear a query chip">
-                      the narrowing hid all {rows.length} rooms in scope
-                    </EmptyState>
-                  ) : world.zones.some((z) => z.rooms.length > 0) ? (
-                    <EmptyState story="filter" exit="press Esc to clear the plan scope">
-                      no rooms in this scope — the plan selection narrowed past every partitioned
-                      zone
-                    </EmptyState>
-                  ) : (
-                    <EmptyState
-                      story="scope"
-                      exit="adopt a zoning region, then partition it — rooms are materialized by partition"
-                    >
-                      no rooms anywhere yet — zones before partitioned have no rooms
-                    </EmptyState>
-                  )
-                }
-              />
-            </TableFrame>
+              fields · {fieldsMode}
+            </Button>
           }
-          end={
-            cursorRow && (
-              <RoomPanelFromStore
-                store={store}
-                row={cursorRow}
-                live={live}
-                fieldsMode={fieldsMode}
-                shortcuts={reviewShortcuts}
-                onDecide={decide}
-                onPatch={(patch) => actions.patch(cursorRow.room.guid, patch)}
-                url={proposedUrl}
-              />
-            )
-          }
-        />
+        >
+          <Table
+            {...listOf(
+              store.source === "saved" && store.displayedCapture
+                ? { state: "ready", observation: store.displayedCapture.snapshot }
+                : store.snapshot,
+              () => rows,
+            )}
+            columns={columns}
+            rowKey={rowKey}
+            label="rooms in scope"
+            state={tableState}
+            onStateChange={setTableState}
+            activeKey={cursor}
+            visibleKeys={visibleKeys}
+            onRowClick={selectTableRow}
+            subject={(row) => ({ doc, key: regionKey(row.room.guid) })}
+            // A call blocks sync and export until a person decides (I2): the kit burn.
+            gutter={gutter}
+            empty={
+              rows.length > 0 ? (
+                <EmptyState story="filter" exit="clear a query chip">
+                  the narrowing hid all {rows.length} rooms in scope
+                </EmptyState>
+              ) : world.zones.some((z) => z.rooms.length > 0) ? (
+                <EmptyState story="filter" exit="press Esc to clear the plan scope">
+                  no rooms in this scope — the plan selection narrowed past every partitioned zone
+                </EmptyState>
+              ) : (
+                <EmptyState
+                  story="scope"
+                  exit="adopt a zoning region, then partition it — rooms are materialized by partition"
+                >
+                  no rooms anywhere yet — zones before partitioned have no rooms
+                </EmptyState>
+              )
+            }
+          />
+        </TableFrame>
       </Pane>
     </Suspense>
   );
+}
+
+export function AtlasRoomPanel() {
+  const { store, cursorRow, live, fieldsMode, reviewShortcuts, decide, actions, proposedUrl } =
+    useAtlasWorkspace();
+  return cursorRow ? (
+    <RoomPanelFromStore
+      store={store}
+      row={cursorRow}
+      live={live}
+      fieldsMode={fieldsMode}
+      shortcuts={reviewShortcuts}
+      onDecide={decide}
+      onPatch={(patch) => actions.patch(cursorRow.room.guid, patch)}
+      url={proposedUrl}
+    />
+  ) : null;
 }

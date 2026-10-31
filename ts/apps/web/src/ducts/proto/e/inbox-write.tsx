@@ -1,9 +1,8 @@
-import { PreviewAction } from "@pe/kit/lang/preview-action";
 import type { ReactNode } from "react";
 import type { ListRowParts } from "@pe/kit/lang/list-view";
 import type { ListSearchable } from "@pe/kit/lang/collection";
 import type { Ref } from "@pe/kit/lang/attention";
-import { compactStatus, STALE_WORDS, type InboxGroup, type PreviewState } from "../../inbox-rows";
+import { compactStatus, type InboxGroup } from "../../inbox-rows";
 
 export type RulingRow = Omit<ListRowParts, "actions" | "subject"> & {
   key: string;
@@ -17,23 +16,14 @@ export type RulingRow = Omit<ListRowParts, "actions" | "subject"> & {
   detail?: () => ReactNode;
   lit?: boolean;
 };
-import type { ActionHandle } from "#/route/handle";
 import type { WriteRow } from "../../inbox-rows";
-import { PreviewLines } from "./preview-lines";
 import { SubjectText } from "@pe/kit/lang/subject-text";
 
-/** The Write group's verbs: the route's own preview and apply, as the handle refuses or arms them. */
+/** The Write row uses the same kernel placement and ticket as the Situation. */
 export interface WriteVerbs {
-  preview: ActionHandle;
-  apply: ActionHandle;
-  busy: boolean;
+  control: ReactNode;
   row: WriteRow;
-  /** The preview that still describes this Work and snapshot, every change it plans one line; null with none. */
-  held: PreviewState | null;
-  /** A preview was run and the Work or snapshot has moved since. */
-  stale: boolean;
 }
-
 export function inboxWriteRows(write: WriteVerbs) {
   const writeSpec: RulingRow = {
     key: "write",
@@ -44,49 +34,18 @@ export function inboxWriteRows(write: WriteVerbs) {
     label: write.row.title,
     title: write.row.title,
     meta: (
-      // One line: the status, then the verb at the text's height (never the row's full 24 px).
-      <span
-        className="inline-flex max-w-full min-w-0 items-center gap-1.5 whitespace-nowrap [&_.dl-button]:h-5! [&_.dl-button]:min-h-0!"
-        data-inbox-write=""
-      >
-        <span className="truncate">{compactStatus(write.row.status)}</span>
-        {/* The handle's own words, so the button reads as the Situation's does. */}
-        <PreviewAction
-          label={write.preview.label}
-          says="Ask Revit what the edit cells would write"
-          refusal={write.preview.refusal}
-          busy={write.busy}
-          held={write.held && { ...write.held, lines: <PreviewLines lines={write.held.lines} /> }}
-          stale={write.stale ? STALE_WORDS : null}
-          preview={() => write.preview.run()}
-          commit={{
-            label: write.apply.label,
-            says: "Write the edit cells to Revit",
-            refusal: write.apply.refusal,
-            run: () => write.apply.run(),
-            done: "written to Revit",
-          }}
-        />
+      <span className="inline-flex min-w-0 items-center gap-1.5" data-inbox-write="">
+        <span>{compactStatus(write.row.status)}</span>
+        {write.control}
       </span>
     ),
-    detail:
-      write.apply.refusal || write.row.held
-        ? () => (
-            <>
-              {write.apply.refusal ? (
-                <p data-inbox-write-says="">
-                  <SubjectText text={write.apply.refusal} />
-                </p>
-              ) : null}
-              {write.row.held ? (
-                <p data-inbox-write-held="">
-                  <SubjectText text={write.row.held} />
-                </p>
-              ) : null}
-            </>
-          )
-        : undefined,
+    detail: write.row.held
+      ? () => (
+          <p data-inbox-write-held="">
+            <SubjectText text={write.row.held!} />
+          </p>
+        )
+      : undefined,
   };
-
   return { writeSpec };
 }

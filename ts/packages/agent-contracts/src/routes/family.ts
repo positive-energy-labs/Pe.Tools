@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { field, text, type RouteDeclaration } from "../route-field.ts";
 import { entityFields, tableFields } from "./entity.ts";
-import { demo } from "./shared.ts";
 
 export const familyAddress = {
   path: "/family",
@@ -27,7 +26,6 @@ export const familyAddress = {
     ),
     /** The doc pane reads as text or as a sheet. */
     doc: field(z.enum(["text", "sheet"]).default("text"), { url: "replace", agent: "set" }),
-    demo,
   },
   agent: {
     finds: ["parameters", "types", "inspector", "overlay"],

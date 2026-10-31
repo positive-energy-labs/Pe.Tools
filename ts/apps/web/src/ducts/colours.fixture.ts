@@ -1,4 +1,4 @@
-/** Explicit no-Revit mesh fixture for /ducts?demo=colours. Geometry and names are synthetic. */
+/** Explicit no-Revit mesh fixture for /ducts?fixture=colours. Geometry and names are synthetic. */
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { SceneMeshes, type SceneInstance } from "#/scene/types";
 import { NAVIGATION_FIXTURE } from "./navigation.fixture";

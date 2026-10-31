@@ -51,7 +51,7 @@ it("resends a read refused by a full Revit queue with 1 s then 2 s backoff, then
     kind: "capture",
     document: { session: "queue-session", openId: "queue-doc" },
     revision: "queue-revision",
-    request: sceneRequest([101]),
+    request: sceneRequest([101], true, 15, "none"),
   });
   const unsubscribe = data.subscribe(() => {});
 

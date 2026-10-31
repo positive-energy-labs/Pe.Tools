@@ -9,8 +9,7 @@
  * and a non-passive unit its port meets directly becomes a root of that group. The unit prices as
  * a component (its stated drop, else nothing, `losses.ts`). Rules:
  * - The merged group's id is the lowest `g<id>` among the groups it merges (DuctNetwork's naming).
- * - Issues move to the merged group; one `multi-root` stands for it when it is fed by more than
- *   one root, and `no-root` goes once any root feeds it.
+ * - The merged group indexes its members' issues (issues are keyed by element, never by group).
  * - A passive unit's port that connects to nothing is a person's fix (`open-end`, blocking): the
  *   model is missing that connection, so the air has no path through to the fan on that side.
  * Revit is untouched: the model's groups stay as they are; this is the route's reading.
@@ -92,9 +91,7 @@ export function passThrough(snapshot: DuctSnapshot, passive: ReadonlySet<number>
     const r = find(g.id);
     members.set(r, [...(members.get(r) ?? []), g]);
   }
-  const issueKind = new Map(snapshot.issues.map((i) => [i.id, i]));
   const groups: Group[] = [];
-  const issues = snapshot.issues.map((i) => ({ ...i, groupId: find(i.groupId) }));
   const merged = new Map<string, string[]>();
   for (const [id, list] of members) {
     const inline = touched.filter((u) => groupOf.get(u) === id);
@@ -116,25 +113,6 @@ export function passThrough(snapshot: DuctSnapshot, passive: ReadonlySet<number>
     ]
       .filter((r) => !passing.has(r))
       .sort((a, b) => a - b);
-    const kept = list
-      .flatMap((g) => g.issueIds)
-      .filter((iid) => {
-        const kind = issueKind.get(iid)?.kind;
-        return kind !== "multi-root" && !(kind === "no-root" && rootIds.length);
-      });
-    const multi = `multi-root:${id}`;
-    if (rootIds.length > 1) {
-      kept.push(multi);
-      if (!issues.some((i) => i.id === multi))
-        issues.push({
-          id: multi,
-          kind: "multi-root",
-          elementId: null,
-          point: null,
-          groupId: id,
-          note: `${rootIds.length} roots once passive units pass air through`,
-        } as unknown as DuctSnapshot["issues"][number]);
-    }
     groups.push({
       ...list[0]!,
       id,
@@ -144,10 +122,9 @@ export function passThrough(snapshot: DuctSnapshot, passive: ReadonlySet<number>
       terminalCount: list.reduce((a, g) => a + g.terminalCount, 0),
       elementCount: list.reduce((a, g) => a + g.elementCount, 0) + inline.length,
       loops: list.reduce((a, g) => a + g.loops, 0),
-      issueIds: [...new Set(kept)],
+      issueIds: [...new Set(list.flatMap((g) => g.issueIds))],
     });
   }
-  const live = new Set(groups.flatMap((g) => g.issueIds));
   const out: DuctSnapshot = {
     ...snapshot,
     groups: groups.sort((a, b) => num(a.id) - num(b.id)),
@@ -160,11 +137,6 @@ export function passThrough(snapshot: DuctSnapshot, passive: ReadonlySet<number>
     ),
     segments: snapshot.segments.map((s) =>
       s.groupId && into(s.groupId) !== s.groupId ? { ...s, groupId: into(s.groupId)! } : s,
-    ),
-    issues: issues.filter(
-      (i, k, all) =>
-        all.findIndex((j) => j.id === i.id) === k &&
-        (live.has(i.id) || !["multi-root", "no-root"].includes(i.kind)),
     ),
   };
   for (const f of findings) {

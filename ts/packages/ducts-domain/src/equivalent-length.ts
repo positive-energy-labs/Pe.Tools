@@ -30,7 +30,9 @@ export function withEquivalentLength(rows: readonly Row[], designRate: number): 
   return rows.map((row, i) => {
     if (row.dp == null) return { ...row, eqFt: null };
     if (row.kind === "friction") return { ...row, eqFt: row.lengthFt ?? 0 };
-    return { ...row, eqFt: (row.dp / refRate(i)) * 100 };
+    // A pressure-gaining part (a converging branch with a negative coefficient) is 0 ft, never a
+    // negative length; its dp stays signed (see `kernel/price-leg.ts` `equivalentFeet`).
+    return { ...row, eqFt: Math.max(0, (row.dp / refRate(i)) * 100) };
   });
 }
 

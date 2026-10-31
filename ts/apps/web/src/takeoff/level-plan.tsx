@@ -14,7 +14,7 @@ import { damageMark } from "#/scene/damage";
 import { Legend, legendWord, type LegendRow } from "@pe/kit/lang/legend";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
-import { PLAN_REFUSAL, type PlanRefusal } from "#/takeoff/plan-image";
+import { PLAN_REFUSAL, type PlanRefusal } from "#/takeoff/plan";
 import { token } from "@pe/kit/lib/token";
 import {
   contentViewport,
@@ -122,7 +122,10 @@ export function LevelPlan({
     thread?: string;
     visible: boolean;
     /** The takeoffs Page; its lease's one key is the viewport (`takeoffsAddress.agent`). */
-    page: readonly [TakeoffPage, (next: Partial<TakeoffPage>, move: { history: "push" }) => void];
+    page: readonly [
+      Partial<TakeoffPage>,
+      (next: Pick<Partial<TakeoffPage>, "viewport">, move: { history: "push" }) => void,
+    ];
     context: Record<string, unknown>;
   };
   viewport: PlaneViewport | null;
@@ -142,7 +145,7 @@ export function LevelPlan({
   /** Zones the table's query keeps; the rest dim. null = no query. */
   shown: ReadonlySet<string> | null;
   stateOf: (room: ModelRoom) => RoomState;
-  rows: readonly import("./controller").AtlasRow[];
+  rows: readonly import("./projections").AtlasRow[];
   onSelectZone: (z: ModelZone | null) => void;
   onCursor: (z: ModelZone, guid: string) => void;
 }) {

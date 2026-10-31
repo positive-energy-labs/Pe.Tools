@@ -1,19 +1,20 @@
 """Space proof harness: MAP "Proof gate" in one command, on the three local model copies.
 
     python tools/space-proof/run.py run   [--models chadds,cleremont,manuella] [--label L] [--baseline DIR]
-                                          [--context boxes|oriented|meshes] [--pin] [--cold-each] [--settle S] [--plan]
+                                          [--context link-boxes|triangle-boxes|oriented|meshes] [--pin] [--cold-each] [--settle S] [--plan]
     python tools/space-proof/run.py diff  <runDirA> <runDirB>        A = baseline, B = candidate
     python tools/space-proof/run.py check <artifact.bin> [frames.json]   offline decode + accuracy self-check
 
 One fresh SDK-controlled session (`probe-h`) per model, headless, one hold of `.artifacts/locks/revit-slot-1`.
 Per model: open the local copy, settle, read /ducts' `ducts.snapshot`, then per system the page's two scene calls
-(focus, then context, no retired `proximity` field - its default is false; `sceneRequestOf`, ts/apps/web/src/ducts/manifest.ts) cold, then once more warm. Cold is the first
+(focus, then context; `page_requests` names the route source) cold, then once more warm. Cold is the first
 read in the process for the model's first system; with --cold-each every system gets its own fresh process.
 Every read records private bytes (before, peak, after), Revit-side ms, the scene receipt, the artifact census, and
 IsModified; any modification aborts the run. After the reads, the PSC1 artifact of each system's cold context call is
 checked against each non-focus element's own frame, read in Revit through `pea script execute` (frames.cs.template).
 Results: .artifacts/accept/space-proof/<commit>-<utc>/results.json + results.md (+ diff.md against --baseline).
-Focus ids are pinned in fixture.json (derived from `ducts.snapshot` through `scopeOf`); drift against the live snapshot is reported.
+Focus ids are pinned in fixture.json (the raw snapshot's `scopeOf` members); drift against the live snapshot is reported. The page
+also sends connector stubs, so its focus is a superset (Chadds EX 7: 108 members + 45 stubs = 153); each pin records the page's count.
 """
 import argparse, datetime, hashlib, json, math, os, struct, subprocess, sys, threading, time
 from pathlib import Path
@@ -347,7 +348,10 @@ def load_artifact(art):
 
 
 def page_requests(ids, context):
-    """The two calls /ducts makes (scene-read.ts useDuctScene) for an opened system with the context layer on (manifest.ts sceneRequestOf)."""
+    """The two calls the /ducts model picture makes with its default `halo` layer on (main `df45210a`): scene/picture/picture.tsx
+    `captureRequest` (sorted ids, maxTriangles 3,000,000, radius = page `contextRadiusFt`, default 10 in agent-contracts
+    routes/picture.ts; scene/host.ts's 15 is never used by the picture), then scene/picture/read.ts `useCapture` (focus first with
+    padding 0 and `none`, context after focus arrives). The ids are the pinned members, not the page's members + stubs."""
     base = {"elementIds": ids, "maxTriangles": 3_000_000}
     return ({**base, "contextPaddingFt": 0, "focusOnly": True, "contextRepresentation": "none"},
             {**base, "contextPaddingFt": 10, "focusOnly": False, "contextRepresentation": context})
@@ -407,7 +411,8 @@ def run_model(name, args, out: Path, fixture, results):
             snapfile = ev / f"{s.n:03d}-snapshot.stdout"
             code2 = subprocess.run([str(Path.home() / ".vite-plus/bin/vp.exe"), "exec", "jiti", str(HERE / "scope-ids.ts"), str(snapfile), *group],
                                    cwd=CHECKOUT / "ts/apps/pea", capture_output=True, text=True, env=dict(os.environ, NO_COLOR="1"))
-            derived = json.loads(code2.stdout[code2.stdout.index("{"):])
+            scoped = json.loads(code2.stdout[code2.stdout.index("{"):])
+            derived, page_ids = scoped["members"], scoped["page"]
             for ps_path in args.pre_script:  # extra read-only native actions (e.g. a levels witness) before the first scene read
                 before = ps.memory_info().private
                 code, res, wall = s.pea(f"prescript-{Path(ps_path).stem}", ["script", "execute", "--file", str(Path(ps_path).resolve()), "--permission-mode", "NoTransaction", "--timeout-seconds", "3000", "--open-document-id", s.doc, "--json"])
@@ -429,7 +434,8 @@ def run_model(name, args, out: Path, fixture, results):
                     pinned = fixture[name][system]
                 use = pinned["ids"] if pinned else ids
                 model["pins"][system] = {"idCount": len(use), "idsSha": hashlib.sha256(json.dumps(use).encode()).hexdigest()[:16],
-                                         "source": "fixture" if pinned else "derived-unpinned", "drift": drift}
+                                         "source": "fixture" if pinned else "derived-unpinned", "drift": drift,
+                                         "pageFocusCount": len(page_ids[system] or [])}
                 focus_req, ctx_req = page_requests(use, args.context)
                 for temp in ("cold", "warm"):
                     for call, req in (("focus", focus_req), ("context", ctx_req)):
@@ -595,7 +601,7 @@ def main():
     r.add_argument("--models", default="chadds,cleremont,manuella")
     r.add_argument("--label", default="main")
     r.add_argument("--baseline")
-    r.add_argument("--context", default="boxes")
+    r.add_argument("--context", default="link-boxes")  # the product default; main before step 3 knew only boxes|meshes
     r.add_argument("--pin", action="store_true")
     r.add_argument("--cold-each", action="store_true")
     r.add_argument("--settle", type=int, default=120)

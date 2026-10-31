@@ -1,21 +1,17 @@
-import { nameOrFallback } from "@pe/kit/lang/subject-text";
 import { showFamilyCell, type FamiliesPatchCell, type PodDraftSource } from "@pe/agent-contracts";
 
 import { FactChip } from "@pe/kit/lang/chip";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
-import { Button } from "@pe/kit/lang/button";
 import { ReviewRow } from "#/components/work/band";
 import { ValueDiff } from "@pe/kit/lang/value-diff";
 import type { Column } from "@pe/kit/table/model";
 import { Table } from "@pe/kit/table/table";
 import { familyCellEntries } from "#/families/staged";
-import type { SalvagedExclusion } from "#/families/store";
-import { filterWords } from "#/families/scope-band";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
 import { cellFromDraft } from "@pe/kit/lang/cell";
 import { WorkLines, type WorkCell } from "#/components/work/lines";
-import { ARTIFACT } from "#/families/manifest";
+import { ARTIFACT } from "#/families/readout-primitives";
 import { Inspect } from "#/route/inspect";
 import { cn } from "@pe/kit/lib/utils";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
@@ -131,7 +127,7 @@ export function FamiliesReceipts() {
  */
 export function FamiliesProposalsBand() {
   const { cells, wire, plan, store, locator } = useFamiliesWorkspace();
-  const patch = store.handle.work.doc?.patch ?? ({} as FamiliesPatchCell);
+  const patch = store.work?.doc.patch ?? ({} as FamiliesPatchCell);
   const patchSource = (patch.edit ?? patch.suggestion)?.value;
   // A plan row with no resolved id (no `hashKey`) is a name the host refused, in its own words.
   const orphans = (plan?.entries ?? []).flatMap((entry) =>
@@ -204,80 +200,5 @@ export function FamiliesProposalsBand() {
         <OutcomeLine key={family} kind="refused" label={`orphaned ${family}`} says={flag} />
       ))}
     </>
-  );
-}
-
-/** One salvaged exclusion as the person reads it: its current name, or that it is gone. */
-const heldWord = (row: SalvagedExclusion) => row.name ?? `${nameOrFallback()} · no longer loaded`;
-
-/**
- * In the start-fresh confirm, read-only: what the Work being set aside held back, by the names the
- * catalog gives those families now. Nothing carries over from here.
- */
-export function SalvagedExclusions() {
-  const { store } = useFamiliesWorkspace();
-  const { data, error, pending } = store.salvaged;
-  if (pending) return <OutcomeLine kind="busy" label="reading what it held back" />;
-  if (error) return <OutcomeLine kind="error" label="old exclusions unread" says={error.message} />;
-  if (!data?.rows.length && !data?.scope)
-    return <span className="t-small text-ink-2">it held no families back</span>;
-  return (
-    <div className="flex flex-col gap-0.5 t-small" aria-label="held back in the old Work">
-      <span className="text-ink-2">held back in the old Work (read-only; set aside with it):</span>
-      {data.scope ? <span className="face-mono">scoped {filterWords(data.scope)}</span> : null}
-      {data.rows.map((row) => (
-        <span key={row.name ?? row.id} className="face-mono">
-          {heldWord(row)}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-/**
- * On the fresh page after start fresh: one line offers the old scope and exclusions back, until
- * pressed, dismissed, or the next plan. One press stages the scope and re-excludes as the person;
- * ids the catalog no longer resolves are said, never written.
- */
-export function FamiliesCarryOverLine() {
-  const { store } = useFamiliesWorkspace();
-  const salvaged = store.salvaged.data;
-  if (!store.page.carryOver || !salvaged || (!salvaged.rows.length && !salvaged.scope)) return null;
-  const { rows, scope } = salvaged;
-  const resolved = rows.filter((row) => row.name !== null).length;
-  const said = [
-    rows.length ? `held back ${rows.map(heldWord).join(", ")}` : null,
-    scope ? `scoped ${filterWords(scope)}` : null,
-  ];
-  return (
-    <div className="flex flex-wrap items-baseline gap-2 px-4 py-1 t-small" role="status">
-      <span>the old Work {said.filter(Boolean).join("; ")}</span>
-      {resolved || scope ? (
-        <Button
-          label="restore these"
-          reason={[
-            scope ? "Stage the old scope again" : null,
-            resolved
-              ? `hold ${resolved} famil${resolved === 1 ? "y" : "ies"} back from plan again, as yours`
-              : null,
-          ]
-            .filter(Boolean)
-            .join(", and ")
-            .concat(", in one write")}
-          kind="framed"
-          onClick={() => void store.actions.restore(salvaged)}
-        >
-          restore these
-        </Button>
-      ) : null}
-      <Button
-        label="dismiss"
-        reason="Keep the fresh Work as it is; the old one stays set aside"
-        kind="framed"
-        onClick={store.actions.dismissCarryOver}
-      >
-        dismiss
-      </Button>
-    </div>
   );
 }

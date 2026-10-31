@@ -174,9 +174,9 @@ test("right-click Select uses the same exact observation and never invokes a box
   const select = await view.findByRole("option", { name: "Select" });
   expect(select.querySelector("svg.lucide-crosshair")).not.toBeNull();
   expect(select.querySelector("kbd")).toBeNull();
-  const box = view.getByRole("option", { name: "Selection Box in Revit" });
+  const box = view.getByRole("option", { name: "Section Box" });
   expect(box.querySelector("kbd")?.textContent).toBe("BX");
-  expect(box.getAttribute("aria-description")).toBe("Selection Box in Revit");
+  expect(box.getAttribute("aria-description")).toBe("Section Box");
   fireEvent.click(select);
   await waitFor(() => expect(submit).toHaveBeenCalledTimes(1));
   expect(submit.mock.calls[0]?.[0]).toMatchObject({

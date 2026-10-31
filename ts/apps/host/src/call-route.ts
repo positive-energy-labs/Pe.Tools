@@ -196,6 +196,12 @@ export function makeCallRoute(
       const unknownKey = Object.keys(body).find((k) => k !== "key" && k !== "request");
       if (unknownKey) return yield* Effect.fail(invalidBody(unknownBodyKeyMessage(unknownKey)));
       const key = body.key;
+      const humanDoor = key === "rhvac.launch";
+      if (humanDoor && caller.kind !== "human")
+        return Response.jsonUnsafe(
+          { error: "Only a person can launch RHVAC", notDispatched: true },
+          { status: 403 },
+        );
       yield* Effect.try({ try: () => admitAnonymousCall(caller, key), catch: (error) => error });
       const request = "request" in body ? body.request : undefined;
       let scope = yield* Effect.try({
@@ -249,7 +255,7 @@ export function makeCallRoute(
             ? { session: resolvedSession.sessionId, openId: openDocumentId }
             : undefined;
         const intent = consentedRead(caller, key, request, ref) ? "Read" : definition.intent;
-        if (intent === "Mutate") {
+        if (intent === "Mutate" && !humanDoor) {
           return yield* Effect.fail(
             new BridgeError(
               "Submit the original exact admission to /actions; raw mutation dispatch is retired",
@@ -258,7 +264,7 @@ export function makeCallRoute(
             ),
           );
         }
-        if (intent !== "Read")
+        if (intent !== "Read" && !humanDoor)
           return yield* Effect.fail(
             new BridgeError("Unknown operation intent", 409, { notDispatched: true }),
           );

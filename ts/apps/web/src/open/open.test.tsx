@@ -5,7 +5,12 @@
  * icon-started Revit is reached by pid, hr shows only for a hot-reload shape, and Stop keeps
  * work unless the Revit is a checkout session.
  */
-import type { Machine, MachineAccess, MachineSession } from "@pe/agent-contracts";
+import {
+  actionReceiptSchema,
+  type Machine,
+  type MachineAccess,
+  type MachineSession,
+} from "@pe/agent-contracts";
 import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
 import {
   RouterProvider,
@@ -18,7 +23,7 @@ import { beforeEach, afterEach, describe, expect, test, vi } from "vite-plus/tes
 
 import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { PatchBay } from "./bay";
-import { runLifecycle } from "./lifecycle";
+import { lifecycleRequest } from "./lifecycle";
 import { EMPTY_DRAFT, launchPlan, modelRows, type DocRow } from "./model";
 import { OpenPage } from "./route";
 import {
@@ -33,7 +38,22 @@ import {
 
 vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({
   readActionStatuses: vi.fn(),
-  runSemanticAction: vi.fn(async () => ({ id: "action-1", state: "succeeded" })),
+  runSemanticAction: vi.fn(async (key, input) =>
+    actionReceiptSchema.parse({
+      id: "action-1",
+      key,
+      input,
+      state: "succeeded",
+      caller: { kind: "human", via: "local" },
+      target: { kind: "host" },
+      basis: null,
+      steps: [],
+      prepared: { state: "unprepared" },
+      recovery: [],
+      startedAt: "2026-10-30T00:00:00.000Z",
+      result: {},
+    }),
+  ),
 }));
 HTMLElement.prototype.scrollIntoView = vi.fn();
 beforeEach(() => {
@@ -84,11 +104,11 @@ test("the frozen Open route renders the bay and patches without opening a host t
   vi.stubGlobal("EventSource", Source);
   const fetch = vi.fn();
   vi.stubGlobal("fetch", fetch);
-  history.replaceState(null, "", "/open?demo=refresh");
+  history.replaceState(null, "", "/open?fixture=refresh");
   try {
     const router = createRouter({
       routeTree: createRootRoute({ component: OpenPage }),
-      history: createMemoryHistory({ initialEntries: ["/open?demo=refresh"] }),
+      history: createMemoryHistory({ initialEntries: ["/open?fixture=refresh"] }),
     });
     await router.load();
     render(<RouterProvider router={router} />);
@@ -187,7 +207,7 @@ describe("launch plan", () => {
         },
       },
     };
-    await expect(runLifecycle("stop", session, "keep")).rejects.toThrow("another checkout");
+    expect(() => lifecycleRequest("stop", session, "keep")).toThrow("another checkout");
     expect(runSemanticAction).not.toHaveBeenCalled();
   });
 
@@ -302,7 +322,7 @@ test("patching Clinic into your Revit 2025 by click names the upgrade and sends 
       upgrade: true,
       links: "refuse",
     },
-    undefined,
+    { kind: "host" },
     undefined,
   ]);
 });

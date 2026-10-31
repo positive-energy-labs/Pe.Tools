@@ -20,10 +20,6 @@ const PRIMITIVE = new Set([
   "components/master-table/master-table-header.tsx",
 ]);
 const DOMAIN: Record<string, string> = {
-  "param-tables/variants/variant-e/bod-lens.tsx":
-    "a printed-sheet exhibit: the sheet's layout is the point",
-  "param-tables/variants/variant-e/fom-lens.tsx":
-    "a printed-sheet exhibit with merged header cells",
   "design-system/action-demo-catalogue.tsx": "a specimen page's plain seed index",
   "workbench/prose.tsx": "GFM tables in prose; the markdown renderer owns them",
 };

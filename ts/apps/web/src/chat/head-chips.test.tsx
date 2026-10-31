@@ -12,7 +12,7 @@ vi.mock("#/navigation/state", () => ({ useDestination: () => vi.fn() }));
 const { useThreadScope } = await import("./scope");
 
 vi.mock("#/machine/use-machine", () => ({ useMachine: () => ({ reading: { state: "absent" } }) }));
-vi.mock("#/route/shell", () => ({ useChooseTarget: () => [null, vi.fn()] }));
+vi.mock("#/shell/binding", () => ({ useChooseTarget: () => [null, vi.fn()] }));
 
 afterEach(() => {
   cleanup();

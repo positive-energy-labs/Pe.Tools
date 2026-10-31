@@ -8,11 +8,18 @@ import {
 } from "@tanstack/react-router";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { routeAddress } from "@pe/agent-contracts";
-import { useRoute } from "#/route";
+import { useGraphRoute } from "#/shell/mount";
 import { LevelPlan } from "./level-plan";
-import { manifest } from "./manifest";
+import { takeoffGraph } from "./graph";
+import { takeoffAdapters } from "./graph-route";
 import { mockModel } from "./proto/mock";
 import { projectMockModel } from "./proto/project-model";
+
+// The gesture proof owns its router; unrelated app chrome is outside this Page/history claim.
+vi.mock("../routes/__root", async () => {
+  const { createRootRoute } = await import("@tanstack/react-router");
+  return { Route: createRootRoute() };
+});
 
 afterEach(() => {
   cleanup();
@@ -47,8 +54,9 @@ test("takeoffs plane gestures replace the address, minimap moves push, and Back 
   const level = model.lanes[0]!.label;
   const zones = model.zones.filter((zone) => zone.zone.lane.label === level);
   function Plan() {
-    const handle = useRoute(manifest, { target: null, url: true });
-    const [page, setPage] = handle.page;
+    const { owner } = useGraphRoute(takeoffGraph, takeoffAdapters);
+    const page = owner.view.read().page;
+    const setPage = owner.view.setPage;
     return (
       <LevelPlan
         readout={null}

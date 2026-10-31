@@ -48,12 +48,14 @@ import {
   readCell,
   readMeasuredText,
   type CellCommit,
+  type CellOption,
   type CellRefusal,
   type CellTransition,
   type CellTransitionKind,
   type StateCellProps,
 } from "./cell-state";
 import { TooltipHint } from "./tooltip";
+import { ListPopup } from "./list-popup";
 
 export {
   CELL_STATE_ORDER,
@@ -66,6 +68,8 @@ export {
 } from "./cell-state";
 export type {
   CellCommit,
+  CellOption,
+  CellPick,
   CellRefusal,
   CellTransition,
   CellTransitionKind,
@@ -204,6 +208,7 @@ export function StateCell(props: StateCellProps) {
     (props.onCommit != null || props.measured != null) &&
     read.body !== "locked" &&
     typeof value === "string";
+  const choosing = props.choice != null && read.body !== "locked";
   // Locate is a click on the cell BODY when not editing; an editable cell's input swallows its
   // own clicks (the caret owns them), so the handler can sit on the wrapper unconditionally.
   const locate =
@@ -324,7 +329,54 @@ export function StateCell(props: StateCellProps) {
           }
           data-locate={props.onLocate != null ? "" : undefined}
         >
-          {editable ? (
+          {choosing ? (
+            <ListPopup<CellOption>
+              anchor="trigger"
+              trigger={
+                read.unsettled != null ? (
+                  <span className={slots.unsettled()} data-state={read.unsettled}>
+                    {shown}
+                  </span>
+                ) : (
+                  shown
+                )
+              }
+              triggerLabel={typeof props.value === "string" ? props.value : undefined}
+              disabled={pending}
+              aria-label="options"
+              items={props.choice!.options}
+              keyOf={(o) => o.key}
+              labelOf={(o) => `${o.label} ${o.description ?? ""}`}
+              empty="No options"
+              select="single"
+              selected={props.choice!.current == null ? [] : [props.choice!.current]}
+              row={(o) => {
+                const sub = o.disabled ?? o.description;
+                return {
+                  label: o.label,
+                  ...(sub ? { sub, lines: 2 as const } : {}),
+                  ...(o.disabled ? { refusal: o.disabled } : {}),
+                };
+              }}
+              onPick={(o) => {
+                if (o.disabled) return;
+                // A standing suggestion is not the current value: picking the current key over it
+                // is a real choice (it keeps what stands), so only a clean or edit cell skips it.
+                if (o.key === props.choice!.current && props.stage !== "proposed") return;
+                const out = props.choice!.pick(o.key);
+                const settle = (refused: string | CellRefusal | null | void) =>
+                  setRefusal(
+                    refused == null
+                      ? null
+                      : typeof refused === "string"
+                        ? { message: refused }
+                        : refused,
+                  );
+                if (out instanceof Promise) void out.then(settle);
+                else settle(out);
+              }}
+            />
+          ) : editable ? (
             <input
               key={value as string}
               defaultValue={value as string}

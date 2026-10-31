@@ -208,6 +208,81 @@ test("resource stream publishes absent Work, an applied revision, and ends on ab
   await expect(reader.read()).rejects.toThrow("closed");
 });
 
+function acksStream(module: RouteWorkspace, signal?: AbortSignal) {
+  const url = `http://host/pe/resources?${new URLSearchParams({ keys: JSON.stringify([{ kind: "work-acks", work: documentA }]) })}`;
+  const reader = resourceResponse(
+    new Request(url, { signal }),
+    observeResources(module, { observe: () => () => {} }),
+  ).body!.getReader();
+  return reader;
+}
+
+test("accepted writes reach a stream subscriber with the host's stamps; a Pea write is a distinct author", async () => {
+  const module = workspace(memoryStore().store);
+  const abort = new AbortController();
+  const reader = acksStream(module, abort.signal);
+  const write = bind(module);
+  await write.apply("human", [{ path: ["values", "a"], value: "1" }], 0);
+  await write.apply("pea", [{ path: ["values", "a"], value: "2" }], 1);
+  const first = await readSse(reader);
+  const second = await readSse(reader);
+  expect(first).toMatchObject({
+    kind: "event",
+    value: {
+      by: "human",
+      base: 0,
+      revision: 1,
+      // The host's accepted delta, not the request: it reconciles to the parent it created.
+      patches: [{ path: ["values"], value: { a: "1" } }],
+      inverse: [{ path: ["values"] }],
+    },
+  });
+  expect(second).toMatchObject({
+    kind: "event",
+    value: { by: "pea", press: null, base: 1, revision: 2 },
+  });
+  abort.abort();
+});
+
+test("a resubscription replays the retained window; a late reader starts at the window and sees the jump", async () => {
+  const module = workspace(memoryStore().store);
+  const write = bind(module);
+  for (let revision = 0; revision < 3; revision++)
+    await write.apply("pea", [{ path: ["count"], value: revision + 1 }], revision);
+  const replay = acksStream(module);
+  const revisions = [];
+  for (let i = 0; i < 3; i++) revisions.push((await readSse(replay)).value as { revision: number });
+  expect(revisions.map((value) => value.revision)).toEqual([1, 2, 3]);
+  await replay.cancel();
+
+  // 130 writes: the module keeps 100 and the stream tail 128, so a late reader sees the last 100.
+  for (let revision = 3; revision < 130; revision++)
+    await write.apply("pea", [{ path: ["count"], value: revision + 1 }], revision);
+  const late = acksStream(module);
+  const first = (await readSse(late)).value as { revision: number; base: number };
+  expect(first).toMatchObject({ base: 30, revision: 31 });
+  await late.cancel();
+});
+
+test("a tail that overflows says gap with the count it dropped, then delivers what it kept", async () => {
+  const module = workspace(memoryStore().store);
+  const write = bind(module);
+  for (let revision = 0; revision < 5; revision++)
+    await write.apply("pea", [{ path: ["count"], value: revision + 1 }], revision);
+  const url = `http://host/pe/resources?${new URLSearchParams({ keys: JSON.stringify([{ kind: "work-acks", work: documentA }]) })}`;
+  const reader = resourceResponse(
+    new Request(url),
+    observeResources(module, { observe: () => () => {} }),
+    { frameBytes: 1 << 20, worldEvents: 64, workAckEvents: 2, stallMs: 10_000, logFrames: 8 },
+  ).body!.getReader();
+  expect(await readSse(reader)).toMatchObject({ kind: "gap", dropped: 3 });
+  const kept = [(await readSse(reader)).value, (await readSse(reader)).value] as {
+    revision: number;
+  }[];
+  expect(kept.map((value) => value.revision)).toEqual([4, 5]);
+  await reader.cancel();
+});
+
 async function readSse(
   reader: ReadableStreamDefaultReader<Uint8Array>,
 ): Promise<Record<string, unknown>> {

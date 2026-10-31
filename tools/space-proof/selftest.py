@@ -22,7 +22,7 @@ assert a["unknownFrame"] == 1 and a["orientedBoxChecked"] == 2 and a["orientedBo
 assert a["runChecked"] == 1 and a["runMismatch"] == 0, a  # endpoints match the line in reverse order
 assert a["bySource"]["9"]["rotatedBoxes"] == 1 and a["bySource"]["host"]["rotated"] == 4, a
 assert run.census(meta)["byRepresentation"]["box"]["context"] == 4
-f, c = run.page_requests([3, 1], "boxes")
+f, c = run.page_requests([3, 1], "link-boxes")
 assert f["focusOnly"] and f["contextRepresentation"] == "none" and c["contextPaddingFt"] == 10 and c["maxTriangles"] == 3_000_000
 print("selftest ok")
 roll = {"axisX": [1, 0, 0], "axisY": [0, 0.866, 0.5], "axisZ": [0, -0.5, 0.866]}  # rolled 30 degrees about X against an unrolled frame

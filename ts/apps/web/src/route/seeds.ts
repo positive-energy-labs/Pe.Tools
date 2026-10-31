@@ -8,9 +8,15 @@ import type { SettingsFieldState } from "@pe/agent-contracts";
 import { SCHEDULE_SEED_BYTES } from "./seed-schedule-content";
 import { SCHEDULE_SEED_CAPTURED_SCHEMA } from "./seed-schedule-schema";
 
-import type { PodRow } from "./entity-route";
+import type { PodRow } from "./pods";
 import type { Run } from "./pods";
-import type { DemoSpec } from "./spec-editor";
+
+/** Saved member bytes, their schema, and optional proposal cells for a read-only fixture. */
+export interface DemoSpec {
+  content: string;
+  schema: string;
+  fields?: Record<string, SettingsFieldState>;
+}
 
 const SCHEDULE_SCHEMA = "http://localhost:5150/schemas/settings/CmdScheduleManager/schedules.json";
 const FAMILIES_SCHEMA = "http://localhost:5150/schemas/settings/FamilyFoundry/patches.json";
@@ -145,7 +151,7 @@ export const DEMO_FRAGMENTS: Record<string, DemoSpec> = {
   ]),
 };
 
-/** `/pods?demo=browse`: the demo pods, the schedule spec open, its run beside it. */
+/** `/pods?fixture=browse`: the demo pods, the schedule spec open, its run beside it. */
 export const PODS_SEEDS = {
   browse: { title: "two pods, a schedule spec and its run", work: null, readings: {}, page: {} },
 };

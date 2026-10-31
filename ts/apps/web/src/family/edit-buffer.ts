@@ -1,7 +1,8 @@
 import { workKey, type RouteStatePatch, type WorkKey } from "@pe/agent-contracts";
-import { causeRefusal, type Refusal } from "#/route/refusal";
+import { causeRefusal } from "#/route/refusal";
 import type { Draft } from "./model";
 
+type Refusal = { code: string; message: string };
 type Apply = (patches: RouteStatePatch[], expectedRevision: number) => Promise<Refusal | null>;
 
 /** Unacknowledged editor input belongs to its file, including while no pane is mounted. */

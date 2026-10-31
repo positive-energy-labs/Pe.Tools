@@ -1,7 +1,7 @@
 import { actionReceiptSchema, type ActionReceipt } from "@pe/agent-contracts";
 import { peReadings, dirty, previousOf, useAction, useReading, type Readings } from "#/readings";
 import { actionControls, type ActionControlKey } from "@pe/agent-contracts";
-import { controlAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import { actionControlRpc } from "../../../../packages/mcps/src/shared/rpc-client";
 import { Button } from "@pe/kit/lang/button";
 import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
 import { Code, stringify } from "@pe/kit/lang/code";
@@ -91,7 +91,7 @@ export function ActionReceiptView({
 }) {
   const receipt = useReading<ActionReceipt[]>({ kind: "receipts", id }, resources);
   const control = useAction(
-    (key: ActionControlKey) => controlAction(key, { id }, base),
+    (key: ActionControlKey) => actionControlRpc.run({ key, id, base }),
     () => dirty({ kind: "receipts", id }, resources),
   );
   const observed = previousOf(receipt);

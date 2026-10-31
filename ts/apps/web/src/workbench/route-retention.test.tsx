@@ -8,51 +8,95 @@ import {
   createRoute,
   createRouter,
   RouterProvider,
+  RouterContextProvider,
   useRouterState,
 } from "@tanstack/react-router";
-import { ductsRouteState, readingKey, routeAddress, type ThreadTab } from "@pe/agent-contracts";
+import {
+  ductsRouteState,
+  readingKey,
+  routeAddress,
+  workWriteSchema,
+  type ThreadTab,
+} from "@pe/agent-contracts";
 import { z } from "zod";
 import { peClient } from "#/host/pe-client";
 import { peReadings } from "#/readings";
-import { useRouteSearch, useRouteDemo, useRouteNavigate } from "#/route/activity";
-import { defineRoute } from "#/route/manifest";
-import { appAtomRegistry, routeSearch, useRouteOwner } from "#/route/route-owner";
-import { useRoute } from "#/route/use-route";
-import { urlPage } from "#/route/url";
+import { useRouteSearch, useRouteFixture, useRouteNavigate } from "#/route/activity";
+import { ductsGraph } from "#/ducts/graph";
+import { familiesGraph } from "#/families/graph";
+import { useGraphRoute } from "#/shell/mount";
+import { graphUrlPage } from "#/shell/mount-page";
+import { queryVerb, workVerb } from "#/shell/verbs";
+import { appAtomRegistry, routeSearch, useRouteOwner } from "#/shell/owner";
 import { applyPageIntent } from "#/route/view-owner";
 import { useRouteLease } from "#/route/view-bridge";
 import { RouteRetention } from "./route-retention";
 import * as routeHost from "#/route/host";
 
-const native = vi.fn<(...args: any[]) => Promise<null>>(async () => null);
+const native = vi.fn<(...args: any[]) => Promise<any>>(async () => null);
 const poseA = routeAddress("ducts").read({ viewport: "orbit:45,30,1.25@0,0,0" }).page.viewport;
 const poseB = routeAddress("ducts").read({ viewport: "orbit:90,20,2@1,2,3" }).page.viewport;
-const manifest = defineRoute({
-  key: "ducts",
-  name: "Ducts",
-  address: "ducts",
-  page: routeAddress("ducts").schema,
-  work: ductsRouteState,
-  actions: {
-    native: {
-      label: "native",
-      says: "native",
-      needs: "host",
-      input: z.void() as unknown as z.ZodType<never>,
-      dirties: [],
-      ready: () => null,
-      run: native,
-    },
+const probeLayout = {
+  layout: { kind: "pane" as const, id: "probe" },
+  panes: { probe: { label: "Probe", purpose: "Retention proof", draws: [], verbs: [] } },
+  stageOrder: ["probe"],
+  stages: { probe: { word: "Probe", panes: ["probe"], verbs: [] } },
+};
+const graph: typeof ductsGraph = {
+  ...ductsGraph,
+  fields: Object.fromEntries(
+    Object.entries(ductsGraph.fields).map(([id, value]) => [id, { ...value, picker: undefined }]),
+  ) as typeof ductsGraph.fields,
+  ...probeLayout,
+  needs: undefined,
+  optionalTarget: undefined,
+  observe: undefined,
+  cells: undefined,
+  readings: {},
+  workSubject: undefined,
+  salvage: undefined,
+  verbs: {
+    native: queryVerb(
+      { key: "native", input: z.object({}).default({}), run: () => native() },
+      { label: "native", input: z.object({}).default({}), review: "none" },
+      {
+        patches: (_scope, value) =>
+          (value as { patches?: import("@pe/agent-contracts").RouteStatePatch[] } | null)
+            ?.patches ?? [],
+      },
+    ),
+    edit: workVerb(
+      { label: "edit", input: z.array(z.any()) },
+      { patches: (_scope, input) => input },
+    ),
   },
-});
-const otherManifest = defineRoute({
-  key: "families",
-  name: "Families",
-  address: "families",
-  page: routeAddress("families").schema,
-});
-const url = urlPage(manifest)!;
-const useDuct = (work?: string) => useRoute(manifest, { work });
+};
+const otherGraph: typeof familiesGraph = {
+  ...familiesGraph,
+  fields: Object.fromEntries(
+    Object.entries(familiesGraph.fields).map(([id, value]) => [
+      id,
+      { ...value, picker: undefined },
+    ]),
+  ) as typeof familiesGraph.fields,
+  ...probeLayout,
+  needs: undefined,
+  optionalTarget: undefined,
+  observe: undefined,
+  work: undefined,
+  workSubject: undefined,
+  salvage: undefined,
+  cells: undefined,
+  readings: {},
+  verbs: {},
+};
+const url = graphUrlPage(graph);
+const adapters = {
+  sources: {},
+  bodies: {},
+  binding: (_id: string, row: unknown) => ({ subject: null, args: row ?? {} }),
+};
+const useDuct = (work?: string) => useGraphRoute(graph, adapters, { work });
 type Probe = {
   handle: ReturnType<typeof useDuct>;
   instance: string;
@@ -62,6 +106,33 @@ type Probe = {
   disposed: ReturnType<typeof vi.fn>;
 };
 const probes = new Map<string, Probe>();
+
+test("retaining the tools index selects its leaf rather than the root with the same full path", async () => {
+  const root = createRootRoute({ component: () => <output>root shell</output> });
+  const index = createRoute({
+    getParentRoute: () => root,
+    path: "/",
+    component: () => <output>tools index</output>,
+  });
+  const router = createRouter({
+    routeTree: root.addChildren([index]),
+    history: createMemoryHistory({ initialEntries: ["/"] }),
+  });
+  await router.load();
+  const view = render(
+    <RouterContextProvider router={router}>
+      <RouteRetention
+        route="home"
+        active={null}
+        tabs={[]}
+        ready={false}
+        renderRoute={(body) => body}
+      />
+    </RouterContextProvider>,
+  );
+  expect(view.getByText("tools index")).toBeTruthy();
+  expect(view.queryByText("root shell")).toBeNull();
+});
 const running = new Set<string>();
 const frames = new Set<Parameters<typeof peReadings.subscribe>[1]>();
 const subscriptions: { kind: string; release: ReturnType<typeof vi.fn> }[] = [];
@@ -74,23 +145,24 @@ function DuctProbe() {
   const [instance] = useState(() => crypto.randomUUID());
   const [draft, setDraft] = useState("");
   const handle = useDuct(String(search.target ?? "A"));
-  const [page, setPage] = handle.page;
-  const demo = useRouteDemo();
+  const page = handle.owner.view.read().page;
+  const setPage = (patch: Partial<typeof page>) => handle.owner.view.setPage(patch);
+  const demo = useRouteFixture();
   const navigate = useRouteNavigate();
   const owner = useRouteOwner(() => ({ registry: appAtomRegistry, dispose: vi.fn() }));
   probes.set(id, { handle, instance, search, demo, navigate, disposed: owner.dispose });
   useEffect(() => {
     running.add(id);
     const key = (event: KeyboardEvent) => {
-      if (event.key === "F8") void handle.actions.native.run();
+      if (event.key === "F8") void handle.owner.control("native").run();
     };
     window.addEventListener("keydown", key);
     return () => {
       running.delete(id);
       window.removeEventListener("keydown", key);
     };
-  }, [id, handle.actions.native]);
-  useRouteLease("ducts", handle.page, {
+  }, [id, handle.owner]);
+  useRouteLease("ducts", [page, setPage], {
     context: { target: search.target },
     facts: { selected: page.selected },
   });
@@ -111,8 +183,8 @@ function DuctProbe() {
   );
 }
 function OtherProbe() {
-  const handle = useRoute(otherManifest);
-  return <div data-probe="families">Families {handle.page[0].query}</div>;
+  const handle = useGraphRoute(otherGraph, adapters);
+  return <div data-probe="families">Families {handle.owner.view.read().page.query}</div>;
 }
 
 const tab = (id: string, route: "ducts" | "families" = "ducts"): ThreadTab => ({
@@ -170,7 +242,7 @@ async function mount({
     component: OtherProbe,
     validateSearch: (search) => ({
       ...routeSearch(search),
-      ...urlPage(otherManifest)!.read(search),
+      ...graphUrlPage(otherGraph).read(search),
     }),
   });
   const pea = createRoute({ getParentRoute: () => root, path: "/pea" });
@@ -195,7 +267,7 @@ async function mount({
       <RouterProvider router={router} />
     ),
   );
-  await waitFor(() => expect(probes.get("A")?.handle.page[0].selected).toBe("101"));
+  await waitFor(() => expect(probes.get("A")?.handle.owner.view.read().page.selected).toBe("101"));
   const go = async (
     id: string,
     route: "ducts" | "families" = "ducts",
@@ -268,14 +340,16 @@ beforeEach(() => {
 test("folding the outer tools Activity preserves the Page writer until its Place closes", async () => {
   const { fold, close, go } = await mount({ strict: true });
   const a = probes.get("A")!;
-  act(() => a.handle.page[1]({ selected: "before-fold", viewport: poseA }));
+  act(() => a.handle.owner.view.setPage({ selected: "before-fold", viewport: poseA }));
   await fold(true);
   await act(() => new Promise((resolve) => setTimeout(resolve, 5)));
   expect(a.disposed).not.toHaveBeenCalled();
   await fold(false);
   expect(probes.get("A")!.instance).toBe(a.instance);
-  act(() => probes.get("A")!.handle.page[1]({ selected: "after-fold", viewport: poseB }));
-  expect(probes.get("A")!.handle.page[0]).toMatchObject({
+  act(() =>
+    probes.get("A")!.handle.owner.view.setPage({ selected: "after-fold", viewport: poseB }),
+  );
+  expect(probes.get("A")!.handle.owner.view.read().page).toMatchObject({
     selected: "after-fold",
     viewport: poseB,
   });
@@ -287,49 +361,64 @@ test("folding the outer tools Activity preserves the Page writer until its Place
 test("an action admitted while visible finishes native receipt and Work bookkeeping after hiding; new hidden writes refuse", async () => {
   const { go } = await mount();
   const a = probes.get("A")!;
-  await waitFor(() => expect(probes.get("A")!.handle.work.current).toBe(true));
-  const write = vi.spyOn(routeHost, "postRouteWrite").mockResolvedValue({
-    status: 200,
-    result: { ok: true, revision: 1 } as never,
+  await waitFor(() => expect(probes.get("A")!.handle.owner.snapshot().work).not.toBeNull());
+  const write = vi.spyOn(routeHost, "writeRouteWork").mockImplementation(async (key, body) => {
+    const { expectedRevision, press, patches, kind } = workWriteSchema.parse(body);
+    return {
+      ok: true,
+      revision: expectedRevision + 1,
+      write: {
+        key,
+        kind,
+        by: "human",
+        press,
+        base: expectedRevision,
+        revision: expectedRevision + 1,
+        patches,
+        inverse: [],
+        undoable: true,
+      },
+    };
   });
   let finish!: () => void;
   const nativeReceipt = new Promise<void>((resolve) => {
     finish = resolve;
   });
-  native.mockImplementationOnce(async (ctx) => {
+  native.mockImplementationOnce(async () => {
     await nativeReceipt;
-    await ctx.write([{ op: "set", path: ["assumptions", "receipt"], value: "landed" }]);
-    return null;
+    return { patches: [{ op: "set", path: ["assumptions", "receipt"], value: "landed" }] };
   });
   let completion!: Promise<unknown>;
   act(() => {
-    completion = probes.get("A")!.handle.actions.native.run();
+    completion = probes.get("A")!.handle.owner.control("native").run();
   });
   await go("B");
   expect(a.disposed).not.toHaveBeenCalled();
-  expect((await a.handle.work.write([]))?.message).toMatch(/hidden/);
+  expect(
+    ((await a.handle.owner.control("edit", []).run()) as { refusal: { message: string } }).refusal
+      .message,
+  ).toMatch(/inactive/);
   await act(async () => {
     finish();
-    expect(await completion).toBeNull();
+    const outcome = await completion;
+    expect(outcome, JSON.stringify(outcome)).toMatchObject({ state: "done" });
   });
   expect(write).toHaveBeenCalledTimes(1);
-  expect(write.mock.calls[0]![2]).toMatchObject({
+  expect(write.mock.calls[0]![1]).toMatchObject({
     expectedRevision: 0,
     patches: [{ op: "set", path: ["assumptions", "receipt"], value: "landed" }],
   });
   await go("A", "ducts", { selected: "101" });
-  expect(probes.get("A")!.handle.outcome).toMatchObject({
-    key: "native",
-    refusal: null,
-    stopped: false,
+  expect(probes.get("A")!.handle.owner.results.get("native")).toMatchObject({
+    state: "done",
+    kind: "query",
   });
   expect(
-    probes.get("A")!.handle.log.some((entry) => entry.action === "native" && entry.says === "ran"),
+    probes
+      .get("A")!
+      .handle.owner.timeline.read()
+      .some((entry) => entry.verb === "native" && entry.kind === "receipt"),
   ).toBe(true);
-  const queued = probes.get("A")!.handle.work.write([], 0);
-  await go("B");
-  expect(await queued).toBeNull();
-  expect(write.mock.calls.at(-1)![2]).toMatchObject({ expectedRevision: 1 });
 });
 afterEach(async () => {
   cleanup();
@@ -345,17 +434,20 @@ test("two actual Page owners retain independent selection, viewport, draft and D
   fireEvent.change(aNode.querySelector("input")!, { target: { value: "draft A" } });
   const aScroll = aNode.closest<HTMLElement>("[data-route-tab]")!;
   aScroll.scrollTop = 147;
-  await act(async () => a.handle.page[1]({ selected: "202", viewport: poseA }));
+  await act(async () => a.handle.owner.view.setPage({ selected: "202", viewport: poseA }));
   await waitFor(() => expect(String(router.state.location.search.selected)).toBe("202"));
   await go("B", "ducts", { selected: "303", viewport: "orbit:90,20,2@1,2,3" });
-  await waitFor(() => expect(probes.get("B")?.handle.page[0].selected).toBe("303"));
-  expect(probes.get("A")!.handle.page[0].selected).toBe("202");
+  await waitFor(() => expect(probes.get("B")?.handle.owner.view.read().page.selected).toBe("303"));
+  expect(probes.get("A")!.handle.owner.view.read().page.selected).toBe("202");
   expect(running).toEqual(new Set(["B"]));
   expect(a.disposed).not.toHaveBeenCalled();
   const before = history.length;
   await act(async () => {
     await a.navigate({ to: "/families" } as never);
-    expect((await a.handle.actions.native.run())?.message).toMatch(/hidden/);
+    expect(
+      ((await a.handle.owner.control("native").run()) as { refusal: { message: string } }).refusal
+        .message,
+    ).toMatch(/inactive/);
   });
   fireEvent.keyDown(window, { key: "F8" });
   await waitFor(() => expect(native).toHaveBeenCalledTimes(1));
@@ -368,15 +460,15 @@ test("two actual Page owners retain independent selection, viewport, draft and D
   expect(document.querySelector('[data-probe="A"]')).toBe(aNode);
   expect(aNode.querySelector("input")!.value).toBe("draft A");
   expect(aScroll.scrollTop).toBe(147);
-  expect(probes.get("A")!.handle.page[0].viewport).toEqual(poseA);
-  expect(probes.get("B")!.handle.page[0].viewport).toEqual(poseB);
+  expect(probes.get("A")!.handle.owner.view.read().page.viewport).toEqual(poseA);
+  expect(probes.get("B")!.handle.owner.view.read().page.viewport).toEqual(poseB);
   await act(async () => history.back());
   await waitFor(() => expect(router.state.location.search.target).toBe("B"));
-  expect(probes.get("A")!.handle.page[0].selected).toBe("202");
-  expect(probes.get("B")!.handle.page[0].selected).toBe("303");
+  expect(probes.get("A")!.handle.owner.view.read().page.selected).toBe("202");
+  expect(probes.get("B")!.handle.owner.view.read().page.selected).toBe("303");
   await act(async () => history.forward());
   await waitFor(() => expect(router.state.location.search.target).toBe("A"));
-  expect(probes.get("A")!.handle.page[0].selected).toBe("202");
+  expect(probes.get("A")!.handle.owner.view.read().page.selected).toBe("202");
 });
 
 test("a hidden leaf never becomes another route; chat retains it, close disposes it, and a chat switch keeps it", async () => {
@@ -388,11 +480,12 @@ test("a hidden leaf never becomes another route; chat retains it, close disposes
   expect(running.size).toBe(0);
   await act(() => router.navigate({ to: "/pea", search: { thread: "t" } } as never));
   expect(a.disposed).not.toHaveBeenCalled();
+  const retiredPage = a.handle.owner.view.read().page;
   await close("A");
   await waitFor(() => expect(a.disposed).toHaveBeenCalledTimes(1));
-  expect(applyPageIntent(a.handle.page[0], () => a.handle.page[1]({ selected: "404" })).ok).toBe(
-    false,
-  );
+  expect(
+    applyPageIntent(retiredPage, () => a.handle.owner.view.setPage({ selected: "404" })).ok,
+  ).toBe(false);
   expect(document.querySelector('[data-probe="A"]')).toBeNull();
   await go("B");
   const b = probes.get("B")!;
@@ -430,14 +523,14 @@ test("enrollment and lazy promotion preserve the initial Page, draft, and identi
   );
   expect(probes.get("A")!.instance).toBe(a.instance);
   expect(probes.get("A")!.search.thread).toBe("promoted");
-  expect(probes.get("A")!.handle.page[0].selected).toBe("101");
+  expect(probes.get("A")!.handle.owner.view.read().page.selected).toBe("101");
   expect((document.querySelector('[data-probe="A"] input') as HTMLInputElement).value).toBe(
     "unsent",
   );
   await act(() =>
     router.navigate({
       to: "/ducts",
-      search: { ...router.state.location.search, demo: "scene" },
+      search: { ...router.state.location.search, fixture: "scene" },
       state: router.state.location.state,
       replace: true,
     } as never),
@@ -478,7 +571,7 @@ test("leases belong to the visible tab; a hidden instance cannot apply or acknow
         },
       } as never);
   });
-  expect(probes.get("A")!.handle.page[0].selected).toBe("101");
+  expect(probes.get("A")!.handle.owner.view.read().page.selected).toBe("101");
   expect(
     wire.filter(
       (call) => call.operation === "view.publish" && call.input.body.instance === first.instance,
@@ -525,7 +618,7 @@ test("leases belong to the visible tab; a hidden instance cannot apply or acknow
   const b = probes.get("B")!;
   // History notifies old listeners synchronously, before the retention bank can select a tree.
   act(() => router.history.push("/ducts?thread=t&target=A&selected=808", {}));
-  expect(b.handle.page[0].selected).toBe("404");
+  expect(b.handle.owner.view.read().page.selected).toBe("404");
   await waitFor(() => expect(String(router.state.location.search.selected)).toBe("808"));
 });
 

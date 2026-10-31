@@ -12,7 +12,7 @@ import {
 import { routeAddress } from "@pe/agent-contracts";
 import { RouteActivity, type RouteActivityScope } from "./activity";
 import { routeFile } from "./address-page";
-import { createRouteOwner, makeAtomRegistry, useOwned } from "./route-owner";
+import { createRouteOwner, makeAtomRegistry, useOwned } from "#/shell/owner";
 import { routeUrlPage, useUrlPage } from "./url";
 import { createViewOwner } from "./view-owner";
 

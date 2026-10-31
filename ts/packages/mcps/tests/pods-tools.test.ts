@@ -1,7 +1,7 @@
 import { machineFixture } from "../../agent-contracts/tests/machine-fixture.ts";
 import { withInvocationContext } from "@pe/runtime/context";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { settingsRouteState } from "@pe/agent-contracts";
+import { settingsRouteState, workWriteSchema } from "@pe/agent-contracts";
 import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
 import { RouteWorkspace } from "../../runtime/src/route-workspace.ts";
 import { createRouteRegistrations } from "../src/pea/routes.ts";
@@ -61,10 +61,9 @@ test("Pea enumerates Pod members and proposes revision-checked Work without rout
       if (url.pathname === "/pe/route-state/pods")
         return Response.json(await runtime.view(scope, "pods"));
       if (url.pathname === "/pe/route-state/pods/apply") {
-        const body = JSON.parse(await bodyText(init));
-        return Response.json(
-          await runtime.apply(scope, "pods", "pea", body.patches, body.expectedRevision),
-        );
+        const body = workWriteSchema.parse(JSON.parse(await bodyText(init)));
+        expect(body).toMatchObject({ press: null, kind: "apply" });
+        return Response.json(await runtime.write(scope, "pods", "pea", body));
       }
       throw Error(`Unexpected ${url.href}`);
     });
@@ -93,7 +92,10 @@ test("Pea enumerates Pod members and proposes revision-checked Work without rout
       expectedRevision: 1,
       input: { patches: [{ path: ["fields", "/x", "suggestion"], value: { value: 2 } }] },
     };
-    expect(await run(peDo, suggestion)).toMatchObject({ ok: true });
+    expect(await run(peDo, suggestion)).toMatchObject({
+      ok: true,
+      result: { write: { by: "pea", press: null } },
+    });
     expect(await run(peDo, suggestion)).toMatchObject({ ok: false });
     expect(
       await run(peDo, {

@@ -96,7 +96,13 @@ export class SceneMeshes {
 /** An answer drawn over the scene in its own group, keyed so it is cheap to add and remove.
  * `build` draws in world coordinates (host feet); the group is disposed when the key leaves or
  * the layer object is replaced. */
-export type IssueTarget = { key: string; elementId: number };
+export type IssueTarget = {
+  key: string;
+  elementId: number;
+  /** The mark is its own subject (a strand's `run:<id>`): `key` is a subject key, a hover lights
+   * it and a pick selects it, rather than an issue standing on `elementId`. */
+  subject?: true;
+};
 /** Where an issue mark stands, weakest first: the pointer within reach (about 24 px), over it, or
  * the issue open (picked here or in the inbox). */
 export type IssueState = ReachRung;

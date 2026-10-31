@@ -9,7 +9,7 @@ import {
   type DuctsRouteDocument,
   type RouteStatePatch,
 } from "@pe/agent-contracts";
-import { reviewTransitions, type CellWire } from "#/components/work/band";
+import { useCellTransitions } from "../../pane-context";
 import { cellFromDraft, StateCell } from "@pe/kit/lang/cell";
 import { Button } from "@pe/kit/lang/button";
 import { ValueDiff } from "@pe/kit/lang/value-diff";
@@ -46,12 +46,8 @@ export function DropCell({
 }) {
   const key = String(id);
   const cell = work.doc?.[segment][key] ?? {};
-  const kind = segment === "terminalDrops" ? "terminal" : "component";
-  const refusal = work.preview?.writes.find(
-    (w) => w.kind === kind && w.id === id && w.outcome === "refused",
-  );
+  const transitions = useCellTransitions(segment, key);
   const authored = (cell.edit ?? cell.suggestion)?.value as DuctDrop | undefined;
-  const wire: CellWire = { segment, revision: work.revision, write: work.write };
   return (
     <span
       className="inline-flex items-baseline gap-1 whitespace-nowrap"
@@ -83,10 +79,7 @@ export function DropCell({
             )
             .then((refusal) => refusal?.message)
         }
-        transitions={reviewTransitions(wire, key, cell)}
-        refused={
-          refusal ? `preview: Revit refuses this drop: ${refusal.reason ?? "no reason"}` : undefined
-        }
+        transitions={transitions}
       />
       <PressureEquivalent inWg={authored?.inWg ?? held} />
     </span>

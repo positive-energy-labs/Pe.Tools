@@ -9,12 +9,10 @@ import {
   focusRow,
   stageIssues,
   issueAt,
-  healRunView,
   inboxRows,
   type TriageInput,
 } from "./inbox-rows";
 import type { Claim } from "./legs";
-import type { DuctsHealRun } from "./manifest";
 
 const node = (id: number, kind: string, groupId: string | null) =>
   ({
@@ -37,7 +35,7 @@ const group = (id: string, rootIds: number[], issueIds: string[] = []) =>
   }) as unknown as TriageInput["snapshot"]["groups"][number];
 
 const snapshot: TriageInput["snapshot"] = {
-  groups: [group("g1", [1], ["open-end:g1:2:1"]), group("g2", [], [])],
+  groups: [group("g1", [1], ["open-end:2:1"]), group("g2", [], [])],
   nodes: [
     node(1, "equipment", null),
     node(30, "terminal", "g1"),
@@ -54,7 +52,7 @@ const finding = (f: Partial<DuctFinding> & Pick<DuctFinding, "id" | "kind">): Du
   ...f,
 });
 const findings = [
-  finding({ id: "open-end:g1:2:1", kind: "open-end", elementIds: [2] }),
+  finding({ id: "open-end:2:1", kind: "open-end", elementIds: [2] }),
   finding({ id: "no-fan:g2", kind: "no-fan", groupId: "g2", elementIds: [40] }),
   finding({
     id: "proximity:5:0|6:0",
@@ -94,7 +92,7 @@ const base = {
   equipmentFlows: new Map<number, { cfm: number | null }>([[1, { cfm: null }]]),
   doc: null,
   claims: [] as Claim[],
-  write: { edit: 0, hasPreview: false, fresh: false, planned: null, refused: null, esp: 0 },
+  write: { edit: 0, esp: 0 },
 };
 
 describe("the ducts inbox", () => {
@@ -133,7 +131,7 @@ describe("the ducts inbox", () => {
       },
     ]);
   });
-  it("a no-fan row with exactly one unit offers to make it its system's fan, armed by a fresh preview", () => {
+  it("a no-fan row with exactly one unit offers to make it its system's fan, places one reviewed kernel command", () => {
     const unit = {
       ...node(7, "equipment", null),
       connectors: [{ index: 1, classification: "SupplyAir" }],
@@ -147,66 +145,22 @@ describe("the ducts inbox", () => {
       ] as TriageInput["snapshot"]["systems"],
     };
     const roles = new Map([[7, { role: "passive" as const, why: "proposed", reason: "x" }]]);
-    const noFan = (fan?: TriageInput["fan"]) =>
+    const noFan = () =>
       inboxRows({
         ...base,
         snapshot: fanless,
         roles,
-        fan,
         nameOf: (id) => (id === 7 ? "FC-17" : String(id)),
       })
         .fix.find((r) => r.kind === "no-fan")!
-        .verbs.filter((v) => v.kind === "preview");
-    // One button: idle until a preview is held, its commit refused until then.
-    expect(noFan()).toMatchObject([
-      {
-        on: { verb: "fan", unitId: 7, systemId: 19 },
-        label: "preview: make FC-17 the fan of SA 19",
-        held: null,
-        stale: null,
-        commit: { label: "make FC-17 the fan of SA 19", refusal: "Preview it first" },
-      },
-    ]);
-    const response = { outcome: "planned", check: "SA 19: base equipment FC-17" } as never;
-    const preview = { unitId: 7, systemId: 19, mode: "preview" as const, epoch: 3, response };
-    expect(noFan({ run: preview, epoch: 3 })[0]).toMatchObject({
-      held: {
-        word: "make FC-17 the fan of SA 19 · previewed",
-        summary: "SA 19: base equipment FC-17",
-      },
-      stale: null,
-      commit: { refusal: null },
+        .verbs.filter((v) => v.kind === "command");
+    expect(noFan()[0]).toMatchObject({
+      kind: "command",
+      on: { verb: "fan", unitId: 7, systemId: 19 },
+      label: "make FC-17 the fan of SA 19",
     });
-    // The snapshot moved on: the held preview is dropped and the reason says so.
-    expect(noFan({ run: preview, epoch: 4 })[0]).toMatchObject({
-      held: null,
-      stale: "changed since preview",
-    });
-    expect(noFan({ run: preview, epoch: 4 })[0]!.commit.refusal).toMatch(/snapshot changed/);
-    const refused = {
-      ...preview,
-      response: { outcome: "refused", reason: "its port is in SA 18" } as never,
-    };
-    expect(noFan({ run: refused, epoch: 3 })[0]!.commit.refusal).toBe(
-      "The preview refused: its port is in SA 18",
-    );
-    // An applied run is the outcome beside the Inputs button, not a held preview.
-    expect(noFan({ run: { ...preview, mode: "apply" }, epoch: 3 })[0]).toMatchObject({
-      held: null,
-      outcome: "applied: SA 19: base equipment FC-17",
-    });
-    // A system that already has base equipment is never offered (the op refuses a swap).
-    const based = { ...fanless, systems: [{ ...fanless.systems![0]!, baseEquipmentId: 8 }] };
-    expect(
-      inboxRows({ ...base, snapshot: based, roles })
-        .fix.find((r) => r.kind === "no-fan")!
-        .verbs.filter((v) => v.kind === "preview"),
-    ).toEqual([]);
   });
-});
 
-describe("healing replaces the capped and connect verdicts", () => {
-  // g1's open end 2:1 caps; the near-miss 5|6 is a coincident join; 7|8 and the anomalous 9|10 are a person's.
   const heal: HealPlan = {
     groups: [
       {
@@ -219,7 +173,7 @@ describe("healing replaces the capped and connect verdicts", () => {
             end: "2:1",
             gapIn: 0,
             ids: [2],
-            covers: ["open-end:g1:2:1"],
+            covers: ["open-end:2:1"],
           },
           {
             key: "join:5:0|6:0",
@@ -234,7 +188,7 @@ describe("healing replaces the capped and connect verdicts", () => {
         ],
       },
     ],
-    covered: new Set(["open-end:g1:2:1", "proximity:5:0|6:0"]),
+    covered: new Set(["open-end:2:1", "proximity:5:0|6:0"]),
     hard: new Map([
       [
         "proximity:7:0|8:0",
@@ -247,120 +201,6 @@ describe("healing replaces the capped and connect verdicts", () => {
     ]),
   };
 
-  it("a preview arms heal with what passed; an apply shows the group's ESP before and after, found again by its root", () => {
-    const run: DuctsHealRun = {
-      group: "g1",
-      mode: "preview",
-      epoch: 4,
-      before: { esp: 0.3123, roots: [1], ids: [2, 5, 6] },
-      response: {
-        previewOnly: true,
-        counts: { planned: 1, healed: 0, refused: 1 },
-        groups: [
-          {
-            group: "g1",
-            outcome: "planned",
-            items: [
-              {
-                key: "cap:2:1",
-                kind: "cap",
-                how: "cap",
-                outcome: "planned",
-                created: [77],
-                replaced: [],
-              },
-              {
-                key: "join:5:0|6:0",
-                kind: "join",
-                how: "connect",
-                outcome: "refused",
-                reason: "post-check failed: the joint is 0.2 in open",
-                created: [],
-                replaced: [],
-              },
-            ],
-            systemsBefore: [],
-            systemsAfter: [],
-          },
-        ],
-      },
-    };
-    const previewed = healRunView(run, snapshot, 4, () => null);
-    expect(previewed).toMatchObject({ fresh: true, passed: ["cap:2:1"], esp: null });
-    const row = inboxRows({ ...base, heal, healRun: previewed }).fix[0]!;
-    expect(row.status).toBe("previewed: 1 pass · 1 refused");
-    expect(row.verbs[0]).toMatchObject({
-      kind: "preview",
-      label: "preview heal",
-      held: {
-        word: "heal · previewed 1",
-        summary: "1 pass · 1 refused",
-        lines: [
-          { key: "cap:2:1", state: "planned" },
-          {
-            key: "join:5:0|6:0",
-            state: "refused",
-            reason: "post-check failed: the joint is 0.2 in open",
-          },
-        ],
-      },
-      stale: null,
-      commit: { label: "apply heal", refusal: null },
-    });
-    expect(row.note).toMatch(
-      /Refused connect unnamed element to unnamed element: post-check failed: the joint is 0\.2 in open\./,
-    );
-    expect(healRunView(run, snapshot, 5, () => null).fresh).toBe(false);
-    // The snapshot moved on: the row's preview disarms with the reason.
-    const moved = inboxRows({
-      ...base,
-      heal,
-      healRun: healRunView(run, snapshot, 5, () => null),
-    }).fix[0]!;
-    expect(moved.verbs[0]).toMatchObject({ held: null, stale: "changed since preview" });
-
-    // Revit renumbered the group: g1 is now g9, still holding root 1.
-    const after = {
-      ...snapshot,
-      groups: [{ ...snapshot.groups[0]!, id: "g9" }, snapshot.groups[1]!],
-    };
-    const applied = healRunView(
-      {
-        ...run,
-        mode: "apply",
-        response: {
-          ...run.response,
-          previewOnly: false,
-          counts: { planned: 0, healed: 1, refused: 0 },
-        },
-      },
-      after,
-      5,
-      (g) => (g === "g9" ? 0.4051 : null),
-    );
-    expect(applied).toMatchObject({
-      group: "g9",
-      esp: { before: 0.3123, after: 0.4051 },
-      ids: [77],
-    });
-    // A unit sits in every group its ports reach: a run whose group is still there never moves.
-    const shared = {
-      ...snapshot,
-      groups: [
-        { ...snapshot.groups[1]!, id: "g0", rootIds: snapshot.groups[0]!.rootIds },
-        ...snapshot.groups,
-      ],
-    };
-    expect(healRunView({ ...run, mode: "apply" }, shared, 5, () => null).group).toBe(run.group);
-    const result = inboxRows({ ...base, snapshot: after, healRun: applied }).fix.find(
-      (r) => r.key === "heal:g9",
-    )!;
-    expect(result).toMatchObject({
-      title: "Healed g9",
-      status: "healed 1 · ESP 0.312 → 0.405 in-wg",
-      blocks: false,
-    });
-  });
   it("stage identities land on the exact row, including Heal folding and direct terminal input", () => {
     const rows = inboxRows({ ...base, heal });
     const issues = stageIssues(rows);
@@ -369,7 +209,7 @@ describe("healing replaces the capped and connect verdicts", () => {
     );
     for (const issue of issues) expect(focusRow(issue.key, keys)).toBe(issue.key);
     expect(issues.find((i) => i.key === "heal:g1")?.findings).toEqual(
-      expect.arrayContaining(["open-end:g1:2:1", "proximity:5:0|6:0"]),
+      expect.arrayContaining(["open-end:2:1", "proximity:5:0|6:0"]),
     );
     expect(issues.find((i) => i.key === "flows:30")?.damage).toBeTruthy();
     expect(
@@ -396,8 +236,65 @@ it("compacts a status for the closed row and keeps unknown words", () => {
   expect(compactStatus("0 of 6 units read")).toBe("0/6 read");
   expect(compactStatus("3 of 12 terminals read")).toBe("3/12 read");
   expect(compactStatus("outside priced paths")).toBe("off path");
-  expect(compactStatus("previewed: 2 pass · 1 refused · out of date")).toBe("2 pass · 1 refused");
   expect(compactStatus("no flow · not on SA 19's runs")).toBe("no flow");
   expect(compactStatus("healed 3 · ESP 0.100 → 0.200 in-wg")).toBe("healed 3");
   expect(compactStatus("stretched")).toBe("stretched");
+});
+
+describe("a heal in a shared group belongs to the systems of the ends it heals", () => {
+  // Chadds 2026-10-30: one group carried FA 20 and RA 37; its caps were all on RA 37's ducts, and the
+  // row read "Heal FA 20, FA 27" on FA 20's view.
+  const seg = (id: number, systemName: string) =>
+    ({
+      id,
+      groupId: "gS",
+      systemName,
+      connectors: [],
+    }) as unknown as TriageInput["snapshot"]["segments"][number];
+  const shared: TriageInput["snapshot"] = {
+    groups: [{ ...group("gS", []), systemNames: ["FA 20", "RA 37"] }],
+    nodes: [],
+    segments: [seg(100, "RA 37"), seg(101, "RA 37"), seg(200, "FA 20")],
+  };
+  const cap = (id: number) => ({
+    key: `cap:${id}:0`,
+    kind: "cap" as const,
+    how: "cap" as const,
+    end: `${id}:0`,
+    gapIn: 0,
+    ids: [id],
+    covers: [`open-end:${id}:0`],
+  });
+  const heal: HealPlan = {
+    groups: [{ group: "gS", items: [cap(100), cap(101)] }],
+    covered: new Set(["open-end:100:0", "open-end:101:0"]),
+    hard: new Map(),
+  };
+  const scope = (name: string, members: number[]) =>
+    ({
+      name,
+      groups: ["gS"],
+      pricing: new Set(["gS"]),
+      shared: new Map(),
+      terminals: new Set(),
+      units: new Set(),
+      prices: new Set(members),
+      members: new Set(members),
+    }) as SystemScope;
+  const rows = (s: SystemScope | null) =>
+    inboxRows({
+      ...base,
+      snapshot: shared,
+      findings: [],
+      scope: s,
+      heal,
+      groupLabel: () => "FA 20, FA 27",
+    }).fix.filter((r) => r.kind === "heal");
+
+  it("is titled by the healed ends' systems, not the group's label", () =>
+    expect(rows(null).map((r) => r.title)).toEqual(["Heal RA 37: 2 caps"]));
+  it("is offered on RA 37's view and never on FA 20's", () => {
+    expect(rows(scope("RA 37", [100, 101]))).toHaveLength(1);
+    expect(rows(scope("FA 20", [200]))).toEqual([]);
+  });
 });

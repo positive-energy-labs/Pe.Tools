@@ -26,7 +26,7 @@ import { settingsFieldPointer, transitionPatches } from "@pe/agent-contracts";
 import type { RouteStatePatch } from "@pe/agent-contracts";
 import type { ConnectorSpec, FamilyModel, FormSpec, ParamSpec } from "#/family/family-model";
 import { paramRef, paramSpec, parameterText } from "#/family/family-model";
-import type { EvidenceSlice } from "#/family/host";
+import type { EvidenceSlice } from "#/family/types";
 import {
   authoredText,
   bindingOf,

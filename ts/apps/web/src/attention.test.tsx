@@ -2,7 +2,7 @@
 import * as Atom from "effect/unstable/reactivity/Atom";
 import { RegistryContext } from "@effect/atom-react";
 import { Profiler } from "react";
-import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import {
   attention,
@@ -19,15 +19,10 @@ import {
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { SubjectText } from "@pe/kit/lang/subject-text";
 import { Row } from "@pe/kit/lang/row";
-import { makeAtomRegistry, createRouteOwner } from "#/route/route-owner";
-import { createViewOwner } from "#/route/view-owner";
+import { makeAtomRegistry } from "#/shell/owner";
 import { inspectAtomRegistry } from "#/state/atom-inspect";
 import { AttentionScope, AttentionRoot, useElementAttention, useHoveredIssue } from "#/attention";
 import { Annotations } from "#/ducts/annotations";
-import { DEMO_ROOMS, DEMO_PLAN, DEMO_VIEW } from "#/rooms/demo";
-import { manifest } from "#/rooms/manifest";
-import { RoomsPlan } from "#/rooms/plan";
-import { RoomsTable, roomRows } from "#/rooms/table";
 
 afterEach(() => {
   cleanup();
@@ -241,83 +236,5 @@ it("SubjectText in another React root lights the ducts picture set and projected
   expect(picture.container.querySelector("[data-subject-badge]")).toBeNull();
   prose.unmount();
   picture.unmount();
-  registry.dispose();
-});
-
-it("rooms table and plan light each other by GUID while clicks and URL/Page selection stay with the route", async () => {
-  vi.stubGlobal(
-    "ResizeObserver",
-    class {
-      constructor(private read: ResizeObserverCallback) {}
-      observe() {
-        this.read(
-          [{ contentRect: { width: 800, height: 600 } }] as ResizeObserverEntry[],
-          this as unknown as ResizeObserver,
-        );
-      }
-      disconnect() {}
-      unobserve() {}
-    },
-  );
-  const registry = makeAtomRegistry();
-  const owner = createRouteOwner("rooms-attention-test", registry);
-  const pageOwner = createViewOwner(owner, manifest.page, { view: DEMO_VIEW });
-  const selected = Atom.make(
-    (get) =>
-      new Set<SubjectKey>(
-        get(pageOwner.state).page.selected.map((guid): SubjectKey => `room:${guid}`),
-      ),
-  );
-  const rows = roomRows(DEMO_ROOMS.regions, ["Fixture level"]);
-  const members = new Map(
-    DEMO_ROOMS.regions.map((region): [SubjectKey, SubjectKey[]] => [
-      `room:${region.guid}`,
-      [elementKey(region.elementId)],
-    ]),
-  );
-  const select = vi.fn((guids: ReadonlySet<string>) => pageOwner.setPage({ selected: [...guids] }));
-  const view = render(
-    <RegistryContext value={registry}>
-      <AttentionScope doc="rooms-fixture" selected={selected} members={members}>
-        <RoomsTable
-          rows={rows}
-          cells={{}}
-          wire={{ segment: "edits", revision: 0, write: vi.fn() } as never}
-          onSelect={select}
-          empty={{ says: "empty", exit: "none" }}
-        />
-        <RoomsPlan
-          rows={rows}
-          plan={DEMO_PLAN}
-          planError={null}
-          planRefusal={null}
-          empty={null}
-          zoomTo={[]}
-          focusMissing={[]}
-          onSelect={(guid) => guid && select(new Set([guid]))}
-          trace={{ data: null, none: "fixture" }}
-          page={registry.get(pageOwner.state).page}
-          setPage={pageOwner.setPage}
-        />
-      </AttentionScope>
-    </RegistryContext>,
-  );
-  const row = view.container.querySelector('tr[data-subject="room:fixture-1"]')!;
-  const path = view.container.querySelector('path[data-subject="room:fixture-1"]')!;
-  expect(row).toBeTruthy();
-  expect(path).toBeTruthy();
-  fireEvent.pointerOver(row);
-  expect(path.getAttribute("data-reach")).toBe("hover");
-  fireEvent.pointerOver(path);
-  expect(row.getAttribute("data-reach")).toBe("hover");
-  fireEvent.click(path);
-  expect(select).toHaveBeenCalledOnce();
-  expect(registry.get(pageOwner.state).page.selected).toEqual(["fixture-1"]);
-  await waitFor(() => expect(row.getAttribute("data-reach")).toBe("selected"));
-  act(() => pageOwner.setPage({ selected: [] }));
-  expect(row.getAttribute("data-reach")).toBe("hover");
-  view.unmount();
-  pageOwner.dispose();
-  owner.dispose();
   registry.dispose();
 });

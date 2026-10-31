@@ -39,7 +39,25 @@ const Anchor = createContext<{
 } | null>(null);
 const Facing = createContext<Side>("bottom");
 export const usePopoverSide = () => useContext(Facing);
-let overlay: { close: (event?: KeyboardEvent) => void } | null = null;
+/** One shown overlay, as the stack knows it: how to close it, its popup, and what it opened from. */
+type Overlay = {
+  close: (event?: KeyboardEvent) => void;
+  popup: RefObject<Element | null>;
+  anchor: RefObject<Element | null>;
+};
+/**
+ * The open overlays, outermost first. Opening a popover closes every shown overlay that does not
+ * contain its anchor, so siblings still replace each other, and a popover whose trigger sits inside
+ * another's popup stacks on it instead. DOM containment is the test, not React ancestry: a route
+ * portals its settings section into the chrome Settings popover (`RouteControlsOutlet`), so Base
+ * UI's context-based nesting never sees that child (2026-10-27, the Ducts airflow slot picker closed
+ * the Settings popover on open).
+ */
+const overlays: Overlay[] = [];
+const Own = createContext<Pick<Overlay, "popup" | "anchor"> | null>(null);
+const descendantHolds = (own: Overlay, node: unknown) =>
+  node instanceof Node &&
+  overlays.slice(overlays.indexOf(own) + 1).some((o) => o.popup.current?.contains(node));
 
 export function Popover({
   open: controlled,
@@ -54,6 +72,13 @@ export function Popover({
   const [open, setOpen] = useState(defaultOpen);
   const [anchor, setAnchor] = useState<Element | null>(null);
   const [dismissed, setDismissed] = useState(false);
+  const popup = useRef<Element | null>(null);
+  const anchorRef = useRef<Element | null>(null);
+  const own = useRef<Overlay>({
+    close: () => {},
+    popup,
+    anchor: anchorRef,
+  }).current;
   const requested = controlled ?? open;
   const shown = requested && !dismissed;
   useEffect(() => {
@@ -61,17 +86,17 @@ export function Popover({
   }, [requested]);
   useEffect(() => {
     if (!shown) return;
-    const own = {
-      close: (event?: KeyboardEvent) => {
-        setDismissed(true);
-        escapeEvent.current = event ?? null;
-        actions.current?.close();
-      },
+    own.close = (event?: KeyboardEvent) => {
+      setDismissed(true);
+      escapeEvent.current = event ?? null;
+      actions.current?.close();
     };
-    if (overlay !== own) overlay?.close();
-    overlay = own;
+    // Close from the top down until an overlay holds this one's anchor; that one is the parent.
+    while (overlays.length && !overlays.at(-1)!.popup.current?.contains(anchorRef.current))
+      overlays.pop()!.close();
+    overlays.push(own);
     const escape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || overlay !== own) return;
+      if (event.key !== "Escape" || overlays.at(-1) !== own) return;
       // An editor inside the popup owns its local Escape before the popup consumes it.
       if (
         event.target instanceof Element &&
@@ -87,28 +112,41 @@ export function Popover({
     window.addEventListener("keydown", escape, true);
     return () => {
       window.removeEventListener("keydown", escape, true);
-      if (overlay === own) overlay = null;
+      const at = overlays.indexOf(own);
+      if (at >= 0) overlays.splice(at, 1);
     };
-  }, [shown, actions]);
+  }, [shown, actions, own]);
   return (
     <Anchor.Provider value={{ element: anchor, set: setAnchor }}>
-      <Primitive.Root
-        {...props}
-        open={shown}
-        actionsRef={actions}
-        onOpenChange={(next, details) => {
-          if (escapeEvent.current) {
-            details.reason = "escape-key";
-            details.event = escapeEvent.current;
-            escapeEvent.current = null;
-          }
-          onOpenChange?.(next, details);
-          if (details.isCanceled) return;
-          if (next) setDismissed(false);
-          setAnchor(details.trigger ?? null);
-          setOpen(next);
-        }}
-      />
+      <Own.Provider value={own}>
+        <Primitive.Root
+          {...props}
+          open={shown}
+          actionsRef={actions}
+          onOpenChange={(next, details) => {
+            if (escapeEvent.current) {
+              details.reason = "escape-key";
+              details.event = escapeEvent.current;
+              escapeEvent.current = null;
+            }
+            // A press or focus landing in a stacked child's popup is inside this one.
+            if (
+              !next &&
+              (details.reason === "outside-press" || details.reason === "focus-out") &&
+              (descendantHolds(own, details.event?.target) ||
+                descendantHolds(own, (details.event as FocusEvent | undefined)?.relatedTarget))
+            ) {
+              details.cancel();
+              return;
+            }
+            onOpenChange?.(next, details);
+            if (details.isCanceled) return;
+            if (next) setDismissed(false);
+            setAnchor(details.trigger ?? null);
+            setOpen(next);
+          }}
+        />
+      </Own.Provider>
     </Anchor.Provider>
   );
 }
@@ -226,6 +264,8 @@ export function PopoverContent({
       : anchor && typeof anchor === "object" && "current" in anchor
         ? anchor.current
         : (trigger ?? null);
+  const own = useContext(Own);
+  if (own) own.anchor.current = target;
   const subject = useSubjectPosition(target);
   // L2: bounded furniture stays in its own field; subject overlays still clear the picture.
   const away = collisionBoundary ? null : subject;
@@ -257,10 +297,18 @@ export function PopoverContent({
             onKeyDown?.(event);
             if (event.key !== "Escape") return;
             event.stopPropagation();
-            if (!event.defaultPrevented) overlay?.close(event.nativeEvent);
+            if (!event.defaultPrevented) overlays.at(-1)?.close(event.nativeEvent);
           }}
           render={(popupProps, state) => (
-            <div {...popupProps}>
+            <div
+              {...popupProps}
+              ref={(node) => {
+                if (own) own.popup.current = node;
+                const { ref } = popupProps as { ref?: React.Ref<HTMLDivElement> };
+                if (typeof ref === "function") return ref(node);
+                if (ref) ref.current = node;
+              }}
+            >
               <Facing.Provider value={state.side}>{props.children}</Facing.Provider>
             </div>
           )}
