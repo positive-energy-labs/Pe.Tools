@@ -1,0 +1,86 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using Autodesk.Revit.DB;
+using Newtonsoft.Json.Linq;
+
+// Space proof, MAP step 3: a curtain host (curtain Wall, glazed FootPrintRoof/ExtrusionRoof) is empty by design; its
+// glazing lives in panels and mullions. For each curtain host among __IDS__[system] (the elements that published nothing),
+// read every panel and mullion natively and require that each one with a native vertex inside guaranteed reach
+// (a focus element's bounds or run box grown by 10 ft, inside the artifact crop: the witness rule) is published.
+// Read-only. Rows go to <metadata>.curtain-members.json.
+public sealed class CurtainMembers : PeScriptContainer {
+    const string MetadataPath = @"__METADATA__";
+    const string IdsPath = @"__IDS__";
+    const double ReachFt = 10;
+    static XYZ P(JToken v) => new XYZ((double)v[0]!, (double)v[1]!, (double)v[2]!);
+
+    public override void Execute() {
+        var before = doc!.IsModified;
+        var meta = JObject.Parse(File.ReadAllText(MetadataPath));
+        var system = Path.GetFileName(MetadataPath).Replace("artifact-", "").Replace(".metadata.json", "");
+        var ids = ((JArray)JObject.Parse(File.ReadAllText(IdsPath))[system]!["elements"]!).Select(e => ((long)e["link"]!, (long)e["id"]!)).ToList();
+        var b = meta["bounds"]!;
+        var crop = new[] { new[] { (double)b["minX"]!, (double)b["maxX"]! }, new[] { (double)b["minY"]!, (double)b["maxY"]! }, new[] { (double)b["minZ"]!, (double)b["maxZ"]! } };
+        var rows = ((JArray)meta["elements"]!).ToArray();
+        var published = new HashSet<(long, long)>(rows.Select(r => r["handle"]!).Where(h => h["linkInstanceId"]!.Type != JTokenType.Null)
+            .Select(h => ((long)h["linkInstanceId"]!, (long)h["elementId"]!)));
+        var focus = rows.Where(r => (bool)r["focus"]!).ToArray();
+        string[] lo = { "minX", "minY", "minZ" }, hi = { "maxX", "maxY", "maxZ" };
+        bool InCrop(XYZ p) { var c = new[] { p.X, p.Y, p.Z }; return Enumerable.Range(0, 3).All(i => c[i] >= crop[i][0] && c[i] <= crop[i][1]); }
+        bool InReach(XYZ p) {
+            if (!InCrop(p)) return false;
+            var c = new[] { p.X, p.Y, p.Z };
+            foreach (var f in focus) {
+                if (f["run"] is JObject run && run["path"] is not JArray) {
+                    var a = P(run["start"]!); var e = P(run["end"]!); var z = (e - a).Normalize(); var x = P(run["crossSectionXAxis"]!); var y = z.CrossProduct(x); var d = p - a;
+                    var t = d.DotProduct(z); var w = (double?)run["diameterFt"] ?? (double?)run["widthFt"] ?? 0; var h = (double?)run["diameterFt"] ?? (double?)run["heightFt"] ?? 0;
+                    if (t >= -ReachFt && t <= a.DistanceTo(e) + ReachFt && Math.Abs(d.DotProduct(x)) <= w / 2 + ReachFt && Math.Abs(d.DotProduct(y)) <= h / 2 + ReachFt) return true;
+                } else if (Enumerable.Range(0, 3).All(i => c[i] >= (double)f["bounds"]![lo[i]]! - ReachFt && c[i] <= (double)f["bounds"]![hi[i]]! + ReachFt)) return true;
+            }
+            return false;
+        }
+        var outRows = new JArray(); int hosts = 0, members = 0, required = 0, missing = 0, inCropBeyondReach = 0;
+        foreach (var (link, id) in ids) {
+            var instance = doc.GetElement(new ElementId(link)) as RevitLinkInstance;
+            var source = instance?.GetLinkDocument(); var t = instance?.GetTotalTransform();
+            var host = source?.GetElement(new ElementId(id));
+            var grids = host switch {
+                Wall w when w.CurtainGrid is not null => new List<CurtainGrid> { w.CurtainGrid },
+                FootPrintRoof fr when fr.CurtainGrids is not null => fr.CurtainGrids.Cast<CurtainGrid>().ToList(),
+                ExtrusionRoof er when er.CurtainGrids is not null => er.CurtainGrids.Cast<CurtainGrid>().ToList(),
+                _ => null
+            };
+            if (grids is null) continue;
+            hosts++;
+            foreach (var memberId in grids.SelectMany(g => g.GetPanelIds().Concat(g.GetMullionIds())).Distinct()) {
+                members++;
+                var m = source!.GetElement(memberId);
+                bool reach = false, inCrop = false; long vertices = 0;
+                if (m is not null) {
+                    using var options = new Options { DetailLevel = ViewDetailLevel.Fine, ComputeReferences = false };
+                    void Walk(GeometryElement g, Transform tr) {
+                        foreach (var o in g) switch (o) {
+                            case Solid s: foreach (Face f in s.Faces) { using var mesh = f.Triangulate(); foreach (var v in mesh.Vertices) Visit(tr.OfPoint(v)); } break;
+                            case Mesh mesh: foreach (var v in mesh.Vertices) Visit(tr.OfPoint(v)); break;
+                            case GeometryInstance gi: using (var inner = gi.GetSymbolGeometry()) if (inner is not null) Walk(inner, tr.Multiply(gi.Transform)); break;
+                        }
+                    }
+                    void Visit(XYZ p) { vertices++; if (InCrop(p)) inCrop = true; if (!reach && InReach(p)) reach = true; }
+                    using var geometry = m.get_Geometry(options); if (geometry is not null) Walk(geometry, t!);
+                }
+                var isPublished = published.Contains((link, memberId.Value));
+                if (reach) { required++; if (!isPublished) missing++; } else if (inCrop) inCropBeyondReach++;
+                if (reach || inCrop || isPublished)
+                    outRows.Add(new JObject { ["link"] = link, ["host"] = id, ["member"] = memberId.Value, ["class"] = m?.GetType().Name, ["category"] = m?.Category?.Name,
+                        ["vertices"] = vertices, ["inCrop"] = inCrop, ["inGuaranteedReach"] = reach, ["published"] = isPublished });
+            }
+        }
+        if (doc.IsModified != before) throw new InvalidOperationException("IsModified changed");
+        var outPath = MetadataPath + ".curtain-members.json";
+        File.WriteAllText(outPath, new JObject { ["system"] = system, ["rows"] = outRows }.ToString());
+        Result(new JObject { ["system"] = system, ["curtainHosts"] = hosts, ["members"] = members, ["requiredInReach"] = required, ["missing"] = missing,
+            ["inCropBeyondReach"] = inCropBeyondReach, ["out"] = outPath, ["isModifiedBefore"] = before, ["isModifiedAfter"] = doc.IsModified });
+    }
+}
