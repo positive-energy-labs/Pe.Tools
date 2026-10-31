@@ -367,13 +367,9 @@ export function ModelPicture({
             kind="advisory"
             label={[
               onContextRepresentation
-                ? contextRepresentation === "link-boxes"
-                  ? "Link-frame envelopes"
-                  : contextRepresentation === "triangle-boxes"
-                    ? "Building envelopes"
-                    : contextRepresentation === "oriented"
-                      ? "Simplified context"
-                      : "Detailed context"
+                ? contextRepresentation === "meshes"
+                  ? "Detailed context"
+                  : "Link-frame envelopes"
                 : "",
               read.contextError ? `context: ${read.contextError}` : "",
               read.completeness?.complete === false
@@ -394,60 +390,25 @@ export function ModelPicture({
               .join(" / ")}
           />
           {onContextRepresentation && contextMode !== "off" ? (
-            <>
-              <Button
-                label={
-                  contextRepresentation !== "meshes"
-                    ? "Read detailed context"
-                    : "Use simplified context"
-                }
-                busy={read.pending}
-                onClick={() =>
-                  onContextRepresentation(
-                    contextRepresentation !== "meshes" ? "meshes" : CONTEXT_DEFAULT,
-                  )
-                }
-              >
-                {contextRepresentation !== "meshes"
+            // The IFC comparison buttons are withheld (coordinator, 2026-10-31): a context read over 30 s
+            // re-captures in a loop (owned by probe-loop). The other representations stay request options.
+            <Button
+              label={
+                contextRepresentation !== "meshes"
                   ? "Read detailed context"
-                  : "Use simplified context"}
-              </Button>
-              {/* Temporary comparison pending the IFC drawing ruling in docs/features/spatial/MAP.md Owed. */}
-              <Button
-                label={
-                  contextRepresentation === "triangle-boxes"
-                    ? "Use building geometry"
-                    : "Use building envelopes"
-                }
-                busy={read.pending}
-                onClick={() =>
-                  onContextRepresentation(
-                    contextRepresentation === "triangle-boxes" ? "oriented" : "triangle-boxes",
-                  )
-                }
-              >
-                {contextRepresentation === "triangle-boxes"
-                  ? "Use building geometry"
-                  : "Use building envelopes"}
-              </Button>
-              <Button
-                label={
-                  contextRepresentation === "link-boxes"
-                    ? "Use building geometry"
-                    : "Use link-frame envelopes"
-                }
-                busy={read.pending}
-                onClick={() =>
-                  onContextRepresentation(
-                    contextRepresentation === "link-boxes" ? "oriented" : "link-boxes",
-                  )
-                }
-              >
-                {contextRepresentation === "link-boxes"
-                  ? "Use building geometry"
-                  : "Use link-frame envelopes"}
-              </Button>
-            </>
+                  : "Use simplified context"
+              }
+              busy={read.pending}
+              onClick={() =>
+                onContextRepresentation(
+                  contextRepresentation !== "meshes" ? "meshes" : CONTEXT_DEFAULT,
+                )
+              }
+            >
+              {contextRepresentation !== "meshes"
+                ? "Read detailed context"
+                : "Use simplified context"}
+            </Button>
           ) : null}
         </PaneOverlay>
       ) : null}

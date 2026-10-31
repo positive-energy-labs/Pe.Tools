@@ -12,7 +12,8 @@ import { openBrowser } from "../../ts/packages/browser/src/index.ts";
 
 const [origin, targetFile, system, outDir, repsArg] = process.argv.slice(2);
 if (!origin || !targetFile || !system || !outDir) throw Error("usage: picture.ts <origin> <target.json> <system> <outDir> [reps]");
-const reps = (repsArg ?? "link-boxes,triangle-boxes,oriented").split(",");
+// The UI offers only the default and full meshes (comparison buttons withheld); other representations render from artifacts.
+const reps = (repsArg ?? "link-boxes").split(",");
 // The picture's comparison control (scene/picture/model.tsx): the advisory label per representation, and the
 // button that reaches it from the interim default. Meshes go through "Read detailed context".
 const LABEL: Record<string, string> = {

@@ -1,0 +1,55 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using Autodesk.Revit.DB;
+using Newtonsoft.Json.Linq;
+
+// Space proof, MAP Owed IFC hybrid: is there a cheap, geometry-free signal that names the loose link-box tail?
+// For every link-frame DirectShape the artifact drew, read only its parameters (no geometry): every numeric parameter
+// whose name speaks of size (volume, area, length, width, height, depth, thickness), plus its link-frame bounding box.
+// __IDS__[system].loose names the tail measured from geometry; the offline pass scores candidate rules against it.
+// Read-only. Rows go to <metadata>.tail-classifier.json; Result carries the time and a parameter-name census.
+public sealed class TailClassifier : PeScriptContainer {
+    const string MetadataPath = @"__METADATA__";
+    const string IdsPath = @"__IDS__";
+
+    public override void Execute() {
+        var before = doc!.IsModified;
+        var meta = JObject.Parse(File.ReadAllText(MetadataPath));
+        var system = Path.GetFileName(MetadataPath).Replace("artifact-", "").Replace(".metadata.json", "");
+        if (JObject.Parse(File.ReadAllText(IdsPath))[system]?["loose"] is not JArray tail) { Result(new JObject { ["system"] = system, ["skipped"] = "no measured tail for this system" }); return; }
+        var loose = new HashSet<(long, long)>(tail.Select(e => ((long)e["link"]!, (long)e["id"]!)));
+        var targets = ((JArray)meta["elements"]!).Where(e => !(bool)e["focus"]! && (string)e["orientedBox"]?["frame"] == "link")
+            .Select(e => ((long)e["handle"]!["linkInstanceId"]!, (long)e["handle"]!["elementId"]!)).ToList();
+        var clock = Stopwatch.StartNew();
+        var docs = new Dictionary<long, Document>();
+        var census = new Dictionary<string, int>();
+        var rows = new JArray();
+        foreach (var (link, id) in targets) {
+            if (!docs.TryGetValue(link, out var source)) docs[link] = source = (doc.GetElement(new ElementId(link)) as RevitLinkInstance)?.GetLinkDocument();
+            var e = source?.GetElement(new ElementId(id));
+            if (e is null) continue;
+            var values = new JObject();
+            foreach (Parameter p in e.Parameters) {
+                var name = p.Definition?.Name ?? "";
+                if (p.StorageType != StorageType.Double || !p.HasValue) continue;
+                var lower = name.ToLowerInvariant();
+                if (!new[] { "vol", "area", "length", "width", "height", "depth", "thick", "span", "size" }.Any(lower.Contains)) continue;
+                values[name] = p.AsDouble();
+                census[name] = census.TryGetValue(name, out var n) ? n + 1 : 1;
+            }
+            using var box = e.get_BoundingBox(null);
+            rows.Add(new JObject { ["link"] = link, ["id"] = id, ["loose"] = loose.Contains((link, id)), ["category"] = e.Category?.Name,
+                ["bbox"] = box is null ? null : new JArray(box.Max.X - box.Min.X, box.Max.Y - box.Min.Y, box.Max.Z - box.Min.Z), ["params"] = values });
+        }
+        clock.Stop();
+        if (doc.IsModified != before) throw new InvalidOperationException("IsModified changed");
+        var outPath = MetadataPath + ".tail-classifier.json";
+        File.WriteAllText(outPath, rows.ToString(Newtonsoft.Json.Formatting.None));
+        Result(new JObject { ["system"] = system, ["elements"] = rows.Count, ["loose"] = rows.Count(r => (bool)r["loose"]!), ["seconds"] = clock.Elapsed.TotalSeconds,
+            ["paramCensus"] = JObject.FromObject(census.OrderByDescending(kv => kv.Value).Take(40).ToDictionary(kv => kv.Key, kv => kv.Value)), ["out"] = outPath,
+            ["isModifiedBefore"] = before, ["isModifiedAfter"] = doc.IsModified });
+    }
+}

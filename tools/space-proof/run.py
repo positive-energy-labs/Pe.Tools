@@ -658,7 +658,7 @@ def main():
     r.add_argument("--post-script", action="append", default=[], help="read-only .cs template run per artifact after the frames pass; __METADATA__ = decoded PSC1 metadata json path (repeatable)")
     r.add_argument("--pre-script", action="append", default=[], help="read-only .cs script run once per process before the first scene read (repeatable)")
     r.add_argument("--pictures", help="web origin serving this checkout's built /ducts (vp preview, borrowed host = this checkout): same-camera pictures per system after the reads")
-    r.add_argument("--picture-reps", default="link-boxes,triangle-boxes,oriented")
+    r.add_argument("--picture-reps", default="link-boxes")
     r.add_argument("--late-script", action="append", default=[], help="like --post-script, but after the pictures (use for the witness: it materializes every element)")
     r.add_argument("--systems", help="comma list: only these of the model's systems")
     r.add_argument("--late-skip", default="", help="comma list of systems whose late scripts are skipped (already witnessed on the same product)")
