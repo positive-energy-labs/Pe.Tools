@@ -9,7 +9,7 @@ using Newtonsoft.Json.Linq;
 
 // Space proof, MAP Owed IFC ruling spike (read-only, no geometry). For each link placement drawn as link-frame boxes:
 //   1. the RevitLinkType's external file reference (path type, user path, load status)
-//   2. IFC identity on 200 sampled DirectShapes: built-in IFC_GUID and any IfcGUID-like string parameter
+//   2. IFC identity: built-in IFC_GUID on every link box (200 sampled with the named and type GUIDs as well)
 //   3. the importer's TEXT quantities (BaseQuantities.GrossVolume / NetVolume / Length) on every link box, with its
 //      link-frame bounding box, so the offline pass can test "bbox volume / IFC volume > 1.5" against __TAIL__[system].loose.
 // Rows go to <metadata>.ifc-probe.json.
@@ -59,7 +59,7 @@ public sealed class IfcProbe : PeScriptContainer {
             rows.Add(new JObject { ["link"] = link, ["id"] = id, ["loose"] = loose.Contains((link, id)), ["category"] = e.Category?.Name,
                 ["bbox"] = bb is null ? null : new JArray(bb.Max.X - bb.Min.X, bb.Max.Y - bb.Min.Y, bb.Max.Z - bb.Min.Z),
                 ["grossVolume"] = gross, ["netVolume"] = net, ["length"] = length,
-                ["grossText"] = Text("BaseQuantities.GrossVolume") });
+                ["grossText"] = Text("BaseQuantities.GrossVolume"), ["ifcGuid"] = e.get_Parameter(BuiltInParameter.IFC_GUID)?.AsString() ?? Text("IfcGUID") });
             if (sampled < 200) {
                 sampled++;
                 var builtIn = e.get_Parameter(BuiltInParameter.IFC_GUID)?.AsString();
