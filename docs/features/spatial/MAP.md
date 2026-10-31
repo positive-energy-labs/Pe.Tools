@@ -83,8 +83,10 @@ does not pay for them again.
 The Chadds row is the harness baseline: headless, on the local clone copy, main product code
 `088f03d4` (`.artifacts/accept/space-proof/baseline-main-088f03d4/results.md`). A windowed run
 on the cloud clone on 2026-10-27 measured 20.1 s / 6.0 s with similar memory; why the time
-differs is UNPROVEN. EX 7 is 108 focus ids by `scopeOf` against 153 in a UI capture, also
-UNPROVEN. Meshes context on Chadds SA 7: 54.5 s, +2,443 MiB. Focus meshes are cheap (whole-building 5,224
+differs is UNPROVEN. EX 7 is 108 focus ids by `scopeOf` against 153 in a UI capture: the page also
+sends the 45 connector stubs of `neighboursOf` (DUCTS_MULTI defaults), PROVEN[deterministic, saved
+`2c282583` snapshot, `tools/space-proof/scope-ids.ts`, 2026-10-31]. The gate keeps the pinned members;
+each pin records `pageFocusCount`. Meshes context on Chadds SA 7: 54.5 s, +2,443 MiB. Focus meshes are cheap (whole-building 5,224
 meshes ≈105 MiB). Reports: `.artifacts/accept/{ducts-read-baseline-20261027,
 manuella-generality-20261027,cleremont-generality-20261028}/REPORT.md`. Local detached copies for
 proof live in `.artifacts/revit/detached/` (Manuella and Cleremont `_local_`). Every Chadds number
