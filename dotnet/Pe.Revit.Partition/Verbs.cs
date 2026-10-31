@@ -33,7 +33,7 @@ public static class Verbs {
 
     public static PartitionAnswer Partition(Document document, PartitionRequest request, World? world = null) {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        world ??= PrepareSpace(document, request);
+        world ??= SpaceWorld.Prepare(document);
         var result = Run(document, Capture(document, request, world), world);
         return result with { Ms = Math.Round(sw.Elapsed.TotalMilliseconds, 3) };
     }
@@ -53,17 +53,9 @@ public static class Verbs {
         return result with { Ms = Math.Round(sw.Elapsed.TotalMilliseconds, 3) };
     }
 
-    /// <summary>
-    ///     The Space a partition reads, and nothing more: the zone's plan grown by the clip margin, from the lowest to the
-    ///     highest point a knee-height probe reaches. Callers that measure the zone's rooms afterwards share it.
-    /// </summary>
-    public static World PrepareSpace(Document document, PartitionRequest request) {
-        var (_, _, level, clip) = Scope(document, request);
-        return SpaceWorld.Prepare(document, SpaceVerbs.ProbeScope(clip, level.ProjectElevation + KneeLoFt), curves: true);
-    }
-
     /// <summary>Read actual Space slices and native Room proposals without running or materializing a solve.</summary>
     public static PartitionInput Capture(Document document, PartitionRequest request, World? world = null) {
+        world ??= SpaceWorld.Prepare(document);
         var knobs = request.Knobs ?? Knobs.Default;
         if (new[] { knobs.InkHalfWidthFt, knobs.CloseFt, knobs.FloorTolFt, knobs.MinHeadroomFt,
                 knobs.MinRoomSqft, knobs.MinFeatureWidthFt, knobs.InkBackedAcceptMin }
@@ -71,36 +63,6 @@ public static class Verbs {
             || knobs.InkHalfWidthFt == 0 || knobs.InkBackedAcceptMin > 1)
             throw new PartitionException("malformed capture: invalid partition knobs");
 
-        var (loops, view, level, clip) = Scope(document, request);
-        var levelZ = level.ProjectElevation;
-        world ??= SpaceWorld.Prepare(document, SpaceVerbs.ProbeScope(clip, levelZ + KneeLoFt), curves: true);
-        var phaseId = PhaseId(view, BuiltInParameter.VIEW_PHASE);
-
-        // Enclosure is declared per document, never inferred. The reason travels into the answer.
-        var (declared, source) = request.Enclosure is null
-            ? EnclosureDeclaration.Read(document)
-            : (request.Enclosure, "request: caller supplied the enclosure");
-
-        // Stage 2, slice. Two calls per band, because Filter.Wants is a conjunction and
-        // (sources AND categories AND Solid|Mesh) OR (Curve2D AND layers) is not one filter.
-        var knee = Band(world, levelZ + KneeLoFt, levelZ + KneeHiFt, declared, clip);
-        var header = Band(world, levelZ + HeaderLoFt, levelZ + HeaderHiFt, declared, clip);
-        RequireStamp(header.Solids.Stamp, knee.Solids.Stamp, document.GetDocumentKey(), "header");
-        var gates = new[] { knee.Solids.Stamp.Resolved, knee.Ribbons.Stamp.Resolved,
-            header.Solids.Stamp.Resolved, header.Ribbons.Stamp.Resolved };
-        var originalKnee = SpaceVerbs.OriginalCurves(world, levelZ + KneeLoFt, levelZ + KneeHiFt, clip, declared.Ribbons);
-        var originalHeader = SpaceVerbs.OriginalCurves(world, levelZ + HeaderLoFt, levelZ + HeaderHiFt, clip, declared.Ribbons);
-        RequireStamp(originalKnee.Stamp, knee.Solids.Stamp, document.GetDocumentKey(), "original knee curves");
-        RequireStamp(originalHeader.Stamp, knee.Solids.Stamp, document.GetDocumentKey(), "original header curves");
-        var (proposals, dropped) = Proposals(document, level, phaseId, knee.Solids.Stamp, clip);
-        RequireCurrent(document, knee.Solids.Stamp);
-        return new PartitionInput(knee.Merged, header.Merged, loops, levelZ, knobs, gates, source, proposals,
-            new OriginalCurveEvidence(originalKnee, originalHeader), Dropped: dropped);
-    }
-
-    // ---------------------------------------------------------------- stage 1
-
-    private static (double[][] Loops, View View, Level Level, Aabb Clip) Scope(Document document, PartitionRequest request) {
         // Stage 1, scope. The Zoning Region is a FilledRegion; its loop is the domain and the
         // accounting denominator, and its level comes from the view it is drawn on.
         double[][] loops;
@@ -133,6 +95,7 @@ public static class Verbs {
         }
         var levelZ = level.ProjectElevation;
         if (!Finite(levelZ)) throw new PartitionException("malformed capture: nonfinite level elevation");
+        var phaseId = PhaseId(view, BuiltInParameter.VIEW_PHASE);
 
         double minx = double.MaxValue, miny = double.MaxValue, maxx = double.MinValue, maxy = double.MinValue;
         foreach (var loop in loops)
@@ -141,8 +104,31 @@ public static class Verbs {
                 miny = Math.Min(miny, loop[i + 1]); maxy = Math.Max(maxy, loop[i + 1]);
             }
 
-        return (loops, view, level, new Aabb(minx - ClipMarginFt, miny - ClipMarginFt, 0, maxx + ClipMarginFt, maxy + ClipMarginFt, 0));
+        var clip = new Aabb(minx - ClipMarginFt, miny - ClipMarginFt, 0, maxx + ClipMarginFt, maxy + ClipMarginFt, 0);
+
+        // Enclosure is declared per document, never inferred. The reason travels into the answer.
+        var (declared, source) = request.Enclosure is null
+            ? EnclosureDeclaration.Read(document)
+            : (request.Enclosure, "request: caller supplied the enclosure");
+
+        // Stage 2, slice. Two calls per band, because Filter.Wants is a conjunction and
+        // (sources AND categories AND Solid|Mesh) OR (Curve2D AND layers) is not one filter.
+        var knee = Band(world, levelZ + KneeLoFt, levelZ + KneeHiFt, declared, clip);
+        var header = Band(world, levelZ + HeaderLoFt, levelZ + HeaderHiFt, declared, clip);
+        RequireStamp(header.Solids.Stamp, knee.Solids.Stamp, document.GetDocumentKey(), "header");
+        var gates = new[] { knee.Solids.Stamp.Resolved, knee.Ribbons.Stamp.Resolved,
+            header.Solids.Stamp.Resolved, header.Ribbons.Stamp.Resolved };
+        var originalKnee = SpaceVerbs.OriginalCurves(world, levelZ + KneeLoFt, levelZ + KneeHiFt, clip, declared.Ribbons);
+        var originalHeader = SpaceVerbs.OriginalCurves(world, levelZ + HeaderLoFt, levelZ + HeaderHiFt, clip, declared.Ribbons);
+        RequireStamp(originalKnee.Stamp, knee.Solids.Stamp, document.GetDocumentKey(), "original knee curves");
+        RequireStamp(originalHeader.Stamp, knee.Solids.Stamp, document.GetDocumentKey(), "original header curves");
+        var (proposals, dropped) = Proposals(document, level, phaseId, knee.Solids.Stamp, clip);
+        RequireCurrent(document, knee.Solids.Stamp);
+        return new PartitionInput(knee.Merged, header.Merged, loops, levelZ, knobs, gates, source, proposals,
+            new OriginalCurveEvidence(originalKnee, originalHeader), Dropped: dropped);
     }
+
+    // ---------------------------------------------------------------- stage 1
 
     private static (double[]? Ring, string? Fault) Loop(IEnumerable<Curve> curves, Transform transform) =>
         Ring(curves.Select(c => c.Tessellate().Select(transform.OfPoint).Select(p => (p.X, p.Y, p.Z)).ToList()));

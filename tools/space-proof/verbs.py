@@ -177,7 +177,7 @@ def run_variant(variant, name, args, out, results, pins):
     else:
         os.environ.pop("PE_SPACE_NO_PACK", None)
     s = R.Session(ev)
-    proc = {"variant": variant, "startedUtc": R.utc(), "availableGiBBeforeStart": round(avail, 2), "packBeforeStart": pack_state(), "reads": []}
+    proc = {"model": name, "variant": variant, "startedUtc": R.utc(), "availableGiBBeforeStart": round(avail, 2), "packBeforeStart": pack_state(), "reads": []}
     results["processes"].append(proc)
     try:
         proc.update(s.start(f"{name}-{variant}", R.GUARD_FLOOR_GIB))
@@ -209,9 +209,8 @@ def run_variant(variant, name, args, out, results, pins):
             (ev / f"req-{r['id']}.json").write_text(json.dumps(r["request"]), encoding="utf8")
         proc["requests"] = [r["id"] for r in reqs]
         proc["packAfterOpen"] = pack_state()
-        for pas in (1, 2):
-            if pas == 2 and args.no_repeat:
-                break
+        # pass 1 is first touch in the process; passes 2..repeats+1 repeat it (spread needs several)
+        for pas in range(1, (1 if args.no_repeat else args.repeats) + 2):
             for r in reqs:
                 before = ps.memory_info().private
                 peak = R.Peak(s.pid)
@@ -250,7 +249,7 @@ def cmd_run(args):
     files = space_files(head)
     pins = read_pins()
     out = R.CHECKOUT / ".artifacts" / "accept" / "space-verbs" / f"{git('rev-parse', '--short', 'HEAD')}-{R.utc()}-{name}-{args.label}"
-    plan = {"model": name, "variants": variants, "filesSwitched": files, "pinned": name in pins, "out": str(out), "freeGiB": round(psutil.virtual_memory().available / 2**30, 1),
+    plan = {"model": name, "variants": variants, "filesSwitched": files, "pinned": {m: m in pins for m in name.split(",")}, "out": str(out), "freeGiB": round(psutil.virtual_memory().available / 2**30, 1),
             "dirty": git("status", "--porcelain", "--", "dotnet", "ts"), "otherRevit": [p.pid for p in psutil.process_iter(["name"]) if p.info["name"] == "Revit.exe"]}
     print(json.dumps(plan, indent=1))
     if args.plan:
@@ -269,10 +268,11 @@ def cmd_run(args):
     results = {"run": {"head": head, "utc": R.utc(), "label": args.label, "model": name, "variants": variants, "checkout": str(R.CHECKOUT), "sdk": "pe-revit (pinned tool of this checkout)"}, "processes": []}
     failed = None
     try:
-        for v in variants:
-            print(f"== {name} {v}", flush=True)
-            to_variant(v, files, head)
-            run_variant(v, name, args, out, results, pins)
+        for model in name.split(","):  # several models in one hold: --model chadds,cleremont
+            for v in variants:
+                print(f"== {model} {v}", flush=True)
+                to_variant(v, files, head)
+                run_variant(v, model, args, out, results, pins)
     except Exception as e:
         failed = f"{type(e).__name__}: {e}"
         results["aborted"] = failed
@@ -305,16 +305,16 @@ def load_run(d):
     return d, res
 
 
-def answers(d, res, variant, pas=1):
+def answers(d, res, variant, pas=1, model=None):
     out = {}
     for p in res["processes"]:
-        if p["variant"] != variant:
+        if p["variant"] != variant or (model and p.get("model", res["run"]["model"]) != model):
             continue
         for r in p["reads"]:
             if r["pass"] == pas and "error" not in r:
                 # r["file"] carries a count taken after the IsModified sdk call, so it is off by one; the tag is the identity.
                 tag = f'{r["id"]}-p{r["pass"]}'
-                path = next((d / "ev" / res["run"]["model"] / variant).glob(f"*-{tag}.stdout"))
+                path = next((d / "ev" / p.get("model", res["run"]["model"]) / variant).glob(f"*-{tag}.stdout"))
                 text = path.read_text(encoding="utf8")
                 resp = json.loads(text[text.index("{"):])
                 out[r["id"]] = (r["verb"], resp["response"])
@@ -500,6 +500,47 @@ def cmd_witness(args):
         sys.exit(1)
 
 
+def warm_stats(processes):
+    """processes: [(model, variant, reads)]. Per (model, variant): the first-touch pass total, then every repeat pass total (host s summed
+    over the pass's requests: median/min/max over passes) and the per-verb median of repeat calls."""
+    import statistics
+    out = {}
+    for model, variant, reads in processes:
+        passes = {}
+        for r in reads:
+            if r.get("elapsedMs") is not None:
+                passes.setdefault(r["pass"], []).append(r)
+        if not passes:
+            continue
+        totals = {p: sum(x["elapsedMs"] for x in rs) / 1000 for p, rs in passes.items()}
+        rep = [t for p, t in sorted(totals.items()) if p > 1]
+        verbs = {}
+        for p, rs in passes.items():
+            if p > 1:
+                for x in rs:
+                    verbs.setdefault(x["verb"], []).append(x["elapsedMs"] / 1000)
+        out[(model, variant)] = {"first": round(totals.get(1, 0), 2), "repeatTotals": [round(t, 2) for t in rep],
+                                 "median": round(statistics.median(rep), 2) if rep else None, "min": min(rep) if rep else None, "max": max(rep) if rep else None,
+                                 "perVerbMedian": {v: round(statistics.median(xs), 3) for v, xs in sorted(verbs.items())},
+                                 "peakGiB": round(max(x["privatePeak"] for rs in passes.values() for x in rs) / 2**30, 2)}
+    return out
+
+
+def cmd_warm(args):
+    procs = []
+    for d in args.runs:
+        d, res = load_run(d)
+        procs += [(p.get("model", res["run"]["model"]), p["variant"], p["reads"]) for p in res["processes"] if p.get("purpose") is None]
+    st = warm_stats(procs)
+    for (model, variant), s in sorted(st.items()):
+        print(f"{model:9s} {variant:7s} first-touch {s['first']:6.2f} s | repeat passes {s['repeatTotals']} median {s['median']} spread [{s['min']}, {s['max']}] | peak {s['peakGiB']} GiB | per-verb median {s['perVerbMedian']}")
+    for model in sorted({m for m, _ in st}):
+        a, b = st.get((model, "scoped")), st.get((model, "nopack"))
+        if a and b and a["median"] is not None and b["median"] is not None:
+            within = a["min"] <= b["median"] <= a["max"]
+            print(f"{model}: nopack median {b['median']} vs scoped spread [{a['min']}, {a['max']}] (median {a['median']}): within spread = {within}; nopack/scoped median = {b['median'] / a['median']:.2f}")
+
+
 def cmd_selftest(_):
     picks = [{"id": 1, "start": [0, 0, 10], "end": [20, 0, 10], "widthFt": 1.0, "heightFt": 0.5}, {"id": 2, "start": [5, 5, 12], "end": [5, 35, 12], "widthFt": 2.0, "heightFt": 2.0}]
     reqs = build_requests(picks)
@@ -537,7 +578,8 @@ def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run")
-    r.add_argument("--model", required=True, choices=["cleremont", "chadds"])
+    r.add_argument("--model", required=True, help="cleremont, chadds, or both comma-separated (one hold)")
+    r.add_argument("--repeats", type=int, default=1, help="repeat passes after the first-touch pass")
     r.add_argument("--variants", default="main,scoped,nopack")
     r.add_argument("--label", default="verbs")
     r.add_argument("--first-only", action="store_true")
@@ -553,9 +595,11 @@ def main():
     w.add_argument("--take", type=int, default=2)
     w.add_argument("--settle", type=int, default=90)
     w.add_argument("--plan", action="store_true")
+    wm = sub.add_parser("warm")
+    wm.add_argument("runs", nargs="+")
     sub.add_parser("selftest")
     args = ap.parse_args()
-    {"run": cmd_run, "compare": cmd_compare, "report": cmd_report, "selftest": cmd_selftest, "witness": cmd_witness}[args.cmd](args)
+    {"run": cmd_run, "compare": cmd_compare, "report": cmd_report, "selftest": cmd_selftest, "witness": cmd_witness, "warm": cmd_warm}[args.cmd](args)
 
 
 if __name__ == "__main__":

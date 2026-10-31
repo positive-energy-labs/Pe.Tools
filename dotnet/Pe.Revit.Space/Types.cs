@@ -165,24 +165,10 @@ public readonly record struct Aabb(
         return x * x + y * y + z * z;
     }
 
-    internal bool Contains(Aabb o) =>
-        this.MinX <= o.MinX && this.MaxX >= o.MaxX && this.MinY <= o.MinY && this.MaxY >= o.MaxY && this.MinZ <= o.MinZ && this.MaxZ >= o.MaxZ;
-
     public bool Overlaps(Aabb o) =>
         this.MinX <= o.MaxX && this.MaxX >= o.MinX
         && this.MinY <= o.MaxY && this.MaxY >= o.MinY
         && this.MinZ <= o.MaxZ && this.MaxZ >= o.MinZ;
-}
-
-/// <summary>
-///     Revit-typed view of an <see cref="Aabb" />. A method on Aabb itself returning XYZ made host-contracts codegen throw
-///     FileNotFoundException for RevitAPI: Newtonsoft resolves every method signature of a response type, and the offline
-///     catalog process cannot load RevitAPI. Aabb is a response type, so it keeps Revit types out of its own members.
-/// </summary>
-internal static class AabbRevit {
-    internal static XYZ[] Corners(this Aabb box) =>
-        [.. from x in new[] { box.MinX, box.MaxX } from y in new[] { box.MinY, box.MaxY } from z in new[] { box.MinZ, box.MaxZ }
-            select new XYZ(x, y, z)];
 }
 
 /// <summary>The address of one element. Enough for the host to select it.</summary>
