@@ -529,6 +529,27 @@ def run_model(name, args, out: Path, fixture, results):
                 metas[system] = (meta, acc)
                 for ps_path in args.post_script:  # per artifact, after the frames pass: __METADATA__ becomes the decoded PSC1 metadata json
                     post(system, meta, acc, ps_path)
+            for system in group:  # other representations, after the timed default reads: first of their kind in this process
+                use = fixture.get(name, {}).get(system, {}).get("ids") or []
+                for rep in [x for x in args.extra_reps.split(",") if x]:
+                    _, req = page_requests(use, rep)
+                    rf = ev / f"req-{system.replace(' ', '')}-{rep}.json"
+                    rf.write_text(json.dumps(req), encoding="utf8")
+                    before = ps.memory_info().private
+                    peak = Peak(s.pid); peak.start()
+                    code, resp, wall = s.pea(f"scene-{system.replace(' ', '')}-{rep}", ["host", "call", "--key", "revit.detail.space-scene", "--open-document-id", s.doc, "--request-file", str(rf), "--verbosity", "full"])
+                    peak.stop_ = True
+                    after = ps.memory_info().private
+                    row = {"system": system, "rep": rep, "wallS": round(wall, 2), "deltaMiB": round((after - before) / MIB, 1), "privatePeak": max(peak.peak, after), "privateAfter": after}
+                    if code == 0 and resp and "response" in resp:
+                        art = find_artifact(resp["response"])
+                        rc = art["scene"]
+                        row.update({"revitMs": rc["work"]["nativeMilliseconds"], "artifact": art["id"], "bytes": art["bytes"], "elements": rc["elements"], "triangles": rc["triangles"],
+                                    "complete": rc["completeness"]["complete"], "phases": rc["work"].get("phaseMilliseconds")})
+                    else:
+                        row["error"] = f"pea exit {code}"
+                    model.setdefault("extraReads", []).append(row)
+                    print(f"  extra {system} {rep}: {row.get('revitMs')} ms, +{row['deltaMiB']} MiB", flush=True)
             if args.pictures:  # after every timed read and early post-script, so browser reads never land in a measured delta
                 tf = ev / "target.json"
                 tf.write_text(json.dumps(model.get("target")), encoding="utf8")
@@ -640,6 +661,7 @@ def main():
     r.add_argument("--picture-reps", default="link-boxes,triangle-boxes,oriented")
     r.add_argument("--late-script", action="append", default=[], help="like --post-script, but after the pictures (use for the witness: it materializes every element)")
     r.add_argument("--systems", help="comma list: only these of the model's systems")
+    r.add_argument("--extra-reps", default="", help="comma list of other context representations to read per system after the timed reads (cost + artifact ids)")
     r.add_argument("--post-token", action="append", default=[], help="NAME=VALUE: replace __NAME__ in every post-script (repeatable); __CACHE__ is the scene cache dir")
     d = sub.add_parser("diff"); d.add_argument("a"); d.add_argument("b")
     m = sub.add_parser("merge", help="one table from the models of several runs (later runs win a model)")
