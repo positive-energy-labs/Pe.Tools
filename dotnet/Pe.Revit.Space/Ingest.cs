@@ -11,6 +11,14 @@ internal static class Ingest {
         internal readonly Dictionary<(string, string, ViewDetailLevel), (Tri[] Triangles, bool Solid)> Entries = new();
         internal int TriangleCount { get; set; }
     }
+    /// <summary>Why an element produced no rows. A native read that threw is a failure; a body rejected by the read
+    /// region lies outside it; neither means the element has nothing to draw (curtain hosts, reveals, openings: 204 of
+    /// them on Cleremont's house links, MAP step 3).</summary>
+    internal sealed class Miss {
+        internal bool Failed;
+        internal bool Outside;
+    }
+
     /// <summary>Model categories that carry no obstacle geometry but poison the world AABB.
     /// Proven on projectA: four 3D view crop boxes stretch host X across 13,860 ft.</summary>
     private static readonly HashSet<long> Denied = [
@@ -59,9 +67,10 @@ internal static class Ingest {
     ///     layer, so a filter can name a layer and a Handle can report one. Returns the row count.
     /// </summary>
     public static int Element(Element e, int source, int firstPrim, List<Tri> sink, Transform xf, List<PrimRow> rows,
-        bool includeCurves = true, Aabb? region = null, SceneBudget? budget = null, bool coarse = false, SymbolMeshes? symbols = null) {
+        bool includeCurves = true, Aabb? region = null, SceneBudget? budget = null, bool coarse = false, SymbolMeshes? symbols = null,
+        Miss? miss = null) {
         var added = 0;
-        var solid = Faces(e, source, firstPrim, sink, xf, region, budget, coarse, symbols);
+        var solid = Faces(e, source, firstPrim, sink, xf, region, budget, coarse, symbols, miss ?? new Miss());
         if (solid is not null) {
             rows.Add(solid);
             added++;
@@ -72,10 +81,10 @@ internal static class Ingest {
     }
 
     /// <summary>The solid and mesh half: one row, or null when the element tessellates to nothing.</summary>
-    private static PrimRow? Faces(Element e, int source, int prim, List<Tri> sink, Transform xf, Aabb? region, SceneBudget? budget, bool coarse, SymbolMeshes? symbols) {
+    private static PrimRow? Faces(Element e, int source, int prim, List<Tri> sink, Transform xf, Aabb? region, SceneBudget? budget, bool coarse, SymbolMeshes? symbols, Miss miss) {
         var start = sink.Count;
         var sawSolid = false;
-        Read(e, coarse ? CoarseOpts : Opts, xf, prim, sink, ref sawSolid, region, budget, symbols);
+        Read(e, coarse ? CoarseOpts : Opts, xf, prim, sink, ref sawSolid, region, budget, symbols, miss);
         var box = TriangleBounds(sink, start);
         var body = sink.Count > start ? ElementBounds(e, xf) : null;
         // A cuff is a solid too. Retry when it spans less than half the body's longest axis;
@@ -83,7 +92,7 @@ internal static class Ingest {
         if (!coarse && (sink.Count == start ? !sawSolid : body is { } b && b.CoverageBy(box) < 0.5)) {
             var fine = new List<Tri>();
             var fineSolid = false;
-            Read(e, FineOpts, xf, prim, fine, ref fineSolid, region, budget, symbols);
+            Read(e, FineOpts, xf, prim, fine, ref fineSolid, region, budget, symbols, miss);
             var fineBox = TriangleBounds(fine, 0);
             if (fine.Count > 0 && (sink.Count == start || body is { } full && full.CoverageBy(fineBox) > full.CoverageBy(box))) {
                 sink.RemoveRange(start, sink.Count - start);
@@ -106,19 +115,20 @@ internal static class Ingest {
             HeightRole: HeightRoles.Of(e.Category?.Id.Value(), e is ImportInstance));
     }
 
-    private static void Read(Element e, Options o, Transform xf, int prim, List<Tri> sink, ref bool sawSolid, Aabb? region, SceneBudget? budget, SymbolMeshes? symbols) {
+    private static void Read(Element e, Options o, Transform xf, int prim, List<Tri> sink, ref bool sawSolid, Aabb? region, SceneBudget? budget, SymbolMeshes? symbols, Miss miss) {
         GeometryElement? ge;
         budget?.Geometry();
         try {
             ge = e.get_Geometry(o);
         } catch {
+            miss.Failed = true;
             return;
         }
 
         using (ge) {
             budget?.AfterNative();
             if (ge is not null) Walk(ge, xf, prim, sink, ref sawSolid, region, xf.HasReflection, budget, symbols,
-                symbols is null ? "" : e.Document.GetDocumentKey(), o.DetailLevel);
+                symbols is null ? "" : e.Document.GetDocumentKey(), o.DetailLevel, miss);
         }
     }
 
@@ -127,7 +137,7 @@ internal static class Ingest {
     // ponytail: loose curves outside a DWG import, and points, are still dropped. Only an
     // ImportInstance raises its curves into ribbons, because only there does a layer name exist.
     private static void Walk(GeometryElement ge, Transform xf, int prim, List<Tri> outp, ref bool sawSolid, Aabb? region, bool reverseWinding, SceneBudget? budget,
-        SymbolMeshes? symbols, string document, ViewDetailLevel detail) {
+        SymbolMeshes? symbols, string document, ViewDetailLevel detail, Miss miss) {
         // Native symbol hierarchies are acyclic; unlike copied geometry, nested symbols are not flattened.
         foreach (var go in ge) {
             using (go) switch (go) {
@@ -137,7 +147,7 @@ internal static class Ingest {
                     budget?.AfterNative();
                     if (faces.Size == 0) break;
                     sawSolid = true;
-                    if (region is { } bounds && !Overlaps(s, xf, bounds)) break;
+                    if (region is { } bounds && !Overlaps(s, xf, bounds)) { miss.Outside = true; break; }
                     foreach (Face f in faces) {
                         using (f) {
                         Mesh? m;
@@ -145,6 +155,7 @@ internal static class Ingest {
                         try {
                             m = f.Triangulate();
                         } catch {
+                            miss.Failed = true;
                             continue;
                         }
 
@@ -177,6 +188,7 @@ internal static class Ingest {
                     try {
                         inner = gi.GetSymbolGeometry();
                     } catch {
+                        miss.Failed = true;
                         continue;
                     }
 
@@ -184,14 +196,19 @@ internal static class Ingest {
                     budget?.AfterNative();
                     if (inner is not null) {
                         if (symbols is null)
-                            Walk(inner, toHost, prim, outp, ref sawSolid, region, reverseWinding ^ local.HasReflection, budget, null, document, detail);
+                            Walk(inner, toHost, prim, outp, ref sawSolid, region, reverseWinding ^ local.HasReflection, budget, null, document, detail, miss);
                         else {
                             var triangles = new List<Tri>();
                             var solid = false;
-                            Walk(inner, Transform.Identity, 0, triangles, ref solid, null, false, budget, symbols, document, detail);
+                            var symbolMiss = new Miss();
+                            Walk(inner, Transform.Identity, 0, triangles, ref solid, null, false, budget, symbols, document, detail, symbolMiss);
+                            miss.Failed |= symbolMiss.Failed;
                             var value = triangles.ToArray();
-                            symbols.Entries.Add(key, (value, solid));
-                            symbols.TriangleCount += value.Length;
+                            // A failed symbol read is not cached: the next instance of it must report the failure too.
+                            if (!symbolMiss.Failed) {
+                                symbols.Entries.Add(key, (value, solid));
+                                symbols.TriangleCount += value.Length;
+                            }
                             Place(value, toHost, prim, outp, reverseWinding ^ local.HasReflection);
                             sawSolid |= solid;
                         }

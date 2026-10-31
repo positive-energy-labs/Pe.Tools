@@ -68,9 +68,9 @@ public sealed record SceneSource(string DocumentKey, long? LinkInstanceId, IRead
     SceneSourceState State, string Name, SceneSourceRead? Read);
 /// <param name="Counted">Ids within reach, counted without loading.</param>
 /// <param name="Kept">Elements handed to representation.</param>
-/// <param name="Excluded">Ids within reach per exclusion class; classes may overlap. Quick-filter classes are removed before iteration; run-insulation is classified after reading its host.</param>
+/// <param name="Excluded">Ids within reach per exclusion class; classes may overlap. Quick-filter classes are removed before iteration; run-insulation is classified after reading its host. <c>no-geometry</c> (native geometry has nothing to draw: curtain hosts, reveals, openings) and <c>outside-crop</c> (geometry wholly outside the picture's crop) are classified after the geometry read and stay counted in Kept.</param>
 /// <param name="RejectedAfterLoad">Passed every quick filter, then refused by the managed gate: loaded for nothing.</param>
-/// <param name="CutByBound">Kept elements left out by a bound: missing native bounds, or the triangle or acquisition budget.</param>
+/// <param name="CutByBound">Kept elements left out by a bound or a failed native read: missing native bounds, the triangle or acquisition budget, or a geometry read that threw.</param>
 /// <param name="QueryMilliseconds">The reach query; ExcludeMilliseconds the exclusion-class queries; IterateMilliseconds the element loads.</param>
 public sealed record SceneSourceRead(int Counted, int Kept, IReadOnlyDictionary<string, int> Excluded, int RejectedAfterLoad,
     int CutByBound, double Milliseconds, double QueryMilliseconds, double ExcludeMilliseconds, double IterateMilliseconds);
@@ -148,17 +148,23 @@ public static class Scene {
         string? limit = null;
         var reads = new Dictionary<Partition, (SceneReach Reach, int Kept, int Cut)>();
         void Cut(Partition partition) { if (reads.TryGetValue(partition, out var r)) reads[partition] = r with { Cut = r.Cut + 1 }; }
+        // Post-read classes: elements read whole that are honestly absent from the picture, never a completeness failure.
+        var classified = new Dictionary<Partition, Dictionary<string, int>>();
+        void Classify(Partition partition, string kind) {
+            if (!classified.TryGetValue(partition, out var classes)) classified[partition] = classes = new Dictionary<string, int>();
+            classes[kind] = classes.TryGetValue(kind, out var n) ? n + 1 : 1;
+        }
         IReadOnlyList<long> detached = [];
         var elements = new List<SceneElement>();
         var triangles = 0;
         var writtenBounds = Aabb.Empty;
         var crop = request.Bounds;
         using var writer = new BinaryWriter(vertices, System.Text.Encoding.UTF8, true);
-        LinkedGeometryStore.Geometry Capture(Partition partition, Element element, Aabb? region) {
+        LinkedGeometryStore.Geometry Capture(Partition partition, Element element, Aabb? region, Ingest.Miss? miss = null) {
             var rows = new List<PrimRow>();
             var mesh = new List<Tri>();
             Ingest.Element(element, partition.Source, 0, mesh, partition.Transform, rows,
-                includeCurves: false, region: region, budget: budget, symbols: oriented.Meshes);
+                includeCurves: false, region: region, budget: budget, symbols: oriented.Meshes, miss: miss);
             var captured = new LinkedGeometryStore.Geometry(rows.ToArray(), mesh.ToArray());
             extracted++;
             extractedTriangles += captured.Triangles.Length;
@@ -220,8 +226,8 @@ public static class Scene {
             var runIndex = new SceneFocusIndex(runs.Select(row => row.Bounds).ToArray());
             var proximity = context == SceneContextRepresentation.Meshes && focus.Count > 0
                 ? Bvh.Build(focus.SelectMany(row => row.Triangles).ToArray()) : null;
-            void Write(Partition partition, PrimRow row, Tri[] source, bool isFocus) {
-                if (crop is { } region && !row.Box.Overlaps(region)) return;
+            bool Write(Partition partition, PrimRow row, Tri[] source, bool isFocus) {
+                if (crop is { } region && !row.Box.Overlaps(region)) return false;
                 var contains = row.Kind == PrimKind.Solid && index.ContainedBy(row.Box);
                 var kept = new List<Tri>();
                 var bounds = Aabb.Empty;
@@ -237,7 +243,7 @@ public static class Scene {
                     } else if (!Take(t)) break;
                     if (stopped) break;
                 }
-                if (kept.Count == 0) return;
+                if (kept.Count == 0) return false;
                 var category = partition.Doc.GetElement(row.ElementId.ToElementId())?.Category?.Id.Value();
                 elements.Add(new SceneElement(partition.HandleFor(row), triangles * 3, kept.Count * 3, bounds, isFocus, category,
                     SceneRepresentation.Mesh, null));
@@ -248,6 +254,7 @@ public static class Scene {
                 }
                 writtenBounds = Union(writtenBounds, bounds);
                 triangles += kept.Count;
+                return true;
                 bool Take(Tri triangle) {
                     if (triangles + kept.Count >= request.MaxTriangles) {
                         if (isFocus) throw new ArgumentException("Selected mesh exceeds maxTriangles; narrow elementIds or raise the budget.");
@@ -274,13 +281,17 @@ public static class Scene {
                         }
                         var envelope = !isFocus && context == SceneContextRepresentation.TriangleBoxes && element is DirectShape;
                         // An element's envelope needs its whole geometry, before the scene crop clips any triangles.
-                        var captured = Capture(partition, element, envelope ? null : crop);
+                        var miss = new Ingest.Miss();
+                        var captured = Capture(partition, element, envelope ? null : crop, miss);
                         box = envelope ? TriangleBox.Fit(captured.Triangles, budget.Check) : null;
                         if (box is null) {
-                            foreach (var meshRow in captured.Rows) Write(partition, meshRow, captured.Triangles, isFocus);
-                            if (captured.Rows.Length == 0) {
+                            var wrote = false;
+                            foreach (var meshRow in captured.Rows) wrote |= Write(partition, meshRow, captured.Triangles, isFocus);
+                            // Only a native read that threw is missing geometry. Nothing to draw, or nothing inside the
+                            // crop, is disclosed per source and leaves the picture complete (Cleremont 204, MAP step 3).
+                            if (!wrote && miss.Failed) {
                                 omitted++; limit ??= "missing-geometry"; Cut(partition);
-                            }
+                            } else if (!wrote && !isFocus) Classify(partition, captured.Rows.Length == 0 && !miss.Outside ? "no-geometry" : "outside-crop");
                             return;
                         }
                     }
@@ -352,7 +363,7 @@ public static class Scene {
             return new SceneMetadata("space-scene-v4", world.StampFor(world.Partitions, Filter.Default), crop ?? writtenBounds,
                 triangles, elements, ids.ToList(), omitted, world.Partitions.Select(p => new SceneSource(p.DocumentKey,
                     p.LinkInstanceId, Matrix(p.Transform), SceneSourceState.Loaded, p.Doc.Title,
-                    reads.TryGetValue(p, out var r) ? new SceneSourceRead(r.Reach.Counted, r.Kept, r.Reach.Excluded,
+                    reads.TryGetValue(p, out var r) ? new SceneSourceRead(r.Reach.Counted, r.Kept, Merge(r.Reach.Excluded, classified.GetValueOrDefault(p)),
                         r.Reach.RejectedAfterLoad, r.Cut, r.Reach.Milliseconds, r.Reach.QueryMilliseconds, r.Reach.ExcludeMilliseconds,
                         r.Reach.IterateMilliseconds) : null))
                     .Concat(world.Unread.Select(u => new SceneSource("", u.LinkInstanceId, Matrix(u.Transform), u.State, u.Name, null)))
@@ -364,6 +375,13 @@ public static class Scene {
         } finally {
             oriented.Meshes.Entries.Clear();
         }
+    }
+
+    private static IReadOnlyDictionary<string, int> Merge(IReadOnlyDictionary<string, int> excluded, Dictionary<string, int>? classified) {
+        if (classified is null) return excluded;
+        var merged = excluded.ToDictionary(pair => pair.Key, pair => pair.Value);
+        foreach (var (kind, count) in classified) merged[kind] = merged.TryGetValue(kind, out var n) ? n + count : count;
+        return merged;
     }
 
     private static IReadOnlyList<double> Matrix(Transform t) => [

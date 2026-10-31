@@ -1,0 +1,439 @@
+// Space proof native primitive witness (MAP proof gate, step 3). Read-only post-script for tools/space-proof/run.py:
+// __METADATA__ = decoded PSC1 metadata, __CACHE__ = the space-scenes dir holding <artifact id>.bin. Rebuilt 2026-10-31 from the
+// surviving cabe69e3 materialized copy (the frozen InstrumentBundle source was lost with worktree t3-5b8bc59c), plus the
+// link-frame branch. Containment tiers against runtime VertexTolerance: <=0.1x pass, 0.1-1x diagnose, >1x fail.
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using Autodesk.Revit.DB;
+using Newtonsoft.Json.Linq;
+using Vector3 = System.Numerics.Vector3;
+public sealed class ArtifactPrimitives : PeScriptContainer {
+ const string Metadata = @"__METADATA__";
+ static XYZ P(JToken v) => new XYZ((double)v[0]!, (double)v[1]!, (double)v[2]!);
+ public override void Execute() {
+  var modified=doc!.IsModified; var meta=JObject.Parse(File.ReadAllText(Metadata));
+  // Revit point resolution; pass <=0.1x; record/diagnose 0.1-1x without abort; fail >1x. Manuella SA42 adc1c811: inscribed4.098x, circumscribed0.0196x, folded insulation0.0264x.
+  var vertexTolerance=doc.Application.VertexTolerance;
+  if(!double.IsFinite(vertexTolerance) || vertexTolerance<=0)throw new Exception("Invalid native VertexTolerance");
+  var errors=new JArray(); var residuals=new Dictionary<string,JObject>(); var failed=0;var boxes=0;var linkBoxes=0;var runs=0;var paths=0;var meshes=0;long meshTriangles=0;var surfaceChecks=0;var surfaceMissing=0;var maxSurfaceExcess=0.0;
+  double maxMeshDeviation=0,maxMeshBound=0,maxMeshRatio=0,maxEnvelopeExcess=0,maxEnvelopeBound=0;var crop=meta["bounds"]!;
+  var meshClasses=new Dictionary<string,int>();var nestedMeshes=0;var multipleInstanceMeshes=0;var modifiedFamilyMeshes=0;
+  long insulationMeshVertices=0,insulationRunVertices=0,curvedMeshVertices=0; JObject worstMesh=null;double maxInsulationMeshDeviation=0,maxInsulationMeshBound=0,maxInsulationRunExcess=0,maxInsulationRunBound=0;
+  long facetVertices=0,inscribedOutsideVertices=0;double maxInscribedFacetExcess=0,maxCircumscribedFacetExcess=0,maxFacetBound=0;
+  var limits=new[]{new[]{(double)crop["minX"]!,(double)crop["maxX"]!},new[]{(double)crop["minY"]!,(double)crop["maxY"]!},new[]{(double)crop["minZ"]!,(double)crop["maxZ"]!}};
+  var artifactId=File.ReadAllText(Metadata.Replace(".metadata.json",".id")).Trim();
+  var cache=@"__CACHE__";
+  using var artifact=new BinaryReader(File.OpenRead(Path.Combine(cache,artifactId+".bin")));
+  if(artifact.ReadInt32()!=0x31435350)throw new Exception("Not PSC1");
+  var dataOffset=(8L+artifact.ReadInt32()+3)/4*4;
+  void Error(JToken row,string reason) { failed++; if(errors.Count<100) errors.Add(new JObject {["handle"]=row["handle"], ["reason"]=reason}); }
+  void Containment(JToken row,string kind,double excess,long? insulationId=null) {
+   var ratio=excess/vertexTolerance;
+   if(ratio<=0.1)return;
+   var key=row["handle"]!.ToString(Newtonsoft.Json.Formatting.None)+kind+insulationId;
+   if(!residuals.TryGetValue(key,out var prior) || excess>(double)prior["excessFt"]!)residuals[key]=new JObject{["handle"]=row["handle"]!.DeepClone(),["kind"]=kind,["insulationId"]=insulationId,["excessFt"]=excess,["vertexToleranceFt"]=vertexTolerance,["ratio"]=ratio,["tier"]=ratio<=1?"diagnose":"failure"};
+   if(ratio>1)Error(row,kind+" exceeds native point resolution: excessFt="+excess+" ratio="+ratio);
+  }
+  // CylinderGeometry after rotateX(pi/2), using the actual float32 template coordinates.
+  (double X,double Y,double Distance)[] Facets(double radius,double diameter) {
+   var vertices=Enumerable.Range(0,32).Select(i=>((double)(float)(Math.Sin(i*2*Math.PI/32)*radius),(double)(float)(-Math.Cos(i*2*Math.PI/32)*radius))).ToArray();
+   return Enumerable.Range(0,32).Select(i=>{
+    var a=vertices[i];var b=vertices[(i+1)%32];var nx=b.Item2-a.Item2;var ny=a.Item1-b.Item1;var length=Math.Sqrt(nx*nx+ny*ny);nx/=length;ny/=length;
+    return (nx,ny,(nx*a.Item1+ny*a.Item2)*diameter);
+   }).ToArray();
+  }
+  double FacetExcess(XYZ point,XYZ start,XYZ x,XYZ y,(double X,double Y,double Distance)[] facets) {
+   var delta=point-start;var u=delta.DotProduct(x);var v=delta.DotProduct(y);
+   return facets.Max(f=>f.X*u+f.Y*v-f.Distance);
+  }
+  foreach(var row in (JArray)meta["elements"]!) {
+   var h=row["handle"]!; var link=h["linkInstanceId"];
+   var source=doc; var transform=Transform.Identity;
+   if(link!=null && link.Type!=JTokenType.Null) {
+    var instance=doc.GetElement(new ElementId((long)link)) as RevitLinkInstance;
+    source=instance?.GetLinkDocument(); transform=instance?.GetTotalTransform();
+   }
+   var e=source?.GetElement(new ElementId((long)h["elementId"]!));
+   if(e==null || transform==null || e.UniqueId!=(string)h["uniqueId"]!) { Error(row,"source identity unavailable or changed");continue; }
+   var representation=(string)row["representation"]!;
+   if(representation=="mesh") {
+    meshes++;var count=(int)row["vertexCount"]!;var published=new List<Triangle>();
+    var nativeClass=e.GetType().Name;meshClasses[nativeClass]=meshClasses.TryGetValue(nativeClass,out var prior)?prior+1:1;
+    if(e is FamilyInstance mf && mf.HasModifiedGeometry())modifiedFamilyMeshes++;
+    var nested=false;var multiple=false;
+    if(count==0 || count%3!=0) {Error(row,"invalid mesh vertex count");continue;}
+    artifact.BaseStream.Position=dataOffset+12L*(int)row["firstVertex"]!;
+    Point ReadPoint()=>new Point(artifact.ReadSingle(),artifact.ReadSingle(),artifact.ReadSingle());
+    for(var n=0;n<count;n+=3)published.Add(new Triangle(ReadPoint(),ReadPoint(),ReadPoint()));
+    meshTriangles+=published.Count;
+    // Independent native traversal and double-precision placement. Crop-created vertices must lie
+    // inside one native triangle, including its plane; a mesh name alone cannot certify orientation.
+    var unmatched=published;
+    var selectedNative=new List<Triangle>();
+    foreach(var detail in new[]{ViewDetailLevel.Medium,ViewDetailLevel.Fine}) {
+     var native=new List<Triangle>();EachTriangle(e,transform,detail,(_,_,_)=>{},(original,rounded)=>{
+      var bound=ClipError(rounded,limits)+original.ArithmeticBound;
+      native.Add(original with { Bound=bound });maxMeshBound=Math.Max(maxMeshBound,bound);
+     },depth=>{if(depth>0)nested=true;},roots=>{if(roots>1)multiple=true;});
+     if(native.Count>0) {
+      var tree=new Tree(native.ToArray());var remaining=new List<Triangle>();
+      foreach(var drawn in unmatched) {
+       if(tree.Match(drawn,out var deviation,out var bound)) {
+        if(deviation>maxMeshDeviation){maxMeshDeviation=deviation;worstMesh=new JObject{["handle"]=h.DeepClone(),["deviationFt"]=deviation,["boundFt"]=bound,["vertexToleranceRatio"]=deviation/vertexTolerance,["publishedTriangle"]=JToken.FromObject(drawn)};}
+        if(bound>0)maxMeshRatio=Math.Max(maxMeshRatio,deviation/bound);
+        Containment(row,"mesh surface",deviation);
+       }
+       else remaining.Add(drawn);
+      }
+      unmatched=remaining;
+     }
+     if(unmatched.Count==0){selectedNative=native;break;}
+    }
+    if(nested)nestedMeshes++;if(multiple)multipleInstanceMeshes++;
+    if(unmatched.Count>0)Error(row,"published mesh triangles outside native surfaces: "+unmatched.Count+"/"+published.Count+" first="+unmatched[0]);
+    var curvedMesh=e is MEPCurve && e.Location is LocationCurve nativeLocation && nativeLocation.Curve is not Line;
+    if((e is InsulationLiningBase || curvedMesh) && selectedNative.Count>0) {
+     // Reverse the surface witness: a valid subset is not a complete insulation mesh.
+     // Always ask Fine independently, even if the forward check accepted a Medium mesh.
+     if(e is InsulationLiningBase){selectedNative=new List<Triangle>();EachTriangle(e,transform,ViewDetailLevel.Fine,(_,_,_)=>{},(original,rounded)=>{
+      selectedNative.Add(original with {Bound=ClipError(rounded,limits)+original.ArithmeticBound});
+     });}
+     if(selectedNative.Count==0){Error(row,"insulation has no independent Fine geometry");continue;}
+     var bound=selectedNative.Max(t=>t.Bound)+published.Max(t=>t.ArithmeticBound);
+     maxInsulationMeshBound=Math.Max(maxInsulationMeshBound,bound);
+     var drawnTree=new Tree(published.Select(t=>t with {Bound=bound}).ToArray());
+     foreach(var native in selectedNative)foreach(var point in new[]{native.A,native.B,native.C}) {
+      if(Enumerable.Range(0,3).Any(axis=>point.At(axis)<limits[axis][0] || point.At(axis)>limits[axis][1]))continue;
+      if(curvedMesh)curvedMeshVertices++;else insulationMeshVertices++;
+      if(drawnTree.Match(new Triangle(point,point,point),out var deviation,out _)) {
+       maxInsulationMeshDeviation=Math.Max(maxInsulationMeshDeviation,deviation);
+       Containment(row,curvedMesh?"curved mesh coverage":"insulation mesh",deviation);
+      }
+      else Error(row,"native body vertex absent from published mesh: "+point+" boundFt="+bound);
+     }
+    }
+    continue;
+   }
+   if(representation=="oriented-box") {
+    boxes++;
+    if((string)row["orientedBox"]!["frame"]! == "triangles") {
+     if(e is not DirectShape) {Error(row,"triangle envelope is not a DirectShape");continue;}
+     var envelope=row["orientedBox"]!;var axes=new[]{P(envelope["axisX"]!),P(envelope["axisY"]!),P(envelope["axisZ"]!)};
+     var envelopeCenter=P(envelope["center"]!);var envelopeHalf=P(envelope["halfSize"]!);var sizes=new[]{envelopeHalf.X,envelopeHalf.Y,envelopeHalf.Z};
+     var outside=false;var triangleFrame=false;var vertices=0;
+     void Triangle(XYZ a,XYZ b,XYZ c) {
+      vertices+=3;
+      var normal=(b-a).CrossProduct(c-a);if(normal.GetLength()<1e-10)return;normal=normal.Normalize();
+      foreach(var edge in new[]{b-a,c-a,c-b}) {
+       if(edge.GetLength()<1e-10)continue;var unit=edge.Normalize();
+       for(var j=0;j<3;j++)for(var k=0;k<3;k++)
+        if(j!=k && Math.Abs(axes[j].DotProduct(normal))>Math.Cos(Math.PI/180) && Math.Abs(axes[k].DotProduct(unit))>Math.Cos(Math.PI/180))triangleFrame=true;
+      }
+     }
+     foreach(var detail in new[]{ViewDetailLevel.Medium,ViewDetailLevel.Fine})EachTriangle(e,transform,detail,Triangle,(original,rounded)=>{
+      var points=new[]{original.A,original.B,original.C};
+      for(var k=0;k<3;k++)for(var j=0;j<3;j++) {
+       var excess=Math.Abs((points[k]-Point.Of(envelopeCenter)).Dot(Point.Of(axes[j])))-sizes[j];
+       var bound=rounded[k].Error+32*Math.Pow(2,-53)/(1-32*Math.Pow(2,-53))*(points[k].Length+envelopeCenter.GetLength()+sizes[j]);
+       maxEnvelopeExcess=Math.Max(maxEnvelopeExcess,excess);maxEnvelopeBound=Math.Max(maxEnvelopeBound,bound);
+       if(excess>bound)outside=true;
+      }
+     });
+     if(vertices==0 || outside || !triangleFrame)Error(row,"triangle envelope native check: vertices="+vertices+", outside="+outside+", ownFaceFrame="+triangleFrame);
+     continue;
+    }
+    if((string)row["orientedBox"]!["frame"]! == "link") {
+     // Interim IFC default (MAP Owed): the element's own bounding box in its link's frame, then the link transform.
+     // Its axes must be the link placement's; every native vertex must lie inside it (containment, never orientation).
+     if(e is not DirectShape) {Error(row,"link-frame box is not a DirectShape");continue;}
+     var lb=row["orientedBox"]!;var laxes=new[]{P(lb["axisX"]!),P(lb["axisY"]!),P(lb["axisZ"]!)};
+     if(Math.Abs(laxes[0].DotProduct(transform.BasisX))<1-1e-7 || Math.Abs(laxes[1].DotProduct(transform.BasisY))<1-1e-7 || Math.Abs(laxes[2].DotProduct(transform.BasisZ))<1-1e-7) {Error(row,"link-frame box axes differ from the link placement");continue;}
+     var lcenter=P(lb["center"]!);var lhalf=P(lb["halfSize"]!);var lsizes=new[]{lhalf.X,lhalf.Y,lhalf.Z};var lvertices=0;
+     foreach(var detail in new[]{ViewDetailLevel.Medium,ViewDetailLevel.Fine})EachTriangle(e,transform,detail,(_,_,_)=>lvertices+=3,(original,rounded)=>{
+      var points=new[]{original.A,original.B,original.C};
+      for(var k=0;k<3;k++)for(var j=0;j<3;j++) {
+       var excess=Math.Abs((points[k]-Point.Of(lcenter)).Dot(Point.Of(laxes[j])))-lsizes[j];
+       var bound=rounded[k].Error+32*Math.Pow(2,-53)/(1-32*Math.Pow(2,-53))*(points[k].Length+lcenter.GetLength()+lsizes[j]);
+       maxEnvelopeExcess=Math.Max(maxEnvelopeExcess,excess);maxEnvelopeBound=Math.Max(maxEnvelopeBound,bound);
+       Containment(row,"link envelope",excess);
+      }
+     });
+     linkBoxes++;if(lvertices==0)Error(row,"link-frame box has no native vertices");
+     continue;
+    }
+    if((string)row["orientedBox"]!["frame"]! != "symbol") {Error(row,"unknown box frame provenance");continue;}
+    if(e is not FamilyInstance f) { Error(row,"oriented box has no family frame");continue; }
+    using var total=transform.Multiply(f.GetTotalTransform()); var b=row["orientedBox"]!;
+    if(Math.Abs(P(b["axisX"]!).DotProduct(total.BasisX))<1-1e-7 || Math.Abs(P(b["axisY"]!).DotProduct(total.BasisY))<1-1e-7 || Math.Abs(P(b["axisZ"]!).DotProduct(total.BasisZ))<1-1e-7) Error(row,"box axes differ from native total/link frame");
+    using var opt=new Options { DetailLevel=ViewDetailLevel.Fine,ComputeReferences=false };
+    using var geometry=f.get_Geometry(opt); var instances=geometry.OfType<GeometryInstance>().ToArray();
+    if(instances.Length!=1) { Error(row,"box does not have one native symbol");continue; }
+    using var symbol=instances[0].GetSymbolGeometry();using var bounds=symbol.GetBoundingBox();
+    var center=total.OfPoint((bounds.Min+bounds.Max)*0.5);var half=(bounds.Max-bounds.Min)*0.5;
+    if(center.DistanceTo(P(b["center"]!))>1e-7 || half.DistanceTo(P(b["halfSize"]!))>1e-7) Error(row,"box center/half-size differs from native symbol bounds");
+    continue;
+   }
+   if(representation!="run" || e is not MEPCurve mep || e.Location is not LocationCurve lc) { Error(row,"unsupported representation or absent native curve");continue; }
+   runs++;var r=row["run"]!;using var curve=lc.Curve;
+   if(transform.OfPoint(curve.GetEndPoint(0)).DistanceTo(P(r["start"]!))>1e-7 || transform.OfPoint(curve.GetEndPoint(1)).DistanceTo(P(r["end"]!))>1e-7) Error(row,"run endpoints differ from native location curve");
+   if(r["path"] is JArray path) {
+    paths++; var native=curve.Tessellate();
+    if(path.Count!=native.Count || native.Where((point,i)=>i<path.Count && transform.OfPoint(point).DistanceTo(P(path[i]))>1e-7).Any()) Error(row,"run path differs from native tessellated location curve");
+   } else if(curve is not Line) Error(row,"curved native run published as a straight chord");
+   var thickness=e.get_Parameter(BuiltInParameter.RBS_REFERENCE_INSULATION_THICKNESS)?.AsDouble()??0;
+   using var manager=mep.ConnectorManager;var end=manager.Connectors.Cast<Connector>().Where(c=>c.ConnectorType==ConnectorType.End).OrderBy(c=>c.Origin.DistanceTo(curve.GetEndPoint(0))).First();
+   var runStart=P(r["start"]!);var runAxis=(P(r["end"]!)-runStart).Normalize();var runX=P(r["crossSectionXAxis"]!);var runY=runAxis.CrossProduct(runX).Normalize();
+   var isRound=(string)r["shape"]! == "round";
+   var diameter=(double?)r["diameterFt"]??0;var overdraw=(double?)r["radialOverdrawFraction"]??-1;
+   var inscribed=Facets(0.5,diameter);var circumscribed=Facets(0.5*(1+Math.Max(0,overdraw)),diameter);
+   void CheckRoundVertex(XYZ p) {
+    facetVertices++;var before=FacetExcess(p,runStart,runX,runY,inscribed);var after=FacetExcess(p,runStart,runX,runY,circumscribed);
+    // Report arithmetic separately; containment uses the runtime point resolution below, never a chord-error allowance.
+    var bound=64*Math.Pow(2,-53)/(1-64*Math.Pow(2,-53))*(p.GetLength()+runStart.GetLength()+diameter);
+    if(before>0)inscribedOutsideVertices++;maxInscribedFacetExcess=Math.Max(maxInscribedFacetExcess,before);
+    maxCircumscribedFacetExcess=Math.Max(maxCircumscribedFacetExcess,after);maxFacetBound=Math.Max(maxFacetBound,bound);
+    Containment(row,"round facet",after);
+   }
+   if(end.Shape==ConnectorProfileType.Round) {
+    var expectedOverdraw=1/(Math.Cos(Math.PI/32)-Math.Pow(2,-24))-1;
+    if((int?)r["radialSegments"]!=32 || Math.Abs(overdraw-expectedOverdraw)>Math.Pow(2,-52))Error(row,"round containment disclosure differs from the facet construction rule");
+    var bare=e is Autodesk.Revit.DB.Plumbing.Pipe ? e.get_Parameter(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER)?.AsDouble()
+     : e is Autodesk.Revit.DB.Electrical.Conduit ? e.get_Parameter(BuiltInParameter.RBS_CONDUIT_OUTER_DIAM_PARAM)?.AsDouble() : 2*end.Radius;
+    if(bare is null || Math.Abs((double)r["diameterFt"]!-(bare.Value+2*thickness))>1e-7) Error(row,"run diameter omits native outside size or insulation");
+    if(curve is Line) {
+     EachTriangle(e,transform,ViewDetailLevel.Fine,(a,b,c)=>{CheckRoundVertex(a);CheckRoundVertex(b);CheckRoundVertex(c);});
+     var radius=0.0;var cylinders=0;
+     void WalkCylinders(GeometryElement geometry) {
+      foreach(var item in geometry)using(item) {
+       if(item is Solid solid)foreach(Face face in solid.Faces)using(face) {
+        if(face is CylindricalFace cylinder) {cylinders++;radius=Math.Max(radius,Math.Max(cylinder.get_Radius(0).GetLength(),cylinder.get_Radius(1).GetLength()));}
+       }
+       else if(item is GeometryInstance instance) {using var symbol=instance.GetSymbolGeometry();WalkCylinders(symbol);}
+      }
+     }
+     using var options=new Options{DetailLevel=ViewDetailLevel.Fine};using var geometry=e.get_Geometry(options);if(geometry!=null)WalkCylinders(geometry);
+     if(cylinders>0) {
+      surfaceChecks++;var drawn=(double)r["diameterFt"]!-2*thickness;var deviation=Math.Abs(2*radius-drawn);maxSurfaceExcess=Math.Max(maxSurfaceExcess,deviation);
+      var bound=32*Math.Pow(2,-53)/(1-32*Math.Pow(2,-53))*(2*radius+Math.Abs(drawn)+2*thickness);
+      if(deviation>bound)Error(row,"round analytic cylinder diameter differs: "+e.GetType().Name+" deviationFt="+deviation+" gamma32BoundFt="+bound);
+     } else surfaceMissing++;
+    }
+   } else {
+    if(Math.Abs((double)r["widthFt"]!-(end.Width+2*thickness))>1e-7 || Math.Abs((double)r["heightFt"]!-(end.Height+2*thickness))>1e-7) Error(row,"run profile omits native size or insulation");
+    using var frame=end.CoordinateSystem;
+    if(Math.Abs(transform.OfVector(frame.BasisX).DotProduct(P(r["crossSectionXAxis"]!)))<1-1e-7) Error(row,"run roll differs from native connector");
+   }
+   if(e is Autodesk.Revit.DB.Mechanical.Duct or Autodesk.Revit.DB.Plumbing.Pipe) {
+    var start=P(r["start"]!);var finish=P(r["end"]!);var axis=(finish-start).Normalize();var length=start.DistanceTo(finish);
+    var x=P(r["crossSectionXAxis"]!);var y=axis.CrossProduct(x).Normalize();
+    foreach(var id in InsulationLiningBase.GetInsulationIds(source,e.Id)) {
+     if(((JArray)meta["elements"]!).Any(other=>(long)other["handle"]!["elementId"]! == id.Value && JToken.DeepEquals(other["handle"]!["linkInstanceId"],h["linkInstanceId"])))continue;
+     var insulation=source.GetElement(id);if(insulation==null){Error(row,"native insulation identity missing");continue;}
+     if(curve is not Line){Error(row,"folded curved-run insulation containment is unproven");continue;}
+     EachTriangle(insulation,transform,ViewDetailLevel.Fine,(a,b,c)=>{
+      foreach(var p in new[]{a,b,c}) {
+       if(Enumerable.Range(0,3).Any(i=>new[]{p.X,p.Y,p.Z}[i]<limits[i][0] || new[]{p.X,p.Y,p.Z}[i]>limits[i][1]))continue;
+       insulationRunVertices++;var delta=p-start;var t=delta.DotProduct(axis);var radial=delta-axis*t;
+       var excess=Math.Max(-t,t-length);
+       if(isRound){CheckRoundVertex(p);excess=Math.Max(excess,FacetExcess(p,runStart,runX,runY,circumscribed));}
+       else if((string)r["shape"]! == "rectangular")excess=Math.Max(excess,Math.Max(Math.Abs(delta.DotProduct(x))-(double)r["widthFt"]!/2,Math.Abs(delta.DotProduct(y))-(double)r["heightFt"]!/2));
+       else {Error(row,"folded oval insulation containment is unproven");continue;}
+       var bound=64*Math.Pow(2,-53)/(1-64*Math.Pow(2,-53))*(p.GetLength()+start.GetLength()+length+radial.GetLength());
+       maxInsulationRunExcess=Math.Max(maxInsulationRunExcess,excess);maxInsulationRunBound=Math.Max(maxInsulationRunBound,bound);
+       Containment(row,"folded insulation",excess,id.Value);
+      }
+     });
+    }
+   }
+  }
+  // Independent missing-element witness. The page/harness request uses 10 ft reach. A native
+  // insulation vertex inside a focus envelope grown by that reach must survive acquisition.
+  var sceneRows=((JArray)meta["elements"]!).ToArray();var focusRows=sceneRows.Where(r=>(bool)r["focus"]!).ToArray();
+  var missingInsulationChecked=0;
+  const double reachFt=10; // tools/space-proof/run.py page_requests; browser captures retain Nearby=10.
+  bool InGuaranteedReach(XYZ p) {
+   if(Enumerable.Range(0,3).Any(i=>new[]{p.X,p.Y,p.Z}[i]<limits[i][0] || new[]{p.X,p.Y,p.Z}[i]>limits[i][1]))return false;
+   var components=new[]{p.X,p.Y,p.Z};var lowKeys=new[]{"minX","minY","minZ"};var highKeys=new[]{"maxX","maxY","maxZ"};
+   if(Enumerable.Range(0,3).Any(i=>components[i]<focusRows.Min(f=>(double)f["bounds"]![lowKeys[i]]!)-reachFt || components[i]>focusRows.Max(f=>(double)f["bounds"]![highKeys[i]]!)+reachFt))return false;
+   foreach(var focus in focusRows) {
+    if(focus["run"] is JObject run && run["path"] is not JArray) {
+     var a=P(run["start"]!);var b=P(run["end"]!);var z=(b-a).Normalize();var x=P(run["crossSectionXAxis"]!);var y=z.CrossProduct(x);var delta=p-a;
+     var t=delta.DotProduct(z);var width=(double?)run["diameterFt"]??(double?)run["widthFt"]??0;var height=(double?)run["diameterFt"]??(double?)run["heightFt"]??0;
+     if(t>=-reachFt && t<=a.DistanceTo(b)+reachFt && Math.Abs(delta.DotProduct(x))<=width/2+reachFt && Math.Abs(delta.DotProduct(y))<=height/2+reachFt)return true;
+    } else if(Enumerable.Range(0,3).All(i=>components[i]>=(double)focus["bounds"]![lowKeys[i]]!-reachFt && components[i]<=(double)focus["bounds"]![highKeys[i]]!+reachFt))return true;
+   }
+   return false;
+  }
+  if((string)meta["phase"]! == "context" && focusRows.Length>0)foreach(var sourceRow in (JArray)meta["sources"]!) {
+   if((string)sourceRow["state"]! != "loaded")continue;
+   var link=sourceRow["linkInstanceId"];Document source=doc;var transform=Transform.Identity;
+   if(link!=null && link.Type!=JTokenType.Null) {var instance=(RevitLinkInstance)doc.GetElement(new ElementId((long)link));source=instance.GetLinkDocument();transform=instance.GetTotalTransform();}
+   var present=sceneRows.Where(r=>JToken.DeepEquals(r["handle"]!["linkInstanceId"],link)).ToDictionary(r=>(long)r["handle"]!["elementId"]!);
+   using var inverse=transform.Inverse;var corners=(from x in limits[0] from y in limits[1] from z in limits[2] select inverse.OfPoint(new XYZ(x,y,z))).ToArray();
+   using var outline=new Outline(new XYZ(corners.Min(p=>p.X),corners.Min(p=>p.Y),corners.Min(p=>p.Z)),new XYZ(corners.Max(p=>p.X),corners.Max(p=>p.Y),corners.Max(p=>p.Z)));
+   using var categories=new ElementMulticategoryFilter(new[]{BuiltInCategory.OST_DuctInsulations,BuiltInCategory.OST_PipeInsulations});
+   using var intersects=new BoundingBoxIntersectsFilter(outline);
+   using var collector=new FilteredElementCollector(source).WhereElementIsNotElementType().WherePasses(categories).WherePasses(intersects);
+   foreach(InsulationLiningBase insulation in collector) {
+    if(present.ContainsKey(insulation.Id.Value))continue;
+    if(present.TryGetValue(insulation.HostElementId.Value,out var hostRow) && (string)hostRow["representation"]! == "run")continue; // Vertex containment checked above.
+    missingInsulationChecked++;var required=false;
+    EachTriangle(insulation,transform,ViewDetailLevel.Fine,(a,b,c)=>{required|=InGuaranteedReach(a)||InGuaranteedReach(b)||InGuaranteedReach(c);});
+    if(required)Error(new JObject{["handle"]=new JObject{["elementId"]=insulation.Id.Value,["uniqueId"]=insulation.UniqueId,["linkInstanceId"]=link}},"native insulation in guaranteed focus reach has no published representation");
+   }
+  }
+  if(failed>0) throw new Exception("Artifact primitive mismatches: "+failed+" maxMeshDeviationFt="+maxMeshDeviation+" maxDerivedMeshBoundFt="+maxMeshBound+" maxInsulationRunExcessFt="+maxInsulationRunExcess+" maxInsulationRunBoundFt="+maxInsulationRunBound+" nativeVertexToleranceFt="+vertexTolerance+" inscribedFacetExcursionRatio="+(maxInscribedFacetExcess/vertexTolerance)+" circumscribedFacetExcursionRatio="+(maxCircumscribedFacetExcess/vertexTolerance)+" foldedInsulationExcursionRatio="+(maxInsulationRunExcess/vertexTolerance)+" inscribedOutsideVertices="+inscribedOutsideVertices+" maxInscribedFacetExcessFt="+maxInscribedFacetExcess+" maxCircumscribedFacetExcessFt="+maxCircumscribedFacetExcess+" maxFacetArithmeticBoundFt="+maxFacetBound+" missingInsulationCandidatesChecked="+missingInsulationChecked+" "+errors.ToString(Newtonsoft.Json.Formatting.None));
+  // Same native parity census already exercised on the certified clone; add host classes to disclose retained fitting insulation.
+  var hostInsulation=new JArray();
+  foreach(var cls in new[]{typeof(Autodesk.Revit.DB.Mechanical.DuctInsulation),typeof(Autodesk.Revit.DB.Plumbing.PipeInsulation)}) {
+   var count=0;var matched=0;var missing=0;var maxError=0.0;var hosts=new Dictionary<string,int>();
+   using var all=new FilteredElementCollector(doc).OfClass(cls);
+   foreach(InsulationLiningBase insulation in all) {
+    count++;var host=doc.GetElement(insulation.HostElementId);var hostClass=host?.GetType().Name??"missing";
+    hosts[hostClass]=hosts.TryGetValue(hostClass,out var prior)?prior+1:1;
+    var parameter=host?.get_Parameter(BuiltInParameter.RBS_REFERENCE_INSULATION_THICKNESS);
+    if(parameter==null){missing++;continue;}
+    var error=Math.Abs(parameter.AsDouble()-insulation.Thickness);maxError=Math.Max(maxError,error);if(error==0)matched++;
+   }
+   hostInsulation.Add(new JObject{["class"]=cls.Name,["count"]=count,["matched"]=matched,["missing"]=missing,["maxErrorFt"]=maxError,["hostClasses"]=JObject.FromObject(hosts)});
+  }
+  if(doc.IsModified!=modified) throw new Exception("Document modified");
+  var residualFiles=new JArray();var residualRows=residuals.Values.ToArray();
+  for(var start=0;start<residualRows.Length;start+=1000){var file=Artifacts.WriteText("containment-residuals-"+start+".json",new JArray(residualRows.Skip(start).Take(1000)).ToString(Newtonsoft.Json.Formatting.None),"application/json");residualFiles.Add(file.FullPath);}
+  var residualSummary=new JArray(residualRows.GroupBy(r=>(string)r["kind"]!).Select(g=>new JObject{["kind"]=g.Key,["elements"]=g.Count(),["maxRatio"]=g.Max(r=>(double)r["ratio"]!)}));
+  Result(new JObject {["worstMesh"]=worstMesh,["curvedMeshVerticesChecked"]=curvedMeshVertices,["containmentResiduals"]=residualSummary,["containmentResidualFiles"]=residualFiles,["hostInsulation"]=hostInsulation,["nativeVertexToleranceFt"]=vertexTolerance,["inscribedFacetExcursionRatio"]=maxInscribedFacetExcess/vertexTolerance,["circumscribedFacetExcursionRatio"]=maxCircumscribedFacetExcess/vertexTolerance,["foldedInsulationExcursionRatio"]=maxInsulationRunExcess/vertexTolerance,["roundFacetVerticesChecked"]=facetVertices,["inscribedOutsideVertices"]=inscribedOutsideVertices,["maxInscribedFacetExcessFt"]=maxInscribedFacetExcess,["maxCircumscribedFacetExcessFt"]=maxCircumscribedFacetExcess,["maxFacetArithmeticBoundFt"]=maxFacetBound,["missingInsulationCandidatesChecked"]=missingInsulationChecked,["boxesChecked"]=boxes,["linkBoxesChecked"]=linkBoxes,["runsChecked"]=runs,["curvedPathsChecked"]=paths,["meshesChecked"]=meshes,["meshNativeClasses"]=JObject.FromObject(meshClasses),["nestedInstanceMeshes"]=nestedMeshes,["multipleRootInstanceMeshes"]=multipleInstanceMeshes,["modifiedFamilyMeshes"]=modifiedFamilyMeshes,["meshTrianglesChecked"]=meshTriangles,["maxMeshDeviationFt"]=maxMeshDeviation,["maxDerivedMeshBoundFt"]=maxMeshBound,["maxMeshDeviationBoundRatio"]=maxMeshRatio,["maxEnvelopeExcessFt"]=maxEnvelopeExcess,["maxDerivedEnvelopeBoundFt"]=maxEnvelopeBound,["meshBoundRule"]="Native tessellation triangle; exact float32 placement residuals + convex interpolation of endpoint residual bounds + each Vector3.Lerp rounding residual; directed-interval triangle distance predicate + gamma128 endpoint/clip arithmetic. No analytic curved-surface claim.",["roundSurfaceChecks"]=surfaceChecks,["roundSurfaceMissing"]=surfaceMissing,["maxNativeSurfaceExcessFt"]=maxSurfaceExcess,["insulationMeshVerticesChecked"]=insulationMeshVertices,["maxInsulationMeshDeviationFt"]=maxInsulationMeshDeviation,["maxInsulationMeshBoundFt"]=maxInsulationMeshBound,["insulationRunVerticesChecked"]=insulationRunVertices,["maxInsulationRunExcessFt"]=maxInsulationRunExcess,["maxInsulationRunBoundFt"]=maxInsulationRunBound,["failures"]=failed,["errors"]=errors,["modifiedBefore"]=modified,["modifiedAfter"]=doc.IsModified});
+ }
+ static void EachTriangle(Element element,Transform transform,ViewDetailLevel detail,Action<XYZ,XYZ,XYZ> triangle,Action<Triangle,Rounded[]> detailed=null,Action<int> instanceDepth=null,Action<int> rootCount=null) {
+  void MeshVertices(Mesh mesh,Transform placed,IReadOnlyList<Transform> stages) {
+   var local=mesh.Vertices.ToArray();var world=local.Select(placed.OfPoint).ToArray();var rounded=new Rounded[local.Length];
+   if(detailed!=null)for(var k=0;k<local.Length;k++) {
+    var p=local[k];foreach(var stage in stages){var next=stage.IsIdentity?p:stage.OfPoint(p);p=new XYZ((float)next.X,(float)next.Y,(float)next.Z);}
+    // This is the observed rounding residual of the native vertex's complete placement chain,
+    // not a chosen distance. The direct native transform remains the independent geometry witness.
+    rounded[k]=new Rounded(new Vector3((float)p.X,(float)p.Y,(float)p.Z),p.DistanceTo(world[k]));
+   }
+   for(var j=0;j<mesh.NumTriangles;j++) {
+    var t=mesh.get_Triangle(j);var a=t.get_Index(0);var b=t.get_Index(1);var c=t.get_Index(2);triangle(world[a],world[b],world[c]);
+    if(detailed==null)continue;
+    detailed(new Triangle(Point.Of(world[a]),Point.Of(world[b]),Point.Of(world[c])),new[]{rounded[a],rounded[b],rounded[c]});
+   }
+  }
+  void Walk(GeometryElement geometry,Transform placed,IReadOnlyList<Transform> stages,int depth) {
+   var roots=0;
+   foreach(var item in geometry)using(item) {
+    if(item is Mesh mesh)MeshVertices(mesh,placed,stages);
+    else if(item is Solid solid) {using var faces=solid.Faces;foreach(Face face in faces)using(face)using(var tessellation=face.Triangulate())MeshVertices(tessellation,placed,stages);}
+    else if(item is GeometryInstance instance) {roots++;instanceDepth?.Invoke(depth);using var local=instance.Transform;using var next=placed.Multiply(local);using var first=stages[0].Multiply(local);using var identity=Transform.Identity;using var symbol=instance.GetSymbolGeometry();Walk(symbol,next,new[]{identity,first}.Concat(stages.Skip(1)).ToArray(),depth+1);}
+   }
+   if(depth==0)rootCount?.Invoke(roots);
+  }
+  using var options=new Options{DetailLevel=detail,ComputeReferences=false};using var geometry=element.get_Geometry(options);if(geometry!=null)Walk(geometry,transform,new[]{transform},0);
+ }
+
+ readonly record struct Rounded(Vector3 Position,double Error);
+ static double ClipError(Rounded[] input,double[][] bounds) {
+  var greatest=input.Max(p=>p.Error);
+  float At(Vector3 p,int axis)=>axis==0?p.X:axis==1?p.Y:p.Z;
+  if(input.All(p=>Enumerable.Range(0,3).All(axis=>At(p.Position,axis)>=bounds[axis][0] && At(p.Position,axis)<=bounds[axis][1])))return greatest;
+  var polygon=input.ToList();
+  for(var axis=0;axis<3;axis++)for(var side=0;side<2;side++) {
+   if(polygon.Count==0)break;
+   var output=new List<Rounded>();var previous=polygon[polygon.Count-1];var pd=At(previous.Position,axis)-bounds[axis][side];
+   foreach(var current in polygon) {
+    var d=At(current.Position,axis)-bounds[axis][side];
+    if((d>=0)!=(pd>=0)) {
+     var amount=(float)(pd/(pd-d));var actual=Vector3.Lerp(previous.Position,current.Position,amount);
+     var a=Point.Of(previous.Position);var b=Point.Of(current.Position);
+     var ideal=a*(1-(double)amount)+b*amount;
+     // Any amount in [0,1] stays inside the original triangle. Parameter rounding changes the
+     // cut position, but cannot move it off that triangle; only Lerp arithmetic adds surface error.
+     if(amount<0||amount>1)throw new Exception("Non-convex clipping interpolation");
+     var error=previous.Error*(1-(double)amount)+current.Error*amount+(Point.Of(actual)-ideal).Length;
+     output.Add(new Rounded(actual,error));greatest=Math.Max(greatest,error);
+    }
+    if(side==0?d>=0:d<=0)output.Add(current);
+    previous=current;pd=d;
+   }
+   polygon=output;
+  }
+  return greatest;
+ }
+ readonly record struct Point(double X,double Y,double Z) {
+  public static Point Of(XYZ p)=>new Point(p.X,p.Y,p.Z);
+  public static Point Of(Vector3 p)=>new Point(p.X,p.Y,p.Z);
+  public static Point operator +(Point a,Point b)=>new Point(a.X+b.X,a.Y+b.Y,a.Z+b.Z);
+  public static Point operator *(Point a,double s)=>new Point(a.X*s,a.Y*s,a.Z*s);
+  public static Point operator -(Point a,Point b)=>new Point(a.X-b.X,a.Y-b.Y,a.Z-b.Z);
+  public double Length=>Math.Sqrt(Dot(this));
+  public double Dot(Point b)=>X*b.X+Y*b.Y+Z*b.Z;
+  public Point Cross(Point b)=>new Point(Y*b.Z-Z*b.Y,Z*b.X-X*b.Z,X*b.Y-Y*b.X);
+  public double At(int axis)=>axis==0?X:axis==1?Y:Z;
+ }
+ // Directed intervals certify the predicate itself; skinny faces never enlarge a spatial allowance.
+ readonly record struct Interval(double Lo,double Hi) {
+  public static implicit operator Interval(double x)=>new(x,x);
+  static double Down(double x)=>double.IsNegativeInfinity(x)?x:Math.BitDecrement(x);
+  static double Up(double x)=>double.IsPositiveInfinity(x)?x:Math.BitIncrement(x);
+  public static Interval operator +(Interval a,Interval b)=>new(Down(a.Lo+b.Lo),Up(a.Hi+b.Hi));
+  public static Interval operator -(Interval a,Interval b)=>new(Down(a.Lo-b.Hi),Up(a.Hi-b.Lo));
+  public static Interval operator *(Interval a,Interval b){var aa=a.Lo*b.Lo;var ab=a.Lo*b.Hi;var ba=a.Hi*b.Lo;var bb=a.Hi*b.Hi;return new(Down(Math.Min(Math.Min(aa,ab),Math.Min(ba,bb))),Up(Math.Max(Math.Max(aa,ab),Math.Max(ba,bb))));}
+  public Interval Square()=>Lo>=0?new(Math.Max(0,Down(Lo*Lo)),Up(Hi*Hi)):Hi<=0?new(Math.Max(0,Down(Hi*Hi)),Up(Lo*Lo)):new(0,Up(Math.Max(Lo*Lo,Hi*Hi)));
+  public Interval Root()=>new(Lo<=0?0:Down(Math.Sqrt(Lo)),Up(Math.Sqrt(Math.Max(0,Hi))));
+  public double AbsUpper=>Math.Max(Math.Abs(Lo),Math.Abs(Hi));
+ }
+ readonly record struct IntervalPoint(Interval X,Interval Y,Interval Z) {
+  public static IntervalPoint Of(Point p)=>new(p.X,p.Y,p.Z);
+  public static IntervalPoint operator +(IntervalPoint a,IntervalPoint b)=>new(a.X+b.X,a.Y+b.Y,a.Z+b.Z);
+  public static IntervalPoint operator -(IntervalPoint a,IntervalPoint b)=>new(a.X-b.X,a.Y-b.Y,a.Z-b.Z);
+  public static IntervalPoint operator *(IntervalPoint a,Interval b)=>new(a.X*b,a.Y*b,a.Z*b);
+  public Interval Dot(IntervalPoint b)=>X*b.X+Y*b.Y+Z*b.Z;
+  public IntervalPoint Cross(IntervalPoint b)=>new(Y*b.Z-Z*b.Y,Z*b.X-X*b.Z,X*b.Y-Y*b.X);
+  public Interval Length=>(X.Square()+Y.Square()+Z.Square()).Root();
+ }
+ readonly record struct Triangle(Point A,Point B,Point C,double Bound=0) {
+  // Only endpoint/clip arithmetic belongs in the spatial bound. Predicate uncertainty is handled below.
+  public double ArithmeticBound=>128*Math.Pow(2,-53)/(1-128*Math.Pow(2,-53))*Math.Max(1,Math.Max(A.Length,Math.Max(B.Length,C.Length)));
+  public double Min(int axis)=>Math.Min(A.At(axis),Math.Min(B.At(axis),C.At(axis)));
+  public double Max(int axis)=>Math.Max(A.At(axis),Math.Max(B.At(axis),C.At(axis)));
+  static double SegmentUpper(Point p,Point a,Point b) {
+   var edge=b-a;var squared=edge.Dot(edge);var t=squared>0?Math.Max(0,Math.Min(1,(p-a).Dot(edge)/squared)):0;
+   // Any clamped t names a point on the exact native segment; its optimality is not assumed.
+   var fraction=(Interval)t;var point=IntervalPoint.Of(a)*((Interval)1-fraction)+IntervalPoint.Of(b)*fraction;
+   return (IntervalPoint.Of(p)-point).Length.Hi;
+  }
+  public double Deviation(Point p) {
+   var distance=Math.Min(SegmentUpper(p,A,B),Math.Min(SegmentUpper(p,B,C),SegmentUpper(p,C,A)));
+   var a=IntervalPoint.Of(A);var b=IntervalPoint.Of(B);var c=IntervalPoint.Of(C);var q=IntervalPoint.Of(p);
+   var normal=(b-a).Cross(c-a);var length=normal.Length;
+   // If orientation is uncertain or the triangle collapses, its edges still give a certified upper distance.
+   if(length.Lo<=0 || (b-a).Cross(q-a).Dot(normal).Lo<0 || (c-b).Cross(q-b).Dot(normal).Lo<0 || (a-c).Cross(q-c).Dot(normal).Lo<0)return distance;
+   var plane=Math.BitIncrement((q-a).Dot(normal).AbsUpper/length.Lo);
+   return Math.Min(distance,plane);
+  }
+ }
+ sealed class Tree {
+  readonly Triangle[] triangles;readonly int start,count;readonly double[] min=new double[3],max=new double[3];readonly Tree left,right;readonly double allowance;
+  public Tree(Triangle[] items):this(items,0,items.Length){}
+  Tree(Triangle[] items,int first,int length) {
+   triangles=items;start=first;count=length;
+   for(var i=first;i<first+length;i++)allowance=Math.Max(allowance,items[i].Bound);
+   for(var axis=0;axis<3;axis++) {min[axis]=double.PositiveInfinity;max[axis]=double.NegativeInfinity;for(var i=first;i<first+length;i++){min[axis]=Math.Min(min[axis],items[i].Min(axis));max[axis]=Math.Max(max[axis],items[i].Max(axis));}}
+   if(length<=16)return;
+   var split=0;for(var axis=1;axis<3;axis++)if(max[axis]-min[axis]>max[split]-min[split])split=axis;
+   Array.Sort(items,first,length,Comparer<Triangle>.Create((a,b)=>(a.Min(split)+a.Max(split)).CompareTo(b.Min(split)+b.Max(split))));
+   var half=length/2;left=new Tree(items,first,half);right=new Tree(items,first+half,length-half);
+  }
+  public bool Match(Triangle t,out double deviation,out double bound) {
+   deviation=bound=0;
+   for(var axis=0;axis<3;axis++)if(t.Min(axis)<min[axis]-allowance || t.Max(axis)>max[axis]+allowance)return false;
+   if(left!=null)return left.Match(t,out deviation,out bound)||right.Match(t,out deviation,out bound);
+   for(var i=start;i<start+count;i++) {
+    var candidate=triangles[i];var error=Math.Max(candidate.Deviation(t.A),Math.Max(candidate.Deviation(t.B),candidate.Deviation(t.C)));
+    if(error<=candidate.Bound){deviation=error;bound=candidate.Bound;return true;}
+   }
+   return false;
+  }
+ }
+}

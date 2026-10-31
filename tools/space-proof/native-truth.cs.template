@@ -1,0 +1,195 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using Autodesk.Revit.DB;
+using Newtonsoft.Json.Linq;
+
+// Space proof, MAP step 3: native truth for context elements that published no geometry. Read-only.
+// For each (link instance, element id) in __IDS__[system] (system = the SA key in the metadata file name), read the
+// element natively at Medium and Fine, the way Ingest does (get_Geometry, Solid faces triangulated, Mesh, GeometryInstance
+// through GetSymbolGeometry), and classify it against the artifact's crop (__METADATA__ bounds):
+//   empty    no exception and no non-degenerate triangle at either detail: nothing to draw by nature
+//   outside  triangles exist, none clips into the crop: correctly absent from this picture
+//   failed   get_Geometry/Triangulate/GetSymbolGeometry threw with nothing drawable, or triangles clip into the crop
+//            while the artifact has no row for the element: a real read failure
+// Rows go to <metadata>.native-truth.json (Result() is capped at 1 MiB); Result carries the summary only.
+public sealed class NativeTruth : PeScriptContainer {
+    const string MetadataPath = @"__METADATA__";
+    const string IdsPath = @"__IDS__";
+
+    public override void Execute() {
+        var before = doc!.IsModified;
+        var meta = JObject.Parse(File.ReadAllText(MetadataPath));
+        var system = Path.GetFileName(MetadataPath).Replace("artifact-", "").Replace(".metadata.json", "");
+        var ids = NativeTruthRules.Ids(JObject.Parse(File.ReadAllText(IdsPath)), system);
+        var crop = NativeTruthRules.Crop(meta);
+        var drawn = NativeTruthRules.Drawn(meta);
+        var vertexTolerance = doc.Application.VertexTolerance;
+        var rows = new JArray();
+        var links = new Dictionary<long, (Document D, Transform T)>();
+        foreach (var (link, id, baselineCategory) in ids) {
+            if (!links.TryGetValue(link, out var source)) {
+                var instance = doc.GetElement(new ElementId(link)) as RevitLinkInstance;
+                source = links[link] = (instance?.GetLinkDocument(), instance?.GetTotalTransform());
+            }
+            var row = new JObject { ["link"] = link, ["id"] = id, ["baselineCategory"] = baselineCategory, ["drawnNow"] = drawn.Contains((link, id)) };
+            var e = source.D?.GetElement(new ElementId(id));
+            if (e is null || source.T is null) { row["class"] = "absent"; row["verdict"] = "failed"; rows.Add(row); continue; }
+            row["class"] = e.GetType().Name;
+            row["category"] = e.Category?.Name;
+            row["uniqueId"] = e.UniqueId;
+            row["traits"] = Traits(e);
+            using (var box = e.get_BoundingBox(null)) row["boundsOverlapCrop"] = box is not null && NativeTruthRules.Overlaps(HostBox(box.Min, box.Max, source.T.Multiply(box.Transform)), crop);
+            var levels = new JObject();
+            foreach (var detail in new[] { ViewDetailLevel.Medium, ViewDetailLevel.Fine }) levels[detail.ToString()] = Read(e, source.T, detail, crop);
+            row["geometry"] = levels;
+            row["verdict"] = NativeTruthRules.Verdict(levels, (bool)row["drawnNow"]!);
+            rows.Add(row);
+        }
+        if (doc.IsModified != before) throw new InvalidOperationException("IsModified changed");
+        var outPath = MetadataPath + ".native-truth.json";
+        File.WriteAllText(outPath, new JObject { ["system"] = system, ["crop"] = new JArray(crop.SelectMany(a => a)), ["vertexToleranceFt"] = vertexTolerance, ["rows"] = rows }.ToString());
+        Result(NativeTruthRules.Summary(system, rows, outPath, before, doc.IsModified));
+    }
+
+    static JObject Traits(Element e) {
+        var t = new JObject();
+        switch (e) {
+            case Wall w:
+                t["wallKind"] = w.WallType?.Kind.ToString(); t["curtainGrid"] = w.CurtainGrid is not null;
+                t["stackedMember"] = w.IsStackedWallMember; t["stacked"] = w.IsStackedWall; break;
+            case WallSweep s: t["sweepType"] = s.GetWallSweepInfo()?.WallSweepType.ToString(); break;
+            case Opening o: t["rectBoundary"] = o.IsRectBoundary; t["host"] = o.Host?.Id.Value; break;
+            case RoofBase r:
+                t["roofClass"] = r.GetType().Name; t["roofType"] = r.RoofType?.Name;
+                t["curtainGrids"] = r is FootPrintRoof fr ? fr.CurtainGrids?.Size ?? 0 : r is ExtrusionRoof er ? er.CurtainGrids?.Size ?? 0 : 0; break;
+        }
+        return t;
+    }
+
+    static double[][] HostBox(XYZ min, XYZ max, Transform toHost) {
+        var lo = new[] { double.MaxValue, double.MaxValue, double.MaxValue }; var hi = new[] { double.MinValue, double.MinValue, double.MinValue };
+        foreach (var x in new[] { min.X, max.X }) foreach (var y in new[] { min.Y, max.Y }) foreach (var z in new[] { min.Z, max.Z }) {
+            var p = toHost.OfPoint(new XYZ(x, y, z)); var c = new[] { p.X, p.Y, p.Z };
+            for (var i = 0; i < 3; i++) { lo[i] = Math.Min(lo[i], c[i]); hi[i] = Math.Max(hi[i], c[i]); }
+        }
+        return new[] { new[] { lo[0], hi[0] }, new[] { lo[1], hi[1] }, new[] { lo[2], hi[2] } };
+    }
+
+    static JObject Read(Element e, Transform toHost, ViewDetailLevel detail, double[][] crop) {
+        var c = new JObject { ["status"] = "ok" };
+        int solids = 0, solidsWithFaces = 0, faces = 0, facesFailed = 0, meshes = 0, instances = 0, instancesFailed = 0, curves = 0, points = 0, solidsOutside = 0;
+        long triangles = 0, degenerate = 0, inCrop = 0; var other = new HashSet<string>(); var errors = new HashSet<string>();
+        void Triangles(Mesh m, Transform t) {
+            var v = m.Vertices.Select(t.OfPoint).Select(p => new[] { p.X, p.Y, p.Z }).ToArray();
+            for (var i = 0; i < m.NumTriangles; i++) {
+                var tri = m.get_Triangle(i);
+                var a = v[tri.get_Index(0)]; var b = v[tri.get_Index(1)]; var d = v[tri.get_Index(2)];
+                if (NativeTruthRules.Degenerate(a, b, d)) { degenerate++; continue; }
+                triangles++;
+                if (NativeTruthRules.ClipsInto(a, b, d, crop)) inCrop++;
+            }
+        }
+        void Walk(GeometryElement g, Transform t) {
+            foreach (var o in g) {
+                switch (o) {
+                    case Solid s:
+                        solids++;
+                        if (s.Faces.Size == 0) break;
+                        solidsWithFaces++;
+                        try { using var sb = s.GetBoundingBox(); if (!NativeTruthRules.Overlaps(HostBox(sb.Min, sb.Max, t.Multiply(sb.Transform)), crop)) solidsOutside++; }
+                        catch (Exception ex) { errors.Add("solid bounds: " + ex.GetType().Name); }
+                        foreach (Face f in s.Faces) {
+                            faces++;
+                            try { using var m = f.Triangulate(); if (m is not null) Triangles(m, t); }
+                            catch (Exception ex) { facesFailed++; errors.Add("triangulate: " + ex.GetType().Name + ": " + ex.Message); }
+                        }
+                        break;
+                    case Mesh m: meshes++; Triangles(m, t); break;
+                    case GeometryInstance gi:
+                        instances++;
+                        try { using var inner = gi.GetSymbolGeometry(); if (inner is not null) Walk(inner, t.Multiply(gi.Transform)); }
+                        catch (Exception ex) { instancesFailed++; errors.Add("symbol: " + ex.GetType().Name + ": " + ex.Message); }
+                        break;
+                    case Curve: curves++; break;
+                    case Point: points++; break;
+                    default: other.Add(o?.GetType().Name ?? "null"); break;
+                }
+            }
+        }
+        try {
+            using var options = new Options { DetailLevel = detail, ComputeReferences = false, IncludeNonVisibleObjects = false };
+            using var g = e.get_Geometry(options);
+            if (g is null) c["status"] = "null"; else Walk(g, toHost);
+        } catch (Exception ex) { c["status"] = "threw"; errors.Add("get_Geometry: " + ex.GetType().Name + ": " + ex.Message); }
+        c["solids"] = solids; c["solidsWithFaces"] = solidsWithFaces; c["solidsOutsideCrop"] = solidsOutside; c["faces"] = faces; c["facesFailed"] = facesFailed;
+        c["meshes"] = meshes; c["instances"] = instances; c["instancesFailed"] = instancesFailed; c["curves"] = curves; c["points"] = points;
+        c["triangles"] = triangles; c["degenerate"] = degenerate; c["trianglesInCrop"] = inCrop;
+        c["other"] = new JArray(other); c["errors"] = new JArray(errors);
+        return c;
+    }
+}
+
+/// <summary>Revit-free rules, testable offline (tools/space-proof/native-truth-selftest).</summary>
+public static class NativeTruthRules {
+    static JToken At(JToken t, string key) => t is JObject o && o.TryGetValue(key, out var v) && v.Type != JTokenType.Null ? v : null;
+
+    public static List<(long Link, long Id, string Category)> Ids(JObject ids, string system) {
+        var list = At(At(ids, system), "elements") as JArray ?? throw new InvalidOperationException("no id list for " + system);
+        return list.Select(e => ((long)At(e, "link")!, (long)At(e, "id")!, (string)At(e, "category"))).ToList();
+    }
+
+    public static double[][] Crop(JObject meta) {
+        var b = At(meta, "bounds") ?? throw new InvalidOperationException("metadata has no bounds");
+        double V(string k) => (double)(At(b, k) ?? throw new InvalidOperationException("bounds." + k));
+        return new[] { new[] { V("minX"), V("maxX") }, new[] { V("minY"), V("maxY") }, new[] { V("minZ"), V("maxZ") } };
+    }
+
+    public static HashSet<(long, long)> Drawn(JObject meta) => new((At(meta, "elements") as JArray ?? new JArray())
+        .Select(e => At(e, "handle")).Where(h => h is not null && At(h, "linkInstanceId") is not null)
+        .Select(h => ((long)At(h, "linkInstanceId")!, (long)At(h, "elementId")!)));
+
+    public static bool Overlaps(double[][] a, double[][] b) => Enumerable.Range(0, 3).All(i => a[i][0] <= b[i][1] && a[i][1] >= b[i][0]);
+
+    // The product's float32 test: |(B-A) x (C-A)|^2 < 1e-12 (Types.cs Tri.IsDegenerate).
+    public static bool Degenerate(double[] a, double[] b, double[] c) {
+        float ux = (float)b[0] - (float)a[0], uy = (float)b[1] - (float)a[1], uz = (float)b[2] - (float)a[2];
+        float vx = (float)c[0] - (float)a[0], vy = (float)c[1] - (float)a[1], vz = (float)c[2] - (float)a[2];
+        float x = uy * vz - uz * vy, y = uz * vx - ux * vz, z = ux * vy - uy * vx;
+        return x * x + y * y + z * z < 1e-12f;
+    }
+
+    // Sutherland-Hodgman against the axis box, in double: does any area of the triangle lie inside the crop?
+    public static bool ClipsInto(double[] a, double[] b, double[] c, double[][] box) {
+        var poly = new List<double[]> { a, b, c };
+        for (var axis = 0; axis < 3 && poly.Count > 0; axis++)
+            for (var side = 0; side < 2 && poly.Count > 0; side++) {
+                var limit = box[axis][side]; var keepAbove = side == 0; var next = new List<double[]>();
+                for (var i = 0; i < poly.Count; i++) {
+                    var p = poly[i]; var q = poly[(i + 1) % poly.Count];
+                    bool pin = keepAbove ? p[axis] >= limit : p[axis] <= limit, qin = keepAbove ? q[axis] >= limit : q[axis] <= limit;
+                    if (pin) next.Add(p);
+                    if (pin != qin) { var t = (limit - p[axis]) / (q[axis] - p[axis]); next.Add(new[] { p[0] + t * (q[0] - p[0]), p[1] + t * (q[1] - p[1]), p[2] + t * (q[2] - p[2]) }); }
+                }
+                poly = next;
+            }
+        return poly.Count >= 3;
+    }
+
+    public static string Verdict(JObject levels, bool drawnNow) {
+        var reads = levels.Properties().Select(p => (JObject)p.Value).ToList();
+        long Sum(string k) => reads.Sum(r => (long)(At(r, k) ?? 0));
+        var threw = reads.Any(r => (string)At(r, "status") == "threw") || Sum("facesFailed") + Sum("instancesFailed") > 0;
+        if (Sum("trianglesInCrop") > 0) return drawnNow ? "drawn" : "failed";
+        if (Sum("triangles") > 0) return "outside";
+        return threw ? "failed" : "empty";
+    }
+
+    public static JObject Summary(string system, JArray rows, string outPath, bool before, bool after) {
+        var by = rows.GroupBy(r => (string)At(r, "verdict") + "|" + (string)At(r, "class") + "|" + ((string)At(r, "category") ?? (string)At(r, "baselineCategory")))
+            .OrderBy(g => g.Key).ToDictionary(g => g.Key, g => g.Count());
+        return new JObject { ["system"] = system, ["rows"] = rows.Count, ["byVerdictClassCategory"] = JObject.FromObject(by), ["out"] = outPath,
+            ["isModifiedBefore"] = before, ["isModifiedAfter"] = after };
+    }
+}

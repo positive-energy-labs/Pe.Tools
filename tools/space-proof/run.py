@@ -71,7 +71,7 @@ def acquire_slot():
     except Exception:
         LOCK.rmdir()  # this call's newly created, still-empty directory only
         raise
-    (LOCK / "owner.txt").write_text(f"{SID} harness {CHECKOUT.name} {utc()}\n")
+    (LOCK / "holder").write_text(f"{SID} harness {CHECKOUT.name} {utc()}\n")
     slot_log("TAKING slot-1")
 
 
@@ -505,7 +505,11 @@ def run_model(name, args, out: Path, fixture, results):
                     mf = ev / f"artifact-{system.replace(' ', '')}.metadata.json"
                     mf.write_text(json.dumps(meta), encoding="utf8")
                     cs2 = ev / f"post-{Path(ps_path).stem}-{system.replace(' ', '')}.cs"
-                    cs2.write_text(Path(ps_path).read_text(encoding="utf8").replace("__METADATA__", str(mf)), encoding="utf8")
+                    text = Path(ps_path).read_text(encoding="utf8").replace("__METADATA__", str(mf)).replace("__CACHE__", str(CACHE))
+                    for token in args.post_token:
+                        name, _, value = token.partition("=")
+                        text = text.replace(f"__{name}__", value)
+                    cs2.write_text(text, encoding="utf8")
                     before = ps.memory_info().private
                     code, res, wall = s.pea(f"post-{Path(ps_path).stem}-{system.replace(' ', '')}", ["script", "execute", "--file", str(cs2), "--permission-mode", "NoTransaction", "--timeout-seconds", "3000", "--open-document-id", s.doc, "--json"])
                     mod = s.modified()
@@ -608,6 +612,7 @@ def main():
     r.add_argument("--plan", action="store_true")
     r.add_argument("--post-script", action="append", default=[], help="read-only .cs template run per artifact after the frames pass; __METADATA__ = decoded PSC1 metadata json path (repeatable)")
     r.add_argument("--pre-script", action="append", default=[], help="read-only .cs script run once per process before the first scene read (repeatable)")
+    r.add_argument("--post-token", action="append", default=[], help="NAME=VALUE: replace __NAME__ in every post-script (repeatable); __CACHE__ is the scene cache dir")
     d = sub.add_parser("diff"); d.add_argument("a"); d.add_argument("b")
     m = sub.add_parser("merge", help="one table from the models of several runs (later runs win a model)")
     m.add_argument("out"); m.add_argument("runs", nargs="+")
@@ -674,7 +679,7 @@ def main():
             slot_log(f"SLOT KEPT: own Revit still alive; evidence {out}")
         else:
             results["devHostStopped"] = stop_dev_host()
-            (LOCK / "owner.txt").unlink()
+            (LOCK / "holder").unlink()
             LOCK.rmdir()
             slot_log(f"RELEASE slot-1; own Revit PIDs gone and backend stopped; evidence {out}")
         (out / "results.json").write_text(json.dumps(results, indent=1, default=str), encoding="utf8")

@@ -57,7 +57,7 @@ with tempfile.TemporaryDirectory() as directory:
         run.LOCK.rmdir()
         run.acquire_slot()
         assert run.ORDER.read_text() == "probe-r\n"
-        assert (run.LOCK / "owner.txt").read_text().startswith("probe-c ")
+        assert (run.LOCK / "holder").read_text().startswith("probe-c ")
     finally:
         run.LOCK, run.ORDER, run.SID = original
 print("selftest FIFO admission ok")

@@ -6425,7 +6425,7 @@ export namespace RevitDetailSpaceScene {
        */
       kept: number;
       /**
-       * Ids within reach per exclusion class; classes may overlap. Quick-filter classes are removed before iteration; run-insulation is classified after reading its host.
+       * Ids within reach per exclusion class; classes may overlap. Quick-filter classes are removed before iteration; run-insulation is classified after reading its host. no-geometry (native geometry has nothing to draw: curtain hosts, reveals, openings) and outside-crop (geometry wholly outside the picture's crop) are classified after the geometry read and stay counted in Kept.
        */
       excluded: {
         [k: string]: number;
@@ -6435,7 +6435,7 @@ export namespace RevitDetailSpaceScene {
        */
       rejectedAfterLoad: number;
       /**
-       * Kept elements left out by a bound: missing native bounds, or the triangle or acquisition budget.
+       * Kept elements left out by a bound or a failed native read: missing native bounds, the triangle or acquisition budget, or a geometry read that threw.
        */
       cutByBound: number;
       milliseconds: number;
