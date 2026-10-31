@@ -458,6 +458,9 @@ def run_model(name, args, out: Path, fixture, results):
                             model["reads"].append(read)
                             raise RuntimeError(f"{system} {call} {temp}: host refused: {read['error'][:300]}")
                         art = find_artifact(resp["response"])
+                        observed = ((resp.get("resolvedTarget") or {}).get("nativeObservation") or {}).get("document")
+                        if observed:
+                            model["target"] = {"kind": "open", "ref": observed}
                         receipt = art["scene"]
                         blob = load_artifact(art)
                         meta = decode_psc1(blob)
@@ -518,6 +521,16 @@ def run_model(name, args, out: Path, fixture, results):
                                                               "output": (res or {}).get("output"), "data": (res or {}).get("data")})
                     if res is None or res.get("status") != "Succeeded" or mod is None or any(mod):
                         raise RuntimeError(f"post-script {ps_path}: exit {code} status {(res or {}).get('status')} isModified {mod}")
+            if args.pictures:  # after every timed read and witness, so browser reads never land in a measured delta
+                tf = ev / "target.json"
+                tf.write_text(json.dumps(model.get("target")), encoding="utf8")
+                for system in group:
+                    t = time.monotonic()
+                    r = subprocess.run(["node", str(HERE / "picture.ts"), args.pictures, str(tf), system, str(out / "pictures" / name), args.picture_reps],
+                                       capture_output=True, text=True, timeout=3600)
+                    (ev / f"pictures-{system.replace(' ', '')}.log").write_text(r.stdout + r.stderr, encoding="utf8")
+                    model.setdefault("pictures", {})[system] = {"exit": r.returncode, "wallS": round(time.monotonic() - t, 1), "tail": (r.stdout + r.stderr)[-1500:]}
+                    print(f"  pictures {system}: exit {r.returncode} {time.monotonic() - t:.1f}s", flush=True)
             mod = s.modified()
             if mod is None or any(mod):
                 raise RuntimeError(f"IsModified {mod} at end")
@@ -612,6 +625,8 @@ def main():
     r.add_argument("--plan", action="store_true")
     r.add_argument("--post-script", action="append", default=[], help="read-only .cs template run per artifact after the frames pass; __METADATA__ = decoded PSC1 metadata json path (repeatable)")
     r.add_argument("--pre-script", action="append", default=[], help="read-only .cs script run once per process before the first scene read (repeatable)")
+    r.add_argument("--pictures", help="web origin serving this checkout's built /ducts (vp preview, borrowed host = this checkout): same-camera pictures per system after the reads")
+    r.add_argument("--picture-reps", default="link-boxes,triangle-boxes,oriented")
     r.add_argument("--post-token", action="append", default=[], help="NAME=VALUE: replace __NAME__ in every post-script (repeatable); __CACHE__ is the scene cache dir")
     d = sub.add_parser("diff"); d.add_argument("a"); d.add_argument("b")
     m = sub.add_parser("merge", help="one table from the models of several runs (later runs win a model)")
