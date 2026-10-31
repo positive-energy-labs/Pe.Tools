@@ -211,7 +211,7 @@ def run_variant(variant, name, args, out, results, pins):
         proc["requests"] = [r["id"] for r in reqs]
         proc["packAfterOpen"] = pack_state()
         # pass 1 is first touch in the process; passes 2..repeats+1 repeat it (spread needs several)
-        for pas in range(1, (1 if args.no_repeat or light else args.repeats) + 2):
+        for pas in range(1, (0 if args.no_repeat or light else args.repeats) + 2):
             for r in reqs:
                 before = ps.memory_info().private
                 peak = R.Peak(s.pid)
