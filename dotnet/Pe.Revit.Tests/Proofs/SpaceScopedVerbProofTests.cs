@@ -22,7 +22,13 @@ public sealed class SpaceScopedVerbProofTests {
             // A 1 x 0.5 ft profile 1 ft over the lower block: NEAR inside a 1.5 ft clearance.
             XYZ[] line = [new(-2, 0.5, 2.25), new(3, 0.5, 2.25)];
             var sweep = Verbs.Sweep(doc, line, 1, 0.5, 1.5);
-            Assert.That(Json(sweep.Segments), Is.EqualTo(Json(Verbs.Sweep(whole, line, 1, 0.5, 1.5).Segments)));
+            // The profile lies over a flat face, so every point of the overlap is equally close and which one is reported depends on BVH
+            // traversal order, which a scoped read (fewer triangles, a different tree) may legitimately change (attached run 2026-10-31:
+            // (1,1,1) whole against (1,0,1) scoped). Verdict, gap and nearest element must agree; the point must be at the shared gap.
+            var wholeSweep = Verbs.Sweep(whole, line, 1, 0.5, 1.5);
+            Assert.That(Json(sweep.Segments.Select(s => new { s.Index, s.Verdict, s.MinGapFt, s.Nearest })),
+                Is.EqualTo(Json(wholeSweep.Segments.Select(s => new { s.Index, s.Verdict, s.MinGapFt, s.Nearest }))));
+            Assert.That(sweep.Segments.Single().ClosestPoint![2], Is.EqualTo(wholeSweep.Segments.Single().ClosestPoint![2]).Within(1e-9));
             Assert.That(sweep.Segments.Single().Verdict, Is.EqualTo("NEAR"));
             Assert.That(sweep.Segments.Single().Nearest!.ElementId, Is.EqualTo(under));
             Assert.That(sweep.Stamp.Sources.Single().Elements, Is.EqualTo(1), "Only the lower block lies within the sweep's reach.");
