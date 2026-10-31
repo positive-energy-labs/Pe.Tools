@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "vp dev",
+    "codegen:graphs": "node scripts/route-graphs.ts",
     "generate-routes": "tsr generate",
     "fixture-census": "node scripts/fixture-census.ts",
     "type-sweep": "node scripts/type-sweep.mjs",

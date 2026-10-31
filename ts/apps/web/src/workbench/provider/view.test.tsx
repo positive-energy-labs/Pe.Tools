@@ -12,7 +12,7 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 import { RegistryContext } from "@effect/atom-react";
-import { appAtomRegistry } from "#/route/route-owner";
+import { appAtomRegistry } from "#/shell/owner";
 import { WorkbenchContext } from "./thread-summary";
 import { WorkbenchProvider } from "./view";
 import { useRouteTabs } from "../tabs";

@@ -14,6 +14,27 @@ import { workKey, workKeySchema } from "./route-state.ts";
 import { addressSchema, documentRefSchema, sameAddress } from "./target.ts";
 import { DUCT_PARAMETER_KEYS } from "./ducts.ts";
 
+/** Which elements `ducts.snapshot` reads (ducts MAP 2026-10-27, "Where the data comes from" row 1). */
+export const ductsSnapshotSelectorSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("document") }),
+  /** The fan roster's read: every HVAC equipment node and air terminal, and Revit's systems without sections. Health without open-end neighbourhoods (as `ids`). */
+  z.strictObject({ kind: z.literal("roster") }),
+  z.strictObject({ kind: z.literal("ids"), ids: z.array(z.number().int()).min(1) }),
+  /** The named Revit systems' groups, whole, in the document read's cooked shape: the network page's read. */
+  z.strictObject({ kind: z.literal("systems"), systemIds: z.array(z.number().int()).min(1) }),
+  z.strictObject({
+    kind: z.literal("from"),
+    unitId: z.number().int(),
+    portIndex: z.number().int().optional(),
+    maxHops: z.number().int().positive().optional(),
+    /** Open-end candidate box in inches (C# default 36): the walk's box side and model health's neighbourhood. */
+    candidateBoxIn: z.number().positive().optional(),
+    /** Model health's auto-join gap in inches (C# default 3). */
+    autoJoinGapIn: z.number().nonnegative().optional(),
+  }),
+]);
+export type DuctsSnapshotSelector = z.infer<typeof ductsSnapshotSelectorSchema>;
+
 /** Acquisition inputs, independent of a Ducts route's local selection and staged calculations. */
 export const ductsSnapshotReadingSchema = z.strictObject({
   kind: z.literal("ducts-snapshot"),
@@ -25,6 +46,11 @@ export const ductsSnapshotReadingSchema = z.strictObject({
     .optional(),
   labelParameter: z
     .string()
+    .nullish()
+    .transform((value) => value ?? undefined)
+    .optional(),
+  /** Mirrors C# DuctSnapshotSelector: absent is the whole-document read; `from`, `ids` and `roster` are raw (no groups). */
+  selector: ductsSnapshotSelectorSchema
     .nullish()
     .transform((value) => value ?? undefined)
     .optional(),
@@ -177,6 +203,12 @@ export const readingRequestSchema = z.discriminatedUnion("kind", [
     workKeySchema.options[2].extend({ kind: z.literal("work") }),
     workKeySchema.options[3].extend({ kind: z.literal("work") }),
   ]),
+  /**
+   * One Work's accepted writes, in acceptance order: each `event` frame is one host-stamped
+   * `WorkWriteAck` (author, press, forward and inverse patches, revision). A subscription replays
+   * the host's retained window first, so a duplicate is possible and a revision jump is a gap.
+   */
+  z.strictObject({ kind: z.literal("work-acks"), work: workKeySchema }),
   z.strictObject({ kind: z.literal("thread-head"), thread: z.string().min(1).max(200) }),
   /** Every harness thread's summary, one snapshot per change (coalesced). */
   z.strictObject({ kind: z.literal("threads") }),

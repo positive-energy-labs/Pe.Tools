@@ -70,11 +70,11 @@ const snap = (segments: Segment[], nodes: Node[] = []): DuctSnapshot => {
     e.connectors
       .filter((c) => !c.connectedTo)
       .map((c) => ({
-        id: `open-end:${e.groupId}:${e.id}:${c.index}`,
+        id: `open-end:${e.id}:${c.index}`,
         kind: "open-end" as const,
         elementId: e.id,
+        connector: c.index,
         point: c.point,
-        groupId: e.groupId!,
         note: "nothing attached",
       })),
   );
@@ -95,7 +95,7 @@ const snap = (segments: Segment[], nodes: Node[] = []): DuctSnapshot => {
       terminalCount: e.kind === "terminal" ? 1 : 0,
       elementCount: 1,
       loops: 0,
-      issueIds: issues.filter((i) => i.groupId === e.groupId).map((i) => i.id),
+      issueIds: issues.filter((i) => i.elementId === e.id).map((i) => i.id),
     })),
     nodes,
     segments,
@@ -120,7 +120,7 @@ it("caps a dangling duct end, and only that end", () => {
   const plan = healPlan(s);
   const caps = items(s).filter((i) => i.kind === "cap");
   expect(caps.map((i) => i.end).sort()).toEqual(["10:0", "11:1"]);
-  expect(plan.covered.has("open-end:g10:10:0")).toBe(true);
+  expect(plan.covered.has("open-end:10:0")).toBe(true);
 });
 
 it("never pairs two ends Revit already connects through a bend; each is a cap", () => {
@@ -147,11 +147,7 @@ it("connects coincident same-size ends, covering the inferred join and both open
   const s = snap([duct(10, [0, 0, 0], [10, 0, 0]), duct(11, [10, 0, 0], [20, 0, 0])]);
   const join = items(s).find((i) => i.kind === "join")!;
   expect(join).toMatchObject({ how: "connect", end: "10:1", other: "11:0", gapIn: 0 });
-  expect(join.covers).toEqual([
-    proximityId("11:0", "10:1"),
-    "open-end:g10:10:1",
-    "open-end:g11:11:0",
-  ]);
+  expect(join.covers).toEqual([proximityId("11:0", "10:1"), "open-end:10:1", "open-end:11:0"]);
   // Groups are the page's: the inferred join already bridged g11 into g10.
   expect(healPlan(s).groups.map((g) => g.group)).toEqual(["g10"]);
   // Ends past the route's bridging tolerance stay in their own groups; a join between them is listed under both.
@@ -209,7 +205,7 @@ it("leaves size changes, two systems, long or skewed gaps and terminals to a per
   const grille = node(40, "terminal", [conn(0, [30, 0, 0], [0, 0, -1])]);
   const lone = snap([], [grille]);
   expect(items(lone)).toEqual([]);
-  expect(healPlan(lone).hard.get("open-end:g40:40:0")?.note).toMatch(/terminal is not connected/);
+  expect(healPlan(lone).hard.get("open-end:40:0")?.note).toMatch(/terminal is not connected/);
 });
 
 it("caps a dangling fitting end, never one a person ignored", () => {
@@ -217,7 +213,7 @@ it("caps a dangling fitting end, never one a person ignored", () => {
   expect(items(snap([], [tee]))).toMatchObject([{ kind: "cap", end: "50:0" }]);
   const work = ductsDocumentSchema.parse({
     assumptions: {
-      "open-end:g50:50:0": { edit: { value: { kind: "verdict", verdict: "ignore" } } },
+      "open-end:50:0": { edit: { value: { kind: "verdict", verdict: "ignore" } } },
     },
   });
   expect(healPlan(snap([], [tee]), work).groups).toEqual([]);
@@ -235,4 +231,43 @@ it("sends the native op keys, kinds and connector keys only, filtered to the app
     ],
   });
   expect(healRequestGroup(group, new Set(["cap:10:0"])).items).toHaveLength(1);
+});
+
+it("never caps an end Revit gives a flow: the air leaves there (Chadds EX 1 11620957:1)", () => {
+  const s = snap([duct(10, [0, 0, 0], [10, 0, 0])]);
+  s.segments[0]!.connectors[1]!.flowCfm = 444;
+  expect(items(s).map((i) => i.end)).toEqual(["10:0"]);
+  expect(healPlan(s).hard.get("open-end:10:1")?.note).toMatch(
+    /carries 444 cfm in Revit; a cap would block its air/,
+  );
+});
+
+it("never caps an end C# marks auto-join toward a port outside the read (Chadds RA 37, live 2026-10-30)", () => {
+  // 14517389:0 faced 14548688:1 at 0.012 in; 14663504:0 and 14663546:0 faced 14663834:1 and
+  // 14663850:1 at 2.25 in. The partners sat outside the per-system read, so only C#'s `near` knew.
+  const s = snap([duct(10, [0, 0, 0], [10, 0, 0]), duct(11, [20, 0, 0], [30, 0, 0])]);
+  const near = (gapIn: number, elementId: number) => ({
+    ports: [
+      {
+        elementId,
+        connector: 1,
+        gapIn,
+        facingDot: -1,
+        opposed: true,
+        aligned: gapIn < 1,
+        autoJoin: true,
+      },
+    ],
+  });
+  Object.assign(s.issues.find((i) => i.id === "open-end:10:0")!, { near: near(0.012, 14548688) });
+  Object.assign(s.issues.find((i) => i.id === "open-end:11:0")!, { near: near(2.25, 14663834) });
+  expect(
+    items(s)
+      .map((i) => i.end)
+      .sort(),
+  ).toEqual(["10:1", "11:1"]);
+  expect(healPlan(s).hard.get("open-end:10:0")?.note).toMatch(
+    /faces 14548688:1 0\.01 in away: a join, not a cap/,
+  );
+  expect(healPlan(s).hard.get("open-end:11:0")?.note).toMatch(/faces 14663834:1 2\.25 in away/);
 });

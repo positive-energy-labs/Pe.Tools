@@ -1467,6 +1467,7 @@ test("door 9: route Work writes take their author from the caller; the /pe/agent
           headers: { "content-type": "application/json", "x-pe-action-actor": "human" },
           body: JSON.stringify({
             expectedRevision: revision,
+            press: as.kind === "human" ? crypto.randomUUID() : null,
             patches: [{ path: ["count"], value: 1 + revision }],
           }),
         }),

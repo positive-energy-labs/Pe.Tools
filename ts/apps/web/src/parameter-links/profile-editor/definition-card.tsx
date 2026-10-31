@@ -1,9 +1,5 @@
 import { Plus, Trash2 } from "lucide-react";
-import type {
-  DocumentRef,
-  ParameterLinkDefinition,
-  ParameterLinkProfile,
-} from "@pe/agent-contracts";
+import type { ParameterLinkDefinition, ParameterLinkProfile } from "@pe/agent-contracts";
 import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { Button } from "@pe/kit/lang/button";
@@ -12,9 +8,8 @@ import {
   FieldOptionPicker,
   FieldOptionSelect,
   parameterReferenceFromOption,
-  pickerOptions,
 } from "#/host/field-options";
-import { useFieldOptionsReading } from "#/readings";
+import { profileOptions, type ProfileOptions } from "../sources";
 import {
   REDUCERS,
   RELATIONSHIPS,
@@ -33,15 +28,13 @@ export function DefinitionCard({
   profile,
   definition,
   disabled,
-  fieldOptionsEnabled = true,
-  target,
+  options,
   onChange,
 }: {
   profile: ParameterLinkProfile;
   definition: ParameterLinkDefinition;
   disabled?: boolean;
-  fieldOptionsEnabled?: boolean;
-  target?: DocumentRef | null;
+  options: ProfileOptions;
   onChange: (next: ParameterLinkProfile) => void;
 }) {
   const patch = (fields: Partial<ParameterLinkDefinition>) =>
@@ -57,27 +50,15 @@ export function DefinitionCard({
     : Array.from(
         new Set(enabledAssignments.flatMap((assignment) => assignment.sourceElementUniqueIds)),
       );
-  const categories = pickerOptions(
-    useFieldOptionsReading(fieldOptionsEnabled ? target : null, "category-ids"),
-  );
-  const elements = pickerOptions(
-    useFieldOptionsReading(
-      fieldOptionsEnabled && definition.sourceCategoryId !== 0 ? target : null,
-      "element-unique-ids",
-      { CategoryId: String(definition.sourceCategoryId) },
-    ),
-  );
-  const sourceParameters = pickerOptions(
-    useFieldOptionsReading(
-      fieldOptionsEnabled && definition.sourceCategoryId !== 0 ? target : null,
-      "parameter-identities",
-      {
-        CategoryId: String(definition.sourceCategoryId),
-        ParameterScope: "instanceThenType",
-        ...(sourceElementIds.length ? { ElementUniqueIds: sourceElementIds.join("\n") } : {}),
-      },
-    ),
-  );
+  const categories = profileOptions(options, "category-ids");
+  const elements = profileOptions(options, "element-unique-ids", {
+    CategoryId: String(definition.sourceCategoryId),
+  });
+  const sourceParameters = profileOptions(options, "parameter-identities", {
+    CategoryId: String(definition.sourceCategoryId),
+    ParameterScope: "instanceThenType",
+    ...(sourceElementIds.length ? { ElementUniqueIds: sourceElementIds.join("\n") } : {}),
+  });
   const targetCategoryId =
     definition.relationship === "sameElement"
       ? definition.sourceCategoryId
@@ -87,30 +68,21 @@ export function DefinitionCard({
           )?.value ?? 0,
         );
   const selectedSource = findParameterOption(sourceParameters.items, definition.sourceParameter);
-  const targetParameters = pickerOptions(
-    useFieldOptionsReading(
-      fieldOptionsEnabled && targetCategoryId !== 0 ? target : null,
-      "parameter-identities",
-      {
-        CategoryId: String(targetCategoryId),
-        ParameterScope: "instance",
-        WritableOnly: "true",
-        ...(selectedSource?.metadata?.storageType
-          ? { StorageType: selectedSource.metadata.storageType }
-          : {}),
-        ...(selectedSource?.metadata?.dataTypeId
-          ? { DataTypeId: selectedSource.metadata.dataTypeId }
-          : {}),
-      },
-    ),
-  );
-  const readableTargetParameters = pickerOptions(
-    useFieldOptionsReading(
-      fieldOptionsEnabled && targetCategoryId !== 0 ? target : null,
-      "parameter-identities",
-      { CategoryId: String(targetCategoryId), ParameterScope: "instance" },
-    ),
-  );
+  const targetParameters = profileOptions(options, "parameter-identities", {
+    CategoryId: String(targetCategoryId),
+    ParameterScope: "instance",
+    WritableOnly: "true",
+    ...(selectedSource?.metadata?.storageType
+      ? { StorageType: selectedSource.metadata.storageType }
+      : {}),
+    ...(selectedSource?.metadata?.dataTypeId
+      ? { DataTypeId: selectedSource.metadata.dataTypeId }
+      : {}),
+  });
+  const readableTargetParameters = profileOptions(options, "parameter-identities", {
+    CategoryId: String(targetCategoryId),
+    ParameterScope: "instance",
+  });
 
   return (
     <ArtifactFrame
@@ -129,13 +101,9 @@ export function DefinitionCard({
             label="remove"
             kind="framed"
             icon={Trash2}
-            refusal={
-              disabled
-                ? "Remove this definition and its assignments from the draft (local until saved)"
-                : null
-            }
+            refusal={disabled ? "Remove this definition and its assignments from the draft" : null}
             onClick={() => onChange(removeDefinition(profile, definition.id))}
-            reason="Remove this definition and its assignments from the draft (local until saved)"
+            reason="Remove this definition and its assignments from the draft"
           >
             remove
           </Button>
@@ -350,11 +318,9 @@ export function DefinitionCard({
                     label="remove"
                     kind="framed"
                     icon={Trash2}
-                    refusal={
-                      disabled ? "Remove this assignment from the draft (local until saved)" : null
-                    }
+                    refusal={disabled ? "Remove this assignment from the draft" : null}
                     onClick={() => onChange(removeAssignment(profile, assignment.id))}
-                    reason="Remove this assignment from the draft (local until saved)"
+                    reason="Remove this assignment from the draft"
                   >
                     remove
                   </Button>

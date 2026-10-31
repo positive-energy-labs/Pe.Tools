@@ -1073,11 +1073,18 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         new Promise<RequestPermissionResponse>((resolve) => {
           if (t.child !== child || t.stopped) return resolve({ outcome: { outcome: "cancelled" } });
           clearIdle(t);
-          // Only explicitly classified reads use native approval. Missing and unknown effects
-          // have no immutable host command or footprint and cannot bypass the journal.
-          if (!["read", "search", "fetch", "think"].includes(request.toolCall.kind ?? "")) {
+          // Only classified reads and Pea's own MCP tools use native approval. Pea's tools cross
+          // the journal themselves (pe_do runs host commands under run consent), and the Claude
+          // ACP adapter reports every MCP tool as kind "other", so 2aecd374's kind-only allowlist
+          // refused every Revit read (2026-10-27 demo thread 06eb2ab8). Other missing and unknown
+          // effects have no immutable host command or footprint and cannot bypass the journal.
+          const peaTool = /^mcp__pea__/.test(request.toolCall.title ?? "");
+          if (
+            !peaTool &&
+            !["read", "search", "fetch", "think"].includes(request.toolCall.kind ?? "")
+          ) {
             const reason =
-              "Native unjournaled writes are unsupported. Only read, search, fetch and think approvals use this door; use Pea host semantic or causal CLI commands.";
+              "Native unjournaled writes are unsupported. Only read, search, fetch, think and Pea's own tools use this door; use Pea host semantic or causal CLI commands.";
             append(t, {
               kind: "update",
               turnId: t.running,
@@ -1096,6 +1103,17 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
                 ? { outcome: "selected", optionId: reject.optionId }
                 : { outcome: "cancelled" },
             });
+          }
+          // Unguarded access (`access.json`, the Agent approvals switch) answers the native ask
+          // itself. Consequential writes still cross the journal and the turn's run consent. No
+          // permission event is journaled: no card was shown, and `permission_resolved`'s `by`
+          // values all mean something else (a user, a run-consent deadline, a cancel).
+          if (!options.providers.access().guarded) {
+            const allow =
+              request.options.find((option) => option.kind === "allow_always") ??
+              request.options.find((option) => option.kind.startsWith("allow"));
+            if (allow)
+              return resolve({ outcome: { outcome: "selected", optionId: allow.optionId } });
           }
           const requestId = randomUUID();
           const turnId = t.running;
@@ -1240,7 +1258,8 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     for (const [id, value] of Object.entries(wantTraits))
       if (t.meta.traits.find((trait) => trait.id === id)?.current !== value)
         await setTrait(t, live, id, value).catch(notReapplied(`${id} ${String(value)}`));
-    // Product writes cross the journal even when the old access preference says Full.
+    // Product writes cross the journal whatever the access preference; unguarded access only
+    // answers the harness's per-call ask (requestPermission), never this mode.
     const offered = new Set(session.modes?.availableModes.map((m) => m.id));
     const required = harness === "codex" ? ["read-only"] : ["default"];
     const mode = required.find((candidate) => offered.has(candidate));

@@ -305,7 +305,11 @@ export async function setup() {
         await client.response("work.apply", {
           params: { route: "schedules" },
           query: { work: scope.work },
-          body: { patches, expectedRevision: previous?.revision ?? 0 },
+          body: {
+            patches,
+            expectedRevision: previous?.revision ?? 0,
+            press: actor === "agent" ? null : crypto.randomUUID(),
+          },
         })
       ).json();
     } finally {

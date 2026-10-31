@@ -29,6 +29,7 @@ type Furniture = Pick<
 export type TeachingPaneRender = (body: ReactNode, furniture?: Furniture) => ReactNode;
 type TeachingContent = (pane: TeachingPaneRender) => ReactNode;
 type TeachingLayoutState = {
+  sizes?: Readonly<Record<string, { size?: number; onChange: (size: number) => void }>>;
   conditions?: Readonly<Record<string, { available: boolean; reason?: string }>>;
   choices?: Readonly<Record<string, { value: PaneSide; onChange: (side: PaneSide) => void }>>;
   folds?: Readonly<
@@ -229,11 +230,14 @@ export function TeachingLayoutView<const L extends TeachingLayout>({
         : node.minOtherSize;
     return (
       <PaneSplit
+        key={node.id}
         id={node.id}
         axis={node.axis}
         resize={{
           target: node.target,
           defaultSize: node.size,
+          size: state.sizes?.[node.id]?.size,
+          onSizeChange: state.sizes?.[node.id]?.onChange,
           minSize: node.minSize ?? 0,
           minOtherSize: minimumOther,
           maxSize: node.maxSize,

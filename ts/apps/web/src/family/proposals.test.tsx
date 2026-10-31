@@ -5,7 +5,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import type { CellWire } from "#/components/work/band";
 import { AnatomyDrawing } from "#/family/anatomy";
-import type { FieldState } from "#/family/host";
+import type { FieldState } from "#/family/types";
 import { initialDraft, savedFrom } from "#/family/model";
 import { familySource } from "#/family/source";
 import type { FamilyStore } from "#/family/store";

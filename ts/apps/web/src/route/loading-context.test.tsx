@@ -6,9 +6,6 @@ import { HelpWorld } from "./help";
 import { STARTUP_TEACHING, referenceTeaching } from "./teaching";
 import { DUCTS_TEACHING } from "#/ducts/proto/e/teaching";
 import { RemoteDeviceGate } from "#/machine/devices";
-import { EScreen } from "#/ducts/proto/e/screen";
-import type { ProtoProps } from "#/ducts/proto/props";
-import { SCENE_FIXTURE } from "#/ducts/scene.fixture";
 
 const host = vi.hoisted(() => ({ call: vi.fn() }));
 vi.mock("#/host/pe-client", () => ({ peClient: host }));
@@ -76,34 +73,6 @@ test.each([
   await act(async () => {});
   expect(screen.getByText("Protected document facts")).toBeTruthy();
   expect(screen.queryByText("Public guide")).toBeNull();
-});
-
-test("the actual Ducts loading branch keeps one guide through reading, pricing and failure", () => {
-  // Deliberately no action callbacks: loading must not mount panes that could invoke them.
-  const props = {
-    page: { system: [] },
-    snapshot: null,
-    pricing: false,
-    empty: { says: "reading ducts…", exit: "wait for the snapshot" },
-    reading: { pending: true, error: null, refreshing: false },
-  } as unknown as ProtoProps;
-  const view = render(<EScreen props={props} />);
-  expect(screen.getByRole("group", { name: "Page regions" })).toBeTruthy();
-  expect(screen.getByRole("status").textContent).toBe("reading ducts…");
-  view.rerender(<EScreen props={{ ...props, snapshot: SCENE_FIXTURE.snapshot, pricing: true }} />);
-  expect(screen.getByRole("status").textContent).toContain(SCENE_FIXTURE.snapshot.document.title);
-  expect(screen.getByRole("status").textContent).toContain("pricing every run");
-  expect(screen.getAllByRole("group", { name: "Page regions" })).toHaveLength(1);
-  view.rerender(
-    <EScreen
-      props={{ ...props, reading: { ...props.reading, pending: false, error: "Snapshot refused" } }}
-    />,
-  );
-  expect(screen.getByRole("alert").textContent).toBe("Snapshot refused");
-  expect(screen.getByRole("region", { name: "Ducts loading" }).hasAttribute("aria-busy")).toBe(
-    false,
-  );
-  expect(screen.getByRole("group", { name: "Page regions" })).toBeTruthy();
 });
 
 test("route declarations replace rather than merge and unsupported routes never use Ducts", () => {

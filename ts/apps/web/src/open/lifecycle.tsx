@@ -29,8 +29,7 @@ import {
   unsavedOf,
   PHASE_TONE,
 } from "#/machine/session";
-import { useAction } from "#/readings";
-import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import { outcomeOf, useOpenKernel } from "./kernel";
 
 /** The kit's reading of one census row, derived here once for both densities. */
 export const factsOf = (session: MachineSession): SessionFacts => {
@@ -49,8 +48,8 @@ export const factsOf = (session: MachineSession): SessionFacts => {
 
 type Command = "restart" | "stop";
 
-/** One lifecycle action over one Revit incarnation, as a person. Resolves to its receipt. */
-export async function runLifecycle(
+/** Validate the exact incarnation and policy before binding a kernel lifecycle verb. */
+export function lifecycleRequest(
   command: Command,
   session: MachineSession,
   unsaved?: "keep" | "discard",
@@ -64,7 +63,7 @@ export async function runLifecycle(
     session: { selection: selectionOf(session.row), process: nativeProcessSchema.parse(process) },
     ...(command === "stop" ? { force: phaseOf(session.row) === "unresponsive", unsaved } : {}),
   });
-  return await runSemanticAction(key, input, undefined, undefined, "", undefined, 30_000);
+  return { key, input };
 }
 
 type Armed = "stop" | "hr" | null;
@@ -88,23 +87,20 @@ export function useLifecycle({
   const ownershipRefusal = executionRefusal(row);
   const blocked = refusal ?? ownershipRefusal;
   const unsaved = unsavedOf(session);
-  const action = useAction(
-    async ({ command, policy }: { command: Command; policy?: "keep" | "discard" }) => {
-      try {
-        const receipt = await runLifecycle(command, session, policy);
-        setOutcome({
-          kind: receipt.state === "succeeded" ? "receipt" : "advisory",
-          label: `${command} ${receipt.state}`,
-        });
-      } catch (caught) {
-        setOutcome({ kind: "refused", label: `${command} refused: ${String(caught)}` });
-      } finally {
-        setArmed(null);
-      }
-    },
-  );
-  const busy = action.isPending;
-  const run = (command: Command, policy?: "keep" | "discard") => action.mutate({ command, policy });
+  const owner = useOpenKernel();
+  const busy = owner.busy() !== null;
+  const run = async (command: Command, policy?: "keep" | "discard") => {
+    try {
+      const { input } = lifecycleRequest(command, session, policy);
+      setOutcome(
+        outcomeOf(await owner.control(command, { request: input, refusal: blocked }).run()),
+      );
+    } catch (caught) {
+      setOutcome({ kind: "refused", label: `${command} refused: ${String(caught)}` });
+    } finally {
+      setArmed(null);
+    }
+  };
   /** One sentence per verb: its reason when it can run, its refusal when it cannot. */
   const gate = (says: string, inert = false) => ({
     reason: blocked ?? says,

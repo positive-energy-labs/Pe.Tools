@@ -12,7 +12,8 @@ import {
   toggleSystem,
   withSystem,
 } from "./selection";
-import { sceneRequestOf } from "./manifest";
+import { ductsFocus } from "./page";
+import { captureRequest } from "#/scene/picture/picture";
 afterEach(() => resetKnob());
 
 test("selection opens in order, closes membership, and evicts the oldest over the cap", () => {
@@ -41,7 +42,9 @@ test("halo and big context share capture; paint names kind and tier only", () =>
     | "halo"
     | "context"
   )[][])
-    expect(sceneRequestOf(snapshot, { system: ["SA Office"], layers })!.focusOnly).toBe(false);
+    expect(
+      captureRequest(ductsFocus(snapshot, ["SA Office"])!, layers, 10, "boxes")!.focusOnly,
+    ).toBe(false);
   const id = snapshot.segments[0]!.id;
   const paint = paintOfDucts(snapshot, new Set([id]), new Set());
   expect(paint({ revitId: id } as SceneInstance)).toEqual({ tier: "subject", kind: "supply" });
@@ -54,15 +57,15 @@ test("the production fixture unions sections once and captures every opened memb
   expect(scope.groups).toHaveLength(2);
   expect([...sectionsOf(snapshot, systems).keys()]).toEqual(scope.groups);
   expect(scope.shared.get(scope.groups[0]!)).toEqual(["SA Lab"]);
-  const request = sceneRequestOf(
-    snapshot,
-    { system: systems, layers: ["meshes"] },
-    [],
-    [999999, 999999],
+  const request = captureRequest(
+    ductsFocus(snapshot, systems, [], [999999, 999999])!,
+    ["meshes"],
+    10,
+    "boxes",
   )!;
   expect(request.elementIds).toEqual([...scope.members, 999999].sort((a, b) => a - b));
   expect(request.focusOnly).toBe(true);
-  expect(sceneRequestOf(snapshot, { system: [], layers: ["context"] })).toBeNull();
+  expect(ductsFocus(snapshot, [])).toBeNull();
 });
 
 test("non-focus MEP paints as stub (kind from its snapshot system, pipes unknown); other context stays context", () => {

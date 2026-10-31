@@ -15,9 +15,13 @@ import {
   useState,
   useSyncExternalStore,
   type ComponentProps,
+  type ReactNode,
+  createContext,
+  useContext,
 } from "react";
-import type { DuctsApply } from "@pe/host-contracts/generated";
+
 import { survey, unitFlowsIn } from "@pe/ducts-domain/survey";
+import { healPlan } from "@pe/ducts-domain/heal";
 import { fansOwedBase, type OwedBase } from "@pe/ducts-domain/fan-assignment";
 import { sectionsOf, systemOfGroup } from "@pe/ducts-domain/system-scope";
 import { neighboursOf, type Neighbour } from "@pe/ducts-domain/neighbours";
@@ -33,38 +37,33 @@ import { useRevitSubjectProps } from "#/revit/element-menu";
 import { noRunBranches } from "@pe/ducts-domain/no-runs";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { AttentionRoot, useIssueHover, useHoveredIssue } from "#/attention";
-import {
-  elementKey,
-  useAttentionDocument,
-  useMembers,
-  type SubjectKey,
-} from "@pe/kit/lang/attention";
+import { elementKey, type SubjectKey } from "@pe/kit/lang/attention";
 import {
   annotatedFindings,
   stageIssues,
   fanVerbs,
-  healRunView,
   focusRow,
   inboxRows,
-  holding,
   type CellRef,
   type InboxItem,
 } from "../../inbox-rows";
 import { groupLabels } from "@pe/ducts-domain/words";
 import { scopeOf, systemScope } from "@pe/ducts-domain/system-scope";
 import { stagedEsp } from "@pe/ducts-domain/staged";
-import { previewFresh } from "../../manifest";
+
 import type { LossesWork } from "../../work";
-import { reviewLines, writePreview } from "../../write-review";
+
 import { buildTree, type TreeNode } from "../b/model";
 import type { systemList } from "../../system-list";
 import type { SystemNote } from "../../system-list-search";
 import type { ProtoProps } from "../props";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
 import { BarRules, systemNoteCount, systemRowParts } from "./bar";
-import { DuctSettings } from "./settings";
+
+import { DesignFriction } from "./design-friction";
+import { ParameterSlots, SystemColours } from "./settings";
 import { FanFacts, fanFacts, type FanFact } from "./fan-sections";
-import { ECanvas } from "./canvas";
+import { DuctsPicture } from "./picture";
 import { grilleLabels } from "./labels";
 import { FanButton, Inbox, type FanVerbs } from "./inbox";
 import type { WriteVerbs } from "./inbox-write";
@@ -72,11 +71,10 @@ import { InputsPane } from "./inputs-pane";
 import { RulesTree, ruleOfIds } from "./rules-pane";
 import { SystemTree } from "./tree-sidebar";
 import { useGroupEncoding } from "../encoding/use-encoding";
-import { DUCTS_LAYOUT, DUCTS_TEACHING, ductsPaneState, TIGHT_PX } from "./teaching";
-import { TeachingLayoutView } from "@pe/kit/lang/teaching-layout";
-import { HelpWorld } from "#/route/help";
+
+import { EMPTY_SNAPSHOT } from "../../sheet/scoped-snapshot";
 import { LoadingContext } from "#/route/loading-context";
-import { activeSystem, capped, DUCTS_MULTI, toggleSystem, withSystem } from "../../selection";
+import { activeSystem, DUCTS_MULTI, toggleSystem, withSystem } from "../../selection";
 import { subscribe as knobsChanged } from "#/knobs/knobs";
 import { OpenSystems } from "./open-systems";
 
@@ -89,53 +87,64 @@ const NO_SYSTEMS: ReturnType<typeof systemList> = [];
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-type Side = "left" | "right";
-
-/** The element's width, measured; 0 until it is (jsdom never measures). */
-function useWidth() {
-  const ref = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(0);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(([entry]) => setWidth(entry?.contentRect.width ?? 0));
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-  return [ref, width] as const;
+const NetworkPanes = createContext<Readonly<Record<string, ReactNode>>>({});
+export function NetworkPane({ id }: { id: string }) {
+  return useContext(NetworkPanes)[id] ?? null;
 }
 
-export function EScreen({ props }: { props: ProtoProps }) {
-  if (!props.snapshot || props.pricing)
-    return (
-      <LoadingContext
-        name="Ducts"
-        says={
-          props.snapshot
-            ? `Read ${props.snapshot.document.title} (${props.snapshot.systems.length} systems) · pricing every run…`
-            : (props.empty?.says ?? "reading ducts…")
-        }
-        error={props.reading.error}
-        busy={props.reading.pending || props.pricing}
-      >
-        {!props.snapshot && props.empty ? <p>{props.empty.exit}</p> : null}
-        <HelpWorld facts={DUCTS_TEACHING} />
-      </LoadingContext>
-    );
+export function NetworkProvider({ props, children }: { props: ProtoProps; children: ReactNode }) {
   return (
     <AttentionRoot doc={props.attentionDoc}>
-      <LoadedScreenBody props={{ ...props, snapshot: props.snapshot }} />
+      <LoadedScreenBody
+        props={{ ...props, snapshot: props.snapshot ?? EMPTY_SNAPSHOT }}
+        loading={!props.snapshot || props.pricing}
+      >
+        {children}
+      </LoadedScreenBody>
     </AttentionRoot>
   );
 }
 
-/** Loading is outside this component so every loaded render calls the same hooks. */
+/** "n of m systems read", or null when the snapshot holds every system. */
+const partialWord = (coverage: ProtoProps["coverage"]) =>
+  coverage && coverage.read < coverage.of
+    ? `${coverage.read} of ${coverage.of} systems read`
+    : null;
+
+/** The scoped read's extent and its one verb: read every system, a few per read, into the panes. */
+function ReadCoverage({ coverage }: { coverage: ProtoProps["coverage"] }) {
+  const partial = partialWord(coverage);
+  if (!coverage || (!partial && !coverage.report)) return null;
+  return (
+    <p className="flex flex-wrap items-baseline gap-2 t-small text-ink-2" data-e-coverage="">
+      <span>
+        {partial ?? `${coverage.read} of ${coverage.of} systems read`}
+        {coverage.reading.length ? ` · reading ${coverage.reading.join(", ")}…` : ""}
+        {coverage.report ? ` · ${coverage.report}` : ""}
+      </span>
+      {coverage.readAll ? (
+        <Button
+          label="Read every system, a few systems per read, so the totals cover the document"
+          onClick={coverage.readAll}
+        >
+          Read every system
+        </Button>
+      ) : null}
+    </p>
+  );
+}
+
+/** Keep providers and graph demand mounted while the readings acquire or reprice. */
 // TODO: N6: rebuild only changed pane projections on pricing delivery. The worker removes solve
 // and triage CPU, but retained-display and result commits still exceed the interaction budget.
 function LoadedScreenBody({
   props,
+  children,
+  loading,
 }: {
   props: ProtoProps & { snapshot: NonNullable<ProtoProps["snapshot"]> };
+  children: ReactNode;
+  loading: boolean;
 }) {
   const { snapshot, priced, page, setPage } = props;
   const doc = props.work.doc;
@@ -143,10 +152,9 @@ function LoadedScreenBody({
     () => ({
       doc,
       revision: props.work.revision,
-      preview: props.work.preview as LossesWork["preview"],
       write: props.work.write as unknown as LossesWork["write"],
     }),
-    [doc, props.work.revision, props.work.preview, props.work.write],
+    [doc, props.work.revision, props.work.write],
   );
   const inboxWork = useMemo(
     () => ({
@@ -188,10 +196,6 @@ function LoadedScreenBody({
   }, [snapshot, page.system, groups, scope]);
   // One hop: the networks a unit of a drawn group also roots, drawn as stubs near that unit.
   const multi = useSyncExternalStore(knobsChanged, DUCTS_MULTI.read, DUCTS_MULTI.read).selection;
-  useEffect(() => {
-    const next = capped(page.system);
-    if (next.length !== page.system.length) setPage({ system: next });
-  }, [multi.systemCap, page.system, setPage]);
   const neighbours = useMemo(
     () => (snapshot && scope ? neighboursOf(snapshot, displayMembers!, multi) : NO_NEIGHBOURS),
     [snapshot, scope, displayMembers, multi],
@@ -261,35 +265,26 @@ function LoadedScreenBody({
     () => priced ?? (snapshot ? survey(snapshot, doc) : null),
     [priced, snapshot, doc],
   );
-  const preview = props.work.preview as DuctsApply.Res.Response | null;
+
   // What heals in Revit is planned over the raw snapshot (the tolerated one has bridged it already).
-  const heal = props.analysis?.heal ?? null;
+  const heal = useMemo(() => (snapshot ? healPlan(snapshot, doc) : null), [snapshot, doc]);
   const notes = props.analysis?.notes ?? NO_NOTES;
-  // The document at a glance: how many systems price clean, and how many a person must fix first.
+  // The document at a glance: how many systems price clean, and how many a person must fix first;
+  // read by system, over the systems read so far, and it says so.
+  const partial = partialWord(props.coverage);
   const census = useMemo(() => {
     const issues = systems.map((s) => systemNoteCount(s, notes.get(s.key)).issues);
     return {
       systems: systems.length,
       priced: systems.filter((s) => s.total != null).length,
       fix: issues.filter((i) => i.some((x) => x.tone === "alarm")).length,
+      partial,
     };
-  }, [systems, notes]);
+  }, [systems, notes, partial]);
   const chosenRow = useMemo(() => {
     const row = systems.find((s) => s.key === activeSystem(page));
     return row ? { ...row, note: notes.get(row.key) } : null;
   }, [systems, page.system, notes]); // eslint-disable-line react-hooks/exhaustive-deps
-  const healRun = useMemo(
-    () =>
-      page.heal && surveyed
-        ? healRunView(
-            page.heal,
-            surveyed.snapshot,
-            page.epoch,
-            (g) => priced?.next.byGroup[g]?.fan ?? null,
-          )
-        : null,
-    [page.heal, page.epoch, surveyed, priced],
-  );
   const noRunRows = useMemo<InboxItem[]>(() => {
     if (!priced || !scope) return [];
     return [
@@ -333,18 +328,12 @@ function LoadedScreenBody({
             nameOf,
             groupLabel,
             heal,
-            healRun,
             airflow: airflowOptions(surveyed.snapshot, scope),
             unitAirflow: airflowOptions(surveyed.snapshot, scope, "unit"),
             roles: surveyed.roles,
-            fan: { run: page.fan, epoch: page.epoch },
             claims: props.claims,
             write: {
               edit: props.edit,
-              hasPreview: page.evaluation !== null,
-              fresh: previewFresh(page, props.work.revision),
-              planned: preview?.counts.planned ?? null,
-              refused: preview?.counts.refused ?? null,
               esp: stagedEsp(doc),
             },
           })
@@ -352,33 +341,36 @@ function LoadedScreenBody({
     [
       surveyed,
       scope,
-      page.fan,
-      page.epoch,
-      page.evaluation,
+      props.captureSource?.version ?? "",
       doc,
       nameOf,
       groupLabel,
       heal,
-      healRun,
       props.claims,
       props.edit,
       props.work.revision,
-      preview,
     ],
   );
-  const inbox = useMemo(
-    () => baseInbox && { ...baseInbox, diagnostics: [...baseInbox.diagnostics, ...noRunRows] },
-    [baseInbox, noRunRows],
-  );
+  const inbox = useMemo(() => {
+    if (!baseInbox) return null;
+    const run = page.heal;
+    const reviewed = (row: InboxItem) =>
+      run && row.key === `heal:${run.group}`
+        ? {
+            ...row,
+            status: run.sentence,
+            note: run.rows.join("; "),
+            ids: [...new Set([...row.ids, ...run.targets.flatMap((t) => t.ids)])],
+          }
+        : row;
+    return {
+      ...baseInbox,
+      fix: baseInbox.fix.map(reviewed),
+      diagnostics: [...baseInbox.diagnostics.map(reviewed), ...noRunRows],
+    };
+  }, [baseInbox, noRunRows, page.heal]);
   // A unit whose role is fan while no Revit system names it base equipment offers to make it one.
-  const fanHandles = useMemo<FanVerbs>(
-    () => ({
-      preview: props.actions.fanPreview,
-      apply: props.actions.fan,
-      busy: props.actions.busy,
-    }),
-    [props.actions.fanPreview, props.actions.fan, props.actions.busy],
-  );
+  const fanHandles: FanVerbs = { render: props.commands };
   const owedBase = useMemo(
     () =>
       snapshot && surveyed
@@ -395,7 +387,7 @@ function LoadedScreenBody({
       // Only the open system is offered: the system comes from the page, the unit from the row.
       const verbs = (owedBase.get(id) ?? [])
         .filter((a) => a.system === active)
-        .flatMap((a) => fanVerbs(a, nameOf, { run: page.fan, epoch: page.epoch }));
+        .flatMap((a) => fanVerbs(a, nameOf));
       const split = [...(owedBase.split ?? [])].find(
         ([system, units]) => system === active && units.includes(id),
       );
@@ -406,7 +398,7 @@ function LoadedScreenBody({
           </span>
         );
       if (!verbs.length) return null;
-      const outcome = verbs.find((v) => v.outcome)?.outcome ?? null;
+
       return (
         <span
           className="flex flex-wrap items-baseline gap-1"
@@ -420,35 +412,16 @@ function LoadedScreenBody({
               fan={fanHandles}
             />
           ))}
-          {outcome ? (
-            <span className="t-small text-ink-2" data-e-fan-outcome="">
-              {outcome}
-            </span>
-          ) : null}
         </span>
       );
     },
-    [owedBase, active, nameOf, page.fan, page.epoch, fanHandles],
+    [owedBase, active, nameOf, fanHandles],
   );
-  // The Write popover holds only a preview that still describes this Work and snapshot.
-  const writeHeld = useMemo(
-    () =>
-      preview && previewFresh(page, props.work.revision)
-        ? writePreview(preview, reviewLines(preview, nameOf))
-        : null,
-    [preview, page, props.work.revision, nameOf],
-  );
-  const toRule = inbox ? inbox.fix.length + inbox.set.length + inbox.check.length : 0;
   // A Set row's verb selects the element and focuses its cell once the tree has drawn it.
   // `system` is the open list's `openKey`.
-  const [sideFor, setSideFor] = useState<{ system: string; side: Side }>({
-    system: "",
-    side: "left",
-  });
   // A fitting's drop cell the inbox asked for, in the rules half that holds it.
   const [landing, setLanding] = useState<{ id: number; half: "all" | "this" } | null>(null);
   const [cellFocus, setCellFocus] = useState<CellRef | null>(null);
-  const [inputsOpen, setInputsOpen] = useState(false);
   // The rules pane lands on the cell: scroll it in, focus its control, mark it once (`--motion-land`).
   useEffect(() => {
     if (!landing) return;
@@ -459,7 +432,7 @@ function LoadedScreenBody({
     if (!row) return;
     land(row, { focus: true });
     setLanding(null);
-  }, [landing, priced, sideFor]);
+  }, [landing, priced]);
   useEffect(() => {
     if (!cellFocus) return;
     const input = document.querySelector<HTMLElement>(
@@ -475,24 +448,15 @@ function LoadedScreenBody({
   const reading = encoded.encoding.quantity ? encoded.encoding : null;
   const subjectProps = useRevitSubjectProps();
   const issues = useMemo(() => (inbox ? stageIssues(inbox) : []), [inbox]);
-  const jump = useRef<((id: number) => void) | null>(null);
+  const jump = useRef<((key: SubjectKey) => void) | null>(null);
   const setHoveredIssue = useIssueHover();
-  const { epoch, system, systemSearch, systemSort } = page;
+  const { system, systemSearch, systemSort } = page;
+  const version = props.captureSource?.version ?? "";
   const systemKeys = useMemo(
-    () => ({ epoch, system, systemSearch, systemSort }),
-    [epoch, system, systemSearch, systemSort],
+    () => ({ version, system, systemSearch, systemSort }),
+    [version, system, systemSearch, systemSort],
   );
   const [ruleFocus, setRuleFocus] = useState<string | null>(null);
-  // null = automatic: open when the inbox holds a row, collapsed when it holds none.
-  const [inboxOpen, setInboxOpen] = useState<boolean | null>(null);
-  // A review from the chat head names an inbox row in `issue`: a rail-collapsed inbox opens for it.
-  useEffect(() => {
-    if (page.issue) setInboxOpen(true);
-  }, [page.issue]);
-  // null = automatic: the sidebar is a rail while the screen is tight.
-  const [treeCollapsed, setTreeCollapsed] = useState<boolean | null>(null);
-  const [panePriority, setPanePriority] = useState<"sidebar" | "inbox">("sidebar");
-  const [rootRef, width] = useWidth();
   const membership = useMemo(() => {
     const map = new Map<SubjectKey, readonly SubjectKey[]>();
     for (const issue of issues) map.set(`issue:${issue.key}`, issue.ids.map(elementKey));
@@ -507,8 +471,6 @@ function LoadedScreenBody({
     trees.forEach(walk);
     return map;
   }, [issues, trees]);
-  useAttentionDocument(props.attentionDoc, props.selection);
-  useMembers(props.attentionDoc, membership);
   // The picture annotates the Fix rows' findings, or the Diagnostics kind picked in its key.
   const kindClause = page.rulingSearch.pills.find(
     (pill) => pill.field === "kind" && pill.op === "=",
@@ -532,14 +494,6 @@ function LoadedScreenBody({
 
   const tree = trees.length ? trees : null;
   const chosen = tree != null && scope != null;
-  // Both panes project one choice, including programmatic landings and system changes.
-  const home: Side = chosen ? "right" : "left";
-  const side = chosen && sideFor.system === openKey(page.system) ? sideFor.side : home;
-  const pick = useCallback(
-    (side: Side) => setSideFor({ system: openKey(page.system), side }),
-    [page.system],
-  );
-
   const select = props.onSelect;
   // The critical run is the largest priced total over every section: the worst fan's run (B's
   // model marks Pe's only when the group solve names one; a provisional solve can leave it
@@ -564,14 +518,6 @@ function LoadedScreenBody({
         ),
       )
     : null;
-  const { sidebarCollapsed, inboxShown } = ductsPaneState({
-    width,
-    inboxOpen,
-    treeCollapsed,
-    priority: panePriority,
-    toRule,
-    edit: props.edit,
-  });
   // A cell outside the system (a Set row on the whole document) moves the page to its system.
   const focusCell = useCallback(
     (cell: CellRef) => {
@@ -580,7 +526,6 @@ function LoadedScreenBody({
         // selected and the page does not move: the picture and its orbit stay as they were.
         const group = (drawn ?? snapshot).nodes.find((n) => n.id === cell.id)?.groupId;
         const mine = chosen && group != null && groups.includes(group);
-        pick(mine ? "right" : "left");
         setLanding({ id: cell.id, half: mine ? "this" : "all" });
         return;
       }
@@ -594,11 +539,9 @@ function LoadedScreenBody({
               return g ? withSystem(page.system, systemOfGroup(drawn ?? snapshot, g)) : page.system;
             })();
       setPage({ system: into, selected: String(cell.id), issue: "" });
-      setSideFor({ system: openKey(into), side: "right" });
-      setInputsOpen(true);
       setCellFocus(cell);
     },
-    [drawn, snapshot, chosen, groups, scope, page.system, pick, setPage],
+    [drawn, snapshot, chosen, groups, scope, page.system, setPage],
   );
   // The section whose run leads the system: its fan and TEL head the pane.
   const activeCritical =
@@ -618,10 +561,6 @@ function LoadedScreenBody({
           : best,
       null,
     ) ?? "";
-  // Any group of the system with an implausible row: its ESP is a partial sum, so none is shown.
-  const blockedLoss = (activeScope?.groups ?? []).some((g) =>
-    priced?.next.byGroup[g]?.implausible.some((id) => activeScope!.prices.has(id)),
-  );
   const fansOf = useCallback(
     (system: ReturnType<typeof systemList>[number]) =>
       fanFacts(
@@ -634,7 +573,6 @@ function LoadedScreenBody({
   );
   jumpToRuleNow.current = (key) => {
     setRuleFocus(key);
-    pick("right");
   };
   const designRate = priced?.edit.designFriction ?? DEFAULT_DESIGN_FRICTION_RATE;
   // The 2026-10-24 open-system chips supersede the 2026-10-23 no-header ruling. The header
@@ -643,13 +581,17 @@ function LoadedScreenBody({
     () =>
       tree ? (
         <>
-          <OpenSystems system={page.system} onChange={(system) => setPage({ system })} />
+          <OpenSystems
+            system={page.system}
+            onChange={(system) => setPage({ system })}
+            whole={!partialWord(props.coverage)}
+          />
           <Scroll className="min-h-0 flex-1">
             <div className="min-w-0 shrink-0">
               <SystemTree
                 key={scope?.name}
                 address={{
-                  scope: `${openKey(page.system)}:${page.epoch}`,
+                  scope: `${openKey(page.system)}:${props.captureSource?.version ?? ""}`,
                   search: page.treeSearch,
                   sort: page.treeSort,
                   onChange: (treeSearch, treeSort) =>
@@ -691,7 +633,7 @@ function LoadedScreenBody({
       tree,
       scope?.name,
       page.system,
-      page.epoch,
+      props.captureSource?.version ?? "",
       page.treeSearch,
       page.treeSort,
       connected,
@@ -712,6 +654,12 @@ function LoadedScreenBody({
     () => (
       <>
         <OpenSystems system={page.system} onChange={(system) => setPage({ system })} />
+        <ReadCoverage coverage={props.coverage} />
+        {props.reading.error ? (
+          <p role="alert" data-tone="alarm">
+            {props.reading.error}
+          </p>
+        ) : null}
         <Scroll className="min-h-0 flex-1">
           <SystemsList
             systems={systems}
@@ -729,6 +677,8 @@ function LoadedScreenBody({
       census.systems,
       census.priced,
       census.fix,
+      props.coverage,
+      props.reading.error,
       systems,
       fansOf,
       nameOf,
@@ -771,7 +721,7 @@ function LoadedScreenBody({
           <p className="t-small text-ink-2 px-(--item-mark-pad-x) py-1">flow · ESP · role · drop</p>
           <InputsPane
             address={{
-              scope: `${openKey(page.system)}:${page.epoch}`,
+              scope: `${openKey(page.system)}:${props.captureSource?.version ?? ""}`,
               search: page.inputSearch,
               sort: page.inputSort,
               onChange: (inputSearch, inputSort) =>
@@ -793,7 +743,7 @@ function LoadedScreenBody({
       scope,
       inputsCount,
       page.system,
-      page.epoch,
+      props.captureSource?.version ?? "",
       page.inputSearch,
       page.inputSort,
       setPage,
@@ -807,52 +757,10 @@ function LoadedScreenBody({
       select,
     ],
   );
-  // The inbox header says what holds the system's ESP back, not only how many rows wait.
-  const held = inbox ? holding(inbox.fix) + inbox.set.length : 0;
-  const rulingsWord = !chosen
-    ? `${toRule} to rule on · every system`
-    : blockedLoss
-      ? "no ESP: an implausible loss"
-      : held
-        ? `ESP held by ${[
-            inbox && holding(inbox.fix) ? `${holding(inbox.fix)} fix` : "",
-            inbox?.set.length ? `${inbox.set.length} set` : "",
-          ]
-            .filter(Boolean)
-            .join(" · ")}${inbox?.check.length ? ` · ${inbox.check.length} to check` : ""}`
-        : inbox?.check.length
-          ? `${inbox.check.length} to check · nothing holds the ESP`
-          : "nothing holds the ESP";
-  // Selection does not change these verbs. Stable handles keep every unrelated ruling row intact.
-  const writeVerbs = useMemo<WriteVerbs | null>(
-    () =>
-      inbox
-        ? {
-            preview: props.actions.preview,
-            apply: props.actions.apply,
-            busy: props.actions.busy,
-            row: inbox.write,
-            held: writeHeld,
-            stale: page.evaluation !== null && writeHeld === null,
-          }
-        : null,
-    [
-      inbox?.write,
-      props.actions.preview,
-      props.actions.apply,
-      props.actions.busy,
-      writeHeld,
-      page.evaluation,
-    ],
-  );
-  const healHandles = useMemo<FanVerbs>(
-    () => ({
-      preview: props.actions.healPreview,
-      apply: props.actions.heal,
-      busy: props.actions.busy,
-    }),
-    [props.actions.healPreview, props.actions.heal, props.actions.busy],
-  );
+  const writeVerbs: WriteVerbs | null = inbox
+    ? { control: props.commands({ kind: "price" }), row: inbox.write }
+    : null;
+  const healHandles: FanVerbs = { render: props.commands };
   const inboxPane = useMemo(
     () => (
       <>
@@ -867,11 +775,12 @@ function LoadedScreenBody({
             write={writeVerbs!}
             heal={healHandles}
             fan={fanHandles}
+            cells={props.cells}
             selected={selected}
             focused={focusKey}
             onPick={(issue) => setPage({ selected: "", issue }, { history: "push" })}
             address={{
-              scope: `${openKey(page.system)}:${page.epoch}`,
+              scope: `${openKey(page.system)}:${props.captureSource?.version ?? ""}`,
               search: page.rulingSearch,
               sort: page.rulingSort,
               onChange: (rulingSearch, rulingSort) =>
@@ -879,10 +788,23 @@ function LoadedScreenBody({
             }}
           />
         ) : null}
+        {page.heal && (
+          <section
+            aria-label={page.heal.mode === "preview" ? "Heal preview" : "Heal result"}
+            className="px-2 py-1"
+          >
+            <p>{page.heal.sentence}</p>
+            <ul>
+              {page.heal.rows.map((row, index) => (
+                <li key={index}>{row}</li>
+              ))}
+            </ul>
+          </section>
+        )}
       </>
     ),
     [
-      rulingsWord,
+      page.heal,
       inbox,
       inboxWork,
       nameOf,
@@ -897,7 +819,7 @@ function LoadedScreenBody({
       setHoveredIssue,
       setPage,
       page.system,
-      page.epoch,
+      props.captureSource?.version ?? "",
       page.rulingSearch,
       page.rulingSort,
     ],
@@ -908,117 +830,106 @@ function LoadedScreenBody({
       doc: props.attentionDoc,
       nameOf: subjectName,
 
-      go: (id: number) => (jump.current ? jump.current(id) : select(id)),
+      go: (id: number) => (jump.current ? jump.current(elementKey(id)) : select(id)),
       refProps: subjectProps,
     }),
     [props.attentionDoc, subjectName, select, subjectProps],
   );
 
+  const picturePane = (
+    <div className="relative flex size-full min-w-0 flex-col">
+      {page.heal?.targets.some(
+        (target) => target.outcome === "planned" || target.outcome === "healed",
+      ) && (
+        <section aria-label="Heal targets" className="flex shrink-0 flex-col px-2 py-1 t-small">
+          {page.heal.targets
+            .filter((target) => target.outcome === "planned" || target.outcome === "healed")
+            .map((target) => (
+              <span key={target.key}>
+                {target.how} · {target.end.replace(":", " end ")}
+                {target.other ? ` to ${target.other.replace(":", " end ")}` : ""}
+              </span>
+            ))}
+        </section>
+      )}
+      <div className="relative min-h-0 flex-1">
+        <DuctsPicture
+          renderPane={(body) => body}
+          {...props}
+          membership={membership}
+          issueScope={issueScope}
+          annotated={annotated}
+          issues={issues}
+          scale={encoded}
+          nameOf={nameOf}
+          jump={jump}
+          groups={drawGroups}
+          members={displayMembers}
+          neighbours={neighbours}
+          lead={leadGroup}
+          identity={{
+            system: chosenRow,
+            census,
+            refreshing: props.reading.refreshing,
+            open: () => {},
+            breakdown:
+              activeCritical?.split && activeCritical.total
+                ? {
+                    split: activeCritical.split,
+                    scale: activeCritical.total,
+                    fans: () => (
+                      <FanFacts
+                        facts={fanFacts(
+                          priced,
+                          activeScope?.groups ?? [],
+                          nameOf,
+                          activeScope?.terminals,
+                        )}
+                        nameOf={nameOf}
+                      />
+                    ),
+                  }
+                : null,
+            allSystems: () => setPage({ system: [] }),
+          }}
+        />
+      </div>
+    </div>
+  );
+  const loadingBody = (
+    <LoadingContext
+      name="Ducts"
+      says={props.empty?.says ?? "Pricing ducts..."}
+      error={props.reading.error}
+      busy={props.reading.pending || props.pricing}
+    >
+      <ReadCoverage coverage={props.coverage} />
+    </LoadingContext>
+  );
+  const panes = {
+    "e-systems": (
+      <BarRules snapshot={drawn} work={work} priced={priced}>
+        {systemsPane}
+      </BarRules>
+    ),
+    "e-sidebar": treePane,
+    "e-inputs": (
+      <>
+        <DesignFriction work={work} rate={designRate} />
+        <ParameterSlots work={work} snapshot={snapshot} scope={scope} />
+        <SystemColours work={work} />
+        {inputsPane}
+      </>
+    ),
+    "e-rules-all": rulesPanes[1],
+    "e-rules": rulesPanes[0],
+    "e-picture": picturePane,
+    "e-inbox": inboxPane,
+  };
   return (
-    <>
-      <SubjectTextContext.Provider value={subjectContext}>
-        <div ref={rootRef} data-proto="E2" className="flex size-full min-h-0">
-          <BarRules snapshot={drawn!} work={work} priced={priced}>
-            <DuctSettings work={work} rate={designRate} snapshot={snapshot} scope={scope} />
-            <TeachingLayoutView<typeof DUCTS_LAYOUT>
-              layout={DUCTS_LAYOUT}
-              content={{
-                "e-systems": (pane) =>
-                  pane(systemsPane, {
-                    meta: `${census.systems} · ${census.priced} priced · ${census.fix} need a fix`,
-                  }),
-                "e-sidebar": (pane) => pane(treePane),
-                "e-inputs": (pane) => pane(inputsPane, { meta: inputsCount }),
-                "e-rules-all": (pane) => pane(rulesPanes[1], { meta: "every system" }),
-                "e-rules": (pane) => pane(rulesPanes[0], { meta: scope?.name ?? "" }),
-                "e-picture": (pane) => (
-                  <div className="relative size-full min-w-0">
-                    <ECanvas
-                      renderPane={pane}
-                      {...props}
-                      onIssueHover={setHoveredIssue}
-                      issueScope={issueScope}
-                      annotated={annotated}
-                      issues={issues}
-                      scale={encoded}
-                      nameOf={nameOf}
-                      jump={jump}
-                      groups={drawGroups}
-                      members={displayMembers}
-                      neighbours={neighbours}
-                      lead={leadGroup}
-                      identity={{
-                        system: chosenRow,
-                        census,
-                        refreshing: props.reading.refreshing,
-                        open: () => pick("right"),
-                        breakdown:
-                          activeCritical?.split && activeCritical.total
-                            ? {
-                                split: activeCritical.split,
-                                scale: activeCritical.total,
-                                fans: () => (
-                                  <FanFacts
-                                    facts={fanFacts(
-                                      priced,
-                                      activeScope?.groups ?? [],
-                                      nameOf,
-                                      activeScope?.terminals,
-                                    )}
-                                    nameOf={nameOf}
-                                  />
-                                ),
-                              }
-                            : null,
-                        allSystems: () => setPage({ system: [] }),
-                      }}
-                    />
-                  </div>
-                ),
-                "e-inbox": (pane) => pane(inboxPane, { meta: rulingsWord }),
-              }}
-              state={{
-                conditions: {
-                  tree: { available: tree != null, reason: "choose a system first" },
-                  system: { available: chosen, reason: "choose a system first" },
-                  tight: { available: width > 0 && width < TIGHT_PX },
-                },
-                choices: {
-                  scope: {
-                    value: side === "left" ? "start" : "end",
-                    onChange: (next) => pick(next === "start" ? "left" : "right"),
-                  },
-                },
-                folds: {
-                  "scope-upper": { endTitle: scope?.name ?? "System" },
-                  inputs: {
-                    collapsed: inputsOpen ? null : "end",
-                    onChange: (folded) => setInputsOpen(folded !== "end"),
-                    endTitle: `Inputs · ${inputsCount}`,
-                  },
-                  sidebar: {
-                    collapsed: sidebarCollapsed ? "start" : null,
-                    startTitle: scope?.name ?? "systems",
-                    onChange: (folded) => {
-                      if (folded !== "start") setPanePriority("sidebar");
-                      setTreeCollapsed(folded === "start");
-                    },
-                  },
-                  drawing: {
-                    collapsed: inboxShown ? null : "end",
-                    endTitle: `Rulings · ${toRule}`,
-                    onChange: (folded) => {
-                      if (folded !== "end") setPanePriority("inbox");
-                      setInboxOpen(folded !== "end");
-                    },
-                  },
-                },
-              }}
-            />
-          </BarRules>
-        </div>
-      </SubjectTextContext.Provider>
-    </>
+    <SubjectTextContext.Provider value={subjectContext}>
+      <NetworkPanes value={loading ? { "e-picture": loadingBody } : panes}>{children}</NetworkPanes>
+    </SubjectTextContext.Provider>
   );
 }
 
@@ -1046,7 +957,7 @@ const SystemsList = memo(function SystemsList({
   nameOf: (id: number) => string;
   notes: ReadonlyMap<string, SystemNote>;
   drawn: ProtoProps["snapshot"];
-  page: Pick<ProtoProps["page"], "epoch" | "system" | "systemSearch" | "systemSort">;
+  page: Pick<ProtoProps["page"], "system" | "systemSearch" | "systemSort"> & { version: string };
   setPage: ProtoProps["setPage"];
 }) {
   const searchable = useMemo(() => (drawn ? systemSearch(drawn) : null), [drawn]);
@@ -1101,7 +1012,7 @@ const SystemsList = memo(function SystemsList({
     [systems, notes],
   );
   const systemListView = useList({
-    scope: String(page.epoch),
+    scope: page.version,
     items: systems,
     keyOf: systemKey,
     search,

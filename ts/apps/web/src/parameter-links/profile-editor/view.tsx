@@ -1,21 +1,20 @@
 import { Plus } from "lucide-react";
-import type { DocumentRef, ParameterLinkProfile } from "@pe/agent-contracts";
+import type { ParameterLinkProfile } from "@pe/agent-contracts";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { Button } from "@pe/kit/lang/button";
 import { addDefinition } from "#/parameter-links/model";
 import { DefinitionCard } from "./definition-card";
+import type { ProfileOptions } from "../sources";
 
 export function ProfileEditor({
   profile,
   disabled,
-  fieldOptionsEnabled,
-  target,
+  options,
   onChange,
 }: {
   profile: ParameterLinkProfile | null;
   disabled?: boolean;
-  fieldOptionsEnabled?: boolean;
-  target?: DocumentRef | null;
+  options: ProfileOptions;
   onChange: (next: ParameterLinkProfile) => void;
 }) {
   if (!profile || profile.definitions.length === 0) {
@@ -30,7 +29,7 @@ export function ProfileEditor({
           icon={Plus}
           refusal={disabled ? "the draft is busy — wait for the current command to finish" : null}
           onClick={() => onChange(addDefinition(profile))}
-          reason="Add a blank link definition to the draft (local until saved)"
+          reason="Add a blank link definition to the shared draft"
         >
           add definition
         </Button>
@@ -46,8 +45,7 @@ export function ProfileEditor({
           profile={profile}
           definition={definition}
           disabled={disabled}
-          fieldOptionsEnabled={fieldOptionsEnabled}
-          target={target}
+          options={options}
           onChange={onChange}
         />
       ))}
@@ -57,7 +55,7 @@ export function ProfileEditor({
         icon={Plus}
         refusal={disabled ? "the draft is busy — wait for the current command to finish" : null}
         onClick={() => onChange(addDefinition(profile))}
-        reason="Add a blank link definition to the draft (local until saved)"
+        reason="Add a blank link definition to the shared draft"
       >
         add definition
       </Button>

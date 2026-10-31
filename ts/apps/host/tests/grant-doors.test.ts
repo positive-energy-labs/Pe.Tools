@@ -189,3 +189,19 @@ test("door 3: resume re-crosses under the current caller and never inherits the 
   const agent = await send(pea("t1"), "/actions/resume", { id: "door-3-resume" });
   expect([agent.status, agent.json.refusal?.code]).toEqual([403, "context.foreign-thread"]);
 });
+
+test("the human RHVAC launch RPC refuses every other caller before dispatch", async () => {
+  for (const caller of [pea(), mcp, page, anonymous]) {
+    const result = await send(caller, "/call", {
+      key: "rhvac.launch",
+      request: { path: "test.r10" },
+    });
+    expect(result).toMatchObject({
+      status: 403,
+      json: { notDispatched: true, error: "Only a person can launch RHVAC" },
+    });
+  }
+  expect(
+    await send(human, "/call", { key: "rhvac.launch", request: { path: "test.r10" } }),
+  ).toMatchObject({ status: 200 });
+});

@@ -27,9 +27,9 @@ const observation = (
   entries,
 });
 const ENTRIES: TurnElementNamesObservation["entries"] = [
-  { state: "resolved", elementId: 101, target, uniqueId: "u-101", name: "FR-1" },
-  { state: "ambiguous", elementId: 102 },
-  { state: "unresolved", elementId: 103, reason: "missing" },
+  { state: "resolved", elementId: 10101, target, uniqueId: "u-10101", name: "FR-1" },
+  { state: "ambiguous", elementId: 10102 },
+  { state: "unresolved", elementId: 10103, reason: "missing" },
 ];
 const row = (id: string, text: string, running = false): ChatMessage => ({
   id,
@@ -39,7 +39,10 @@ const row = (id: string, text: string, running = false): ChatMessage => ({
   running,
   createdAt: new Date("2026-10-24T12:00:00Z"),
 });
-const TURN = [row("pea-1", "Open end at 101 and 102."), row("pea-2", "Also 103, not `101`.")];
+const TURN = [
+  row("pea-1", "Open end at 10101 and 10102."),
+  row("pea-2", "Also 10103, not `10101`."),
+];
 const show = (messages: ChatMessage[]) =>
   render(<Moments messages={messages} register={() => {}} harness="claude" thread="th" />);
 const settle = () => act(async () => {});
@@ -51,7 +54,7 @@ afterEach(() => {
 
 test("one read per settled turn, batched across its rows, never again on re-render or remount", async () => {
   host.read.mockResolvedValue(observation(ENTRIES));
-  const view = show([row("pea-1", "Open end at 101", true)]);
+  const view = show([row("pea-1", "Open end at 10101", true)]);
   await settle();
   expect(host.read).not.toHaveBeenCalled();
   view.rerender(<Moments messages={TURN} register={() => {}} harness="claude" thread="th" />);
@@ -61,7 +64,7 @@ test("one read per settled turn, batched across its rows, never again on re-rend
     kind: "turn-element-names",
     thread: "th",
     turnId: "t1",
-    ids: [101, 102, 103],
+    ids: [10101, 10102, 10103],
   });
   view.rerender(<Moments messages={[...TURN]} register={() => {}} harness="claude" thread="th" />);
   view.unmount();
@@ -77,12 +80,12 @@ test("only an id resolved to one element links, through attention, in its pinned
   const links = [...view.container.querySelectorAll(".subject-ref")];
   expect(
     links.map((link) => [link.getAttribute("data-subject"), link.getAttribute("data-subject-doc")]),
-  ).toEqual([["e:101", "s/o1"]]);
+  ).toEqual([["e:10101", "s/o1"]]);
   expect(links[0]!.textContent).toBe("FR-11");
   // Ambiguous and unresolved ids are plain text; the code span keeps its literal id.
-  expect(view.container.textContent).toContain("and 102.");
-  expect(view.container.textContent).toContain("Also 103, not 101.");
-  expect(view.container.querySelector("code")!.textContent).toBe("101");
+  expect(view.container.textContent).toContain("and 10102.");
+  expect(view.container.textContent).toContain("Also 10103, not 10101.");
+  expect(view.container.querySelector("code")!.textContent).toBe("10101");
   expect(view.container.querySelectorAll("[href^='pe:']")).toHaveLength(0);
 });
 
@@ -91,7 +94,7 @@ test("an incomplete snapshot or a failed read leaves every id plain", async () =
   const incomplete = show(TURN);
   await settle();
   expect(incomplete.container.querySelectorAll(".subject-ref")).toHaveLength(0);
-  expect(incomplete.container.textContent).toContain("Open end at 101 and 102.");
+  expect(incomplete.container.textContent).toContain("Open end at 10101 and 10102.");
   incomplete.unmount();
   forgetTurnNames();
   host.read.mockRejectedValueOnce(new Error("404"));
@@ -104,8 +107,30 @@ test("an incomplete snapshot or a failed read leaves every id plain", async () =
 test("only ids the prose links are read: never inside inline code or link text", async () => {
   host.read.mockResolvedValue(observation([]));
   show([
-    row("pea-1", "Review 1001 and 1002. Example `1003`; [1004](https://example.invalid/element)."),
+    row(
+      "pea-1",
+      "Review 11001 and 11002. Example `11003`; [11004](https://example.invalid/element).",
+    ),
   ]);
   await settle();
-  expect(host.read.mock.calls[0]![0].ids).toEqual([1001, 1002]);
+  expect(host.read.mock.calls[0]![0].ids).toEqual([11001, 11002]);
+});
+
+test("old persisted low-id names cannot rewrite dimensions or equipment tags", async () => {
+  host.read.mockResolvedValue(
+    observation([
+      { state: "resolved", elementId: 20, target, uniqueId: "u-20", name: "<Solid fill>" },
+      { state: "resolved", elementId: 23, target, uniqueId: "u-23", name: "Horizontal" },
+      { state: "resolved", elementId: 30, target, uniqueId: "u-30", name: "Level 1/Main Level" },
+      { state: "resolved", elementId: 14107111, target, uniqueId: "u-14107111", name: "Standard" },
+    ]),
+  );
+  const view = show([row("pea-1", "30×30 end cap (14107111). FA 43 → DH-20 inlet → FC-23.")]);
+  await settle();
+  expect(host.read.mock.calls[0]![0].ids).toEqual([14107111]);
+  expect(view.container.textContent).toContain(
+    "30×30 end cap (Standard1). FA 43 → DH-20 inlet → FC-23.",
+  );
+  const links = [...view.container.querySelectorAll(".subject-ref")];
+  expect(links.map((link) => link.getAttribute("data-subject"))).toEqual(["e:14107111"]);
 });

@@ -12,7 +12,6 @@
  *    Air)"), which then passes air through (`pass-through.ts`);
  * 4. else a `fan` ("mixed port classes: moves air"): air handlers, dehumidifiers, ERVs, and a
  *    one-port unit. Passive needs a positive signal, so a model with no airflow data still prices.
- * A multi-root finding stands only while more than one root of the group is a fan after this.
  */
 import type { DuctUnitRole } from "@pe/agent-contracts";
 

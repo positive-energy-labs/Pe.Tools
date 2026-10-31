@@ -13,7 +13,7 @@ import { PidChip } from "#/components/lang/process";
 import { SwitchRow } from "@pe/kit/lang/switch-row";
 import { dirty, useAction } from "#/readings";
 import { recheckUpdate } from "#/host/install";
-import { hostFetch } from "#/host/runtime";
+import { automaticUpdatesRpc } from "../../../../packages/mcps/src/shared/rpc-client";
 
 import { blockersOf, disconnected, hhmm, legWords, machineOf } from "./model";
 import { updateStatus } from "./update-state";
@@ -21,17 +21,6 @@ import { SEED_REFUSAL, useUpdateConsent } from "./use-machine";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 const mb = (bytes: number) => `${Math.round(bytes / 1_048_576)} MB`;
-
-async function setAutomaticUpdates(enabled: boolean): Promise<void> {
-  const response = await hostFetch("/host/update/automatic", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ enabled }),
-  });
-  if (response.ok) return;
-  const body = (await response.json().catch(() => null)) as { error?: string } | null;
-  throw Error(body?.error ?? `Switch refused (${response.status}).`);
-}
 
 /** The automatic-update off switch: one instrument, drawn in the Update group and on its card. */
 export function AutomaticUpdates({
@@ -44,7 +33,7 @@ export function AutomaticUpdates({
   const machine = machineOf(reading);
   const toggle = useAction<boolean, void>(async (enabled) => {
     try {
-      await setAutomaticUpdates(enabled);
+      await automaticUpdatesRpc.run({ enabled });
     } finally {
       dirty({ kind: "machine" });
     }

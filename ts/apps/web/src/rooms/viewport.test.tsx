@@ -3,8 +3,9 @@ import { useState } from "react";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { DEMO_PLAN, DEMO_ROOMS, DEMO_VIEW } from "./demo";
-import { manifest, type RoomsPage } from "./manifest";
+import { roomsPageSchema, type RoomsPage } from "./graph";
 import { RoomsPlan } from "./plan";
+import { Pane } from "@pe/kit/lang/pane";
 import { roomRows } from "./table";
 
 afterEach(() => {
@@ -30,10 +31,15 @@ test("a null viewport fits without a write, wheel preserves its cursor point, an
   let navigate!: (next: Partial<RoomsPage>) => void;
   const rows = roomRows(DEMO_ROOMS.regions, ["Fixture level"]);
   function Plan() {
-    const [page, set] = useState(() => manifest.page!.parse({ view: DEMO_VIEW }));
+    const [page, set] = useState(() => roomsPageSchema.parse({ view: DEMO_VIEW }));
     navigate = (next) => set((previous) => ({ ...previous, ...next }));
     return (
       <RoomsPlan
+        renderPane={(body, furniture) => (
+          <Pane picture {...furniture}>
+            {body}
+          </Pane>
+        )}
         rows={rows}
         plan={DEMO_PLAN}
         planRefusal={null}

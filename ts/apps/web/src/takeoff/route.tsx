@@ -1,44 +1,12 @@
-/**
- * The Takeoffs route mount. Target resolution, the owner, the readings and the actions are all
- * `useRoute(manifest)`; this file chooses live versus saved. The standalone owner syncs Page to
- * the URL; an embedded owner holds the same Page without that binding.
- */
-import { useEffect, useState } from "react";
-import type { TakeoffCapture } from "@pe/agent-contracts";
+import { mountRoute, type MountRouteProps } from "#/shell/mount";
+import { takeoffGraph } from "./graph";
+import { takeoffAdapters } from "./graph-route";
 
-import { SavedTakeoffsRoute } from "#/takeoff/saved-review";
-import { useTakeoffsController } from "#/takeoff/controller";
-import { TakeoffsPage } from "#/takeoff/route-workspace";
-
-export function TakeoffsRoute({ target = "", work }: { target?: string; work?: string }) {
-  // `?work=<capture>` names a saved capture; otherwise the route binds the live target.
-  if (work) return <SavedTakeoffsRoute capture={work} />;
-  return <LiveTakeoffsRoute target={target} />;
+const TakeoffMount = mountRoute(takeoffGraph, takeoffAdapters);
+export function TakeoffsRoute(props: MountRouteProps) {
+  return <TakeoffMount {...props} />;
 }
-
-export function LiveTakeoffsRoute({ target = "" }: { target?: string }) {
-  // Render mechanics only: wait for the client URL before mounting its route owner.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  return mounted ? <TakeoffsControllerOwner target={target} url /> : null;
+export function LiveTakeoffsRoute(props: MountRouteProps) {
+  return <TakeoffMount {...props} />;
 }
-
-export function TakeoffsControllerOwner({
-  target = "",
-  thread,
-  savedCapture,
-  url,
-}: {
-  target?: string;
-  thread?: string;
-  savedCapture?: TakeoffCapture;
-  url?: boolean;
-}) {
-  const store = useTakeoffsController({
-    target,
-    ...(thread ? { thread } : {}),
-    ...(savedCapture ? { savedCapture } : {}),
-    ...(url ? { url } : {}),
-  });
-  return <TakeoffsPage store={store} />;
-}
+export { takeoffsRoute, takeoffAdapters } from "./graph-route";

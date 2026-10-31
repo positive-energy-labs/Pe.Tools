@@ -29,6 +29,28 @@ export function groupLabels(snapshot: DuctSnapshot): Map<string, string> {
 export const networkWord = (snapshot: DuctSnapshot, group: string) =>
   groupLabels(snapshot).get(group) ?? "the duct network";
 
+/** Repairs name the systems of their ends, even on a group shared by other systems and units. */
+export function healSystems(
+  snapshot: Pick<DuctSnapshot, "nodes" | "segments">,
+  ids: readonly number[],
+) {
+  const members = new Set(ids);
+  const names = [
+    ...new Set(
+      [...snapshot.nodes, ...snapshot.segments]
+        .filter((element) => members.has(element.id))
+        .flatMap(
+          (element) =>
+            element.systemName
+              ?.split(",")
+              .map((name) => name.trim())
+              .filter(Boolean) ?? [],
+        ),
+    ),
+  ].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  return names.join(", ") || null;
+}
+
 const countsWord = (counts: object, none: string) =>
   (Object.entries(counts) as [string, number][])
     .filter(([, n]) => n)

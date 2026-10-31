@@ -20,7 +20,8 @@ import type { Verdict } from "#/takeoff/atlas";
 import { FLAG_MEANING } from "#/takeoff/model";
 import { MANUAL_J, decideReason, decisionRefusal } from "#/takeoff/room-actions";
 import { STATE_META, stateMeta } from "#/takeoff/room-state";
-import type { AtlasRow as Row, TakeoffsController } from "#/takeoff/controller";
+import type { AtlasRow as Row } from "./projections";
+import type { TakeoffStore } from "./store";
 import type { RoomEdit, ModelRoom } from "#/takeoff/world";
 
 export function RoomPanelFromStore({
@@ -28,7 +29,7 @@ export function RoomPanelFromStore({
   row,
   ...props
 }: Omit<Parameters<typeof RoomPanel>[0], "decided" | "cells" | "wires"> & {
-  store: TakeoffsController;
+  store: TakeoffStore;
 }) {
   return (
     <RoomPanel
@@ -55,8 +56,8 @@ function RoomPanel({
 }: {
   row: Row;
   decided: Readonly<Record<string, Verdict>>;
-  cells: TakeoffsController["cells"];
-  wires: TakeoffsController["wires"];
+  cells: TakeoffStore["cells"];
+  wires: TakeoffStore["wires"];
   live: boolean;
   fieldsMode: "columns" | "panel";
   shortcuts: readonly ScopeKey[];

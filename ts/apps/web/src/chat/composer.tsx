@@ -8,7 +8,6 @@ import {
   type Capability,
   type CapabilityCatalog,
   type Machine,
-  type Reading,
 } from "@pe/agent-contracts";
 import { FirstOpenCard, ProviderRepair } from "#/chat/first-open";
 import { isReady } from "#/workbench/provider/providers";
@@ -23,7 +22,7 @@ import {
 } from "@pe/agent-contracts/chat-state";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import { useSend, type ChatHandle } from "#/chat/composer-head";
-import { SituationAction } from "#/route/situation-verbs";
+import { chatReading } from "./graph";
 import { Composer, ComposerFrame } from "#/components/lang/conversation";
 import { Button } from "@pe/kit/lang/button";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
@@ -89,15 +88,16 @@ export function ThreadComposer({
     setDraft((current) => (current === sent ? EMPTY_CHAT_DRAFT : current));
   });
   const files = useAttachments(draft, setDraft);
-  const refusedSend = handle.outcome?.key === "send" ? handle.outcome.refusal?.message : null;
+  const sendResult = handle.results.get("send");
+  const refusedSend = sendResult && "refusal" in sendResult ? sendResult.refusal.message : null;
   const commands = useMemo<SlashCommand[]>(() => selectSkillCommands(chat), [chat]);
   const messages = useMemo(() => selectMessages(chat), [chat]);
   const slash = useSlashMenu(draft.text, commands);
   const [area, setArea] = useState<HTMLTextAreaElement | null>(null);
   const form = area?.form ?? null;
   // Documents come from the live inventory, never the catalog read at mount.
-  const machine = previousOf(handle.readings.machine as Reading<Machine>);
-  const read = parseCatalog(previousOf(handle.readings.capabilities));
+  const machine = previousOf(chatReading<Machine>(handle, "machine"));
+  const read = parseCatalog(previousOf(chatReading(handle, "capabilities")));
   const catalog = useMemo(() => read && machine && liveCatalog(read, machine), [read, machine]);
   const mentions = useMentions(draft, setDraft, catalog, area, slash.open);
   const setText = (text: string) => setDraft((previous) => withText(previous, text));
@@ -164,7 +164,7 @@ export function ThreadComposer({
                 query={mentions.query}
                 onCollection={mentions.bind}
                 aria-label="Mentions"
-                {...listOf(handle.readings.capabilities, () => mentions.rows)}
+                {...listOf(chatReading(handle, "capabilities"), () => mentions.rows)}
                 keyOf={(row) => row.key}
                 labelOf={(row) => row.title}
                 groupOf={(row) => MENTION_KINDS[row.kind].group}
@@ -251,11 +251,11 @@ export function ThreadComposer({
             ) : null
           }
           fork={
-            <SituationAction
-              handle={handle}
-              name="fork"
-              action={handle.actions.fork}
+            <Button
+              label="fork"
               icon={GitFork}
+              refusal={handle.control("fork").refusal}
+              onClick={() => void handle.control("fork").run()}
             />
           }
           attach={
@@ -270,12 +270,11 @@ export function ThreadComposer({
           }
           send={
             isRunning ? (
-              <SituationAction
-                handle={handle}
-                name="stop"
-                action={handle.actions.stop}
+              <Button
+                label="stop"
                 icon={Square}
-                tone="alarm"
+                refusal={handle.control("stop").refusal}
+                onClick={() => void handle.control("stop").run()}
               />
             ) : (
               <TooltipHint content={refusedSend ?? send.refusal ?? send.says}>
@@ -283,7 +282,7 @@ export function ThreadComposer({
                   kind="commit"
                   label={send.label}
                   icon={ArrowUp}
-                  busy={handle.busy?.key === "send"}
+                  busy={handle.busy()?.key === "send"}
                   data-tone={refusedSend ? "caution" : undefined}
                   aria-disabled={Boolean(send.refusal) || undefined}
                   onClick={sendCurrent}

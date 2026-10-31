@@ -83,9 +83,9 @@ export function useRouteSearch(route?: RouteKey) {
   return useRouteSearchSlice((search) => (route ? searchOf(search, route) : search));
 }
 
-export function useRouteDemo(): string | null {
+export function useRouteFixture(): string | null {
   return useRouteSearchSlice((search) =>
-    search.live !== undefined ? null : typeof search.demo === "string" ? search.demo : null,
+    typeof search.fixture === "string" ? search.fixture : null,
   );
 }
 

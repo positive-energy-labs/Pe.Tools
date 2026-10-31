@@ -98,7 +98,7 @@ export function RouteRetention({
   if (route) {
     const pathname = routeAddress(route).path;
     const search = location.search as Record<string, unknown>;
-    const source = JSON.stringify([search.demo ?? null, search.live ?? null]);
+    const source = JSON.stringify(search.fixture ?? null);
     let entry = retained.current.find(
       (item) =>
         item.route === route &&
@@ -109,7 +109,9 @@ export function RouteRetention({
       entry = undefined;
     }
     if (!entry) {
-      const Component = router.routesById[pathname]?.options.component;
+      const Component = Object.values(router.routesById).find(
+        (entry) => !entry.isRoot && entry.fullPath === pathname,
+      )?.options.component;
       if (!Component) throw Error(`No route component registered for ${pathname}`);
       const owners = new Set<{ dispose(): void }>();
       const disposed = new WeakSet<object>();

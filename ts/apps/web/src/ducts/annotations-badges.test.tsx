@@ -11,7 +11,7 @@ import { ElementMenu } from "#/revit/element-menu";
 import { NativeObservationScope } from "#/revit/observation";
 import { Annotations } from "./annotations";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
-import { makeAtomRegistry } from "#/route/route-owner";
+import { makeAtomRegistry } from "#/shell/owner";
 import { TestAttention } from "#/test-attention";
 import { citation, cite, elementKey } from "@pe/kit/lang/attention";
 
@@ -146,10 +146,10 @@ it("one gap repair has one row, two named subjects, two pins and one evidence se
     ],
   }));
   const issues = segments.map((e) => ({
-    id: `open-end:${e.groupId}:${e.id}:0`,
+    id: `open-end:${e.id}:0`,
     kind: "open-end",
     elementId: e.id,
-    groupId: e.groupId,
+    connector: 0,
     point: e.connectors[0]!.point,
     note: "open",
   }));
@@ -163,7 +163,6 @@ it("one gap repair has one row, two named subjects, two pins and one evidence se
     id: i.id,
     kind: "open-end",
     elementIds: [i.elementId],
-    groupId: i.groupId,
     note: i.note,
     assumed: null,
     clearer: "person",
@@ -186,7 +185,7 @@ it("one gap repair has one row, two named subjects, two pins and one evidence se
     equipmentFlows: new Map(),
     doc: null,
     claims: [],
-    write: { edit: 0, hasPreview: false, fresh: false, planned: null, refused: null, esp: 0 },
+    write: { edit: 0, esp: 0 },
   };
   const rows = inboxRows(input);
   expect(rows.fix).toHaveLength(1);
@@ -217,7 +216,7 @@ it("one gap repair has one row, two named subjects, two pins and one evidence se
   ]);
 });
 
-it("pin pointer entry paints reach and right click exposes Select and Selection Box", async () => {
+it("pin pointer entry paints reach and right click exposes Select and Section Box", async () => {
   const pick = vi.fn();
   const props = {
     project: () => [100, 100],
@@ -255,6 +254,6 @@ it("pin pointer entry paints reach and right click exposes Select and Selection 
   expect(pick).toHaveBeenCalledOnce();
   fireEvent.contextMenu(pin);
   expect(await view.findByRole("option", { name: "Select" })).toBeTruthy();
-  expect(view.getByRole("option", { name: "Selection Box in Revit" })).toBeTruthy();
+  expect(view.getByRole("option", { name: "Section Box" })).toBeTruthy();
   expect(view.queryByRole("menu")).toBeNull();
 });

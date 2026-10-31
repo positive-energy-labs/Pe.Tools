@@ -98,8 +98,11 @@ function groupIndex(snapshot: DuctSnapshot): GroupIndex {
   };
   for (const node of snapshot.nodes) bucket(index.nodes, node.groupId, node);
   for (const segment of snapshot.segments) bucket(index.segments, segment.groupId, segment);
-  for (const issue of snapshot.issues)
-    if (issue.elementId != null) bucket(index.issues, issue.groupId, issue);
+  // An issue is keyed by element (ducts LEDGER 2026-10-29); it belongs to its element's group.
+  const groupOf = new Map<number, string | null | undefined>(
+    [...snapshot.nodes, ...snapshot.segments].map((e) => [e.id, e.groupId]),
+  );
+  for (const issue of snapshot.issues) bucket(index.issues, groupOf.get(issue.elementId), issue);
   indexes.set(snapshot, index);
   return index;
 }

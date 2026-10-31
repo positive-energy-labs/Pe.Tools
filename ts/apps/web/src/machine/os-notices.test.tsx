@@ -183,7 +183,7 @@ test("two windows serialize delivery and reread the shared acknowledgement", asy
             data: JSON.stringify({ kind: "event", key: "k", value: notice("same-turn"), id: 1 }),
           }),
         );
-      await Promise.all([...queues.values()]);
+      await Promise.all(queues.values());
     });
     expect(raised).toHaveLength(1);
     // Reconnect deliveries and another local subscriber cannot announce that revision again.
@@ -194,7 +194,7 @@ test("two windows serialize delivery and reread the shared acknowledgement", asy
             data: JSON.stringify({ kind: "event", key: "k", value: notice("same-turn"), id: 2 }),
           }),
         );
-      await Promise.all([...queues.values()]);
+      await Promise.all(queues.values());
     });
     expect(raised).toHaveLength(1);
   } finally {

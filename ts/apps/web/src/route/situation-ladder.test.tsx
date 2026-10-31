@@ -9,7 +9,7 @@ vi.mock("#/machine/use-machine", () => ({
     select({ state: "absent" }),
 }));
 const choose = vi.fn();
-vi.mock("#/route/shell", () => ({ useChooseTarget: () => [null, choose] }));
+vi.mock("#/shell/binding", () => ({ useChooseTarget: () => [null, choose] }));
 const call = vi.hoisted(() => vi.fn());
 vi.mock("#/host/pe-client", () => ({ peClient: { call } }));
 const { useDocumentLadder, LadderPicker } = await import("./situation-ladder");

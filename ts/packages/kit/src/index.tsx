@@ -5,6 +5,14 @@ export { React };
 export { createElement as h, useEffect, useReducer, useState } from "react";
 export { createRoot } from "react-dom/client";
 export { ArtifactFrame } from "./components/lang/artifact-frame";
+export {
+  GraphLayoutView,
+  type GraphLayoutViewProps,
+  type GraphLayoutState,
+  type GraphPaneState,
+  type PaneApi,
+} from "./components/lang/graph-layout";
+export { reduceLayout, sidebars, withDoc } from "./components/lang/layout-graph";
 export { Switcher } from "./components/lang/switcher";
 export { Code } from "./components/lang/code";
 export { Button } from "./components/lang/button";

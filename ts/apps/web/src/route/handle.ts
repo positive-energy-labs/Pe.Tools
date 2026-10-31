@@ -1,7 +1,7 @@
 import type * as Atom from "effect/unstable/reactivity/Atom";
 import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import type { PageSnapshot } from "./view-owner";
-/** The handle a route gets back from `useRoute`: its resolution, Work, Readings, Page and one handle per action. */
+/** Presentation facts shared by the retained ladder and specimens; execution belongs to shell/. */
 import type {
   Reading,
   RouteStatePatch,
@@ -12,9 +12,10 @@ import type {
 } from "@pe/agent-contracts";
 
 import type { ActionFacts } from "./facts";
-import type { PageMove, RouteManifest } from "./manifest";
+import type { PresentationFacts } from "./facts";
+import type { PageMove } from "#/shell/page";
 import type { Refusal } from "./refusal";
-import type { LogEntry, RouteNote } from "./route-owner";
+import type { LogEntry, RouteNote } from "#/shell/owner";
 import type { BindingLost, TargetProvenance } from "./route-target";
 
 export interface ActionHandle extends ActionFacts {
@@ -39,7 +40,7 @@ export interface RouteOutcome<A extends string> {
 }
 
 export interface RouteHandle<W, R extends string, P, A extends string> {
-  readonly manifest: RouteManifest<W, R, P, A>;
+  readonly manifest: PresentationFacts<R>;
   readonly resolution: TargetResolution;
   readonly targetProvenance: TargetProvenance;
   /** The `?target` pin: a view over one document, never written by the route; null falls back read-only to the sole user document. */
@@ -95,7 +96,6 @@ export interface RouteHandle<W, R extends string, P, A extends string> {
   /** The Page and its setter; `{ history: "replace" }` marks a gesture's move (`PageMove`). */
   readonly page: readonly [P, (next: Partial<P>, move?: PageMove<P>) => void];
   readonly actions: Readonly<Record<A, ActionHandle>>;
-  readonly commands: import("./presentation").BoundCommands;
   readonly busy: { readonly key: A; readonly seconds: number } | null;
   readonly stop: () => void; // stop waiting on the busy action (its flag's stop)
   readonly failure: Refusal | null;

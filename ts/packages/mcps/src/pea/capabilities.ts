@@ -4,9 +4,10 @@ import { contextFetch as fetch } from "@pe/runtime/context";
 import {
   capabilityPrincipals,
   nativePrincipals,
-  DUCTS_ANALYSIS_FIRST_CALL,
   DUCTS_FINDS,
   ductsAnalysisRequestSchema,
+  ductsSheetRequestSchema,
+  ductsRosterRequestSchema,
   instancesReading,
   scheduleReads,
   actionControls,
@@ -158,26 +159,44 @@ export function buildCapabilities(sources: CapabilitySources): Capability[] {
       }),
     ),
     ...sources.routes.flatMap(routeRows),
+    ...(
+      [
+        [
+          "sheet",
+          ductsSheetRequestSchema,
+          "Fan pressure-drop sheet",
+          "Read a bounded per-fan sheet: ranked paths, totals, all compact blockers and basis-bound detail handles. Start with route:ducts.roster for unitId and portIndex; use mode fan. Mode chain takes a start, end and asserted direction and makes no ESP claim. Read blockers back, then propose a sourced default or previewed heal with its effect on the total. Never compute by hand or grep snapshots.",
+        ],
+        [
+          "roster",
+          ductsRosterRequestSchema,
+          "Duct fan roster",
+          "Find fan ports by mark and unitId before reading route:ducts.sheet. Rows show side served, rated ESP and confirmation; computed columns appear only for a current cached sheet.",
+        ],
+      ] as const
+    ).map(
+      ([name, input, title, description]): Capability => ({
+        key: `route:ducts.${name}`,
+        kind: "route-command",
+        title,
+        description,
+        finds: ["ducts", "pressure drop", "pdrop", "fan", "ESP", "static pressure"],
+        needs: "nothing",
+        effect: "query",
+        mutates: false,
+        principal: capabilityPrincipals(false),
+        input: z.toJSONSchema(input),
+        source: "host Ducts sheet",
+        rank: 2,
+      }),
+    ),
     {
       key: "route:ducts.analysis",
       kind: "route-command",
-      title: "Analyze duct pressure drop",
+      title: "Inspect duct networks",
       description:
-        "Calculate pressure-drop demand over a complete retained duct graph without a mounted page. Artifact-only projection apply-request builds a bounded reference to an immutable canonical staged-write candidate; download its payload, obtain approval and revalidate before the separate preview/apply doors. It does not stage Work or write Revit. `source` and `selector` are objects, never strings. First full inventory, with the exact open document's session and openId: " +
-        DUCTS_ANALYSIS_FIRST_CALL +
-        " Then reuse the returned artifact for equipment, terminal, group or exact space-text projections and pagination, with no further native reads. Use projection ports for exact UID/connector evidence pins to propose in canonical Work; use projection circuits or circuit-path for staged physical fan/passive/terminal evidence and balanced-design demand; role evidence is edited through shared ducts Work by either author. Projection components exposes staged signed KCL and optional prescribed-flow TOTAL-pressure closure with bounded hydraulic head summaries. Unknown circulation, constitutive laws or fan allocation remain unresolved; legacy circuits remain tree-limited. Legacy path totals remain separate, and physical circuit pressure is not a manufacturer scalar ESP. Totals expose incomplete inputs and native parity limits. Space text does not prove room identity. Read/calculation only; no model or Work mutation. Rows carry `tag`, the equipment tag (PE_G___TagInstance), to match a name like FC-23. If the page's saved Work is unreadable, a finding of kind unreadable-work says what to tell the person; the price still runs. Start with skill:@product/skills/calc-duct-pressure-drop.",
-      finds: [
-        "ducts",
-        "pressure drop",
-        "fan static",
-        "equipment",
-        "terminal",
-        "grille",
-        "room",
-        "space",
-        "critical path",
-        ...DUCTS_FINDS,
-      ],
+        "Legacy network inspection for general duct work. For pressure drop, read route:ducts.roster then route:ducts.sheet. Never use network totals as a fan sheet.",
+      finds: ["duct network", "network inspection"],
       needs: "nothing",
       effect: "query",
       mutates: false,
@@ -191,7 +210,7 @@ export function buildCapabilities(sources: CapabilitySources): Capability[] {
       kind: "route-doc",
       title: "Ducts guide",
       description:
-        "What the Ducts route does and why, the one source the /ducts tutorial renders: the walk and who does each step, what Pea does and never does, where every duct value lives and what survives a save, Pe compared with Revit's own pressure drop and Naviate feature by feature (section compare, with the evidence per cell), what the engineer decides, the limits, and the known cases (number, title, code; pass section cases for their prose). Pass document, an exact open document, to add present: the cases its fresh ducts analysis shows, with up to ten element ids each. Answer questions about the route from this, never from general knowledge. Read only; no Work or model mutation.",
+        "The shared per-fan sheet guide: roster, fan or asserted chain, blockers, provenance and basis-bound detail. Read only; no document acquisition or mutation.",
       finds: [
         "ducts",
         "tutorial",
@@ -312,7 +331,7 @@ function routeRows(spec: RouteStateSpec<z.ZodType>): Capability[] {
     key: `route:${spec.route}`,
     kind: "route-doc",
     title: spec.title,
-    description: `Read the ${spec.title} document you co-edit with the user: current doc, revision, JSON Schema, and commands. ${spec.description} ${spec.route === "families" ? "For the currently visible matrix or past reading, use route:families.view first. Work scope can differ from the visible reading. This does not start a matrix read." : ""} ${scopeHint}`,
+    description: `Read the ${spec.title} document you co-edit with the user: current doc, revision, JSON Schema, and commands. ${spec.route === "ducts" ? "Legacy network Work for general duct work. For pressure drop use route:ducts.roster then route:ducts.sheet and its basis-bound closers; this Work does not feed the fan sheet." : spec.description} ${spec.route === "families" ? "For the currently visible matrix or past reading, use route:families.view first. Work scope can differ from the visible reading. This does not start a matrix read." : ""} ${scopeHint}`,
     needs: "nothing",
     effect: "query",
     mutates: false,
@@ -325,8 +344,13 @@ function routeRows(spec: RouteStateSpec<z.ZodType>): Capability[] {
     key: `route:${spec.route}.edit`,
     kind: "route-doc",
     title: `${spec.title}: edit`,
-    description: `Edit shared Work with expectedRevision from the read. Either author may replace an existing edit or leave an optional suggestion. Attribution and host evidence are host-owned. Omit value to delete an authored key. ${spec.finds?.join(" ") ?? ""} ${scopeHint}`,
-    finds: spec.finds ? [...spec.finds] : undefined,
+    description: `Edit shared Work with expectedRevision from the read. Either author may replace an existing edit or leave an optional suggestion. Attribution and host evidence are host-owned. Omit value to delete an authored key. ${spec.route === "ducts" ? "Legacy network Work; it does not feed route:ducts.sheet. Use the sheet's available typed closers for pressure drop." : (spec.finds?.join(" ") ?? "")} ${scopeHint}`,
+    finds:
+      spec.route === "ducts"
+        ? ["duct network", "network work"]
+        : spec.finds
+          ? [...spec.finds]
+          : undefined,
     needs: "nothing",
     effect: "command",
     mutates: true,

@@ -24,7 +24,7 @@ test("navigation fixture reaches production pricing with three systems, long lis
     expect(scope.terminals.size).toBe(16);
     expect(scope.members.size).toBeGreaterThan(30);
   }
-  const shared = priced.findings.find((finding) => finding.id === "open-end:1002");
+  const shared = priced.findings.find((finding) => finding.id.startsWith("open-end:1002:"));
   expect(shared?.elementIds).toContain(1002);
   expect(systemScope(priced.snapshot, "SA Office").members.has(1002)).toBe(true);
   expect(systemScope(priced.snapshot, "SA Lab").members.has(1002)).toBe(true);

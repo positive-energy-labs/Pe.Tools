@@ -13,6 +13,7 @@ import type { Column } from "@pe/kit/table/model";
 import { parseConditionNumber } from "@pe/kit/table/view";
 import type { ScheduleGridSnapshot as Snapshot } from "@pe/agent-contracts";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
+import { useScheduleTransitions } from "#/schedules/context";
 
 type ScheduleRow = Snapshot["rows"][number];
 
@@ -105,6 +106,7 @@ export interface ScheduleCellWrites {
   refused: Readonly<Record<string, string>>;
   stageEdit: (key: string, value: string | MeasuredValue) => Promise<string | void>;
   parseMeasured: (key: string, text: string) => Promise<MeasuredValue | { refusal: string } | null>;
+  transitions?: (key: string) => CellTransition[] | undefined;
 }
 
 /**
@@ -113,7 +115,7 @@ export interface ScheduleCellWrites {
  * reviewed.
  */
 function scheduleCellState(
-  { cells, wire, stale, refused, stageEdit, parseMeasured }: ScheduleCellWrites,
+  { cells, wire, stale, refused, stageEdit, parseMeasured, transitions }: ScheduleCellWrites,
   row: ScheduleRow,
   columnNumber: number,
   columnIndex: number,
@@ -182,7 +184,13 @@ function scheduleCellState(
                 : stageEdit(key, text),
           }),
     ...(refused[key] ? { refused: refused[key] } : {}),
-    transitions: scheduleTransitions(wire, key, cell, stale),
+    transitions: isStale
+      ? scheduleTransitions(wire, key, cell, stale)
+      : (transitions?.(key)?.filter((transition) =>
+          scheduleTransitions(wire, key, cell, stale).some(
+            (allowed) => allowed.kind === transition.kind,
+          ),
+        ) ?? scheduleTransitions(wire, key, cell, stale)),
   };
 }
 
@@ -197,6 +205,7 @@ export function useScheduleGridColumns(
   /** The last push's refusals, by key: each draws on its own cell. */
   refused: Readonly<Record<string, string>> = {},
 ) {
+  const transitions = useScheduleTransitions();
   return useMemo<Column<ScheduleRow>[]>(() => {
     if (!snapshot) return [];
     return [
@@ -251,7 +260,7 @@ export function useScheduleGridColumns(
           condition: { kind: numeric ? "number" : "text", read },
           state: (row) =>
             scheduleCellState(
-              { cells, wire, stale, refused, stageEdit, parseMeasured },
+              { cells, wire, stale, refused, stageEdit, parseMeasured, transitions },
               row,
               column.columnNumber,
               columnIndex,

@@ -11,7 +11,9 @@ export async function verifyBundle(bytes: Uint8Array, hash: string) {
 }
 
 /** Removal invalidates an in-flight import as well as a mounted registration. */
-export function createPodRouteLoader(load: (row: PodRouteDescriptor) => Promise<() => void>) {
+export function createPodRouteLoader(
+  load: (row: PodRouteDescriptor, current: () => boolean) => Promise<() => void>,
+) {
   const active = new Map<string, { hash: string; dispose?: () => void; pending?: Promise<void> }>();
   const remove = (key: string) => {
     const entry = active.get(key);
@@ -28,7 +30,7 @@ export function createPodRouteLoader(load: (row: PodRouteDescriptor) => Promise<
           hash: row.sha256,
         };
         active.set(row.key, entry);
-        entry.pending = load(row)
+        entry.pending = load(row, () => active.get(row.key) === entry)
           .then((dispose) => {
             if (active.get(row.key) === entry) entry.dispose = dispose;
             else dispose();

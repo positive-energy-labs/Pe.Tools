@@ -22,7 +22,7 @@ vi.mock("#/host/pe-client", () => ({ peClient: { call } }));
 vi.mock("#/navigation/surface-host", () => ({ useSurfaceHost: () => ({ surface: "web" }) }));
 
 beforeEach(() => {
-  window.history.replaceState({}, "", "/pea?demo=send");
+  window.history.replaceState({}, "", "/pea?fixture=send");
   vi.stubGlobal(
     "ResizeObserver",
     class {

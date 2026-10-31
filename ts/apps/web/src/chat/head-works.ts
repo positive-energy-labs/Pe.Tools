@@ -1,14 +1,21 @@
 /**
- * The Works the Chat head summarizes: every plugin route's Work, read by the key its manifest
- * declares (`useRouteWorks`, the same Work atom the route's pane reads), one head Work per declared
+ * The Works the Chat head summarizes: every plugin route's Work, read by the key its graph
+ * declares, through the kernel's cross-Work handles, one head Work per declared
  * cell head with pending cells. Every exit opens that route in the plugin pane.
  */
 import { useState, useSyncExternalStore, useMemo } from "react";
-import type { Address, DocumentRef, RouteStatePatch, CellLike, WorkKey } from "@pe/agent-contracts";
+import {
+  bindWork,
+  workKey,
+  type Address,
+  type DocumentRef,
+  type CellLike,
+  type WorkKey,
+  type RouteGraph,
+  type CellsDecl,
+} from "@pe/agent-contracts";
 
-import type { Cells } from "#/route/cells";
-import type { RouteManifest } from "#/route/manifest";
-import { useRouteWorks } from "#/route/route-work";
+import { useWorkHandles } from "#/shell/use-work-handles";
 import {
   capturedPlace,
   chatPluginTitle,
@@ -27,22 +34,14 @@ export interface HeadExits {
 }
 
 type Doc = Record<string, unknown>;
-type Manifest = RouteManifest<Doc, string, unknown, string>;
+type Manifest = RouteGraph<any, Doc>;
 
 const keyOf = (
   manifest: Manifest,
   address: Address | null,
   document: DocumentRef | null,
 ): WorkKey | null =>
-  manifest.workKey ??
-  (address
-    ? {
-        binding: "address" as const,
-        route: manifest.key,
-        target: address,
-        ...(document ? { from: document } : {}),
-      }
-    : null);
+  address || document ? bindWork(manifest.key, address, undefined, document ?? undefined) : null;
 
 const pending = (cell: CellLike | undefined) =>
   cell != null && (cell.suggestion != null || cell.edit != null);
@@ -60,39 +59,29 @@ export function useHeadWorks(
   );
   const headed = useMemo(
     () =>
-      publicRoutes.entries().flatMap(({ manifest: registered }) => {
-        const manifest = registered as unknown as Manifest;
-        return manifest.work && manifest.cells?.length && manifest.workKey !== null
+      publicRoutes.entries().flatMap(({ graph: manifest }) => {
+        return manifest?.needs && manifest.work && manifest.cells?.length
           ? [
               {
                 route: manifest.key,
                 manifest,
+                graph: manifest,
                 cells: manifest.cells,
-                spec: manifest.work,
                 key: keyOf(manifest, address, document),
+                closed: document === null,
               },
             ]
           : [];
       }),
     [revision, address, document?.session, document?.openId],
   );
-  const summaries = useRouteWorks(headed);
-  // A refused bound write is a foreign write landing first: say it, and offer reload.
-  const [conflicts, setConflicts] = useState<ReadonlySet<string>>(new Set());
+  const summaries = useWorkHandles(headed);
   const [openRefusal, setOpenRefusal] = useState<{ route: string; message: string } | null>(null);
-  const conflict = (route: string, on: boolean) =>
-    setConflicts((now) => {
-      if (now.has(route) === on) return now;
-      const next = new Set(now);
-      if (on) next.add(route);
-      else next.delete(route);
-      return next;
-    });
   const works = headed.map((one, index) => ({ ...one, work: summaries[index]! }));
   return works.flatMap(({ route, manifest, work, cells: heads }) => {
     const doc = work.doc as Doc | null;
-    if (!doc || !publicRoutes.get(route)) return [];
     const key = keyOf(manifest, address, document);
+    if (!doc || !key || !publicRoutes.get(route)) return [];
     const place = capturedPlace(route, key, doc, undefined, false);
     // A review names a cell: the route's own page fields for it land on its place; a route that
     // declares none opens as before.
@@ -106,44 +95,51 @@ export function useHeadWorks(
       else
         exits.open(at ? { ...place, page: { ...place.page, ...at } as typeof place.page } : place);
     };
-    return heads.flatMap((head: Cells<Doc>): HeadWork[] => {
+    return heads.flatMap((head: CellsDecl<Doc>): HeadWork[] => {
       const cells = (
         head.segment === null ? { [head.key!]: doc[head.key!] } : (doc[head.segment] ?? {})
       ) as Record<string, CellLike | undefined>;
-      if (!Object.values(cells).some(pending)) return [];
+      const unaccepted = work.pending.filter(({ patches }) =>
+        patches.some(({ path }) => !path.length || path[0] === (head.segment ?? head.key)),
+      );
+      if (!Object.values(cells).some(pending) && !unaccepted.length) return [];
       const plan = head.commit === "plan";
       return [
         {
-          id: `${JSON.stringify(key)}:${head.segment ?? head.key}`,
+          id: `${workKey(key)}:${head.segment ?? head.key}`,
           route: chatPluginTitle(route),
           subject: head.noun ?? subject,
           cells: cells as Record<string, CellLike>,
           wire: {
             segment: head.segment,
             revision: work.revision,
-            write: async (patches: RouteStatePatch[], expectedRevision?: number) => {
-              const refused = head.admit?.(doc, patches);
-              if (refused) return refused;
-              const refusal = await work.write(patches, expectedRevision);
-              conflict(route, refusal?.code === "stale-revision");
-              return refusal;
-            },
+            write: work.write,
+            pending: (press) => work.pending.some((request) => request.press === press),
+            discard: work.discard,
           },
           groupOf: head.groupOf,
           ...(head.label ? { label: head.label } : {}),
           ...(head.show ? { show: head.show } : {}),
           stale: work.stale,
-          conflict: conflicts.has(route),
-          reload: () => {
-            conflict(route, false);
-            work.reload();
-          },
+          conflict: work.conflict,
+          reload: work.reload,
+          pending: unaccepted.flatMap(({ press }) =>
+            press
+              ? [
+                  {
+                    press,
+                    retry: () => work.retry(press),
+                    discard: () => work.discard(press),
+                  },
+                ]
+              : [],
+          ),
           commit: plan
             ? { word: "apply", run: () => open(true) }
             : { word: "open", run: () => open(false) },
           open: (cell) => open(false, cell && head.focus ? head.focus(cell) : undefined),
           // A planned Work commits whole: all its cells are one head line (F-B-4).
-          ...(plan ? { line: `${route}:${JSON.stringify(key)}` } : {}),
+          ...(plan ? { line: workKey(key) } : {}),
           ...(exits.planRefusal?.route === route ? { refusal: exits.planRefusal.message } : {}),
           ...(!place.ok ? { refusal: place.refusal } : {}),
           ...(openRefusal?.route === route ? { refusal: openRefusal.message } : {}),

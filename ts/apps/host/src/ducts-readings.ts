@@ -118,6 +118,17 @@ export class DuctsReadings {
       entry.used = Date.now();
     };
   }
+  /** An explicit refresh retires retained bodies before its semantic receipt is published. */
+  refresh(target: { session: string; openId: string }): void {
+    for (const entry of this.entries.values()) {
+      const scope = identity(entry.request);
+      if (
+        scope.session === target.session &&
+        (!scope.target || scope.target.openId === target.openId)
+      )
+        this.invalidate(entry);
+    }
+  }
   /** Called synchronously by the bridge tap, before another response can publish. */
   changed(event: HostBridgeEvent): void {
     let changed: unknown;

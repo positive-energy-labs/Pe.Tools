@@ -129,6 +129,42 @@ test("demo Work instances count the portable editable cells through the producti
   });
 });
 
+test("declared demo writes retain the press and replay the accepted inverse as restore", async () => {
+  const f = await setup();
+  const { scope, route } = f.owner;
+  expect(scope.binding).toBe("workspace");
+  if (scope.binding !== "workspace") throw Error("Expected isolated workspace");
+  const path = `/pe/route-state/${route}/apply?work=${encodeURIComponent(scope.work)}`;
+  const before = await f.owner.work.view(scope, route);
+  if (!before) throw Error("Expected seeded demo Work");
+  const applied = await (
+    await f.fetch(path, {
+      patches: [{ path: ["fields", "/family/name", "edit"], value: { value: "One press" } }],
+      expectedRevision: before.revision,
+      press: "demo-edit-press",
+      kind: "apply",
+    })
+  ).json();
+  expect(applied).toMatchObject({
+    ok: true,
+    write: { by: "human", kind: "apply", press: "demo-edit-press", undoable: true },
+  });
+  expect(applied.write.inverse.length).toBeGreaterThan(0);
+  const restored = await (
+    await f.fetch(path, {
+      patches: applied.write.inverse,
+      expectedRevision: applied.revision,
+      press: null,
+      kind: "restore",
+    })
+  ).json();
+  expect(restored).toMatchObject({
+    ok: true,
+    write: { by: "human", kind: "restore", press: null },
+  });
+  expect((await f.owner.work.view(scope, route))?.doc).toEqual(before.doc);
+});
+
 test("admitted demo launch uses only its labelled leaf and rejects escape or real IO fallback", async () => {
   const f = await setup();
   const submit = async (suffix: string, key: string, path: string) => {

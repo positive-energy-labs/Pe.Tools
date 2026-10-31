@@ -2,7 +2,7 @@ import type { Tone } from "@pe/kit/lib/token";
 import { token } from "@pe/kit/lib/token";
 import { verdictInk } from "@pe/kit/table/cells";
 import type { Verdict as RowVerdict } from "@pe/kit/table/model";
-import { ATLAS_ROOM_STATE_LABEL, type AtlasRoomState as RoomState } from "#/takeoff/controller";
+import { ATLAS_ROOM_STATE_LABEL, type AtlasRoomState as RoomState } from "#/takeoff/projections";
 import type { Phase } from "#/takeoff/world";
 
 export const STATE_META: Record<RoomState, { tone?: Tone; label: string; note: string }> = {
@@ -54,4 +54,4 @@ export const ABSENT_INK = token("ink-mute");
 export {
   ATLAS_ROOM_STATES as ROOM_STATES,
   type AtlasRoomState as RoomState,
-} from "#/takeoff/controller";
+} from "#/takeoff/projections";

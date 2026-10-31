@@ -24,8 +24,8 @@ export type SubjectDocument = {
   references: NumberedElement[];
 };
 
-/** A bare element id in prose, optionally `id:connector`; never part of a word or a decimal. */
-const PROSE_ID = /(?<![\w.])\d+(?::\d+)?(?!\w|\.\d)/g;
+/** Infer only 5+ digit ids; short ids require structured references to avoid quantities and tags. */
+const PROSE_ID = /(?<![\w.:])(?<!\d,)\d{5,}(?::\d+)?(?![\w:]|[.,]\d)/g;
 /** The element ids prose names, in order, by the same rule `subjectDocument` resolves them. */
 export const proseIds = (text: string) =>
   [...text.matchAll(PROSE_ID)].map((match) => Number(match[0].split(":")[0]));

@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vite-plus/test";
-import { createRouteOwner, makeAtomRegistry } from "./route-owner";
+import { createRouteOwner, makeAtomRegistry } from "#/shell/owner";
 
 const admissions = vi.hoisted(() => vi.fn(async () => []));
 vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({

@@ -1,34 +1,29 @@
 /**
- * The seed catalogue: every route that declares `manifest.seeds`, one row per seed action.
+ * The seed catalogue: every route that declares `graph.seeds`, one row per seed action.
  *
- * There is no second demo lane any more. A seed is plain data on the route's own manifest, and
- * `?demo=<action>` mounts it through `useRoute`'s isolated owner — so this surface's whole job is
+ * There is no second demo lane any more. A seed is plain data beside the route's graph, and
+ * `?fixture=<action>` mounts it through the kernel's fixture owner — so this surface's whole job is
  * to name what exists and link to it. It builds nothing, owns nothing, and runs no action.
  */
-import type { Seed } from "@pe/agent-contracts";
-import { CHAT_SEEDS } from "#/chat/seeds";
-import { PODS_SEEDS } from "#/route/seeds";
-import { SCHEDULE_SEEDS } from "#/route/schedules/manifest";
-import { OPEN_SEEDS } from "#/open/seeds";
-import { manifest as takeoffManifest } from "#/takeoff/manifest";
-import { manifest as familyManifest } from "#/routes/family";
-import { manifest as familiesManifest } from "#/families/manifest";
+import type { GraphSeed } from "@pe/agent-contracts";
+import { useSyncExternalStore } from "react";
+import { publicRoutes } from "#/route/builtin-routes";
 import { Demo } from "./exhibit";
 
 interface SeedRow {
-  /** The manifest key the seed belongs to. */
+  /** The graph key the seed belongs to. */
   route: string;
-  /** The route path `?demo=` is appended to. */
+  /** The route path `?fixture=` is appended to. */
   path: string;
   /** The action key the seed seeds. */
   action: string;
   /** The seed's own one-line title. */
   title: string;
-  /** The URL that mounts this seed in an isolated demo owner. */
+  /** The URL that mounts this seed in an isolated fixture owner. */
   href: string;
 }
 
-type AnySeeds = Readonly<Record<string, Seed<unknown, string, unknown> | undefined>> | undefined;
+type AnySeeds = Readonly<Record<string, GraphSeed<unknown, unknown> | undefined>> | undefined;
 
 const rows = (route: string, path: string, seeds: AnySeeds): SeedRow[] =>
   Object.entries(seeds ?? {})
@@ -38,29 +33,19 @@ const rows = (route: string, path: string, seeds: AnySeeds): SeedRow[] =>
       path,
       action,
       title: seed!.title,
-      href: `${path}?demo=${encodeURIComponent(action)}`,
+      href: `${path}?fixture=${encodeURIComponent(action)}`,
     }));
 
-/**
- * Chat and Schedules declare their manifests as builders over live deps, so their seed records are
- * read straight from the seed modules the builders hand to `seeds:`. Same data, no deps needed.
- */
-const SEED_CATALOGUE: SeedRow[] = [
-  ...rows("chat", "/pea", CHAT_SEEDS as AnySeeds),
-  ...rows("pods", "/pods", PODS_SEEDS as AnySeeds),
-  ...rows("schedules", "/schedules", SCHEDULE_SEEDS as AnySeeds),
-  ...rows("instances", "/open", OPEN_SEEDS as AnySeeds),
-  ...rows("takeoffs", "/takeoffs", takeoffManifest.seeds as AnySeeds),
-  ...rows("family", "/family", familyManifest.seeds as AnySeeds),
-  ...rows("families", "/families", familiesManifest.seeds as AnySeeds),
-];
-
 export function ActionDemoCatalogue() {
+  useSyncExternalStore(publicRoutes.subscribe, publicRoutes.revision, publicRoutes.revision);
+  const SEED_CATALOGUE = publicRoutes
+    .entries()
+    .flatMap(({ graph }) => (graph ? rows(graph.key, `/${graph.address}`, graph.seeds) : []));
   return (
     <Demo
       label="Seed catalogue"
-      consumers="Every route manifest that declares seeds"
-      spec="A seed is plain data on the route's manifest. Opening its link mounts it through ?demo= in an isolated owner; nothing here runs an action or touches a host."
+      consumers="Every route graph that declares seeds"
+      spec="A seed is plain data beside the route's graph. Opening its link mounts it through ?fixture= in an isolated owner; nothing here runs an action or touches a host."
     >
       {/* DOMAIN (kept hand table): a specimen page's plain seed index, not a product surface. */}
       <table aria-label="Route seeds">

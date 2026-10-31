@@ -7,29 +7,20 @@ import { revitTarget } from "@pe/kit/lang/revit-target";
  * never the row, and each names its transition. State is `inboxCards`', derived on read.
  */
 import { useState } from "react";
-import {
-  transitionBinding,
-  transitionPatches,
-  type RouteStatePatch,
-  type TransitionKind,
-} from "@pe/agent-contracts";
 import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 
-import type { CellWire } from "#/components/work/band";
 import { useList, emptyListState } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
 import { Scroll } from "@pe/kit/lang/scroll";
-import { Pane } from "@pe/kit/lang/pane";
+import type { PaneApi } from "../../../../packages/kit/src/components/lang/graph-layout";
 import { Button } from "@pe/kit/lang/button";
 import { Switcher } from "@pe/kit/lang/switcher";
 import { tokenRef } from "@pe/kit/lib/token";
 import { CARD_META, CARD_STATES, type Card, type CardState } from "./cards";
-import type { RoomsPage } from "./manifest";
+import type { RoomsPage } from "./graph";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 type Region = RoomsSnapshot.Res.RoomsRegion;
-type Wire = Pick<CellWire, "write" | "revision">;
-type Refusal = { code: string; message: string } | null;
 
 /** A state's glyph in its tone; the title says what it means and what moves it next. */
 function Glyph({ state }: { state: CardState }) {
@@ -123,75 +114,6 @@ function Thumb({
   );
 }
 
-interface Verb {
-  word: string;
-  /** The transition it makes, from state to state, and what it writes. */
-  title: string;
-  refusal?: string | null;
-  run: () => Promise<Refusal>;
-}
-
-/** A bound transition carries the rendered revision; with none rendered it refuses (band.tsx). */
-const writeKind = (wire: Wire, kind: TransitionKind, patches: RouteStatePatch[]) =>
-  transitionBinding(kind) !== "bound"
-    ? wire.write(patches)
-    : wire.revision === null
-      ? Promise.resolve({ code: "not-ready", message: "Work has not been read yet" })
-      : wire.write(patches, wire.revision);
-
-/** The verbs a person has on one card, exactly as its rungs allow. */
-export function cardMoves(
-  card: Card,
-  wire: Wire,
-  apply: { refusal: (id: string) => string | null; run: (id: string) => Promise<Refusal> },
-): Verb[] {
-  const cell = card.cell;
-  const at = `${card.kind === "note" ? "notes" : "marks"}/${card.id}`;
-  const remove: Verb = {
-    word: "delete",
-    title: `${card.state} → removed: delete ${at} from the Work`,
-    run: () => wire.write([{ path: [card.kind === "note" ? "notes" : "marks", card.id] }]),
-  };
-  if (!cell) return [remove];
-  const move = (kind: TransitionKind) =>
-    writeKind(wire, kind, transitionPatches(["marks"], card.id, cell, { kind } as never));
-  if (!cell.edit)
-    return [
-      {
-        word: "take",
-        title: `proposed → accepted: stage Pea's mark (writes ${at}/edit)`,
-        run: () => move("take"),
-      },
-      {
-        word: "reject",
-        title: `proposed → removed: drop Pea's suggestion (clears ${at}/suggestion)`,
-        run: () => move("unsuggest"),
-      },
-    ];
-  return [
-    ...(card.kind === "merge"
-      ? [
-          {
-            word: "apply",
-            title: `${card.state} → merged: rooms.merge the regions it covers, then read the plan again`,
-            refusal: apply.refusal(card.id),
-            run: () => apply.run(card.id),
-          },
-        ]
-      : []),
-    ...(cell.suggestion
-      ? [
-          {
-            word: "reopen",
-            title: `${card.state} → proposed: unstage; Pea's suggestion stands (clears ${at}/edit)`,
-            run: () => move("clear"),
-          },
-        ]
-      : []),
-    remove,
-  ];
-}
-
 /** One card: glyph, tag, line, thumbnail and its verbs. The plan's projection draws it. */
 export function FeedbackCard({
   card,
@@ -203,10 +125,9 @@ export function FeedbackCard({
   card: Card;
   line: string;
   regions: readonly Region[];
-  verbs: readonly Verb[] | null;
+  verbs: React.ReactNode;
   onClose?: () => void;
 }) {
-  const [said, setSaid] = useState<string | null>(null);
   return (
     <div
       className="flex gap-2 p-1"
@@ -226,28 +147,12 @@ export function FeedbackCard({
         <span>{line}</span>
         {verbs ? (
           <span className="flex flex-wrap items-center gap-1">
-            {verbs.map((verb) => (
-              <Button
-                key={verb.word}
-                label={verb.word}
-                kind="framed"
-                reason={verb.title}
-                refusal={verb.refusal ? verb.refusal : null}
-                onClick={() => void verb.run().then((refusal) => setSaid(refusal?.message ?? null))}
-              >
-                {verb.word}
-              </Button>
-            ))}
+            {verbs}
             {onClose ? (
               <Button label="unpin" reason="unpin (Esc)" onClick={onClose}>
                 ×
               </Button>
             ) : null}
-          </span>
-        ) : null}
-        {said ? (
-          <span data-tone="alarm" className="t-small">
-            {said}
           </span>
         ) : null}
       </div>
@@ -259,6 +164,7 @@ type Filter = RoomsPage["show"];
 
 /** The inbox pane: filter, rows, and the two exports (markdown to the clipboard, the plan PNG). */
 export function RoomsInbox({
+  renderPane,
   cards,
   regions,
   labelOf,
@@ -269,6 +175,7 @@ export function RoomsInbox({
   markdown,
   snap,
 }: {
+  renderPane: PaneApi;
   cards: readonly Card[];
   regions: readonly Region[];
   labelOf: (guid: string) => string | undefined;
@@ -311,13 +218,53 @@ export function RoomsInbox({
     onPick: (card) => onPin(card.id),
     select: "single",
   });
-  return (
-    <Pane
-      title="Feedback"
-      meta={said ?? `${cards.length}`}
-      scroll="clip"
-      flush
-      actions={
+  return renderPane(
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="px-1 py-1">
+        <Switcher<Filter>
+          ariaLabel="filter Feedback by state"
+          value={filter}
+          onChange={onShow}
+          options={[
+            { value: "all", label: `all ${cards.length}`, title: "every card on this view" },
+            ...CARD_STATES.filter((state) => count(state) > 0).map((state) => ({
+              value: state,
+              label: `${CARD_META[state].glyph}${count(state)}`,
+              title: CARD_META[state].says,
+            })),
+          ]}
+        />
+      </div>
+      <Scroll className="min-h-0 flex-1">
+        <ListView
+          list={list}
+          aria-label="Feedback"
+          empty={{
+            message: cards.length ? "No card in this state" : "No marks or notes on this view",
+            exit: cards.length
+              ? "Choose all in the filter"
+              : "Draw a mark or a note on the plan, or ask Pea",
+          }}
+          row={(card) => ({
+            lead: (
+              <span className="flex gap-1">
+                <Glyph state={card.state} />
+                <Tag card={card} />
+              </span>
+            ),
+            revit: regions
+              .filter((region) => card.guids.includes(region.guid))
+              .map((region) => region.elementId),
+            label: cardLine(card, labelOf),
+            meta: <Thumb card={card} regions={regions} width={32} />,
+          })}
+        />
+      </Scroll>
+    </div>,
+    {
+      title: "Feedback",
+      meta: said ?? `${cards.length}`,
+      actions: (
         <>
           <Button
             label="copy markdown"
@@ -341,50 +288,7 @@ export function RoomsInbox({
             snap PNG
           </Button>
         </>
-      }
-    >
-      <div className="flex min-h-0 flex-1 flex-col">
-        <div className="px-1 py-1">
-          <Switcher<Filter>
-            ariaLabel="filter Feedback by state"
-            value={filter}
-            onChange={onShow}
-            options={[
-              { value: "all", label: `all ${cards.length}`, title: "every card on this view" },
-              ...CARD_STATES.filter((state) => count(state) > 0).map((state) => ({
-                value: state,
-                label: `${CARD_META[state].glyph}${count(state)}`,
-                title: CARD_META[state].says,
-              })),
-            ]}
-          />
-        </div>
-        <Scroll className="min-h-0 flex-1">
-          <ListView
-            list={list}
-            aria-label="Feedback"
-            empty={{
-              message: cards.length ? "No card in this state" : "No marks or notes on this view",
-              exit: cards.length
-                ? "Choose all in the filter"
-                : "Draw a mark or a note on the plan, or ask Pea",
-            }}
-            row={(card) => ({
-              lead: (
-                <span className="flex gap-1">
-                  <Glyph state={card.state} />
-                  <Tag card={card} />
-                </span>
-              ),
-              revit: regions
-                .filter((region) => card.guids.includes(region.guid))
-                .map((region) => region.elementId),
-              label: cardLine(card, labelOf),
-              meta: <Thumb card={card} regions={regions} width={32} />,
-            })}
-          />
-        </Scroll>
-      </div>
-    </Pane>
+      ),
+    },
   );
 }

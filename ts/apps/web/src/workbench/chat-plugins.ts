@@ -22,13 +22,13 @@ import {
 } from "@pe/agent-contracts";
 
 import { publicRoutes } from "#/route/builtin-routes";
-import { isRecord } from "#/route/route-owner";
+import { isRecord } from "#/shell/owner";
 
 export type ChatPluginRoute = string;
 const chatPluginRoutes = () => publicRoutes.keys();
 export const chatPluginTitle = (route: ChatPluginRoute) => {
   const manifest = publicRoutes.get(route)?.manifest;
-  return manifest ? (manifest.work?.title ?? manifest.name) : `Unavailable route: ${route}`;
+  return manifest ? manifest.name : `Unavailable route: ${route}`;
 };
 
 /** A tool result's payload: its MCP `structuredContent` when it carries one. */

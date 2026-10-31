@@ -1,31 +1,32 @@
 import * as React from "react";
 import * as kit from "@pe/kit";
 import { z } from "zod";
-import { podRouteWorkSpec, parseContributionKey, message } from "@pe/agent-contracts";
-import { isAnyOperationKey } from "@pe/host-contracts/operation-types";
-import { peClient } from "#/host/pe-client";
-import { callHostRpc } from "#/host/client";
-import { defineRoute, type Ctx } from "./manifest";
-import { RouteShell, useChooseTarget } from "./shell";
-import { useRoute } from "./use-route";
-import { useDocumentLadder, LadderPicker } from "./situation-ladder";
-import { usePublishPagePalette } from "#/navigation/route-controls";
-import { KeysNode } from "@pe/kit/keys";
-import type { PodRouteDescriptor } from "@pe/agent-contracts";
-import { CommandPalette } from "@pe/kit/lang/list-popup";
 import {
-  submitAction,
-  actionResult,
-} from "../../../../packages/mcps/src/shared/takeoff-action-client";
+  pane,
+  podRouteStateSchema,
+  split,
+  workKey,
+  machineAttachments,
+  type Machine,
+  type PodRouteDescriptor,
+  type RouteGraph,
+  type WorkWriteAck,
+} from "@pe/agent-contracts";
+import { field } from "../../../../packages/agent-contracts/src/route-field";
+import { mountRoute, type GraphMount, type MountBody, type RouteAdapters } from "#/shell/mount";
+import { operationVerb, queryVerb, rpcVerb, workVerb, type InvocationResult } from "#/shell/verbs";
+import { podOperation, podRead, podRequest, podScript, podExport, podSources } from "./pod-sources";
+import { podRoutePath } from "./pod-address";
+import { actionResult } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
 type State = Record<string, unknown>;
 type Work = { version: 1; state: State };
-type Page = { palette: boolean };
+type Page = { request: z.output<typeof podRequest> };
 type Event = Record<string, unknown>;
-interface PodApi {
+export interface PodApi {
   React: typeof React;
   kit: typeof kit;
-  useState(): { state: State; fire(event: Event): Promise<void> };
+  useState(): { state: State; fire(this: void, event: Event): Promise<void> };
   getState(): State;
   target(): Promise<{ session: string; openId: string; title: string }>;
   read(key: string, input: State): Promise<unknown>;
@@ -37,289 +38,327 @@ export interface PodRouteBundle {
   initial: State;
   reducer(state: State, event: Event): State;
   create(api: PodApi): React.ComponentType;
+  fixtures?: Readonly<
+    Record<string, { title: string; state: State; queries?: Readonly<Record<string, unknown>> }>
+  >;
 }
 
-export async function executePodAction(
-  ctx: Pick<Ctx<Work, never, Page>, "target" | "work">,
-  key: string,
-  input: State,
+/** Reviews stay open in the kernel; the bundle receives only the final admitted outcome. */
+async function invocation(
+  owner: GraphMount<Page, Work>,
+  id: string,
+  input?: unknown,
+  signal?: AbortSignal,
 ) {
-  const reference = parseContributionKey(key);
-  if (reference) {
-    if (reference.kind !== "script") throw Error(`${key} is not an executable script.`);
-    const captured = await peClient.call("contributions.read", { query: { key } });
-    if (!captured.sourceBundle) throw Error(`${key} has no captured source bundle.`);
-    key = "scripting.execute";
-    input = {
-      sourcePath: reference.path,
-      sourceBundle: captured.sourceBundle,
-      ...Object.fromEntries(
-        ["permissionMode", "timeoutSeconds"]
-          .filter((name) => input[name] !== undefined)
-          .map((name) => [name, input[name]]),
-      ),
-    };
-  } else if (!isAnyOperationKey(key)) throw Error(`Unknown operation ${key}`);
-  return actionResult(
-    await submitAction(
-      {
-        id: crypto.randomUUID(),
-        key,
-        target: ctx.target,
-        input,
-      },
-      "",
-      120_000,
-    ),
-  );
+  let outcome = await owner.control(id, input).run();
+  if (outcome.state === "review") {
+    const press = outcome.press;
+    outcome = await new Promise<InvocationResult>((resolve, reject) => {
+      const abort = () => {
+        release();
+        reject(Error("This Pod editor is no longer mounted."));
+      };
+      const check = () => {
+        const next = owner.results.get(id);
+        if (next?.press !== press || next.state === "review") return;
+        release();
+        signal?.removeEventListener("abort", abort);
+        resolve(next);
+      };
+      const release = owner.subscribe(check);
+      signal?.addEventListener("abort", abort, { once: true });
+      if (signal?.aborted) abort();
+      else check();
+    });
+  }
+  if (outcome.state !== "done")
+    throw Error("refusal" in outcome ? outcome.refusal.message : "Review is still open");
+  return outcome;
+}
+async function result(
+  owner: GraphMount<Page, Work>,
+  id: string,
+  input?: unknown,
+  signal?: AbortSignal,
+) {
+  const outcome = await invocation(owner, id, input, signal);
+  return "receipt" in outcome
+    ? outcome.kind === "command"
+      ? actionResult(outcome.receipt)
+      : outcome.receipt.value
+    : undefined;
 }
 
+/** An ACK owns the inverse; the Work reading owns the next reducer's input. Never predict either. */
+function readAcknowledged(owner: GraphMount<Page, Work>, ack: WorkWriteAck, signal: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    const finish = (error?: string) => {
+      clearTimeout(timer);
+      release();
+      signal.removeEventListener("abort", abort);
+      if (error) reject(Error(error));
+      else resolve();
+    };
+    const abort = () => finish("This Pod editor is no longer mounted.");
+    const check = () => {
+      const work = owner.snapshot().work;
+      if (work && workKey(work.handle.key) !== workKey(ack.key))
+        finish("This route's Work changed after the edit.");
+      else if (work && work.handle.revision >= ack.revision) finish();
+    };
+    const release = owner.subscribe(check);
+    const timer = setTimeout(
+      () =>
+        finish(
+          "The edit was accepted, but its Work reading has not arrived; reload Work before editing again.",
+        ),
+      15_000,
+    );
+    signal.addEventListener("abort", abort, { once: true });
+    if (signal.aborted) abort();
+    else check();
+  });
+}
+
+/** One trusted module declares one executable graph; no second manifest or writer exists. */
 export function makePodRoute(row: PodRouteDescriptor, bundle: PodRouteBundle) {
+  if (!row.trusted) throw Error("Trust this Pod route hash before loading.");
   if (
     bundle.version !== 1 ||
     typeof bundle.create !== "function" ||
     typeof bundle.reducer !== "function" ||
     !bundle.initial ||
+    typeof bundle.initial !== "object" ||
     Array.isArray(bundle.initial)
   )
     throw Error("This Pod route does not implement route bundle version 1.");
-  const responses = new Map<string, unknown>();
-  const manifest = defineRoute<Work, never, Page, "execute">({
+  const graph: RouteGraph<Page, Work> = {
     key: row.workRoute,
+    address: podRoutePath(row.key).slice(1),
     name: row.name,
-    needs: "document",
-    work: podRouteWorkSpec(row.workRoute, row.name),
-    page: z.object({ palette: z.boolean().default(false) }),
-    docs: row.description,
-    actions: {
-      execute: {
-        label: "Run Pod action",
-        visible: false,
-        input: z.custom<never>(
-          (raw) =>
-            z
-              .object({ id: z.string(), key: z.string(), input: z.record(z.string(), z.unknown()) })
-              .safeParse(raw).success,
+    // Calculator inputs are host-owned; choosing a document scopes operations, never replaces inputs.
+    optionalTarget: "document",
+    work: podRouteStateSchema.extend({
+      state: podRouteStateSchema.shape.state.default(() => structuredClone(bundle.initial)),
+    }),
+    fields: {
+      request: {
+        ...field(
+          podRequest.default({ key: "", input: {} }),
+          {},
+          { encode: JSON.stringify, decode: JSON.parse },
         ),
-        says: "Execute the requested Pod action on this route's exact target.",
-        needs: "document",
-        dirties: [],
-        requires: { work: true },
-        ready: () => null,
-        run: async (ctx, raw) => {
-          const input = raw as { id: string; key: string; input: State };
-          responses.set(input.id, await executePodAction(ctx, input.key, input.input));
-        },
+        role: "draft",
+        url: false,
+        agent: false,
       },
     },
-  });
-  function View({ thread }: { thread: string }) {
-    const [chosen] = useChooseTarget();
-    const handle = useRoute(manifest, {
-      target: chosen,
-      thread,
-      url: false,
-      work: (_page, target) => (target === null ? "calculator" : undefined),
-    });
-    const latest = React.useRef(handle);
-    latest.current = handle;
-    const queue = React.useRef(Promise.resolve());
-    const queued = React.useRef<{ state: State; revision: number; key: string } | null>(null);
+    readings: {
+      state: { kind: "derive", source: "pod.state", retire: "target" },
+      machine: { kind: "use", source: "pod.machine", retire: "never" },
+    },
+    verbs: {
+      edit: workVerb(
+        { label: "Edit Pod state", input: z.record(z.string(), z.unknown()) },
+        {
+          patches: (scope, event) => [
+            {
+              path: ["state"],
+              value: bundle.reducer((scope.snapshot.work!.doc as Work).state, event),
+            },
+          ],
+        },
+      ),
+      reset: workVerb(
+        { label: "Reset authored state", input: z.object({}).default({}) },
+        {
+          patches: () => [{ path: ["state"], value: structuredClone(bundle.initial) }],
+        },
+      ),
+      read: queryVerb(podRead, { label: "Read Pod operation", input: podRequest, review: "none" }),
+      script: queryVerb(podScript, { label: "Read Pod script", input: podRequest, review: "none" }),
+      execute: operationVerb(
+        podRead,
+        { label: "Run Pod action", input: podRequest },
+        {
+          ready: (scope, input) =>
+            !input.key
+              ? "Choose a Pod action"
+              : scope.snapshot.target.kind !== "document"
+                ? "Choose an exact document"
+                : null,
+          raw: (_, input) => ({ key: podOperation(input.key).key, input: input.input }),
+          intent: (_, input) => input,
+        },
+      ),
+      export: rpcVerb(
+        podExport(row),
+        {
+          label: "Export portable Page",
+          input: z.object({ snapshot: z.unknown() }),
+          caller: "human",
+          review: "none",
+        },
+        { intent: (_, input) => input },
+      ),
+    },
+    panes: {
+      instrument: {
+        label: row.name,
+        purpose: row.description,
+        draws: ["state", "machine"],
+        verbs: [],
+      },
+      history: {
+        label: "History",
+        purpose: "Inspect Pod edits and admitted host actions",
+        draws: [],
+        verbs: [],
+        history: {},
+      },
+    },
+    layout: split(
+      "pod",
+      { axis: "v", sized: "end", size: 160 },
+      pane("instrument"),
+      pane("history"),
+    ),
+    stages: {
+      use: {
+        word: row.name,
+        panes: ["instrument", "history"],
+        verbs: ["reset", "execute"],
+        teach: row.description,
+      },
+    },
+    pick: false,
+    seeds: Object.fromEntries(
+      Object.entries(bundle.fixtures ?? {}).map(([name, seed]) => [
+        name,
+        {
+          title: seed.title,
+          load: async () => ({
+            work: { version: 1 as const, state: structuredClone(seed.state) },
+            readings: { state: seed.state, machine: null },
+            queries: seed.queries,
+            target: {
+              kind: "document" as const,
+              ref: { session: "fixture", openId: row.workRoute },
+            },
+          }),
+        },
+      ]),
+    ),
+  };
+  function Instrument({ owner }: MountBody<Page, Work>) {
     const [error, setError] = React.useState<string | null>(null);
-    const [targetPalette, setTargetPalette] = React.useState(false);
-    const initializing = React.useRef<string | null>(null);
+    const lifetime = React.useRef(new AbortController());
     const active = React.useRef(true);
     React.useEffect(() => {
+      lifetime.current = new AbortController();
       active.current = true;
       return () => {
         active.current = false;
+        lifetime.current.abort();
       };
     }, []);
-    const ladder = useDocumentLadder(handle);
-    const targetTitle = React.useRef(ladder.docWord);
-    targetTitle.current = ladder.docWord;
-    const [page, setPage] = handle.page;
-    usePublishPagePalette(row.workRoute, page.palette, (palette) => setPage({ palette }));
-    React.useEffect(() => {
-      const key = JSON.stringify(handle.work.key);
-      if (queued.current?.key !== key) queued.current = null;
-      if (
-        handle.work.current &&
-        !handle.work.refusal &&
-        initializing.current !== key &&
-        (!handle.work.doc || Object.keys(handle.work.doc.state).length === 0)
-      ) {
-        initializing.current = key;
-        void handle.work.write([{ path: ["state"], value: bundle.initial }]).then((failure) => {
-          if (failure) {
-            initializing.current = null;
-            setError(failure.message);
-          }
+    const api = React.useMemo<PodApi>(() => {
+      let queue = Promise.resolve();
+      const state = () => owner.snapshot().work?.doc.state ?? bundle.initial;
+      const fire = (event: Event) => {
+        const input = structuredClone(event);
+        const basis = owner.context.snapshot();
+        const run = queue.then(async () => {
+          const current = owner.context.snapshot();
+          if (
+            !active.current ||
+            basis.generation !== current.generation ||
+            !basis.work ||
+            !current.work ||
+            workKey(basis.work.handle.key) !== workKey(current.work.handle.key)
+          )
+            throw Error("This route's Work changed before the edit; choose it again.");
+          const outcome = await invocation(owner, "edit", input);
+          if (outcome.kind === "work")
+            await readAcknowledged(owner, outcome.acknowledgement, lifetime.current.signal);
         });
-      }
-    }, [handle.work.key, handle.work.current, handle.work.doc, handle.work.refusal]);
-    const api: PodApi = React.useMemo<PodApi>(
-      () => ({
+        queue = run.catch((cause: unknown) => setError(String(cause)));
+        return run;
+      };
+      return {
         React,
         kit,
-        useState: () => ({
-          state: latest.current.work.doc?.state ?? bundle.initial,
-          fire: (event) => {
-            const expectedKey = JSON.stringify(latest.current.work.key);
-            const run = queue.current.then(async () => {
-              const h = latest.current;
-              if (!active.current || JSON.stringify(h.work.key) !== expectedKey)
-                throw Error("This route's Work changed before the edit; choose it again.");
-              if (!h.work.current || h.work.refusal)
-                throw Error(h.work.refusal ?? "Work is not current.");
-              const identity = JSON.stringify(h.work.key);
-              const prior = queued.current?.key === identity ? queued.current : null;
-              const next = bundle.reducer(
-                prior?.state ?? h.work.doc?.state ?? bundle.initial,
-                event,
-              );
-              const revision = prior?.revision ?? h.work.revision ?? 0;
-              const refused = await h.work.write([{ path: ["state"], value: next }], revision);
-              if (refused) {
-                queued.current = null;
-                throw Error(refused.message);
-              }
-              queued.current = { state: next, revision: revision + 1, key: identity };
-            });
-            queue.current = run.catch((cause: unknown) => {
-              setError(message(cause));
-            });
-            return run;
-          },
-        }),
-        getState: () =>
-          queued.current?.key === JSON.stringify(latest.current.work.key) &&
-          queued.current.revision >= (latest.current.work.revision ?? 0)
-            ? queued.current.state
-            : (latest.current.work.doc?.state ?? bundle.initial),
+        useState: () => ({ state: state(), fire }),
+        getState: state,
         target: async () => {
-          const h = latest.current;
-          if (
-            h.bindingLost ||
-            h.resolution.kind !== "resolved" ||
-            h.resolution.target.kind !== "document"
-          )
-            throw Error(
-              h.bindingLost?.sentence ?? "Choose an exact document in this route's palette.",
-            );
-          return { ...h.resolution.target.ref, title: targetTitle.current ?? "" };
+          const target = owner.snapshot().target;
+          if (target.kind !== "document")
+            throw Error("Choose an exact document in this route's target picker.");
+          const reading = owner.readings.get("machine");
+          const document =
+            reading.current && reading.value
+              ? machineAttachments(reading.value as Machine)
+                  .find((a) => a.session === target.ref.session)
+                  ?.documents?.find((d) => d.openId === target.ref.openId)
+              : null;
+          if (!document && !owner.fixture)
+            throw Error("The exact document's title is not current; wait for its reading.");
+          return { ...target.ref, title: document?.title ?? "Fixture document" };
         },
-        read: async (key, input) => {
-          if (!isAnyOperationKey(key)) throw Error(`Unknown operation ${key}`);
-          const target = await api.target();
-          return callHostRpc(key, input as never, {
-            bridgeSessionId: target.session,
-            openDocumentId: target.openId,
-          });
-        },
+        read: (key, input) => result(owner, "read", { key, input }),
         do: async (key, input) => {
-          await queue.current;
-          const id = crypto.randomUUID();
-          const refused = await latest.current.actions.execute.run({ id, key, input });
-          if (refused) throw Error(refused.message);
-          const response = responses.get(id);
-          responses.delete(id);
-          return response;
+          const generation = owner.context.snapshot().generation;
+          await queue;
+          if (generation !== owner.context.snapshot().generation)
+            throw Error("The Pod target changed before execution.");
+          if (key.startsWith("script:")) {
+            const captured = (await result(owner, "script", { key, input })) as z.output<
+              typeof podRequest
+            >;
+            key = captured.key;
+            input = captured.input;
+          }
+          if (podOperation(key).intent.toLowerCase() === "read")
+            return result(owner, "read", { key, input });
+          owner.view.setPage({ request: { key, input } });
+          return result(owner, "execute", undefined, lifetime.current.signal);
         },
-        exportSnapshot: async (snapshot) => {
-          if (!row.page) throw Error("This route declares no portable Page.");
-          const slug = `${row.packageId.replace(/^@/, "")}--${row.page.replace(/^pages\//, "")}`;
-          const response = await peClient.response("page.export", {
-            params: { slug },
-            body: { snapshot },
-          });
-          if (!response.ok) throw Error(`Page export refused (${response.status}).`);
-          const url = URL.createObjectURL(await response.blob());
-          const anchor = document.createElement("a");
-          anchor.href = url;
-          anchor.download = `${slug}.html`;
-          anchor.click();
-          URL.revokeObjectURL(url);
-        },
-      }),
-      [],
-    );
-    const Instrument = React.useMemo(() => bundle.create(api), [api]);
-    const commands = [
-      { key: "target", label: "Choose document", run: () => setTargetPalette(true) },
-      {
-        key: "reset",
-        label: "Reset authored state",
-        run: () => {
-          void handle.work.write([{ path: ["state"], value: bundle.initial }]).then((failure) => {
-            if (failure) setError(failure.message);
-            else queued.current = null;
-          });
-        },
-      },
-      { key: "reload", label: "Reload saved Work", run: handle.work.reload },
-      {
-        key: "export",
-        label: "Export portable Page",
-        run: () => {
-          void api
-            .exportSnapshot(api.getState())
-            .catch((cause: unknown) => setError(String(cause)));
-        },
-      },
-    ];
+        exportSnapshot: (snapshot) => result(owner, "export", { snapshot }).then(() => {}),
+      };
+    }, [owner]);
+    const View = React.useMemo(() => bundle.create(api), [api]);
     return (
-      <RouteShell
-        manifest={manifest}
-        handle={handle}
-        aside={
-          <LadderPicker ladder={ladder} open={targetPalette} onOpenChange={setTargetPalette} />
-        }
-      >
-        <KeysNode
-          id={`${row.name} target`}
-          keys={[
-            {
-              hotkey: "Mod+K",
-              label: "Route commands",
-              callback: () => setPage({ palette: true }),
-            },
-          ]}
-        >
-          <CommandPalette
-            open={page.palette}
-            onOpenChange={(palette) => setPage({ palette })}
-            items={commands}
-            keyOf={(item) => item.key}
-            labelOf={(item) => item.label}
-            filter="substring"
-            empty="No route commands"
-            aria-label={`${row.name} commands`}
-            row={(item) => ({ label: item.label })}
-            onPick={(item) => item.run()}
-          />
-          {error && (
-            <p role="alert" data-tone="alarm" className="p-3">
-              {error}
-            </p>
-          )}
-          {handle.work.refusal ? (
-            <p role="alert" className="p-3">
-              {handle.work.refusal}
-            </p>
-          ) : !handle.work.current ||
-            !handle.work.doc ||
-            !Object.keys(handle.work.doc.state).length ? (
-            <p className="p-3">Reading route Work…</p>
-          ) : (
-            <Instrument />
-          )}
-        </KeysNode>
-      </RouteShell>
+      <>
+        {error && (
+          <p role="alert" data-tone="alarm">
+            {error}
+          </p>
+        )}
+        <View />
+      </>
     );
   }
+  const adapters: RouteAdapters<Page, Work> = {
+    sources: podSources,
+    binding: (id, row, scope) => ({
+      subject: null,
+      args: id === "execute" ? scope.page.request : (row ?? {}),
+    }),
+    bodies: { instrument: (body) => <Instrument {...body} /> },
+  };
+  const View = mountRoute(graph, adapters);
   return {
-    manifest,
-    hosted: View,
+    graph,
+    manifest: graph,
+    adapters,
+    hosted: ({
+      visible,
+      ...props
+    }: {
+      visible: boolean;
+      thread: string;
+      target?: string;
+      work?: string;
+    }) => <View {...props} hidden={!visible} url={false} />,
   };
 }

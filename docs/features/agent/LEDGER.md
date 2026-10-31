@@ -11,6 +11,8 @@ restated here.
 
 ## Decided
 
+- 2026-10-27, kaitpw accepted excluding short-ID levels because "modeled elements are far more important": infer prose references only from at least five consecutive digits, and leave comma-formatted numbers plain. Tool snapshots do not limit eligible IDs; structured references retain short IDs. The Chadds census found 55 of 348,990 elements below five digits, including two levels and no family instances.
+
 - 2026-10-27, fresh adversarial Fable approved source `4f3b0d24` after rejecting `7e2ce31a`: one runtime-bound registry and Work owner, engine-owned selection/freshness/dispatch/settlement, and domain-only command entries replace the old parallel lifecycle paths. Six independent falsifier cases and 169 focused assertions passed; root independently reran 24 dispatch/dependency/consent assertions. Growth is +1,312 production lines including relocated current decoding, with +87 historical lines; approval rests on removed caller knowledge, not a net-negative LOC claim. Full verify retains inherited failures; native and installed limits below remain.
 - 2026-10-27, kaitpw authorized overnight Sol-swarm distillation and full consumer cutover, with fresh adversarial Fable approval required before completion. The earlier landed foundation was a baseline, not design acceptance; preserve concurrent edits and existing execution guarantees while correcting rejected candidates.
 

@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { field, text, type RouteDeclaration } from "../route-field.ts";
 import { entityFields, tableFields, workLinesField } from "./entity.ts";
-import { demo } from "./shared.ts";
 
 export const schedulesAddress = {
   path: "/schedules",
@@ -23,7 +22,6 @@ export const schedulesAddress = {
         .default(""),
       { url: "replace", agent: "set" },
     ),
-    demo,
   },
   agent: {
     finds: ["schedule", "grid", "query", "columns", "cell"],

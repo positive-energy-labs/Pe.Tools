@@ -754,7 +754,7 @@ function pathRows(
     if (!grid) return bad(`${table} ${input.res} is not loaded`);
     let found;
     try {
-      found = lookupGrid(grid, input.x, input.y);
+      found = lookupGrid(grid, input.x, input.y, input.z);
     } catch (e) {
       if (e instanceof GridError) return bad(e.message);
       throw e;

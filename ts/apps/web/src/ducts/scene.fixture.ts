@@ -1,7 +1,7 @@
 /**
  * The dev-only subject fixture for the ducts scene: the Project A makeup-air path Pea traced on
  * 2026-10-17 (`.artifacts/fixtures/makeup-path.json`, 88 ordered elements) as a minimal
- * `ducts.snapshot` plus the five claims written over it. Mounted only under `?demo=scene`
+ * `ducts.snapshot` plus the five claims written over it. Mounted only under `?fixture=scene`
  * (`route.tsx`). Sizes, system names and every name but MUAS-1, FC-23 and the silencer are
  * fixture stand-ins: the trace carried ids, kinds and geometry only.
  * Every row connects to the next, as the 2026-10-19 Project A read did, but one: the louver side ends

@@ -7,9 +7,12 @@ import { activeSystem, toggleSystem } from "../../selection";
 export function OpenSystems({
   system,
   onChange,
+  whole = true,
 }: {
   system: readonly string[];
   onChange: (system: string[]) => void;
+  /** False when the panes hold only the systems read so far, not the whole document. */
+  whole?: boolean;
 }) {
   const active = activeSystem({ system });
   return (
@@ -36,11 +39,19 @@ export function OpenSystems({
                 />
               ))
             ) : (
-              <span className="t-small text-ink-2">Whole document</span>
+              <span className="t-small text-ink-2">
+                {whole ? "Whole document" : "Every read system"}
+              </span>
             )}
             <Button
               label="Clear all open systems"
-              refusal={system.length ? undefined : "The whole document is already open"}
+              refusal={
+                system.length
+                  ? undefined
+                  : whole
+                    ? "The whole document is already open"
+                    : "Every read system is already open"
+              }
               onClick={() => onChange([])}
             >
               Clear all

@@ -13,7 +13,6 @@ import {
   type Viewport,
 } from "../page-keys.ts";
 import { field, type RouteDeclaration } from "../route-field.ts";
-import { demo } from "./shared.ts";
 import { emptySpaceCut, spaceCutsSchema, spaceSceneSchema } from "../space-view.ts";
 
 /** Lossless JSON in the address: what `schema` parses (its key order), stringified; no rounding. */
@@ -159,7 +158,6 @@ export const spaceAddress = {
       url: "push",
       agent: "set",
     }),
-    demo,
   },
   conflict: spaceConflict,
   agent: {

@@ -15,6 +15,7 @@ import type { DeviceListing, Pairing } from "@pe/host-contracts/pe-api";
 import { peClient } from "#/host/pe-client";
 import { LoadingContext } from "#/route/loading-context";
 import { HOST_READ_WAIT_S } from "#/route/waits";
+import { useFixtureName } from "#/shell/fixture-services";
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 const LocalDevice = createContext(true);
@@ -393,15 +394,29 @@ function pairingCode(input: string): string {
   }
 }
 
-export function RemoteDeviceGate({
-  name,
-  guidance,
-  children,
-}: {
+type DeviceGateProps = {
   name: string;
   guidance: ReactNode;
   children: ReactNode;
-}) {
+};
+export function RemoteDeviceGate(props: DeviceGateProps) {
+  const fixture = useFixtureName();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  return fixture !== null ? (
+    mounted ? (
+      <LocalDevice.Provider value={true}>{props.children}</LocalDevice.Provider>
+    ) : (
+      <LoadingContext name={props.name} says="Loading fixture…">
+        {props.guidance}
+      </LoadingContext>
+    )
+  ) : (
+    <HostDeviceGate {...props} />
+  );
+}
+
+function HostDeviceGate({ name, guidance, children }: DeviceGateProps) {
   const [state, setState] = useState<{
     environmentId: string;
     paired: boolean;

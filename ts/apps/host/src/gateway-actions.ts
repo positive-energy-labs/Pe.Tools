@@ -312,9 +312,11 @@ export function gatewayExecutor(
               .filter(
                 (doc) =>
                   !(
-                    caller.kind === "page" &&
-                    readTarget?.session === scriptSession.sessionId &&
-                    readTarget.openId === doc.openId
+                    readTarget &&
+                    (caller.kind === "pea" ||
+                      (caller.kind === "page" &&
+                        readTarget.session === scriptSession.sessionId &&
+                        readTarget.openId === doc.openId))
                   ),
               )
               .map((doc) => ({

@@ -164,7 +164,7 @@ describe("sharing", () => {
 });
 
 describe("shells", () => {
-  beforeEach(() => history.replaceState(null, "", "/?demo=blocked-plan"));
+  beforeEach(() => history.replaceState(null, "", "/?fixture=blocked-plan"));
   afterEach(() => history.replaceState(null, "", "/"));
 
   test("only a native tray capability can quit the host and open a window", () => {

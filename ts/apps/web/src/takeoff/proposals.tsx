@@ -10,6 +10,28 @@ import type { ReactNode } from "react";
 import { ReviewRow, reviewTransitions, type CellWire } from "#/components/work/band";
 import { cellFromDraft, fmtNum, StateCell } from "@pe/kit/lang/cell";
 import { useCellNavigation } from "@pe/kit/table/cell-navigation";
+import { useTakeoffKernel } from "./kernel-context";
+import type { TakeoffMount } from "./store";
+import type { CellTransition } from "@pe/kit/lang/cell";
+
+const transitions = (owner: TakeoffMount, segment: string | null, key: string): CellTransition[] =>
+  (
+    [
+      ["take", "take"],
+      ["unsuggest", "reject"],
+      ["clear", "reopen"],
+    ] as const
+  ).map(([kind, verb]) => {
+    const control = owner.control(`cell:${segment}.${verb}`, { segment, key });
+    return {
+      kind,
+      reason: control.refusal ?? control.label,
+      run: async () => {
+        const result = await control.run();
+        return "refusal" in result ? result.refusal : null;
+      },
+    };
+  });
 
 /** An adoption choice said as the person reads it. */
 export const showAdopt = (value: unknown) => {
@@ -46,21 +68,38 @@ export function TakeoffProposalRows({
   label: (key: string) => ReactNode;
   show: (value: unknown) => string;
 }) {
+  const owner = useTakeoffKernel();
   const rows = Object.entries(cells).filter(([key, cell]) => keep(key) && proposing(cell));
   if (!rows.length) return null;
   return (
     <div data-slot="takeoff-proposals" className="flex flex-col">
-      {rows.map(([key, cell]) => (
-        <ReviewRow
-          key={key}
-          wire={wire}
-          address={key}
-          label={<span className="t-small face-mono text-ink-2">pea proposes · {label(key)}</span>}
-          cell={cell}
-          facts={{ value: show((cell.edit ?? cell.suggestion)?.value), scale: "row" }}
-          show={show}
-        />
-      ))}
+      {rows.map(([key, cell]) =>
+        owner ? (
+          <div key={key} role="group" aria-label={`Proposal ${key}`}>
+            <span className="t-small face-mono text-ink-2">pea proposes · {label(key)}</span>
+            <StateCell
+              {...cellFromDraft(
+                cell,
+                { value: show((cell.edit ?? cell.suggestion)?.value), scale: "row" },
+                show,
+              )}
+              transitions={transitions(owner, wire.segment, key)}
+            />
+          </div>
+        ) : (
+          <ReviewRow
+            key={key}
+            wire={wire}
+            address={key}
+            label={
+              <span className="t-small face-mono text-ink-2">pea proposes · {label(key)}</span>
+            }
+            cell={cell}
+            facts={{ value: show((cell.edit ?? cell.suggestion)?.value), scale: "row" }}
+            show={show}
+          />
+        ),
+      )}
     </div>
   );
 }
@@ -88,6 +127,7 @@ export function TakeoffEditCell({
   wire: CellWire;
   onPatch: (value: number) => void;
 }) {
+  const owner = useTakeoffKernel();
   const move = useCellNavigation();
   const key = takeoffEditKey(roomId, field);
   const show = (raw: unknown) => fmtNum(Number(raw), digits);
@@ -105,7 +145,13 @@ export function TakeoffEditCell({
         },
         show,
       )}
-      transitions={cell ? reviewTransitions(wire, key, cell) : undefined}
+      transitions={
+        cell
+          ? owner
+            ? transitions(owner, wire.segment, key)
+            : reviewTransitions(wire, key, cell)
+          : undefined
+      }
       onCommit={(text) => onPatch(Number(text))}
       onNavigate={(direction) => move?.(direction) ?? false}
     />

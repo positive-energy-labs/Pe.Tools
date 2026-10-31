@@ -1,5 +1,5 @@
 import { field, text, type RouteDeclaration } from "../route-field.ts";
-import { demo, planViewport } from "./shared.ts";
+import { planViewport } from "./shared.ts";
 
 export const takeoffsAddress = {
   path: "/takeoffs",
@@ -9,7 +9,6 @@ export const takeoffsAddress = {
     zone: field(text(), { url: "push" }),
     room: field(text(), { url: "push" }),
     viewport: planViewport,
-    demo,
   },
   agent: {
     policy:

@@ -17,7 +17,6 @@ import {
 } from "#/family/model";
 import type { ProtoProposal } from "#/family/world";
 import { useMeasuredParse } from "#/host/measured-parse";
-import { useScopeKeys } from "@pe/kit/keys";
 
 export function useFamilyWorkspaceCore(store: FamilyStore) {
   const profile = store.profile;
@@ -63,8 +62,6 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
    * sidebar, or the cards would go dark exactly as you reached for them. */
   const pinnedParam = store.pinnedParam;
   const setPinnedParam = store.actions.setPinnedParam;
-  const anatomyCollapsed = store.anatomyCollapsed;
-  const setAnatomyCollapsed = store.actions.setAnatomyCollapsed;
   const target = store.target;
   /**
    * What the doc pane's LOWER HALF is showing. One slot, two subjects: a constituent's
@@ -80,23 +77,6 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const say = store.actions.say;
-
-  // Esc unwinds ONE thing, innermost first: the bind picker, then the inspector, then the
-  // drill-in. Each is a mode of a pane rather than a place, so leaving one must never feel like
-  // navigating — and collapsing them all at once would throw away context you did not ask to lose.
-  useScopeKeys([
-    {
-      hotkey: "Escape",
-      callback: () => {
-        if (binding != null) setBinding(null);
-        else if (inspect != null) setInspect(null);
-        else setDrillType(null);
-      },
-      label: "close current mode",
-      says: "close the bind picker, inspector, or drill-in",
-      options: { enabled: drillType != null || inspect != null || binding != null },
-    },
-  ]);
 
   /**
    * The last LOCATE, as a serial: the only thing that moves the sidebar or the sheet (N1). Hover
@@ -504,8 +484,6 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
     setFocusedProposal,
     pinnedParam,
     setPinnedParam,
-    anatomyCollapsed,
-    setAnatomyCollapsed,
     target,
     inspect,
     setInspect,

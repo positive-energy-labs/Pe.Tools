@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/** The chrome Settings popover carries the active route's own section through the `settings` slot. */
+/** The chrome Settings popover asks the kernel for the active registered graph. */
 import {
   createMemoryHistory,
   createRootRoute,
@@ -10,10 +10,16 @@ import {
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { ChromeSettings } from "./chrome-settings";
-import { PrimaryRouteControls, RouteControlsProvider } from "./route-controls";
+import { RouteControlsProvider } from "./route-controls";
 import { SurfaceHostProvider } from "./surface-host";
 
-afterEach(cleanup);
+vi.mock("#/shell/settings-registry", () => ({
+  RegisteredRouteSettings: ({ route }: { route?: string }) => <p>{route} registered settings</p>,
+}));
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 test("a primary route's settings section appears inside the Settings popover, and only there", async () => {
   vi.stubGlobal("matchMedia", () => ({
@@ -26,9 +32,6 @@ test("a primary route's settings section appears inside the Settings popover, an
       <SurfaceHostProvider>
         <RouteControlsProvider>
           <ChromeSettings />
-          <PrimaryRouteControls route="ducts" slot="settings">
-            <p>ducts own section</p>
-          </PrimaryRouteControls>
         </RouteControlsProvider>
       </SurfaceHostProvider>
     ),
@@ -41,6 +44,6 @@ test("a primary route's settings section appears inside the Settings popover, an
   await router.load();
   render(<RouterProvider router={router} />);
   fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
-  const section = await screen.findByText("ducts own section");
+  const section = await screen.findByText("ducts registered settings");
   expect(section.closest('[aria-label="Settings menu"]')).not.toBeNull();
 });

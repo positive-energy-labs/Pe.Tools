@@ -16,11 +16,10 @@ const issue = (id: string, kind: DuctSnapshot["issues"][number]["kind"], element
   kind,
   elementId,
   point: [0, 0, 0],
-  groupId: "g1",
   note: "",
 });
 
-/** One supply group off AHU 9: an open end, an accessory with no drop, an AHU with no fan static. */
+/** One supply group off AHU 9: an open end and an accessory with no drop. */
 const snapshot = {
   coordinateEncoding: "native-double",
   document: {
@@ -39,7 +38,7 @@ const snapshot = {
       terminalCount: 1,
       elementCount: 4,
       loops: 0,
-      issueIds: ["open-end:g1:2:1", "no-component-drop:g1:3", "no-fan-static:g1:9"],
+      issueIds: ["open-end:2:1", "no-component-drop:3"],
     },
   ],
   nodes: [
@@ -65,9 +64,8 @@ const snapshot = {
   segments: [],
   flows: [],
   issues: [
-    issue("open-end:g1:2:1", "open-end", 2),
-    issue("no-component-drop:g1:3", "no-component-drop", 3),
-    issue("no-fan-static:g1:9", "no-fan-static", 9),
+    issue("open-end:2:1", "open-end", 2),
+    issue("no-component-drop:3", "no-component-drop", 3),
   ],
   layers: [],
   systems: [],
@@ -96,21 +94,20 @@ it("a group climbs from blocked to walkable to budgetable as a person stages ass
   let doc = ductsRouteState.schema.parse({});
   expect(readiness(snapshot, doc).g1).toEqual({
     level: "blocked",
-    walk: ["open-end:g1:2:1"],
-    budget: ["no-component-drop:g1:3", "no-fan-static:g1:9"],
+    walk: ["open-end:2:1"],
+    budget: ["no-component-drop:3"],
   });
-  doc = stage(doc, "open-end:g1:2:1", { kind: "verdict", verdict: "capped" });
+  doc = stage(doc, "open-end:2:1", { kind: "verdict", verdict: "capped" });
   expect(readiness(snapshot, doc).g1?.level).toBe("walkable");
   // A suggestion is not an assumption until a person stages it.
   const proposed = ductsRouteState.schema.parse({
     ...doc,
     assumptions: {
       ...doc.assumptions,
-      "fan-static:9": { suggestion: { value: { kind: "fan-static", inWg: 0.5 } } },
+      "component-drop:Damper": { suggestion: { value: { kind: "component-drop", inWg: 0.05 } } },
     },
   });
   expect(readiness(snapshot, proposed).g1?.level).toBe("walkable");
-  doc = stage(doc, "fan-static:9", { kind: "fan-static", inWg: 0.5 });
   doc = stage(doc, "component-drop:Damper", { kind: "component-drop", inWg: 0.05 });
   expect(readiness(snapshot, doc).g1).toEqual({ level: "budgetable", walk: [], budget: [] });
 });

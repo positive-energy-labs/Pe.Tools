@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { AppSurface, Machine, Reading } from "@pe/agent-contracts";
 import { Accordion, type AccordionGroup } from "@pe/kit/lang/accordion";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
+import { SwitchRow } from "@pe/kit/lang/switch-row";
 import { useDiagnostics, type DiagnosticsState } from "#/host/diagnostics";
 import {
   attention,
@@ -70,6 +71,14 @@ function PeaSettings({ machine, fixture }: { machine: Machine; fixture: boolean 
   return (
     <div className="flex flex-col gap-3">
       <ProviderSetup providers={providers} />
+      <SwitchRow
+        label="Agent approvals"
+        says="Ask before each Pea tool call. Off: Pea's reads and tool calls run without asking; consequential writes still use the turn's consent."
+        checked={providers.access?.guarded ?? true}
+        disabled={fixture || providers.access === undefined}
+        refusal={providers.access?.readError}
+        onCheckedChange={(guarded) => void providers.setAccess(guarded)}
+      />
     </div>
   );
 }

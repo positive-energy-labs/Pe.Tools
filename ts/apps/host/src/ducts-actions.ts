@@ -4,6 +4,7 @@ import {
   ductsHealInputSchema,
   nativeProcessSchema,
   type DuctsHealInput,
+  type DuctsApplyInput,
 } from "@pe/agent-contracts";
 import { healPlan, healRequestGroup } from "@pe/ducts-domain/heal";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
@@ -14,6 +15,9 @@ import type { ActionExecution } from "./action-journal.ts";
 import { lifetime } from "./family-actions.ts";
 import type { SdkReceiptReader } from "./native-receipts.ts";
 import { nativeInputSchema } from "./native-input.ts";
+import { ductsReadings } from "./ducts-readings.ts";
+import { appliedCellPaths } from "@pe/ducts-domain/staged";
+import type { DuctsApply } from "@pe/host-contracts/generated";
 
 const losses = (preview: boolean) =>
   nativeInputSchema("ducts.apply").refine((input) => input.previewOnly === preview);
@@ -122,13 +126,36 @@ export function ductsExecutors(
     );
     return { value, target: { session: target.session, document: null } };
   };
-  const runLosses = (ctx: CommandContext, execution: ActionExecution) =>
-    run(ctx, execution, "ducts.apply");
+  const runLosses = async (ctx: CommandContext, execution: ActionExecution) => {
+    const result = await run(ctx, execution, "ducts.apply");
+    const input = ctx.admission.input as DuctsApplyInput & {
+      work?: import("@pe/agent-contracts").WorkHandle;
+    };
+    const response = result.value as DuctsApply.Res.Response;
+    const paths = appliedCellPaths(input, response);
+    // ActionJournal retires only the exact consumed edit, so a concurrent replacement survives.
+    const retired =
+      input.work && paths.length
+        ? await execution.retireWork(input.work.key, "ducts", paths)
+        : undefined;
+    return { ...result, ...(retired ? { retired } : {}) };
+  };
   const runHeal = (ctx: CommandContext, execution: ActionExecution) =>
     run(ctx, execution, "ducts.heal");
   const runFan = (ctx: CommandContext, execution: ActionExecution) =>
     run(ctx, execution, "ducts.assign-fan");
   return {
+    "ducts.refresh": command(commands["ducts.refresh"], z.null(), {
+      bind: async (ctx) => {
+        targetOf(ctx);
+        return { effects: [] };
+      },
+      run: async (ctx) => {
+        const target = targetOf(ctx);
+        ductsReadings(bridge).refresh(target);
+        return { target, refreshed: true };
+      },
+    }),
     "ducts.preview-losses": command(commands["ducts.preview-losses"], prepared(losses(true)), {
       bind: (ctx) => bindLosses(ctx, true),
       run: runLosses,

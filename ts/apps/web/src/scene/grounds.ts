@@ -42,7 +42,8 @@ export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
     opacity: num("Subject opacity", 0.98, [0.05, 1, 0.01]),
     stubOpacity: num("Stub opacity", 0.35, [0.05, 1, 0.01]),
     stubGroundMix: num("Stub mix toward ground", 0.25, [0, 1, 0.01]),
-    stubEndAlpha: num("Stub fade floor × opacity", 0.06, [0, 1, 0.01]),
+    // The far end of a stub's colour gradient reads as context, not as nothing (was 0.06, an alpha fade).
+    stubEndAlpha: num("Stub context-end alpha × opacity", 0.5, [0, 1, 0.01]),
   },
   depth: {
     rim: num("Duct rim contrast", 0.18, [0, 0.8, 0.01]),

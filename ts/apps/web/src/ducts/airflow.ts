@@ -30,11 +30,6 @@ export interface AirflowOption {
 /** Which elements a slot reads: terminals (`terminalFlow`) or units (`fanFlow`). */
 export type AirflowOf = "terminal" | "unit";
 
-// firm-default: the snapshot reports the slots it read; these are only for a snapshot that predates them.
-const DEFAULT_SLOT: Record<AirflowOf, string> = {
-  terminal: "PE_M_Grd_AirFlow",
-  unit: "PE_M_Fan_AirFlowDesign",
-};
 const NOUN: Record<AirflowOf, string> = { terminal: "terminal", unit: "unit" };
 
 /**
@@ -49,9 +44,7 @@ export function airflowOptions(
   scope: Pick<SystemScope, "groups" | "terminals" | "units"> | null,
   of: AirflowOf = "terminal",
 ): { current: string; options: AirflowOption[] } {
-  // A snapshot read before the slot was reported (or a test's partial one) reads the default.
-  const current =
-    (of === "unit" ? snapshot.slots?.fanFlow : snapshot.slots?.terminalFlow) ?? DEFAULT_SLOT[of];
+  const current = of === "unit" ? snapshot.slots.fanFlow : snapshot.slots.terminalFlow;
   const kind = of === "unit" ? "equipment" : "terminal";
   const members =
     (scope ? (of === "unit" ? scope.units : scope.terminals) : null) ??

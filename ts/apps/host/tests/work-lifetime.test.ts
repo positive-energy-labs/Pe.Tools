@@ -104,7 +104,14 @@ test("HTTP Work shares edits independently of thread targets and refuses forged 
     fetch(`${base}/pe/route-state/ducts${patches ? "/apply" : ""}?${search}`, {
       headers: { "content-type": "application/json", "x-test-author": caller.kind },
       ...(patches
-        ? { method: "POST", body: JSON.stringify({ patches, expectedRevision: revision }) }
+        ? {
+            method: "POST",
+            body: JSON.stringify({
+              patches,
+              expectedRevision: revision,
+              press: caller.kind === "human" ? crypto.randomUUID() : null,
+            }),
+          }
         : {}),
     });
   try {
@@ -274,7 +281,11 @@ test("HTTP addressless Work survives workspace recreation and Save As carries it
       new Request(`${path.replace("?", "/apply?")}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ expectedRevision: 0, patches: [{ path: ["count"], value: 7 }] }),
+        body: JSON.stringify({
+          expectedRevision: 0,
+          press: crypto.randomUUID(),
+          patches: [{ path: ["count"], value: 7 }],
+        }),
       }),
     );
     expect(await written.json()).toMatchObject({ ok: true, revision: 1 });
@@ -291,7 +302,11 @@ test("HTTP addressless Work survives workspace recreation and Save As carries it
       new Request(path.replace("?", "/apply?"), {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ expectedRevision: 1, patches: [{ path: ["count"], value: 9 }] }),
+        body: JSON.stringify({
+          expectedRevision: 1,
+          press: crypto.randomUUID(),
+          patches: [{ path: ["count"], value: 9 }],
+        }),
       });
     expect(await (await asHuman(app)(apply())).json()).toMatchObject({ ok: true });
     const addressed = `${path}&target=${encodeURIComponent("C:\\Models\\Saved.rvt")}`;
@@ -364,6 +379,7 @@ test("host HTTP preserves addressless Work through close and replacement bridge 
                     headers: { "content-type": "application/json" },
                     body: JSON.stringify({
                       expectedRevision: 0,
+                      press: crypto.randomUUID(),
                       patches: [{ path: ["count"], value: 7 }],
                     }),
                   }),
@@ -513,7 +529,11 @@ test("HTTP authored writes enforce short local revision checks", async () => {
     await (
       await post(
         "/pe/route-state/test-route/apply",
-        { patches: [{ path: ["values", "http"], value: "landed" }], expectedRevision: 0 },
+        {
+          patches: [{ path: ["values", "http"], value: "landed" }],
+          expectedRevision: 0,
+          press: null,
+        },
         pea(),
       )
     ).json(),
@@ -533,7 +553,11 @@ test("HTTP authored writes enforce short local revision checks", async () => {
   expect(
     await (await post("/pe/route-state/test-route/apply", { patches: [] }, pea())).json(),
   ).toMatchObject({ error: expect.stringMatching(/^invalid body at expectedRevision: /) });
-  const edit = { patches: [{ path: ["count"], value: 1 }], expectedRevision: 1 };
+  const edit = {
+    patches: [{ path: ["count"], value: 1 }],
+    expectedRevision: 1,
+    press: crypto.randomUUID(),
+  };
   expect(await (await post("/pe/route-state/test-route/apply", edit)).json()).toMatchObject({
     ok: true,
     revision: 2,

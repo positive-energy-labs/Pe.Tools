@@ -10,7 +10,7 @@ import { storedRuling } from "@pe/ducts-domain/rulings";
 import type { Priced } from "@pe/ducts-domain/pricing";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { cellFromDraft, StateCell } from "@pe/kit/lang/cell";
-import { reviewTransitions, type CellWire } from "#/components/work/band";
+import { useCellTransitions } from "../../pane-context";
 
 import { rulingPatches } from "../../assumptions";
 import { equipmentInputs, terminalInputs, type Resolved } from "../../inputs";
@@ -90,7 +90,7 @@ function InputCell({
   const key = String(id);
   const cell = work.doc?.[spec.segment][key] ?? {};
   const standing = (cell.edit ?? cell.suggestion)?.value as Rung | undefined;
-  const wire: CellWire = { segment: spec.segment, revision: work.revision, write: work.write };
+  const transitions = useCellTransitions(spec.segment, key);
   const word = cell.edit ? "override" : cell.suggestion ? "Pea proposes" : resolved.word;
   const value = spec.text(standing) ?? (resolved.value == null ? "" : String(resolved.value));
   return (
@@ -123,7 +123,7 @@ function InputCell({
             )
             .then((refusal) => refusal?.message)
         }
-        transitions={reviewTransitions(wire, key, cell)}
+        transitions={transitions}
       />
       {spec.unit.label === "in-wg" && value !== "" ? (
         <PressureEquivalent inWg={Number(value)} />
@@ -154,7 +154,7 @@ function RoleCell({
   const key = String(id);
   const cell = work.doc?.roles[key] ?? {};
   const standing = (cell.edit ?? cell.suggestion)?.value;
-  const wire: CellWire = { segment: "roles", revision: work.revision, write: work.write };
+  const transitions = useCellTransitions("roles", key);
   const stored = storedRuling(store, "roles", key);
   const word =
     cell.edit && stored === cell.edit.value.role
@@ -187,7 +187,7 @@ function RoleCell({
             .write(rulingPatches(work.doc, store, "roles", key, role) as never)
             .then((refusal) => refusal?.message);
         }}
-        transitions={reviewTransitions(wire, key, cell)}
+        transitions={transitions}
       />
       <TooltipHint content={resolved.reason}>
         <span className="dl-cells-note t-small" data-e-source={word ?? ""}>

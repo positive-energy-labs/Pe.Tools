@@ -370,8 +370,8 @@ new AgentSideConnection(
       }
       const toolCall = {
         toolCallId: `t-${text}`,
-        title: "fake tool",
-        kind: text.includes("raw-write") ? "edit" : "read",
+        title: text.includes("mcp") ? "mcp__pea__pe_find" : "fake tool",
+        kind: text.includes("raw-write") ? "edit" : text.includes("mcp") ? "other" : "read",
         status: "pending",
       };
       await conn.sessionUpdate({ sessionId, update: { sessionUpdate: "tool_call", ...toolCall } });

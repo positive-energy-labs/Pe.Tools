@@ -128,7 +128,26 @@ interface StateCellBase {
   refused?: string;
 }
 
-/** A cell commits text (`onCommit`) or a measured value (`measured`), never both. */
+/** One value of a choice cell's closed set: what it is called, and what picking it means. */
+export interface CellOption {
+  key: string;
+  label: string;
+  /** What the option means for whatever reads the cell; never the mechanism that writes it. */
+  description?: string;
+  /**
+   * Present, the option stays listed but greyed and cannot be picked by mouse or keyboard; the
+   * reason is drawn in place of the description. For a value the world refuses, never a hidden one.
+   */
+  disabled?: string;
+}
+
+/** What picking an option commits: a refusal back, or nothing (the same contract as `onCommit`). */
+export type CellPick = (key: string) => string | void | Promise<string | CellRefusal | null | void>;
+
+/**
+ * A cell commits text (`onCommit`), a measured value (`measured`), or one of a closed set of
+ * options (`choice`), never two.
+ */
 export type StateCellProps = StateCellBase &
   (
     | {
@@ -146,6 +165,7 @@ export type StateCellProps = StateCellBase &
          */
         onCommit?: CellCommit;
         measured?: never;
+        choice?: never;
       }
     | {
         /**
@@ -168,6 +188,21 @@ export type StateCellProps = StateCellBase &
           ) => string | void | Promise<string | CellRefusal | null | void>;
         };
         onCommit?: never;
+        choice?: never;
+      }
+    | {
+        /**
+         * The choice cell: a closed option set, picked from a list under the cell. The body, fill,
+         * squiggle and marks are the text cell's, so a Pea suggestion of an option draws as
+         * proposed (`cellFromDraft` with a `show` that names the option) and take / unsuggest /
+         * clear ride `transitions` as on any cell. `value` is the shown option's label; `current`
+         * is the key standing now (the edit or the source underneath), marked selected in the list.
+         * A pick of `current` commits nothing. Requires `scale="row"`; `cap` other than editable
+         * draws the value locked, with no list.
+         */
+        choice: { options: readonly CellOption[]; current: string | null; pick: CellPick };
+        onCommit?: never;
+        measured?: never;
       }
   );
 

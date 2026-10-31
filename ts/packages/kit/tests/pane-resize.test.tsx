@@ -277,6 +277,64 @@ test("an unset other-side floor is the sized side's: too narrow for both stacks,
   expect(parseFloat(getComputedStyle(wide).getPropertyValue("--pane-size"))).toBe(900 - 8 - 320);
 });
 
+test.each([628, 627, 538])(
+  "nested support yields at %spx before its ancestor can hide the subject",
+  async (width) => {
+    measure(900);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: HTMLElement) {
+        return new DOMRect(0, 0, this.dataset.layoutSplit === "drawing" ? width : 900, 600);
+      },
+    );
+    const { container } = render(
+      <PaneSplit
+        id="dock"
+        axis="horizontal"
+        start="chat"
+        end={
+          <div>
+            <PaneSplit
+              id="drawing"
+              axis="horizontal"
+              start={<input aria-label="Picture" defaultValue="kept" />}
+              end="rulings"
+              resize={{
+                target: "end",
+                defaultSize: 340,
+                minSize: 260,
+                minOtherSize: 360,
+                collapse: {
+                  collapsed: null,
+                  onCollapsedChange: () => {},
+                  end: { title: "Rulings" },
+                },
+              }}
+            />
+          </div>
+        }
+        resize={{
+          target: "end",
+          defaultSize: 620,
+          minSize: 420,
+          minOtherSize: 280,
+          collapse: {
+            collapsed: null,
+            onCollapsedChange: () => {},
+            start: { title: "chat" },
+            end: { title: "tools" },
+          },
+        }}
+      />,
+    );
+    await act(async () => {});
+    expect(container.firstElementChild?.getAttribute("data-pane-folded")).toBeNull();
+    expect(screen.getByRole("textbox", { name: "Picture" })).toBeTruthy();
+    const drawing = container.querySelector<HTMLElement>('[data-layout-split="drawing"]')!;
+    expect(drawing.dataset.paneFolded).toBe(width < 628 ? "end" : undefined);
+    if (width < 628) expect(screen.getByRole("button", { name: "Expand Rulings" })).toBeTruthy();
+  },
+);
+
 test("container fitting restores the preferred size when room returns without persisting the fit", () => {
   measure(1200);
   let resized: (entries: { contentRect: DOMRect }[]) => void;

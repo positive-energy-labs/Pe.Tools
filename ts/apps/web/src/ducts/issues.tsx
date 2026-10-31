@@ -41,42 +41,23 @@ export const ISSUE_KINDS: Record<IssueKind, IssueKindInfo> = {
     1,
   ),
   loop: kind("loop", "loop", "The network closes on itself, so flow direction is ambiguous.", 2),
-  "no-root": kind("no-root", "no root", "No equipment port feeds the network.", 3),
-  "multi-root": kind(
-    "multi-root",
-    "many roots",
-    "More than one equipment port feeds the network.",
-    4,
-  ),
   "no-terminal-flow": kind(
     "no-terminal-flow",
     "terminal no flow",
     "A terminal states no design flow.",
-    5,
-  ),
-  "no-fan-static": kind(
-    "no-fan-static",
-    "no fan static",
-    "The root equipment states no external static pressure.",
-    1,
+    3,
   ),
   "no-component-drop": kind(
     "no-component-drop",
     "no component drop",
     "An accessory in the path states no pressure drop.",
-    2,
+    1,
   ),
   "default-flex-roughness": kind(
     "default-flex-roughness",
     "default flex roughness",
     "Flex carries the rigid galvanized roughness Revit ships.",
-    3,
-  ),
-  "no-flow-leg": kind(
-    "no-flow-leg",
-    "no-flow leg",
-    "A tee or tap leg carries no flow; every table prices it 0, so the leg is not on the budget.",
-    4,
+    2,
   ),
   stub: kind("stub", "stub", "A duct under 3 in long, a connector stub between fittings.", 1),
   "implausible-size": kind(
@@ -85,10 +66,10 @@ export const ISSUE_KINDS: Record<IssueKind, IssueKindInfo> = {
     "A size or aspect ratio no real duct has.",
     2,
   ),
-  "mixed-classification": kind(
-    "mixed-classification",
-    "mixed systems",
-    "The network carries more than one system classification.",
+  "air-type-change": kind(
+    "air-type-change",
+    "air type change",
+    "A joint where two connectors state different air classifications.",
     3,
   ),
   "high-velocity": kind(
@@ -96,6 +77,18 @@ export const ISSUE_KINDS: Record<IssueKind, IssueKindInfo> = {
     "high velocity",
     "Revit reports 2000 fpm or more on the segment.",
     4,
+  ),
+  "near-miss": kind(
+    "near-miss",
+    "near miss",
+    "An open end with a vacant, opposed connector within the auto-join gap.",
+    5,
+  ),
+  inline: kind(
+    "inline",
+    "inline part",
+    "A damper or fitting inside a duct, aligned with it, connected to nothing; priced in series on it.",
+    6,
   ),
 };
 

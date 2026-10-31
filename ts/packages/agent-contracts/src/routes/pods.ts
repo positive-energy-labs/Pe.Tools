@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { field, text, type RouteDeclaration } from "../route-field.ts";
-import { demo } from "./shared.ts";
 
 export const podsAddress = {
   path: "/pods",
@@ -14,7 +13,6 @@ export const podsAddress = {
     path: field(text(1024), { url: "push", agent: "read" }),
     /** The runs pane lists the open member's runs, or the whole pod's (a draft's run has no member). */
     runs: field(z.enum(["member", "pod"]).default("member"), { url: "replace", agent: "set" }),
-    demo,
   },
   agent: {
     finds: ["pod", "member", "runs"],

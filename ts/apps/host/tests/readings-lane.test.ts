@@ -17,6 +17,7 @@ function open(logFrames: number) {
   const response = resourceResponse(new Request(url), observe, {
     frameBytes: 1 << 20,
     worldEvents: 64,
+    workAckEvents: 128,
     stallMs: 10_000,
     logFrames,
   });

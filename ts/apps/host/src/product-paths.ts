@@ -28,6 +28,7 @@ export const productHarnessThreadsPath = () => productStatePath("harness-threads
 
 /** Route Work documents (`pe-routes.ts`): one JSON file per route and Work key. */
 export const productRouteWorkPath = () => productStatePath("route-work");
+export const productRouteSettingsPath = () => productStatePath("route-settings");
 
 /** Immutable headless Ducts calculations, including their complete effective inputs. */
 export const productDuctsAnalysesPath = () => productStatePath("ducts", "analyses");

@@ -1,6 +1,6 @@
 /**
  * The machine body over every recorded machine moment: the same seeds the tests and the
- * `/open?demo=` lane draw, at the tray's 380 px. Nothing here reaches a host.
+ * `/open?fixture=` lane draw, at the tray's 380 px. Nothing here reaches a host.
  */
 import { useState } from "react";
 

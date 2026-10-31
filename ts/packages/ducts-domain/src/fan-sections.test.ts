@@ -92,7 +92,7 @@ const snapshot = (flows: { ahu?: number; dh?: number } = { ahu: 800, dh: 100 }) 
         terminalCount: 2,
         elementCount: 10,
         loops: 0,
-        issueIds: ["multi-root:g10"],
+        issueIds: [],
       },
     ],
     nodes: [
@@ -125,7 +125,7 @@ const snapshot = (flows: { ahu?: number; dh?: number } = { ahu: 800, dh: 100 }) 
       duct(16, [50, 3]),
     ],
     flows: [],
-    issues: [{ id: "multi-root:g10", kind: "multi-root", groupId: "g10", note: "3 roots" }],
+    issues: [],
     layers: [],
     systems: [],
     slots: {},

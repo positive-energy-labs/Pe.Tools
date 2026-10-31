@@ -1,7 +1,6 @@
 import { Suspense } from "react";
 import type { PlaneViewport } from "@pe/agent-contracts";
 import { stageViewport } from "#/scene/stage-controller";
-import { Button } from "@pe/kit/lang/button";
 import { Switcher } from "@pe/kit/lang/switcher";
 import { LevelPlan } from "#/takeoff/level-plan";
 import { LevelTotals } from "#/takeoff/level-totals";
@@ -9,11 +8,9 @@ import { ZoneFacts } from "#/takeoff/zone-facts";
 import { PictureReadout } from "@pe/kit/lang/readout";
 import { useAtlasWorkspace } from "#/takeoff/atlas-context";
 import { ScopeKeys } from "@pe/kit/keys";
-import { levelsOf } from "#/takeoff/plan-image";
-import { useRouteSearch } from "#/route/activity";
+import { levelsOf } from "#/takeoff/plan";
 
-export function AtlasVisual() {
-  const search = useRouteSearch();
+export function AtlasVisual({ visible, thread }: { visible: boolean; thread?: string }) {
   const {
     store,
     world,
@@ -21,11 +18,9 @@ export function AtlasVisual() {
     tableState,
     zoneKey,
     cursor,
-    planOpen,
     level,
     planImage,
     setLevel,
-    setPlanOpen,
     stateOf,
     zoneCalls,
     selected,
@@ -38,14 +33,14 @@ export function AtlasVisual() {
     <Suspense fallback={<div className="t-small t-upper p-2 text-ink-2">reading plan…</div>}>
       <LevelPlan
         lease={{
-          thread: store.handle.thread ?? search.thread,
+          thread,
           visible:
-            planOpen &&
+            visible &&
             !!store.displayedCapture &&
             (store.source === "saved" || store.snapshot.state === "ready"),
           page: store.handle.page,
           context: {
-            source: store.handle.demo ? "fixture" : store.source,
+            source: store.handle.fixture ? "fixture" : store.source,
             captureId: store.displayedCapture?.id,
             capturedAt: store.displayedCapture?.capturedAt,
             observedDocument: store.displayedCapture?.provenance.target,
@@ -95,21 +90,6 @@ export function AtlasVisual() {
                   };
                 })}
               />
-
-              <span className="hairline-l ml-1 flex items-center gap-1 pl-1">
-                <Button
-                  kind="framed"
-                  label={planOpen ? "▴ hide plan" : "▾ show plan"}
-                  onClick={() => setPlanOpen(!planOpen)}
-                  reason={
-                    planOpen
-                      ? "collapse the plan — give the table the full height"
-                      : "show the plan"
-                  }
-                >
-                  <span className="face-mono">{planOpen ? "▴ hide plan" : "▾ show plan"}</span>
-                </Button>
-              </span>
             </div>
           </>
         }

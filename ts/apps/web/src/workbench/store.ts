@@ -3,7 +3,7 @@ import type { PaneSide } from "@pe/kit/lang/pane";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 
-import { createRouteOwner } from "#/route/route-owner";
+import { createRouteOwner } from "#/shell/owner";
 import type { ClosedWork, Resumed } from "#/chat/thread-work";
 import { type RouteKey, type LinkPage, type Carry } from "@pe/agent-contracts";
 
@@ -20,7 +20,7 @@ type Setter<A> = A | ((previous: A) => A);
 export function createChatPageStore(deps: {
   registry: AtomRegistry.AtomRegistry;
   search: ChatSearch;
-  /** `?demo=`: tab writes stay in this browser and never reach a host thread. */
+  /** `?fixture=`: tab writes stay in this browser and never reach a host thread. */
   local?: boolean;
 }) {
   let tabs: {

@@ -41,3 +41,14 @@ export const stageTeaching = (): readonly TeachDescriptor[] => [
     items: [...actionTeaching(Object.values(STAGE_ACTIONS)), ...ORBIT_GESTURES],
   },
 ];
+
+/** The picture's two modes, the model and a surface's flat picture, as the pane strip and Help
+ * teach them; `S` swaps them. */
+export const pictureModes = (flat: { key: string; label: string; says?: string }) => [
+  { key: "model", label: "model", says: "The model large, the other in the corner" },
+  {
+    key: flat.key,
+    label: flat.label,
+    says: flat.says ?? `The ${flat.label} large, the other in the corner`,
+  },
+];

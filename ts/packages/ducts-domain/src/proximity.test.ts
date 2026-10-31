@@ -9,7 +9,8 @@
 import { expect, it } from "vite-plus/test";
 import { ductsDocumentSchema, type DuctsRouteDocument } from "@pe/agent-contracts";
 
-import { inferJoints, tolerate, MISSED_JOIN_MAX_IN } from "./proximity.ts";
+import { axisOf, inferJoints, tolerate, MISSED_JOIN_MAX_IN } from "./proximity.ts";
+import { withHealth } from "./sheet/health.fixture.ts";
 import { survey } from "./survey.ts";
 import { groupTree } from "./topology.ts";
 import type { DuctSnapshot } from "./types.ts";
@@ -72,11 +73,11 @@ const snap = (segments: Segment[], nodes: Node[] = []): DuctSnapshot => {
     s.connectors
       .filter((c) => !c.connectedTo)
       .map((c) => ({
-        id: `open-end:${s.groupId}:${s.id}:${c.index}`,
+        id: `open-end:${s.id}:${c.index}`,
         kind: "open-end" as const,
         elementId: s.id,
+        connector: c.index,
         point: c.point,
-        groupId: s.groupId!,
         note: "open",
       })),
   );
@@ -98,7 +99,9 @@ const snap = (segments: Segment[], nodes: Node[] = []): DuctSnapshot => {
       terminalCount: 0,
       elementCount: [...segments, ...nodes].filter((s) => s.groupId === id).length,
       loops: 0,
-      issueIds: issues.filter((i) => i.groupId === id).map((i) => i.id),
+      issueIds: issues
+        .filter((i) => segments.find((s) => s.id === i.elementId)?.groupId === id)
+        .map((i) => i.id),
     })),
     nodes,
     segments,
@@ -120,6 +123,58 @@ const staging = (id: string, verdict: "ignore" | "connect"): DuctsRouteDocument 
     assumptions: { [id]: { edit: { value: { kind: "verdict", verdict } } } },
   });
 const ignoring = (id: string) => staging(id, "ignore");
+
+it.each([6311356, 7320242])(
+  "an opened Chadds side port with a captured facing joins terminal %s without an axis",
+  (terminalId) => {
+    // Geometry from Pe.Tools-sheet/.artifacts/tmp/netstage-census/chadds-snapshot-health.before.json:
+    // SA 27 terminal 6311356:1 and duct 7320241:3, opened here. The second id reverses pair order.
+    const point = [335.7205, 643.7165, -5.1667];
+    const main: Segment = rect(7320241, [335.4553, 643.9817, -5.1667], point, 8, 4, "g6311356");
+    const port: Connector = {
+      ...main.connectors[0]!,
+      index: 3,
+      kind: "curve",
+      point,
+      facing: [0.707, -0.707, 0],
+      widthAxis: [-0.707, -0.707, 0],
+    };
+    main.connectors = [port];
+    const terminal: Node = {
+      id: terminalId,
+      kind: "terminal",
+      category: "Air Terminals",
+      family: "Price LBP15A Supply",
+      type: "8 X 4 W",
+      point: [335.7829, 643.6541, -5.1667],
+      groupId: main.groupId,
+      systemName: "SA 27",
+      classification: "Supply Air",
+      connectors: [{ ...port, index: 1, kind: "end", facing: [-0.707, 0.707, 0] }],
+      facts: [],
+    };
+    const raw = snap([main], [terminal]);
+    expect(axisOf(main, port)).toBeNull();
+    const inference = inferJoints(raw);
+    expect(inference.joints).toMatchObject([{ grade: "stretched", gapIn: 0 }]);
+    expect(inference.taps).toEqual([]);
+    expect(inference.findings).toMatchObject([
+      {
+        kind: "joined-by-proximity",
+        grade: "stretched",
+        elementIds: expect.arrayContaining([main.id, terminalId]),
+      },
+    ]);
+    expect(tolerate(raw).links).toMatchObject([{ grade: "stretched", ruled: false }]);
+    expect(survey(raw, null).findings).toContainEqual(
+      expect.objectContaining({
+        kind: "joined-by-proximity",
+        clearer: "person",
+        assumed: expect.any(String),
+      }),
+    );
+  },
+);
 
 it("reports a facing 2.88 in gap without joining it, while a 1.5 in gap still infers", () => {
   const at = (gapIn: number) =>
@@ -208,13 +263,10 @@ it("a 0.4 in gap joins the two open ends and merges their groups", () => {
   expect(findings.map((f) => f.id)).toEqual(["proximity:1:2|2:1"]);
   expect(snapshot.segments[0]!.connectors[1]!.connectedTo).toEqual({ elementId: 2, connector: 1 });
   expect(snapshot.segments[1]!.connectors[0]!.connectedTo).toEqual({ elementId: 1, connector: 2 });
-  // An absorbed group's issue ids keep their prefix: a verdict cell is keyed on the id as read.
-  expect(snapshot.issues.map((i) => [i.id, i.groupId])).toEqual([
-    ["open-end:g1:1:1", "g1"],
-    ["open-end:g2:2:2", "g1"],
-  ]);
+  // An absorbed group's issue ids stay as read: a verdict cell is keyed on the id as read.
+  expect(snapshot.issues.map((i) => i.id)).toEqual(["open-end:1:1", "open-end:2:2"]);
   expect(snapshot.groups.map((g) => [g.id, g.elementCount, g.issueIds])).toEqual([
-    ["g1", 2, ["open-end:g1:1:1", "open-end:g2:2:2"]],
+    ["g1", 2, ["open-end:1:1", "open-end:2:2"]],
   ]);
   expect(groupTree(snapshot, "g1").parent.get(2)).toBe(1);
   // The input is untouched.
@@ -258,9 +310,9 @@ it("a branch end 0.3 in off a main's side becomes a virtual tap on the main", ()
   });
   expect(snapshot.segments[1]!.connectors[0]!.connectedTo).toEqual({ elementId: -1, connector: 1 });
   expect(snapshot.issues.map((i) => i.id)).toEqual([
-    "open-end:g1:1:1",
-    "open-end:g1:1:2",
-    "open-end:g2:2:2",
+    "open-end:1:1",
+    "open-end:1:2",
+    "open-end:2:2",
   ]);
   expect(snapshot.groups.map((g) => [g.id, g.elementCount])).toEqual([["g1", 3]]);
   const tree = groupTree(snapshot, "g1");
@@ -276,7 +328,7 @@ it("a edit ignore verdict on the finding id withholds that inference", () => {
   const out = tolerate(before, ignoring("proximity:1:2|2:1"));
   expect(out.joints).toEqual([]);
   expect(out.snapshot).toBe(before);
-  expect(out.snapshot.issues.map((i) => i.id)).toContain("open-end:g1:1:2");
+  expect(out.snapshot.issues.map((i) => i.id)).toContain("open-end:1:2");
 });
 
 it("an inferred joint that closes a ring is also a loop-by-inference finding", () => {
@@ -383,12 +435,19 @@ const damper = (id: number, at: number[], facing = false): Node => {
   };
 };
 
-it("a damper inside a duct's body, aligned with it, neither end connected, is inline on it", () => {
+/** C# finds inline parts (DuctHealth.Inline, ducts LEDGER 2026-10-29); the route only splices what it found. */
+const inlineSnap = (segments: Segment[], nodes: Node[]) => {
+  const s = snap(segments, nodes);
+  return { ...s, issues: withHealth(s).issues };
+};
+
+it("a damper C# finds inside a duct's body is spliced inline on it", () => {
   const host = duct(1, [0, 0, 0], [10, 0, 0], "g1");
   const next = duct(3, [10, 0, 0], [20, 0, 0], "g1");
   link(host, 2, next, 1);
-  for (const facing of [false, true]) {
-    const before = snap([host, next], [damper(9, [4, 0, 0], facing)]);
+  for (const before of [false, true].map((facing) =>
+    inlineSnap([host, next], [damper(9, [4, 0, 0], facing)]),
+  )) {
     const { inline, taps, joints, findings, links, snapshot } = tolerate(before);
     const id = "proximity:9|1";
     expect([taps, joints]).toEqual([[], []]);
@@ -436,36 +495,30 @@ it("a damper inside a duct's body, aligned with it, neither end connected, is in
       { elementId: 1, connector: 3 },
     ]);
     expect(snapshot.groups.map((g) => [g.id, g.elementCount])).toEqual([["g1", 4]]);
-    expect(snapshot.issues.map((i) => i.id)).toEqual(["open-end:g1:1:1", "open-end:g1:3:2"]);
+    expect(snapshot.issues.map((i) => i.id).filter((i) => i.startsWith("open-end:"))).toEqual([
+      "open-end:1:1",
+      "open-end:3:2",
+    ]);
+    expect(snapshot.issues.map((i) => i.id)).toContain("inline:9");
     const tree = groupTree(snapshot, "g1");
     expect([...tree.parts.keys()].sort((a, b) => a - b)).toEqual([-1, 1, 3, 9]);
     expect(before.segments[0]!.connectors).toHaveLength(2);
   }
 });
 
-it("an inline part is a person-ruled warning an ignore verdict withholds; a connected or misaligned one is not inline", () => {
+it("an inline part is a person-ruled warning an ignore verdict withholds; without C#'s record nothing is inline", () => {
+  // Which parts are inline (connected, across the run, outside the body) is C#'s: DuctHealthTests.
   const host = () => duct(1, [0, 0, 0], [10, 0, 0], "g1");
-  const findings = survey(snap([host()], [damper(9, [4, 0, 0])]), null).findings;
+  const findings = survey(inlineSnap([host()], [damper(9, [4, 0, 0])]), null).findings;
   expect(findings.find((f) => f.id === "proximity:9|1")).toMatchObject({
     kind: "inline-by-inference",
     clearer: "person",
     assumed: expect.stringContaining("neither end connected"),
   });
   expect(
-    inferJoints(snap([host()], [damper(9, [4, 0, 0])]), 1, ignoring("proximity:9|1")).inline,
+    inferJoints(inlineSnap([host()], [damper(9, [4, 0, 0])]), 1, ignoring("proximity:9|1")).inline,
   ).toEqual([]);
-  // One end connected: the rule needs both open.
-  const joined = damper(9, [4, 0, 0]);
-  const other = duct(2, [4, 5, 0], [4, 10, 0], "g9");
-  joined.connectors[0]!.connectedTo = { elementId: 2, connector: 1 };
-  other.connectors[0]!.connectedTo = { elementId: 9, connector: 1 };
-  expect(inferJoints(snap([host(), other], [joined])).inline).toEqual([]);
-  // Across the run, not along it.
-  const across = damper(9, [4, 0, 0], true);
-  across.connectors = across.connectors.map((c, i) => ({ ...c, facing: [0, i ? -1 : 1, 0] }));
-  expect(inferJoints(snap([host()], [across])).inline).toEqual([]);
-  // Outside the body: no host.
-  expect(inferJoints(snap([host()], [damper(9, [4, 1, 0])])).inline).toEqual([]);
+  expect(inferJoints(snap([host()], [damper(9, [4, 0, 0])])).inline).toEqual([]);
 });
 
 // ---- grades (pressure-drop ledger, 2026-10-19: inference may compute, never conclude) --------

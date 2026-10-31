@@ -1,4 +1,4 @@
-import { makeAtomRegistry } from "#/route/route-owner";
+import { makeAtomRegistry } from "#/shell/owner";
 import { TestAttention } from "#/test-attention";
 import { hovered } from "@pe/kit/lang/attention";
 import { SubjectTextContext } from "@pe/kit/lang/reach";

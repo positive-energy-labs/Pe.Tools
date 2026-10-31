@@ -9,9 +9,12 @@ import {
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { Row } from "@pe/kit/lang/row";
 import { attention, elementKey, setHovered, useMention } from "@pe/kit/lang/attention";
-import { useRoute } from "#/route";
-import type { TakeoffsController } from "./controller";
-import { manifest } from "./manifest";
+import { useEffect, useSyncExternalStore } from "react";
+import { createGraphMount } from "#/shell/mount";
+import { takeoffGraph } from "./graph";
+import { takeoffAdapters } from "./graph-route";
+import { useTakeoffStore } from "./store";
+import type { TakeoffStore } from "./store";
 import { LevelPlan } from "./level-plan";
 import { regionKey, TakeoffAttention } from "./attention";
 import { mockModel } from "./proto/mock";
@@ -43,7 +46,16 @@ test("zone and room rows share hover with the plan, while selection follows Page
   const room = zone.rooms[0]!;
   zone.zone.elementId = 101;
   room.elementId = 102;
-  let handle!: TakeoffsController["handle"];
+  const owner = createGraphMount(takeoffGraph, {
+    ...takeoffAdapters,
+    getSnapshot: () => ({ target: { kind: "host" }, work: null }),
+    subscribe: () => () => {},
+    write: async () => {
+      throw Error("attention must not write Work");
+    },
+    subscribeAcceptedDeltas: () => () => {},
+  });
+  let handle!: TakeoffStore["handle"];
   function Rows() {
     const mention = useMention();
     return (
@@ -58,7 +70,9 @@ test("zone and room rows share hover with the plan, while selection follows Page
     );
   }
   function Plan() {
-    handle = useRoute(manifest, { target: null, url: false });
+    useEffect(() => owner.connect(), []);
+    useSyncExternalStore(owner.subscribe, owner.version, owner.version);
+    handle = useTakeoffStore(owner).handle;
     const [page, setPage] = handle.page;
     return (
       <TakeoffAttention store={{ handle, world, savedCapture: undefined }}>
@@ -103,13 +117,15 @@ test("zone and room rows share hover with the plan, while selection follows Page
   expect(roomShape.getAttribute("data-reach")).toBe("hover");
   fireEvent.click(zonePath);
   await waitFor(() => expect(zoneRow.getAttribute("data-reach")).toBe("selected"));
-  expect(handle.page[0].zone).toBe(zone.zone.guid);
+  await waitFor(() => expect(handle.page[0].zone).toBe(zone.zone.guid));
   fireEvent.click(roomPath);
   await waitFor(() => expect(roomRow.getAttribute("data-reach")).toBe("selected"));
-  expect(handle.page[0].room).toBe(room.guid);
+  await waitFor(() => expect(handle.page[0].room).toBe(room.guid));
   act(() => setHovered(handle.registry, { doc: "other-document", key: elementKey(101) }));
   expect(handle.registry.get(attention("fixture:takeoffs:plan")).hovered.size).toBe(0);
   act(() => handle.page[1]({ zone: "", room: "" }));
   await waitFor(() => expect(zoneRow.getAttribute("data-reach")).toBe("rest"));
   expect(roomRow.getAttribute("data-reach")).toBe("rest");
+  view.unmount();
+  owner.dispose();
 });

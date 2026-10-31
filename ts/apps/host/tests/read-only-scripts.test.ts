@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { Effect, Layer } from "effect";
-import { expect, test, vi } from "vite-plus/test";
+import { expect, test } from "vite-plus/test";
 import { HOST_CONTEXT_HEADER, HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { RevitBridge } from "../src/bridge.ts";
@@ -15,15 +15,8 @@ import { pagesRoute } from "../src/pages-route.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 import { serveRoutes } from "./real-server.ts";
 
-/**
- * Acceptance round 4c §3: the route-prefs Page, pinned by a person to a document the person opened,
- * pressed "read routing preferences" (`pe.script(READ)`, ReadOnly by default) and the host refused
- * it as a write. Counsel's rule: a ReadOnly (or default-mode) script is a read only under a person's
- * consent, a human caller or a Page whose binding a human set. 2026-10-14 (items 9, 10): Pea joins
- * them on an exact target, because the rollback guard contains the target; it does not contain a
- * sibling's commit, so the K9 census still refuses beside an ungranted sibling. An external MCP
- * client and a Page bound by Pea keep it a write that needs a grant or an acquisition.
- */
+/** Pea ReadOnly scripts bypass approval, including beside other open documents. Pages and
+ * external devices retain their existing document authority boundaries. Write modes need consent. */
 const MODEL = "C:/Jobs/HVAC.rvt";
 const doc = { session: "bridge-a", openId: "open-a" };
 const census = "Result(new { types = 2 });";
@@ -250,8 +243,9 @@ test("item 9: Pea reads an ungranted human document by exact target; a write the
   }
 }, 30_000);
 
-test("Pea script modes all cross the same root-run consent and raw script dispatch refuses", async () => {
+test("Pea ReadOnly scripts bypass approval at call and action doors, including beside siblings", async () => {
   const host = await serve();
+  host.openDocuments.push(other);
   const events: ConsentEvent[] = [],
     run = { thread: "script-turn", turn: randomUUID() },
     runs = new RunConsents((_, event) => events.push(event));
@@ -259,8 +253,13 @@ test("Pea script modes all cross the same root-run consent and raw script dispat
   bindControl({ runs });
   const headers = as({ kind: "pea", thread: run.thread, run, root: run });
   try {
-    let decision: unknown;
-    for (const mode of ["ReadOnly", undefined, "NoTransaction", "WriteTransaction"]) {
+    for (const mode of ["ReadOnly", undefined]) {
+      const raw = await host.send(
+        "/call",
+        { ...headers, "x-pe-bridge-session-id": doc.session, "x-pe-open-document-id": doc.openId },
+        { key: "scripting.execute", request: script(mode) },
+      );
+      expect(raw.status, raw.text).toBe(200);
       const act = await host.send("/actions", headers, {
         id: randomUUID(),
         key: "scripting.execute",
@@ -268,27 +267,11 @@ test("Pea script modes all cross the same root-run consent and raw script dispat
         input: script(mode),
       });
       expect(act.status, act.text).toBeLessThan(300);
-      if (!decision) {
-        expect(act.json.state).toBe("waiting");
-        expect(host.sent).toEqual([]);
-        await vi.waitFor(() =>
-          expect(events.some((e) => e.kind === "permission_request")).toBe(true),
-        );
-        const ask = events.find((e) => e.kind === "permission_request")!;
-        if (ask.kind === "permission_request") runs.decide(run.thread, ask.requestId, "allow_now");
-      }
+      expect(act.json.effects).toEqual([]);
       const row = await host.settle(act.json.id!);
-      expect(row.state, JSON.stringify(row)).toBe("succeeded");
-      if (!decision) decision = row.consent;
-      else expect(row.consent).toEqual(decision);
-      const raw = await host.send(
-        "/call",
-        { ...headers, "x-pe-bridge-session-id": doc.session, "x-pe-open-document-id": doc.openId },
-        { key: "scripting.execute", request: script(mode) },
-      );
-      expect(raw.status, raw.text).toBe(409);
+      expect(row).toMatchObject({ state: "succeeded", consent: null });
     }
-    expect(events.filter((event) => event.kind === "permission_request")).toHaveLength(1);
+    expect(events.filter((event) => event.kind === "permission_request")).toHaveLength(0);
     expect(host.sent).toHaveLength(4);
   } finally {
     runs.closeAll();
@@ -296,54 +279,58 @@ test("Pea script modes all cross the same root-run consent and raw script dispat
   }
 }, 30000);
 
-test("Pea script footprint includes every sibling and Stop prevents dispatch", async () => {
-  const host = await serve();
-  host.openDocuments.push(other);
-  const run = { thread: "siblings", turn: randomUUID() },
-    runs = new RunConsents(() => {});
-  runs.open(run);
-  bindControl({ runs });
-  const headers = as({ kind: "pea", thread: run.thread, run, root: run });
-  try {
-    const raw = await host.send(
-      "/call",
-      { ...headers, "x-pe-bridge-session-id": doc.session, "x-pe-open-document-id": doc.openId },
-      { key: "scripting.execute", request: script("ReadOnly") },
-    );
-    expect(raw.status).toBe(409);
-    const act = await host.send("/actions", headers, {
-      id: randomUUID(),
-      key: "scripting.execute",
-      target: { kind: "document", ref: doc },
-      input: script("ReadOnly"),
-    });
-    expect(act.json.state, act.text).toBe("waiting");
-    expect(act.json.effects).toEqual(
-      expect.arrayContaining([
-        { kind: "document", ref: doc },
-        { kind: "document", ref: { session: doc.session, openId: other.openId } },
-      ]),
-    );
-    // These expected IDs came from this bridge attachment, not the SDK's document vocabulary.
-    expect(act.json.consumes?.find((dependency) => dependency.kind === "census")).toEqual({
-      kind: "census",
-      probe: { session: doc.session },
-      expected: [doc.openId, other.openId],
-    });
-    expect(
-      act.json.consumes?.find((dependency) => dependency.kind === "incarnation"),
-    ).toMatchObject({
-      probe: { process: { pid: 42, processStartUtc: "1970-01-01T00:00:01.0000000Z" } },
-      expected: true,
-    });
-    runs.close(run, "stopped");
-    expect((await host.settle(act.json.id!)).state).toBe("cancelled");
-    expect(host.sent).toEqual([]);
-  } finally {
-    runs.closeAll();
-    await host.close();
-  }
-}, 30000);
+test.each(["WriteTransaction", "NoTransaction"])(
+  "Pea %s includes every sibling and Stop prevents dispatch",
+  async (mode) => {
+    const host = await serve();
+    host.openDocuments.push(other);
+    const run = { thread: "siblings", turn: randomUUID() },
+      runs = new RunConsents(() => {});
+    runs.open(run);
+    bindControl({ runs });
+    const headers = as({ kind: "pea", thread: run.thread, run, root: run });
+    try {
+      const raw = await host.send(
+        "/call",
+        { ...headers, "x-pe-bridge-session-id": doc.session, "x-pe-open-document-id": doc.openId },
+        { key: "scripting.execute", request: script(mode) },
+      );
+      expect(raw.status).toBe(409);
+      const act = await host.send("/actions", headers, {
+        id: randomUUID(),
+        key: "scripting.execute",
+        target: { kind: "document", ref: doc },
+        input: script(mode),
+      });
+      expect(act.json.state, act.text).toBe("waiting");
+      expect(act.json.effects).toEqual(
+        expect.arrayContaining([
+          { kind: "document", ref: doc },
+          { kind: "document", ref: { session: doc.session, openId: other.openId } },
+        ]),
+      );
+      // These expected IDs came from this bridge attachment, not the SDK's document vocabulary.
+      expect(act.json.consumes?.find((dependency) => dependency.kind === "census")).toEqual({
+        kind: "census",
+        probe: { session: doc.session },
+        expected: [doc.openId, other.openId],
+      });
+      expect(
+        act.json.consumes?.find((dependency) => dependency.kind === "incarnation"),
+      ).toMatchObject({
+        probe: { process: { pid: 42, processStartUtc: "1970-01-01T00:00:01.0000000Z" } },
+        expected: true,
+      });
+      runs.close(run, "stopped");
+      expect((await host.settle(act.json.id!)).state).toBe("cancelled");
+      expect(host.sent).toEqual([]);
+    } finally {
+      runs.closeAll();
+      await host.close();
+    }
+  },
+  30000,
+);
 
 test("an external MCP client cannot read a human document with a ReadOnly script", async () => {
   const host = await serve();

@@ -2,7 +2,7 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { sceneRequest } from "./host";
-import { useDuctScene } from "#/ducts/scene-read";
+import { useCapture } from "#/scene/picture/read";
 
 const native = vi.hoisted(() => ({
   calls: [] as {
@@ -63,7 +63,7 @@ const finish = async (index: number, id: string) => {
 it("context representation changes retain exact focus and never reuse incompatible coverage", async () => {
   const view = renderHook(
     ({ representation }: { representation: "boxes" | "meshes" }) =>
-      useDuctScene(sceneRequest([7199], false, 10, representation), doc, "representation"),
+      useCapture(sceneRequest([7199], false, 10, representation), doc, "representation"),
     { initialProps: { representation: "boxes" } },
   );
   expect(native.calls[0]!.request.contextRepresentation).toBe("none");
@@ -91,7 +91,7 @@ it("context representation changes retain exact focus and never reuse incompatib
 
 it("shows exact focus before context, keeps it inspectable, and does not recapture on visual renders or shrink", async () => {
   const view = renderHook(
-    ({ radius, epoch }) => useDuctScene(sceneRequest([7121], false, radius), doc, epoch),
+    ({ radius, epoch }) => useCapture(sceneRequest([7121], false, radius), doc, epoch),
     { initialProps: { radius: 10, epoch: 3 } },
   );
   expect(native.calls).toHaveLength(1);
@@ -117,7 +117,7 @@ it("shows exact focus before context, keeps it inspectable, and does not recaptu
 
 it("fences late scopes and revisions", async () => {
   const view = renderHook(
-    ({ ids, epoch }) => useDuctScene(sceneRequest(ids, false, 10), doc, epoch),
+    ({ ids, epoch }) => useCapture(sceneRequest(ids, false, 10), doc, epoch),
     { initialProps: { ids: [7122], epoch: 0 } },
   );
   await finish(0, "old-focus");
@@ -137,8 +137,8 @@ it("fences late scopes and revisions", async () => {
 
 it("shares identical in-flight reads and fences a replacement document", async () => {
   const request = sceneRequest([7124], false, 10);
-  const first = renderHook(() => useDuctScene(request, doc, "snapshot-a"));
-  const second = renderHook(({ target }) => useDuctScene(request, target, "snapshot-a"), {
+  const first = renderHook(() => useCapture(request, doc, "snapshot-a"));
+  const second = renderHook(({ target }) => useCapture(request, target, "snapshot-a"), {
     initialProps: { target: doc },
   });
   expect(native.calls).toHaveLength(1);
@@ -155,7 +155,7 @@ it("shares identical in-flight reads and fences a replacement document", async (
 
 it("reuses A/B/A and remounts at the same native revision, but expansion and revision changes read", async () => {
   const hook = ({ id, radius, revision }: { id: number; radius: number; revision: string }) =>
-    useDuctScene(sceneRequest([id], false, radius), doc, revision);
+    useCapture(sceneRequest([id], false, radius), doc, revision);
   const view = renderHook(hook, { initialProps: { id: 7130, radius: 10, revision: "reuse-a" } });
   await finish(0, "reuse-focus-a");
   await waitFor(() => expect(native.calls).toHaveLength(2));
@@ -183,7 +183,7 @@ it("reuses A/B/A and remounts at the same native revision, but expansion and rev
 
 it("keeps a limited expansion usable without retrying or promoting it over complete smaller coverage", async () => {
   const hook = ({ radius }: { radius: number }) =>
-    useDuctScene(sceneRequest([7140], false, radius), doc, "limited-context");
+    useCapture(sceneRequest([7140], false, radius), doc, "limited-context");
   const view = renderHook(hook, { initialProps: { radius: 10 } });
   await finish(0, "limited-proof-focus");
   await waitFor(() => expect(native.calls).toHaveLength(2));
@@ -222,7 +222,7 @@ it("keeps a limited expansion usable without retrying or promoting it over compl
 
 it("reports failed optional context separately from the usable focus", async () => {
   const view = renderHook(() =>
-    useDuctScene(sceneRequest([7141], false, 10), doc, "context-failure"),
+    useCapture(sceneRequest([7141], false, 10), doc, "context-failure"),
   );
   await finish(0, "context-failure-focus");
   await waitFor(() => expect(native.calls).toHaveLength(2));

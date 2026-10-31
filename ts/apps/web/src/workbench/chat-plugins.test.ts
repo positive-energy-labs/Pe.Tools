@@ -76,6 +76,7 @@ describe("chat plugin records", () => {
     expect(actionRoute("settings.observe")).toBe("pods");
     expect(actionRoute("schedule.grid.push")).toBe("schedules");
     expect(actionRoute("instances.open")).toBe("instances");
+    expect(actionRoute("data-table.apply")).toBe("data-tables");
     // Every semantic action is some pane's: none falls back to a bare receipt link.
     expect(Object.keys(commands).filter((key) => !actionRoute(key))).toEqual([]);
     // No pane declares these: the record keeps its receipt link instead of inventing an owner.

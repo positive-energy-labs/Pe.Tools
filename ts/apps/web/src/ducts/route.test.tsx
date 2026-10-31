@@ -1,764 +1,710 @@
 // @vitest-environment jsdom
-/** Deterministic route proof: fixture transport, real route/page owner, head and the one shell. No ASHRAE tables are served, so nothing is priced. */
-import { WorkOwner } from "@pe/kit/lang/work";
-import { ChatHosted } from "#/route/situation-ladder";
-import { Route } from "#/routes/ducts";
-import { DuctsRoute } from "./route";
-import {
-  applyPatches,
-  ductsRouteState,
-  readingKey,
-  readingRequestSchema,
-  DUCTS_BODY_VERSION_HEADER,
-  DUCTS_REFRESH_HEADER,
-  type DuctsReadingRequest,
-  emptyThreadHead,
-  type ThreadHead,
-} from "@pe/agent-contracts";
-import {
-  HOST_RPC_BRIDGE_SESSION_HEADER,
-  HOST_RPC_DOCUMENT_HEADER,
-} from "@pe/host-contracts/operation-types";
-import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import type { DuctsSnapshot } from "@pe/host-contracts/generated";
-import {
-  RouterProvider,
-  createMemoryHistory,
-  createRootRoute,
-  createRoute,
-  createRouter,
-} from "@tanstack/react-router";
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
+import { createMemoryHistory, createRouter, RouterContextProvider } from "@tanstack/react-router";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import { machineFixture } from "../../../../packages/agent-contracts/tests/machine-fixture";
-import type { ProtoProps } from "./proto/props";
-import { useNativeObservation } from "#/revit/observation";
-import { peReadings } from "#/readings";
-import { pricingJob, type PricingRequest, type PricingResponse } from "./pricing-job";
-import type { ModelPicture } from "./model-picture";
-import type { SceneInstance } from "#/scene/types";
-import { scopeOf } from "@pe/ducts-domain/system-scope";
-import { declaredTeaching } from "@pe/kit/lang/teach";
-import { useTeaching } from "@pe/kit/lang/use-teach";
-import { DUCTS_LAYOUT } from "./proto/e/teaching";
+import { ductsRouteState, workWriteSchema } from "@pe/agent-contracts";
+import { Route as root } from "../routes/__root";
+import { ductsGraph } from "./graph";
+import { ductsRoute, ductsAdapters } from "./route";
+import { DuctsHostFixture } from "./host.fixture";
+import { writeRouteWork } from "#/route/host";
+import { createRouteOwner, makeAtomRegistry } from "#/shell/owner";
+import { kernelCellVerbs } from "#/shell/verbs-cells";
+import { invoke, type VerbContext } from "#/shell/verbs";
+import { ductsPageSchema } from "./graph";
+import { mountRoute } from "#/shell/mount";
+import { noTerminalSnapshot } from "./no-terminal.fixture";
+import { chaddsNearMissSnapshot, ra23Snapshot, twoHealNetworksSnapshot } from "./heal.fixture";
 
-const picture = vi.hoisted(() => ({ current: null as Parameters<typeof ModelPicture>[0] | null }));
-vi.mock("./model-picture", async (original) => {
-  const module = await original<typeof import("./model-picture")>();
-  return {
-    ...module,
-    ModelPicture: (props: Parameters<typeof ModelPicture>[0]) => {
-      picture.current = props;
-      return <module.ModelPicture {...props} />;
-    },
-  };
-});
+test.each(["row", "Situation"])(
+  "%s Preview heal targets the pointed-at network among two",
+  async (placement) => {
+    host.snapshot = twoHealNetworksSnapshot();
+    const { view, situation } = await mounted(
+      "/ducts?target=s&system=RA%2023&selected=10002955&picture=schematic&layers=",
+    );
+    const row = await waitFor(() => {
+      const element = view.container.querySelector<HTMLElement>('[data-key="heal:g6953999"]');
+      expect(element).not.toBeNull();
+      return element!;
+    });
+    if (placement === "Situation") fireEvent.click(within(row).getByText(/^Heal RA 23/));
+    else expect(within(row).getAllByRole("button", { name: "Preview heal" })).toHaveLength(1);
+    fireEvent.click(
+      await liveButton(placement === "row" ? within(row) : situation, "Preview heal"),
+    );
+    await waitFor(() => expect(host.actions).toHaveLength(1));
+    expect(host.actions[0]).toMatchObject({
+      key: "ducts.preview-heal",
+      input: {
+        groups: [
+          { group: "g6953999", items: [{ key: "cap:14663504:1" }, { key: "cap:14663546:1" }] },
+        ],
+      },
+    });
+    expect((host.actions[0]!.input as { groups: unknown[] }).groups).toHaveLength(1);
+    if (placement === "row") {
+      fireEvent.click(within(row).getByText(/^Heal RA 23/));
+      const detail = view.container.querySelector<HTMLElement>(
+        '[data-inbox-detail="heal:g6953999"]',
+      )!;
+      expect(within(detail).queryByRole("button", { name: "Preview heal" })).toBeNull();
+      expect(within(row).getAllByRole("button", { name: "Preview heal" })).toHaveLength(1);
+    }
+    const targets = await view.findByLabelText("Heal targets");
+    expect(targets.textContent).toContain("cap · 14663504 end 1");
+    expect(targets.textContent).toContain("cap · 14663546 end 1");
+  },
+);
 
-const drawing = vi.hoisted(() => ({ lightweight: false, latest: null as ProtoProps | null }));
-const inboxProbe = vi.hoisted(() => ({
-  focus: null as Parameters<typeof import("./proto/e/inbox").Inbox>[0]["onFocusCell"] | null,
-}));
-vi.mock("./proto/e/inbox", async (original) => {
-  const module = await original<typeof import("./proto/e/inbox")>();
-  return {
-    ...module,
-    Inbox: (props: Parameters<typeof module.Inbox>[0]) => {
-      inboxProbe.focus = props.onFocusCell;
-      return <module.Inbox {...props} />;
-    },
-  };
-});
-vi.mock("./proto/e/screen", async (original) => {
-  const { EScreen } = await original<typeof import("./proto/e/screen")>();
-  return {
-    EScreen: ({ props }: { props: ProtoProps }) => {
-      const observation = useNativeObservation();
-      drawing.latest = props;
-      return drawing.lightweight ? (
-        <div
-          data-proto={props.snapshot ? "E2" : undefined}
-          data-native={
-            observation.scope?.source === "native" && observation.scope.document !== null
-          }
-        >
-          {props.snapshot ? props.snapshot.document.elapsedMs : "reading ducts…"}
-          {props.reading.refreshing ? "refreshing…" : ""}
-        </div>
-      ) : (
-        <EScreen props={props} />
-      );
-    },
-  };
-});
-
-let work = ductsRouteState.schema.parse({ assumptions: {} });
-let revision = 0;
-type Request = DuctsSnapshot.Req.Request;
-const requests: { request: Request; openId: string | null }[] = [];
-const workListeners = new Set<() => void>();
-const ductsListeners = new Set<() => void>();
-const headListeners = new Set<() => void>();
-let head = emptyThreadHead;
-const ductReadings = new Map<string, { request: DuctsReadingRequest; version: string }>();
-let nextReading = 0;
-const ductReading = (request: DuctsReadingRequest) => {
-  const key = readingKey(request);
-  let value = ductReadings.get(key);
-  if (!value) {
-    value = { request, version: `duct-route-fixture-${++nextReading}` };
-    ductReadings.set(key, value);
+test("Chadds autoJoin ends show their partner and measured gap in the row and Evidence", async () => {
+  host.snapshot = chaddsNearMissSnapshot();
+  const { view } = await mounted();
+  for (const [id, partner, gap] of [
+    [14517389, 14548688, "0.01"],
+    [14663504, 14663834, "2.25"],
+    [14663546, 14663850, "2.25"],
+  ] as const) {
+    const row = await waitFor(() => {
+      const element = view.container.querySelector<HTMLElement>(`[data-key="open-end:${id}:0"]`);
+      expect(element).not.toBeNull();
+      return element!;
+    });
+    const words = `faces ${partner}:1 ${gap} in away: a join, not a cap`;
+    expect(row.textContent).toContain(words);
+    fireEvent.click(within(row).getByText(words, { exact: false }));
+    const detail = view.container.querySelector<HTMLElement>(
+      `[data-inbox-detail="open-end:${id}:0"]`,
+    )!;
+    const hint = within(detail).getByRole("button", { name: "What is this?" });
+    fireEvent.pointerEnter(hint, { pointerType: "mouse" });
+    fireEvent.mouseEnter(hint);
+    fireEvent.mouseMove(hint);
+    expect((await view.findByRole("tooltip")).textContent).toContain(words);
+    fireEvent.pointerLeave(hint, { pointerType: "mouse" });
+    fireEvent.mouseLeave(hint);
+    await waitFor(() => expect(view.queryByRole("tooltip")).toBeNull());
   }
-  return value;
-};
-const invalidateDucts = (openId: string) => {
-  for (const value of ductReadings.values())
-    if (value.request.kind === "ducts-snapshot" && value.request.target.openId === openId)
-      value.version = `duct-route-fixture-${++nextReading}`;
-  ductsListeners.forEach((emit) => emit());
-};
-let reply: (request: Request) => Promise<Response>;
-const links = [
-  [100, 1],
-  [1, 2],
-  [2, 3],
-  [3, 4],
-  [2, 5],
-  [5, 6],
-];
-const connectors = (id: number) =>
-  links
-    .filter((pair) => pair.includes(id))
-    .map((pair, index) => ({
-      index,
-      kind: "end" as const,
-      point: [id, 0, 0],
-      direction: "out" as const,
-      shape: "round" as const,
-      size: "8 in",
-      connectedTo: { elementId: pair.find((other) => other !== id)!, connector: 0 },
-    }));
-const snapshot: DuctSnapshot = {
-  coordinateEncoding: "native-double",
-  document: {
-    title: "Duct route slice",
-    readAt: "2026-09-26T00:00:00Z",
-    elapsedMs: 1,
-    networkBasedCalculations: false,
-  },
-  levels: [{ id: 30, name: "Level 1", elevationFt: 0 }],
-  groups: [
-    {
-      id: "g1",
-      rootIds: [100],
-      classifications: ["Supply Air"],
-      systemNames: ["SA"],
-      terminalCount: 2,
-      elementCount: 6,
-      loops: 0,
-      issueIds: [],
-    },
-    {
-      id: "g2",
-      rootIds: [],
-      classifications: [],
-      systemNames: [],
-      terminalCount: 0,
-      elementCount: 1,
-      loops: 0,
-      issueIds: ["no-root:g2"],
-    },
-  ],
-  nodes: [100, 2, 4, 6].map((id) => ({
-    id,
-    kind: id === 100 ? "equipment" : id === 2 ? "fitting" : "terminal",
-    category: "duct node",
-    point: [id === 100 ? 0 : id, 0, 0],
-    levelId: 30,
-    groupId: id === 100 ? null : "g1",
-    systemName: id === 100 ? null : "SA",
-    connectors: connectors(id),
-    facts: [],
-  })),
-  segments: [1, 3, 5].map((id) => ({
-    id,
-    kind: "duct",
-    curveKind: "line",
-    shape: "round",
-    size: "8 in",
-    diameterIn: 8,
-    lengthFt: 2,
-    polyline: [
-      [id, 0, 0],
-      [id + 1, 0, 0],
-    ],
-    levelId: 30,
-    groupId: "g1",
-    systemName: "SA",
-    roughness: { valueFt: 0.0003, provenance: "revit-default" },
-    revit: {},
-    connectors: connectors(id),
-  })),
-  flows: [],
-  issues: [
-    {
-      id: "no-root:g2",
-      kind: "no-root",
-      elementId: null,
-      point: null,
-      groupId: "g2",
-      note: "no root",
-    },
-  ],
-  layers: [],
-  systems: [{ id: 900, name: "SA", classification: "Supply Air", criticalPath: [], sections: [] }],
-  slots: {
-    fanStatic: "PE_M_Fan_ExternalStaticPressure",
-    fanFlow: "PE_M_Fan_AirFlow",
-    componentDrop: "Pressure Drop",
-    fittingCoefficient: "Pe_C",
-    terminalFlow: "PE_M_Grd_AirFlow",
-  },
-};
+  expect(host.actions).toEqual([]);
+});
 
-// The whole document in one read: a group choice is the page's, never the request's.
-const response = (): DuctsSnapshot.Res.Response => snapshot;
-
-const inventory = {
-  sessions: [
-    {
-      connected: true,
-      sessionId: "slice",
-      openDocumentCount: 1,
-      openDocuments: [
-        { openId: "doc", title: snapshot.document.title, address: null, isFamilyDocument: false },
-      ],
-    },
-  ],
-};
-
-beforeEach(() => {
-  drawing.lightweight = false;
-  drawing.latest = null;
-  inboxProbe.focus = null;
-  picture.current = null;
-  work = ductsRouteState.schema.parse({ assumptions: {} });
-  revision = 0;
-  requests.length = 0;
-  workListeners.clear();
-  ductsListeners.clear();
-  ductReadings.clear();
-  head = emptyThreadHead;
-  headListeners.clear();
-  reply = async () => Response.json(response());
-  // Fixture transport only: the route still resolves its target and reads through the production wire.
-  vi.stubGlobal(
-    "EventSource",
-    class {
-      onopen?: () => void;
-      onmessage?: (event: { data: string }) => void;
-      closed = false;
-      constructor(url: string) {
-        queueMicrotask(() => {
-          if (this.closed) return;
-          this.onopen?.();
-          const keys: unknown[] = JSON.parse(new URL(url).searchParams.get("keys")!);
-          for (const raw of keys) {
-            const request = readingRequestSchema.parse(raw);
-            const emit = () => {
-              const value =
-                request.kind === "machine"
-                  ? machineFixture(
-                      inventory.sessions.map((session) => ({
-                        session: session.sessionId,
-                        documents: session.openDocuments.map((document) => ({
-                          ...document,
-                          isActive: document.openId === "doc",
-                        })),
-                      })),
-                    )
-                  : request.kind === "inventory"
-                    ? inventory
-                    : request.kind === "thread-head"
-                      ? head
-                      : request.kind === "work"
-                        ? { doc: work, revision }
-                        : request.kind === "ducts-snapshot" || request.kind === "ducts-tables"
-                          ? {
-                              state: "ready",
-                              revision: ductReading(request).version,
-                              version: ductReading(request).version,
-                              session:
-                                request.kind === "ducts-snapshot"
-                                  ? request.target.session
-                                  : request.session,
-                              target: request.kind === "ducts-snapshot" ? request.target : null,
-                            }
-                          : undefined;
-              if (value !== undefined)
-                this.onmessage?.({
-                  data: JSON.stringify({ kind: "snapshot", key: readingKey(request), value }),
-                });
-            };
-            if (request.kind === "work")
-              workListeners.add(() => {
-                if (!this.closed) emit();
-              });
-            if (request.kind === "thread-head")
-              headListeners.add(() => {
-                if (!this.closed) emit();
-              });
-            if (request.kind === "ducts-snapshot" || request.kind === "ducts-tables")
-              ductsListeners.add(() => {
-                if (!this.closed) emit();
-              });
-            emit();
-          }
-        });
-      }
-      close() {
-        this.closed = true;
-      }
-    },
+test("RA 23 preview shows its cap review, then Heal uses exactly the admitted plan", async () => {
+  host.snapshot = ra23Snapshot();
+  const { view, situation } = await mounted(
+    "/ducts?target=s&system=RA%2023&picture=schematic&layers=",
   );
-  vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
-    if (url.startsWith("/pe/scope/") && init?.method === "PUT" && typeof init.body === "string") {
-      const { targets } = JSON.parse(init.body) as { targets: ThreadHead["targets"] };
-      head = {
-        ...head,
-        targets: targets.map((target) => ({ ...target, admission: null })),
-        revision: head.revision + 1,
-      };
-      queueMicrotask(() => headListeners.forEach((emit) => emit()));
-      return Response.json({
-        ok: true,
-        why: "set",
-        head: {
-          ...head,
-        },
-      });
-    }
-    if (url.includes("/route-state/ducts/apply") && typeof init?.body === "string") {
-      const { patches, expectedRevision } = JSON.parse(init.body);
-      const result = applyPatches(
-        ductsRouteState,
-        { version: 1, revision, doc: work },
-        "human",
-        patches,
-        expectedRevision,
-      );
-      if (!result.ok) return Response.json(result);
-      work = result.envelope.doc;
-      revision = result.envelope.revision;
-      queueMicrotask(() => workListeners.forEach((emit) => emit()));
-      return Response.json({ ok: true, revision });
-    }
-    if (url === "/call" && typeof init?.body === "string") {
-      const { key, request } = JSON.parse(init.body);
-      const headers = new Headers(init.headers);
-      const session = headers.get(HOST_RPC_BRIDGE_SESSION_HEADER)!;
-      const openId = headers.get(HOST_RPC_DOCUMENT_HEADER);
-      const subject = readingRequestSchema.parse(
-        key === "ducts.snapshot"
-          ? { kind: "ducts-snapshot", target: { session, openId }, ...request }
-          : { kind: "ducts-tables", session, ids: request.ids },
-      ) as DuctsReadingRequest;
-      const held = ductReading(subject);
-      if (headers.get(DUCTS_REFRESH_HEADER) === held.version) {
-        held.version = `duct-route-fixture-${++nextReading}`;
-        queueMicrotask(() => ductsListeners.forEach((emit) => emit()));
-      }
-      const version = held.version;
-      if (key === "ducts.snapshot") requests.push({ request, openId });
-      const result =
-        key === "ducts.snapshot"
-          ? await reply(request)
-          : Response.json({ tables: {}, missing: [], unsupported: {} });
-      if (version !== held.version)
-        return Response.json({ error: "Reading invalidated" }, { status: 409 });
-      result.headers.set("x-pe-resolved-session", session);
-      if (openId) result.headers.set("x-pe-resolved-open-id", encodeURIComponent(openId));
-      result.headers.set("x-pe-native-request-id", `native-${version}`);
-      result.headers.set(DUCTS_BODY_VERSION_HEADER, version);
-      result.headers.set("x-pe-ducts-reused", "true");
-      return result;
-    }
-    throw Error(`Unexpected fixture request: ${url}`);
-  });
+  fireEvent.click(await liveButton(situation, "Preview heal"));
+  const review = await view.findByLabelText("Heal preview");
+  expect(review.textContent).toMatch(/10002955.*end 9.*8 in round.*planned/);
+  await waitFor(() => expect(view.container.querySelector("[data-review-target]")).not.toBeNull());
+  expect(view.getByLabelText("Heal targets").textContent).toContain("cap · 10002955 end 9");
+  const input = host.actions[0]!.input;
+  fireEvent.click(await liveButton(situation, "Heal"));
+  await view.findByLabelText("Heal review");
+  fireEvent.click(await liveButton(within(view.getByLabelText("Heal review")), "Commit Heal"));
+  await waitFor(() =>
+    expect(host.actions.map((a) => a.key)).toEqual(["ducts.preview-heal", "ducts.apply-heal"]),
+  );
+  expect(host.actions[1]!.input).toEqual(input);
+});
+
+test("the Fix list drops flowing caps while the new pricing job is still pending", async () => {
+  host.snapshot = ra23Snapshot();
+  const { view, situation } = await mounted(
+    "/ducts?target=s&system=RA%2023&picture=schematic&layers=",
+  );
+  await waitFor(() => expect(view.getAllByText(/^Heal RA 23/).length).toBeGreaterThan(0));
+  host.snapshot = structuredClone(host.snapshot);
+  host.snapshot.segments[0]!.connectors.at(-1)!.flowCfm = 444;
+  const pending = vi.spyOn(host.worker.prototype, "postMessage").mockImplementation(() => {});
+  try {
+    act(() => host.invalidate());
+    await waitFor(() => expect(pending).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(
+        situation.getByRole("button", { name: "Preview heal" }).getAttribute("aria-disabled"),
+      ).toBe("true"),
+    );
+    expect(view.queryByText(/^Heal RA 23/)).toBeNull();
+  } finally {
+    pending.mockRestore();
+  }
+});
+
+let host: DuctsHostFixture;
+const releases: (() => void)[] = [];
+beforeEach(() => {
+  host = new DuctsHostFixture();
+  vi.stubGlobal("EventSource", host.source());
+  vi.stubGlobal("fetch", host.fetch);
+  vi.stubGlobal("Worker", host.worker);
   vi.stubGlobal(
     "ResizeObserver",
     class {
-      constructor(private readonly callback: ResizeObserverCallback) {}
-      observe(target: Element) {
-        this.callback(
-          [{ target, contentRect: { width: 800, height: 600 } } as ResizeObserverEntry],
-          this as unknown as ResizeObserver,
-        );
-      }
+      observe() {}
       unobserve() {}
       disconnect() {}
     },
   );
-  Element.prototype.scrollIntoView = () => {};
-  window.scrollTo = () => {};
 });
-afterEach(() => {
+afterEach(async () => {
   cleanup();
-  window.history.replaceState({}, "", "/");
-  inventory.sessions[0]!.openDocuments.splice(1);
+  for (const release of releases.splice(0)) release();
+  await new Promise((resolve) => setTimeout(resolve, 450));
   vi.unstubAllGlobals();
 });
-
-async function mount(
-  search = "&system=SA",
+async function mounted(
+  url = "/ducts?target=s&system=SA&picture=schematic&layers=",
+  waitForNative = true,
   hosted = false,
-  target = "slice",
-  thread = "fixture",
-  nativeRead = true,
 ) {
-  const root = createRootRoute();
-  const route = createRoute({
-    getParentRoute: () => root,
-    path: "/ducts",
-    validateSearch: Route.options.validateSearch,
-    // Import the real screen before timed interactions; the browser journey covers lazy routing.
-    component: DuctsRoute,
-  });
   const router = createRouter({
-    routeTree: root.addChildren([route]),
-    history: createMemoryHistory({
-      initialEntries: [`/ducts?target=${target}&thread=${thread}${search}`],
-    }),
+    routeTree: root.addChildren([ductsRoute]),
+    history: createMemoryHistory({ initialEntries: [url] }),
   });
+  releases.push(router.history.subscribe(router.load));
   await router.load();
-  // The last test's atoms hold their keys for the registry's idle TTL, so the shared stream would
-  // stay on that test's transport and state. Reconnect it onto this one's, as a wake does.
-  peReadings.resync();
-  const rendered = render(
-    <ChatHosted.Provider value={hosted}>
-      {/* The app's surface owner, which the route's reading registers its refresh with. */}
-      <WorkOwner owner="surface">
-        <RouterProvider router={router} />
-      </WorkOwner>
-    </ChatHosted.Provider>,
+  const Component = ductsRoute.options.component!;
+  const Hosted = mountRoute(ductsGraph, {
+    ...ductsAdapters,
+    initialPage: { stage: "sheet", fan: "14577391:2", picture: "schematic", layers: [] },
+  });
+  const view = render(
+    <RouterContextProvider router={router}>
+      <Component />
+      {hosted && (
+        <section aria-label="Hosted chat pane">
+          <Hosted thread="journal-proof" target="s" url={false} />
+        </section>
+      )}
+    </RouterContextProvider>,
   );
-  if (nativeRead) await waitFor(() => expect(requests.length).toBeGreaterThan(0));
-  await waitFor(() => expect(screen.queryByText("reading ducts…")).toBeNull());
-  return { ...rendered, router };
-}
-
-test("navigation demo prices the production route and moves all to Office to Lab to all without native authority", async () => {
-  drawing.lightweight = true;
-  window.history.replaceState({}, "", "/ducts?demo=navigation");
-  const flights: PricingRequest[] = [];
-  vi.stubGlobal(
-    "Worker",
-    class {
-      onmessage: ((event: MessageEvent<PricingResponse>) => void) | null = null;
-      onerror = null;
-      solve = pricingJob();
-      postMessage(request: PricingRequest) {
-        flights.push(request);
-        const data = this.solve(request);
-        queueMicrotask(() => this.onmessage?.({ data } as MessageEvent<PricingResponse>));
-      }
-      terminate() {}
-    },
-  );
-  try {
-    const { router } = await mount("&demo=navigation", false, "slice", "fixture", false);
-    await waitFor(() => expect(drawing.latest?.analysis?.systems).toHaveLength(3));
-    expect(screen.getByText(/Navigation fixture \(synthetic/)).toBeTruthy();
-    expect(drawing.latest?.doc).toBeNull();
-    expect(document.querySelector('[data-proto="E2"]')?.getAttribute("data-native")).toBe("false");
-    expect(await drawing.latest!.actions.preview.run()).toMatchObject({ code: "not-ready" });
-    const epoch = drawing.latest!.page.epoch;
-    const before = flights.length;
-    fireEvent.click(screen.getByRole("button", { name: /^refresh/, hidden: true }));
-    await waitFor(() => expect(drawing.latest!.page.epoch).toBe(epoch + 1));
-    await waitFor(() => expect(flights.length).toBeGreaterThan(before));
-    await waitFor(() => expect(drawing.latest!.priced).not.toBeNull());
-    expect(await drawing.latest!.actions.apply.run()).toMatchObject({ code: "not-ready" });
-    for (const system of [
-      ["SA Office"],
-      ["EA Lab", "SA Office"],
-      ["EA Lab", "SA Office", "SA Lab"],
-      [],
-    ]) {
-      act(() => drawing.latest!.setPage({ system, picture: "schematic" }));
-      await waitFor(() => expect(router.state.location.search).toMatchObject({ system }));
-      expect(drawing.latest?.page.system).toEqual(system);
-    }
-    expect(requests).toEqual([]);
-  } finally {
-    cleanup();
-    window.history.replaceState({}, "", "/");
-  }
-}, 30_000);
-
-test("the real workspace composition keeps paired scopes, Inputs folds and programmatic landings", async () => {
-  const rect = vi
-    .spyOn(HTMLElement.prototype, "getBoundingClientRect")
-    .mockReturnValue(new DOMRect(100, 80, 1200, 800));
-  window.history.replaceState({}, "", "/ducts?demo=navigation");
-  vi.stubGlobal(
-    "Worker",
-    class {
-      onmessage: ((event: MessageEvent<PricingResponse>) => void) | null = null;
-      onerror = null;
-      solve = pricingJob();
-      postMessage(request: PricingRequest) {
-        const data = this.solve(request);
-        queueMicrotask(() => this.onmessage?.({ data } as MessageEvent<PricingResponse>));
-      }
-      terminate() {}
-    },
-  );
-  function Inventory() {
-    return (
-      <output data-workspace-inventory="">
-        {JSON.stringify(useTeaching().filter((fact) => fact.kind === "region"))}
-      </output>
-    );
-  }
-  try {
-    const mounted = await mount("&demo=navigation", false, "slice", "fixture", false);
-    await waitFor(() => expect(drawing.latest?.priced).not.toBeNull());
-    render(<Inventory />);
-    const inventory = () =>
-      JSON.parse(document.querySelector("[data-workspace-inventory]")!.textContent!);
-    const ids = declaredTeaching(DUCTS_LAYOUT)
-      .filter((fact) => fact.kind === "region")
-      .map((fact) => fact.id)
-      .sort();
-    expect(ids).toHaveLength(7);
+  await view.findAllByLabelText("Situation");
+  if (waitForNative)
     await waitFor(() =>
-      expect(
-        inventory()
-          .map((fact: { id: string }) => fact.id)
-          .sort(),
-      ).toEqual(ids),
+      expect(host.requests.some((request) => request.key === "ducts.snapshot")).toBe(true),
     );
-    expect(inventory().find((fact: { id: string }) => fact.id === "e-inputs")).toMatchObject({
-      available: false,
-      visibility: "folded",
-    });
-    const unit = drawing.latest!.snapshot!.nodes.find((node) => node.kind === "equipment")!;
-    await waitFor(() => expect(inboxProbe.focus).not.toBeNull());
-    act(() => inboxProbe.focus!({ segment: "equipmentFlows", id: unit.id }));
-    const split = (id: string) => mounted.container.querySelector(`[data-layout-split="${id}"]`)!;
-    await waitFor(() => expect(split("inputs").hasAttribute("data-pane-folded")).toBe(false));
-    expect(split("scope-upper").getAttribute("data-pane-folded")).toBe("start");
-    expect(split("scope-lower").getAttribute("data-pane-folded")).toBe("start");
-    const actual = [...mounted.container.querySelectorAll("[data-pane-id]")]
-      .map((node) => node.getAttribute("data-pane-id"))
-      .sort();
-    expect(actual).toEqual(ids);
-    expect(mounted.container.querySelectorAll('[data-pane-id="e-picture"]')).toHaveLength(1);
-    const own = scopeOf(drawing.latest!.snapshot!, drawing.latest!.page.system)!;
-    const component = drawing.latest!.snapshot!.nodes.find(
-      (node) => node.groupId && own.groups.includes(node.groupId),
-    )!;
-    fireEvent.click(
-      within(split("scope-upper") as HTMLElement).getByRole("button", {
-        name: "Expand Systems",
-        hidden: true,
+  return { view, router, situation: within(view.getAllByLabelText("Situation")[0]!) };
+}
+const liveButton = async (scope: ReturnType<typeof within>, name: string | RegExp) =>
+  waitFor(() => {
+    const button = scope.getByRole("button", { name });
+    expect(button.getAttribute("aria-disabled")).not.toBe("true");
+    expect(button.hasAttribute("disabled")).toBe(false);
+    return button;
+  });
+
+test("Situation draws all declared network verbs and chooses systems from the roster", async () => {
+  const { view, situation, router } = await mounted();
+  for (const name of [
+    "Refresh",
+    "Preview",
+    "Write to Revit",
+    "Preview heal",
+    "Heal",
+    "Preview fan",
+    "Make the fan",
+  ])
+    expect(situation.getByRole("button", { name })).toBeTruthy();
+  expect(situation.queryByLabelText("systemSearch")).toBeNull();
+  expect(situation.queryByLabelText("selected")).toBeNull();
+  expect(situation.getByRole("group", { name: "log kind" })).toBeTruthy();
+  fireEvent.click(await liveButton(situation, "Preview"));
+  await waitFor(() =>
+    expect(host.actions.map((action) => action.key)).toEqual(["ducts.preview-losses"]),
+  );
+  fireEvent.click(situation.getByRole("button", { name: "Choose system" }));
+  fireEvent.click(await view.findByRole("option", { name: /SA/ }));
+  await waitFor(() => expect(router.state.location.search.system).toEqual([]));
+});
+
+test("opening a fan pushes its Page identity into a link that reopens the sheet", async () => {
+  const first = await mounted("/ducts?target=s&stage=sheet&picture=schematic&layers=", false);
+  await waitFor(() =>
+    expect(first.view.container.querySelector("[data-key='14577391:2']")).not.toBeNull(),
+  );
+  fireEvent.click(first.view.container.querySelector<HTMLElement>("[data-key='14577391:2']")!);
+  await first.view.findByRole("region", { name: "Required ESP" });
+  expect(first.router.state.location.search.fan).toBe("14577391:2");
+  const url = first.router.state.location.href;
+  first.view.unmount();
+  const reopened = await mounted(url, false);
+  await reopened.view.findByRole("region", { name: "Required ESP" });
+  expect(
+    reopened.view.container.querySelector("[data-key='14577391:2'][aria-selected='true']"),
+  ).not.toBeNull();
+  expect(host.writes).toEqual([]);
+});
+
+test("a URL field round-trips through kernel Page, its edit and a reopened URL", async () => {
+  const first = await mounted("/ducts?target=s&system=SA&level=30&picture=schematic&layers=");
+  expect((first.situation.getByLabelText("level") as HTMLInputElement).value).toBe("30");
+  fireEvent.change(first.situation.getByLabelText("level"), { target: { value: "42" } });
+  await waitFor(() => expect(first.router.state.location.search.level).toBe("42"));
+  const url = first.router.state.location.href;
+  first.view.unmount();
+  const reopened = await mounted(url);
+  expect((reopened.situation.getByLabelText("level") as HTMLInputElement).value).toBe("42");
+  expect(host.writes).toEqual([]);
+});
+
+test("snapshot failure has one loading body and semantic Refresh reacquires and reprices", async () => {
+  host.snapshotFailure = "Snapshot refused";
+  const { view, situation } = await mounted();
+  await view.findByText("Snapshot refused", { selector: "[role='alert']" });
+  expect(view.getAllByRole("region", { name: "Ducts loading" })).toHaveLength(1);
+  host.snapshotFailure = null;
+  fireEvent.click(await liveButton(situation, "Refresh"));
+  await liveButton(situation, "Write to Revit");
+  await waitFor(() => expect(view.queryByRole("region", { name: "Ducts loading" })).toBeNull());
+  expect(host.actions.map((action) => action.key)).toEqual(["ducts.refresh"]);
+  expect(
+    host.requests.filter((request) => request.key === "ducts.snapshot").length,
+  ).toBeGreaterThan(1);
+  expect(host.writes).toEqual([]);
+});
+
+test("a fan without terminals shows its pricing failure and native picture while Heal remains available", async () => {
+  host.snapshot = noTerminalSnapshot();
+  // A zero-flow dangling end is a valid cap repair. An outlet carrying air remains protected.
+  host.snapshot.segments[0]!.connectors[1]!.flowCfm = 0;
+  const { view, situation } = await mounted(
+    "/ducts?target=s&system=EX%201&picture=schematic&layers=",
+  );
+  await view.findByText("EX 1 has no terminal and no fan-to-terminal path; nothing to price", {
+    selector: "[role='alert']",
+  });
+  expect(view.queryByRole("region", { name: "Ducts loading" })).toBeNull();
+  expect(
+    view.container.querySelector("[data-schematic-group='g1'] [data-element='11620957']"),
+  ).not.toBeNull();
+  await liveButton(situation, "Heal");
+  fireEvent.click(await liveButton(situation, "Preview heal"));
+  await waitFor(() =>
+    expect(host.actions.map((action) => action.key)).toContain("ducts.preview-heal"),
+  );
+});
+
+test("the ordered network and sheet stages have no picker and render only their graph panes", async () => {
+  const { view, router, situation } = await mounted();
+  expect(ductsGraph.stageOrder).toEqual(["network", "sheet"]);
+  expect(situation.getByText(/^Pricing systems on /)).toBeTruthy();
+  expect(situation.queryByRole("button", { name: "Choose stage" })).toBeNull();
+  expect(situation.queryByRole("button", { name: "Pricing systems" })).toBeNull();
+  expect(view.container.querySelector("[data-pane-id='e-inbox']")).not.toBeNull();
+  expect(view.container.querySelector("[data-pane-id='sheet-roster']")).toBeNull();
+  await act(() =>
+    router.navigate({
+      to: "/ducts",
+      search: { target: "s", stage: "sheet", picture: "schematic", layers: [] },
+    }),
+  );
+  await waitFor(() =>
+    expect(within(view.getByLabelText("Situation")).getByText(/^Pricing fans on /)).toBeTruthy(),
+  );
+  expect(view.container.querySelector("[data-pane-id='e-inbox']")).toBeNull();
+  for (const pane of ductsGraph.stages.sheet!.panes)
+    expect(view.container.querySelector(`[data-pane-id='${pane}']`)).not.toBeNull();
+  const sheetSituation = within(view.getByLabelText("Situation"));
+  for (const name of [
+    "Refresh",
+    "Preview",
+    "Write to Revit",
+    "Preview heal",
+    "Heal",
+    "Preview fan",
+    "Make the fan",
+  ])
+    expect(sheetSituation.getByRole("button", { name })).toBeTruthy();
+  expect(situation.queryByRole("button", { name: "Choose stage" })).toBeNull();
+  expect(
+    host.requests.some((request) => request.key === "ducts.snapshot" && !request.request.selector),
+  ).toBe(false);
+});
+
+test("a fresh sheet URL opens a fan and edits its criteria through one kernel Work journal step", async () => {
+  const before = structuredClone(host.doc);
+  const { view } = await mounted("/ducts?target=s&stage=sheet&picture=schematic&layers=", false);
+  expect(within(view.getByLabelText("Situation")).getByText(/^Pricing fans on /)).toBeTruthy();
+  await waitFor(() => {
+    const row = view.container.querySelector<HTMLElement>("[data-key='14577391:2']");
+    expect(row).not.toBeNull();
+    expect(row!.getAttribute("aria-disabled")).not.toBe("true");
+  });
+  fireEvent.click(view.container.querySelector<HTMLElement>("[data-key='14577391:2']")!);
+  await waitFor(() =>
+    expect(
+      host.requests.some((request) => request.key === "sheet"),
+      JSON.stringify({
+        requests: host.requests,
+        alerts: view.queryAllByRole("alert").map((node) => node.textContent),
+      }),
+    ).toBe(true),
+  );
+  await view.findByRole("region", { name: "Required ESP" });
+  expect(host.requests.some((request) => request.key === "sheet" && !!request.request.detail)).toBe(
+    true,
+  );
+  const input = (await view.findByLabelText("Default terminal drop in-wg")).querySelector("input")!;
+  await act(async () => input.focus());
+  fireEvent.change(input, { target: { value: "0.11" } });
+  fireEvent.blur(input);
+  await waitFor(() => expect(host.doc.criteria.edit?.value.terminalDropInWg).toBe(0.11));
+  expect(host.writes).toHaveLength(1);
+  expect(host.writes[0]).toMatchObject({ kind: "apply", by: "human", base: 1, revision: 2 });
+  fireEvent.click(
+    await liveButton(within(view.getByLabelText("Sheet inputs")), "Undo criteria terminalDropInWg"),
+  );
+  await waitFor(() => expect(host.writes).toHaveLength(2));
+  expect(host.doc).toEqual(before);
+  fireEvent.click(
+    await liveButton(within(view.getByLabelText("Sheet inputs")), "Redo criteria terminalDropInWg"),
+  );
+  await waitFor(() => expect(host.doc.criteria.edit?.value.terminalDropInWg).toBe(0.11));
+  expect(host.writes).toHaveLength(3);
+});
+
+test("Price prepares one host preview, shows its kernel ticket, commits the same request and consumes a receipt", async () => {
+  const { view, situation } = await mounted();
+  fireEvent.click(await liveButton(situation, "Write to Revit"));
+  const review = await view.findByLabelText("Write to Revit review");
+  expect(review.textContent).toContain("1 planned");
+  expect(review.textContent).not.toContain('"receipt"');
+  expect(review.textContent).toContain("terminal flow");
+  expect(host.actions.map((row) => row.key)).toEqual(["ducts.preview-losses"]);
+  fireEvent.click(await liveButton(within(review), "Commit Write to Revit"));
+  await waitFor(() =>
+    expect(host.actions.map((row) => row.key)).toEqual([
+      "ducts.preview-losses",
+      "ducts.apply-losses",
+    ]),
+  );
+  expect(host.actions[1]!.state).toBe("succeeded");
+  expect(host.actions[1]!.input).toEqual(host.actions[0]!.input);
+  await waitFor(() => expect(view.queryByLabelText("Write to Revit review")).toBeNull());
+});
+
+test("a Work write invalidates an open ticket and commit cannot dispatch its apply", async () => {
+  const { view, situation } = await mounted();
+  fireEvent.click(await liveButton(situation, "Write to Revit"));
+  await view.findByLabelText("Write to Revit review");
+  await act(async () => {
+    await writeRouteWork(
+      host.key,
+      workWriteSchema.parse({
+        expectedRevision: host.revision,
+        press: "other-human",
+        patches: [
+          { path: ["flows", "4", "edit"], value: { value: { cfm: 120, source: "changed" } } },
+        ],
       }),
     );
-    expect(split("scope-upper").getAttribute("data-pane-folded")).toBe("end");
-    expect(split("scope-lower").getAttribute("data-pane-folded")).toBe("end");
-    act(() => inboxProbe.focus!({ segment: "componentDrops", id: component.id }));
-    expect(split("scope-upper").getAttribute("data-pane-folded")).toBe("start");
-    expect(split("scope-lower").getAttribute("data-pane-folded")).toBe("start");
-    expect(requests).toEqual([]);
-  } finally {
-    rect.mockRestore();
-    cleanup();
-  }
-}, 30_000);
-
-test("a changed document fences a pending read after changing targets and returning to that exact open document", async () => {
-  // Exercise the real route, target and read owners. Tree/layout work cannot falsify this race.
-  drawing.lightweight = true;
-  inventory.sessions[0]!.openDocuments.push({
-    openId: "doc2",
-    title: "Second document",
-    address: null,
-    isFamilyDocument: false,
   });
-  const target = encodeURIComponent(
-    JSON.stringify({ kind: "open", ref: { session: "slice", openId: "doc" } }),
+  await waitFor(() => expect(host.revision).toBe(2));
+  fireEvent.click(await liveButton(situation, "Write to Revit"));
+  await waitFor(() => expect(view.queryByLabelText("Write to Revit review")).toBeNull());
+  await waitFor(() =>
+    expect(
+      within(view.getByLabelText("Situation"))
+        .getAllByRole("status")
+        .some((status) => /changed|stale/i.test(status.textContent ?? "")),
+    ).toBe(true),
   );
-  const mounted = await mount("&system=SA", false, target, "");
-  await waitFor(() => expect(document.querySelector('[data-proto="E2"]')).not.toBeNull());
-  const picture = document.querySelector('[data-proto="E2"]');
-  expect(picture?.getAttribute("data-native")).toBe("true");
-  let release: (value: Response) => void = () => {};
-  reply = () =>
-    new Promise((resolve) => {
-      release = resolve;
-    });
-  fireEvent.click(screen.getByRole("button", { name: /^refresh/, hidden: true }));
-  expect(document.querySelector('[data-proto="E2"]')).not.toBeNull();
-  await waitFor(() => expect(requests.length).toBe(2));
-  expect(document.querySelector('[data-proto="E2"]')).toBe(picture);
-  expect(picture?.closest('[aria-busy="true"]')).not.toBeNull();
-  expect(picture?.textContent).toContain("refreshing");
-  expect(picture?.getAttribute("data-native")).toBe("false");
-  const old = response();
-  reply = async () => Response.json(response());
-  const pick = async (title: string) => {
-    fireEvent.click(screen.getByRole("button", { name: "Choose document", hidden: true }));
-    fireEvent.click(await screen.findByRole("option", { name: new RegExp(title), hidden: true }));
-  };
-  await pick("Second document");
-  await waitFor(() => expect(requests.at(-1)?.openId).toBe("doc2"), {
-    onTimeout: () =>
-      Error(JSON.stringify({ head, search: mounted.router.state.location.search, requests })),
-  });
-  act(() => invalidateDucts("doc"));
-  await pick("Duct route slice");
-  await waitFor(() => expect(requests.at(-1)?.openId).toBe("doc"));
-  await act(async () =>
-    release(Response.json({ ...old, document: { ...old.document, elapsedMs: 999999 } })),
-  );
-  expect(
-    screen.getByRole("region", { name: "Ducts route", hidden: true }).textContent,
-  ).not.toContain("999999");
-  // Two document-picker transitions and a fenced read exceed 15 s on a busy test machine.
-}, 30_000);
-
-test("picture layers choose the Context and Colour dials", async () => {
-  const instance = { revitId: 1 } as SceneInstance;
-  await mount();
-  await waitFor(() => expect(picture.current?.contextMode).toBe("glass"));
-  expect(picture.current!.paintOf!(instance)).toEqual({ tier: "subject", kind: "supply" });
-  expect(picture.current?.colour).toBe("firm");
-  expect(picture.current?.kinds.supply).toBe("#0569a5");
-  act(() => drawing.latest!.setPage({ layers: ["meshes", "halo", "context"] }));
-  await waitFor(() => expect(picture.current?.contextMode).toBe("glass"));
-  expect(picture.current?.colour).toBe("mono");
-  act(() => drawing.latest!.setPage({ layers: ["meshes", "system-colours"] }));
-  await waitFor(() => expect(picture.current?.contextMode).toBe("off"));
-  act(() =>
-    drawing.latest!.setPage({
-      layers: ["meshes", "halo", "system-colours"],
-      contextStyle: "lines",
-    }),
-  );
-  await waitFor(() => expect(picture.current?.contextMode).toBe("lines"));
-  expect(picture.current?.colour).toBe("firm");
-  // Scope mutation cannot depend on rendering an animation frame.
-  const frame = vi.spyOn(window, "requestAnimationFrame").mockImplementation(() => 0);
-  try {
-    fireEvent.click(
-      screen
-        .getAllByRole("button", { name: 'Remove the "SA active" narrowing', hidden: true })
-        .at(-1)!,
-    );
-    await waitFor(() => expect(drawing.latest!.page.system).toEqual([]));
-  } finally {
-    frame.mockRestore();
-  }
+  expect(host.actions.map((row) => row.key)).toEqual(["ducts.preview-losses"]);
 });
 
-test("a native tree selection keeps the camera and address pose; F frames and Escape keeps it", async () => {
-  const view = await mount();
-  const stretch = view.container.querySelector('[data-e-kind="leg"]')!.closest("[data-key]")!;
-  fireEvent.click(stretch.querySelector(".dl-row-twist")!);
-  const part = await waitFor(() => {
-    const label = view.container.querySelector('[data-e-kind="element"]');
-    expect(label).not.toBeNull();
-    return label!;
-  });
-  const id = "1";
-  await waitFor(() => expect(picture.current!.orbit.read()).not.toBeNull());
-  const pose = picture.current!.orbit.read();
-  const viewport = drawing.latest!.page.viewport;
-  fireEvent.click(part);
-  await waitFor(() => expect(drawing.latest!.page.selected).toBe(id));
-  expect(picture.current!.orbit.read()).toEqual(pose);
-  expect(drawing.latest!.page.viewport).toEqual(viewport);
-  expect(new URLSearchParams(view.router.state.location.searchStr).get("viewport")).toBe("null");
-  fireEvent.keyDown(document.body, { key: "f", code: "KeyF" });
-  await waitFor(() => expect(drawing.latest!.page.viewport).not.toBeNull());
-  expect(picture.current!.orbit.read()).not.toEqual(pose);
-  const framed = picture.current!.orbit.read();
-  fireEvent.keyDown(document.body, { key: "Escape", code: "Escape" });
-  await waitFor(() => expect(drawing.latest!.page.selected).toBe(""));
-  expect(picture.current!.orbit.read()).toEqual(framed);
-});
-
-test("a click on empty picture clears the selection; an empty clear writes no history", async () => {
-  const view = await mount();
-  const stretch = view.container.querySelector('[data-e-kind="leg"]')!.closest("[data-key]")!;
-  fireEvent.click(stretch.querySelector(".dl-row-twist")!);
-  const part = await waitFor(() => {
-    const label = view.container.querySelector('[data-e-kind="element"]');
-    expect(label).not.toBeNull();
-    return label!;
-  });
-  fireEvent.click(part);
-  await waitFor(() => expect(drawing.latest!.page.selected).toBe("1"));
-  act(() => picture.current!.onClear());
-  await waitFor(() => expect(drawing.latest!.page.selected).toBe(""));
-  const href = view.router.state.location.href;
-  act(() => picture.current!.onClear());
-  expect(view.router.state.location.href).toBe(href);
-});
-
-test("a staged subject and plural claim select the whole row without framing; a verdict stages the claim", async () => {
-  work = ductsRouteState.schema.parse({
-    subject: { g1: { edit: { value: [100, 1, 2, 3, 4] } } },
-    claims: {
-      c1: {
-        edit: {
-          value: {
-            title: "Open ends",
-            text: "Open ends at 1 and 3.",
-            ids: [1, 3],
-            state: "assumed",
-          },
-        },
-      },
+test("taking an assumptions row is one acknowledged journal step and Mod+Z restores it", async () => {
+  host.snapshot.issues = [
+    { id: "open-end:4:1", kind: "open-end", elementId: 4, note: "Terminal 4 has an open end" },
+  ];
+  host.snapshot.groups[0]!.issueIds = ["open-end:4:1"];
+  host.doc = ductsRouteState.schema.parse({
+    assumptions: {
+      "open-end:4:1": { suggestion: { value: { kind: "verdict", verdict: "ignore" } } },
     },
-    labelParameter: { edit: { value: "Unit Tag" } },
   });
-  reply = async () =>
-    Response.json({
-      ...response(),
-      nodes: snapshot.nodes.map((node) => (node.id === 100 ? { ...node, label: "AHU-9" } : node)),
-    });
-  await mount();
-  // The edit labelParameter rides the snapshot request.
-  await waitFor(() => expect(requests.at(-1)?.request).toEqual({ labelParameter: "Unit Tag" }));
-  // A person reveals the folded pane before acting on its evidence.
-  fireEvent.click(await screen.findByRole("button", { name: /^Expand Rulings/ }));
-  const inbox = await screen.findByText("Check");
-  expect(inbox).toBeTruthy();
-  const prefix = await waitFor(() => {
-    const row = document.querySelector<HTMLElement>('[data-key="claim:c1"]');
-    expect(row, document.querySelector("#e-inbox")?.textContent ?? "no inbox").not.toBeNull();
+  const before = structuredClone(host.doc);
+  const { view } = await mounted();
+  const row = await waitFor(() => {
+    const row = view.container.querySelector<HTMLElement>("[data-key='assumptions:open-end:4:1']");
+    expect(row).not.toBeNull();
     return row!;
   });
-  const pose = picture.current!.orbit.read();
-  fireEvent.click(within(prefix).getByText("Open ends"));
-  await waitFor(() => expect([...picture.current!.selected]).toEqual([1, 3]));
-  expect(picture.current!.orbit.read()).toEqual(pose);
-  expect(drawing.latest!.page.viewport).toBeNull();
-  expect(drawing.latest!.page).toMatchObject({ selected: "", issue: "claim:c1" });
-  const detail = document.querySelector<HTMLElement>('[data-inbox-detail="claim:c1"]')!;
-  fireEvent.focus(within(detail).getByRole("button", { name: "What is this?" }));
-  const evidence = await screen.findByRole("tooltip");
-  fireEvent.click(evidence.querySelector('[data-claim-element="1"]')!);
-  await waitFor(() => expect(drawing.latest!.page.viewport).not.toBeNull());
-  expect(drawing.latest!.page.selected).toBe("1");
-  fireEvent.click(await screen.findByRole("button", { name: "yes" }));
-  await waitFor(() => expect(work.claims.c1?.edit?.value?.verdict).toBe("yes"));
-  expect(work.claims.c1?.edit?.value).toMatchObject({
-    title: "Open ends",
-    text: "Open ends at 1 and 3.",
-    ids: [1, 3],
+  fireEvent.click(row);
+  fireEvent.click(await liveButton(within(row), "take"));
+  await waitFor(() =>
+    expect(host.doc.assumptions["open-end:4:1"]?.edit?.value).toMatchObject({
+      kind: "verdict",
+      verdict: "ignore",
+    }),
+  );
+  expect(host.writes).toHaveLength(1);
+  expect(host.writes[0]).toMatchObject({ kind: "apply", by: "human", base: 1, revision: 2 });
+  fireEvent.keyDown(view.getByLabelText("Ducts route"), { key: "z", ctrlKey: true });
+  await waitFor(() => expect(host.writes).toHaveLength(2));
+  expect(host.writes[1]).toMatchObject({ kind: "restore", base: 2, revision: 3, press: null });
+  expect(host.doc).toEqual(before);
+});
+
+test("sheet input history retains row labels, restore metadata and before/after totals", async () => {
+  host.sheetInputs.terminals["4"] = {
+    cfm: { value: 100, source: "typed" },
+    drop: { value: 0.03, source: "firm" },
+  };
+  host.sheetOverview.totals!.requiredEspInWg = 0.2;
+  const { view } = await mounted("/ducts?target=s&stage=sheet&picture=schematic&layers=", false);
+  expect(within(view.getByLabelText("Situation")).getByText(/^Pricing fans on /)).toBeTruthy();
+  await waitFor(() => {
+    const row = view.container.querySelector<HTMLElement>("[data-key='14577391:2']");
+    expect(row).not.toBeNull();
+    expect(row!.getAttribute("aria-disabled")).not.toBe("true");
   });
-  expect(work.claims.c1!.edit!.value).not.toHaveProperty("verdictBy");
-  expect(work.claims.c1!.edit!.value).not.toHaveProperty("verdictAt");
-}, 20000);
+  fireEvent.click(view.container.querySelector<HTMLElement>("[data-key='14577391:2']")!);
+  await waitFor(() =>
+    expect(
+      host.requests.some((request) => request.key === "sheet"),
+      JSON.stringify({
+        requests: host.requests,
+        alerts: view.queryAllByRole("alert").map((node) => node.textContent),
+      }),
+    ).toBe(true),
+  );
+  await view.findByRole("region", { name: "Required ESP" });
+  expect(host.requests.some((request) => request.key === "sheet" && !!request.request.detail)).toBe(
+    true,
+  );
+  const input = (await view.findByLabelText("Default terminal drop in-wg")).querySelector("input")!;
+  // Transport supplies distinct totals; the real kernel must bind them to the accepted revision.
+  host.sheetOverview.totals!.requiredEspInWg = 0.4;
+  await act(async () => input.focus());
+  fireEvent.change(input, { target: { value: "0.11" } });
+  fireEvent.blur(input);
+  await waitFor(() => expect(host.doc.criteria.edit?.value.terminalDropInWg).toBe(0.11));
+  expect(view.getByRole("button", { name: "Undo criteria terminalDropInWg" })).toBeTruthy();
+  const inputs = within(view.getByLabelText("Sheet inputs"));
+  const effect = () => view.container.querySelector("[data-inputs-effect]")!.textContent;
+  await waitFor(() => expect(effect()).toContain("required ESP 0.2000 → 0.4000"));
+  const beforeClear = structuredClone(host.doc);
+  host.sheetInputs.terminals["4"].cfm = { value: 80, source: "revit" };
+  host.sheetOverview.totals!.requiredEspInWg = 0.3;
+  fireEvent.click(inputs.getByRole("button", { name: /^Clear Terminal airflow / }));
+  await waitFor(() => expect(host.doc.flows["4"]).toBeUndefined());
+  await waitFor(() => expect(effect()).toContain("required ESP 0.4000 → 0.3000"));
+  const restore = await inputs.findByRole("button", {
+    name: /^Restore Terminal airflow .*100 cfm/,
+  });
+  host.sheetInputs.terminals["4"].cfm = { value: 100, source: "typed" };
+  host.sheetOverview.totals!.requiredEspInWg = 0.4;
+  fireEvent.click(restore);
+  await waitFor(() => expect(host.doc).toEqual(beforeClear));
+  expect(host.writes.at(-1)).toMatchObject({ kind: "restore", press: null });
+  await waitFor(() => expect(effect()).toContain("required ESP 0.3000 → 0.4000"));
+  expect(effect()).toContain("undid clear Terminal airflow");
+  const redo = await liveButton(inputs, /^Redo clear Terminal airflow /);
+  host.sheetInputs.terminals["4"].cfm = { value: 80, source: "revit" };
+  host.sheetOverview.totals!.requiredEspInWg = 0.3;
+  fireEvent.click(redo);
+  await waitFor(() => expect(host.doc.flows["4"]).toBeUndefined());
+  await waitFor(() => expect(effect()).toContain("required ESP 0.4000 → 0.3000"));
+  expect(effect()).toContain("redid clear Terminal airflow");
+  expect(host.writes).toHaveLength(4);
+});
+
+test("criteria and unit kinds take and revert through the graph's kernel cell verbs", async () => {
+  const kindKey = JSON.stringify(["Broan", "B210E75RT"]);
+  host.doc = ductsRouteState.schema.parse({
+    criteria: { suggestion: { value: { splitPolicy: "even" } } },
+    kinds: { [kindKey]: { suggestion: { value: { kind: "erv" } } } },
+  });
+  const registry = makeAtomRegistry();
+  const owner = createRouteOwner("ducts", registry);
+  const { verbs, subjects } = kernelCellVerbs(ductsGraph);
+  const context: VerbContext<"human"> = {
+    caller: "human",
+    owner,
+    subjects,
+    snapshot: () => ({
+      target: { kind: "document", ref: { session: "s", openId: "d" } },
+      work: { handle: { key: host.key, revision: host.revision }, doc: host.doc },
+      basis: null,
+    }),
+    write: (key, write) => writeRouteWork(key, { ...write, kind: "apply" }),
+  };
+  try {
+    for (const row of [
+      { segment: null, key: "criteria" },
+      { segment: "kinds", key: kindKey },
+    ]) {
+      const subject = ductsAdapters.cell!(row, {
+        target: context.snapshot().target,
+        work: { handle: { key: host.key, revision: host.revision }, doc: host.doc },
+        page: ductsPageSchema.parse({}),
+        readings: {},
+      })!;
+      expect(subject).not.toBeNull();
+      expect(
+        (await invoke(context, verbs[`${subject.type}.take`]!, subject, undefined)).state,
+      ).toBe("done");
+      expect(
+        (await invoke(context, verbs[`${subject.type}.reopen`]!, subject, undefined)).state,
+      ).toBe("done");
+    }
+    expect(host.doc.criteria.edit).toBeNull();
+    expect(host.doc.kinds[kindKey]?.edit).toBeNull();
+    expect(host.writes).toHaveLength(4);
+  } finally {
+    owner.dispose();
+    registry.dispose();
+  }
+});
+
+test("clearing the only part drop keeps its row under typed-only and restores through the journal", async () => {
+  host.doc.componentDrops["4"] = { edit: { value: { inWg: 0.12 } } };
+  host.sheetInputs.components["4"] = { drop: { value: 0.12, source: "typed" } };
+  const before = structuredClone(host.doc);
+  const { view } = await mounted("/ducts?target=s&stage=sheet&picture=schematic&layers=", false);
+  await waitFor(() =>
+    expect(view.container.querySelector("[data-key='14577391:2']")).not.toBeNull(),
+  );
+  fireEvent.click(view.container.querySelector<HTMLElement>("[data-key='14577391:2']")!);
+  await view.findByRole("region", { name: "Required ESP" });
+  const inputs = within(await view.findByLabelText("Sheet inputs"));
+  fireEvent.click(inputs.getByRole("button", { name: "Show typed inputs only" }));
+  const clear = await liveButton(inputs, /^Clear Part drop /);
+  delete host.sheetInputs.components["4"];
+  expect(clear.isConnected).toBe(true);
+  fireEvent.click(clear);
+  await waitFor(() => expect(host.doc.componentDrops["4"]).toBeUndefined());
+  const restore = await inputs.findByRole("button", { name: /^Restore Part drop / });
+  expect(restore.closest("[data-input-field]")?.getAttribute("data-input-field")).toBe(
+    "component:4:drop",
+  );
+  expect(restore.closest("[data-inputs-orphan]")).toBeNull();
+  host.sheetInputs.components["4"] = { drop: { value: 0.12, source: "typed" } };
+  fireEvent.click(restore);
+  await waitFor(() => expect(host.doc).toEqual(before));
+  expect(host.writes.at(-1)?.kind).toBe("restore");
+  expect(inputs.queryByRole("button", { name: /^Restore Part drop / })).toBeNull();
+});
+
+test.each(["Heal", "Preview heal"])(
+  "%s lands readable repairs and targets in the picture",
+  async (verb) => {
+    const segment = host.snapshot.segments[0]!;
+    segment.connectors.push({
+      ...segment.connectors[0]!,
+      index: 9,
+      point: [-10, 0, 0],
+      facing: [-1, 0, 0],
+      diameterIn: 8,
+      connectedTo: null,
+    });
+    host.snapshot.issues.push({
+      id: "open-end:1:9",
+      kind: "open-end",
+      elementId: 1,
+      connector: 9,
+      note: "open end",
+    });
+    const { view, situation } = await mounted();
+    const controls =
+      verb === "Heal"
+        ? within(view.container.querySelector<HTMLElement>("[data-pane-id='e-inbox']")!)
+        : situation;
+    fireEvent.click(await liveButton(controls, verb));
+    if (verb === "Heal") {
+      const review = await view.findByLabelText("Heal review");
+      expect(review.textContent).toContain("1 planned");
+      expect(review.textContent).toContain("cap");
+      expect(review.textContent).not.toContain('"receipt"');
+    }
+    await waitFor(() =>
+      expect(
+        view.container.querySelector("[data-review-target]"),
+        view
+          .queryAllByRole("alert")
+          .map((n) => n.textContent)
+          .join(" "),
+      ).not.toBeNull(),
+    );
+    expect(view.getAllByLabelText("Heal in picture")[0]!.textContent).toContain("1 planned");
+    expect(host.actions.map((a) => a.key)).toEqual(["ducts.preview-heal"]);
+    if (verb === "Heal") {
+      fireEvent.click(await liveButton(within(view.getByLabelText("Heal review")), "Commit Heal"));
+      await waitFor(() =>
+        expect(host.actions.map((a) => a.key)).toEqual(["ducts.preview-heal", "ducts.apply-heal"]),
+      );
+    }
+  },
+);
+
+test("page and hosted fan sheets bind journal chords once per focused mount without duplicate warnings", async () => {
+  const warn = vi.spyOn(console, "warn");
+  const wrap = vi.spyOn(ductsAdapters, "wrap");
+  try {
+    const { view } = await mounted(
+      "/ducts?target=s&stage=sheet&fan=14577391:2&picture=schematic&layers=",
+      false,
+      true,
+    );
+    const regions = view.getAllByRole("region", { name: "Ducts route" });
+    expect(regions).toHaveLength(2);
+    const page = within(regions[0]!);
+    const chat = within(regions[1]!);
+    await page.findByRole("region", { name: "Required ESP" });
+    await chat.findByRole("region", { name: "Required ESP" });
+    const owners = [...new Set(wrap.mock.calls.map((call) => call[0]))];
+    expect(owners).toHaveLength(2);
+    const edit = async (value: string, count: number) => {
+      await waitFor(() => {
+        for (const owner of owners) {
+          expect(owner.snapshot().work?.handle.revision).toBe(host.revision);
+          expect(owner.readings.get("sheet").current).toBe(true);
+        }
+      });
+      const input = page.getByLabelText("Default terminal drop in-wg").querySelector("input")!;
+      await act(async () => input.focus());
+      fireEvent.change(input, { target: { value } });
+      fireEvent.blur(input);
+      await waitFor(() => expect(host.writes).toHaveLength(count));
+    };
+    await edit("0.11", 1);
+    await edit("0.12", 2);
+    const restores = owners.map((owner) => vi.spyOn(owner, "restore"));
+    const undo = async (scope: ReturnType<typeof within>, count: number) => {
+      await waitFor(() => {
+        for (const owner of owners) {
+          expect(owner.snapshot().work?.handle.revision).toBe(host.revision);
+          expect(owner.journal(owner.snapshot().work!.handle.key).read().busy).toBe(false);
+        }
+      });
+      const button = scope.getByRole("button", { name: "Refresh" });
+      button.focus();
+      fireEvent.keyDown(button, { key: "z", code: "KeyZ", ctrlKey: true });
+      fireEvent.keyUp(button, { key: "z", code: "KeyZ", ctrlKey: true });
+      await waitFor(() =>
+        expect(host.writes, owners.map((owner) => owner.journalRefusal()).join("; ")).toHaveLength(
+          count,
+        ),
+      );
+    };
+    await undo(page, 3);
+    expect(host.doc.criteria.edit?.value.terminalDropInWg).toBe(0.11);
+    expect(restores[0]).toHaveBeenCalledTimes(1);
+    expect(restores[1]).not.toHaveBeenCalled();
+    await undo(chat, 4);
+    expect(host.doc.criteria.edit).toBeUndefined();
+    expect(restores[0]).toHaveBeenCalledTimes(1);
+    expect(restores[1]).toHaveBeenCalledTimes(1);
+    expect(host.writes.slice(2).every((write) => write.kind === "restore")).toBe(true);
+    expect(
+      warn.mock.calls.filter((args) =>
+        args.some((value) => String(value).includes("already registered")),
+      ),
+    ).toEqual([]);
+    for (const restore of restores) restore.mockRestore();
+  } finally {
+    wrap.mockRestore();
+    warn.mockRestore();
+  }
+});

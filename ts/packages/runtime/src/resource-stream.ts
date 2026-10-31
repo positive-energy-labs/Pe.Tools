@@ -36,6 +36,10 @@ export function observeResources(
     const accept = (value: OwnerValue<unknown>) => publish(resourceSnapshot(key, value));
     if (request.kind === "work") return work.observe(request, request.route, accept);
     if (request.kind === "thread-head") return heads.observe(request.thread, accept);
+    if (request.kind === "work-acks")
+      return work.observeAccepted(request.work, (ack) =>
+        publish({ kind: "event", key, value: ack }),
+      );
     if (host) return host(request, publish, after);
     publish({ kind: "failure", key, error: `Resource '${request.kind}' is unavailable` });
     return () => {};
@@ -47,7 +51,7 @@ const LOG = "\u0000log";
 
 /**
  * One bounded connection mailbox. Producers only offer; they never await the socket. Snapshot keys
- * keep their latest frame; `world` keeps a bounded tail with gap frames; host log frames (those
+ * keep their latest frame; `world` and `work-acks` keep a bounded tail per key with gap frames; host log frames (those
  * carrying an `id`) share one lane in id order, and a reader that falls `logFrames` behind loses
  * the connection: it reconnects from its cursor and the durable log replays what it missed.
  */
@@ -57,6 +61,8 @@ export function resourceResponse(
   limits = {
     frameBytes: READING_MAX_FRAME_BYTES,
     worldEvents: 64,
+    // One Work's retained window is 100 writes (`RouteWorkspace.observeAccepted`); replay must fit.
+    workAckEvents: 128,
     stallMs: 10_000,
     logFrames: 4096,
   },
@@ -79,10 +85,12 @@ export function resourceResponse(
   const encoder = new TextEncoder();
   const pending = new Map<string, Uint8Array>();
   const ready = new Set<string>();
-  const world: Uint8Array[] = [];
+  const tails = new Map<string, { frames: Uint8Array[]; gap: boolean; dropped: number | null }>();
+  const tailLimit = (key: string) => {
+    const kind = requested.get(key)?.kind;
+    return kind === "world" ? limits.worldEvents : kind === "work-acks" ? limits.workAckEvents : 0;
+  };
   const lane: Uint8Array[] = [];
-  let dropped: number | null = null;
-  let gap = false;
   let closed = false;
   let demand: (() => void) | undefined;
   let stalled: ReturnType<typeof setTimeout> | undefined;
@@ -115,7 +123,7 @@ export function resourceResponse(
     for (const release of releases.splice(0)) release();
     pending.clear();
     ready.clear();
-    world.length = 0;
+    tails.clear();
     lane.length = 0;
     demand?.();
     demand = undefined;
@@ -133,13 +141,14 @@ export function resourceResponse(
       if (key === LOG) {
         bytes = lane.shift()!;
         if (lane.length) ready.add(LOG);
-      } else if (requested.get(key)?.kind === "world") {
-        if (gap) {
-          bytes = encode({ kind: "gap", key, dropped });
-          gap = false;
-          dropped = 0;
-        } else bytes = world.shift()!;
-        if (world.length || gap) ready.add(key);
+      } else if (tailLimit(key)) {
+        const tail = tails.get(key)!;
+        if (tail.gap) {
+          bytes = encode({ kind: "gap", key, dropped: tail.dropped });
+          tail.gap = false;
+          tail.dropped = 0;
+        } else bytes = tail.frames.shift()!;
+        if (tail.frames.length || tail.gap) ready.add(key);
       } else {
         bytes = pending.get(key)!;
         pending.delete(key);
@@ -170,17 +179,19 @@ export function resourceResponse(
         lane.push(bytes);
         ready.add(LOG);
         return drain();
-      } else if (requested.get(frame.key)?.kind === "world") {
+      } else if (tailLimit(frame.key)) {
+        const tail = tails.get(frame.key) ?? { frames: [], gap: false, dropped: null };
+        tails.set(frame.key, tail);
         if (frame.kind === "gap") {
-          gap = true;
-          dropped = frame.dropped;
+          tail.gap = true;
+          tail.dropped = frame.dropped;
         } else {
-          if (world.length === limits.worldEvents) {
-            world.shift();
-            gap = true;
-            dropped = (dropped ?? 0) + 1;
+          if (tail.frames.length === tailLimit(frame.key)) {
+            tail.frames.shift();
+            tail.gap = true;
+            tail.dropped = (tail.dropped ?? 0) + 1;
           }
-          world.push(bytes);
+          tail.frames.push(bytes);
         }
       } else pending.set(frame.key, bytes);
       ready.add(frame.key);

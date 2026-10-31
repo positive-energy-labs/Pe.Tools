@@ -12,6 +12,7 @@ export {
   SPACE_LAYERS,
   spaceElementKey,
 } from "./routes/index.ts";
+export { pictureFields, type PicturePage } from "./routes/picture.ts";
 export type { History } from "./route-field.ts";
 export * from "./page-keys.ts";
 export * from "./route-doc.ts";
@@ -70,3 +71,6 @@ export * from "./ducts-guide.ts";
 export * from "./list-search.ts";
 export * from "./scene-view.ts";
 export { threadSearchDefault } from "./routes/shared.ts";
+export * from "./route-graph.ts";
+export * from "./route-settings.ts";
+export * from "./ducts-sheet.ts";

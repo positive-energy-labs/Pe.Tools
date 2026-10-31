@@ -1040,9 +1040,9 @@ export const DUCT_CASES: readonly DuctCase[] = [
     whatWeDo: "Needs the firm's ESP parameter name.",
     why: "Parameter names are firm-specific.",
     status: "owed",
-    code: "no-fan-static · esp",
-    kinds: ["no-fan-static"],
-    ids: 'SA 19: FC-17 9668311 "states no external static" (no-fan-static), as does DH-21 9668310.',
+    code: "esp",
+    kinds: [],
+    ids: "SA 19: FC-17 9668311 states no external static, as does DH-21 9668310.",
     examples: [
       {
         system: "SA 19",

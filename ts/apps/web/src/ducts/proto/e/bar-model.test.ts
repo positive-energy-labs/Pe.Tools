@@ -80,6 +80,9 @@ test("bar columns follow this run's actual rules, lookup inputs, unique count an
     "elbow-1d-le10",
     "elbow-1d-gt10",
     "elbow-075d",
+    "elbow-15d-90-le10",
+    "elbow-15d-45-le10",
+    "elbow-round-radius",
   ]);
   expect(ruleConditions(ruleByKey("elbow-075d")!, elbow!).inactive).toBe(false);
   expect(ruleConditions(ruleByKey("elbow-1d-le10")!, elbow!).inactive).toBe(true);

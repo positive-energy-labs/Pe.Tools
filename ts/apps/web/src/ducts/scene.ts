@@ -137,12 +137,19 @@ export function sceneOf(
       issues: index.issuesOf.get(node.id) ?? [],
       pressure: pointOf(index, node.id),
     }));
-  const drawn = new Set(groups);
+  // An issue is keyed by element (ducts LEDGER 2026-10-29): drawn when its element's group is.
+  const drawn = new Set(
+    groups
+      .flatMap((group) => [
+        ...(index.segmentsOf.get(group) ?? []),
+        ...(index.nodesOf.get(group) ?? []),
+      ])
+      .map((element) => element.id),
+  );
   const issues = index.snapshot.issues.filter(
     (issue) =>
-      issue.groupId != null &&
-      drawn.has(issue.groupId) &&
-      (!members || issue.elementId == null || members.has(issue.elementId)) &&
+      drawn.has(issue.elementId) &&
+      (!members || members.has(issue.elementId)) &&
       issue.point &&
       keepLevel(index.levelOf(issue)),
   );

@@ -6,7 +6,6 @@ import { readPeError } from "@pe/host-contracts/pe-api";
 import { publicRoutes } from "./builtin-routes";
 import { createPodRouteLoader, verifyBundle } from "./pod-loader";
 import { makePodRoute, type PodRouteBundle } from "./pod-view";
-import { setPodAddresses } from "./pod-address";
 
 type Inventory = {
   rows: PodRouteDescriptor[];
@@ -26,7 +25,7 @@ export function PodRoutesProvider({ children }: { children: ReactNode }) {
   const [revision, setRevision] = useState(0);
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const { loader, publish } = useMemo(() => {
-    const loader = createPodRouteLoader(async (row) => {
+    const loader = createPodRouteLoader(async (row, current) => {
       try {
         const response = await peClient.response("plugins.routeBundle", {
           params: { key: row.key, hash: row.sha256 },
@@ -34,11 +33,13 @@ export function PodRoutesProvider({ children }: { children: ReactNode }) {
         if (!response.ok) throw Error((await readPeError(response)).message);
         const bytes = new Uint8Array(await response.arrayBuffer());
         await verifyBundle(bytes, row.sha256);
+        if (!current()) return () => {};
         const url = URL.createObjectURL(new Blob([bytes], { type: "text/javascript" }));
         try {
           const bundle = (await import(/* @vite-ignore */ url)) as PodRouteBundle;
+          if (!current()) return () => {};
           const route = makePodRoute(row, bundle);
-          return publicRoutes.register(route);
+          return publicRoutes.registerGraph(route.graph, route.hosted);
         } finally {
           URL.revokeObjectURL(url);
         }
@@ -49,7 +50,6 @@ export function PodRoutesProvider({ children }: { children: ReactNode }) {
     });
     const publish = async (next: PodRouteDescriptor[]) => {
       setRows(next);
-      setPodAddresses(next);
       setErrors({});
       await loader.sync(next);
     };
@@ -63,7 +63,6 @@ export function PodRoutesProvider({ children }: { children: ReactNode }) {
       clearInterval(timer);
       window.removeEventListener("focus", refresh);
       loader.dispose();
-      setPodAddresses([]);
     };
   }, [loader]);
   useEffect(() => {

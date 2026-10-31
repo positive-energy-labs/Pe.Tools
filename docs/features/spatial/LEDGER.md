@@ -1,6 +1,6 @@
 # spatial ledger
 
-One metric substrate sits under every Pe.* helper that reads or writes Revit geometry: Placement, Takeoff, filled regions, family placement. Pea asks small, addressable questions, and the substrate computes metric truth. Read cost and geometric truth: [Reading Revit: cost and truth](READING-REVIT.md). Top rule: [ADR 0025](../../adr/0025-accurate-geometry-first.md). Design source: fanout 2026-09-04 (substrate), with disposable reports in `.artifacts/handoffs/fanout-20260904-substrate/`. Rebuilt as current truth on 2026-10-27. Git holds the timeline.
+One metric substrate sits under every Pe.\* helper that reads or writes Revit geometry: Placement, Takeoff, filled regions, family placement. Pea asks small, addressable questions, and the substrate computes metric truth. Read cost and geometric truth: [Reading Revit: cost and truth](READING-REVIT.md). Top rule: [ADR 0025](../../adr/0025-accurate-geometry-first.md). Design source: fanout 2026-09-04 (substrate), with disposable reports in `.artifacts/handoffs/fanout-20260904-substrate/`. Rebuilt as current truth on 2026-10-27. Git holds the timeline.
 
 ## Decided
 
@@ -51,6 +51,7 @@ One metric substrate sits under every Pe.* helper that reads or writes Revit geo
 - 2026-10-28, PROVEN[session dev, harness `probe-r` headless, `8b5359fe` (Chadds 08:18Z, Manuella 08:07Z) and its byte-identical rebase `6842220f` (Cleremont 09:00Z); 13/13 Space tests]: the warm-time fix for step 2 (exclusions in one pass over the reach ids, each class counted over only what that pass excluded; loads in document order). Against main's baseline, cold context: Chadds EX 7 1.14→1.12 s (step 2 had 1.50), SA 7 4.75 s; warm SA 7 1.34→1.15 s (step 2 had 1.64); Cleremont SA 19 0.79→0.59 s, SA 2 2.41→0.32 s, SA 21 0.27→0.39 s; Manuella flat. Memory, counts and the witness (0 near-run building lost) unchanged. **Residual time cost, recorded: Cleremont SA 21 cold +0.12 s and SA 19 warm +0.23 s against main.** On Cleremont's house links most ids in reach are excluded (sketch, view-specific), so the one pass costs ≈70 ms extra there while saving ≈0.5 s on Chadds, where the IFC link excludes almost nothing. A 2 s sampler across the Cleremont open stayed clean (free ≥15.0 GiB; kernel pools flat at 9.8/5.6 GiB); the 08:14Z open that died with free memory at 1.3 GiB while probe Revit held 2.6 GB has no named consumer (the orchestrator's memlog had stopped; probe-sheet reports builds near then). Evidence: `.artifacts/accept/space-proof/8b5359fe-20261028T081800Z`, `…/6842220f-20261028T090011Z`, sampler `…/6842220f-20261028T090011Z/memsample.csv`.
 
 ## Tried & rejected
+
 - 2026-10-28, per-class exclusion counts as queries ANDed with the reach filter: 13 OR-of-hundreds-of-boxes queries per source took Cleremont SA 19 from 1.5 s to 6.2 s. One reach query per source.
 - 2026-10-28, one outline per focus member: an OR of 501 boxes over Chadds' host took 19.5 s (SA 7 28 s total). Outlines merge, with their extent filtering first.
 - 2026-10-28, exclusion classes counted document-wide (an id set per class per source): Cleremont SA 21 +38 MiB against main's +10. Classes are counted over the reach ids only.
@@ -81,6 +82,8 @@ One metric substrate sits under every Pe.* helper that reads or writes Revit geo
 - 2026-09-04, IFC export plus IfcOpenShell (drops `ImportInstance`, takes minutes per commit); live Revit predicates with no stored world (`ElementIntersectsSolidFilter` skips non-solid geometry); a dense distance field (a 0.5 ft cell cannot certify a 2 in clearance). Paper verdicts, sources in `priorart.md`.
 
 ## Owed
+
+- Converge `/space`'s custom stage composition (`space/picture.tsx` over `Scene3D`, `stage-controller`, orbit and plane directly) onto `scene/picture/*`; preserve the three axis cuts, their node/edge edits and the saved 3D return pose. Deferred from the 2026-10-30 ADR 0026 kernel port, which kept the drawing bodies unchanged.
 
 - Step 6: replace whole-model beta-verb preparation with the scoped read, then re-measure the retained disk pack. Delete the store and flags only when the pack's measured benefit is gone. Comparison bar: actual Cleremont Sweep warm 11.307 s with the pack, versus 15.677 s without; cold 27.526→24.471 s. Any future resident reuse requires a measured hard memory cap. [U6 production Sweep](READING-REVIT.md#u6-production-sweep-the-repeat-regression-is-real).
 

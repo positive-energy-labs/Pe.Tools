@@ -38,7 +38,9 @@ export function veilUniforms() {
     contextDepthSize: { value: new THREE.Vector2() },
     subjectRim: { value: 0 },
     stubFadeFt: { value: 10 },
-    stubEndAlpha: { value: 0.06 },
+    stubEndAlpha: { value: 0.5 },
+    /** The context ink a stub grades to over its fade (`grounds.context`). */
+    stubContext: { value: new THREE.Color(0.6, 0.6, 0.6) },
   };
 }
 export type VeilUniforms = ReturnType<typeof veilUniforms>;
@@ -74,6 +76,7 @@ uniform sampler2D contextDepth;
 uniform vec2 contextDepthSize;
 uniform float subjectRim;
 uniform float stubFadeFt, stubEndAlpha;
+uniform vec3 stubContext;
 varying vec3 sceneNormal, sceneView;
 varying float sceneContinuation;
 #endif
@@ -105,8 +108,12 @@ void veil(inout vec4 c) {
     }
   } else {
     // Negative batch alpha carries the stub tier without spending another vertex attribute.
+    // A stub grades from its system colour at the subject to the context ink over the fade
+    // (kaitpw 2026-10-30: "a subtle gradient over the first 10-15 ft"), then reads as context;
+    // its alpha eases to the floor rather than vanishing, so a unit's other ports stay legible.
     if (c.a < 0.0) {
       float fade = min(1.0 - smoothstep(0.0, stubFadeFt, d), smoothstep(0.0, stubFadeFt, sceneContinuation));
+      c.rgb = mix(stubContext, c.rgb, fade);
       c.a = -c.a * mix(stubEndAlpha, 1.0, fade);
     }
     // Face interiors darken slightly against their rim; this survives the all-translucent view.

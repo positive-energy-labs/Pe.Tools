@@ -7,7 +7,7 @@ const search = (keywords = "", pills: Record<string, string> = {}) =>
 // @vitest-environment jsdom
 import { useState } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { makeAtomRegistry } from "#/route/route-owner";
+import { makeAtomRegistry } from "#/shell/owner";
 import { TestAttention } from "#/test-attention";
 import { hovered } from "@pe/kit/lang/attention";
 import { afterEach, expect, test, vi } from "vite-plus/test";

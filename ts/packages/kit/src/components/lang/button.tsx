@@ -23,6 +23,9 @@ import { useWork } from "./work";
 import "./button.css";
 
 const NAV_ICON = { back: ArrowLeft, forward: ArrowRight, out: ExternalLink };
+/** Row action slots draw glyphs even when a composed control supplies words. */
+export const ButtonIcon = createContext<LucideIcon | null>(null);
+
 /** A composing surface supplies state; its button owns the anchored overlay. */
 export const ButtonOutcome = createContext<OutcomeLineProps | null>(null);
 
@@ -61,6 +64,11 @@ export function Button({
   "data-tone": toneProp,
   ...props
 }: ButtonProps) {
+  const compactIcon = useContext(ButtonIcon);
+  if (compactIcon) {
+    icon ??= compactIcon;
+    children = undefined;
+  }
   const [pending, setPending] = useState(false);
   const [outcome, setOutcome] = useState<OutcomeLineProps | null>(null);
   const shownOutcome = useContext(ButtonOutcome) ?? outcome;

@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { availableTransitions, transitionPatches, type FamilyDraft } from "@pe/agent-contracts";
 
 import type { CellWire } from "#/components/work/band";
-import type { FieldState } from "#/family/host";
+import type { FieldState } from "#/family/types";
 import { initialDraft, savedFrom } from "#/family/model";
 import { familySource } from "#/family/source";
 import { familyLockOf, type FamilyStore } from "#/family/store";

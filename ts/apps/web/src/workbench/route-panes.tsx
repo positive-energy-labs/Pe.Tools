@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
-import { routeAddress } from "@pe/agent-contracts";
+import { routeAddress, split, pane } from "@pe/agent-contracts";
 import { ChatShell } from "#/chat/chat-shell";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { Button } from "@pe/kit/lang/button";
 import { chipRecipe } from "@pe/kit/lang/chip";
 import { useThreadWorks } from "#/chat/thread-work";
-import { Pane, PaneSplit, type PaneSide } from "@pe/kit/lang/pane";
+import {
+  GraphLayoutView,
+  type GraphLayoutState,
+} from "../../../../packages/kit/src/components/lang/graph-layout";
 import { ChatPlanIntent } from "#/route/situation-ladder";
 import { useWorkbench } from "./provider";
 import { useRouteTabs } from "./tabs";
@@ -46,8 +49,16 @@ export function RouteDock({
   useEffect(() => {
     if (plan && plan.route !== tabs.route) store.actions.cancelPlan();
   }, [plan, tabs.route, store]);
-  const [fold, setFold] = useState<PaneSide | null>(tabs.route ? null : "end");
-  useEffect(() => setFold(tabs.route ? null : "end"), [tabs.route, tabs.active?.id]);
+  const [layout, setLayout] = useState<GraphLayoutState>({ tools: { folded: !tabs.route } });
+  useEffect(
+    () =>
+      setLayout((prior) => ({
+        ...prior,
+        tools: { ...prior.tools, folded: !tabs.route },
+        pea: { ...prior.pea, folded: false },
+      })),
+    [tabs.route, tabs.active?.id],
+  );
   const failure = tabs.failure ?? planRefusal?.message ?? null;
   // A Work pressed on a closed document: its tool says what was kept and how to reconnect, while
   // the source row's remembered Work still finds that document closed. It follows the Place the
@@ -75,58 +86,76 @@ export function RouteDock({
   return (
     <ChatPlanIntent.Provider value={intent}>
       {/* Pea and tool pages share this owner so navigation cannot destroy unsent drafts. */}
-      <PaneSplit
-        axis="horizontal"
-        grow
-        resize={{
-          target: "end",
-          defaultSize: 720,
-          minSize: DOCK_FLOOR.tools,
-          minOtherSize: DOCK_FLOOR.pea,
-          persist: "pe.toolsWidth",
-          collapse: {
-            collapsed: fold,
-            onCollapsedChange: setFold,
-            start: { title: "pea" },
-            end: { title: "tools" },
+      <GraphLayoutView
+        layout={split(
+          "route-dock",
+          {
+            axis: "h",
+            sized: "end",
+            size: 720,
+            minSize: DOCK_FLOOR.tools,
+            minOtherSize: DOCK_FLOOR.pea,
+            persist: "pe.toolsWidth",
+          },
+          pane("pea"),
+          pane("tools"),
+        )}
+        panes={{
+          pea: {
+            label: "pea",
+            purpose: "Conversation",
+            draws: [],
+            verbs: [],
+            frame: { header: false, flush: true, scroll: "clip" },
+          },
+          tools: {
+            label: "tools",
+            purpose: "Retained tool routes",
+            draws: [],
+            verbs: [],
+            frame: { flush: true, scroll: "clip" },
           },
         }}
-        start={
-          tabs.route || pea ? (
-            <ChatShell docked={Boolean(tabs.route)} target={tabs.target} />
-          ) : (
-            children
-          )
-        }
-        end={
-          <Pane
-            id="tools"
-            title="tools"
-            scroll="clip"
-            flush
-            tabs={strip}
-            actions={
+        active={() => true}
+        state={{ panes: layout, onChange: setLayout }}
+        bodies={{
+          pea: (frame) =>
+            frame(
+              tabs.route || pea ? (
+                <ChatShell docked={Boolean(tabs.route)} target={tabs.target} />
+              ) : (
+                children
+              ),
+            ),
+          tools: (frame) =>
+            frame(
               <>
-                <RouteTabActions
-                  tabs={tabs.tabs}
-                  active={active}
-                  failure={failure}
-                  onRetry={tabs.retry}
-                  onChat={() => void tabs.chat()}
-                  onDuplicate={tabs.active ? () => void tabs.duplicate() : null}
-                  onCloseActive={() => {
-                    if (tabs.active) void tabs.close(tabs.active);
-                  }}
-                />
-              </>
-            }
-          >
-            {reconnect ? (
-              <ClosedWorkBand closed={reconnect} onOpen={() => void navigate({ to: "/open" })} />
-            ) : null}
-            <RouteRetention {...tabs} renderRoute={renderRoute} />
-          </Pane>
-        }
+                {reconnect && (
+                  <ClosedWorkBand
+                    closed={reconnect}
+                    onOpen={() => void navigate({ to: "/open" })}
+                  />
+                )}
+                <RouteRetention {...tabs} renderRoute={renderRoute} />
+              </>,
+              {
+                tabs: strip,
+                actions: (
+                  <RouteTabActions
+                    tabs={tabs.tabs}
+                    active={active}
+                    failure={failure}
+                    onRetry={tabs.retry}
+                    onChat={() => void tabs.chat()}
+                    onDuplicate={tabs.active ? () => void tabs.duplicate() : null}
+                    onCloseActive={() => {
+                      if (tabs.active) void tabs.close(tabs.active);
+                    }}
+                  />
+                ),
+              },
+            ),
+        }}
       />
     </ChatPlanIntent.Provider>
   );

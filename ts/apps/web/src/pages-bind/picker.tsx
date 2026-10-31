@@ -3,7 +3,7 @@
  * The app is the human door; the Page only shows what the host resolved. Wave 1 binds the
  * `default` slot.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   address,
   type HarnessThreadSummary,
@@ -19,11 +19,6 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { emptyListState, listOf, useList } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
 import { Section } from "@pe/kit/lang/section";
-import { Surface } from "@pe/kit/lang/surface";
-import { useThreadSummaries } from "#/open/bay";
-import { inventoryOf, previousOf, useInventory } from "#/readings";
-
-import { bindPage, readPageTarget } from "./client";
 
 /** One document a pin can name: saved, so it has an Address. */
 export interface Pinnable {
@@ -205,82 +200,5 @@ export function BindPicker({
         }
       />
     </div>
-  );
-}
-
-/** The route body: the live threads, the open documents, and the host's reading of the Page. */
-function BindingPickerRoute({ slug }: { slug: string }) {
-  const [reading, setReading] = useState<PageTargetReading | null>(null);
-  const [outcome, setOutcome] = useState<{ ok: boolean; message: string } | null>(null);
-  const threads = useThreadSummaries(true, null);
-  const inventory = useInventory(true);
-  const seen = previousOf(inventory);
-  const documents = useMemo<Pinnable[] | null>(
-    () =>
-      seen
-        ? inventoryOf(seen.sessions).flatMap((session) =>
-            (session.openDocuments ?? []).map((doc) => ({
-              title: doc.title,
-              address: doc.address ?? null,
-              revit: `Revit ${session.year ?? ""} · pid ${session.processId}`.replace("  ", " "),
-              ref: { session: session.sessionId, openId: doc.openId },
-            })),
-          )
-        : null,
-    [seen],
-  );
-  const read = useCallback(
-    () =>
-      readPageTarget(slug).then(setReading, (error: Error) =>
-        setOutcome({ ok: false, message: error.message }),
-      ),
-    [slug],
-  );
-  useEffect(() => void read(), [read]);
-  const onBind = (slot: PageChoice) =>
-    void bindPage(slug, slot).then(
-      (next) => {
-        setReading(next);
-        setOutcome({ ok: true, message: "Bound. The Page's chip follows within 5 s." });
-      },
-      (error: Error) => setOutcome({ ok: false, message: error.message }),
-    );
-  return (
-    <Surface>
-      <BindPicker
-        slug={slug}
-        reading={reading}
-        threads={threads}
-        documents={documents}
-        inventory={inventory}
-        outcome={outcome}
-        onBind={onBind}
-      />
-    </Surface>
-  );
-}
-
-/** The existing SPA shell supplies chrome; Page bytes stay in their own document. */
-export function BindRoute({
-  slug,
-  view = false,
-  query = "",
-  fragment = "",
-}: {
-  slug: string;
-  view?: boolean;
-  query?: string;
-  fragment?: string;
-}) {
-  return view ? (
-    <Surface>
-      <iframe
-        className="size-full flex-1"
-        title={`Page ${slug}`}
-        src={`/pages/${encodeURIComponent(slug)}/${query ? `?${new URLSearchParams(query)}` : ""}${fragment ? `#${fragment}` : ""}`}
-      />
-    </Surface>
-  ) : (
-    <BindingPickerRoute slug={slug} />
   );
 }

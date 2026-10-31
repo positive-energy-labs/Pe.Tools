@@ -13,6 +13,8 @@ public sealed record LossItem(int Begin, int End);
 /// <summary>ASHRAE grid interpolation, row for row with the web's `lookupGrid`: linear in 1-D, bilinear in 2-D, clamped at the edges.</summary>
 public static class AshraeLookup {
     public static double Value(AshraeGrid g, double x, double? y = null) {
+        // The loss server prices one- and two-axis tables; a three-axis grid (ER5-1, ED5-3) is the web's to look up.
+        if (g.Z is not null) throw new ArgumentException($"{g.Title}: a three-axis table ({g.ZLabel}) the loss server does not price");
         if (g.X.Count == 0) return Flat(g)[0];
         if (g.Y is null) return Interp(x, g.X, Flat(g), g.XLabel);
         if (y is null || double.IsNaN(y.Value)) throw new ArgumentException($"{g.Title} needs {g.YLabel ?? "y"}");

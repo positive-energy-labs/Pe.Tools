@@ -478,9 +478,10 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
         "Apply request outputs differ from the retained producer; no historical result was replaced",
       );
     const createdAt = new Date().toISOString();
-    const payload = ductsApplyInputSchema.parse(
-      applyRequest(input.snapshot, priced, createdAt, group ? [group] : []),
-    );
+    const payload = ductsApplyInputSchema.parse({
+      ...applyRequest(input.snapshot, priced, createdAt, group ? [group] : []),
+      slots: input.snapshot.slots,
+    });
     const payloadJson = JSON.stringify(payload);
     const unpriced = Object.keys(priced.edit.rules)
       .sort()

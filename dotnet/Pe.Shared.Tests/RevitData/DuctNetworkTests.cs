@@ -19,7 +19,7 @@ public sealed class DuctNetworkTests {
             new DuctRoughness(0.0003, DuctProvenance.RevitDefault), new DuctRevitValues(null, null, null, null), ports);
 
     [Test]
-    public void One_root_tree_sums_terminal_flow_and_names_its_open_end_and_missing_static() {
+    public void One_root_tree_sums_terminal_flow_and_health_names_its_open_end() {
         // AHU 1 -> duct 10 -> tee 20 -> duct 11 -> terminal 30 (100 cfm)
         //                             \-> duct 12 -> terminal 31 (50 cfm), duct 12 also has an open port.
         var nodes = new List<DuctNode> {
@@ -43,7 +43,9 @@ public sealed class DuctNetworkTests {
         Assert.That(group.TerminalCount, Is.EqualTo(2));
         Assert.That(a.Flows.ToDictionary(f => f.SegmentId, f => f.Cfm),
             Is.EquivalentTo(new Dictionary<long, double> { [10] = 150, [11] = 100, [12] = 50 }));
-        Assert.That(a.Issues.Select(i => i.Id), Is.EquivalentTo(new[] { "open-end:g10:12:3", "no-fan-static:g10:1" }));
+        // Health is keyed by element and connector; the retired root kinds (no-fan-static, no-root) are gone.
+        Assert.That(DuctHealth.Assess(a.Nodes, a.Segments, DuctHealth.Tolerances(null)).Select(i => i.Id),
+            Is.EquivalentTo(new[] { "open-end:12:3" }));
         Assert.That(a.Nodes.Single(n => n.Id == 1).GroupId, Is.Null, "equipment is cut out of every group");
     }
 
@@ -59,6 +61,7 @@ public sealed class DuctNetworkTests {
 
         Assert.That(a.Groups.Single().Loops, Is.EqualTo(1));
         Assert.That(a.Flows, Is.Empty);
-        Assert.That(a.Issues.Select(i => i.Kind), Is.EquivalentTo(new[] { DuctIssueKind.Loop, DuctIssueKind.Stub, DuctIssueKind.NoRoot }));
+        Assert.That(DuctHealth.Assess(a.Nodes, a.Segments, DuctHealth.Tolerances(null)).Select(i => i.Kind),
+            Is.EquivalentTo(new[] { DuctIssueKind.Loop, DuctIssueKind.Stub }));
     }
 }

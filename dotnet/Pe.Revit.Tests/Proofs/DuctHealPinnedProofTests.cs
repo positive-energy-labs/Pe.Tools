@@ -54,7 +54,7 @@ public sealed class DuctHealPinnedProofTests {
     }
 
     /// <summary>Ducts A (0,0)-(10,0) and B (10+gap,0)-(20,0), joined the long way round through C, D, E and four elbows.</summary>
-    private static (Duct Left, Duct Right) Ring(Document doc) {
+    internal static (Duct Left, Duct Right) Ring(Document doc) {
         using var t = new Transaction(doc, "duct heal pinned proof: ring");
         _ = t.Start();
         var system = new FilteredElementCollector(doc).OfClass(typeof(MechanicalSystemType)).Cast<MechanicalSystemType>()
@@ -80,10 +80,10 @@ public sealed class DuctHealPinnedProofTests {
         return (ducts[0], ducts[1]);
     }
 
-    private static Connector End(Element e, XYZ near) =>
+    internal static Connector End(Element e, XYZ near) =>
         DuctSnapshots.HvacConnectors(e).OrderBy(c => c.Origin.DistanceTo(near)).First();
 
-    private static string Key(Connector c) => $"{c.Owner.Id.Value()}:{c.Id}";
+    internal static string Key(Connector c) => $"{c.Owner.Id.Value()}:{c.Id}";
 
     private static void Pin(Document doc, Element e, bool pinned) {
         using var t = new Transaction(doc, "duct heal pinned proof: pin");

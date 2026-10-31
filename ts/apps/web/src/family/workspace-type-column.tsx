@@ -56,7 +56,7 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
           // once and make the type column read-only for no reason the drill-in explains.
           setOverlay("draft");
         }}
-        reason={`Drill into "${typeName}". The table pane swaps to the same table, narrowed to this one type and opened up with the spine and the crossing verbs. "← all types" in the pane header, or Esc, comes back.`}
+        reason={`Drill into "${typeName}". The table pane narrows to this type with its spine and crossing verbs. "← all types" in the pane header returns to the family.`}
       >
         <PressContent geometry="block">
           {typeName} <span>⤢</span>

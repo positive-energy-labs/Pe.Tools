@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { scopeOf } from "@pe/ducts-domain/system-scope";
-import { makeAtomRegistry } from "#/route/route-owner";
+import { makeAtomRegistry } from "#/shell/owner";
 import { TestAttention } from "#/test-attention";
 import { NAVIGATION_FIXTURE } from "./navigation.fixture";
 import { encodingFor } from "./encoding";

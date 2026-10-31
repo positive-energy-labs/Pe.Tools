@@ -1,84 +1,45 @@
-import {
-  DUCTS_GUIDE,
-  DUCTS_LIMITS,
-  DUCTS_PEA_NEVER,
-  DUCTS_RESIDENCY,
-  DUCTS_WALK,
-} from "@pe/agent-contracts";
+import { DUCTS_SHEET_GUIDE, ductsSheetRequestSchema } from "@pe/agent-contracts";
 import { expect, test } from "vite-plus/test";
-import { ductsGuideReading, presentDuctCases, renderDuctsSkill } from "../src/pea/ducts-skill.ts";
+import { ductsGuideReading, renderDuctsSkill } from "../src/pea/ducts-skill.ts";
 import { bundledPeaSkills } from "../src/pea/skills.ts";
 
-test("the bundled ducts skill is projected from DUCTS_GUIDE and keeps the operational keys", () => {
+test("pressure-drop guidance shares the sheet guide and never drives the legacy inbox", () => {
   const skill = renderDuctsSkill();
   expect(bundledPeaSkills.find((s) => s.name === "calc-duct-pressure-drop")?.content).toBe(skill);
-  for (const step of DUCTS_WALK) expect(skill).toContain(step.step);
-  for (const line of [...DUCTS_LIMITS, ...DUCTS_PEA_NEVER]) expect(skill).toContain(line);
-  for (const row of DUCTS_RESIDENCY) expect(skill).toContain(row.value);
-  for (const key of [
-    "route:ducts.set-view",
-    "op:ducts.preview-heal",
-    "op:ducts.apply-heal",
-    "op:ducts.preview-assign-fan",
-    "route:ducts.edit",
-    "route:ducts.guide",
-  ])
-    expect(skill).toContain(key);
-  expect(skill).toContain(
-    "Never rebuild it with pod or C# scripts; they will not match the tool the person reads",
-  );
-  // Facts, not lines to say: no scripted instruction to the person, and "tool" is the person's word.
-  expect(skill).not.toContain("tell the person to open /ducts");
-  expect(skill).not.toMatch(/the route|route's words/i);
-  expect(skill).not.toContain("Project A");
-  // The cases stay in the read, not the skill.
-  expect(skill).not.toContain(DUCTS_GUIDE.cases[0]!.whatWeDo);
-  const description = /^description:\s*(.+)$/m.exec(skill)?.[1] ?? "";
-  expect(description).not.toContain(': "');
-  expect(description).not.toContain(": ");
-  for (const word of ["ESP", "Naviate", "Manual D", "airflow slot", "survives a save"])
-    expect(description).toContain(word);
+  for (const step of DUCTS_SHEET_GUIDE.walk) expect(skill).toContain(step);
+  expect(skill).toContain("route:ducts.roster");
+  expect(skill).toContain("route:ducts.sheet");
+  expect(skill).not.toContain("preview-assign-fan");
+  expect(skill).not.toContain("Fix, Set, Check, Write");
+  expect(skill).toContain("Never compute pressure drop by hand");
+  expect(skill).toContain("Never grep");
+  expect(skill).toContain("effect on the total");
+  expect(/^description: (.+)$/m.exec(skill)?.[1]).not.toContain(": ");
+  expect(ductsGuideReading()).toBe(DUCTS_SHEET_GUIDE);
+  expect(ductsGuideReading("never")).toEqual({ never: DUCTS_SHEET_GUIDE.never });
 });
 
-test("the documented first analysis call parses through the real schema", async () => {
-  const { DUCTS_ANALYSIS_FIRST_CALL, ductsAnalysisRequestSchema } =
-    await import("@pe/agent-contracts");
-  expect(ductsAnalysisRequestSchema.safeParse(JSON.parse(DUCTS_ANALYSIS_FIRST_CALL)).success).toBe(
-    true,
-  );
-  // The trap the example exists to prevent.
+test("the fan and asserted-chain requests have one discriminated contract", () => {
+  const target = { session: "dev", openId: "project" };
   expect(
-    ductsAnalysisRequestSchema.safeParse({ source: "fresh", selector: "document" }).success,
+    ductsSheetRequestSchema.safeParse({ target, mode: "fan", unitId: 14577391, portIndex: 2 })
+      .success,
+  ).toBe(true);
+  expect(
+    ductsSheetRequestSchema.safeParse({
+      target,
+      mode: "chain",
+      start: { elementId: 1 },
+      end: { elementId: 2 },
+      direction: "return",
+    }).success,
+  ).toBe(true);
+  expect(
+    ductsSheetRequestSchema.safeParse({
+      target,
+      mode: "chain",
+      start: { elementId: 1 },
+      end: { elementId: 2 },
+    }).success,
   ).toBe(false);
-  expect(renderDuctsSkill()).toContain(DUCTS_ANALYSIS_FIRST_CALL);
-});
-
-test("the guide read cuts cases to their identity unless cases are asked for", () => {
-  const brief = ductsGuideReading().cases as Record<string, unknown>[];
-  expect(brief).toHaveLength(DUCTS_GUIDE.cases.length);
-  expect(Object.keys(brief[0]!).sort()).toEqual(
-    ["code", "group", "kinds", "number", "status", "title"].sort(),
-  );
-  expect(ductsGuideReading("cases")).toEqual({ cases: DUCTS_GUIDE.cases });
-  expect(ductsGuideReading("limits")).toEqual({ limits: DUCTS_GUIDE.limits });
-});
-
-test("present cases carry counts and at most ten element ids", () => {
-  const kase = DUCTS_GUIDE.cases.find((c) => c.kinds.length)!;
-  const kind = kase.kinds[0]!.split(":")[0]!;
-  const grade = kase.kinds[0]!.split(":")[1] ?? null;
-  const findings = Array.from({ length: 12 }, (_, i) => ({ kind, grade, elementIds: [i + 1] }));
-  const counts = { [kase.kinds[0]!]: 12 };
-  const present = presentDuctCases(counts, findings).find((p) => p.number === kase.number)!;
-  expect(present).toMatchObject({ title: kase.title, code: kase.code });
-  expect(present.count).toBeGreaterThanOrEqual(12);
-  expect(present.elementIds).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-});
-
-test("the skill carries each comparison cell's evidence, not only its note", () => {
-  const skill = renderDuctsSkill();
-  for (const { rows } of DUCTS_GUIDE.compare)
-    for (const row of rows)
-      for (const c of [row.revit, row.naviate, row.pe])
-        if (c.detail) expect(skill).toContain(c.detail.replace(/\.$/, ""));
 });

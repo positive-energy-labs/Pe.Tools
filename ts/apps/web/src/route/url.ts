@@ -10,7 +10,6 @@ import { routeAddress, type History, type RouteKey, type RoutePage } from "@pe/a
 import { useRouter, type SearchMiddleware } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { z } from "zod";
-import type { RouteManifest } from "./manifest";
 import type { ViewOwner } from "./view-owner";
 import { causeRefusal } from "./refusal";
 import { useRouteActivity } from "./activity";
@@ -121,13 +120,6 @@ export function routeUrlPage<R extends RouteKey>(route: R): UrlPage<RoutePage<R>
   return addressPage(route, route, routeAddress(route).schema as never) as unknown as UrlPage<
     RoutePage<R>
   >;
-}
-
-/** The manifest's URL page; null when the manifest names no contract address. */
-export function urlPage<W, R extends string, P, A extends string>(
-  manifest: RouteManifest<W, R, P, A>,
-): UrlPage<P> | null {
-  return manifest.address ? addressPage(manifest.key, manifest.address, manifest.page) : null;
 }
 
 /**

@@ -1,6 +1,6 @@
 /**
- * Chat seed data — plain values, no provider, no behaviour. `?demo=<action>` mounts one of these
- * through `useRoute`'s demo owner; nothing here renders or holds state. Each seed is a thread body
+ * Chat seed data — plain values, no provider, no behaviour. `?fixture=<action>` mounts one of these
+ * through the kernel's fixture owner; nothing here renders or holds state. Each seed is a thread body
  * whose `events` are the harness log the host would have written.
  */
 import {
@@ -20,7 +20,7 @@ import {
 } from "@pe/agent-contracts";
 import { CHECKOUT_HOT, MACHINE_SEEDS } from "#/open/seeds";
 
-import type { ChatReading } from "#/chat/manifest";
+import type { ChatReading } from "#/chat/graph";
 import { emptyChatState, type ChatState } from "@pe/agent-contracts/chat-state";
 
 const at = (minute: number) => new Date(Date.UTC(2026, 7, 30, 19, minute));
@@ -611,7 +611,7 @@ export const CHAT_SEEDS = {
 /** Chat's draft belongs to `createChatPageStore`; the route manifest owns no Page fields. */
 export type ChatPage = Record<string, never>;
 
-/** `?demo=` Work for `demoThreads`: none, one document with two Works, three documents with one
+/** `?fixture=` Work for `demoThreads`: none, one document with two Works, three documents with one
  *  closed, and a closed document whose Work is unfinished. Demo only; outside it the
  *  `thread-work` Reading is the source. Ids are opaque handles, never shown. */
 export const CHAT_SEED_THREAD_WORK = {

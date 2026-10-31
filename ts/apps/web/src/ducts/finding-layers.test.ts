@@ -122,8 +122,8 @@ it("a chosen system draws its findings without annotations and excludes annotati
   const raw = {
     ...snapshot,
     issues: [
-      { id: "open-end:1:1", kind: "open-end", elementId: 1 },
-      { id: "open-end:2:0", kind: "open-end", elementId: 2 },
+      { id: "open-end:1:1", kind: "open-end", elementId: 1, connector: 1 },
+      { id: "open-end:2:0", kind: "open-end", elementId: 2, connector: 0 },
     ],
   } as DuctSnapshot;
   const scoped = findingShapes(raw, new Set(), null, new Set([1, 2]));
@@ -272,9 +272,7 @@ it("a heal that caps a round open end draws a cylinder of the duct's diameter", 
         diameterIn: 12,
       },
     ],
-    issues: [
-      { id: "open-end:1:1", kind: "open-end", elementId: 1, severity: "warning", message: "" },
-    ],
+    issues: [{ id: "open-end:1:1", kind: "open-end", elementId: 1, connector: 1, note: "" }],
   } as unknown as DuctSnapshot;
   const shapes = findingShapes(round, new Set(), null, new Set([1]));
   const cyl = shapes.boxes.find((b) => b.shape === "cylinder");

@@ -1,52 +1,34 @@
 /**
- * The one way a shell reads the machine, and the one update mutation. In the frozen demo lane
- * (`?demo=<name>`) the reading is a recorded fixture and nothing reaches a host; a mutation there
+ * The one way a shell reads the machine, and the one update mutation. In the kernel fixture lane
+ * (`?fixture=<name>`) the reading is a recorded fixture and nothing reaches a host; a mutation there
  * is refused with that reason instead of being sent.
  */
-import { useCallback, useState, useSyncExternalStore } from "react";
+import { useCallback, useState } from "react";
 import type { Machine, Reading } from "@pe/agent-contracts";
 
-import { frozenDemo } from "#/host/demo-client";
+import { fixtureMachine, useFixtureName } from "#/shell/fixture-services";
 import { acknowledgeUpdate } from "#/host/install";
-import { BAY_RECENTS, MACHINE_SEEDS, OPEN_SEEDS } from "#/open/seeds";
 import { dirty, useAction, useReading, useReadingSlice } from "#/readings";
 
 import { setAccepting } from "./accepting";
 import { machineOf, planWaits } from "./model";
 
-const ABSENT: Reading<Machine> = { state: "absent" };
-
-/** The recorded machine a frozen demo draws: a machine fixture by name, else the Open seed's. */
-function demoMachine(demo: string): Reading<Machine> {
-  if (Object.hasOwn(MACHINE_SEEDS, demo)) return MACHINE_SEEDS[demo as keyof typeof MACHINE_SEEDS];
-  const seeded = OPEN_SEEDS[demo as keyof typeof OPEN_SEEDS]?.readings.machine as
-    | Machine
-    | undefined;
-  return seeded ? { state: "ready", observation: seeded } : ABSENT;
-}
-
-/** The recents a frozen demo draws beside its machine: the Open seed's, else the patch bay's. */
-export const demoRecents = (demo: string) =>
-  (OPEN_SEEDS[demo as keyof typeof OPEN_SEEDS]?.readings.recents as
-    | typeof BAY_RECENTS
-    | undefined) ?? BAY_RECENTS;
-
-const still = () => () => {};
-
 export const SEED_REFUSAL = "Fixture: nothing on this page reaches a host.";
 
 export function useMachine(): { reading: Reading<Machine>; fixture: boolean } {
-  // The server renders the live lane; the client hydrates it, then reads the URL's demo seed.
-  const demo = useSyncExternalStore(still, frozenDemo, () => null);
-  const live = useReading<Machine>(demo ? null : { kind: "machine" });
-  return demo ? { reading: demoMachine(demo), fixture: true } : { reading: live, fixture: false };
+  // Common chrome follows the kernel fixture selection, including seed switches.
+  const demo = useFixtureName();
+  const live = useReading<Machine>(demo !== null ? null : { kind: "machine" });
+  return demo !== null
+    ? { reading: fixtureMachine(demo), fixture: true }
+    : { reading: live, fixture: false };
 }
 
 /** Shell consumers select their own machine facts rather than subscribing to its polling metadata. */
 export function useMachineSlice<S>(select: (reading: Reading<Machine>) => S): S {
-  const demo = useSyncExternalStore(still, frozenDemo, () => null);
-  return useReadingSlice<Machine, S>(demo ? null : { kind: "machine" }, (reading) =>
-    select(demo ? demoMachine(demo) : reading),
+  const demo = useFixtureName();
+  return useReadingSlice<Machine, S>(demo !== null ? null : { kind: "machine" }, (reading) =>
+    select(demo !== null ? fixtureMachine(demo) : reading),
   );
 }
 

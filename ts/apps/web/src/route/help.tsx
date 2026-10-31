@@ -344,7 +344,7 @@ const showHelp = (page: string) => {
 export function HelpOwner() {
   const help = useSyncExternalStore(subscribe, current);
   const page = shown;
-  useEffect(() => () => void (shown = undefined), []);
+  useEffect(() => () => (shown = undefined), []);
   const close = () => {
     shown = undefined;
     publish();

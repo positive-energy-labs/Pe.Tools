@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { Effect } from "effect";
 import { checkoutRoot } from "../../checkout-paths.ts";
-import { manifest as takeoffManifest } from "#/takeoff/manifest";
+import { takeoffSeeds } from "#/takeoff/seeds";
 import { createDemoOwner } from "../../../host/src/demo-owner";
 import { takeoffExecutors, fileVersion } from "../../../host/src/takeoff-actions";
 import { sdkSessions, readRhvacFixture } from "../../../host/tests/native-receipt-fixture";
@@ -36,7 +36,7 @@ test.skipIf(process.env.PE_DEMO_JET !== "1")(
       // The Takeoffs seeds are plain manifest data now; the demo map they used to live in is deleted.
       const seed = structuredClone(
         (
-          takeoffManifest.seeds as unknown as Record<
+          takeoffSeeds as unknown as Record<
             string,
             { page: { zones: unknown[] }; readings: { snapshot: any } }
           >

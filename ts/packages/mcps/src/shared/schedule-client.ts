@@ -29,8 +29,12 @@ export async function readScheduleCapture<K extends ScheduleReadKey>(
     body: JSON.stringify({ key, input, target }),
   });
   const value = await response.json();
+  // The status rides on the error: a 4xx is the host refusing the read (its `error` is the reason), anything else failed.
   if (!response.ok)
-    throw Error((value as { error?: string }).error ?? `Schedule read failed (${response.status})`);
+    throw Object.assign(
+      Error((value as { error?: string }).error ?? `Schedule read failed (${response.status})`),
+      { status: response.status },
+    );
   const parsed =
     key === "schedule.grid.bind"
       ? z

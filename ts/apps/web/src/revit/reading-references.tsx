@@ -9,7 +9,7 @@ import {
 import { readRecord } from "@pe/agent-contracts/chat-state";
 import { FactChip } from "@pe/kit/lang/chip";
 import type { RevitElementReference } from "@pe/kit/lang/revit-target";
-import { useRouteDemo } from "#/route/activity";
+import { useRouteFixture } from "#/route/activity";
 import { prepareElements, revitReferences, type RevitObservationScope } from "./element-target";
 
 type Reference = RevitElementReference & { label: string };
@@ -80,7 +80,7 @@ export function NativeReadingReferences({
   result?: unknown;
   receipt?: ActionReceipt;
 }) {
-  const demo = useRouteDemo();
+  const demo = useRouteFixture();
   const outer = readRecord(readRecord(result)?.structuredContent) ?? readRecord(result);
   const operation = readRecord(outer?.result);
   const parsedReceipt = receipt

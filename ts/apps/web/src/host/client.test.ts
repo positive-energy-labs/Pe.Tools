@@ -1,6 +1,6 @@
 import type { HostOperationCatalogEntry } from "#/ops/manifest";
 import { runOp } from "#/ops/run";
-import type { HostCaller } from "#/route/manifest";
+import type { HostCaller } from "#/shell/host-call";
 import { expect, expectTypeOf, it, vi } from "vite-plus/test";
 import { callHostRpc } from "./client";
 

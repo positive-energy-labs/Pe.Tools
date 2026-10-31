@@ -1,45 +1,9 @@
-/**
- * Takeoffs inside the workbench. The pane is the route: `useTakeoffsController` owns the same manifest
- * the standalone route mounts, so there is no second store, no second registry and no second
- * source switch. `?work=` on the route is `capture` here, and the saved list is the thread
- * document's, read from that one controller's resolved Work.
- */
-import { useState } from "react";
+import { mountRoute, type MountRouteProps } from "#/shell/mount";
+import { takeoffGraph } from "./graph";
+import { takeoffAdapters } from "./graph-route";
 
-import { TakeoffsControllerOwner } from "#/takeoff/route";
-import { useTakeoffsController } from "#/takeoff/controller";
-import { TakeoffsPage } from "#/takeoff/route-workspace";
-import { SavedTakeoffsView } from "#/takeoff/saved-review";
-import { Button } from "@pe/kit/lang/button";
-
-export function TakeoffsPane({ thread }: { thread?: string }) {
-  const store = useTakeoffsController(thread ? { thread } : {});
-  // Embedded-pane navigation; closing the pane intentionally returns to its live route.
-  const [capture, setCapture] = useState<string | undefined>();
-  const [saved, setSaved] = useState(false);
-  if (saved)
-    return (
-      <SavedTakeoffsView
-        capture={capture}
-        document={store.handle.work.key.target}
-        select={(patch) => {
-          setCapture(patch.work);
-          if (patch.work === undefined && capture === undefined) setSaved(false);
-        }}
-        renderCapture={(row) => <TakeoffsControllerOwner key={row.id} savedCapture={row} />}
-      />
-    );
-  return (
-    <>
-      <Button
-        kind="framed"
-        label="saved review"
-        reason="Read dated captures without Revit"
-        onClick={() => setSaved(true)}
-      >
-        saved review
-      </Button>
-      <TakeoffsPage store={store} />
-    </>
-  );
+const TakeoffMount = mountRoute(takeoffGraph, takeoffAdapters);
+/** A hosted route keeps Page local and uses the same graph and Work door as standalone. */
+export function TakeoffsPane(props: MountRouteProps) {
+  return <TakeoffMount {...props} url={false} />;
 }
