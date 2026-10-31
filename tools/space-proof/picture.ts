@@ -29,7 +29,7 @@ const PATH: Record<string, string[]> = {
 };
 const target = JSON.parse(await readFile(targetFile, "utf8"));
 const url = `${origin}/ducts?target=${encodeURIComponent(JSON.stringify(target))}&system=${encodeURIComponent(JSON.stringify([system]))}`;
-const size = { width: 1600, height: 1000 };
+const size = { width: 2560, height: 1440 };
 await mkdir(outDir, { recursive: true });
 const stem = system.replaceAll(" ", "");
 const receipts: unknown[] = [];
@@ -40,6 +40,15 @@ try {
     const page = await browser.page({ url: "about:blank" });
     try {
       await page.send("Emulation.setDeviceMetricsOverride", { ...size, deviceScaleFactor: 1, mobile: false });
+      // Pane sizes are the product's own persisted widths (workbench pe.toolsWidth, ducts proto-e-sidebar): set once,
+      // the same for every representation, so the picture pane is wide and the camera (fit to focus and aspect) is equal.
+      await page.send("Page.navigate", { url: `${origin}/` });
+      await new Promise((r) => setTimeout(r, 3000));
+      await page.evaluate(() => {
+        localStorage.setItem("pe.toolsWidth", "2300");
+        localStorage.setItem("proto-e-sidebar", "280");
+        return true;
+      });
       await page.send("Page.navigate", { url });
       const settle = async (label: string, timeoutMs: number) => {
         const until = Date.now() + timeoutMs;
@@ -49,10 +58,15 @@ try {
           last = await page.evaluate((want: string) => {
             // The advisory names the drawn representation (model.tsx); a busy control means a read is in flight.
             const text = document.body?.textContent ?? "";
+            // The advisory and controls live in the folded "scene completeness" floater: open it once.
+            const fold = document.querySelector<HTMLButtonElement>('button[aria-label="scene completeness"]');
+            if (fold && !text.includes(want) && fold.getAttribute("aria-expanded") !== "true") fold.click();
             const canvas = document.querySelector("canvas");
             const pending = !!document.querySelector("[data-scene-pending]");
             const busy = !!document.querySelector('button[aria-busy="true"]');
-            return { ready: !!canvas && !pending && !busy && text.includes(want), text, pending, busy, canvas: canvas ? { width: canvas.width, height: canvas.height } : null, href: location.href };
+            const pane = document.querySelector('[data-pane-id="e-picture"]')?.getBoundingClientRect();
+            const clip = pane ? { x: pane.x, y: pane.y, width: pane.width, height: pane.height } : null;
+            return { ready: !!canvas && !pending && !busy && text.includes(want), text: text.slice(0, 400), pending, busy, clip, href: location.href };
           }, label);
           if ((last as { ready: boolean }).ready) return last;
           await new Promise((r) => setTimeout(r, 1000));
@@ -71,7 +85,8 @@ try {
       }
       const state = await settle(LABEL[rep]!, 600_000);
       await new Promise((r) => setTimeout(r, 2000)); // let the last frame paint
-      const shot = (await page.send("Page.captureScreenshot", { format: "png" })) as { data: string };
+      const clip = (state as { clip: { x: number; y: number; width: number; height: number } | null }).clip;
+      const shot = (await page.send("Page.captureScreenshot", { format: "png", ...(clip ? { clip: { ...clip, scale: 1 } } : {}) })) as { data: string };
       const file = resolve(outDir, `${stem}-${rep}.png`);
       await writeFile(file, Buffer.from(shot.data, "base64"));
       receipts.push({ system, rep, file, url, viewport: size, state, seconds: (Date.now() - started) / 1000 });
