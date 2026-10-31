@@ -85,7 +85,7 @@ export type { Lane };
 type Frame = (ReadingFrame & { stale?: boolean }) | { kind: "stale"; key: string };
 type Source = Pick<EventSource, "onopen" | "onmessage" | "onerror" | "close">;
 
-/** How long a subscribed key may wait for its owner acquisition; past it the connection is dead. */
+/** How long a fresh connection may stay silent with keys unanswered; past it the connection is dead. */
 const READING_DEADLINE_MS = 30_000;
 /** Reconnect delays double from 1 s to this ceiling, and reset on the first fresh frame. */
 const RETRY_CEILING_MS = 30_000;
@@ -119,7 +119,7 @@ export class PeReadings {
   private opened = false;
   /** Reconnects since the last fresh frame; the next delay is 1 s doubled this many times. */
   private attempts = 0;
-  /** A connection whose keys are not all fresh by the deadline is faulted (it opened and went silent). */
+  /** A connection that opened and delivered nothing by the deadline, with keys unanswered, is faulted. */
   private watchdog?: ReturnType<typeof setTimeout>;
   /** A fault or wake happened; the next open tells every resync listener to re-read. */
   private faulted = false;
@@ -359,9 +359,16 @@ export class PeReadings {
     this.opening = source;
     const current = () =>
       this.generation === generation && (this.source === source || this.opening === source);
+    // The watchdog judges the wire, not each owner's speed. A stream that has delivered any frame
+    // since it opened is alive; a key still unanswered is slow (Revit runs one op at a time, so a
+    // 60 s native read starves every Revit-backed reading behind it). Faulting then fenced healthy
+    // keys, withdrew a capture's document, aborted the capture and re-asked it every 31 s
+    // (2026-10-31). Only a stream that opened and stayed silent is dead.
+    let heard = false;
     clearTimeout(this.watchdog);
     this.watchdog = setTimeout(() => {
-      if (current() && [...this.entries.values()].some((entry) => entry.stale)) this.fault();
+      if (current() && !heard && [...this.entries.values()].some((entry) => entry.stale))
+        this.fault();
     }, READING_DEADLINE_MS);
     source.onopen = () => {
       if (!current() || this.opening !== source) return;
@@ -379,6 +386,7 @@ export class PeReadings {
     // Socket open proves no reading fresh. Each key must receive its owner acquisition.
     source.onmessage = (event) => {
       if (!current() || (this.source !== undefined && this.source !== source)) return;
+      heard = true;
       try {
         if (new TextEncoder().encode(event.data as string).byteLength > READING_MAX_FRAME_BYTES)
           throw Error("Reading frame exceeds limit");
