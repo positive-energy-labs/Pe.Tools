@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { workWriteBoundary } from "./work-write-boundary.ts";
 import { commands, tools, canonicalRouteInput, type DuctsApplyInput } from "@pe/agent-contracts";
 import { healPlan, healRequestGroup } from "@pe/ducts-domain/heal";
 import { fanOf } from "@pe/ducts-domain/action-targets";
@@ -12,23 +12,15 @@ import { command, refused, type CommandContext } from "./command-executor.ts";
 import type { ActionExecution } from "./action-journal.ts";
 import { lifetime } from "./family-actions.ts";
 import type { SdkReceiptReader } from "./native-receipts.ts";
-import { documentMarks } from "./document-marks.ts";
 import { ductsReadings } from "./ducts-readings.ts";
 import { readDuctCatalogs } from "./duct-catalogs.ts";
 import { appliedCellPaths } from "@pe/ducts-domain/staged";
 import type { DuctsApply, DuctsHeal } from "@pe/host-contracts/generated";
 
-const hash = (value: unknown) =>
-  createHash("sha256").update(canonicalRouteInput(value)).digest("hex");
 const prepared = z.object({
   process: z.unknown(),
   input: z.record(z.string(), z.unknown()),
-  seal: z.object({
-    requestHash: z.string(),
-    work: z.unknown(),
-    incarnation: z.unknown(),
-    dependencies: z.string(),
-  }),
+  dependencies: z.unknown(),
 });
 const targetOf = (ctx: CommandContext) => {
   if (ctx.admission.target.kind !== "document") throw refused("Exact document target required");
@@ -87,34 +79,15 @@ export function ductsExecutors(
   deps: { sdk?: SdkReceiptReader } = {},
 ) {
   const bind = async (ctx: CommandContext, kind: Kind, previewOnly: boolean) => {
-    documentMarks(bridge);
     const target = targetOf(ctx);
-    const raw = ctx.admission.input.work as {
-      key: import("@pe/agent-contracts").WorkKey;
-      expectedRevision: number;
-    };
-    if (!raw) throw refused("Work is required");
+    const raw = ctx.admission.input.work as import("@pe/agent-contracts").WorkHandle;
     const key = raw.key;
-    const { process, session } = await lifetime(bridge, target, "project", deps);
-    const liveDoc = session.state?.openDocuments.find((d) => d.openId === target.openId);
-    // A saved Work binds to its address; `from` is provenance, never authority to write a new open.
-    if (
-      (key.binding === "open" && canonicalRouteInput(key.open) !== canonicalRouteInput(target)) ||
-      (key.binding === "address" &&
-        String(key.target).replaceAll("/", "\\").toLowerCase() !==
-          String(liveDoc?.address).replaceAll("/", "\\").toLowerCase()) ||
-      !["open", "address"].includes(key.binding)
-    )
-      throw refused("Work belongs to another document", "work.target");
-    const doc = await ctx.selectWork(
-      tools.ducts.work,
-      { key, revision: raw.expectedRevision },
-      (_doc, cells) => ({
-        edits: tools.ducts.work.editable,
-        facts: [["workingPhase"]],
-        cells: cells.filter(({ cell }) => cell.edit).map(({ path }) => path),
-      }),
-    );
+    const { process } = await lifetime(bridge, target, "project", deps);
+    const doc = await ctx.selectWork(tools.ducts.work, raw, (_doc, cells) => ({
+      edits: tools.ducts.work.editable,
+      facts: [["workingPhase"]],
+      cells: cells.filter(({ cell }) => cell.edit).map(({ path }) => path),
+    }));
     const preview = ctx.read
       .receipts()
       .filter(
@@ -147,14 +120,23 @@ export function ductsExecutors(
       prepare: async () => {
         const intent = doc.writeIntent.edit?.value;
         const read = (selector: Record<string, unknown>) =>
-          invokeBridge<DuctSnapshot>(bridge, target, "ducts.snapshot", {
-            selector,
-            slots: stagedDucts(doc).parameters,
-          });
+          invokeBridge<DuctSnapshot>(
+            bridge,
+            target,
+            selector.kind === "roster" ? "ducts.snapshot.roster" : "ducts.snapshot.walk",
+            {
+              selector,
+              slots: stagedDucts(doc).parameters,
+            },
+          );
         const snapshot =
-          kind === "heal"
-            ? await healSnapshot(intent?.groups ?? [], read)
-            : await read({ kind: "document" });
+          kind === "assign-fan"
+            ? intent?.fan
+              ? await read({ kind: "systems", systemIds: [intent.fan.systemId] })
+              : (() => {
+                  throw refused("Stage writeIntent.fan before assigning a fan");
+                })()
+            : await healSnapshot(intent?.groups ?? [], read);
         const evidence = {
           ...snapshot,
           document: { ...snapshot.document, readAt: "", elapsedMs: 0 },
@@ -200,25 +182,7 @@ export function ductsExecutors(
           fanOf(snapshot, intent.fan);
           input = intent.fan;
         }
-        const seal = {
-          requestHash: hash(input),
-          work: { ...raw, consumed: ctx.consumed.filter((c) => c.kind === "work") },
-          incarnation: { target, process },
-          dependencies: hash(dependencies),
-        };
-        if (!previewOnly) {
-          if (
-            !preview ||
-            preview.state !== "succeeded" ||
-            canonicalRouteInput((preview.result as { seal?: unknown }).seal) !==
-              canonicalRouteInput(seal)
-          )
-            throw refused(
-              "Preview is missing or stale; preview the current Work and evidence again",
-              "preview.stale",
-            );
-        }
-        return { process, input: { ...input, previewOnly }, seal };
+        return { process, input: { ...input, previewOnly }, dependencies };
       },
     };
   };
@@ -246,7 +210,6 @@ export function ductsExecutors(
     return {
       value,
       derivedRequest: p.input,
-      seal: p.seal,
       target: { session: target.session, document: null },
       ...(retired ? { retired } : {}),
     };
@@ -269,10 +232,28 @@ export function ductsExecutors(
           const key = `ducts.${preview ? "preview" : "apply"}-${kind}` as const;
           return [
             key,
-            command(commands[key], prepared, {
-              bind: (ctx) => bind(ctx, kind, preview),
-              run: (ctx, execution) => run(ctx, execution, kind),
-            }),
+            workWriteBoundary(
+              command(commands[key], prepared, {
+                bind: (ctx) => bind(ctx, kind, preview),
+                run: (ctx, execution) => run(ctx, execution, kind),
+              }),
+              bridge,
+              deps,
+              {
+                route: "ducts",
+                key: `ducts.preview-${kind}`,
+                previewOnly: preview,
+                nativePreview: true,
+                handle: (input) => {
+                  const handle = input.work as {
+                    key: import("@pe/agent-contracts").WorkKey;
+                    expectedRevision: number;
+                  };
+                  return { key: handle.key, revision: handle.expectedRevision };
+                },
+                ...commands[key].derivation,
+              },
+            ),
           ];
         }),
       ),

@@ -22,8 +22,8 @@ export interface CatalogLink extends CatalogAxes {
     | string
     | { key: string; cardinality: Value<typeof opCardinality>; cap?: number }
   )[];
-  derive?: string;
-  preview?: string;
+  derive?: NonNullable<import("./command.ts").Command["derivation"]>["derive"];
+  preview?: NonNullable<import("./command.ts").Command["derivation"]>["preview"];
 }
 const weight = { Cheap: 1, Bounded: 10, Expensive: 100, Mutation: 100 };
 /** Validate edges only. Execution, derivation and preview remain in named runtime functions. */
@@ -31,6 +31,12 @@ export function linkCatalog(entries: readonly CatalogLink[]): string[] {
   const errors: string[] = [];
   const byKey = new Map<string, CatalogLink>();
   for (const entry of entries) {
+    if (
+      entry.key.startsWith("command:") &&
+      entry.effect === "ModelWrite" &&
+      (typeof entry.derive !== "function" || typeof entry.preview !== "function")
+    )
+      errors.push(`${entry.key}: missing executable derive/preview binding`);
     if (byKey.has(entry.key)) errors.push(`Duplicate catalog key: ${entry.key}`);
     if (
       entry.touches.includes("Geometry") &&

@@ -4,14 +4,7 @@ import { lifetime } from "./family-actions.ts";
 import type { RevitBridge } from "./bridge.ts";
 import type { SdkReceiptReader } from "./native-receipts.ts";
 import { z } from "zod";
-import {
-  canonicalRouteInput,
-  tools,
-  stagedRoomWrites,
-  type RoomsRouteDocument,
-  type Tool,
-  type WorkHandle,
-} from "@pe/agent-contracts";
+import { canonicalRouteInput, tools, type Tool, type WorkHandle } from "@pe/agent-contracts";
 import { refused, type CommandContext, type CommandExecutor } from "./command-executor.ts";
 
 const hash = (value: unknown) =>
@@ -19,23 +12,45 @@ const hash = (value: unknown) =>
 const preparedSchema = z.object({
   input: z.record(z.string(), z.unknown()),
   value: z.unknown(),
-  seal: z.string(),
+  seal: z.object({
+    requestHash: z.string(),
+    work: z.unknown(),
+    incarnation: z.unknown(),
+    dependencies: z.string(),
+  }),
   previewOnly: z.boolean(),
   takenAt: z.string(),
 });
+
+export interface WriteBinding {
+  route: string;
+  key: string;
+  workspace?: boolean;
+  derive(work: unknown): unknown;
+  preview(request: unknown): unknown;
+  nativePreview?: boolean;
+  previewOnly?: boolean;
+  handle?(input: Record<string, unknown>): WorkHandle;
+}
 
 /** Keep native derivation/recovery in its owner; admit only authored, revisioned Work. */
 export function workWriteBoundary(
   executor: CommandExecutor,
   bridge: RevitBridge["Service"],
   deps: { sdk?: SdkReceiptReader } = {},
+  binding?: WriteBinding,
+  registeredWork?: import("@pe/agent-contracts").RouteStateSpec<z.ZodType>,
 ): CommandExecutor {
   const definition = executor.definition as import("@pe/agent-contracts").Command & {
     authoredInput: z.ZodType;
-    writeBoundary: { route: string; key: string };
+    writeBoundary: WriteBinding;
   };
-  const { route, key } = definition.writeBoundary;
-  const spec = (tools[route as keyof typeof tools] as Tool).work! as NonNullable<Tool["work"]> & {
+  const hooks = binding ?? definition.writeBoundary;
+  if (!hooks || typeof hooks.derive !== "function" || typeof hooks.preview !== "function")
+    throw Error("Write command requires typed derive and preview bindings");
+  const { route, key } = hooks;
+  const spec = (registeredWork ??
+    (tools[route as keyof typeof tools] as Tool)?.work)! as NonNullable<Tool["work"]> & {
     schema: z.ZodType<Record<string, unknown>>;
   };
   const internal = (ctx: CommandContext, input: Record<string, unknown>) => ({
@@ -48,16 +63,18 @@ export function workWriteBoundary(
     bind: async (ctx) => {
       documentMarks(bridge);
       const takenAt = new Date().toISOString();
-      const { work, previewOnly } = definition.input.parse(ctx.admission.input) as {
+      const parsed = definition.input.parse(ctx.admission.input) as {
         work: WorkHandle;
         previewOnly: boolean;
       };
+      const work = hooks.handle ? hooks.handle(ctx.admission.input) : parsed.work;
+      const previewOnly = hooks.previewOnly ?? parsed.previewOnly;
       if (ctx.admission.target.kind !== "document") throw refused("Exact document required");
       // Address binding must be checked against the current open, never provenance `from`.
       if (
         work.key.binding !== "open" &&
         work.key.binding !== "address" &&
-        !(route === "schedules" && key === "schedule.grid.push" && work.key.binding === "workspace")
+        !(hooks.workspace && work.key.binding === "workspace")
       )
         throw refused("Document Work required");
       if (
@@ -85,11 +102,8 @@ export function workWriteBoundary(
           .map((name) => [name]),
         edits: spec.editable,
       }))) as { writeIntent?: Record<string, { edit?: { value: Record<string, unknown> } }> };
-      const authored =
-        key === "rooms.write"
-          ? { regions: stagedRoomWrites(doc as unknown as RoomsRouteDocument) }
-          : (doc.writeIntent?.[key]?.edit?.value ?? {});
-      const input = { ...(definition.authoredInput.parse(authored) as object), work };
+      const authored = hooks.derive(doc);
+      const input = { ...(authored as object), work };
       const preview = ctx.read
         .receipts()
         .filter(
@@ -141,10 +155,21 @@ export function workWriteBoundary(
             value && typeof value === "object" && !Array.isArray(value)
               ? (value as Record<string, unknown>)
               : { value };
-          const seal = hash({ input, request, dependencies });
+          const seal = {
+            requestHash: hash(hooks.preview(request)),
+            work: { handle: work, consumed: ctx.consumed.filter((item) => item.kind === "work") },
+            incarnation: { target, process: observed.process },
+            dependencies: hash({
+              input,
+              dependencies,
+              evidence: (request as Record<string, unknown>).dependencies,
+            }),
+          };
           if (
             !previewOnly &&
-            (preview?.state !== "succeeded" || (preview.result as { seal?: string }).seal !== seal)
+            (preview?.state !== "succeeded" ||
+              canonicalRouteInput((preview.result as { seal?: unknown }).seal) !==
+                canonicalRouteInput(seal))
           )
             throw refused(
               "Preview changed; preview the current Work and dependencies again",
@@ -156,15 +181,25 @@ export function workWriteBoundary(
     },
     run: async (ctx, execution) => {
       const p = preparedSchema.parse(execution.prepared);
-      if (p.previewOnly)
+      if (p.previewOnly && !hooks.nativePreview)
         return {
           previewOnly: true,
-          derivedRequest: p.value,
+          derivedRequest: hooks.preview(p.value),
           authoredIntent: p.input,
           seal: p.seal,
           takenAt: p.takenAt,
         };
-      return executor.run(internal(ctx, p.input), { ...execution, prepared: p.value });
+      const result = await executor.run(internal(ctx, p.input), {
+        ...execution,
+        prepared: p.value,
+      });
+      return {
+        ...(result as object),
+        previewOnly: p.previewOnly,
+        derivedRequest: hooks.preview(p.value),
+        seal: p.seal,
+        takenAt: p.takenAt,
+      };
     },
     recover: executor.recover
       ? (step, prepared, target) =>

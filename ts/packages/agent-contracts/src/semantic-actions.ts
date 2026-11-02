@@ -1,3 +1,4 @@
+import { stagedRoomWrites, roomsRouteState as roomsWorkSchema } from "./rooms.ts";
 import { workWriteCommand, writeIntentSchema } from "./write-intent.ts";
 import { instancesActions, instancesReading, instancesSessionSelection } from "./instances.ts";
 import { scheduleActions, scheduleReads } from "./schedule-actions.ts";
@@ -119,6 +120,15 @@ export const takeoffActions = definitions;
  * keys, so `operations call ducts.apply` still names the native op.
  */
 const ductsWorkCommand = <C extends Command & { input: z.ZodObject }>(definition: C) => ({
+  derivation: {
+    derive: (work: unknown) => stagedDucts(ductsRouteState.schema.parse(work)),
+    preview: (value: unknown) => {
+      const { previewOnly: _, ...request } = z
+        .object({ input: z.record(z.string(), z.unknown()) })
+        .parse(value).input;
+      return request;
+    },
+  },
   ...definition,
   input: z.strictObject({
     work: z.strictObject({ key: workKeySchema, expectedRevision: z.number().int().nonnegative() }),
@@ -207,7 +217,7 @@ import { parameterLinksRouteState } from "./parameter-links.ts";
 import { scheduleGridRouteState } from "./schedule-grid-data.ts";
 import { takeoffsRouteState } from "./takeoffs.ts";
 import { roomsRouteState } from "./rooms.ts";
-import { ductsRouteState } from "./ducts.ts";
+import { stagedDucts, ductsRouteState } from "./ducts.ts";
 export const dataTableDraftSchema = z.object({
   name: z.string(),
   isNew: z.boolean(),
@@ -322,6 +332,7 @@ export const tools = {
         "schedules",
         "schedule.grid.push",
         scheduleActions["schedule.grid.push"],
+        { workspace: true },
       ),
       "schedule.capture": workWriteCommand(
         "schedules",
@@ -383,10 +394,15 @@ export const tools = {
         definitions["rooms.partition"],
       ),
       "rooms.draw": workWriteCommand("rooms", "rooms.draw", definitions["rooms.draw"]),
-      "rooms.write": workWriteCommand("rooms", "rooms.write", {
-        ...definitions["rooms.write"],
-        input: z.strictObject({}),
-      }),
+      "rooms.write": workWriteCommand(
+        "rooms",
+        "rooms.write",
+        {
+          ...definitions["rooms.write"],
+          input: definitions["rooms.write"].input,
+        },
+        { derive: (work) => ({ regions: stagedRoomWrites(roomsWorkSchema.schema.parse(work)) }) },
+      ),
       "rooms.merge": workWriteCommand("rooms", "rooms.merge", definitions["rooms.merge"]),
     },
   },

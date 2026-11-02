@@ -214,6 +214,7 @@ export function takeoffExecutors(
           return value(ctx, native, "rooms.draw", input);
         }),
     }),
+    // TODO: rooms.write native receipts report only a count; retain edits until receipts identify confirmed guid/field cells.
     "rooms.write": command(
       {
         ...commands["rooms.write"],
