@@ -26,6 +26,7 @@ import {
   type BridgeResponse,
   type BridgeStateSnapshot,
   type Lane,
+  type ValidationIssue,
 } from "@pe/host-contracts/contracts";
 
 /** Provenance grants only the Internal leaves the command declares in the catalog. */
@@ -52,16 +53,12 @@ export function commandLeafRefusal(
 
 // Vocabulary: a SESSION is one Revit process incarnation; a CONNECTION is one WS attachment to
 // it. With stable ids (hash(pid + processStartUtc)) a reconnect re-registers the SAME session id,
-// so registration performs an explicit takeover and cleanup must be guarded (see cleanupSession).
-type Session = {
+// and the session (its line, its worker, its requests, its occupied slot) survives the transport
+// replacement: only `connection` changes. A new socket never opens the slot for the next op.
+type Connection = {
+  /** Increments per attachment of one session; a late answer from an older epoch still matches. */
+  readonly epoch: number;
   readonly send: (frame: BridgeFrame) => Effect.Effect<void>;
-  // Every request this session owns, keyed by the id the wire carries. Responses route by that
-  // id, so several requests may be live at once: the serial worker below keeps ordinary ops
-  // serial, and `op.cancel` is the one op that walks past it.
-  readonly requests: Ref.Ref<ReadonlyMap<string, BridgeRequest>>;
-  readonly sessionId: string;
-  readonly processId: number;
-  readonly processStartUtcUnixMs: number | null;
   // Observed selector metadata, never process identity or custody authority.
   readonly lane: Lane | null;
   readonly sourceRoot: string | null;
@@ -69,6 +66,22 @@ type Session = {
   readonly serviceName: string;
   readonly sdkSessionId: string | null;
   readonly buildStamp: string | null;
+};
+
+type Session = {
+  // Every request this session owns, keyed by the id the wire carries. Responses route by that
+  // id from any of the session's sockets, so several requests may be live at once: the serial
+  // worker below keeps ordinary ops serial, and `op.cancel` is the one op that walks past it.
+  readonly requests: Ref.Ref<ReadonlyMap<string, BridgeRequest>>;
+  readonly sessionId: string;
+  readonly processId: number;
+  readonly processStartUtcUnixMs: number | null;
+  /**
+   * The current attachment; null while the transport is lost. A loss with a dispatched request is
+   * reconciliation: the slot stays held until the answer arrives (on any socket) or the process
+   * is observed dead. A loss with nothing dispatched retires the session.
+   */
+  readonly connection: Ref.Ref<Connection | null>;
   readonly state: Ref.Ref<BridgeStateSnapshot>;
   // One worker fiber per session, forked in the bridge scope, takes `line` in FIFO order: one op
   // at a time, no priority, no preemption. Machine callers (SSE-invalidated refetch bursts, IDE
@@ -105,8 +118,8 @@ const MAX_QUEUED_OPS = 8;
 const MAX_REVOKED_BEFORE_QUEUE = 1024;
 
 /**
- * One live request. `queued` = the host holds it behind the gate and Revit has never seen it;
- * `dispatched` = Revit owns it; `cancelled` = a cancel reached it before dispatch, so the gate
+ * One live request. `queued` = the host holds it in the line and Revit has never seen it;
+ * `dispatched` = Revit owns it; `cancelled` = a cancel reached it before dispatch, so the worker
  * drops it instead of sending it.
  */
 export type BridgeRequest = {
@@ -114,7 +127,31 @@ export type BridgeRequest = {
   readonly reply: Deferred.Deferred<BridgeResponse, BridgeError>;
   readonly requestId: string;
   readonly phase: "queued" | "dispatched" | "cancelled";
+  /** The connection epoch a dispatched request went out on. */
+  readonly epoch?: number;
 };
+
+/**
+ * Process-death evidence for a session in reconciliation. The default asks the OS whether the pid
+ * exists (signal 0); EPERM means it exists. Ceiling: pid reuse inside one reconciliation would
+ * read as alive, which holds the slot (never releases it early).
+ */
+export const RevitProcessAlive = Context.Reference<(processId: number) => boolean>(
+  "RevitProcessAlive",
+  {
+    defaultValue: () => (processId) => {
+      try {
+        process.kill(processId, 0);
+        return true;
+      } catch (error) {
+        return (error as NodeJS.ErrnoException).code === "EPERM";
+      }
+    },
+  },
+);
+
+/** How often a session in reconciliation looks for death evidence. Not a release timer. */
+const DEATH_PROBE_INTERVAL = "1 second";
 
 /** The op that must never wait behind the op it names. */
 export const CANCEL_OPERATION_KEY = "op.cancel";
@@ -147,7 +184,8 @@ export async function invokeBridge<A = unknown>(
 }
 
 export type BridgeEvidence = {
-  readonly issues?: BridgeResponse["issues"];
+  /** Opaque: bridge.ts reads only `code` and `instancePath` (see rootOutcome). */
+  readonly issues?: ReadonlyArray<ValidationIssue> | null;
   readonly nativeOutcome?: string;
   /** Revit never saw the request. */
   readonly notDispatched?: true;
@@ -188,7 +226,7 @@ export class BridgeError extends Schema.TaggedError<BridgeError>()("BridgeError"
 }
 
 /** BridgeAgent emits one root issue for a RevitTaskOutcome or a typed refusal; preserve unknown future codes. */
-const rootOutcome = (issues: BridgeResponse["issues"]) =>
+const rootOutcome = (issues: ReadonlyArray<ValidationIssue> | null | undefined) =>
   issues?.length === 1 && issues[0]?.instancePath === "$" ? issues[0].code : undefined;
 
 /**
@@ -373,6 +411,7 @@ const forgetBridgeRequest = (
 const completeBridgeRequest = Effect.fnUntraced(function* (
   requests: Ref.Ref<ReadonlyMap<string, BridgeRequest>>,
   response: BridgeResponse,
+  epoch: number,
 ) {
   const request = (yield* Ref.get(requests)).get(response.requestId);
   if (!request) {
@@ -381,6 +420,10 @@ const completeBridgeRequest = Effect.fnUntraced(function* (
     );
     return false;
   }
+  if (request.epoch !== undefined && request.epoch !== epoch)
+    yield* Effect.logInfo(
+      `bridge response for ${response.requestId} arrived on epoch ${epoch}; dispatched on epoch ${request.epoch}`,
+    );
   yield* Deferred.succeed(request.reply, response);
   return true;
 });
@@ -390,6 +433,7 @@ export const RevitBridgeLive = Layer.effect(
   Effect.gen(function* () {
     // Session workers are forked here, so closing the host closes every line (see `serve`).
     const bridgeScope = yield* Effect.scope;
+    const processAlive = yield* RevitProcessAlive;
     const sessions = yield* Ref.make(new Map<string, Session>());
     const lastRegistrationRefusal = yield* Ref.make<string | null>(null);
     const events = yield* Effect.acquireRelease(
@@ -410,48 +454,91 @@ export const RevitBridgeLive = Layer.effect(
         for (const listener of listeners) listener(event);
       }).pipe(Effect.andThen(PubSub.publish(events, event)), Effect.asVoid);
 
-    const viewSession = Effect.fnUntraced(function* (session: Session) {
+    /** A session is targetable only while a transport is attached. */
+    const attached = Effect.fnUntraced(function* (bridgeSessionId: string | undefined) {
+      const session = bridgeSessionId ? (yield* Ref.get(sessions)).get(bridgeSessionId) : undefined;
+      const connection = session ? yield* Ref.get(session.connection) : null;
+      return session && connection ? { session, connection } : undefined;
+    });
+
+    const viewSession = Effect.fnUntraced(function* (session: Session, connection: Connection) {
       return {
         connected: true,
         sessionId: session.sessionId,
         processId: session.processId,
         processStartUtcUnixMs: session.processStartUtcUnixMs,
-        lane: session.lane,
-        sourceRoot: session.sourceRoot,
-        installedRoot: session.installedRoot,
-        serviceName: session.serviceName,
+        lane: connection.lane,
+        sourceRoot: connection.sourceRoot,
+        installedRoot: connection.installedRoot,
+        serviceName: connection.serviceName,
         runtimeMatch: "verified",
-        sdkSessionId: session.sdkSessionId,
-        buildStamp: session.buildStamp,
+        sdkSessionId: connection.sdkSessionId,
+        buildStamp: connection.buildStamp,
         state: yield* Ref.get(session.state),
       } satisfies BridgeSessionView;
     });
 
-    const failPendingRequest = Effect.fnUntraced(function* (session: Session, reason: string) {
-      const live = yield* Ref.getAndSet(session.requests, new Map());
-      for (const request of live.values())
-        yield* Deferred.fail(request.reply, new BridgeError(reason, 503));
-    });
-
-    // Socket-close cleanup. With stable session ids this races reconnect takeover: the OLD
-    // connection's close must never tear down the NEW connection that re-registered the same id.
-    // Guard: only the session object still present in the map cleans up its id.
-    const cleanupSession = Effect.fnUntraced(function* (closedSession: Session) {
-      yield* closeLine(closedSession, "Revit bridge disconnected before this request reached it.");
-      yield* failPendingRequest(closedSession, "Revit bridge disconnected before responding.");
-      const map = yield* Ref.get(sessions);
-      if (map.get(closedSession.sessionId) !== closedSession) return; // superseded by takeover — harmless
+    /** Ends a session: its line fails unsent, and its id leaves the registry (if still its own). */
+    const retireSession = Effect.fnUntraced(function* (session: Session, reason: string) {
+      yield* closeLine(session, reason);
       yield* Ref.update(sessions, (current) => {
+        if (current.get(session.sessionId) !== session) return current;
         const next = new Map(current);
-        next.delete(closedSession.sessionId);
+        next.delete(session.sessionId);
         return next;
       });
-      yield* emit({
-        sessionId: closedSession.sessionId,
-        kind: "disconnected",
-        docTitle: (yield* Ref.get(closedSession.state)).activeDocumentTitle ?? null,
-      });
     });
+
+    const hasDispatched = (session: Session) =>
+      Effect.map(Ref.get(session.requests), (requests) =>
+        [...requests.values()].some((request) => request.phase === "dispatched"),
+      );
+
+    /** After a request settles: a session whose transport is gone and owes no answer retires. */
+    const settleLoss = Effect.fnUntraced(function* (session: Session) {
+      if ((yield* Ref.get(session.connection)) !== null) return;
+      if (yield* hasDispatched(session)) return;
+      yield* retireSession(session, "Revit bridge disconnected before this request reached it.");
+    });
+
+    // Socket-close cleanup. Only the connection still current for its session acts: an old
+    // socket closing after a reconnect of the same process is harmless. A loss while Revit owns a
+    // dispatched request is uncertain (native work may still run): the session stays, holding its
+    // slot, until the answer arrives on a new socket or the process is observed dead.
+    const cleanupConnection = Effect.fnUntraced(function* (
+      session: Session,
+      connection: Connection,
+    ) {
+      const lost = yield* Ref.modify(session.connection, (current) =>
+        current === connection ? ([true, null] as const) : ([false, current] as const),
+      );
+      if (!lost) return;
+      yield* emit({
+        sessionId: session.sessionId,
+        kind: "disconnected",
+        docTitle: (yield* Ref.get(session.state)).activeDocumentTitle ?? null,
+      });
+      yield* settleLoss(session);
+    });
+
+    /**
+     * Fails only on process-death evidence while the transport is lost. Reconciliation ends on
+     * evidence, never on elapsed time: this loop looks every DEATH_PROBE_INTERVAL and releases
+     * nothing while the process lives.
+     */
+    const processDeath = (session: Session, operationKey: string) =>
+      Effect.gen(function* () {
+        while (true) {
+          if ((yield* Ref.get(session.connection)) === null && !processAlive(session.processId))
+            return yield* Effect.fail(
+              new BridgeError(
+                `Revit process ${session.processId} exited before answering '${operationKey}'; its outcome is unknown.`,
+                503,
+              ),
+            );
+          yield* Effect.sleep(DEATH_PROBE_INTERVAL);
+        }
+      });
 
     const handleConnectionScoped = Effect.fnUntraced(function* (
       req: HttpServerRequest.HttpServerRequest,
@@ -462,7 +549,15 @@ export const RevitBridgeLive = Layer.effect(
         Effect.flatMap(Effect.orDie(encodeFrame(frame)), (encoded) =>
           Effect.orDie(write.write(encoded)),
         );
+      // This socket's attachment: the session it serves and the connection it is.
       let session: Session | null = null;
+      let connection: Connection | null = null;
+      /** Frames from a socket a reconnect replaced still answer requests, but never steer state. */
+      const current = Effect.suspend(() =>
+        session
+          ? Effect.map(Ref.get(session.connection), (live) => live === connection)
+          : Effect.succeed(false),
+      );
 
       const onFrame = Effect.fnUntraced(function* (raw: string) {
         const decoded = yield* Effect.result(decodeFrame(raw));
@@ -492,49 +587,52 @@ export const RevitBridgeLive = Layer.effect(
             // Registration admitted a valid process incarnation before assigning its broker id.
             const registration = frame.registration;
             const sessionId = (yield* Effect.promise(() => computeBridgeSessionId(registration)))!;
-            const registeredSession = {
-              send,
-              requests: yield* Ref.make<ReadonlyMap<string, BridgeRequest>>(new Map()),
-              sessionId,
-              processId: frame.registration.processId,
-              processStartUtcUnixMs: frame.registration.processStartUtcUnixMs ?? null,
-              lane: normalizeSessionLane(frame.registration.lane),
-              sourceRoot: frame.registration.sourceRoot ?? null,
-              installedRoot: frame.registration.installedRoot ?? null,
-              serviceName: frame.registration.serviceName!,
-              sdkSessionId: frame.registration.sdkSessionId ?? null,
-              buildStamp: frame.registration.buildStamp ?? null,
-              state: yield* Ref.make(frame.registration.state),
-              line: yield* Queue.unbounded<Job>(),
-              depth: yield* Ref.make(0),
-            };
-            // Reconnect takeover: a stable id re-registering means the same Revit process came
-            // back on a new socket. Replace the old connection, fail its pending request, and
-            // leave its eventual socket-close cleanup harmless (guarded in cleanupSession).
             const previous = (yield* Ref.get(sessions)).get(sessionId);
+            const previousConnection = previous ? yield* Ref.get(previous.connection) : null;
+            const attachment: Connection = {
+              epoch: previousConnection ? previousConnection.epoch + 1 : 0,
+              send,
+              lane: normalizeSessionLane(registration.lane),
+              sourceRoot: registration.sourceRoot ?? null,
+              installedRoot: registration.installedRoot ?? null,
+              serviceName: registration.serviceName!,
+              sdkSessionId: registration.sdkSessionId ?? null,
+              buildStamp: registration.buildStamp ?? null,
+            };
             if (previous) {
+              // Reconnect of the SAME process: the session, its line and its occupied slot carry
+              // over; only the transport is replaced. The old socket's close is then harmless.
               yield* Effect.logInfo(
-                `bridge session ${sessionId} re-registered (pid ${registeredSession.processId}); taking over the previous connection`,
+                `bridge session ${sessionId} re-registered (pid ${registration.processId}); epoch ${attachment.epoch} replaces the previous connection`,
               );
-              const superseded =
-                "Revit bridge connection was superseded by a reconnect for the same session.";
-              yield* closeLine(previous, superseded);
-              yield* failPendingRequest(previous, superseded);
+              yield* Ref.set(previous.state, registration.state);
+              yield* Ref.set(previous.connection, attachment);
+              session = previous;
+            } else {
+              const registered: Session = {
+                requests: yield* Ref.make<ReadonlyMap<string, BridgeRequest>>(new Map()),
+                sessionId,
+                processId: registration.processId,
+                processStartUtcUnixMs: registration.processStartUtcUnixMs ?? null,
+                connection: yield* Ref.make<Connection | null>(attachment),
+                state: yield* Ref.make(registration.state),
+                line: yield* Queue.unbounded<Job>(),
+                depth: yield* Ref.make(0),
+              };
+              yield* Effect.forkIn(serve(registered), bridgeScope);
+              yield* Ref.update(sessions, (map) => new Map(map).set(sessionId, registered));
+              session = registered;
             }
-            session = registeredSession;
-            yield* Effect.forkIn(serve(registeredSession), bridgeScope);
+            connection = attachment;
             yield* Ref.set(lastRegistrationRefusal, null);
-            yield* Ref.update(sessions, (map) =>
-              new Map(map).set(registeredSession.sessionId, registeredSession),
-            );
             yield* send({
               kind: "RegistrationAck",
-              registrationAck: { accepted: true, sessionId: registeredSession.sessionId },
+              registrationAck: { accepted: true, sessionId },
             });
             yield* emit({
-              sessionId: registeredSession.sessionId,
+              sessionId,
               kind: "connected",
-              docTitle: frame.registration.state.activeDocumentTitle ?? null,
+              docTitle: registration.state.activeDocumentTitle ?? null,
             });
             return;
           }
@@ -543,7 +641,7 @@ export const RevitBridgeLive = Layer.effect(
               yield* Effect.logWarning("bridge StateSync frame missing stateSync");
               return;
             }
-            if (session) {
+            if (session && (yield* current)) {
               const prevState = yield* Ref.get(session.state);
               const nextState = frame.stateSync.state;
               yield* Ref.set(session.state, nextState);
@@ -563,7 +661,10 @@ export const RevitBridgeLive = Layer.effect(
               yield* Effect.logWarning("bridge Response frame missing response");
               return;
             }
-            if (session) yield* completeBridgeRequest(session.requests, frame.response);
+            // Matched by request id from any socket of the session: a late answer from a replaced
+            // socket settles its request instead of being dropped as unknown.
+            if (session && connection)
+              yield* completeBridgeRequest(session.requests, frame.response, connection.epoch);
             return;
           }
           case "Event": {
@@ -573,21 +674,26 @@ export const RevitBridgeLive = Layer.effect(
             }
             // This is producer evidence, never a browser event, including when malformed.
             if (frame.event.eventName === "receipt.producer") {
-              if (!session || (yield* Ref.get(sessions)).get(session.sessionId) !== session) return;
+              if (
+                !session ||
+                !connection ||
+                (yield* Ref.get(sessions)).get(session.sessionId) !== session
+              )
+                return;
               const raw = frame.event.payloadJson;
               try {
                 if (!raw || raw.length > 256 * 1024) throw Error("Invalid producer size");
                 const fact = receiptProducerSchema.parse(JSON.parse(raw));
-                const connection = {
+                const emitter = {
                   sessionId: session.sessionId,
                   processId: session.processId,
                   processStartUtcUnixMs: session.processStartUtcUnixMs,
-                  lane: session.lane,
-                  buildStamp: session.buildStamp,
+                  lane: connection.lane,
+                  buildStamp: connection.buildStamp,
                 };
                 for (const consume of receiptProducers) {
                   try {
-                    consume({ fact: structuredClone(fact), connection: { ...connection } });
+                    consume({ fact: structuredClone(fact), connection: { ...emitter } });
                   } catch {
                     yield* Effect.logWarning("Native receipt subscriber failed");
                   }
@@ -598,7 +704,7 @@ export const RevitBridgeLive = Layer.effect(
               return;
             }
             yield* Effect.log(`bridge event: ${frame.event.eventName}`);
-            if (session)
+            if (session && (yield* current))
               yield* emit({
                 sessionId: session.sessionId,
                 kind: "event",
@@ -620,7 +726,11 @@ export const RevitBridgeLive = Layer.effect(
           ),
         ),
       ).pipe(
-        Effect.ensuring(Effect.suspend(() => (session ? cleanupSession(session) : Effect.void))),
+        Effect.ensuring(
+          Effect.suspend(() =>
+            session && connection ? cleanupConnection(session, connection) : Effect.void,
+          ),
+        ),
         Effect.ignore({ log: true }), // log socket closes
       );
       return Response.empty();
@@ -648,6 +758,7 @@ export const RevitBridgeLive = Layer.effect(
       if (provenanceRefusal)
         return yield* Effect.fail(new BridgeError(provenanceRefusal, 403, { notDispatched: true }));
       const reply = reserved ?? (yield* Deferred.make<BridgeResponse, BridgeError>());
+      let dispatchedOn: Connection | undefined;
       // A revoke fences dispatch synchronously, before its asynchronous journal census answers.
       // Checking that fence and changing the request phase are one atomic decision.
       while (true) {
@@ -662,7 +773,8 @@ export const RevitBridgeLive = Layer.effect(
           });
         if (reserved) {
           const live = (yield* Ref.get(sessions)).get(session.sessionId);
-          if (live !== session) return yield* Effect.fail(new NoRevitSession());
+          if (live !== session || !(yield* Ref.get(session.connection)))
+            return yield* Effect.fail(new NoRevitSession());
           const state = yield* Ref.get(session.state);
           if (openDocumentId && !state.openDocuments.some((doc) => doc.openId === openDocumentId))
             return yield* Effect.fail(
@@ -680,6 +792,10 @@ export const RevitBridgeLive = Layer.effect(
               }),
             );
         }
+        // Dispatch is fenced by incarnation (this session object) and connection epoch: the
+        // request records the epoch it goes out on, read in the same step that marks it dispatched.
+        const connection = yield* Ref.get(session.connection);
+        if (!connection) return yield* Effect.fail(new NoRevitSession());
         const phase = yield* Ref.modify(
           session.requests,
           (
@@ -694,11 +810,20 @@ export const RevitBridgeLive = Layer.effect(
             const refusal = reserved ? bridgeDispatchRefusal(requestId) : null;
             if (refusal) return [{ refusal }, requests] as const;
             const next = new Map(requests);
-            next.set(requestId, { operationKey, requestId, reply, phase: "dispatched" });
+            next.set(requestId, {
+              operationKey,
+              requestId,
+              reply,
+              phase: "dispatched",
+              epoch: connection.epoch,
+            });
             return ["dispatched", next] as const;
           },
         );
-        if (phase === "dispatched") break;
+        if (phase === "dispatched") {
+          dispatchedOn = connection;
+          break;
+        }
         if (typeof phase !== "string")
           return yield* Effect.fail(
             new BridgeError(phase.refusal.message, phase.refusal.kind === "cancelled" ? 499 : 403, {
@@ -715,7 +840,7 @@ export const RevitBridgeLive = Layer.effect(
       }
       return yield* Effect.gen(function* () {
         const payloadJson = yield* encodePayloadJson(payload);
-        yield* session.send({
+        yield* dispatchedOn!.send({
           kind: "Request",
           request: {
             requestId,
@@ -726,9 +851,11 @@ export const RevitBridgeLive = Layer.effect(
           },
         });
         if (reserved) yield* Effect.promise(() => markBridgeDispatched(requestId));
-        // Only host stop interrupts the worker mid-op (a leaving waiter never does): Revit gets an
-        // out-of-band cancel, and the slot stays held until Revit answers or acknowledges it.
+        // The slot is released by Revit's answer to THIS request (from any socket of the
+        // session) or by process death; never by a reconnect, a timer, or a cancel's acceptance.
+        // Only host stop interrupts the worker mid-op (a leaving waiter never does).
         const res = yield* Deferred.await(reply).pipe(
+          Effect.raceFirst(processDeath(session, operationKey)),
           Effect.onInterrupt(() =>
             reserved ? cancelInFlight(session, requestId, reply) : Effect.void,
           ),
@@ -757,7 +884,11 @@ export const RevitBridgeLive = Layer.effect(
           value: yield* decodePayloadJson(res.payloadJson),
           openDocumentId: res.openDocumentId,
         };
-      }).pipe(Effect.ensuring(forgetBridgeRequest(session.requests, requestId)));
+      }).pipe(
+        Effect.ensuring(
+          Effect.andThen(forgetBridgeRequest(session.requests, requestId), settleLoss(session)),
+        ),
+      );
     });
 
     // Ids a revoke named before their request reached this registry: a begun step may still be
@@ -850,7 +981,8 @@ export const RevitBridgeLive = Layer.effect(
         const known = typeof named === "string" ? yield* cancelRequest(named) : null;
         if (known) return known;
       }
-      const session = bridgeSessionId ? (yield* Ref.get(sessions)).get(bridgeSessionId) : undefined;
+      // New work targets only an attached session; a session in reconciliation takes none.
+      const session = (yield* attached(bridgeSessionId))?.session;
       if (!session) return yield* Effect.fail(new NoRevitSession());
 
       // An id this host never queued: let Revit answer for it, but still outside the line.
@@ -1001,7 +1133,10 @@ export const RevitBridgeLive = Layer.effect(
         Effect.onInterrupt(() =>
           Deferred.fail(
             job.result,
-            new BridgeError("The host bridge stopped before Revit answered.", 503),
+            new BridgeError(
+              "The host bridge stopped while Revit ran this request; its outcome is unknown here.",
+              503,
+            ),
           ),
         ),
         Effect.ensuring(retire(session, job)),
@@ -1030,34 +1165,37 @@ export const RevitBridgeLive = Layer.effect(
       );
 
     /**
-     * Host stop only: cancel the op Revit is running, out of band, and hold the slot until Revit
-     * answers it or acknowledges the cancel. Bounded so a wedged Revit cannot hang shutdown.
+     * Host stop only: send the op Revit is running an out-of-band cancel and wait for that op's own
+     * terminal answer (a cancel's acceptance is not proof it stopped). The 5 s bound is the host's
+     * shutdown budget, not a slot release: no op can take this line after the host stops.
      */
     const cancelInFlight = (
       session: Session,
       requestId: string,
       reply: Deferred.Deferred<BridgeResponse, BridgeError>,
     ): Effect.Effect<void> =>
-      Deferred.await(reply).pipe(
-        Effect.raceFirst(
+      Effect.gen(function* () {
+        yield* Effect.forkChild(
           invokeSession(session, CANCEL_OPERATION_KEY, { requestId }, undefined, undefined),
-        ),
-        Effect.timeout("5 seconds"),
-        Effect.exit,
-        Effect.asVoid,
-      );
+        );
+        yield* Deferred.await(reply);
+      }).pipe(Effect.timeout("5 seconds"), Effect.exit, Effect.asVoid);
 
     // Exact attachment lookup only; absence never selects a socket.
     const snapshot = Effect.fnUntraced(function* (bridgeSessionId?: string) {
-      const session = bridgeSessionId ? (yield* Ref.get(sessions)).get(bridgeSessionId) : undefined;
-      return session
-        ? yield* viewSession(session)
+      const live = yield* attached(bridgeSessionId);
+      return live
+        ? yield* viewSession(live.session, live.connection)
         : ({ connected: false } satisfies BridgeSessionView);
     });
 
     const list = Effect.gen(function* () {
-      const map = yield* Ref.get(sessions);
-      return yield* Effect.all([...map.values()].map((session) => viewSession(session)));
+      const views: BridgeSessionView[] = [];
+      for (const session of (yield* Ref.get(sessions)).values()) {
+        const connection = yield* Ref.get(session.connection);
+        if (connection) views.push(yield* viewSession(session, connection));
+      }
+      return views;
     });
 
     return {
