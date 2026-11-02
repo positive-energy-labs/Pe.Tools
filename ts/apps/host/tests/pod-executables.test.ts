@@ -27,11 +27,18 @@ async function fixture() {
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   const source = await import(`data:text/javascript;base64,${bytes.toString("base64")}`);
   let writes = 0;
-  const module = source.registerHost({
+  const declaration = source.register({
     ...contracts,
     z,
-    descriptor: { key: "route:@pipes/routes/pipes/index.js", sha256 },
-    operation: (op: Parameters<typeof podExecutor>[0]): CommandExecutor => podExecutor(op, {
+    descriptor: {
+      key: "route:@pipes/routes/pipes/index.js",
+      sha256,
+      packageId: "pipes",
+      workRoute: "pod.pipes.pipes",
+    },
+  });
+  const operation = (op: Parameters<typeof podExecutor>[0]): CommandExecutor =>
+    podExecutor(op, {
       definition: {} as contracts.Command,
       prepared: z.unknown(),
       bind: async (ctx) => ({
@@ -40,10 +47,38 @@ async function fixture() {
       }),
       run: async (_ctx, execution) => {
         writes++;
-        return execution.step("native", op.key, execution.prepared, async id => { await markDispatched(id); return { applied: 1, dryRun: false, results: [{ ok: true }], input: execution.prepared }; }, { process: { pid: 42, processStartUtc: "1970-01-01T00:00:01.0000000Z", executable: "C:/Revit.exe" } });
+        return execution.step(
+          "native",
+          op.key,
+          execution.prepared,
+          async (id) => {
+            await markDispatched(id);
+            return {
+              applied: 1,
+              dryRun: false,
+              results: [{ ok: true }],
+              input: execution.prepared,
+            };
+          },
+          {
+            process: {
+              pid: 42,
+              processStartUtc: "1970-01-01T00:00:01.0000000Z",
+              executable: "C:/Revit.exe",
+            },
+          },
+        );
       },
-    }),
-  }) as contracts.ExecutableRouteModule<CommandExecutor>;
+    });
+  const module = {
+    ...declaration,
+    bodies: Object.fromEntries(
+      Object.entries(declaration.entries).map(([key, definition]) => [
+        key,
+        operation({ ...declaration.operations[key], definition }),
+      ]),
+    ),
+  } as contracts.ExecutableRouteModule<CommandExecutor>;
   const saved = new Map<string, unknown>();
   const workspace = new RouteWorkspace({
     registrations: [],
@@ -88,7 +123,7 @@ test("pipes admission binds catalog, executable bodies and Work; migration and r
     const view = await f.workspace.view(key, key.route);
     expect(view).toMatchObject({
       revision: 8,
-      doc: { version: 2, state: { systemId: 12, label: "" }, writeIntent: {} },
+      doc: { version: 3, writeIntent: {} },
     });
     expect((await f.workspace.view(key, key.route))?.revision).toBe(8);
     expect(podCommand("pod.pipes.set-parameter")).toBeDefined();
@@ -129,7 +164,23 @@ test("pipes preview and apply use the shared Work boundary and durable journal",
       [
         {
           path: ["writeIntent", "pod.pipes.set-parameter"],
-          value: { edit: { value: { elementId: 12, parameterId: 4, value: "P-1", expected: { elementId: 12, parameterId: 4, storageType: "String", isReadOnly: false, hasValue: true, rawValue: "P-0" } } } },
+          value: {
+            edit: {
+              value: {
+                elementId: 12,
+                parameterId: 4,
+                value: "P-1",
+                expected: {
+                  elementId: 12,
+                  parameterId: 4,
+                  storageType: "String",
+                  isReadOnly: false,
+                  hasValue: true,
+                  rawValue: "P-0",
+                },
+              },
+            },
+          },
         },
       ],
       0,
@@ -159,9 +210,13 @@ test("pipes preview and apply use the shared Work boundary and durable journal",
       expect(receipt.state, JSON.stringify(receipt)).toBe("succeeded");
       expect(f.writes()).toBe(previewOnly ? 0 : 1);
       const result = (receipt as { result: Record<string, unknown> }).result;
-      expect(result.derivedRequest).toMatchObject({ edits: [{ elementId: 12, parameterId: 4, value: "P-1" }], dryRun: false });
+      expect(result.derivedRequest).toMatchObject({
+        edits: [{ elementId: 12, parameterId: 4, value: "P-1" }],
+        dryRun: false,
+      });
       if (!previewOnly) expect(result.input).toEqual(result.derivedRequest);
-      if (!previewOnly) expect((await f.workspace.view(key, key.route))!.doc).toMatchObject({ writeIntent: {} });
+      if (!previewOnly)
+        expect((await f.workspace.view(key, key.route))!.doc).toMatchObject({ writeIntent: {} });
     }
     dispose();
     expect(
@@ -179,7 +234,7 @@ test("pipes mounts through the builtin registry and rejects foreign builtin hash
   const f = await fixture();
   const registry = createRouteRegistry();
   const remove = registry.registerModule({ ...f.module, bodies: () => null });
-  expect(registry.get("pod.pipes.pipes")?.graph?.subject?.({})).toBe("Piping system");
+  expect(registry.get("pod.pipes.pipes")?.graph?.subjectField.noun).toBe("Piping system");
   remove();
   expect(registry.get("pod.pipes.pipes")).toBeUndefined();
   expect(() =>

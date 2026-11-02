@@ -1,205 +1,15 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
-import { createMemoryHistory, createRouter, RouterContextProvider } from "@tanstack/react-router";
-import { afterEach, expect, test, vi } from "vite-plus/test";
+import { expect, test, vi } from "vite-plus/test";
+import { waitFor } from "@testing-library/react";
 import {
   podRouteDescriptorSchema,
-  readingKey,
-  workKey,
-  type WorkWriteAck,
+  validatePodSource,
+  validatePodDeclaration,
 } from "@pe/agent-contracts";
-import { routeFromGraph } from "#/shell/mount";
-import { Route as root } from "../routes/__root";
-import { makePodRoute, type PodApi } from "./pod-view";
-import { peReadings } from "#/readings";
-import * as routeHost from "./host";
-
-vi.mock("../routes/__root", async () => {
-  const { createRootRoute, Outlet } = await import("@tanstack/react-router");
-  return { Route: createRootRoute({ component: Outlet }) };
-});
-
-test("queued Pod events wait for the ACK's authoritative Work reading", async () => {
-  vi.stubGlobal(
-    "ResizeObserver",
-    class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    },
-  );
-  const subscribers = new Set<(revision: number, value: number) => void>();
-  vi.spyOn(peReadings, "subscribe").mockImplementation((request, accept) => {
-    if (request.kind !== "work") return () => {};
-    const publish = (revision: number, value: number) =>
-      accept({
-        kind: "snapshot",
-        key: readingKey(request),
-        value: { revision, doc: { version: 1, state: { value } } },
-      } as never);
-    subscribers.add(publish);
-    publish(0, 0);
-    return () => {
-      subscribers.delete(publish);
-    };
-  });
-  const writes: WorkWriteAck[] = [];
-  vi.spyOn(routeHost, "writeRouteWork").mockImplementation(async (key, request) => {
-    const ack: WorkWriteAck = {
-      ...request,
-      key,
-      by: "human",
-      base: request.expectedRevision,
-      revision: request.expectedRevision + 1,
-      inverse: [],
-      undoable: true,
-    };
-    writes.push(ack);
-    return { ok: true, revision: ack.revision, write: ack };
-  });
-  let api!: PodApi;
-  const { graph, adapters } = makePodRoute(
-    podRouteDescriptorSchema.parse({
-      key: "route:@test/routes/queue/index.js",
-      workRoute: "pod.test.queue",
-      packageId: "test",
-      name: "Queue",
-      description: "Queue proof",
-      sourcePath: "routes/queue/index.js",
-      sha256: "a".repeat(64),
-      trusted: true,
-    }),
-    {
-      version: 2,
-      register: (base) => base,
-      initial: { value: 0 },
-      reducer: (state, event) => ({ value: Number(state.value) + Number(event.add) }),
-      create: (provided) => {
-        api = provided;
-        return () => (
-          <output aria-label="Queued count">{String(provided.useState().state.value)}</output>
-        );
-      },
-    },
-  );
-  const route = routeFromGraph(graph, adapters, "/queue");
-  const router = createRouter({
-    routeTree: root.addChildren([route]),
-    history: createMemoryHistory({ initialEntries: ["/queue"] }),
-  });
-  await router.load();
-  const Component = route.options.component!;
-  const view = render(
-    <RouterContextProvider router={router}>
-      <Component />
-    </RouterContextProvider>,
-  );
-  await waitFor(() => expect(view.getByLabelText("Queued count").textContent).toBe("0"));
-  await waitFor(() => expect(subscribers.size).toBe(1));
-  let first!: Promise<void>, second!: Promise<void>;
-  act(() => {
-    first = api.useState().fire({ add: 1 });
-    second = api.useState().fire({ add: 2 });
-  });
-  await waitFor(() => expect(writes).toHaveLength(1));
-  expect(writes[0]!.patches).toEqual([{ path: ["state"], value: { value: 1 } }]);
-  expect(api.getState().value).toBe(0);
-  act(() => subscribers.forEach((publish) => publish(1, 1)));
-  await first;
-  await waitFor(() => expect(writes).toHaveLength(2));
-  expect(writes[1]!.base).toBe(1);
-  expect(workKey(writes[1]!.key)).toBe(workKey(writes[0]!.key));
-  expect(writes[1]!.patches).toEqual([{ path: ["state"], value: { value: 3 } }]);
-  act(() => subscribers.forEach((publish) => publish(2, 3)));
-  await second;
-  await waitFor(() => expect(view.getByLabelText("Queued count").textContent).toBe("3"));
-});
-afterEach(() => {
-  cleanup();
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
-});
-
-test("a Pod mounts the kernel fixture lane, journals reducer events and blocks host execution", async () => {
-  const fetch = vi.fn(() => {
-    throw Error("Real host called");
-  });
-  vi.stubGlobal("fetch", fetch);
-  vi.stubGlobal(
-    "ResizeObserver",
-    class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    },
-  );
-  let api!: PodApi;
-  const { graph, adapters } = makePodRoute(
-    podRouteDescriptorSchema.parse({
-      key: "route:@test/routes/counter/index.js",
-      workRoute: "pod.test.counter",
-      packageId: "test",
-      name: "Counter",
-      description: "Authored counter",
-      sourcePath: "routes/counter/index.js",
-      sha256: "a".repeat(64),
-      trusted: true,
-    }),
-    {
-      version: 2,
-      register: (base) => base,
-      initial: { value: 0 },
-      reducer: (state, event) => ({ value: Number(state.value) + Number(event.add) }),
-      fixtures: {
-        count: {
-          title: "Counter fixture",
-          state: { value: 3 },
-          queries: { "pod.read": { answer: 42 } },
-        },
-      },
-      create: (provided) => {
-        api = provided;
-        return function Counter() {
-          const { state, fire } = provided.useState();
-          return (
-            <>
-              <output aria-label="Count">{String(state.value)}</output>
-              <button onClick={() => void fire({ add: 1 })}>Increment</button>
-            </>
-          );
-        };
-      },
-    },
-  );
-  const route = routeFromGraph(graph, adapters, "/counter");
-  const router = createRouter({
-    routeTree: root.addChildren([route]),
-    history: createMemoryHistory({ initialEntries: ["/counter?fixture=count"] }),
-  });
-  await router.load();
-  const Component = route.options.component!;
-  const view = render(
-    <RouterContextProvider router={router}>
-      <Component />
-    </RouterContextProvider>,
-  );
-  await waitFor(() => expect(view.getByLabelText("Count").textContent).toBe("3"));
-  fireEvent.click(view.getByText("Increment"));
-  await waitFor(() => expect(view.getByLabelText("Count").textContent).toBe("4"));
-  await act(async () => {
-    await Promise.all([api.useState().fire({ add: 2 }), api.useState().fire({ add: 3 })]);
-  });
-  await waitFor(() => expect(view.getByLabelText("Count").textContent).toBe("9"));
-  fireEvent.keyDown(view.getByLabelText("Counter route"), { key: "z", ctrlKey: true });
-  await waitFor(() => expect(view.getByLabelText("Count").textContent).toBe("6"));
-  await expect(api.read("revit.context.lens", {})).resolves.toEqual({ answer: 42 });
-  await expect(api.do("revit.context.show-elements", { elementIds: [1] })).rejects.toThrow(
-    "Fixture",
-  );
-  await expect(api.exportSnapshot(api.getState())).rejects.toThrow("Fixture");
-  expect(fetch).not.toHaveBeenCalled();
-});
-
+import * as contracts from "@pe/agent-contracts";
+import { z } from "zod";
+vi.mock("./builtin-routes", () => ({ publicRoutes: { entries: () => [] } }));
+import { makePodRoute } from "./pod-view";
 test("pipes authors a document route with versioned typed Work through the common mount", async () => {
   const { readFile } = await import("node:fs/promises");
   const { createHash } = await import("node:crypto");
@@ -222,39 +32,133 @@ test("pipes authors a document route with versioned typed Work through the commo
   });
   const mounted = makePodRoute(row, bundle);
   expect(mounted.graph.needs).toBe("document");
-  expect(mounted.graph.subject?.({ request: { key: "", input: {} } })).toBe("Piping system");
-  expect(mounted.graph.work?.parse({})).toEqual({
-    version: 2,
-    state: { systemId: null, label: "" },
-    writeIntent: {},
-  });
+  expect(mounted.graph.subjectField.keyKind).toBe("UniqueId");
+  expect(mounted.graph.work?.parse({})).toMatchObject({ version: 3, writeIntent: {} });
   expect(typeof mounted.hosted).toBe("function");
 });
-
 
 test("Pod catalog readings refresh through the shared receipt invalidation mechanism", async () => {
   const { createReadingGraph } = await import("#/shell/readings");
   const { podRead } = await import("./pod-sources");
   const { readFile } = await import("node:fs/promises");
   const { resolve } = await import("node:path");
-  const bytes = await readFile(resolve(process.cwd(), "../../../examples/pods/pipes/routes/pipes/index.js"));
+  const bytes = await readFile(
+    resolve(process.cwd(), "../../../examples/pods/pipes/routes/pipes/index.js"),
+  );
   const bundle = await import(`data:text/javascript;base64,${bytes.toString("base64")}`);
-  const { graph, adapters } = makePodRoute(podRouteDescriptorSchema.parse({
-    key: "route:@pipes/routes/pipes/index.js", packageId: "pipes", workRoute: "pod.pipes.pipes",
-    name: "Pipes", description: "Piping systems", sourcePath: "routes/pipes/index.js", sha256: "a".repeat(64), trusted: true,
-  }), bundle);
+  const { graph, adapters } = makePodRoute(
+    podRouteDescriptorSchema.parse({
+      key: "route:@pipes/routes/pipes/index.js",
+      packageId: "pipes",
+      workRoute: "pod.pipes.pipes",
+      name: "Pipes",
+      description: "Piping systems",
+      sourcePath: "routes/pipes/index.js",
+      sha256: "a".repeat(64),
+      trusted: true,
+    }),
+    bundle,
+  );
   let value = "P-0";
   const read = vi.spyOn(podRead, "run").mockImplementation(async () => ({ value }));
   const target = { kind: "document" as const, ref: { session: "fixture", openId: "pipes" } };
-  const readings = createReadingGraph(graph, { sources: adapters.sources, log() {}, scope: {
-    target, workKey: null, workRevision: 1, page: { request: { key: "", input: {} } }, work: { version: 2, state: { systemId: 12 } },
-  } });
+  const readings = createReadingGraph(graph, {
+    sources: adapters.sources,
+    log() {},
+    scope: {
+      target,
+      workKey: null,
+      workRevision: 1,
+      page: { system: "pipe-system-1" },
+      work: { version: 3, writeIntent: {} },
+    },
+  });
   const release = readings.mount(["pod.pipes.detail"]);
   try {
     await waitFor(() => expect(readings.get("pod.pipes.detail").value).toEqual({ value: "P-0" }));
     value = "P-1";
-    readings.acceptReceipt({ id: "fixture-apply", state: "succeeded", target, effects: [{ kind: "document", ref: target.ref }] }, ["snapshot"]);
+    readings.acceptReceipt(
+      {
+        id: "fixture-apply",
+        state: "succeeded",
+        target,
+        effects: [{ kind: "document", ref: target.ref }],
+      },
+      ["snapshot"],
+    );
     await waitFor(() => expect(readings.get("pod.pipes.detail").value).toEqual({ value: "P-1" }));
     expect(read).toHaveBeenCalledTimes(2);
-  } finally { release(); readings.dispose(); read.mockRestore(); }
+  } finally {
+    release();
+    readings.dispose();
+    read.mockRestore();
+  }
+});
+
+for (const name of ["pipes/routes/pipes", "snowdon-circuits/routes/voltage-drop"]) {
+  test(`${name} has one registration and refuses state ownership, empty draws and missing Work`, async () => {
+    const { readFile } = await import("node:fs/promises");
+    const { resolve } = await import("node:path");
+    const bytes = await readFile(resolve(process.cwd(), `../../../examples/pods/${name}/index.js`));
+    validatePodSource(bytes.toString());
+    const bundle = await import(`data:text/javascript;base64,${bytes.toString("base64")}`);
+    expect(Object.keys(bundle)).toEqual(["register"]);
+    const [packageId, , source] = name.split("/");
+    const row = podRouteDescriptorSchema.parse({
+      key: `route:@${name}/index.js`,
+      packageId,
+      workRoute: `pod.${packageId}.${source}`,
+      name: source,
+      description: "Test",
+      sourcePath: `routes/${source}/index.js`,
+      sha256: "a".repeat(64),
+      trusted: true,
+    });
+    makePodRoute(row, bundle);
+    const declaration = () => bundle.register({ ...contracts, z, descriptor: row });
+    const missing = declaration();
+    delete missing.work;
+    expect(() => validatePodDeclaration(missing)).toThrow("Work schema");
+    const empty = declaration();
+    (Object.values(empty.graph.panes).find((p: any) => !p.history) as { draws: string[] }).draws =
+      [];
+    expect(() => validatePodDeclaration(empty)).toThrow("draws");
+    expect(() => validatePodSource("api.React.useState(null)")).toThrow("kernel props");
+  });
+}
+
+test("pipes kernel owns subject selection and stages the exact typed Work input", async () => {
+  const { createFixtureMount } = await import("#/shell/fixture");
+  const { readFile } = await import("node:fs/promises");
+  const { resolve } = await import("node:path");
+  const bytes = await readFile(
+    resolve(process.cwd(), "../../../examples/pods/pipes/routes/pipes/index.js"),
+  );
+  const bundle = await import(`data:text/javascript;base64,${bytes.toString("base64")}`);
+  const row = podRouteDescriptorSchema.parse({
+    key: "route:@pipes/routes/pipes/index.js",
+    packageId: "pipes",
+    workRoute: "pod.pipes.pipes",
+    name: "Pipes",
+    description: "Test",
+    sourcePath: "routes/pipes/index.js",
+    sha256: "a".repeat(64),
+    trusted: true,
+  });
+  const { graph, adapters } = makePodRoute(row, bundle);
+  const owner = await createFixtureMount(graph, "sample", adapters);
+  const disconnect = owner.connect();
+  try {
+    owner.view.setPage({ system: "pipe-system-1" });
+    const edit = { elementId: 12, parameterId: 42, value: "P-1", expected: {} };
+    expect((await owner.control("intent", JSON.stringify(edit)).run()).state).toBe("done");
+    expect((await owner.control("stage", {}).run()).state).toBe("done");
+    expect(owner.snapshot().work?.doc.writeIntent["pod.pipes.set-parameter"].edit.value).toEqual(
+      edit,
+    );
+    expect(owner.view.read().page.system).toBe("pipe-system-1");
+  } finally {
+    disconnect();
+    owner.dispose();
+  }
 });

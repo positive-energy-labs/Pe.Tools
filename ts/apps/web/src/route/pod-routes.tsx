@@ -1,5 +1,5 @@
 import { createContext, use, useEffect, useMemo, useState, type ReactNode } from "react";
-import { message, type PodRouteDescriptor } from "@pe/agent-contracts";
+import { message, validatePodSource, type PodRouteDescriptor } from "@pe/agent-contracts";
 import { useRouterState } from "@tanstack/react-router";
 import { peClient } from "#/host/pe-client";
 import { readPeError } from "@pe/host-contracts/pe-api";
@@ -33,13 +33,14 @@ export function PodRoutesProvider({ children }: { children: ReactNode }) {
         if (!response.ok) throw Error((await readPeError(response)).message);
         const bytes = new Uint8Array(await response.arrayBuffer());
         await verifyBundle(bytes, row.sha256);
+        validatePodSource(new TextDecoder().decode(bytes));
         if (!current()) return () => {};
         const url = URL.createObjectURL(new Blob([bytes], { type: "text/javascript" }));
         try {
           const bundle = (await import(/* @vite-ignore */ url)) as PodRouteBundle;
           if (!current()) return () => {};
           const route = makePodRoute(row, bundle);
-          return publicRoutes.registerModule({...route.registration, bodies: route.hosted});
+          return publicRoutes.registerModule({ ...route.registration, bodies: route.hosted });
         } finally {
           URL.revokeObjectURL(url);
         }

@@ -1,13 +1,13 @@
 import { isAnyOperationKey } from "@pe/host-contracts/operation-types";
-import { podExecutor, podOperationBinding, type PodOperation } from "./pod-executor.ts";
+import { podExecutor, podOperationBinding } from "./pod-executor.ts";
 import { gatewayExecutor } from "./gateway-actions.ts";
 import type { RevitBridge } from "./bridge.ts";
 import { createHash } from "node:crypto";
 import * as contracts from "@pe/agent-contracts";
-import { command, type CommandExecutor } from "./command-executor.ts";
+import { type CommandExecutor } from "./command-executor.ts";
 import { dirname } from "node:path";
 import { z } from "zod";
-import { podRouteWorkSpec, type PodRouteDescriptor } from "@pe/agent-contracts";
+import { type PodRouteDescriptor } from "@pe/agent-contracts";
 import type { RouteWorkspace } from "@pe/runtime";
 import type { createPackageLifecycle } from "./package-lifecycle.ts";
 import { productRouteTrustPath } from "./product-paths.ts";
@@ -21,7 +21,8 @@ export function podCommand(key: string) {
   for (const { module, available } of executableModules.values()) {
     if (!available()) continue;
     const executor = module.bodies[key];
-    if (executor && module.entries[key]?.effect === "command") return { executor, work: module.work };
+    if (executor && module.entries[key]?.effect === "command")
+      return { executor, work: module.work };
   }
   return undefined;
 }
@@ -133,39 +134,49 @@ export function createPodRoutes(
         const bytes = pod.members.find((member) => member.path === route.sourcePath)!.bytes;
         const actualHash = createHash("sha256").update(bytes).digest("hex");
         if (actualHash !== route.sha256) throw Error("Route module hash mismatch");
+        contracts.validatePodSource(Buffer.from(bytes).toString("utf8"));
         const loaded = await import(
           `data:text/javascript;base64,${Buffer.from(bytes).toString("base64")}`
         );
-        const module = loaded.registerHost?.({
+        contracts.validatePodBundle(loaded);
+        const declaration = loaded.register({
           ...contracts,
           z,
-          command,
           descriptor: route,
-          operation: (op: PodOperation) => {
-            if (!options.bridge) throw Error("Native bridge unavailable");
-            return podExecutor(op, gatewayExecutor(op.key, options.bridge, async () => {
-              throw Error("Native operation required");
-            }));
-          },
-        });
-        if (
-          module &&
-          (module.namespace !== route.packageId || module.graph.key !== route.workRoute)
-        )
-          throw Error("Executable route identity differs from its admitted member");
-        const dispose = module
-          ? admitPodModule(module, actualHash, options.workspace, () =>
-              lifecycle
-                .packages()
-                .some(
-                  (pod) =>
-                    pod.id === route.packageId &&
-                    pod.members.some(
-                      (member) => member.path === route.sourcePath && member.sha256 === actualHash,
-                    ),
+        }) as contracts.PodModule;
+        contracts.validatePodDeclaration(declaration);
+        const module = {
+          ...declaration,
+          bodies: Object.fromEntries(
+            Object.entries(declaration.entries).map(([key, definition]) => {
+              const op = declaration.operations[key];
+              if (!op) throw Error(`Missing Pod operation: ${key}`);
+              if (!options.bridge) throw Error("Native bridge unavailable");
+              return [
+                key,
+                podExecutor(
+                  { ...op, definition },
+                  gatewayExecutor(op.key, options.bridge, async () => {
+                    throw Error("Native operation required");
+                  }),
                 ),
-            )
-          : options.workspace.register({ spec: podRouteWorkSpec(route.workRoute, route.name) });
+              ];
+            }),
+          ),
+        };
+        if (module.namespace !== route.packageId || module.graph.key !== route.workRoute)
+          throw Error("Executable route identity differs from its admitted member");
+        const dispose = admitPodModule(module, actualHash, options.workspace, () =>
+          lifecycle
+            .packages()
+            .some(
+              (pod) =>
+                pod.id === route.packageId &&
+                pod.members.some(
+                  (member) => member.path === route.sourcePath && member.sha256 === actualHash,
+                ),
+            ),
+        );
         registrations.set(route.key, { hash: route.sha256, dispose });
       }
     }
