@@ -504,6 +504,9 @@ export function scheduleExecutors(
         rebindError: string | undefined;
       try {
         if (readback && !outcome.unresolved) {
+          const { id, ...value } = readback;
+          // Explicit command publication retains evidence before Work can reference it.
+          await execution.step("publication", "schedule.retain-readback", { id }, () => captures.saveSchedule(value));
           const view = await work.read(base.key, scheduleGridRouteState.route);
           const latest = view && scheduleGridDocumentSchema.parse(view.doc);
           if (!latest || latest.basis?.captureId !== document.basis!.captureId)

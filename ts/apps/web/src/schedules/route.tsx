@@ -216,7 +216,7 @@ function WorkBody({ owner, page, verbs }: MountBody<SchedulesPage, ScheduleGridD
 }
 
 function SpecBody({ owner, page }: MountBody<SchedulesPage, ScheduleGridDocument>) {
-  const { scope } = useScheduleView();
+  const scope: SchedulesScope = { ...owner.snapshot(), page, readings: Object.fromEntries(Object.keys(schedulesGraph.readings).map(id => [id, owner.readings.get(id)])) };
   const pods = readingValue<PodList["pods"]>(scope, "pods") ?? [];
   const rows = pods.flatMap((pod) =>
     pod.members
@@ -279,3 +279,9 @@ export const schedulesAdapters: RouteAdapters<SchedulesPage, ScheduleGridDocumen
   },
 };
 export const schedulesRoute = routeFromGraph(schedulesGraph, schedulesAdapters, "/schedules");
+
+/** Definition authoring never mounts the document schedule grid or its push controls. */
+export const scheduleSpecsAdapters: RouteAdapters<SchedulesPage, ScheduleGridDocument> = {
+  sources: schedulesSources(), binding: schedulesBinding,
+  bodies: { spec: body => <SpecBody {...body} /> },
+};

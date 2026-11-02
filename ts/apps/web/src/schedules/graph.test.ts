@@ -13,7 +13,7 @@ test("the schedule graph admits the original Work schema, cells and stages", () 
   expect(schedulesGraph.stages.history?.verbs).toEqual([]);
   expect(schedulesGraph.verbs.push?.review).toBe("shown");
   expect(schedulesGraph.verbs.capture?.does).toBe("schedule.capture");
-  expect(schedulesGraph.verbs.apply?.does).toBe("schedule.apply");
+  expect(schedulesGraph.verbs.apply).toBeUndefined();
   expect(schedulesGraph.verbs.read?.does).toBe("schedule.grid.snapshot");
   expect(projectRouteGraph(schedulesGraph).cells).toHaveLength(1);
 });

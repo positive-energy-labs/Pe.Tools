@@ -1,5 +1,5 @@
 import { mountRoute, routeFromGraph } from "#/shell/mount";
-import { schedulesAdapters } from "../schedules/route";
+import { scheduleSpecsAdapters } from "../schedules/route";
 import { scheduleSpecsGraph } from "./graph";
-export const Body = mountRoute(scheduleSpecsGraph, schedulesAdapters);
-export const route = routeFromGraph(scheduleSpecsGraph, schedulesAdapters, "/schedule-specs");
+export const Body = mountRoute(scheduleSpecsGraph, scheduleSpecsAdapters);
+export const route = routeFromGraph(scheduleSpecsGraph, scheduleSpecsAdapters, "/schedule-specs");
