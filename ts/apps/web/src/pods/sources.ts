@@ -1,13 +1,11 @@
 import { z } from "zod";
-import { Schema } from "effect";
-import type { ReadEntry, SettingsRouteDocument } from "@pe/agent-contracts";
+import { effectDecoder as decode } from "@pe/host-contracts/decoders";
+import type { SettingsRouteDocument } from "@pe/agent-contracts";
 import {
   podListResponseSchema,
   podMemberComposeResponseSchema,
   podRunsResponseSchema,
 } from "@pe/host-contracts/operation-types";
-import type { PluginStatus, PodRouteDescriptor } from "@pe/agent-contracts";
-import { peClient } from "#/host/pe-client";
 import { requestJson } from "#/shell/readings-api";
 import { subscriptionSource } from "#/shell/readings-use";
 import type { ReadingContext, ReadingSource, ReadingScope } from "#/shell/readings";
@@ -20,22 +18,8 @@ import {
   type MemberRead,
 } from "./model";
 
-const decode = <S extends Schema.ConstraintDecoder<unknown, never>>(schema: S) =>
-  z.unknown().transform((value) => Schema.decodeUnknownSync(schema)(value));
 const page = (ctx: ReadingContext) => ctx.page as PodsPage;
 const work = (ctx: ReadingContext) => ctx.work as SettingsRouteDocument | null;
-export interface PluginsRead {
-  statuses: PluginStatus[];
-  routes: PodRouteDescriptor[];
-}
-
-/** Activation stays human-only; this is a host RPC, never an agent semantic command. */
-export const activationRpc: ReadEntry<z.ZodObject<{ id: z.ZodString; enabled: z.ZodBoolean }>> = {
-  key: "plugin.update",
-  input: z.object({ id: z.string().min(1), enabled: z.boolean() }),
-  run: ({ id, enabled }) => peClient.call("plugin.update", { params: { id }, body: { enabled } }),
-};
-
 export function podsSources(): Readonly<Record<string, ReadingSource>> {
   return {
     "pods.status": {
@@ -147,26 +131,6 @@ export function podsSources(): Readonly<Record<string, ReadingSource>> {
             ctx.signal,
           );
           deliver({ kind: "complete", value: result.runs, revision: 1 });
-        } catch (error) {
-          if (!ctx.signal.aborted) deliver({ kind: "failure", error });
-        }
-      },
-    },
-    "pods.plugins": {
-      kind: "use",
-      effects: () => [],
-      async open(ctx, deliver) {
-        try {
-          const [statuses, routes] = await Promise.all([
-            peClient.call("plugins.list", {}),
-            peClient.call("plugins.routes", {}),
-          ]);
-          if (!ctx.signal.aborted)
-            deliver({
-              kind: "complete",
-              value: { statuses, routes } satisfies PluginsRead,
-              revision: 1,
-            });
         } catch (error) {
           if (!ctx.signal.aborted) deliver({ kind: "failure", error });
         }

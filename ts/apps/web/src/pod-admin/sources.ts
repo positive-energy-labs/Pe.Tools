@@ -25,3 +25,10 @@ export const trustRpc: ReadEntry<typeof trustInput> = {
   input: trustInput,
   run: ({ key, ...body }) => peClient.call("plugins.routeTrust", { params: { key }, body }),
 };
+
+/** Activation stays human-only; this is a host RPC, never an agent semantic command. */
+export const activationRpc: ReadEntry<z.ZodObject<{ id: z.ZodString; enabled: z.ZodBoolean }>> = {
+  key: "plugin.update",
+  input: z.object({ id: z.string().min(1), enabled: z.boolean() }),
+  run: ({ id, enabled }) => peClient.call("plugin.update", { params: { id }, body: { enabled } }),
+};

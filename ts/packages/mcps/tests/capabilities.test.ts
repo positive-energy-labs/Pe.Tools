@@ -801,7 +801,7 @@ test("the live head names an open lifetime; reopen needs an explicit override an
     ...buildCapabilities({
       ops: [
         { key: "host.status", needs: "nothing", intent: "Read" },
-        { key: "revit.family.inspect", needs: "family-document", intent: "Read" },
+        { key: "family.look", needs: "family-document", intent: "Read" },
         { key: "revit.context.document-session", needs: "nothing", intent: "Read" },
       ],
       routes: [],
@@ -852,7 +852,7 @@ test("the live head names an open lifetime; reopen needs an explicit override an
     ).toMatchObject({ ok: true, revision: 4 });
     expect(
       await call({
-        key: "op:revit.family.inspect",
+        key: "op:family.look",
         timeoutSeconds: 30,
         target: { kind: "open", ref: { session: "b1", openId: "family" } },
       }),
@@ -873,9 +873,9 @@ test("the live head names an open lifetime; reopen needs an explicit override an
     ).toMatchObject({ ok: true, revision: 4 });
     expect(
       await call({
-        key: "op:revit.catalog.loaded-families",
+        key: "op:family.look",
         timeoutSeconds: 30,
-        target: { kind: "open", ref: { session: "b1", openId: "family" } },
+        target: { kind: "open", ref: { session: "b1", openId: "a2" } },
       }),
     ).toMatchObject({ ok: false, content: expect.stringContaining("wrong-document-kind") });
     expect(

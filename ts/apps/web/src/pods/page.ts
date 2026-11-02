@@ -7,7 +7,6 @@ import { threadListFields } from "../../../../packages/agent-contracts/src/route
 export const podsPageSchema = routeAddress("pods").schema.extend({
   member: z.string().default(""),
   mode: z.enum(["form", "raw"]).default("form"),
-  pluginEpoch: z.number().default(0),
   pendingDraft: z.boolean().default(false),
 });
 export type PodsPage = z.output<typeof podsPageSchema>;
@@ -27,11 +26,6 @@ export const podsFields = {
     role: "device" as const,
     url: false as const,
     agent: false as const,
-  },
-  pluginEpoch: {
-    ...field(podsPageSchema.shape.pluginEpoch, {}),
-    role: "transient" as const,
-    url: false as const,
   },
   pendingDraft: {
     ...field(podsPageSchema.shape.pendingDraft, {}),
