@@ -918,7 +918,15 @@ export function GraphHistory<P, W>({
                     : undefined,
                 )}
                 {entry.outcome?.reason && <> | {entry.outcome.reason}</>}
-                {entry.outcome?.recovery && <> | {entry.outcome.recovery}</>}
+                {entry.outcome?.recovery && entry.outcome.receiptId && (
+                  <>
+                    {" "}
+                    |{" "}
+                    <a href={routeAddress("ops").link({ actionId: entry.outcome.receiptId })}>
+                      {entry.outcome.recovery}
+                    </a>
+                  </>
+                )}
                 {entry.outcome?.consentWindow && (
                   <>
                     {" "}
@@ -938,7 +946,13 @@ export function GraphHistory<P, W>({
                 <a href={routeAddress("ops").link({ actionId: receipt.id })}>{receipt.key}</a> ·{" "}
                 {invocationOutcome(receipt).state} · {activityTime(receipt.startedAt)}
                 {invocationOutcome(receipt).recovery && (
-                  <> | {invocationOutcome(receipt).recovery}</>
+                  <>
+                    {" "}
+                    |{" "}
+                    <a href={routeAddress("ops").link({ actionId: receipt.id })}>
+                      {invocationOutcome(receipt).recovery}
+                    </a>
+                  </>
                 )}
                 {receipt.consentWindow && (
                   <>

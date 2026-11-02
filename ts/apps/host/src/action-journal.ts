@@ -761,10 +761,10 @@ export class ActionJournal implements ReceiptReader {
     await writeFile(`${file}.tmp`, JSON.stringify(value, null, 2), "utf8");
     await renameReplacing(`${file}.tmp`, file);
   }
-  private async waitForTurn(id: string) {
+  private async waitForTurn(id: string, retirementOnly = false) {
     for (;;) {
       const row = this.rows.get(id)!;
-      await this.gate(row, "turn");
+      if (!retirementOnly) await this.gate(row, "turn");
       const earlier = [...this.rows.values()].slice(0, [...this.rows.keys()].indexOf(id));
       const blocked = earlier.find(
         (other) =>
@@ -1671,7 +1671,7 @@ export class ActionJournal implements ReceiptReader {
           }
           await save((current) => ({ ...current, state: "running", consent }));
           await gate(row, "consented");
-          await this.waitForTurn(row.id);
+          await this.waitForTurn(row.id, retirementOnly);
           if (row.prepared.state !== "ready") {
             const value = structuredClone(
               executor.prepared.parse((await binding?.prepare?.()) ?? null),
