@@ -155,7 +155,7 @@ const makeRunConsents = Effect.gen(function* () {
         calls,
         (call) =>
           Effect.try(call).pipe(
-            Effect.catch((error) => Effect.logWarning(`consent notification failed: ${error.cause}`)),
+            Effect.catch((error) => Effect.logWarning(`consent notification failed: ${String(error.cause)}`)),
           ),
         { discard: true },
       );
@@ -442,7 +442,7 @@ const makeRunConsents = Effect.gen(function* () {
     revoke: Effect.fn("consent.revoke")(function* (thread: string) {
       const persisted = yield* Effect.exit(persist(thread, null));
       threads.delete(thread);
-      for (const run of [...runs.values()])
+      for (const run of runs.values())
         if (run.ref.thread === thread && key(run.ref) === key(run.root)) {
           if (run.state.state === "closed") {
             run.state = { state: "closed", reason: "stopped", decision: null, at: yield* nowIso };
