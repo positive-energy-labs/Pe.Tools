@@ -329,15 +329,15 @@ export class DuctsHostFixture {
       const request = (body.request ?? {}) as Record<string, unknown>;
       const key = String(body.key);
       this.requests.push({ key, request });
-      if (key === "ducts.snapshot" && this.snapshotFailure) throw Error(this.snapshotFailure);
+      if (key.startsWith("ducts.snapshot.") && this.snapshotFailure) throw Error(this.snapshotFailure);
       const subject = readingRequestSchema.parse(
-        key === "ducts.snapshot"
+        key.startsWith("ducts.snapshot.")
           ? { kind: "ducts-snapshot", target: { session, openId }, ...request }
           : { kind: "ducts-tables", session, ids: request.ids },
       ) as DuctsReadingRequest;
       const version = this.version(subject);
       return Response.json(
-        key === "ducts.snapshot" ? this.snapshot : { tables: {}, missing: [], unsupported: {} },
+        key.startsWith("ducts.snapshot.") ? this.snapshot : { tables: {}, missing: [], unsupported: {} },
         {
           headers: {
             "x-pe-resolved-session": session,

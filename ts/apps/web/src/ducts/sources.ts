@@ -215,6 +215,7 @@ function sheets(): UseSource<SheetReading> {
         (row) => keys === "all" || keys.includes(stableFanKey(row)),
       );
       if (chosen.length > 32) return deliver({ kind: "failure", error: "Pick at most 32 fans for one combined picture" });
+      // TODO: Duplicate FC-23 marks (8732550 and 13760867 on Chadds) need stable roster identities before mark selection can distinguish them.
       if (new Set(chosen.map(stableFanKey)).size !== chosen.length)
         return deliver({
           kind: "failure",
