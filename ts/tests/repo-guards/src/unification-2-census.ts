@@ -193,10 +193,15 @@ export function census() {
       };
       const pattern = patterns[p.split("/").at(-1)!];
       if (pattern)
-        for (const m of source.text.matchAll(pattern))
+        for (const m of source.text.matchAll(pattern)) {
+          // schedule.bind now publishes through an explicit ActionJournal command.
+          if (p.endsWith("schedule-actions.ts") && m.index! > source.text.indexOf("export function scheduleExecutors")) continue;
+          // The GET branch returns before the explicit plugin update reconciles lifecycle.
+          if (p.endsWith("plugins-handler.ts") && source.text.slice(0, m.index).includes('if (request.method === "GET") return')) continue;
           result.readWrites!.push(
             `${p}:${source.getLineAndCharacterOfPosition(m.index!).line + 1}: ${m[0]}`,
           );
+        }
     }
   }
   // Classification ported from t3/op-scope-cost-catalog-spike @ 6dc7153d. Current [Op]

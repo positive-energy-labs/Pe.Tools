@@ -1,9 +1,7 @@
 import { contextFetch as fetch } from "@pe/runtime/context";
-import { z } from "zod";
 import {
   scheduleReadingSchema,
   scheduleCatalogSchema,
-  scheduleGridDocumentSchema,
   type ScheduleCatalog,
   type ScheduleReading,
   type ScheduleGridDocument,
@@ -35,19 +33,6 @@ export async function readScheduleCapture<K extends ScheduleReadKey>(
       Error((value as { error?: string }).error ?? `Schedule read failed (${response.status})`),
       { status: response.status },
     );
-  const parsed =
-    key === "schedule.grid.bind"
-      ? z
-          .object({
-            envelope: z.object({
-              version: z.literal(1),
-              revision: z.number().int().nonnegative(),
-              doc: scheduleGridDocumentSchema,
-            }),
-          })
-          .parse(value)
-      : key === "schedule.grid.catalog"
-        ? scheduleCatalogSchema.parse(value)
-        : scheduleReadingSchema.parse(value);
+  const parsed = key === "schedule.grid.catalog" ? scheduleCatalogSchema.parse(value) : scheduleReadingSchema.parse(value);
   return parsed as ScheduleResult<K>;
 }

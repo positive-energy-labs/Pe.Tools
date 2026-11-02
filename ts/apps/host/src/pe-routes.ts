@@ -857,7 +857,6 @@ export function createContributionContent(options: {
   let observedAt = 0;
   let pending = false;
   let initialized: Promise<unknown> | undefined;
-  let firstBuild = true;
   let admitted: readonly AdmittedPackage[] = [];
   const lifecycle = createPackageLifecycle({
     decisionsPath: options.decisionsPath,
@@ -910,8 +909,8 @@ export function createContributionContent(options: {
   }
   async function build(): Promise<CapabilityContent> {
     await (initialized ??= options.bootstrap?.() ?? Promise.resolve());
-    const listing = await lifecycle.refresh(firstBuild);
-    firstBuild = false;
+    await lifecycle.ready;
+    const listing = lifecycle.listing();
     admitted = lifecycle.packages();
     const allDescriptors = options.pages
       ? await options.pages(admitted)

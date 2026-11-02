@@ -89,3 +89,10 @@ Two first-principles critics (`.artifacts/tmp/unification-2/big-picture-1/`) fou
 6. Purge and fold per the list above; ratchets to zero.
 7. Driver thread proves each route in the browser; kaitpw's drive is the final bar.
 Kit has one owner thread per wave; route threads add red `kernel gap:` tests, never local kit patches. Merge main daily.
+
+## Phase 1a checkpoint (2026-11-02)
+
+- Ducts loss, heal and fan commands now accept only a Work handle with `expectedRevision`. The host derives requests, returns an inspectable preview seal, checks the seal on apply, and keeps ActionJournal retirement conditional on captured cells and native receipts. Domain refusals retain the existing journal wire state `failed`, with `notDispatched` and `refusal`; the new Timeline outcome enum remains a later cutover.
+- Sheet reads no longer apply edits or proposals. Data Tables Open is an explicit Work verb. Schedule binding is an explicit ActionJournal command. Pod inventory reads no longer reconcile setup/cleanup; explicit import and activation do.
+- Read-write census survivors: `readSchedule` files immutable evidence through `captures.saveSchedule`; this is observational retention, not authored Work or model mutation. `families/graph.ts` still adopts read results through queryVerb patches; split explicit adoption from the read in the next slice. The census excludes schedule publication inside the explicit command and plugin refresh after the GET return.
+- Owed: migrate the remaining family, schedule, data-table and takeoff ModelWrite contracts to Work-only inputs and preview seals; replace legacy caller-payload forwarding tests. Connect the ducts UI's chosen heal/fan/system scope to the new `stage-write` Work verb before preview; Pea can stage `writeIntent` through the shared Work door. Browser and Revit behavior remain unproven.

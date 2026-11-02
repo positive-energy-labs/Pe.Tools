@@ -1,12 +1,10 @@
-import {
-  commands,
-  tools,
-  ductsHealInputSchema,
-  nativeProcessSchema,
-  type DuctsHealInput,
-  type DuctsApplyInput,
-} from "@pe/agent-contracts";
+import { createHash } from "node:crypto";
+import { commands, tools, canonicalRouteInput, type DuctsApplyInput } from "@pe/agent-contracts";
 import { healPlan, healRequestGroup } from "@pe/ducts-domain/heal";
+import { fanOf } from "@pe/ducts-domain/action-targets";
+import { applyRequest, price, TABLE_IDS } from "@pe/ducts-domain/pricing";
+import { toGrids } from "@pe/ducts-domain/loss-grid";
+import { stagedDucts } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { z } from "zod";
 import { invokeBridge, type RevitBridge } from "./bridge.ts";
@@ -14,171 +12,104 @@ import { command, refused, type CommandContext } from "./command-executor.ts";
 import type { ActionExecution } from "./action-journal.ts";
 import { lifetime } from "./family-actions.ts";
 import type { SdkReceiptReader } from "./native-receipts.ts";
-import { nativeInputSchema } from "./native-input.ts";
+import { documentMarks } from "./document-marks.ts";
 import { ductsReadings } from "./ducts-readings.ts";
+import { readDuctCatalogs } from "./duct-catalogs.ts";
 import { appliedCellPaths } from "@pe/ducts-domain/staged";
 import type { DuctsApply } from "@pe/host-contracts/generated";
 
-const losses = (preview: boolean) =>
-  nativeInputSchema("ducts.apply").refine((input) => input.previewOnly === preview);
-const heal = (preview: boolean) =>
-  nativeInputSchema("ducts.heal").refine(
-    (input) => input.previewOnly === preview && input.groups.every((group) => group.items),
-    "Heal groups must be planned",
-  );
-const fan = (preview: boolean) =>
-  nativeInputSchema("ducts.assign-fan").refine((input) => input.previewOnly === preview);
-const prepared = <S extends z.ZodType>(input: S) =>
-  z.object({ process: nativeProcessSchema, input });
+const hash = (value: unknown) => createHash("sha256").update(canonicalRouteInput(value)).digest("hex");
+const prepared = z.object({ process: z.unknown(), input: z.record(z.string(), z.unknown()), seal: z.object({ requestHash: z.string(), work: z.unknown(), incarnation: z.unknown(), dependencies: z.string() }) });
+const targetOf = (ctx: CommandContext) => {
+  if (ctx.admission.target.kind !== "document") throw refused("Exact document target required");
+  return ctx.admission.target.ref;
+};
+type Kind = "losses" | "heal" | "assign-fan";
 
-/** Resolve missing heal items once, before the exact native request is durably prepared. */
-async function planned(input: DuctsHealInput, read: () => Promise<DuctSnapshot>) {
-  if (input.groups.every((group) => group.items)) return input;
-  const plan = healPlan(await read());
-  return {
-    groups: input.groups.map((group) => {
-      if (group.items) return group;
-      const found = plan.groups.find((item) => item.group === group.group);
-      if (!found)
-        throw refused(
-          `Group ${group.group} has nothing to heal (or no such group in the snapshot)`,
-        );
-      return healRequestGroup(found);
-    }),
-  };
-}
-
-/** The stable entry owns its native operation; preparation owns only captured input and process. */
-export function ductsExecutors(
-  bridge: RevitBridge["Service"],
-  deps: { sdk?: SdkReceiptReader } = {},
-) {
-  const targetOf = (ctx: CommandContext) => {
-    if (ctx.admission.target.kind !== "document") throw refused("Exact document target required");
-    return ctx.admission.target.ref;
-  };
-  const bind = async (ctx: CommandContext, losses: boolean, previewOnly: boolean) => {
-    const target = targetOf(ctx),
-      { process } = await lifetime(bridge, target, "project", deps);
-    const handle = (ctx.admission.input as { work?: import("@pe/agent-contracts").WorkHandle })
-      .work;
-    if (handle)
-      await ctx.selectWork(tools.ducts.work, handle, (_doc, cells) => ({
-        cells: losses
-          ? cells
-              .filter(
-                ({ path, cell }) =>
-                  cell.edit && !["systemColours", "claims", "subject"].includes(String(path[0])),
-              )
-              .map(({ path }) => path)
-          : [],
-      }));
+/** Work is the only authored input. Preview and apply share the same derivation and journal. */
+export function ductsExecutors(bridge: RevitBridge["Service"], deps: { sdk?: SdkReceiptReader } = {}) {
+  const bind = async (ctx: CommandContext, kind: Kind, previewOnly: boolean) => {
+    documentMarks(bridge);
+    const target = targetOf(ctx);
+    const raw = ctx.admission.input.work as { key: import("@pe/agent-contracts").WorkKey; expectedRevision: number };
+    if (!raw) throw refused("Work is required");
+    const key = raw.key;
+    const { process, session } = await lifetime(bridge, target, "project", deps);
+    const liveDoc = session.state?.openDocuments.find(d => d.openId === target.openId);
+    // A saved Work binds to its address; `from` is provenance, never authority to write a new open.
+    if ((key.binding === "open" && canonicalRouteInput(key.open) !== canonicalRouteInput(target)) ||
+        (key.binding === "address" && String(key.target).replaceAll("/", "\\").toLowerCase() !== String(liveDoc?.address).replaceAll("/", "\\").toLowerCase()) ||
+        !["open", "address"].includes(key.binding))
+      throw refused("Work belongs to another document", "work.target");
+    const doc = await ctx.selectWork(tools.ducts.work, { key, revision: raw.expectedRevision }, (_doc, cells) => ({
+      edits: tools.ducts.work.editable,
+      facts: [["workingPhase"]],
+      cells: cells.filter(({cell}) => cell.edit).map(({path}) => path),
+    }));
+    const preview = ctx.read.receipts().filter(r => r.key === `ducts.preview-${kind}` && r.state === "succeeded" && canonicalRouteInput(r.target) === canonicalRouteInput(ctx.admission.target)).at(-1);
+    const appliedAt = previewOnly ? new Date().toISOString() : preview?.state === "succeeded" ? (preview.result as { derivedRequest?: { store?: { appliedAt?: string } } }).derivedRequest?.store?.appliedAt : undefined;
     return {
-      consumes: [
-        {
-          kind: "incarnation" as const,
-          probe: { target: ctx.admission.target, process },
-          expected: true as const,
-        },
-      ],
+      consumes: [{ kind: "incarnation" as const, probe: { target: ctx.admission.target, process }, expected: true as const }, { kind: "document-mark" as const, probe: { ref: target, takenAt: new Date().toISOString() }, expected: true as const }],
       effects: previewOnly ? [] : [{ kind: "document" as const, ref: target }],
-      process,
-    };
-  };
-  const bindLosses = async (ctx: CommandContext, previewOnly: boolean) => {
-    const { process, ...facts } = await bind(ctx, true, previewOnly),
-      { work: _, ...input } = ctx.admission.input;
-    return { ...facts, prepare: async () => ({ process, input: { ...input, previewOnly } }) };
-  };
-  const bindHeal = async (ctx: CommandContext, previewOnly: boolean) => {
-    const { process, ...facts } = await bind(ctx, false, previewOnly),
-      { work: _, ...input } = ctx.admission.input;
-    return {
-      ...facts,
-      prepare: async () => ({
-        process,
-        input: {
-          ...(await planned(ductsHealInputSchema.parse(input), () =>
-            invokeBridge<DuctSnapshot>(bridge, targetOf(ctx), "ducts.snapshot", {}),
-          )),
-          previewOnly,
-        },
-      }),
-    };
-  };
-  const bindFan = async (ctx: CommandContext, previewOnly: boolean) => {
-    const { process, ...facts } = await bind(ctx, false, previewOnly),
-      { work: _, ...input } = ctx.admission.input;
-    return { ...facts, prepare: async () => ({ process, input: { ...input, previewOnly } }) };
-  };
-  const run = async (ctx: CommandContext, execution: ActionExecution, key: string) => {
-    const p = execution.prepared as {
-        process: z.infer<typeof nativeProcessSchema>;
-        input: unknown;
+      prepare: async () => {
+        const snapshot = await invokeBridge<DuctSnapshot>(bridge, target, "ducts.snapshot", { selector: { kind: "document" }, slots: stagedDucts(doc).parameters });
+        const intent = doc.writeIntent.edit?.value;
+        const evidence = { ...snapshot, document: { ...snapshot.document, readAt: "", elapsedMs: 0 } };
+        let input: Record<string, unknown>, dependencies: unknown = evidence;
+        if (kind === "losses") {
+          const tables = await invokeBridge(bridge, target, "ducts.tables", { ids: TABLE_IDS });
+          const grids = toGrids(tables as Parameters<typeof toGrids>[0]);
+          const catalogs = await readDuctCatalogs();
+          // Timestamp is authored-revision stable; wall time would invalidate an identical preview.
+          const request = applyRequest(snapshot, price(snapshot, grids, doc, catalogs.tables), appliedAt ?? "", intent?.groups ?? []);
+          for (const tableId of new Set([...request.fittings.map(f => f.table ?? ""), ...Object.values(stagedDucts(doc).rules).map(r => r.table)])) {
+            const table = grids[tableId.toUpperCase()];
+            if (!table || Object.values(table).some((grid) => grid.z != null))
+              throw refused(`Loss server cannot price table ${tableId}; choose a served one- or two-axis table`);
+          }
+          input = request as unknown as Record<string, unknown>;
+          dependencies = { snapshot: evidence, tables, catalogs };
+        } else if (kind === "heal") {
+          if (!intent?.groups?.length) throw refused("Stage writeIntent.groups in Work before healing");
+          const plan = healPlan(snapshot, doc);
+          input = { groups: intent.groups.map(group => {
+            const found = plan.groups.find(item => item.group === group);
+            if (!found) throw refused(`Group ${group} has nothing to heal`);
+            return healRequestGroup(found);
+          }) };
+        } else {
+          if (!intent?.fan) throw refused("Stage writeIntent.fan in Work before assigning a fan");
+          fanOf(snapshot, intent.fan);
+          input = intent.fan;
+        }
+        const seal = { requestHash: hash(input), work: { ...raw, consumed: ctx.consumed.filter(c => c.kind === "work") }, incarnation: { target, process }, dependencies: hash(dependencies) };
+        if (!previewOnly) {
+          if (!preview || preview.state !== "succeeded" || canonicalRouteInput((preview.result as { seal?: unknown }).seal) !== canonicalRouteInput(seal))
+            throw refused("Preview is missing or stale; preview the current Work and evidence again", "preview.stale");
+        }
+        return { process, input: { ...input, previewOnly }, seal };
       },
-      target = targetOf(ctx);
-    const value = await execution.step(
-      "native",
-      key,
-      p.input,
-      (id) => invokeBridge(bridge, target, key, p.input, id),
-      { process: p.process },
-    );
-    return { value, target: { session: target.session, document: null } };
-  };
-  const runLosses = async (ctx: CommandContext, execution: ActionExecution) => {
-    const result = await run(ctx, execution, "ducts.apply");
-    const input = ctx.admission.input as DuctsApplyInput & {
-      work?: import("@pe/agent-contracts").WorkHandle;
     };
-    const response = result.value as DuctsApply.Res.Response;
-    const paths = appliedCellPaths(input, response);
-    // ActionJournal retires only the exact consumed edit, so a concurrent replacement survives.
-    const retired =
-      input.work && paths.length
-        ? await execution.retireWork(input.work.key, "ducts", paths)
-        : undefined;
-    return { ...result, ...(retired ? { retired } : {}) };
   };
-  const runHeal = (ctx: CommandContext, execution: ActionExecution) =>
-    run(ctx, execution, "ducts.heal");
-  const runFan = (ctx: CommandContext, execution: ActionExecution) =>
-    run(ctx, execution, "ducts.assign-fan");
+  const run = async (ctx: CommandContext, execution: ActionExecution, kind: Kind) => {
+    const p = prepared.parse(execution.prepared), target = targetOf(ctx);
+    const key = kind === "losses" ? "ducts.apply" : `ducts.${kind}`;
+    const value = await execution.step("native", key, p.input,
+      id => invokeBridge(bridge, target, key, p.input, id),
+      { process: p.process as import("@pe/agent-contracts").NativeProcess });
+    const handle = ctx.admission.input.work as { key: import("@pe/agent-contracts").WorkKey };
+    const paths = kind === "losses" ? appliedCellPaths(p.input as unknown as DuctsApplyInput, value as DuctsApply.Res.Response) : [];
+    const retired = paths.length ? await execution.retireWork(handle.key, "ducts", paths) : undefined;
+    return { value, derivedRequest: p.input, seal: p.seal, target: { session: target.session, document: null }, ...(retired ? { retired } : {}) };
+  };
   return {
     "ducts.refresh": command(commands["ducts.refresh"], z.null(), {
-      bind: async (ctx) => {
-        targetOf(ctx);
-        return { effects: [] };
-      },
-      run: async (ctx) => {
-        const target = targetOf(ctx);
-        ductsReadings(bridge).refresh(target);
-        return { target, refreshed: true };
-      },
+      bind: async ctx => { targetOf(ctx); return { effects: [] }; },
+      run: async ctx => { const target = targetOf(ctx); ductsReadings(bridge).refresh(target); return { target, refreshed: true }; },
     }),
-    "ducts.preview-losses": command(commands["ducts.preview-losses"], prepared(losses(true)), {
-      bind: (ctx) => bindLosses(ctx, true),
-      run: runLosses,
-    }),
-    "ducts.apply-losses": command(commands["ducts.apply-losses"], prepared(losses(false)), {
-      bind: (ctx) => bindLosses(ctx, false),
-      run: runLosses,
-    }),
-    "ducts.preview-heal": command(commands["ducts.preview-heal"], prepared(heal(true)), {
-      bind: (ctx) => bindHeal(ctx, true),
-      run: runHeal,
-    }),
-    "ducts.apply-heal": command(commands["ducts.apply-heal"], prepared(heal(false)), {
-      bind: (ctx) => bindHeal(ctx, false),
-      run: runHeal,
-    }),
-    "ducts.preview-assign-fan": command(commands["ducts.preview-assign-fan"], prepared(fan(true)), {
-      bind: (ctx) => bindFan(ctx, true),
-      run: runFan,
-    }),
-    "ducts.apply-assign-fan": command(commands["ducts.apply-assign-fan"], prepared(fan(false)), {
-      bind: (ctx) => bindFan(ctx, false),
-      run: runFan,
-    }),
+    ...Object.fromEntries((["losses", "heal", "assign-fan"] as const).flatMap(kind => [true, false].map(preview => {
+      const key = `ducts.${preview ? "preview" : "apply"}-${kind}` as const;
+      return [key, command(commands[key], prepared, { bind: ctx => bind(ctx, kind, preview), run: (ctx, execution) => run(ctx, execution, kind) })];
+    }))),
   };
 }

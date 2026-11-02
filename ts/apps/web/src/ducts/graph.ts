@@ -27,7 +27,6 @@ import { cellFocus } from "./inbox-rows";
 import {
   presentHeal,
   previewedHeal,
-  plannedHeal,
   presentLosses,
   presentFan,
   healReviewSchema,
@@ -446,20 +445,24 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
   },
 
   verbs: {
+    "stage-write": workVerb(
+      { label: "Choose write scope", input: z.strictObject({ groups: z.array(z.string()).optional(), fan: z.object({ unitId: z.number().int(), systemId: z.number().int() }).optional() }) },
+      { patches: (_, input) => [{ path: ["writeIntent", "edit"], value: { value: input } }] },
+    ),
     preview: commandVerb(
       "ducts.preview-losses",
       { label: "Preview", input: priceInput, review: "none", effect: "query" },
-      { ready: requestReady, present: presentLosses, intent: (_, input) => input.request! },
+      { ready: requestReady, present: presentLosses, intent: () => ({}) },
     ),
     "heal-preview": commandVerb(
       "ducts.preview-heal",
       { label: "Preview heal", input: healInput, review: "none", effect: "query" },
-      { ready: requestReady, present: presentHeal, intent: (_, input) => input.request! },
+      { ready: requestReady, present: presentHeal, intent: () => ({}) },
     ),
     "fan-preview": commandVerb(
       "ducts.preview-assign-fan",
       { label: "Preview fan", input: assignInput, review: "none", effect: "query" },
-      { ready: requestReady, present: presentFan, intent: (_, input) => input.request! },
+      { ready: requestReady, present: presentFan, intent: () => ({}) },
     ),
     refresh: commandVerb(
       "ducts.refresh",
@@ -481,10 +484,10 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
         ready: requestReady,
 
         present: presentLosses,
-        prepare: (scope, input) =>
-          prepareCommand(scope, "ducts.preview-losses", input.request!, NATIVE_APPLY_WAIT_S),
+        prepare: (scope) =>
+          prepareCommand(scope, "ducts.preview-losses", {}, NATIVE_APPLY_WAIT_S),
 
-        intent: (_, input) => input.request!,
+        intent: () => ({}),
       },
     ),
 
@@ -500,10 +503,10 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
           const review = previewedHeal(scope, input.request!);
           return review
             ? { response: review.response }
-            : prepareCommand(scope, "ducts.preview-heal", input.request!, NATIVE_APPLY_WAIT_S);
+            : prepareCommand(scope, "ducts.preview-heal", {}, NATIVE_APPLY_WAIT_S);
         },
 
-        intent: (_, input, __, ticket) => plannedHeal(input.request!, ticket!.evidence),
+        intent: () => ({}),
       },
     ),
 
@@ -515,10 +518,10 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
         ready: requestReady,
 
         present: presentFan,
-        prepare: (scope, input) =>
-          prepareCommand(scope, "ducts.preview-assign-fan", input.request!, NATIVE_APPLY_WAIT_S),
+        prepare: (scope) =>
+          prepareCommand(scope, "ducts.preview-assign-fan", {}, NATIVE_APPLY_WAIT_S),
 
-        intent: (_, input) => input.request!,
+        intent: () => ({}),
       },
     ),
 

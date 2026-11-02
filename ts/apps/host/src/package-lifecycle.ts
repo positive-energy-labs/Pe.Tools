@@ -144,18 +144,19 @@ export function createPackageLifecycle(
         decisions[id] === true || ((initial || known) && decisions[id] !== false),
       );
     }
+    initialListing = listing;
     return listing;
   }
   return {
     ready,
     initialized: () => initialized,
-    /** The first catalog build reuses the bootstrap census; every later read re-lists. */
+    /** Explicit import, activation and update reconcile setup/cleanup; inventory reads use listing. */
     refresh: async (initial = false) => {
       await ready;
       const listing = initial ? initialListing : undefined;
-      initialListing = undefined;
       return listing ?? synchronize();
     },
+    listing: () => initialListing!,
     inventory: runtime.inventory,
     active: (id: string) => runtime.active(`pod:${id}`),
     setEnabled: async (id: string, enabled: boolean) => {
