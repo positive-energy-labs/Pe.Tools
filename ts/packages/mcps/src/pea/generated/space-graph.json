@@ -909,7 +909,7 @@
     "size": 320,
     "sized": "end"
   },
-  "moduleHash": "ce9dcf9b9c66737eb529968af338aac5af3191751dabb459e96b4e05d043333e",
+  "moduleHash": "ca36d65ba803b028db1550c95d747b798cbb42c50892b39ac94d7c1972c38111",
   "name": "Space",
   "needs": "document",
   "panes": {
@@ -924,6 +924,7 @@
         "ids": [
           "capture",
           "context",
+          "detailed",
           "status",
           "rows",
           "tree",
@@ -1025,10 +1026,7 @@
           },
           "contextRepresentation": {
             "enum": [
-              "none",
-              "oriented",
-              "triangle-boxes",
-              "link-boxes",
+              "overview",
               "meshes"
             ],
             "type": "string"
@@ -1149,10 +1147,7 @@
           },
           "contextRepresentation": {
             "enum": [
-              "none",
-              "oriented",
-              "triangle-boxes",
-              "link-boxes",
+              "overview",
               "meshes"
             ],
             "type": "string"
@@ -1259,6 +1254,127 @@
       },
       "kind": "query",
       "label": "load context",
+      "review": "none"
+    },
+    "detailed": {
+      "does": "revit.detail.space-scene",
+      "effect": "query",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "contextPaddingFt": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "contextRepresentation": {
+            "enum": [
+              "overview",
+              "meshes"
+            ],
+            "type": "string"
+          },
+          "elementIds": {
+            "items": {
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991,
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "focusOnly": {
+            "type": "boolean"
+          },
+          "maxTriangles": {
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "region": {
+            "oneOf": [
+              {
+                "properties": {
+                  "box": {
+                    "prefixItems": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ],
+                    "type": "array"
+                  },
+                  "kind": {
+                    "const": "box",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "box"
+                ],
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "kind": {
+                    "const": "room",
+                    "type": "string"
+                  },
+                  "uniqueId": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "uniqueId"
+                ],
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "kind": {
+                    "const": "space",
+                    "type": "string"
+                  },
+                  "uniqueId": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "uniqueId"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "elementIds",
+          "contextPaddingFt",
+          "maxTriangles",
+          "focusOnly",
+          "contextRepresentation"
+        ],
+        "type": "object"
+      },
+      "kind": "query",
+      "label": "Read detailed",
       "review": "none"
     },
     "probe": {
