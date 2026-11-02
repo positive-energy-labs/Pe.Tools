@@ -32,6 +32,56 @@ export interface OptionList {
   readonly stale: boolean;
 }
 
+type CatalogFamily = {
+  familyId?: number;
+  familyName: string;
+  categoryName?: string | null;
+  placedInstanceCount: number;
+};
+
+/**
+ * The family picker's roster: one row per family name, the identity Work selects and excludes by
+ * (`familyNames`), so a name can never draw two rows or two React keys (N2: a live Chadds catalog
+ * drew duplicate rows). Rows that share a name merge, their placed counts summed, and the row
+ * says so rather than hiding it. Placed families first, then by name.
+ */
+export function familyRoster(
+  catalog: readonly CatalogFamily[],
+  draft: Pick<FamiliesDraft, "categories" | "placement">,
+): NonNullable<OptionList["options"]> {
+  const byName = new Map<string, { family: CatalogFamily; placed: number; ids: Set<number | string> }>();
+  catalog.forEach((family, index) => {
+    if (!draft.categories.includes(family.categoryName ?? "")) return;
+    const row = byName.get(family.familyName);
+    const id = family.familyId ?? `row:${index}`;
+    if (row) {
+      row.placed += row.ids.has(id) ? 0 : family.placedInstanceCount;
+      row.ids.add(id);
+    } else
+      byName.set(family.familyName, {
+        family,
+        placed: family.placedInstanceCount,
+        ids: new Set([id]),
+      });
+  });
+  return [...byName.values()]
+    .filter(
+      ({ placed }) =>
+        draft.placement === "AllLoaded" || (draft.placement === "PlacedOnly") === placed > 0,
+    )
+    .sort(
+      (a, b) =>
+        Number(!a.placed) - Number(!b.placed) ||
+        a.family.familyName.localeCompare(b.family.familyName),
+    )
+    .map(({ family, placed, ids }) => ({
+      id: family.familyName,
+      label: family.familyName,
+      categoryName: family.categoryName,
+      sub: `${placed} placed${ids.size > 1 ? ` · ${ids.size} families share this name` : ""}`,
+    }));
+}
+
 /** Values for the matrix only. Acquisition, Target, Work, writes, tickets and history belong to owner. */
 export function useFamiliesStore(owner: FamiliesMount) {
   const scope: FamiliesScope = {
@@ -137,9 +187,7 @@ export function useFamiliesStore(owner: FamiliesMount) {
     | undefined;
   const plan = evidence?.plan ? { entries: [evidence.plan.plan].flat().map(ffPlanRow) } : null;
   const categories = readingValue<string[]>(scope, "categories");
-  const catalog = readingValue<
-    { familyName: string; categoryName?: string | null; placedInstanceCount: number }[]
-  >(scope, "catalog");
+  const catalog = readingValue<CatalogFamily[]>(scope, "catalog");
   // FOOTGUN: base-ui Combobox items must keep identity between renders (progress must not rebuild options).
   const feeds = useMemo(() => {
     const feed = (id: string, options: OptionList["options"]): OptionList => ({
@@ -150,27 +198,7 @@ export function useFamiliesStore(owner: FamiliesMount) {
     });
     return {
       category: feed("categories", categories?.map((id) => ({ id, label: id })) ?? null),
-      family: feed(
-        "catalog",
-        catalog
-          ?.filter(
-            (family) =>
-              draft.categories.includes(family.categoryName ?? "") &&
-              (draft.placement === "AllLoaded" ||
-                (draft.placement === "PlacedOnly") === family.placedInstanceCount > 0),
-          )
-          .sort(
-            (a, b) =>
-              Number(!a.placedInstanceCount) - Number(!b.placedInstanceCount) ||
-              a.familyName.localeCompare(b.familyName),
-          )
-          .map((family) => ({
-            id: family.familyName,
-            label: family.familyName,
-            categoryName: family.categoryName,
-            sub: `${family.placedInstanceCount} placed`,
-          })) ?? null,
-      ),
+      family: feed("catalog", catalog ? familyRoster(catalog, draft) : null),
     };
   }, [
     categories,
