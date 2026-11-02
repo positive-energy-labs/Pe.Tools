@@ -723,10 +723,12 @@ export function createReadingGraph<P, W>(
       flush();
     },
     acceptReceipt(
-      receipt: Pick<ActionReceipt, "id" | "state" | "effects" | "target">,
+      receipt: Pick<ActionReceipt, "id" | "state" | "effects" | "target"> & Partial<Pick<ActionReceipt, "input">>,
       dirties: readonly string[] = [],
     ) {
       if (disposed) return;
+      // A preview with no effects cannot invalidate the evidence it is asking the user to review.
+      if (receipt.input?.previewOnly === true && receipt.effects.length === 0) return;
       if (receipt.state === "waiting" || receipt.state === "running") return;
       const stamp = canonicalRouteInput([receipt.id, receipt.state, receipt.effects, dirties]);
       if (receiptVersions.has(stamp)) return;

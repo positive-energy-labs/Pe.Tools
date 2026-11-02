@@ -329,6 +329,9 @@ describe("reading graph", () => {
     const matrix = read.attempts[0];
     done(matrix.deliver, 1);
     done(read.attempts[1].deliver, 2);
+    const previewBasis = graph.get("matrix");
+    graph.acceptReceipt(receipt({ id: "preview", input: { previewOnly: true }, effects: [] }), ["families"]);
+    expect(graph.get("matrix")).toBe(previewBasis);
     graph.acceptReceipt(
       receipt({ effects: [{ kind: "document", ref: { session: "session", openId: "B" } }] }),
       ["families"],
