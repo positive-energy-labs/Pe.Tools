@@ -717,7 +717,7 @@ async function invokeCore<C extends Caller>(
   };
   ctx.changed?.("idle", null);
   // The write acknowledgement is authoritative before its Reading reaches React.
-  // TODO: verify Families preview, consent and Revit readback in the fresh detached-local drive.
+  // TODO: docs/features/routes/LEDGER.md#s10-families-live-drive Verify Families preview, consent and Revit readback in the fresh detached-local drive.
   let acknowledged: VerbSnapshot | null = null;
   const snapshotNow = (): VerbSnapshot => {
     const seen = ctx.snapshot();

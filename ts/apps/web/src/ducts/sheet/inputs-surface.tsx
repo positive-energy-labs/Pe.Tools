@@ -79,7 +79,7 @@ type Criterion = {
 );
 /** The settings rows come only from resolved inputs; Work identifies pending join/end rulings. */
 export function inputFields(ctx: InputContext): { criteria: Criterion[]; rows: InputRow[] } {
-  // TODO: X1 browser re-drive of tap provenance and FC-23 flow conflict after the shared host-status
+  // TODO: docs/features/routes/LEDGER.md#s10-x1-live-drive X1 browser re-drive of tap provenance and FC-23 flow conflict after the shared host-status
   // timeout is fixed. Live sheet + rendered-cell tests pass; the full Fans route was unavailable.
   const criteria: Criterion[] = [];
   if (!ctx.inputs) return { criteria, rows: [] };

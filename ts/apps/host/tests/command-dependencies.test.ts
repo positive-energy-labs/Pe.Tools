@@ -234,7 +234,7 @@ async function setup(probe?: CommandResources["probe"]) {
   const close = async () => {
     runs.closeAll();
     await Promise.all((await journal.list()).map((row) => journal.wait(row.id)));
-    await rm(directory, { recursive: true, force: true });
+    await rm(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   };
   return { directory, work, key, events, runs, journal, ready, approve, close };
 }

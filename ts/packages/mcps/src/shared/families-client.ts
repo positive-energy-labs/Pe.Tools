@@ -50,8 +50,10 @@ export async function readFamiliesCapture(
     try {
       const body = JSON.parse(text);
       reason = typeof body.error === "string" ? body.error : (body.error?.message ?? text);
-    } catch {
-      // Ingress refusals can be plain text; preserve their reason.
+    } catch (cause) {
+      throw Object.assign(Error(text || `Families query failed (${response.status})`, { cause }), {
+        status: response.status,
+      });
     }
     throw Object.assign(Error(reason ?? `Families query failed (${response.status})`), {
       status: response.status,
