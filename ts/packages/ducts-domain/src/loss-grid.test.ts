@@ -95,3 +95,11 @@ it("low branch flow interpolates fixed-basis loss, preserves nodes and labels of
   expect(lookupBranchLoss(g, 0.005, 1).notes.join(" ")).toContain("extrapolated");
   expect(g).toEqual(before);
 });
+
+it("branch policy follows the first published interval and is continuous at its boundary", () => {
+  const grid = { title: "Cb", xLabel: "Qb/Qc", x: [0.02, 0.2, 0.5], y: [1], grid: [[2500, 25, 4]] };
+  expect(lookupBranchLoss(grid, 0.15, 1).value * 0.15 ** 2).toBeCloseTo(1, 10);
+  expect(lookupBranchLoss(grid, 0.2 - 1e-10, 1).value).toBeCloseTo(25, 6);
+  expect(lookupBranchLoss(grid, 0.2 + 1e-10, 1).value).toBeCloseTo(25, 6);
+  expect(lookupBranchLoss(grid, 0.3, 1)).toEqual(lookupGrid(grid, 0.3, 1));
+});

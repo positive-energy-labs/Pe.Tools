@@ -361,11 +361,13 @@ export const ductsDocumentSchema = z
       .record(z.string().min(1), draftCellSchema(z.strictObject({ kind: z.enum(DUCT_UNIT_KINDS) })))
       .default({}),
     /** Authored scope for host-derived repair and fan commands; never a native request. */
-    writeIntent: draftCellSchema(z.strictObject({
-      groups: z.array(z.string().min(1)).optional(),
-      walk: z.strictObject({ unitId: z.number().int(), portIndex: z.number().int() }).optional(),
-      fan: z.strictObject({ unitId: z.number().int(), systemId: z.number().int() }).optional(),
-    })).default({}),
+    writeIntent: draftCellSchema(
+      z.strictObject({
+        groups: z.array(z.string().min(1)).optional(),
+        walk: z.strictObject({ unitId: z.number().int(), portIndex: z.number().int() }).optional(),
+        fan: z.strictObject({ unitId: z.number().int(), systemId: z.number().int() }).optional(),
+      }),
+    ).default({}),
     calculation: z.record(z.string().min(1), draftCellSchema(ductCalculationSchema)).default({}),
     /** Deletable: a delete edit takes back the verdict the model's store holds at that key. */
     assumptions: z
@@ -553,24 +555,38 @@ const slotsSchema = z.strictObject({
    */
   terminalFlow: z.string().min(1).optional(),
 });
-/**
- * How Revit is told a fitting's loss (pressure-drop ledger, 2026-10-12): the Pe loss server charges the
- * family's coefficient when it has one, else prices the legs live from the rule's table; a frozen
- * Specific Coefficient is the export route and never the web's. Revit's own table route is never written.
- */
+/** Pe server consumes host-priced leg results; Specific Coefficient freezes one export coefficient. */
 export const DUCT_FITTING_METHODS = ["pe-server", "specific-coefficient"] as const;
 export type DuctFittingMethod = (typeof DUCT_FITTING_METHODS)[number];
 export const ductsApplyInputSchema = z.strictObject({
   slots: slotsSchema.nullable().optional(),
   fittings: z.array(
-    z.strictObject({
-      id: z.number().int(),
-      method: z.enum(DUCT_FITTING_METHODS),
-      coefficient: z.number(),
-      table: optionalText,
-      inputs: optionalText,
-      ruleKey: optionalText,
-    }),
+    z
+      .strictObject({
+        id: z.number().int(),
+        method: z.enum(DUCT_FITTING_METHODS),
+        coefficient: z.number(),
+        table: optionalText,
+        inputs: optionalText,
+        ruleKey: optionalText,
+        results: z
+          .array(
+            z.strictObject({
+              velocityPressureInWg: z.number().nonnegative(),
+              coefficient: z.number(),
+            }),
+          )
+          .min(1)
+          .optional(),
+      })
+      .superRefine((fitting, ctx) => {
+        if (fitting.method === "pe-server" && !fitting.results?.length)
+          ctx.addIssue({
+            code: "custom",
+            path: ["results"],
+            message: "Host-priced leg results are required",
+          });
+      }),
   ),
   terminals: z.array(writeDrop),
   components: z.array(writeDrop),

@@ -189,16 +189,6 @@ export function ductsExecutors(
             appliedAt ?? "",
             intent?.groups ?? [],
           );
-          for (const tableId of new Set([
-            ...request.fittings.map((f) => f.table ?? ""),
-            ...Object.values(stagedDucts(doc).rules).map((r) => r.table),
-          ])) {
-            const table = grids[tableId.toUpperCase()];
-            if (!table || Object.values(table).some((grid) => grid.z != null))
-              throw refused(
-                `Loss server cannot price table ${tableId}; choose a served one- or two-axis table`,
-              );
-          }
           input = request as unknown as Record<string, unknown>;
           dependencies = { snapshot: evidence, tables, catalogs };
         } else if (kind === "heal") {

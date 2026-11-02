@@ -4,6 +4,7 @@
  * (negative id) legs are left out, ESP is written only when the total is complete, and the store
  * is carried forward with this apply over it.
  */
+import { ductsApplyInputSchema } from "@pe/agent-contracts";
 import { expect, it } from "vite-plus/test";
 
 import { applyRequest } from "./apply-request.ts";
@@ -99,6 +100,10 @@ it("writes each rule-priced fitting once, in id order, and carries the store for
       id: 4,
       method: "pe-server",
       coefficient: 3.15333,
+      results: [
+        { velocityPressureInWg: 0.02, coefficient: 3.15333 },
+        { velocityPressureInWg: 0.01, coefficient: 0.13667 },
+      ],
       table: "SD5-9",
       inputs: "Qb/Qc=0.3333, Ab/Ac=0.5625",
       ruleKey: "tap-std",
@@ -134,4 +139,34 @@ it("an incomplete total writes no ESP and no design flow", () => {
   expect(req.equipment).toEqual([]);
   expect(req.equipmentFlows).toEqual([]);
   expect(req.fittings).toHaveLength(1);
+});
+
+it("admits host results and refuses a Pe-server request with no priced basis", () => {
+  const request = applyRequest({ ...base, requiredEspInWg: null, designFlowCfm: null });
+  expect(ductsApplyInputSchema.safeParse(request).success).toBe(true);
+  const missing = {
+    ...request,
+    fittings: request.fittings.map(({ results, ...fitting }) => fitting),
+  };
+  expect(ductsApplyInputSchema.safeParse(missing).success).toBe(false);
+});
+
+it("retains signed and zero coefficients on every priced basis", () => {
+  const signed = rule(4, -2, {
+    source: {
+      ...(legs[1]!.source as Extract<NonNullable<PricedLeg["source"]>, { kind: "rule" }>),
+      coefficient: -2,
+      pv: 0,
+    },
+  });
+  const request = applyRequest({
+    ...base,
+    legs: [signed, rule(4, 0)],
+    requiredEspInWg: null,
+    designFlowCfm: null,
+  });
+  expect(request.fittings[0]!.results).toEqual([
+    { velocityPressureInWg: 0, coefficient: -2 },
+    { velocityPressureInWg: 0.02, coefficient: 0 },
+  ]);
 });

@@ -456,9 +456,21 @@ export function applyRequest(
         .filter((row) => row.c != null && !row.error && row.id > 0 && inScope(row.id))
         .map((row) => ({
           id: row.id,
-          // The Pe server charges the family's own coefficient when it has one, else prices the legs from this table.
+          // Native consumes the host results; no table or family-parameter fallback.
           method: "pe-server" as const,
           coefficient: row.c!,
+          results: Object.values(priced.next.paths)
+            .flatMap((path) => path.rows)
+            .filter((leg) => leg.id === row.id && leg.c != null && leg.pv != null && !leg.error)
+            .map((leg) => ({ velocityPressureInWg: leg.pv!, coefficient: leg.c! }))
+            .filter(
+              (leg, i, all) =>
+                all.findIndex(
+                  (other) =>
+                    other.velocityPressureInWg === leg.velocityPressureInWg &&
+                    other.coefficient === leg.coefficient,
+                ) === i,
+            ),
           table: row.table!,
           inputs: inputsOf(row),
           ruleKey,

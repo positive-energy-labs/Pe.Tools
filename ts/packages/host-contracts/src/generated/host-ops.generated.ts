@@ -171,18 +171,12 @@ export namespace DocumentTemporaryStatus {
 export namespace DuctsApply {
   export namespace Req {
     /**
-     * How Revit is told a fitting's loss (pressure-drop ledger, 2026-10-12): the Pe server live, or a frozen number for export.
+     * Consume host results in Pe's server, or freeze one coefficient for export.
      */
     export type DuctFittingMethod = "pe-server" | "specific-coefficient";
 
     /**
-     * A fitting write names its Method: PeServer points the fitting at the Pe loss server, which reads the family's
-     * coefficient parameter live (the FittingCoefficient slot, default Pe_C); AshraeTable stores Table as Revit's
-     * ASHRAETableName and Revit looks the legs up itself; SpecificCoefficient freezes Coefficient (the export route,
-     * never the web's). Coefficient, Table, Inputs and RuleKey are Pe's provenance and land in the store.
-     * Terminals and Components carry a drop in in-wg; Equipment the fan external static; TerminalFlows and EquipmentFlows
-     * a design flow in cfm (the TerminalFlow slot on the terminal instance, the FanFlow slot on the unit).
-     *
+     * Host-priced losses, drops in in-wg and design flows in cfm. Preview opens no transaction.
      */
     export interface Request {
       previewOnly: boolean;
@@ -211,7 +205,7 @@ export namespace DuctsApply {
       terminalFlow?: string;
     }
     /**
-     * Table is the rule's ASHRAE table the Pe server prices the legs from when the family carries no coefficient; Coefficient is the web's number for the store and the export route.
+     * Results are the host engine's priced legs, including their velocity-pressure basis. Table and Inputs are provenance only.
      */
     export interface DuctFittingWrite {
       id: number;
@@ -220,6 +214,14 @@ export namespace DuctsApply {
       table?: null | string;
       inputs?: null | string;
       ruleKey?: null | string;
+      results?: DuctLossResult[] | null;
+    }
+    /**
+     * A signed host coefficient at one velocity pressure in in-wg. Native code refuses changed or ambiguous bases.
+     */
+    export interface DuctLossResult {
+      velocityPressureInWg: number;
+      coefficient: number;
     }
     export interface DuctDropWrite {
       id: number;

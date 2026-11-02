@@ -1,3 +1,4 @@
+using Newtonsoft.Json;
 using Autodesk.Revit.DB.ExtensibleStorage;
 using Autodesk.Revit.DB.ExternalService;
 using Autodesk.Revit.DB.Mechanical;
@@ -266,35 +267,17 @@ public static class DuctApplier {
         }
     }
 
-    /// <summary>
-    ///     A fitting under the ruled composite (2026-10-08, 2026-10-12): the Pe server charges the family's own
-    ///     coefficient when the family carries one, else prices the legs live from the rule's table; Specific
-    ///     Coefficient is the frozen export. Each refuses what it cannot honor: no server in this Revit, neither a
-    ///     coefficient parameter on the family nor a table named.
-    /// </summary>
+    /// <summary>Native code validates and persists host results. Tables are provenance, never a native pricing fallback.</summary>
     private static Item Fitting(Document doc, DuctFittingWrite w, DuctParameterSlots slots, Dictionary<Guid, Schema?> schemas) {
         const string kind = "fitting";
         switch (w.Method) {
             case DuctFittingMethod.PeServer: {
                 var e = doc.GetElement(w.Id.ToElementId());
-                var table = w.Table?.Trim().ToUpperInvariant() ?? "";
-                if (e is not null && e.Category.ToBuiltInCategory() == BuiltInCategory.OST_DuctFitting) {
-                    if (!PeLossServer.IsRegistered) return new Item(w.Id, kind, null) { Element = e }.Refuse("the Pe loss server is not registered in this Revit; it registers at Pe.App startup");
-                    var own = e.LookupParameter(slots.FittingCoefficient) is { StorageType: StorageType.Double };
-                    if (!own && table.Length == 0)
-                        return new Item(w.Id, kind, null) { Element = e }.Refuse($"the family has no number parameter '{slots.FittingCoefficient}' (the FittingCoefficient slot) and the write names no table; stamp it with ducts.family-patch or name the rule's table");
-                    if (table.Length > 0) {
-                        var grids = PeLossServer.Table(table);
-                        if (grids is null)
-                            return new Item(w.Id, kind, null) { Element = e }.Refuse($"Revit ships no readable ASHRAE table {table}");
-                        // TODO: ADR 0028 replace the native PeLossServer pricing caller with host-priced coefficients, then delete C# pricing.
-                        if (grids.Values.Any(grid => grid.Z is not null))
-                            return new Item(w.Id, kind, null) { Element = e }.Refuse($"The native loss server cannot price three-axis table {table}; use the host engine and SpecificCoefficient");
-                    }
-                }
+                if (!PeLossServer.IsRegistered) return new Item(w.Id, kind, null) { Element = e }.Refuse("the Pe loss server is not registered");
+                if (w.Results is not { Count: > 0 } || w.Results.Any(r => !PeLossServer.Valid(r)))
+                    return new Item(w.Id, kind, null) { Element = e }.Refuse("host-priced leg results with finite coefficients and velocity-pressure bases are required");
                 return Lossy(doc, w.Id, kind, BuiltInCategory.OST_DuctFitting, PeLossServer.Id, schemas,
-                    [(PeLossServer.ParameterField, slots.FittingCoefficient), (PeLossServer.TableField, table)], 0,
-                    table.Length > 0 ? $"pe-server reads '{slots.FittingCoefficient}', else {table}" : $"pe-server reads '{slots.FittingCoefficient}'");
+                    [(PeLossServer.ResultsField, JsonConvert.SerializeObject(w.Results))], 0, $"pe-server host results ({w.Results.Count} legs)");
             }
             case DuctFittingMethod.SpecificCoefficient:
                 return Lossy(doc, w.Id, kind, BuiltInCategory.OST_DuctFitting, SpecificCoefficient, schemas,
