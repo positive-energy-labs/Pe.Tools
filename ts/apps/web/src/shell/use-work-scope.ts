@@ -261,8 +261,6 @@ export function useWorkScope<P, W>(
       subscribeAcceptedDeltas: spec
         ? (key: WorkKey, onAck: (ack: WorkWriteAck) => void) => subscribeAcceptedDeltas(key, onAck)
         : noDeltas,
-      // TODO: docs/features/routes/LEDGER.md#s7-fd4c79938c prove on a live host that a Pea ducts preview receipt consumes this Work (receiptsForWork)
-      // and lands in the Timeline head; only the head projection is unit-proven (situation-band.test).
       subscribeReceipts: (accept: (receipt: ActionStatus, key: WorkKey | null) => void) => {
         let current = "";
         let release = () => {};

@@ -505,6 +505,8 @@ export function createWorkJournal(key: WorkKey) {
             step.transitions.some((t) => t.revision > consumed.probe.handle.revision)
           )
             continue;
+          // TODO: Live recheck the replaced-value boundary after u2-y2's host was replaced;
+          // latest-edit rejection is live-proven, older-value exclusion is deterministic-only.
           if (
             !step.transitions.some((t) =>
               t.forward.some((patch) =>
