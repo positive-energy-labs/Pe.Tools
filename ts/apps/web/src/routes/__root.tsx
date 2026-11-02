@@ -1,3 +1,4 @@
+import { useRestoreTabPage } from "../route/url";
 import { useEffect, useState } from "react";
 import { WorkOwner } from "@pe/kit/lang/work";
 import { TeachPage, TeachReference, TeachTarget } from "@pe/kit/lang/use-teach";
@@ -148,6 +149,7 @@ function SurfaceOutlet({ children }: { children?: React.ReactNode }) {
 }
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+  useRestoreTabPage();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => setHydrated(true), []);

@@ -213,7 +213,7 @@ export function AppBar() {
   });
   useSubjects();
   const subjectLabel = subjectState(routeAt(location.pathname) ?? "", location.search).label;
-  const label = locationLabel(location.pathname) + (subjectLabel ? ` ? ${subjectLabel}` : "");
+  const label = locationLabel(location.pathname) + (subjectLabel ? ` \u00b7 ${subjectLabel}` : "");
   const actions = (
     <>
       <RouteControlsOutlet slot="palette" />

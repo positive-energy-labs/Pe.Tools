@@ -176,15 +176,6 @@ export function useRouteTabs() {
   const subject = subjectState(route ?? "", search);
   const link = route ? place(route, search, store.local) : null;
   const restoring = Object.keys(search).some((key) => !(key in location.search));
-  useEffect(() => {
-    if (!restoring) return;
-    void router.navigate({
-      to: location.pathname,
-      search,
-      replace: true,
-      ignoreBlocker: true,
-    } as never);
-  }, [restoring, location.href]);
   const [tabs, setTabs] = useState<ThreadTab[]>(read);
   const [failure, setFailure] = useState<string | null>(null);
   const fail = (error: unknown) =>

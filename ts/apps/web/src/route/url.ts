@@ -7,7 +7,7 @@
  * Nothing here hand-rolls `new URL().searchParams`.
  */
 import { routeAddress, type History, type RouteKey, type RoutePage } from "@pe/agent-contracts";
-import { useRouter, type SearchMiddleware } from "@tanstack/react-router";
+import { useRouter, useRouterState, type SearchMiddleware } from "@tanstack/react-router";
 import { useEffect, useState, useRef } from "react";
 import { z } from "zod";
 import type { ViewOwner } from "./view-owner";
@@ -286,4 +286,20 @@ export function restorePageSearch(memory?: Record<string, unknown>, url?: Record
         ...Object.fromEntries(Object.entries(url ?? {}).filter(([, value]) => value !== undefined)),
       }
     : undefined;
+}
+
+
+/** Restore before device admission, so a bare fixture Place never falls into the host lane. */
+export function useRestoreTabPage() {
+  const router = useRouter();
+  const at = useRouterState({select: (state) => state.location});
+  const explicit = new Set(new URLSearchParams(at.searchStr).keys());
+  const search = restorePageSearch(
+    "__pePageMove" in at.state ? undefined : tabPageSearch(at.pathname),
+    Object.fromEntries(Object.entries(at.search).filter(([key]) => explicit.has(key))),
+  ) ?? {};
+  const restoring = Object.keys(search).some((key) => !(key in at.search));
+  useEffect(() => {
+    if (restoring) void router.navigate({to:at.pathname,search,replace:true,ignoreBlocker:true} as never);
+  }, [restoring, at.href]);
 }
