@@ -194,7 +194,8 @@ export const runPods = <A, E>(
 ) =>
   deps.runPods
     ? deps.runPods(effect)
-    : Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
+    : // effect-edge: island, phase 5
+      Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
 
 /** Pod context whose composition runs in the exact admitted session and document lifetime. */
 export const podContext = (
@@ -266,6 +267,7 @@ async function current(
   family: boolean | "project",
   process?: NativeProcess,
 ) {
+  // effect-edge: island, phase 5
   const session = (await Effect.runPromise(bridge.list)).find(
     (s) => s.sessionId === target.session,
   );

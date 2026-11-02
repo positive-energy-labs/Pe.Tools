@@ -41,6 +41,7 @@ test("SDK refusal output survives a real nonzero child exit while stderr drains"
   await fixture(
     `process.stderr.write('diagnostic'.repeat(100000)); process.stdout.write(${JSON.stringify(envelope)}, () => { process.exitCode = 3; });`,
     async (args) => {
+      // effect-edge: island, phase 5
       expect(await Effect.runPromise(runPeRevitCli(args))).toBe(envelope);
     },
   );
@@ -50,6 +51,7 @@ test("timeout awaits termination of the actual CLI child", async () => {
   await fixture(
     "require('node:fs').writeFileSync(require('node:path').join(__dirname, 'pid'), String(process.pid)); setInterval(() => {}, 1000);",
     async (args, root) => {
+      // effect-edge: island, phase 5
       const outcome = await Effect.runPromise(
         executeSessionCli(args, runPeRevitCli, 1000, { action: "list" }),
       );

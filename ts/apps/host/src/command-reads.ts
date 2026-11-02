@@ -32,6 +32,7 @@ export function commandResources(
     },
     async target(target, needs) {
       if (target.kind !== "document" && target.kind !== "session") return;
+      // effect-edge: island, phase 5
       const selected = (await Effect.runPromise(bridge.list)).find(
         (row) =>
           row.sessionId === (target.kind === "document" ? target.ref.session : target.session),
@@ -73,6 +74,7 @@ export function commandResources(
         case "member":
           return (
             deps.runPods ??
+            // effect-edge: island, phase 5
             ((effect) => Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer))))
           )(
             readMember(
@@ -97,6 +99,7 @@ export function commandResources(
           );
           const target = dependency.probe.target;
           if (target.kind === "document" || target.kind === "session") {
+            // effect-edge: island, phase 5
             const session = (await Effect.runPromise(bridge.list)).find(
               (row) =>
                 row.sessionId ===
@@ -121,6 +124,7 @@ export function commandResources(
             if (!session.documents) throw Error("SDK document census unavailable");
             return session.documents.map((doc) => doc.openId).sort();
           }
+          // effect-edge: island, phase 5
           const session = (await Effect.runPromise(bridge.list)).find(
             (row) => row.sessionId === dependency.probe.session,
           );

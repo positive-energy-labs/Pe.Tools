@@ -74,6 +74,7 @@ test("the host-owned /pe surface answers without Revit", async () => {
       );
     }),
   );
+  // effect-edge: island, phase 5
   const fiber = Effect.runFork(program);
   try {
     const deadline = Date.now() + 10_000;
@@ -147,14 +148,15 @@ test("the host-owned /pe surface answers without Revit", async () => {
     expect(routeList.status).toBe(200);
     expect(((await routeList.json()) as unknown[]).length).toBeGreaterThan(0);
 
-
     await fetch(`${base}/admin/shutdown`, {
       method: "POST",
       headers: { "x-pe-service-token": service.token },
     });
+    // effect-edge: island, phase 5
     await Effect.runPromise(Fiber.join(fiber));
   } finally {
     nodeServer.closeAllConnections();
+    // effect-edge: island, phase 5
     await Effect.runPromise(Fiber.interrupt(fiber));
     vi.unstubAllEnvs();
     if (previousLocalAppData === undefined) delete process.env.LOCALAPPDATA;

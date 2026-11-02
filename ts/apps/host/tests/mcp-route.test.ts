@@ -57,8 +57,26 @@ const options: IdentityOptions = {
   },
 };
 const operations: HostOperationDefinition[] = [
-  { key: "pod.list", intent: "Read", subject: "None", touches: "Metadata", effect: "Read", cardinality: "One", costTier: "Cheap", needs: "nothing" },
-  { key: "pod.member.write", intent: "Mutate", subject: "None", touches: "Metadata", effect: "SessionWrite", cardinality: "One", costTier: "Cheap", needs: "nothing" },
+  {
+    key: "pod.list",
+    intent: "Read",
+    subject: "None",
+    touches: "Metadata",
+    effect: "Read",
+    cardinality: "One",
+    costTier: "Cheap",
+    needs: "nothing",
+  },
+  {
+    key: "pod.member.write",
+    intent: "Mutate",
+    subject: "None",
+    touches: "Metadata",
+    effect: "SessionWrite",
+    cardinality: "One",
+    costTier: "Cheap",
+    needs: "nothing",
+  },
 ];
 const dispose: Array<() => Promise<void>> = [];
 test("access-084/086: one paired MCP session crosses transports and revoke refuses its next HTTP request", async () => {
@@ -177,7 +195,9 @@ async function fixture(telemetry?: ReceiptExport) {
     const a = server.address();
     return a && typeof a !== "string" ? a.port : 0;
   };
+  // effect-edge: island, phase 5
   const latch = Effect.runSync(Deferred.make<void>());
+  // effect-edge: island, phase 5
   const done = Effect.runPromise(
     Effect.raceFirst(
       Layer.launch(
@@ -195,6 +215,7 @@ async function fixture(telemetry?: ReceiptExport) {
   for (let i = 0; !port() && i < 200; i++) await new Promise((r) => setTimeout(r, 10));
   const mcpBase = `http://127.0.0.1:${port()}`;
   dispose.push(async () => {
+    // effect-edge: island, phase 5
     Effect.runSync(Deferred.succeed(latch, undefined));
     server.closeAllConnections();
     await done.catch(() => {});

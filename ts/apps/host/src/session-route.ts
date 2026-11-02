@@ -172,6 +172,7 @@ export function observeSdkReading(
         return readHoldings(readMachine(), request);
       }
       const args = sdkReadingArgs(request);
+      // effect-edge: island, phase 5
       const result = await Effect.runPromise(
         executeSessionCli(args, runPeRevitCli, STATUS_TIMEOUT_MS, {
           action: request.read,

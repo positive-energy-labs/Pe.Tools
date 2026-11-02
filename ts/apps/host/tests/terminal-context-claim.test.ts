@@ -19,6 +19,7 @@ test("a host whose service claim is refused leaves the claim holder's terminal c
   try {
     const path = hostContextTokenPath(hostOwnership.serviceName);
     expect(readFileSync(path, "utf8")).toBe(settled.terminal);
+    // effect-edge: island, phase 5
     const rival = await Effect.runPromiseExit(
       Effect.scoped(
         Layer.launch(
@@ -26,7 +27,9 @@ test("a host whose service claim is refused leaves the claim holder's terminal c
             capabilities: { revit: true },
             port: 0,
             lifecycle: {
+              // effect-edge: island, phase 5
               latch: Effect.runSync(Deferred.make<void>()),
+              // effect-edge: island, phase 5
               handle: Effect.runSync(Deferred.make<ServiceHostHandle>()),
             },
             webRoot: null,

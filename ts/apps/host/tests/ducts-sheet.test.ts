@@ -1,13 +1,13 @@
 import {
-DUCTS_BODY_VERSION_HEADER,
-ductsRosterResponseSchema,
-ductsSheetOverviewSchema,
-ductsSheetResponseSchema
+  DUCTS_BODY_VERSION_HEADER,
+  ductsRosterResponseSchema,
+  ductsSheetOverviewSchema,
+  ductsSheetResponseSchema,
 } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Effect } from "effect";
-import { existsSync,readFileSync } from "node:fs";
-import { expect,test } from "vite-plus/test";
+import { existsSync, readFileSync } from "node:fs";
+import { expect, test } from "vite-plus/test";
 import type { RevitBridge } from "../src/bridge.ts";
 import { DuctsReadings } from "../src/ducts-readings.ts";
 import { createPeRoutes } from "../src/pe-routes.ts";
@@ -29,8 +29,9 @@ test.skipIf(!existsSync(retained))(
           expect(["ducts.snapshot.roster", "ducts.snapshot.walk", "ducts.tables"]).toContain(key);
           requests.push(request);
           return {
-            value:
-              key.startsWith("ducts.snapshot.") ? snapshot : { tables: {}, missing: [], unsupported: [] },
+            value: key.startsWith("ducts.snapshot.")
+              ? snapshot
+              : { tables: {}, missing: [], unsupported: [] },
             target: { session: target.session, document: "Chadds", documentRef: target },
           };
         }),
@@ -53,6 +54,7 @@ test.skipIf(!existsSync(retained))(
           const body = await owner.read(
             reading,
             async () => ({
+              // effect-edge: island, phase 5
               ...(await Effect.runPromise(
                 bridge.invoke(key, request, target.session, target.openId),
               )),

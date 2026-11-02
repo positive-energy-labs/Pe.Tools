@@ -274,7 +274,10 @@ class PageState {
       for (const listen of this.listeners) listen(row);
       return row;
     });
-    this.queue = job.catch((error) => { console.error("pages-route: asynchronous operation failed", error); return undefined; });
+    this.queue = job.catch((error) => {
+      console.error("pages-route: asynchronous operation failed", error);
+      return undefined;
+    });
     return job;
   }
   snapshot(): Promise<unknown> {
@@ -520,7 +523,8 @@ export function createPagesHandler(
           unhear();
           try {
             controller.close();
-          } catch (error) { console.warn("ts/apps/host/src/pages-route.ts: fallback after failure", error);
+          } catch (error) {
+            console.warn("ts/apps/host/src/pages-route.ts: fallback after failure", error);
             /* already closed by the consumer */
           }
         };
@@ -634,7 +638,10 @@ export function createPagesHandler(
     const at = `/pages/${slug}/${verb}`;
     const who = doorRefusal(at, caller);
     if (who) return refused(who);
-    const raw: unknown = await request.json().catch((error) => { console.error("pages-route: asynchronous operation failed", error); return undefined; });
+    const raw: unknown = await request.json().catch((error) => {
+      console.error("pages-route: asynchronous operation failed", error);
+      return undefined;
+    });
     const binding = await bindingOf(dir);
     const slot = binding.slots.default;
     // Only a person's pin consents to ReadOnly on its resolved document; thread bindings need a human-added target.
@@ -726,7 +733,12 @@ export function createPagesHandler(
    */
   async function bind(slug: string, dir: string, page: string, request: Request, caller: Caller) {
     const at = peRouteUrl("page.bind", { params: { slug } });
-    const parsed = pageChoiceSchema.safeParse(await request.json().catch((error) => { console.error("pages-route: asynchronous operation failed", error); return undefined; }));
+    const parsed = pageChoiceSchema.safeParse(
+      await request.json().catch((error) => {
+        console.error("pages-route: asynchronous operation failed", error);
+        return undefined;
+      }),
+    );
     if (!parsed.success)
       return problem(
         400,
@@ -834,7 +846,12 @@ export function createPagesHandler(
     const verb = rest.length === 1 ? rest[0] : undefined;
     if (verb === "export" && (request.method === "GET" || request.method === "POST")) {
       const sent: unknown =
-        request.method === "POST" ? await request.json().catch((error) => { console.error("pages-route: asynchronous operation failed", error); return undefined; }) : {};
+        request.method === "POST"
+          ? await request.json().catch((error) => {
+              console.error("pages-route: asynchronous operation failed", error);
+              return undefined;
+            })
+          : {};
       const parsed = z.strictObject({ snapshot: z.unknown().optional() }).safeParse(sent);
       if (!parsed.success)
         return problem(400, "a Page export is { snapshot? }; destination paths are host-owned");
@@ -879,7 +896,10 @@ export function createPagesHandler(
       return new Response(null, { status: 204 });
     }
     if (verb === "events" && request.method === "POST") {
-      const event: unknown = await request.json().catch((error) => { console.error("pages-route: asynchronous operation failed", error); return undefined; });
+      const event: unknown = await request.json().catch((error) => {
+        console.error("pages-route: asynchronous operation failed", error);
+        return undefined;
+      });
       if (typeof event !== "object" || event === null || Array.isArray(event))
         return problem(400, "an event is one JSON object");
       return json(await state.append(event, originOf(caller)), 201);
@@ -895,7 +915,10 @@ export function createPagesHandler(
       return sse(request, state, Number.isFinite(after) ? after : 0);
     }
     if (verb === "snapshot" && request.method === "PUT") {
-      const value: unknown = await request.json().catch((error) => { console.error("pages-route: asynchronous operation failed", error); return undefined; });
+      const value: unknown = await request.json().catch((error) => {
+        console.error("pages-route: asynchronous operation failed", error);
+        return undefined;
+      });
       if (value === undefined) return problem(400, "a snapshot is JSON");
       await state.writeSnapshot(value);
       return new Response(null, { status: 204 });
@@ -929,7 +952,8 @@ export const pagesRoute = (root = productPagesRootPath, pods = productPodsRootPa
       const live: PageLive = {
         sessions: async () =>
           bridge
-            ? (await Effect.runPromise(bridge.list)).flatMap((s) =>
+            ? // effect-edge: island, phase 5
+              (await Effect.runPromise(bridge.list)).flatMap((s) =>
                 s.connected && s.sessionId
                   ? [{ session: s.sessionId, documents: s.state?.openDocuments ?? null }]
                   : [],

@@ -547,6 +547,7 @@ function temporarySucceeded(value: unknown): boolean {
 /** The bridge session now serving the original's SDK session, whatever process it runs in. */
 async function successorOf(bridge: RevitBridge["Service"] | undefined, sdkSession: unknown) {
   if (!bridge || typeof sdkSession !== "string") return undefined;
+  // effect-edge: island, phase 5
   const view = (await Effect.runPromise(bridge.list)).find(
     (s) => s.connected && s.sdkSessionId === sdkSession && s.processId !== undefined,
   );

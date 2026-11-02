@@ -347,6 +347,7 @@ test("host HTTP preserves addressless Work through close and replacement bridge 
   const frames: Array<{ kind: string; value?: { kind?: string; type?: string; action?: string } }> =
     [];
   try {
+    // effect-edge: island, phase 5
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {

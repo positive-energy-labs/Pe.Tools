@@ -56,8 +56,10 @@ test("remote listener marks real loopback tunnel requests before the identity mi
   const devices = createDevices();
   const device = devices.claim(devices.pair("browser").code, "Tunnel browser", "ssh");
   const port = () => (server.address() as { port: number }).port;
+  // effect-edge: island, phase 5
   const latch = Effect.runSync(Deferred.make<void>());
   const listening = once(server, "listening");
+  // effect-edge: island, phase 5
   const done = Effect.runPromise(
     Effect.raceFirst(
       Layer.launch(
@@ -125,6 +127,7 @@ test("remote listener marks real loopback tunnel requests before the identity mi
   } finally {
     await remoteServer.close();
     server.closeAllConnections();
+    // effect-edge: island, phase 5
     Effect.runSync(Deferred.succeed(latch, undefined));
     await done;
   }

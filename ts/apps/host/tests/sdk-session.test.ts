@@ -86,6 +86,7 @@ test("the held attachment is checked again after the SDK answers", async () => {
 });
 
 test("an exact product document uses its held pid and refuses a closed lifetime or SDK document id", () =>
+  // effect-edge: island, phase 5
   Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {

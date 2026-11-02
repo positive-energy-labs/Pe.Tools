@@ -201,6 +201,7 @@ export const IDLE_CHILD_MS = 15 * 60_000;
 const INTERRUPT_MS = 10_000;
 /** Thrown by `input` on a body route sent without a JSON content type; served as 415. */
 class NotJson extends Error {}
+// effect-edge: island, phase 5
 const warn = (message: string) => Effect.runSync(Effect.logWarning(message));
 
 /**

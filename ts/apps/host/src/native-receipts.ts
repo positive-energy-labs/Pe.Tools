@@ -23,6 +23,7 @@ import { parsePeRevitEnvelope, peRevitLauncher } from "./pe-revit-launch.ts";
 export type { NativeProcess } from "@pe/agent-contracts";
 export type SdkReceiptReader = (args: readonly string[]) => Promise<string>;
 const run: SdkReceiptReader = (args) =>
+  // effect-edge: island, phase 5
   Effect.runPromise(
     runPeRevitCli(args).pipe(Effect.provide(NodeServices.layer), Effect.timeout("30 seconds")),
   );

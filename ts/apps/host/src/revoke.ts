@@ -25,11 +25,10 @@ export function bindRevoke(owner: ActionJournal, bridge: RevitBridge["Service"])
           })
         : [],
     );
-    void bridge
-      .cancelQueued(requests)
-      .catch((error) =>
-        Effect.runSync(Effect.logError("Target removal queue sweep failed", error)),
-      );
+    void bridge.cancelQueued(requests).catch((error) =>
+      // effect-edge: island, phase 5
+      Effect.runSync(Effect.logError("Target removal queue sweep failed", error)),
+    );
   });
   return () => {
     active = false;

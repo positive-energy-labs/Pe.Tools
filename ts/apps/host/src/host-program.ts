@@ -72,6 +72,7 @@ export const hostProgram = (
       const updateReader = makeInstalledUpdateReader(
         (fact) => recordUpdateFact(telemetry, fact),
         // Let the POST/receipt frame flush before the launch scope tears the server down.
+        // effect-edge: process exit (the exit timer settles the shutdown Deferred)
         () => void setTimeout(() => Effect.runSync(Deferred.succeed(latch, undefined)), 1000),
       );
       const HttpLive = makeHttpLive({

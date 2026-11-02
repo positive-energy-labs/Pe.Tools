@@ -1119,12 +1119,14 @@ export function makeHostPeRoutes(
   void userCodexMcpServers(userCodexConfigPath())
     .then((names) => writePeaCodexProjectConfig(worldRoot, names))
     .catch((error) =>
+      // effect-edge: island, phase 5
       Effect.runSync(
         Effect.logWarning(`Pea's Codex project config was not written: ${String(error)}`),
       ),
     );
   const shellPath = () =>
     captureUserShellPath().then((captured) => {
+      // effect-edge: island, phase 5
       Effect.runSync(
         captured
           ? Effect.logInfo(`user shell PATH captured (${captured.split(";").length} entries)`)
@@ -1168,6 +1170,7 @@ export function makeHostPeRoutes(
     // Cached bridge metadata only. Remembered labels/addresses never admit a native operation.
     observeDocument: (request) => {
       if (!bridge) return null;
+      // effect-edge: island, phase 5
       const matches = Effect.runSync(bridge.list).flatMap((session) =>
         session.connected && session.sessionId
           ? (session.state?.openDocuments ?? []).flatMap((doc) => {
@@ -1295,6 +1298,7 @@ export function makeHostPeRoutes(
     turnElementNames: (request) =>
       threads.readTurnElementNames(request, (operation, input, ref) => {
         if (!bridge) return Promise.reject(new Error("No Revit bridge is available"));
+        // effect-edge: island, phase 5
         return Effect.runPromise(bridge.invoke(operation, input, ref.session, ref.openId));
       }),
     navigation: {
@@ -1322,6 +1326,7 @@ export function makeHostPeRoutes(
       },
       documents: async () => {
         if (!bridge) throw new Error("No Revit bridge metadata is available");
+        // effect-edge: island, phase 5
         const sessions = await Effect.runPromise(bridge.list);
         return sessions.flatMap((session) =>
           session.connected && session.sessionId

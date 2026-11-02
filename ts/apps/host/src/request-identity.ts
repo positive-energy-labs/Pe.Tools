@@ -62,7 +62,8 @@ function authority(value: string): string | undefined {
   if (!/^[a-z0-9.-]+(?::[0-9]+)?$/i.test(value)) return undefined;
   try {
     return new URL(`https://${value}`).host;
-  } catch (error) { console.warn("ts/apps/host/src/request-identity.ts: fallback after failure", error);
+  } catch (error) {
+    console.warn("ts/apps/host/src/request-identity.ts: fallback after failure", error);
     return undefined;
   }
 }
@@ -435,6 +436,7 @@ export const requestIdentityLayer = (options: IdentityOptions) =>
               device: identity.device,
               headers: identity.headers,
             },
+            // effect-edge: AsyncLocalStorage crossing for invocation context; a FiberRef retires it
             () => Effect.runPromiseExitWith(services)(handler, { signal }),
           ),
         );

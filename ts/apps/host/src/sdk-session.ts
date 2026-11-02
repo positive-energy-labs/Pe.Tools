@@ -20,6 +20,7 @@ import { hostOwnership } from "./host-ownership.ts";
 import { hostServiceName, runtimeOwnerRejection } from "@pe/host-contracts/service-identity";
 
 const readSdk: SdkReceiptReader = (args) =>
+  // effect-edge: island, phase 5
   Effect.runPromise(
     runPeRevitCli(args).pipe(Effect.provide(NodeServices.layer), Effect.timeout("30 seconds")),
   );
@@ -47,7 +48,8 @@ export async function resolveSdkSession(
   if (scope.openDocumentId && !scope.bridgeSessionId)
     throw refuse("A product document lifetime requires its exact bridge attachment");
   const attachments = scope.bridgeSessionId
-    ? (await Effect.runPromise(bridge.list)).filter((s) => s.sessionId === scope.bridgeSessionId)
+    ? // effect-edge: island, phase 5
+      (await Effect.runPromise(bridge.list)).filter((s) => s.sessionId === scope.bridgeSessionId)
     : [];
   if (scope.bridgeSessionId && attachments.length !== 1)
     throw refuse("The exact bridge attachment is no longer available");
@@ -57,7 +59,8 @@ export async function resolveSdkSession(
   // ponytail: one owned attachment → its pid; the SDK's unscoped ladder (cwd-project) costs ~40 s against a 30 s budget. Owed: SDK ladder speed.
   const owned = held
     ? []
-    : (await Effect.runPromise(bridge.list)).filter(
+    : // effect-edge: island, phase 5
+      (await Effect.runPromise(bridge.list)).filter(
         (s) => s.connected && s.processId && !runtimeOwnerRejection(hostOwnership, s),
       );
   const only = held ?? (owned.length === 1 ? owned[0] : undefined);
@@ -66,6 +69,7 @@ export async function resolveSdkSession(
   let cache = resolutions.get(bridge);
   if (!cache) resolutions.set(bridge, (cache = new Map()));
   const cached = cache.get(key);
+  // effect-edge: island, phase 5
   const sockets = await Effect.runPromise(bridge.list);
   let resolved = cached?.resolved;
   if (cached) {
@@ -127,6 +131,7 @@ export async function resolveSdkSession(
     start <= 0
   )
     throw refuse("SDK resolution did not provide a valid process incarnation", envelope);
+  // effect-edge: island, phase 5
   const matches = (await Effect.runPromise(bridge.list)).filter(
     (socket) =>
       socket.connected &&

@@ -190,7 +190,10 @@ export function hostResourceObserver(
               },
               signal: controller.signal,
             });
-            const value: unknown = await response.json().catch((error) => { console.error("resource-adapters: asynchronous operation failed", error); return null; });
+            const value: unknown = await response.json().catch((error) => {
+              console.error("resource-adapters: asynchronous operation failed", error);
+              return null;
+            });
             if (!response.ok)
               throw Error(
                 (value as { error?: string } | null)?.error ??
@@ -228,6 +231,7 @@ export function hostResourceObserver(
             request.kind === "ducts-snapshot" ? request.target.session : request.session,
           )
             .then((session) =>
+              // effect-edge: island, phase 5
               Effect.runPromise(
                 resolveSession(bridge, {
                   bridgeSessionId: session,
@@ -308,6 +312,7 @@ export function hostResourceObserver(
           }
           let live = true;
           const { target, key: domain, context } = request;
+          // effect-edge: island, phase 5
           void Effect.runPromise(
             resolveSession(bridge, {
               bridgeSessionId: target.session,
@@ -346,7 +351,8 @@ export function hostResourceObserver(
             "inventory",
             () =>
               bridge
-                ? Effect.runPromise(listBridgeSessions(bridge.list))
+                ? // effect-edge: island, phase 5
+                  Effect.runPromise(listBridgeSessions(bridge.list))
                 : Promise.resolve({ sessions: [] }),
             (notify) => (bridge ? bridge.subscribe(() => notify()) : () => {}),
             accept,

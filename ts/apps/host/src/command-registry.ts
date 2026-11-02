@@ -53,7 +53,10 @@ export function commandRegistry(
   ]) {
     for (const [key, factory] of Object.entries(group)) {
       if (implementations[key]) throw Error(`Command '${key}' has two executors`);
-      if (commandCatalogAxes[key as keyof typeof commandCatalogAxes]?.effect === "ModelWrite" && !factory.seal)
+      if (
+        commandCatalogAxes[key as keyof typeof commandCatalogAxes]?.effect === "ModelWrite" &&
+        !factory.seal
+      )
         throw Error(`ModelWrite ${key} requires a producer-owned seal projection`);
       implementations[key] = factory;
     }
@@ -63,6 +66,7 @@ export function commandRegistry(
     return readNativeReceipt(step, step.process, deps.sdk);
   };
   const cancel = async (requestId: string) => {
+    // effect-edge: island, phase 5
     const answer = await Effect.runPromise(bridge.invoke(CANCEL_OPERATION_KEY, { requestId }));
     const result = answer.value as { cancelled?: boolean; message?: string } | null;
     if (result?.cancelled === false) throw Error(result.message ?? "Native request is not running");
@@ -100,9 +104,17 @@ export function commandRegistry(
         ? (entry.definition.writeBoundary as WriteBoundaryBinding)
         : undefined;
     if (modelWrite && boundary?.phase !== "apply")
-      throw Error(`ModelWrite ${key} has no typed apply writeBoundary; build it with workWriteCommands`);
+      throw Error(
+        `ModelWrite ${key} has no typed apply writeBoundary; build it with workWriteCommands`,
+      );
     const wrapped = boundary
-      ? workWriteBoundary(entry, bridge, deps, undefined, ownExecutors.has(key) && boundary.phase === "preview")
+      ? workWriteBoundary(
+          entry,
+          bridge,
+          deps,
+          undefined,
+          ownExecutors.has(key) && boundary.phase === "preview",
+        )
       : entry;
     if (modelWrite && wrapped.boundary !== "work")
       throw Error(`ModelWrite ${key} is not behind the Work write boundary`);

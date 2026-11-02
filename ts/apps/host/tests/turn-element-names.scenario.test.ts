@@ -50,6 +50,7 @@ function payload(ids: number[], entries: ReturnType<typeof row>[]) {
 // Only the socket/native payload is substituted. The service, registration, FIFO, frame
 // decoding and exact open-document dispatch are production. This does not prove Revit behavior.
 test("turn names batch exact pinned documents through the production bridge and keep ambiguity", async () => {
+  // effect-edge: island, phase 5
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
@@ -60,6 +61,7 @@ test("turn names batch exact pinned documents through the production bridge and 
         const calls: string[] = [];
         const read: TurnElementNamesNativeRead = (op, input, ref) => {
           calls.push(ref.openId);
+          // effect-edge: island, phase 5
           return Effect.runPromise(bridge.invoke(op, input, ref.session, ref.openId));
         };
         const pending = readTurnElementNames(pinned, request([101, 101, 202, 303]), read);

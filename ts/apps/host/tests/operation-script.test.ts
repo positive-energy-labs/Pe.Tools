@@ -38,7 +38,12 @@ it.each([
           key === "host.ops.catalog"
             ? {
                 operations: [
-                  {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap",
+                  {
+                    subject: "None",
+                    touches: "Metadata",
+                    effect: "Read",
+                    cardinality: "One",
+                    costTier: "Cheap",
                     key: "scripting.execute",
                     intent: "Mutate",
                     needs: "document",
@@ -79,7 +84,9 @@ it.each([
       const address = server.address();
       return address && typeof address !== "string" ? address.port : 0;
     };
+    // effect-edge: island, phase 5
     const latch = Effect.runSync(Deferred.make<void>());
+    // effect-edge: island, phase 5
     const done = Effect.runPromise(
       Effect.raceFirst(
         Layer.launch(
@@ -156,6 +163,7 @@ it.each([
       expect(read.status, await read.clone().text()).toBe(200);
       expect(await read.json()).toEqual(result);
     } finally {
+      // effect-edge: island, phase 5
       Effect.runSync(Deferred.succeed(latch, undefined));
       await done;
       await rm(dir, { recursive: true, force: true });

@@ -153,6 +153,7 @@ const lane = <A>(body: (h: Harness) => Effect.Effect<A, unknown, never>, sdk = s
     );
     return yield* body({ owner, outgoing, post, answer, intent, work, workKey, target });
   }).pipe(Effect.scoped, Effect.provide(RevitBridgeLive), (effect) =>
+    // effect-edge: island, phase 5
     Effect.runPromise(effect as Effect.Effect<A>),
   );
 
@@ -411,7 +412,9 @@ test("host-derived preview and apply send the captured Work flow and retire only
         const next = yield* dispatchOrReceipt(owner, outgoing, id, answer);
         expect(next.kind, JSON.stringify(next)).toBe("dispatch");
         // The preview reaches the TransactRead leaf; only the apply entry reaches the ModelWrite leaf.
-        expect(next.frame.request!.operationKey).toBe(previewOnly ? "ducts.apply.preview" : "ducts.apply");
+        expect(next.frame.request!.operationKey).toBe(
+          previewOnly ? "ducts.apply.preview" : "ducts.apply",
+        );
         const native = JSON.parse(next.frame.request!.payloadJson);
         expect(native).not.toHaveProperty("previewOnly");
         expect(native.terminalFlows.find((row: { id: number }) => row.id === 4)?.cfm).toBe(200);

@@ -102,6 +102,7 @@ export async function invokeBridge<A = unknown>(
   input: unknown,
   requestId?: string,
 ): Promise<A> {
+  // effect-edge: island, phase 5
   const result = await Effect.runPromise(
     Effect.result(bridge.invoke(key, input, target.session, target.openId ?? null, requestId)),
   );
@@ -414,7 +415,9 @@ export const RevitBridgeLive = Layer.effect(
       const socket = yield* Effect.orDie(req.upgrade);
       const write = yield* socket.writer;
       const send = (frame: BridgeFrame) =>
-        Effect.flatMap(Effect.orDie(encodeFrame(frame)), (encoded) => Effect.orDie(write.write(encoded)));
+        Effect.flatMap(Effect.orDie(encodeFrame(frame)), (encoded) =>
+          Effect.orDie(write.write(encoded)),
+        );
       let session: Session | null = null;
 
       const onFrame = Effect.fnUntraced(function* (raw: string) {
@@ -569,7 +572,9 @@ export const RevitBridgeLive = Layer.effect(
       // 4.0.2 has no Socket.runString: pull string batches and run each frame in order.
       yield* Effect.flatMap(Socket.readerString(socket), (pullFrames) =>
         Effect.forever(
-          Effect.flatMap(pullFrames, (frames) => Effect.forEach(frames, onFrame, { discard: true })),
+          Effect.flatMap(pullFrames, (frames) =>
+            Effect.forEach(frames, onFrame, { discard: true }),
+          ),
         ),
       ).pipe(
         Effect.ensuring(Effect.suspend(() => (session ? cleanupSession(session) : Effect.void))),
@@ -652,11 +657,9 @@ export const RevitBridgeLive = Layer.effect(
         if (phase === "dispatched") break;
         if (typeof phase !== "string")
           return yield* Effect.fail(
-            new BridgeError(
-              phase.refusal.message,
-              phase.refusal.kind === "cancelled" ? 499 : 403,
-              { notDispatched: true },
-            ),
+            new BridgeError(phase.refusal.message, phase.refusal.kind === "cancelled" ? 499 : 403, {
+              notDispatched: true,
+            }),
           );
         if (phase === "cancelled")
           return yield* Effect.fail(
@@ -730,6 +733,7 @@ export const RevitBridgeLive = Layer.effect(
 
     const cancelQueued = (requestIds: Promise<readonly string[]>): Promise<void> => {
       revocation = Promise.all([revocation, requestIds]).then(async ([, ids]) => {
+        // effect-edge: island, phase 5
         for (const id of ids) await Effect.runPromise(cancelQueuedRequest(id));
       });
       return revocation;

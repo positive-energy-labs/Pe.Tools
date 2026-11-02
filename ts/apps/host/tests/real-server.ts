@@ -28,6 +28,7 @@ export async function serveRoutes<E, R>(
     const address = nodeServer.address();
     return address && typeof address !== "string" ? address.port : 0;
   };
+  // effect-edge: island, phase 5
   const latch = Effect.runSync(Deferred.make<void>());
   const served = HttpRouter.serve(
     Layer.mergeAll(
@@ -49,6 +50,7 @@ export async function serveRoutes<E, R>(
     Layer.provide(NodeHttpClient.layerUndici),
     Layer.provide(NodeHttpServer.layer(() => nodeServer, { host: "127.0.0.1", port: 0 })),
   );
+  // effect-edge: island, phase 5
   const done = Effect.runPromise(
     Effect.raceFirst(Layer.launch(served), Deferred.await(latch)) as Effect.Effect<unknown>,
   );
@@ -56,6 +58,7 @@ export async function serveRoutes<E, R>(
   return {
     base: `http://127.0.0.1:${port()}`,
     async close() {
+      // effect-edge: island, phase 5
       Effect.runSync(Deferred.succeed(latch, undefined));
       await done.catch(() => {});
     },
@@ -83,7 +86,9 @@ export async function bootHost() {
   };
   process.env.LOCALAPPDATA = localAppData;
   process.env[productPathNames.productHomeVariable] = home;
+  // effect-edge: island, phase 5
   const latch = Effect.runSync(Deferred.make<void>());
+  // effect-edge: island, phase 5
   const done = Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
@@ -111,6 +116,7 @@ export async function bootHost() {
     base: `http://127.0.0.1:${file!.port}`,
     terminal: readFileSync(hostContextTokenPath(hostOwnership.serviceName), "utf8"),
     async close() {
+      // effect-edge: island, phase 5
       Effect.runSync(Deferred.succeed(latch, undefined));
       await done.catch(() => {});
       for (const [name, value] of Object.entries(prior))

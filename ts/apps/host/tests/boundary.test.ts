@@ -47,7 +47,9 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
   // appBase is resolved the same way the running host resolves it (LOCALAPPDATA now = temp).
   const appBase = productRoot();
 
+  // effect-edge: island, phase 5
   const latch = Effect.runSync(Deferred.make<void>());
+  // effect-edge: island, phase 5
   const handle = Effect.runSync(Deferred.make<ServiceHostHandle>());
   const program = Effect.scoped(
     Effect.gen(function* () {
@@ -61,12 +63,14 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
     }),
   );
 
+  // effect-edge: island, phase 5
   const done = Effect.runPromise(program);
 
   try {
     // A published service file precedes terminal context creation. The host's handle signals
     // completed acquisition; retain the independent file read below as the boundary assertion.
     await Promise.race([
+      // effect-edge: island, phase 5
       Effect.runPromise(Deferred.await(handle)),
       done.then(() => {
         throw new Error("Host exited before readiness");
@@ -171,6 +175,7 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
     expect(await readServiceFile(appBase, hostOwnership.serviceName)).toBeNull();
     await expect(fetch(`${base}/host/status`)).rejects.toBeDefined();
   } finally {
+    // effect-edge: island, phase 5
     Effect.runSync(Deferred.succeed(latch, undefined));
     await done.catch(() => {});
     if (prevLocalAppData === undefined) delete process.env.LOCALAPPDATA;

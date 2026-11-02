@@ -259,6 +259,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
     frontendOrigin: () =>
       options.webUrl
         ? Option.getOrUndefined(
+            // effect-edge: Layer construction (polls the startup Deferred while composing layers)
             Effect.runSync(Deferred.poll(options.webUrl)).pipe(Option.map(Effect.runSync)),
           )
         : undefined,

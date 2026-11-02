@@ -280,6 +280,7 @@ export async function canonicalDuctsSession(
   bridge: RevitBridge["Service"],
   id: string,
 ): Promise<string> {
+  // effect-edge: island, phase 5
   const sessions = await Effect.runPromise(bridge.list);
   const matches = sessions.filter(
     (session) => session.connected && (session.sessionId === id || session.sdkSessionId === id),

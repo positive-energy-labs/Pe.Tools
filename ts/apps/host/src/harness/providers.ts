@@ -44,7 +44,9 @@ type Probed = Pick<Provider, "readiness" | "models" | "traits" | "probedAt">;
 const PROBE_MS = 20_000;
 const FRESH_MS = 60_000;
 const log = {
+  // effect-edge: island, phase 5
   info: (message: string) => Effect.runSync(Effect.logInfo(message)),
+  // effect-edge: island, phase 5
   warn: (message: string) => Effect.runSync(Effect.logWarning(message)),
 };
 

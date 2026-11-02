@@ -24,6 +24,7 @@ let root: string;
 const member = { pod: "sample", path: "settings/file.json" };
 const digest = (raw: string | Uint8Array) => createHash("sha256").update(raw).digest("hex");
 const run = <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem>) =>
+  // effect-edge: island, phase 5
   Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
 const ctx = (): PodContext => ({ podsRoot: root });
 // The folder name is an address; the pod is found by its manifest id.
