@@ -1,5 +1,5 @@
 import { readTable } from "../../../../packages/mcps/src/shared/query-client";
-import { takeoffReads, readTakeoff } from "./queries";
+import { takeoffReads, readTakeoff, takeoffReadScope } from "./queries";
 import { z } from "zod";
 import {
   actionReceiptSchema,
@@ -62,11 +62,7 @@ export function takeoffSources(): Readonly<Record<string, ReadingSource>> {
       async open(ctx, deliver) {
         if (page(ctx).work || ctx.target.kind !== "document")
           return deliver({ kind: "complete", value: null, revision: 0 });
-        await readTakeoff(
-          "takeoffs.snapshot",
-          { views: page(ctx).views, zoneGuids: page(ctx).zones },
-          ctx.target.ref,
-        );
+        await readTakeoff("takeoffs.snapshot", takeoffReadScope(page(ctx)), ctx.target.ref);
         if (ctx.signal.aborted) return;
         return subscriptionSource({
           request: () => ({

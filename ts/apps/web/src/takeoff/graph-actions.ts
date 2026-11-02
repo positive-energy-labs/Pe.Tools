@@ -1,4 +1,5 @@
 import { takeoffQueries } from "./sources";
+import { takeoffReadScope } from "./queries";
 import { z } from "zod";
 import {
   commands,
@@ -264,8 +265,7 @@ export function takeoffBinding(id: string, row: unknown, scope: TakeoffScope): M
   const snapshot = snapshotOfObservation(valueOf(scope, "snapshot"));
   const world = snapshot?.world;
   const common = takeoffRefusal(scope);
-  let request: unknown =
-    id === "refresh" ? { views: scope.page.views, zoneGuids: scope.page.zones } : input;
+  let request: unknown = id === "refresh" ? takeoffReadScope(scope.page) : input;
   let why = common;
   if (id === "edit") {
     const edited =

@@ -38,3 +38,9 @@ export function readTakeoff(
     AbortSignal.timeout(120_000),
   );
 }
+
+/** Zone audit and file sync never widen a chosen zone back to all of its views. */
+export const takeoffReadScope = (page: { views: string[]; zones: string[] }) => ({
+  views: page.zones.length ? [] : page.views,
+  zoneGuids: page.zones,
+});
