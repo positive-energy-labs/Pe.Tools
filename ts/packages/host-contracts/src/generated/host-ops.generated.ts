@@ -7557,7 +7557,7 @@ export namespace RevitDetailSpaceProbe {
   }
 }
 
-/** Read every element row of the operation-owned world that passes a filter, as parallel arrays with legend lists for category, kind, layer and height role, plus each row's box and triangle count. */
+/** Read element rows intersecting the declared room, space or box region and passing a filter, as parallel arrays with legend lists for category, kind, layer and height role, plus each row's box and triangle count. */
 export namespace RevitDetailSpaceRows {
   export namespace Req {
     /**
@@ -8523,7 +8523,7 @@ export namespace RevitDetailSpaceSweep {
   }
 }
 
-/** Read one source's BVH down to a depth: each node's box, depth, leaf flag and triangle count, so a viewer can draw how a sweep prunes. */
+/** Read one source's BVH captured inside a declared room, space or box region down to a depth: each node's box, depth, leaf flag and triangle count, so a viewer can draw how a sweep prunes. */
 export namespace RevitDetailSpaceTree {
   export namespace Req {
     /**
@@ -9866,7 +9866,7 @@ export namespace RoomsRoster {
   }
 }
 
-/** Read plan-view levels and every zone, room, and held region on them with its parent zone, designation, room fields, geometry, and locked, touched, and stale state. */
+/** Read zones, rooms and held regions on one named plan view, with geometry and provenance. rooms.roster lists available views without geometry. */
 export namespace RoomsSnapshot {
   export namespace Req {
     export interface Request {
@@ -10644,7 +10644,7 @@ export namespace TakeoffsRhvacLinks {
   }
 }
 
-/** Read Takeoff model status, plan views, zoning regions, materialized rooms, and source identity from the active project. */
+/** Read Takeoff zones and rooms for explicit view names or zone GUIDs. Empty scope reads only model status and source identity without region geometry. */
 export namespace TakeoffsSnapshot {
   export namespace Req {
     /**

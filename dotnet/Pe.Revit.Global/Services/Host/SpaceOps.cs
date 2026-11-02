@@ -35,11 +35,11 @@ internal static class SpaceOps {
     [Op("revit.detail.space-status", Subject = OpSubject.Document, Touches = OpTouches.Metadata, Effect = OpEffect.Read, Does = "Read the current change epoch and level elevations without capturing geometry. Geometry is operation-owned; status reports no retained world.", Title = "Get Space World Status", Finds = ["space", "world", "status", "stamp", "sources", "levels"], Cost = OpCost.Cheap)]
     private static StatusAnswer Status(NoRequest _, ProjectDocument document) => SpaceView.Status(document.Value);
 
-    [Op("revit.detail.space-rows", Subject = OpSubject.Region, Touches = OpTouches.Geometry, Effect = OpEffect.Read, Does = "Read every element row of the operation-owned world that passes a filter, as parallel arrays with legend lists for category, kind, layer and height role, plus each row's box and triangle count.", Title = "Get Space Rows", Finds = ["space", "rows", "elements", "boxes", "categories"], Cost = OpCost.Expensive)]
+    [Op("revit.detail.space-rows", Subject = OpSubject.Region, Touches = OpTouches.Geometry, Effect = OpEffect.Read, Does = "Read element rows intersecting the declared room, space or box region and passing a filter, as parallel arrays with legend lists for category, kind, layer and height role, plus each row's box and triangle count.", Title = "Get Space Rows", Finds = ["space", "rows", "elements", "boxes", "categories"], Cost = OpCost.Expensive)]
     private static RowsAnswer Rows(RowsRequest request, ProjectDocument document) =>
         SpaceView.Rows(document.Value, (request.Filter ?? new FilterRequest()).ToFilter(), request.Region.Resolve(document.Value));
 
-    [Op("revit.detail.space-tree", Subject = OpSubject.Region, Touches = OpTouches.Geometry, Effect = OpEffect.Read, Does = "Read one source's BVH down to a depth: each node's box, depth, leaf flag and triangle count, so a viewer can draw how a sweep prunes.", Title = "Get Space BVH", Finds = ["space", "bvh", "tree", "nodes"], Cost = OpCost.Expensive)]
+    [Op("revit.detail.space-tree", Subject = OpSubject.Region, Touches = OpTouches.Geometry, Effect = OpEffect.Read, Does = "Read one source's BVH captured inside a declared room, space or box region down to a depth: each node's box, depth, leaf flag and triangle count, so a viewer can draw how a sweep prunes.", Title = "Get Space BVH", Finds = ["space", "bvh", "tree", "nodes"], Cost = OpCost.Expensive)]
     private static TreeAnswer Tree(TreeRequest request, ProjectDocument document) =>
         SpaceView.Tree(document.Value, request.Source ?? 0, request.MaxDepth ?? 8, request.Region.Resolve(document.Value));
 

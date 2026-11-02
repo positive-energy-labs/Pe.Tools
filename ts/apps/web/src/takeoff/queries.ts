@@ -40,7 +40,7 @@ export function readTakeoff(
 }
 
 /** Zone audit and file sync never widen a chosen zone back to all of its views. */
-export const takeoffReadScope = (page: { views: string[]; zones: string[] }) => ({
+export const takeoffReadScope = (page: { views: readonly string[]; zones: readonly string[] }) => ({
   views: page.zones.length ? [] : page.views,
   zoneGuids: page.zones,
 });

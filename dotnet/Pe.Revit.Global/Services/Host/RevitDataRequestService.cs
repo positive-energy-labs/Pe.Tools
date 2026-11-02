@@ -46,7 +46,7 @@ namespace Pe.Revit.Global.Services.Host;
 ///     Bridge-backed Revit data requests for browser routes.
 /// </summary>
 internal sealed class RevitDataRequestService {
-    [Op("takeoffs.snapshot", Subject = OpSubject.Region, Touches = OpTouches.Geometry, Effect = OpEffect.Read, Does = "Read Takeoff model status, plan views, zoning regions, materialized rooms, and source identity from the active project.", Title = "Get Takeoff Snapshot", Finds = ["takeoffs", "snapshot", "zones", "rooms", "filled-regions"], Cost = OpCost.Bounded)]
+    [Op("takeoffs.snapshot", Subject = OpSubject.Region, Touches = OpTouches.Geometry, Effect = OpEffect.Read, Does = "Read Takeoff zones and rooms for explicit view names or zone GUIDs. Empty scope reads only model status and source identity without region geometry.", Title = "Get Takeoff Snapshot", Finds = ["takeoffs", "snapshot", "zones", "rooms", "filled-regions"], Cost = OpCost.Bounded)]
     private static TakeoffSnapshotResponse GetTakeoffSnapshotCore(TakeoffReadRequest request, ProjectDocument activeDocument) =>
         RunTakeoff(activeDocument.Value, document =>
             new TakeoffSnapshotResponse(DocumentReading.Here(document), TakeoffAtlas.Snapshot(document, request)));
@@ -84,7 +84,7 @@ internal sealed class RevitDataRequestService {
         Does = "Read plan views and level elevations without region boundaries.", Cost = OpCost.Cheap)]
     private static RoomsSnapshotData GetRoomsRoster(NoRequest _, ProjectDocument document) => Rooms.Roster(document.Value);
 
-    [Op("rooms.snapshot", Subject = OpSubject.View, Touches = OpTouches.Geometry, Effect = OpEffect.Read, Does = "Read plan-view levels and every zone, room, and held region on them with its parent zone, designation, room fields, geometry, and locked, touched, and stale state.", Title = "Get Rooms Snapshot", Finds = ["rooms", "snapshot", "levels", "room-regions", "filled-regions"], Cost = OpCost.Bounded)]
+    [Op("rooms.snapshot", Subject = OpSubject.View, Touches = OpTouches.Geometry, Effect = OpEffect.Read, Does = "Read zones, rooms and held regions on one named plan view, with geometry and provenance. rooms.roster lists available views without geometry.", Title = "Get Rooms Snapshot", Finds = ["rooms", "snapshot", "levels", "room-regions", "filled-regions"], Cost = OpCost.Bounded)]
     private static RoomsSnapshotData GetRoomsSnapshotCore(RoomsReadRequest request, ProjectDocument activeDocument) =>
         RunTakeoff(activeDocument.Value, doc => Rooms.Snapshot(doc, request.View));
 
