@@ -73,7 +73,10 @@ export type DuctsPage = { [K in keyof typeof fields]: z.output<(typeof fields)[K
 const requestInput = <S extends z.ZodType>(request: S) =>
   z.strictObject({ request: request.optional(), refusal: z.string().nullable().default(null) });
 
-const priceInput = requestInput(ductsApplyInputSchema);
+const priceInput = requestInput(z.union([
+  ductsApplyInputSchema,
+  z.strictObject({ walk: z.strictObject({ unitId: z.number().int(), portIndex: z.number().int() }) }),
+]));
 
 const healInput = requestInput(ductsHealInputSchema);
 
@@ -470,6 +473,7 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
         label: "Choose write scope",
         input: z.strictObject({
           groups: z.array(z.string()).optional(),
+          walk: z.object({ unitId: z.number().int(), portIndex: z.number().int() }).optional(),
           fan: z.object({ unitId: z.number().int(), systemId: z.number().int() }).optional(),
         }),
       },

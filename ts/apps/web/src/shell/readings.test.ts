@@ -815,3 +815,34 @@ it("worker errors end pending honestly and an explicit refresh gets a new channe
   graph.dispose();
   expect(terminations[1]).toHaveBeenCalledTimes(1);
 });
+
+// A stream may be alive yet never complete: progress cannot extend the attempt deadline.
+it("partial publications settle to failure within the original deadline", () => {
+  vi.useFakeTimers();
+  const read = controlled();
+  const { graph } = fixture({ matrix: decl("read") }, { read: read.source });
+  graph.mount(["matrix"]);
+  for (let revision = 0; revision < 3; revision++) {
+    vi.advanceTimersByTime(DEFAULT_WAIT_S * 250);
+    read.attempts[0]!.deliver({ kind: "part", value: revision, revision });
+  }
+  vi.advanceTimersByTime(DEFAULT_WAIT_S * 250 + 1);
+  expect(graph.get("matrix")).toMatchObject({ status: "failed", current: false });
+  graph.dispose();
+  vi.useRealTimers();
+});
+
+it("a recovering subscription with partial evidence becomes stale at its deadline", () => {
+  vi.useFakeTimers();
+  const read = controlled();
+  read.source.recovers = true;
+  const { graph } = fixture({ matrix: decl("read") }, { read: read.source });
+  graph.mount(["matrix"]);
+  read.attempts[0]!.deliver({ kind: "part", value: 1, revision: 0 });
+  vi.advanceTimersByTime(DEFAULT_WAIT_S * 1000 + 1);
+  expect(graph.get("matrix")).toMatchObject({ status: "stale", value: 1, current: false });
+  read.attempts[0]!.deliver({ kind: "complete", value: 2, revision: 1 });
+  expect(graph.get("matrix")).toMatchObject({ status: "ready", value: 2, current: true });
+  graph.dispose();
+  vi.useRealTimers();
+});

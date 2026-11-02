@@ -1,3 +1,4 @@
+import type { SheetReading } from "./sources";
 import { canonicalRouteInput, type DuctsRouteDocument } from "@pe/agent-contracts";
 
 import { EMPTY_CATALOGS, type Catalogs } from "@pe/ducts-domain/catalog";
@@ -74,6 +75,18 @@ function pricing(scope: Scope) {
 const requests = new WeakMap<ReadingState, Map<string, ReturnType<typeof applyRequest>>>();
 
 export function priceRequest(scope: Scope) {
+  if (scope.page.stage === "sheet") {
+    if (!scope.work) throw Error("Read this document's Work before writing");
+    const sheet = current<SheetReading>(scope, "sheet");
+    if (!sheet.open?.overview.fan) throw Error("Choose a fan before writing");
+    if ((sheet.opened?.length ?? 1) > 1) throw Error("Choose one fan to preview its writes");
+    current<DuctSnapshot>(scope, "sheetSnapshot");
+    if (!pendingCount(scope.work.doc, undefined)) throw Error("Nothing edit");
+    // TODO: FD1 live re-drive /fans preview on Chadds; retained-payload proof does not certify native writes.
+    // The host derives the actual request from Work and this fan's connector walk at preview.
+    const { unitId, portIndex } = sheet.open.overview.fan;
+    return { walk: { unitId, portIndex } };
+  }
   const { result, snapshot, doc } = pricing(scope);
 
   if (!pendingCount(doc, snapshot.store)) throw Error("Nothing edit");
@@ -226,7 +239,7 @@ export function ductsWriteStage(id: string, bound: MountBinding, scope: Scope) {
     return null;
   const args = bound.args as {
     refusal?: string | null;
-    request?: { groups?: (string | { group: string })[]; unitId?: number; systemId?: number };
+    request?: { groups?: (string | { group: string })[]; unitId?: number; systemId?: number; walk?: { unitId: number; portIndex: number } };
   };
   if (args.refusal || !args.request) return null;
   const request = args.request;
@@ -234,7 +247,9 @@ export function ductsWriteStage(id: string, bound: MountBinding, scope: Scope) {
     id === "fan-preview" || id === "assign-fan"
       ? { fan: { unitId: request.unitId!, systemId: request.systemId! } }
       : id === "price" || id === "preview"
-        ? {
+        ? request.walk
+          ? { walk: request.walk }
+          : {
             groups: activeSystem(scope.page)
               ? systemScope(current<DuctSnapshot>(scope, "ducts"), activeSystem(scope.page)).groups
               : [],

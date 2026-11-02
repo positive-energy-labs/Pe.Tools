@@ -363,6 +363,7 @@ export const ductsDocumentSchema = z
     /** Authored scope for host-derived repair and fan commands; never a native request. */
     writeIntent: draftCellSchema(z.strictObject({
       groups: z.array(z.string().min(1)).optional(),
+      walk: z.strictObject({ unitId: z.number().int(), portIndex: z.number().int() }).optional(),
       fan: z.strictObject({ unitId: z.number().int(), systemId: z.number().int() }).optional(),
     })).default({}),
     calculation: z.record(z.string().min(1), draftCellSchema(ductCalculationSchema)).default({}),

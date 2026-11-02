@@ -724,8 +724,14 @@ function PaneHead<P, W>({
           data-tone={failed ? "caution" : undefined}
           className="text-ink-2 text-xs"
         >
-          {failed ? "failed" : status === "pending" ? "reading…" : "stale"}
+          {failed ? "failed" : status === "pending" ? "readingâ€¦" : "stale"}
         </span>
+      )}
+      {failed && draws.some((id) => owner.readings.get(id).errorDetails) && (
+        <details className="t-small text-ink-2">
+          <summary>Details</summary>
+          <pre>{draws.map((id) => owner.readings.get(id).errorDetails).filter(Boolean).join("\n")}</pre>
+        </details>
       )}
       <Button
         label="Refresh"

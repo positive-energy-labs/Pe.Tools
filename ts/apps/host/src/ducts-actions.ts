@@ -51,6 +51,16 @@ export async function healSnapshot(
   return read({ kind: "systems", systemIds });
 }
 
+/** A fan preview acquires its connector walk; network previews acquire their authored groups. */
+export async function lossSnapshot(
+  intent: { walk?: { unitId: number; portIndex: number }; groups?: string[] } | undefined,
+  read: (selector: Record<string, unknown>) => Promise<DuctSnapshot>,
+): Promise<DuctSnapshot> {
+  const snapshot = await (intent?.walk ? read({ kind: "from", ...intent.walk }) : healSnapshot(intent?.groups ?? [], read));
+  if (snapshot.walk?.truncated) throw refused("The fan walk is truncated; no writes can be previewed from this scope");
+  return snapshot;
+}
+
 /** Only a fully confirmed heal consumes its intent; partial/refused/preview results remain editable. */
 export function healedCellPaths(
   input: Record<string, unknown>,
@@ -135,7 +145,9 @@ export function ductsExecutors(
               : (() => {
                   throw refused("Stage writeIntent.fan before assigning a fan");
                 })()
-            : await healSnapshot(intent?.groups ?? [], read);
+            : kind === "losses"
+              ? await lossSnapshot(intent, read)
+              : await healSnapshot(intent?.groups ?? [], read);
         const evidence = {
           ...snapshot,
           document: { ...snapshot.document, readAt: "", elapsedMs: 0 },

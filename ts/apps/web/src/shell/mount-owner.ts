@@ -806,16 +806,30 @@ export function createGraphMount<P, W>(
       throw Error(`Row resolved unknown cell type '${subject.type}'`);
     return subject;
   };
-  const binding = (id: string, row?: unknown): MountBinding =>
-    // Kernel-owned verbs (cells, recovery) take kernel args; a route's binding never sees them.
-    kernel.verbs[id]
-      ? { subject: cellSubject(row), args: {} }
-      : verbs[id]?.kind === "recovery"
-        ? { subject: null, args: {} }
-        : (adapters.binding?.(id, row, bindingScope()) ?? {
-            subject: null,
-            args: {},
-          });
+  const bindingFaults = new Map<string, string>();
+  const binding = (id: string, row?: unknown): MountBinding => {
+    bindingFaults.delete(id);
+    if (kernel.verbs[id]) return { subject: cellSubject(row), args: {} };
+    if (verbs[id]?.kind === "recovery") return { subject: null, args: {} };
+    const reachable = new Set<string>();
+    const include = (key: string) => {
+      if (reachable.has(key)) return;
+      reachable.add(key);
+      for (const dep of graph.readings[key]?.deps ?? []) include(dep);
+    };
+    for (const pane of graph.stages[stage()]!.panes)
+      for (const key of graph.panes[pane]?.draws ?? []) include(key);
+    for (const key of adapters.verbReadings?.[id] ?? []) include(key);
+    const bound = bindingScope();
+    bound.readings = new Proxy(bound.readings, {
+      get(target, key: string) {
+        if (typeof key === "string" && graph.readings[key] && !reachable.has(key))
+          bindingFaults.set(id, `Verb ${id} binds reading ${key}, which stage ${stage()} never demands`);
+        return Reflect.get(target, key);
+      },
+    });
+    return adapters.binding?.(id, row, bound) ?? { subject: null, args: {} };
+  };
   // Writing verbs wait out a conflict; queries only read, so they still run.
   /** A failed dependency names its failure; it never reads as "refreshing". */
   const failedDependency = (id: string) => {
@@ -830,7 +844,7 @@ export function createGraphMount<P, W>(
       ? "This route is inactive"
       : conflict && scope.conflict && verbs[id]?.effect !== "query"
         ? CONFLICT_REFUSAL
-        : failedDependency(id);
+        : bindingFaults.get(id) ?? failedDependency(id);
   const retryRefusal = () => {
     if (!rejected) return "There is no unaccepted edit";
     if (scope.closed || scope.failure) return scope.failure ?? "This Work is closed";

@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { canonicalRouteInput } from "@pe/agent-contracts";
 import { DEFAULT_WAIT_S } from "#/route/waits";
 import type {
@@ -47,6 +48,7 @@ export interface ReadingState<T = unknown> {
    */
   readonly hash?: string;
   readonly error?: string;
+  readonly errorDetails?: string;
 }
 
 export type ReadingPublication<T = unknown> =
@@ -271,7 +273,11 @@ export function createReadingGraph<P, W>(
     node.wait = setTimeout(() => {
       node.wait = undefined;
       // A live subject holding evidence is stale, not failed: its transport recovers it.
-      if (node.source.recovers && node.state.value !== undefined) return;
+      if (node.source.recovers && node.state.value !== undefined) {
+        put(node, { ...node.state, status: "stale", current: false });
+        flush();
+        return;
+      }
       if (node.context)
         deliver(node, node.context, {
           kind: "failure",
@@ -377,11 +383,14 @@ export function createReadingGraph<P, W>(
       if (complete && fresh) {
         clearTimeout(node.wait);
         node.wait = undefined;
-      } else if (publication.kind === "part" || !node.wait) awaitProgress(node);
+      } else if (!node.wait) awaitProgress(node);
     } else if (publication.kind === "failure") {
-      const error =
-        publication.error instanceof Error ? publication.error.message : String(publication.error);
-      put(node, { ...node.state, status: "failed", complete: false, current: false, error });
+      const mismatch = publication.error instanceof z.ZodError ? publication.error : null;
+      const error = mismatch
+        ? `snapshot contract mismatch: ${mismatch.issues[0]?.path.join(".") || "response"}`
+        : publication.error instanceof Error ? publication.error.message : String(publication.error);
+      put(node, { ...node.state, status: "failed", complete: false, current: false, error,
+        errorDetails: mismatch?.message });
       clearTimeout(node.wait);
       node.wait = undefined;
       deps.log({ kind: "failure", reading: node.id, attempt, message: error });
@@ -497,7 +506,7 @@ export function createReadingGraph<P, W>(
             node.worker?.stop();
             node.worker = undefined;
             node.signature = undefined;
-            put(node, { ...node.state, status: "failed", complete: false, current: false, error });
+            put(node, { ...node.state, status: "failed", complete: false, current: false, error, errorDetails: failed[1].errorDetails });
           }
           continue;
         }

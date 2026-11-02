@@ -153,6 +153,7 @@ Rebuilt 2026-10-21 as current truth after the close of the ducts walk; git holds
 - 2026-10-08, shelved loss-server shape revived on the evaluation-order proof; Specific Coefficient alone as a product shape stays off the table (it is the storage Revit charges).
 
 ## Owed
+- 2026-11-02 FD1: re-drive Chadds `/ducts` and `/fans` after the producer-schema and fan-write fixes. Retained K2 payloads and fixture transport pass; browser preview was unavailable. Confirm names, Picture, and native preview before claiming session proof. Fan write preview currently requires one selected fan.
 
 - Manual D FD2: exact current MUAS-1 pressure remains unproven. Re-drive with r52 fan slot `PE_M_Fan_AirFlow`, terminal slot `revit:Flow`, 900 cfm and the accepted intake connection. The 2026-10-29 whole-document snapshot and K2 capture differ in geometry and cap connectivity; they are not an exact before/after acquisition pair. No Revit session was started for FD2.
 

@@ -133,3 +133,11 @@ test("a failed worker reading names its failure to the verb and holds until its 
   expect(owner.readings.get("calc")).toMatchObject({ status: "ready", value: "priced" });
   expect(owner.control("go").refusal).toBeNull();
 });
+
+test("a verb cannot silently bind a reading unreachable from its active stage", () => {
+  const f = fixture();
+  f.graph.panes.body.draws = [];
+  const owner = createGraphMount(f.graph, f.adapters);
+  expect(owner.control("go").refusal).toBe("Verb go binds reading calc, which stage edit never demands");
+  owner.dispose();
+});

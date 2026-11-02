@@ -219,3 +219,19 @@ test("Work choices stage the selected heal network, fan pair and system before c
     ductsWriteStage("heal", { subject: null, args: { refusal: "Read first" } }, scope),
   ).toBeNull();
 });
+
+test("fan write previews use the fan reading, never undemanded network pricing", () => {
+  const scope = scopeFor(ductsRouteState.schema.parse({
+    componentDrops: { "10": { edit: { value: { inWg: 0.18 } } } },
+  }));
+  scope.page = { ...scope.page, stage: "sheet" };
+  scope.readings = {
+    sheet: state({ open: { overview: { fan: { unitId: 14577391, portIndex: 2 } } } }),
+    sheetSnapshot: state(snapshot),
+  };
+  const bound = ductsBinding("price", undefined, scope);
+  expect(bound.args).toMatchObject({ refusal: null });
+  expect(ductsWriteStage("price", bound, scope)).toEqual({
+    verb: "stage-write", input: { walk: { unitId: 14577391, portIndex: 2 } },
+  });
+});
