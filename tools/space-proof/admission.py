@@ -10,8 +10,8 @@ The driver switches the product files with `git checkout <ref> -- <files>` and r
 finish unless `git diff HEAD` is empty afterwards. Requests are verbs.py's (pinned picks, verbs-requests.json) in the Region shape.
 Per request: pass 1 (first touch) and pass 2 (repeat); wall s, host ms, Revit private bytes before/after and 4 Hz peak. A refusal or
 error is recorded as the answer (A must be able to refuse a Curve2D sweep) and does not stop the run; any IsModified does.
---extras (B, Chadds): the budget boundary. A box ladder through space-census (count/cost/time/memory), Chadds SA 7 scenes under
-link-boxes and meshes at several reaches, and the overview probe (which classes still fall back to native meshes).
+--extras link,meshes,ladder (Chadds): the budget boundary, one kind per process so each first touch is cold. link: SA 7 and SA 7 + EX 7 scenes under
+link-boxes; meshes: SA 7 meshes at 2, 5, 10, 15 ft; ladder: nested boxes through space-census (count, time, memory).
 """
 import argparse, json, os, subprocess, sys, time
 from pathlib import Path
@@ -99,9 +99,9 @@ def ladder(s, ps, ev, proc, centre, cap_cost):
             break
 
 
-def scenes(s, ps, ev, proc, ids, label):
-    """Chadds SA 7 under both representations at the same reach: the boundary the weight must tell apart."""
-    for rep, pad in [("link-boxes", 15), ("meshes", 2), ("meshes", 5), ("meshes", 10), ("meshes", 15)]:
+def scenes(s, ps, ev, proc, ids, label, plan):
+    """Chadds scenes at stated reaches. One representation per process: a first touch is paid once, so cold costs need fresh processes."""
+    for rep, pad in plan:
         tag = f"scene-{label}-{rep}-{pad}"
         read, resp = call(s, ps, ev, tag, "revit.detail.space-scene",
                           {"elementIds": ids, "contextPaddingFt": pad, "contextRepresentation": rep, "focusOnly": False, "maxTriangles": 3000000})
@@ -158,12 +158,12 @@ def run_variant(variant, model, args, out, results, pins):
         fixture = json.loads((HERE / "fixture.json").read_text(encoding="utf8"))
         ids = fixture[model][systems[0]]["ids"]
         pin = V.get_or_pin_picks(s, model, ev, ids, pins, args.take)
-        reqs = V.build_requests(pin["picks"][: args.take])
+        reqs = [] if args.no_verbs else V.build_requests(pin["picks"][: args.take])
         if args.first_only:
             reqs = [r for r in reqs if r["idx"] == 0]
         # A Curve2D sweep, the request step 6 made refuse on a region-prepared world (Cleremont has the DWGs that make it non-trivial).
-        first = next(r for r in reqs if r["verb"] == "sweep")
-        reqs.append({"id": "sweepcad0", "verb": "sweep", "idx": 0, "request": {**first["request"], "filter": {**first["request"]["filter"], "kinds": ["Curve2D"]}}})
+        first = next((r for r in reqs if r["verb"] == "sweep"), None)
+        if first: reqs.append({"id": "sweepcad0", "verb": "sweep", "idx": 0, "request": {**first["request"], "filter": {**first["request"]["filter"], "kinds": ["Curve2D"]}}})
         proc["requests"] = [r["id"] for r in reqs]
         for pas in range(1, (0 if args.no_repeat else 1) + 2):
             for r in reqs:
@@ -171,10 +171,15 @@ def run_variant(variant, model, args, out, results, pins):
                 read, resp = call(s, ps, ev, tag, f"revit.detail.space-{r['verb']}", r["request"])
                 read.update({"verb": r["verb"], "pass": pas, "reqId": r["id"]})
                 proc["reads"].append(read)
-        if args.extras and model == "chadds":
+        extras = (args.extras or "").split(",")
+        if model == "chadds" and "link" in extras:
+            scenes(s, ps, ev, proc, fixture[model]["SA 7"]["ids"], "sa7", [("link-boxes", 15)])
+            scenes(s, ps, ev, proc, fixture[model]["SA 7"]["ids"] + fixture[model]["EX 7"]["ids"], "sa7ex7", [("link-boxes", 15)])
+        if model == "chadds" and "meshes" in extras:
+            scenes(s, ps, ev, proc, fixture[model]["SA 7"]["ids"], "sa7", [("meshes", 2), ("meshes", 5), ("meshes", 10), ("meshes", 15)])
+        if model == "chadds" and "ladder" in extras:
             c = pin["picks"][0]
             ladder(s, ps, ev, proc, ((c["start"][0] + c["end"][0]) / 2, (c["start"][1] + c["end"][1]) / 2), args.ladder_cap)
-            scenes(s, ps, ev, proc, fixture[model]["SA 7"]["ids"], "sa7")
         proc["budgetLog"] = logs(s)
         proc["endedUtc"] = R.utc()
     finally:
@@ -256,11 +261,12 @@ def main():
     r.add_argument("--models")
     r.add_argument("--variants", default="A,B")
     r.add_argument("--base-ref", default="85db8cb5")
-    r.add_argument("--extras", action="store_true")
+    r.add_argument("--extras", default="", help="comma list: link, meshes, ladder (Chadds, B)")
     r.add_argument("--label", default="admission")
     r.add_argument("--take", type=int, default=2)
     r.add_argument("--settle", type=float, default=20)
     r.add_argument("--first-only", action="store_true")
+    r.add_argument("--no-verbs", action="store_true", help="skip the verb requests (a process kept cold for an extras measurement)")
     r.add_argument("--no-repeat", action="store_true")
     r.add_argument("--ladder-cap", type=int, default=60000)
     r.add_argument("--keep-slot", action="store_true")
