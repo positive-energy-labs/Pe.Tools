@@ -7,22 +7,24 @@ import type { Plugin } from "vite-plus";
 
 const exec = promisify(execFile);
 const graphFile = /[\\/]src[\\/][^/\\]+[\\/]graph\.ts$/;
-async function generateRoutes() {
+async function checkRoutes() {
   // A fresh process avoids retaining jiti's previously imported graph declarations during watch.
   await exec(process.execPath, [
     fileURLToPath(new URL("./scripts/route-graphs.ts", import.meta.url)),
+    "--check",
   ]);
   await exec(process.execPath, [
     fileURLToPath(
       new URL("../../packages/agent-contracts/scripts/route-links-cs.ts", import.meta.url),
     ),
+    "--check",
   ]);
 }
 
-/** Generate before bundling and before graph HMR; admission still checks the actual compiled bytes. */
-export function routeModuleHash(generate = generateRoutes): Plugin {
+/** Bundling and tests only check projections; explicit codegen owns tracked-file writes. */
+export function routeModuleHash(check = checkRoutes): Plugin {
   let pending: Promise<void> = Promise.resolve();
-  const refresh = () => (pending = pending.then(generate, generate));
+  const refresh = () => (pending = pending.then(check, check));
   return {
     name: "route-module-hash",
     enforce: "pre",
@@ -38,7 +40,7 @@ export function routeModuleHash(generate = generateRoutes): Plugin {
       return [];
     },
     async transform(code, id) {
-      // A request arriving during regeneration must not see a new graph with the old directory.
+      // A request arriving during verification must not see a new graph with the old directory.
       await pending;
       if (!graphFile.test(id)) return;
       const hash = routeSourceHash(readFileSync(id));

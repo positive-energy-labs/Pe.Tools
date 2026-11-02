@@ -85,7 +85,8 @@
     "./lang/revit-target": "./src/components/lang/revit-target.tsx"
   },
   "scripts": {
-    "build": "vp build && node scripts/page.mjs",
+    "build": "vp build",
+    "codegen:pages": "node scripts/page.mjs",
     "test": "vp test && node --test tests/*.test.mjs",
     "check": "vp check"
   },
