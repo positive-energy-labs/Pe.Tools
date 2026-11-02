@@ -100,8 +100,6 @@ export interface VerbDecl<S extends z.ZodType = z.ZodType> {
   does?: string;
   /** A query whose result names the subject Work the graph's `workSubject` field then selects. */
   selects?: "work";
-  /** The answer a shown review takes, when the declaration states it for Pea. */
-  answers?: z.ZodType;
   subject?: string;
   input: S;
   /** At most `shown` (ADR 0027 rule 11): Pea may skip it; no review blocks on a person. */
