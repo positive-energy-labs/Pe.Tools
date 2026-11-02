@@ -312,7 +312,7 @@ export function useCollection<T>(options: CollectionOptions<T>) {
     ];
     const rung = levels?.[level];
     const next = levels?.[level + 1];
-    if (next?.independent && query.trim() && !rung?.multi && !rung?.refusal)
+    if (next?.independent && query.trim() && !rung?.refusal)
       pools.push({
         items: next.items(path),
         path,
