@@ -133,7 +133,8 @@ test("preview exposes a derived request without running the write; changed deriv
 test("missing preview and foreign Work refuse before native execution", async () => {
   const f = await fixture();
   f.ctx.admission.input.previewOnly = false;
-  await expect(f.executor.bind(f.ctx)).rejects.toThrow("Preview the current Work");
+  const binding = await f.executor.bind(f.ctx);
+  await expect(binding.prepare!()).rejects.toThrow("Preview the current Work");
   (f.ctx.admission.input.work as { key: { open: { openId: string } } }).key.open.openId = "foreign";
   await expect(f.executor.bind(f.ctx)).rejects.toThrow("another document");
   expect(f.run).not.toHaveBeenCalled();

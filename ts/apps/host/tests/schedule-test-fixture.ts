@@ -318,7 +318,8 @@ export async function setup() {
   const bindReading = async (input: { readingId: string; expectedRevision: number }) => {
     const id = crypto.randomUUID();
     const response = await fetch("/actions", {
-      method: "POST", headers: { "content-type": "application/json" },
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ id, key: "schedule.grid.bind", target: { kind: "host" }, input }),
     });
     if (!response.ok) throw Error(JSON.stringify(await response.json()));
@@ -326,16 +327,23 @@ export async function setup() {
     if (receipt.state !== "succeeded") throw Error(JSON.stringify(receipt));
     return receipt.result;
   };
-  await bindReading( { readingId: reading.id, expectedRevision: 0 });
+  await bindReading({ readingId: reading.id, expectedRevision: 0 });
   expect(
     await patch([{ path: ["cells", "1::2"], value: { edit: { value: "150 VA" } } }]),
   ).toMatchObject({ ok: true });
-  const admission = async (id = crypto.randomUUID()): Promise<ActionAdmission> => ({
-    id,
-    key: "schedule.grid.push",
-    target: { kind: "document", ref: b },
-    input: { work: { key: scope, revision: (await view()).revision } },
-  });
+  const admission = async (id = crypto.randomUUID(), ref = b): Promise<ActionAdmission> => {
+    const value: ActionAdmission = {
+      id,
+      key: "schedule.grid.push",
+      target: { kind: "document", ref },
+      input: { work: { key: scope, revision: (await view()).revision } },
+    };
+    // Exercise the same explicit preview boundary as callers before returning an apply admission.
+    const preview = { ...value, id: `${id}:preview`, input: { ...value.input, previewOnly: true } };
+    const result = await post("/actions", preview);
+    if (result.status !== 409) await owner.wait(preview.id);
+    return value;
+  };
   const post = async (path: string, body: unknown) => {
     const response = await fetch(path, {
       method: "POST",
@@ -362,7 +370,7 @@ export async function setup() {
     patch,
     read,
     bind: async (reading: ScheduleReading) =>
-      bindReading( {
+      bindReading({
         readingId: reading.id,
         expectedRevision: (await view()).revision,
       }),

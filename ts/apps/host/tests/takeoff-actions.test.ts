@@ -1,3 +1,4 @@
+import { workWriteBoundary } from "../src/work-write-boundary.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,8 +17,8 @@ import { sdkSessions } from "./native-receipt-fixture.ts";
 import { RunConsents, type ConsentEvent } from "../src/run-consent.ts";
 import { bindControl } from "../src/control.ts";
 
-test.each(["selected", "unrelated"] as const)(
-  "rooms.write freezes requested room fields while %s Work changes after binding",
+test.each(["selected", "unrelated", "none"] as const)(
+  "rooms.write derives all edited fields and guards %s changes after preview",
   async (changed) => {
     const directory = await mkdtemp(join(tmpdir(), "pe-rooms-command-"));
     const target = { session: "rooms-session", openId: "rooms-document" };
@@ -42,6 +43,7 @@ test.each(["selected", "unrelated"] as const)(
     runs.open(run);
     bindControl({ runs });
     const bridge = {
+      subscribe: () => () => {},
       list: Effect.succeed([
         {
           sessionId: target.session,
@@ -86,11 +88,25 @@ test.each(["selected", "unrelated"] as const)(
       const rendered = (await work.read(key, "rooms"))!;
       const owner = new ActionJournal(join(directory, "journal.jsonl"));
       const deps = { workspace: work, sdk: sdkSessions };
-      const entry = takeoffExecutors(new TakeoffCaptures(directory), bridge, deps)["rooms.write"];
+      const entry = workWriteBoundary(
+        takeoffExecutors(new TakeoffCaptures(directory), bridge, deps)["rooms.write"],
+        bridge,
+        deps,
+      );
       owner.bindCommands({
         ...commandResources(bridge, deps, async (id) => (await owner.list(undefined, id))[0]),
         resolve: () => entry,
       });
+      await owner.invoke(
+        {
+          id: "preview",
+          key: "rooms.write",
+          target: { kind: "document", ref: target },
+          input: { work: { key, revision: rendered.revision }, previewOnly: true },
+        },
+        { caller: { kind: "human", via: "local" }, basis: { kind: "human" } },
+      );
+      expect((await owner.wait("preview")).state).toBe("succeeded");
       await owner.invoke(
         {
           id: "write",
@@ -98,7 +114,6 @@ test.each(["selected", "unrelated"] as const)(
           target: { kind: "document", ref: target },
           input: {
             work: { key, revision: rendered.revision },
-            regions: [{ guid: "room-a", name: "reviewed-a" }],
           },
         },
         {
@@ -109,17 +124,18 @@ test.each(["selected", "unrelated"] as const)(
       await vi.waitFor(() =>
         expect(events.some((event) => event.kind === "permission_request")).toBe(true),
       );
-      await work.publish(
-        key,
-        "rooms",
-        [{ path: ["edits", changed === "selected" ? a : b, "edit", "value"], value: "newer" }],
-        rendered.revision,
-      );
+      if (changed !== "none")
+        await work.publish(
+          key,
+          "rooms",
+          [{ path: ["edits", changed === "selected" ? a : b, "edit", "value"], value: "newer" }],
+          rendered.revision,
+        );
       const ask = events.find((event) => event.kind === "permission_request");
       if (ask?.kind !== "permission_request") throw Error("Missing root consent request");
       runs.decide(run.thread, ask.requestId, "allow_now");
       const receipt = await owner.wait("write");
-      if (changed === "selected") {
+      if (changed !== "none") {
         expect(receipt).toMatchObject({
           state: "failed",
           notDispatched: true,
@@ -130,10 +146,18 @@ test.each(["selected", "unrelated"] as const)(
         expect(receipt.state, JSON.stringify(receipt)).toBe("succeeded");
         expect(calls).toEqual([
           { key: "takeoffs.initialize-carrier", input: { stage: "Rooms" } },
-          { key: "rooms.write", input: { regions: [{ guid: "room-a", name: "reviewed-a" }] } },
+          {
+            key: "rooms.write",
+            input: {
+              regions: [
+                { guid: "room-a", name: "reviewed-a" },
+                { guid: "room-b", name: "reviewed-b" },
+              ],
+            },
+          },
         ]);
         expect((await work.read(key, "rooms"))!.doc).toMatchObject({
-          edits: { [b]: { edit: { value: "newer" } } },
+          edits: { [b]: { edit: { value: "reviewed-b" } } },
         });
       }
     } finally {

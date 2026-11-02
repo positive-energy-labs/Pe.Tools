@@ -54,7 +54,11 @@ export function workWriteBoundary(
       };
       if (ctx.admission.target.kind !== "document") throw refused("Exact document required");
       // Address binding must be checked against the current open, never provenance `from`.
-      if (work.key.binding !== "open" && work.key.binding !== "address")
+      if (
+        work.key.binding !== "open" &&
+        work.key.binding !== "address" &&
+        !(route === "schedules" && key === "schedule.grid.push" && work.key.binding === "workspace")
+      )
         throw refused("Document Work required");
       if (
         work.key.binding === "open" &&
@@ -100,8 +104,6 @@ export function workWriteBoundary(
       // Reproduce generated paths and plan references from this exact preview, never a new caller payload.
       derivedContext.admission.id = !previewOnly && preview ? preview.id : ctx.admission.id;
       const bound = await executor.bind(derivedContext);
-      if (!previewOnly && !preview)
-        throw refused("Preview the current Work first", "preview.stale");
       return {
         ...bound,
         effects: previewOnly ? [] : bound.effects,
@@ -129,6 +131,8 @@ export function workWriteBoundary(
         ],
         prepare: async () => {
           const value = executor.prepared.parse(await bound.prepare?.());
+          if (!previewOnly && !preview)
+            throw refused("Preview the current Work first", "preview.stale");
           const dependencies = [...ctx.consumed, ...(bound.consumes ?? [])].filter(
             (item) => item.kind !== "document-mark",
           );
