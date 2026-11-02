@@ -87,7 +87,8 @@ it.skipIf(!existsSync(CHADDS))(
     // per-path fitting, unpriced only where this fan's air crosses it and the flow is known; the
     // three assumed joins carry none of it (two) or wait on the no-flow share (one): 3 and 3.
     expect(sheet.blockers.length).toBe(3);
-    expect(sheet.assumed.blockers.length).toBe(3);
+    // ba4fd56c (G7): the unserved assumed end now retains its missing-flow blocker.
+    expect(sheet.assumed.blockers.length).toBe(4);
   },
   120_000,
 );

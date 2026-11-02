@@ -43,6 +43,7 @@ beforeEach(() => {
       recovery: [],
       startedAt: "2026-10-30T00:00:00.000Z",
       state: "succeeded",
+      effects: [{ kind: "session", session: "fixture" }],
       result: {},
     }),
   );

@@ -10,11 +10,13 @@ const doc = ductsRouteState.schema.parse({
 });
 
 it("retires only transmitted successful writes, retaining held ESP and partially refused rules", () => {
+  // 07ca5af4: pe-server writes carry the host-priced legs, never native repricing.
+  const results = [{ velocityPressureInWg: 0.02, coefficient: 1 }];
   const input = ductsApplyInputSchema.parse({
     fittings: [
-      { id: 1, method: "pe-server", coefficient: 1, ruleKey: "partial" },
-      { id: 2, method: "pe-server", coefficient: 1, ruleKey: "partial" },
-      { id: 3, method: "pe-server", coefficient: 1, ruleKey: "complete" },
+      { id: 1, method: "pe-server", coefficient: 1, results, ruleKey: "partial" },
+      { id: 2, method: "pe-server", coefficient: 1, results, ruleKey: "partial" },
+      { id: 3, method: "pe-server", coefficient: 1, results, ruleKey: "complete" },
     ],
     terminals: [{ id: 4, inWg: 0.1 }],
     components: [{ id: 5, inWg: 0.2 }],

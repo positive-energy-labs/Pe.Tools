@@ -11,10 +11,8 @@ import { inputsFor } from "./test-inputs.ts";
  * (14517389, 14663504, 14663546) whose :0 ends each sit 0.01 in from an unconnected SupplyAir
  * grille (14548688, 14663834, 14663850; 294 cfm each) and whose :1 ends are open.
  *
- * Tables are not loaded here (`grids: {}`), so every fitting is `not-priced`; that kind is
- * filtered out of every assertion below. Completeness is computed from blockers, so the final
- * assertions re-price the closed sheet with a constant grid stub (every table, every result =
- * 0.1) to assert `complete` for real.
+ * Grid-less reads isolate topology blockers. Constant-grid reads then prove that closing
+ * geometry and pricing fittings still withhold totals until the missing inflows are measured.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { expect, it } from "vite-plus/test";
@@ -48,8 +46,6 @@ const ids = (bs: Sheet["blockers"]) =>
     .sort();
 const noFlow = (s: Sheet) =>
   [...s.blockers, ...s.assumed.blockers].filter((b) => b.kind === "no-flow").map((b) => b.id);
-const byKind = (bs: Sheet["blockers"]) =>
-  bs.reduce<Record<string, number>>((m, b) => ({ ...m, [b.kind]: (m[b.kind] ?? 0) + 1 }), {});
 /** Test-only: every table and result prices at a constant, so completeness is about the walk. */
 const CONSTANT = { title: "stub", xLabel: "x", x: [], grid: [0.1] };
 const stubGrids = new Proxy({}, { get: () => new Proxy({}, { get: () => CONSTANT }) }) as Grids;
@@ -105,7 +101,7 @@ function closeFromPage(input: BuildSheetInput, seed: ConnectorPairRuling[] = [])
 }
 
 it.skipIf(!existsSync(CHADDS))(
-  "FC-23 13760867 on Chadds: siblings carry nothing, walked stubs propose each other, a capped end is no end, and the page closes every gap",
+  "FC-23 13760867 on Chadds: siblings carry nothing, walked stubs propose each other, a capped end is no end, and closing topology retains missing inflows",
   () => {
     const { snap, roster } = load();
     const input: BuildSheetInput = {
@@ -121,19 +117,26 @@ it.skipIf(!existsSync(CHADDS))(
     // return side, is a sibling sharing the trunk, not an outlet share: the `no-flow` it raised
     // (no-flow:13926753:1) is gone and nothing else asks for a share. RV-25, reached at its
     // discharge 13770618:2 beyond 13889080 on the supply side, is a sibling by the same rule.
-    expect(noFlow(sheet)).toEqual([]);
+    // ba4fd56c (G7): unnamed/ERV inflows remain missing on both passes.
+    expect(noFlow(sheet).sort()).toEqual([
+      "no-flow:13771684:0",
+      "no-flow:13771684:0",
+      "no-flow:13975612:1",
+      "no-flow:13975612:1",
+    ]);
     const siblings = sheet.paths.filter((p) => p.end.kind === "sibling-fan");
     expect(siblings.map((p) => `${p.side}:${p.end.elementId}:${p.end.fan!.unitId}`).sort()).toEqual(
       [`return:13926753:${RV7}`, `supply:13889080:${RV25}`],
     );
+    // 0f304f4f: visible notes name the element rather than leaking connector ids.
     expect(sheet.notes).toContainEqual({
       kind: "sibling",
-      text: `sibling RV-7 ${RV7}:2 at 13926753: reached at its inlet on this fan's return side; shares the trunk`,
+      text: `sibling RV-7 at 10\u2033 tapadjustable: reached at its inlet on this fan's return side; shares the trunk`,
       value: null,
     });
     expect(sheet.notes).toContainEqual({
       kind: "sibling",
-      text: `sibling RV-25 ${RV25}:2 at 13889080: reached at its discharge on this fan's supply side; shares the trunk`,
+      text: `sibling RV-25 at 10\u2033 duct: reached at its discharge on this fan's supply side; shares the trunk`,
       value: null,
     });
     // Priced to the junction only: every leg but the last is shared with another path on the
@@ -158,8 +161,8 @@ it.skipIf(!existsSync(CHADDS))(
     // 13975612, and stays a source there.
     expect(sheet.notes).toContainEqual({
       kind: "inflow",
-      text: `inflow from RV-25 ${RV25}:2 at 13975612: unknown; 0 assumed`,
-      value: 0,
+      text: `inflow from RV-25 at 6\u2033 tapadjustable: missing flow`,
+      value: null,
     });
 
     // Every supply path ends at a terminal, an open end, or a named fan.
@@ -216,7 +219,7 @@ it.skipIf(!existsSync(CHADDS))(
     ).toBe(false);
     expect(capped.notes).toContainEqual({
       kind: "capped",
-      text: "open end 8734004:1 ruled capped",
+      text: "an open end on 12\u2033x6\u2033 duct ruled capped",
       value: null,
     });
     expect(capped.basis).not.toBe(sheet.basis);
@@ -245,11 +248,10 @@ it.skipIf(!existsSync(CHADDS))(
     // kaitpw 2026-10-29: the tee at 13771256:0 is a fitting priced by its table per path, never a
     // combined drop on 13771256; only the stubs' joins (a turn with no geometry) take typed path drops.
     expect(Object.keys(blind.fittingDrops)).toEqual(["proposed:14663546:0|14663850:1>14663850"]);
-    expect(ids(blind.closed.blockers)).toEqual([]);
-    expect(ids(blind.closed.assumed.blockers)).toEqual([]);
-    // 72 -> 73 (2026-10-29): the proposed tee at 13771256:0 is a fitting, unpriced on this grid-less read.
-    expect(byKind(blind.closed.blockers)).toEqual({ "not-priced": 73 });
-    expect(byKind(blind.closed.assumed.blockers)).toEqual({ "not-priced": 73 });
+    // ba4fd56c (G7): closing geometry does not supply missing inflow measurements.
+    const missing = ["no-flow:13771684:0", "no-flow:13975612:1"];
+    expect(ids(blind.closed.blockers)).toEqual(missing);
+    expect(ids(blind.closed.assumed.blockers)).toEqual(missing);
     // Honest reading of that closure: the blind loop accepts the same-class stub 17 in away
     // before the cross-class grille 0.01 in away (an unruled crossing never heads a candidate
     // list), so the plenums close in series, 14517389 -> 14663504 -> 14663546 -> grille 14663850.
@@ -259,7 +261,7 @@ it.skipIf(!existsSync(CHADDS))(
         .map((p) => p.end.elementId)
         .sort((a, b) => a - b);
     expect(returnTerminals(blind.closed)).toEqual([13884018, 14584961, 14663850]);
-    // Completeness for real, on the constant grid stub: zero blockers of any kind, both sides complete.
+    // A priced table cannot certify a complete total while inflows are missing.
     const blindPriced = buildSheet({
       ...input,
       grids: stubGrids,
@@ -271,22 +273,11 @@ it.skipIf(!existsSync(CHADDS))(
         fittingDrops: blind.fittingDrops,
       }),
     });
-    expect(blindPriced.blockers).toEqual([]);
-    expect(blindPriced.assumed.blockers).toEqual([]);
-    expect(blindPriced.totals.supply.complete && blindPriced.totals.return.complete).toBe(true);
-    // 2.2049 before 2026-10-28 evening: the volume dampers' 1.0 in-wg family default (all 252 round,
-    // all 49 square) was priced as designer-stated; demoted, they take CD9-1/CR9-1 (0.1 on the stub).
-    // 0.3817 -> 0.4213 the same evening: converging tap Cb re-referenced to the common section.
-    // 0.4213 -> 0.3765 later that evening: converging takeoffs on ER5-1 with Cb on the branch Pv
-    // (no stated-geometry factor on the stub's axis-free grid) and the split taps as bullheads (Cb1
-    // on the larger main stream).
-    // 0.3765 -> 0.3335 (2026-10-29): the proposed tee is priced on its table (the stub) per path
-    // instead of a typed 0.05 combined drop on 13771256, which keeps only its own loss.
-    // fix6 (2026-10-29): the one-way supply splits at 13885163, 9448322 and 9448375 now read Qc as
-    // the real collar total (Qb/Qc 1) instead of 2x the collar flow (0.5). The total does not move
-    // (0.33352 before and after): the stub grid reads one coefficient at every flow ratio, so this pin
-    // cannot see a ratio change; sheet.test.ts (R-Q4, one way) carries that proof on real SD5-9.
-    expect(blindPriced.totals.requiredEspInWg).toBeCloseTo(0.3335, 3);
+    expect(ids(blindPriced.blockers)).toEqual(missing);
+    expect(ids(blindPriced.assumed.blockers)).toEqual(missing);
+    expect(blindPriced.blockers.every((b) => b.kind === "no-flow")).toBe(true);
+    expect(blindPriced.totals.return.complete).toBe(false);
+    expect(blindPriced.totals.requiredEspInWg).toBeNull();
 
     // The per-plenum closure: accept each stub's own grille first (the pair each inferred-join
     // names once its stub neighbour is taken), then the same loop. Each plenum ends at its grille.
@@ -298,8 +289,8 @@ it.skipIf(!existsSync(CHADDS))(
         { pair: ["14663546:0", "14663850:1"], verdict: "accept" },
       ],
     );
-    expect(ids(seeded.closed.blockers)).toEqual([]);
-    expect(ids(seeded.closed.assumed.blockers)).toEqual([]);
+    expect(ids(seeded.closed.blockers)).toEqual(missing);
+    expect(ids(seeded.closed.assumed.blockers)).toEqual(missing);
     expect(returnTerminals(seeded.closed)).toEqual([
       13884018, 14548688, 14584961, 14663834, 14663850,
     ]);
@@ -314,12 +305,10 @@ it.skipIf(!existsSync(CHADDS))(
         fittingDrops: seeded.fittingDrops,
       }),
     });
-    expect(seededPriced.blockers).toEqual([]);
-    expect(seededPriced.totals.supply.complete && seededPriced.totals.return.complete).toBe(true);
-    // 0.7079 -> 0.8062 the same evening: converging tap Cb re-referenced to the common section;
-    // 0.8062 -> 0.6969 later: ER5-1 on the branch Pv and the split taps as bullheads (see above).
-    // 0.6969 -> 0.6539 (2026-10-29): the proposed tee on its table per path, as above.
-    expect(seededPriced.totals.requiredEspInWg).toBeCloseTo(0.6539, 3); // 2.2054 with the 1.0 damper default
+    expect(ids(seededPriced.blockers)).toEqual(missing);
+    expect(seededPriced.blockers.every((b) => b.kind === "no-flow")).toBe(true);
+    expect(seededPriced.totals.return.complete).toBe(false);
+    expect(seededPriced.totals.requiredEspInWg).toBeNull();
   },
   240_000,
 );
@@ -346,6 +335,7 @@ it.skipIf(!existsSync(CHADDS))(
     // enters a return stream at the class change 13342116 (an outlet, unnamed); it cites its cause.
     expect(sheet.assumed.blockers.filter((b) => b.kind === "no-flow")).toMatchObject([
       { id: "no-flow:13342116:0", causedBy: "inferred-join:8738359:1" },
+      { id: "no-flow:8738359:1", causedBy: "inferred-join:8732550:3" },
     ]);
     expect(sheet.walkedElementIds).toContain(13415684);
     expect(sheet.walkedElementIds).toContain(12871538);
@@ -429,11 +419,6 @@ const LIVE: Grids = {
     },
   },
 };
-const unknownErv = (ref: string) => ({
-  cfm: 0,
-  source: `unknown (0 assumed): ERV ${ref}'s discharge reaches no terminal it supplies; type the unit design flow`,
-});
-
 it.skipIf(!existsSync(CHADDS))(
   "assumed fan flow on Chadds: FC-23, RV-25 and RV-7 no longer share one value; an ERV whose discharge reaches no terminal is unknown",
   () => {
@@ -457,11 +442,9 @@ it.skipIf(!existsSync(CHADDS))(
     });
     // RV-25's discharge merges into FC-23's return and RV-7's into another fan's inlet: neither
     // supplies a terminal through its own discharge, so neither borrows a sum.
-    expect(rv25).toEqual(unknownErv(`${RV25}:2`));
-    expect(rv7).toEqual(unknownErv(`${RV7}:2`));
-    expect(fc.cfm).not.toBe(rv25.cfm);
-    expect(new Set([fc, rv25, rv7].map((f) => f.source)).size).toBe(3);
-
+    // ba4fd56c (G7): unknown ERVs are absent from the assumed-flow map.
+    expect(rv25).toBeUndefined();
+    expect(rv7).toBeUndefined();
     const sheet = buildSheet({
       snapshot: snap,
       fan: { unitId: FC23, portIndex: 1 },
@@ -469,11 +452,10 @@ it.skipIf(!existsSync(CHADDS))(
       grids: {},
       inputs: inputsFor(snap, { slot: "revit:Flow" }),
     });
-    expect(sheet.notes).toContainEqual({
-      kind: "assumed-flow",
-      text: `fan ${RV25}:2 cfm (assumed): ${unknownErv(`${RV25}:2`).source}`,
-      value: 0,
-    });
+    expect(
+      sheet.notes.some((n) => n.kind === "assumed-flow" && n.text.startsWith(`fan ${RV25}:2`)),
+    ).toBe(false);
+    expect(sheet.totals.requiredEspAssumedInWg).toBeNull();
   },
   120_000,
 );
@@ -521,6 +503,9 @@ it.skipIf(!existsSync(CHADDS))(
         Array.from({ length: n }, () => ({
           value: null,
           source: "none",
+          units: "in-wg",
+          status: "missing",
+          version: null,
           ref: `family placeholder 1 on ${n}`,
         })),
       );

@@ -96,11 +96,13 @@ afterEach(() => {
 });
 
 async function mounted() {
+  // Each case owns an independent Work store and therefore a distinct document incarnation.
+  const session = crypto.randomUUID();
   const key: WorkKey = {
     binding: "open",
     route: "data-tables",
     target: null,
-    open: { session: "fixture", openId: "document-a" },
+    open: { session, openId: "document-a" },
   };
   const stored = new Map<string, unknown>();
   const workspace = new RouteWorkspace({
@@ -122,7 +124,7 @@ async function mounted() {
     },
   });
   let scope: MountScope<DataTablesWork> = {
-    target: { kind: "document", ref: { session: "fixture", openId: "document-a" } },
+    target: { kind: "document", ref: { session, openId: "document-a" } },
     work: { handle: { key, revision: 0 }, doc: dataTablesWorkSchema.parse({}) },
   };
   const listeners = new Set<() => void>();
@@ -178,6 +180,7 @@ async function mounted() {
   await router.load();
   const view = render(<RouterProvider router={router} />);
   await view.findByRole("button", { name: "Open table" });
+  releases.push(() => owner.dispose());
   return {
     view,
     owner: () => owner,
@@ -186,7 +189,7 @@ async function mounted() {
     write: ports.write,
     key,
     selectDocument: async (openId: string) => {
-      const ref = { session: "fixture", openId };
+      const ref = { session, openId };
       const selected: WorkKey = { binding: "open", route: "data-tables", target: null, open: ref };
       const envelope = await workspace.view(selected, "data-tables");
       scope = {

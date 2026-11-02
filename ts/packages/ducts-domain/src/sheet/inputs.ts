@@ -343,20 +343,29 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
         stated != null ||
         placeholder ||
         run.componentDrops?.[id]
-      )
-        components[id] = {
-          drop: pick(
-            {
-              run: { value: run.componentDrops?.[id]?.inWg },
-              Work: { value: typed ?? family },
-              model: {
-                value: placeholder ? null : stated,
-                ref: slots.componentDrop ?? "Pressure Drop",
-              },
+      ) {
+        const resolved = pick(
+          {
+            run: { value: run.componentDrops?.[id]?.inWg },
+            Work: { value: typed ?? family },
+            model: {
+              value: placeholder ? null : stated,
+              ref: slots.componentDrop ?? "Pressure Drop",
             },
-            "in-wg",
-          ),
+          },
+          "in-wg",
+        );
+        // A missing value still needs the reason this model parameter was demoted.
+        components[id] = {
+          drop:
+            resolved.status === "missing" && placeholder
+              ? {
+                  ...resolved,
+                  ref: `family placeholder ${placeholder.inWg} on ${placeholder.count}`,
+                }
+              : resolved,
         };
+      }
     }
   }
 

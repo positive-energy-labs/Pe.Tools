@@ -51,10 +51,30 @@ vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({
       prepared: { state: "unprepared" },
       recovery: [],
       startedAt: "2026-10-30T00:00:00.000Z",
+      effects: [{ kind: "session", session: "fixture" }],
       result: {},
     }),
   ),
 }));
+// The standalone bay still requires current machine evidence before dispatch.
+vi.mock("./sources", async () => {
+  const { MACHINE_SEEDS, BAY_RECENTS, BAY_THREADS } = await import("./seeds");
+  const fixed = (value: unknown) => ({
+    kind: "use",
+    dirties: ["sdk"],
+    open: (_: unknown, deliver: (event: unknown) => void) =>
+      deliver({ kind: "complete", value, revision: 1 }),
+  });
+  return {
+    openSources: () => ({
+      "open.machine": fixed((MACHINE_SEEDS["patch-bay"] as { observation: Machine }).observation),
+      "open.recents": fixed(BAY_RECENTS),
+      "open.threads": fixed(BAY_THREADS),
+      "open.receipts": fixed([]),
+      "open.world": { kind: "feed", open: () => {} },
+    }),
+  };
+});
 HTMLElement.prototype.scrollIntoView = vi.fn();
 beforeEach(() => {
   vi.stubGlobal(

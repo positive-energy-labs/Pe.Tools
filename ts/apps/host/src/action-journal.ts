@@ -1520,9 +1520,13 @@ export class ActionJournal implements ReceiptReader {
             process ??
             (incarnation?.kind === "incarnation" ? incarnation.probe.process : undefined);
           const step: ActionStep = {
-            id: kind === "native" && !row.steps.some((step) => step.kind === "native")
-              ? row.id
-              : randomUUID(),
+            // Opaque caller ids cannot serve as the SDK's native request UUID.
+            id:
+              kind === "native" &&
+              !row.steps.some((step) => step.kind === "native") &&
+              z.uuid().safeParse(row.id).success
+                ? row.id
+                : randomUUID(),
             kind,
             key,
             input: structuredClone(input),
