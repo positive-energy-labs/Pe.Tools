@@ -6,7 +6,7 @@ import { createReadingGraph, type ReadingDelivery } from "./readings";
 
 afterEach(cleanup);
 
-test("kernel gap: revealing a retained app tab does not reacquire unchanged readings", async () => {
+test("revealing a retained app tab does not reacquire unchanged readings", async () => {
   const attempts: ReadingDelivery[] = [];
   const close = vi.fn();
   const value = { context: "retained model" };

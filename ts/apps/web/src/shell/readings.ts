@@ -231,6 +231,11 @@ export function createReadingGraph<P, W>(
       now.values.every((value, i) => value === node.launched!.values[i])
     );
   };
+  const retained = (node: Node<P>) =>
+    (node.source.kind === "use" || node.source.kind === "feed" || node.source.kind === "derive") &&
+    node.trigger?.kind === "demand" &&
+    node.context !== undefined &&
+    node.state.status !== "failed";
   const owned = (node: Node<P>, attempt: ReadingAttempt) =>
     !disposed && node.context?.attempt === attempt;
   const put = (node: Node<P>, state: Omit<ReadingState, "version">) => {
@@ -531,6 +536,12 @@ export function createReadingGraph<P, W>(
         node.demand--;
         if (acquire) node.mounted--;
         if (node.demand || disposed) continue;
+        // Retention by kind (ADR 0027 rule 9, ADR 0028): a hidden pane keeps a demand
+        // subscription's value, signature and live attempt, so revealing it reacquires nothing.
+        // Workers and ports hold real compute/handles, and a verb's capture belongs to its
+        // invocation; those release now. ponytail: undemanded subscriptions live until target/Work
+        // retirement or dispose; add an idle timeout if hidden tabs pile up SSE streams.
+        if (acquire && retained(node)) continue;
         detach(node);
         node.worker?.stop();
         node.worker = undefined;

@@ -538,13 +538,16 @@ describe("reading graph", () => {
     graph.dispose();
   });
 
-  it("explicit Stop and pane-only release revoke every publication path", () => {
+  it("pane release retains its subscription; explicit Stop revokes every publication path", () => {
     const read = controlled();
     const { graph, logs } = fixture({ matrix: decl("read") }, { read: read.source });
     const release = graph.mount(["matrix"]);
     const paneRead = read.attempts[0];
     release();
+    // ADR 0027 rule 9: a hidden pane keeps its demand subscription and its old content.
+    expect(paneRead.context.signal.aborted).toBe(false);
     done(paneRead.deliver, 1);
+    expect(graph.get("matrix")).toMatchObject({ value: 1, current: true });
     graph.start("matrix", "press");
     const verbRead = read.attempts.at(-1)!;
     graph.cancel("matrix", "other-press");
@@ -552,7 +555,7 @@ describe("reading graph", () => {
     graph.cancel("matrix", "press");
     done(verbRead.deliver, 2);
     expect(graph.get("matrix").current).toBe(false);
-    expect(logs.filter((log) => log.kind === "drop")).toHaveLength(2);
+    expect(logs.filter((log) => log.kind === "drop")).toHaveLength(1);
     graph.dispose();
   });
 
