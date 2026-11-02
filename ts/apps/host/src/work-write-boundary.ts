@@ -12,6 +12,7 @@ import {
   type Tool,
   type WorkHandle,
   type Consumed,
+  type WriteBoundaryBinding,
 } from "@pe/agent-contracts";
 import { refused, type CommandContext, type CommandExecutor } from "./command-executor.ts";
 
@@ -59,16 +60,6 @@ const preparedSchema = z.object({
   takenAt: z.string(),
 });
 
-export interface WriteBinding {
-  route: string;
-  key: string;
-  workspace?: boolean;
-  derive(work: unknown): unknown;
-  preview(request: unknown): unknown;
-  nativePreview?: boolean;
-  previewOnly?: boolean;
-  handle?(input: Record<string, unknown>): WorkHandle;
-}
 
 // TODO: docs/features/routes/LEDGER.md#s3-native-seal Prove preview/refetch/apply in browser against a controlled Revit session.
 /** Keep native derivation/recovery in its owner; admit only authored, revisioned Work. */
@@ -76,19 +67,22 @@ export function workWriteBoundary(
   executor: CommandExecutor,
   bridge: RevitBridge["Service"],
   deps: { sdk?: SdkReceiptReader } = {},
-  binding?: WriteBinding,
   registeredWork?: import("@pe/agent-contracts").RouteStateSpec<z.ZodType>,
+  /** The preview entry has its own executor (a native TransactRead leaf); otherwise it is synthesized. */
+  ownsPreview = false,
 ): CommandExecutor {
   const definition = executor.definition as import("@pe/agent-contracts").Command & {
     authoredInput: z.ZodType;
-    writeBoundary: WriteBinding;
+    writeBoundary: WriteBoundaryBinding;
   };
-  const hooks = binding ?? definition.writeBoundary;
+  const hooks = definition.writeBoundary;
+  if (hooks?.phase !== "preview" && hooks?.phase !== "apply")
+    throw Error("Write command requires a preview or apply phase");
   if (!hooks || typeof hooks.derive !== "function" || typeof hooks.preview !== "function")
     throw Error("Write command requires typed derive and preview bindings");
   if (!executor.seal) throw Error("Write command requires a producer-owned seal projection");
   const project = executor.seal;
-  const { route, key } = hooks;
+  const { route } = hooks;
   const spec = (registeredWork ??
     (tools[route as keyof typeof tools] as Tool)?.work)! as NonNullable<Tool["work"]> & {
     schema: z.ZodType<Record<string, unknown>>;
@@ -104,12 +98,9 @@ export function workWriteBoundary(
     bind: async (ctx) => {
       documentMarks(bridge);
       const takenAt = new Date().toISOString();
-      const parsed = definition.input.parse(ctx.admission.input) as {
-        work: WorkHandle;
-        previewOnly: boolean;
-      };
-      const work = hooks.handle ? hooks.handle(ctx.admission.input) : parsed.work;
-      const previewOnly = hooks.previewOnly ?? parsed.previewOnly;
+      const { work } = definition.input.parse(ctx.admission.input) as { work: WorkHandle };
+      // The entry is the mode: seal at the TransactRead preview, recheck at the ModelWrite.
+      const previewOnly = hooks.phase === "preview";
       if (ctx.admission.target.kind !== "document") throw refused("Exact document required");
       const target = ctx.admission.target.ref;
       const observed = await lifetime(bridge, target, false, deps);
@@ -132,9 +123,8 @@ export function workWriteBoundary(
         .receipts()
         .filter(
           (row) =>
-            row.key === key &&
+            row.key === hooks.previewKey &&
             row.state === "succeeded" &&
-            (row.result as { previewOnly?: boolean })?.previewOnly &&
             canonicalRouteInput(row.target) === canonicalRouteInput(ctx.admission.target),
         )
         .at(-1);
@@ -199,7 +189,7 @@ export function workWriteBoundary(
     },
     run: async (ctx, execution) => {
       const p = preparedSchema.parse(execution.prepared);
-      if (p.previewOnly && !hooks.nativePreview)
+      if (p.previewOnly && !ownsPreview)
         return {
           previewOnly: true,
           derivedRequest: project(p.value).request,

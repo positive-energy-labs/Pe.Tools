@@ -74,7 +74,7 @@ export function healedCellPaths(
   input: Record<string, unknown>,
   value: DuctsHeal.Res.Response,
 ): string[][] {
-  if (input.previewOnly || value.previewOnly) return [];
+  if (value.previewOnly) return [];
   const requested = input.groups as DuctsHeal.Req.DuctHealGroup[];
   return requested?.length &&
     requested.every((group) => {
@@ -238,11 +238,11 @@ export function ductsExecutors(
             return { input: intent.fan, dependencies: ductWriteEvidence(snapshot) };
           },
         }[kind]();
-        return { process, input: { ...input, previewOnly }, dependencies };
+        return { process, input, dependencies };
       },
     };
   };
-  const run = async (ctx: CommandContext, execution: ActionExecution, kind: Kind) => {
+  const run = async (ctx: CommandContext, execution: ActionExecution, kind: Kind, preview: boolean) => {
     const p = prepared.parse(execution.prepared),
       target = targetOf(ctx);
     const entry = {
@@ -258,7 +258,8 @@ export function ductsExecutors(
       },
       "assign-fan": { key: "ducts.assign-fan", retires: () => [] as string[][] },
     }[kind];
-    const key = entry.key;
+    // A preview calls the native TransactRead sibling; only the apply entry reaches the ModelWrite leaf.
+    const key = preview ? `${entry.key}.preview` : entry.key;
     const value = await execution.step(
       "native",
       key,
@@ -298,12 +299,9 @@ export function ductsExecutors(
             key,
             // The registry wraps this at boot: `commands[key].writeBoundary` carries the binding.
             command(commands[key], prepared, {
-              seal: (p) => ({
-                request: commands[key].derivation.preview(p),
-                evidence: p.dependencies,
-              }),
+              seal: (p) => ({ request: p.input, evidence: p.dependencies }),
               bind: (ctx) => bind(ctx, kind, preview),
-              run: (ctx, execution) => run(ctx, execution, kind),
+              run: (ctx, execution) => run(ctx, execution, kind, preview),
             }),
           ];
         }),

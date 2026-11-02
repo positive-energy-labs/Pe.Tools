@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { canonicalRouteInput } from "@pe/agent-contracts";
+import { canonicalRouteInput, isWritePreviewKey } from "@pe/agent-contracts";
 import { DEFAULT_WAIT_S } from "#/route/waits";
 import type {
   ActionReceipt,
@@ -723,13 +723,13 @@ export function createReadingGraph<P, W>(
       flush();
     },
     acceptReceipt(
-      receipt: Pick<ActionReceipt, "id" | "state" | "effects" | "target"> & Partial<Pick<ActionReceipt, "input">>,
+      receipt: Pick<ActionReceipt, "id" | "state" | "effects" | "target"> & Partial<Pick<ActionReceipt, "input" | "key">>,
       dirties: readonly string[] = [],
     ) {
       if (disposed) return;
       // Successful reads and explicit previews with no effects preserve their review evidence.
       // Unknown or failed execution still falls back to the target when its effects are uncertain.
-      if (receipt.effects.length === 0 && (receipt.state === "succeeded" || receipt.input?.previewOnly === true)) return;
+      if (receipt.effects.length === 0 && (receipt.state === "succeeded" || (receipt.key !== undefined && isWritePreviewKey(receipt.key)))) return;
       if (receipt.state === "waiting" || receipt.state === "running") return;
       const stamp = canonicalRouteInput([receipt.id, receipt.state, receipt.effects, dirties]);
       if (receiptVersions.has(stamp)) return;

@@ -45,10 +45,7 @@ test.each(writes)(
             target: null,
             open: { session: "A", openId: "B" },
           };
-          // Ducts carries its own revisioned handle, declared by the binding's `handle` hook.
-          return "handle" in entry.writeBoundary
-            ? { work: { key: foreign, expectedRevision: 1 } }
-            : { work: { key: foreign, revision: 1 }, previewOnly: false };
+          return { work: { key: foreign, revision: 1 } };
         })(),
       },
     } as unknown as CommandContext;

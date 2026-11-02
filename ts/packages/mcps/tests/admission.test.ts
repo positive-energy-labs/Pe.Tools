@@ -290,7 +290,7 @@ test("semantic recovery normalizes declared defaults before reading a later thre
     id: "old-sync",
     key: "takeoffs.sync",
     target: destination,
-    input: { ...selected, previewOnly: false },
+    input: selected,
   });
   const { posts, reads } = host(original);
   const recover = (input: Record<string, unknown>, override?: unknown) =>
@@ -314,10 +314,6 @@ test("semantic recovery normalizes declared defaults before reading a later thre
     result: { id: "old-sync" },
   });
   expect(await recover({ ...selected, work: { ...selected.work, revision: 14 } })).toMatchObject({
-    isError: true,
-    content: expect.stringContaining("conflicts"),
-  });
-  expect(await recover({ ...selected, previewOnly: true })).toMatchObject({
     isError: true,
     content: expect.stringContaining("conflicts"),
   });

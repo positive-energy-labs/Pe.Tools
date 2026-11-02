@@ -153,18 +153,26 @@ export function nativeEntry(op: HostOperationDefinition): CatalogRow {
     cost: op.costTier,
     cardinality: op.cardinality as CatalogRow["cardinality"],
     internal: op.internal,
+    rollsBack: op.rollsBack,
+    // A native write leaf with a `<key>.preview` sibling is bound to it, so the linker checks its axis.
+    ...(hostOpCatalog.some((other) => other.key === `${op.key}.preview`)
+      ? { previewBy: `${op.key}.preview` }
+      : {}),
     uses: [],
   };
 }
 function commandAxes(key: string, action: Command): CatalogLink {
   const uses = action.native ?? (hostOpCatalog.some((op) => op.key === key) ? [key] : []);
   const axes = commandCatalogAxes[key as keyof typeof commandCatalogAxes];
+  const boundary = (action as { writeBoundary?: import("./write-intent.ts").WriteBoundaryBinding })
+    .writeBoundary;
   if (!axes) throw Error(`Command ${key} has no declared catalog axes`);
   return {
     key: `command:${key}`,
     uses,
     ...axes,
-    ...(axes.effect === "ModelWrite" ? action.derivation : {}),
+    ...(boundary ? action.derivation : {}),
+    ...(boundary?.phase === "apply" ? { previewBy: `command:${boundary.previewKey}` } : {}),
   };
 }
 export const catalogEntries: readonly CatalogRow[] = [

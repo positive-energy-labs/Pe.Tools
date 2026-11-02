@@ -343,7 +343,7 @@ export async function setup() {
       input: { work: { key: scope, revision: (await view()).revision } },
     };
     // Exercise the same explicit preview boundary as callers before returning an apply admission.
-    const preview = { ...value, id: `${id}:preview`, input: { ...value.input, previewOnly: true } };
+    const preview = { ...value, id: `${id}:preview`, key: "schedule.grid.push.preview" };
     const result = await post("/actions", preview);
     if (result.status !== 409) await owner.wait(preview.id);
     return value;

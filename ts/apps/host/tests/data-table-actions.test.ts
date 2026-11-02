@@ -101,11 +101,11 @@ async function fixture(
     kind: "apply",
   });
   const invoke = async (raw?: unknown) => {
-    const call = async (input: unknown) => {
+    const call = async (input: unknown, key = "data-table.apply") => {
       const admitted = await owner.invoke(
         actionAdmissionSchema.parse({
           id: crypto.randomUUID(),
-          key: "data-table.apply",
+          key,
           target: { kind: "document", ref },
           input,
         }),
@@ -114,7 +114,7 @@ async function fixture(
       return owner.wait(admitted.id);
     };
     if (raw) return call(raw);
-    await call(commands["data-table.apply"].work.bind({ previewOnly: true }, { key, revision: 1 }));
+    await call(commands["data-table.apply.preview"].work.bind({}, { key, revision: 1 }), "data-table.apply.preview");
     return call(commands["data-table.apply"].work.bind({}, { key, revision: 1 }));
   };
   return { work, registrations, sent, invoke };

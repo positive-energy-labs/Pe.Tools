@@ -124,7 +124,6 @@ test.each(writes)("%s preview round-trips its public response contract", async (
     takenAt: "2026-11-02T15:17:11.675Z",
     seal: { requestHash: "request", work: {}, incarnation: {}, dependencies: "dependencies" },
   };
-  if (key.startsWith("ducts.")) value.input.previewOnly = true;
   const result = await executor.run(
     {
       admission: {

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { podExecutor } from "../src/pod-executor.ts";
 import { admitPodModule, podCommand, podReadRequest } from "../src/pod-routes.ts";
 import { RouteWorkspace } from "@pe/runtime";
-import { field, pane, workWriteCommand, writeIntentSchema } from "@pe/agent-contracts";
+import { field, pane, workWriteCommands, writeIntentSchema } from "@pe/agent-contracts";
 import type { CommandContext, CommandExecutor } from "../src/command-executor.ts";
 import type { ActionExecution } from "../src/action-journal.ts";
 
@@ -12,7 +12,7 @@ for (const namespace of ["alpha", "beta"]) {
   const route = `pod.${namespace}.tool`, read = `pod.${namespace}.read`, write = `pod.${namespace}.write`;
   function fixture() {
     let transforms = 0;
-    const definition = workWriteCommand(route, write, { axes: { subject: "Elements", touches: ["Metadata"], effect: "ModelWrite", cost: "Mutation", cardinality: "One" }, says: "Write", needs: "document", effect: "command", dirties: ["snapshot"], input: z.object({ value: z.string() }) });
+    const definition = workWriteCommands(route, write, { axes: { subject: "Elements", touches: ["Metadata"], effect: "ModelWrite", cost: "Mutation", cardinality: "One" }, says: "Write", needs: "document", effect: "command", dirties: ["snapshot"], input: z.object({ value: z.string() }) })[write];
     const query = { axes: { subject: "Elements", touches: ["Metadata"], effect: "Read", cost: "Cheap", cardinality: "One" }, says: "Read", needs: "document", effect: "query", dirties: [], input: z.object({ value: z.string() }) } as const;
     const native: CommandExecutor = {
       definition, prepared: z.unknown(),

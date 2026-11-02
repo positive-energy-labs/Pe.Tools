@@ -45,12 +45,12 @@ const inputsOf = (inputs: Extract<PricedLeg["source"], { kind: "rule" }>["inputs
 const byId = <T extends { id: number }>(xs: T[]) => xs.sort((a, b) => a.id - b.id);
 
 /**
- * The native `ducts.apply` request (less `previewOnly`) from one fan sheet: every rule-priced
+ * The native `ducts.apply` request from one fan sheet: every rule-priced
  * fitting leg under its table (unpriced and inferred (negative id) legs left out), every drop,
  * every terminal flow, the fan's required ESP only when complete, and the store carried forward
  * at the revision read. Rulings and roles in the store pass through untouched.
  */
-export function applyRequest(input: ApplyRequestInput): Omit<DuctsApplyInput, "previewOnly"> {
+export function applyRequest(input: ApplyRequestInput): DuctsApplyInput {
   const seen = new Set<number>();
   const fittings = byId(
     input.legs.flatMap((leg) => {

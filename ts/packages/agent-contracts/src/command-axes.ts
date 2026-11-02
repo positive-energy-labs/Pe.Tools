@@ -1,8 +1,16 @@
 import type { CatalogAxes } from "./catalog.ts";
-import type { hostActions } from "./semantic-actions.ts";
+import { hostActions } from "./semantic-actions.ts";
+
+type HostActionKey = keyof typeof hostActions;
+/** Keys built as the TransactRead half of a Work write; their axes derive from the write. */
+type PreviewKey = {
+  [K in HostActionKey]: (typeof hostActions)[K] extends { writeBoundary: { phase: "preview" } }
+    ? K
+    : never;
+}[HostActionKey];
 
 /** Explicit command budgets; adding a command requires an axis declaration. */
-export const commandCatalogAxes = {
+const declaredAxes = {
   "data-table.apply": {
     subject: "Elements",
     touches: ["Metadata"],
@@ -49,6 +57,7 @@ export const commandCatalogAxes = {
     subject: "Elements",
     touches: ["Geometry"],
     effect: "TransactRead",
+    rollsBack: true,
     cost: "Mutation",
     cardinality: "One",
   },
@@ -77,6 +86,7 @@ export const commandCatalogAxes = {
     subject: "Elements",
     touches: ["Geometry"],
     effect: "TransactRead",
+    rollsBack: true,
     cost: "Mutation",
     cardinality: "One",
   },
@@ -192,13 +202,6 @@ export const commandCatalogAxes = {
     cost: "Mutation",
     cardinality: "One",
   },
-  "ducts.preview-losses": {
-    subject: "Elements",
-    touches: ["Geometry"],
-    effect: "TransactRead",
-    cost: "Mutation",
-    cardinality: "One",
-  },
   "ducts.apply-losses": {
     subject: "Elements",
     touches: ["Geometry"],
@@ -206,24 +209,10 @@ export const commandCatalogAxes = {
     cost: "Mutation",
     cardinality: "One",
   },
-  "ducts.preview-heal": {
-    subject: "Elements",
-    touches: ["Geometry"],
-    effect: "TransactRead",
-    cost: "Mutation",
-    cardinality: "One",
-  },
   "ducts.apply-heal": {
     subject: "Elements",
     touches: ["Geometry"],
     effect: "ModelWrite",
-    cost: "Mutation",
-    cardinality: "One",
-  },
-  "ducts.preview-assign-fan": {
-    subject: "Elements",
-    touches: ["Topology"],
-    effect: "TransactRead",
     cost: "Mutation",
     cardinality: "One",
   },
@@ -402,4 +391,29 @@ export const commandCatalogAxes = {
     cost: "Mutation",
     cardinality: "One",
   },
-} satisfies Record<keyof typeof hostActions, CatalogAxes>;
+} satisfies Record<Exclude<HostActionKey, PreviewKey>, CatalogAxes>;
+
+/**
+ * A preview has the write's subject, Touches and cost by construction, Effect TransactRead and a
+ * declared rollback; the linker refuses a ModelWrite whose preview binding breaks that.
+ */
+const previewAxes = Object.fromEntries(
+  Object.entries(hostActions).flatMap(([key, action]) =>
+    "writeBoundary" in action && action.writeBoundary.phase === "preview"
+      ? [
+          [
+            key,
+            {
+              ...declaredAxes[action.writeBoundary.key as keyof typeof declaredAxes],
+              effect: "TransactRead",
+              rollsBack: true,
+            },
+          ],
+        ]
+      : [],
+  ),
+) as unknown as Record<PreviewKey, CatalogAxes>;
+export const commandCatalogAxes: Record<HostActionKey, CatalogAxes> = {
+  ...declaredAxes,
+  ...previewAxes,
+};

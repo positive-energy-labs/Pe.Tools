@@ -15,6 +15,8 @@ export interface CatalogAxes {
   cardinality: Value<typeof opCardinality>;
   cap?: number;
   internal?: boolean;
+  /** TransactRead's declaration that every transaction it opens is rolled back (ADR 0028). */
+  rollsBack?: boolean;
 }
 export interface CatalogLink extends CatalogAxes {
   key: string;
@@ -22,6 +24,8 @@ export interface CatalogLink extends CatalogAxes {
     | string
     | { key: string; cardinality: Value<typeof opCardinality>; cap?: number }
   )[];
+  /** A ModelWrite's seal-at-preview entry: TransactRead, rolled back, same Touches. */
+  previewBy?: string;
   derive?: NonNullable<import("./command.ts").Command["derivation"]>["derive"];
   preview?: NonNullable<import("./command.ts").Command["derivation"]>["preview"];
 }
@@ -61,6 +65,10 @@ export function linkCatalog(entries: readonly CatalogLink[]): string[] {
       (typeof entry.derive !== "function" || typeof entry.preview !== "function")
     )
       errors.push(`${entry.key}: missing executable derive/preview binding`);
+    if (entry.effect === "TransactRead" && entry.rollsBack !== true)
+      errors.push(`${entry.key}: TransactRead must declare rollback`);
+    if (entry.key.startsWith("command:") && entry.effect === "ModelWrite" && !entry.previewBy)
+      errors.push(`${entry.key}: ModelWrite has no preview binding`);
     if (byKey.has(entry.key)) errors.push(`Duplicate catalog key: ${entry.key}`);
     if (
       entry.touches.includes("Geometry") &&
@@ -69,6 +77,16 @@ export function linkCatalog(entries: readonly CatalogLink[]): string[] {
     )
       errors.push(`${entry.key}: geometry over many subjects requires a cap`);
     byKey.set(entry.key, entry);
+  }
+  // Seal at preview binds to a rolled-back read of the same footprint; recheck at apply binds to the write.
+  for (const entry of byKey.values()) {
+    if (!entry.previewBy) continue;
+    const preview = byKey.get(entry.previewBy);
+    if (!preview) errors.push(`${entry.key}: unknown preview ${entry.previewBy}`);
+    else if (preview.effect !== "TransactRead")
+      errors.push(`${entry.key}: preview ${preview.key} is ${preview.effect}, not TransactRead`);
+    else if ([...preview.touches].sort().join() !== [...entry.touches].sort().join())
+      errors.push(`${entry.key}: preview ${preview.key} touches differ`);
   }
   const visited = new Set<string>(),
     active = new Set<string>();

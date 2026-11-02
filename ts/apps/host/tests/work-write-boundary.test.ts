@@ -10,7 +10,7 @@ import { hostOwnership } from "../src/host-ownership.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 
 const writes = Object.entries(commands).filter(([, definition]) => "writeBoundary" in definition);
-test.each(writes)("%s accepts only revisioned Work and preview choice", (_key, definition) => {
+test.each(writes)("%s accepts only revisioned Work, never a preview flag", (_key, definition) => {
   const work = {
     key: {
       binding: "open",
@@ -20,14 +20,11 @@ test.each(writes)("%s accepts only revisioned Work and preview choice", (_key, d
     },
     revision: 1,
   };
-  const ducts = "handle" in (definition as { writeBoundary: object }).writeBoundary;
-  expect(
-    definition.input.safeParse(
-      ducts ? { work: { key: work.key, expectedRevision: work.revision } } : { work, previewOnly: true },
-    ).success,
-  ).toBe(true);
+  expect(definition.input.safeParse({ work }).success).toBe(true);
   for (const input of [
     {},
+    { work, previewOnly: true },
+    { work, nativePreview: true },
     { source: {} },
     { work, regions: [] },
     { work, table: {} },
@@ -61,9 +58,9 @@ async function fixture() {
   let request = "one";
   let evidence: unknown = { model: 1 };
   const run = vi.fn(async () => ({ applied: true }));
-  const executor = workWriteBoundary(
+  const make = (definition: Command) => workWriteBoundary(
     {
-      definition: commands["schedule.apply"],
+      definition,
       prepared: z.object({ request: z.string(), dependencies: z.unknown() }),
       bind: async (ctx) => {
         expect(ctx.admission.input.source).toEqual({
@@ -85,6 +82,8 @@ async function fixture() {
     bridge,
     { sdk: sdkSessions },
   );
+  const executors = { preview: make(commands["schedule.apply.preview"]), apply: make(commands["schedule.apply"]) };
+  let executor = executors.preview;
   const doc = tools.schedules.work.schema.parse({
     writeIntent: {
       "schedule.apply": {
@@ -97,7 +96,7 @@ async function fixture() {
       id: "preview",
       key: "schedule.apply",
       target: { kind: "document", ref },
-      input: { work, previewOnly: true },
+      input: { work },
     },
     caller: { kind: "human", via: "local" },
     basis: null,
@@ -108,7 +107,13 @@ async function fixture() {
   };
   return {
     ctx,
-    executor,
+    get executor() {
+      return executor;
+    },
+    /** Recheck at apply: the write entry, not a flag on the preview. */
+    apply: () => {
+      executor = executors.apply;
+    },
     run,
     receipts,
     evidence: (value: unknown) => {
@@ -130,13 +135,13 @@ test("preview exposes a derived request without running the write; changed deriv
   expect(f.run).not.toHaveBeenCalled();
   f.receipts.push({
     id: "preview",
-    key: "schedule.apply",
+    key: "schedule.apply.preview",
     target: f.ctx.admission.target,
     state: "succeeded",
     result: preview,
     startedAt: new Date().toISOString(),
   } as ActionReceipt);
-  f.ctx.admission.input.previewOnly = false;
+  f.apply();
   const apply = await f.executor.bind(f.ctx);
   await expect(apply.prepare!()).resolves.toMatchObject({
     seal: (preview as { seal: unknown }).seal,
@@ -154,12 +159,12 @@ test("re-derived identical inputs apply; a changed dependency refuses before exe
   } as ActionExecution);
   f.receipts.push({
     id: "preview",
-    key: "schedule.apply",
+    key: "schedule.apply.preview",
     target: f.ctx.admission.target,
     state: "succeeded",
     result: preview,
   } as ActionReceipt);
-  f.ctx.admission.input.previewOnly = false;
+  f.apply();
   f.evidence({ model: 1 });
   const apply = await f.executor.bind(f.ctx);
   await f.executor.run(f.ctx, { prepared: await apply.prepare!() } as ActionExecution);
@@ -171,7 +176,7 @@ test("re-derived identical inputs apply; a changed dependency refuses before exe
 
 test("missing preview and foreign Work refuse before native execution", async () => {
   const f = await fixture();
-  f.ctx.admission.input.previewOnly = false;
+  f.apply();
   const binding = await f.executor.bind(f.ctx);
   await expect(binding.prepare!()).rejects.toThrow("Preview the current Work");
   (f.ctx.admission.input.work as { key: { open: { openId: string } } }).key.open.openId = "foreign";
@@ -187,13 +192,13 @@ test("a new Work revision invalidates the seal even when the request is identica
   } as ActionExecution);
   f.receipts.push({
     id: "preview",
-    key: "schedule.apply",
+    key: "schedule.apply.preview",
     target: f.ctx.admission.target,
     state: "succeeded",
     result: preview,
     startedAt: new Date().toISOString(),
   } as ActionReceipt);
-  f.ctx.admission.input.previewOnly = false;
+  f.apply();
   (f.ctx.admission.input.work as { revision: number }).revision++;
   const apply = await f.executor.bind(f.ctx);
   await expect(apply.prepare!()).rejects.toThrow("Preview changed");
@@ -211,12 +216,12 @@ test("refetching the same dependency set in a different order preserves the prev
   } as ActionExecution);
   f.receipts.push({
     id: "preview",
-    key: "schedule.apply",
+    key: "schedule.apply.preview",
     target: f.ctx.admission.target,
     state: "succeeded",
     result: preview,
   } as ActionReceipt);
-  f.ctx.admission.input.previewOnly = false;
+  f.apply();
   f.ctx.consumed = [b, a, b];
   const apply = await f.executor.bind(f.ctx);
   await expect(apply.prepare!()).resolves.toMatchObject({
@@ -240,7 +245,7 @@ test("re-pricing a changed preview remains a successful read and never runs a wr
     const bound = await f.executor.bind(f.ctx);
     const preview = await f.executor.run(f.ctx, { prepared: await bound.prepare!() } as ActionExecution);
     expect(preview).toMatchObject({ previewOnly: true });
-    f.receipts.push({ id, key: "schedule.apply", target: f.ctx.admission.target,
+    f.receipts.push({ id, key: "schedule.apply.preview", target: f.ctx.admission.target,
       state: "succeeded", result: preview, startedAt: new Date().toISOString() } as ActionReceipt);
     f.change();
   }

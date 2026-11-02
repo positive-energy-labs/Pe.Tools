@@ -405,7 +405,7 @@ const buildSchema = nativeSchema.extend({
 });
 const parameterApplySchema = nativeSchema.extend({
   input: nativeInputSchema("revit.apply.parameter-links").refine(
-    (input) => input.profile != null && input.previewOnly === false && input.reconcile === true,
+    (input) => input.profile != null && input.reconcile === true,
     "Apply must write and reconcile",
   ),
 });
@@ -1547,8 +1547,8 @@ export function familyExecutors(
             const result = (await invoke(
               bridge,
               bound.target,
-              "revit.apply.parameter-links",
-              { profile, previewOnly: true, reconcile: false },
+              "revit.apply.parameter-links.preview",
+              { profile, reconcile: false },
               `${ctx.admission.id}:evaluate`,
             )) as { evaluation?: { issues?: { severity?: string }[] } };
             if (
@@ -1560,7 +1560,7 @@ export function familyExecutors(
           return {
             kind: "native",
             process: bound.process,
-            input: { profile, previewOnly: false, reconcile: true },
+            input: { profile, reconcile: true },
           };
         },
       };
@@ -1763,11 +1763,7 @@ export async function readFamily(
         : "Stage a profile before evaluating it",
     );
   const data = evaluate
-    ? await native("revit.apply.parameter-links", {
-        profile,
-        previewOnly: true,
-        reconcile: false,
-      })
+    ? await native("revit.apply.parameter-links.preview", { profile, reconcile: false })
     : await native("revit.detail.parameter-links", { includeEvaluation: false });
   const reading: FamilyCapture["reading"] = {
     kind: "parameter-links",

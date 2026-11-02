@@ -192,7 +192,7 @@ test("pipes preview and apply use the shared Work boundary and durable journal",
       probe: async () => true,
       resolve: (key) => {
         const pod = podCommand(key)!;
-        return workWriteBoundary(pod.executor, bridge, { sdk: sdkSessions }, undefined, pod.work);
+        return workWriteBoundary(pod.executor, bridge, { sdk: sdkSessions }, pod.work);
       },
     });
     for (const previewOnly of [true, false]) {

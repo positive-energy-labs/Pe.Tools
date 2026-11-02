@@ -1,12 +1,11 @@
 import { stagedRoomWrites, roomsRouteState as roomsWorkSchema } from "./rooms.ts";
-import { workWriteCommand, writeIntentSchema, writeCommandResultSchema } from "./write-intent.ts";
+import { workWriteCommands, writeIntentSchema } from "./write-intent.ts";
 import { instancesActions, instancesReading, instancesSessionSelection } from "./instances.ts";
 import { scheduleActions, scheduleReads } from "./schedule-actions.ts";
 import { familyActions, familyReads } from "./family-actions.ts";
 import { stagedRoomEditSchema } from "./takeoffs.ts";
 import { nativeProcessSchema } from "./action-receipts.ts";
 import { z } from "zod";
-import { workKeySchema } from "./route-state.ts";
 import { executionTargetSchema } from "./target.ts";
 
 import type { Command } from "./command.ts";
@@ -115,54 +114,6 @@ const definitions = {
 } as const;
 export const takeoffActions = definitions;
 
-/**
- * /ducts verbs: one native op, `ducts.apply`, once with `previewOnly` and once for real. Their own
- * keys, so `operations call ducts.apply` still names the native op.
- */
-const ductsWorkCommand = <C extends Command & { input: z.ZodObject }>(
-  kind: "losses" | "heal" | "assign-fan",
-  previewOnly: boolean,
-  definition: C,
-) => {
-  const derivation = {
-    derive: (work: unknown) => stagedDucts(ductsRouteState.schema.parse(work)),
-    preview: (value: unknown) => {
-      const { previewOnly: _, ...request } = z
-        .object({ input: z.record(z.string(), z.unknown()) })
-        .parse(value).input;
-      return request;
-    },
-  };
-  return {
-    derivation,
-    // Ducts keeps its own revisioned handle and a separate preview key; the host registry wraps
-    // by catalog axis and reads this binding, so no ModelWrite is shape-attached.
-    writeBoundary: {
-      route: "ducts",
-      key: `ducts.preview-${kind}`,
-      workspace: false,
-      previewOnly,
-      nativePreview: true,
-      handle: (input: Record<string, unknown>) => {
-        const handle = input.work as { key: z.infer<typeof workKeySchema>; expectedRevision: number };
-        return { key: handle.key, revision: handle.expectedRevision };
-      },
-      ...derivation,
-    },
-    ...definition,
-    result: writeCommandResultSchema(definition.result),
-    input: z.strictObject({
-      work: z.strictObject({ key: workKeySchema, expectedRevision: z.number().int().nonnegative() }),
-    }),
-    work: {
-      route: "ducts",
-      bind: (_input: unknown, handle: import("./command.ts").WorkHandle) => ({
-        work: { key: handle.key, expectedRevision: handle.revision },
-      }),
-    },
-  };
-};
-
 export const ductsActions = {
   "ducts.refresh": {
     says: "Read this document's duct snapshots and pricing inputs again.",
@@ -172,7 +123,7 @@ export const ductsActions = {
     dirties: ["snapshot"],
   },
   "ducts.preview-losses": {
-    native: ["ducts.apply"],
+    native: ["ducts.apply.preview"],
     says: "Plan the staged duct loss writes (fitting coefficients, terminal and component drops, fan static) and report each write's outcome without changing Revit.",
     needs: "project-document",
     effect: "query",
@@ -188,7 +139,7 @@ export const ductsActions = {
     dirties: ["snapshot"],
   },
   "ducts.preview-heal": {
-    native: ["ducts.heal"],
+    native: ["ducts.heal.preview"],
     says: "Preview healing duct groups in Revit: cap dangling open ends, connect coincident same-size ends, close same-size gaps of at most 3 in; runs every repair and Pe's post-check, then rolls all of it back. Name a group without items to preview everything the Ducts route would heal there; show the person the per-item outcome before any apply.",
     needs: "project-document",
     effect: "query",
@@ -204,7 +155,7 @@ export const ductsActions = {
     dirties: ["snapshot"],
   },
   "ducts.preview-assign-fan": {
-    native: ["ducts.assign-fan"],
+    native: ["ducts.assign-fan.preview"],
     says: "Preview making a unit the fan of a duct system in Revit (Duct Systems > Select Equipment: the system's base equipment): runs Pe's guards, the write and its read back, then rolls it back. Refuses a system that already has base equipment, and a unit with no port of the system's air classification in that system or on its ducts. Show the person the outcome before any apply.",
     needs: "project-document",
     effect: "query",
@@ -240,6 +191,8 @@ import { scheduleGridRouteState } from "./schedule-grid-data.ts";
 import { takeoffsRouteState } from "./takeoffs.ts";
 import { roomsRouteState } from "./rooms.ts";
 import { stagedDucts, ductsRouteState } from "./ducts.ts";
+/** Ducts derives its native request from the whole staged Work, not one writeIntent cell. */
+const ductsDerive = (work: unknown) => stagedDucts(ductsRouteState.schema.parse(work));
 export const dataTableDraftSchema = z.object({
   name: z.string(),
   isNew: z.boolean(),
@@ -262,7 +215,7 @@ export const tools = {
       editable: [["writeIntent", "*"]],
     },
     commands: {
-      "data-table.apply": workWriteCommand("data-tables", "data-table.apply", {
+      ...workWriteCommands("data-tables", "data-table.apply", {
         native: ["data-table.apply"],
         says: "Upsert the reviewed table by name and row key; prune rows absent from the draft.",
         needs: "project-document",
@@ -294,14 +247,14 @@ export const tools = {
     commands: {
       "family.attach-spec": workCommand("family", familyActions["family.attach-spec"]),
       "family.observe": workCommand("family", familyActions["family.observe"], { optional: true }),
-      "family.capture": workWriteCommand(
+      ...workWriteCommands(
         "family",
         "family.capture",
         familyActions["family.capture"],
       ),
       "family.plan": workCommand("family", familyActions["family.plan"]),
-      "family.apply": workWriteCommand("family", "family.apply", familyActions["family.apply"]),
-      "family.build": workWriteCommand("family", "family.build", familyActions["family.build"]),
+      ...workWriteCommands("family", "family.apply", familyActions["family.apply"]),
+      ...workWriteCommands("family", "family.build", familyActions["family.build"]),
     },
   },
   families: {
@@ -312,13 +265,13 @@ export const tools = {
       editable: [["writeIntent", "*"], ["cells", "*"], ["patch"], ["scope"]],
     },
     commands: {
-      "families.capture": workWriteCommand(
+      ...workWriteCommands(
         "families",
         "families.capture",
         familyActions["families.capture"],
       ),
       "families.plan": workCommand("families", familyActions["families.plan"]),
-      "families.apply": workWriteCommand(
+      ...workWriteCommands(
         "families",
         "families.apply",
         familyActions["families.apply"],
@@ -331,7 +284,7 @@ export const tools = {
     says: parameterLinksRouteState.description,
     work: { ...parameterLinksRouteState, editable: [["writeIntent", "*"], ["profile"]] },
     commands: {
-      "parameter-links.apply": workWriteCommand(
+      ...workWriteCommands(
         "parameter-links",
         "parameter-links.apply",
         familyActions["parameter-links.apply"],
@@ -350,18 +303,18 @@ export const tools = {
     },
     commands: {
       "schedule.grid.bind": scheduleActions["schedule.grid.bind"],
-      "schedule.grid.push": workWriteCommand(
+      ...workWriteCommands(
         "schedules",
         "schedule.grid.push",
         scheduleActions["schedule.grid.push"],
         { workspace: true },
       ),
-      "schedule.capture": workWriteCommand(
+      ...workWriteCommands(
         "schedules",
         "schedule.capture",
         scheduleActions["schedule.capture"],
       ),
-      "schedule.apply": workWriteCommand(
+      ...workWriteCommands(
         "schedules",
         "schedule.apply",
         scheduleActions["schedule.apply"],
@@ -380,22 +333,22 @@ export const tools = {
       ],
     },
     commands: {
-      "takeoffs.initialize": workWriteCommand(
+      ...workWriteCommands(
         "takeoffs",
         "takeoffs.initialize",
         definitions["takeoffs.initialize"],
       ),
-      "takeoffs.adopt": workWriteCommand(
+      ...workWriteCommands(
         "takeoffs",
         "takeoffs.adopt",
         definitions["takeoffs.adopt"],
       ),
-      "takeoffs.partition": workWriteCommand(
+      ...workWriteCommands(
         "takeoffs",
         "takeoffs.partition",
         definitions["takeoffs.partition"],
       ),
-      "takeoffs.sync": workWriteCommand("takeoffs", "takeoffs.sync", definitions["takeoffs.sync"]),
+      ...workWriteCommands("takeoffs", "takeoffs.sync", definitions["takeoffs.sync"]),
     },
   },
   rooms: {
@@ -410,13 +363,13 @@ export const tools = {
       ],
     },
     commands: {
-      "rooms.partition": workWriteCommand(
+      ...workWriteCommands(
         "rooms",
         "rooms.partition",
         definitions["rooms.partition"],
       ),
-      "rooms.draw": workWriteCommand("rooms", "rooms.draw", definitions["rooms.draw"]),
-      "rooms.write": workWriteCommand(
+      ...workWriteCommands("rooms", "rooms.draw", definitions["rooms.draw"]),
+      ...workWriteCommands(
         "rooms",
         "rooms.write",
         {
@@ -425,7 +378,7 @@ export const tools = {
         },
         { derive: (work) => ({ regions: stagedRoomWrites(roomsWorkSchema.schema.parse(work)) }) },
       ),
-      "rooms.merge": workWriteCommand("rooms", "rooms.merge", definitions["rooms.merge"]),
+      ...workWriteCommands("rooms", "rooms.merge", definitions["rooms.merge"]),
     },
   },
   ducts: {
@@ -460,12 +413,18 @@ export const tools = {
     },
     commands: {
       "ducts.refresh": ductsActions["ducts.refresh"],
-      "ducts.preview-losses": ductsWorkCommand("losses", true, ductsActions["ducts.preview-losses"]),
-      "ducts.apply-losses": ductsWorkCommand("losses", false, ductsActions["ducts.apply-losses"]),
-      "ducts.preview-heal": ductsWorkCommand("heal", true, ductsActions["ducts.preview-heal"]),
-      "ducts.apply-heal": ductsWorkCommand("heal", false, ductsActions["ducts.apply-heal"]),
-      "ducts.preview-assign-fan": ductsWorkCommand("assign-fan", true, ductsActions["ducts.preview-assign-fan"]),
-      "ducts.apply-assign-fan": ductsWorkCommand("assign-fan", false, ductsActions["ducts.apply-assign-fan"]),
+      ...workWriteCommands("ducts", "ducts.apply-losses", ductsActions["ducts.apply-losses"], {
+        derive: ductsDerive,
+        preview: { key: "ducts.preview-losses", definition: ductsActions["ducts.preview-losses"] },
+      }),
+      ...workWriteCommands("ducts", "ducts.apply-heal", ductsActions["ducts.apply-heal"], {
+        derive: ductsDerive,
+        preview: { key: "ducts.preview-heal", definition: ductsActions["ducts.preview-heal"] },
+      }),
+      ...workWriteCommands("ducts", "ducts.apply-assign-fan", ductsActions["ducts.apply-assign-fan"], {
+        derive: ductsDerive,
+        preview: { key: "ducts.preview-assign-fan", definition: ductsActions["ducts.preview-assign-fan"] },
+      }),
     },
   },
   instances: {
@@ -575,3 +534,14 @@ export const hostActions = {
 } satisfies Record<string, Command>;
 export type HostActionKey = keyof typeof hostActions;
 export type SemanticActionKey = keyof typeof commands;
+/** The TransactRead half of a Work write: its receipt is review evidence, never a commit. */
+export function isWritePreviewKey(key: string): boolean {
+  const command = commands[key as SemanticActionKey] as { writeBoundary?: { phase: string } } | undefined;
+  return command?.writeBoundary?.phase === "preview";
+}
+/** The preview entry a Work write seals at. */
+export function writePreviewKey<K extends SemanticActionKey>(key: K): SemanticActionKey {
+  const command = commands[key] as { writeBoundary?: { previewKey: string } };
+  if (!command.writeBoundary) throw Error(`${key} is not a Work write`);
+  return command.writeBoundary.previewKey as SemanticActionKey;
+}
