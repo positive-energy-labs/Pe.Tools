@@ -1,5 +1,6 @@
 import {
   READING_MAX_FRAME_BYTES,
+  readingRequestSchema,
   READING_MAX_REQUEST_BYTES,
   readingKey,
   readingRequestsSchema,
@@ -44,6 +45,27 @@ export function observeResources(
     publish({ kind: "failure", key, error: `Resource '${request.kind}' is unavailable` });
     return () => {};
   };
+}
+
+// Subscription ownership is host-local and scoped to the same observer as the stream.
+const connections = new WeakMap<ResourceObserver, Map<string, (add: ReadingRequest[], remove: string[]) => void>>();
+export async function updateResourceSubscriptions(request: Request, observe: ResourceObserver): Promise<Response> {
+  const id = new URL(request.url).searchParams.get("connection") ?? "";
+  const update = connections.get(observe)?.get(id);
+  if (!update) return Response.json({ error: "Reading connection retired" }, { status: 409 });
+  const raw = await request.text();
+  if (new TextEncoder().encode(raw).byteLength > READING_MAX_REQUEST_BYTES)
+    return Response.json({ error: "Resource request is too large" }, { status: 400 });
+  try {
+    const value = JSON.parse(raw);
+    const add = readingRequestSchema.array().max(32).parse(value.add);
+    if (!Array.isArray(value.remove) || value.remove.length > 32 || value.remove.some((key: unknown) => typeof key !== "string"))
+      throw Error("Invalid removals");
+    update(add, value.remove);
+    return Response.json({ ok: true });
+  } catch {
+    return Response.json({ error: "Invalid resource keys" }, { status: 400 });
+  }
 }
 
 /** The pseudo-key of the one host log lane in the ready set. */
@@ -94,7 +116,11 @@ export function resourceResponse(
   let closed = false;
   let demand: (() => void) | undefined;
   let stalled: ReturnType<typeof setTimeout> | undefined;
-  const releases: Array<() => void> = [];
+  const releases = new Map<string, () => void>();
+  const connection = url.searchParams.get("connection");
+  let registry = connections.get(observe);
+  if (!registry) connections.set(observe, registry = new Map());
+  if (connection && registry.has(connection)) return Response.json({ error: "Connection already exists" }, { status: 409 });
   let controller: ReadableStreamDefaultController<Uint8Array>;
   const encode = (frame: ReadingFrame) =>
     encoder.encode(
@@ -120,7 +146,9 @@ export function resourceResponse(
     closed = true;
     clearTimeout(stalled);
     request.signal.removeEventListener("abort", abort);
-    for (const release of releases.splice(0)) release();
+    if (connection) registry!.delete(connection);
+    for (const release of releases.values()) release();
+    releases.clear();
     pending.clear();
     ready.clear();
     tails.clear();
@@ -209,17 +237,34 @@ export function resourceResponse(
           abort();
           return;
         }
-        for (const [key, value] of requested) {
-          if (closed) break;
-          if (value.kind === "world") publish({ kind: "gap", key, dropped: null });
-          try {
-            const release = observe(value, publish, after);
-            if (closed) release();
-            else releases.push(release);
-          } catch (error) {
-            publish({ kind: "failure", key, error: String(error) });
+        const update = (add: ReadingRequest[], remove: string[]) => {
+          if (closed) return;
+          for (const key of remove) {
+            requested.delete(key);
+            releases.get(key)?.();
+            releases.delete(key);
+            pending.delete(key);
+            ready.delete(key);
+            tails.delete(key);
+            rejected.delete(key);
           }
-        }
+          for (const value of add) {
+            const key = readingKey(value);
+            if (releases.has(key)) continue;
+            requested.set(key, value);
+            rejected.set(key, encode({ kind: "failure", key, error: "Resource value exceeds the frame limit or cannot be serialized." }));
+            if (value.kind === "world") publish({ kind: "gap", key, dropped: null });
+            try {
+              const release = observe(value, publish, after);
+              if (closed) release();
+              else releases.set(key, release);
+            } catch (error) {
+              publish({ kind: "failure", key, error: String(error) });
+            }
+          }
+        };
+        if (connection) registry!.set(connection, update);
+        update([...requested.values()], []);
       },
       pull() {
         clearTimeout(stalled);

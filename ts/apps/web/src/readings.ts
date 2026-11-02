@@ -1,6 +1,6 @@
 import { currentFixture } from "#/shell/fixture-lane";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
-import { runtimeStreamUrl } from "#/host/runtime";
+import { hostFetch, runtimeStreamUrl } from "#/host/runtime";
 /**
  * The wire. One EventSource per tab: SSE frames, fences, reconnect backoff and wake resync.
  *
@@ -35,8 +35,7 @@ type Source = Pick<EventSource, "onopen" | "onmessage" | "onerror" | "close">;
 const READING_DEADLINE_MS = 30_000;
 /** Reconnect delays double from 1 s to this ceiling, and reset on the first fresh frame. */
 const RETRY_CEILING_MS = 30_000;
-/** A tab hidden at least this long resyncs when it is shown again (a frozen tab's socket lies). */
-const WAKE_AFTER_MS = 5_000;
+
 
 /** The one place the web opens an SSE stream: Readings, and a harness thread's tail. */
 export const openEventSource = (url: string) => new EventSource(runtimeStreamUrl(url));
@@ -53,6 +52,9 @@ export class PeReadings {
     }
   >();
   private source?: Source;
+  private connection = "";
+  private sent = new Map<string, ReadingRequest>();
+  private updating = false;
   /** A replacement cannot retire the active stream until it has opened. */
   private opening?: Source;
   private generation = 0;
@@ -88,6 +90,12 @@ export class PeReadings {
       }
       const frame = requestAnimationFrame(deliver);
       return () => cancelAnimationFrame(frame);
+    },
+    private readonly update: (connection: string, add: ReadingRequest[], remove: string[]) => Promise<void> = async (connection, add, remove) => {
+      const url = new URL(peRouteUrl("resources.subscriptions", {}, resolveWorkbenchConfig().origin));
+      url.searchParams.set("connection", connection);
+      const response = await hostFetch(url.href, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ add, remove }) });
+      if (!response.ok) throw Error(`Reading subscriptions: ${response.status}`);
     },
   ) {}
 
@@ -153,22 +161,10 @@ export class PeReadings {
 
   private watchWake() {
     if (this.unwatchWake || typeof document === "undefined") return;
-    let hiddenAt: number | undefined;
-    const visibility = () => {
-      if (document.visibilityState === "hidden") hiddenAt ??= Date.now();
-      else if (hiddenAt !== undefined) {
-        const slept = Date.now() - hiddenAt;
-        hiddenAt = undefined;
-        if (slept >= WAKE_AFTER_MS) this.resync();
-      }
-    };
-    const online = () => this.resync();
-    document.addEventListener("visibilitychange", visibility);
+    // Visibility is not a change of basis. The live stream keeps delivering while hidden.
+    const online = () => { if (this.faulted) this.resync(); };
     window.addEventListener("online", online);
-    this.unwatchWake = () => {
-      document.removeEventListener("visibilitychange", visibility);
-      window.removeEventListener("online", online);
-    };
+    this.unwatchWake = () => window.removeEventListener("online", online);
   }
 
   subscribe(raw: ReadingRequest, listener: (frame: Frame) => void): () => void {
@@ -185,7 +181,6 @@ export class PeReadings {
     const key = readingKey(request);
     let entry = this.entries.get(key);
     if (!entry) {
-      if (this.entries.size >= READING_MAX_KEYS) throw Error("Too many Pe reading subscriptions");
       entry = { request, listeners: new Set(), stale: true };
       this.entries.set(key, entry);
       this.schedule(false);
@@ -272,9 +267,33 @@ export class PeReadings {
       this.scheduled = false;
       clearTimeout(this.retry);
       this.retry = undefined;
+      const fenced = this.pendingFenced;
       this.pendingFenced = false;
-      this.open();
+      if (!fenced && (this.source || this.opening)) void this.syncSubscriptions();
+      else this.open();
     });
+  }
+
+  private async syncSubscriptions() {
+    if (this.updating || !this.source || this.opening || this.closed) return;
+    this.updating = true;
+    const connection = this.connection;
+    try {
+      while (!this.closed && this.connection === connection) {
+        const remove = [...this.sent.keys()].filter(key => !this.entries.has(key)).slice(0, READING_MAX_KEYS);
+        const add = [...this.entries].filter(([key]) => !this.sent.has(key)).slice(0, READING_MAX_KEYS);
+        if (!remove.length && !add.length) break;
+        await this.update(connection, add.map(([, entry]) => entry.request), remove);
+        if (this.connection !== connection) break;
+        for (const key of remove) this.sent.delete(key);
+        for (const [key, entry] of add) this.sent.set(key, entry.request);
+      }
+    } catch {
+      if (!this.closed && this.connection === connection) this.fault();
+    } finally {
+      this.updating = false;
+      if (!this.closed && this.connection !== connection) void this.syncSubscriptions();
+    }
   }
 
   private open() {
@@ -296,8 +315,11 @@ export class PeReadings {
     const url = new URL(this.url());
     url.searchParams.set(
       "keys",
-      JSON.stringify([...this.entries.values()].map(({ request }) => request)),
+      JSON.stringify([...this.entries.values()].slice(0, READING_MAX_KEYS).map(({ request }) => request)),
     );
+    this.connection = crypto.randomUUID();
+    url.searchParams.set("connection", this.connection);
+    this.sent = new Map([...this.entries].slice(0, READING_MAX_KEYS).map(([key, entry]) => [key, entry.request]));
     // Topology changes can overtake a still-opening replacement. Retire that candidate, not the
     // active stream: commands remain live while the newest connection acquires its keys.
     this.opening?.close();
@@ -323,6 +345,7 @@ export class PeReadings {
       this.opening = undefined;
       this.opened = true;
       this.recovered();
+      void this.syncSubscriptions();
     };
     const lost = () => {
       if (!current()) return;

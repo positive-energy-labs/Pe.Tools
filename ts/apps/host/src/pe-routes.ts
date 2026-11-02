@@ -76,6 +76,7 @@ import {
   OwnerReads,
   resourceSnapshot,
   resourceResponse,
+  updateResourceSubscriptions,
   RouteViewStore,
   RouteWorkspace,
   type ResourceObserver,
@@ -546,6 +547,8 @@ export function createPeRoutes(options: PeRoutesOptions) {
         return json({ error: message(error) }, 502);
       }
     }
+    if (method === "POST" && declared.id === "resources.subscriptions")
+      return updateResourceSubscriptions(request, observe);
     if (method === "GET" && declared.id === "resources.stream")
       return resourceResponse(request, observe);
     // Agent feedback (owner ruling 2026-10-14): any admitted caller may file; the host stamps it.

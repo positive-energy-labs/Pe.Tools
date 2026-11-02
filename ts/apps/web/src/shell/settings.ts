@@ -77,7 +77,16 @@ export function createSettingsOwner(
       }
     }
   };
-  const refresh = () => run(transport.read).catch(() => {});
+  let fetching: Promise<void> | undefined;
+  const refresh = () => fetching ??= run(transport.read).catch(() => {}).finally(() => { fetching = undefined; });
+  let invalidated = false;
+  const changed = () => {
+    if (fetching) {
+      if (invalidated) return;
+      invalidated = true;
+      void fetching.then(() => { invalidated = false; void refresh(); });
+    } else void refresh();
+  };
   let users = 0;
   let release = () => {};
   return {
@@ -91,13 +100,13 @@ export function createSettingsOwner(
     refresh,
     connect() {
       if (++users === 1 && Object.keys(fields).length) {
-        release = transport.subscribe(() => void refresh());
-        void refresh();
+        release = transport.subscribe(changed);
+        if (state.revision < 0) void refresh();
       }
       return () => {
         if (--users === 0) {
           release();
-          for (const controller of controllers) controller.abort();
+          // The route owns hydration, not a transient React mount. Keep an in-flight read.
         }
       };
     },
@@ -141,7 +150,7 @@ export function graphSettings(graph: RouteGraph<any, any>): SettingsOwner {
         ),
       subscribe: (notify) =>
         peReadings.subscribe({ kind: "world" }, (frame) => {
-          if (frame.kind === "gap" || frame.kind === "stale") return notify();
+          if (frame.kind === "gap" && frame.dropped !== null) return notify();
           if (frame.kind !== "event") return;
           const event = frame.value as { type?: string; route?: string };
           if (event?.type === "route-settings-changed" && event.route === graph.key) notify();

@@ -1,3 +1,4 @@
+import { canonicalRouteInput } from "../../../../packages/agent-contracts/src/route-doc";
 /**
  * Transport subjects as engine readings. Each subscribed `ReadingRequest` is one node of the shell
  * reading engine (`createReadingGraph`): the engine owns its demand, deadline, failure and
@@ -181,7 +182,7 @@ export function readingAtom<T = unknown>(
     family = makeAtoms(source);
     families.set(source, family);
   }
-  return family(JSON.stringify(readingRequestSchema.parse(request))) as Atom.Atom<Reading<T>>;
+  return family(canonicalRouteInput(readingRequestSchema.parse(request))) as Atom.Atom<Reading<T>>;
 }
 
 const atomOf = <T>(request: ReadingRequest | null, source: Readings) =>
@@ -192,7 +193,7 @@ export function useReading<T = unknown>(
   request: ReadingRequest | null,
   source: Readings = peReadings,
 ): Reading<T> {
-  const key = request ? JSON.stringify(readingRequestSchema.parse(request)) : null;
+  const key = request ? canonicalRouteInput(readingRequestSchema.parse(request)) : null;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const atom = useMemo(() => atomOf<T>(request, source), [key, source]);
   return useAtomValue(atom);
@@ -207,7 +208,7 @@ export function useReadingSlice<T, S>(
   select: (reading: Reading<T>) => S,
   source: Readings = peReadings,
 ): S {
-  const key = request ? JSON.stringify(readingRequestSchema.parse(request)) : null;
+  const key = request ? canonicalRouteInput(readingRequestSchema.parse(request)) : null;
   const selectRef = useRef(select);
   selectRef.current = select;
   const registry = useContext(RegistryContext);

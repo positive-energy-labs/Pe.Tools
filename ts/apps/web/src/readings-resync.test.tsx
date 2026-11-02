@@ -18,7 +18,7 @@ import { emptyChatState } from "@pe/agent-contracts/chat-state";
 import { RegistryContext } from "@effect/atom-react";
 
 import { PeReadings, peReadings, useHostEvents, bindActionReadings } from "./readings";
-import { readingAtom, previousOf, useReadingSlice } from "#/shell/readings-hooks";
+import { readingAtom, previousOf, useReading, useReadingSlice } from "#/shell/readings-hooks";
 import { useProviders } from "./workbench/provider/providers";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture";
 import { useThreadStream } from "./workbench/provider/thread-stream";
@@ -48,6 +48,11 @@ function owner(
   },
 ) {
   const sources: Fake[] = [];
+  const subscriptions = new Set<string>();
+  const update = vi.fn(async (_connection: string, add: import("@pe/agent-contracts").ReadingRequest[], remove: string[]) => {
+    for (const key of remove) subscriptions.delete(key);
+    for (const request of add) subscriptions.add(readingKey(request));
+  });
   const readings = new PeReadings(
     () => "http://127.0.0.1:5180/readings",
     (url) => {
@@ -59,15 +64,17 @@ function owner(
         closed: false,
         close: () => void (source.closed = true),
       };
+      for (const request of JSON.parse(new URL(url).searchParams.get("keys")!)) subscriptions.add(readingKey(request));
       sources.push(source);
       return source as unknown as EventSource;
     },
     batch,
+    update,
   );
-  return { readings, sources };
+  return { readings, sources, subscriptions, update };
 }
 
-test("wake restores identical evidence by identity without recomputing dependents; changed revisions still replace it", async () => {
+test("a 33-second hide keeps evidence and the stream; explicit refresh replaces changed revisions", async () => {
   const { readings, sources } = owner();
   const derive = vi.fn((ctx: ReadingContext) => ctx.inputs.raw!.value);
   const graph = createReadingGraph(
@@ -100,28 +107,24 @@ test("wake restores identical evidence by identity without recomputing dependent
     vi.useFakeTimers({ toFake: ["Date"] });
     Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
     document.dispatchEvent(new Event("visibilitychange"));
-    vi.setSystemTime(Date.now() + 5_000);
+    vi.setSystemTime(Date.now() + 33_000);
     Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
     document.dispatchEvent(new Event("visibilitychange"));
     vi.useRealTimers();
-    expect(graph.get("raw").current).toBe(false);
-    expect(graph.get("derived").current).toBe(false);
-    await vi.waitFor(() => expect(sources).toHaveLength(2));
-    sources[1]!.onopen!();
-    // JSON parsing produces a new object even though the host returned the same observation.
-    sources[1]!.onmessage!(snapshot({ revision: "v1", data: { count: 1 } }));
+    expect(graph.get("raw").current).toBe(true);
+    expect(graph.get("derived").current).toBe(true);
+    expect(sources).toHaveLength(1);
     expect(graph.get("raw").value).toBe(original);
-    expect(graph.get("derived")).toMatchObject({ current: true, status: "ready" });
     expect(derive).toHaveBeenCalledTimes(1);
 
     readings.dirty(head);
     expect(graph.get("raw").current).toBe(false);
     // A pre-write stream may not restore freshness, even with an identical answer.
-    sources[1]!.onmessage!(snapshot({ revision: "v1", data: { count: 1 } }));
+    sources[0]!.onmessage!(snapshot({ revision: "v1", data: { count: 1 } }));
     expect(graph.get("raw").current).toBe(false);
-    await vi.waitFor(() => expect(sources).toHaveLength(3));
-    sources[2]!.onopen!();
-    sources[2]!.onmessage!(snapshot({ revision: "v2", data: { count: 1 } }));
+    await vi.waitFor(() => expect(sources).toHaveLength(2));
+    sources[1]!.onopen!();
+    sources[1]!.onmessage!(snapshot({ revision: "v2", data: { count: 1 } }));
     expect(graph.get("raw").value).not.toBe(original);
     expect(graph.get("derived").current).toBe(true);
     expect(derive).toHaveBeenCalledTimes(2);
@@ -180,46 +183,17 @@ test("an acknowledged command completes on the existing receipt stream without a
   }
 });
 
-test("a topology handover keeps its active event source until the latest replacement opens", async () => {
+test("late readings join and leave without reopening the page stream", async () => {
   const { readings, sources } = owner();
-  const received: unknown[] = [];
-  const world = { kind: "world" } as const;
-  const release = readings.subscribe(world, (frame) => {
-    if (frame.kind === "event") received.push(frame.value);
-  });
+  const release = readings.subscribe({ kind: "world" }, () => {});
   await Promise.resolve();
-  const active = sources[0]!;
-  active.onopen!();
-  const releaseHead = readings.subscribe(head, () => {});
+  sources[0]!.onopen!();
+  const releases = Array.from({ length: 100 }, (_, n) => readings.subscribe({ kind: "receipts", id: String(n) }, () => {}));
   await Promise.resolve();
-  const pending = sources[1]!;
-  const send = (source: Fake, commandId: string) =>
-    source.onmessage!({
-      data: JSON.stringify({
-        kind: "event",
-        key: readingKey(world),
-        value: { type: "route-view-open", commandId },
-      }),
-    });
-  send(active, "before-open");
-  expect(received).toEqual([{ type: "route-view-open", commandId: "before-open" }]);
-  const releaseMachine = readings.subscribe({ kind: "machine" }, () => {});
+  expect(sources).toHaveLength(1);
+  for (const remove of releases) remove();
   await Promise.resolve();
-  expect(active.closed).toBe(false);
-  expect(pending.closed).toBe(true);
-  send(active, "during-second-swap");
-  sources[2]!.onopen!();
-  expect(active.closed).toBe(true);
-  send(active, "late");
-  send(sources[2]!, "after-open");
-  expect(received).toEqual(
-    ["before-open", "during-second-swap", "after-open"].map((commandId) => ({
-      type: "route-view-open",
-      commandId,
-    })),
-  );
-  releaseMachine();
-  releaseHead();
+  expect(sources).toHaveLength(1);
   release();
   readings.close();
 });
@@ -552,7 +526,7 @@ test.each([false, true])(
   },
 );
 
-test("a tab shown after sleeping resyncs once, and the thread re-reads its body and tail", async () => {
+test("a tab shown after sleeping retains its thread body and tail", async () => {
   const { readings, sources } = owner();
   const registry = AtomRegistry.make();
   const release = registry.subscribe(readingAtom(head, readings), () => {}, { immediate: true });
@@ -581,20 +555,36 @@ test("a tab shown after sleeping resyncs once, and the thread re-reads its body 
     window.dispatchEvent(new Event("online"));
   });
   vi.useRealTimers();
-  await vi.waitFor(() => expect(sources).toHaveLength(2));
+  await act(async () => {});
+  expect(sources).toHaveLength(1);
   expect(sources[0]!.closed).toBe(false);
-  act(() => sources[1]!.onopen!());
-  expect(sources[0]!.closed).toBe(true);
-
-  // The view is marked stale until the re-read body lands, then the tail reopens from its cursor.
-  expect(seen.some((s) => s.stale && s.error?.includes("not current"))).toBe(true);
-  await vi.waitFor(() => expect(bodyReads).toHaveLength(2));
-  await vi.waitFor(() => expect(seen.at(-1)).toEqual({ stale: false, error: null }));
-  expect(tails[0]!.closed).toBe(true);
-  expect(tails.at(-1)!.closed).toBe(false);
-  expect(tails.at(-1)!.url).toContain("after=2");
-  expect(sources).toHaveLength(2);
+  expect(bodyReads).toHaveLength(1);
+  expect(tails).toHaveLength(1);
+  expect(tails[0]!.closed).toBe(false);
+  expect(seen.at(-1)).toEqual({ stale: false, error: null });
 
   release();
+  readings.close();
+});
+
+
+test("reopened thread with 100 action records shares each reading and releases all on unmount", async () => {
+  const { readings, sources, subscriptions } = owner();
+  const registry = AtomRegistry.make();
+  function Record({ id }: { id: string }) {
+    const value = useReading({ kind: "receipts", id }, readings);
+    return <span>{value.state}</span>;
+  }
+  const tree = <RegistryContext.Provider value={registry}>{Array.from({ length: 200 }, (_, i) => <Record key={i} id={String(i % 100)} />)}</RegistryContext.Provider>;
+  for (let pass = 0; pass < 2; pass++) {
+    const view = render(tree);
+    await act(async () => { await Promise.resolve(); });
+    if (pass === 0) sources[0]!.onopen!();
+    await vi.waitFor(() => expect(subscriptions.size).toBe(100));
+    expect(sources).toHaveLength(1);
+    view.unmount();
+    await vi.waitFor(() => expect(subscriptions.size).toBe(0));
+  }
+  registry.dispose();
   readings.close();
 });

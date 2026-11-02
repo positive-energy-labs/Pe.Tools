@@ -698,6 +698,7 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
     ),
     "receipts.read": route("GET", "/pe/receipt-facts", none, z.array(object), "read", "pe", "read"),
     "resources.stream": route("GET", "/pe/resources", none, object, "read", "pe", "read", "stream"),
+    "resources.subscriptions": route("POST", "/pe/resource-subscriptions", object, object, "read", "pe", "read"),
     /** Query `after`, `kind`, `thread`, `limit`: one page of the host log after a cursor. */
     "log.read": route("GET", "/pe/log", none, hostLogPageSchema, "read", "pe", "read"),
     "work.list": route("GET", "/pe/route-state", none, z.array(object), "read", "pe", "read"),
