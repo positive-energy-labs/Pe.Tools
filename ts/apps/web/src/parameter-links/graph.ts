@@ -85,6 +85,13 @@ const read = (label: string, evaluate: boolean, subject: "edit" | "suggestion" =
   );
 
 export const parameterLinksGraph: RouteGraph<ParameterLinksPage, ParameterLinksDocument> = {
+  seeds: {
+    links: {
+      title: "links",
+      load: () =>
+        import("#/shell/fixture-examples").then((m) => m.routeExamples["parameter-links"]),
+    },
+  },
   directory: {
     path: "/parameter-links",
     title: "Parameter Links",

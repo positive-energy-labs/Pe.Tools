@@ -12,8 +12,32 @@ import { takeoffGraph } from "../takeoff/graph";
 import { settingsGraph } from "../settings/graph";
 import { chatGraph } from "../chat/graph";
 
+import { capturesGraph } from "../captures/graph";
+
+import { dataTablesGraph } from "../data-tables/graph";
+
+import { designSystemGraph } from "../design-system/graph";
+
+import { ductLossGraph } from "../duct-loss/graph";
+
+import { grillesGraph } from "../grilles/graph";
+
+import { opsGraph } from "../ops/graph";
+
+import { bindGraph } from "../pages-bind/graph";
+
+import { parameterLinksGraph } from "../parameter-links/graph";
+
 afterEach(() => vi.unstubAllGlobals());
-const routes: RouteGraph<any, any>[] = [
+const routes = [
+  capturesGraph,
+  dataTablesGraph,
+  designSystemGraph,
+  ductLossGraph,
+  grillesGraph,
+  opsGraph,
+  bindGraph,
+  parameterLinksGraph,
   openGraph,
   podsGraph,
   roomsGraph,
@@ -23,7 +47,7 @@ const routes: RouteGraph<any, any>[] = [
   takeoffGraph,
   settingsGraph,
   chatGraph(() => ({ thread: "" })),
-];
+] as unknown as RouteGraph<any, any>[];
 test.each(routes.map((graph) => [graph.address, graph] as const))(
   "/%s mounts every declared seed through the kernel without host reads",
   async (_, graph) => {
@@ -86,6 +110,20 @@ test("Pods switches seeded members, preserves their memory Work, and undoes edit
     expect(fetch).not.toHaveBeenCalled();
   } finally {
     demand();
+    release();
+    owner.dispose();
+  }
+});
+
+test("calculator fixtures recalculate with Page edits rather than freezing an example", async () => {
+  const owner = await createFixtureMount(ductLossGraph, "calculate");
+  const release = owner.readings.mount(["result"]);
+  try {
+    const before = owner.readings.get("result").value as { loss: number };
+    owner.view.setPage({ cfm: 2400 });
+    const after = owner.readings.get("result").value as { loss: number };
+    expect(after.loss).toBeGreaterThan(before.loss);
+  } finally {
     release();
     owner.dispose();
   }

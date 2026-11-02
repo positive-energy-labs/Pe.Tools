@@ -172,7 +172,14 @@ export class RoomsHostFixture {
         admission.key === "rooms.partition"
           ? { zones: 1, created: 2, kept: 1, locked: 1, deleted: 0, held: 1, failures: [] }
           : admission.key === "rooms.merge"
-            ? { guid: "merged-room", merged: ["fixture-1", "fixture-2"], sqft: 480 }
+            ? {
+                guid: "00000000-0000-4000-8000-000000000004",
+                merged: [
+                  "00000000-0000-4000-8000-000000000001",
+                  "00000000-0000-4000-8000-000000000002",
+                ],
+                sqft: 480,
+              }
             : {};
       const receipt = actionReceiptSchema.parse({
         ...admission,

@@ -15,11 +15,11 @@ export const DEMO_ROOMS: RoomsSnapshot.Res.Response = {
   levels: [{ name: "Fixture level", elevation: 0, views: [DEMO_VIEW] }],
   regions: rectangles.map(([role, x, y, right, top], index) => ({
     elementId: 1001 + index,
-    guid: `fixture-${index}`,
+    guid: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
     view: DEMO_VIEW,
     level: "Fixture level",
     role,
-    zone: index ? "fixture-0" : null,
+    zone: index ? "00000000-0000-4000-8000-000000000000" : null,
     name: "",
     type: "hall",
     sqft: (right - x) * (top - y),

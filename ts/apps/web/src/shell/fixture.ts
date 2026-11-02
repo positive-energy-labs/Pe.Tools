@@ -148,6 +148,7 @@ export function pendingFixtureEnvironment<P, W>(
         if (!seed || !Object.hasOwn(seed.readings, id))
           throw Error(`Fixture '${name}' has no reading '${id}'`);
         const reading = seed.readings[id];
+        if (typeof reading === "function") return reading(context.page);
         if (reading && typeof reading === "object" && "fixtureSelect" in reading) {
           const { fields, values, fallback } = (
             reading as {

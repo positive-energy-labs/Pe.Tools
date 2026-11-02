@@ -10,29 +10,31 @@ export type DuctLossPage = {
 const fields = ductLossAddress.fields;
 
 export const ductLossGraph: RouteGraph<DuctLossPage, null> = {
+  seeds: {
+    calculate: {
+      title: "calculate",
+      load: () => import("#/shell/fixture-examples").then((m) => m.routeExamples["duct-loss"]),
+    },
+  },
   directory: {
-  "path": "/duct-loss",
-  "title": "Duct Loss",
-  "label": "Duct friction",
-  "exposure": "Main",
-  "runtimeNeed": "Browser calculation",
-  "icon": "Wind",
-  "category": "Calculate loads & airflow",
-  "blurb": "The imperial duct friction loss formula, live — type a duct and airflow, read Δp with every intermediate term beside the equation.",
-  "aliases": [
-    "friction",
-    "airflow",
-    "pressure",
-    "calculator"
-  ],
-  "listed": true,
-  "satellites": [],
-  "surfaces": {
-    "web": "full",
-    "pwa": "full",
-    "tray": false
-  }
-},
+    path: "/duct-loss",
+    title: "Duct Loss",
+    label: "Duct friction",
+    exposure: "Main",
+    runtimeNeed: "Browser calculation",
+    icon: "Wind",
+    category: "Calculate loads & airflow",
+    blurb:
+      "The imperial duct friction loss formula, live — type a duct and airflow, read Δp with every intermediate term beside the equation.",
+    aliases: ["friction", "airflow", "pressure", "calculator"],
+    listed: true,
+    satellites: [],
+    surfaces: {
+      web: "full",
+      pwa: "full",
+      tray: false,
+    },
+  },
   key: "duct-loss",
   address: "duct-loss",
   name: "Duct Loss",
@@ -86,5 +88,4 @@ export const ductLossGraph: RouteGraph<DuctLossPage, null> = {
         "Calculate duct friction from dimensions and airflow. The wheel, charts and formula use the same inputs. All calculation runs in this browser. The formula is ASHRAE Fundamentals, Duct Design: Darcy friction with the Altshul-Tsal factor (L in ft, D in inches, roughness in ft, density in lb/ft3). The wheel reads the friction-chart power law 0.109136·Q^1.9/D^5.02 for galvanized duct and standard air, as the SMACNA Ductulator does; it runs up to a tenth above the Altshul-Tsal figure.",
     },
   },
-
 };

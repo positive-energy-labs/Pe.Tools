@@ -53,27 +53,31 @@ export function pruneReview(draft: Draft, tables: readonly TableHandle[]) {
 }
 
 export const dataTablesGraph: RouteGraph<DataTablesPage, DataTablesWork> = {
+  seeds: {
+    edit: {
+      title: "edit",
+      load: () => import("#/shell/fixture-examples").then((m) => m.routeExamples["data-tables"]),
+    },
+  },
   directory: {
-  "path": "/data-tables",
-  "title": "Data Tables",
-  "label": "Revit data",
-  "exposure": "Preview",
-  "runtimeNeed": "Revit for model actions; browsing saved data is separate",
-  "icon": "Table",
-  "category": "Coordinate model data",
-  "blurb": "Author synthetic data tables — draft columns and keyed rows, then upsert them in one apply; rows deleted here are pruned in Revit.",
-  "aliases": [
-    "Revit",
-    "data"
-  ],
-  "listed": true,
-  "satellites": [],
-  "surfaces": {
-    "web": "full",
-    "pwa": "full",
-    "tray": false
-  }
-},
+    path: "/data-tables",
+    title: "Data Tables",
+    label: "Revit data",
+    exposure: "Preview",
+    runtimeNeed: "Revit for model actions; browsing saved data is separate",
+    icon: "Table",
+    category: "Coordinate model data",
+    blurb:
+      "Author synthetic data tables — draft columns and keyed rows, then upsert them in one apply; rows deleted here are pruned in Revit.",
+    aliases: ["Revit", "data"],
+    listed: true,
+    satellites: [],
+    surfaces: {
+      web: "full",
+      pwa: "full",
+      tray: false,
+    },
+  },
   key: "data-tables",
   address: "data-tables",
   name: "Data Tables",
