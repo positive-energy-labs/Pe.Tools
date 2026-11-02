@@ -7,7 +7,7 @@ import {
   DUCTS_REFRESH_HEADER,
   type DuctsReadingRequest,
 } from "@pe/agent-contracts";
-import { sdkSession, readSessionScope } from "./sdk-session.ts";
+import { sdkSession, readSessionScope, SdkSession } from "./sdk-session.ts";
 import { readSchedule } from "./schedule-actions.ts";
 import { actionControls, commandTool, receiptsForWork } from "@pe/agent-contracts";
 import { NodeHttpClient, NodeServices } from "@effect/platform-node";
@@ -203,6 +203,7 @@ export function makeCallRoute(
       // gate while Revit still runs it. The turn ends when Revit answers (or answers cancelled).
       const created = {
         requestId,
+        // effect-edge: island, phase 5
         answer: Effect.runPromise(bridge.invoke(key, input, session, openId, requestId)),
         callers: 0,
       };
@@ -225,6 +226,7 @@ export function makeCallRoute(
       Effect.onExit((exit) => {
         if (--joined.callers > 0 || !Exit.hasInterrupts(exit)) return Effect.void;
         if (nativeReads.get(identity) === joined) nativeReads.delete(identity);
+        // effect-edge: island, phase 5
         void Effect.runPromise(
           Effect.ignore(
             bridge.invoke(CANCEL_OPERATION_KEY, { requestId: joined.requestId }, session),
@@ -407,6 +409,7 @@ export function makeCallRoute(
             owner.read(
               subject,
               async () => ({
+                // effect-edge: island, phase 5
                 ...(await Effect.runPromise(
                   bridge.invoke(key, request ?? {}, target.session, target.openId, requestId),
                 )),
@@ -448,10 +451,10 @@ export function makeCallRoute(
                   openId: openDocumentId,
                 });
                 const selected = async () => {
-                  const sessions = await Effect.runPromise(bridge.list);
-                  return sessions
-                    .find((session) => session.sessionId === target.session)
-                    ?.state?.openDocuments.find((document) => document.openId === target.openId);
+                  const resolve = SdkSession.resolve(bridge, { session: target.session });
+                  // effect-edge: island, phase 5
+                  const session = await Effect.runPromise(resolve);
+                  return session.state?.openDocuments.find((doc) => doc.openId === target.openId);
                 };
                 const document = await selected();
                 if (!document?.address)
@@ -461,9 +464,11 @@ export function makeCallRoute(
                   target,
                   async () => {
                     const [result, index] = await Promise.all([
+                      // effect-edge: island, phase 5
                       Effect.runPromise(
                         bridge.invoke(key, request ?? {}, target.session, target.openId, requestId),
                       ),
+                      // effect-edge: island, phase 5
                       Effect.runPromise(
                         bridge.invoke(
                           "revit.catalog.project-index",
@@ -591,17 +596,21 @@ export function makeCallRoute(
             }
             if (id) return Response.jsonUnsafe(await observations().families(id));
             if (!raw) return Response.jsonUnsafe(await observations().familiesReadings());
-            const work = workKeySchema.and(z.object({ route: z.literal("families") })).parse(JSON.parse(raw));
+            const work = workKeySchema
+              .and(z.object({ route: z.literal("families") }))
+              .parse(JSON.parse(raw));
             return Response.jsonUnsafe(await observations().displayedFamilies(work));
           }
           if (req.method === "DELETE") {
             const { readId } = z
               .strictObject({ readId: z.uuid() })
+              // effect-edge: island, phase 5
               .parse(await Effect.runPromise(req.json));
             const target = documentRefSchema.parse({
               session: req.headers[HOST_RPC_BRIDGE_SESSION_HEADER],
               openId: req.headers[HOST_RPC_DOCUMENT_HEADER],
             });
+            // effect-edge: island, phase 5
             const session = await Effect.runPromise(
               sdkSession(
                 bridge,
@@ -629,11 +638,13 @@ export function makeCallRoute(
                 placementScope: z.enum(["AllLoaded", "PlacedOnly", "UnplacedOnly"]),
               }),
             })
+            // effect-edge: island, phase 5
             .parse(await Effect.runPromise(req.json));
           const target = documentRefSchema.parse({
             session: req.headers[HOST_RPC_BRIDGE_SESSION_HEADER],
             openId: req.headers[HOST_RPC_DOCUMENT_HEADER],
           });
+          // effect-edge: island, phase 5
           const resolvedSession = await Effect.runPromise(
             sdkSession(
               bridge,
@@ -663,10 +674,11 @@ export function makeCallRoute(
             resolved.ref.openId !== target.openId
           )
             throw Error("Families read requires the exact project document");
-          const session = (await Effect.runPromise(bridge.list)).find(
-            (row) => row.sessionId === target.session,
+          // effect-edge: island, phase 5
+          const session = await Effect.runPromise(
+            SdkSession.resolve(bridge, { session: target.session }),
           );
-          const document = session?.state?.openDocuments.find(
+          const document = session.state?.openDocuments.find(
             (row) => row.openId === target.openId,
           );
           if (body.work.binding === "address") {
@@ -858,6 +870,7 @@ export function makeCallRoute(
       return RevitBridge.use((_bridge) =>
         Effect.tryPromise({
           try: async () => {
+            // effect-edge: island, phase 5
             const body = await Effect.runPromise(req.json);
             if (!isRecord(body) || typeof body.id !== "string")
               throw Error("An original action ID is required");
@@ -900,6 +913,7 @@ export function makeCallRoute(
       Effect.tryPromise({
         try: async () => {
           if (req.method === "POST") {
+            // effect-edge: island, phase 5
             const body = await Effect.runPromise(req.json);
             if (!isRecord(body) || typeof body.key !== "string")
               throw Error("A Family read key is required");
@@ -930,6 +944,7 @@ export function makeCallRoute(
     RevitBridge.use((bridge) =>
       Effect.tryPromise({
         try: async () => {
+          // effect-edge: island, phase 5
           const body = await Effect.runPromise(req.json);
           if (!isRecord(body) || typeof body.key !== "string")
             throw Error("Schedule read key required");
@@ -1285,6 +1300,8 @@ function toProblem(error: unknown): {
 } {
   if (error instanceof CommandRejected)
     return { kind: "InvalidRequest", message: error.message, status: 409 };
+  if (error instanceof NoRevitSession)
+    return { kind: "Disconnected", message: error.message, status: 503 };
   if (error instanceof StepFailure)
     return {
       kind: "HostFailure",
@@ -1358,12 +1375,14 @@ function executeGatewayLocal(
   if (!isTsOnlyOperationKey(key))
     throw new BridgeError("Unknown host operation", 409, { notDispatched: true });
   if (!callEntries.get(key)?.shell)
+    // effect-edge: island, phase 5
     return Effect.runPromise(
       dispatchTsOnlyOperation(key, input, undefined, bridge).pipe(
         Effect.provide(NodeServices.layer),
         Effect.provide(NodeHttpClient.layerUndici),
       ),
     );
+  // effect-edge: island, phase 5
   return Effect.runPromise(
     Effect.flatMap(decodeRequest("host.shell.open", input), (input) =>
       openShellPath(input, launch),

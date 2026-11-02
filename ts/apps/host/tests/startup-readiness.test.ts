@@ -43,8 +43,11 @@ test("HTTP requests answer during claim acquisition and discovery only publishes
     enterClaim();
     await released;
   };
+  // effect-edge: island, phase 5
   const handle = Effect.runSync(Deferred.make<ServiceHostHandle>());
+  // effect-edge: island, phase 5
   const latch = Effect.runSync(Deferred.make<void>());
+  // effect-edge: island, phase 5
   const fiber = Effect.runFork(
     Layer.launch(
       makeHttpLive({
@@ -66,6 +69,7 @@ test("HTTP requests answer during claim acquisition and discovery only publishes
     expect(response.status).toBe(200);
     expect((await response.json()).processId).toBe(process.pid);
     releaseClaim();
+    // effect-edge: island, phase 5
     const acquired = await Effect.runPromise(Deferred.await(handle));
     expect(acquired.serviceFile.port).toBe(address.port);
     const refused = await fetch(`${base}/admin/shutdown`, { method: "POST" });
@@ -75,10 +79,12 @@ test("HTTP requests answer during claim acquisition and discovery only publishes
       headers: { "x-pe-service-token": acquired.serviceFile.token },
     });
     expect(shutdown.status).toBe(200);
+    // effect-edge: island, phase 5
     await Effect.runPromise(Deferred.await(latch));
   } finally {
     releaseClaim();
     nodeServer.closeAllConnections();
+    // effect-edge: island, phase 5
     await Effect.runPromise(Fiber.interrupt(fiber));
     expect(await readServiceFile(productRoot(), hostOwnership.serviceName)).toBeNull();
     claim.before = async () => {};

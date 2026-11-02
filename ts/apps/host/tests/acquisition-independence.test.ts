@@ -218,7 +218,9 @@ test("handover certifies Pea's acquisition only from native SDK document facts",
   const journal = hostActionJournal();
   census("controlled", {});
 
+  // effect-edge: island, phase 5
   const latch = Effect.runSync(Deferred.make<void>());
+  // effect-edge: island, phase 5
   const done = Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
@@ -369,6 +371,7 @@ test("handover certifies Pea's acquisition only from native SDK document facts",
     }
   } finally {
     if (socket && socket.readyState === WebSocket.OPEN) socket.close();
+    // effect-edge: island, phase 5
     Effect.runSync(Deferred.succeed(latch, undefined));
     await done.catch(() => {});
     if (prev.localAppData === undefined) delete process.env.LOCALAPPDATA;

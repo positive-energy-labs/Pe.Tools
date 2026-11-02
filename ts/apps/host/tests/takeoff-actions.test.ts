@@ -1,3 +1,4 @@
+import { testConsents } from "./effect-test.ts";
 import { workWriteBoundary } from "../src/work-write-boundary.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -14,7 +15,7 @@ import { TakeoffCaptures } from "../src/takeoff-captures.ts";
 import type { RevitBridge } from "../src/bridge.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
-import { RunConsents, type ConsentEvent } from "../src/run-consent.ts";
+import type { ConsentEvent } from "../src/run-consent.ts";
 import { bindControl } from "../src/control.ts";
 
 test.each(["selected", "unrelated", "none"] as const)(
@@ -38,7 +39,7 @@ test.each(["selected", "unrelated", "none"] as const)(
     });
     const calls: { key: string; input: unknown }[] = [];
     const events: ConsentEvent[] = [];
-    const runs = new RunConsents((_run, event) => events.push(event));
+    const runs = testConsents((_run, event) => events.push(event));
     const run = { thread: "rooms-thread", turn: "rooms-turn" };
     runs.open(run);
     bindControl({ runs });

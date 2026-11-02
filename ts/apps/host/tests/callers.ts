@@ -1,5 +1,5 @@
+import { testConsents } from "./effect-test.ts";
 import { randomUUID } from "node:crypto";
-import { RunConsents } from "../src/run-consent.ts";
 import { bindControl } from "../src/control.ts";
 import type { Caller } from "@pe/agent-contracts";
 import { withInvocationContext } from "@pe/runtime/context";
@@ -14,7 +14,7 @@ export const pea = (thread = "thread-1"): Caller => ({
 });
 
 /** Explicit approved harness fixture. Boundary tests keep using unscoped pea(). */
-const fixtureRuns = new RunConsents((run, event) => {
+const fixtureRuns = testConsents((run, event) => {
   if (event.kind === "permission_request")
     queueMicrotask(() => fixtureRuns.decide(run.thread, event.requestId, "allow_now"));
 });

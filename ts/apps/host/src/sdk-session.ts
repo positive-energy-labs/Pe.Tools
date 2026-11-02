@@ -12,7 +12,7 @@ import {
   HOST_RPC_DOCUMENT_HEADER,
   type HostSessionScope,
 } from "@pe/host-contracts/operation-types";
-import { BridgeError, type RevitBridge } from "./bridge.ts";
+import { BridgeError, NoRevitSession, type RevitBridge } from "./bridge.ts";
 import { parsePeRevitEnvelope, peRevitLauncher } from "./pe-revit-launch.ts";
 import { runPeRevitCli } from "./session-route.ts";
 import type { SdkReceiptReader } from "./native-receipts.ts";
@@ -20,11 +20,13 @@ import { hostOwnership } from "./host-ownership.ts";
 import { hostServiceName, runtimeOwnerRejection } from "@pe/host-contracts/service-identity";
 
 const readSdk: SdkReceiptReader = (args) =>
+  // effect-edge: island, phase 5
   Effect.runPromise(
     runPeRevitCli(args).pipe(Effect.provide(NodeServices.layer), Effect.timeout("30 seconds")),
   );
-const refuse = (message: string, result?: unknown) =>
+const refusal = (message: string, result?: unknown) =>
   new BridgeError(message, 409, { notDispatched: true, result });
+const refuse = (message: string, result?: unknown) => Effect.fail(refusal(message, result));
 const resolutions = new WeakMap<object, Map<string, { resolved: Resolved; sessionId: string }>>();
 
 export function readSessionScope(headers: Record<string, string | undefined>): HostSessionScope {
@@ -37,7 +39,7 @@ export function readSessionScope(headers: Record<string, string | undefined>): H
 }
 
 /** The SDK runs its ladder. An exact product reference constrains it to the held process. */
-export async function resolveSdkSession(
+const resolveSdk = Effect.fn("SdkSession.sdk")(function* (
   bridge: Pick<RevitBridge["Service"], "list">,
   scope: HostSessionScope = {},
   read: SdkReceiptReader = readSdk,
@@ -45,19 +47,19 @@ export async function resolveSdkSession(
   const selection =
     scope.session === undefined ? undefined : sdkSessionSelectionSchema.parse(scope.session);
   if (scope.openDocumentId && !scope.bridgeSessionId)
-    throw refuse("A product document lifetime requires its exact bridge attachment");
+    return yield* refuse("A product document lifetime requires its exact bridge attachment");
   const attachments = scope.bridgeSessionId
-    ? (await Effect.runPromise(bridge.list)).filter((s) => s.sessionId === scope.bridgeSessionId)
+    ? (yield* bridge.list).filter((s) => s.sessionId === scope.bridgeSessionId)
     : [];
   if (scope.bridgeSessionId && attachments.length !== 1)
-    throw refuse("The exact bridge attachment is no longer available");
+    return yield* refuse("The exact bridge attachment is no longer available");
   const held = attachments[0];
   if (held && (!held.connected || !held.processId || !held.processStartUtcUnixMs))
-    throw refuse("The exact bridge attachment is no longer available");
+    return yield* refuse("The exact bridge attachment is no longer available");
   // ponytail: one owned attachment → its pid; the SDK's unscoped ladder (cwd-project) costs ~40 s against a 30 s budget. Owed: SDK ladder speed.
   const owned = held
     ? []
-    : (await Effect.runPromise(bridge.list)).filter(
+    : (yield* bridge.list).filter(
         (s) => s.connected && s.processId && !runtimeOwnerRejection(hostOwnership, s),
       );
   const only = held ?? (owned.length === 1 ? owned[0] : undefined);
@@ -66,7 +68,7 @@ export async function resolveSdkSession(
   let cache = resolutions.get(bridge);
   if (!cache) resolutions.set(bridge, (cache = new Map()));
   const cached = cache.get(key);
-  const sockets = await Effect.runPromise(bridge.list);
+  const sockets = yield* bridge.list;
   let resolved = cached?.resolved;
   if (cached) {
     const start = Date.parse(cached.resolved.processStartUtc!);
@@ -88,12 +90,15 @@ export async function resolveSdkSession(
   const envelope = resolved
     ? undefined
     : parsePeRevitEnvelope<DocListResult, Resolved | null>(
-        await read(argv),
+        yield* Effect.tryPromise({
+          try: () => read(argv),
+          catch: (error) => refusal(`pe-revit did not answer: ${String(error)}`),
+        }),
         argv,
         peRevitLauncher(),
       );
   if (envelope && (envelope.exitCode !== 0 || envelope.result?.state !== "ok"))
-    throw refuse(
+    return yield* refuse(
       envelope.diagnostics.map((d) => `${d.code}: ${d.detail}`).join("; ") ||
         `pe-revit ${envelope.result?.state}`,
       envelope,
@@ -116,7 +121,7 @@ export async function resolveSdkSession(
   });
   if (rejection) {
     cache.delete(key);
-    throw refuse(rejection, envelope);
+    return yield* refuse(rejection, envelope);
   }
   const start = resolved?.processStartUtc ? Date.parse(resolved.processStartUtc) : NaN;
   if (
@@ -126,8 +131,8 @@ export async function resolveSdkSession(
     !Number.isFinite(start) ||
     start <= 0
   )
-    throw refuse("SDK resolution did not provide a valid process incarnation", envelope);
-  const matches = (await Effect.runPromise(bridge.list)).filter(
+    return yield* refuse("SDK resolution did not provide a valid process incarnation", envelope);
+  const matches = (yield* bridge.list).filter(
     (socket) =>
       socket.connected &&
       socket.sessionId &&
@@ -136,13 +141,13 @@ export async function resolveSdkSession(
   );
   if (matches.length !== 1) {
     cache.delete(key);
-    throw refuse("The SDK resolved process has no unique bridge attachment", envelope);
+    return yield* refuse("The SDK resolved process has no unique bridge attachment", envelope);
   }
   const socket = matches[0]!;
   const socketRejection = runtimeOwnerRejection(hostOwnership, socket);
   if (socketRejection) {
     cache.delete(key);
-    throw refuse(socketRejection, envelope);
+    return yield* refuse(socketRejection, envelope);
   }
   if (
     held &&
@@ -150,12 +155,12 @@ export async function resolveSdkSession(
       socket.processId !== held.processId ||
       socket.processStartUtcUnixMs !== held.processStartUtcUnixMs)
   )
-    throw refuse("The exact bridge attachment no longer matches the SDK process", envelope);
+    return yield* refuse("The exact bridge attachment no longer matches the SDK process", envelope);
   if (
     scope.openDocumentId &&
     !socket.state?.openDocuments.some((doc) => doc.openId === scope.openDocumentId)
   )
-    throw refuse("The exact product document lifetime is no longer open", envelope);
+    return yield* refuse("The exact product document lifetime is no longer open", envelope);
   cache.set(key, { resolved, sessionId: socket.sessionId! });
   return {
     ...socket,
@@ -164,16 +169,49 @@ export async function resolveSdkSession(
     processStartUtcUnixMs: start,
     resolved,
   };
-}
+});
 
-export type SdkSession = Awaited<ReturnType<typeof resolveSdkSession>>;
+export type SdkSession = Effect.Success<ReturnType<typeof resolveSdk>>;
+export const sdkSession = resolveSdk;
 
-export const sdkSession = (
+/** {@link sdkSession} for Promise callers until phase 5; a refusal is thrown as its `BridgeError`. */
+export const resolveSdkSession = (...args: Parameters<typeof resolveSdk>) =>
+  // effect-edge: island, phase 5
+  Effect.runPromise(resolveSdk(...args));
+
+/** Which attachment a caller means: its bridge id, its SDK session id, or either. */
+export type AttachmentTarget = { session: string } | { sdkSession: string } | { id: string };
+
+/**
+ * The one lookup of an attached Revit. A bridge id names its attachment as it is; an SDK session
+ * id, or an id that may be either, names one connected attachment, never two.
+ */
+export const resolveAttachment = Effect.fn("SdkSession.resolve")(function* (
   bridge: Pick<RevitBridge["Service"], "list">,
-  scope: HostSessionScope = {},
-  read?: SdkReceiptReader,
-) =>
-  Effect.tryPromise({
-    try: () => resolveSdkSession(bridge, scope, read),
-    catch: (error) => (error instanceof BridgeError ? error : refuse(String(error))),
-  });
+  target: AttachmentTarget,
+) {
+  const sessions = yield* bridge.list;
+  const matches = sessions.filter((s) =>
+    "session" in target
+      ? s.sessionId === target.session
+      : s.connected &&
+        ("sdkSession" in target
+          ? s.sdkSessionId === target.sdkSession
+          : s.sessionId === target.id || s.sdkSessionId === target.id),
+  );
+  const match = matches[0];
+  if (matches.length !== 1 || !match?.sessionId)
+    return yield* new NoRevitSession({
+      asked:
+        "session" in target
+          ? `bridge session ${target.session}`
+          : "sdkSession" in target
+            ? `SDK session ${target.sdkSession}`
+            : `session ${target.id}${matches.length > 1 ? " (ambiguous)" : ""}`,
+      attached: sessions.flatMap((s) => (s.sessionId ? [s.sessionId] : [])),
+    });
+  return { ...match, sessionId: match.sessionId };
+});
+
+/** The attachment lookup on its service face. */
+export const SdkSession = { resolve: resolveAttachment, sdk: resolveSdk };

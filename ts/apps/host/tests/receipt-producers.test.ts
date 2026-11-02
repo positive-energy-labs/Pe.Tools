@@ -1,14 +1,14 @@
 import { NodeHttpServer } from "@effect/platform-node";
 import { HOST_CONTEXT_HEADER } from "@pe/host-contracts/contracts";
-import { Deferred,Effect,Layer } from "effect";
-import { HttpEffect,HttpRouter } from "effect/http";
+import { Deferred, Effect, Layer } from "effect";
+import { HttpEffect, HttpRouter } from "effect/http";
 import { randomUUID } from "node:crypto";
-import { mkdtempSync,readFileSync,rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PostHog } from "posthog-node";
-import { expect,test } from "vite-plus/test";
+import { expect, test } from "vite-plus/test";
 import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { receiptBuildStamp } from "../src/build-stamp.ts";
@@ -60,7 +60,9 @@ test("real HTTP feedback retains content and caller before body; diagnostics can
     const a = server.address();
     return a && typeof a !== "string" ? a.port : 0;
   };
+  // effect-edge: island, phase 5
   const latch = Effect.runSync(Deferred.make<void>());
+  // effect-edge: island, phase 5
   const done = Effect.runPromise(
     Effect.raceFirst(
       Layer.launch(
@@ -68,7 +70,7 @@ test("real HTTP feedback retains content and caller before body; diagnostics can
           Layer.mergeAll(
             requestIdentityLayer({
               port,
-              frontendOrigin: () => undefined,
+              frontendOrigin: Effect.succeed(undefined),
               share: {
                 read: async () => {
                   throw Error("local only");
@@ -170,6 +172,7 @@ test("real HTTP feedback retains content and caller before body; diagnostics can
     expect(stale.status).toBe(200);
     expect((await journal.read({ kinds: ["diagnostic"] })).at(-1)!.stamp).toBeNull();
   } finally {
+    // effect-edge: island, phase 5
     Effect.runSync(Deferred.succeed(latch, undefined));
     server.closeAllConnections();
     await done.catch(() => {});
@@ -196,6 +199,7 @@ test("real HTTP refusals, from admission and from a door, export refusal_count w
     const a = server.address();
     return a && typeof a !== "string" ? a.port : 0;
   };
+  // effect-edge: island, phase 5
   const latch = Effect.runSync(Deferred.make<void>());
   // A door's own 403: one with a closed code, one naming a code outside the contract.
   const door = (code: string) =>
@@ -205,6 +209,7 @@ test("real HTTP refusals, from admission and from a door, export refusal_count w
         { status: 403, headers: { "x-pe-refusal": code } },
       ),
     );
+  // effect-edge: island, phase 5
   const done = Effect.runPromise(
     Effect.raceFirst(
       Layer.launch(
@@ -212,7 +217,7 @@ test("real HTTP refusals, from admission and from a door, export refusal_count w
           Layer.mergeAll(
             requestIdentityLayer({
               port,
-              frontendOrigin: () => undefined,
+              frontendOrigin: Effect.succeed(undefined),
               telemetry,
               share: {
                 read: async () => {
@@ -256,6 +261,7 @@ test("real HTTP refusals, from admission and from a door, export refusal_count w
     expect(sent.every((e) => e.properties.count === 1)).toBe(true);
     expect(JSON.stringify(sent)).not.toMatch(/private|elsewhere|threads/);
   } finally {
+    // effect-edge: island, phase 5
     Effect.runSync(Deferred.succeed(latch, undefined));
     server.closeAllConnections();
     await done.catch(() => {});

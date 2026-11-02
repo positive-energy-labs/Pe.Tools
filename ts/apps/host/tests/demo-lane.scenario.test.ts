@@ -39,6 +39,7 @@ beforeAll(async () => {
   process.env.LOCALAPPDATA = mkdtempSync(join(tmpdir(), "pe-demo-lane-"));
   const nodeServer = createNodeServer();
   // The dev host's shape: the frontend origin is recorded once the browser's Vite listens.
+  // effect-edge: island, phase 5
   const webUrl = Effect.runSync(Deferred.make<string>());
   const program = Effect.scoped(
     Effect.gen(function* () {
@@ -59,6 +60,7 @@ beforeAll(async () => {
       );
     }),
   );
+  // effect-edge: island, phase 5
   hostDone = Effect.runPromise(program);
   const service = await waitForService(productRoot());
   serviceToken = service.token;
@@ -79,6 +81,7 @@ beforeAll(async () => {
   });
   await browserVite.listen();
   baseUrl = browserVite.resolvedUrls!.local[0]!.replace(/\/$/, "");
+  // effect-edge: island, phase 5
   Effect.runSync(Deferred.succeed(webUrl, baseUrl));
   // As in route-chaos-launch, a bound port precedes the first SSR document compilation.
   // Leave Accept unset: text/html asks ingress for a browser-only human-session mint.

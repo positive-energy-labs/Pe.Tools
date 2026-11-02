@@ -1,3 +1,4 @@
+import { consentService } from "./effect-test.ts";
 import { createHash } from "node:crypto";
 import {
   mkdirSync,
@@ -93,6 +94,7 @@ test("public export pins the full durable thread, including tool results, withou
   for (const event of events) durableLog.append({ kind: "thread", thread: "thread-1", event });
   durableLog.append({ kind: "thread", thread: "unrelated", event: events[0]! });
   const host = createHarnessThreads({
+    runs: consentService(),
     log: durableLog,
     root,
     worldRoot: root,

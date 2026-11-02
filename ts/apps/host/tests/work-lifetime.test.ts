@@ -1,3 +1,4 @@
+import { consentService } from "./effect-test.ts";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -347,6 +348,7 @@ test("host HTTP preserves addressless Work through close and replacement bridge 
   const frames: Array<{ kind: string; value?: { kind?: string; type?: string; action?: string } }> =
     [];
   try {
+    // effect-edge: island, phase 5
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
@@ -363,6 +365,7 @@ test("host HTTP preserves addressless Work through close and replacement bridge 
           const { routes: host, threads } = makeHostPeRoutes(
             "http://127.0.0.1:0",
             bridge,
+            consentService(),
             () => registrations,
           );
           yield* Effect.addFinalizer(() => Effect.sync(() => threads.close()));

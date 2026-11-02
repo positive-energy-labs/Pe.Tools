@@ -1,6 +1,6 @@
+import { testConsents } from "./effect-test.ts";
 import { createHash } from "node:crypto";
 import { bindControl } from "../src/control.ts";
-import { RunConsents } from "../src/run-consent.ts";
 import type { Caller } from "@pe/agent-contracts";
 import { invokeCommand } from "./command-fixture.ts";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -24,7 +24,7 @@ test.each([
   async (changed, pea, uncertain) => {
     const directory = await mkdtemp(join(tmpdir(), "pe-effect-freshness-"));
     const run = { thread: "recovery", turn: "original" };
-    const runs = new RunConsents((_, event) => {
+    const runs = testConsents((_, event) => {
       if (event.kind === "permission_request")
         queueMicrotask(() => runs.decide(run.thread, event.requestId, "allow_now"));
     });

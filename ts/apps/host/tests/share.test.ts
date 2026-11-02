@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
-import { Layer } from "effect";
+import { Effect, Layer } from "effect";
 import { HttpRouter } from "effect/http";
 import { createShare, shareIntentFile, tailscaleCommand, shareRoute } from "../src/share.ts";
 import { requestIdentityLayer } from "../src/request-identity.ts";
@@ -132,7 +132,7 @@ test("PUT share is local, human-only and validates the switch before invoking th
       shareRoute(share),
       requestIdentityLayer({
         port: () => 5180,
-        frontendOrigin: () => undefined,
+        frontendOrigin: Effect.succeed(undefined),
         share: {
           observe: () => {},
           read: async () => ({

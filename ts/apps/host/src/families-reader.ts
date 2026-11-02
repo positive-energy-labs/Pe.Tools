@@ -1,3 +1,4 @@
+import { SdkSession } from "./sdk-session.ts";
 import { Effect } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { randomUUID } from "node:crypto";
@@ -57,6 +58,7 @@ function lifecycle<T>(operation: () => Promise<T>): Promise<T> {
 }
 
 async function sdk<T>(args: string[]): Promise<T> {
+  // effect-edge: island, phase 5
   const raw = await Effect.runPromise(runPeRevitCli(args).pipe(Effect.provide(NodeServices.layer)));
   const envelope = parsePeRevitEnvelope<T>(raw, args, peRevitLauncher());
   if (envelope.exitCode !== 0)
@@ -101,6 +103,7 @@ export async function readFamiliesProgressively(options: {
       // Cancel bypasses the per-session FIFO; the owning calls settle before cleanup.
       await Promise.allSettled(
         [...active].map(([requestId, target]) =>
+          // effect-edge: island, phase 5
           Effect.runPromise(bridge.invoke(CANCEL_OPERATION_KEY, { requestId }, target.session)),
         ),
       );
@@ -148,6 +151,7 @@ export async function readFamiliesProgressively(options: {
     const requestId = randomUUID();
     active.set(requestId, target);
     try {
+      // effect-edge: island, phase 5
       const reply = await Effect.runPromise(
         bridge.invoke(OP, input, target.session, target.openId, requestId),
       );
@@ -168,7 +172,8 @@ export async function readFamiliesProgressively(options: {
       typeof stored.families === "object"
     )
       costs = stored;
-  } catch (error) { console.warn("ts/apps/host/src/families-reader.ts: fallback after failure", error);
+  } catch (error) {
+    console.warn("ts/apps/host/src/families-reader.ts: fallback after failure", error);
     /* A missing or damaged timing file is a cold estimate, never a read failure. */
   }
   const samples: Sample[] = [];
@@ -300,10 +305,11 @@ export async function readFamiliesProgressively(options: {
           let target: DocumentRef | undefined;
           const deadline = Date.now() + 15_000;
           do {
-            const attached = (await Effect.runPromise(bridge.list)).find(
-              (s) => s.connected && s.sdkSessionId === id,
+            // effect-edge: island, phase 5
+            const attached = await Effect.runPromise(
+              SdkSession.resolve(bridge, { sdkSession: id }).pipe(Effect.orElseSucceed(() => undefined)),
             );
-            if (attached?.sessionId) {
+            if (attached) {
               target = { session: attached.sessionId, openId };
               break;
             }
@@ -374,14 +380,20 @@ export async function readFamiliesProgressively(options: {
     return latest!;
   } finally {
     runs.delete(readId);
-    await folder?.then((dir) => rm(dir, { recursive: true, force: true })).catch((error) => { console.error("families-reader: asynchronous operation failed", error); });
+    await folder
+      ?.then((dir) => rm(dir, { recursive: true, force: true }))
+      .catch((error) => {
+        console.error("families-reader: asynchronous operation failed", error);
+      });
     const temp = `${costsPath}.${randomUUID()}.tmp`;
     try {
       await mkdir(join(captures.directory, "families"), { recursive: true });
       await writeFile(temp, JSON.stringify(costs));
       await rename(temp, costsPath);
     } catch {
-      await rm(temp, { force: true }).catch((error) => { console.error("families-reader: asynchronous operation failed", error); });
+      await rm(temp, { force: true }).catch((error) => {
+        console.error("families-reader: asynchronous operation failed", error);
+      });
     }
   }
 }

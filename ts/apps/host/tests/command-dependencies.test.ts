@@ -1,3 +1,4 @@
+import { testConsents } from "./effect-test.ts";
 import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,7 +13,7 @@ import {
   type Claim,
 } from "@pe/agent-contracts";
 import { ActionJournal } from "../src/action-journal.ts";
-import { RunConsents, type ConsentEvent } from "../src/run-consent.ts";
+import type { ConsentEvent } from "../src/run-consent.ts";
 import { bindControl } from "../src/control.ts";
 import {
   StepFailure,
@@ -200,7 +201,7 @@ async function setup(probe?: CommandResources["probe"]) {
   const key = bindWork("probe", null);
   await work.publish(key, "probe", [{ path: ["fields", "consumed"], value: 0 }], 0);
   const events: ConsentEvent[] = [];
-  const runs = new RunConsents((_run, event) => events.push(event));
+  const runs = testConsents((_run, event) => events.push(event));
   runs.open(run);
   bindControl({ runs, acquired: () => null });
   const journal = new ActionJournal(join(directory, "journal.jsonl"));

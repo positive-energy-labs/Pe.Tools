@@ -1,3 +1,4 @@
+import { SdkSession } from "./sdk-session.ts";
 import { randomUUID } from "node:crypto";
 import { Effect } from "effect";
 import {
@@ -280,11 +281,9 @@ export async function canonicalDuctsSession(
   bridge: RevitBridge["Service"],
   id: string,
 ): Promise<string> {
-  const sessions = await Effect.runPromise(bridge.list);
-  const matches = sessions.filter(
-    (session) => session.connected && (session.sessionId === id || session.sdkSessionId === id),
+  // effect-edge: island, phase 5
+  const session = await Effect.runPromise(
+    SdkSession.resolve(bridge, { id }).pipe(Effect.mapError((error) => refused(error.message))),
   );
-  if (matches.length !== 1 || !matches[0]!.sessionId)
-    throw refused("The exact Ducts bridge attachment is unavailable or ambiguous");
-  return matches[0]!.sessionId!;
+  return session.sessionId;
 }

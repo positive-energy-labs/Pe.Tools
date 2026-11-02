@@ -244,6 +244,8 @@ Consume it as `const bridge = yield* RevitBridge`, then `bridge.invoke(...)`. Wh
 a signature, use `RevitBridge["Service"]` (see `call-route.ts` `dispatchTsOnlyOperation`).
 
 ### Tagged errors — plain classes, not `Data.TaggedError`
+> Superseded 2026-11-02 by [ADR 0029](../../adr/0029-effect-is-the-standard-library-one-fiber-per-request.md) rule 5: new errors are `Schema.TaggedError`; plain `_tag` classes survive only until their file is converted. The v4 mechanics below still hold.
+
 ```ts
 export class BridgeError {
   readonly _tag = "BridgeError"
@@ -258,6 +260,8 @@ export class NoRevitSession {
 (see `call-route.ts`) → problem+json with a real status.
 
 ### Effectful functions — `Effect.fnUntraced`
+> Superseded 2026-11-02 by [ADR 0029](../../adr/0029-effect-is-the-standard-library-one-fiber-per-request.md) rule 6: the house idiom is `Effect.fn("name")`, so every step is a span. `fnUntraced` is for hot inner loops only.
+
 The house idiom for a generator-bodied helper (curried-arg friendly, no manual `Effect.gen` wrap):
 ```ts
 const decodeFrame = Effect.fnUntraced(function* (raw: string) {

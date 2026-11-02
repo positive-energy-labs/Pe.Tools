@@ -449,6 +449,7 @@ test("A1 typed/raw forwarding, concurrent replies, isolated events and live sche
   await direct.close();
   let scoped!: Awaited<ReturnType<typeof connectCdp>>;
   const endpoint = await getBrowserEndpoint(browser.info.endpoint);
+  // effect-edge: island, phase 5
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {

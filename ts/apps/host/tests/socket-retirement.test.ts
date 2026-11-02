@@ -36,6 +36,7 @@ async function launchHost(port: number, previousToken?: string) {
       );
     }),
   );
+  // effect-edge: island, phase 5
   const done = Effect.runPromise(program);
   const deadline = Date.now() + 10_000;
   for (;;) {

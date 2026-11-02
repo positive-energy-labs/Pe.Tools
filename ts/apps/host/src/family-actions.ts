@@ -1,4 +1,4 @@
-import { resolveSdkSession } from "./sdk-session.ts";
+import { resolveSdkSession, SdkSession } from "./sdk-session.ts";
 import { createHash } from "node:crypto";
 import { join, resolve, win32 } from "node:path";
 import { Effect, FileSystem } from "effect";
@@ -194,7 +194,8 @@ export const runPods = <A, E>(
 ) =>
   deps.runPods
     ? deps.runPods(effect)
-    : Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
+    : // effect-edge: island, phase 5
+      Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
 
 /** Pod context whose composition runs in the exact admitted session and document lifetime. */
 export const podContext = (
@@ -266,12 +267,14 @@ async function current(
   family: boolean | "project",
   process?: NativeProcess,
 ) {
-  const session = (await Effect.runPromise(bridge.list)).find(
-    (s) => s.sessionId === target.session,
+  // effect-edge: island, phase 5
+  const session = await Effect.runPromise(
+    SdkSession.resolve(bridge, { session: target.session }).pipe(
+      Effect.mapError((error) => refused(error.message)),
+    ),
   );
-  const doc = session?.state?.openDocuments.find((d) => d.openId === target.openId);
+  const doc = session.state?.openDocuments.find((d) => d.openId === target.openId);
   if (
-    !session ||
     !doc ||
     (family === true && !doc.isFamilyDocument) ||
     (family === "project" && doc.isFamilyDocument) ||

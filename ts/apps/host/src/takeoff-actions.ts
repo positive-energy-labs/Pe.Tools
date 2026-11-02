@@ -388,6 +388,7 @@ export function takeoffExecutors(
                 const before = await (
                   deps.openFile ??
                   ((path) =>
+                    // effect-edge: island, phase 5
                     Effect.runPromise(rhvacOpen({ path }).pipe(Effect.provide(NodeServices.layer))))
                 )(input.path);
                 const firstRoomNumber = Math.max(0, ...before.rooms.map((room) => room.number)) + 1;
@@ -459,6 +460,7 @@ export function takeoffExecutors(
               (
                 deps.syncFile ??
                 ((input, expectedVersion) =>
+                  // effect-edge: island, phase 5
                   Effect.runPromise(
                     rhvacSync(input, expectedVersion).pipe(Effect.provide(NodeServices.layer)),
                   ))

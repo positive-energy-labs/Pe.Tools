@@ -74,6 +74,7 @@ export function demoRoutes(parent = resolve(".artifacts/tmp/demos")) {
             }),
           );
         } catch (error) {
+          // effect-edge: island, phase 5
           await Effect.runPromise(Effect.logError("Fixture request refused", error));
           return json({ error: String(error) }, 409);
         }

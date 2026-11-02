@@ -119,6 +119,7 @@ async function fixture() {
 
 test("GET carries the full validated plan, POST returns persisted request and receipt evidence", async () => {
   const f = await fixture();
+  // effect-edge: island, phase 5
   const lifecycle = await Effect.runPromise(
     Effect.gen(function* () {
       return {

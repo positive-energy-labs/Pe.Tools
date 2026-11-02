@@ -65,4 +65,5 @@ for (const [event, code] of [
     void fatalReceipt(hostReceiptExport(), code, error);
   });
 
+// effect-edge: process-main
 NodeRuntime.runMain(hostProgram());

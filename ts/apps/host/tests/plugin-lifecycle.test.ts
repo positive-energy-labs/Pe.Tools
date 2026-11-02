@@ -96,6 +96,7 @@ test("public disable removes Page, script, member, catalog and receipted skill; 
     "inactive",
   );
   await expect(
+    // effect-edge: island, phase 5
     Effect.runPromise(readMember({ pod: "sample", path: "settings/input.json" })),
   ).rejects.toThrow("inactive");
   expect((await content.read()).skills.some((s) => s.package.id === "sample")).toBe(false);

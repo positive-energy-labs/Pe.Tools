@@ -1,3 +1,4 @@
+import { consentService } from "./effect-test.ts";
 import { afterAll, beforeAll, expect, test } from "vite-plus/test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -35,6 +36,7 @@ afterAll(async () => {
 function host(home: string, observeDocument?: ObserveDocument) {
   const log = new HostLog(join(home, "log"));
   const threads = createHarnessThreads({
+    runs: consentService(),
     root: join(home, "threads"),
     log,
     observeDocument,

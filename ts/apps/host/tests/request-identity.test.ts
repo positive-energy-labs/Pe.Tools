@@ -52,7 +52,7 @@ const paired = devices.claim(
 const options: IdentityOptions = {
   devices,
   port: () => 5180,
-  frontendOrigin: () => "http://127.0.0.1:8123",
+  frontendOrigin: "http://127.0.0.1:8123",
   share: { read: async () => share, observe: () => {} },
 };
 const local = { host: "127.0.0.1:5180", [HOST_RUNTIME_SERVICE_HEADER]: hostOwnership.serviceName };
@@ -254,7 +254,7 @@ test("the global reader gates routes, static fallback, unmatched paths and upgra
       }),
     ),
   );
-  const app = HttpRouter.toWebHandler(Layer.mergeAll(requestIdentityLayer(options), ...routes), {
+  const app = HttpRouter.toWebHandler(Layer.mergeAll(requestIdentityLayer({ ...options, frontendOrigin: Effect.succeed(options.frontendOrigin) }), ...routes), {
     disableLogger: true,
   });
   disposals.push(app.dispose);

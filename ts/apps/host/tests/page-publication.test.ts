@@ -1,3 +1,4 @@
+import { testConsents } from "./effect-test.ts";
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,7 +10,6 @@ import { Context, Effect } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { CaptureStore, capturesRoute } from "../src/captures-route.ts";
 import { ActionJournal } from "../src/action-journal.ts";
-import { RunConsents } from "../src/run-consent.ts";
 import { bindControl } from "../src/control.ts";
 import {
   commitPagePublication,
@@ -154,7 +154,7 @@ it("captures through real Edge, publishes only on success, and preserves authore
 it("records publication before waiting and Stop leaves the existing source untouched", async () => {
   const ref = { thread: "publication", turn: "one" };
   const events: Array<{ kind: string; requestId?: string }> = [];
-  const runs = new RunConsents((_run, event) => events.push(event));
+  const runs = testConsents((_run, event) => events.push(event));
   bindControl({ runs });
   runs.open(ref);
   try {

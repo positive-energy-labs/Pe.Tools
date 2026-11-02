@@ -571,7 +571,9 @@ export function processCustody(
   if (!machine || !pid) return null;
   const latest = machine.current();
   if (!latest.legs.sessions) {
-    void machine.refresh().catch((error) => { console.error("machine: asynchronous operation failed", error); });
+    void machine.refresh().catch((error) => {
+      console.error("machine: asynchronous operation failed", error);
+    });
     return null;
   }
   const row = latest.revit.sessions?.find((session) => {
@@ -657,6 +659,7 @@ const matches = (
   attachment.processStartUtcUnixMs === Date.parse(process.processStartUtc);
 
 async function sdk<A>(args: string[], acceptedExitCodes = [0]): Promise<Envelope<A>> {
+  // effect-edge: island, phase 5
   const stdout = await Effect.runPromise(
     runPeRevitCli(args).pipe(Effect.timeout(60_000), Effect.provide(NodeServices.layer)),
   );
@@ -683,9 +686,11 @@ export function machineSources(
       const file = await readServiceFile(productRoot(), hostOwnership.serviceName);
       if (!file || file.pid !== process.pid)
         throw Error("This host has no matching SDK service identity.");
+      // effect-edge: island, phase 5
       const attachments = bridge ? await Effect.runPromise(bridge.list) : [];
       const runtimeRefusal = bridge
-        ? await Effect.runPromise(bridge.lastRegistrationRefusal)
+        ? // effect-edge: island, phase 5
+          await Effect.runPromise(bridge.lastRegistrationRefusal)
         : null;
       return {
         runtimeMatch: attachments.length
@@ -804,6 +809,7 @@ export async function bridgeAttachments(
   bridge: Pick<RevitBridge["Service"], "list"> | undefined,
 ): Promise<readonly AttachmentRead[]> {
   if (!bridge) return [];
+  // effect-edge: island, phase 5
   return (await Effect.runPromise(bridge.list)).flatMap((view) =>
     view.connected && view.sessionId && view.processId
       ? [
@@ -903,7 +909,8 @@ async function readAutostart(executablePath: string): Promise<MachineHost["autos
     const approval = entry.approved?.[0];
     if (approval === 3 || approval === 7) return "disabled-in-windows";
     return approval === undefined || approval === 2 || approval === 6 ? "on" : null;
-  } catch (error) { console.warn("ts/apps/host/src/machine.ts: fallback after failure", error);
+  } catch (error) {
+    console.warn("ts/apps/host/src/machine.ts: fallback after failure", error);
     return null;
   }
 }

@@ -114,6 +114,7 @@ import {
 } from "./control.ts";
 import { bindRevoke } from "./revoke.ts";
 import { hostActionJournal, hostLog } from "./gateway-owner.ts";
+import { RunConsents } from "./run-consent.ts";
 import type { HostLog } from "./host-log.ts";
 import { UpdateReader } from "./update-reader.ts";
 import { makeInstalledUpdateReader } from "./update-route.ts";
@@ -1094,6 +1095,7 @@ export function createContributionContent(options: {
 export function makeHostPeRoutes(
   hostBaseUrl: string,
   bridge: RevitBridge["Service"] | undefined,
+  runs: RunConsents["Service"],
   registrationsFactory: typeof createRouteRegistrations = createRouteRegistrations,
   update: UpdateReader["Service"] = makeInstalledUpdateReader(),
   share?: MachineShareAdapter,
@@ -1119,12 +1121,14 @@ export function makeHostPeRoutes(
   void userCodexMcpServers(userCodexConfigPath())
     .then((names) => writePeaCodexProjectConfig(worldRoot, names))
     .catch((error) =>
+      // effect-edge: island, phase 5
       Effect.runSync(
         Effect.logWarning(`Pea's Codex project config was not written: ${String(error)}`),
       ),
     );
   const shellPath = () =>
     captureUserShellPath().then((captured) => {
+      // effect-edge: island, phase 5
       Effect.runSync(
         captured
           ? Effect.logInfo(`user shell PATH captured (${captured.split(";").length} entries)`)
@@ -1145,6 +1149,7 @@ export function makeHostPeRoutes(
   );
   const routeSettings = createRouteSettings(productRouteSettingsPath());
   const threads = createHarnessThreads({
+    runs,
     // An unreadable settings file asks a person: unknown consent never applies by itself.
     autoApprove: () => {
       try {
@@ -1168,6 +1173,7 @@ export function makeHostPeRoutes(
     // Cached bridge metadata only. Remembered labels/addresses never admit a native operation.
     observeDocument: (request) => {
       if (!bridge) return null;
+      // effect-edge: island, phase 5
       const matches = Effect.runSync(bridge.list).flatMap((session) =>
         session.connected && session.sessionId
           ? (session.state?.openDocuments ?? []).flatMap((doc) => {
@@ -1295,6 +1301,7 @@ export function makeHostPeRoutes(
     turnElementNames: (request) =>
       threads.readTurnElementNames(request, (operation, input, ref) => {
         if (!bridge) return Promise.reject(new Error("No Revit bridge is available"));
+        // effect-edge: island, phase 5
         return Effect.runPromise(bridge.invoke(operation, input, ref.session, ref.openId));
       }),
     navigation: {
@@ -1322,6 +1329,7 @@ export function makeHostPeRoutes(
       },
       documents: async () => {
         if (!bridge) throw new Error("No Revit bridge metadata is available");
+        // effect-edge: island, phase 5
         const sessions = await Effect.runPromise(bridge.list);
         return sessions.flatMap((session) =>
           session.connected && session.sessionId
@@ -1385,8 +1393,9 @@ export const peRoutesLayer = (
       const hostBaseUrl = `http://127.0.0.1:${address._tag === "UnixPathAddress" ? 0 : address.port}`;
       const bridge = Option.getOrUndefined(yield* Effect.serviceOption(RevitBridge));
       const update = yield* UpdateReader;
+      const runs = yield* RunConsents;
       const { providers, threads, routes, catalog, machine, notices, plugins, tasks } =
-        makeHostPeRoutes(hostBaseUrl, bridge, registrationsFactory, update, share, hostWork);
+        makeHostPeRoutes(hostBaseUrl, bridge, runs, registrationsFactory, update, share, hostWork);
       useHostMachine(machine);
       bindControl({
         heads: threads.heads.read,

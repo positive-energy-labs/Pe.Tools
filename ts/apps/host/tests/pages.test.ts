@@ -676,7 +676,7 @@ describe("pages", () => {
     }
     const options: IdentityOptions = {
       port: () => 5180,
-      frontendOrigin: () => undefined,
+      frontendOrigin: undefined,
       share: {
         read: async () => ({
           allowRemoteAdministration: true,

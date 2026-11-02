@@ -44,6 +44,7 @@ export async function assertDemoPath(root: string, path: string): Promise<string
 /** Real Settings policy with mandatory root and a filesystem that cannot leave it. */
 export async function createDemoSettings(root: string) {
   const storageRoot = await realpath(root);
+  // effect-edge: island, phase 5
   const fs = await Effect.runPromise(
     FileSystem.FileSystem.pipe(Effect.provide(NodeServices.layer)),
   );
@@ -76,6 +77,7 @@ export async function createDemoSettings(root: string) {
     },
   });
   const run = <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem>) =>
+    // effect-edge: island, phase 5
     Effect.runPromise(effect.pipe(Effect.provideService(FileSystem.FileSystem, guarded)));
   const podsRoot = resolve(storageRoot, "Pods");
   const ctx = { podsRoot };

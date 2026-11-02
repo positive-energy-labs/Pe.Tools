@@ -48,6 +48,7 @@ test("Vite owns HMR, proxies the claimed backend, and restarts without replacing
   const webUrl = Deferred.makeUnsafe<string>();
   const latch = Deferred.makeUnsafe<void>();
   const handle = Deferred.makeUnsafe<ServiceHostHandle>();
+  // effect-edge: island, phase 5
   const done = Effect.runPromise(
     Effect.scoped(
       Effect.raceFirst(
@@ -68,6 +69,7 @@ test("Vite owns HMR, proxies the claimed backend, and restarts without replacing
   let vite: Awaited<ReturnType<typeof createViteServer>> | undefined;
   let socket: WebSocket | undefined;
   try {
+    // effect-edge: island, phase 5
     const claimed = await Effect.runPromise(
       Deferred.await(handle).pipe(Effect.timeout("10 seconds")),
     );
@@ -82,6 +84,7 @@ test("Vite owns HMR, proxies the claimed backend, and restarts without replacing
     });
     await vite.listen();
     const browser = vite.resolvedUrls!.local[0]!.replace(/\/$/, "");
+    // effect-edge: island, phase 5
     await Effect.runPromise(Deferred.succeed(webUrl, browser));
     expect(browser).not.toBe(backend);
     expect(await fetch(browser).then((r) => r.text())).toContain("frontend");
@@ -152,6 +155,7 @@ test("Vite owns HMR, proxies the claimed backend, and restarts without replacing
   } finally {
     socket?.close();
     await vite?.close();
+    // effect-edge: island, phase 5
     await Effect.runPromise(Deferred.succeed(latch, undefined));
     await done;
     if (previousLocalAppData === undefined) delete process.env.LOCALAPPDATA;

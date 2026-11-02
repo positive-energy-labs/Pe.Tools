@@ -16,7 +16,8 @@ import {
   type Readiness,
   type TraitOption,
 } from "@pe/agent-contracts";
-import { Effect } from "effect";
+import { Cause, Effect, Exit, Schema } from "effect";
+import { MessagesReply, ModelList, ResponsesReply } from "./edge-schemas.ts";
 import { z } from "zod";
 import { productProvidersPath } from "../product-paths.ts";
 import { adapterCli, adapterLogin, adapters, openAdapter, stopChild } from "./adapter.ts";
@@ -43,7 +44,9 @@ type Probed = Pick<Provider, "readiness" | "models" | "traits" | "probedAt">;
 const PROBE_MS = 20_000;
 const FRESH_MS = 60_000;
 const log = {
+  // effect-edge: island, phase 5
   info: (message: string) => Effect.runSync(Effect.logInfo(message)),
+  // effect-edge: island, phase 5
   warn: (message: string) => Effect.runSync(Effect.logWarning(message)),
 };
 
@@ -219,12 +222,13 @@ function normalizeBaseUrl(harness: HarnessId, raw: string): string {
   return `${url.origin}${path || "/v1"}`;
 }
 
-async function upstream(
+async function upstream<A>(
   step: string,
   url: string,
   headers: Record<string, string>,
+  reply: Schema.Codec<A, unknown>,
   body?: unknown,
-): Promise<Record<string, any>> {
+): Promise<A> {
   const response = await fetch(url, {
     method: body ? "POST" : "GET",
     headers: { ...headers, "content-type": "application/json" },
@@ -243,8 +247,9 @@ async function upstream(
       response.status,
       classifyEndpointFailure(text, response.status),
     );
+  let json: unknown;
   try {
-    return JSON.parse(text) as Record<string, any>;
+    json = JSON.parse(text);
   } catch {
     throw new Refusal(
       `${step}: HTTP 200 from ${url} was not JSON`,
@@ -252,6 +257,14 @@ async function upstream(
       classifyEndpointFailure(text),
     );
   }
+  // Promise caller until phase 5: the reply is decoded, and a shape the API does not speak refuses.
+  const decoded = Schema.decodeUnknownExit(reply)(json);
+  if (Exit.isSuccess(decoded)) return decoded.value;
+  throw new Refusal(
+    `${step}: HTTP 200 from ${url} is not a ${step} reply: ${Cause.pretty(decoded.cause)}`,
+    200,
+    classifyEndpointFailure(text),
+  );
 }
 
 /** Codex speaks the Responses API to the endpoint, Claude the Messages API: each probe proves its own. */
@@ -267,22 +280,16 @@ async function checkEndpoint(
     ? { authorization: `Bearer ${apiKey}`, "x-api-key": apiKey, "anthropic-version": "2023-06-01" }
     : { authorization: `Bearer ${apiKey}` };
   const root = claude ? `${baseUrl}/v1` : baseUrl;
-  const listed = await upstream("models", `${root}/models`, headers);
-  const models: HarnessModel[] = Array.isArray(listed.data)
-    ? [
-        ...new Set<string>(
-          listed.data.flatMap((row: { id?: unknown }) =>
-            typeof row?.id === "string" && row.id.trim() ? [row.id] : [],
-          ),
-        ),
-      ]
-        .filter((id) =>
-          claude
-            ? /^claude-/i.test(id) || id === selectedModel
-            : codexModels?.some((model) => model.modelId === id),
-        )
-        .map((modelId) => ({ modelId, name: modelId }))
-    : [];
+  const listed = await upstream("models", `${root}/models`, headers, ModelList);
+  const models: HarnessModel[] = [
+    ...new Set(listed.data.flatMap((row) => (row.id.trim() ? [row.id] : []))),
+  ]
+    .filter((id) =>
+      claude
+        ? /^claude-/i.test(id) || id === selectedModel
+        : codexModels?.some((model) => model.modelId === id),
+    )
+    .map((modelId) => ({ modelId, name: modelId }));
   // A custom Responses model without Codex metadata can reject the reasoning/tool
   // fields the harness sends even when the tiny endpoint request succeeds.
   if (!claude && selectedModel && !codexModels?.some((model) => model.modelId === selectedModel))
@@ -313,22 +320,25 @@ async function checkEndpoint(
   const rejected = new Set<string>();
   for (const { modelId: model } of candidates) {
     try {
-      const reply = claude
-        ? await upstream("messages", `${root}/messages`, headers, {
+      const [reply, text] = claude
+        ? await upstream("messages", `${root}/messages`, headers, MessagesReply, {
             model,
             max_tokens: 16,
             messages: [{ role: "user", content: prompt }],
-          })
-        : await upstream("responses", `${root}/responses`, headers, {
+          }).then((r) => [r, r.content?.find((c) => c.type === "text")?.text] as const)
+        : await upstream("responses", `${root}/responses`, headers, ResponsesReply, {
             model,
             input: prompt,
             max_output_tokens: 64,
-          });
-      const text: unknown = claude
-        ? reply.content?.find((c: { type?: string }) => c?.type === "text")?.text
-        : reply.output
-            ?.find((o: { type?: string }) => o?.type === "message")
-            ?.content?.find((c: { type?: string }) => c?.type === "output_text")?.text;
+          }).then(
+            (r) =>
+              [
+                r,
+                r.output
+                  ?.find((o) => o.type === "message")
+                  ?.content?.find((c) => c.type === "output_text")?.text,
+              ] as const,
+          );
       if (typeof text !== "string" || !text.trim())
         throw new Refusal(
           `${claude ? "messages" : "responses"}: HTTP 200 but no assistant text`,
@@ -942,7 +952,12 @@ export function createProviders(options: ProvidersOptions) {
           { error: "This route reads a JSON body: send content-type: application/json" },
           415,
         );
-      const parsed = schema.safeParse(await request.json().catch((error) => { console.error("providers: asynchronous operation failed", error); return null; }));
+      const parsed = schema.safeParse(
+        await request.json().catch((error) => {
+          console.error("providers: asynchronous operation failed", error);
+          return null;
+        }),
+      );
       return parsed.success ? parsed.data : json({ error: parsed.error.message }, 400);
     };
     const rawId = declared.params.id;

@@ -46,10 +46,8 @@ import {
   attachmentRefusal,
   createThreadRequestSchema,
   emptyThreadLifecycle,
-  harnessThreadSummarySchema,
   routeAddress,
   threadPlaceRequestSchema,
-  threadLifecycleSchema,
   updateThreadRequestSchema,
   forkThreadRequestSchema,
   permissionResponseSchema,
@@ -79,7 +77,6 @@ import {
   type ReadingFrame,
   type ReadingRequest,
   type Caller,
-  type RunRef,
   emptyThreadHead,
 } from "@pe/agent-contracts";
 import { HOST_CONTEXT_VARIABLE } from "@pe/host-contracts/contracts";
@@ -97,11 +94,13 @@ import {
   documentAcquisition,
   sessionAcquisition,
 } from "../control.ts";
-import { Effect } from "effect";
-import { RunConsents } from "../run-consent.ts";
+import { Effect, Schema } from "effect";
+import { runConsentsPromise, type RunConsents } from "../run-consent.ts";
 import { z } from "zod";
 import type { HostLog } from "../host-log.ts";
 import { openAdapter, stopChild } from "./adapter.ts";
+import { CodexConfig } from "./edge-schemas.ts";
+import { decodeThreadMeta, replayThreadEvents, type Meta } from "./thread-store.ts";
 import { isAuthRefusal, sessionOffer, type Providers } from "./providers.ts";
 import type { PluginHookName, PluginHooks } from "@pe/agent-contracts";
 import { exportThread } from "../thread-export.ts";
@@ -110,29 +109,10 @@ import {
   rememberPlace,
   rememberTarget,
   type ObserveDocument,
-  type ThreadWorkContext,
 } from "../thread-work-context.ts";
 
 /** The thread wire of ADR 0015; contract and route list in `@pe/agent-contracts` `harness-thread.ts`. */
 
-type Meta = Omit<HarnessThreadSummary, "lastSeq" | "cursor" | "activity" | "head"> & {
-  /** Display/Work relationships survive removal of native target authority. */
-  workContext?: ThreadWorkContext;
-  /** Host-issued causal delegation; absent for independent and scheduled threads. */
-  consentRoot?: RunRef;
-  runConsent?: import("@pe/agent-contracts").AllowDecision | null;
-  acpSessionId: string | null;
-  models: HarnessThreadBody["models"];
-  traits: HarnessThreadBody["traits"];
-  /** Trait values the user chose, re-applied when a session comes back with the harness default. */
-  traitValues: Record<string, string | boolean>;
-  /** The thread head the Pea MCP child reads through `GET /pe/scope/:id`. */
-  head: ThreadHead;
-  /** The thread this one was forked from; `acpSessionId` is null when the fork crossed providers. */
-  forkOf: { threadId: string; acpSessionId: string | null } | null;
-  /** What the last `initialize` advertised; the attachment refusal reads it before a child runs. */
-  promptCapabilities: HarnessThreadBody["promptCapabilities"];
-};
 type Live = { conn: ClientSideConnection; sessionId: string; configOptions: SessionConfigOption[] };
 type Pending<R> = { turnId: string | null; resolve: (response: R) => void };
 /** A prompt waiting its turn; `turnId` is the client's prompt id. */
@@ -198,6 +178,8 @@ export type HarnessThreadsOptions = {
   providers: Providers;
   /** Pea's auto-approve setting (route `chat`): on, a thread's first write applies at its deadline. */
   autoApprove?: () => boolean;
+  /** Run consent, provided once by the host layer; this store attaches its transcript and grants. */
+  runs: RunConsents["Service"];
   /** Automatic update admission excludes new harness work through installer handoff. */
   updatePending?: () => boolean;
   /** Admission/import and skill publication must settle before either harness starts. */
@@ -216,6 +198,7 @@ export const IDLE_CHILD_MS = 15 * 60_000;
 const INTERRUPT_MS = 10_000;
 /** Thrown by `input` on a body route sent without a JSON content type; served as 415. */
 class NotJson extends Error {}
+// effect-edge: island, phase 5
 const warn = (message: string) => Effect.runSync(Effect.logWarning(message));
 
 /**
@@ -244,7 +227,8 @@ async function childEnv(
   const env = await options.providers.env(record, modelId);
   env.PYTHONIOENCODING ??= "utf-8";
   if (record.harness !== "codex") return env;
-  const config = env.CODEX_CONFIG ? (JSON.parse(env.CODEX_CONFIG) as object) : {};
+  // Promise caller until phase 5: a sync decode throws the path of a CODEX_CONFIG that is not an object.
+  const config = env.CODEX_CONFIG ? Schema.decodeUnknownSync(CodexConfig)(env.CODEX_CONFIG) : {};
   const developer_instructions = [await options.developerInstructions?.(), CODEX_QUESTION_RULE]
     .filter(Boolean)
     .join("\n\n");
@@ -375,11 +359,48 @@ function bounded(event: Append): Append {
         : value && typeof value === "object"
           ? Object.fromEntries(Object.entries(value).map(([k, v]) => [k, cut(v)]))
           : value;
-  const field = event.kind === "update" ? "update" : "toolCall";
-  let kept = cut((event as Record<string, unknown>)[field]) as Record<string, unknown>;
-  if (Buffer.byteLength(JSON.stringify(kept)) > HARNESS_EVENT_MAX_BYTES)
-    kept = Object.fromEntries(Object.entries(kept).filter(([k]) => IDENTITY.includes(k)));
-  return { ...event, [field]: { ...kept, truncated: bytes } } as Append;
+  // Spreading the cut entries over the body keeps the body's type: the keys are the same.
+  const cutBody = <T extends Record<string, unknown>>(body: T): T => ({
+    ...body,
+    ...Object.fromEntries(Object.entries(body).map(([k, v]) => [k, cut(v)])),
+  });
+  const identity = (body: Record<string, unknown>) =>
+    Object.fromEntries(Object.entries(body).filter(([k]) => IDENTITY.includes(k)));
+  const tooBig = (body: object) =>
+    Buffer.byteLength(JSON.stringify(body)) > HARNESS_EVENT_MAX_BYTES;
+  if (event.kind === "update") {
+    const kept = cutBody(event.update);
+    const body = tooBig(kept)
+      ? { ...identity(kept), sessionUpdate: event.update.sessionUpdate }
+      : kept;
+    return { ...event, update: { ...body, truncated: bytes } };
+  }
+  const { toolCallId, title } = event.toolCall;
+  const kept = cutBody(event.toolCall);
+  const body = tooBig(kept)
+    ? { ...identity(kept), toolCallId, ...(title === undefined ? {} : { title }) }
+    : kept;
+  return { ...event, toolCall: { ...body, truncated: bytes } };
+}
+
+/**
+ * No endpoint key lands in a thread record, even when a harness echoes it: every string in the
+ * event, keys included, shows only its last four characters. Shape-preserving, so the event keeps
+ * its type and the line written from it needs no second decode.
+ */
+function redactKeys<T>(value: T, keys: readonly string[]): T {
+  const text = (s: string) =>
+    keys.reduce((out, key) => out.replaceAll(key, `…${key.slice(-4)}`), s);
+  const walk = (v: unknown): unknown =>
+    typeof v === "string"
+      ? text(v)
+      : Array.isArray(v)
+        ? v.map(walk)
+        : v && typeof v === "object"
+          ? Object.fromEntries(Object.entries(v).map(([k, x]) => [text(k), walk(x)]))
+          : v;
+  // The one cast: `walk` maps strings to strings and keeps every container, so T holds.
+  return walk(value) as T;
 }
 
 /** tmp + rename, so a crash mid-write never leaves a torn file. */
@@ -390,20 +411,21 @@ function writeJson(path: string, value: unknown) {
 
 export function createHarnessThreads(options: HarnessThreadsOptions) {
   const threads = new Map<string, Thread>();
-  const runs = new RunConsents(
-    (run, event) => {
+  const runs = runConsentsPromise(options.runs);
+  runs.attach({
+    emit: (run, event) => {
       const t = threads.get(run.thread);
       if (t) append(t, event);
     },
-    (ref) => options.observeDocument?.({ kind: "open", ref })?.name,
-    options.autoApprove,
-    (thread, decision) => {
+    documentName: (ref) => options.observeDocument?.({ kind: "open", ref })?.name,
+    autoApprove: options.autoApprove ?? (() => true),
+    persist: (thread, decision) => {
       const t = threads.get(thread);
       if (!t) return; // Deletion removes the record before its cancelled turn unwinds.
       t.meta.runConsent = decision;
       writeMeta(t);
     },
-  );
+  });
   bindControl({ runs });
   /** Synchronization only. Observations and pins are always reconstructed from thread events. */
   const elementNameReads = new Map<string, Promise<void>>();
@@ -419,23 +441,22 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     const dir = join(options.root, id);
     if (!existsSync(join(dir, "meta.json"))) continue;
     try {
-      const events = existsSync(join(dir, "events.jsonl"))
-        ? readFileSync(join(dir, "events.jsonl"), "utf8")
-            .split("\n")
-            .filter(Boolean)
-            .map((line) => JSON.parse(line) as HarnessEvent)
-        : [];
-      const meta = JSON.parse(readFileSync(join(dir, "meta.json"), "utf8")) as Meta;
-      meta.head = threadHeadSchema.safeParse(meta.head ?? emptyThreadHead).data ?? emptyThreadHead;
-      meta.lifecycle = threadLifecycleSchema.parse(meta.lifecycle ?? emptyThreadLifecycle());
-      meta.tabs = harnessThreadSummarySchema.shape.tabs.parse(meta.tabs);
-      meta.forkOf ??= null;
-      meta.promptCapabilities ??= null;
-      // Threads from before providers ran on the harness's own login.
-      meta.providerId ??= meta.harness;
-      meta.providerName ??= options.providers.get(meta.harness)?.name ?? meta.harness;
-      meta.traits ??= [];
-      meta.traitValues ??= {};
+      const eventsPath = join(dir, "events.jsonl");
+      // Thread replay runs in the synchronous store constructor.
+      // effect-edge: island, phase 5
+      const { events, meta } = Effect.runSync(
+        Effect.all({
+          events: existsSync(eventsPath)
+            ? replayThreadEvents(eventsPath, readFileSync(eventsPath, "utf8")).pipe(
+                Effect.map((replay) => replay.events),
+              )
+            : Effect.succeed([]),
+          meta: decodeThreadMeta(
+            readFileSync(join(dir, "meta.json"), "utf8"),
+            (harness) => options.providers.get(harness)?.name ?? harness,
+          ),
+        }),
+      );
       const before = JSON.stringify(meta.workContext);
       threads.set(id, fresh(meta, events));
       runs.restore(id, meta.runConsent);
@@ -495,7 +516,9 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     );
     threads.set(meta.id, t);
     notifySummaries();
-    ensure(t).catch((error) => { console.error("threads: asynchronous operation failed", error); }); // a failure to start is an `error` event
+    ensure(t).catch((error) => {
+      console.error("threads: asynchronous operation failed", error);
+    }); // a failure to start is an `error` event
     return t;
   }
 
@@ -536,22 +559,24 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
   const writeMeta = (t: Thread) => writeJson(join(options.root, t.meta.id, "meta.json"), t.meta);
 
   function append(t: Thread, event: Append): HarnessEvent {
-    const line = JSON.stringify({
+    const keys = options.providers.keys();
+    const stamped: HarnessEvent = {
       ...bounded(event),
       seq: t.events.length + 1,
       at: new Date().toISOString(),
-    });
-    // No endpoint key lands in a thread record, even when a harness echoes it.
-    const redacted = options.providers
-      .keys()
-      .reduce((text, key) => text.replaceAll(key, `…${key.slice(-4)}`), line);
-    const full = JSON.parse(redacted) as HarnessEvent;
+    };
+    const full = keys.length > 0 ? redactKeys(stamped, keys) : stamped;
+    const line = JSON.stringify(full);
     if (
       (full.kind === "turn_element_targets" || full.kind === "turn_element_names") &&
-      Buffer.byteLength(redacted) >= HARNESS_EVENT_MAX_BYTES
+      Buffer.byteLength(line) >= HARNESS_EVENT_MAX_BYTES
     )
       throw Error("Turn element event exceeds the byte bound");
-    appendFileSync(join(options.root, t.meta.id, "events.jsonl"), `${redacted}\n`);
+    appendFileSync(
+      join(options.root, t.meta.id, "events.jsonl"),
+      `${line}
+`,
+    );
     t.events.push(full);
     projectActivity(t, full);
     options.log.append({ kind: "thread", thread: t.meta.id, event: full });
@@ -1167,7 +1192,10 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
           const live = caps.resume
             ? await conn
                 .resumeSession({ ...request, sessionId: forked.sessionId })
-                .catch((error) => { console.error("threads: asynchronous operation failed", error); return null; })
+                .catch((error) => {
+                  console.error("threads: asynchronous operation failed", error);
+                  return null;
+                })
             : null;
           state = "forked";
           return { ...forked, ...live, sessionId: forked.sessionId };
@@ -1469,7 +1497,11 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       if (runError) throw runError;
       // Configuration may have warmed an unscoped child. Admission is logged before waiting.
       await t.retiring;
-      if (t.live) await t.live.catch((error) => { console.error("threads: asynchronous operation failed", error); return null; });
+      if (t.live)
+        await t.live.catch((error) => {
+          console.error("threads: asynchronous operation failed", error);
+          return null;
+        });
       if (t.child) await retire(t);
       await options.prepare?.();
       await options.pluginHook?.("turn.before", { threadId: t.meta.id, turnId });
@@ -1661,7 +1693,10 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     append(t, { kind: "cancel_requested", turnId, by, door });
     runs.close({ thread: t.meta.id, turn: turnId }, "stopped");
     settleAsks(t, "cancel");
-    const live = await connecting?.catch((error) => { console.error("threads: asynchronous operation failed", error); return null; });
+    const live = await connecting?.catch((error) => {
+      console.error("threads: asynchronous operation failed", error);
+      return null;
+    });
     // A starting turn retires the warm child. Its logged cancellation also prevents prompt
     // dispatch; an old connection must never cancel a queued turn's replacement child.
     const current = () => t.running === turnId && t.live === connecting && t.child === child;
@@ -1925,7 +1960,11 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
           return json({ error: "Restore this archived thread before sending" }, 409);
         if (attachments) {
           // The harness says what it reads at `initialize`; learn it before admitting the turn.
-          if (!t.meta.promptCapabilities) await ensure(t).catch((error) => { console.error("threads: asynchronous operation failed", error); return null; });
+          if (!t.meta.promptCapabilities)
+            await ensure(t).catch((error) => {
+              console.error("threads: asynchronous operation failed", error);
+              return null;
+            });
           const refusal = attachmentRefusal(
             attachments,
             t.meta.promptCapabilities,
