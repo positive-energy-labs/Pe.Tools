@@ -330,6 +330,8 @@ const blocker = z.object({
  * table). `candidates` are the rules a person may price it with; `options` the tables its rule may swap to.
  */
 const fittingPricingFields = {
+  /** Controlling priced leg, including its table inputs and interpolation boundary. */
+  derivation: z.string().optional(),
   family: z.string().nullable(),
   rule: z.string().nullable(),
   table: z.string().nullable(),
@@ -526,6 +528,9 @@ export const ductsRosterResponseSchema = z.object({
       uniqueId: z.string().min(1),
       portIndex,
       mark: z.string(),
+      /** Display disambiguators for a duplicate mark; the UniqueId is identity, never text. */
+      level: z.string().nullable().optional(),
+      system: z.string().nullable().optional(),
       kind: z.enum(["fan-coil", "air-handler", "erv", "muas", "dehumidifier", "other"]),
       side: z.enum(["supply", "return", "exhaust", "outdoor"]),
       ratedEspInWg: z.number().nullable(),

@@ -304,7 +304,8 @@ function GraphSituation<P, W>({
             <span>{stage.word}</span>
           )}
           {/* One subject projection (shell/subject.ts) titles the band, the Places and the window. */}
-          {(subjectLabel || graph.subject) && (
+          {/* A declared subject field speaks only through its roster label; graph.subject(page) may hold raw keys. */}
+          {(subjectLabel || (!graph.subjectField && graph.subject)) && (
             <span data-slot="situation-subject">
               {subjectLabel || graph.subject!(owner.view.read().page)}
             </span>

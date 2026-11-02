@@ -59,5 +59,19 @@ export function selectedFans<T extends Pick<FanPort, "uniqueId" | "portIndex">>(
   });
 }
 
-export const fanLabel = (fan: Pick<FanPort, "mark" | "uniqueId" | "portIndex">, rows: readonly Pick<FanPort, "mark" | "uniqueId">[]) =>
-  `${fan.mark}${rows.some((row) => row.mark === fan.mark && row.uniqueId !== fan.uniqueId) ? ` (${fan.uniqueId.slice(-8)})` : ""} / port ${fan.portIndex}`;
+type Labelled = Pick<FanPort, "mark" | "uniqueId" | "portIndex"> &
+  Partial<Pick<FanPort, "level" | "system">>;
+/** A duplicate mark is told apart by where it is (level, then system), else by its order; never by its key. */
+export const fanLabel = (fan: Labelled, rows: readonly Labelled[]) => {
+  const twins = rows.filter((row) => row.mark === fan.mark && row.uniqueId !== fan.uniqueId);
+  const where = (["level", "system"] as const).find(
+    (key) => fan[key] && twins.every((row) => row[key] !== fan[key]),
+  );
+  const units = [...new Set([fan, ...twins].map((row) => row.uniqueId))].sort();
+  const place = !twins.length
+    ? ""
+    : where
+      ? ` · ${fan[where]}`
+      : ` (${units.indexOf(fan.uniqueId) + 1} of ${units.length})`;
+  return `${fan.mark}${place} / port ${fan.portIndex}`;
+};

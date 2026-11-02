@@ -37,3 +37,20 @@ test("empty native preview explains why there is nothing to write", () => {
   const review = presentLosses({ writes: [], counts: {} }, { readings: {} } as VerbScope);
   expect(review.sentence).toMatch(/Nothing to write:.*no native targets.*selected scope/);
 });
+
+test("review rows speak Revit's words: no loss-method tokens, no store machine words", () => {
+  const review = presentLosses(
+    {
+      response: {
+        counts: { planned: 2, written: 0, refused: 0, unchanged: 0 },
+        writes: [
+          { id: 7, kind: "component", outcome: "planned", before: "no server", after: "specific-loss 0.18 in-wg" },
+          { id: null, kind: "store", outcome: "planned", before: "absent", after: null },
+        ],
+      },
+    },
+    { readings: {} } as VerbScope,
+  );
+  expect(review.rows[0]).toContain("Specific Loss: no loss method → Specific Loss 0.18 in-wg");
+  expect(review.rows[1]).toBe("Pe loss record (Project Information): none yet → created · planned");
+});

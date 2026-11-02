@@ -607,11 +607,14 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
         // (PE_M_Fan_ExternalStaticPressure), the REQUIRED ESP Pe writes; the page labels it
         // "required (written)". Rated ESP has no firm slot yet; the contract field keeps its name.
         const rating = inputs.units[String(port.unitId)]?.esp.value ?? null;
+        const unit = snapshot.nodes.find((node) => node.id === port.unitId);
         rows.push({
           unitId: port.unitId,
-          uniqueId: snapshot.nodes.find((node) => node.id === port.unitId)?.uniqueId,
+          uniqueId: unit?.uniqueId,
           portIndex: port.portIndex,
           mark: port.tag,
+          level: snapshot.levels.find((level) => level.id === unit?.levelId)?.name ?? null,
+          system: unit?.systemName ?? null,
           kind: port.kind,
           side: port.side,
           ratedEspInWg: sheet?.fan.ratedEspInWg ?? rating,

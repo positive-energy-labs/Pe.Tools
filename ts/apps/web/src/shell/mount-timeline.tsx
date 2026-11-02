@@ -102,7 +102,8 @@ export function GraphHistory<P, W>({
             })
             .map((entry, index) => (
               <li key={`event:${index}`}>
-                {entry.verb ?? entry.kind} · {entry.outcome?.state ?? entry.kind} ? {entryCaller(entry)} ·{" "}
+                {(entry.verb && owner.verbs[entry.verb]?.label) ?? entry.kind} ·{" "}
+                {entry.outcome?.state ?? entry.kind} · {entryCaller(entry)} ·{" "}
                 {activityTime(
                   entry.at,
                   entry.kind === "receipt" && entry.press
@@ -130,15 +131,18 @@ export function GraphHistory<P, W>({
                       : "; awaiting approval"}
                   </>
                 )}
-                {entry.kind === "feed" && <> · {JSON.stringify(entry.subject)}</>}
               </li>
             )),
           ...[...saved]
             .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
             .map((receipt) => (
               <li key={receipt.id}>
-                <a href={routeAddress("ops").link({ actionId: receipt.id })}>{receipt.key}</a> ·{" "}
-                {invocationOutcome(receipt).state} ? {receipt.caller.kind === "pea" ? "Pea" : "you"} · {activityTime(receipt.startedAt)}
+                <a href={routeAddress("ops").link({ actionId: receipt.id })}>
+                  {Object.values(owner.verbs).find((verb) => verb.does === receipt.key)?.label ??
+                    receipt.key}
+                </a>{" "}
+                ·{" "}
+                {invocationOutcome(receipt).state} · {receipt.caller.kind === "pea" ? "Pea" : "you"} · {activityTime(receipt.startedAt)}
                 {invocationOutcome(receipt).recovery && (
                   <>
                     {" "}

@@ -126,7 +126,8 @@ export const openControls: RouteGraph<OpenPageState> = {
     roster: "recents",
     detail: "machine",
     pane: "bay",
-    show: (id) => id,
+    // A path is the key; a cloud path carries project/model GUIDs, so the label is the file name.
+    show: (id: string) => id.replace(/^.*[\\/}]/, ""),
   },
   fields: {
     session: { ...field(z.string().default(""), {}), role: "selection" },
@@ -263,7 +264,8 @@ export const openGraph: RouteGraph<OpenPageState> = {
     roster: "recents",
     detail: "machine",
     pane: "bay",
-    show: (id) => id,
+    // A path is the key; a cloud path carries project/model GUIDs, so the label is the file name.
+    show: (id: string) => id.replace(/^.*[\\/}]/, ""),
   },
   fields: {
     ...openControls.fields,

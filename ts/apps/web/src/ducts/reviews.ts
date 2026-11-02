@@ -182,6 +182,18 @@ export function presentHeal(result: unknown, scope: VerbScope): VerbPresentation
   };
 }
 
+/** DuctApplier names loss methods by token; a review speaks Revit's words. */
+const METHODS: Record<string, string> = {
+  "no server": "no loss method",
+  "not-defined": "Not Defined",
+  "pe-server": "Pe loss server",
+  "specific-loss": "Specific Loss",
+  "specific-coefficient": "Specific Coefficient",
+  "ashrae-table": "ASHRAE table",
+};
+const spoken = (value: string | null | undefined) =>
+  value?.replace(/^(no server|not-defined|pe-server|specific-loss|specific-coefficient|ashrae-table)/, (m) => METHODS[m]!);
+
 export function presentLosses(result: unknown, scope: VerbScope): VerbPresentation {
   const response = responseOf<DuctsApply.Res.Response>(result);
   const envelope = result as {
@@ -242,7 +254,11 @@ export function presentLosses(result: unknown, scope: VerbScope): VerbPresentati
             : proposed
               ? "Work"
               : "derived Work";
-      return `${write.id == null ? "Model store" : `${name(write.id) ?? "element"} [${write.id}]`} · ${slot ?? write.kind}: ${write.before ?? "not available"} → ${write.after ?? next ?? "derived store"} · source: ${source} · ${write.outcome}${write.reason ? ` · ${write.reason}` : ""}`;
+      const tail = `${write.outcome}${write.reason ? ` · ${write.reason}` : ""}`;
+      // The store row is Pe's provenance record in Project Information; its "absent"/"revision n" are machine words.
+      if (write.id == null)
+        return `Pe loss record (Project Information): ${write.before === "absent" ? "none yet → created" : `${spoken(write.before) ?? "not available"} → updated`} · ${tail}`;
+      return `${name(write.id) ?? "element"} [${write.id}] · ${slot ?? write.kind}: ${spoken(write.before) ?? "not available"} → ${spoken(write.after) ?? next ?? "derived from Work"} · source: ${source} · ${tail}`;
     }),
   };
 }

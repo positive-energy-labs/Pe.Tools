@@ -11,7 +11,7 @@ test("refused legacy fan drops before the next roster pick; refusal is emitted o
   // Use the declaration's actual stable keys, never guess the fan DTO's identity spelling.
   const id = fansGraph.fields.fan.picker.options(roster)[0]!.id;
   const refused = admittedSubject(fansGraph, page, roster)!;
-  expect(refused.refusal).toContain("13760867:1 not in this model");
+  expect(refused.refusal).toBe("Dropped 1 fan link not in this model");
   page = { ...page, ...refused.patch };
   expect(page.fan).toEqual([]);
   expect(admittedSubject(fansGraph, page, roster)).toBeNull();

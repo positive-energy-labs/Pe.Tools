@@ -53,17 +53,28 @@ export function subjectState(route: string, search: Record<string, unknown>) {
   const ids: string[] = value === "all" ? [] : Array.isArray(value) ? value : value ? [value] : [];
   const options = rosters.get(scopeKey(route, search));
   const unknown = options && ids.find((id) => !options.some((option) => option.id === id));
+  // A UniqueId key (and its port suffix) is never display text: refusals and labels name the noun instead.
+  const named = subject.keyKind !== "UniqueId";
   if (unknown)
-    return { ready: false, refusal: `${subject.noun} ${unknown} not in this model`, label: "" };
+    return {
+      ready: false,
+      refusal: named
+        ? `${subject.noun} ${unknown} not in this model`
+        : `A ${subject.noun} in this link is not in this model; choose it again from the roster`,
+      label: "",
+    };
+  const label = (id: string) =>
+    options?.find((option) => option.id === id)?.label ?? (named ? subject.show(id) : null);
+  const labels = ids.map(label);
   return {
     ready: !field.picker || !!options || (!ids.length && value !== "all"),
     refusal: null,
     label:
       value === "all"
         ? `All ${subject.noun}s`
-        : ids
-            .map((id) => options?.find((option) => option.id === id)?.label ?? subject.show(id))
-            .join(" + "),
+        : labels.every((l) => l !== null)
+          ? labels.join(" + ")
+          : `${ids.length} ${subject.noun}${ids.length === 1 ? "" : "s"}`,
   };
 }
 
@@ -86,6 +97,9 @@ export function admittedSubject(graph: Declaration, page: Record<string, unknown
   const kept = ids.filter((id) => !refused.includes(id));
   return {
     patch: { [subject.field]: field.cardinality === "many" ? kept : kept[0] ?? field.schema.parse(undefined) },
-    refusal: `${subject.noun} ${refused.join(", ")} not in this model`,
+    refusal:
+      subject.keyKind === "UniqueId"
+        ? `Dropped ${refused.length} ${subject.noun} link${refused.length === 1 ? "" : "s"} not in this model`
+        : `${subject.noun} ${refused.join(", ")} not in this model`,
   };
 }
