@@ -11,7 +11,7 @@ import { useRouter, useRouterState } from "@tanstack/react-router";
 import { THREAD_TABS_MAX, routeAddress, type RouteKey, type ThreadTab } from "@pe/agent-contracts";
 import { RouteActivity, RouteVisibility, type RouteActivityScope } from "#/route/activity";
 import { currentLocation } from "#/route/url";
-import { PaneErrorBoundary } from "@pe/kit/lang/pane";
+import { PaneErrorBoundary, PaneLoading } from "@pe/kit/lang/pane";
 
 interface RetainedRoute {
   key: string;
@@ -58,7 +58,7 @@ const RetainedPane = memo(function RetainedPane({
             data-route-tab={id ?? "enrolling"}
           >
             <PaneErrorBoundary>
-              <Suspense fallback={null}>{renderRoute(<Component />)}</Suspense>
+              <Suspense fallback={<PaneLoading what="route" />}>{renderRoute(<Component />)}</Suspense>
             </PaneErrorBoundary>
           </div>
         </Activity>

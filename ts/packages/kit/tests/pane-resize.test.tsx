@@ -26,6 +26,22 @@ function measure(width: number, height = 600) {
   );
 }
 
+test("a hidden split keeps its last fitted size through a zero ResizeObserver measurement", () => {
+  measure(900);
+  let resize!: (entries: { contentRect: DOMRect }[]) => void;
+  vi.stubGlobal("ResizeObserver", class {
+    constructor(callback: typeof resize) { resize = callback; }
+    observe() {}
+    disconnect() {}
+  });
+  const { container } = render(<PaneSplit axis="horizontal" start="subject" end="drawing"
+    resize={{ target: "end", defaultSize: 500, minSize: 260, minOtherSize: 560 }} />);
+  const split = container.firstElementChild as HTMLElement;
+  const size = split.style.getPropertyValue("--pane-size");
+  act(() => resize([{ contentRect: new DOMRect(0, 0, 0, 0) }]));
+  expect(split.style.getPropertyValue("--pane-size")).toBe(size);
+});
+
 test("a folded pane releases effects, retains edits, and reveals only current action inputs", () => {
   measure(1200);
   const acquire = vi.fn(),

@@ -81,16 +81,10 @@ export class PeReadings {
     private readonly url: () => string,
     private readonly connect: (url: string) => Source = openEventSource,
     private readonly batch: (deliver: () => void) => () => void = (deliver) => {
-      if (typeof requestAnimationFrame !== "function") {
-        deliver();
-        return () => {};
-      }
-      if (document.visibilityState === "hidden") {
-        const timer = setTimeout(deliver, 0);
-        return () => clearTimeout(timer);
-      }
-      const frame = requestAnimationFrame(deliver);
-      return () => cancelAnimationFrame(frame);
+      // Transport progress must not depend on a paint: a visible tab can become occluded
+      // after scheduling, leaving an rAF (and all later frames) stranded indefinitely.
+      const timer = setTimeout(deliver, 0);
+      return () => clearTimeout(timer);
     },
     private readonly update: (
       connection: string,

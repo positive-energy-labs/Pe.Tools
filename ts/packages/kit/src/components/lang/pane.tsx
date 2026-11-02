@@ -209,6 +209,17 @@ export class PaneErrorBoundary extends Component<
   }
 }
 
+/** A suspended body must either resolve or fail into its enclosing pane boundary. */
+export function PaneLoading({ what = "pane" }: { what?: ReactNode }) {
+  const [expired, setExpired] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setExpired(true), 15_000);
+    return () => clearTimeout(timer);
+  }, []);
+  if (expired) throw Error("The page module or data did not load after 15s. Retry to load it again.");
+  return <Work label={typeof what === "string" ? `loading ${what}…` : "loading…"} />;
+}
+
 export function Pane({
   id,
   title,
@@ -313,7 +324,7 @@ export function Pane({
   const guarded = (
     <PaneErrorBoundary key={boundaryKey} what={title} onRetry={onRetry}>
       <Suspense
-        fallback={<Work label={typeof title === "string" ? `loading ${title}…` : "loading…"} />}
+        fallback={<PaneLoading what={title} />}
       >
         {children}
       </Suspense>

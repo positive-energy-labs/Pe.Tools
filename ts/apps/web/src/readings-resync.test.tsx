@@ -41,6 +41,33 @@ const snapshot = (value: unknown) => ({
   ),
 });
 
+test("transport delivers when a visible tab's animation frame never runs", async () => {
+  vi.useFakeTimers();
+  const raf = vi.fn(() => 1);
+  vi.stubGlobal("requestAnimationFrame", raf);
+  const sources: Fake[] = [];
+  const readings = new PeReadings(() => "http://localhost/readings", url => {
+    const source: Fake = { url, onopen: null, onmessage: null, onerror: null,
+      closed: false, close() { this.closed = true; } };
+    sources.push(source);
+    return source;
+  }, undefined, async () => {});
+  const received = vi.fn();
+  try {
+    readings.subscribe(head, received);
+    await vi.advanceTimersByTimeAsync(0);
+    sources[0]!.onopen!();
+    sources[0]!.onmessage!(snapshot({ retained: true }));
+    await vi.advanceTimersByTimeAsync(1);
+    expect(received).toHaveBeenCalledWith(expect.objectContaining({ value: { retained: true } }));
+    expect(raf).not.toHaveBeenCalled();
+  } finally {
+    readings.close();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  }
+});
+
 function owner(
   batch: (deliver: () => void) => () => void = (deliver) => {
     deliver();

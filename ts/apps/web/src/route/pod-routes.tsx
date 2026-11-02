@@ -1,7 +1,6 @@
 import { currentFixture } from "#/shell/fixture-lane";
 import { createContext, use, useEffect, useMemo, useState, type ReactNode } from "react";
 import { message, validatePodSource, type PodRouteDescriptor } from "@pe/agent-contracts";
-import { useRouterState } from "@tanstack/react-router";
 import { peClient } from "#/host/pe-client";
 import { readPeError } from "@pe/host-contracts/pe-api";
 import { publicRoutes } from "./builtin-routes";
@@ -24,7 +23,6 @@ export function PodRoutesProvider({ children }: { children: ReactNode }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [revision, setRevision] = useState(0);
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
   const { loader, publish } = useMemo(() => {
     const loader = createPodRouteLoader(async (row, current) => {
       try {
@@ -67,7 +65,7 @@ export function PodRoutesProvider({ children }: { children: ReactNode }) {
   }, []);
   const refresh = () => setRevision((prior) => prior + 1);
   useEffect(() => {
-    const timer = setInterval(refresh, 10_000);
+    const timer = setInterval(() => { if (!document.hidden) refresh(); }, 10_000);
     window.addEventListener("focus", refresh);
     return () => {
       clearInterval(timer);
@@ -77,7 +75,6 @@ export function PodRoutesProvider({ children }: { children: ReactNode }) {
   }, [loader]);
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true);
     const inventory = currentFixture() !== null
       ? import("./pod-fixtures").then(m => m.podFixtures()).then(entries => entries.map(entry => entry.row))
       : peClient.call("plugins.routes", {}, { signal: controller.signal });
@@ -88,14 +85,13 @@ export function PodRoutesProvider({ children }: { children: ReactNode }) {
       })
       .catch(async (error: unknown) => {
         if (controller.signal.aborted) return;
-        await publish([]);
         setErrors({ inventory: message(error) });
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [publish, revision, pathname]);
+  }, [publish, revision]);
   const trust = async (row: PodRouteDescriptor, trusted: boolean) => {
     const next = await peClient.call("plugins.routeTrust", {
       params: { key: row.key },

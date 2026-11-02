@@ -5,6 +5,9 @@ import {
 import { z } from "zod";
 import { webBuildStamp } from "./build-stamp";
 import { currentFixture } from "#/shell/fixture-lane";
+import { createReadFetch } from "./read-fetch";
+
+const readFetch = createReadFetch((...args) => fetch(...args));
 
 // Frozen into the served page's module graph: a reused port must never change its owner.
 const serviceName: string = import.meta.env.PE_RUNTIME_SERVICE;
@@ -18,7 +21,7 @@ export async function hostFetch(url: string, init?: RequestInit): Promise<Respon
   const headers = new Headers(init?.headers);
   headers.set(HOST_RUNTIME_SERVICE_HEADER, serviceName);
   headers.set("x-pe-web-build", webBuildStamp.build);
-  const response = await fetch(url, { ...init, headers });
+  const response = await readFetch(url, { ...init, headers });
   if ((init?.method ?? "GET").toUpperCase() !== "GET" && response.status === 403) {
     const body: unknown = await response
       .clone()

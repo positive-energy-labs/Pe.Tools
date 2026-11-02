@@ -39,6 +39,8 @@ import { RouteDock } from "#/workbench/route-panes";
 import { useRouteActivity } from "#/route/activity";
 import { bindActionReadings } from "#/readings";
 
+import { startupWatch } from "#/route/startup-watch";
+
 import appCss from "../styles.css?url";
 
 if (import.meta.env.DEV)
@@ -152,7 +154,10 @@ function RootDocument({ children }: { children: React.ReactNode }) {
   useRestoreTabPage();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const [hydrated, setHydrated] = useState(false);
-  useEffect(() => setHydrated(true), []);
+  useEffect(() => {
+    setHydrated(true);
+    window.dispatchEvent(new Event("pe:hydrated"));
+  }, []);
   const reference = hydrated ? referenceTeaching(pathname) : STARTUP_TEACHING;
   const card = useRouterState({ select: (state) => state.location.search.shell === "card" });
   return (
@@ -162,6 +167,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body>
+        <script dangerouslySetInnerHTML={{ __html: startupWatch }} />
         <RegistryContext.Provider value={appAtomRegistry}>
           <PaneFaultProvider onFault={(error) => reportFault({ code: "pane.failed" }, error)}>
             <WorkOwner owner="root" className="contents">

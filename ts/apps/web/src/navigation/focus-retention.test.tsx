@@ -103,7 +103,7 @@ test("blur-only focus refresh keeps navigation, ledger readiness, mounted contex
     await waitFor(() => expect(ports.read).toHaveBeenCalledTimes(2));
     expect(ports.call).toHaveBeenCalledTimes(2);
     expect(ports.call).toHaveBeenLastCalledWith("actions.read", {});
-    expect(seen?.loading).toBe(true);
+    expect(seen?.loading).toBe(false); // Revalidation retains ready content, including its status.
     expect(seen?.snapshot).toBe(snapshot);
     expect(view.getByTestId("context")).toBe(context);
     expect(context.getAttribute("data-ledger-status")).toBe("ready");

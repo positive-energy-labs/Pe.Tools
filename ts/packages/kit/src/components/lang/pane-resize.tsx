@@ -469,6 +469,8 @@ export function PaneSplit({ id, axis, start, end, resize, grow }: PaneSplitProps
   usePaneFit(
     rootRef,
     (rect) => {
+      // Retained/occluded panes have no layout; keep their last committed geometry.
+      if (rect.width <= 0 || rect.height <= 0) return;
       const gutter = seamSize();
       setGutter(gutter);
       setAvailableWidth(rect.width);

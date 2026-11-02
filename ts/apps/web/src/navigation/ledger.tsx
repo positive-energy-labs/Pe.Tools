@@ -81,7 +81,7 @@ function useLedgerRows() {
           console.error("ledger: asynchronous operation failed", error);
         });
     read();
-    const timer = setInterval(read, 15_000);
+    const timer = setInterval(() => { if (!document.hidden) read(); }, 15_000);
     window.addEventListener("focus", read);
     return () => {
       clearInterval(timer);

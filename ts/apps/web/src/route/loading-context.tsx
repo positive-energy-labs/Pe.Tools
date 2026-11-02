@@ -16,6 +16,7 @@ export function LoadingContext({
 }) {
   return (
     <section
+      data-startup=""
       aria-label={`${name} loading`}
       // A static owner: it renders before effects and in prerender, so it states its own work.
       {...workAttributes("page", busy && !error ? [name] : [])}

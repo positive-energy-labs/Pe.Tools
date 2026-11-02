@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { routeAddress, split, pane } from "@pe/agent-contracts";
@@ -50,7 +50,7 @@ export function RouteDock({
     if (plan && plan.route !== tabs.route) store.actions.cancelPlan();
   }, [plan, tabs.route, store]);
   const [layout, setLayout] = useState<GraphLayoutState>({ tools: { folded: !tabs.route } });
-  useEffect(
+  useLayoutEffect(
     () =>
       setLayout((prior) => ({
         ...prior,

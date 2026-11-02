@@ -5,6 +5,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -95,12 +96,14 @@ function CurrentThreadChatSurface(props: ChatShellProps) {
 function ChatSurface({ target, docked = false }: ChatShellProps) {
   const columnRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const column = columnRef.current;
     const composer = composerRef.current;
     if (!column || !composer) return;
-    const measure = () =>
-      column.style.setProperty("--chat-composer-height", `${composer.offsetHeight}px`);
+    const measure = () => {
+      if (composer.offsetHeight > 0)
+        column.style.setProperty("--chat-composer-height", `${composer.offsetHeight}px`);
+    };
     const observer = new ResizeObserver(measure);
     observer.observe(composer);
     measure();
