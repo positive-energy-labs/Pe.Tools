@@ -12,6 +12,7 @@ test("Manual D's leaked strings are each caught; their human forms pass", () => 
     "unit 8775469 / port 7",
     "14106988:0 connects to 14107098:0, which the snapshot does not hold",
     "heal → element 13771267",
+    "auto-joined 1:1 to 2:0 across 2.000 in",
     "First write: document Chadds-manuald (session-a2ff31b15bd1edf7/92c6a5bb901b44978588633af34aef5b).",
     "MUAS-1 is element 14577391 in Chadds-manuald",
     "MUAS 10 [14577391] · PE_M_Fan_AirFlow: 900 cfm → 950 cfm",

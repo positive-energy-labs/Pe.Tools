@@ -15,6 +15,8 @@ const LEAKS: readonly [string, RegExp][] = [
   ["element id", /\b(?:unit|element) #?\d+\b/i],
   ["bracketed id", /\[\d{3,}\]/],
   ["connector key", /\b\d{3,}:\d+\b/],
+  // Small fixture ids too ("auto-joined 1:1 to 2:0"); a clock or scale never pairs this way.
+  ["connector pair", /\b\d+:\d+ (?:to|and|→) \d+:\d+\b/],
   // A date inside an op id (op-20260830-1842) is not an element.
   ["bare element id", /(?<![\d.,-])\d{7,}(?![\d.,])/],
   ["session id", /\bsession-[0-9a-f]{6,}|\b[0-9a-f]{16,}\b/i],

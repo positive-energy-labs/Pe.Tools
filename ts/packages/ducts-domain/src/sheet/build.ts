@@ -890,6 +890,9 @@ class Pricer {
     const { proposal } = h;
     const source = w.states[h.state]!.el;
     const key = `heal:${proposal.pair.join("|")}`;
+    // TODO: Y3 (Manual D #5 defect 7) owed: this note still spells `id:port to id:port`; no web pane
+    // renders heal notes today, and heal-refusal.test parses the ids out of it. Carry the pair as a
+    // field and name the ends with g.name before any surface draws it.
     const note = `${proposal.kind} ${proposal.pair.join(" to ")}; ${proposal.risk}`;
     this.healNotes.add(note);
     const port = source.connectors.find((c) => c.index === proposal.from.connector)!;
