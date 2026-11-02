@@ -79,6 +79,7 @@ catalogs:
 overrides:
   vite: npm:@voidzero-dev/vite-plus-core@0.2.1
   '@smithy/core': 3.33.3
+  '@effect/platform-node-shared': 4.0.2
 
 pnpmfileChecksum: sha256-o67yEFBwLUO/jgHp2d9DPtNvgEAEkiWkBOmIRuxfqV0=
 
@@ -926,11 +927,11 @@ packages:
       react: '>=19.0.0 <20.0.0'
       scheduler: '>=0.25.0 <0.28.0'
 
-  '@effect/platform-node-shared@4.1.1':
-    resolution: {integrity: sha512-29zdEDs3i5W+t92+mWTFNSfzSHsTpZMcFZ9k4lkkz4tETlC1m4lRwjdjieJtvQ/bKHMnYrCtZwizsBFSf3L5Yg==}
-    engines: {node: '>=22.19.0'}
+  '@effect/platform-node-shared@4.0.2':
+    resolution: {integrity: sha512-xn8aDw9p/QUPt1Yi0C3HUMcycT+MjHfAe19FDUDrUuzcwq0xxskkamVSqbdykF/Dsuus4aZTsCBZA/vkhHIfbQ==}
+    engines: {node: '>=18.0.0'}
     peerDependencies:
-      effect: ^4.1.1
+      effect: ^4.0.2
 
   '@effect/platform-node@4.0.2':
     resolution: {integrity: sha512-RWesXBQStnFHdD465gR5thFKgXO7FSyCKRZ56nWXB7PedNVzr8vV0nb/3MULLdri493sMz/b/pmGBTb6K8cBjQ==}
@@ -5348,7 +5349,7 @@ snapshots:
       react: 19.2.7
       scheduler: 0.27.0
 
-  '@effect/platform-node-shared@4.1.1(bufferutil@4.1.0)(effect@4.0.2)':
+  '@effect/platform-node-shared@4.0.2(bufferutil@4.1.0)(effect@4.0.2)':
     dependencies:
       '@types/ws': 8.18.2
       effect: 4.0.2
@@ -5359,7 +5360,7 @@ snapshots:
 
   '@effect/platform-node@4.0.2(bufferutil@4.1.0)(effect@4.0.2)(redis@6.3.1(@opentelemetry/api@1.9.1))':
     dependencies:
-      '@effect/platform-node-shared': 4.1.1(bufferutil@4.1.0)(effect@4.0.2)
+      '@effect/platform-node-shared': 4.0.2(bufferutil@4.1.0)(effect@4.0.2)
       effect: 4.0.2
       redis: 6.3.1(@opentelemetry/api@1.9.1)
       undici: 8.12.3
