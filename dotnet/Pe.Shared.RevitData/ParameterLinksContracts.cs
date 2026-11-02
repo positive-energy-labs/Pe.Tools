@@ -136,7 +136,6 @@ public sealed record ParameterLinksDetailRequest(bool IncludeEvaluation = true);
 
 public sealed record ParameterLinksApplyRequest(
     ParameterLinkProfile? Profile = null,
-    bool PreviewOnly = false,
     bool Reconcile = true
 );
 

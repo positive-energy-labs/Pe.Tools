@@ -37,9 +37,9 @@ public static class DuctHealer {
 
     private sealed record Done(string How, IReadOnlyList<long> Created, IReadOnlyList<long> Replaced, string Check);
 
-    public static DuctHealResult Heal(Document doc, DuctHealRequest request) {
+    public static DuctHealResult Heal(Document doc, DuctHealRequest request, bool preview) {
         var groups = new List<DuctHealGroupOutcome>();
-        if (request.PreviewOnly) {
+        if (preview) {
             using var all = new TransactionGroup(doc, DocumentSandbox.TransactionNamePrefix + "Pe Heal Ducts (preview)");
             _ = all.Start();
             try {
@@ -51,7 +51,7 @@ public static class DuctHealer {
             foreach (var g in request.Groups) groups.Add(Group(doc, g, false));
         }
         var items = groups.SelectMany(g => g.Items).ToList();
-        return new DuctHealResult(request.PreviewOnly, groups, new DuctHealCounts(
+        return new DuctHealResult(preview, groups, new DuctHealCounts(
             items.Count(i => i.Outcome == "planned"),
             items.Count(i => i.Outcome == "healed"),
             items.Count(i => i.Outcome == "refused")));

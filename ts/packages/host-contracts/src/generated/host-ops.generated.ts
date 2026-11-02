@@ -167,7 +167,7 @@ export namespace DocumentTemporaryStatus {
   }
 }
 
-/** Write duct losses into Revit so they travel with the model. Each fitting names a method: pe-server points it at the Pe loss server, which charges the family's own coefficient parameter live (the fittingCoefficient slot, default Pe_C) when the family carries one and otherwise prices each leg live from the write's ASHRAE table and the connectors' flows (taps, transitions, unstamped elbows); specific-coefficient freezes a number (export only). Revit's own ASHRAE-table route is never written. Also Specific Loss (in-wg) on duct accessories, terminal connector drops where the family connector is Specific Loss, fan external static on equipment through the fanStatic slot, and Pe's provenance store in the hidden _PE_DuctLosses Project Information parameter. previewOnly plans every write and refusal without a transaction. A real apply commits Not Defined on every targeted fitting, then the losses, in one undo step; a failed stage rolls everything back and is named. Returns per-target outcomes and the touched systems' critical path after. */
+/** Write duct losses into Revit so they travel with the model. Each fitting names a method: pe-server points it at the Pe loss server, which charges the family's own coefficient parameter live (the fittingCoefficient slot, default Pe_C) when the family carries one and otherwise prices each leg live from the write's ASHRAE table and the connectors' flows (taps, transitions, unstamped elbows); specific-coefficient freezes a number (export only). Revit's own ASHRAE-table route is never written. Also Specific Loss (in-wg) on duct accessories, terminal connector drops where the family connector is Specific Loss, fan external static on equipment through the fanStatic slot, and Pe's provenance store in the hidden _PE_DuctLosses Project Information parameter. ducts.apply.preview plans every write and refusal without a transaction. A real apply commits Not Defined on every targeted fitting, then the losses, in one undo step; a failed stage rolls everything back and is named. Returns per-target outcomes and the touched systems' critical path after. */
 export namespace DuctsApply {
   export namespace Req {
     /**
@@ -179,7 +179,6 @@ export namespace DuctsApply {
      * Host-priced losses, drops in in-wg and design flows in cfm. Preview opens no transaction.
      */
     export interface Request {
-      previewOnly: boolean;
       slots?: null | DuctParameterSlots;
       fittings: DuctFittingWrite[];
       terminals: DuctDropWrite[];
@@ -411,14 +410,313 @@ export namespace DuctsApply {
   }
 }
 
-/** Make a unit the base equipment of a duct system (Revit's Duct Systems > Select Equipment), keeping the system's id, name, type and parameters. Refuses a system that already has base equipment (a swap drops the old base from the members and Revit does not restore it), anything that is not mechanical equipment, and a unit with no port of the system's air classification that is a member of the system or joined to its ducts (Revit itself checks neither). Reads back that the base equipment is the unit and the name, type and classification are unchanged, else refuses and rolls back. previewOnly runs the write and the read back and rolls them back. Returns the outcome and the system before and after (read ducts.snapshot again: systems[].baseEquipmentId). */
+/** Plan every duct loss write and refusal ducts.apply would make, without opening a transaction. Same request and result as ducts.apply; nothing is committed. */
+export namespace DuctsApplyPreview {
+  export namespace Req {
+    /**
+     * Consume host results in Pe's server, or freeze one coefficient for export.
+     */
+    export type DuctFittingMethod = "pe-server" | "specific-coefficient";
+
+    /**
+     * Host-priced losses, drops in in-wg and design flows in cfm. Preview opens no transaction.
+     */
+    export interface Request {
+      slots?: null | DuctParameterSlots;
+      fittings: DuctFittingWrite[];
+      terminals: DuctDropWrite[];
+      components: DuctDropWrite[];
+      equipment: DuctEquipmentWrite[];
+      terminalFlows: DuctFlowWrite[];
+      equipmentFlows: DuctFlowWrite[];
+      store: DuctLossStore;
+    }
+    /**
+     * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
+     * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) and TerminalFlow (CFM) on terminals,
+     * FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
+     * live (the configurable door, kaitpw 2026-10-08).
+     *
+     */
+    export interface DuctParameterSlots {
+      fanStatic?: string;
+      fanFlow?: string;
+      componentDrop?: string;
+      terminalDrop?: null | string;
+      fittingCoefficient?: string;
+      terminalFlow?: string;
+    }
+    /**
+     * Results are the host engine's priced legs, including their velocity-pressure basis. Table and Inputs are provenance only.
+     */
+    export interface DuctFittingWrite {
+      id: number;
+      method: DuctFittingMethod;
+      coefficient: number;
+      table?: null | string;
+      inputs?: null | string;
+      ruleKey?: null | string;
+      results?: DuctLossResult[] | null;
+    }
+    /**
+     * A signed host coefficient at one velocity pressure in in-wg. Native code refuses changed or ambiguous bases.
+     */
+    export interface DuctLossResult {
+      velocityPressureInWg: number;
+      coefficient: number;
+    }
+    export interface DuctDropWrite {
+      id: number;
+      inWg: number;
+      source?: null | string;
+    }
+    export interface DuctEquipmentWrite {
+      id: number;
+      externalStaticInWg: number;
+    }
+    /**
+     * A design flow in cfm and where it came from (override, load preview, rooms, a person's note).
+     */
+    export interface DuctFlowWrite {
+      id: number;
+      cfm: number;
+      source?: null | string;
+      slot?: null | string;
+    }
+    /**
+     * Pe's provenance for duct losses: one versioned JSON blob in the hidden Project Information text parameter
+     * `_PE_DuctLosses` (pressure-drop ledger: never extensible storage). WorkRevision counts applies; a request
+     * carrying an older revision than the model holds is stale. Unknown keys survive read-modify-write.
+     * v2 adds the rulings that remain after healing (pressure-drop ledger, 2026-10-20): Verdicts keyed by issue or
+     * finding id, Roles keyed by unit id. They live here, not on elements and not in Pe Work; Work holds only pending
+     * edits. A v1 blob reads as v2 with no rulings; every write is v2.
+     *
+     */
+    export interface DuctLossStore {
+      version?: number;
+      rules?: {
+        [k: string]: DuctRuleChoice;
+      };
+      instances?: {
+        [k: string]: DuctInstanceRecord;
+      };
+      terminals?: {
+        [k: string]: DuctDropRecord;
+      };
+      terminalFlows?: {
+        [k: string]: DuctFlowRecord;
+      };
+      equipmentFlows?: {
+        [k: string]: DuctFlowRecord;
+      };
+      verdicts?: {
+        [k: string]: DuctVerdictRecord;
+      };
+      roles?: {
+        [k: string]: DuctRoleRecord;
+      };
+      slots?: null | DuctParameterSlots;
+      workRevision?: number;
+      appliedAt?: null | string;
+      [k: string]: unknown;
+    }
+    /**
+     * A rule's chosen ASHRAE table (rule key is family:type plus a geometry condition, owned by the web).
+     */
+    export interface DuctRuleChoice {
+      table?: null | string;
+    }
+    /**
+     * What Pe wrote on one fitting: the table and lookup inputs behind the coefficient.
+     */
+    export interface DuctInstanceRecord {
+      table?: null | string;
+      inputs?: null | string;
+      coefficient: number;
+      appliedAt: string;
+    }
+    /**
+     * What Pe wrote on one terminal or component: the drop and where it came from (catalog, typed).
+     */
+    export interface DuctDropRecord {
+      inWg: number;
+      source?: null | string;
+      appliedAt: string;
+    }
+    /**
+     * What Pe wrote on one terminal or unit: the design flow in cfm and where it came from.
+     */
+    export interface DuctFlowRecord {
+      cfm: number;
+      source?: null | string;
+      appliedAt: string;
+    }
+    /**
+     * A person's ruling on an issue or inferred-join finding id: `ignore` leaves an open end out of the walk, or
+     * withholds (objects to) an inferred join.
+     *
+     */
+    export interface DuctVerdictRecord {
+      verdict: string;
+      ruledAt: string;
+    }
+    /**
+     * A person's ruling on an air mover: `passive` moves no design air (or `fan`, the default, said aloud).
+     */
+    export interface DuctRoleRecord {
+      role: string;
+      ruledAt: string;
+    }
+  }
+  export namespace Res {
+    /**
+     * StoreRevision is the store's WorkRevision after this call (unchanged on preview). Worksharing is set on a preview of a
+     * workshared document: what the commit will borrow.
+     *
+     */
+    export interface Response {
+      previewOnly: boolean;
+      writes: DuctWrite[];
+      counts: DuctApplyCounts;
+      systemsAfter?: DuctSystem[] | null;
+      storeRevision: number;
+      worksharing?: null | WorksharingDisclosure;
+    }
+    /**
+     * One target's outcome. Kind: fitting, terminal, component, equipment, terminal-flow, equipment-flow, store, and the
+     * store entries a write changes: slot (Key names the slot), verdict (Key is the issue or finding id, Id its first
+     * element) and role (Id is the unit). Outcome: planned (preview), written, refused (Reason says why), unchanged
+     * (already holds the value). Before and After are display text; "none" is no entry.
+     *
+     */
+    export interface DuctWrite {
+      id?: number | null;
+      kind: string;
+      outcome: string;
+      reason?: null | string;
+      before?: null | string;
+      after?: null | string;
+      key?: null | string;
+    }
+    export interface DuctApplyCounts {
+      planned: number;
+      written: number;
+      refused: number;
+      unchanged: number;
+    }
+    /**
+     * One supply, return or exhaust MechanicalSystem as Revit reports it: the check beside Pe's own solve.
+     * CriticalPath is GetCriticalPathSectionNumbers(); empty when Revit found none.
+     *
+     */
+    export interface DuctSystem {
+      id: number;
+      name: string;
+      classification: string;
+      isWellConnected?: boolean | null;
+      baseEquipmentId?: number | null;
+      baseEquipmentConnector?: number | null;
+      criticalPathLossInWg?: null | number;
+      criticalPath: number[];
+      sections: DuctSection[];
+    }
+    /**
+     * One MEPSection: Revit's run of elements carrying one flow.
+     */
+    export interface DuctSection {
+      number: number;
+      flowCfm?: null | number;
+      totalPressureLossInWg?: null | number;
+      elementIds: number[];
+    }
+    /**
+     * What a model write will borrow on a workshared central. Present only on workshared documents. A commit borrows
+     * every element it changes that the user does not already own, and they stay borrowed until the user syncs with
+     * central or relinquishes; a write never syncs. Creates names model-wide definitions the write adds (new elements
+     * the user owns until sync).
+     *
+     */
+    export interface WorksharingDisclosure {
+      cloud: boolean;
+      elements: WorksharedElement[];
+      creates: string[];
+    }
+    /**
+     * Status: borrows (free now; the commit borrows it), owned (already yours), blocked (Owner holds it; the write is refused by Revit).
+     */
+    export interface WorksharedElement {
+      id: number;
+      name: string;
+      status: string;
+      owner?: null | string;
+    }
+  }
+}
+
+/** Make a unit the base equipment of a duct system (Revit's Duct Systems > Select Equipment), keeping the system's id, name, type and parameters. Refuses a system that already has base equipment (a swap drops the old base from the members and Revit does not restore it), anything that is not mechanical equipment, and a unit with no port of the system's air classification that is a member of the system or joined to its ducts (Revit itself checks neither). Reads back that the base equipment is the unit and the name, type and classification are unchanged, else refuses and rolls back. ducts.assign-fan.preview runs the write and the read back and rolls them back. Returns the outcome and the system before and after (read ducts.snapshot again: systems[].baseEquipmentId). */
 export namespace DuctsAssignFan {
   export namespace Req {
     /**
      * SystemId is the MechanicalSystem; UnitId the mechanical equipment to make its base equipment.
      */
     export interface Request {
+      systemId: number;
+      unitId: number;
+    }
+  }
+  export namespace Res {
+    /**
+     * Outcome: planned (preview), assigned, refused (Reason says why; nothing changed). Connector is the
+     * unit's connector index made the base. Check is the read back's words. Before and After are the system as
+     * Revit reports it (After inside the rolled-back run on preview; null when refused).
+     *
+     */
+    export interface Response {
       previewOnly: boolean;
+      systemId: number;
+      unitId: number;
+      outcome: string;
+      reason?: null | string;
+      connector?: number | null;
+      check?: null | string;
+      before?: null | DuctSystem;
+      after?: null | DuctSystem;
+    }
+    /**
+     * One supply, return or exhaust MechanicalSystem as Revit reports it: the check beside Pe's own solve.
+     * CriticalPath is GetCriticalPathSectionNumbers(); empty when Revit found none.
+     *
+     */
+    export interface DuctSystem {
+      id: number;
+      name: string;
+      classification: string;
+      isWellConnected?: boolean | null;
+      baseEquipmentId?: number | null;
+      baseEquipmentConnector?: number | null;
+      criticalPathLossInWg?: null | number;
+      criticalPath: number[];
+      sections: DuctSection[];
+    }
+    /**
+     * One MEPSection: Revit's run of elements carrying one flow.
+     */
+    export interface DuctSection {
+      number: number;
+      flowCfm?: null | number;
+      totalPressureLossInWg?: null | number;
+      elementIds: number[];
+    }
+  }
+}
+
+/** Run the ducts.assign-fan write and its read back inside one transaction group and roll both back. Same request and result as ducts.assign-fan; nothing is committed. */
+export namespace DuctsAssignFanPreview {
+  export namespace Req {
+    /**
+     * SystemId is the MechanicalSystem; UnitId the mechanical equipment to make its base equipment.
+     */
+    export interface Request {
       systemId: number;
       unitId: number;
     }
@@ -497,7 +795,7 @@ export namespace DuctsFamilyPatch {
   }
 }
 
-/** Heal duct geometry so the model itself is whole: cap a dangling open end with its duct type's Caps routing rule, connect coincident same-size ends, and close a same-size gap of at most 3 in with a union (two ducts) or by extending the duct (duct to part). Each item names connector keys elementId:connectorIndex from ducts.snapshot; the op refuses size changes, cross-class or cross-system joins, equipment, and longer gaps (a person's, in Revit). Every item must pass Pe's own post-check (connected, sizes equal, origins within 1/16 in, no system split or merged) or it is refused and rolled back alone. previewOnly runs everything and rolls it back; a real heal commits one transaction per group. Returns per-item outcomes with created and replaced element ids (Revit gives new ids to what it rebuilds; read ducts.snapshot again) and the touched systems' Revit critical path before and after. */
+/** Heal duct geometry so the model itself is whole: cap a dangling open end with its duct type's Caps routing rule, connect coincident same-size ends, and close a same-size gap of at most 3 in with a union (two ducts) or by extending the duct (duct to part). Each item names connector keys elementId:connectorIndex from ducts.snapshot; the op refuses size changes, cross-class or cross-system joins, equipment, and longer gaps (a person's, in Revit). Every item must pass Pe's own post-check (connected, sizes equal, origins within 1/16 in, no system split or merged) or it is refused and rolled back alone. ducts.heal.preview runs everything and rolls it back; a real heal commits one transaction per group. Returns per-item outcomes with created and replaced element ids (Revit gives new ids to what it rebuilds; read ducts.snapshot again) and the touched systems' Revit critical path before and after. */
 export namespace DuctsHeal {
   export namespace Req {
     export type DuctHealKind = "cap" | "join";
@@ -506,7 +804,109 @@ export namespace DuctsHeal {
      * Groups are the approved systems; each group is one transaction on apply.
      */
     export interface Request {
+      groups: DuctHealGroup[];
+    }
+    /**
+     * Group is the route's group id (`g<lowest element id>`), a label only: the items name the geometry.
+     */
+    export interface DuctHealGroup {
+      group: string;
+      items: DuctHealItem[];
+    }
+    /**
+     * One repair. End and Other are connector keys `elementId:connectorIndex` as `ducts.snapshot` names them.
+     * A cap closes End with the Caps routing rule of its duct type. A join meets End and Other: coincident ends
+     * are connected, a small gap between two ducts gets a union fitting, a small gap from a duct to a part
+     * extends the duct; the op picks which from the geometry and refuses anything outside its limits.
+     *
+     */
+    export interface DuctHealItem {
+      key: string;
+      kind: DuctHealKind;
+      end: string;
+      other?: null | string;
+    }
+  }
+  export namespace Res {
+    export interface Response {
       previewOnly: boolean;
+      groups: DuctHealGroupOutcome[];
+      counts: DuctHealCounts;
+    }
+    /**
+     * One group's run. Outcome: planned (preview), healed, refused (Reason says why: the group's transaction
+     * failed and rolled back), empty (nothing healed). SystemsBefore and SystemsAfter are Revit's touched systems
+     * with their critical path, read before the first item and after the last (inside the rolled-back run on
+     * preview).
+     *
+     */
+    export interface DuctHealGroupOutcome {
+      group: string;
+      outcome: string;
+      reason?: null | string;
+      items: DuctHealOutcome[];
+      systemsBefore: DuctSystem[];
+      systemsAfter: DuctSystem[];
+    }
+    /**
+     * One item. How: cap, connect, union, extend (null when refused before choosing). Outcome: planned (preview),
+     * healed, refused. Created: new element ids (the cap, the union); Replaced: ids Revit deleted while healing (a
+     * duct it split or rebuilt), each replaced by an id in Created. Check is the post-check's words.
+     * On preview the ids are those of the rolled-back run and do not exist.
+     *
+     */
+    export interface DuctHealOutcome {
+      key: string;
+      kind: string;
+      how?: null | string;
+      outcome: string;
+      reason?: null | string;
+      created: number[];
+      replaced: number[];
+      check?: null | string;
+    }
+    /**
+     * One supply, return or exhaust MechanicalSystem as Revit reports it: the check beside Pe's own solve.
+     * CriticalPath is GetCriticalPathSectionNumbers(); empty when Revit found none.
+     *
+     */
+    export interface DuctSystem {
+      id: number;
+      name: string;
+      classification: string;
+      isWellConnected?: boolean | null;
+      baseEquipmentId?: number | null;
+      baseEquipmentConnector?: number | null;
+      criticalPathLossInWg?: null | number;
+      criticalPath: number[];
+      sections: DuctSection[];
+    }
+    /**
+     * One MEPSection: Revit's run of elements carrying one flow.
+     */
+    export interface DuctSection {
+      number: number;
+      flowCfm?: null | number;
+      totalPressureLossInWg?: null | number;
+      elementIds: number[];
+    }
+    export interface DuctHealCounts {
+      planned: number;
+      healed: number;
+      refused: number;
+    }
+  }
+}
+
+/** Run every ducts.heal group inside one transaction group and roll all of it back. Same request and result as ducts.heal; nothing is committed. */
+export namespace DuctsHealPreview {
+  export namespace Req {
+    export type DuctHealKind = "cap" | "join";
+
+    /**
+     * Groups are the approved systems; each group is one transaction on apply.
+     */
+    export interface Request {
       groups: DuctHealGroup[];
     }
     /**
@@ -2958,7 +3358,7 @@ export namespace RevitApplyCommandExecute {
   }
 }
 
-/** Preview or atomically replace the model-owned parameter-link profile and reconcile its changed target values. */
+/** Atomically replace the model-owned parameter-link profile and reconcile its changed target values. revit.apply.parameter-links.preview evaluates the same request without writing. */
 export namespace RevitApplyParameterLinks {
   export namespace Req {
     export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
@@ -2968,7 +3368,157 @@ export namespace RevitApplyParameterLinks {
 
     export interface Request {
       profile?: null | ParameterLinkProfile;
-      previewOnly?: boolean;
+      reconcile?: boolean;
+    }
+    export interface ParameterLinkProfile {
+      formatVersion?: number;
+      definitions: ParameterLinkDefinition[];
+      assignments: ParameterLinkAssignment[];
+    }
+    export interface ParameterLinkDefinition {
+      id: string;
+      sourceCategoryId: number;
+      sourceParameter: ParameterReference;
+      sourceScope?: ParameterLinkSourceScope;
+      relationship: ParameterLinkRelationship;
+      targetParameter: ParameterReference;
+      targetOverride?: null | ParameterLinkTargetOverride;
+      reducer?: ParameterLinkReducer;
+    }
+    export interface ParameterReference {
+      identity?: null | ParameterIdentity;
+      name?: null | string;
+      sharedGuid?: null | string;
+    }
+    export interface ParameterIdentity {
+      key: string;
+      kind: ParameterIdentityKind;
+      name: string;
+      builtInParameterId?: number | null;
+      sharedGuid?: null | string;
+      parameterElementId?: number | null;
+    }
+    export interface ParameterLinkTargetOverride {
+      enabledParameter: ParameterReference;
+      valueParameter: ParameterReference;
+    }
+    export interface ParameterLinkAssignment {
+      id: string;
+      definitionId: string;
+      enabled?: boolean;
+      sourceElementUniqueIds?: string[];
+    }
+  }
+  export namespace Res {
+    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+    export type ParameterLinkSourceScope = "instance" | "type" | "instanceThenType";
+    export type ParameterLinkRelationship = "sameElement" | "electricalEquipmentCircuits";
+    export type ParameterLinkReducer = "first" | "min" | "max";
+    export type ParameterLinkIssueSeverity = "warning" | "error";
+
+    export interface Response {
+      profile?: null | ParameterLinkProfile;
+      evaluation?: null | ParameterLinkEvaluation;
+      status: ParameterLinksRuntimeStatus;
+      profileChanged: boolean;
+      appliedWriteCount: number;
+    }
+    export interface ParameterLinkProfile {
+      formatVersion: number;
+      definitions: ParameterLinkDefinition[];
+      assignments: ParameterLinkAssignment[];
+    }
+    export interface ParameterLinkDefinition {
+      id: string;
+      sourceCategoryId: number;
+      sourceParameter: ParameterReference;
+      sourceScope: ParameterLinkSourceScope;
+      relationship: ParameterLinkRelationship;
+      targetParameter: ParameterReference;
+      targetOverride?: null | ParameterLinkTargetOverride;
+      reducer: ParameterLinkReducer;
+    }
+    export interface ParameterReference {
+      identity?: null | ParameterIdentity;
+      name?: null | string;
+      sharedGuid?: null | string;
+    }
+    export interface ParameterIdentity {
+      key: string;
+      kind: ParameterIdentityKind;
+      name: string;
+      builtInParameterId?: number | null;
+      sharedGuid?: null | string;
+      parameterElementId?: number | null;
+    }
+    export interface ParameterLinkTargetOverride {
+      enabledParameter: ParameterReference;
+      valueParameter: ParameterReference;
+    }
+    export interface ParameterLinkAssignment {
+      id: string;
+      definitionId: string;
+      enabled: boolean;
+      sourceElementUniqueIds: string[];
+    }
+    export interface ParameterLinkEvaluation {
+      writes: ParameterLinkWrite[];
+      issues: ParameterLinkIssue[];
+      sourceElementCount: number;
+      targetElementCount: number;
+      changedWriteCount: number;
+    }
+    export interface ParameterLinkWrite {
+      definitionId: string;
+      assignmentId: string;
+      targetElementId: number;
+      targetElementUniqueId: string;
+      targetElementName?: null | string;
+      targetParameter: ParameterIdentity;
+      currentValue: ParameterLinkValue;
+      linkedValue: ParameterLinkValue;
+      overrideValue?: null | ParameterLinkValue;
+      overrideApplied: boolean;
+      proposedValue: ParameterLinkValue;
+      changed: boolean;
+    }
+    export interface ParameterLinkValue {
+      storageType: string;
+      specTypeId?: null | string;
+      doubleValue?: null | number;
+      integerValue?: number | null;
+      stringValue?: null | string;
+      elementIdValue?: number | null;
+      displayValue?: null | string;
+    }
+    export interface ParameterLinkIssue {
+      code: string;
+      severity: ParameterLinkIssueSeverity;
+      message: string;
+      definitionId?: null | string;
+      assignmentId?: null | string;
+      sourceElementUniqueId?: null | string;
+      targetElementUniqueId?: null | string;
+    }
+    export interface ParameterLinksRuntimeStatus {
+      hasStoredProfile: boolean;
+      updaterRegistered: boolean;
+      activeDefinitionCount: number;
+      activeAssignmentCount: number;
+    }
+  }
+}
+
+/** Evaluate a parameter-link profile (or the stored one) and preview every proposed target write and issue, without writing. Same request and result as revit.apply.parameter-links. */
+export namespace RevitApplyParameterLinksPreview {
+  export namespace Req {
+    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+    export type ParameterLinkSourceScope = "instance" | "type" | "instanceThenType";
+    export type ParameterLinkRelationship = "sameElement" | "electricalEquipmentCircuits";
+    export type ParameterLinkReducer = "first" | "min" | "max";
+
+    export interface Request {
+      profile?: null | ParameterLinkProfile;
       reconcile?: boolean;
     }
     export interface ParameterLinkProfile {
@@ -10207,9 +10757,12 @@ export interface HostOps {
   "document.temporary.release": { request: DocumentTemporaryRelease.Req.Request; response: DocumentTemporaryRelease.Res.Response };
   "document.temporary.status": { request: DocumentTemporaryStatus.Req.Request; response: DocumentTemporaryStatus.Res.Response };
   "ducts.apply": { request: DuctsApply.Req.Request; response: DuctsApply.Res.Response };
+  "ducts.apply.preview": { request: DuctsApplyPreview.Req.Request; response: DuctsApplyPreview.Res.Response };
   "ducts.assign-fan": { request: DuctsAssignFan.Req.Request; response: DuctsAssignFan.Res.Response };
+  "ducts.assign-fan.preview": { request: DuctsAssignFanPreview.Req.Request; response: DuctsAssignFanPreview.Res.Response };
   "ducts.family-patch": { request: DuctsFamilyPatch.Req.Request; response: DuctsFamilyPatch.Res.Response };
   "ducts.heal": { request: DuctsHeal.Req.Request; response: DuctsHeal.Res.Response };
+  "ducts.heal.preview": { request: DuctsHealPreview.Req.Request; response: DuctsHealPreview.Res.Response };
   "ducts.ports": { request: DuctsPorts.Req.Request; response: DuctsPorts.Res.Response };
   "ducts.snapshot.roster": { request: DuctsSnapshotRoster.Req.Request; response: DuctsSnapshotRoster.Res.Response };
   "ducts.snapshot.walk": { request: DuctsSnapshotWalk.Req.Request; response: DuctsSnapshotWalk.Res.Response };
@@ -10230,6 +10783,7 @@ export interface HostOps {
   "pod.member.compose": { request: PodMemberCompose.Req.Request; response: PodMemberCompose.Res.Response };
   "revit.apply.command.execute": { request: RevitApplyCommandExecute.Req.Request; response: RevitApplyCommandExecute.Res.Response };
   "revit.apply.parameter-links": { request: RevitApplyParameterLinks.Req.Request; response: RevitApplyParameterLinks.Res.Response };
+  "revit.apply.parameter-links.preview": { request: RevitApplyParameterLinksPreview.Req.Request; response: RevitApplyParameterLinksPreview.Res.Response };
   "revit.apply.parameter-values": { request: RevitApplyParameterValues.Req.Request; response: RevitApplyParameterValues.Res.Response };
   "revit.apply.parameters-service-cache.refresh": { request: RevitApplyParametersServiceCacheRefresh.Req.Request; response: RevitApplyParametersServiceCacheRefresh.Res.Response };
   "revit.catalog.concept-evidence": { request: RevitCatalogConceptEvidence.Req.Request; response: RevitCatalogConceptEvidence.Res.Response };
@@ -10305,9 +10859,12 @@ export const hostOpKeys = [
   "document.temporary.release",
   "document.temporary.status",
   "ducts.apply",
+  "ducts.apply.preview",
   "ducts.assign-fan",
+  "ducts.assign-fan.preview",
   "ducts.family-patch",
   "ducts.heal",
+  "ducts.heal.preview",
   "ducts.ports",
   "ducts.snapshot.roster",
   "ducts.snapshot.walk",
@@ -10328,6 +10885,7 @@ export const hostOpKeys = [
   "pod.member.compose",
   "revit.apply.command.execute",
   "revit.apply.parameter-links",
+  "revit.apply.parameter-links.preview",
   "revit.apply.parameter-values",
   "revit.apply.parameters-service-cache.refresh",
   "revit.catalog.concept-evidence",
@@ -10403,9 +10961,12 @@ export const hostOpSafety = {
   "document.temporary.release": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"None","touches":"Metadata","effect":"SessionWrite","cardinality":"One","internal":false,"rollsBack":false},
   "document.temporary.status": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"None","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "ducts.apply": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Document","touches":"Geometry","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
+  "ducts.apply.preview": {"intent":"Read","costTier":"Mutation","usesTransactions":false,"subject":"Elements","touches":"Geometry","effect":"TransactRead","cardinality":"One","internal":true,"rollsBack":true},
   "ducts.assign-fan": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"System","touches":"Topology","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
+  "ducts.assign-fan.preview": {"intent":"Read","costTier":"Mutation","usesTransactions":true,"subject":"System","touches":"Topology","effect":"TransactRead","cardinality":"One","internal":true,"rollsBack":true},
   "ducts.family-patch": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"None","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "ducts.heal": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Document","touches":"Geometry","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
+  "ducts.heal.preview": {"intent":"Read","costTier":"Mutation","usesTransactions":true,"subject":"Elements","touches":"Geometry","effect":"TransactRead","cardinality":"One","internal":true,"rollsBack":true},
   "ducts.ports": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"Elements","touches":"Topology","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "ducts.snapshot.roster": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"Document","touches":"Topology","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "ducts.snapshot.walk": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"Elements","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
@@ -10426,6 +10987,7 @@ export const hostOpSafety = {
   "pod.member.compose": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"None","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "revit.apply.command.execute": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Document","touches":"Metadata","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
   "revit.apply.parameter-links": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Document","touches":"Topology","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
+  "revit.apply.parameter-links.preview": {"intent":"Read","costTier":"Mutation","usesTransactions":false,"subject":"Document","touches":"Topology","effect":"TransactRead","cardinality":"One","internal":true,"rollsBack":true},
   "revit.apply.parameter-values": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Elements","touches":"Metadata","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
   "revit.apply.parameters-service-cache.refresh": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"None","touches":"Metadata","effect":"SessionWrite","cardinality":"One","internal":false,"rollsBack":false},
   "revit.catalog.concept-evidence": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},

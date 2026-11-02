@@ -112,31 +112,47 @@ internal sealed class RevitDataRequestService {
         }
     }
 
-    [Op("ducts.apply", Subject = OpSubject.Document, Touches = OpTouches.Geometry, Effect = OpEffect.ModelWrite, Internal = true, Does = "Write duct losses into Revit so they travel with the model. Each fitting names a method: pe-server points it at the Pe loss server, which charges the family's own coefficient parameter live (the fittingCoefficient slot, default Pe_C) when the family carries one and otherwise prices each leg live from the write's ASHRAE table and the connectors' flows (taps, transitions, unstamped elbows); specific-coefficient freezes a number (export only). Revit's own ASHRAE-table route is never written. Also Specific Loss (in-wg) on duct accessories, terminal connector drops where the family connector is Specific Loss, fan external static on equipment through the fanStatic slot, and Pe's provenance store in the hidden _PE_DuctLosses Project Information parameter. previewOnly plans every write and refusal without a transaction. A real apply commits Not Defined on every targeted fitting, then the losses, in one undo step; a failed stage rolls everything back and is named. Returns per-target outcomes and the touched systems' critical path after.", Title = "Apply Duct Losses", Finds = ["ducts", "apply", "pressure", "loss", "coefficient", "terminal", "fan-static", "critical-path", "mutation"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Example = "{ \"previewOnly\": true, \"fittings\": [{ \"id\": 12345, \"method\": \"pe-server\", \"coefficient\": 0.25, \"table\": \"CD3-1\", \"ruleKey\": \"elbow-1d-le10\" }, { \"id\": 12346, \"method\": \"pe-server\", \"coefficient\": 0.35, \"table\": \"SD5-10\", \"ruleKey\": \"tap-std\" }], \"terminals\": [], \"components\": [], \"equipment\": [], \"store\": { \"version\": 1 } }")]
-    private static DuctApplyResult ApplyDuctsCore(DuctApplyRequest request, ProjectDocument activeDocument) {
+    [Op("ducts.apply", Subject = OpSubject.Document, Touches = OpTouches.Geometry, Effect = OpEffect.ModelWrite, Internal = true, Does = "Write duct losses into Revit so they travel with the model. Each fitting names a method: pe-server points it at the Pe loss server, which charges the family's own coefficient parameter live (the fittingCoefficient slot, default Pe_C) when the family carries one and otherwise prices each leg live from the write's ASHRAE table and the connectors' flows (taps, transitions, unstamped elbows); specific-coefficient freezes a number (export only). Revit's own ASHRAE-table route is never written. Also Specific Loss (in-wg) on duct accessories, terminal connector drops where the family connector is Specific Loss, fan external static on equipment through the fanStatic slot, and Pe's provenance store in the hidden _PE_DuctLosses Project Information parameter. ducts.apply.preview plans every write and refusal without a transaction. A real apply commits Not Defined on every targeted fitting, then the losses, in one undo step; a failed stage rolls everything back and is named. Returns per-target outcomes and the touched systems' critical path after.", Title = "Apply Duct Losses", Finds = ["ducts", "apply", "pressure", "loss", "coefficient", "terminal", "fan-static", "critical-path", "mutation"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Example = "{ \"fittings\": [{ \"id\": 12345, \"method\": \"pe-server\", \"coefficient\": 0.25, \"table\": \"CD3-1\", \"ruleKey\": \"elbow-1d-le10\" }, { \"id\": 12346, \"method\": \"pe-server\", \"coefficient\": 0.35, \"table\": \"SD5-10\", \"ruleKey\": \"tap-std\" }], \"terminals\": [], \"components\": [], \"equipment\": [], \"store\": { \"version\": 1 } }")]
+    private static DuctApplyResult ApplyDuctsCore(DuctApplyRequest request, ProjectDocument activeDocument) =>
+        ApplyDucts(request, activeDocument, false);
+
+    // The preview is its own TransactRead leaf, not a flag on the ModelWrite: the bridge gate refuses a
+    // TransactRead that does not declare rollback, and the host binds this key to the Work seal step.
+    [Op("ducts.apply.preview", Subject = OpSubject.Elements, Touches = OpTouches.Geometry, Effect = OpEffect.TransactRead, RollsBack = true, Internal = true, Does = "Plan every duct loss write and refusal ducts.apply would make, without opening a transaction. Same request and result as ducts.apply; nothing is committed.", Title = "Preview Duct Losses", Finds = ["ducts", "preview", "pressure", "loss"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
+    private static DuctApplyResult PreviewDuctsCore(DuctApplyRequest request, ProjectDocument activeDocument) =>
+        ApplyDucts(request, activeDocument, true);
+
+    private static DuctApplyResult ApplyDucts(DuctApplyRequest request, ProjectDocument activeDocument, bool preview) {
         var document = activeDocument.Value;
-        if (!request.PreviewOnly && document.IsReadOnly)
+        if (!preview && document.IsReadOnly)
             throw BridgeOperationExceptions.Conflict(
                 "The active project document is read-only.",
                 [BridgeOperationExceptions.Issue("$", "DuctsDocumentReadOnly", "The active project document is read-only.",
-                    "Open a writable project document and retry, or use previewOnly=true.")]);
+                    "Open a writable project document and retry, or preview with ducts.apply.preview.")]);
         if (request.Store is null)
             throw BridgeOperationExceptions.Conflict(
                 "ducts.apply needs the store read from ducts.snapshot.",
                 [BridgeOperationExceptions.Issue("$.store", "DuctsStoreMissing", "The request carries no store.",
                     "Send ducts.snapshot's store (or { \"version\": 1 } when it has none) with the changes merged in.")]);
         try {
-            return Lib.Mep.DuctApplier.Apply(document, request);
+            return Lib.Mep.DuctApplier.Apply(document, request, preview);
         } catch (BridgeOperationException) {
             throw;
         } catch (Exception ex) {
             Serilog.Log.Error(ex, "ducts.apply failed outside a stage");
-            throw BridgeOperationExceptions.Unexpected("DuctsApplyException", ex, "Run ducts.apply with previewOnly=true and read each refusal, then retry.");
+            throw BridgeOperationExceptions.Unexpected("DuctsApplyException", ex, "Run ducts.apply.preview and read each refusal, then retry.");
         }
     }
 
-    [Op("ducts.heal", Subject = OpSubject.Document, Touches = OpTouches.Geometry, Effect = OpEffect.ModelWrite, Internal = true, Does = "Heal duct geometry so the model itself is whole: cap a dangling open end with its duct type's Caps routing rule, connect coincident same-size ends, and close a same-size gap of at most 3 in with a union (two ducts) or by extending the duct (duct to part). Each item names connector keys elementId:connectorIndex from ducts.snapshot; the op refuses size changes, cross-class or cross-system joins, equipment, and longer gaps (a person's, in Revit). Every item must pass Pe's own post-check (connected, sizes equal, origins within 1/16 in, no system split or merged) or it is refused and rolled back alone. previewOnly runs everything and rolls it back; a real heal commits one transaction per group. Returns per-item outcomes with created and replaced element ids (Revit gives new ids to what it rebuilds; read ducts.snapshot again) and the touched systems' Revit critical path before and after.", Title = "Heal Duct Geometry", Finds = ["ducts", "heal", "cap", "open-end", "connect", "union", "repair", "mutation"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Example = "{ \"previewOnly\": true, \"groups\": [{ \"group\": \"g12345\", \"items\": [{ \"key\": \"cap:12345:1\", \"kind\": \"cap\", \"end\": \"12345:1\" }, { \"key\": \"join:12350:0|12351:1\", \"kind\": \"join\", \"end\": \"12350:0\", \"other\": \"12351:1\" }] }] }")]
-    private static DuctHealResult HealDuctsCore(DuctHealRequest request, ProjectDocument activeDocument) {
+    [Op("ducts.heal", Subject = OpSubject.Document, Touches = OpTouches.Geometry, Effect = OpEffect.ModelWrite, Internal = true, Does = "Heal duct geometry so the model itself is whole: cap a dangling open end with its duct type's Caps routing rule, connect coincident same-size ends, and close a same-size gap of at most 3 in with a union (two ducts) or by extending the duct (duct to part). Each item names connector keys elementId:connectorIndex from ducts.snapshot; the op refuses size changes, cross-class or cross-system joins, equipment, and longer gaps (a person's, in Revit). Every item must pass Pe's own post-check (connected, sizes equal, origins within 1/16 in, no system split or merged) or it is refused and rolled back alone. ducts.heal.preview runs everything and rolls it back; a real heal commits one transaction per group. Returns per-item outcomes with created and replaced element ids (Revit gives new ids to what it rebuilds; read ducts.snapshot again) and the touched systems' Revit critical path before and after.", Title = "Heal Duct Geometry", Finds = ["ducts", "heal", "cap", "open-end", "connect", "union", "repair", "mutation"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Example = "{ \"groups\": [{ \"group\": \"g12345\", \"items\": [{ \"key\": \"cap:12345:1\", \"kind\": \"cap\", \"end\": \"12345:1\" }, { \"key\": \"join:12350:0|12351:1\", \"kind\": \"join\", \"end\": \"12350:0\", \"other\": \"12351:1\" }] }] }")]
+    private static DuctHealResult HealDuctsCore(DuctHealRequest request, ProjectDocument activeDocument) =>
+        HealDucts(request, activeDocument, false);
+
+    [Op("ducts.heal.preview", Subject = OpSubject.Elements, Touches = OpTouches.Geometry, Effect = OpEffect.TransactRead, RollsBack = true, Internal = true, UsesTransactions = true, Does = "Run every ducts.heal group inside one transaction group and roll all of it back. Same request and result as ducts.heal; nothing is committed.", Title = "Preview Duct Heal", Finds = ["ducts", "heal", "preview"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
+    private static DuctHealResult PreviewHealDuctsCore(DuctHealRequest request, ProjectDocument activeDocument) =>
+        HealDucts(request, activeDocument, true);
+
+    private static DuctHealResult HealDucts(DuctHealRequest request, ProjectDocument activeDocument, bool preview) {
         var document = activeDocument.Value;
         if (document.IsReadOnly)
             throw BridgeOperationExceptions.Conflict(
@@ -144,17 +160,24 @@ internal sealed class RevitDataRequestService {
                 [BridgeOperationExceptions.Issue("$", "DuctsDocumentReadOnly", "The active project document is read-only.",
                     "Open a writable project document and retry.")]);
         try {
-            return Lib.Mep.DuctHealer.Heal(document, request);
+            return Lib.Mep.DuctHealer.Heal(document, request, preview);
         } catch (BridgeOperationException) {
             throw;
         } catch (Exception ex) {
             Serilog.Log.Error(ex, "ducts.heal failed outside an item");
-            throw BridgeOperationExceptions.Unexpected("DuctsHealException", ex, "Run ducts.heal with previewOnly=true and read each refusal, then retry.");
+            throw BridgeOperationExceptions.Unexpected("DuctsHealException", ex, "Run ducts.heal.preview and read each refusal, then retry.");
         }
     }
 
-    [Op("ducts.assign-fan", Subject = OpSubject.System, Touches = OpTouches.Topology, Effect = OpEffect.ModelWrite, Internal = true, Does = "Make a unit the base equipment of a duct system (Revit's Duct Systems > Select Equipment), keeping the system's id, name, type and parameters. Refuses a system that already has base equipment (a swap drops the old base from the members and Revit does not restore it), anything that is not mechanical equipment, and a unit with no port of the system's air classification that is a member of the system or joined to its ducts (Revit itself checks neither). Reads back that the base equipment is the unit and the name, type and classification are unchanged, else refuses and rolls back. previewOnly runs the write and the read back and rolls them back. Returns the outcome and the system before and after (read ducts.snapshot again: systems[].baseEquipmentId).", Title = "Assign Duct System Fan", Finds = ["ducts", "fan", "base-equipment", "system", "select-equipment", "unit", "mutation"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Example = "{ \"previewOnly\": true, \"systemId\": 6103113, \"unitId\": 9668311 }")]
-    private static DuctAssignFanResult AssignDuctFanCore(DuctAssignFanRequest request, ProjectDocument activeDocument) {
+    [Op("ducts.assign-fan", Subject = OpSubject.System, Touches = OpTouches.Topology, Effect = OpEffect.ModelWrite, Internal = true, Does = "Make a unit the base equipment of a duct system (Revit's Duct Systems > Select Equipment), keeping the system's id, name, type and parameters. Refuses a system that already has base equipment (a swap drops the old base from the members and Revit does not restore it), anything that is not mechanical equipment, and a unit with no port of the system's air classification that is a member of the system or joined to its ducts (Revit itself checks neither). Reads back that the base equipment is the unit and the name, type and classification are unchanged, else refuses and rolls back. ducts.assign-fan.preview runs the write and the read back and rolls them back. Returns the outcome and the system before and after (read ducts.snapshot again: systems[].baseEquipmentId).", Title = "Assign Duct System Fan", Finds = ["ducts", "fan", "base-equipment", "system", "select-equipment", "unit", "mutation"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Example = "{ \"systemId\": 6103113, \"unitId\": 9668311 }")]
+    private static DuctAssignFanResult AssignDuctFanCore(DuctAssignFanRequest request, ProjectDocument activeDocument) =>
+        AssignDuctFan(request, activeDocument, false);
+
+    [Op("ducts.assign-fan.preview", Subject = OpSubject.System, Touches = OpTouches.Topology, Effect = OpEffect.TransactRead, RollsBack = true, Internal = true, UsesTransactions = true, Does = "Run the ducts.assign-fan write and its read back inside one transaction group and roll both back. Same request and result as ducts.assign-fan; nothing is committed.", Title = "Preview Duct System Fan", Finds = ["ducts", "fan", "preview"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
+    private static DuctAssignFanResult PreviewAssignDuctFanCore(DuctAssignFanRequest request, ProjectDocument activeDocument) =>
+        AssignDuctFan(request, activeDocument, true);
+
+    private static DuctAssignFanResult AssignDuctFan(DuctAssignFanRequest request, ProjectDocument activeDocument, bool preview) {
         var document = activeDocument.Value;
         if (document.IsReadOnly)
             throw BridgeOperationExceptions.Conflict(
@@ -162,12 +185,12 @@ internal sealed class RevitDataRequestService {
                 [BridgeOperationExceptions.Issue("$", "DuctsDocumentReadOnly", "The active project document is read-only.",
                     "Open a writable project document and retry.")]);
         try {
-            return Lib.Mep.DuctFanAssigner.Assign(document, request);
+            return Lib.Mep.DuctFanAssigner.Assign(document, request, preview);
         } catch (BridgeOperationException) {
             throw;
         } catch (Exception ex) {
             Serilog.Log.Error(ex, "ducts.assign-fan failed outside its guards");
-            throw BridgeOperationExceptions.Unexpected("DuctsAssignFanException", ex, "Run ducts.assign-fan with previewOnly=true and read its refusal, then retry.");
+            throw BridgeOperationExceptions.Unexpected("DuctsAssignFanException", ex, "Run ducts.assign-fan.preview and read its refusal, then retry.");
         }
     }
 
@@ -593,21 +616,28 @@ internal sealed class RevitDataRequestService {
         return ParameterLinksService.Instance.Detail(document, request.IncludeEvaluation);
     }
 
-    [Op("revit.apply.parameter-links", Subject = OpSubject.Document, Touches = OpTouches.Topology, Effect = OpEffect.ModelWrite, Internal = true, Does = "Preview or atomically replace the model-owned parameter-link profile and reconcile its changed target values.", Title = "Apply Parameter Links", Finds = ["parameters", "links", "rules", "apply", "reconcile", "electrical", "circuits", "mocp", "mutation"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Example = "{ \"previewOnly\": true }", Actor = OpActor.Any)]
-    private ParameterLinksData ApplyParameterLinksCore(ParameterLinksApplyRequest request, ProjectDocument activeDocument) {
+    [Op("revit.apply.parameter-links", Subject = OpSubject.Document, Touches = OpTouches.Topology, Effect = OpEffect.ModelWrite, Internal = true, Does = "Atomically replace the model-owned parameter-link profile and reconcile its changed target values. revit.apply.parameter-links.preview evaluates the same request without writing.", Title = "Apply Parameter Links", Finds = ["parameters", "links", "rules", "apply", "reconcile", "electrical", "circuits", "mocp", "mutation"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Example = "{ \"reconcile\": true }", Actor = OpActor.Any)]
+    private ParameterLinksData ApplyParameterLinksCore(ParameterLinksApplyRequest request, ProjectDocument activeDocument) =>
+        this.ApplyParameterLinks(request, activeDocument, false);
+
+    [Op("revit.apply.parameter-links.preview", Subject = OpSubject.Document, Touches = OpTouches.Topology, Effect = OpEffect.TransactRead, RollsBack = true, Internal = true, Does = "Evaluate a parameter-link profile (or the stored one) and preview every proposed target write and issue, without writing. Same request and result as revit.apply.parameter-links.", Title = "Preview Parameter Links", Finds = ["parameters", "links", "preview", "evaluate"], Cost = OpCost.Mutation, Actor = OpActor.Any)]
+    private ParameterLinksData PreviewParameterLinksCore(ParameterLinksApplyRequest request, ProjectDocument activeDocument) =>
+        this.ApplyParameterLinks(request, activeDocument, true);
+
+    private ParameterLinksData ApplyParameterLinks(ParameterLinksApplyRequest request, ProjectDocument activeDocument, bool preview) {
         var document = activeDocument.Value;
-        if (!request.PreviewOnly && document.IsReadOnly) {
+        if (!preview && document.IsReadOnly) {
             throw BridgeOperationExceptions.Conflict(
                 "Active document is read-only.",
                 [BridgeOperationExceptions.Issue(
                     "$",
                     "ParameterLinksDocumentReadOnly",
                     "Active document is read-only.",
-                    "Open a writable project document and retry, or use previewOnly=true.")]);
+                    "Open a writable project document and retry, or preview with revit.apply.parameter-links.preview.")]);
         }
 
         try {
-            return ParameterLinksService.Instance.Apply(document, request);
+            return ParameterLinksService.Instance.Apply(document, request, preview);
         } catch (BridgeOperationException) {
             throw;
         } catch (Exception ex) {
