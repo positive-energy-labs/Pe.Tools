@@ -118,7 +118,7 @@ export function SpacePicture({
   const orbit = useLiveOrbit(
     axis ? under : pose,
     stageViewport(setPage),
-    `${page.scene}/${page.ids.elementIds.join(",")}/${page.mode}`,
+    `${page.scene}/${page.mode}`,
     page.viewport,
   );
   const plane = useMemo(() => {

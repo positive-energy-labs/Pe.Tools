@@ -125,7 +125,7 @@ export const spaceGraph: RouteGraph<SpacePage, null> = defineRouteGraph({
   fields: {
     ...threadListFields,
     ...fields,
-    ids: { ...fields.ids, role: "selection" },
+    selected: { ...fields.selected, role: "selection" },
     row: { ...fields.row, url: false },
   },
   readings: {
@@ -159,7 +159,7 @@ export const spaceGraph: RouteGraph<SpacePage, null> = defineRouteGraph({
       purpose: "Edit axis cuts and read answer layers",
       draws: ["scene", "answers"],
       verbs: Object.assign((row: { verb: string }) => [row.verb], {
-        ids: ["status", "rows", "tree", "slice", "probe", "sweep"],
+        ids: ["capture", "context", "status", "rows", "tree", "slice", "probe", "sweep"],
       }),
     },
   },
@@ -239,13 +239,13 @@ export const spaceBinding = (id: string, row: unknown, { page }: { page: SpacePa
     id === "capture" || id === "context"
       ? {
           ...sceneRequest(
-            page.ids.elementIds.filter((n) => Number.isSafeInteger(n) && n > 0),
+            ((row as { input?: { elementIds?: number[] } } | undefined)?.input?.elementIds ?? []),
             false,
             15,
             CONTEXT_DEFAULT,
           ),
           ...(page.region ? { region: page.region } : {}),
-          elementIds: page.region ? [] : page.ids.elementIds,
+          elementIds: page.region ? [] : ((row as { input?: { elementIds?: number[] } } | undefined)?.input?.elementIds ?? []),
           focusOnly: !page.region && id === "capture",
           contextRepresentation: !page.region && id === "capture" ? "none" : CONTEXT_DEFAULT,
         }

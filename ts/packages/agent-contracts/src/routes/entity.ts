@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { field, text, jsonCodec } from "../route-field.ts";
+import { field, text, sortField, keyedSetField } from "../route-field.ts";
 
 /**
  * Entity routes (`/schedules`, `/families`, `/family`): stage, pod and path are the address, so
@@ -27,11 +27,6 @@ export const workLinesField = field(z.enum(["suggestions", "edits", "all"]).opti
   agent: "set",
 });
 
-const sortsSchema = z
-  .array(z.object({ key: z.string().min(1).max(512), dir: z.enum(["asc", "desc"]) }))
-  .max(8);
-const sortState = z.object({ columns: sortsSchema }).default({ columns: [] });
-const hiddenColumns = z.record(z.string().min(1).max(512), z.literal(true)).default({});
 /**
  * A table's view (kit `TableState`): the query line, its sorts and its hidden columns, each Pea's
  * to set (MAP ruling 48: Pea shapes the query and the visible columns without asking). The query
@@ -39,6 +34,6 @@ const hiddenColumns = z.record(z.string().min(1).max(512), z.literal(true)).defa
  */
 export const tableFields = (query = "") => ({
   query: field(z.string().max(4096).default(query), { url: "push", agent: "set" }),
-  sort: field(sortState, { url: "replace", agent: "set" }, jsonCodec(sortState)),
-  hidden: field(hiddenColumns, { url: "replace", agent: "set" }, jsonCodec(hiddenColumns)),
+  sort: sortField({ url: "replace", agent: "set" }),
+  hidden: keyedSetField({ url: "replace", agent: "set" }),
 });

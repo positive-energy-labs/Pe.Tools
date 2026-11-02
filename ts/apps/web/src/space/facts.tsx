@@ -29,9 +29,11 @@ type Element = Psc1Metadata["elements"][number];
 export function HostIds({
   page,
   setPage,
+  verbs,
 }: {
   page: SpacePage;
   setPage(this: void, patch: Partial<SpacePage>): void;
+  verbs: (row: { verb: string; input?: unknown }) => ReactNode;
 }) {
   const [regionDraft, setRegionDraft] = useState("");
   const regionText = page.region
@@ -48,17 +50,18 @@ export function HostIds({
     );
   };
   const region = parseRegion(regionDraft);
+  const [elementIds, setElementIds] = useState<number[]>([]);
   const [draft, setDraft] = useState("");
   const id = Number(draft);
   const refusal =
     !Number.isSafeInteger(id) || id <= 0
       ? "Enter a positive whole host element ID"
-      : page.ids.elementIds.includes(id)
+      : elementIds.includes(id)
         ? "This host element is already named"
         : null;
   const add = () => {
     if (refusal) return;
-    setPage({ ids: { elementIds: [...page.ids.elementIds, id] } });
+    setElementIds([...elementIds, id]);
     setDraft("");
   };
   return (
@@ -106,11 +109,13 @@ export function HostIds({
       <Button label="Add host element ID" refusal={refusal} onClick={add}>
         add
       </Button>
-      {page.ids.elementIds.map((id, index) => (
+      {verbs({ verb: "capture", input: { elementIds } })}
+      {verbs({ verb: "context", input: { elementIds } })}
+      {elementIds.map((id, index) => (
         <Button
           key={`${id}:${index}`}
           label={`Remove host element ${id}`}
-          onClick={() => setPage({ ids: { elementIds: page.ids.elementIds.filter((value) => value !== id) } })}
+          onClick={() => setElementIds(elementIds.filter((value) => value !== id))}
         >
           {id} ×
         </Button>

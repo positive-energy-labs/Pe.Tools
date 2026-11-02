@@ -74,8 +74,16 @@ it("declarations include template tails and graph factories, excluding metadata"
   expect(declarationLines(syntax(`const graph = {\n key: "r",\n directory: {\n title: "metadata",\n },\n fields: {},\n readings: {},\n verbs: {},\n panes: {},\n stages: {},\n};`))).toEqual([6,7,8,9,10]);
 });
 
-it("array ratchet distinguishes named state from a wrapped array Page value", () => {
+it("array ratchet counts nested object arrays and only exempts kernel construction", () => {
   const value = (text: string) => (syntax(text).statements[0] as import("typescript").ExpressionStatement).expression;
   expect(arraySchema(value("z.array(z.string()).readonly().default([])"))).toBe(true);
-  expect(arraySchema(value("z.object({ columns: z.array(z.string()) }).default({ columns: [] })"))).toBe(false);
+  expect(arraySchema(value("z.object({ columns: z.array(z.string()) }).default({ columns: [] })"))).toBe(true);
+});
+
+it("kernel field helpers are recognized by their calls, never wrapper property names", () => {
+  const value = (text: string) => (syntax(text).statements[0] as import("typescript").ExpressionStatement).expression;
+  expect(arraySchema(value("sortField({})"))).toBe(false);
+  expect(arraySchema(value("keyedSetField({})"))).toBe(false);
+  expect(arraySchema(value("z.object({ x: z.array(z.string()) })"))).toBe(true);
+  expect(arraySchema(value("z.union([z.string(), z.object({ x: z.array(z.string()) })])"))).toBe(true);
 });

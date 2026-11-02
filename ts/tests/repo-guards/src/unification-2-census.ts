@@ -107,13 +107,15 @@ export function declarationLines(source: ts.SourceFile): number[] {
   tokens(source);
   return [...lines].sort((a, b) => a - b);
 }
-/** Inspect only the Page value's outer schema, not arrays nested in a named object. */
+/** Any array in an authored schema counts, including object and union members.
+ * Named kernel constructors own their shapes; only their calls escape this structural scan. */
 export function arraySchema(node: ts.Node | undefined): boolean {
-  if (!node || !ts.isCallExpression(node) || !ts.isPropertyAccessExpression(node.expression)) return false;
-  const method = node.expression.name.text;
-  if (method === "array") return true;
-  return ["default", "optional", "nullable", "readonly", "catch", "prefault", "max", "min", "refine", "transform"].includes(method)
-    && arraySchema(node.expression.expression);
+  if (!node) return false;
+  if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)
+      && node.expression.name.text === "array") return true;
+  let found = false;
+  node.forEachChild(child => { if (arraySchema(child)) found = true; });
+  return found;
 }
 
 export function census() {
@@ -184,8 +186,7 @@ export function census() {
       if (
         ts.isCallExpression(n) &&
         n.expression.getText(source) === "field" &&
-        arraySchema(n.arguments[0]) &&
-        !/\bmany\s*:\s*true/.test(n.parent.getText(source))
+        arraySchema(n.arguments[0])
       )
         add("arrayFields", n);
       if (

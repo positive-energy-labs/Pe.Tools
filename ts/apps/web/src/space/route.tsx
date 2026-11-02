@@ -352,7 +352,7 @@ function FactsBody({ owner, page, verbs }: MountBody<SpacePage, null>) {
   const on = new Set((SPACE_LAYERS.filter(layer => page.layers === "all" || page.layers.includes(layer))));
   return (
     <div className="flex flex-col gap-3">
-      <HostIds page={page} setPage={setPage} />
+      <HostIds page={page} setPage={setPage} verbs={verbs} />
       {page.mode !== "3d" && meshes ? (
         <CutControls
           axis={page.mode}

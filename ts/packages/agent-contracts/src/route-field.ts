@@ -155,7 +155,7 @@ export function manyField<const A extends Access & { cap?: number; initial?: Man
     keyKind,
   };
 }
-/** Structured Page values have one JSON spelling; arrays belong inside a named object. */
+/** Structured scalar Page values have one JSON spelling. */
 export const jsonCodec = <S extends z.ZodType>(schema: S): Codec<z.output<S>> => ({
   encode: JSON.stringify,
   decode: text => {
@@ -165,3 +165,16 @@ export const jsonCodec = <S extends z.ZodType>(schema: S): Codec<z.output<S>> =>
 });
 export const resolveMany = (value: Many, roster: readonly string[]) =>
   value === "all" ? [...roster] : [...new Set(value)];
+
+/** Ordered column priorities; order and direction survive URL and agent projections. */
+export function sortField<const A extends Access>(access: A) {
+  const schema = z.object({ columns: z.array(z.object({
+    key: z.string().min(1).max(512), dir: z.enum(["asc", "desc"]),
+  }).strict()).max(8) }).strict().default({ columns: [] });
+  return { ...access, schema, codec: jsonCodec(schema) };
+}
+/** A set of column keys: presence means hidden, with no ordered-list semantics. */
+export function keyedSetField<const A extends Access>(access: A) {
+  const schema = z.record(z.string().min(1).max(512), z.literal(true)).default({});
+  return { ...access, schema, codec: jsonCodec(schema) };
+}

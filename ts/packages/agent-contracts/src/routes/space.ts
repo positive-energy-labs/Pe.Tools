@@ -83,8 +83,6 @@ const nullableText: Codec<string | null> = {
 const spaceFields = {
   /** The captured scene's hash; absent = none open. Only the capture verb writes a new one. */
   scene: field(spaceSceneSchema.optional(), { url: "push", agent: "read" }),
-  /** Host element ids whose surrounding context a capture includes; a URL read never captures. */
-  ids: field(z.object({ elementIds: z.array(z.number().int().positive()).max(50000) }).default({ elementIds: [] }), { url: "push", agent: "set" }, jsonCodec(z.object({ elementIds: z.array(z.number().int()) }))),
   mode: field(modeKey(SPACE_MODES, "3d"), { url: "push", agent: "set" }),
   /** null = fit. `3d` holds an orbit, an axis a plane (`conflict`). A drag replaces. */
   viewport: field(
@@ -142,6 +140,6 @@ export const spaceAddress = {
   conflict: spaceConflict,
   agent: {
     policy:
-      "Change the visible captured Space picture using ids, mode, viewport, cuts, selected, hidden, isolated and layers. Scene is read-only. Use exact element keys from this loaded scene, preserving document and link identity; unknown members are refused. Isolation all shows every element; an empty isolation shows none. Viewport must match the mode, or be empty to fit. Cuts use the scene frame. Editing ids.elementIds only prepares a later explicit capture. View changes never capture, recapture, select in Revit or write Work.",
+      "Change the visible captured Space picture using mode, viewport, cuts, selected, hidden, isolated and layers. Scene is read-only. Use exact element keys from this loaded scene, preserving document and link identity; unknown members are refused. Isolation all shows every element; an empty isolation shows none. Viewport must match the mode, or be empty to fit. Cuts use the scene frame. Capture takes elementIds as explicit reading input, never Page state. View changes never capture, recapture, select in Revit or write Work.",
   },
 } satisfies RouteDeclaration;

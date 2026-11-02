@@ -8,10 +8,12 @@ import { solve } from "./math";
 export type GrillesPage = {
   row: string;
   sheet: boolean;
-  rows: { profiles: SheetRow[] };
+  rows: { profiles: Record<string, SheetRow> };
   picked: Many;
   project: string;
 };
+
+export const profileRows = () => Object.fromEntries(seedRows().map(row => [row.id, row]));
 
 export const grillesFields = {
   row: { ...grillesAddress.fields.row, role: "subject" },
@@ -22,7 +24,7 @@ export const grillesFields = {
       z
         .object({
           profiles: z
-            .array(
+            .record(z.string(),
               z
                 .object({
                   id: z.string(),
@@ -36,9 +38,9 @@ export const grillesFields = {
                 })
                 .transform(({ id, ...input }) => ({ ...solve(input), id })),
             )
-            .default(seedRows),
+            .default(profileRows),
         })
-        .default(() => ({ profiles: seedRows() })),
+        .default(() => ({ profiles: profileRows() })),
       {},
       {
         encode: JSON.stringify,

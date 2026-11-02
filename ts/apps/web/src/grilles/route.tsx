@@ -1,3 +1,4 @@
+import { profileRows } from "./page";
 import { FactChip } from "@pe/kit/lang/chip";
 import { Button } from "@pe/kit/lang/button";
 import { KeyLegend, type LegendKey } from "@pe/kit/lang/key-hint";
@@ -23,9 +24,7 @@ const FIELD_KEYS: readonly LegendKey[] = [
 function edit(body: Body, id: string, patch: Partial<GrilleInput>) {
   body.owner.view.setPage({
     rows: {
-      profiles: body.page.rows.profiles.map((row) =>
-        row.id === id ? { ...solve({ ...row, ...patch }), id } : row,
-      ),
+      profiles: { ...body.page.rows.profiles, [id]: { ...solve({ ...body.page.rows.profiles[id]!, ...patch }), id } },
     },
   });
 }
@@ -41,11 +40,11 @@ function Drawing(body: Body) {
           set={(patch) =>
             body.owner.view.setPage({
               rows: {
-                profiles: body.page.rows.profiles.map((row) => {
+                profiles: Object.fromEntries(Object.values(body.page.rows.profiles).map((row) => {
                   const next = { ...row, ...patch };
                   const rib = "rib" in patch ? next.rib : Math.max(0, ribToFill(next));
-                  return { ...solve({ ...next, rib }), id: row.id };
-                }),
+                  return [row.id, { ...solve({ ...next, rib }), id: row.id }];
+                })),
               },
             })
           }
@@ -92,7 +91,7 @@ function Profiles(body: Body) {
   const { page, owner } = body;
   const setPage = owner.view.setPage;
   const picked = new Set(
-    page.picked === "all" ? page.rows.profiles.map((row) => row.id) : page.picked,
+    page.picked === "all" ? Object.keys(page.rows.profiles) : page.picked,
   );
   return (
     <>
@@ -117,7 +116,7 @@ function Profiles(body: Body) {
         <Button
           label="reset"
           kind="framed"
-          onClick={() => setPage({ rows: { profiles: seedRows() } })}
+          onClick={() => setPage({ rows: { profiles: profileRows() } })}
         >
           reset
         </Button>
@@ -130,7 +129,7 @@ function Profiles(body: Body) {
         add={() => {
           const src = value.active ?? value.rows.at(-1) ?? seedRows()[0]!;
           const id = `new${value.rows.length + 1}`;
-          setPage({ rows: { profiles: [...page.rows.profiles, { ...src, id }] }, row: id });
+          setPage({ rows: { profiles: { ...page.rows.profiles, [id]: { ...src, id } } }, row: id });
         }}
         picked={picked}
         onPickedChange={(next) => setPage({ picked: [...next] })}
