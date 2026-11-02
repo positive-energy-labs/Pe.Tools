@@ -1,5 +1,5 @@
 import { expect, it } from "vite-plus/test";
-import raw from "./fixtures/muas-real.json";
+import raw from "./fixtures/muas-real.json" with { type: "json" };
 import type { SheetSnapshot } from "./build.ts";
 import { buildSheet } from "./build.ts";
 import { inputsFor } from "./test-inputs.ts";

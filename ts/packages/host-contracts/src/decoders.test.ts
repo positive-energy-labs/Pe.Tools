@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { readFileSync } from "node:fs";
 import { expect, test } from "vite-plus/test";
-import { generatedJsonSchema, nativeResponseSchema, nativeRequestSchema, nativeResponseDefinitionSchema, effectDecoder } from "./decoders";
+import { generatedJsonSchema, nativeResponseSchema, nativeRequestSchema, nativeResponseDefinitionSchema, effectDecoder } from "./decoders.ts";
 
 test.each(["2026-11-02T08:23:20.757+00:00", "2026-11-02T02:23:20.757-06:00", "2026-11-02T08:23:20Z"])("generated date-time accepts DateTimeOffset %s", (value) => {
   const schema = generatedJsonSchema({ type: "string", format: "date-time" });

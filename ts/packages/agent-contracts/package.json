@@ -28,6 +28,7 @@
       "types": "./src/product-map.ts",
       "import": "./src/product-map.ts"
     },
+    "./work-value": "./src/work-value.ts",
     "./space-view": "./src/space-view.ts",
     "./ducts-guide": {
       "types": "./src/ducts-guide.ts",

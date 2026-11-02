@@ -1,6 +1,6 @@
 import { expect, test } from "vite-plus/test";
-import { createDuctsSheets } from "../src/ducts-sheet";
-import { snapshot } from "../../web/src/ducts/test-fixture";
+import { createDuctsSheets } from "../src/ducts-sheet.ts";
+import { snapshot } from "../../web/src/ducts/test-fixture.ts";
 
 test("roster composition retains UniqueId for two equipment instances with the same mark", async () => {
   const fan = snapshot.nodes.find((node) => node.id === 100)!;
