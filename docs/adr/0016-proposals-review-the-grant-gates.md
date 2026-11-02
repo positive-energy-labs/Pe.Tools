@@ -1,6 +1,6 @@
 # 0016: Proposals are for review; the write grant is the one gate
 
-Date: 2026-10-12. Status: accepted. Source: kaitpw, thread "Pea-Revit Document Control UX Rework", rulings Q7 to Q15. The ruling lines are in [the agent ledger](../features/agent/LEDGER.md).
+Date: 2026-10-12. Status: superseded. [ADR 0024](0024-root-run-consent-and-shared-work.md) replaced the grant and authorship rules; [ADR 0027](0027-one-route-one-subject-one-consent.md) replaced run consent. The rule that a proposal is a review artifact, never a write gate, still stands. Source: kaitpw, thread "Pea-Revit Document Control UX Rework", rulings Q7 to Q15. The ruling lines are in [the agent ledger](../features/agent/LEDGER.md).
 
 ## Context
 

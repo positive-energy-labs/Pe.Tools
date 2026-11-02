@@ -1,5 +1,7 @@
 # Root run consent and shared Work
 
+Status: accepted; the per-turn countdown is superseded by [ADR 0027](0027-one-route-one-subject-one-consent.md) (consent per thread, auto-approve after a "Reject?" window). Shared Work, the journal and the run token still stand.
+
 ## Context
 
 Human-only commands, agent-only proposals and thread targets imposed different authority on the same tool. A harness spawn token also lacked causal turn identity. Looking up the current turn at delayed tool entry could authorize an earlier invocation under a later turn.

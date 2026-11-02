@@ -1,6 +1,6 @@
 # ADR 0001 — Route-workspace framework (trichotomy core, commit primitive, session binding, Atom state layer)
 
-Date: 2026-07-13. Status: accepted, implemented.
+Date: 2026-07-13. Status: accepted, implemented; superseded in part by [ADR 0026](0026-one-route-shell.md) (one manifest and one kernel per route) and [ADR 0024](0024-root-run-consent-and-shared-work.md) (the proposal rung is no longer a write gate).
 Evidence base: a four-plugin spike (family-types, parameter-links, settings,
 schedule-grid), each driven e2e with proven Revit/disk writes, plus a 4-way
 compiling state-layer bake-off (bare hook vs TanStack Query vs Effect.Atom vs
