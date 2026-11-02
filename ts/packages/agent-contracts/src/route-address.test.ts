@@ -63,7 +63,11 @@ describe("the route address", () => {
     const facts = { systems: [{ name: "SA 1" }, { name: "SA 2" }, { name: "RA 1" }] };
     expect(at.agent!.resolve!({ system: "ra 1,sa 2" }, facts)).toEqual({
       ok: true,
-      patch: { system: "RA 1,SA 2" },
+      patch: { system: "RA%201,SA%202" },
+    });
+    expect(at.agent!.resolve!({ system: "RA%201,SA%202" }, facts)).toEqual({
+      ok: true,
+      patch: { system: "RA%201,SA%202" },
     });
     expect(at.agent!.resolve!({ system: "SA" }, facts).ok).toBe(false);
     const page = at.read({ system: "RA 1,SA 2" }).page;
@@ -130,7 +134,7 @@ describe("the route address", () => {
       ok: true,
       patch: {
         threadSearch: JSON.stringify(pickListPill(emptyListSearch(), "scope", "attention")),
-        system: "SA 19",
+        system: "SA%2019",
       },
     });
     if (mixed.ok) {

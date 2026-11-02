@@ -15,7 +15,7 @@ import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
   HOST_RPC_DOCUMENT_HEADER,
 } from "@pe/host-contracts/operation-types";
-import type { RevitContextViewImage } from "@pe/host-contracts/generated";
+import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { jsonSource, requestJson, type JsonRequest } from "#/shell/readings-api";
 import { subscriptionSource } from "#/shell/readings-use";
 import type { ReadingContext, ReadingSource } from "#/shell/readings";
@@ -56,10 +56,16 @@ function rpc(ctx: ReadingContext, key: string, request: unknown): JsonRequest | 
 }
 export function takeoffSources(): Readonly<Record<string, ReadingSource>> {
   return {
-    "takeoffs.roster": { kind: "derive", derive: (ctx) => {
-      const world = worldOf(ctx);
-      return { views: (world?.lanes ?? []).map(row => ({ id: row.view, label: row.label })), zones: (world?.zones ?? []).map(row => ({ id: row.zone.guid, label: row.name })) };
-    } },
+    "takeoffs.roster": {
+      kind: "derive",
+      derive: (ctx) => {
+        const world = worldOf(ctx);
+        return {
+          views: (world?.lanes ?? []).map((row) => ({ id: row.view, label: row.label })),
+          zones: (world?.zones ?? []).map((row) => ({ id: row.zone.guid, label: row.name })),
+        };
+      },
+    },
     "takeoffs.snapshot": {
       kind: "use",
       dirties: ["snapshot"],
@@ -159,7 +165,7 @@ export function takeoffSources(): Readonly<Record<string, ReadingSource>> {
           ? planOf(
               await requestJson(
                 request,
-                z.custom<RevitContextViewImage.Res.Response>(),
+                nativeResponseSchema("revit.context.view-image"),
                 ctx.signal,
               ),
             )

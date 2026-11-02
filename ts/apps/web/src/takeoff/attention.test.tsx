@@ -11,7 +11,7 @@ import { Row } from "@pe/kit/lang/row";
 import { attention, elementKey, setHovered, useMention } from "@pe/kit/lang/attention";
 import { useEffect, useSyncExternalStore } from "react";
 import { createGraphMount } from "#/shell/mount";
-import { takeoffGraph } from "./graph";
+import { takeoffBase as takeoffGraph } from "./graph";
 import { takeoffAdapters } from "./graph-route";
 import { useTakeoffStore } from "./store";
 import type { TakeoffStore } from "./store";

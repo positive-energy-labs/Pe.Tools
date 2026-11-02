@@ -157,7 +157,7 @@ export function fittingGroups(
                 ? { tables: { [g.name]: null } }
                 : { tables: { [g.name]: { table: t } } },
         })),
-        clear: chosen?.source === "typed" ? { tables: { [g.name]: null } } : null,
+        clear: chosen?.source === "Work" ? { tables: { [g.name]: null } } : null,
       });
       continue;
     }
@@ -197,7 +197,7 @@ export function fittingGroups(
               })),
             )
           : [],
-        clear: assigned?.source === "typed" ? { assignments: { [g.name]: null } } : null,
+        clear: assigned?.source === "Work" ? { assignments: { [g.name]: null } } : null,
       });
       continue;
     }

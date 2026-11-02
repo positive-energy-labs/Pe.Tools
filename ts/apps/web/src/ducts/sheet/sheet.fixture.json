@@ -98,7 +98,9 @@
             "knownInWg": 0,
             "complete": false,
             "legCount": 15,
-            "blockerIds": ["inferred-join:14122436:1"]
+            "blockerIds": [
+              "inferred-join:14122436:1"
+            ]
           }
         ],
         "rest": 0
@@ -158,44 +160,68 @@
           "supply": {
             "value": 900,
             "source": "firm",
-            "ref": "test"
+            "ref": "test",
+            "units": "fpm",
+            "version": "fixture",
+            "status": "valid"
           },
           "return": {
             "value": 700,
             "source": "firm",
-            "ref": "test"
+            "ref": "test",
+            "units": "fpm",
+            "version": "fixture",
+            "status": "valid"
           }
         },
         "terminalDropInWg": {
           "value": 0.03,
           "source": "firm",
-          "ref": "test"
+          "ref": "test",
+          "units": "in-wg",
+          "version": "fixture",
+          "status": "valid"
         },
         "autoJoinGapIn": {
           "value": 3,
           "source": "firm",
-          "ref": "test"
+          "ref": "test",
+          "units": "in",
+          "version": "fixture",
+          "status": "valid"
         },
         "healBoxIn": {
           "value": 36,
           "source": "firm",
-          "ref": "test"
+          "ref": "test",
+          "units": "in",
+          "version": "fixture",
+          "status": "valid"
         },
         "splitPolicy": {
           "value": "even",
           "source": "firm",
-          "ref": "test"
+          "ref": "test",
+          "units": null,
+          "version": "fixture",
+          "status": "valid"
         },
         "allowanceInWg": {
           "supply": {
             "value": 0.15,
-            "source": "project",
-            "ref": "test"
+            "source": "Work",
+            "ref": "test",
+            "units": "in-wg",
+            "version": "fixture",
+            "status": "valid"
           },
           "return": {
             "value": 0,
             "source": "firm",
-            "ref": "test"
+            "ref": "test",
+            "units": "in-wg",
+            "version": "fixture",
+            "status": "valid"
           }
         }
       },
@@ -250,7 +276,10 @@
     },
     "basis": "muas-fixture-basis",
     "kind": "elements",
-    "walkedElementIds": [14577391, 14122436],
+    "walkedElementIds": [
+      14577391,
+      14122436
+    ],
     "beyond": []
   },
   "legs": {

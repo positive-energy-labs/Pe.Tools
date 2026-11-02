@@ -4,7 +4,14 @@ import { describeCloser, type CloserContext } from "./closer";
 import { detailOf, type SheetBlocker } from "./tiers";
 
 const context: CloserContext = {
-  terminalDrop: { value: 0.03, source: "firm", ref: "seed" },
+  terminalDrop: {
+    value: 0.03,
+    source: "firm",
+    ref: "seed",
+    units: null,
+    version: null,
+    status: "valid",
+  },
   nameOf: (id) => (id === 2 ? "14×10 duct" : null),
   wait: null,
 };

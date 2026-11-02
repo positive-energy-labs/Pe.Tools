@@ -115,11 +115,10 @@ function resolveDucts(input: Record<string, unknown>, facts: Record<string, unkn
       error: `the Ducts page takes ${keys.join(", ")}, not ${stray.join(", ")}; name the system`,
     };
   if (patch.system?.trim() && patch.system !== "all") {
+    const decoded = manyCodec.decode(patch.system);
+    if (!Array.isArray(decoded)) return { ok: false as const, error: "Invalid system names" };
     const named: string[] = [];
-    for (const said of patch.system
-      .split(",")
-      .map((word) => word.trim())
-      .filter(Boolean)) {
+    for (const said of decoded.map((word) => word.trim()).filter(Boolean)) {
       const word = said.toLowerCase();
       const exact = systems.filter((system) => system.name.toLowerCase() === word);
       const near = systems.filter((system) => system.name.toLowerCase().includes(word));

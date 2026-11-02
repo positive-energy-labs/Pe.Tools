@@ -10,7 +10,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { routeAddress } from "@pe/agent-contracts";
 import { useGraphRoute } from "#/shell/mount";
 import { LevelPlan } from "./level-plan";
-import { takeoffGraph } from "./graph";
+import { takeoffBase as takeoffGraph } from "./graph";
 import { takeoffAdapters } from "./graph-route";
 import { mockModel } from "./proto/mock";
 import { projectMockModel } from "./proto/project-model";

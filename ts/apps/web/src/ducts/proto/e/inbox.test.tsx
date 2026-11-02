@@ -5,7 +5,7 @@ const search = (keywords = "", pills: Record<string, string> = {}) =>
     keywords,
   });
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import { ductClaimSchema, ductsDocumentSchema } from "@pe/agent-contracts";
@@ -40,7 +40,12 @@ test("D18 requires a short claim title and keeps its sentence in the Evidence hi
   const row = document.querySelector<HTMLElement>('[data-key="claim:c1"]')!;
   expect(within(row).getByText(claim.title)).toBeTruthy();
   expect(screen.queryByText(value.text)).toBeNull();
-  const detail = document.querySelector<HTMLElement>('[data-inbox-detail="claim:c1"]')!;
+  fireEvent.click(row);
+  const detail = await waitFor(() => {
+    const node = document.querySelector<HTMLElement>('[data-inbox-detail="claim:c1"]');
+    expect(node).not.toBeNull();
+    return node!;
+  });
   const hint = within(detail).getByRole("button", { name: "What is this?" });
   fireEvent.pointerEnter(hint, { pointerType: "mouse" });
   fireEvent.mouseEnter(hint);
@@ -215,7 +220,7 @@ const rowKeysOf = (over: NonNullable<Parameters<typeof mount>[0]>) =>
   ]);
 
 test("review on a edit rule with no row of its own lands on the Write row", () => {
-  const { issue } = reviewPage("rules", "elbow-1d-le10") as { issue: string };
+  const { selected: issue } = reviewPage("rules", "elbow-1d-le10") as { selected: string };
   const focused = focusRow(issue, rowKeysOf({}));
   expect(focused).toBe("write");
   const { container } = mount({ focused });
@@ -224,7 +229,7 @@ test("review on a edit rule with no row of its own lands on the Write row", () =
   expect(container.querySelectorAll("[data-selected]")).toHaveLength(1);
 });
 
-test("review on a proposed rule lands on that cell's own row, opened", () => {
+test("review on a proposed rule lands on that cell's own row, opened", async () => {
   const check = [
     item({
       key: "rules:elbow-1d-le10",
@@ -234,13 +239,16 @@ test("review on a proposed rule lands on that cell's own row, opened", () => {
       verbs: [],
     }),
   ];
-  const { issue } = reviewPage("rules", "elbow-1d-le10") as { issue: string };
+  const { selected: issue } = reviewPage("rules", "elbow-1d-le10") as { selected: string };
   const focused = focusRow(issue, rowKeysOf({ check }));
   expect(focused).toBe("rules:elbow-1d-le10");
   const { container } = mount({ focused, check });
   const row = container.querySelector('[data-key="rules:elbow-1d-le10"]') as HTMLElement;
   expect(row.hasAttribute("data-selected")).toBe(true);
-  expect(container.querySelector('[data-inbox-detail="rules:elbow-1d-le10"]')).not.toBeNull();
+  fireEvent.click(row);
+  await waitFor(() =>
+    expect(container.querySelector('[data-inbox-detail="rules:elbow-1d-le10"]')).not.toBeNull(),
+  );
 });
 
 test("an issue id that names no Work cell lands nowhere extra", () => {
@@ -256,7 +264,7 @@ test("a loss-rule group reads as its family, type and condition", () => {
   expect(family.label!("not-a-rule")).toBe("not-a-rule");
 });
 
-test("picking another ruling for the selected element retains that row's details", () => {
+test("picking another ruling opens its details without owning Page selection", () => {
   const { container } = mount({
     selected: 10,
     check: [
@@ -267,7 +275,7 @@ test("picking another ruling for the selected element retains that row's details
   expect(container.querySelector('[data-inbox-detail="same-element"]')).not.toBeNull();
   expect(container.querySelector('[data-inbox-detail="heal:g1"]')).toBeNull();
   expect(container.querySelector('[data-key="same-element"]')?.getAttribute("aria-selected")).toBe(
-    "true",
+    "false",
   );
 });
 
@@ -387,8 +395,9 @@ test("taking back a family assignment clears only its edit rung", async () => {
     focused: "family",
     check: [item({ key: "family", group: "check", verbs: [{ kind: "price-as", family }] })],
   });
+  fireEvent.click(view.container.querySelector('[data-key="family"]')!);
   await act(async () =>
-    fireEvent.change(screen.getByRole("combobox", { name: `price ${family} as` }), {
+    fireEvent.change(await screen.findByRole("combobox", { name: `price ${family} as` }), {
       target: { value: "" },
     }),
   );

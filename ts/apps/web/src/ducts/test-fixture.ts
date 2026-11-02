@@ -22,7 +22,12 @@ const connectors = (id: number) =>
     }));
 export const snapshot = {
   coordinateEncoding: "native-double",
-  document: { title: "slice", readAt: "2026-10-21T00:00:00Z", elapsedMs: 1 },
+  document: {
+    networkBasedCalculations: false,
+    title: "slice",
+    readAt: "2026-10-21T00:00:00Z",
+    elapsedMs: 1,
+  },
   levels: [{ id: 30, name: "Level 1", elevationFt: 0 }],
   groups: [
     {
@@ -45,7 +50,8 @@ export const snapshot = {
     groupId: id === 100 ? null : "g1",
     systemName: id === 100 ? null : "SA",
     connectors: connectors(id),
-    facts: id === 100 ? [{ key: "mark", text: "FC-1" }] : [],
+    facts:
+      id === 100 ? [{ key: "mark", text: "FC-1", unit: "", provenance: "revit-reported" }] : [],
   })),
   segments: [1, 3, 5].map((id) => ({
     id,

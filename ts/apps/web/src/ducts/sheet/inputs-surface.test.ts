@@ -18,7 +18,14 @@ import {
 } from "./inputs-surface";
 import { EMPTY_SNAPSHOT } from "./scoped-snapshot";
 
-const firm = <T>(value: T): Resolved<T> => ({ value, source: "firm", ref: "seed" , units: null, version: null, status: "valid"});
+const firm = <T>(value: T): Resolved<T> => ({
+  value,
+  source: "firm",
+  ref: "seed",
+  units: null,
+  version: null,
+  status: "valid",
+});
 const inputs = (): DuctsInputs =>
   ductsInputsSchema.parse({
     criteria: {
@@ -52,7 +59,13 @@ const context = (): InputContext => ({
 
 it("orders the project criteria and carries source chips from the resolved values", () => {
   const ctx = context();
-  ctx.inputs!.criteria.autoJoinGapIn = { value: 4, source: "Work" , units: null, version: null, status: "valid"};
+  ctx.inputs!.criteria.autoJoinGapIn = {
+    value: 4,
+    source: "Work",
+    units: null,
+    version: null,
+    status: "valid",
+  };
   const rows = inputFields(ctx).criteria;
   expect(rows.map((r) => r.key)).toEqual([
     "velocityLimitFpm:supply",
@@ -65,7 +78,7 @@ it("orders the project criteria and carries source chips from the resolved value
     "allowanceInWg:return",
   ]);
   expect(rows[0]).toMatchObject({ value: 900, source: "firm seed", unit: "fpm" });
-  expect(rows[3]).toMatchObject({ value: 4, source: "Work", unit: "in" , units: null, version: null, status: "valid"});
+  expect(rows[3]).toMatchObject({ value: 4, source: "Work", unit: "in" });
 });
 
 it("edits criteria through the contract, writing and clearing only the edited side of a pair", () => {
@@ -134,7 +147,10 @@ it.each(["terminal:7:cfm", "join:1:0|2:0"])(
   (rowKey) => {
     const ctx = context();
     ctx.sheet = { overview: { fan: null } } as unknown as NonNullable<InputContext["sheet"]>;
-    ctx.inputs!.terminals["7"] = { cfm: { value: 80, source: "model" , units: null, version: null, status: "valid"}, drop: firm(0.03) };
+    ctx.inputs!.terminals["7"] = {
+      cfm: { value: 80, source: "model", units: null, version: null, status: "valid" },
+      drop: firm(0.03),
+    };
     const restore = vi.fn();
     const history: InputsHistory = {
       undoLabel: "clear",

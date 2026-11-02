@@ -1,3 +1,4 @@
+import { podListResponseSchema } from "@pe/host-contracts/operation-types";
 import { z } from "zod";
 import {
   actionReceiptSchema,
@@ -9,7 +10,7 @@ import {
   type ReadingRequest,
   type ScheduleGridDocument,
 } from "@pe/agent-contracts";
-import type { PodList } from "@pe/host-contracts/operation-types";
+import { effectDecoder } from "@pe/host-contracts/decoders";
 import { jsonSource } from "#/shell/readings-api";
 import { subscriptionSource } from "#/shell/readings-use";
 import type { ReadingContext, ReadingSource, UseSource } from "#/shell/readings";
@@ -150,9 +151,7 @@ export function schedulesSources(): Readonly<Record<string, ReadingSource>> {
     "schedules.pods": {
       ...jsonSource({
         request: () => ({ path: "/call", body: { key: "pod.list", request: {} } }),
-        schema: z
-          .object({ pods: z.array(z.custom<PodList["pods"][number]>()) })
-          .transform((row) => row.pods),
+        schema: effectDecoder(podListResponseSchema).transform((row) => row.pods),
         absent: [],
       }),
       effects: () => [],

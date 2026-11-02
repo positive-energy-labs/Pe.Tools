@@ -1,3 +1,4 @@
+import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { z } from "zod";
 
 import {
@@ -8,7 +9,7 @@ import {
   type DuctsSheetOverview,
 } from "@pe/agent-contracts";
 
-import { EMPTY_CATALOGS, type Catalogs } from "@pe/ducts-domain/catalog";
+import { EMPTY_CATALOGS, catalogTableSchema, type Catalogs } from "@pe/ducts-domain/catalog";
 
 import { toGrids } from "@pe/ducts-domain/loss-grid";
 
@@ -75,7 +76,7 @@ const saved: string | undefined = import.meta.env.DEV
   ? import.meta.env.VITE_DUCTS_FIXTURE
   : undefined;
 
-const snapshotSchema = z.custom<DuctSnapshot>();
+const snapshotSchema = nativeResponseSchema("ducts.snapshot.walk");
 
 function networks(): UseSource<NetworkSnapshot | null> {
   return {
@@ -213,6 +214,7 @@ function sheets(): UseSource<SheetReading> {
       const chosen = (fans?.rows ?? []).filter(
         (row) => keys === "all" || keys.includes(stableFanKey(row)),
       );
+      if (chosen.length > 32) return deliver({ kind: "failure", error: "Pick at most 32 fans for one combined picture" });
       if (new Set(chosen.map(stableFanKey)).size !== chosen.length)
         return deliver({
           kind: "failure",
@@ -341,7 +343,10 @@ export function ductsSources(): Readonly<Record<string, ReadingSource>> {
     "ducts.catalogs": {
       ...jsonSource({
         request: () => ({ path: "/pe/ducts/catalogs" }),
-        schema: z.object({ tables: z.custom<Catalogs>(), findings: z.array(z.string()) }),
+        schema: z.object({
+          tables: z.record(z.string(), catalogTableSchema),
+          findings: z.array(z.string()),
+        }),
         absent: { tables: EMPTY_CATALOGS, findings: [] },
       }),
       dirties: ["snapshot"],

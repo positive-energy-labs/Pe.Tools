@@ -41,12 +41,7 @@ export function derivedFlowSource(flowSource: string | null): string {
   return "derived";
 }
 
-/**
- * A terminal run's design cfm: the kit cell, typed in place, cleared by emptying; the source reads
- * beside it. A terminal stating no flow of its own still carries what its run delivers (the Chadds
- * louver 14088043 carries 350, its four ERVs' and MUAS-1's draws): the cell shows that flow with
- * where it came from, an estimate, never the alarm "none" (UI5, 2026-10-29). Typing still writes it.
- */
+/** Authored input and computed carried flow are separate values (ADR 0027 rule 8). */
 function CfmCell({ run, ws, editing }: { run: Run; ws: Ws; editing: WorksheetEditing }) {
   if (run.end.kind !== "terminal" || !editing.inputs)
     return <span className={CFM}>{run.cfm ?? "—"}</span>;
@@ -57,24 +52,26 @@ function CfmCell({ run, ws, editing }: { run: Run; ws: Ws; editing: WorksheetEdi
   const carried = !stated && run.cfm != null;
   const flowSource = ws.legs[run.legIds.at(-1) ?? ""]?.flowSource ?? null;
   return (
-    <SheetCell
-      label={`design cfm at ${id}`}
-      value={stated ? resolved!.value : carried ? run.cfm : null}
-      unit={{ label: "cfm" }}
-      digits={0}
-      source={carried ? derivedFlowSource(flowSource) : (resolved?.source ?? null)}
-      sourceTitle={
-        carried
-          ? `${derivedFlowSource(flowSource) === "consumers" ? "consumers' sum" : derivedFlowSource(flowSource)}: ${flowSource ?? "no source"}`
-          : undefined
-      }
-      refusal={editing.busy ? "Wait for the current read" : null}
-      clearable={typed}
-      className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-x-1"
-      onValue={(value) =>
-        editing.changeInputs({ flows: { [id]: value == null ? null : { cfm: value } } })
-      }
-    />
+    <>
+      <SheetCell
+        label={`design cfm at ${id}`}
+        value={resolved?.value ?? null}
+        unit={{ label: "cfm" }}
+        digits={0}
+        source={resolved?.source ?? "none"}
+        refusal={editing.busy ? "Wait for the current read" : null}
+        clearable={typed}
+        className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-x-1"
+        onValue={(value) =>
+          editing.changeInputs({ flows: { [id]: value == null ? null : { cfm: value } } })
+        }
+      />
+      {carried && (
+        <span className="t-small text-ink-2" title={flowSource ?? undefined}>
+          {run.cfm} cfm computed ? {derivedFlowSource(flowSource)}
+        </span>
+      )}
+    </>
   );
 }
 const fpm = (v: number | null) => (v == null ? "—" : v.toFixed(0));
