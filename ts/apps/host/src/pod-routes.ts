@@ -34,8 +34,21 @@ export function admitPodModule(
   for (const [key, executor] of Object.entries(module.bodies)) {
     if (podCommand(key)) throw Error(`Catalog key already admitted: ${key}`);
     if (executor.definition !== module.entries[key]) throw Error("Body and projection disagree");
-    if (executor.definition.effect === "command" && !("writeBoundary" in executor.definition))
-      throw Error("Pod commands require the Work write boundary");
+    if (executor.definition.effect === "command") {
+      const boundary = (
+        executor.definition as contracts.Command & {
+          writeBoundary?: { route: string; key: string; derive: unknown; preview: unknown };
+        }
+      ).writeBoundary;
+      if (
+        !boundary ||
+        boundary.route !== module.work.route ||
+        boundary.key !== key ||
+        typeof boundary.derive !== "function" ||
+        typeof boundary.preview !== "function"
+      )
+        throw Error("Pod commands require typed Work derive and preview bindings");
+    }
   }
   const removeWork = workspace.register({ spec: module.work });
   executableModules.set(module.key, { module, available });
@@ -114,6 +127,11 @@ export function createPodRoutes(
             });
           },
         });
+        if (
+          module &&
+          (module.namespace !== route.packageId || module.graph.key !== route.workRoute)
+        )
+          throw Error("Executable route identity differs from its admitted member");
         const dispose = module
           ? admitPodModule(module, actualHash, options.workspace, () =>
               lifecycle

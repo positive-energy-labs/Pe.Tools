@@ -107,28 +107,32 @@ export function buildCapabilities(sources: CapabilitySources): Capability[] {
   ];
 }
 
+function podCapabilities(): Capability[] {
+  return [...admittedRouteEntries.values()]
+    .filter((row) => row.available())
+    .flatMap(({ entries }) =>
+      Object.entries(entries).map(
+        ([key, entry]): Capability => ({
+          key: `op:${key}`,
+          kind: "op",
+          title: entry.says,
+          description: entry.says,
+          needs: entry.needs,
+          effect: entry.effect,
+          mutates: entry.effect === "command",
+          principal: capabilityPrincipals(entry.effect === "command", entry.principal),
+          input: z.toJSONSchema(entry.input) as Record<string, unknown>,
+          source: "catalog",
+          rank: 2,
+        }),
+      ),
+    );
+}
+
 /** The runtime provider for packages, skills, Pages, route Work docs and leased views. */
 export function dynamicCapabilityProvider(sources: CapabilitySources): Capability[] {
   return [
-    ...[...admittedRouteEntries.values()]
-      .filter((row) => row.available())
-      .flatMap(({ entries }) =>
-        Object.entries(entries).map(
-          ([key, entry]): Capability => ({
-            key: `op:${key}`,
-            kind: "op",
-            title: entry.says,
-            description: entry.says,
-            needs: entry.needs,
-            effect: entry.effect,
-            mutates: entry.effect === "command",
-            principal: capabilityPrincipals(entry.effect === "command", entry.principal),
-            input: z.toJSONSchema(entry.input) as Record<string, unknown>,
-            source: "catalog",
-            rank: 2,
-          }),
-        ),
-      ),
+    ...podCapabilities(),
     ...sources.routes.flatMap(routeRows),
     {
       key: "route:ducts.guide",
@@ -423,6 +427,10 @@ export function createCapabilityCatalogSource(options: {
         : scoped;
       return {
         ...catalog,
+        capabilities: [
+          ...catalog.capabilities.filter((row) => !row.key.startsWith("op:pod.")),
+          ...podCapabilities(),
+        ],
         machine: discoveryMachine(machine),
         recents: recent.recents,
         sources: { ...catalog.sources, recents: recent.status },

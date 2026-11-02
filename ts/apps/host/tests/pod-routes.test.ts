@@ -1,10 +1,10 @@
 ﻿import { expect, test } from "vite-plus/test";
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { listPackages } from "../src/packages.ts";
 import { createPackageLifecycle } from "../src/package-lifecycle.ts";
-import { createPodRoutes } from "../src/pod-routes.ts";
+import { createPodRoutes, podCommand } from "../src/pod-routes.ts";
 import { peRoutes, peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { admitRequest } from "../src/control.ts";
 import { human, pea } from "./callers.ts";
@@ -126,6 +126,43 @@ test("undeclared modules and malformed route declarations never become executabl
     expect(pod.diagnostics.some((d) => d.code === "InvalidRoute")).toBe(true);
     expect(pod.contributions.some((c) => c.kind === "route")).toBe(false);
   } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("the pipes module is admitted from its trusted runtime member and deactivation withdraws its commands", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pipes-runtime-"));
+  const folder = join(root, "Pods/pipes");
+  await mkdir(join(folder, "routes/pipes"), { recursive: true });
+  for (const name of ["pod.json", "routes/pipes/index.js"])
+    await writeFile(
+      join(folder, name),
+      await readFile(new URL(`../../../../examples/pods/pipes/${name}`, import.meta.url)),
+    );
+  const lifecycle = createPackageLifecycle({
+    packages: () => listPackages(join(root, "Pods")),
+    decisionsPath: join(root, "enabled.json"),
+  });
+  const workspace = new RouteWorkspace({
+    registrations: [],
+    store: fileRouteDocumentStore(join(root, "Work")),
+  });
+  const routes = createPodRoutes(lifecycle, {
+    workspace,
+    bridge: {} as never,
+    trustPath: join(root, "trust.json"),
+  });
+  try {
+    const [route] = await routes.list();
+    expect(podCommand("pod.pipes.roster")).toBeUndefined();
+    await routes.trust(route!.key, route!.sha256, true);
+    expect(podCommand("pod.pipes.roster")).toBeDefined();
+    await lifecycle.setEnabled("pod:pipes", false);
+    expect(podCommand("pod.pipes.roster")).toBeUndefined();
+    expect(await routes.list()).toEqual([]);
+  } finally {
+    routes.close();
+    await lifecycle.close();
     await rm(root, { recursive: true, force: true });
   }
 });

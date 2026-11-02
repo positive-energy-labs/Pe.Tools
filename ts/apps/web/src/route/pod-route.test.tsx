@@ -199,3 +199,34 @@ test("a Pod mounts the kernel fixture lane, journals reducer events and blocks h
   await expect(api.exportSnapshot(api.getState())).rejects.toThrow("Fixture");
   expect(fetch).not.toHaveBeenCalled();
 });
+
+test("pipes authors a document route with versioned typed Work through the common mount", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const { createHash } = await import("node:crypto");
+  const bytes = await readFile(
+    (await import("node:path")).resolve(
+      process.cwd(),
+      "../../../examples/pods/pipes/routes/pipes/index.js",
+    ),
+  );
+  const bundle = await import(`data:text/javascript;base64,${bytes.toString("base64")}`);
+  const row = podRouteDescriptorSchema.parse({
+    key: "route:@pipes/routes/pipes/index.js",
+    packageId: "pipes",
+    workRoute: "pod.pipes.pipes",
+    name: "Pipes",
+    description: "Piping systems",
+    sourcePath: "routes/pipes/index.js",
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+    trusted: true,
+  });
+  const mounted = makePodRoute(row, bundle);
+  expect(mounted.graph.needs).toBe("document");
+  expect(mounted.graph.subject?.({ request: { key: "", input: {} } })).toBe("Piping system");
+  expect(mounted.graph.work?.parse({})).toEqual({
+    version: 2,
+    state: { systemId: null, label: "" },
+    writeIntent: {},
+  });
+  expect(typeof mounted.hosted).toBe("function");
+});

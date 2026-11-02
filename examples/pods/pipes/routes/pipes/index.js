@@ -15,14 +15,14 @@ export function catalog({ z, workWriteCommand, writeIntentSchema }) {
     "pod.pipes.roster": query("Read piping systems", z.object({}).default({})),
     "pod.pipes.detail": query("Read a piping system", z.object({ systemId: z.number().int() })),
     "pod.pipes.set-parameter": workWriteCommand(route, "pod.pipes.set-parameter", {
-      says: "Set a pipe parameter", needs: "document", effect: "command", dirties: [], input: edit,
+      says: "Set a pipe parameter", native: ["revit.apply.parameter-values"], needs: "document", effect: "command", dirties: [], input: edit,
     }),
   };
   return { work, entries };
 }
 function authoredGraph({ pane }, work, directory) {
   return { key: work.route, name: "Pipes", address: directory.path.slice(1), directory,
-    subject: () => "Piping system", work: work.schema, optionalTarget: "document",
+    subject: () => "Piping system", work: work.schema, needs: "document", optionalTarget: undefined,
     fields: {}, readings: {}, verbs: {}, panes: { instrument: { label: "Pipes", purpose: "Inspect piping systems", draws: [], verbs: [] } },
     layout: pane("instrument"), stages: { inspect: { word: "Inspect", panes: ["instrument"], verbs: [], teach: "Read a piping system before staging parameter edits." } }, stageOrder: ["inspect"],
   };
@@ -40,7 +40,7 @@ export function registerHost(api) {
   const operationKeys = { "pod.pipes.roster": "scripting.execute", "pod.pipes.detail": "revit.detail.elements", "pod.pipes.set-parameter": "revit.apply.parameter-values" };
   const derive = (key, input) => key.endsWith("roster")
     ? { scriptContent: rosterScript, workspaceKey: "workspaces/default", permissionMode: "ReadOnly", timeoutSeconds: 30 }
-    : key.endsWith("detail") ? { query: { elementIds: [input.systemId] } }
+    : key.endsWith("detail") ? { query: { kind: "ElementReferences", elementIds: [input.systemId] } }
     : { edits: [{ elementId: input.elementId, parameterId: input.parameterId, value: input.value, expected: input.expected }], dryRun: false };
   const bodies = Object.fromEntries(Object.entries(entries).map(([key, definition]) => {
     const native = api.operation(operationKeys[key]);
@@ -51,17 +51,27 @@ export function registerHost(api) {
   return { version: 1, namespace: "pipes", key: `pipes:${work.route}`, moduleHash: descriptor.sha256,
     graph: authoredGraph(api, work, directory), work, entries, bodies };
 }
-export function register({ graph, adapters }) {
-  return { graph: { ...graph, subject: () => "Piping system" }, adapters };
+export function register({ graph, adapters, pane }) {
+  const authored = authoredGraph({ pane }, { route: graph.key, schema: graph.work }, graph.directory);
+  return { graph: { ...graph, ...authored, fields: graph.fields, readings: graph.readings, verbs: graph.verbs }, adapters };
 }
 export function create(api) {
   return function Pipes() {
     const { state, fire } = api.useState();
     const [reading, setReading] = api.React.useState(null);
-    return api.React.createElement("section", null,
-      api.React.createElement("button", { onClick: async () => setReading(await api.do("pod.pipes.roster", {})) }, "Read piping systems"),
-      api.React.createElement("input", { "aria-label": "Piping system id", value: state.systemId ?? "", onChange: e => fire({ systemId: e.target.value ? Number(e.target.value) : null }) }),
-      api.React.createElement("button", { disabled: !state.systemId, onClick: async () => setReading(await api.do("pod.pipes.detail", { systemId: state.systemId })) }, "Read system"),
-      api.React.createElement("pre", null, JSON.stringify(reading, null, 2)));
+    const [intent, setIntent] = api.React.useState('{"elementId":0,"parameterId":0,"value":"","expected":{}}');
+    const h = api.React.createElement;
+    const run = action => async () => {
+      try { setReading(await action()); }
+      catch (error) { setReading({ error: String(error) }); }
+    };
+    return h("section", null,
+      h(api.kit.Button, { label: "Read piping systems", onClick: run(() => api.do("pod.pipes.roster", {})) }, "Read piping systems"),
+      h(api.kit.Input, { "aria-label": "Piping system id", type: "number", value: state.systemId ?? "", onChange: e => fire({ systemId: e.target.value ? Number(e.target.value) : null }) }),
+      h(api.kit.Button, { label: "Read system", disabled: !state.systemId, onClick: run(() => api.do("pod.pipes.detail", { systemId: state.systemId })) }, "Read system"),
+      h(api.kit.Input, { "aria-label": "Pipe parameter intent and observed evidence", value: intent, onChange: e => setIntent(e.target.value) }),
+      h(api.kit.Button, { label: "Stage and preview", onClick: run(async () => { await api.stage("pod.pipes.set-parameter", JSON.parse(intent)); return api.do("pod.pipes.set-parameter", { previewOnly: true }); }) }, "Stage and preview"),
+      h(api.kit.Button, { label: "Apply preview", onClick: run(() => api.do("pod.pipes.set-parameter", { previewOnly: false })) }, "Apply preview"),
+      h("pre", null, reading === null ? "No piping system reading yet." : JSON.stringify(reading, null, 2)));
   };
 }

@@ -1219,7 +1219,10 @@ export function makeHostPeRoutes(
     hostBaseUrl,
     registrations,
     machine: () => machine.refresh(),
-    content: content.read,
+    content: async () => {
+      await podRoutes.list();
+      return content.read();
+    },
     pages: content.pages,
   });
   invalidateCatalog = () => catalog.invalidate();

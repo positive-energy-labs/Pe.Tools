@@ -23,7 +23,7 @@ import { podRoutePath } from "./pod-address";
 import { actionResult } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
 type State = Record<string, unknown>;
-type Work = { version: 1; state: State };
+type Work = { version: number; state: State };
 type Page = { request: z.output<typeof podRequest> };
 type Event = Record<string, unknown>;
 export interface PodApi {
@@ -34,6 +34,7 @@ export interface PodApi {
   target(): Promise<{ session: string; openId: string; title: string }>;
   read(key: string, input: State): Promise<unknown>;
   do(key: string, input: State): Promise<unknown>;
+  stage(key: string, input: State): Promise<void>;
   exportSnapshot(snapshot: unknown): Promise<void>;
 }
 export interface PodRouteBundle {
@@ -199,6 +200,18 @@ export function makePodRoute(row: PodRouteDescriptor, bundle: PodRouteBundle) {
       machine: { kind: "use", source: "pod.machine", retire: "never" },
     },
     verbs: {
+      stage: workVerb(
+        { label: "Stage Pod command", input: podRequest },
+        {
+          patches: (_scope, { key, input }) => {
+            const entry = catalog?.entries[key];
+            if (!entry || !("authoredInput" in entry))
+              throw Error("Command has no authored Work input");
+            const value = (entry.authoredInput as z.ZodType).parse(input);
+            return [{ path: ["writeIntent", key], value: { edit: { value } } }];
+          },
+        },
+      ),
       edit: workVerb(
         { label: "Edit Pod state", input: z.record(z.string(), z.unknown()) },
         {
@@ -278,7 +291,10 @@ export function makePodRoute(row: PodRouteDescriptor, bundle: PodRouteBundle) {
         {
           title: seed.title,
           load: async () => ({
-            work: { version: 1 as const, state: structuredClone(seed.state) },
+            work: (catalog?.work.schema.parse({ state: structuredClone(seed.state) }) as Work) ?? {
+              version: 1,
+              state: structuredClone(seed.state),
+            },
             readings: { state: seed.state, machine: null },
             queries: seed.queries,
             target: {
@@ -346,6 +362,11 @@ export function makePodRoute(row: PodRouteDescriptor, bundle: PodRouteBundle) {
           return { ...target.ref, title: document?.title ?? "Fixture document" };
         },
         read: (key, input) => result(owner, "read", { key, input }),
+        stage: async (key, input) => {
+          const outcome = await invocation(owner, "stage", { key, input });
+          if (outcome.kind === "work")
+            await readAcknowledged(owner, outcome.acknowledgement, lifetime.current.signal);
+        },
         do: async (key, input) => {
           const generation = owner.context.snapshot().generation;
           await queue;
@@ -360,6 +381,11 @@ export function makePodRoute(row: PodRouteDescriptor, bundle: PodRouteBundle) {
           }
           if (!catalog?.entries[key] && operation(key).intent.toLowerCase() === "read")
             return result(owner, "read", { key, input });
+          if (catalog?.entries[key]?.work) {
+            const work = owner.snapshot().work;
+            if (!work) throw Error("Choose Work before running this command");
+            input = { ...input, work: work.handle };
+          }
           owner.view.setPage({ request: { key, input } });
           return result(owner, "execute", undefined, lifetime.current.signal);
         },

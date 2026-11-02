@@ -1,3 +1,4 @@
+import { admittedRouteEntries } from "@pe/agent-contracts";
 import { catalogEntries } from "@pe/agent-contracts/pe-api";
 import { catalogCommandContext } from "./catalog-command-context.ts";
 import { StepFailure } from "./command-executor.ts";
@@ -32,6 +33,14 @@ export function commandLeafRefusal(
 ): string | null {
   const leaf = catalogEntries.find((entry) => entry.key === operationKey);
   if (!leaf?.internal) return null;
+  if (
+    command &&
+    [...admittedRouteEntries.values()].some(
+      (registration) =>
+        registration.available() && registration.entries[command]?.native?.includes(operationKey),
+    )
+  )
+    return null;
   const owner = command && catalogEntries.find((entry) => entry.key === `command:${command}`);
   return owner &&
     owner.uses.some((use) => (typeof use === "string" ? use : use.key) === operationKey)
