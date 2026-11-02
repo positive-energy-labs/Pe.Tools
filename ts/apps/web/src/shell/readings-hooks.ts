@@ -10,7 +10,6 @@ import { canonicalRouteInput } from "../../../../packages/agent-contracts/src/ro
 import {
   addressSchema,
   readingRequestSchema,
-  type Address,
   type Reading,
   type ReadingRequest,
   type TargetInventory,
@@ -305,22 +304,19 @@ export function targetInventory(
   const seen = previousOf(reading);
   if (reading.state === "failed" && !seen) return { kind: "failed", message: reading.message };
   if (!seen) return { kind: "checking" };
-  const sessions: Record<
-    string,
-    {
-      kind: "ready";
-      values: { openId: string; address: Address | null; kind: "project" | "family" }[];
-    }
-  > = {};
-  for (const session of inventoryOf(seen.sessions)) {
-    sessions[session.sessionId] = {
-      kind: "ready",
-      values: (session.openDocuments ?? []).map((doc) => ({
-        openId: doc.openId,
-        address: addressSchema.safeParse(doc.address).data ?? null,
-        kind: doc.isFamilyDocument ? ("family" as const) : ("project" as const),
-      })),
-    };
+  const sessions: Extract<TargetInventory, { kind: "ready" }>["sessions"] = {};
+  for (const session of seen.sessions) {
+    sessions[session.sessionId] =
+      !session.connected || session.openDocuments == null
+        ? { kind: "checking" }
+        : {
+            kind: "ready",
+            values: session.openDocuments.map((doc) => ({
+              openId: doc.openId,
+              address: addressSchema.safeParse(doc.address).data ?? null,
+              kind: doc.isFamilyDocument ? ("family" as const) : ("project" as const),
+            })),
+          };
   }
   return { kind: "ready", sessions };
 }
@@ -348,3 +344,21 @@ export const useFieldOptionsReading = (
         }
       : null,
   );
+
+/** Refetch gaps retain facts; only an observed close or absent session revokes them. */
+export function retainTargetInventory(
+  next: TargetInventory,
+  last: TargetInventory,
+): TargetInventory {
+  if (next.kind !== "ready") return last.kind === "ready" ? last : next;
+  if (last.kind !== "ready") return next;
+  return {
+    kind: "ready",
+    sessions: Object.fromEntries(
+      Object.entries(next.sessions).map(([id, value]) => [
+        id,
+        value.kind === "checking" ? (last.sessions[id] ?? value) : value,
+      ]),
+    ),
+  };
+}

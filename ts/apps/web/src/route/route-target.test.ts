@@ -1,3 +1,4 @@
+import { targetInventory, retainTargetInventory } from "#/shell/readings-hooks";
 import { expect, test } from "vite-plus/test";
 import { documentRequestSchema, sameAddress } from "@pe/agent-contracts";
 import { machineFixture } from "../../../../packages/agent-contracts/tests/machine-fixture";
@@ -76,7 +77,13 @@ test("N4: a fresh page mid-read (machine census busy, nothing kept) binds the li
     {
       session: "one",
       documents: [
-        { openId: "doc", title: "Project", address: "C:/Models/A.rvt", isActive: true, isFamilyDocument: false },
+        {
+          openId: "doc",
+          title: "Project",
+          address: "C:/Models/A.rvt",
+          isActive: true,
+          isFamilyDocument: false,
+        },
       ],
     },
   ]);
@@ -84,7 +91,12 @@ test("N4: a fresh page mid-read (machine census busy, nothing kept) binds the li
   Object.assign(busy.revit.sessions![0]!.attachment!, { documents: null });
   const live = {
     kind: "ready" as const,
-    sessions: { one: { kind: "ready" as const, values: [{ openId: "doc", address: null, kind: "project" as const }] } },
+    sessions: {
+      one: {
+        kind: "ready" as const,
+        values: [{ openId: "doc", address: null, kind: "project" as const }],
+      },
+    },
   };
   expect(retainSoleDocument(busy, null)).toEqual({ request: null, busy: true });
   expect(retainSoleDocument(busy, null, live)).toEqual({
@@ -92,8 +104,96 @@ test("N4: a fresh page mid-read (machine census busy, nothing kept) binds the li
     busy: true,
   });
   // Two open documents in the live inventory name no sole one; the kept target still wins.
-  const two = { ...live, sessions: { one: { kind: "ready" as const, values: [...live.sessions.one.values, { openId: "b", address: null, kind: "project" as const }] } } };
+  const two = {
+    ...live,
+    sessions: {
+      one: {
+        kind: "ready" as const,
+        values: [
+          ...live.sessions.one.values,
+          { openId: "b", address: null, kind: "project" as const },
+        ],
+      },
+    },
+  };
   expect(retainSoleDocument(busy, null, two).request).toBeNull();
   const kept = { kind: "open" as const, ref: { session: "one", openId: "kept" } };
   expect(retainSoleDocument(busy, kept, live).request).toBe(kept);
+});
+
+test("a reconnecting attachment does not confirm that the automatic document closed", () => {
+  const machine = machineFixture([
+    {
+      session: "one",
+      documents: [
+        {
+          openId: "doc",
+          title: "Project",
+          address: "C:/Models/A.rvt",
+          isActive: true,
+          isFamilyDocument: false,
+        },
+      ],
+    },
+  ]);
+  const first = retainSoleDocument(machine, null);
+  const reconnecting = structuredClone(machine);
+  Object.assign(reconnecting.revit.sessions![0]!, { attachment: null });
+  expect(retainSoleDocument(reconnecting, first.request)).toEqual({
+    request: first.request,
+    busy: true,
+  });
+});
+
+test("an unavailable open-document list is checking, not a confirmed empty list", () => {
+  const result = targetInventory({
+    state: "ready",
+    observation: { sessions: [{ sessionId: "one", connected: true, openDocuments: null }] },
+  } as never);
+  expect(result).toMatchObject({ kind: "ready", sessions: { one: { kind: "checking" } } });
+});
+
+test("target facts survive a refetch and an incomplete session but not a confirmed close", () => {
+  const ready = {
+    kind: "ready" as const,
+    sessions: {
+      one: {
+        kind: "ready" as const,
+        values: [{ openId: "doc", address: null, kind: "project" as const }],
+      },
+    },
+  };
+  expect(retainTargetInventory({ kind: "checking" }, ready)).toBe(ready);
+  expect(
+    retainTargetInventory({ kind: "ready", sessions: { one: { kind: "checking" } } }, ready),
+  ).toEqual(ready);
+  const closed = {
+    kind: "ready" as const,
+    sessions: { one: { kind: "ready" as const, values: [] } },
+  };
+  expect(retainTargetInventory(closed, ready)).toEqual(closed);
+  expect(retainTargetInventory({ kind: "ready", sessions: {} }, ready)).toEqual({
+    kind: "ready",
+    sessions: {},
+  });
+});
+
+test("an automatic target is tab memory while still open, even if preview opens another document", () => {
+  const docs = [
+    {
+      openId: "project",
+      title: "Project",
+      address: "C:/A.rvt",
+      isActive: true,
+      isFamilyDocument: false,
+    },
+  ];
+  const first = retainSoleDocument(machineFixture([{ session: "one", documents: docs }]), null);
+  const expanded = machineFixture([
+    {
+      session: "one",
+      documents: [...docs, { ...docs[0]!, openId: "family", isFamilyDocument: true }],
+    },
+  ]);
+  expect(retainSoleDocument(expanded, first.request)).toMatchObject({ request: first.request });
 });
