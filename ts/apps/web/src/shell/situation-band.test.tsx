@@ -4,7 +4,8 @@ import { z } from "zod";
 import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { validateRouteGraph, type VerbDecl } from "@pe/agent-contracts";
 import { builtinAdmission } from "@pe/kit/route-registry";
-import { rankVerbs } from "./situation-band";
+import { rankVerbs, TimelineHead } from "./situation-band";
+import { createRouteTimeline } from "./timeline";
 import { PageControl } from "./situation-fields";
 import { ductsGraph } from "../ducts/graph";
 
@@ -57,4 +58,26 @@ test("ducts refreshes from the pane head, never from a stage verb", () => {
 test("a stale builtin stamp refuses that route with the fix, instead of throwing", () => {
   const stale = { ...ductsGraph, moduleHash: "0".repeat(64) };
   expect(builtinAdmission(stale as never)).toMatch(/hash.*codegen:routes/);
+});
+
+test("an open consent window draws its countdown with Reject, refused on the fixture lane", () => {
+  // TimelineHead reads only the owner's timeline and fixture lane.
+  const owner = { timeline: createRouteTimeline(), fixture: { name: "f", queries: {} } } as never as Parameters<typeof TimelineHead>[0]["owner"];
+  owner.timeline.append({
+    kind: "receipt",
+    at: Date.now(),
+    verb: "apply",
+    receiptId: "r1",
+    outcome: {
+      id: "r1",
+      state: "queued",
+      input: {},
+      receiptId: "r1",
+      consentWindow: { requestId: "q1", deadline: new Date(Date.now() + 30_000).toISOString() },
+    },
+  });
+  const html = renderToStaticMarkup(<TimelineHead owner={owner} history={null} thread="t1" />);
+  expect(html).toContain("Reject?");
+  expect(html).toMatch(/apply · [23]\ds/);
+  expect(html).toMatch(/aria-label="Reject apply" aria-disabled="true"[^>]*>.*Reject\?/);
 });

@@ -108,10 +108,8 @@ export function TimelineHead<P, W>({
   history: ReactNode;
   thread?: string;
 }) {
-  const entries = useSyncExternalStore(
-    (notify) => owner.timeline.subscribe(notify),
-    () => owner.timeline.read().length,
-  );
+  const length = () => owner.timeline.read().length;
+  const entries = useSyncExternalStore((notify) => owner.timeline.subscribe(notify), length, length);
   const timeline = entries ? owner.timeline.read() : [];
   const [now, setNow] = useState(Date.now);
   const windows = openConsentWindows(timeline, now);

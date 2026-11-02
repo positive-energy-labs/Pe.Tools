@@ -149,11 +149,13 @@
 [data-slot="pane-strip"] {
   gap: calc(var(--space-unit) * 2);
 }
-/* A word control in the head (the subject picker) gives way by ellipsis; it never paints under the
-   icon beside it (the group already lets it shrink; nowrap alone overflowed). */
+/* A word control in the head (the subject picker) gives way by a drawn ellipsis; it never paints
+   under the icon beside it (nowrap alone overflowed). Block, because a flex box drops the ellipsis. */
 [data-slot="pane-actions"] [data-list-trigger] {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: calc(var(--control-h) - 2px);
 }
 [data-slot="pane-actions"] > * + *,
 [data-slot="pane-strip"] > * + * {
