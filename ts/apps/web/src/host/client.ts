@@ -7,6 +7,8 @@ import {
   HOST_RPC_DOCUMENT_HEADER,
   HOST_RPC_ORIGIN_HEADER,
   HostCallError,
+  geometryOverBudget,
+  geometryBudgetSentence,
   type HostSessionScope,
   type OpCallArgs,
   type OpKey,
@@ -47,12 +49,18 @@ export async function callHostRpc<K extends OpKey>(
     const problem = failure.details as
       | { kind?: string; message?: string; status?: number }
       | undefined;
-    throw new HostCallError(`${key}: ${failure.message}`, response.status, {
-      kind: problem?.kind,
-      operationKey: key,
-      title: failure.message,
-      status: response.status,
-    });
+    const budget = geometryOverBudget(problem);
+    throw new HostCallError(
+      `${key}: ${budget ? geometryBudgetSentence(budget) : failure.message}`,
+      response.status,
+      {
+        ...problem,
+        kind: problem?.kind,
+        operationKey: key,
+        title: failure.message,
+        status: response.status,
+      },
+    );
   }
   const result = await response.json();
   const captureUrl = response.headers.get("x-pe-capture-url");

@@ -12,6 +12,9 @@ import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
   HOST_RPC_DOCUMENT_HEADER,
   HOST_RPC_ORIGIN_HEADER,
+  HostCallError,
+  geometryOverBudget,
+  geometryBudgetSentence,
   type OpKey,
   type OpRequestOf,
   type OpResponseOf,
@@ -42,7 +45,17 @@ async function requestJson<T>(
         }),
     signal,
   });
-  if (!response.ok) throw Error((await readPeError(response)).message);
+  if (!response.ok) {
+    const failure = await readPeError(response);
+    const budget = geometryOverBudget(failure.details);
+    throw new HostCallError(
+      budget ? geometryBudgetSentence(budget) : failure.message,
+      response.status,
+      failure.details && typeof failure.details === "object"
+        ? (failure.details as Record<string, unknown>)
+        : undefined,
+    );
+  }
   return schema.parse(await response.json());
 }
 
@@ -211,7 +224,17 @@ async function readDuctsBody(
     },
     { headers, signal: AbortSignal.any([signal, AbortSignal.timeout(120_000)]) },
   );
-  if (!response.ok) throw Error((await readPeError(response)).message);
+  if (!response.ok) {
+    const failure = await readPeError(response);
+    const budget = geometryOverBudget(failure.details);
+    throw new HostCallError(
+      budget ? geometryBudgetSentence(budget) : failure.message,
+      response.status,
+      failure.details && typeof failure.details === "object"
+        ? (failure.details as Record<string, unknown>)
+        : undefined,
+    );
+  }
   const bodyVersion = response.headers.get(DUCTS_BODY_VERSION_HEADER);
   if (
     response.headers.get("x-pe-resolved-session") !== session ||

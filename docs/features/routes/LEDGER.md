@@ -47,7 +47,7 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 - 2026-09-09, the claim that document keys and receipts alone prevent every stale read or duplicate mutation: keys separate open lifetimes; Effect refresh orders reads within one lifetime; host admission and request identity govern retries.
 
 ## Owed
-- Geometry pane fallback: kernel declaration of a pane's overview reading and the requested → link-boxes → overview chain over `OverBudget` (host budget lands on `t3/space-region-admission`).
+- <a id="geometry-pane-fallback"></a> Geometry pane fallback: the web declaration and typed-refusal fixture chain are implemented; wire the host subject representation and a separate metadata overview reading when `t3/space-region-admission` lands. The current `space-scene` request selects context representation only, so it does not prove link-boxes focus or a capture-free overview.
 - Geometry law not yet enforced: Revit read priority (a user read never waits behind a background read) and real host-side cancel of an abandoned reading.
 - Merge gate before `t3/unification-2` reaches main: the perf thread re-runs `tools/space-proof/verbs.py` on Chadds, Cleremont and Manuella and `/ducts` `fan` = 1, 3, `all` on Chadds, on the sha the orchestrator names.
 - Kernel ports, in the order a route author gets them wrong (`.artifacts/review/u2-2026-11-02/REVIEW.md` B/C):

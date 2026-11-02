@@ -50,7 +50,11 @@ export function useCapture(
   doc: { session: string; openId: string } | null,
   epoch: number | string,
   cuts: SceneMeshes["cuts"] = EMPTY_CUTS,
+  geometry?: { overview: CaptureRequest; subject: "all" | "picked"; narrow: string },
 ): SceneRead {
+  const declared = useScene(geometry ? request : null, doc, epoch, geometry);
+  const activeRequest = request;
+  request = geometry ? null : request;
   const identity = JSON.stringify([
     doc?.session,
     doc?.openId,
@@ -92,6 +96,12 @@ export function useCapture(
     () => (context.meshes ? clipMeshes(context.meshes, cuts) : null),
     [context.meshes, cuts],
   );
+  const declaredMeshes = useMemo(
+    () => (declared.meshes ? clipMeshes(declared.meshes, cuts) : null),
+    [declared.meshes, cuts],
+  );
+  if (geometry && activeRequest)
+    return { ...declared, meshes: declaredMeshes, focusReady: !!declaredMeshes };
   if (!request || request.focusOnly) return { ...focus, meshes: focusMeshes };
   const shown = context.meshes ? context : focus;
   return {

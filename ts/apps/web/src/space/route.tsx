@@ -85,6 +85,7 @@ function SpaceMount({ owner, children }: { owner: Owner; children: ReactNode }) 
     seen.current.add(latest.press);
     if (captured.document.session !== doc?.session || captured.document.openId !== doc.openId)
       return;
+    setError(captured.notice ?? null);
     owner.view.setPage(
       {
         scene: captured.response.id,

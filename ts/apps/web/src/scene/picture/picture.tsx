@@ -79,6 +79,12 @@ export interface PictureContent<L extends string = string, F extends string = st
   hoverGroups?: (group: SubjectKey) => boolean;
   /** A picked element's selection, widened (E: its leg). Absent = the single element. */
   widen?: (key: SubjectKey) => readonly SubjectKey[];
+  /** Every geometry pane declares its link-boxes overview reading and narrowing advice. */
+  geometry: {
+    overview: ReturnType<typeof sceneRequest>;
+    subject: "all" | "picked";
+    narrow: string;
+  };
   /** Capture limits and clipping; `meshes` substitutes a dev fixture for the capture. */
   capture?: { maxTriangles?: number; cuts?: SceneMeshes["cuts"]; meshes?: SceneMeshes | null };
   /** Centrelines: bounds before meshes arrive, the jump fallback, and the globe's lines. */
@@ -243,7 +249,13 @@ export function Picture<L extends string, F extends string>({
 }) {
   // No document = selection and member registration silently do nothing (the fan sheet's 10-28
   // defect), so a Picture outside an `AttentionRoot` fails loudly instead.
-  const visibleLayers = useMemo(() => content.layerOptions.filter(layer => page.layers === "all" || page.layers.includes(layer.key)).map(layer => layer.key), [page.layers, content.layerOptions]);
+  const visibleLayers = useMemo(
+    () =>
+      content.layerOptions
+        .filter((layer) => page.layers === "all" || page.layers.includes(layer.key))
+        .map((layer) => layer.key),
+    [page.layers, content.layerOptions],
+  );
   const doc = useContext(AttentionDocument);
   if (!doc) throw new Error("Picture requires an AttentionRoot (attention document)");
   useAttentionDocument(doc, selection);
@@ -297,6 +309,7 @@ export function Picture<L extends string, F extends string>({
     native,
     source.version,
     content.capture?.cuts,
+    content.geometry,
   );
   const fixture = content.capture?.meshes;
   const capture = fixture ? { ...captured, meshes: fixture, focusMeshes: fixture } : captured;

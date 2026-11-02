@@ -359,6 +359,7 @@ export function ModelPicture({
       )}
       {(onContextRepresentation && contextMode !== "off") ||
       read.completeness?.complete === false ||
+      read.notice ||
       read.contextError ||
       read.omittedElements ||
       read.unavailableElements ? (
@@ -371,6 +372,7 @@ export function ModelPicture({
                   ? "Detailed context"
                   : "Link-frame envelopes"
                 : "",
+              read.notice ?? "",
               read.contextError ? `context: ${read.contextError}` : "",
               read.completeness?.complete === false
                 ? (CONTEXT_LIMITS[read.completeness.limitReason ?? ""] ?? "Context limited")

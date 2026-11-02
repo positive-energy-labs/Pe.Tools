@@ -9,6 +9,7 @@ export type SceneRead = {
   /** Why there are no meshes: the capture or the artifact failed; null otherwise. */
   error: string | null;
   pending: boolean;
+  notice?: string | null;
   /** Current-scope exact focus is usable while its optional context is pending. */
   focusReady?: boolean;
   /** Exact focus owner, stable while its optional context changes. Also the first staged picture. */
@@ -38,6 +39,7 @@ function useSource(source: SceneSource | null): ArtifactRead {
     metadata: snapshot.state === "ready" ? snapshot.data.metadata : null,
     error: snapshot.state === "failed" ? snapshot.error : null,
     pending: snapshot.state === "pending",
+    notice: snapshot.state === "ready" ? snapshot.notice : null,
   };
 }
 /** React declares an exact requested view and subscribes; the shared data owner executes it. */
@@ -45,13 +47,15 @@ export function useScene(
   request: ReturnType<typeof sceneRequest> | null,
   document: { session: string; openId: string } | null,
   revision: number | string,
+  geometry?: Extract<SceneSource, { kind: "capture" }>["geometry"],
 ): SceneRead {
   const read = useSource(
-    request && document ? { kind: "capture", request, document, revision } : null,
+    request && document ? { kind: "capture", request, document, revision, geometry } : null,
   );
   return {
     meshes: read.meshes,
     error: read.error,
+    notice: read.notice,
     pending: read.pending,
     omittedElements: read.metadata?.omittedElements ?? 0,
     unavailableElements: read.metadata?.unavailableElements.length ?? 0,
@@ -60,6 +64,7 @@ export function useScene(
   };
 }
 export type ArtifactRead = {
+  notice?: string | null;
   meshes: SceneMeshes | null;
   metadata: Psc1Metadata | null;
   error: string | null;

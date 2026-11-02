@@ -1,3 +1,4 @@
+import { sceneRequest } from "#/scene/host";
 /**
  * E's picture content: what the ducts picture is of and what it marks. Every picture behaviour
  * (capture, camera, selection, hover, readout and pane furniture) is the shared `Picture`'s; this
@@ -179,7 +180,8 @@ function Content({
     () => stubLabels(snapshot, neighbours, opened),
     [snapshot, neighbours, opened],
   );
-  const meshes = useContext(DuctsOwner)?.readings.get("meshes").value as SceneMeshes | undefined;
+  const owner = useContext(DuctsOwner);
+  const meshes = owner?.readings.get("meshes").value as SceneMeshes | undefined;
   const meshCuts = useMemo(() => {
     const cuts = new Map<number, (typeof neighbours)[number]["cuts"]>();
     for (const id of stubs) {
@@ -523,6 +525,17 @@ function Content({
       onPose={onPose}
       jump={jump}
       content={{
+        geometry: {
+          subject:
+            owner?.view.read().page.system === "all" || !page.system.length ? "all" : "picked",
+          overview: sceneRequest(
+            snapshot.nodes.filter((node) => node.kind === "equipment").map((node) => node.id),
+            false,
+            0,
+            "link-boxes",
+          ),
+          narrow: "Open fewer systems for full geometry.",
+        },
         focus,
         members: membership,
         hoverGroups,

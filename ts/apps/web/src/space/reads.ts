@@ -1,3 +1,4 @@
+import { readGeometry } from "#/shell/geometry";
 import { z } from "zod";
 import type { DocumentRef } from "@pe/agent-contracts";
 import {
@@ -66,6 +67,7 @@ export type SpaceAnswerKey = "status" | "rows" | "tree" | "slice" | "probe" | "s
 export type SpaceAnswers = { [K in SpaceAnswerKey]: Answer<`revit.detail.space-${K}`> | null };
 export type SpaceReadResult<K extends SpaceReadKey = SpaceReadKey> = Answer<K> & {
   document: DocumentRef;
+  notice?: string | null;
 };
 
 /** Invoked only by the kernel query door, with its resolved exact document. */
@@ -76,17 +78,50 @@ export async function readSpaceCapture<K extends SpaceReadKey>(
 ): Promise<SpaceReadResult<K>> {
   if (!document) throw Error("Choose an exact document before reading Space");
   const request = spaceReads[key].input.parse(input);
-  const response = await callOp(
-    {
-      signal: AbortSignal.timeout(NATIVE_READ_WAIT_S * 1000),
-      headers: {
-        [HOST_RPC_BRIDGE_SESSION_HEADER]: document.session,
-        [HOST_RPC_DOCUMENT_HEADER]: document.openId,
-        [HOST_RPC_ORIGIN_HEADER]: "web:/space",
+  const call = (request: OpRequestOf<K>) =>
+    callOp(
+      {
+        signal: AbortSignal.timeout(NATIVE_READ_WAIT_S * 1000),
+        headers: {
+          [HOST_RPC_BRIDGE_SESSION_HEADER]: document.session,
+          [HOST_RPC_DOCUMENT_HEADER]: document.openId,
+          [HOST_RPC_ORIGIN_HEADER]: "web:/space",
+        },
       },
-    },
-    key,
-    request as OpRequestOf<K>,
-  );
+      key,
+      request,
+    );
+  if (key === "revit.detail.space-scene") {
+    const scene = request as OpRequestOf<"revit.detail.space-scene">;
+    const overview = {
+      ...scene,
+      focusOnly: false,
+      contextPaddingFt: 0,
+      contextRepresentation: "link-boxes" as const,
+    };
+    const result = await readGeometry(
+      {
+        overview: () => call(overview as OpRequestOf<K>),
+        narrow: "Choose a smaller region for full geometry.",
+      },
+      "picked",
+      scene.contextRepresentation === "none"
+        ? "meshes"
+        : (scene.contextRepresentation ?? "link-boxes"),
+      (representation) =>
+        call({
+          ...scene,
+          focusOnly: false,
+          contextRepresentation: representation,
+        } as OpRequestOf<K>),
+    );
+    return {
+      request: scene as OpRequestOf<K>,
+      response: result.value,
+      document,
+      notice: result.notice,
+    };
+  }
+  const response = await call(request as OpRequestOf<K>);
   return { request: request as OpRequestOf<K>, response, document };
 }

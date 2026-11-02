@@ -1,3 +1,4 @@
+import { readGeometry, budgetSentence, geometryBudget } from "#/shell/geometry";
 import { NATIVE_READ_WAIT_S } from "#/route/waits";
 import { callHostRpc } from "#/host/client";
 import { HostCallError } from "@pe/host-contracts/operation-types";
@@ -8,6 +9,7 @@ import { sceneMemory, type SceneMemoryLease } from "./scene-memory";
 import type { SceneMeshes } from "./types";
 import type { sceneRequest } from "./host";
 
+// TODO: docs/features/routes/LEDGER.md#geometry-pane-fallback Wire subject representation and the separate metadata overview when the host admission contract lands.
 export type SceneSource =
   | { kind: "artifact"; id: string }
   | {
@@ -15,11 +17,16 @@ export type SceneSource =
       document: { session: string; openId: string };
       revision: string | number;
       request: ReturnType<typeof sceneRequest>;
+      geometry?: {
+        overview: ReturnType<typeof sceneRequest>;
+        subject: "all" | "picked";
+        narrow: string;
+      };
     };
 type Decoded = { metadata: Psc1Metadata; positions: Float32Array; meshes: SceneMeshes };
 export type SourceSnapshot =
   | { state: "pending" }
-  | { state: "ready"; data: Decoded }
+  | { state: "ready"; data: Decoded; notice?: string | null }
   | { state: "failed"; error: string };
 const PENDING: SourceSnapshot = { state: "pending" };
 /** A refused Revit queue (`BridgeBusy`, not dispatched) is transient: resend 1 s, doubling to 15 s,
@@ -29,7 +36,7 @@ const BUSY_RETRY_CEILING_MS = 15_000;
 const isBridgeBusy = (error: unknown) =>
   error instanceof HostCallError && error.problem?.kind === "BridgeBusy";
 const cache = new SceneCache<Decoded>();
-const receipts = new Map<string, string>();
+const receipts = new Map<string, { id: string; notice: string | null }>();
 const sources = new Map<string, SceneData>();
 const identity = (source: SceneSource) =>
   source.kind === "artifact"
@@ -40,6 +47,7 @@ const identity = (source: SceneSource) =>
         source.document.openId,
         source.revision,
         source.request,
+        source.geometry,
       ]);
 
 /** Freshness belongs to the exact source identity; there is no elapsed-time substitute for a revision.
@@ -53,14 +61,14 @@ class SceneData {
     private readonly key: string,
   ) {}
   private artifactId() {
-    return this.source.kind === "artifact" ? this.source.id : receipts.get(this.key);
+    return this.source.kind === "artifact" ? this.source.id : receipts.get(this.key)?.id;
   }
   read = (): SourceSnapshot => {
     if (!this.owned) {
       const id = this.artifactId(),
         data = id ? cache.get(id)?.data : undefined;
       if (data && (this.current.state !== "ready" || this.current.data !== data))
-        this.current = { state: "ready", data };
+        this.current = { state: "ready", data, notice: receipts.get(this.key)?.notice };
       if (!data) this.current = PENDING;
     }
     return this.current;
@@ -93,15 +101,19 @@ class SceneData {
       if (!abort.signal.aborted && this.owned === owned) this.publish(snapshot);
     };
     if (this.source.kind === "capture") {
-      const follow = (id: string) => {
+      const follow = (id: string, notice?: string | null) => {
         abort.signal.throwIfAborted();
         const artifact = sceneData({ kind: "artifact", id });
-        owned.release = artifact.subscribe(() => publish(artifact.read()));
-        publish(artifact.read());
+        const update = () => {
+          const snapshot = artifact.read();
+          publish(snapshot.state === "ready" ? { ...snapshot, notice } : snapshot);
+        };
+        owned.release = artifact.subscribe(update);
+        update();
       };
       const id = this.artifactId();
       if (id) {
-        follow(id);
+        follow(id, receipts.get(this.key)?.notice);
         return;
       }
       const source = this.source;
@@ -117,18 +129,45 @@ class SceneData {
       };
       const send = (delay: number) => {
         if (abort.signal.aborted) return;
-        void callHostRpc("revit.detail.space-scene", source.request, {
-          bridgeSessionId: source.document.session,
-          openDocumentId: source.document.openId,
-          signal: abort.signal,
-        })
-          .then(({ id }) => {
+        const call = (request: ReturnType<typeof sceneRequest>) =>
+          callHostRpc("revit.detail.space-scene", request, {
+            bridgeSessionId: source.document.session,
+            openDocumentId: source.document.openId,
+            signal: abort.signal,
+          });
+        const operation = source.geometry
+          ? readGeometry(
+              {
+                overview: () => call(source.geometry!.overview),
+                narrow: source.geometry.narrow,
+              },
+              source.geometry.subject,
+              source.request.contextRepresentation === "none"
+                ? "meshes"
+                : source.request.contextRepresentation,
+              (representation) =>
+                call(
+                  representation === "link-boxes"
+                    ? {
+                        ...source.request,
+                        focusOnly: false,
+                        contextPaddingFt: source.request.focusOnly
+                          ? 0
+                          : source.request.contextPaddingFt,
+                        contextRepresentation: "link-boxes",
+                      }
+                    : source.request,
+                ),
+            )
+          : call(source.request).then((value) => ({ value, notice: null }));
+        void operation
+          .then(({ value: { id }, notice }) => {
             clearTimeout(timeout);
             abort.signal.throwIfAborted();
             receipts.delete(this.key);
-            receipts.set(this.key, id);
+            receipts.set(this.key, { id, notice });
             if (receipts.size > 32) receipts.delete(receipts.keys().next().value!);
-            follow(id);
+            follow(id, notice);
           })
           .catch((error: unknown) => {
             if (abort.signal.aborted) return;
@@ -137,7 +176,10 @@ class SceneData {
               return;
             }
             clearTimeout(timeout);
-            publish({ state: "failed", error: String(error) });
+            publish({
+              state: "failed",
+              error: geometryBudget(error) ? budgetSentence(geometryBudget(error)!) : String(error),
+            });
           });
       };
       send(BUSY_RETRY_FIRST_MS);
@@ -165,7 +207,10 @@ class SceneData {
       })
       .catch((error: unknown) => {
         lease?.release();
-        publish({ state: "failed", error: String(error) });
+        publish({
+          state: "failed",
+          error: geometryBudget(error) ? budgetSentence(geometryBudget(error)!) : String(error),
+        });
       });
   }
 }

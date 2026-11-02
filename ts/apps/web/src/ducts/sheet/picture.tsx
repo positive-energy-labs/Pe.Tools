@@ -4,6 +4,7 @@
  * its). The focused blocker is the page's `issue`, so a mark picked here focuses its row and a
  * row's hover lights its mark. Rendered through the layout's pane renderer, as `e-picture` is.
  */
+import { sceneRequest } from "#/scene/host";
 import { useMemo, type RefObject } from "react";
 import { elementKey, type Members, type SubjectKey } from "@pe/kit/lang/attention";
 import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
@@ -293,6 +294,18 @@ export function SheetPicture({
       onPose={props.onPose}
       jump={jump}
       content={{
+        geometry: {
+          subject: page.fan === "all" ? "all" : "picked",
+          overview: sceneRequest(
+            (opened ?? (sheet ? [sheet] : [])).flatMap((item) =>
+              item.overview.fan ? [item.overview.fan.unitId] : [],
+            ),
+            false,
+            0,
+            "link-boxes",
+          ),
+          narrow: "Open fewer fans for full geometry.",
+        },
         focus,
         members,
         // Ruling C: hovering an element lights its section; a pick selects that section.
