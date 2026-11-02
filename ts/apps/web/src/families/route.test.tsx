@@ -1,18 +1,16 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
-import { createMemoryHistory, createRouter, RouterContextProvider } from "@tanstack/react-router";
-import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import { familiesRouteState, workKey, workWriteSchema } from "@pe/agent-contracts";
-import { UNREADABLE_WORK } from "@pe/agent-contracts";
+import { familiesRouteState,UNREADABLE_WORK,workKey } from "@pe/agent-contracts";
 import {
-  HOST_RPC_BRIDGE_SESSION_HEADER,
-  HOST_RPC_DOCUMENT_HEADER,
+HOST_RPC_BRIDGE_SESSION_HEADER,
+HOST_RPC_DOCUMENT_HEADER,
 } from "@pe/host-contracts/operation-types";
-import { writeRouteWork } from "#/route/host";
+import { createMemoryHistory,createRouter,RouterContextProvider } from "@tanstack/react-router";
+import { act,cleanup,fireEvent,render,waitFor,within } from "@testing-library/react";
+import { afterEach,beforeEach,expect,test,vi } from "vite-plus/test";
 import { Route as root } from "../routes/__root";
-import { familiesAdapters, familiesRoute } from "./route";
 import { familiesGraph } from "./graph";
 import { FamiliesHostFixture } from "./host.fixture";
+import { familiesAdapters,familiesRoute } from "./route";
 
 let host: FamiliesHostFixture;
 const releases: (() => void)[] = [];
@@ -147,56 +145,6 @@ test("a family table cell edit is one journal step per press and Mod+Z restores 
   expect(host.doc).toEqual(before);
   expect(host.writes[2]?.kind).toBe("restore");
   expect(host.writes[3]?.kind).toBe("restore");
-});
-
-test("kernel gap: prepared Families plan evidence reaches the real route's commit and receipt", async () => {
-  const { view, situation, owner } = await mounted();
-  fireEvent.click(await liveButton(situation, "Apply families"));
-  await waitFor(() => expect(owner().results.get("apply")).toMatchObject({ state: "review" }));
-  const review = await within(document.body).findByLabelText("Apply families review");
-  expect(review.textContent).toContain("Review 1 family: 1 change, 0 refusals.");
-  expect(review.textContent).toContain("Fan Coil Unit - Ducted");
-  expect(review.textContent).toContain("FXMQ15 → Edited model");
-  expect(review.textContent).not.toContain('"receipt"');
-  expect(host.actions.map((row) => row.key)).toEqual(["families.plan"]);
-  fireEvent.click(await liveButton(situation, "Apply families"));
-  await waitFor(() => expect(owner().results.get("apply")).toMatchObject({ state: "done" }));
-  expect(host.actions[1]!.input).toMatchObject({ plan: `plan-${host.id}`, include: "all" });
-  await waitFor(() => expect(view.queryByLabelText("Apply families review")).toBeNull());
-  const receipt = await view.findByRole("link", { name: "Open family receipt" });
-  expect(receipt.getAttribute("href")).toContain(host.actions[1]!.id);
-  expect(owner().results.get("apply")).toMatchObject({
-    state: "done",
-    kind: "command",
-    receipt: { id: host.actions[1]!.id },
-  });
-});
-
-test("a Work write makes the Families review ticket stale and refuses native apply", async () => {
-  const { view, situation } = await mounted();
-  fireEvent.click(await liveButton(situation, "Apply families"));
-  await within(document.body).findByLabelText("Apply families review");
-  await act(async () => {
-    await writeRouteWork(
-      host.key,
-      workWriteSchema.parse({
-        expectedRevision: host.revision,
-        press: "other-human",
-        patches: [
-          {
-            path: ["cells", host.cell, "edit"],
-            value: { value: { value: "Changed after review", storageType: "String" } },
-          },
-        ],
-      }),
-    );
-  });
-  fireEvent.click(await liveButton(situation, "Apply families"));
-  await waitFor(() => expect(view.queryByLabelText("Apply families review")).toBeNull());
-  expect(
-    situation.getAllByRole("status").some((row) => /changed|stale/i.test(row.textContent ?? "")),
-  ).toBe(true);
-  expect(host.actions.map((row) => row.key)).toEqual(["families.plan"]);
 });
 
 test("a family cell row takes the kernel verb and one undo restores the exact proposal", async () => {

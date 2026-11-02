@@ -99,7 +99,7 @@ test("editing a real table cell makes one journal step and Mod+Z restores exact 
   const before = structuredClone(host.doc);
   const { view, owner } = await mounted();
   const input = await waitFor(() => {
-    const row = view.container.querySelector('tr[data-subject="room:fixture-1"]');
+    const row = view.container.querySelector('tr[data-subject="room:00000000-0000-4000-8000-000000000001"]');
     const input = row?.querySelector<HTMLInputElement>("input");
     expect(input).toBeTruthy();
     return input!;
@@ -107,7 +107,7 @@ test("editing a real table cell makes one journal step and Mod+Z restores exact 
   fireEvent.change(input, { target: { value: "Pantry" } });
   fireEvent.keyDown(input, { key: "Enter" });
   await waitFor(() =>
-    expect(host.doc.edits[roomEditKey("fixture-1", "name")]?.edit?.value).toBe("Pantry"),
+    expect(host.doc.edits[roomEditKey("00000000-0000-4000-8000-000000000001", "name")]?.edit?.value).toBe("Pantry"),
   );
   expect(host.writes).toHaveLength(1);
   expect(owner().journals.get(workKey(host.key))!.read().undo).toHaveLength(1);
@@ -136,7 +136,7 @@ test("partition's one review button carries standing rejection polygons and re-r
             kind: "reject",
             anchor: { view: DEMO_VIEW, level: "Fixture level", polygon },
             run: "fixture-run",
-            guids: ["fixture-1"],
+            guids: ["00000000-0000-4000-8000-000000000001"],
           },
         },
       },
@@ -166,7 +166,7 @@ test("partition's one review button carries standing rejection polygons and re-r
 
 test("a Work change during native write review stales the kernel ticket before Revit is written", async () => {
   host.doc = roomsRouteState.schema.parse({
-    edits: { [roomEditKey("fixture-1", "name")]: { edit: { value: "Pantry" } } },
+    edits: { [roomEditKey("00000000-0000-4000-8000-000000000001", "name")]: { edit: { value: "Pantry" } } },
   });
   const { situation, owner } = await mounted();
   fireEvent.click(await liveButton(situation, "apply"));
@@ -179,7 +179,7 @@ test("a Work change during native write review stales the kernel ticket before R
         press: "another-person",
         patches: [
           {
-            path: ["edits", roomEditKey("fixture-1", "name"), "edit"],
+            path: ["edits", roomEditKey("00000000-0000-4000-8000-000000000001", "name"), "edit"],
             value: { value: "New name" },
           },
         ],
@@ -230,7 +230,7 @@ test("kernel mark take, reopen, reject and delete each undo to the exact prior c
       ],
     },
     run: "fixture-run",
-    guids: ["fixture-1", "fixture-2"],
+    guids: ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"],
   };
   host.doc = roomsRouteState.schema.parse({ marks: { m1: { suggestion: { value: mark } } } });
   const { owner } = await mounted();
@@ -307,7 +307,7 @@ test("targeting another plan view re-reads rooms, trace and image and clears the
   host.snapshot.levels[0]!.views.push("Another plan");
   const { view, owner } = await mounted();
   await act(async () => {
-    owner().view.setPage({ selected: ["fixture-1"] });
+    owner().view.setPage({ selected: ["00000000-0000-4000-8000-000000000001"] });
   });
   const before = Object.fromEntries(
     ["rooms.snapshot", "rooms.trace", "revit.context.view-image"].map((key) => [
@@ -336,9 +336,9 @@ test("targeting another plan view re-reads rooms, trace and image and clears the
 test("native field review submits edited values by GUID and excludes suggestions", async () => {
   host.doc = roomsRouteState.schema.parse({
     edits: {
-      [roomEditKey("fixture-1", "name")]: { edit: { value: "Pantry" } },
-      [roomEditKey("fixture-1", "people")]: { edit: { value: 2 } },
-      [roomEditKey("fixture-2", "ceilingFt")]: { suggestion: { value: 9 } },
+      [roomEditKey("00000000-0000-4000-8000-000000000001", "name")]: { edit: { value: "Pantry" } },
+      [roomEditKey("00000000-0000-4000-8000-000000000001", "people")]: { edit: { value: 2 } },
+      [roomEditKey("00000000-0000-4000-8000-000000000002", "ceilingFt")]: { suggestion: { value: 9 } },
     },
   });
   const { situation, owner } = await mounted();
@@ -351,7 +351,7 @@ test("native field review submits edited values by GUID and excludes suggestions
   );
   expect(host.actions[0]).toMatchObject({
     key: "rooms.write",
-    input: { regions: [{ guid: "fixture-1", name: "Pantry", people: 2 }] },
+    input: { regions: [{ guid: "00000000-0000-4000-8000-000000000001", name: "Pantry", people: 2 }] },
   });
 });
 
@@ -373,7 +373,7 @@ test("selection merge and anchored-mark merge each use the kernel review and exa
               ],
             },
             run: "fixture-run",
-            guids: ["fixture-1", "fixture-2"],
+            guids: ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"],
           },
         },
       },
@@ -381,7 +381,7 @@ test("selection merge and anchored-mark merge each use the kernel review and exa
   });
   const { situation, owner } = await mounted();
   await act(async () => {
-    owner().view.setPage({ selected: ["fixture-1", "fixture-2"] });
+    owner().view.setPage({ selected: ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"] });
   });
   fireEvent.click(await liveButton(situation, "merge"));
   await within(document.body).findByLabelText("merge review");
@@ -407,7 +407,7 @@ test("selection merge and anchored-mark merge each use the kernel review and exa
   for (const receipt of host.actions)
     expect(receipt).toMatchObject({
       key: "rooms.merge",
-      input: { view: DEMO_VIEW, guids: ["fixture-1", "fixture-2"] },
+      input: { view: DEMO_VIEW, guids: ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"] },
     });
 });
 

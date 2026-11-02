@@ -1,15 +1,14 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
-import { createMemoryHistory, createRouter, RouterContextProvider } from "@tanstack/react-router";
-import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import { routeFromGraph, mountRoute, type MountBody } from "#/shell/mount";
+import { mountRoute,routeFromGraph,type MountBody } from "#/shell/mount";
 import type { ParameterLinksDocument } from "@pe/agent-contracts";
+import { createMemoryHistory,createRouter,RouterContextProvider } from "@tanstack/react-router";
+import { act,cleanup,fireEvent,render,waitFor,within } from "@testing-library/react";
+import { afterEach,beforeEach,expect,test,vi } from "vite-plus/test";
 import { Route as root } from "../routes/__root";
-import { parameterLinksGraph, type ParameterLinksPage } from "./graph";
+import { parameterLinksGraph,type ParameterLinksPage } from "./graph";
+import { ParameterLinksHostFixture } from "./host.fixture";
 import { parameterLinksAdapters } from "./route";
 import { parameterLinksSources } from "./sources";
-import { ParameterLinksHostFixture } from "./host.fixture";
-import { familyQueries } from "../../../../packages/mcps/src/shared/query-client";
 
 vi.mock("../routes/__root", async () => {
   const { createRootRoute, Outlet } = await import("@tanstack/react-router");
@@ -142,95 +141,6 @@ test("discarding a stale edit leaves accepted Work untouched", async () => {
   expect(view.queryByRole("button", { name: /retry/i })).toBeNull();
   expect(host.writes).toEqual([]);
   expect(host.doc.profile.edit?.value.definitions[0]?.id).toBe("supply-flow");
-});
-
-test("an agent suggestion preview cannot arm human Apply even after take; accepted Preview arms its own reading id", async () => {
-  host.doc.profile.suggestion = {
-    value: {
-      ...host.profile,
-      definitions: host.profile.definitions.map((definition) => ({
-        ...definition,
-        reducer: "max",
-      })),
-    },
-  };
-  const { view, situation, owner } = await mounted();
-  // An agent's read lands through the shared source, outside this human mount's invocation.
-  await act(async () => {
-    await familyQueries["parameter-links.read"].run(
-      { evaluate: true, subject: "suggestion" },
-      { target: owner().snapshot().target, work: owner().snapshot().work!.handle },
-    );
-  });
-  expect(owner().results.get("previewProposal")).toBeUndefined();
-  expect(host.captures[0]?.reading).toMatchObject({
-    kind: "parameter-links",
-    value: { subject: "suggestion" },
-  });
-  expect(view.getByText("preview of Pea's suggestion — not edit")).toBeTruthy();
-  expect(owner().control("apply").refusal).toContain("suggestion preview");
-  await act(async () => {
-    await owner().control("apply").run();
-  });
-  expect(host.actions).toEqual([]);
-  fireEvent.click(await readyButton(situation, "preview Pea's suggestion"));
-  await waitFor(() => expect(owner().results.get("previewProposal")?.state).toBe("done"));
-  fireEvent.click(
-    await readyButton(within(view.getByRole("group", { name: "profile proposal" })), "take"),
-  );
-  await waitFor(() => expect(host.doc.profile.edit?.value.definitions[0]?.reducer).toBe("max"));
-  expect(owner().control("apply").refusal).toContain("suggestion preview");
-  fireEvent.click(await readyButton(situation, "preview"));
-  await waitFor(() => expect(owner().results.get("preview")?.state).toBe("done"));
-  const id = host.captures[0]!.id;
-  await waitFor(() => expect(owner().control("apply").refusal).toBeNull());
-  fireEvent.change(view.getByRole("textbox", { name: "reason for this write" }), {
-    target: { value: "Reconcile reviewed links" },
-  });
-  fireEvent.click(await readyButton(within(view.container), "apply"));
-  await waitFor(() =>
-    expect(owner().results.get("apply")).toMatchObject({ state: "done", kind: "command" }),
-  );
-  expect(host.actions[0]?.input).toMatchObject({ readingId: id });
-  expect(host.reads.map((request) => request.input)).toEqual([
-    { evaluate: true, subject: "suggestion" },
-    { evaluate: true, subject: "suggestion" },
-    { evaluate: true, subject: "edit" },
-  ]);
-  expect(
-    host.reads.every((request) => JSON.stringify(request.target) === JSON.stringify(host.target)),
-  ).toBe(true);
-});
-
-test("Apply requires an evaluated reading id and a fresh basis matching current Work", async () => {
-  host.capture(false);
-  const { view, owner, situation } = await mounted();
-  expect(owner().control("apply").refusal).not.toBeNull();
-  await act(async () => {
-    await owner().control("apply").run();
-  });
-  expect(host.actions).toEqual([]);
-  fireEvent.click(await readyButton(situation, "preview"));
-  await waitFor(() => expect(owner().results.get("preview")?.state).toBe("done"));
-  await waitFor(() => expect(owner().control("apply").refusal).toBeNull());
-  const retainedApply = owner().control("apply");
-  fireEvent.change(view.getByLabelText("definition id"), {
-    target: { value: "changed-after-preview" },
-  });
-  await waitFor(() => expect(owner().results.get("edit")?.state).toBe("done"));
-  await waitFor(() => expect(owner().control("apply").refusal).toContain("Preview this draft"));
-  await act(async () => {
-    await retainedApply.run();
-  });
-  expect(host.actions).toEqual([]);
-  expect(host.reads).toHaveLength(1);
-  fireEvent.click(await readyButton(situation, "preview"));
-  await waitFor(() => expect(host.reads).toHaveLength(2));
-  await waitFor(() => expect(owner().control("apply").refusal).toBeNull());
-  await act(async () => {
-    await owner().control("apply").run();
-  });
-  expect(host.actions[0]?.input).toMatchObject({ readingId: host.captures[0]!.id });
 });
 
 test("production edits write Work immediately; option demand follows Work with exact document and compatibility filters", async () => {

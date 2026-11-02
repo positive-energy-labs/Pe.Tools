@@ -63,7 +63,7 @@ afterEach(() => {
 });
 
 test("the mounted settings graph drives its section verb and edits another registered graph without Work or URL writes", async () => {
-  releases.push(publicRoutes.registerGraph(proofGraph, () => null));
+  releases.push(publicRoutes.register({ manifest: proofGraph, graph: proofGraph, hosted: () => null }));
   let values = settingsSchema(proofSettingFields).parse({});
   let revision = 0;
   const writes: unknown[] = [];

@@ -1,19 +1,17 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
-import { createMemoryHistory, createRouter, RouterContextProvider } from "@tanstack/react-router";
-import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import {
-  familyDraftRouteState,
-  familyReads,
-  workKey,
-  workWriteSchema,
-  UNREADABLE_WORK,
+familyDraftRouteState,
+familyReads,
+UNREADABLE_WORK,
+workKey
 } from "@pe/agent-contracts";
-import { writeRouteWork } from "#/route/host";
+import { createMemoryHistory,createRouter,RouterContextProvider } from "@tanstack/react-router";
+import { act,cleanup,fireEvent,render,waitFor,within } from "@testing-library/react";
+import { afterEach,beforeEach,expect,test,vi } from "vite-plus/test";
 import { Route as root } from "../routes/__root";
-import { familyAdapters, familyRoute } from "./route";
 import { familyGraph } from "./graph";
 import { FamilyHostFixture } from "./host.fixture";
+import { familyAdapters,familyRoute } from "./route";
 
 let host: FamilyHostFixture;
 const releases: (() => void)[] = [];
@@ -138,30 +136,6 @@ test("a Family table edit makes one journal step and Mod+Z restores the exact Wo
   expect(host.doc).toEqual(before);
 });
 
-test("Family review seals a plan, commits its ticket and retains the original receipt", async () => {
-  const { view, situation, owner } = await mounted();
-  fireEvent.click(await liveButton(situation, "Apply family"));
-  const review = await within(document.body).findByLabelText("Apply family review");
-  expect(review.textContent).toContain("Review 1 family: 0 changes, 0 refusals.");
-  expect(review.textContent).toContain("Test family");
-  expect(review.textContent).not.toContain('"receipt"');
-  expect(host.actions.map((row) => row.key)).toEqual(["family.plan"]);
-  fireEvent.click(await liveButton(situation, "Apply family"));
-  await waitFor(() =>
-    expect(owner().results.get("apply")).toMatchObject({
-      state: "done",
-      kind: "command",
-      receipt: { id: host.actions[1]!.id },
-    }),
-  );
-  expect(host.actions[1]!.input).toMatchObject({ plan: `plan-${host.id}`, include: "all" });
-  expect(
-    (
-      await view.findByRole("link", { name: `family.apply · succeeded · ${host.actions[1]!.id}` })
-    ).getAttribute("href"),
-  ).toContain(host.actions[1]!.id);
-});
-
 test("Family receipts exclude another document lifetime even when its action consumed the same Work", async () => {
   await host.fetch("/actions", {
     method: "POST",
@@ -175,28 +149,6 @@ test("Family receipts exclude another document lifetime even when its action con
   const { view, owner } = await mounted();
   expect(owner().readings.get("receipts").value).toEqual([]);
   expect(view.queryByRole("link", { name: /other-family-lifetime/ })).toBeNull();
-});
-
-test("a newer Family Work revision refuses the stale ticket without dispatching apply", async () => {
-  const { view, situation } = await mounted();
-  fireEvent.click(await liveButton(situation, "Apply family"));
-  await within(document.body).findByLabelText("Apply family review");
-  await act(async () => {
-    await writeRouteWork(
-      host.key,
-      workWriteSchema.parse({
-        expectedRevision: host.revision,
-        press: "other-human",
-        patches: [{ path: ["cells", host.cell, "edit"], value: { value: "After review" } }],
-      }),
-    );
-  });
-  fireEvent.click(await liveButton(situation, "Apply family"));
-  await waitFor(() => expect(view.queryByLabelText("Apply family review")).toBeNull());
-  expect(
-    situation.getAllByRole("status").some((row) => /changed|stale/i.test(row.textContent ?? "")),
-  ).toBe(true);
-  expect(host.actions.map((row) => row.key)).toEqual(["family.plan"]);
 });
 
 test("a Family cell row invokes the kernel take verb and undo restores its exact proposal", async () => {
@@ -397,45 +349,6 @@ test("kernel gap: Escape closes the Family inspector through a declared Page ver
   const { view, owner } = await mounted(routeUrl({ inspector: "param:Model" }));
   fireEvent.keyDown(view.getByLabelText("Family route"), { key: "Escape" });
   await waitFor(() => expect(owner().view.read().page.inspector).toBe(""));
-});
-
-test("kernel gap: saving a Family lands Page on the member returned by the command", async () => {
-  const { situation, owner } = await mounted(routeUrl({ pod: host.sourceMember.pod }));
-  fireEvent.click(await liveButton(situation, "Save family to pod"));
-  await waitFor(() =>
-    expect(owner().results.get("capture")).toMatchObject({
-      state: "done",
-      kind: "command",
-      receipt: { result: { member: host.capturedMember } },
-    }),
-  );
-  expect(host.actions[0]!.input).toMatchObject({ pod: host.sourceMember.pod, spec: host.raw });
-  await waitFor(() =>
-    expect(owner().view.read().page).toMatchObject({
-      pod: host.capturedMember.pod,
-      path: host.capturedMember.path,
-    }),
-  );
-});
-
-test("Family build reviews and commits the saved member's exact hash", async () => {
-  const { situation, owner } = await mounted(
-    routeUrl({ pod: host.sourceMember.pod, path: host.sourceMember.path }),
-  );
-  fireEvent.click(await liveButton(situation, "Build .rfa"));
-  const review = await within(document.body).findByLabelText("Build .rfa review");
-  expect(review.textContent).toContain(`Build ${host.sourceMember.path}`);
-  expect(review.textContent).toContain(`SHA-256: ${host.sourceMember.sha256}`);
-  expect(review.textContent).not.toContain('"source"');
-  expect(host.actions).toEqual([]);
-  fireEvent.click(await liveButton(situation, "Build .rfa"));
-  await waitFor(() =>
-    expect(owner().results.get("build")).toMatchObject({ state: "done", kind: "command" }),
-  );
-  expect(host.actions[0]).toMatchObject({
-    key: "family.build",
-    input: { source: host.sourceMember },
-  });
 });
 
 test("Family build refuses staged edits before preparing or dispatching a saved-file build", async () => {

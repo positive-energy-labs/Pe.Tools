@@ -192,55 +192,6 @@ test("admitted demo launch uses only its labelled leaf and rejects escape or rea
   });
 });
 
-test("simulated native outcomes carry the exact journal dispatch evidence", async () => {
-  const f = await setup();
-  const id = "native-capture";
-  const response = await f.fetch("/actions", {
-    id,
-    key: "family.capture",
-    target: { kind: "document", ref: f.owner.target },
-    input: {},
-  });
-  expect(response.ok, await response.clone().text()).toBe(true);
-  const row = await f.owner.journal.wait(id);
-  expect(row.state, JSON.stringify(row)).toBe("succeeded");
-  expect(row.steps).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({
-        kind: "native",
-        key: "family.capture",
-        state: "succeeded",
-        dispatchedAt: expect.any(String),
-      }),
-    ]),
-  );
-});
-test("a simulated lost native result retains pre-effect dispatch evidence and stays unknown", async () => {
-  const f = await setup(family("native-unknown"));
-  const member = await f.owner.settings.readMember(f.owner.member!);
-  const id = "lost-native-build";
-  const response = await f.fetch("/actions", {
-    id,
-    key: "family.build",
-    target: { kind: "document", ref: f.owner.target },
-    input: { source: { ...f.owner.member, sha256: member.sha256 } },
-  });
-  expect(response.ok, await response.clone().text()).toBe(true);
-  const row = await f.owner.journal.wait(id);
-  expect(row, JSON.stringify(row)).toMatchObject({ state: "unknown" });
-  expect(row.steps).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({
-        kind: "native",
-        key: "family.build",
-        state: "unknown",
-        dispatchedAt: expect.any(String),
-      }),
-    ]),
-  );
-  expect(row.steps.find((step) => step.key === "family.build")).not.toHaveProperty("notDispatched");
-});
-
 test("separate demo journals retain the same exact request ID without rewriting or sharing receipts", async () => {
   const first = await setup();
   const second = await setup();

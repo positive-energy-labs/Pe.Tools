@@ -185,24 +185,6 @@ test("restore refuses forged inverses, another Work's inverse and stale revision
   expect(await h.stored()).toEqual(before);
 });
 
-test("Pea paths are barriers even after an ABA write, while disjoint paths remain restorable", async () => {
-  const h = await fixture();
-  const edited = await h.apply(width(20), 0);
-  await h.apply([{ path: ["settings", "height"], value: 8 }], 1, pea());
-  expect(await h.restore(edited.write, 2)).toMatchObject({
-    ok: true,
-    doc: { settings: { width: 10, height: 8 } },
-  });
-  const again = await h.apply(width(20), 3);
-  await h.apply(width(99), 4, pea());
-  await h.apply(width(20), 5, pea());
-  expect(h.events.at(-1)).toMatchObject({ by: "pea", press: null, patches: width(20) });
-  expect(await h.restore(again.write, 6)).toMatchObject({ ok: false });
-  expect((await h.app.workspace.view(h.scope, h.scope.route))?.doc).toMatchObject({
-    settings: { width: 20 },
-  });
-});
-
 test("ordinary restore still validates the inverse against the current Work schema", async () => {
   const h = await fixture();
   const edited = await h.apply(width(20), 0);

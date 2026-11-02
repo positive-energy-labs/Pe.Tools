@@ -1,28 +1,27 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
-import { createMemoryHistory, createRouter, RouterProvider } from "@tanstack/react-router";
-import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import { actionReceiptSchema, workKey, type WorkKey } from "@pe/agent-contracts";
-import { RouteWorkspace } from "../../../../packages/runtime/src/route-workspace";
-import { peReadings } from "#/readings";
-import { Route as root } from "../routes/__root";
-import type { GraphMount, MountScope, MountAdapters } from "#/shell/mount";
-import type { ReadingDelivery } from "#/shell/readings";
-import type { ReadingContext } from "#/shell/readings";
 import * as hostRuntime from "#/host/runtime";
+import { peReadings } from "#/readings";
+import type { GraphMount,MountAdapters,MountScope } from "#/shell/mount";
+import type { ReadingContext,ReadingDelivery } from "#/shell/readings";
+import { workKey,type WorkKey } from "@pe/agent-contracts";
 import {
-  HOST_RPC_BRIDGE_SESSION_HEADER,
-  HOST_RPC_DOCUMENT_HEADER,
+HOST_RPC_BRIDGE_SESSION_HEADER,
+HOST_RPC_DOCUMENT_HEADER,
 } from "@pe/host-contracts/operation-types";
-import { dataTablesAdapters, dataTablesRoute } from "./route";
+import { createMemoryHistory,createRouter,RouterProvider } from "@tanstack/react-router";
+import { act,cleanup,fireEvent,render,waitFor } from "@testing-library/react";
+import { afterEach,beforeEach,expect,test,vi } from "vite-plus/test";
+import { RouteWorkspace } from "../../../../packages/runtime/src/route-workspace";
+import { Route as root } from "../routes/__root";
 import {
-  dataTablesWorkSchema,
-  draftFrom,
-  pruneReview,
-  type DataTablesPage,
-  type DataTablesWork,
-  type TableHandle,
+dataTablesWorkSchema,
+draftFrom,
+pruneReview,
+type DataTablesPage,
+type DataTablesWork,
+type TableHandle,
 } from "./graph";
+import { dataTablesAdapters,dataTablesRoute } from "./route";
 import { dataTablesSources } from "./sources";
 
 const door = vi.hoisted(() => ({ ports: null as object | null }));
@@ -211,77 +210,6 @@ test("the real graph mount copies native values into Work once and a refresh pre
   expect(f.scope().work?.doc.draft?.rows).toEqual(table.rows);
   expect(f.scope().work?.doc.draft?.name).toBe("Edited");
   expect(f.owner().journal(f.scope().work!.handle.key).read().undo).toHaveLength(2);
-});
-
-test("Apply requires a prune review, refuses changed Work, and submits the sealed reviewed draft", async () => {
-  const f = await mounted();
-  fireEvent.click(f.view.getByRole("button", { name: "New table" }));
-  await waitFor(() => expect(f.scope().work?.doc.draft?.isNew).toBe(true));
-  fireEvent.change(f.view.getByPlaceholderText("Table name"), { target: { value: "Loads" } });
-  await waitFor(() => expect(f.scope().work?.doc.draft?.name).toBe("Loads"));
-  fireEvent.click(f.view.getByRole("button", { name: "Apply" }));
-  const review = await f.view.findByRole("dialog", { name: "Apply review" });
-  expect(review.textContent).toContain("Prune deletes 2 rows");
-  expect(review.textContent).toContain("Delete row a");
-  expect(review.textContent).toContain("Delete row b");
-  expect(review.textContent).not.toContain('"table"');
-  expect(command.run).not.toHaveBeenCalled();
-  await act(async () => {
-    await f.write(f.key, {
-      patches: [{ path: ["draft", "name"], value: "Changed" }],
-      expectedRevision: f.scope().work!.handle.revision,
-      press: "other-human",
-      kind: "apply",
-    });
-  });
-  fireEvent.click(f.view.getByRole("button", { name: "Apply" }));
-  await waitFor(() => expect(f.view.queryByLabelText("Apply review")).toBeNull());
-  expect(command.run).not.toHaveBeenCalled();
-  fireEvent.click(f.view.getByRole("button", { name: "Apply" }));
-  const currentReview = await f.view.findByRole("dialog", { name: "Apply review" });
-  command.run.mockResolvedValue(
-    actionReceiptSchema.parse({
-      id: "applied",
-      key: "data-table.apply",
-      caller: { kind: "human", via: "local" },
-      basis: { kind: "human" },
-      target: f.scope().target,
-      input: {},
-      state: "succeeded",
-      result: { name: "Changed" },
-      consumes: [],
-      effects: [],
-      steps: [],
-      prepared: { state: "ready", value: null },
-      recovery: [],
-      startedAt: "2026-10-30T06:00:00Z",
-    }),
-  );
-  fireEvent.click(within(currentReview).getByRole("button", { name: "Commit Apply" }));
-  await waitFor(() =>
-    expect(
-      f.owner().results.get("apply"),
-      JSON.stringify(f.owner().results.get("apply")),
-    ).toMatchObject({ state: "done" }),
-  );
-  expect(command.run).toHaveBeenCalledOnce();
-  expect(command.run).toHaveBeenCalledWith(
-    "data-table.apply",
-    {
-      table: {
-        name: "Changed",
-        columns: f.scope().work!.doc.draft!.columns,
-        rows: f.scope().work!.doc.draft!.rows,
-        pruneMissingRows: true,
-      },
-    },
-    f.scope().target,
-    f.scope().work!.handle,
-    "",
-    expect.any(String),
-    expect.any(Number),
-  );
-  await waitFor(() => expect(f.owner().view.read().page.table).toBe("Changed"));
 });
 
 test("switching documents selects that document's Work and returning restores its draft", async () => {

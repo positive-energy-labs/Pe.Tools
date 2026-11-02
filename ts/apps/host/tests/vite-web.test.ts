@@ -102,24 +102,13 @@ test("Vite owns HMR, proxies the claimed backend, and restarts without replacing
     expect(html).toContain("frontend");
     const cookie = document.headers["set-cookie"]?.[0]?.split(";")[0];
     expect(cookie).toContain(hostOwnership.serviceName);
-    const approval = await fetch(`${browser}/pe/access`, {
-      method: "PUT",
-      headers: {
-        origin: browser,
-        referer: `${browser}/ops`,
-        cookie: cookie!,
-        "content-type": "application/json",
-        "x-pe-runtime-service": hostOwnership.serviceName,
-      },
-      body: JSON.stringify({ guarded: true }),
-    });
-    expect(approval.status).toBe(200);
+
     expect(await fetch(`${browser}/ops`).then((r) => r.json())).toHaveProperty("operations");
     expect(await fetch(`${browser}/host/status`).then((r) => r.json())).toEqual(
       await fetch(`${backend}/host/status`).then((r) => r.json()),
     );
-    expect(await fetch(`${browser}/pe/access`).then((r) => r.json())).toEqual(
-      await fetch(`${backend}/pe/access`).then((r) => r.json()),
+    expect(await fetch(`${browser}/pe/providers`).then((r) => r.json())).toEqual(
+      await fetch(`${backend}/pe/providers`).then((r) => r.json()),
     );
     const world = encodeURIComponent(JSON.stringify([{ kind: "world" }]));
     const events = await fetch(`${browser}/pe/resources?keys=${world}`);
