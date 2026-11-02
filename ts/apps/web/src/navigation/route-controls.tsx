@@ -247,16 +247,30 @@ export function PrimaryRouteControls({
   const hosted = useContext(HostedChrome);
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const token = useRef(Symbol(route)).current;
+  const [portalHost] = useState(() => {
+    if (typeof document === "undefined") return null;
+    const element = document.createElement("div");
+    element.className = "contents";
+    return element;
+  });
   const primary = hosted == null && pathname === routePath(route);
   const present = children != null && children !== false;
   const claim = slot?.claim;
   const release = slot?.release;
+  const element = slot?.elements[name];
+  const owns = slot?.owners[name] === token;
   useLayoutEffect(() => {
     if (!primary || !present || !claim || !release) return;
     claim(name, token);
     return () => release(name, token);
   }, [primary, present, claim, release, token, name]);
+  useLayoutEffect(() => {
+    if (!primary || !owns || !element || !portalHost) return;
+    // Hidden Activities defer renders, including removal of their old portal children. Detach
+    // this owner's host at the layout boundary so two bands can never share the shell's space.
+    element.replaceChildren(portalHost);
+    return () => portalHost.remove();
+  }, [primary, owns, element, portalHost]);
   if (!slot || !primary) return <>{children}</>;
-  const element = slot.elements[name];
-  return element && slot.owners[name] === token ? createPortal(children, element) : null;
+  return portalHost ? createPortal(children, portalHost) : null;
 }
