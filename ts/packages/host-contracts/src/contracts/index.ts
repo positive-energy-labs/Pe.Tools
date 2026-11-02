@@ -5,3 +5,4 @@
 export * from "./product.ts";
 export * from "./bridge-protocol.ts";
 export * from "./operation-vocabulary.ts";
+export * from "./standard-schema.ts";
