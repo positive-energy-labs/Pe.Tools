@@ -14,6 +14,8 @@ import {
 } from "@pe/host-contracts/contracts";
 import { checkoutLayout, productRoot } from "@pe/host-contracts/service-identity";
 import { codexStandaloneRelease, installCommand } from "./install.ts";
+import { AdapterPackage, Win32Rows } from "./edge-schemas.ts";
+import { Schema } from "effect";
 
 /**
  * One row per harness: the ACP adapter package the host spawns, the CLI the user signs in with, and
@@ -65,7 +67,8 @@ function adapterLaunch(
   if (isSea()) return { command: process.execPath, args: ["--adapter", harness], env: cliEnv };
   const override = process.env[`PE_HARNESS_ADAPTER_${harness.toUpperCase()}`];
   const pkgJson = createRequire(import.meta.url).resolve(`${adapters[harness].pkg}/package.json`);
-  const bin = JSON.parse(readFileSync(pkgJson, "utf8")).bin as Record<string, string>;
+  // Sync caller until phase 5: a package without a string `bin` map throws its path.
+  const { bin } = Schema.decodeUnknownSync(AdapterPackage)(readFileSync(pkgJson, "utf8"));
   return {
     command: process.execPath,
     args: [override ?? join(dirname(pkgJson), Object.values(bin)[0]!)],
@@ -255,10 +258,11 @@ $paths = ConvertFrom-Json ([Console]::In.ReadToEnd())
       throw new Error(
         result.error?.message ?? `PowerShell exited ${result.status}: ${result.stderr.trim()}`,
       );
-    const rows = JSON.parse(result.stdout);
+    // Sync caller until phase 5; a reply that does not decode lands in the catch below.
+    const rows = Schema.decodeUnknownSync(Win32Rows)(result.stdout);
     for (const [index, candidate] of failed.entries()) {
       const row = (Array.isArray(rows) ? rows : [rows])[index];
-      candidate.win32Error = typeof row?.code === "number" ? row.code : null;
+      candidate.win32Error = row?.code ?? null;
       candidate.reason += `; ${row?.reason ?? "native check returned no result"}`;
     }
   } catch (error) {
