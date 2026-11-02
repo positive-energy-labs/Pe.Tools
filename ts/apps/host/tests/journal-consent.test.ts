@@ -125,12 +125,14 @@ test("an acquired document supplies provenance without bypassing the run countdo
   bindControl({ acquired: () => "pea-acquisition" });
   let writes = 0;
   let nativeId = "";
+  // SDK-backed invocations use a UUID shared by their first native request and outcome.
+  const invocationId = "11111111-1111-4111-8111-111111111111";
   try {
     const target = { session: "owned-session", openId: "owned-document" };
     const row = await invokeCommand(
       h.journal,
       {
-        ...admission("acquired-write"),
+        ...admission(invocationId),
         caller,
         target: { kind: "document", ref: target },
         basis: {
@@ -143,7 +145,7 @@ test("an acquired document supplies provenance without bypassing the run countdo
       async () => null,
       async (execution) => execution.step("native", "write", {}, async (id) => {
         nativeId = id;
-        expect(id).toBe("acquired-write");
+        expect(id).toBe(invocationId);
         return ++writes;
       }),
     );
