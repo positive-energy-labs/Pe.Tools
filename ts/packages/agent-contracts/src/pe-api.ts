@@ -15,7 +15,13 @@ const threadHistoryInput = z.strictObject({
 });
 const routeCatalog: Record<
   string,
-  { description: string; cost?: CatalogLink["cost"]; uses?: CatalogLink["uses"] }
+  {
+    description: string;
+    cost?: CatalogLink["cost"];
+    uses?: CatalogLink["uses"];
+    subject?: CatalogLink["subject"];
+    touches?: CatalogLink["touches"];
+  }
 > = {
   "threads.history": {
     description:

@@ -216,9 +216,7 @@ test("an ordered route retains semantic stage order in its sorted descriptor and
     expect(validateRouteGraph({ ...graph, stageOrder }).map((refusal) => refusal.code)).toContain(
       "stage-order",
     );
-  expect(validateRouteGraph({ ...ductLoss, stages: {} }).map((refusal) => refusal.code)).toContain(
-    "stage-order",
-  );
+  expect(validateRouteGraph({ ...ductLoss, stages: {} })).toEqual([]);
   const reordered = { ...graph, stages: { a: first, z: first }, stageOrder: ["z", "a"] };
   expect(projectRouteGraph(reordered)).toEqual(json);
   expect(await routeGraphHash(projectRouteGraph({ ...graph, stageOrder: ["a", "z"] }))).not.toBe(
@@ -496,7 +494,7 @@ test("a graph's salvage hook projects the carry-over recovery; its id is reserve
   ]);
 });
 
-test("a verb's review answers project as JSON Schema; one that cannot convert refuses the projection", () => {
+test("a verb's review answers project as JSON Schema; runtime validation is marked in the projection", () => {
   const answered = (answers: z.ZodType): RouteGraph => ({
     ...withCells(rules),
     verbs: { go: { ...verb("Go", "Mod+G"), answers } },
@@ -504,5 +502,7 @@ test("a verb's review answers project as JSON Schema; one that cannot convert re
   expect(
     projectRouteGraph(answered(z.strictObject({ confirm: z.literal(true) }))).verbs.go,
   ).toMatchObject({ answers: { required: ["confirm"] } });
-  expect(() => projectRouteGraph(answered(z.custom<string>(() => true)))).toThrow();
+  expect(projectRouteGraph(answered(z.custom<string>(() => true))).verbs.go).toMatchObject({
+    answers: { "x-runtime-validation": true },
+  });
 });

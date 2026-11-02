@@ -70,7 +70,8 @@ test("queued Pod events wait for the ACK's authoritative Work reading", async ()
       trusted: true,
     }),
     {
-      version: 1,
+      version: 2,
+      register: (base) => base,
       initial: { value: 0 },
       reducer: (state, event) => ({ value: Number(state.value) + Number(event.add) }),
       create: (provided) => {
@@ -145,7 +146,8 @@ test("a Pod mounts the kernel fixture lane, journals reducer events and blocks h
       trusted: true,
     }),
     {
-      version: 1,
+      version: 2,
+      register: (base) => base,
       initial: { value: 0 },
       reducer: (state, event) => ({ value: Number(state.value) + Number(event.add) }),
       fixtures: {

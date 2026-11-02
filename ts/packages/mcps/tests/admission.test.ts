@@ -173,13 +173,7 @@ test("pe_do admits native and semantic commands with exact Work intent and no ac
       key: "op:takeoffs.partition",
       actionId: "partition",
       target,
-      input: {
-        zoneRegion: 1,
-        view: "v",
-        zoneName: "z",
-        zoneGuid: "g",
-        work,
-      },
+      input: { work },
     }),
   ).toMatchObject({ ok: true });
   expect(posts).toMatchObject([
@@ -281,12 +275,22 @@ test("pe_do admits a lifecycle action at the session its input names, with no he
 });
 
 test("semantic recovery normalizes declared defaults before reading a later thread or closed document", async () => {
-  const selected = { path: "C:/old.rhvac", captureId: "c".repeat(64), fileVersion: "v13" };
+  const selected = {
+    work: {
+      key: {
+        binding: "open",
+        route: "takeoffs",
+        target: null,
+        open: { session: "A", openId: "open-A" },
+      },
+      revision: 13,
+    },
+  };
   const original = receipt({
     id: "old-sync",
     key: "takeoffs.sync",
     target: destination,
-    input: { ...selected, zones: [] },
+    input: { ...selected, previewOnly: false },
   });
   const { posts, reads } = host(original);
   const recover = (input: Record<string, unknown>, override?: unknown) =>
@@ -309,11 +313,11 @@ test("semantic recovery normalizes declared defaults before reading a later thre
     target: { session: "A" },
     result: { id: "old-sync" },
   });
-  expect(await recover({ ...selected, path: "C:/changed.rhvac" })).toMatchObject({
+  expect(await recover({ ...selected, work: { ...selected.work, revision: 14 } })).toMatchObject({
     isError: true,
     content: expect.stringContaining("conflicts"),
   });
-  expect(await recover({ ...selected, fileVersion: "v14" })).toMatchObject({
+  expect(await recover({ ...selected, previewOnly: true })).toMatchObject({
     isError: true,
     content: expect.stringContaining("conflicts"),
   });

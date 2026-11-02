@@ -10,7 +10,7 @@ import { ThesisSpecimen } from "#/design-system/specimens/thesis";
 export const designSystemGraph: RouteGraph<Record<string, never>, null> = {
   key: "design-system",
   address: "design-system",
-  stages: {},
+  stages: { main: { word: "Design System", panes: ["specimens"], verbs: [] } },
   name: "Design System",
   fields: {},
   readings: {},
