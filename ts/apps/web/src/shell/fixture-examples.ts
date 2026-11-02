@@ -15,7 +15,7 @@ import { solvePage } from "#/grilles/sources";
 import type { GrillesPage } from "#/grilles/page";
 import { optionKey } from "#/parameter-links/sources";
 
-// TODO: Link response examples to catalog entries when OpAttribute.Example supports responses.
+// TODO: docs/features/routes/LEDGER.md#s7-5d8183e3b5 Link response examples to catalog entries when OpAttribute.Example supports responses.
 // It currently projects requestExamples only. Native writes stay refused in the fixture lane.
 const at = "2026-11-02T15:00:00Z";
 const target = { session: "fixture", openId: "parameter-links" };
@@ -76,15 +76,22 @@ const links = familyCaptureSchema.parse({
 const tables = [
   tableSchema.parse({
     name: "Air terminal design flows",
+    scheduleId: 601,
+    scheduleUniqueId: "fixture-schedule-601",
     columns: [
-      { heading: "Mark", kind: "Text" },
-      { heading: "Design flow (CFM)", kind: "Number" },
+      { heading: "Mark", kind: "Text", parameterName: "Mark", sharedParameterGuid: "" },
+      {
+        heading: "Design flow (CFM)",
+        kind: "Number",
+        parameterName: "Design Flow",
+        sharedParameterGuid: "",
+      },
     ],
     rows: [
-      { key: "sa-1", values: ["SA-1", "450"] },
-      { key: "sa-2", values: ["SA-2", "325"] },
+      { key: "sa-1", elementId: 1001, uniqueId: "terminal-1", values: ["SA-1", "450"] },
+      { key: "sa-2", elementId: 1002, uniqueId: "terminal-2", values: ["SA-2", "325"] },
     ],
-    placements: [{ sheetNumber: "M601" }],
+    placements: [{ sheetId: 602, sheetNumber: "M601", sheetName: "Mechanical schedules" }],
   }),
 ];
 const image =
@@ -181,7 +188,10 @@ export const routeExamples = {
       roughness: 0.0003,
       density: 0.075,
     },
-    readings: { case: [{ id: "duct", label: "Hypothetical duct case" }], result: (page: DuctInput) => solve(page) },
+    readings: {
+      case: [{ id: "duct", label: "Hypothetical duct case" }],
+      result: (page: DuctInput) => solve(page),
+    },
   },
   grilles: {
     page: { project: "Clinic lobby floor grilles" },
@@ -190,7 +200,12 @@ export const routeExamples = {
   ops: {
     target: { kind: "document" as const, ref: { session: "fixture", openId: "clinic" } },
     page: { op: "revit.context.document-session" },
-    readings: { operation: (page: { op: string }) => hostOpCatalog.find(op => op.key === page.op) ?? null, catalog: { operations: hostOpCatalog }, receipt: [], receipts: [] },
+    readings: {
+      operation: (page: { op: string }) => hostOpCatalog.find((op) => op.key === page.op) ?? null,
+      catalog: { operations: hostOpCatalog },
+      receipt: [],
+      receipts: [],
+    },
     queries: {
       "ops.read": {
         kind: "value",

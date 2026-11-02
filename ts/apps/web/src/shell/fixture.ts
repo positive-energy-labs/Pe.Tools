@@ -1,3 +1,4 @@
+import { createFixtureHost } from "../../../../packages/host-contracts/src/fixture-host";
 import {
   routeSettingsSnapshotSchema,
   address,
@@ -18,7 +19,11 @@ export { fixtureName, currentFixture } from "./fixture-lane";
 
 export async function fixtureEnvironment<P, W>(graph: RouteGraph<P, W>, name: string) {
   // Companion chat must not borrow another route's seed or block its editor as a running Pea.
-  if (graph.key === "chat" && typeof location !== "undefined" && location.pathname !== "/pea")
+  if (
+    typeof location !== "undefined" &&
+    location.pathname !== graph.directory?.path &&
+    graph.seeds?.attach
+  )
     name = "attach";
   const declaration = graph.seeds?.[name];
   if (!declaration)
@@ -119,6 +124,7 @@ export function pendingFixtureEnvironment<P, W>(
         patches: routeDocDelta(before, doc),
         inverse: routeDocDelta(doc, before),
         undoable: true,
+        ...(request.kind === "restore" ? { restoreOf: request.restoreOf } : {}),
       };
       snapshot = { ...snapshot, work: { handle: { key, revision }, doc } };
       stored.set(workKey(key), snapshot);
@@ -144,33 +150,26 @@ export function pendingFixtureEnvironment<P, W>(
       failure,
     },
   };
+  // Derived Reading examples use the graph catalog; native HTTP examples use producer schemas.
+  const examples = createFixtureHost(
+    Object.keys(graph.readings).map((key) => ({ key, effect: "Read" })),
+    Object.fromEntries(
+      Object.entries(seed?.readings ?? {}).filter(([key]) => Object.hasOwn(graph.readings, key)),
+    ),
+  );
   const sources: Record<string, ReadingSource> = {};
   const readings = Object.fromEntries(
     Object.entries(graph.readings).map(([id, reading]) => {
-      const value = (context: { page: unknown; work?: unknown }) => {
-        if (!seed || !Object.hasOwn(seed.readings, id))
-          throw Error(`Fixture '${name}' has no reading '${id}'`);
-        const reading = seed.readings[id];
-        if (typeof reading === "function") return reading(context.page, context.work);
-        if (reading && typeof reading === "object" && "fixtureSelect" in reading) {
-          const { fields, values, fallback } = (
-            reading as {
-              fixtureSelect: {
-                fields: string[];
-                values: Record<string, unknown>;
-                fallback: unknown;
-              };
-            }
-          ).fixtureSelect;
-          const page = context.page as Record<string, unknown>;
-          return values[JSON.stringify(fields.map((field) => page[field]))] ?? fallback;
-        }
-        return reading;
-      };
+      const value = (context: { page: unknown; work?: unknown }) =>
+        examples.read(id, context.page, context.work);
       const source = `fixture:${id}`;
       switch (reading.kind) {
         case "derive":
-          sources[source] = { kind: "derive", key: scope => [scope.page, scope.workRevision], derive: value };
+          sources[source] = {
+            kind: "derive",
+            key: (scope) => [scope.page, scope.workRevision],
+            derive: value,
+          };
           break;
         case "worker":
           sources[source] = {

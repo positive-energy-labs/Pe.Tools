@@ -3,7 +3,13 @@ import { loadedScene } from "./sources";
 export const spaceSeeds = {
   fixture: {
     title: "Spatial inspection",
-    page: { scene: "f".repeat(64) },
+    page: {
+      scene: "f".repeat(64),
+      ids: [],
+      hidden: [],
+      isolated: null,
+      layers: ["meshes", "context", "cuts"],
+    },
     queries: {
       "revit.detail.space-scene": {
         document: { session: "fixture", openId: "space" },
@@ -23,6 +29,11 @@ export const spaceSeeds = {
         ]),
       ),
     },
-    readings: { region: (page: { region: unknown }) => page.region ? [{ id: JSON.stringify(page.region), region: page.region }] : [], scene: loadedScene("f".repeat(64), FIXTURE_SCENE), answers: FIXTURE_ANSWERS },
+    readings: {
+      region: (page: { region: unknown }) =>
+        page.region ? [{ id: JSON.stringify(page.region), region: page.region }] : [],
+      scene: loadedScene("f".repeat(64), FIXTURE_SCENE),
+      answers: FIXTURE_ANSWERS,
+    },
   },
 };

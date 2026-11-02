@@ -1,3 +1,12 @@
+import { zoneAuditGraph } from "../zone-audit/graph";
+import { rhvacSyncGraph } from "../rhvac-sync/graph";
+import { scheduleSpecsGraph } from "../schedule-specs/graph";
+import { sessionsGraph } from "../sessions/graph";
+import { podAdminGraph } from "../pod-admin/graph";
+import { indexGraph } from "../index/graph";
+import { familiesGraph } from "../families/graph";
+import { fansGraph } from "../fans/graph";
+import { ductsGraph } from "../ducts/graph";
 import { selectRunStatus } from "@pe/agent-contracts/chat-state";
 import { fixtureThread } from "./fixture-services";
 import { afterEach, expect, test, vi } from "vite-plus/test";
@@ -32,6 +41,16 @@ import { parameterLinksGraph } from "../parameter-links/graph";
 
 afterEach(() => vi.unstubAllGlobals());
 const routes = [
+  ductsGraph,
+  fansGraph,
+  familiesGraph,
+  indexGraph,
+  podAdminGraph,
+  sessionsGraph,
+  scheduleSpecsGraph,
+  rhvacSyncGraph,
+  zoneAuditGraph,
+
   capturesGraph,
   dataTablesGraph,
   designSystemGraph,
@@ -136,7 +155,13 @@ test("calculator fixtures recalculate with Page edits rather than freezing an ex
 test("companion chat stays idle and mounts its own seed beside another route", async () => {
   vi.stubGlobal("location", { pathname: "/parameter-links" });
   expect(selectRunStatus(fixtureThread("links"))).toBe("idle");
-  const owner = await createFixtureMount(chatGraph(() => ({ thread: "" })), "links");
-  try { expect(owner.snapshot().failure).toBeNull(); }
-  finally { owner.dispose(); }
+  const owner = await createFixtureMount(
+    chatGraph(() => ({ thread: "" })),
+    "links",
+  );
+  try {
+    expect(owner.snapshot().failure).toBeNull();
+  } finally {
+    owner.dispose();
+  }
 });
