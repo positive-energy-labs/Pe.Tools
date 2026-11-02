@@ -1,3 +1,4 @@
+import { registerSubject, publishSubjectRoster, subjectState, useSubjects } from "./subject";
 import { completeVerb } from "./verbs";
 import {
   useContext,
@@ -118,6 +119,7 @@ function Refused({ refusals }: { refusals: Readonly<ReturnType<typeof mountRefus
 
 /** One declaration produces one mounted owner. Admission runs before any owner or resource exists. */
 export function mountRoute<P, W>(graph: RouteGraph<P, W>, adapters: RouteAdapters<P, W>) {
+  registerSubject(graph.key, graph);
   const refusals = mountRefusals(graph, adapters);
   // Only stamped graphs (a graph.ts the build compiled) admit as builtins; inline graphs carry none.
   const admission = graph.moduleHash ? builtinAdmission(graph) : null;
@@ -307,9 +309,13 @@ export function routeFromGraph<P, W, const Path extends string>(
       return {
         ...routeSearch(search),
         ...present,
+        ...(graph.subjectField && graph.subjectField.field in search
+          ? { [graph.subjectField.field]: search[graph.subjectField.field] }
+          : {}),
         ...(fixtureName(search) !== null ? { fixture: fixtureName(search)! } : {}),
       };
     },
+    search: { middlewares: [...url.middlewares] },
     component: mountRoute(graph, adapters),
   });
 }
@@ -648,9 +654,22 @@ function MountedPane<P, W>({
   };
   const subject = graph.subjectField?.pane === id ? graph.subjectField : null;
   const subjectField = subject ? graph.fields[subject.field] : null;
+  const search = useRouteSearchSlice((search) => search);
+  useSubjects();
+  const subjectStatus = subjectState(graph.key, search);
+  const roster = subject ? owner.readings.get(subject.roster) : null;
+  useEffect(() => {
+    if (subjectField?.picker && roster?.complete)
+      publishSubjectRoster(graph.key, search, subjectField.picker.options(roster.value));
+  }, [graph.key, subjectField, roster?.version, roster?.complete, search]);
   const head = (
     <>
-      {subject && subjectField && (
+      {subject && subjectStatus.refusal && (
+        <span role="alert" data-tone="alarm">
+          {subjectStatus.refusal}
+        </span>
+      )}
+      {subject && subjectField && !subjectStatus.refusal && (
         <PageControl
           id={subject.field}
           field={subjectField}
@@ -731,13 +750,18 @@ function PaneHead<P, W>({
           data-tone={failed ? "caution" : undefined}
           className="text-ink-2 text-xs"
         >
-          {failed ? "failed" : status === "pending" ? "readingâ€¦" : "stale"}
+          {failed ? "failed" : status === "pending" ? "reading…" : "stale"}
         </span>
       )}
       {failed && draws.some((id) => owner.readings.get(id).errorDetails) && (
         <details className="t-small text-ink-2">
           <summary>Details</summary>
-          <pre>{draws.map((id) => owner.readings.get(id).errorDetails).filter(Boolean).join("\n")}</pre>
+          <pre>
+            {draws
+              .map((id) => owner.readings.get(id).errorDetails)
+              .filter(Boolean)
+              .join("\n")}
+          </pre>
         </details>
       )}
       <Button
@@ -802,8 +826,8 @@ function GraphSituation<P, W>({
   const stage = graph.stages[stageId]!;
   const stageField = graphFields(graph).find(([, field]) => field.role === "stage")?.[0];
   const verbs = rankVerbs(owner.stageVerbs(), owner.verbs).map((id) => (
-      <GraphVerb key={id} id={id} verb={owner.verbs[id]!} owner={owner} enabled={enabled} />
-    ));
+    <GraphVerb key={id} id={id} verb={owner.verbs[id]!} owner={owner} enabled={enabled} />
+  ));
   const content = (
     <SituationBand
       name={graph.name}
@@ -1060,9 +1084,7 @@ function GraphVerb<P, W>({
         label={verb.label}
         pressed={!!review}
         refusal={!enabled ? "This route is inactive" : control.refusal}
-        onClick={() =>
-          void control.run()
-        }
+        onClick={() => void control.run()}
       >
         {review ? `Commit ${verb.label}` : verb.label}
       </Button>

@@ -147,11 +147,18 @@ export function useUrlPage<P>(url: UrlPage<P> | null, owner: ViewOwner<P>) {
       (state as Record<string, unknown>)[marker] as
         | { token: string; generation: number }
         | undefined;
-    const restore = () => {
+    const restore = (remember = false) => {
       generation += 1;
       pending = null;
       const next = location();
-      if (ownsUrl() && next.pathname === pathname) owner.move(url.read(next.search), {}, "url");
+      if (ownsUrl() && next.pathname === pathname)
+        owner.move(
+          url.read(
+            restorePageSearch(remember ? url.write(owner.read().page) : undefined, next.search)!,
+          ),
+          {},
+          "url",
+        );
       previous = owner.read();
     };
     const unhistory = router.history.subscribe(({ location: next, action }) => {
@@ -162,7 +169,7 @@ export function useUrlPage<P>(url: UrlPage<P> | null, owner: ViewOwner<P>) {
         move.generation === generation
       )
         return;
-      restore();
+      restore(action.type === "PUSH" || action.type === "REPLACE");
     });
     const schedule = () => {
       if (queued || writing || !pending || !active) return;
@@ -237,7 +244,11 @@ export function useInitialUrlPage<P>(url: UrlPage<P> | null): Partial<P> {
     url
       ? url.read(
           restorePageSearch(
-            activity?.search,
+            activity?.search ??
+              tabPageSearch(
+                router?.state.location.pathname ??
+                  (typeof location === "undefined" ? "" : location.pathname),
+              ),
             !activity || activity.current() ? router?.state.location.search : undefined,
           ) ??
             (typeof location === "undefined"
@@ -249,6 +260,30 @@ export function useInitialUrlPage<P>(url: UrlPage<P> | null): Partial<P> {
 }
 
 /** Defaults are applied by UrlPage.read after merging tab memory and explicit deep-link keys. */
+export function tabPageSearch(pathname: string): Record<string, unknown> | undefined {
+  try {
+    const tabs = JSON.parse(sessionStorage.getItem("pe.places") ?? "[]") as {
+      id: string;
+      link: string;
+    }[];
+    const focused = sessionStorage.getItem("pe.place.focus");
+    const matches = tabs.filter(
+      (tab) => new URL(tab.link, "http://tab.invalid").pathname === pathname,
+    );
+    const tab = matches.find((tab) => tab.id === focused) ?? matches.at(-1);
+    return tab
+      ? Object.fromEntries(new URL(tab.link, "http://tab.invalid").searchParams)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function restorePageSearch(memory?: Record<string, unknown>, url?: Record<string, unknown>) {
-  return memory || url ? { ...memory, ...url } : undefined;
+  return memory || url
+    ? {
+        ...memory,
+        ...Object.fromEntries(Object.entries(url ?? {}).filter(([, value]) => value !== undefined)),
+      }
+    : undefined;
 }

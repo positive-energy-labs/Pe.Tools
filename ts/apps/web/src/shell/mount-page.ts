@@ -108,6 +108,34 @@ export function graphUrlPage<P, W>(graph: RouteGraph<P, W>, rest: Partial<P> = {
         : (override ??
             (changed.some(([, f]) => graphFieldPolicy(f).url === "push") ? "push" : "replace"));
     },
-    middlewares: [],
+    middlewares: [
+      ({ search, next }) => {
+        const out = { ...next(search) };
+        const page = read(out);
+        for (const [id, field] of fields) {
+          if (!(id in out)) continue;
+          // Invalid subjects remain visible to admission, never normalized into an empty pick.
+          if (field.role === "subject") {
+            let valid = field.schema.safeParse(out[id]).success;
+            if (!valid && typeof out[id] === "string") {
+              try {
+                valid = field.schema.safeParse(field.codec.decode(out[id] as string)).success;
+              } catch {
+                /* Keep the refusal input. */
+              }
+            }
+            if (!valid) continue;
+          }
+          const value = write(page)[id];
+          if (value === undefined) {
+            if (field.role === "subject" && out[id] !== undefined) out[id] = "";
+            else delete out[id];
+          } else
+            out[id] =
+              typeof page[id] === "number" || typeof page[id] === "boolean" ? page[id] : value;
+        }
+        return out;
+      },
+    ],
   };
 }

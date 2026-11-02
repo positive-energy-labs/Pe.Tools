@@ -44,3 +44,29 @@ test("one subject and kernel many codec are admission rules; query arrays retain
     }),
   ).toEqual(expect.arrayContaining([expect.objectContaining({ path: "subjectField" })]));
 });
+
+test("restore is per field; explicit empty clears memory but absent and undefined do not", () => {
+  const url = graphUrlPage(fansGraph);
+  expect(
+    url.read(restorePageSearch({ fan: "saved", stage: "sheet" }, { fan: undefined })!),
+  ).toMatchObject({ fan: ["saved"], stage: "sheet" });
+  expect(url.read(restorePageSearch({ fan: "saved" }, { fan: "" })!)).toMatchObject({ fan: [] });
+  expect(url.read(restorePageSearch({ fan: "saved" }, { fan: [] })!)).toMatchObject({ fan: [] });
+});
+
+test("graph URL elides defaults and round-trips changed subject fields", () => {
+  const url = graphUrlPage(fansGraph);
+  const defaults = url.read({});
+  expect(Object.values(url.write(defaults)).every((value) => value === undefined)).toBe(true);
+  const page = { ...defaults, fan: ["uid,1@2"] };
+  expect(url.read(url.write(page))).toEqual(page);
+});
+
+test("URL projection removes setting defaults but preserves an explicit empty subject over memory", () => {
+  const url = graphUrlPage(fansGraph);
+  const project = (search: Record<string, unknown>) =>
+    url.middlewares[0]!({ search, next: (value: Record<string, unknown>) => value } as never);
+  expect(project({ stage: "sheet", fan: [] })).toEqual({ fan: "" });
+  expect(project({ fan: [1, 2] })).toEqual({ fan: [1, 2] });
+  expect(project({ fan: "~null" })).toEqual({ fan: "~null" });
+});

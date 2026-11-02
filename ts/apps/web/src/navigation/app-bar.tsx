@@ -1,3 +1,5 @@
+import { subjectState, useSubjects } from "../shell/subject";
+import { routeAt } from "@pe/agent-contracts";
 import { SHELL_REGIONS } from "#/route/teaching";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useCanGoBack, useRouter, useRouterState } from "@tanstack/react-router";
@@ -209,7 +211,9 @@ export function AppBar() {
       )
     );
   });
-  const label = locationLabel(location.pathname);
+  useSubjects();
+  const subjectLabel = subjectState(routeAt(location.pathname) ?? "", location.search).label;
+  const label = locationLabel(location.pathname) + (subjectLabel ? ` ? ${subjectLabel}` : "");
   const actions = (
     <>
       <RouteControlsOutlet slot="palette" />
