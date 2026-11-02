@@ -4,7 +4,7 @@
  * Waits and working lead every presentation and never fold (owner, 2026-10-13).
  */
 import type {
-  ActionReceipt,
+  ActionStatus,
   HarnessEvent,
   HarnessThreadSummary,
   NavigationWork,
@@ -49,7 +49,7 @@ export interface LedgerSources {
   threads: readonly HarnessThreadSummary[];
   /** The open ask of each waiting thread, in its own words. */
   asks: ReadonlyMap<string, { verb: string; says: string }>;
-  receipts: readonly ActionReceipt[];
+  receipts: readonly ActionStatus[];
   works: readonly NavigationWork[];
   /** Machine attention lines (update waits, a Revit dialog). */
   attention: readonly string[];
@@ -112,7 +112,7 @@ function threadRow(
 }
 
 /** Who admitted the action, in words: a principal, never a password. */
-const callerWord = (caller: ActionReceipt["caller"]) =>
+const callerWord = (caller: ActionStatus["caller"]) =>
   caller.kind === "pea"
     ? "Pea"
     : caller.kind === "page"
@@ -121,14 +121,14 @@ const callerWord = (caller: ActionReceipt["caller"]) =>
         ? caller.label
         : caller.kind;
 
-const RECEIPT_GROUP: Partial<Record<ActionReceipt["state"], LedgerGroup>> = {
+const RECEIPT_GROUP: Partial<Record<ActionStatus["state"], LedgerGroup>> = {
   unknown: "waits",
   incomplete: "waits",
   running: "working",
   failed: "failed",
 };
 
-function receiptRow(receipt: ActionReceipt): LedgerRow | null {
+function receiptRow(receipt: ActionStatus): LedgerRow | null {
   const group = RECEIPT_GROUP[receipt.state];
   if (!group) return null;
   const failure =

@@ -173,6 +173,7 @@ export type PeApiSchemas = Record<
   | "diagnosticBodySchema"
   | "actionAdmissionSchema"
   | "actionReceiptSchema"
+  | "actionStatusSchema"
   | "actionControlInputSchema"
   | "familiesObservationSchema"
   | "familiesObservationSummarySchema"
@@ -351,7 +352,12 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "GET",
       "/actions",
       none,
-      z.array(schemas.actionReceiptSchema as S["actionReceiptSchema"]),
+      z.array(
+        z.union([
+          schemas.actionReceiptSchema as S["actionReceiptSchema"],
+          schemas.actionStatusSchema as S["actionStatusSchema"],
+        ]),
+      ),
       "read",
       "gateway",
       "read",
