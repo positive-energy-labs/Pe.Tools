@@ -123,7 +123,7 @@ test("preview exposes a derived request without running the write; changed deriv
   f.ctx.admission.input.previewOnly = false;
   const apply = await f.executor.bind(f.ctx);
   await expect(apply.prepare!()).resolves.toMatchObject({
-    seal: (preview as { seal: string }).seal,
+    seal: (preview as { seal: unknown }).seal,
   });
   f.change();
   await expect(apply.prepare!()).rejects.toThrow("Preview changed");
@@ -137,5 +137,26 @@ test("missing preview and foreign Work refuse before native execution", async ()
   await expect(binding.prepare!()).rejects.toThrow("Preview the current Work");
   (f.ctx.admission.input.work as { key: { open: { openId: string } } }).key.open.openId = "foreign";
   await expect(f.executor.bind(f.ctx)).rejects.toThrow("another document");
+  expect(f.run).not.toHaveBeenCalled();
+});
+
+test("a new Work revision invalidates the seal even when the request is identical", async () => {
+  const f = await fixture();
+  const bound = await f.executor.bind(f.ctx);
+  const preview = await f.executor.run(f.ctx, {
+    prepared: await bound.prepare!(),
+  } as ActionExecution);
+  f.receipts.push({
+    id: "preview",
+    key: "schedule.apply",
+    target: f.ctx.admission.target,
+    state: "succeeded",
+    result: preview,
+    startedAt: new Date().toISOString(),
+  } as ActionReceipt);
+  f.ctx.admission.input.previewOnly = false;
+  (f.ctx.admission.input.work as { revision: number }).revision++;
+  const apply = await f.executor.bind(f.ctx);
+  await expect(apply.prepare!()).rejects.toThrow("Preview changed");
   expect(f.run).not.toHaveBeenCalled();
 });

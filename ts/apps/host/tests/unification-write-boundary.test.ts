@@ -191,7 +191,10 @@ const response = {
   systemsAfter: [],
   storeRevision: 1,
 };
-const edit = (cfm: number) => [{ path: ["flows", "31", "edit"], value: { value: { cfm } } }];
+const edit = (cfm: number) => [
+  { path: ["flows", "31", "edit"], value: { value: { cfm } } },
+  { path: ["writeIntent", "edit"], value: { value: { groups: ["g1"] } } },
+];
 const rawDispatchOrReceipt = (owner: ActionJournal, outgoing: Harness["outgoing"], id: string) =>
   Effect.race(
     Queue.take(outgoing).pipe(Effect.map((frame) => ({ kind: "dispatch" as const, frame }))),
@@ -200,16 +203,24 @@ const rawDispatchOrReceipt = (owner: ActionJournal, outgoing: Harness["outgoing"
     ),
   );
 
-const dispatchOrReceipt = (owner: ActionJournal, outgoing: Harness["outgoing"], id: string, answer: Harness["answer"]): Effect.Effect<any> => Effect.gen(function* () {
-  while (true) {
-    const next = yield* rawDispatchOrReceipt(owner, outgoing, id);
-    if (next.kind === "receipt") return next;
-    const request = next.frame.request!;
-    if (request.operationKey === "ducts.snapshot") yield* answer(request.requestId, snapshot);
-    else if (request.operationKey === "ducts.tables") yield* answer(request.requestId, { tables: {}, missing: [], unsupported: [] });
-    else return next;
-  }
-});
+const dispatchOrReceipt = (
+  owner: ActionJournal,
+  outgoing: Harness["outgoing"],
+  id: string,
+  answer: Harness["answer"],
+): Effect.Effect<any> =>
+  Effect.gen(function* () {
+    while (true) {
+      const next = yield* rawDispatchOrReceipt(owner, outgoing, id);
+      if (next.kind === "receipt") return next;
+      const request = next.frame.request!;
+      if (request.operationKey.startsWith("ducts.snapshot."))
+        yield* answer(request.requestId, snapshot);
+      else if (request.operationKey === "ducts.tables")
+        yield* answer(request.requestId, { tables: {}, missing: [], unsupported: [] });
+      else return next;
+    }
+  });
 
 for (const foreign of [false, true])
   test(`kernel gap: ${foreign ? "Work A cannot write document B" : "native payload must derive from Work, not caller"}`, () =>
@@ -221,12 +232,19 @@ for (const foreign of [false, true])
         const staged = yield* Effect.promise(() => work.apply(key, "ducts", "human", edit(200), 0));
         expect(staged.ok).toBe(true);
         const submitted = yield* post(
-          intent("mismatch", "ducts.apply-losses", undefined, foreign ? {
-            work: { key, expectedRevision: staged.revision },
-          } : {
-            ...input,
-            work: { key, expectedRevision: staged.revision },
-          }),
+          intent(
+            "mismatch",
+            "ducts.apply-losses",
+            undefined,
+            foreign
+              ? {
+                  work: { key, expectedRevision: staged.revision },
+                }
+              : {
+                  ...input,
+                  work: { key, expectedRevision: staged.revision },
+                },
+          ),
         );
         if (!foreign) {
           expect(submitted.status).toBeGreaterThanOrEqual(400);
@@ -235,7 +253,11 @@ for (const foreign of [false, true])
         }
         const next = yield* dispatchOrReceipt(owner, outgoing, "mismatch", answer);
         if (next.kind === "receipt") {
-          expect(next.receipt).toMatchObject({ state: "failed", notDispatched: true, refusal: { kind: "domain" } });
+          expect(next.receipt).toMatchObject({
+            state: "failed",
+            notDispatched: true,
+            refusal: { kind: "domain" },
+          });
           return;
         }
         const frame = next.frame;
@@ -324,7 +346,11 @@ test("kernel gap: preview seal refuses apply after Work changes", () =>
       );
       const next = yield* dispatchOrReceipt(owner, outgoing, "apply", answer);
       if (next.kind === "receipt") {
-        expect(next.receipt).toMatchObject({ state: "failed", notDispatched: true, refusal: { kind: "domain" } });
+        expect(next.receipt).toMatchObject({
+          state: "failed",
+          notDispatched: true,
+          refusal: { kind: "domain" },
+        });
         return;
       }
       yield* answer(next.frame.request!.requestId, response);
@@ -340,7 +366,9 @@ test("kernel gap: preview seal refuses apply after Work changes", () =>
 test("unknown outcome blocks a new invocation from dispatching the same write", () =>
   lane(({ owner, outgoing, post, answer, intent, work, workKey }) =>
     Effect.gen(function* () {
-      const staged = yield* Effect.promise(() => work.apply(workKey, "ducts", "human", edit(200), 0));
+      const staged = yield* Effect.promise(() =>
+        work.apply(workKey, "ducts", "human", edit(200), 0),
+      );
       const payload = { work: { key: workKey, expectedRevision: staged.revision } };
       yield* post(intent("pre-unknown", "ducts.preview-losses", undefined, payload));
       const preview = yield* dispatchOrReceipt(owner, outgoing, "pre-unknown", answer);
@@ -360,20 +388,40 @@ test("unknown outcome blocks a new invocation from dispatching the same write", 
   ));
 
 test("host-derived preview and apply send the captured Work flow and retire only confirmed cells", () =>
-  lane(({ owner, outgoing, post, answer, intent, work, workKey }) => Effect.gen(function* () {
-    const staged = yield* Effect.promise(() => work.apply(workKey, "ducts", "human", [{ path: ["flows", "4", "edit"], value: { value: { cfm: 200 } } }], 0));
-    const payload = { work: { key: workKey, expectedRevision: staged.revision } };
-    for (const [id, key, previewOnly] of [["preview-derived", "ducts.preview-losses", true], ["apply-derived", "ducts.apply-losses", false]] as const) {
-      yield* post(intent(id, key, undefined, payload));
-      const next = yield* dispatchOrReceipt(owner, outgoing, id, answer);
-      expect(next.kind, JSON.stringify(next)).toBe("dispatch");
-      const native = JSON.parse(next.frame.request!.payloadJson);
-      expect(native.terminalFlows.find((row: {id:number}) => row.id === 4)?.cfm).toBe(200);
-      yield* answer(next.frame.request!.requestId, { ...response, previewOnly, writes: [{ ...response.writes[0], id: 4, after: "200" }] });
-      const receipt = yield* Effect.promise(() => owner.wait(id));
-      expect(receipt.state, JSON.stringify(receipt)).toBe("succeeded");
-      expect((receipt as any).result.seal.requestHash).toMatch(/^[a-f0-9]{64}$/);
-    }
-    const view = yield* Effect.promise(() => work.view(workKey, "ducts"));
-    expect((view!.doc as any).flows["4"].edit).toBeNull();
-  })));
+  lane(({ owner, outgoing, post, answer, intent, work, workKey }) =>
+    Effect.gen(function* () {
+      const staged = yield* Effect.promise(() =>
+        work.apply(
+          workKey,
+          "ducts",
+          "human",
+          [
+            { path: ["flows", "4", "edit"], value: { value: { cfm: 200 } } },
+            { path: ["writeIntent", "edit"], value: { value: { groups: ["g1"] } } },
+          ],
+          0,
+        ),
+      );
+      const payload = { work: { key: workKey, expectedRevision: staged.revision } };
+      for (const [id, key, previewOnly] of [
+        ["preview-derived", "ducts.preview-losses", true],
+        ["apply-derived", "ducts.apply-losses", false],
+      ] as const) {
+        yield* post(intent(id, key, undefined, payload));
+        const next = yield* dispatchOrReceipt(owner, outgoing, id, answer);
+        expect(next.kind, JSON.stringify(next)).toBe("dispatch");
+        const native = JSON.parse(next.frame.request!.payloadJson);
+        expect(native.terminalFlows.find((row: { id: number }) => row.id === 4)?.cfm).toBe(200);
+        yield* answer(next.frame.request!.requestId, {
+          ...response,
+          previewOnly,
+          writes: [{ ...response.writes[0], id: 4, after: "200" }],
+        });
+        const receipt = yield* Effect.promise(() => owner.wait(id));
+        expect(receipt.state, JSON.stringify(receipt)).toBe("succeeded");
+        expect((receipt as any).result.seal.requestHash).toMatch(/^[a-f0-9]{64}$/);
+      }
+      const view = yield* Effect.promise(() => work.view(workKey, "ducts"));
+      expect((view!.doc as any).flows["4"].edit).toBeNull();
+    }),
+  ));
