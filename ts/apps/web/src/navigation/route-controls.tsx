@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
@@ -250,7 +251,7 @@ export function PrimaryRouteControls({
   const present = children != null && children !== false;
   const claim = slot?.claim;
   const release = slot?.release;
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!primary || !present || !claim || !release) return;
     claim(name, token);
     return () => release(name, token);
