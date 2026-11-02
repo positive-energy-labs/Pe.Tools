@@ -75,7 +75,7 @@ async function fixture() {
     bodies: Object.fromEntries(
       Object.entries(declaration.entries).map(([key, definition]) => [
         key,
-        operation({ ...podOperation(declaration, key), definition }),
+        operation({ ...podOperation(declaration, key), definition: definition as contracts.Command }),
       ]),
     ),
   } as contracts.ExecutableRouteModule<CommandExecutor>;

@@ -46,9 +46,13 @@ test("live MUAS preview/apply seals ignore traversal diagnostics but retain mode
   expect(apply.seal.dependencies).not.toBe(preview.seal.dependencies); // The live red loop.
   const executor = resolve("ducts.apply-losses");
   const seal = (capture: typeof preview) => {
+    // The 2026-11-02 capture predates the preview entry: its native input carried the retired
+    // previewOnly flag, which the old projection stripped. The mode is now the op key, never input.
+    const { previewOnly: _flag, ...input } = capture.value.input as Record<string, unknown>;
     // Exercise the real producer projection, which runs during acquisition before executor.seal.
     const value = {
       ...capture.value,
+      input,
       dependencies: {
         ...capture.value.dependencies,
         snapshot: ductWriteEvidence(capture.value.dependencies.snapshot as unknown as DuctSnapshot),
