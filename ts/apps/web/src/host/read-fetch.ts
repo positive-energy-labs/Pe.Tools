@@ -10,7 +10,10 @@ export function createReadFetch(fetcher: typeof fetch) {
     }
   >();
   return async (url: string, init: RequestInit): Promise<Response> => {
-    if ((init.method ?? "GET").toUpperCase() !== "GET") return fetcher(url, init);
+    // Only bodyless GETs join: their full payload is the URL and headers. Native operation
+    // POSTs keep their complete body (representation, reach, etc.) and never join here.
+    if ((init.method ?? "GET").toUpperCase() !== "GET" || init.body != null)
+      return fetcher(url, init);
     const signal = init.signal;
     signal?.throwIfAborted();
     const key = JSON.stringify([
