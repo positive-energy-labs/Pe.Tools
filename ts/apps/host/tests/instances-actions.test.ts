@@ -21,7 +21,7 @@ import {
   machineSessionAcquisition,
   unavailableShare,
 } from "../src/machine.ts";
-import { machineOwner } from "./effect-test.ts";
+import { captureStore, machineOwner } from "./effect-test.ts";
 import { bindControl, mintContext } from "../src/control.ts";
 import type { ThreadHead } from "@pe/agent-contracts";
 import { docListArgv, type SessionObservation } from "@pe/host-contracts/pe-revit-contract";
@@ -1248,7 +1248,7 @@ test("R4d: after recovery over HTTP, cleanup closes and stops the Revit that sur
   const { f, world, row, input } = await crashWorld();
   world.crash = "open";
   const server = await serveRoutes(
-    makeCallRoute(f.owner, undefined, f.deps),
+    makeCallRoute(f.owner, captureStore(join(f.dir, "captures")), f.deps),
     {} as RevitBridge["Service"],
   );
   cleanup.push(() => server.close());
@@ -1455,7 +1455,7 @@ test("/actions/cancel stops a running Instances step through the SDK op cancel, 
     return { result: { state: "cancelled" } };
   });
   const server = await serveRoutes(
-    makeCallRoute(f.owner, undefined, f.deps),
+    makeCallRoute(f.owner, captureStore(join(f.dir, "captures")), f.deps),
     {} as RevitBridge["Service"],
   );
   cleanup.push(async () => {
@@ -1510,7 +1510,7 @@ test.each([
   async (key, verb) => {
     const f = await setup(() => ({ result: { id: "dev", state: "ok", phase: "stopped" } }));
     const server = await serveRoutes(
-      makeCallRoute(f.owner, undefined, { sdk: f.deps.sdk }),
+      makeCallRoute(f.owner, captureStore(join(f.dir, "captures")), { sdk: f.deps.sdk }),
       {} as RevitBridge["Service"],
     );
     cleanup.push(() => server.close());

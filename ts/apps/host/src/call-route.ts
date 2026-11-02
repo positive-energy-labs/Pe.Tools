@@ -27,7 +27,7 @@ import { readFamily, type FamilyActionDependencies } from "./family-actions.ts";
 import { actionAdmissionSchema, workKeySchema } from "@pe/agent-contracts";
 import { z } from "zod";
 import { fileVersion } from "./takeoff-actions.ts";
-import { Effect, Exit, Layer, Option, Schema } from "effect";
+import { Context, Effect, Exit, Layer, Option, Schema } from "effect";
 import {
   addressSchema,
   sameAddress,
@@ -181,9 +181,9 @@ export function makeCallRoute(
   const dispatch: CallRouteDispatch = (...args) =>
     (composition?.dispatch ?? dispatchTsOnlyOperation)(...args);
   // The injected store, else the `CaptureStore` of the layer that builds these routes (set below,
-  // before any handler can run); a composition with neither fails loudly at first use.
+  // before any handler can run).
   const observations = (): TakeoffCaptures => {
-    if (!captures) throw Error("Takeoff captures are unavailable: provide CaptureStore.");
+    if (!captures) throw Error("Takeoff captures are read before the call route layer is built.");
     return captures;
   };
   const owner = () => operations;
@@ -980,7 +980,11 @@ export function makeCallRoute(
     Layer.effectDiscard(
       RevitBridge.use((bridge) =>
         Effect.gen(function* () {
-          captures ??= Option.getOrUndefined(yield* Effect.serviceOption(TakeoffCaptureStore));
+          // The host provides one store for the whole app; a composition with none owns its own,
+          // closed with this layer's scope.
+          captures ??=
+            Option.getOrUndefined(yield* Effect.serviceOption(TakeoffCaptureStore)) ??
+            Context.get(yield* Layer.build(TakeoffCaptureStore.layer()), TakeoffCaptureStore);
           operations.bindCommands({
             ...commandResources(
               bridge,
