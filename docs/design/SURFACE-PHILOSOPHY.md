@@ -198,13 +198,12 @@ The long rationale is in git history.
 
 - `.agents/skills/lens.house/SKILL.md` laws 2, 8, and 9 hold honest numbers, stand-ins, and explicit empty states.
 - `VerbProps.reason`, `EmptyStateProps`, `FactChip`, `ArmingStrip`, and their specimens hold refusal, seam, provenance, and blast-radius ceremony.
-- Candidate `lens.house` law: an agent may edit a portable document, but a human invokes every crossing into the live model.
 - Candidate `lens.house` law: a rejected cell commit restores the prior value and states the reason beside the cell without moving the row.
 
 ### 4 · Layout and addressing
 
 - Doctrine P2 (the route head draws every verb that leaves the route) and N4 (a link lands on its row; selection opens every row that names it and offers "show in Revit") are candidate `lens.house` laws. A collapsed diagnostics group carries a key of kind chips with counts that filters rows and picture annotations together.
-- `Situation` (the one route head), `Ladder` (the target picker), `TableFrame` with `MasterTable`, and their specimens hold sentence addressing, visible narrowing, drill-in, fixed controls, and local fact placement.
+- `Situation` (the route head: document plus verbs, ADR 0027), the roster pane (the subject picker), `Ladder` (the document picker), `TableFrame` with `MasterTable`, and their specimens hold addressing, visible narrowing, drill-in, fixed controls, and local fact placement.
 - `.agents/skills/lens.house/SKILL.md` laws 1, 4, 7, and 9 hold one meaning, table modes, meaningful frames, and designed empty states.
 - Spatial renderers and their measured/fixture types distinguish surveyed drawings from estimates.
 
@@ -218,10 +217,9 @@ The long rationale is in git history.
 - `.agents/skills/lens.house/SKILL.md` law 10 holds kit-first authoring.
 - Component prop types, `design-guard.test.ts`, recipe-grid tests, and swatch specimens hold primitive capability, keyboard behavior, and variant coverage.
 - Kit `ActionDefinition` and `actionScopeKeys` connect control activation, scoped bindings, and Tutorial. `KeyHint`, `PopupFrame`, and `SearchControl` own shortcut, picker, and search presentation; [normalization](../features/design-system/NORMALIZATION.md) indexes these contracts.
-- `state/route-store.ts` and product manifests hold the route-visible model.
 - `scene/gestures.ts` holds the one pointer scheme (N2); `scene/damage.ts` holds the damage pulse (I2); kit `useList` and `ListView` hold the one list (N3).
 
 ### 7 · Route anatomy
 
-- Product manifests and route-store types hold the world, actions, feeds, panes, fixture lanes, and URL-owned scope.
-- Candidate `lens.house` law: a route owns its world and host calls; descendants render typed state and return typed actions.
+- One typed graph per route (`RouteGraph` in each route's `graph.ts`, ADR 0026) declares the subject (ADR 0027), stages, verbs, readings, layout, keys and URL-owned fields; the kernel in `apps/web/src/shell/` executes it. [The routes ledger](../features/routes/LEDGER.md) holds the kernel's decisions.
+- A route never calls the host; `host-door.guard.test.ts` ratchets every route onto the one host door (ADR 0026). Descendants render typed state and return typed verbs.

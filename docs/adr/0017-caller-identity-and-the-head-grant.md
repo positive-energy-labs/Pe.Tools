@@ -1,6 +1,6 @@
 # 0017: Caller identity and the head grant
 
-Date: 2026-10-12. Status: accepted; completed policy rulings 2026-10-13.
+Date: 2026-10-12. Status: accepted; completed policy rulings 2026-10-13. Rules 5 and 10 superseded by [ADR 0021](0021-one-access-switch-and-document-targets.md); the head grant superseded by [ADR 0024](0024-root-run-consent-and-shared-work.md) and [ADR 0027](0027-one-route-one-subject-one-consent.md). Caller identity and admission (rules 1 to 4, 6 to 9) still stand.
 Source: kaitpw, ADR 0016 review and the 2026-10-13 reorient campaign. The [agent ledger](../features/agent/LEDGER.md) records the rulings.
 
 ## Context

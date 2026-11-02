@@ -81,7 +81,8 @@ Two first-principles critics (`.artifacts/tmp/unification-2/big-picture-1/`) fou
 ## Cutover (ADR 0027 rule 15; reviewers' order)
 
 1. Ratchets per law before code: host calls outside the kernel, React-held selection, unscoped geometry ops, `z.custom` count, `pick:false`, `required`, reads that write, declaration LOC.
-2. Fixture-lane screenshots of every route as the visual baseline; diff each round.
+2. Fixture-lane screenshots of every route as a change detector; diff each round. The baseline is NOT the target (kaitpw: the current head "sucks bad"); a diff means "this changed", never "this is wrong".
+2b. Target look: a `protoui` + `house` pass on the new primitives (roster pane-head picker, pane-head status and refresh, Timeline head with consent windows, the shrunk Situation, tab titles, the PWA stage switch), owned by the design-system ledger's kit owner. Each route adopts the result as it migrates.
 3. Write boundary, acceptance and the Timeline: invocation identity through ActionJournal, typed outcomes, reconcile-before-retry, receipt-confirmed retirement, `Internal` leaves refused at the bridge, host consent default and Pea instructions, Pea edits as undo steps (adversarial deterministic tests from `.artifacts/runs/review-20261030-ducts/`).
 4. Catalog export (axes in `Op.cs`, typegen), then the DAG linker, then Pea projection.
 5. Subject (stable keys), selection, directory; Pod registration so Pod routes mount like builtins; route splits; one reading engine with retention and content-hashed values; the value resolver.

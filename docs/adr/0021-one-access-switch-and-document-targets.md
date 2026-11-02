@@ -1,6 +1,6 @@
 # 0021: One access switch; reads are free; a thread targets a set of documents
 
-Date: 2026-10-22. Status: accepted. Supersedes the grant clock and visibility rule of [ADR 0016](0016-proposals-review-the-grant-gates.md) and rules 5 and 10 of [ADR 0017](0017-caller-identity-and-the-head-grant.md). Source: kaitpw, thread "grant" (composer protoui round 1, then muse), 2026-10-22.
+Date: 2026-10-22. Status: superseded. [ADR 0024](0024-root-run-consent-and-shared-work.md) made thread targets context only; [ADR 0027](0027-one-route-one-subject-one-consent.md) deleted the access switch. Rule 1 (reads never ask) still stands; the K9 sibling refusal stays until its rollback proof exists. Supersedes the grant clock and visibility rule of [ADR 0016](0016-proposals-review-the-grant-gates.md) and rules 5 and 10 of [ADR 0017](0017-caller-identity-and-the-head-grant.md). Source: kaitpw, thread "grant" (composer protoui round 1, then muse), 2026-10-22.
 
 ## Context
 

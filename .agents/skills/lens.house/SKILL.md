@@ -26,7 +26,7 @@ The ten that code cannot hold. Anything holdable by a type, a check, or a specim
 1. Every mark means one thing. A mark drawn two ways is two marks; a slot that carries two meanings is a lie the reader cannot detect.
 2. The needle never lies to look calm. A confident wrong number is worse than an awkward honest one; the reader will act on it and pay later, elsewhere.
 3. Dense, because the reader scans. A newcomer answers what am I looking at, what state is it in, what would each verb do, and why is that one refused, in seconds, without a tooltip. Tooltips deepen; they never rescue.
-4. The table is the page. Detail, reconciliation, and space are modes of it, entered from a header and left with Esc, never a route away. A route change is a change of scope.
+4. One route asks one question about one kind of subject. A different subject noun is a different route, linked by a deep link that carries the subject; a stage is a mode of the same subject, and a person can always pick it. The table is the page: detail, reconciliation, and space are modes of it, entered from a header and left with Esc.
 5. Colour is a claim about meaning. Spend it only where the meaning changes; selection, focus, and hover are fills, never hues; exactly one hue means the world disagrees.
 6. Type carries meaning on colour's terms. Mono is what a machine measured; bold is what you have not saved; there is a fixed ladder of sizes and no rung is added for a call site.
 7. Nothing is enclosed that carries no state. A frame says a machine operates this; plain content sits on the ground.
