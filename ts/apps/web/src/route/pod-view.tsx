@@ -3,6 +3,8 @@ import * as kit from "@pe/kit";
 import { z } from "zod";
 import {
   pane,
+  workWriteCommand,
+  writeIntentSchema,
   validateRouteModule,
   podRouteStateSchema,
   split,
@@ -15,7 +17,7 @@ import {
 } from "@pe/agent-contracts";
 import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { mountRoute, type GraphMount, type MountBody, type RouteAdapters } from "#/shell/mount";
-import { operationVerb, queryVerb, rpcVerb, workVerb, type InvocationResult } from "#/shell/verbs";
+import { operationVerb, queryVerb, rpcVerb, workVerb, type VerbCompletion } from "#/shell/verbs";
 import { podOperation, podRead, podRequest, podScript, podExport, podSources } from "./pod-sources";
 import { podRoutePath } from "./pod-address";
 import { actionResult } from "../../../../packages/mcps/src/shared/takeoff-action-client";
@@ -36,7 +38,22 @@ export interface PodApi {
 }
 export interface PodRouteBundle {
   version: 2;
-  register(base: { graph: RouteGraph<Page, Work>; adapters: RouteAdapters<Page, Work>; field: typeof field; z: typeof z; pane: typeof pane; split: typeof split }): { graph: RouteGraph<Page, Work>; adapters: RouteAdapters<Page, Work> };
+  catalog?(api: {
+    z: typeof z;
+    workWriteCommand: typeof workWriteCommand;
+    writeIntentSchema: typeof writeIntentSchema;
+  }): {
+    work: { schema: z.ZodType };
+    entries: Record<string, import("@pe/agent-contracts").Command>;
+  };
+  register(base: {
+    graph: RouteGraph<Page, Work>;
+    adapters: RouteAdapters<Page, Work>;
+    field: typeof field;
+    z: typeof z;
+    pane: typeof pane;
+    split: typeof split;
+  }): { graph: RouteGraph<Page, Work>; adapters: RouteAdapters<Page, Work> };
   initial: State;
   reducer(state: State, event: Event): State;
   create(api: PodApi): React.ComponentType;
@@ -55,7 +72,7 @@ async function invocation(
   let outcome = await owner.control(id, input).run();
   if (outcome.state === "review") {
     const press = outcome.press;
-    outcome = await new Promise<InvocationResult>((resolve, reject) => {
+    outcome = await new Promise<VerbCompletion>((resolve, reject) => {
       const abort = () => {
         release();
         reject(Error("This Pod editor is no longer mounted."));
@@ -126,7 +143,8 @@ function readAcknowledged(owner: GraphMount<Page, Work>, ack: WorkWriteAck, sign
 export function makePodRoute(row: PodRouteDescriptor, bundle: PodRouteBundle) {
   if (!row.trusted) throw Error("Trust this Pod route hash before loading.");
   if (
-    bundle.version !== 2 || typeof bundle.register !== "function" ||
+    bundle.version !== 2 ||
+    typeof bundle.register !== "function" ||
     typeof bundle.create !== "function" ||
     typeof bundle.reducer !== "function" ||
     !bundle.initial ||
@@ -134,21 +152,36 @@ export function makePodRoute(row: PodRouteDescriptor, bundle: PodRouteBundle) {
     Array.isArray(bundle.initial)
   )
     throw Error("This Pod route does not implement route bundle version 2.");
+  const catalog = bundle.catalog?.({ z, workWriteCommand, writeIntentSchema });
+  const operation = (key: string) =>
+    catalog?.entries[key]
+      ? { key, intent: catalog.entries[key]!.effect === "query" ? "read" : "mutate" }
+      : podOperation(key);
   const graph: RouteGraph<Page, Work> = {
     directory: {
-      path: podRoutePath(row.key), title: row.name, label: row.name, icon: "Boxes",
-      category: "Ask / automate", blurb: row.description, aliases: [], exposure: "Main",
-      listed: true, runtimeNeed: "Host; Revit for model operations", satellites: [],
-      surfaces: {web: "full", pwa: "full", tray: false},
+      path: podRoutePath(row.key),
+      title: row.name,
+      label: row.name,
+      icon: "Boxes",
+      category: "Ask / automate",
+      blurb: row.description,
+      aliases: [],
+      exposure: "Main",
+      listed: true,
+      runtimeNeed: "Host; Revit for model operations",
+      satellites: [],
+      surfaces: { web: "full", pwa: "full", tray: false },
     },
     key: row.workRoute,
     address: podRoutePath(row.key).slice(1),
     name: row.name,
     // Calculator inputs are host-owned; choosing a document scopes operations, never replaces inputs.
     optionalTarget: "document",
-    work: podRouteStateSchema.extend({
-      state: podRouteStateSchema.shape.state.default(() => structuredClone(bundle.initial)),
-    }),
+    work:
+      (catalog?.work.schema as z.ZodType<Work>) ??
+      podRouteStateSchema.extend({
+        state: podRouteStateSchema.shape.state.default(() => structuredClone(bundle.initial)),
+      }),
     fields: {
       request: {
         ...field(
@@ -195,7 +228,7 @@ export function makePodRoute(row: PodRouteDescriptor, bundle: PodRouteBundle) {
               : scope.snapshot.target.kind !== "document"
                 ? "Choose an exact document"
                 : null,
-          raw: (_, input) => ({ key: podOperation(input.key).key, input: input.input }),
+          raw: (_, input) => ({ key: operation(input.key).key, input: input.input }),
           intent: (_, input) => input,
         },
       ),
@@ -325,7 +358,7 @@ export function makePodRoute(row: PodRouteDescriptor, bundle: PodRouteBundle) {
             key = captured.key;
             input = captured.input;
           }
-          if (podOperation(key).intent.toLowerCase() === "read")
+          if (!catalog?.entries[key] && operation(key).intent.toLowerCase() === "read")
             return result(owner, "read", { key, input });
           owner.view.setPage({ request: { key, input } });
           return result(owner, "execute", undefined, lifetime.current.signal);
@@ -354,9 +387,19 @@ export function makePodRoute(row: PodRouteDescriptor, bundle: PodRouteBundle) {
     bodies: { instrument: (body) => <Instrument {...body} /> },
   };
   const authored = bundle.register({ graph, adapters, field, z, pane, split });
-  if (authored.graph.key !== row.workRoute || authored.graph.directory?.path !== podRoutePath(row.key))
+  if (
+    authored.graph.key !== row.workRoute ||
+    authored.graph.directory?.path !== podRoutePath(row.key)
+  )
     throw Error("Pod route identity must match its registered member");
-  const registration = { version: 1 as const, namespace: row.packageId, key: `${row.packageId}:${row.workRoute}`, moduleHash: row.sha256, graph: authored.graph, bodies: authored.adapters };
+  const registration = {
+    version: 1 as const,
+    namespace: row.packageId,
+    key: `${row.packageId}:${row.workRoute}`,
+    moduleHash: row.sha256,
+    graph: authored.graph,
+    bodies: authored.adapters,
+  };
   validateRouteModule(registration);
   const View = mountRoute(authored.graph, authored.adapters);
   return {

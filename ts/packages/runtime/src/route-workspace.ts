@@ -496,6 +496,24 @@ export class RouteWorkspace {
   ): Promise<RouteEnvelope<unknown> | null> {
     const raw = await this.#carryOver(scope, spec.route);
     if (raw == null) return create ? emptyEnvelope(spec) : null;
+    let age = (raw as { schemaVersion?: number }).schemaVersion ?? 1;
+    const current = spec.schemaVersion ?? 1;
+    if (age < current && spec.migrations) {
+      const saved = envelopeSchema.parse(raw);
+      let doc = structuredClone(saved.doc);
+      while (age < current) {
+        const migrate = spec.migrations[age];
+        if (!migrate) throw Error(OLDER_WORK);
+        doc = migrate(doc);
+        age++;
+      }
+      const migrated = parseEnvelope(
+        { ...saved, doc, schemaVersion: age, revision: saved.revision + 1 },
+        spec,
+      );
+      await this.#persist(scope, spec.route, migrated);
+      return migrated;
+    }
     return parseEnvelope(raw, spec);
   }
 

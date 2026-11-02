@@ -8,6 +8,7 @@ import {
   nativePrincipals,
   DUCTS_FINDS,
   commands,
+  admittedRouteEntries,
   settingsRouteState,
   scheduleGridRouteState,
   routeAddress,
@@ -61,7 +62,10 @@ export function buildCapabilities(sources: CapabilitySources): Capability[] {
   // Runtime registrations overlay compiled vocabulary; they do not author it.
   for (const op of sources.ops) {
     const compiled = generated.get(op.key);
-    generated.set(op.key, compiled ? { ...compiled, needs: op.needs, actor: op.actor ?? compiled.actor } : op);
+    generated.set(
+      op.key,
+      compiled ? { ...compiled, needs: op.needs, actor: op.actor ?? compiled.actor } : op,
+    );
   }
   const hidden = new Set(
     Object.values(commands).flatMap(
@@ -106,6 +110,25 @@ export function buildCapabilities(sources: CapabilitySources): Capability[] {
 /** The runtime provider for packages, skills, Pages, route Work docs and leased views. */
 export function dynamicCapabilityProvider(sources: CapabilitySources): Capability[] {
   return [
+    ...[...admittedRouteEntries.values()]
+      .filter((row) => row.available())
+      .flatMap(({ entries }) =>
+        Object.entries(entries).map(
+          ([key, entry]): Capability => ({
+            key: `op:${key}`,
+            kind: "op",
+            title: entry.says,
+            description: entry.says,
+            needs: entry.needs,
+            effect: entry.effect,
+            mutates: entry.effect === "command",
+            principal: capabilityPrincipals(entry.effect === "command", entry.principal),
+            input: z.toJSONSchema(entry.input) as Record<string, unknown>,
+            source: "catalog",
+            rank: 2,
+          }),
+        ),
+      ),
     ...sources.routes.flatMap(routeRows),
     {
       key: "route:ducts.guide",

@@ -16,6 +16,8 @@ export interface RouteStateSpec<TSchema extends z.ZodType> {
   schema: TSchema;
   /** Monotonic authored-Work schema age, independent of the transport envelope version. */
   schemaVersion?: number;
+  /** Each key upgrades exactly that saved schema age to the next. */
+  migrations?: Readonly<Record<number, (doc: unknown) => unknown>>;
   editable?: readonly import("./command.ts").WorkPath[];
   /** Domain-derived bookkeeping after an authored edit, before validation. */
   reconcileEdit?: (next: unknown, patches: readonly RouteStatePatch[]) => unknown;

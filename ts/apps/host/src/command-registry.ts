@@ -1,3 +1,4 @@
+import { podCommand } from "./pod-routes.ts";
 import { workWriteBoundary } from "./work-write-boundary.ts";
 import { catalogCommandContext } from "./catalog-command-context.ts";
 import type { CommandExecutor, CommandRegistry } from "./command-executor.ts";
@@ -83,6 +84,16 @@ export function commandRegistry(
     );
   for (const key of Object.keys(commands))
     if (!implementations[key]) throw Error(`Semantic command '${key}' has no executor`);
-  return (key) =>
-    (implementations[key] ??= complete(gatewayExecutor(key, bridge, local, deps.sdk)));
+  return (key) => {
+    const pod = podCommand(key);
+    if (pod)
+      return complete(
+        "writeBoundary" in pod.executor.definition
+          ? workWriteBoundary(pod.executor, bridge, deps, undefined, pod.work)
+          : pod.executor,
+        key,
+      );
+    if (key.startsWith("pod.")) throw Error(`Pod command unavailable: ${key}`);
+    return (implementations[key] ??= complete(gatewayExecutor(key, bridge, local, deps.sdk)));
+  };
 }

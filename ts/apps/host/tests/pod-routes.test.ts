@@ -83,6 +83,7 @@ test("route installation pins exact bytes, changed bytes lose trust, disable rem
       join(folder, entry),
       "export function create(){ return function Changed() { return null; }; }",
     );
+    await lifecycle.refresh();
     expect((await routes.list())[0]!.trusted).toBe(false);
     expect(await workspace.view(scope, scope.route)).toBeNull();
     await expect(routes.bundle(first!.key, first!.sha256)).rejects.toThrow();
