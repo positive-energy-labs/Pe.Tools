@@ -20,7 +20,12 @@ test.each(writes)("%s accepts only revisioned Work and preview choice", (_key, d
     },
     revision: 1,
   };
-  expect(definition.input.safeParse({ work, previewOnly: true }).success).toBe(true);
+  const ducts = "handle" in (definition as { writeBoundary: object }).writeBoundary;
+  expect(
+    definition.input.safeParse(
+      ducts ? { work: { key: work.key, expectedRevision: work.revision } } : { work, previewOnly: true },
+    ).success,
+  ).toBe(true);
   for (const input of [
     {},
     { source: {} },

@@ -155,3 +155,7 @@ test("captured successful families preview response round-trips without losing i
   const { default: captured } = await import("./fixtures/families-live-preview-20261102.json");
   expect(commands["families.apply"].result.parse(captured.response)).toEqual(captured.response);
 });
+
+test.each(writes)("%s is behind the Work write boundary, keyed by its catalog axis", (key) => {
+  expect(resolve(key).boundary).toBe("work");
+});

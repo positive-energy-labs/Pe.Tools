@@ -79,13 +79,20 @@ export function commandRegistry(
     recover: entry.recover ?? recover,
     cancel: entry.cancel ?? cancel,
   });
-  for (const [key, entry] of Object.entries(implementations))
-    implementations[key] = complete(
-      typeof entry.definition !== "function" && "writeBoundary" in entry.definition
-        ? workWriteBoundary(entry, bridge, deps)
-        : entry,
-      key,
-    );
+  // The wrap is keyed on the catalog axis, never on a definition's shape: a ModelWrite whose
+  // definition carries no typed `writeBoundary` is refused at boot instead of running unsealed.
+  // Previews (TransactRead) that carry a binding are wrapped too; every other command is untouched.
+  for (const [key, entry] of Object.entries(implementations)) {
+    const modelWrite =
+      commandCatalogAxes[key as keyof typeof commandCatalogAxes]?.effect === "ModelWrite";
+    const bound = typeof entry.definition !== "function" && "writeBoundary" in entry.definition;
+    if (modelWrite && !bound)
+      throw Error(`ModelWrite ${key} has no typed writeBoundary; build it with workWriteCommand`);
+    const wrapped = bound ? workWriteBoundary(entry, bridge, deps) : entry;
+    if (modelWrite && wrapped.boundary !== "work")
+      throw Error(`ModelWrite ${key} is not behind the Work write boundary`);
+    implementations[key] = complete(wrapped, key);
+  }
   for (const key of Object.keys(commands))
     if (!implementations[key]) throw Error(`Semantic command '${key}' has no executor`);
   return (key) => {

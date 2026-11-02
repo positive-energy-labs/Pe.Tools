@@ -38,18 +38,18 @@ test.each(writes)(
         id: "foreign",
         key,
         target: { kind: "document", ref: { session: "A", openId: "A" } },
-        input: {
-          work: {
-            key: {
-              binding: "open",
-              route: entry.writeBoundary.route,
-              target: null,
-              open: { session: "A", openId: "B" },
-            },
-            revision: 1,
-          },
-          previewOnly: false,
-        },
+        input: (() => {
+          const foreign = {
+            binding: "open",
+            route: entry.writeBoundary.route,
+            target: null,
+            open: { session: "A", openId: "B" },
+          };
+          // Ducts carries its own revisioned handle, declared by the binding's `handle` hook.
+          return "handle" in entry.writeBoundary
+            ? { work: { key: foreign, expectedRevision: 1 } }
+            : { work: { key: foreign, revision: 1 }, previewOnly: false };
+        })(),
       },
     } as unknown as CommandContext;
     const boundary = workWriteBoundary(executor, {

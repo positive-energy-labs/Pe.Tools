@@ -99,6 +99,7 @@ export function workWriteBoundary(
   });
   return {
     ...executor,
+    boundary: "work",
     prepared: preparedSchema,
     bind: async (ctx) => {
       documentMarks(bridge);

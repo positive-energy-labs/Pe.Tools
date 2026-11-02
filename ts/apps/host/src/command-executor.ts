@@ -109,6 +109,8 @@ export interface CommandExecutor {
   bind(context: CommandContext): Promise<CommandBinding>;
   run(context: CommandContext, execution: ActionExecution): Promise<unknown>;
   recover?: StepRecovery;
+  /** Set only by `workWriteBoundary`: the executor derives, seals and rechecks against Work. */
+  boundary?: "work";
   /** Receipt-confirmed cells retired by the shared Work write boundary. */
   retires?(result: unknown): readonly WorkPath[];
   cancel?(requestId: string): Promise<unknown>;

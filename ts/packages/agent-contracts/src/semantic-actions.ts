@@ -119,8 +119,12 @@ export const takeoffActions = definitions;
  * /ducts verbs: one native op, `ducts.apply`, once with `previewOnly` and once for real. Their own
  * keys, so `operations call ducts.apply` still names the native op.
  */
-const ductsWorkCommand = <C extends Command & { input: z.ZodObject }>(definition: C) => ({
-  derivation: {
+const ductsWorkCommand = <C extends Command & { input: z.ZodObject }>(
+  kind: "losses" | "heal" | "assign-fan",
+  previewOnly: boolean,
+  definition: C,
+) => {
+  const derivation = {
     derive: (work: unknown) => stagedDucts(ductsRouteState.schema.parse(work)),
     preview: (value: unknown) => {
       const { previewOnly: _, ...request } = z
@@ -128,19 +132,36 @@ const ductsWorkCommand = <C extends Command & { input: z.ZodObject }>(definition
         .parse(value).input;
       return request;
     },
-  },
-  ...definition,
-  result: writeCommandResultSchema(definition.result),
-  input: z.strictObject({
-    work: z.strictObject({ key: workKeySchema, expectedRevision: z.number().int().nonnegative() }),
-  }),
-  work: {
-    route: "ducts",
-    bind: (_input: unknown, handle: import("./command.ts").WorkHandle) => ({
-      work: { key: handle.key, expectedRevision: handle.revision },
+  };
+  return {
+    derivation,
+    // Ducts keeps its own revisioned handle and a separate preview key; the host registry wraps
+    // by catalog axis and reads this binding, so no ModelWrite is shape-attached.
+    writeBoundary: {
+      route: "ducts",
+      key: `ducts.preview-${kind}`,
+      workspace: false,
+      previewOnly,
+      nativePreview: true,
+      handle: (input: Record<string, unknown>) => {
+        const handle = input.work as { key: z.infer<typeof workKeySchema>; expectedRevision: number };
+        return { key: handle.key, revision: handle.expectedRevision };
+      },
+      ...derivation,
+    },
+    ...definition,
+    result: writeCommandResultSchema(definition.result),
+    input: z.strictObject({
+      work: z.strictObject({ key: workKeySchema, expectedRevision: z.number().int().nonnegative() }),
     }),
-  },
-});
+    work: {
+      route: "ducts",
+      bind: (_input: unknown, handle: import("./command.ts").WorkHandle) => ({
+        work: { key: handle.key, expectedRevision: handle.revision },
+      }),
+    },
+  };
+};
 
 export const ductsActions = {
   "ducts.refresh": {
@@ -439,12 +460,12 @@ export const tools = {
     },
     commands: {
       "ducts.refresh": ductsActions["ducts.refresh"],
-      "ducts.preview-losses": ductsWorkCommand(ductsActions["ducts.preview-losses"]),
-      "ducts.apply-losses": ductsWorkCommand(ductsActions["ducts.apply-losses"]),
-      "ducts.preview-heal": ductsWorkCommand(ductsActions["ducts.preview-heal"]),
-      "ducts.apply-heal": ductsWorkCommand(ductsActions["ducts.apply-heal"]),
-      "ducts.preview-assign-fan": ductsWorkCommand(ductsActions["ducts.preview-assign-fan"]),
-      "ducts.apply-assign-fan": ductsWorkCommand(ductsActions["ducts.apply-assign-fan"]),
+      "ducts.preview-losses": ductsWorkCommand("losses", true, ductsActions["ducts.preview-losses"]),
+      "ducts.apply-losses": ductsWorkCommand("losses", false, ductsActions["ducts.apply-losses"]),
+      "ducts.preview-heal": ductsWorkCommand("heal", true, ductsActions["ducts.preview-heal"]),
+      "ducts.apply-heal": ductsWorkCommand("heal", false, ductsActions["ducts.apply-heal"]),
+      "ducts.preview-assign-fan": ductsWorkCommand("assign-fan", true, ductsActions["ducts.preview-assign-fan"]),
+      "ducts.apply-assign-fan": ductsWorkCommand("assign-fan", false, ductsActions["ducts.apply-assign-fan"]),
     },
   },
   instances: {

@@ -1,5 +1,4 @@
 import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";
-import { workWriteBoundary } from "./work-write-boundary.ts";
 import { commands, tools, canonicalRouteInput, type DuctsApplyInput } from "@pe/agent-contracts";
 import { healPlan, healRequestGroup } from "@pe/ducts-domain/heal";
 import { fanOf } from "@pe/ducts-domain/action-targets";
@@ -297,32 +296,15 @@ export function ductsExecutors(
           const key = `ducts.${preview ? "preview" : "apply"}-${kind}` as const;
           return [
             key,
-            workWriteBoundary(
-              command(commands[key], prepared, {
-                seal: (p) => ({
-                  request: commands[key].derivation.preview(p),
-                  evidence: p.dependencies,
-                }),
-                bind: (ctx) => bind(ctx, kind, preview),
-                run: (ctx, execution) => run(ctx, execution, kind),
+            // The registry wraps this at boot: `commands[key].writeBoundary` carries the binding.
+            command(commands[key], prepared, {
+              seal: (p) => ({
+                request: commands[key].derivation.preview(p),
+                evidence: p.dependencies,
               }),
-              bridge,
-              deps,
-              {
-                route: "ducts",
-                key: `ducts.preview-${kind}`,
-                previewOnly: preview,
-                nativePreview: true,
-                handle: (input) => {
-                  const handle = input.work as {
-                    key: import("@pe/agent-contracts").WorkKey;
-                    expectedRevision: number;
-                  };
-                  return { key: handle.key, revision: handle.expectedRevision };
-                },
-                ...commands[key].derivation,
-              },
-            ),
+              bind: (ctx) => bind(ctx, kind, preview),
+              run: (ctx, execution) => run(ctx, execution, kind),
+            }),
           ];
         }),
       ),
