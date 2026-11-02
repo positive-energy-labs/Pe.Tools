@@ -67,7 +67,7 @@ test("real loopback HTTP and WebSocket refuse a foreign checkout before routing"
     ),
     requestIdentityLayer({
       port,
-      frontendOrigin: () => undefined,
+      frontendOrigin: Effect.succeed(undefined),
       share: {
         read: async () => {
           throw Error("No share in this loopback proof");

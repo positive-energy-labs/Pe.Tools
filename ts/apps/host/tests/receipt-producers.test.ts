@@ -70,7 +70,7 @@ test("real HTTP feedback retains content and caller before body; diagnostics can
           Layer.mergeAll(
             requestIdentityLayer({
               port,
-              frontendOrigin: () => undefined,
+              frontendOrigin: Effect.succeed(undefined),
               share: {
                 read: async () => {
                   throw Error("local only");
@@ -217,7 +217,7 @@ test("real HTTP refusals, from admission and from a door, export refusal_count w
           Layer.mergeAll(
             requestIdentityLayer({
               port,
-              frontendOrigin: () => undefined,
+              frontendOrigin: Effect.succeed(undefined),
               telemetry,
               share: {
                 read: async () => {

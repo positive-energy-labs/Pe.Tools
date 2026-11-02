@@ -50,7 +50,8 @@ export interface IdentityOptions {
   /** Host-configured addresses. Never inferred from Forwarded or caller-supplied transport headers. */
   readonly remoteIngress?: readonly { origin: string; transport: "lan" | "ssh" }[];
   readonly port: () => number;
-  readonly frontendOrigin: () => string | undefined;
+  /** The recorded checkout frontend origin, if one has settled. */
+  readonly frontendOrigin: string | undefined;
   readonly share: {
     read(): Promise<MachineShare>;
     observe(result: IdentityResult, path: string, from: string): void;
@@ -169,7 +170,7 @@ export async function readRequestIdentity(
       ? refuse("identity.forged-proxy", "Proxy identity is not accepted on the local authority.")
       : origin !== undefined &&
           origin !== `http://127.0.0.1:${options.port()}` &&
-          origin !== options.frontendOrigin()
+          origin !== options.frontendOrigin
         ? refuse("identity.origin", "Origin is not this host or its recorded checkout frontend.")
         : { principal: { kind: "local" }, headers: origin ? { origin } : {}, caller: anonymous };
   } else {
@@ -394,7 +395,12 @@ function countRefusal(telemetry: ReceiptExport | undefined, code: string) {
 }
 
 /** A global router middleware also covers unmatched/static requests and WebSocket upgrades. */
-export const requestIdentityLayer = (options: IdentityOptions) =>
+export type IdentityLayerOptions = Omit<IdentityOptions, "frontendOrigin"> & {
+  /** Read on each request's fiber: the dev frontend's URL settles after the layer is built. */
+  readonly frontendOrigin: Effect.Effect<string | undefined>;
+};
+
+export const requestIdentityLayer = (options: IdentityLayerOptions) =>
   HttpRouter.middleware(
     (handler) =>
       Effect.gen(function* () {
@@ -411,11 +417,12 @@ export const requestIdentityLayer = (options: IdentityOptions) =>
             serviceAuthorized = authorizeShutdownFor(handle)(request.headers, body);
           }
         }
+        const frontendOrigin = yield* options.frontendOrigin;
         const identity = yield* Effect.promise(() =>
           readRequestIdentity(
             request.headers,
             request.originalUrl,
-            options,
+            { ...options, frontendOrigin },
             request.method,
             serviceAuthorized,
             Option.getOrUndefined(request.remoteAddress),

@@ -69,11 +69,19 @@ export const hostProgram = (
       const latch = yield* Deferred.make<void>();
       const handle = yield* Deferred.make<ServiceHostHandle>();
       const webUrl = web ? yield* Deferred.make<string>() : undefined;
+      // The update reader's handoff is a Promise-world callback: it only settles this signal, and
+      // the fiber below sleeps and settles the latch, so the exit is owned by the launch scope.
+      const handoff = yield* Deferred.make<void>();
       const updateReader = makeInstalledUpdateReader(
         (fact) => recordUpdateFact(telemetry, fact),
-        // Let the POST/receipt frame flush before the launch scope tears the server down.
-        // effect-edge: process exit (the exit timer settles the shutdown Deferred)
-        () => void setTimeout(() => Effect.runSync(Deferred.succeed(latch, undefined)), 1000),
+        () => void Deferred.doneUnsafe(handoff, Effect.void),
+      );
+      yield* Effect.forkScoped(
+        Deferred.await(handoff).pipe(
+          // Let the POST/receipt frame flush before the launch scope tears the server down.
+          Effect.andThen(Effect.sleep("1 second")),
+          Effect.andThen(Deferred.succeed(latch, undefined)),
+        ),
       );
       const HttpLive = makeHttpLive({
         port,

@@ -21,7 +21,7 @@ import { hostOwnership } from "../src/host-ownership.ts";
 
 const options: IdentityOptions = {
   port: () => 5180,
-  frontendOrigin: () => undefined,
+  frontendOrigin: undefined,
   share: {
     observe: () => {},
     read: async () => ({
@@ -67,6 +67,7 @@ test("remote listener marks real loopback tunnel requests before the identity mi
           Layer.mergeAll(
             requestIdentityLayer({
               ...options,
+              frontendOrigin: Effect.succeed(undefined),
               port,
               devices,
               remoteRequests: requests,

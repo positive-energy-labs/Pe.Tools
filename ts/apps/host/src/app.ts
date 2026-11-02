@@ -256,13 +256,14 @@ export function makeHttpLive(options: HttpLiveOptions) {
     remoteRequests,
     remoteIngress: options.remoteIngress ?? remoteConfig?.origins,
     port,
-    frontendOrigin: () =>
-      options.webUrl
-        ? Option.getOrUndefined(
-            // effect-edge: Layer construction (polls the startup Deferred while composing layers)
-            Effect.runSync(Deferred.poll(options.webUrl)).pipe(Option.map(Effect.runSync)),
-          )
-        : undefined,
+    // Read on each request's fiber: the dev frontend's URL settles after the layer is built.
+    frontendOrigin: options.webUrl
+      ? Deferred.poll(options.webUrl).pipe(
+          Effect.flatMap(
+            Option.match({ onNone: () => Effect.succeed(undefined), onSome: (url) => url }),
+          ),
+        )
+      : Effect.succeed(undefined),
     share,
   }).pipe(Layer.provide(peApiErrorsLayer));
 

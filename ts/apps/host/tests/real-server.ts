@@ -34,7 +34,7 @@ export async function serveRoutes<E, R>(
     Layer.mergeAll(
       requestIdentityLayer({
         port,
-        frontendOrigin: () => undefined,
+        frontendOrigin: Effect.succeed(undefined),
         share: {
           read: async () => {
             throw Error("loopback only");

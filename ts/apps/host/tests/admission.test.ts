@@ -6,7 +6,7 @@ import { admitRequest, type RoutePermission } from "../src/control.ts";
 
 const options: IdentityOptions = {
   port: () => 5180,
-  frontendOrigin: () => undefined,
+  frontendOrigin: undefined,
   share: {
     observe: () => {},
     read: async () => ({

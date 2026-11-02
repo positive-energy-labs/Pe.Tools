@@ -42,7 +42,7 @@ const options: IdentityOptions = {
   devices,
   remoteIngress: [{ origin: "http://localhost:65180", transport: "ssh" }],
   port: () => 5180,
-  frontendOrigin: () => undefined,
+  frontendOrigin: undefined,
   share: {
     observe: () => {},
     read: async () => ({
@@ -203,7 +203,7 @@ async function fixture(telemetry?: ReceiptExport) {
       Layer.launch(
         HttpRouter.serve(
           Layer.mergeAll(
-            requestIdentityLayer({ ...options, port }),
+            requestIdentityLayer({ ...options, port, frontendOrigin: Effect.succeed(undefined) }),
             mcpRoute(() => hostBase, telemetry),
           ),
           { disableLogger: true },
