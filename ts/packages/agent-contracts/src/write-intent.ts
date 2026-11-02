@@ -52,6 +52,21 @@ export interface WriteBoundaryBinding {
   preview(request: unknown): unknown;
 }
 
+const workWriteInputSchema = z.strictObject({ work: workHandleSchema });
+/** A named boundary keeps declaration emit out of the local generic entry closure (TS 6.0.3). */
+type WriteEntry<
+  D extends Command,
+  A extends z.ZodType,
+  P extends WriteBoundaryBinding["phase"],
+> = Omit<D, "input" | "work" | "result"> & {
+  result: ReturnType<typeof writeCommandResultSchema<NonNullable<D["result"]>>>;
+  derivation: Pick<WriteBoundaryBinding, "derive" | "preview">;
+  authoredInput: A;
+  writeBoundary: WriteBoundaryBinding & { phase: P };
+  input: typeof workWriteInputSchema;
+  work: { route: string; bind: (input: unknown, handle: WorkHandle) => { work: WorkHandle } };
+};
+
 export function workWriteCommands<
   const K extends string,
   const C extends Command,
@@ -66,7 +81,9 @@ export function workWriteCommands<
     derive?: (work: unknown) => unknown;
     preview?: { key: PK; definition: PC };
   } = {},
-) {
+): { [P in K]: WriteEntry<C, C["input"], "apply"> } & {
+  [P in [PK] extends [never] ? `${K}.preview` : PK]: WriteEntry<PC, C["input"], "preview">;
+} {
   const authoredInput = definition.input as C["input"];
   const derivation = {
     derive:
@@ -84,8 +101,8 @@ export function workWriteCommands<
   const entry = <D extends Command, const P extends WriteBoundaryBinding["phase"]>(
     source: D,
     phase: P,
-  ) => {
-    const { input: _input, work: _work, ...metadata } = source;
+  ): WriteEntry<D, C["input"], P> => {
+    const { input: _input, work: _work, result: _result, ...metadata } = source;
     return {
       ...metadata,
       result: writeCommandResultSchema(source.result as NonNullable<D["result"]>),
@@ -99,7 +116,7 @@ export function workWriteCommands<
         workspace: options.workspace ?? false,
         ...derivation,
       },
-      input: z.strictObject({ work: workHandleSchema }),
+      input: workWriteInputSchema,
       work: { route, bind: (_input: unknown, handle: WorkHandle) => ({ work: handle }) },
     };
   };
