@@ -5,6 +5,7 @@ import { hostActions } from "./semantic-actions.ts";
 import type { Command } from "./command.ts";
 import { capabilityPrincipals } from "./capability.ts";
 import type { CatalogLink } from "./catalog.ts";
+import { hostRouteAxes } from "./route-axes.ts";
 import { z } from "zod";
 const threadHistoryInput = z.strictObject({
   since: z.iso.datetime(),
@@ -17,10 +18,6 @@ const routeCatalog: Record<
   string,
   {
     description: string;
-    cost?: CatalogLink["cost"];
-    uses?: CatalogLink["uses"];
-    subject?: CatalogLink["subject"];
-    touches?: CatalogLink["touches"];
   }
 > = {
   "threads.history": {
@@ -29,26 +26,14 @@ const routeCatalog: Record<
   },
   "ducts.roster": {
     description: "Find fan ports by mark and unitId before reading route:ducts.sheet.",
-    cost: "Bounded",
-    uses: ["ducts.snapshot.roster"],
-    subject: "Document",
-    touches: ["Topology"],
   },
   "ducts.sheet": {
     description:
       "Read a bounded per-fan pressure-drop sheet with ranked paths, blockers, provenance and basis-bound detail handles. Start with route:ducts.roster.",
-    cost: "Expensive",
-    uses: ["ducts.snapshot.walk"],
-    subject: "Elements",
-    touches: ["Geometry"],
   },
   "ducts.analysis": {
     description:
       "Inspect duct networks. For pressure drop read route:ducts.roster then route:ducts.sheet.",
-    cost: "Expensive",
-    uses: ["ducts.snapshot.walk"],
-    subject: "Elements",
-    touches: ["Geometry"],
   },
 };
 import {
@@ -76,6 +61,13 @@ const routeSchemas: RouteSchemas = {
 type Routes = PeRouteTable<typeof routeSchemas>;
 const api: PeApi<Routes> = definePeApi(routeSchemas);
 export const httpRoutes: Routes = api.peRoutes;
+const routeAxes = hostRouteAxes([
+  ...hostOpCatalog
+    .filter((op) => !tsOnlyOperationCatalog.some((local) => local.key === op.key))
+    .map(nativeEntry),
+  ...tsOnlyOperationCatalog.map(nativeEntry),
+  ...Object.entries(hostActions).map(([key, action]) => commandAxes(key, action as Command)),
+]);
 export const peRoutes = {
   ...(Object.fromEntries(
     Object.entries(httpRoutes).map(([key, row]) => [
@@ -83,14 +75,7 @@ export const peRoutes = {
       {
         ...row,
         catalog: {
-          key: `route:${key}`,
-          subject: "None",
-          touches: ["Metadata"],
-          effect: row.method === "GET" || row.principal === "read" ? "Read" : "SessionWrite",
-          cost: "Cheap",
-          cardinality: "One",
-          uses: [],
-          ...routeCatalog[key],
+          ...routeAxes[key as keyof Routes],
           ...(routeCatalog[key]
             ? {
                 discovery: {
