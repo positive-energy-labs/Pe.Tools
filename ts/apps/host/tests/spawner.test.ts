@@ -4,9 +4,9 @@ import { join } from "node:path";
 import { Context, Effect, Exit, Fiber, Layer, Scope, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { afterAll, expect, test, vi } from "vite-plus/test";
-import { adapterCommand, openAdapter, stopChild } from "../src/harness/adapter.ts";
+import { adapterCommand, stopChild } from "../src/harness/adapter.ts";
 import { CHILD_EXIT_GRACE, Spawner, type ChildLaunch } from "../src/harness/spawner.ts";
-import { effectTest } from "./effect-test.ts";
+import { testAdapter, settle, effectTest } from "./effect-test.ts";
 
 // ADR 0029 phase 4. The children here are real processes (the tree kill is the thing proven); the
 // grace window runs on TestClock. A fixture that ignores stdin EOF stays up until its scope kills it.
@@ -190,7 +190,7 @@ effectTest(
 const adapterFixture = async (file: string) => {
   vi.stubEnv("PE_HARNESS_ADAPTER_CLAUDE", file);
   const env = { PATH: "", USERPROFILE: dir, LOCALAPPDATA: dir, SystemRoot: process.env.SystemRoot };
-  return openAdapter("claude", dir, env, () => ({
+  return testAdapter("claude", dir, env, () => ({
     sessionUpdate: async () => {},
     requestPermission: async () => ({ outcome: { outcome: "cancelled" } }),
   }));
@@ -204,7 +204,7 @@ test("openAdapter: stopChild ends stdin, the child exits, and the exit event fol
   await vi.waitFor(() => expect(opened.child.pid).toBeGreaterThan(0));
   const pid = opened.child.pid!;
   expect(alive(pid)).toBe(true);
-  await stopChild(opened.child);
+  await settle(stopChild(opened.child));
   expect(await exit).toEqual([0, null]);
   expect(alive(pid)).toBe(false);
   vi.unstubAllEnvs();
@@ -215,6 +215,6 @@ test("openAdapter: a child that dies on its own reports its exit code and the st
   const opened = await adapterFixture(dies);
   expect(await exits(opened.child)).toEqual([3, null]);
   expect(opened.stderr()).toContain("no auth");
-  await stopChild(opened.child);
+  await settle(stopChild(opened.child));
   vi.unstubAllEnvs();
 }, 30_000);

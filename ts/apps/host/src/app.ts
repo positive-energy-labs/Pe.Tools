@@ -1,3 +1,4 @@
+import { Spawner } from "./harness/spawner.ts";
 import { currentMachine } from "./machine.ts";
 import { sdkSession } from "./sdk-session.ts";
 import { requestIdentityLayer } from "./request-identity.ts";
@@ -332,6 +333,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
       Layer.provide(Layer.succeed(HostLifecycle, options.lifecycle)),
       Layer.provide(UpdateLive),
       Layer.provide(RunConsents.layer),
+      Layer.provide(Spawner.live),
       Layer.provide(FamiliesReader.layer),
       Layer.provide(CaptureStore.layer()),
       Layer.provide(ReceiptsLive),
@@ -363,6 +365,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
     Layer.provide(Layer.succeed(HostLifecycle, options.lifecycle)),
     Layer.provide(UpdateLive),
     Layer.provide(RunConsents.layer),
+    Layer.provide(Spawner.live),
     Layer.provide(CaptureStore.layer()),
     Layer.provide(ReceiptsLive),
     Layer.provide(NodeServices.layer),

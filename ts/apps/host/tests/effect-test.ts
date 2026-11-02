@@ -1,3 +1,5 @@
+import * as adapter from "../src/harness/adapter.ts";
+import { Spawner } from "../src/harness/spawner.ts";
 import { NodeCrypto, NodeServices } from "@effect/platform-node";
 import { Cause, Context, Effect, Exit, Layer, Logger, References, Scope } from "effect";
 import { TestClock } from "effect/testing";
@@ -123,7 +125,10 @@ export const harnessThreads = async (
   // effect-edge: test-runner
   const context = await Effect.runPromise(
     Layer.buildWithScope(
-      HarnessThreads.layer(options).pipe(Layer.provide(NodeServices.layer)),
+      HarnessThreads.layer(options).pipe(
+        Layer.provide(Spawner.live),
+        Layer.provide(NodeServices.layer),
+      ),
       scope,
     ),
   );
@@ -226,3 +231,16 @@ export const captureStore = (directory: string, apsCachePath?: string): TakeoffC
   }
   return Context.get(context, CaptureStore);
 };
+
+/** A real adapter owned by the running test's scope. */
+export async function testAdapter(...args: Parameters<typeof adapter.openAdapter>) {
+  const scope = Scope.makeUnsafe();
+  // effect-edge: test-runner
+  onTestFinished(() => Effect.runPromise(Scope.close(scope, Exit.void)));
+  // effect-edge: test-runner
+  const services = await Effect.runPromise(Layer.buildWithScope(Spawner.live, scope));
+  // effect-edge: test-runner
+  return Effect.runPromiseWith(Context.add(services, Scope.Scope, scope))(
+    adapter.openAdapter(...args),
+  );
+}

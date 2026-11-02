@@ -446,7 +446,7 @@ test("host HTTP preserves addressless Work through close and replacement bridge 
             });
           });
         }),
-      ).pipe(Effect.provide(NodeServices.layer)),
+      ).pipe(Effect.provide(Spawner.live), Effect.provide(NodeServices.layer)),
     );
   } finally {
     if (previousLocalAppData === undefined) delete process.env.LOCALAPPDATA;
@@ -629,3 +629,4 @@ test("HTTP Work writes use the producer schema including restore identity", () =
     }),
   ).toMatchObject({ restoreOf: 12 });
 });
+import { Spawner } from "../src/harness/spawner.ts";

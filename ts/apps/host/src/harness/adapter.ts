@@ -14,7 +14,7 @@ import {
 import { checkoutLayout, productRoot } from "@pe/host-contracts/service-identity";
 import { codexStandaloneRelease, installCommand } from "./install.ts";
 import { AdapterPackage, Win32Rows } from "./edge-schemas.ts";
-import { Cause, Effect, Exit, ManagedRuntime, Schema, Stream } from "effect";
+import { Cause, Effect, Exit, Schema, Scope, Stream } from "effect";
 import { Spawner } from "./spawner.ts";
 
 /**
@@ -93,12 +93,11 @@ export function adapterCommand(
 }
 
 /**
- * The Promise face of one Spawner child until phase 5. A `ChildProcess` in type only: `threads.ts`
+ * The event face of one scoped Spawner child. A `ChildProcess` in type only: `threads.ts`
  * holds it as one and listens for `exit`; its scope, not a handle, ends it ({@link stopChild}).
  */
 class AdapterChild extends ChildProcess {
-  closed: Promise<void> = Promise.resolve();
-  close = () => this.closed;
+  close: Effect.Effect<void> = Effect.void;
   settle(code: number | null, signal: NodeJS.Signals | null) {
     if (this.exitCode !== null || this.signalCode !== null) return;
     Object.assign(this, { exitCode: code, signalCode: signal });
@@ -106,20 +105,19 @@ class AdapterChild extends ChildProcess {
   }
 }
 
-// The island's runtime is the Spawner's scope: children started here outlive no call, only their own scope.
-const islandSpawner = ManagedRuntime.make(Spawner.live);
-
 /**
  * Spawns the harness's adapter over `env` and connects `client` to it; `stderr()` is the tail.
  * Returns before the child is up: the fiber that owns the child pumps its pipes through web streams.
  */
-export function openAdapter(
+export const openAdapter = Effect.fn("Adapter.open")(function* (
   harness: HarnessId,
   cwd: string,
   env: Record<string, string | undefined>,
   client: ConstructorParameters<typeof ClientSideConnection>[0],
   detail?: ProviderRefusal,
 ) {
+  const owner = yield* Scope.Scope;
+  const lifetime = yield* Scope.fork(owner);
   const launch = adapterCommand(harness, cwd, env, detail);
   const child = new AdapterChild();
   const toChild = new TransformStream<Uint8Array, Uint8Array>();
@@ -173,16 +171,11 @@ export function openAdapter(
     ),
     Effect.ignore,
   );
-  // effect-edge: island, phase 5
-  const fiber = islandSpawner.runFork(owned);
-  child.closed = new Promise<void>((resolve) => fiber.addObserver(() => resolve()));
-  child.close = () => {
-    fiber.interruptUnsafe();
-    return child.closed;
-  };
+  yield* Effect.forkIn(owned, lifetime);
+  child.close = Scope.close(lifetime, Exit.void);
   const conn = new ClientSideConnection(client, ndJsonStream(toChild.writable, fromChild.readable));
   return { child, conn, stderr: () => stderr };
-}
+});
 
 /** Pea's own Codex package: a physical directory under the product root, so OpenAI's junctions never apply. */
 export function codexPackagePath(): string {
@@ -394,6 +387,6 @@ export function peaMcpServer(
 }
 
 /** Closing the child's scope ends its stdin, waits `CHILD_EXIT_GRACE`, and kills its whole tree. */
-export function stopChild(child: ChildProcess | null): Promise<void> {
-  return child instanceof AdapterChild ? child.close() : Promise.resolve();
+export function stopChild(child: ChildProcess | null): Effect.Effect<void> {
+  return child instanceof AdapterChild ? child.close : Effect.void;
 }

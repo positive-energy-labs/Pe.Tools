@@ -98,6 +98,7 @@ import { runConsentsPromise, type RunConsents } from "../run-consent.ts";
 import { z } from "zod";
 import type { HostLog } from "../host-log.ts";
 import * as adapter from "./adapter.ts";
+import { Spawner } from "./spawner.ts";
 import { CodexConfig } from "./edge-schemas.ts";
 import { loadThreads, type LoadedThread, type Meta } from "./thread-store.ts";
 import { isAuthRefusal, sessionOffer, type Providers } from "./providers.ts";
@@ -197,15 +198,6 @@ export const IDLE_CHILD_MS = 15 * 60_000;
 const INTERRUPT_MS = 10_000;
 /** Thrown by `input` on a body route sent without a JSON content type; served as 415. */
 class NotJson extends Error {}
-/**
- * The harness child spawner, as this store uses it. One seam: the `effect/unstable/process`
- * Spawner service replaces both members here and nowhere else.
- */
-const spawner = {
-  open: (...args: Parameters<typeof adapter.openAdapter>) => adapter.openAdapter(...args),
-  stop: (...args: Parameters<typeof adapter.stopChild>) => adapter.stopChild(...args),
-} as const;
-
 /**
  * Codex reads `developer_instructions` from its config, and that is the only instruction door this
  * wire reaches: Codex ignores an MCP server's `instructions` (canary 2026-10-04: a child called the
@@ -425,10 +417,16 @@ type Startup = {
   warn: (message: string) => void;
   /** Failures while adopting a loaded thread, logged by the Layer after construction. */
   skipped: string[];
+  spawner: {
+    open: (
+      ...args: Parameters<typeof adapter.openAdapter>
+    ) => Promise<Effect.Success<ReturnType<typeof adapter.openAdapter>>>;
+    stop: (child: ChildProcess | null) => Promise<void>;
+  };
 };
 
 function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) {
-  const { clock, warn } = startup;
+  const { clock, warn, spawner } = startup;
   const nowMs = () => clock.currentTimeMillisUnsafe();
   const stamp = () => DateTime.formatIso(DateTime.makeUnsafe(nowMs()));
   const threads = new Map<string, Thread>();
@@ -607,9 +605,8 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
     createHash("sha256").update(JSON.stringify(value)).digest("hex");
   const refKey = (ref: DocumentRef) => JSON.stringify([ref.session, ref.openId]);
   const elementEventFits = (event: Append) =>
-    Buffer.byteLength(
-      JSON.stringify({ ...event, seq: Number.MAX_SAFE_INTEGER, at: stamp() }),
-    ) < HARNESS_EVENT_MAX_BYTES;
+    Buffer.byteLength(JSON.stringify({ ...event, seq: Number.MAX_SAFE_INTEGER, at: stamp() })) <
+    HARNESS_EVENT_MAX_BYTES;
 
   function elementChunks<A>(
     values: readonly A[],
@@ -1066,7 +1063,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
     });
     env[HOST_CONTEXT_VARIABLE] = context;
     let live: Live | undefined;
-    const { child, conn, stderr } = spawner.open(harness, options.worldRoot, env, () => ({
+    const { child, conn, stderr } = await spawner.open(harness, options.worldRoot, env, () => ({
       sessionUpdate: ({ update }) => {
         if (t.child !== child || t.stopped) return;
         if (update.sessionUpdate === "config_option_update") {
@@ -1313,7 +1310,8 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
     t.child = null;
     t.live = null;
     t.session = "closed";
-    t.retiring = spawner.stop(child)
+    t.retiring = spawner
+      .stop(child)
       .then(async () => {
         if (child && t.meta.acpSessionId)
           await options.pluginHook?.("harness.session.stopped", {
@@ -1865,8 +1863,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
           t.meta.lifecycle.snoozedSeq = state.lastSeq;
           t.meta.lifecycle.status = "active";
         }
-        if (change.snoozedUntil === null && wasSnoozed)
-          t.meta.lifecycle.reopenedAt = stamp();
+        if (change.snoozedUntil === null && wasSnoozed) t.meta.lifecycle.reopenedAt = stamp();
         if (change.status === "settled") {
           t.meta.lifecycle.pinned = false;
           t.meta.lifecycle.snoozedUntil = null;
@@ -2397,19 +2394,24 @@ export const makeHarnessThreads = Effect.fn("HarnessThreads.make")(function* (
     (harness) => options.providers.get(harness)?.name ?? harness,
   );
   const clock = yield* Clock.clockWith(Effect.succeed);
-  const services = yield* Effect.context<never>();
+  const services = yield* Effect.context<Spawner | import("effect").Scope.Scope>();
+  // effect-edge: island, phase 5
+  const run = Effect.runPromiseWith(services);
   // Promise code in the store logs through this one adapter, on the host's logger.
-  const warn = (message: string) =>
-    // effect-edge: island, phase 5
-    Effect.runForkWith(services)(Effect.logWarning(message));
+  const warn = (message: string) => void run(Effect.logWarning(message));
   const skipped: string[] = [];
-  const { service, sweep } = createHarnessThreads(options, { loaded, clock, warn, skipped });
+  const { service, sweep } = createHarnessThreads(options, {
+    loaded,
+    clock,
+    warn,
+    skipped,
+    spawner: {
+      open: (...args) => run(adapter.openAdapter(...args)),
+      stop: (child) => run(adapter.stopChild(child)),
+    },
+  });
   for (const message of skipped) yield* Effect.logWarning(message);
-  yield* Effect.sync(sweep).pipe(
-    Effect.delay("60 seconds"),
-    Effect.forever,
-    Effect.forkScoped,
-  );
+  yield* Effect.sync(sweep).pipe(Effect.delay("60 seconds"), Effect.forever, Effect.forkScoped);
   yield* Effect.addFinalizer(() => Effect.promise(() => service.close()));
   return service;
 });

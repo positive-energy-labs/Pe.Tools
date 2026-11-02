@@ -1,3 +1,4 @@
+import { Spawner } from "../src/harness/spawner.ts";
 import { NodeServices } from "@effect/platform-node";
 import { Context, Effect, FileSystem, Layer, Scope } from "effect";
 import { TestClock } from "effect/testing";
@@ -11,8 +12,10 @@ import type { Providers } from "../src/harness/providers.ts";
 import { captureLogs, consentService, effectTest } from "./effect-test.ts";
 
 /** An Effect test over the node file system, for fixtures that live on disk. */
-const nodeTest = <A, E>(name: string, body: () => Effect.Effect<A, E, Scope.Scope | FileSystem.FileSystem>) =>
-  effectTest(name, () => body().pipe(Effect.provide(NodeServices.layer)));
+const nodeTest = <A, E>(
+  name: string,
+  body: () => Effect.Effect<A, E, Scope.Scope | FileSystem.FileSystem>,
+) => effectTest(name, () => body().pipe(Effect.provide(NodeServices.layer)));
 
 const meta = (id: string) => ({
   id,
@@ -47,12 +50,22 @@ const store = Effect.fn("test.store")(function* (
     worldRoot: root,
     mcpServer: () => ({ name: "unused", command: "unused", args: [], env: [] }),
     providers: {
-      get: () => ({ id: "claude", harness: "claude", name: "Claude", auth: { kind: "subscription" } }),
+      get: () => ({
+        id: "claude",
+        harness: "claude",
+        name: "Claude",
+        auth: { kind: "subscription" },
+      }),
       keys: () => [],
       invalidate: () => {},
     } as unknown as Providers,
   };
-  const built = Layer.build(HarnessThreads.layer(options).pipe(Layer.provide(NodeServices.layer)));
+  const built = Layer.build(
+    HarnessThreads.layer(options).pipe(
+      Layer.provide(Spawner.live),
+      Layer.provide(NodeServices.layer),
+    ),
+  );
   const context = yield* logs ? built.pipe(Effect.provide(logs.layer)) : built;
   return Context.get(context, HarnessThreads);
 });
