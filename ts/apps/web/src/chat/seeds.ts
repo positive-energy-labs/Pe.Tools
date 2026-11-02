@@ -31,6 +31,7 @@ function log(
     | { kind: "prompt"; text: string; attachments?: PromptAttachment[]; mentions?: Mention[] }
     | { kind: "update"; update: { sessionUpdate: string; [key: string]: unknown } }
     | Omit<Extract<HarnessEvent, { kind: "permission_request" }>, "seq" | "at" | "turnId">
+    | Omit<Extract<HarnessEvent, { kind: "question_request" }>, "seq" | "at" | "turnId">
     | { kind: "turn_end"; stopReason: string }
   )[]
 ): HarnessEvent[] {
@@ -134,6 +135,44 @@ export const CHAT_SEED_STATE: ChatState = {
         { optionId: "always", name: "Always allow", kind: "allow_always" },
         { optionId: "reject", name: "Reject", kind: "reject_once" },
       ],
+    },
+  ),
+};
+
+/** Pea waiting on an AskUserQuestion, in the claude-agent-acp form shape: a pick plus its "Other" box. */
+const CHAT_ASK_STATE: ChatState = {
+  ...THREAD,
+  running: true,
+  events: log(
+    { kind: "prompt", text: "Stage one input for FC-4 supply and preview it." },
+    say("Neither FC-4 supply terminal has a design airflow, and no source supplies one."),
+    {
+      kind: "question_request",
+      requestId: "ask-input",
+      message: "Which single input should I stage and preview?",
+      requestedSchema: {
+        type: "object",
+        properties: {
+          question_0: {
+            type: "string",
+            title: "Input",
+            oneOf: [
+              {
+                const: "Terminal cfm (you give it)",
+                title: "Terminal cfm (you give it)",
+                description: "Type the terminal and the cfm in Other, e.g. 8781191 = 150 cfm.",
+              },
+              { const: "Stop at preview", title: "Stop at preview" },
+            ],
+          },
+          question_0_custom: {
+            type: "string",
+            title: "Other",
+            description:
+              "Type your own answer, or add a note to the option you chose above (optional).",
+          },
+        },
+      },
     },
   ),
 };
@@ -598,6 +637,12 @@ export const CHAT_SEEDS = {
         revision: 4,
       },
     },
+    page: {},
+  },
+  ask: {
+    title: "pea waiting on a question; composer text answers it through Other",
+    work: CHAT_ASK_STATE,
+    readings: READINGS,
     page: {},
   },
   stop: {
