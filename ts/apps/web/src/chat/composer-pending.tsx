@@ -1,10 +1,11 @@
 import { useWork } from "@pe/kit/lang/work";
-import { useEffect, useId, useState } from "react";
+import { useId, useState } from "react";
 import { ChevronRight, Hand, Timer } from "lucide-react";
 import { ArmingStrip } from "@pe/kit/lang/arming-strip";
 import { Button } from "@pe/kit/lang/button";
 import type { Approval, Question, ToolCall } from "@pe/agent-contracts/chat-state";
 import { QuestionForm } from "./question-form";
+import { secondsLeft, useSecondTick } from "#/shell/countdown";
 
 /** Pending requests keep their own identities and targets; the composer pickers name the next turn. */
 export function ComposerPending({
@@ -135,13 +136,8 @@ function WriteHold({
   );
 }
 
-/** Whole seconds until `deadline`, redrawn each second; zero once it passes; null without one. */
+/** Whole seconds until `deadline` (the shared countdown the Timeline head also draws); null without one. */
 function useSecondsLeft(deadline?: string) {
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => {
-    if (!deadline) return;
-    const tick = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(tick);
-  }, [deadline]);
-  return deadline ? Math.max(0, Math.ceil((Date.parse(deadline) - now) / 1000)) : null;
+  useSecondTick(!!deadline);
+  return deadline ? secondsLeft(deadline) : null;
 }

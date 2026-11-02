@@ -1,14 +1,14 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import type { RouteGraph } from "@pe/agent-contracts";
 import { useRouter } from "@tanstack/react-router";
-import { KeyScope, ScopeKeys, actionScopeKeys } from "@pe/kit/keys";
+import { KeyScope, ScopeKeys, actionScopeKeys, useScopeKeys, type ScopeKey } from "@pe/kit/keys";
 import { Button } from "@pe/kit/lang/button";
 import {
   GraphLayoutView,
   type GraphLayoutState,
   type PaneApi,
 } from "../../../../packages/kit/src/components/lang/graph-layout";
-import { PrimaryRouteControls } from "../navigation/route-controls";
+import { PrimaryRouteControls, useRouteKeysPrimary } from "../navigation/route-controls";
 import { useRouteSearchSlice } from "../route/activity";
 import { Ladder } from "../route/ladder";
 import { bindGraphChords } from "./keys";
@@ -20,7 +20,7 @@ import { readLayoutState, writeLayoutState } from "./mount-page";
 import { MountedPane, stageLayout, type RouteAdapters } from "./mount-pane";
 import { GraphHistory } from "./mount-timeline";
 import { GraphReview, GraphVerb, verbActions } from "./mount-verbs";
-import { GraphTarget, journalKeys } from "./mount-work";
+import { GraphTarget, journalKeys, routeOwnsKey } from "./mount-work";
 import type { WorkScopeStatus } from "./use-work-scope";
 
 export function Refused({ refusals }: { refusals: Readonly<ReturnType<typeof mountRefusals>> }) {
@@ -124,6 +124,7 @@ export function GraphRouteView<P, W>({
   device?: { panes: GraphLayoutState; onChange(next: GraphLayoutState): void };
 }) {
   const mountElement = useRef<HTMLDivElement>(null);
+  const primary = useRouteKeysPrimary(graph.key, hosted);
   const stageId = owner.stage();
   const page = owner.view.read().page;
   const layoutKey = `pe.route.${graph.key}.layout`;
@@ -172,7 +173,9 @@ export function GraphRouteView<P, W>({
   });
   if (!keys.ok) return <Refused refusals={keys.refusals} />;
   const stageKeys = keys.tree.children[0]!;
-  const journal = journalKeys(graph, owner, live);
+  const journal = journalKeys(graph, owner, live, (event) =>
+    routeOwnsKey(mountElement.current, primary, event),
+  );
   const navigator = adapters.navigate ? navigatorKeys(graph, adapters.navigate) : [];
   const bodies = Object.fromEntries(
     [...present].map((id) => {
@@ -204,11 +207,13 @@ export function GraphRouteView<P, W>({
   );
   return (
     <KeyScope id={keys.tree.id} hidden={hidden} element={mountElement}>
-      <ScopeKeys keys={[...keys.tree.keys, ...journal, ...navigator]} />
+      <ScopeKeys keys={[...keys.tree.keys, ...navigator]} />
+      <DocumentKeys keys={journal} />
       <KeyScope key={stageKeys.id} id={stageKeys.id} element={mountElement}>
         <ScopeKeys keys={stageKeys.keys} />
         <div
           ref={mountElement}
+          data-route-mount={graph.key}
           role="region"
           aria-label={`${graph.name} route`}
           className="flex h-full min-h-0 flex-col"
@@ -249,6 +254,12 @@ export function GraphRouteView<P, W>({
       </KeyScope>
     </KeyScope>
   );
+}
+
+/** The route node's own rule (keys.tsx): bound on the document, so its chords reach a portaled Situation. */
+function DocumentKeys({ keys }: { keys: readonly ScopeKey[] }) {
+  useScopeKeys(keys, typeof document === "undefined" ? null : document.documentElement);
+  return null;
 }
 
 function GraphSituation<P, W>({

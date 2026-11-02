@@ -152,20 +152,37 @@ function nativeUndo(event: KeyboardEvent) {
   );
 }
 
-/** Undo/redo restore this Work's journal; a focused text field keeps its own native undo. */
+/**
+ * Whether a key event belongs to this route: inside its own mount, or (for the URL's primary
+ * route) anywhere outside every route mount — its portaled Situation, the app bar, nothing
+ * focused. A docked route (Pea beside Families) answers only inside its own mount.
+ */
+export function routeOwnsKey(mount: HTMLElement | null, primary: boolean, event?: KeyboardEvent) {
+  const at = event?.target instanceof Element ? event.target : null;
+  const holder = at?.closest("[data-route-mount]") ?? null;
+  return holder ? holder === mount : primary;
+}
+
+/**
+ * Undo/redo restore this Work's journal anywhere in the route; a focused text field keeps its own
+ * native undo. Bound on the document (the route node's rule, keys.tsx), not on the mount element:
+ * the Situation is portaled into the app bar, so focus on the stage control sits outside it (D7).
+ */
 export function journalKeys<P, W>(
   graph: RouteGraph<P, W>,
   owner: GraphMount<P, W>,
   live: () => boolean,
+  owns: (event?: KeyboardEvent) => boolean,
 ) {
   return actionScopeKeys(
     (["undo", "redo"] as const).map((direction) => ({
       id: `${graph.key}.${direction}`,
       label: direction,
       bindings: direction === "undo" ? ["Mod+Z"] : ["Mod+Shift+Z", "Mod+Y"],
-      options: { ignoreInputs: true, preventDefault: false },
+      // Several mounted routes (a docked Pea) each bind these on the document; `owns` picks one.
+      options: { ignoreInputs: true, preventDefault: false, conflictBehavior: "allow" as const },
       invoke: (event?: KeyboardEvent) => {
-        if (!live() || (event && nativeUndo(event))) return false;
+        if (!live() || !owns(event) || (event && nativeUndo(event))) return false;
         void owner.restore(direction);
       },
     })),

@@ -30,6 +30,33 @@ test("Pea's queued ducts write opens the route head and Reject answers its origi
 });
 
 
+test("D8: a head mounted long before a window opens counts the host's 60 s, and a resolved window leaves at once", () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    const timeline = createRouteTimeline();
+    const owner = {
+      timeline, fixture: null, verbs: {}, subscribe: () => () => {}, version: () => 0,
+      snapshot: () => ({}), journals: new Map(),
+    } as never;
+    const ui = render(<TimelineHead owner={owner} history={null} thread="t" />);
+    // Minutes pass with no window open, so no interval ever ran (a throttled tab).
+    vi.setSystemTime(Date.now() + 133_000);
+    const receipt = { id: "apply-1", caller: { kind: "pea", thread: "t" } };
+    const consentWindow = { requestId: "ask-1", deadline: new Date(Date.now() + 60_000).toISOString() };
+    act(() => timeline.append({ kind: "receipt", at: Date.now(), verb: "apply", basis: { receipt },
+      outcome: { id: "apply-1", receiptId: "apply-1", state: "queued", input: {}, consentWindow } }));
+    expect(ui.getByRole("timer").textContent).toBe("apply · 60s");
+    // Rejected: the cancelled receipt still carries the window it was stamped with.
+    act(() => timeline.append({ kind: "receipt", at: Date.now(), verb: "apply", basis: { receipt },
+      outcome: { id: "apply-1", receiptId: "apply-1", state: "cancelled", input: {}, consentWindow } }));
+    expect(ui.queryByRole("timer")).toBeNull();
+    expect(ui.queryByRole("button", { name: "Reject apply" })).toBeNull();
+  } finally {
+    vi.useRealTimers();
+    cleanup();
+  }
+});
+
 test("History records a write receipt and caller once rather than echoing its invocation", async () => {
   const { GraphHistory } = await import("./mount-timeline");
   const timeline = createRouteTimeline();

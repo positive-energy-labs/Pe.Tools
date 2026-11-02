@@ -202,6 +202,15 @@ export function useIsPrimaryRoute(route: string) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   return slot != null && hosted == null && pathname === routePath(route);
 }
+/**
+ * Whether this route answers keys pressed outside every route mount (its portaled Situation, the
+ * app bar, nothing focused): the URL's route, or, with no app bar to portal into, any unhosted one.
+ */
+export function useRouteKeysPrimary(route: string, hosted: boolean) {
+  const slot = useContext(Context);
+  const primary = useIsPrimaryRoute(route);
+  return !hosted && (slot == null || primary);
+}
 export function RouteControlsOutlet({
   slot: name = "controls",
   as = "span",

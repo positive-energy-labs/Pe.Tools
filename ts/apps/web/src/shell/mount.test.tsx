@@ -33,6 +33,7 @@ import {
   type MountScope,
 } from "./mount";
 import { commandVerb, workVerb } from "./verbs";
+import { routeOwnsKey } from "./mount-work";
 import type { ReadingContext, ReadingDelivery } from "./readings";
 import { peReadings } from "#/readings";
 
@@ -458,6 +459,53 @@ test("one graph mounts Page-derived layout and one stable owner; Work press, Mod
   await act(async () => {});
   expect(f.scope().work.doc.rows.slot!.n).toBe(2);
   expect(f.subscriptions()).toEqual({ subscriptions: 1, deltaSubscriptions: 1 });
+});
+
+test("D7: Mod+Z and Mod+Shift+Z restore from outside the route mount (a portaled Situation, nothing focused), and the head draws Undo/Redo", async () => {
+  const f = await fixture();
+  const { view } = await mounted(f);
+  await waitFor(() => expect(view.getByLabelText("Solved").textContent).toBe("800"));
+  fireEvent.click(view.getByRole("button", { name: "Edit" }));
+  await waitFor(() => expect(f.scope().work.doc.rows.slot!.n).toBe(2));
+  // The app bar's Situation slot lives outside the mount element: stand one in.
+  const portaled = document.createElement("button");
+  document.body.append(portaled);
+  try {
+    portaled.focus();
+    chord(portaled, "z");
+    await waitFor(() => expect(f.scope().work.doc.rows.slot!.n).toBe(1));
+    chord(document.body, "z", true);
+    await waitFor(() => expect(f.scope().work.doc.rows.slot!.n).toBe(2));
+    // The Timeline head's own Undo is the same restore.
+    const undo = view.getAllByRole("button", { name: /^Undo / })[0]!;
+    fireEvent.click(undo);
+    await waitFor(() => expect(f.scope().work.doc.rows.slot!.n).toBe(1));
+    expect(view.getAllByRole("button", { name: /^Redo / }).length).toBeGreaterThan(0);
+  } finally {
+    portaled.remove();
+  }
+});
+
+test("D7: a key inside another route's mount is that route's, never this one's", () => {
+  const mine = document.createElement("div");
+  const theirs = document.createElement("div");
+  mine.dataset.routeMount = "families";
+  theirs.dataset.routeMount = "chat";
+  const inTheirs = document.createElement("input");
+  theirs.append(inTheirs);
+  const outside = document.createElement("button");
+  document.body.append(mine, theirs, outside);
+  const at = (target: Element) => ({ target }) as unknown as KeyboardEvent;
+  try {
+    expect(routeOwnsKey(mine, true, at(mine))).toBe(true);
+    expect(routeOwnsKey(mine, true, at(inTheirs))).toBe(false);
+    expect(routeOwnsKey(mine, true, at(outside))).toBe(true);
+    expect(routeOwnsKey(theirs, false, at(outside))).toBe(false);
+  } finally {
+    mine.remove();
+    theirs.remove();
+    outside.remove();
+  }
 });
 
 test("Situation renders declared subject, typed Page controls, verbs and a working log filter", async () => {

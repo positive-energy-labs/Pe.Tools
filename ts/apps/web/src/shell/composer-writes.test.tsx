@@ -230,9 +230,8 @@ test("D8.7: edit → composer revert → edit → undo → undo names the restor
     const original = structuredClone(one.doc().rules[RULE]!.edit);
     expect(original?.at).toBeTruthy();
     fireEvent.click(one.view.getByRole("button", { name: /^review/ }));
-    const revert = one.view.getByRole("button", { name: "Revert 1 edit" });
-    fireEvent.click(revert);
-    fireEvent.click(revert);
+    // One press is one undoable journal step (no arming).
+    fireEvent.click(one.view.getByRole("button", { name: "Revert 1 edit" }));
     await waitFor(() => expect(one.doc().rules).toEqual({}));
     const reverted = one.owner.journal(one.owner.snapshot().work!.handle.key).read().undo.at(-1);
     await waitFor(() =>
@@ -264,7 +263,7 @@ test("D8.7: edit → composer revert → edit → undo → undo names the restor
   }
 });
 
-test("D8.8: a stale row with a failed reading stream says why confirm cannot post and retains the confirmed revert for retry", async () => {
+test("D8.8: a stale row with a failed reading stream says why the revert was refused and keeps the edit for a retry", async () => {
   const one = await scenario();
   try {
     await one.edit("CD3-1");
@@ -272,7 +271,6 @@ test("D8.8: a stale row with a failed reading stream says why confirm cannot pos
     const revert = one.view.getByRole("button", { name: "Revert 1 edit" });
     one.stale();
     expect(one.view.getByText("r53").parentElement?.textContent).toContain("stale");
-    fireEvent.click(revert);
     one.fail();
     fireEvent.click(revert);
     await waitFor(() =>
@@ -280,13 +278,6 @@ test("D8.8: a stale row with a failed reading stream says why confirm cannot pos
     );
     expect(one.posted).toHaveBeenCalledTimes(1);
     expect(one.doc().rules[RULE]!.edit?.value.table).toBe("CD3-1");
-    expect(revert.textContent).toContain("again");
-    vi.useFakeTimers();
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(5000);
-    });
-    expect(revert.textContent).toContain("again");
-    vi.useRealTimers();
     one.recover();
     fireEvent.click(revert);
     await waitFor(() => expect(one.doc().rules).toEqual({}));

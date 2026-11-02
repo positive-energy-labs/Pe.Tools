@@ -5,9 +5,8 @@ import {
   receiptsForWork,
   routeAddress,
 } from "@pe/agent-contracts";
-import { Button } from "@pe/kit/lang/button";
 import type { GraphMount } from "./mount-owner";
-import { entryCaller, lastMove, stepState, useWorkJournal } from "./situation-band";
+import { JournalButtons, entryCaller, lastMove, stepState, useWorkJournal } from "./situation-band";
 import { activityTime } from "./timeline";
 
 /** One History presentation for graph panes: accepted calls and exact Work receipts. */
@@ -32,8 +31,6 @@ export function GraphHistory<P, W>({
   // Newest first, as the receipts below: every edit, undo and redo is its own entry.
   const steps = journal ? [...journal.redo, ...journal.undo] : [];
   const moves = journal ? [...journal.moves].reverse() : [];
-  const undo = journal?.undo.at(-1);
-  const redo = journal?.redo.at(-1);
   const saved =
     !workOnly && parsed.success ? (key ? receiptsForWork(parsed.data, key) : parsed.data) : [];
   const recorded = new Set(saved.map((receipt) => receipt.id));
@@ -65,28 +62,7 @@ export function GraphHistory<P, W>({
               · {lastMove(journal)} {journal.last.step.label}
             </>
           )}{" "}
-          <Button
-            label={undo ? `Undo ${undo.label}` : "Undo"}
-            refusal={
-              owner.journalRefusal() ??
-              undo?.superseded?.message ??
-              (undo ? null : "Nothing to undo: no edit to this Work since this tab opened it")
-            }
-            onClick={() => void owner.restore("undo")}
-          >
-            undo
-          </Button>{" "}
-          <Button
-            label={redo ? `Redo ${redo.label}` : "Redo"}
-            refusal={
-              owner.journalRefusal() ??
-              redo?.superseded?.message ??
-              (redo ? null : "Nothing to redo")
-            }
-            onClick={() => void owner.restore("redo")}
-          >
-            redo
-          </Button>
+          <JournalButtons owner={owner} words />
         </p>
       )}
       <ol>

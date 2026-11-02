@@ -7,8 +7,8 @@
  * TODO: docs/features/routes/LEDGER.md#s7-a91a2429a1 H2 — Reject dispatch and host cancellation are proven separately by fixture tests; press it against a live
  * host consent window (a route command from a Pea thread) to prove the round trip.
  */
-import { useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
-import { MoreHorizontal } from "lucide-react";
+import { useContext, useSyncExternalStore, type ReactNode } from "react";
+import { MoreHorizontal, Redo2, Undo2 } from "lucide-react";
 import { workKey, type VerbDecl } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
 import { selectApprovals } from "@pe/agent-contracts/chat-state";
@@ -18,6 +18,7 @@ import { resolveWorkbenchConfig } from "#/workbench/config";
 import { Popover, PopoverTrigger, SubjectPopoverContent } from "@pe/kit/lang/popover";
 import type { GraphMount } from "./mount-owner";
 import { activityTime, type TimelineEntry } from "./timeline";
+import { secondsLeft, useSecondTick } from "./countdown";
 import "./situation-band.css";
 
 export function SituationBand({
@@ -92,16 +93,23 @@ export const entryCaller = (entry: TimelineEntry) =>
     ? "Pea"
     : "you";
 
-/** The latest entry per press or receipt; a consent window is open until its entry moves on. */
-export function openConsentWindows(entries: readonly TimelineEntry[], now: number) {
+/** An invocation still waiting on its consent window; every other state has resolved it. */
+const WAITING = new Set(["queued", "running"]);
+
+/**
+ * The latest entry per press or receipt; a consent window is open until its entry moves on. A
+ * cancelled, refused, failed or succeeded receipt that still carries the window it was stamped
+ * with is resolved: it leaves the head at once (D8, "apply · 17s / Reject?" beside "cancelled").
+ */
+export function openConsentWindows(entries: readonly TimelineEntry[], now = Date.now()) {
   const latest = new Map<string, TimelineEntry>();
   entries.forEach((entry, index) =>
     latest.set(entry.outcome?.receiptId ?? entry.press ?? `entry:${index}`, entry),
   );
   return [...latest.values()].flatMap((entry) => {
     const window = entry.outcome?.consentWindow;
-    if (!window) return [];
-    const left = window.deadline ? Math.ceil((Date.parse(window.deadline) - now) / 1000) : null;
+    if (!window || !WAITING.has(entry.outcome!.state)) return [];
+    const left = window.deadline ? secondsLeft(window.deadline, now) : null;
     return left === null || left > 0 ? [{ entry, left }] : [];
   });
 }
@@ -134,6 +142,42 @@ export const lastMove = (journal: Journal) => {
 };
 
 /**
+ * Undo and redo over this Work's journal, as the head and the History both draw them: the same
+ * restore Mod+Z runs, refused with the journal's own reason. `words` draws the labels beside the
+ * glyphs (the History); the head draws glyphs alone, their names as tooltips.
+ */
+export function JournalButtons<P, W>({ owner, words = false }: { owner: GraphMount<P, W>; words?: boolean }) {
+  const journal = useWorkJournal(owner);
+  if (!journal) return null;
+  const undo = journal.undo.at(-1);
+  const redo = journal.redo.at(-1);
+  return (
+    <>
+      <Button
+        icon={Undo2}
+        label={undo ? `Undo ${undo.label}` : "Undo"}
+        refusal={
+          owner.journalRefusal() ??
+          undo?.superseded?.message ??
+          (undo ? null : "Nothing to undo: no edit to this Work since this tab opened it")
+        }
+        onClick={() => void owner.restore("undo")}
+      >
+        {words ? "undo" : undefined}
+      </Button>
+      <Button
+        icon={Redo2}
+        label={redo ? `Redo ${redo.label}` : "Redo"}
+        refusal={owner.journalRefusal() ?? redo?.superseded?.message ?? (redo ? null : "Nothing to redo")}
+        onClick={() => void owner.restore("redo")}
+      >
+        {words ? "redo" : undefined}
+      </Button>
+    </>
+  );
+}
+
+/**
  * The Timeline's head: the latest Work edit (who made it, its state, the Work revision), unless a
  * command ran after it; else the latest entry, in one line and every open consent window as its
  * "Reject?" countdown. The full history opens beneath it; it never takes a row of its own.
@@ -151,20 +195,19 @@ export function TimelineHead<P, W>({
     (notify) => owner.timeline.subscribe(notify), owner.timeline.version, owner.timeline.version,
   );
   const timeline = entries ? owner.timeline.read() : [];
-  const [now, setNow] = useState(Date.now);
-  const windows = openConsentWindows(timeline, now);
   // The selected thread's run consent (ADR 0027 rule 11) is the same window Pea's composer card
   // answers; the head shows it too, so a "Reject?" countdown is never only inside the chat pane.
   const workbench = useContext(WorkbenchContext);
   const runAsks = workbench
     ? selectApprovals(workbench.chat).filter((ask) => ask.scope === "run")
     : [];
-  const ticking = windows.some((open) => open.left !== null) || runAsks.some((ask) => ask.deadline);
-  useEffect(() => {
-    if (!ticking) return;
-    const tick = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(tick);
-  }, [ticking]);
+  // One host window is one countdown: a receipt stamped with a window the run ask already draws
+  // is not drawn twice. Both read the host's deadline from the clock at render (countdown.ts).
+  const asked = new Set(runAsks.map((ask) => ask.requestId));
+  const windows = openConsentWindows(timeline).filter(
+    ({ entry }) => !asked.has(entry.outcome!.consentWindow!.requestId),
+  );
+  useSecondTick(windows.some((open) => open.left !== null) || runAsks.some((ask) => ask.deadline));
   const journal = useWorkJournal(owner);
   const step = journal?.last?.step;
   // A command press or any receipt (Pea's previews included, ADR 0028) outranks an older Work edit.
@@ -208,9 +251,7 @@ export function TimelineHead<P, W>({
         );
       })}
       {runAsks.map((ask) => {
-        const left = ask.deadline
-          ? Math.max(0, Math.ceil((Date.parse(ask.deadline) - now) / 1000))
-          : null;
+        const left = ask.deadline ? secondsLeft(ask.deadline) : null;
         const reject = ask.options.find((option) => option.kind.startsWith("reject"));
         return (
           <span key={ask.requestId} data-slot="consent-window">
@@ -251,6 +292,7 @@ export function TimelineHead<P, W>({
           {history}
         </SubjectPopoverContent>
       </Popover>
+      <JournalButtons owner={owner} />
     </span>
   );
 }
