@@ -34,11 +34,11 @@ export function createReadFetch(fetcher: typeof fetch) {
       flight = { controller, response, readers: 0 };
       flights.set(key, flight);
       const current = flight;
-      void response
-        .finally(() => {
-          if (flights.get(key) === current) flights.delete(key);
-        })
-        .catch(() => {});
+      const forget = () => {
+        if (flights.get(key) === current) flights.delete(key);
+      };
+      // Both paths release the index; the original promise still delivers failures to callers.
+      void response.then(forget, forget);
     }
     const current = flight;
     current.readers++;
