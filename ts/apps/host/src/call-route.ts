@@ -1,6 +1,6 @@
 import { ductsSnapshotReadingSchema } from "@pe/agent-contracts";
 import { podReadRequest } from "./pod-routes.ts";
-import { peRoutes } from "@pe/agent-contracts/pe-api";
+import { peRoutes, catalogEntries } from "@pe/agent-contracts/pe-api";
 import { canonicalDuctsSession, ductsReadings } from "./ducts-readings.ts";
 import {
   DUCTS_BODY_VERSION_HEADER,
@@ -46,7 +46,6 @@ import { CommandRejected, StepFailure } from "./command-executor.ts";
 import { ActionJournal } from "./action-journal.ts";
 import { commandRegistry } from "./command-registry.ts";
 import { commandResources } from "./command-reads.ts";
-import { VIEW_IMAGE_KEY } from "@pe/agent-contracts";
 import {
   captureOrigin,
   hostCaptures,
@@ -96,6 +95,32 @@ import {
   type HostSessionScope,
 } from "@pe/host-contracts/operation-types";
 import type { HostErrorKind } from "@pe/host-contracts/contracts";
+
+const callEntries = new Map(catalogEntries.map((entry) => [entry.key, entry.call]));
+const readingSubjects: Record<
+  "roster" | "walk" | "tables",
+  (request: unknown, session: string, openId: string | null | undefined) => DuctsReadingRequest
+> = {
+  roster: (request, session, openId) => ({
+    ...(request as object),
+    kind: "ducts-snapshot",
+    selector: { kind: "roster" },
+    target: documentRefSchema.parse({ session, openId }),
+  }),
+  walk: (request, session, openId) => ({
+    ...(request as object),
+    kind: "ducts-snapshot",
+    selector: ductsSnapshotReadingSchema.shape.selector.parse(
+      (request as { selector?: unknown }).selector,
+    ),
+    target: documentRefSchema.parse({ session, openId }),
+  }),
+  tables: (request, session) => ({
+    ...(request as { ids: string[] }),
+    kind: "ducts-tables",
+    session,
+  }),
+};
 
 /** A door refusal: 403, named, and never dispatched. */
 const refusedResponse = (error: Refused) =>
@@ -257,9 +282,13 @@ export function makeCallRoute(
       // call to the user's live Revit — session targeting travels ONLY in the header.
       const unknownKey = Object.keys(body).find((k) => k !== "key" && k !== "request");
       if (unknownKey) return yield* Effect.fail(invalidBody(unknownBodyKeyMessage(unknownKey)));
-      const resolvedPod = yield* Effect.try({ try: () => podReadRequest(body.key as string, "request" in body ? body.request : undefined), catch: (error) => error });
+      const resolvedPod = yield* Effect.try({
+        try: () => podReadRequest(body.key as string, "request" in body ? body.request : undefined),
+        catch: (error) => error,
+      });
       const key = resolvedPod.key;
-      const humanDoor = key === "rhvac.launch";
+      const entry = callEntries.get(key) ?? {};
+      const humanDoor = entry.humanOnly;
       if (humanDoor && caller.kind !== "human")
         return Response.jsonUnsafe(
           { error: "Only a person can launch RHVAC", notDispatched: true },
@@ -271,7 +300,7 @@ export function makeCallRoute(
         try: () => readSessionScope(req.headers),
         catch: (error) => invalidBody(String(error)),
       });
-      if (((key === "ducts.snapshot.roster" || key === "ducts.snapshot.walk") || key === "ducts.tables") && scope.bridgeSessionId) {
+      if (entry.canonicalSession && scope.bridgeSessionId) {
         const bridgeForScope = yield* RevitBridge;
         const canonicalSession = yield* Effect.tryPromise({
           try: () => canonicalDuctsSession(bridgeForScope, scope.bridgeSessionId!),
@@ -282,17 +311,17 @@ export function makeCallRoute(
       let bridgeSessionId = scope.bridgeSessionId;
       let openDocumentId: string | null | undefined = scope.openDocumentId;
 
-      if (key === "takeoffs.saved") {
+      if (entry.saved) {
         op = { key, tsOnly: true, startedAt: Date.now(), origin, originClass, requestId };
         const value = yield* savedTakeoffs(request, observations());
         recordOperation(op, { ok: true });
         return Response.jsonUnsafe(value);
       }
 
-      if (key === "host.ops.catalog") openDocumentId = null;
+      if (entry.hostOnly) openDocumentId = null;
       const bridge = yield* RevitBridge;
       const resolvedSession =
-        !isTsOnlyOperationKey(key) && key !== CANCEL_OPERATION_KEY
+        !isTsOnlyOperationKey(key) && !entry.cancel
           ? yield* sdkSession(bridge, scope, actionDeps.sdk)
           : undefined;
       bridgeSessionId = resolvedSession?.sessionId ?? bridgeSessionId;
@@ -305,11 +334,7 @@ export function makeCallRoute(
         requestId,
       };
       let intent: string | undefined;
-      if (
-        key !== "takeoffs.snapshot" &&
-        key !== "host.ops.catalog" &&
-        key !== CANCEL_OPERATION_KEY
-      ) {
+      if (entry.admission !== "intrinsic") {
         const definition = yield* Effect.tryPromise({
           try: () => operationDefinition(key, bridge, resolvedSession),
           catch: (error) => error,
@@ -345,7 +370,7 @@ export function makeCallRoute(
           if (target.kind !== "host")
             bridgeSessionId = target.kind === "document" ? target.ref.session : target.session;
           openDocumentId = target.kind === "document" ? target.ref.openId : null;
-          if (key === "scripting.execute" && resolvedSession) {
+          if (entry.script && resolvedSession) {
             const current = yield* sdkSession(
               bridge,
               {
@@ -370,20 +395,12 @@ export function makeCallRoute(
           }
         }
       }
-      if ((key === "ducts.snapshot.roster" || key === "ducts.snapshot.walk") || key === "ducts.tables") {
+      if (entry.reading) {
+        const subject = readingSubjects[entry.reading](request, bridgeSessionId!, openDocumentId);
         const target =
-          (key === "ducts.snapshot.roster" || key === "ducts.snapshot.walk")
-            ? documentRefSchema.parse({ session: bridgeSessionId, openId: openDocumentId })
-            : { session: bridgeSessionId!, openId: undefined };
-        const subject: DuctsReadingRequest =
-          (key === "ducts.snapshot.roster" || key === "ducts.snapshot.walk")
-            ? {
-                ...(request as object),
-                selector: ductsSnapshotReadingSchema.shape.selector.parse(key === "ducts.snapshot.roster" ? { kind: "roster" } : (request as { selector?: unknown }).selector),
-                kind: "ducts-snapshot",
-                target: documentRefSchema.parse(target),
-              }
-            : { ...(request as { ids: string[] }), kind: "ducts-tables", session: target.session };
+          subject.kind === "ducts-snapshot"
+            ? subject.target
+            : { session: subject.session, openId: undefined };
         const owner = ductsReadings(bridge);
         const shared = yield* Effect.tryPromise({
           try: () =>
@@ -423,7 +440,7 @@ export function makeCallRoute(
             value: yield* dispatch(key, request, scope, bridge),
             target: null,
           }
-        : key === "takeoffs.snapshot"
+        : entry.snapshot
           ? yield* Effect.tryPromise({
               try: async () => {
                 const target = documentRefSchema.parse({
@@ -495,24 +512,22 @@ export function makeCallRoute(
         "nativeRequestId" in result && typeof result.nativeRequestId === "string"
           ? result.nativeRequestId
           : requestId;
-      const kept =
-        key === VIEW_IMAGE_KEY
-          ? yield* registerViewImage(
-              actionDeps.captureStore ?? hostCaptures(),
-              result.value,
-              request,
-              captureOrigin(origin, caller),
-              bridge,
-              { session: bridgeSessionId, openId: openDocumentId },
-            )
-          : null;
+      const kept = entry.capture
+        ? yield* registerViewImage(
+            actionDeps.captureStore ?? hostCaptures(),
+            result.value,
+            request,
+            captureOrigin(origin, caller),
+            bridge,
+            { session: bridgeSessionId, openId: openDocumentId },
+          )
+        : null;
       recordOperation(op, { ok: true });
       // Every /call response names the target it actually ran against, so a tool card can show
       // what was touched rather than the selector that was typed. Headers, not a payload wrapper.
       // A TS-only op touched no Revit, so it stamps nothing rather than the latest session.
       const headers = result.target ? resolvedTargetHeaders(result.target) : {};
-      if (!op.tsOnly && key !== CANCEL_OPERATION_KEY)
-        headers["x-pe-native-request-id"] = nativeRequestId;
+      if (!op.tsOnly && !entry.cancel) headers["x-pe-native-request-id"] = nativeRequestId;
       if (captureId) headers["x-pe-takeoff-capture-id"] = captureId;
       if (kept)
         Object.assign(headers, { "x-pe-capture-id": kept.id, "x-pe-capture-url": kept.url });
@@ -836,9 +851,8 @@ export function makeCallRoute(
     );
   });
   // action.read is GET /actions; every other control is POST /actions/<verb>, the path the client builds.
-  const controlVerbs = Object.keys(actionControls).filter(
-    (key): key is Exclude<keyof typeof actionControls, "action.read"> => key !== "action.read",
-  );
+  const { "action.read": _readControl, ...writeControls } = actionControls;
+  const controlVerbs = Object.keys(writeControls) as (keyof typeof writeControls)[];
   const controls = controlVerbs.map((id) => {
     const choice = id.slice("action.".length);
     return HttpRouter.add(peRoutes[id].method, peRoutes[id].path, (req) => {
@@ -1075,107 +1089,135 @@ const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
   scope: HostSessionScope | undefined,
   bridge: RevitBridge["Service"],
 ) {
-  switch (key) {
-    case "takeoffs.saved":
-      return yield* savedTakeoffs(request, hostTakeoffCaptures());
-    case "host.status":
-      return yield* Effect.flatMap(
-        Effect.map(bridge.list, (sessions) => ({ connected: sessions.some((s) => s.connected) })),
-        (snapshot) => getHostStatus(snapshot),
-      );
-    case "host.topology": {
-      // The operator's map: host identity + all sessions in one snapshot (ADR 0003).
-      const host = yield* Effect.flatMap(
-        Effect.map(bridge.list, (sessions) => ({ connected: sessions.some((s) => s.connected) })),
-        (snapshot) => getHostStatus(snapshot),
-      );
-      const sessions = yield* listBridgeSessions(bridge.list);
-      return {
-        observedAtUtc: new Date().toISOString(),
-        host,
-        sessions: sessions.sessions,
-      };
-    }
-    case "bridge.sessions.summary":
-      return yield* Effect.flatMap(sdkSession(bridge, scope), getBridgeSessionSummary);
-    case "bridge.sessions.list":
-      return yield* listBridgeSessions(bridge.list);
-    case "logs.tail":
-      return yield* tailLogs(yield* decodeRequest(key, request));
-    case "host.shell.open":
-      return yield* openShellPath(yield* decodeRequest(key, request));
-    case "pod.list": {
-      const input = yield* decodeRequest(key, request);
-      return input.projection === "identity"
-        ? yield* resolvePodIdentity(input.folder)
-        : yield* listPods();
-    }
-    case "pod.capture": {
-      const { pod } = yield* decodeRequest(key, request);
-      return yield* Effect.tryPromise({
-        try: () => capturePackage(pod),
-        catch: (error) => packageError(key, error),
-      }).pipe(
-        Effect.map(
-          ({ id, folder, directory, entrypoints, contributions, memberBundle, sourceBundle }) => ({
-            id,
-            folder,
-            directory,
-            entrypoints,
-            contributions,
-            memberBundle,
-            sourceBundle,
-          }),
-        ),
-      );
-    }
-    case "pod.export": {
-      const input = yield* decodeRequest(key, request);
-      return yield* transfer(key, () => exportPod(input));
-    }
-    case "pod.import": {
-      const input = yield* decodeRequest(key, request);
-      return yield* transfer(key, () => importPod(input));
-    }
-    case "pod.promote": {
-      const input = yield* decodeRequest(key, request);
-      return yield* transfer(key, () => promotePage(input));
-    }
-    case "pod.runs":
-      return yield* listRuns(yield* decodeRequest(key, request));
-    case "pod.member.read":
-      return yield* readMember(yield* decodeRequest(key, request));
-    case "pod.member.write":
-      return yield* writeMember(yield* decodeRequest(key, request));
-    case "pod.member.save":
-      return yield* saveMember(yield* decodeRequest(key, request));
-    case "pod.member.compose":
-      return yield* composeMember(
-        yield* decodeRequest(key, request),
-        yield* podContext(bridge, scope),
-      );
-    case "rhvac.open":
-      return yield* rhvacOpen(yield* decodeRequest(key, request));
-    case "rhvac.assemblies":
-      return yield* rhvacAssemblies(yield* decodeRequest(key, request));
-    case "rhvac.sync":
-      return yield* rhvacSync(yield* decodeRequest(key, request));
-    case "rhvac.launch":
-      return yield* rhvacLaunch(yield* decodeRequest(key, request));
-    case "rhvac.takeoff":
-      return yield* rhvacTakeoff(yield* decodeRequest(key, request));
-    case "rhvac.list":
-      return yield* rhvacList(yield* decodeRequest(key, request));
-    case "aps.auth.status":
-      return yield* apsAuthStatus(yield* decodeRequest(key, request));
-    case "aps.auth.login":
-      return yield* apsAuthLogin(yield* decodeRequest(key, request));
-    case "aps.auth.logout":
-      return yield* apsAuthLogout();
-    case "aps.auth.token":
-      return yield* apsAuthToken(yield* decodeRequest(key, request));
-  }
+  return yield* localEntries[key]({ request, scope, bridge });
 });
+
+type LocalCall = {
+  request: unknown;
+  scope: HostSessionScope | undefined;
+  bridge: RevitBridge["Service"];
+};
+const localEntries = {
+  "takeoffs.saved": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    return yield* savedTakeoffs(request, hostTakeoffCaptures());
+  }),
+  "host.status": Effect.fnUntraced(function* ({ bridge }: LocalCall) {
+    return yield* Effect.flatMap(
+      Effect.map(bridge.list, (sessions) => ({ connected: sessions.some((s) => s.connected) })),
+      (snapshot) => getHostStatus(snapshot),
+    );
+  }),
+  "host.topology": Effect.fnUntraced(function* ({ bridge }: LocalCall) {
+    // The operator's map: host identity + all sessions in one snapshot (ADR 0003).
+    const host = yield* Effect.flatMap(
+      Effect.map(bridge.list, (sessions) => ({ connected: sessions.some((s) => s.connected) })),
+      (snapshot) => getHostStatus(snapshot),
+    );
+    const sessions = yield* listBridgeSessions(bridge.list);
+    return {
+      observedAtUtc: new Date().toISOString(),
+      host,
+      sessions: sessions.sessions,
+    };
+  }),
+  "bridge.sessions.summary": Effect.fnUntraced(function* ({ scope, bridge }: LocalCall) {
+    return yield* Effect.flatMap(sdkSession(bridge, scope), getBridgeSessionSummary);
+  }),
+  "bridge.sessions.list": Effect.fnUntraced(function* ({ bridge }: LocalCall) {
+    return yield* listBridgeSessions(bridge.list);
+  }),
+  "logs.tail": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    return yield* tailLogs(yield* decodeRequest("logs.tail", request));
+  }),
+  "host.shell.open": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    return yield* openShellPath(yield* decodeRequest("host.shell.open", request));
+  }),
+  "pod.list": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    const input = yield* decodeRequest("pod.list", request);
+    return input.projection === "identity"
+      ? yield* resolvePodIdentity(input.folder)
+      : yield* listPods();
+  }),
+  "pod.capture": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    const { pod } = yield* decodeRequest("pod.capture", request);
+    return yield* Effect.tryPromise({
+      try: () => capturePackage(pod),
+      catch: (error) => packageError("pod.capture", error),
+    }).pipe(
+      Effect.map(
+        ({ id, folder, directory, entrypoints, contributions, memberBundle, sourceBundle }) => ({
+          id,
+          folder,
+          directory,
+          entrypoints,
+          contributions,
+          memberBundle,
+          sourceBundle,
+        }),
+      ),
+    );
+  }),
+  "pod.export": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    const input = yield* decodeRequest("pod.export", request);
+    return yield* transfer("pod.export", () => exportPod(input));
+  }),
+  "pod.import": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    const input = yield* decodeRequest("pod.import", request);
+    return yield* transfer("pod.import", () => importPod(input));
+  }),
+  "pod.promote": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    const input = yield* decodeRequest("pod.promote", request);
+    return yield* transfer("pod.promote", () => promotePage(input));
+  }),
+  "pod.runs": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    return yield* listRuns(yield* decodeRequest("pod.runs", request));
+  }),
+  "pod.member.read": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    return yield* readMember(yield* decodeRequest("pod.member.read", request));
+  }),
+  "pod.member.write": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    return yield* writeMember(yield* decodeRequest("pod.member.write", request));
+  }),
+  "pod.member.save": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    return yield* saveMember(yield* decodeRequest("pod.member.save", request));
+  }),
+  "pod.member.compose": Effect.fnUntraced(function* ({ request, scope, bridge }: LocalCall) {
+    return yield* composeMember(
+      yield* decodeRequest("pod.member.compose", request),
+      yield* podContext(bridge, scope),
+    );
+  }),
+  "rhvac.open": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    return yield* rhvacOpen(yield* decodeRequest("rhvac.open", request));
+  }),
+  "rhvac.assemblies": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    return yield* rhvacAssemblies(yield* decodeRequest("rhvac.assemblies", request));
+  }),
+  "rhvac.sync": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    return yield* rhvacSync(yield* decodeRequest("rhvac.sync", request));
+  }),
+  "rhvac.launch": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    return yield* rhvacLaunch(yield* decodeRequest("rhvac.launch", request));
+  }),
+  "rhvac.takeoff": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    return yield* rhvacTakeoff(yield* decodeRequest("rhvac.takeoff", request));
+  }),
+  "rhvac.list": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    return yield* rhvacList(yield* decodeRequest("rhvac.list", request));
+  }),
+  "aps.auth.status": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    return yield* apsAuthStatus(yield* decodeRequest("aps.auth.status", request));
+  }),
+  "aps.auth.login": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    return yield* apsAuthLogin(yield* decodeRequest("aps.auth.login", request));
+  }),
+  "aps.auth.logout": Effect.fnUntraced(function* (_call: LocalCall) {
+    return yield* apsAuthLogout();
+  }),
+  "aps.auth.token": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    return yield* apsAuthToken(yield* decodeRequest("aps.auth.token", request));
+  }),
+};
 
 /**
  * Archive transport is host-only. A refusal is a settled answer (the transfer is all-or-nothing, so
@@ -1317,7 +1359,7 @@ function executeGatewayLocal(
 ): Promise<unknown> {
   if (!isTsOnlyOperationKey(key))
     throw new BridgeError("Unknown host operation", 409, { notDispatched: true });
-  if (key !== "host.shell.open")
+  if (!callEntries.get(key)?.shell)
     return Effect.runPromise(
       dispatchTsOnlyOperation(key, input, undefined, bridge).pipe(
         Effect.provide(NodeServices.layer),

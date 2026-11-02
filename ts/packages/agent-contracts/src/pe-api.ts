@@ -1,3 +1,4 @@
+import { callPolicies, type CallPolicy } from "./call-policy.ts";
 import { commandCatalogAxes } from "./command-axes.ts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
@@ -130,6 +131,7 @@ export const peRoutes = {
 };
 
 export interface CatalogRow extends CatalogLink {
+  call?: CallPolicy;
   discovery?: {
     key: string;
     title: string;
@@ -144,6 +146,7 @@ export interface CatalogRow extends CatalogLink {
 export function nativeEntry(op: HostOperationDefinition): CatalogRow {
   return {
     key: op.key,
+    call: callPolicies[op.key],
     subject: op.subject as CatalogRow["subject"],
     touches: op.touches.split(", ") as CatalogRow["touches"],
     effect: op.effect as CatalogRow["effect"],

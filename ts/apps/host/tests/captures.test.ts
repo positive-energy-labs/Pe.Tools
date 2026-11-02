@@ -1,3 +1,4 @@
+import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import type { Caller } from "@pe/agent-contracts";
 import { withInvocationContext } from "@pe/runtime/context";
 import { human, pea } from "./callers.ts";
@@ -58,7 +59,7 @@ async function host(
         if (key === "host.ops.catalog")
           return {
             value: {
-              operations: [{ key: "revit.context.view-image", intent: "Read", needs: "document" }],
+              operations: [hostOpCatalog.find((op) => op.key === "revit.context.view-image")!],
             },
             target: null,
           };

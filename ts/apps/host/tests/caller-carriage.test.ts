@@ -1,3 +1,4 @@
+import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { invokeCommand } from "./command-fixture.ts";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -270,7 +271,7 @@ test("/call attributes a view-image capture to the caller it was carried by", as
       key === "host.ops.catalog"
         ? {
             value: {
-              operations: [{ key: "revit.context.view-image", intent: "Read", needs: "document" }],
+              operations: [hostOpCatalog.find((op) => op.key === "revit.context.view-image")!],
             },
             target: null,
           }
@@ -340,6 +341,7 @@ test("action controls and the Families reading judge their real caller", async (
             value: {
               operations: [
                 {
+                  ...hostOpCatalog.find((op) => op.key === "revit.matrix.loaded-families")!,
                   key: "revit.matrix.loaded-families",
                   intent: "Read",
                   needs: "document",
