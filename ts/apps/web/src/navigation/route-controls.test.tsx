@@ -19,7 +19,7 @@ test("the shell attaches only its current owner's host across retained route swi
     const path = useRouterState({ select: (state) => state.location.pathname });
     return (
       <RouteControlsProvider>
-        <RouteControlsOutlet slot="situation" as="div" className="outlet" />
+        <RouteControlsOutlet slot="situation" as="div" className="pe-appbar-situation" />
         {(["ducts", "fans"] as const).map((route) => (
           <Activity key={route} mode={path === `/${route}` ? "visible" : "hidden"}>
             <PrimaryRouteControls route={route} slot="situation">
@@ -40,7 +40,7 @@ test("the shell attaches only its current owner's host across retained route swi
   });
   await router.load();
   const view = render(<RouterProvider router={router} />);
-  const outlet = view.container.querySelector(".outlet")!;
+  const outlet = view.container.querySelector(".pe-appbar-situation")!;
   expect(outlet.textContent).toBe("ducts controls");
   const firstHost = outlet.firstElementChild!;
   await act(async () => {
