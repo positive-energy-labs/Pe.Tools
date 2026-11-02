@@ -25,6 +25,7 @@ internal static class PeRoutes {
         internal static class Keys {
             public const string ThreadSearch = "threadSearch";
             public const string ThreadSort = "threadSort";
+            public const string Selected = "selected";
             public const string Mode = "mode";
             public const string Turn = "turn";
         }
@@ -291,9 +292,8 @@ internal static class PeRoutes {
             public const string Stage = "stage";
             public const string View = "view";
             public const string Layers = "layers";
-            public const string Focus = "focus";
+            public const string Selected = "selected";
             public const string Show = "show";
-            public const string Card = "card";
             public const string Viewport = "viewport";
         }
     }

@@ -35,7 +35,7 @@ test("a bare string field draws no free-text box unless it declares one", () => 
     renderToStaticMarkup(
       <PageControl
         id="pod"
-        field={{ ...field(z.string().default("")), ...decl } as never}
+        field={{ ...field(z.string().default(""), {}), ...decl } as never}
         value=""
         enabled
         set={() => {}}

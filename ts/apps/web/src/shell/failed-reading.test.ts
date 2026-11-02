@@ -1,3 +1,4 @@
+import {testSources,testSubject,testFields,testReadings} from '../test-route-subject';
 import { afterEach, expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { pane, type RouteGraph, type WorkKey } from "@pe/agent-contracts";
@@ -23,12 +24,12 @@ function fixture() {
   let port!: ReadingWorkerPort<unknown, string>;
   const reply = (data: { id: number; error: string } | { id: number; result: string }) =>
     port.onmessage!({ data });
-  const graph: RouteGraph<Page, Doc> = {
+  const graph: RouteGraph<Page, Doc> = {...testSubject,
     key: "failed-proof",
     address: "failed-proof",
     name: "Failed proof",
-    fields: { stage: { ...field(z.string().default("edit"), {}), role: "stage" } },
-    readings: {
+    fields: {...testFields, stage: { ...field(z.string().default("edit"), {}), role: "stage" } },
+    readings: {...testReadings,
       input: { kind: "use", source: "input", retire: "target" },
       calc: { kind: "worker", source: "calc", deps: ["input"], retire: "target" },
     },
@@ -48,7 +49,7 @@ function fixture() {
   const adapters: MountAdapters<Page, Doc> = {
     getSnapshot: () => scope,
     subscribe: () => () => {},
-    sources: {
+    sources: {...testSources,
       input: {
         kind: "use",
         open: (ctx, deliver) => {

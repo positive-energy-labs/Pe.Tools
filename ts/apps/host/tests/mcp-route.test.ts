@@ -57,8 +57,8 @@ const options: IdentityOptions = {
   },
 };
 const operations: HostOperationDefinition[] = [
-  { key: "pod.list", intent: "Read", needs: "nothing" },
-  { key: "pod.member.write", intent: "Mutate", needs: "nothing" },
+  { key: "pod.list", intent: "Read", subject: "None", touches: "Metadata", effect: "Read", cardinality: "One", costTier: "Cheap", needs: "nothing" },
+  { key: "pod.member.write", intent: "Mutate", subject: "None", touches: "Metadata", effect: "SessionWrite", cardinality: "One", costTier: "Cheap", needs: "nothing" },
 ];
 const dispose: Array<() => Promise<void>> = [];
 test("access-084/086: one paired MCP session crosses transports and revoke refuses its next HTTP request", async () => {

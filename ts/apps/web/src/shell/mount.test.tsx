@@ -1,3 +1,4 @@
+import {testSources,testSubject,testFields,testReadings} from '../test-route-subject';
 // @vitest-environment jsdom
 import { StrictMode } from "react";
 import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
@@ -182,7 +183,7 @@ async function fixture(cells = false) {
   let deltaSubscriptions = 0;
   let documentChange: ((ref: { session: string; openId: string }) => void) | undefined;
   let late: ((receipt: ActionReceipt, key: WorkKey | null, press?: string) => void) | undefined;
-  const graph: RouteGraph<Page, Doc> = {
+  const graph: RouteGraph<Page, Doc> = {...testSubject,
     key: "mount-proof",
     address: "mount-proof",
     name: "Mount proof",
@@ -193,11 +194,11 @@ async function fixture(cells = false) {
           cells: [{ segment: "rules", groupOf: (id: string) => [id], nouns: ["rule"] }],
         }
       : {}),
-    fields: {
+    fields: {...testFields,
       stage: { ...field(z.string().default("edit"), {}), role: "stage" },
       cfm: { ...field(z.number().default(400), {}), role: "query", editor: "situation" },
     },
-    readings: {
+    readings: {...testReadings,
       result: {
         kind: "derive",
         source: "solve",
@@ -270,7 +271,7 @@ async function fixture(cells = false) {
         listeners.delete(notify);
       };
     },
-    sources: {
+    sources: {...testSources,
       solve: { kind: "derive", derive: (ctx) => (ctx.page as Page).cfm * 2 },
       capture: {
         kind: "use",

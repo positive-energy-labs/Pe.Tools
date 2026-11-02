@@ -1,3 +1,4 @@
+import {testSources,testSubject,testFields,testReadings} from '../test-route-subject';
 import { scheduleQueries } from "../../../../packages/mcps/src/shared/query-client";
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
@@ -59,12 +60,12 @@ const DOC = address("C:/Jobs/Level 1.rvt");
 const workSchema = z.object({ note: z.string().default("") });
 const graph = (
   needs?: RouteGraph["needs"],
-): RouteGraph<Record<string, never>, { note: string }> => ({
+): RouteGraph<{}, { note: string }> => ({...testSubject,
   key: "scope-proof",
   address: "scope-proof",
   name: "Scope proof",
-  fields: {},
-  readings: {},
+  fields: {...testFields,},
+  readings: {...testReadings,},
   verbs: {},
   panes: { only: { label: "Only", purpose: "Proof", draws: [], verbs: [] } },
   layout: pane("only"),
@@ -364,7 +365,7 @@ test("a stale write raises conflict; writing verbs and undo refuse until an acce
   const ports = await probe(noted, pin({ kind: "open", ref }));
   await waitFor(() => expect(ports().getSnapshot().work).not.toBeNull());
   const key = ports().getSnapshot().work!.handle.key;
-  const owner = createGraphMount(noted, { sources: {}, ...ports() });
+  const owner = createGraphMount(noted, { sources: {...testSources,}, ...ports() });
   const release = owner.connect();
   host.write.mockResolvedValue(STALE);
   expect(await owner.control("note").run()).toMatchObject({ state: "stale" });
@@ -409,7 +410,7 @@ test("unreadable Work offers the start-fresh verb; its shown review commits once
   await waitFor(() => expect(ports().status.unreadable).toBe(true));
   const key = ports().getSnapshot().unreadable!;
   expect(ports().getSnapshot().work).toBeNull();
-  const owner = createGraphMount(noted, { sources: {}, ...ports() });
+  const owner = createGraphMount(noted, { sources: {...testSources,}, ...ports() });
   expect(owner.verbs[START_FRESH_VERB]).toMatchObject({
     kind: "recovery",
     label: "Start fresh",
@@ -447,7 +448,7 @@ test("unreadable Work offers the start-fresh verb; its shown review commits once
     basis: { workKey: workKey(key) },
   });
   // The review is spent: the next press opens a new one, it never commits.
-  expect(await owner.control(START_FRESH_VERB).run({ confirm: true })).toMatchObject({
+  expect(await owner.control(START_FRESH_VERB).run()).toMatchObject({
     state: "review",
   });
   expect(host.fresh).toHaveBeenCalledTimes(1);
@@ -459,7 +460,7 @@ test("readable Work has nothing to start fresh", async () => {
   const ports = await probe(noted, pin({ kind: "open", ref: { session: "s1", openId: "o1" } }));
   await waitFor(() => expect(ports().getSnapshot().work).not.toBeNull());
   expect(ports().status.unreadable).toBe(false);
-  const owner = createGraphMount(noted, { sources: {}, ...ports() });
+  const owner = createGraphMount(noted, { sources: {...testSources,}, ...ports() });
   expect(owner.control(START_FRESH_VERB).refusal).toBe(
     "This Work is readable; there is nothing to recover",
   );
@@ -471,15 +472,15 @@ test("readable Work has nothing to start fresh", async () => {
 // Real routeFromGraph, real door: Page's `ws` names the subject Work.
 type Subject = { ws: string };
 let latest: GraphMount<Subject, { note: string }> | null = null;
-const subjectGraph: RouteGraph<Subject, { note: string }> = {
+const subjectGraph: RouteGraph<Subject, { note: string }> = {...testSubject,
   key: "subject-proof",
   address: "subject-proof",
   name: "Subject proof",
   needs: "document",
   work: workSchema,
   workSubject: "ws",
-  fields: { ws: { ...field(z.string().default(""), {}), role: "subject" } },
-  readings: {},
+  fields: {...testFields, ws: { ...field(z.string().default(""), {}), role: "subject" } },
+  readings: {...testReadings,},
   verbs: {
     note: workVerb(
       { label: "note", input: z.strictObject({}).default({}) },
@@ -511,7 +512,7 @@ const subjectGraph: RouteGraph<Subject, { note: string }> = {
 const subjectRoute = routeFromGraph(
   subjectGraph,
   {
-    sources: {},
+    sources: {...testSources,},
     bodies: {
       only: ({ owner }) => {
         latest = owner;
@@ -673,7 +674,7 @@ const salvageGraph: RouteGraph<Subject, { note: string }> = {
 const salvageRoute = routeFromGraph(
   salvageGraph,
   {
-    sources: {},
+    sources: {...testSources,},
     bodies: {
       only: ({ owner }) => {
         latest = owner;

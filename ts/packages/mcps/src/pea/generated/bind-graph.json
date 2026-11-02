@@ -280,6 +280,18 @@
       "word": "Page"
     }
   },
+  "subjectField": {
+    "cardinality": "one",
+    "detail": "target",
+    "field": "page",
+    "keyKind": "name",
+    "noun": "Page",
+    "pane": "page",
+    "roster": "inventory",
+    "show": {
+      "runtime": true
+    }
+  },
   "verbs": {
     "bind": {
       "caller": "human",

@@ -99,7 +99,7 @@ export const familiesGraph: RouteGraph<FamiliesPage, FamiliesRouteDocument> = {
     query: { ...fields.query, role: "query" },
     sort: { ...fields.sort, role: "query" },
     hidden: { ...fields.hidden, role: "pose" },
-    lines: { ...fields.lines, role: "selection" },
+    lines: { ...fields.lines, role: "query" },
     past: { ...fields.past, role: "selection" },
     draft: {
       ...field(draft, {}, { encode: JSON.stringify, decode: (text) => JSON.parse(text) }),

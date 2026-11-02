@@ -86,7 +86,7 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = {
     sort: { ...fields.sort, role: "query" },
     hidden: { ...fields.hidden, role: "pose" },
     overlay: { ...fields.overlay, role: "pose" },
-    drill: { ...fields.drill, role: "selection" },
+    drill: { ...fields.drill, role: "query" },
     inspector: { ...fields.inspector, role: "selection" },
     doc: { ...fields.doc, role: "pose" },
   },

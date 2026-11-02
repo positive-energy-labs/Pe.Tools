@@ -12,7 +12,7 @@ import {
   type PlaneViewport,
   type Viewport,
 } from "../page-keys.ts";
-import { field, type RouteDeclaration } from "../route-field.ts";
+import { manyField, field, type RouteDeclaration } from "../route-field.ts";
 import { emptySpaceCut, spaceCutsSchema, spaceSceneSchema } from "../space-view.ts";
 
 /** Lossless JSON in the address: what `schema` parses (its key order), stringified; no rounding. */
@@ -76,15 +76,6 @@ const spaceCuts = spaceCutsSchema.default({
 const SPACE_MODES = ["3d", "top", "north", "east"] as const;
 const spaceViewport = z.discriminatedUnion("kind", [orbitViewportSchema, planeViewportSchema]);
 
-/** Host element ids, comma joined; any non-integer part makes the whole list unreadable. */
-const idsCodec: Codec<number[]> = {
-  encode: (ids) => ids.join(","),
-  decode: (text) => {
-    const parts = text === "" ? [] : text.split(",");
-    return parts.every((part) => /^-?\d+$/.test(part)) ? parts.map(Number) : INVALID;
-  },
-};
-
 /** `""` is none (null); any other text is the key itself. */
 const nullableText: Codec<string | null> = {
   encode: (value) => value ?? "",
@@ -95,7 +86,7 @@ const spaceFields = {
   /** The captured scene's hash; absent = none open. Only the capture verb writes a new one. */
   scene: field(spaceSceneSchema.optional(), { url: "push", agent: "read" }),
   /** Host element ids whose surrounding context a capture includes; a URL read never captures. */
-  ids: field(z.array(z.number().int()).default([]), { url: "push", agent: "set" }, idsCodec),
+  ids: manyField("name", { url: "push", agent: "set" }, z.array(z.number().int()).default([])),
   mode: field(modeKey(SPACE_MODES, "3d"), { url: "push", agent: "set" }),
   /** null = fit. `3d` holds an orbit, an axis a plane (`conflict`). A drag replaces. */
   viewport: field(
@@ -110,17 +101,8 @@ const spaceFields = {
     { url: "push", agent: "set" },
     nullableText,
   ),
-  hidden: field(
-    spaceElementKeys.default([]),
-    { url: "push", agent: "set" },
-    jsonCodec(spaceElementKeys),
-  ),
-  /** null = every element shown; `[]` = nothing shown. */
-  isolated: field(
-    spaceElementKeys.nullable().default(null),
-    { url: "push", agent: "set" },
-    jsonCodec(spaceElementKeys.nullable()),
-  ),
+  hidden: manyField("UniqueId", { url: "push", agent: "set" }, spaceElementKeys.default([])),
+  isolated: manyField("UniqueId", { url: "push", agent: "set" }, spaceElementKeys.nullable().default(null)),
 };
 
 /** The viewport kind the mode draws: a wrong one is no pose for this mode. */
@@ -154,10 +136,10 @@ export const spaceAddress = {
   fields: {
     ...spaceFields,
     /** The layers the picture draws, in `SPACE_LAYERS` order. */
-    layers: field(layersKey(SPACE_LAYERS, ["meshes", "context", "cuts"]), {
+    layers: manyField("name", {
       url: "push",
       agent: "set",
-    }),
+    }, layersKey(SPACE_LAYERS, ["meshes", "context", "cuts"])),
   },
   conflict: spaceConflict,
   agent: {

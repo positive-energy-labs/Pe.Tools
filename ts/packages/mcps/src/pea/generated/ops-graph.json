@@ -202,6 +202,17 @@
       "retire": "target",
       "source": "ops.catalog"
     },
+    "operation": {
+      "args": {
+        "runtime": true
+      },
+      "deps": [
+        "catalog"
+      ],
+      "kind": "derive",
+      "retire": "page",
+      "source": "ops.operation"
+    },
     "receipt": {
       "args": {
         "runtime": true
@@ -236,6 +247,18 @@
         "run"
       ],
       "word": "Inspecting"
+    }
+  },
+  "subjectField": {
+    "cardinality": "one",
+    "detail": "operation",
+    "field": "op",
+    "keyKind": "name",
+    "noun": "operation",
+    "pane": "operation",
+    "roster": "catalog",
+    "show": {
+      "runtime": true
     }
   },
   "transition": {

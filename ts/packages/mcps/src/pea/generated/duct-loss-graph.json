@@ -62,6 +62,28 @@
       "share": true,
       "url": "replace"
     },
+    "case": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "subject",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "duct",
+        "enum": [
+          "duct"
+        ],
+        "type": "string"
+      },
+      "share": true,
+      "url": "push"
+    },
     "cfm": {
       "agent": "set",
       "codec": {
@@ -161,6 +183,39 @@
       "share": true,
       "url": "replace"
     },
+    "selected": {
+      "agent": "set",
+      "cardinality": "many",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "keyKind": "name",
+      "role": "selection",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "anyOf": [
+          {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "const": "all",
+            "type": "string"
+          }
+        ],
+        "default": []
+      },
+      "share": true,
+      "url": "replace"
+    },
     "shape": {
       "agent": "set",
       "codec": {
@@ -171,7 +226,7 @@
           "runtime": true
         }
       },
-      "role": "subject",
+      "role": "query",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "round",
@@ -244,6 +299,11 @@
     }
   },
   "readings": {
+    "case": {
+      "kind": "derive",
+      "retire": "page",
+      "source": "duct-loss.case"
+    },
     "result": {
       "args": {
         "runtime": true
@@ -274,6 +334,19 @@
       "teach": "Calculate duct friction from dimensions and airflow. The wheel, charts and formula use the same inputs. All calculation runs in this browser. The formula is ASHRAE Fundamentals, Duct Design: Darcy friction with the Altshul-Tsal factor (L in ft, D in inches, roughness in ft, density in lb/ft3). The wheel reads the friction-chart power law 0.109136·Q^1.9/D^5.02 for galvanized duct and standard air, as the SMACNA Ductulator does; it runs up to a tenth above the Altshul-Tsal figure.",
       "verbs": [],
       "word": "Calculating"
+    }
+  },
+  "subjectField": {
+    "cardinality": "one",
+    "detail": "result",
+    "field": "case",
+    "keyKind": "name",
+    "kind": "singleton",
+    "noun": "hypothetical duct case",
+    "pane": "inputs",
+    "roster": "case",
+    "show": {
+      "runtime": true
     }
   },
   "verbs": {}

@@ -24,7 +24,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "tray": false
       }
     },
-    "moduleHash": "e86b1703514da8b39e8edd4791655b3ec95cf1a6e1d26858e5151e498b9d5a23"
+    "moduleHash": "b63b1db5fa53b5ce7bcdd2d23c3445ac455fcb9a2282736f21df63cfc3623fa5"
   },
   {
     "key": "chat",
@@ -51,7 +51,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "tray": "compact"
       }
     },
-    "moduleHash": "271d5b9bc0ea3cbc5a57f4117dd99755974d85aaaf3bbe39c83bbeb3f517909c"
+    "moduleHash": "fd86854bec294b147a3bb02fe210396deb579be71cc8460059da98749e5466b6"
   },
   {
     "key": "data-tables",
@@ -76,7 +76,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "tray": false
       }
     },
-    "moduleHash": "748a3a5873293f43f62dc6f35dea89e96cf930b85903674411a703a7103393f7"
+    "moduleHash": "14e27267f1daa3337a74e239cf6a061de0458bd7fe0017c8d4d93b2c1cc48f65"
   },
   {
     "key": "design-system",
@@ -126,7 +126,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "tray": false
       }
     },
-    "moduleHash": "227d79605ba19d94f9fcb83694350cac096483d1f3930634e5c8064c8e708333"
+    "moduleHash": "e8b13eaacc19a5a1a7e13cc2ac07379bfc25c2aae462bb713d5404b772373acf"
   },
   {
     "key": "duct-loss",
@@ -153,7 +153,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "tray": false
       }
     },
-    "moduleHash": "3cbfe8b9ffc9d169d39b885feb1518ed1c65b152b220c243d113e47e233ec97b"
+    "moduleHash": "5871efc52a17b40f0943c7c6c086d89ca8ec9f793906b2135e2c4a296a2cc659"
   },
   {
     "key": "ducts",
@@ -185,7 +185,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
       },
       "resume": "document"
     },
-    "moduleHash": "0e4ab4d04aa0af3addb35fbcf238ff1a32eed7567919dcc8b52c0b25574ff2a9"
+    "moduleHash": "d87f4e0cdab6b2b824af576930ebdfccb9ebf30bb206a41e4bd312fa7f6bb422"
   },
   {
     "key": "families",
@@ -213,7 +213,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
       },
       "resume": "document"
     },
-    "moduleHash": "718555a5beb7604805ab0e75b28c8e61d45f0eab23881799eddf91f25f08bc16"
+    "moduleHash": "850e49cc3edff4a537ba41cfaf33af0bf4057628e8daf8cda94829b9c736ccff"
   },
   {
     "key": "family",
@@ -242,7 +242,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
       },
       "resume": "document"
     },
-    "moduleHash": "16414417800003edf66bf1ad8a02e79a9a44bb5f650517d5501bd8ee79945871"
+    "moduleHash": "12e1d32d8e10bf3cdd3bbf0ed2a798810cc65c5a7e0152eb3e35bf2739b0f64c"
   },
   {
     "key": "fans",
@@ -269,7 +269,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
       },
       "resume": "document"
     },
-    "moduleHash": "b5bfd0e3eac7c8687799232cd0b86260dd5f47805587001fed709053ad4480b1"
+    "moduleHash": "4883742d9f93c99e952910636fdb2257fbae38b460ff1a979d1177afc91f7a79"
   },
   {
     "key": "grilles",
@@ -298,7 +298,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "tray": false
       }
     },
-    "moduleHash": "2323c2c560aef90414cdd5022b5c701e353f9d80c2617d7037858f58095d32f6"
+    "moduleHash": "ec7b33e4f1eabcdd53dc71b86502f99b92720f59658930bfcc4bbc18bf17e5a4"
   },
   {
     "key": "index",
@@ -324,7 +324,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "tray": false
       }
     },
-    "moduleHash": "1e1ea4deb22535c0aa287bef30843fa75c55ad027adb7e7d1d23d5f2becb1001"
+    "moduleHash": "c2a323be4d8fd74c29044c4b646aef2b987b87b97b54109c529b0acc62d324bb"
   },
   {
     "key": "instances",
@@ -350,7 +350,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "tray": "compact"
       }
     },
-    "moduleHash": "a12b1343a126d70ea545efed2269837ac930ea1c322dfccaf57f8d45959ad7a8"
+    "moduleHash": "18340aaf88781f08fa803a93ac7b4b47887d26499f05309ea1d6a3394d82be44"
   },
   {
     "key": "ops",
@@ -377,7 +377,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "tray": false
       }
     },
-    "moduleHash": "1841fe5b092402f808e1ce0c95b72af9210ef440c9cc047ff27fcfa693f48692"
+    "moduleHash": "f3b95174d1af4e84b1c53dcf944b5edac14af0b3eb074641aca41fce5a2d08c5"
   },
   {
     "key": "bind",
@@ -402,7 +402,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "tray": false
       }
     },
-    "moduleHash": "eaa3420e711607149d67edb328295c4d83a6f12167fc8d53958fe0b5aefcb76c"
+    "moduleHash": "87bc88cc7c48d186077e311088b03803b29c025791a7243020963026c35505af"
   },
   {
     "key": "parameter-links",
@@ -414,7 +414,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
       "runtimeNeed": "Revit for model actions; browsing saved data is separate",
       "icon": "Link2",
       "category": "Coordinate model data",
-      "blurb": "Cross-element parameter links — co-edit the link profile with pea, preview the projected target writes, then apply to reconcile them.",
+      "blurb": "Cross-element parameter links â€” co-edit the link profile with pea, preview the projected target writes, then apply to reconcile them.",
       "aliases": [
         "Revit",
         "data"
@@ -427,7 +427,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "tray": false
       }
     },
-    "moduleHash": "4ccad94c771c5ce8f798b0df7384d8fc779744582fd7712792c8777408099946"
+    "moduleHash": "50a3336721d01dde07d61335d972fec033aea85ffa478937af9d53152a523d0a"
   },
   {
     "key": "pod-admin",
@@ -453,7 +453,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "tray": false
       }
     },
-    "moduleHash": "292127f0e5f032db4d2463f4723ac2e7763622385471a1abdcb6f6554f5635ca"
+    "moduleHash": "70dccdaa2add51f12d415ee079b51169bcc784f3e50900ca0e0c8846faeb7a56"
   },
   {
     "key": "pods",
@@ -477,7 +477,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "tray": false
       }
     },
-    "moduleHash": "c538291b5e1f06f0abd95b172ce8becd1bd4c1066b585a2604950f86a737af2d"
+    "moduleHash": "5abd2c8cb0c510439f322db1968468aa667f13b2bf82ce778b9aa1e37e050ecf"
   },
   {
     "key": "rhvac-sync",
@@ -506,7 +506,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
       },
       "resume": "document"
     },
-    "moduleHash": "9d7dd0cb059fe7b3ce2202934233807d3db90dadfb6587ce1861401052f5aa3e"
+    "moduleHash": "a6307c66c9aa973f1e22181273bd9a606cf4493da94a0aa647f7d828dd975200"
   },
   {
     "key": "rooms",
@@ -534,7 +534,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
       },
       "resume": "document"
     },
-    "moduleHash": "913a44c968944c3169874cb26e17527cad8f1112cae9794b7b361e11f2c92581"
+    "moduleHash": "0bb831592f493d8fc021a7e7c8b395d632836c37af3d233edf130adf107d3373"
   },
   {
     "key": "schedule-specs",
@@ -560,7 +560,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
       },
       "resume": "document"
     },
-    "moduleHash": "130c03fd3a12df48381cd5985570f6d51e1e64685fed745d10bcfaa2d4c23b79"
+    "moduleHash": "1bae867e978c9291afce4f6cdb0aea0ab9a84a7ca33953b5fc6f92b8f2f27001"
   },
   {
     "key": "schedules",
@@ -586,7 +586,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
       },
       "resume": "document"
     },
-    "moduleHash": "0f6f8ead6b3859e42ca363f395f1659d3f0f426bc3393d458b47111a665d98e0"
+    "moduleHash": "7fbca53c3d5178bc95bda115d731f6a626551fcbc6883a1073b0ebbe7361aba2"
   },
   {
     "key": "session-admin",
@@ -611,7 +611,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "tray": "compact"
       }
     },
-    "moduleHash": "fb5c81d39bc8a5a279f7f0473c9c51896c432aa2d739fd09015a37f51fd46be0"
+    "moduleHash": "bb576af4553e5df659977c3b1f907437d31d7faf340152b66fddd3cc8305e49e"
   },
   {
     "key": "settings",
@@ -649,7 +649,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "tray": "compact"
       }
     },
-    "moduleHash": "b5d2a07d41ba836ef037b2fd5bb565c46030f19ce13310d508a8357f3720b03a"
+    "moduleHash": "7d1830bc5d82062cc737c693d79ce512455f47e88744329a560668018af590ad"
   },
   {
     "key": "space",
@@ -678,7 +678,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "tray": false
       }
     },
-    "moduleHash": "f0a3279b2f24cf03446cc3bfbff0c448792bb64b267187e664391717dacbf0c7"
+    "moduleHash": "e0ff5d0bf8b24988412449724cec5ce1086d0c2d888c7843e6b1b1937ab8a067"
   },
   {
     "key": "takeoffs",
@@ -712,7 +712,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
       },
       "resume": "document"
     },
-    "moduleHash": "188f966c58e66c1da506ef0802ddf5c61e7342de7bb3a24817478eeecaecfc62"
+    "moduleHash": "2965661464fe8dcc1dee4d9e79a3e31f999e6c3718ba658cd63c382b4f3a4e35"
   },
   {
     "key": "zone-audit",
@@ -741,6 +741,6 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
       },
       "resume": "document"
     },
-    "moduleHash": "9ee3ffdc5951866210b2c624f48264c72335486f7390d2cc889eea7653b2c016"
+    "moduleHash": "a9fa7f1a0573d61b5a4407e15d05b441502b88d2bb0ca9f277b917605b5dabe2"
   }
 ];

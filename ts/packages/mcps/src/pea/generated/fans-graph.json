@@ -652,6 +652,7 @@
           "runtime": true
         }
       },
+      "keyKind": "name",
       "role": "pose",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -1787,6 +1788,7 @@
       "source": "ducts.tables"
     }
   },
+  "refresh": "refresh",
   "resetOnTarget": [
     "heal"
   ],
@@ -1816,12 +1818,8 @@
         "sheet-ledger"
       ],
       "verbs": [
-        "refresh",
-        "preview",
         "price",
-        "heal-preview",
         "heal",
-        "fan-preview",
         "assign-fan"
       ],
       "word": "Fan paths"

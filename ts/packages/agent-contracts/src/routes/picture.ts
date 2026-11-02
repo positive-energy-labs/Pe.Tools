@@ -8,7 +8,7 @@ import {
   viewportSchema,
   type Viewport,
 } from "../page-keys.ts";
-import { field, text } from "../route-field.ts";
+import { manyField, field, text } from "../route-field.ts";
 
 /**
  * The Page keys a route's `Picture` (web `scene/picture`) reads and writes. A route's fields take
@@ -36,7 +36,7 @@ export const pictureFields = <
   /** The picture's encoding, a key of the web's `ENCODINGS`. */
   encoding: field(z.string().max(200).default(encoding), { url: "push", agent: "set" }),
   /** The layer keys the picture draws; empty = none. */
-  layers: field(layersKey(layers, on), { url: "push", agent: "set" }),
+  layers: manyField("name", { url: "push", agent: "set" }, layersKey(layers, on)),
   /**
    * How the model picture draws context when the halo or context layer is on: `glass` surfaces or
    * `lines`. With neither layer on, context is off (nothing captured or drawn).

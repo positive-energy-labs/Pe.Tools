@@ -1,3 +1,4 @@
+import {testSources,testSubject,testFields,testReadings} from '../test-route-subject';
 // @vitest-environment jsdom
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { StrictMode } from "react";
@@ -25,13 +26,13 @@ import { workVerb } from "./verbs";
 
 test("a Chat head Work write acknowledges the canonical kernel journal", async () => {
   const schema = z.object({ count: z.number().default(0) });
-  const graph: RouteGraph<Record<string, never>, z.output<typeof schema>> = {
+  const graph: RouteGraph<{}, z.output<typeof schema>> = {...testSubject,
     key: "head-journal",
     address: "head-journal",
     name: "Head journal",
     work: schema,
-    fields: {},
-    readings: {},
+    fields: {...testFields,},
+    readings: {...testReadings,},
     verbs: {},
     panes: { main: { label: "Main", purpose: "Test", draws: [], verbs: [] } },
     stages: { main: { word: "Main", panes: ["main"], verbs: [] } },
@@ -89,13 +90,13 @@ test("a head and its route share real host admission, undo, redo and author barr
   const route = `multi-work-${crypto.randomUUID()}`;
   const schema = z.object({ count: z.number().default(0) });
   const spec = { route, title: route, description: route, schema };
-  const graph: RouteGraph<Record<string, never>, z.output<typeof schema>> = {
+  const graph: RouteGraph<{}, z.output<typeof schema>> = {...testSubject,
     key: route,
     address: route,
     name: route,
     work: schema,
-    fields: {},
-    readings: {},
+    fields: {...testFields,},
+    readings: {...testReadings,},
     verbs: {
       increment: workVerb(
         { label: "increment", input: z.object({}) },
@@ -162,7 +163,7 @@ test("a head and its route share real host admission, undo, redo and author barr
       };
     },
     subscribe: (notify) => appAtomRegistry.subscribe(atom, notify),
-    sources: {},
+    sources: {...testSources,},
     write: host.writeRouteWork,
     subscribeAcceptedDeltas: (key, accept) => workspace.observeAccepted(key, accept),
   });

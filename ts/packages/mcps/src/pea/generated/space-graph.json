@@ -216,6 +216,7 @@
           "runtime": true
         }
       },
+      "keyKind": "UniqueId",
       "role": "pose",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -241,6 +242,7 @@
           "runtime": true
         }
       },
+      "keyKind": "name",
       "role": "selection",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -266,6 +268,7 @@
           "runtime": true
         }
       },
+      "keyKind": "UniqueId",
       "role": "pose",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -298,6 +301,7 @@
           "runtime": true
         }
       },
+      "keyKind": "name",
       "role": "pose",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -969,6 +973,14 @@
       "retire": "page",
       "source": "space.answers"
     },
+    "region": {
+      "args": {
+        "runtime": true
+      },
+      "kind": "derive",
+      "retire": "page",
+      "source": "space.region"
+    },
     "scene": {
       "args": {
         "runtime": true
@@ -998,6 +1010,18 @@
         "context"
       ],
       "word": "Inspecting"
+    }
+  },
+  "subjectField": {
+    "cardinality": "one",
+    "detail": "scene",
+    "field": "region",
+    "keyKind": "name",
+    "noun": "region",
+    "pane": "picture",
+    "roster": "region",
+    "show": {
+      "runtime": true
     }
   },
   "transition": {

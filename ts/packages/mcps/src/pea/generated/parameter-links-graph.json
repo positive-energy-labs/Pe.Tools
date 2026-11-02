@@ -18,7 +18,7 @@
       "Revit",
       "data"
     ],
-    "blurb": "Cross-element parameter links — co-edit the link profile with pea, preview the projected target writes, then apply to reconcile them.",
+    "blurb": "Cross-element parameter links â€” co-edit the link profile with pea, preview the projected target writes, then apply to reconcile them.",
     "category": "Coordinate model data",
     "exposure": "Preview",
     "icon": "Link2",
@@ -35,6 +35,26 @@
     "title": "Parameter Links"
   },
   "fields": {
+    "profile": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "subject",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "const": "document",
+        "default": "document",
+        "type": "string"
+      },
+      "share": true,
+      "url": "push"
+    },
     "rail": {
       "agent": false,
       "codec": {
@@ -53,6 +73,25 @@
           "open",
           "folded"
         ],
+        "type": "string"
+      },
+      "share": true,
+      "url": "replace"
+    },
+    "selection": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "selection",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "",
         "type": "string"
       },
       "share": true,
@@ -145,6 +184,18 @@
         "previewProposal"
       ],
       "word": "links"
+    }
+  },
+  "subjectField": {
+    "cardinality": "one",
+    "detail": "links",
+    "field": "profile",
+    "keyKind": "name",
+    "noun": "parameter-link profile",
+    "pane": "profile",
+    "roster": "links",
+    "show": {
+      "runtime": true
     }
   },
   "verbs": {

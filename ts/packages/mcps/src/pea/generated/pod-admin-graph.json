@@ -61,6 +61,25 @@
       },
       "share": true,
       "url": "push"
+    },
+    "selection": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "selection",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "",
+        "type": "string"
+      },
+      "share": true,
+      "url": "replace"
     }
   },
   "key": "pod-admin",

@@ -1,3 +1,4 @@
+import {testSources,testSubject,testFields,testReadings} from '../test-route-subject';
 // @vitest-environment jsdom
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
@@ -24,13 +25,13 @@ function fixture() {
   });
   const deliveries: { revision: number | null; deliver: ReadingDelivery<number> }[] = [];
   const requests: WorkWrite[] = [];
-  const graph: RouteGraph<Record<string, never>, z.output<typeof schema>> = {
+  const graph: RouteGraph<{}, z.output<typeof schema>> = {...testSubject,
     key: key.route,
     address: key.route,
     name: "History",
-    fields: {},
+    fields: {...testFields,},
     work: schema,
-    readings: { total: { kind: "use", source: "total", retire: "target" } },
+    readings: {...testReadings, total: { kind: "use", source: "total", retire: "target" } },
     verbs: {
       edit: workVerb(
         { label: "Edit", input: z.object({ amount: z.number() }) },
@@ -66,7 +67,7 @@ function fixture() {
         if (event.ok) accept(event);
       }),
     binding: (_, row) => ({ subject: null, args: row }),
-    sources: {
+    sources: {...testSources,
       total: {
         kind: "use",
         key: (scope) => scope.workRevision,

@@ -1,3 +1,4 @@
+import {testSubject,testFields} from '../test-route-subject';
 // @vitest-environment jsdom
 import { cleanup, render, waitFor, fireEvent } from "@testing-library/react";
 import { createMemoryHistory, createRouter, RouterContextProvider } from "@tanstack/react-router";
@@ -24,13 +25,13 @@ const read = {
     throw Error("Real query called");
   },
 };
-const graph: RouteGraph<{ stage: string }, { value: number }> = {
+const graph: RouteGraph<{ stage: string }, { value: number }> = {...testSubject, subjectField: { ...testSubject.subjectField, roster: "derive", detail: "derive" },
   key: "fixture-proof",
   address: "fixture-proof",
   name: "Fixture proof",
   needs: "project",
   work: z.object({ value: z.number().default(0) }),
-  fields: { stage: { ...field(z.string().default("edit"), {}), role: "stage" } },
+  fields: {...testFields, stage: { ...field(z.string().default("edit"), {}), role: "stage" } },
   readings: Object.fromEntries(
     (["use", "feed", "derive", "worker", "port"] as const).map((kind) => [
       kind,

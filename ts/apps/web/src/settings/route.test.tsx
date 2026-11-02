@@ -1,3 +1,4 @@
+import {testSubject,testReadings} from '../test-route-subject';
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { createMemoryHistory, createRouter, RouterContextProvider } from "@tanstack/react-router";
@@ -42,12 +43,12 @@ const proofSettingFields = {
     control: "color",
   },
 } satisfies Record<string, SettingField>;
-const proofGraph: RouteGraph<object> = {
+const proofGraph: RouteGraph<object> = {...testSubject,
   key: "proof",
   address: "proof",
   name: "Proof",
   fields: proofSettingFields,
-  readings: {},
+  readings: {...testReadings,},
   verbs: {},
   panes: { body: { label: "Body", purpose: "proof", draws: [], verbs: [] } },
   stages: { main: { word: "Main", panes: ["body"], verbs: [] } },

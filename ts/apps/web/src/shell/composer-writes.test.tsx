@@ -1,3 +1,4 @@
+import {testSources,testSubject,testFields,testReadings} from '../test-route-subject';
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { expect, test, vi } from "vite-plus/test";
@@ -33,13 +34,13 @@ async function scenario() {
     rules: z.record(z.string(), draftCellSchema(z.object({ table: z.string() }))).default({}),
   });
   type Work = z.output<typeof schema>;
-  const graph: RouteGraph<Record<string, never>, Work> = {
+  const graph: RouteGraph<{}, Work> = {...testSubject,
     key: route,
     address: route,
     name: "Ducts",
     work: schema,
-    fields: {},
-    readings: { sheet: { kind: "derive", source: "sheet", retire: "target" } },
+    fields: {...testFields,},
+    readings: {...testReadings, sheet: { kind: "derive", source: "sheet", retire: "target" } },
     cells: [{ segment: "rules", groupOf: (key) => [key], label: () => LABEL, noun: "loss rules" }],
     verbs: {
       edit: workVerb(
@@ -144,7 +145,7 @@ async function scenario() {
       };
     },
     subscribe: (notify) => appAtomRegistry.subscribe(atom, notify),
-    sources: {
+    sources: {...testSources,
       sheet: {
         kind: "derive",
         key: (scope) => scope.workRevision,

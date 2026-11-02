@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
-import { createRouteRegistry } from "../../kit/src/route-registry.ts";
-import { ductLossGraph as ductLoss } from "../../../apps/web/src/duct-loss/graph.ts";
-import { field, text } from "../src/route-field.ts";
+import { createRouteRegistry } from "../../../packages/kit/src/route-registry.ts";
+import { ductLossGraph as ductLoss } from "./duct-loss/graph.ts";
+import { field, text } from "../../../packages/agent-contracts/src/route-field.ts";
 import {
   cellVerbId,
   gate,
@@ -18,7 +18,7 @@ import {
   type FieldRole,
   type RouteGraph,
   type VerbDecl,
-} from "../src/route-graph.ts";
+} from "../../../packages/agent-contracts/src/route-graph.ts";
 
 const fields = ductLoss.fields;
 
@@ -140,11 +140,12 @@ test("a declared transition clears selection atomically when the subject changes
     key: "ducts",
     address: "ducts",
     name: "Ducts",
+    subjectField: {field:"system",noun:"system",keyKind:"name",cardinality:"one",roster:"roster",detail:"roster",pane:"picture",show:id=>id},
     fields: {
       system: { ...field(text(), {}), role: "subject" },
       selected: { ...field(text(), {}), role: "selection" },
     },
-    readings: {},
+    readings: {roster:{kind:"derive",source:"roster",retire:"never"}},
     verbs: {},
     panes: { picture: { label: "Picture", purpose: "See the system", draws: [], verbs: [] } },
     layout: gate("hasSystem", pane("picture")),

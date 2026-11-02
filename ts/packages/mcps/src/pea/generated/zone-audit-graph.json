@@ -92,7 +92,7 @@
           "runtime": true
         }
       },
-      "role": "selection",
+      "role": "pose",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "",
@@ -313,6 +313,7 @@
           "runtime": true
         }
       },
+      "keyKind": "name",
       "picker": {
         "options": {
           "runtime": true
@@ -320,15 +321,23 @@
         "placeholder": "Choose views",
         "reading": "roster"
       },
-      "role": "selection",
+      "role": "query",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": [],
-        "items": {
-          "type": "string"
-        },
-        "readOnly": true,
-        "type": "array"
+        "anyOf": [
+          {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "const": "all",
+            "type": "string"
+          }
+        ],
+        "default": []
       },
       "share": true,
       "url": "push"
@@ -363,7 +372,7 @@
           "runtime": true
         }
       },
-      "role": "selection",
+      "role": "pose",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "",
@@ -384,6 +393,7 @@
           "runtime": true
         }
       },
+      "keyKind": "UniqueId",
       "picker": {
         "options": {
           "runtime": true
@@ -394,12 +404,20 @@
       "role": "subject",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": [],
-        "items": {
-          "type": "string"
-        },
-        "readOnly": true,
-        "type": "array"
+        "anyOf": [
+          {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "const": "all",
+            "type": "string"
+          }
+        ],
+        "default": []
       },
       "share": true,
       "url": "push"
@@ -536,6 +554,9 @@
       "args": {
         "runtime": true
       },
+      "deps": [
+        "roster"
+      ],
       "kind": "use",
       "retire": "page",
       "source": "takeoffs.candidates"
@@ -551,7 +572,8 @@
       },
       "deps": [
         "snapshot",
-        "saved"
+        "saved",
+        "roster"
       ],
       "kind": "use",
       "retire": "page",
@@ -564,7 +586,8 @@
       "deps": [
         "snapshot",
         "saved",
-        "ownerCrops"
+        "ownerCrops",
+        "roster"
       ],
       "kind": "use",
       "retire": "page",
@@ -585,10 +608,9 @@
     },
     "roster": {
       "deps": [
-        "snapshot",
         "saved"
       ],
-      "kind": "derive",
+      "kind": "use",
       "retire": "target",
       "source": "takeoffs.roster"
     },
@@ -604,6 +626,9 @@
       "args": {
         "runtime": true
       },
+      "deps": [
+        "roster"
+      ],
       "kind": "use",
       "retire": "page",
       "source": "takeoffs.snapshot"
@@ -629,22 +654,22 @@
   ],
   "seeds": {
     "adopt": {
-      "title": "project-a — regions drawn, nothing adopted"
+      "title": "project-a â€” regions drawn, nothing adopted"
     },
     "launch": {
-      "title": "project-a — synced, RHVAC not open"
+      "title": "project-a â€” synced, RHVAC not open"
     },
     "partition": {
-      "title": "project-a — zones adopted, ready to partition"
+      "title": "project-a â€” zones adopted, ready to partition"
     },
     "refresh": {
-      "title": "project-a — a stale model waiting for a re-read"
+      "title": "project-a â€” a stale model waiting for a re-read"
     },
     "retry-r10": {
-      "title": "project-a — the .r10 read failed"
+      "title": "project-a â€” the .r10 read failed"
     },
     "sync": {
-      "title": "project-a — partitioned, .r10 bound, sync unreviewed"
+      "title": "project-a â€” partitioned, .r10 bound, sync unreviewed"
     }
   },
   "stageOrder": [
@@ -2073,5 +2098,6 @@
     },
     "type": "object"
   },
+  "workRoute": "takeoffs",
   "workSubject": "work"
 }

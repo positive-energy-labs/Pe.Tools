@@ -22,6 +22,25 @@
     "title": "Data Tables"
   },
   "fields": {
+    "row": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "selection",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "",
+        "type": "string"
+      },
+      "share": true,
+      "url": "replace"
+    },
     "table": {
       "agent": "set",
       "codec": {
@@ -111,6 +130,18 @@
         "apply"
       ],
       "word": "Editing"
+    }
+  },
+  "subjectField": {
+    "cardinality": "one",
+    "detail": "tables",
+    "field": "table",
+    "keyKind": "name",
+    "noun": "table",
+    "pane": "tables",
+    "roster": "tables",
+    "show": {
+      "runtime": true
     }
   },
   "verbs": {

@@ -1,3 +1,4 @@
+import { manyField } from "@pe/agent-contracts";
 import { z } from "zod";
 import {
   attachmentRefusal,
@@ -141,7 +142,7 @@ export function chatGraph(deps: () => ChatRouteDeps, minOtherSize?: number): Rou
   subjectField: { field: "thread", noun: "thread", keyKind: "name", cardinality: "one", roster: "threads", detail: "head", pane: "threads", show: (id) => id },
     fields: {
       thread: { ...field(z.string().default(""), {}), role: "subject" },
-      selected: { ...field(z.array(z.string()).default([]), { url: "replace", agent: "set" }), role: "selection" },
+      selected: { ...manyField("name", { url: "replace", agent: "set" }, z.array(z.string()).default([])), role: "selection" },
       mode: { ...field(z.enum(["threads", "world"]).default("threads"), {}), role: "pose" },
       ...peaSettingFields,
     },

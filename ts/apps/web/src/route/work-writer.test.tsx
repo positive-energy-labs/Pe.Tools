@@ -1,3 +1,4 @@
+import {testSources,testSubject,testFields,testReadings} from '../test-route-subject';
 // @vitest-environment jsdom
 /** Consecutive graph edits bind the authoritative Work revision delivered after each ACK. */
 import { act, cleanup, renderHook } from "@testing-library/react";
@@ -10,12 +11,12 @@ import { workVerb } from "#/shell/verbs";
 import * as routeHost from "./host";
 
 const DOC = address("C:/Review/Writer.rvt");
-const graph = {
+const graph = {...testSubject,
   key: "ducts",
   address: "ducts",
   name: "Ducts",
-  fields: {},
-  readings: {},
+  fields: {...testFields,},
+  readings: {...testReadings,},
   needs: "document" as const,
   work: ductsRouteState.schema,
   verbs: {
@@ -29,7 +30,7 @@ const graph = {
   stages: { probe: { word: "Probe", panes: ["probe"], verbs: [] } },
 };
 const adapters = {
-  sources: {},
+  sources: {...testSources,},
   bodies: {},
   binding: (_id: string, value: unknown) => ({ subject: null, args: value }),
 };

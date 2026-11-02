@@ -114,25 +114,26 @@ export const setKeys = (fields: Fields) => keysWhere(fields, (field) => field.ag
 export type Many = string[] | "all";
 export const manyCodec: Codec<Many> = {
   encode: (value) =>
-    value === "all"
+    value == null ? "~null" : value === "all"
       ? "all"
-      : value.map((id) => (id === "all" ? "%61ll" : encodeURIComponent(id))).join(","),
+      : (value as unknown[]).map((id) => typeof id === "string" ? (id === "all" ? "%61ll" : encodeURIComponent(id).replaceAll("~", "%7E")) : "~" + encodeURIComponent(JSON.stringify(id))).join(","),
   decode: (text) => {
     if (text === "all") return "all";
+    if (text === "~null") return null as never;
     try {
-      return text ? text.split(",").map(decodeURIComponent) : [];
+      return text ? text.split(",").map((part) => part.startsWith("~") ? JSON.parse(decodeURIComponent(part.slice(1))) : decodeURIComponent(part)) : [];
     } catch {
       return INVALID;
     }
   },
 };
 export type StableKeyKind = "UniqueId" | "system-name" | "fan-mark" | "name";
-export function manyField<const A extends Access>(keyKind: StableKeyKind, access: A) {
+export function manyField<const A extends Access, S extends z.ZodType = z.ZodDefault<z.ZodUnion<[z.ZodArray<z.ZodString>, z.ZodLiteral<"all">]>>>(keyKind: StableKeyKind, access: A, schema?: S) {
   if (!["UniqueId", "system-name", "fan-mark", "name"].includes(keyKind))
     throw Error("Subject keys must be stable; ElementId is refused");
   return {
-    schema: z.union([z.array(z.string().min(1)), z.literal("all")]).default([]),
-    codec: manyCodec,
+    schema: (schema ?? z.union([z.array(z.string().min(1)), z.literal("all")]).default([])) as S,
+    codec: manyCodec as unknown as Codec<z.output<S>>,
     cardinality: "many" as const,
     keyKind,
     ...access,

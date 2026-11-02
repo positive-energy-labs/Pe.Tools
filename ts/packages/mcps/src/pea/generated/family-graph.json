@@ -73,11 +73,33 @@
           "runtime": true
         }
       },
-      "role": "selection",
+      "role": "query",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "",
         "maxLength": 512,
+        "type": "string"
+      },
+      "share": true,
+      "url": "push"
+    },
+    "family": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "subject",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "current",
+        "enum": [
+          "current"
+        ],
         "type": "string"
       },
       "share": true,
@@ -94,6 +116,7 @@
           "runtime": true
         }
       },
+      "keyKind": "name",
       "role": "pose",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -187,7 +210,7 @@
           "runtime": true
         }
       },
-      "role": "subject",
+      "role": "query",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "",
@@ -207,7 +230,7 @@
           "runtime": true
         }
       },
-      "role": "subject",
+      "role": "query",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "",
@@ -248,6 +271,7 @@
           "runtime": true
         }
       },
+      "keyKind": "name",
       "role": "query",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -596,6 +620,20 @@
       "retire": "target",
       "source": "family.capture-receipt"
     },
+    "document": {
+      "kind": "derive",
+      "retire": "target",
+      "source": "family.document"
+    },
+    "family": {
+      "deps": [
+        "profile",
+        "captureReceipt"
+      ],
+      "kind": "derive",
+      "retire": "page",
+      "source": "family.draft"
+    },
     "pods": {
       "kind": "use",
       "retire": "never",
@@ -681,6 +719,19 @@
         "close-inspector"
       ],
       "word": "History"
+    }
+  },
+  "subjectField": {
+    "cardinality": "one",
+    "detail": "family",
+    "field": "family",
+    "keyKind": "name",
+    "kind": "singleton",
+    "noun": "family document",
+    "pane": "matrix",
+    "roster": "document",
+    "show": {
+      "runtime": true
     }
   },
   "verbs": {

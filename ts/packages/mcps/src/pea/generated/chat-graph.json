@@ -68,8 +68,9 @@
       "share": true,
       "url": "replace"
     },
-    "thread": {
-      "agent": false,
+    "selected": {
+      "agent": "set",
+      "cardinality": "many",
       "codec": {
         "decode": {
           "runtime": true
@@ -78,14 +79,37 @@
           "runtime": true
         }
       },
-      "role": "transient",
+      "keyKind": "name",
+      "role": "selection",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": [],
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "share": true,
+      "url": "replace"
+    },
+    "thread": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "subject",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "",
         "type": "string"
       },
-      "share": false,
-      "url": false
+      "share": true,
+      "url": "push"
     }
   },
   "key": "chat",
@@ -170,6 +194,11 @@
       "kind": "use",
       "retire": "page",
       "source": "receipts"
+    },
+    "threads": {
+      "kind": "use",
+      "retire": "never",
+      "source": "threads"
     }
   },
   "seeds": {
@@ -215,6 +244,18 @@
         "world"
       ],
       "word": "Conversation"
+    }
+  },
+  "subjectField": {
+    "cardinality": "one",
+    "detail": "head",
+    "field": "thread",
+    "keyKind": "name",
+    "noun": "thread",
+    "pane": "threads",
+    "roster": "threads",
+    "show": {
+      "runtime": true
     }
   },
   "verbs": {

@@ -49,26 +49,6 @@
     "title": "Rooms"
   },
   "fields": {
-    "card": {
-      "agent": false,
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "selection",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": "",
-        "maxLength": 200,
-        "type": "string"
-      },
-      "share": true,
-      "url": "replace"
-    },
     "epoch": {
       "agent": false,
       "codec": {
@@ -88,26 +68,6 @@
       "share": false,
       "url": false
     },
-    "focus": {
-      "agent": false,
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "selection",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": "",
-        "maxLength": 1024,
-        "type": "string"
-      },
-      "share": true,
-      "url": "replace"
-    },
     "layers": {
       "agent": false,
       "cardinality": "many",
@@ -119,6 +79,7 @@
           "runtime": true
         }
       },
+      "keyKind": "name",
       "role": "pose",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -138,7 +99,7 @@
       "url": "push"
     },
     "selected": {
-      "agent": false,
+      "agent": "set",
       "cardinality": "many",
       "codec": {
         "decode": {
@@ -148,7 +109,8 @@
           "runtime": true
         }
       },
-      "role": "transient",
+      "keyKind": "name",
+      "role": "selection",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": [],
@@ -157,8 +119,8 @@
         },
         "type": "array"
       },
-      "share": false,
-      "url": false
+      "share": true,
+      "url": "replace"
     },
     "show": {
       "agent": false,
@@ -531,6 +493,11 @@
       "retire": "target",
       "source": "rooms.receipts"
     },
+    "roster": {
+      "kind": "use",
+      "retire": "target",
+      "source": "rooms.roster"
+    },
     "snapshot": {
       "args": {
         "runtime": true
@@ -593,6 +560,18 @@
         "refresh"
       ],
       "word": "Reviewing rooms"
+    }
+  },
+  "subjectField": {
+    "cardinality": "one",
+    "detail": "snapshot",
+    "field": "view",
+    "keyKind": "name",
+    "noun": "view",
+    "pane": "scope",
+    "roster": "roster",
+    "show": {
+      "runtime": true
     }
   },
   "transition": {

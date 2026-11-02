@@ -33,15 +33,43 @@
           "runtime": true
         }
       },
+      "keyKind": "name",
       "role": "pose",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": [],
-        "items": {
-          "maxLength": 64,
-          "type": "string"
+        "anyOf": [
+          {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "const": "all",
+            "type": "string"
+          }
+        ],
+        "default": []
+      },
+      "share": true,
+      "url": "replace"
+    },
+    "selection": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
         },
-        "type": "array"
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "selection",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "",
+        "type": "string"
       },
       "share": true,
       "url": "replace"
@@ -56,7 +84,7 @@
           "runtime": true
         }
       },
-      "role": "selection",
+      "role": "subject",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "maxLength": 64,
@@ -200,6 +228,18 @@
         "refresh"
       ],
       "word": "Captures"
+    }
+  },
+  "subjectField": {
+    "cardinality": "one",
+    "detail": "captures",
+    "field": "sha",
+    "keyKind": "name",
+    "noun": "capture",
+    "pane": "captures",
+    "roster": "captures",
+    "show": {
+      "runtime": true
     }
   },
   "verbs": {

@@ -37,16 +37,26 @@
           "runtime": true
         }
       },
+      "keyKind": "name",
       "role": "selection",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "anyOf": [
+          {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "const": "all",
+            "type": "string"
+          }
+        ],
         "default": [
           "row7"
-        ],
-        "items": {
-          "type": "string"
-        },
-        "type": "array"
+        ]
       },
       "share": true,
       "url": false
@@ -80,7 +90,7 @@
           "runtime": true
         }
       },
-      "role": "selection",
+      "role": "subject",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "row7",
@@ -92,7 +102,6 @@
     },
     "rows": {
       "agent": "set",
-      "cardinality": "many",
       "codec": {
         "decode": {
           "runtime": true
@@ -104,46 +113,51 @@
       "role": "draft",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "items": {
-          "properties": {
-            "boardLength": {
-              "type": "number"
+        "properties": {
+          "profiles": {
+            "items": {
+              "properties": {
+                "boardLength": {
+                  "type": "number"
+                },
+                "boardWidth": {
+                  "type": "number"
+                },
+                "edgeBorder": {
+                  "type": "number"
+                },
+                "endBorder": {
+                  "type": "number"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "opening": {
+                  "type": "number"
+                },
+                "openings": {
+                  "type": "number"
+                },
+                "rib": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "id",
+                "boardLength",
+                "endBorder",
+                "boardWidth",
+                "edgeBorder",
+                "opening",
+                "rib",
+                "openings"
+              ],
+              "type": "object"
             },
-            "boardWidth": {
-              "type": "number"
-            },
-            "edgeBorder": {
-              "type": "number"
-            },
-            "endBorder": {
-              "type": "number"
-            },
-            "id": {
-              "type": "string"
-            },
-            "opening": {
-              "type": "number"
-            },
-            "openings": {
-              "type": "number"
-            },
-            "rib": {
-              "type": "number"
-            }
-          },
-          "required": [
-            "id",
-            "boardLength",
-            "endBorder",
-            "boardWidth",
-            "edgeBorder",
-            "opening",
-            "rib",
-            "openings"
-          ],
-          "type": "object"
+            "type": "array"
+          }
         },
-        "type": "array"
+        "type": "object"
       },
       "share": false,
       "url": false
@@ -257,6 +271,18 @@
       "teach": "Edit candidate wood floor grille profiles. Drawing dimensions change every row. Pick a buildable profile in the field chart; arrow keys walk quantity and opening width. Checked rows form the printable export. Rows stay in memory for this page view.",
       "verbs": [],
       "word": "Calculating"
+    }
+  },
+  "subjectField": {
+    "cardinality": "one",
+    "detail": "result",
+    "field": "row",
+    "keyKind": "name",
+    "noun": "grille profile",
+    "pane": "profiles",
+    "roster": "result",
+    "show": {
+      "runtime": true
     }
   },
   "verbs": {}

@@ -34,7 +34,7 @@
   },
   "fields": {
     "member": {
-      "agent": false,
+      "agent": "set",
       "codec": {
         "decode": {
           "runtime": true
@@ -43,13 +43,13 @@
           "runtime": true
         }
       },
-      "role": "transient",
+      "role": "selection",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "",
         "type": "string"
       },
-      "share": false,
+      "share": true,
       "url": false
     },
     "mode": {

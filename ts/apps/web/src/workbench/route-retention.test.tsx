@@ -44,7 +44,7 @@ const probeLayout = {
 };
 const graph: typeof ductsGraph = {
   ...ductsGraph,
-  subjectField: undefined,
+  subjectField: { ...ductsGraph.subjectField, roster: "testSubject", detail: "testSubject" },
   fields: Object.fromEntries(
     Object.entries(ductsGraph.fields).map(([id, value]) => [id, { ...value, picker: undefined }]),
   ) as typeof ductsGraph.fields,
@@ -53,7 +53,7 @@ const graph: typeof ductsGraph = {
   optionalTarget: undefined,
   observe: undefined,
   cells: undefined,
-  readings: {},
+  readings: { testSubject: { kind: "derive", source: "testSubject", retire: "never" } },
   workSubject: undefined,
   salvage: undefined,
   verbs: {
@@ -74,7 +74,7 @@ const graph: typeof ductsGraph = {
 };
 const otherGraph: typeof familiesGraph = {
   ...familiesGraph,
-  subjectField: undefined,
+  subjectField: { ...familiesGraph.subjectField, roster: "testSubject", detail: "testSubject" },
   fields: Object.fromEntries(
     Object.entries(familiesGraph.fields).map(([id, value]) => [
       id,
@@ -89,12 +89,12 @@ const otherGraph: typeof familiesGraph = {
   workSubject: undefined,
   salvage: undefined,
   cells: undefined,
-  readings: {},
+  readings: { testSubject: { kind: "derive", source: "testSubject", retire: "never" } },
   verbs: {},
 };
 const url = graphUrlPage(graph);
 const adapters = {
-  sources: {},
+  sources: { testSubject: { kind: "derive" as const, derive: () => [] },},
   bodies: {},
   binding: (_id: string, row: unknown) => ({ subject: null, args: row ?? {} }),
 };

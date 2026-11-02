@@ -46,7 +46,63 @@
     },
     "title": "Design System"
   },
-  "fields": {},
+  "fields": {
+    "catalog": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "subject",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "builtin",
+        "enum": [
+          "builtin"
+        ],
+        "type": "string"
+      },
+      "share": true,
+      "url": "push"
+    },
+    "selected": {
+      "agent": "set",
+      "cardinality": "many",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "keyKind": "name",
+      "role": "selection",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "anyOf": [
+          {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "const": "all",
+            "type": "string"
+          }
+        ],
+        "default": []
+      },
+      "share": true,
+      "url": "replace"
+    }
+  },
   "key": "design-system",
   "layout": {
     "id": "main",
@@ -55,13 +111,21 @@
   "name": "Design System",
   "panes": {
     "main": {
-      "draws": [],
+      "draws": [
+        "catalog"
+      ],
       "label": "Design System",
       "purpose": "The spec and catalogue for the design language â€” production components under production tokens, with the gaps they cannot yet express marked in place.",
       "verbs": []
     }
   },
-  "readings": {},
+  "readings": {
+    "catalog": {
+      "kind": "derive",
+      "retire": "never",
+      "source": "catalog"
+    }
+  },
   "seeds": {
     "main": {
       "title": "main"
@@ -77,6 +141,19 @@
       ],
       "verbs": [],
       "word": "Design System"
+    }
+  },
+  "subjectField": {
+    "cardinality": "one",
+    "detail": "catalog",
+    "field": "catalog",
+    "keyKind": "name",
+    "kind": "singleton",
+    "noun": "design language",
+    "pane": "main",
+    "roster": "catalog",
+    "show": {
+      "runtime": true
     }
   },
   "verbs": {}

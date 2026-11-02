@@ -1023,7 +1023,7 @@ function GraphVerb<P, W>({
         pressed={!!review}
         refusal={!enabled ? "This route is inactive" : control.refusal}
         onClick={() =>
-          void control.run(review && verb.kind === "recovery" ? { confirm: true } : undefined)
+          void control.run()
         }
       >
         {review ? `Commit ${verb.label}` : verb.label}

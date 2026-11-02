@@ -8,6 +8,7 @@ import { schedulesAddress } from "./schedules.ts";
 import { roomsAddress } from "./rooms.ts";
 import { takeoffsAddress } from "./takeoffs.ts";
 import { spaceAddress } from "./space.ts";
+import { podAdminAddress } from "./pod-admin.ts";
 import { podsAddress } from "./pods.ts";
 import { bindAddress } from "./bind.ts";
 import { settingsAddress } from "./settings.ts";
@@ -42,6 +43,7 @@ export const routeAddresses = {
   takeoffs: takeoffsAddress,
   space: spaceAddress,
   pods: podsAddress,
+  "pod-admin": podAdminAddress,
   bind: bindAddress,
   settings: settingsAddress,
   ops: opsAddress,

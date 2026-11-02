@@ -44,7 +44,7 @@
           "runtime": true
         }
       },
-      "role": "selection",
+      "role": "query",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "",
@@ -84,17 +84,24 @@
           "runtime": true
         }
       },
+      "keyKind": "name",
       "role": "pose",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": [],
-        "items": {
-          "maxLength": 512,
-          "minLength": 1,
-          "type": "string"
-        },
-        "maxItems": 500,
-        "type": "array"
+        "anyOf": [
+          {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "const": "all",
+            "type": "string"
+          }
+        ],
+        "default": []
       },
       "share": true,
       "url": "replace"
@@ -109,7 +116,7 @@
           "runtime": true
         }
       },
-      "role": "selection",
+      "role": "query",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "enum": [
@@ -207,7 +214,6 @@
     },
     "sort": {
       "agent": "set",
-      "cardinality": "many",
       "codec": {
         "decode": {
           "runtime": true
@@ -219,30 +225,38 @@
       "role": "query",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": [],
-        "items": {
-          "properties": {
-            "dir": {
-              "enum": [
-                "asc",
-                "desc"
-              ],
-              "type": "string"
-            },
-            "key": {
-              "maxLength": 512,
-              "minLength": 1,
-              "type": "string"
-            }
-          },
-          "required": [
-            "key",
-            "dir"
-          ],
-          "type": "object"
+        "default": {
+          "columns": []
         },
-        "maxItems": 8,
-        "type": "array"
+        "properties": {
+          "columns": {
+            "default": [],
+            "items": {
+              "properties": {
+                "dir": {
+                  "enum": [
+                    "asc",
+                    "desc"
+                  ],
+                  "type": "string"
+                },
+                "key": {
+                  "maxLength": 512,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key",
+                "dir"
+              ],
+              "type": "object"
+            },
+            "maxItems": 8,
+            "type": "array"
+          }
+        },
+        "type": "object"
       },
       "share": true,
       "url": "replace"

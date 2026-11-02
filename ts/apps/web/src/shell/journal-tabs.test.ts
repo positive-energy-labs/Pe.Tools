@@ -1,3 +1,4 @@
+import {testSources,testSubject,testFields,testReadings} from '../test-route-subject';
 // @vitest-environment jsdom
 import { expect, test, vi } from "vite-plus/test";
 import { act, render } from "@testing-library/react";
@@ -24,13 +25,13 @@ async function tabs() {
       },
     },
   });
-  const graph: RouteGraph<{}, Work> = {
+  const graph: RouteGraph<{}, Work> = {...testSubject,
     key: route,
     address: route,
     name: route,
-    fields: {},
+    fields: {...testFields,},
     work: schema,
-    readings: {},
+    readings: {...testReadings,},
     verbs: {},
     cells: [
       { segment: "rules", groupOf: (id) => [id], label: () => "Round Elbow 1 D" },
@@ -57,7 +58,7 @@ async function tabs() {
         listeners.add(notify);
         return () => listeners.delete(notify);
       },
-      sources: {},
+      sources: {...testSources,},
       subscribeAcceptedDeltas: (_, accept) => host.observeAccepted(key, accept),
       write: (_, request) => {
         requests.push(structuredClone(request));

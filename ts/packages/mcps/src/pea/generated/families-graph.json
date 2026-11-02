@@ -132,6 +132,7 @@
           "runtime": true
         }
       },
+      "keyKind": "name",
       "role": "pose",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -157,7 +158,7 @@
           "runtime": true
         }
       },
-      "role": "selection",
+      "role": "query",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "enum": [
@@ -223,7 +224,7 @@
           "runtime": true
         }
       },
-      "role": "subject",
+      "role": "query",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "",
@@ -243,7 +244,7 @@
           "runtime": true
         }
       },
-      "role": "subject",
+      "role": "query",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "",
@@ -273,6 +274,28 @@
       "share": true,
       "url": "push"
     },
+    "scope": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "subject",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "draft",
+        "enum": [
+          "draft"
+        ],
+        "type": "string"
+      },
+      "share": true,
+      "url": "push"
+    },
     "sort": {
       "agent": "set",
       "cardinality": "many",
@@ -284,6 +307,7 @@
           "runtime": true
         }
       },
+      "keyKind": "name",
       "role": "query",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -615,6 +639,14 @@
       "kind": "use",
       "retire": "page",
       "source": "families.saved"
+    },
+    "scopes": {
+      "args": {
+        "runtime": true
+      },
+      "kind": "derive",
+      "retire": "page",
+      "source": "families.scopes"
     }
   },
   "salvage": {
@@ -665,6 +697,19 @@
       ],
       "verbs": [],
       "word": "History"
+    }
+  },
+  "subjectField": {
+    "cardinality": "one",
+    "detail": "matrix",
+    "field": "scope",
+    "keyKind": "name",
+    "kind": "singleton",
+    "noun": "family draft scope",
+    "pane": "scope",
+    "roster": "scopes",
+    "show": {
+      "runtime": true
     }
   },
   "verbs": {

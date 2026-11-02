@@ -23,6 +23,7 @@ import { familyRoute } from "./family/route";
 import { roomsRoute } from "./rooms/route";
 import { spaceRoute } from "./space/route";
 import { takeoffsRoute } from "./takeoff/route";
+import { podAdminRoute } from "./pod-admin/route";
 import { podsRoute } from "./pods/route";
 import { parameterLinksRoute } from "./parameter-links/route";
 import { dataTablesRoute } from "./data-tables/route";
@@ -55,6 +56,7 @@ const codeRoutes: AnyRoute[] = [
   spaceRoute,
   takeoffsRoute,
   podsRoute,
+  podAdminRoute,
   parameterLinksRoute,
   dataTablesRoute,
   bindRoute,

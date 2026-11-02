@@ -44,7 +44,7 @@ import {
   type PeApiSchemas,
   type PeRouteTable,
 } from "@pe/host-contracts/pe-api";
-import * as schemas from "./index.ts";
+import * as schemas from "./api-schemas.ts";
 
 type RouteSchemas = Pick<
   typeof schemas,

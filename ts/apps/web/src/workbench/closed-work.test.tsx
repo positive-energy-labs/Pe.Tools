@@ -33,7 +33,7 @@ const action = (label: string) =>
   );
 const graph: typeof ductsGraph = {
   ...ductsGraph,
-  subjectField: undefined,
+  subjectField: { ...ductsGraph.subjectField, roster: "testSubject", detail: "testSubject" },
   fields: Object.fromEntries(
     Object.entries(ductsGraph.fields).map(([id, value]) => [id, { ...value, picker: undefined }]),
   ) as typeof ductsGraph.fields,
@@ -51,7 +51,7 @@ const graph: typeof ductsGraph = {
 const url = graphUrlPage(graph);
 const adapters = {
   bodies: {},
-  sources: {
+  sources: { testSubject: { kind: "derive" as const, derive: () => [] },
     takeoff: {
       kind: "use" as const,
       open(

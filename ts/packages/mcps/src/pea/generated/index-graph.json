@@ -22,7 +22,63 @@
     },
     "title": "Tools"
   },
-  "fields": {},
+  "fields": {
+    "catalog": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "subject",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "builtin",
+        "enum": [
+          "builtin"
+        ],
+        "type": "string"
+      },
+      "share": true,
+      "url": "push"
+    },
+    "selected": {
+      "agent": "set",
+      "cardinality": "many",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "keyKind": "name",
+      "role": "selection",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "anyOf": [
+          {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "const": "all",
+            "type": "string"
+          }
+        ],
+        "default": []
+      },
+      "share": true,
+      "url": "replace"
+    }
+  },
   "key": "index",
   "layout": {
     "id": "main",
@@ -31,13 +87,26 @@
   "name": "Tools",
   "panes": {
     "main": {
-      "draws": [],
+      "draws": [
+        "catalog"
+      ],
       "label": "Tools",
       "purpose": "Tools and saved work",
       "verbs": []
     }
   },
-  "readings": {},
+  "readings": {
+    "catalog": {
+      "kind": "derive",
+      "retire": "never",
+      "source": "catalog"
+    }
+  },
+  "seeds": {
+    "main": {
+      "title": "Tool directory"
+    }
+  },
   "stageOrder": [
     "main"
   ],
@@ -48,6 +117,19 @@
       ],
       "verbs": [],
       "word": "Tools"
+    }
+  },
+  "subjectField": {
+    "cardinality": "one",
+    "detail": "catalog",
+    "field": "catalog",
+    "keyKind": "name",
+    "kind": "singleton",
+    "noun": "tool directory",
+    "pane": "main",
+    "roster": "catalog",
+    "show": {
+      "runtime": true
     }
   },
   "verbs": {}

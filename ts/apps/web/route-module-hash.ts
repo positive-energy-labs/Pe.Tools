@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { routeSourceHash } from "./route-source-hash.ts";
 import { readFileSync } from "node:fs";
 import type { Plugin } from "vite-plus";
 
@@ -9,7 +9,7 @@ export function routeModuleHash(): Plugin {
     enforce: "pre",
     transform(code, id) {
       if (!/[\\/]src[\\/][^/\\]+[\\/]graph\.ts$/.test(id)) return;
-      const hash = createHash("sha256").update(readFileSync(id)).digest("hex");
+      const hash = routeSourceHash(readFileSync(id));
       return {
         code: code.replace(/\bdirectory\s*:/g, `moduleHash: "${hash}", directory:`),
         map: null,

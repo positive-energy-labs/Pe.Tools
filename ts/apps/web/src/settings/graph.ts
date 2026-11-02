@@ -1,4 +1,4 @@
-import { pane, type RouteGraph } from "@pe/agent-contracts";
+import { manyField, pane, type RouteGraph } from "@pe/agent-contracts";
 import { settingsAddress } from "../../../../packages/agent-contracts/src/routes/settings";
 import { z } from "zod";
 import { pageVerb } from "#/shell/verbs";
@@ -102,7 +102,7 @@ export const settingsGraph: RouteGraph<SettingsPage> = {
   },
   // TODO: K1c must declare the kernel selection within this setting scope.
   subjectField: { field: "section", noun: "setting scope", keyKind: "name", cardinality: "one", roster: "scopes", detail: "machine", pane: "settings", show: (id) => id },
-  fields: {
+  fields: { selected: { ...manyField("name", {}), role: "selection" },
     section: { ...settingsAddress.fields.section, role: "subject" },
     session: { ...settingsAddress.fields.session, role: "pose" },
   },

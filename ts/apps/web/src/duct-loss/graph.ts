@@ -1,4 +1,4 @@
-import { pane, split, type RouteGraph } from "@pe/agent-contracts";
+import { manyField, pane, split, type RouteGraph } from "@pe/agent-contracts";
 import { z } from "zod";
 import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { ductLossAddress } from "../../../../packages/agent-contracts/src/routes/duct-loss";
@@ -41,7 +41,7 @@ export const ductLossGraph: RouteGraph<DuctLossPage, null> = {
   name: "Duct Loss",
   // TODO: K1c must declare the kernel selection within this hypothetical case.
   subjectField: { kind: "singleton", field: "case", noun: "hypothetical duct case", keyKind: "name", cardinality: "one", roster: "case", detail: "result", pane: "inputs", show: (id) => id },
-  fields: {
+  fields: { selected: { ...manyField("name", {}), role: "selection" },
     case: { ...field(z.enum(["duct"]).default("duct"), {}), role: "subject" },
     shape: { ...fields.shape, role: "query" },
     a: { ...fields.a, role: "query" },

@@ -2,6 +2,7 @@ import { scheduleSpecsGraph } from "#/schedule-specs/graph";
 import { rhvacSyncGraph } from "#/rhvac-sync/graph";
 import { zoneAuditGraph } from "#/zone-audit/graph";
 import { sessionsGraph } from "#/sessions/graph";
+import { podAdminGraph } from "#/pod-admin/graph";
 import { lazy, type ComponentType } from "react";
 import { createRouteRegistry } from "@pe/kit/route-registry";
 import { openGraph } from "#/open/graph";
@@ -73,6 +74,9 @@ publicRoutes.registerGraph(parameterLinksGraph, hosted(ParameterLinksRoute));
 publicRoutes.registerGraph(podsGraph, hosted(PodsRoute));
 publicRoutes.registerGraph(dataTablesGraph, hosted(DataTablesRoute));
 
+const PodAdminRoute = named(() => import("#/pod-admin/route"), "PodAdminRoute");
+publicRoutes.registerGraph(podAdminGraph, hosted(PodAdminRoute));
+
 const sessionsRoute = lazy(async () => ({ default: (await import("#/sessions/route")).SessionsRoute }));
 publicRoutes.registerGraph(sessionsGraph, hosted(sessionsRoute));
 
@@ -84,7 +88,6 @@ publicRoutes.registerGraph(rhvacSyncGraph, hosted(rhvacSyncRoute));
 
 const scheduleSpecsRoute = lazy(async () => ({ default: (await import("#/schedule-specs/route")).Body }));
 publicRoutes.registerGraph(scheduleSpecsGraph, hosted(scheduleSpecsRoute));
-
 
 const FansRoute = lazy(async () => ({ default: mountRoute(fansGraph, (await import("#/ducts/route")).ductsAdapters) }));
 publicRoutes.registerGraph(fansGraph, hosted(FansRoute));

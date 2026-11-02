@@ -9,7 +9,7 @@ registerHooks({
 });
 /** Graph declarations own the directory and Pea projections; browser bodies never ship to MCP. */
 import { createJiti } from "jiti";
-import { createHash } from "node:crypto";
+import { routeSourceHash } from "../route-source-hash.ts";
 import { readdir, mkdir, writeFile, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 const jiti = createJiti(import.meta.url, {
@@ -44,9 +44,7 @@ for (const folder of (await readdir(new URL("../src/", import.meta.url), { withF
     directory.push({
       key: graph.key,
       directory: graph.directory,
-      moduleHash: createHash("sha256")
-        .update(await readFile(new URL(`../src/${folder.name}/graph.ts`, import.meta.url)))
-        .digest("hex"),
+      moduleHash: routeSourceHash(await readFile(new URL(`../src/${folder.name}/graph.ts`, import.meta.url))),
     });
     const destination = new URL(
       `../../../packages/mcps/src/pea/generated/${graph.key}-graph.json`,
