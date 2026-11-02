@@ -1,10 +1,9 @@
-import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { ChildProcess, spawnSync } from "node:child_process";
 import { closeSync, openSync, realpathSync, statSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { createRequire } from "node:module";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { isSea } from "node:sea";
-import { Readable, Writable } from "node:stream";
 import { ClientSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
 import type { HarnessId, ProviderRefusal } from "@pe/agent-contracts";
 import {
@@ -15,7 +14,8 @@ import {
 import { checkoutLayout, productRoot } from "@pe/host-contracts/service-identity";
 import { codexStandaloneRelease, installCommand } from "./install.ts";
 import { AdapterPackage, Win32Rows } from "./edge-schemas.ts";
-import { Schema } from "effect";
+import { Cause, Effect, Exit, ManagedRuntime, Schema, Stream } from "effect";
+import { Spawner } from "./spawner.ts";
 
 /**
  * One row per harness: the ACP adapter package the host spawns, the CLI the user signs in with, and
@@ -76,7 +76,43 @@ function adapterLaunch(
   };
 }
 
-/** Spawns the harness's adapter over `env` and connects `client` to it; `stderr()` is the tail. */
+/** The adapter process's launch, exactly what `spawn` received before the Spawner: `env` is whole. */
+export function adapterCommand(
+  harness: HarnessId,
+  cwd: string,
+  env: Record<string, string | undefined>,
+  detail?: ProviderRefusal,
+) {
+  const launch = adapterLaunch(harness, env, detail);
+  return {
+    command: launch.command,
+    args: launch.args,
+    cwd,
+    env: { ...env, ...launch.env },
+  };
+}
+
+/**
+ * The Promise face of one Spawner child until phase 5. A `ChildProcess` in type only: `threads.ts`
+ * holds it as one and listens for `exit`; its scope, not a handle, ends it ({@link stopChild}).
+ */
+class AdapterChild extends ChildProcess {
+  closed: Promise<void> = Promise.resolve();
+  close = () => this.closed;
+  settle(code: number | null, signal: NodeJS.Signals | null) {
+    if (this.exitCode !== null || this.signalCode !== null) return;
+    Object.assign(this, { exitCode: code, signalCode: signal });
+    this.emit("exit", code, signal);
+  }
+}
+
+// The island's runtime is the Spawner's scope: children started here outlive no call, only their own scope.
+const islandSpawner = ManagedRuntime.make(Spawner.live);
+
+/**
+ * Spawns the harness's adapter over `env` and connects `client` to it; `stderr()` is the tail.
+ * Returns before the child is up: the fiber that owns the child pumps its pipes through web streams.
+ */
 export function openAdapter(
   harness: HarnessId,
   cwd: string,
@@ -84,22 +120,67 @@ export function openAdapter(
   client: ConstructorParameters<typeof ClientSideConnection>[0],
   detail?: ProviderRefusal,
 ) {
-  const launch = adapterLaunch(harness, env, detail);
-  const child = spawn(launch.command, launch.args, {
-    cwd,
-    stdio: ["pipe", "pipe", "pipe"],
-    env: { ...env, ...launch.env },
-    windowsHide: true,
-  });
+  const launch = adapterCommand(harness, cwd, env, detail);
+  const child = new AdapterChild();
+  const toChild = new TransformStream<Uint8Array, Uint8Array>();
+  const fromChild = new TransformStream<Uint8Array, Uint8Array>();
   let stderr = "";
-  child.stderr!.on("data", (chunk) => (stderr = (stderr + chunk).slice(-2000)));
-  const conn = new ClientSideConnection(
-    client,
-    ndJsonStream(
-      Writable.toWeb(child.stdin!),
-      Readable.toWeb(child.stdout!) as ReadableStream<Uint8Array>,
+  const decoder = new TextDecoder();
+  const writer = fromChild.writable.getWriter();
+  let spawned: { readonly exitCode: Effect.Effect<number, unknown> } | undefined;
+  const owned = Effect.gen(function* () {
+    const handle = yield* (yield* Spawner).spawn(launch);
+    spawned = handle;
+    Object.assign(child, { pid: handle.pid });
+    yield* Effect.forkScoped(
+      Stream.run(
+        Stream.fromReadableStream({ evaluate: () => toChild.readable, onError: String }),
+        handle.stdin,
+      ),
+    );
+    yield* Effect.all(
+      [
+        Stream.runForEach(handle.stdout, (chunk) => Effect.promise(() => writer.write(chunk))),
+        Stream.runForEach(handle.stderr, (chunk) =>
+          Effect.sync(
+            () => (stderr = (stderr + decoder.decode(chunk, { stream: true })).slice(-2000)),
+          ),
+        ),
+        handle.exitCode.pipe(
+          Effect.tap((code) => Effect.sync(() => child.settle(code, null))),
+          Effect.catch(() => Effect.sync(() => child.settle(null, "SIGTERM"))),
+        ),
+      ],
+      { concurrency: "unbounded", discard: true },
+    );
+  }).pipe(
+    Effect.scoped,
+    Effect.tapError((error) => Effect.sync(() => (stderr += String(error)))),
+    // After the scope closed: the exit event and the end of the child's stdout follow its death.
+    Effect.onExit((exit) =>
+      Effect.gen(function* () {
+        // The scope's close waited for the death, so the code is already settled.
+        const code = spawned ? yield* Effect.exit(spawned.exitCode) : undefined;
+        if (code && Exit.isSuccess(code)) child.settle(code.value, null);
+        else child.settle(null, spawned ? "SIGTERM" : "SIGKILL");
+        yield* Effect.promise(() =>
+          (Exit.isFailure(exit) && !Cause.hasInterrupts(exit.cause)
+            ? writer.abort(Cause.squash(exit.cause))
+            : writer.close()
+          ).catch(() => {}),
+        );
+      }),
     ),
+    Effect.ignore,
   );
+  // effect-edge: island, phase 5
+  const fiber = islandSpawner.runFork(owned);
+  child.closed = new Promise<void>((resolve) => fiber.addObserver(() => resolve()));
+  child.close = () => {
+    fiber.interruptUnsafe();
+    return child.closed;
+  };
+  const conn = new ClientSideConnection(client, ndJsonStream(toChild.writable, fromChild.readable));
   return { child, conn, stderr: () => stderr };
 }
 
@@ -312,16 +393,7 @@ export function peaMcpServer(
   };
 }
 
-/**
- * End stdin, give the adapter 2 s to exit, then kill its whole tree: on win32 `kill()` would leave
- * the adapter's own children (codex app-server, claude CLI, the Pea MCP server) running.
- */
-export async function stopChild(child: ChildProcess | null) {
-  if (!child || child.exitCode !== null || child.signalCode !== null) return;
-  const exited = new Promise<boolean>((resolve) => child.once("exit", () => resolve(true)));
-  child.stdin?.end();
-  if (await Promise.race([exited, new Promise<boolean>((r) => setTimeout(r, 2000, false))])) return;
-  if (process.platform === "win32" && child.pid)
-    spawnSync("taskkill", ["/T", "/F", "/PID", String(child.pid)], { windowsHide: true });
-  else child.kill();
+/** Closing the child's scope ends its stdin, waits `CHILD_EXIT_GRACE`, and kills its whole tree. */
+export function stopChild(child: ChildProcess | null): Promise<void> {
+  return child instanceof AdapterChild ? child.close() : Promise.resolve();
 }

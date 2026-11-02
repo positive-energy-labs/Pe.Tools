@@ -13,6 +13,7 @@
     "apps/host/src/family-actions.ts": 2,
     "apps/host/src/family-spec.ts": 1,
     "apps/host/src/gateway-actions.ts": 1,
+    "apps/host/src/harness/adapter.ts": 1,
     "apps/host/src/harness/providers.ts": 2,
     "apps/host/src/harness/threads.ts": 2,
     "apps/host/src/machine.ts": 4,
