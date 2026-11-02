@@ -193,7 +193,7 @@ export function lookupGrid(grid: Grid, x: number, y?: number | null, z?: number 
  * velocity changes with Qb/Qc, so interpolating raw Cb across 0.01..0.1 magnifies
  * the near-zero-flow singularity. This is an interpolation policy, not a new DFDB equation.
  * Only the first published flow interval uses it; all published nodes remain exact.
- * TODO: compare this interpolation policy with licensed DFDB at interior low-flow points;
+ * TODO: docs/features/routes/LEDGER.md#s7-76a2681e4b compare this interpolation policy with licensed DFDB at interior low-flow points;
  * the published grids establish the nodes and velocity basis, not that proprietary algorithm.
  * Source: https://handbook.ashrae.org/Handbooks/F21/IP/F21_Ch21/F21_Ch21_ip.aspx
  */
