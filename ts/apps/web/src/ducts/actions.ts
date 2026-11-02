@@ -1,4 +1,4 @@
-import type { DuctsRouteDocument } from "@pe/agent-contracts";
+import { canonicalRouteInput, type DuctsRouteDocument } from "@pe/agent-contracts";
 
 import { EMPTY_CATALOGS, type Catalogs } from "@pe/ducts-domain/catalog";
 
@@ -220,4 +220,33 @@ export function ductsBinding(id: string, row: unknown, scope: Scope): MountBindi
       args: { refusal: error instanceof Error ? error.message : String(error) },
     };
   }
+}
+
+/** A choice becomes shared Work before the command captures its revision. */
+export function ductsWriteStage(id: string, bound: MountBinding, scope: Scope) {
+  if (!["preview", "price", "heal-preview", "heal", "fan-preview", "assign-fan"].includes(id))
+    return null;
+  const args = bound.args as {
+    refusal?: string | null;
+    request?: { groups?: (string | { group: string })[]; unitId?: number; systemId?: number };
+  };
+  if (args.refusal || !args.request) return null;
+  const request = args.request;
+  const input =
+    id === "fan-preview" || id === "assign-fan"
+      ? { fan: { unitId: request.unitId!, systemId: request.systemId! } }
+      : id === "price" || id === "preview"
+        ? {
+            groups: activeSystem(scope.page)
+              ? systemScope(current<DuctSnapshot>(scope, "ducts"), activeSystem(scope.page)).groups
+              : [],
+          }
+        : {
+            groups: (request.groups ?? []).map((group) =>
+              typeof group === "string" ? group : group.group,
+            ),
+          };
+  if (canonicalRouteInput(scope.work?.doc.writeIntent.edit?.value) === canonicalRouteInput(input))
+    return null;
+  return { verb: "stage-write", input };
 }

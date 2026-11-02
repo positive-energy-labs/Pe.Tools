@@ -106,6 +106,12 @@ export interface MountAdapters<P, W> {
   reread?(key: WorkKey): void;
   subjects?: VerbContext["subjects"];
   binding?(id: string, row: unknown, scope: BindingScope<P, W>): MountBinding;
+  /** Stage authored command choices through an existing Work verb before opening its review. */
+  stageBefore?(
+    id: string,
+    bound: MountBinding,
+    scope: BindingScope<P, W>,
+  ): { verb: string; input: unknown } | null;
   /** The cell subject (`cell:<seg|key>`) a pane row stands for, or null; the kernel's cell verbs follow it. */
   cell?(row: unknown, scope: BindingScope<P, W>): VerbSubject | null;
   /** Explicit captures only. Ordinary pane demand must not start an expensive operation. */
@@ -823,7 +829,12 @@ export function createGraphMount<P, W>(
       ? "Read current Work before retrying"
       : null;
   };
-  const run = async (id: string, bound: MountBinding, origin: string, answers?: unknown) => {
+  const run = async (
+    id: string,
+    bound: MountBinding,
+    origin: string,
+    answers?: unknown,
+  ): Promise<InvocationResult> => {
     const inactive = blocked(id);
     if (inactive)
       return {
@@ -834,6 +845,45 @@ export function createGraphMount<P, W>(
     const verb = verbs[id];
     if (!verb) throw Error(`Unknown verb ${id}`);
     const review = reviews.get(id);
+    const stage = !review && adapters.stageBefore?.(id, bound, bindingScope());
+    if (stage) {
+      if (verbs[stage.verb]?.kind !== "work") throw Error("Command staging requires a Work verb");
+      const staged = await run(stage.verb, { subject: null, args: stage.input }, origin);
+      if (staged.state !== "done") return staged;
+      if (staged.kind !== "work") throw Error("Staging returned no Work acknowledgement");
+      const acknowledgement = staged.acknowledgement;
+      const started = generation;
+      // The host acknowledgement can beat the Work subscription. Never bind the next command to
+      // the old revision, or invent a second local Work document from the submitted patches.
+      const observed = await new Promise<boolean>((resolve) => {
+        const finish = (ok: boolean) => {
+          clearTimeout(timeout);
+          listeners.delete(check);
+          resolve(ok);
+        };
+        const check = () => {
+          if (disposed || generation !== started) return finish(false);
+          if (
+            scope.work &&
+            workKey(scope.work.handle.key) === workKey(acknowledgement.key) &&
+            scope.work.handle.revision >= acknowledgement.revision
+          )
+            finish(true);
+        };
+        const timeout = setTimeout(() => finish(false), 10_000);
+        listeners.add(check);
+        check();
+      });
+      if (!observed)
+        return {
+          state: "refused",
+          press: null,
+          refusal: refuse(
+            "not-ready",
+            "The staged Work has not arrived; read Work before previewing",
+          ),
+        };
+    }
     // Another press cannot steal the running invocation's identity.
     active = id;
     activeOrigin = origin;

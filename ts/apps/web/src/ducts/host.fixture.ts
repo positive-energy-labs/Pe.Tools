@@ -1,3 +1,4 @@
+import { healPlan, healRequestGroup } from "@pe/ducts-domain/heal";
 import {
   actionReceiptSchema,
   applyPatches,
@@ -200,6 +201,15 @@ export class DuctsHostFixture {
     if (url.pathname === "/actions" && init?.method === "POST") {
       const admission = body as unknown as ActionAdmission;
       const preview = admission.key.includes("preview-");
+      const intent = this.doc.writeIntent.edit?.value;
+      const derived = admission.key.endsWith("heal")
+        ? {
+            groups: healPlan(this.snapshot, this.doc)
+              .groups.filter((group) => intent?.groups?.includes(group.group))
+              .map((group) => healRequestGroup(group)),
+          }
+        : (intent?.fan ?? {});
+
       const row = actionReceiptSchema.parse({
         ...admission,
         caller: { kind: "human", via: "local" },
@@ -219,7 +229,7 @@ export class DuctsHostFixture {
                 previewOnly: preview,
                 counts: { planned: preview ? 1 : 0, healed: preview ? 0 : 1, refused: 0 },
                 groups: (
-                  admission.input.groups as {
+                  ("groups" in derived ? derived.groups : []) as {
                     group: string;
                     items: { key: string; kind: string }[];
                   }[]
@@ -241,8 +251,8 @@ export class DuctsHostFixture {
             : admission.key.endsWith("assign-fan")
               ? {
                   previewOnly: preview,
-                  unitId: admission.input.unitId,
-                  systemId: admission.input.systemId,
+                  unitId: "unitId" in derived ? derived.unitId : null,
+                  systemId: "systemId" in derived ? derived.systemId : null,
                   outcome: preview ? "planned" : "assigned",
                   check: "base equipment checked",
                 }

@@ -9,7 +9,7 @@ import {
 import { EMPTY_CATALOGS } from "@pe/ducts-domain/catalog";
 import { pricingJob, type PricingResult } from "./pricing-job";
 import { ductsGraph, ductsPageSchema, type DuctsPage } from "./graph";
-import { ductsBinding } from "./actions";
+import { ductsBinding, ductsWriteStage } from "./actions";
 import type { BindingScope } from "#/shell/mount-owner";
 import type { ReadingState } from "#/shell/readings";
 import { snapshot } from "./test-fixture";
@@ -192,4 +192,31 @@ test("fan-stage selection and framing remain Page fields without a network read"
   expect(ductsGraph.transition!(current, patch, "page")).toMatchObject({ patch });
   expect(ductsGraph.fields.selected.url).not.toBe(false);
   expect(ductsGraph.fields.viewport.url).not.toBe(false);
+});
+
+test("Work choices stage the selected heal network, fan pair and system before commands", () => {
+  const scope = scopeFor(ductsRouteState.schema.parse({}));
+  const heal = {
+    subject: null,
+    args: { request: { groups: [{ group: "g1", items: [] }] }, refusal: null },
+  };
+  expect(ductsWriteStage("heal-preview", heal, scope)).toEqual({
+    verb: "stage-write",
+    input: { groups: ["g1"] },
+  });
+  expect(
+    ductsWriteStage(
+      "assign-fan",
+      { subject: null, args: { request: { unitId: 12, systemId: 34 }, refusal: null } },
+      scope,
+    ),
+  ).toEqual({ verb: "stage-write", input: { fan: { unitId: 12, systemId: 34 } } });
+  expect(
+    ductsWriteStage("preview", { subject: null, args: { request: {}, refusal: null } }, scope),
+  ).toMatchObject({ verb: "stage-write", input: { groups: expect.any(Array) } });
+  scope.work!.doc.writeIntent = { edit: { value: { groups: ["g1"] } } };
+  expect(ductsWriteStage("heal", heal, scope)).toBeNull();
+  expect(
+    ductsWriteStage("heal", { subject: null, args: { refusal: "Read first" } }, scope),
+  ).toBeNull();
 });

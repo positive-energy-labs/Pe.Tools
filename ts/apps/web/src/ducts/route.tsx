@@ -12,7 +12,7 @@ import { routeFromGraph, type RouteAdapters, type GraphMount } from "#/shell/mou
 import { NativeObservationScope, type NativeObservation } from "#/revit/observation";
 import { ductsGraph, type DuctsPage } from "./graph";
 import { ductsSources } from "./sources";
-import { ductsBinding } from "./actions";
+import { ductsBinding, ductsWriteStage } from "./actions";
 import { NetworkPane, NetworkProvider } from "./proto/e/screen";
 import { SheetPane, SheetProvider } from "./sheet/mount";
 import { DuctsOwner, PaneBody, commands } from "./pane-context";
@@ -222,6 +222,7 @@ export const ductsAdapters: RouteAdapters<DuctsPage, DuctsRouteDocument> = {
       describeInputHistory(scope.readings, { label: input.label }, after),
   },
   binding: ductsBinding,
+  stageBefore: ductsWriteStage,
   cell: (row, scope) => {
     const value = row as { segment?: string | null; key?: string; id?: string | number } | null;
     const segment = value?.segment;

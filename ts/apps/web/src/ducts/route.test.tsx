@@ -34,15 +34,13 @@ test.each(["row", "Situation"])(
       await liveButton(placement === "row" ? within(row) : situation, "Preview heal"),
     );
     await waitFor(() => expect(host.actions).toHaveLength(1));
+    expect(host.doc.writeIntent.edit?.value).toEqual({ groups: ["g6953999"] });
     expect(host.actions[0]).toMatchObject({
       key: "ducts.preview-heal",
-      input: {
-        groups: [
-          { group: "g6953999", items: [{ key: "cap:14663504:1" }, { key: "cap:14663546:1" }] },
-        ],
-      },
+      input: { work: { key: host.key, expectedRevision: host.revision } },
     });
-    expect((host.actions[0]!.input as { groups: unknown[] }).groups).toHaveLength(1);
+    expect(Object.keys(host.actions[0]!.input)).toEqual(["work"]);
+    expect(host.writes).toHaveLength(1);
     if (placement === "row") {
       fireEvent.click(within(row).getByText(/^Heal RA 23/));
       const detail = view.container.querySelector<HTMLElement>(
