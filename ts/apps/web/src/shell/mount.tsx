@@ -42,6 +42,7 @@ import {
   SituationBand,
   TimelineHead,
   rankVerbs,
+  lastMove,
   stepSource,
   stepState,
   useWorkJournal,
@@ -946,7 +947,10 @@ export function GraphHistory<P, W>({
       {!shown.length && !saved.length && !steps.length && <p>No activity yet</p>}
       {journal && (
         <p>
-          Work r{journal.revision ?? "?"}{" "}
+          Work r{journal.revision ?? "?"}
+          {journal.last && journal.last.kind !== "apply" && (
+            <> · {lastMove(journal)} {journal.last.step.label}</>
+          )}{" "}
           <Button
             label={undo ? `Undo ${undo.label}` : "Undo"}
             refusal={

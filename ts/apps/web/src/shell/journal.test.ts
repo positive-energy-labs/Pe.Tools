@@ -153,8 +153,13 @@ test("Pea's host undo and redo walk the person's journal: same step, same revisi
   expect((await f.workspace.read(f.key, f.key.route))!.doc).toEqual(before);
   expect(f.journal.read().undo.map(({ press }) => press)).toEqual(["human-1"]);
   expect(f.journal.read().redo.map(({ press }) => press)).toEqual(["pea:r2"]);
+  // The Timeline says who moved last: Pea undid Pea's step; each step keeps its author.
+  expect(f.journal.read().last).toMatchObject({ kind: "undo", by: "pea" });
+  expect(f.journal.read().undo.map(({ by }) => by)).toEqual(["human"]);
+  expect(f.journal.read().redo.map(({ by }) => by)).toEqual(["pea"]);
   // The person's Redo replays the step Pea undid, then Pea's redo-then-undo cycle stays coherent.
   expect(await f.journal.redo(f.writer)).toMatchObject({ ok: true, press: "pea:r2", revision: 4 });
+  expect(f.journal.read().last).toMatchObject({ kind: "redo", by: "human" });
   expect(await pea("undo", 4)).toMatchObject({ ok: true, revision: 5 });
   expect(await pea("redo", 5)).toMatchObject({ ok: true, revision: 6 });
   expect(f.journal.read().undo.map(({ press }) => press)).toEqual(["human-1", "pea:r2"]);
@@ -429,4 +434,14 @@ test("empty descriptions cannot remove the accepted entry's required label", asy
   await f.apply([{ path: ["settings", "width"], value: 20 }], "width");
   f.journal.describe("width", { label: "  ", meta: { late: true } });
   expect(f.journal.read().undo[0]).toMatchObject({ label: "width", meta: { late: true } });
+});
+
+test("a Work read back below the journal's revision is a new lifetime: its history is dropped", async () => {
+  const f = fixture();
+  await f.apply([{ path: ["settings", "width"], value: 20 }], "human-1");
+  await f.apply([{ path: ["settings", "width"], value: 30 }], "human-2");
+  expect(f.journal.read()).toMatchObject({ revision: 2, undo: [{}, {}] });
+  // The tab-lifetime journal meets its Work recreated at r0 (fixture remount, start-fresh elsewhere).
+  f.journal.observe({ revision: 0, doc: f.initial });
+  expect(f.journal.read()).toMatchObject({ revision: 0, undo: [], redo: [], last: null });
 });

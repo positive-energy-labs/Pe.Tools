@@ -115,6 +115,15 @@ export const stepState = (journal: Journal, step: Journal["undo"][number]) =>
       ? "undone"
       : "applied";
 
+/** The journal's latest move as words: who edited, or who undid/redid it (Pea's undo is a step too). */
+export const lastMove = (journal: Journal) => {
+  const { kind, step, by } = journal.last!;
+  const who = by === "pea" ? "Pea" : "you";
+  return kind === "apply"
+    ? `${stepSource(step)} · ${stepState(journal, step)}`
+    : `${who} ${kind === "undo" ? "undid" : "redid"}`;
+};
+
 /**
  * The Timeline's head: the latest Work edit (who made it, its state, the Work revision), unless a
  * command ran after it; else the latest entry, in one line and every open consent window as its
@@ -211,7 +220,7 @@ export function TimelineHead<P, W>({
             <>
               <span>{step.label}</span>
               <span data-slot="timeline-state">
-                {stepSource(step)} · {journal!.last!.kind === "apply" ? stepState(journal!, step) : `${journal!.last!.kind === "undo" ? "undone" : "redone"}`} · r{journal!.revision}
+                {lastMove(journal!)} · r{journal!.revision}
               </span>
             </>
           ) : last ? (

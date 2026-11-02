@@ -99,7 +99,8 @@ export function createWorkJournal(key: WorkKey) {
   let current: { revision: number; doc: unknown } | null = null;
   let undo: Step[] = [];
   let redo: Step[] = [];
-  let last: { kind: "apply" | "undo" | "redo"; step: Step } | null = null;
+  /** The latest move and who made it: an undo or redo may be Pea's (`work.history`) or this person's. */
+  let last: { kind: "apply" | "undo" | "redo"; step: Step; by: "human" | "pea" } | null = null;
   let pending: { direction: "undo" | "redo"; step: Step } | null = null;
   let sending: WorkWrite | null = null;
   let busy = false;
@@ -160,7 +161,7 @@ export function createWorkJournal(key: WorkKey) {
       if (undone && back && !undone.superseded && canonicalRouteInput(back.inverse) === sent) {
         back.forward = ack.inverse;
         if (--undone.cursor === 0) redo.push(undo.pop()!);
-        last = { kind: "undo", step: undone };
+        last = { kind: "undo", step: undone, by: ack.by === "pea" ? "pea" : "human" };
         return;
       }
       const redone = redo.at(-1);
@@ -168,7 +169,7 @@ export function createWorkJournal(key: WorkKey) {
       if (redone && ahead && !redone.superseded && canonicalRouteInput(ahead.forward) === sent) {
         ahead.inverse = ack.inverse;
         if (++redone.cursor === redone.transitions.length) undo.push(redo.pop()!);
-        last = { kind: "redo", step: redone };
+        last = { kind: "redo", step: redone, by: ack.by === "pea" ? "pea" : "human" };
         return;
       }
     }
@@ -248,7 +249,7 @@ export function createWorkJournal(key: WorkKey) {
         transitions: [transition],
         cursor: 1,
       });
-    last = { kind: "apply", step: undo.at(-1)! };
+    last = { kind: "apply", step: undo.at(-1)!, by: pea ? "pea" : "human" };
   };
 
   const replay = async (
@@ -383,7 +384,7 @@ export function createWorkJournal(key: WorkKey) {
       source.splice(index, 1);
       (direction === "undo" ? redo : undo).push(step);
       pending = null;
-      last = { kind: direction, step };
+      last = { kind: direction, step, by: "human" };
       return { ok: true, press: step.press, revision };
     } catch (cause) {
       return {
@@ -404,6 +405,14 @@ export function createWorkJournal(key: WorkKey) {
     accept,
     /** A read proves values only at its own revision; a newer acknowledgement invalidates it. */
     observe(snapshot: { revision: number; doc: unknown }) {
+      // The journal outlives its mounts (tab lifetime); a Work read back BELOW the journal's
+      // revision is a new lifetime of that Work (recreated, fixture remount), so its history is
+      // not this Work's and the head must not claim it.
+      if (revision !== null && snapshot.revision < revision) {
+        clear();
+        revision = snapshot.revision;
+        current = null;
+      }
       if (!current || snapshot.revision >= current.revision) current = structuredClone(snapshot);
     },
     /** Attach cloneable presentation to an accepted press, including a late Reading result. */
