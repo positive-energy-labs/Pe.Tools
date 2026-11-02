@@ -5,4 +5,4 @@ export * from "./write-intent.ts";
 export * from "./work-value.ts";
 
 export * from "./pod-module.ts";
-export { field, manyField, manyCodec, resolveMany } from "./route-field.ts";
+export { field, manyField, manyCodec, resolveMany, decodePageField } from "./route-field.ts";

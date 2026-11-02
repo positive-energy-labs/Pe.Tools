@@ -31,6 +31,22 @@ export interface RouteField<S extends z.ZodType = z.ZodType> extends Access {
   codec: Codec<z.output<S>>;
 }
 
+/** Presence survives decoding: an explicit empty/default value must override Place memory. */
+export function decodePageField(field: RouteField, search: Record<string, unknown>, id: string) {
+  const present = Object.hasOwn(search, id) && search[id] !== undefined;
+  const raw = search[id];
+  let decoded = field.schema.safeParse(raw);
+  if (!decoded.success && ["string", "number", "boolean"].includes(typeof raw)) {
+    try {
+      decoded = field.schema.safeParse(field.codec.decode(String(raw)));
+    } catch (error) {
+      console.warn("ts/packages/agent-contracts/src/route-field.ts: fallback after failure", error);
+      // The original failed schema result is the refusal, never an empty selection.
+    }
+  }
+  return { present, decoded };
+}
+
 const WRAPPERS = new Set(["default", "optional", "nullable", "readonly", "catch", "prefault"]);
 export const bare = (schema: z.ZodType): z.ZodType =>
   WRAPPERS.has(schema.def.type)
@@ -145,12 +161,13 @@ export const manyCodec: Codec<Many> = {
     }
   },
 };
-export type StableKeyKind = "UniqueId" | "system-name" | "fan-mark" | "name";
+export const stableKeyKinds = ["UniqueId", "system-name", "name"] as const;
+export type StableKeyKind = (typeof stableKeyKinds)[number];
 export function manyField<
   const A extends Access,
   S extends z.ZodType = z.ZodDefault<z.ZodUnion<[z.ZodArray<z.ZodString>, z.ZodLiteral<"all">]>>,
 >(keyKind: StableKeyKind, access: A, schema?: S) {
-  if (!["UniqueId", "system-name", "fan-mark", "name"].includes(keyKind))
+  if (!stableKeyKinds.includes(keyKind))
     throw Error("Subject keys must be stable; ElementId is refused");
   return {
     schema: (schema ?? z.union([z.array(z.string().min(1)), z.literal("all")]).default([])) as S,

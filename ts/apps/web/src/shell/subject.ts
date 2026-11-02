@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { canonicalRouteInput, type RouteGraph } from "@pe/agent-contracts";
+import { canonicalRouteInput, decodePageField, type RouteGraph } from "@pe/agent-contracts";
 
 type Option = { id: string; label: string };
 type Declaration = Pick<RouteGraph<any, any>, "fields" | "subjectField" | "name">;
@@ -39,17 +39,10 @@ export function useSubjects() {
 export function subjectState(route: string, search: Record<string, unknown>) {
   const graph = declarations.get(route);
   const subject = graph?.subjectField;
-  if (!graph || !subject) return { ready: true, refusal: null, label: "" };
+  if (!graph || !subject) return { ready: false, refusal: null, label: "" };
   const field = graph.fields[subject.field]!;
   const raw = search[subject.field];
-  let decoded = field.schema.safeParse(raw);
-  if (!decoded.success && typeof raw === "string") {
-    try {
-      decoded = field.schema.safeParse(field.codec.decode(raw));
-    } catch {
-      /* Refuse below. */
-    }
-  }
+  const { decoded } = decodePageField(field, search, subject.field);
   if (!decoded.success)
     return {
       ready: false,

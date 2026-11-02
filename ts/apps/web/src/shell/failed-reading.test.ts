@@ -1,4 +1,4 @@
-import {testSources,testSubject,testFields,testReadings} from '../test-route-subject';
+import { testSources, testSubject, testFields, testReadings } from "../test-route-subject";
 import { afterEach, expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { pane, type RouteGraph, type WorkKey } from "@pe/agent-contracts";
@@ -24,12 +24,14 @@ function fixture() {
   let port!: ReadingWorkerPort<unknown, string>;
   const reply = (data: { id: number; error: string } | { id: number; result: string }) =>
     port.onmessage!({ data });
-  const graph: RouteGraph<Page, Doc> = {...testSubject,
+  const graph: RouteGraph<Page, Doc> = {
+    ...testSubject,
     key: "failed-proof",
     address: "failed-proof",
     name: "Failed proof",
-    fields: {...testFields, stage: { ...field(z.string().default("edit"), {}), role: "stage" } },
-    readings: {...testReadings,
+    fields: { ...testFields, stage: { ...field(z.string().default("edit"), {}), role: "stage" } },
+    readings: {
+      ...testReadings,
       input: { kind: "use", source: "input", retire: "target" },
       calc: { kind: "worker", source: "calc", deps: ["input"], retire: "target" },
     },
@@ -49,7 +51,8 @@ function fixture() {
   const adapters: MountAdapters<Page, Doc> = {
     getSnapshot: () => scope,
     subscribe: () => () => {},
-    sources: {...testSources,
+    sources: {
+      ...testSources,
       input: {
         kind: "use",
         open: (ctx, deliver) => {
@@ -134,10 +137,10 @@ test("a failed worker reading names its failure to the verb and holds until its 
   expect(owner.control("go").refusal).toBeNull();
 });
 
-test("a verb cannot silently bind a reading unreachable from its active stage", () => {
+test("admission refuses a verb whose prerequisites its stage never demands", () => {
   const f = fixture();
   f.graph.panes.body.draws = [];
-  const owner = createGraphMount(f.graph, f.adapters);
-  expect(owner.control("go").refusal).toBe("Verb go binds reading calc, which stage edit never demands");
-  owner.dispose();
+  expect(() => createGraphMount(f.graph, f.adapters)).toThrow(
+    "Verb go depends on reading calc, which stage edit never demands",
+  );
 });

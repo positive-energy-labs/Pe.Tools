@@ -22,6 +22,7 @@ import {
   type WorkKey,
   type WorkWrite,
   type VerbDecl,
+  type VerbReadingEdges,
   type WorkWriteAck,
 } from "@pe/agent-contracts";
 import { createRouteOwner, makeAtomRegistry } from "#/shell/owner";
@@ -88,7 +89,7 @@ export type BindingScope<P, W> = MountScope<W> & {
   readings: Readonly<Record<string, ReadingState>>;
 };
 
-export interface MountAdapters<P, W> {
+export interface MountAdapters<P, W> extends VerbReadingEdges {
   fixture?: { name: string; queries: Readonly<Record<string, unknown>>; select?(page: P): void };
   settings?: SettingsOwner;
   /**
@@ -117,14 +118,6 @@ export interface MountAdapters<P, W> {
   ): { verb: string; input: unknown } | null;
   /** The cell subject (`cell:<seg|key>`) a pane row stands for, or null; the kernel's cell verbs follow it. */
   cell?(row: unknown, scope: BindingScope<P, W>): VerbSubject | null;
-  /** Explicit captures only. Ordinary pane demand must not start an expensive operation. */
-  verbReadings?: Readonly<Record<string, readonly string[]>>;
-  /**
-   * Readings whose change stales a verb's bound basis and its ticket. Distinct from `verbReadings`
-   * (captures the verb itself starts): a started capture changes version by the verb's own doing
-   * and never counts against it. Work revision and the Page epoch are always in the basis.
-   */
-  verbDepends?: Readonly<Record<string, readonly string[]>>;
   /** Native effects name their actual Work footprint; [[]] explicitly means the whole Work. */
   receiptPaths?(receipt: ActionReceipt, key: WorkKey): readonly RouteStatePatch["path"][];
   subscribeReceipts?(
@@ -145,49 +138,20 @@ export function mountRefusals<P, W>(
   graph: RouteGraph<P, W>,
   adapters?: Pick<MountAdapters<P, W>, "sources" | "verbReadings" | "verbDepends">,
 ) {
-  const refusals = validateRouteGraph(graph);
+  const refusals = validateRouteGraph(
+    graph,
+    adapters && { verbReadings: adapters.verbReadings, verbDepends: adapters.verbDepends },
+  );
   // validateRouteGraph also handles malformed runtime inputs; do not traverse those again.
   if (refusals.some((r) => r.code === "invalid-graph")) return refusals;
   const all = [...refusals, ...validateGraphChords(graph)];
   const invalid = (path: string, message: string) =>
     all.push({ code: "invalid-graph", path, message });
   if (!Object.keys(graph.stages).length) invalid("stages", "A route needs at least one stage");
-  const visiting = new Set<string>();
-  const visited = new Set<string>();
-  const visit = (id: string) => {
-    if (id === "page" && !graph.readings.page) return;
-    if (visiting.has(id)) {
-      invalid(`readings.${id}`, "Reading dependency cycle");
-      return;
-    }
-    if (visited.has(id)) return;
-    const reading = graph.readings[id];
-    if (!reading) {
-      all.push({
-        code: "missing-reading",
-        path: `readings.${id}`,
-        message: `Unknown reading '${id}'`,
-      });
-      return;
-    }
-    visiting.add(id);
-    if (adapters && adapters.sources[reading.source]?.kind !== reading.kind)
-      invalid(`readings.${id}.source`, `Unresolved ${reading.kind} source '${reading.source}'`);
-    for (const dep of reading.deps ?? []) visit(dep);
-    visiting.delete(id);
-    visited.add(id);
-  };
-  for (const id of Object.keys(graph.readings)) visit(id);
-  for (const [verb, readings] of Object.entries(adapters?.verbReadings ?? {})) {
-    if (!graph.verbs[verb]) invalid(`verbReadings.${verb}`, `Unknown verb '${verb}'`);
-    for (const id of readings)
-      if (!graph.readings[id]) invalid(`verbReadings.${verb}`, `Unknown reading '${id}'`);
-  }
-  for (const [verb, readings] of Object.entries(adapters?.verbDepends ?? {})) {
-    if (!graph.verbs[verb]) invalid(`verbDepends.${verb}`, `Unknown verb '${verb}'`);
-    for (const id of readings)
-      if (!graph.readings[id]) invalid(`verbDepends.${verb}`, `Unknown reading '${id}'`);
-  }
+  if (adapters)
+    for (const [id, reading] of Object.entries(graph.readings))
+      if (adapters.sources[reading.source]?.kind !== reading.kind)
+        invalid(`readings.${id}.source`, `Unresolved ${reading.kind} source '${reading.source}'`);
   return all;
 }
 
@@ -352,7 +316,8 @@ export function createGraphMount<P, W>(
         ),
       });
       return patches.length ? patches : null;
-    } catch {
+    } catch (error) {
+      console.warn("ts/apps/web/src/shell/mount-owner.ts: fallback after failure", error);
       return null;
     }
   };
@@ -810,29 +775,10 @@ export function createGraphMount<P, W>(
       throw Error(`Row resolved unknown cell type '${subject.type}'`);
     return subject;
   };
-  const bindingFaults = new Map<string, string>();
   const binding = (id: string, row?: unknown): MountBinding => {
-    bindingFaults.delete(id);
     if (kernel.verbs[id]) return { subject: cellSubject(row), args: {} };
     if (verbs[id]?.kind === "recovery") return { subject: null, args: {} };
-    const reachable = new Set<string>();
-    const include = (key: string) => {
-      if (reachable.has(key)) return;
-      reachable.add(key);
-      for (const dep of graph.readings[key]?.deps ?? []) include(dep);
-    };
-    for (const pane of graph.stages[stage()]!.panes)
-      for (const key of graph.panes[pane]?.draws ?? []) include(key);
-    for (const key of adapters.verbReadings?.[id] ?? []) include(key);
-    const bound = bindingScope();
-    bound.readings = new Proxy(bound.readings, {
-      get(target, key: string) {
-        if (typeof key === "string" && graph.readings[key] && !reachable.has(key))
-          bindingFaults.set(id, `Verb ${id} binds reading ${key}, which stage ${stage()} never demands`);
-        return Reflect.get(target, key);
-      },
-    });
-    return adapters.binding?.(id, row, bound) ?? { subject: null, args: {} };
+    return adapters.binding?.(id, row, bindingScope()) ?? { subject: null, args: {} };
   };
   // Writing verbs wait out a conflict; queries only read, so they still run.
   /** A failed dependency names its failure; it never reads as "refreshing". */
@@ -848,7 +794,7 @@ export function createGraphMount<P, W>(
       ? "This route is inactive"
       : conflict && scope.conflict && verbs[id]?.effect !== "query"
         ? CONFLICT_REFUSAL
-        : bindingFaults.get(id) ?? failedDependency(id);
+        : failedDependency(id);
   const retryRefusal = () => {
     if (!rejected) return "There is no unaccepted edit";
     if (scope.closed || scope.failure) return scope.failure ?? "This Work is closed";

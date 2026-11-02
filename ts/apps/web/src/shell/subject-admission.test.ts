@@ -31,3 +31,18 @@ test("fan titles use roster display labels including duplicate-mark disambiguato
   expect(subjectState("fans", { fan: "uid-b%400" }).label).toBe("FC-23 \u00b7 200");
   expect(subjectState("fans", { fan: "uid-a%400", target: "other-model" }).ready).toBe(false);
 });
+
+test("Place admission waits for declaration and roster, distinguishing an empty roster", () => {
+  expect(subjectState("not-registered", {}).ready).toBe(false);
+  registerSubject("admission-fans", fansGraph);
+  expect(subjectState("admission-fans", { fan: "uid-a%400" })).toMatchObject({
+    ready: false,
+    refusal: null,
+  });
+  publishSubjectRoster("admission-fans", {}, []);
+  expect(subjectState("admission-fans", { fan: "uid-a%400" })).toMatchObject({
+    ready: false,
+    refusal: expect.stringContaining("not in this model"),
+  });
+  expect(subjectState("admission-fans", { fan: "" })).toMatchObject({ ready: true, refusal: null });
+});

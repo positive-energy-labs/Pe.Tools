@@ -96,3 +96,33 @@ test("Pod admission links axes and refuses missing declarations", () => {
     "missing or invalid subject",
   );
 });
+
+test("verb prerequisites must be demanded transitively in every placement stage", () => {
+  const g = graph();
+  g.readings = {
+    ...g.readings,
+    derived: { kind: "derive", source: "derive", deps: ["items"], retire: "never" },
+  };
+  g.verbs = { apply: { kind: "command", input: z.object({}), label: "Apply", review: "shown" } };
+  g.stages = { main: { word: "Main", panes: ["main"], verbs: ["apply"] } };
+  const edges = { verbDepends: { apply: ["derived"] } };
+  expect(validateRouteGraph(g, edges).map((r) => r.message)).toContain(
+    "Verb apply depends on reading derived, which stage main never demands",
+  );
+  expect(validateRouteGraph(g, { ...edges, verbReadings: { apply: ["derived"] } })).not.toEqual([]);
+  g.panes = { main: { ...g.panes.main!, draws: ["derived"] } };
+  expect(validateRouteGraph(g, edges)).toEqual([]);
+  expect(
+    validateRouteGraph(g, { verbDepends: { missing: ["absent"] } }).map((r) => r.code),
+  ).toEqual(["missing-verb", "missing-reading"]);
+  g.readings = { ...g.readings, items: { ...g.readings.items!, deps: ["derived"] } };
+  expect(validateRouteGraph(g, edges).some((r) => r.message.includes("cycle"))).toBe(true);
+});
+test.each(["ElementId", "fan-mark", "label", "display-name"])(
+  "display identity %s refuses admission",
+  (keyKind) => {
+    const g = graph();
+    g.subjectField = { ...g.subjectField, keyKind } as any;
+    expect(messages(g)).toContain("never ElementId or display fields");
+  },
+);

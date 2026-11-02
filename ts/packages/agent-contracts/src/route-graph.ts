@@ -1,6 +1,6 @@
 import type { AppExposure, AppRouteMount, AppSurface } from "./route-directory.ts";
 import { z } from "zod";
-import { bare, manyCodec, type History, type RouteField } from "./route-field.ts";
+import { bare, manyCodec, stableKeyKinds, type History, type RouteField } from "./route-field.ts";
 import type { RouteStatePatch } from "./route-state.ts";
 import type { RouteViewRefusalCode } from "./route-view.ts";
 
@@ -509,8 +509,18 @@ function unwrapSchema(schema: z.ZodType): ZodDef {
   return def;
 }
 
-/** Collects admission refusals without running route code. Malformed runtime data also refuses. */
-export function validateRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphRefusal[] {
+/** The same dependency declaration governs admission, capture and review invalidation. */
+export interface VerbReadingEdges {
+  /** Captures started by a verb, not prerequisites of its binding. */
+  verbReadings?: Readonly<Record<string, readonly string[]>>;
+  /** Reading prerequisites of a verb's binding and review basis. */
+  verbDepends?: Readonly<Record<string, readonly string[]>>;
+}
+
+export function validateRouteGraph<P, W>(
+  graph: RouteGraph<P, W>,
+  edges: VerbReadingEdges = {},
+): RouteGraphRefusal[] {
   const refusals: RouteGraphRefusal[] = [];
   const refuse = (code: RouteGraphRefusal["code"], path: string, message: string) => {
     // A pane shared by several stages is checked once per stage; say each refusal once.
@@ -518,14 +528,14 @@ export function validateRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphRef
       refusals.push({ code, path, message });
   };
   try {
-    // TODO: Supply genuine roster/detail bindings in graphs still missing subjectField; admission stays closed.
+    // TODO: docs/features/routes/LEDGER.md#s7-dd18c610fe Supply genuine roster/detail bindings in graphs still missing subjectField; admission stays closed.
     if (!graph.subjectField)
       refuse(
         "invalid-graph",
         "subjectField",
         "Every route must declare its subject field, noun, stable key, cardinality, roster and detail",
       );
-    // TODO: Consolidate remaining Page selection fields instead of relabeling competing copies.
+    // TODO: docs/features/routes/LEDGER.md#s7-d234a3544a Consolidate remaining Page selection fields instead of relabeling competing copies.
     const selections = Object.values(graph.fields).filter((field) => field.role === "selection");
     if (selections.length !== 1)
       refuse(
@@ -543,15 +553,28 @@ export function validateRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphRef
       if (subject.kind === "singleton") {
         const schema = graph.fields[subject.field]?.schema;
         const definition = schema && unwrapSchema(schema);
-        const entries = definition && (definition as unknown as { entries?: Record<string, string> }).entries;
-        if (subject.cardinality !== "one" || definition?.type !== "enum" || Object.keys(entries ?? {}).length !== 1)
-          refuse("invalid-graph", "subjectField", "A singleton subject requires one fixed named key");
+        const entries =
+          definition && (definition as unknown as { entries?: Record<string, string> }).entries;
+        if (
+          subject.cardinality !== "one" ||
+          definition?.type !== "enum" ||
+          Object.keys(entries ?? {}).length !== 1
+        )
+          refuse(
+            "invalid-graph",
+            "subjectField",
+            "A singleton subject requires one fixed named key",
+          );
       }
       const subjects = Object.entries(graph.fields).filter(([, f]) => f.role === "subject");
       if (subjects.length !== 1 || subjects[0]?.[0] !== subject.field)
         refuse("invalid-graph", "subjectField", "Declare exactly one subject field");
-      if (!["UniqueId", "system-name", "fan-mark", "name"].includes(subject.keyKind))
-        refuse("invalid-graph", "subjectField.keyKind", "ElementId is not a stable subject key");
+      if (!stableKeyKinds.includes(subject.keyKind))
+        refuse(
+          "invalid-graph",
+          "subjectField.keyKind",
+          "Subject keys must be stable identity, never ElementId or display fields",
+        );
       if (subject.cardinality === "many" && graph.fields[subject.field]?.codec !== manyCodec)
         refuse(
           "invalid-graph",
@@ -569,6 +592,35 @@ export function validateRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphRef
           `fields.${id}.picker`,
           `Unknown reading '${field.picker.reading}'`,
         );
+    const closure = (roots: readonly string[], path: string) => {
+      const reached = new Set<string>(),
+        visiting = new Set<string>();
+      const visit = (id: string) => {
+        if (id === "page" && !graph.readings.page) return;
+        if (visiting.has(id)) {
+          refuse("invalid-graph", path, `Reading dependency cycle at '${id}'`);
+          return;
+        }
+        if (reached.has(id)) return;
+        const reading = graph.readings[id];
+        if (!reading) {
+          refuse("missing-reading", path, `Unknown reading '${id}'`);
+          return;
+        }
+        reached.add(id);
+        visiting.add(id);
+        for (const dep of reading.deps ?? []) visit(dep);
+        visiting.delete(id);
+      };
+      roots.forEach(visit);
+      return reached;
+    };
+    closure(Object.keys(graph.readings), "readings");
+    for (const [kind, declarations] of Object.entries(edges))
+      for (const [verb, ids] of Object.entries(declarations ?? {})) {
+        if (!graph.verbs[verb]) refuse("missing-verb", `${kind}.${verb}`, `Unknown verb '${verb}'`);
+        closure(ids as readonly string[], `${kind}.${verb}`);
+      }
     const checkVerb = (id: string, path: string) => {
       if (!Object.hasOwn(graph.verbs, id)) refuse("missing-verb", path, `Unknown verb '${id}'`);
     };
@@ -586,6 +638,20 @@ export function validateRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphRef
         if (!declared) refuse("missing-pane", `stages.${id}.panes`, `Unknown pane '${paneId}'`);
         else for (const verb of placedIds(declared.verbs)) verbs.add(verb);
       }
+      const demanded = closure(
+        stage.panes.flatMap((pane) => graph.panes[pane]?.draws ?? []),
+        `stages.${id}`,
+      );
+      if (graph.refresh) verbs.add(graph.refresh);
+      for (const verb of graph.observe ?? []) verbs.add(verb);
+      for (const verb of verbs)
+        for (const dep of closure(edges.verbDepends?.[verb] ?? [], `verbs.${verb}`))
+          if (!demanded.has(dep))
+            refuse(
+              "invalid-graph",
+              `stages.${id}.verbs`,
+              `Verb ${verb} depends on reading ${dep}, which stage ${id} never demands`,
+            );
       // A chord collides within its own scope path: stage chords, then stage chords plus one pane's.
       // Sibling panes are disjoint kit scopes, so they never see each other's chords.
       const checkChord = (scope: Map<string, string>, path: string, verb: string, chord: Chord) => {
@@ -598,7 +664,11 @@ export function validateRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphRef
       for (const verb of verbs) checkVerb(verb, `stages.${id}.verbs`);
       // The pane head owns refresh; a stage verb that refreshes would draw it twice.
       if (graph.refresh && stage.verbs.includes(graph.refresh))
-        refuse("invalid-graph", `stages.${id}.verbs`, `'${graph.refresh}' is the pane head's refresh`);
+        refuse(
+          "invalid-graph",
+          `stages.${id}.verbs`,
+          `'${graph.refresh}' is the pane head's refresh`,
+        );
       if (stage.verbs.filter((verb) => graph.verbs[verb]?.primary).length > 1)
         refuse("invalid-graph", `stages.${id}.verbs`, "A stage frames at most one primary verb");
       const stageScope = new Map<string, string>();

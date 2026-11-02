@@ -1,5 +1,6 @@
 import {
   canonicalRouteInput,
+  decodePageField,
   graphFieldPolicy,
   type RouteGraph,
   type FieldDecl,
@@ -48,15 +49,17 @@ export function readLayoutState(key: string): GraphLayoutState {
 export function writeLayoutState(key: string, state: GraphLayoutState): void {
   try {
     localStorage.setItem(key, JSON.stringify(state));
-  } catch {
+  } catch (error) {
+    console.warn("ts/apps/web/src/shell/mount-page.ts: fallback after failure", error);
     /* Storage may be disabled. */
   }
 }
 
-/** Graph fields supply every codec and history policy; useUrlPage owns router sequencing. */
+// TODO: docs/features/routes/LEDGER.md#s4-page-drive ? drive bare/empty URL, Back/Forward and Place reload in the browser.
 /**
  * `rest` is each field's resting value when its schema has no default (the mount's initialPage);
- * a field at rest is absent from the URL, so a shared link carries only what the user changed.
+ * S4 presence rule supersedes omission of explicit defaults: they must override Place memory.
+ * Middleware still leaves a bare route bare.
  */
 export function graphUrlPage<P, W>(graph: RouteGraph<P, W>, rest: Partial<P> = {}): UrlPage<P> {
   const entries = Object.entries(graph.fields) as [
@@ -67,37 +70,14 @@ export function graphUrlPage<P, W>(graph: RouteGraph<P, W>, rest: Partial<P> = {
   const read = (search: Record<string, unknown>) =>
     Object.fromEntries(
       fields.map(([id, field]) => {
-        const raw = search[id];
-        if (raw === undefined && id in rest) return [id, rest[id]];
-        const typed = field.schema.safeParse(raw);
-        // The router JSON-parses search values, so `?level=30` arrives as a number and `?on=true`
-        // as a boolean; a scalar re-enters the one string grammar. Objects and arrays never do.
-        const scalar =
-          typeof raw === "string" || typeof raw === "number" || typeof raw === "boolean";
-        const decoded = typed.success
-          ? typed
-          : scalar
-            ? field.schema.safeParse(field.codec.decode(String(raw)))
-            : typed;
+        const { present, decoded } = decodePageField(field, search, id);
+        if (!present && id in rest) return [id, rest[id]];
         return [id, decoded.success ? decoded.data : field.schema.parse(undefined)];
       }),
     ) as Partial<P>;
   const write = (page: Partial<P>) =>
     Object.fromEntries(
-      fields
-        .filter(([id]) => id in page)
-        .map(([id, field]) => {
-          const value = page[id];
-          const initial = field.schema.safeParse(undefined);
-          const resting = initial.success ? initial.data : rest[id as keyof P];
-          return [
-            id,
-            (initial.success || id in rest) &&
-            canonicalRouteInput(resting) === canonicalRouteInput(value)
-              ? undefined
-              : field.codec.encode(value),
-          ];
-        }),
+      fields.filter(([id]) => id in page).map(([id, field]) => [id, field.codec.encode(page[id])]),
     );
   return {
     keys: fields.map(([id]) => id),
@@ -118,25 +98,10 @@ export function graphUrlPage<P, W>(graph: RouteGraph<P, W>, rest: Partial<P> = {
         const page = read(out);
         for (const [id, field] of fields) {
           if (!(id in out)) continue;
-          // Invalid subjects remain visible to admission, never normalized into an empty pick.
-          if (field.role === "subject") {
-            let valid = field.schema.safeParse(out[id]).success;
-            if (!valid && typeof out[id] === "string") {
-              try {
-                valid = field.schema.safeParse(field.codec.decode(out[id] as string)).success;
-              } catch {
-                /* Keep the refusal input. */
-              }
-            }
-            if (!valid) continue;
-          }
+          if (!decodePageField(field, out, id).decoded.success) continue;
           const value = write(page)[id];
-          if (value === undefined) {
-            if (field.role === "subject" && out[id] !== undefined) out[id] = "";
-            else delete out[id];
-          } else
-            out[id] =
-              typeof page[id] === "number" || typeof page[id] === "boolean" ? page[id] : value;
+          out[id] =
+            typeof page[id] === "number" || typeof page[id] === "boolean" ? page[id] : value;
         }
         return out;
       },

@@ -38,6 +38,7 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 - 2026-09-09, the claim that document keys and receipts alone prevent every stale read or duplicate mutation: keys separate open lifetimes; Effect refresh orders reads within one lifetime; host admission and request identity govern retries.
 
 ## Owed
+- <a id="s4-page-drive"></a> S4: browser-drive bare route restore, explicit empty/default overrides, Back/Forward, malformed subjects and Place reload after admission/codec consolidation. Deterministic kernel tests do not prove browser enrollment.
 - R3 live receipt proof: open `/schedules` and `/families` in controlled session `u2-r3` with a local model copy; confirm the schedule grid renders and Families has no failed heads before a read. Deterministic journal-to-decoder and demand regressions pass at `6fe6b9fd`; TODO at `ts/apps/host/tests/receipt-reading-contract.test.ts`.
 - **Host-filed snapshots (`?at=`)**: an immutable checkpoint of address, authored inputs and reading versions, opened read-only, surviving a reload. kaitpw: "i really really really want this". The timeline is in memory only today (`timeline.ts`).
 - Wave 2 technical shape (muse, then build per ADR 0027 rule 15): capability catalog shape; `Scope` and cost class on every C# `[Op]` with a codegen refusal; one reading engine (`readings.ts` and `shell/readings.ts`); reading retention by kind; one revision-ordered acceptance path for Work acks and the stream; when an open review goes stale; roster, click-to-paint and memory budgets.

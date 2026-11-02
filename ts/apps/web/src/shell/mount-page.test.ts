@@ -21,7 +21,7 @@ describe("graphUrlPage.read", () => {
 });
 
 describe("graphUrlPage.write", () => {
-  test("a field at its resting value is absent from the URL", () => {
+  test("explicit resting values remain present to override Place memory", () => {
     const codec = { encode: (v: unknown) => String(v), decode: (s: string) => s };
     const url = graphUrlPage(
       {
@@ -33,12 +33,12 @@ describe("graphUrlPage.write", () => {
       { level: "" } as never,
     );
     expect(url.write({ level: "", cfm: "1000" } as never)).toEqual({
-      level: undefined,
-      cfm: undefined,
+      level: "",
+      cfm: "1000",
     });
     expect(url.write({ level: "L2", cfm: "1000" } as never)).toEqual({
       level: "L2",
-      cfm: undefined,
+      cfm: "1000",
     });
   });
 });
@@ -75,4 +75,27 @@ test("device layout validates persisted data and tolerates unavailable storage",
   } finally {
     vi.unstubAllGlobals();
   }
+});
+
+test("absence, empty and malformed values survive middleware distinctly", () => {
+  const url = graphUrlPage({
+    fields: {
+      subject: {
+        schema: z.string().default(""),
+        role: "subject",
+        codec: {
+          encode: String,
+          decode: () => {
+            throw Error("bad codec");
+          },
+        },
+      },
+    },
+  } as never);
+  const normalize = (search: Record<string, unknown>) =>
+    url.middlewares[0]!({ search, next: () => search } as never);
+  expect(normalize({})).toEqual({});
+  expect(normalize({ subject: "" })).toEqual({ subject: "" });
+  expect(normalize({ subject: null })).toEqual({ subject: null });
+  expect(normalize({ subject: 123 })).toEqual({ subject: 123 });
 });
