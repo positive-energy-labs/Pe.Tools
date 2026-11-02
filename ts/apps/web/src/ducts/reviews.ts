@@ -184,14 +184,66 @@ export function presentHeal(result: unknown, scope: VerbScope): VerbPresentation
 
 export function presentLosses(result: unknown, scope: VerbScope): VerbPresentation {
   const response = responseOf<DuctsApply.Res.Response>(result);
-  const snapshot = snapshotOf(scope);
+  const envelope = result as {
+    derivedRequest?: import("@pe/agent-contracts").DuctsApplyInput;
+    receipt?: { result?: { derivedRequest?: import("@pe/agent-contracts").DuctsApplyInput } };
+  };
+  const request = envelope.derivedRequest ?? envelope.receipt?.result?.derivedRequest;
+  const snapshot =
+    snapshotOf(scope) ?? (scope.readings.sheetSnapshot?.value as DuctSnapshot | undefined);
+  const slots = { ...snapshot?.slots, ...request?.slots };
   const name = snapshot ? subjectNamer(snapshot) : () => null;
   return {
-    sentence: outcomeWords(response),
-    rows: response.writes.map(
-      (write) =>
-        `${write.kind.replaceAll("-", " ")} ${(write.id == null ? null : name(write.id)) ?? "duct element"}: ${write.outcome}${write.before != null || write.after != null ? ` · ${write.before ?? "none"} → ${write.after ?? "none"}` : ""}${write.reason ? ` · ${write.reason}` : ""}`,
-    ),
+    sentence: response.writes.length
+      ? outcomeWords(response)
+      : "Nothing to write: no native targets were derived from this Work in the selected scope.",
+    rows: response.writes.map((write) => {
+      const proposed =
+        write.kind === "component"
+          ? request?.components?.find((r) => r.id === write.id)
+          : write.kind === "terminal"
+            ? request?.terminals?.find((r) => r.id === write.id)
+            : write.kind === "equipment-flow"
+              ? request?.equipmentFlows?.find((r) => r.id === write.id)
+              : write.kind === "terminal-flow"
+                ? request?.terminalFlows?.find((r) => r.id === write.id)
+                : write.kind === "equipment"
+                  ? request?.equipment?.find((r) => r.id === write.id)
+                  : write.kind === "fitting"
+                    ? request?.fittings?.find((r) => r.id === write.id)
+                    : undefined;
+      const slot =
+        write.kind === "equipment-flow"
+          ? slots.fanFlow
+          : write.kind === "equipment"
+            ? slots.fanStatic
+            : write.kind === "component"
+              ? "Specific Loss"
+              : write.kind === "terminal"
+                ? slots.terminalDrop
+                : proposed && "slot" in proposed
+                  ? proposed.slot
+                  : (write.key ?? write.kind);
+      const next =
+        proposed && "inWg" in proposed
+          ? `${proposed.inWg} in-wg`
+          : proposed && "cfm" in proposed
+            ? `${proposed.cfm} cfm`
+            : proposed && "externalStaticInWg" in proposed
+              ? `${proposed.externalStaticInWg} in-wg`
+              : proposed && "coefficient" in proposed
+                ? `C = ${proposed.coefficient}`
+                : null;
+      const source =
+        proposed && "source" in proposed
+          ? (proposed.source ?? "Work")
+          : proposed && "table" in proposed
+            ? proposed.table
+            : proposed
+              ? "Work"
+              : "derived Work";
+      return `${write.id == null ? "Model store" : `${name(write.id) ?? "element"} [${write.id}]`} · ${slot ?? write.kind}: ${write.before ?? "not available"} → ${write.after ?? next ?? "derived store"} · source: ${source} · ${write.outcome}${write.reason ? ` · ${write.reason}` : ""}`;
+    }),
   };
 }
 

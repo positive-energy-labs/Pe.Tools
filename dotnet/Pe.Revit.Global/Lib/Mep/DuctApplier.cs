@@ -94,6 +94,8 @@ public static class DuctApplier {
 
         foreach (var w in request.Fittings ?? [])
             items.Add(Duplicate("fitting", w.Id) ?? Plan("fitting", w.Id, () => Fitting(doc, w, slots, schemas)));
+        // TODO: Chadds DS-1 14577394 / SH-1 14577396 are Mechanical Equipment; prove a
+        // parameter-backed component-drop write/readback before extending the accessory-only writer.
         foreach (var w in request.Components ?? [])
             items.Add(Duplicate("component", w.Id) ?? Plan("component", w.Id, () => Lossy(doc, w.Id, "component", BuiltInCategory.OST_DuctAccessory, SpecificLoss, schemas,
                 [(PressureLossField, Finite(w.InWg) ? UnitUtils.ConvertToInternalUnits(w.InWg, InWg).ToString("R", CultureInfo.InvariantCulture) : "")], w.InWg, $"specific-loss {w.InWg:0.####} in-wg")));
@@ -358,6 +360,8 @@ public static class DuctApplier {
             return item.Refuse($"the connector's loss method is {method}; Revit takes a drop only when the family connector is Specific Loss");
         if (!Finite(w.InWg) || w.InWg < 0) return item.Refuse("the drop must be a finite number of 0 or more");
         if (had is { } h && Math.Abs(h - w.InWg) < 1e-6) return item.Unchanged($"{w.InWg:0.#####} in-wg");
+        // TODO: Chadds louver 14088043 has no writable default TerminalDrop parameter;
+        // establish its actual connector-bound parameter before claiming this loss writes successfully.
         var bound = slots.TerminalDrop is { } name ? e.LookupParameter(name) : null;
         if (slots.TerminalDrop is { } named && (bound is null || bound.IsReadOnly || bound.StorageType != StorageType.Double))
             return item.Refuse($"the instance has no writable number parameter '{named}' (the TerminalDrop slot)");

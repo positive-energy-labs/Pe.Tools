@@ -825,7 +825,10 @@ function GraphSituation<P, W>({
   const stageId = owner.stage();
   const stage = graph.stages[stageId]!;
   useSubjects();
-  const subjectLabel = subjectState(graph.key, useRouteSearchSlice((search) => search)).label;
+  const subjectLabel = subjectState(
+    graph.key,
+    useRouteSearchSlice((search) => search),
+  ).label;
   const stageField = graphFields(graph).find(([, field]) => field.role === "stage")?.[0];
   const verbs = rankVerbs(owner.stageVerbs(), owner.verbs).map((id) => (
     <GraphVerb key={id} id={id} verb={owner.verbs[id]!} owner={owner} enabled={enabled} />
@@ -956,7 +959,10 @@ export function GraphHistory<P, W>({
         <p>
           Work r{journal.revision ?? "?"}
           {journal.last && journal.last.kind !== "apply" && (
-            <> · {lastMove(journal)} {journal.last.step.label}</>
+            <>
+              {" "}
+              · {lastMove(journal)} {journal.last.step.label}
+            </>
           )}{" "}
           <Button
             label={undo ? `Undo ${undo.label}` : "Undo"}
@@ -1131,6 +1137,7 @@ function GraphReview<P, W>({
   return (
     <Popover
       open
+      replaceOnSiblingOpen={false}
       onOpenChange={(open, details) => {
         if (open) return;
         if (details.reason === "escape-key") owner.stop();

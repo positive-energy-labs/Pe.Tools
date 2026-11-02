@@ -54,6 +54,7 @@ type Overlay = {
  * the Settings popover on open).
  */
 const overlays: Overlay[] = [];
+const persistentOverlays = new WeakSet<Overlay>();
 const Own = createContext<Pick<Overlay, "popup" | "anchor"> | null>(null);
 const descendantHolds = (own: Overlay, node: unknown) =>
   node instanceof Node &&
@@ -64,8 +65,9 @@ export function Popover({
   defaultOpen = false,
   onOpenChange,
   actionsRef,
+  replaceOnSiblingOpen = true,
   ...props
-}: Primitive.Root.Props) {
+}: Primitive.Root.Props & { replaceOnSiblingOpen?: boolean }) {
   const localActions = useRef<Primitive.Root.Actions>(null);
   const actions = actionsRef ?? localActions;
   const escapeEvent = useRef<KeyboardEvent | null>(null);
@@ -79,6 +81,8 @@ export function Popover({
     popup,
     anchor: anchorRef,
   }).current;
+  if (replaceOnSiblingOpen) persistentOverlays.delete(own);
+  else persistentOverlays.add(own);
   const requested = controlled ?? open;
   const shown = requested && !dismissed;
   useEffect(() => {
@@ -91,8 +95,13 @@ export function Popover({
       escapeEvent.current = event ?? null;
       actions.current?.close();
     };
-    // Close from the top down until an overlay holds this one's anchor; that one is the parent.
-    while (overlays.length && !overlays.at(-1)!.popup.current?.contains(anchorRef.current))
+    // A pending write review keeps its consent visible while sibling evidence is inspected.
+    // Otherwise close from the top down until an overlay holds this one's anchor (its parent).
+    while (
+      overlays.length &&
+      !persistentOverlays.has(overlays.at(-1)!) &&
+      !overlays.at(-1)!.popup.current?.contains(anchorRef.current)
+    )
       overlays.pop()!.close();
     overlays.push(own);
     const escape = (event: KeyboardEvent) => {

@@ -1,6 +1,7 @@
-import {testSources,testSubject,testFields,testReadings} from '../test-route-subject';
+import { testSources, testSubject, testFields, testReadings } from "../test-route-subject";
 // @vitest-environment jsdom
 import { StrictMode } from "react";
+import { Popover, SubjectPopoverContent } from "@pe/kit/lang/popover";
 import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { createMemoryHistory, createRouter, RouterProvider } from "@tanstack/react-router";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
@@ -184,7 +185,8 @@ async function fixture(cells = false) {
   let deltaSubscriptions = 0;
   let documentChange: ((ref: { session: string; openId: string }) => void) | undefined;
   let late: ((receipt: ActionReceipt, key: WorkKey | null, press?: string) => void) | undefined;
-  const graph: RouteGraph<Page, Doc> = {...testSubject,
+  const graph: RouteGraph<Page, Doc> = {
+    ...testSubject,
     key: "mount-proof",
     address: "mount-proof",
     name: "Mount proof",
@@ -195,11 +197,13 @@ async function fixture(cells = false) {
           cells: [{ segment: "rules", groupOf: (id: string) => [id], nouns: ["rule"] }],
         }
       : {}),
-    fields: {...testFields,
+    fields: {
+      ...testFields,
       stage: { ...field(z.string().default("edit"), {}), role: "stage" },
       cfm: { ...field(z.number().default(400), {}), role: "query", editor: "text" },
     },
-    readings: {...testReadings,
+    readings: {
+      ...testReadings,
       result: {
         kind: "derive",
         source: "solve",
@@ -272,7 +276,8 @@ async function fixture(cells = false) {
         listeners.delete(notify);
       };
     },
-    sources: {...testSources,
+    sources: {
+      ...testSources,
       solve: { kind: "derive", derive: (ctx) => (ctx.page as Page).cfm * 2 },
       capture: {
         kind: "use",
@@ -358,8 +363,9 @@ async function fixture(cells = false) {
   };
 }
 async function revealVerb(view: ReturnType<typeof render>, name: string) {
-  if (!view.queryByRole("button", {name})) fireEvent.click(view.getByRole("button", {name:/more .* verbs/}));
-  return view.findByRole("button", {name});
+  if (!view.queryByRole("button", { name }))
+    fireEvent.click(view.getByRole("button", { name: /more .* verbs/ }));
+  return view.findByRole("button", { name });
 }
 async function mounted(f: Awaited<ReturnType<typeof fixture>>, strict = false) {
   door.ports = f.adapters;
@@ -461,7 +467,11 @@ test("Situation renders declared subject, typed Page controls, verbs and a worki
   Object.assign(graph.fields, {
     testSubject: { ...testFields.testSubject, role: "query" },
     testSelected: { ...testFields.testSelected, role: "query" },
-    mode: { ...field(z.enum(["all", "one"]).default("all"), {}), role: "query", editor: "situation" },
+    mode: {
+      ...field(z.enum(["all", "one"]).default("all"), {}),
+      role: "query",
+      editor: "situation",
+    },
     system: {
       ...manyField("name", {}, z.array(z.string()).default([])),
       role: "subject",
@@ -475,7 +485,16 @@ test("Situation renders declared subject, typed Page controls, verbs and a worki
     paneSearch: { ...field(z.string().default("local"), {}), role: "query" },
     selected: { ...field(z.string().default("4"), {}), role: "selection" },
   });
-  graph.subjectField = {field:"system",noun:"system",keyKind:"name",cardinality:"many",roster:"capture",detail:"result",pane:"inputs",show:id=>id};
+  graph.subjectField = {
+    field: "system",
+    noun: "system",
+    keyKind: "name",
+    cardinality: "many",
+    roster: "capture",
+    detail: "result",
+    pane: "inputs",
+    show: (id) => id,
+  };
   const { view } = await mounted(f);
   const situation = within(view.getByLabelText("Situation"));
   expect(situation.getByText("Pricing fans on the fixture")).toBeTruthy();
@@ -537,6 +556,21 @@ test("review survives window disturbances and outside presses", async () => {
   fireEvent.pointerDown(document.body);
   expect(f.owner().reviews.size).toBe(1);
   expect(view.getByLabelText("Apply review")).toBeTruthy();
+});
+
+test("opening the Timeline cannot silently dismiss a pending write review", async () => {
+  const f = await fixture();
+  const { view } = await mounted(f);
+  fireEvent.click(await revealVerb(view, "Apply"));
+  await view.findByLabelText("Apply review");
+  render(
+    <Popover defaultOpen>
+      <SubjectPopoverContent>Timeline detail</SubjectPopoverContent>
+    </Popover>,
+  );
+  await view.findByText("Timeline detail");
+  expect(f.owner().reviews.size).toBe(1);
+  expect(view.queryByLabelText("Apply review")).not.toBeNull();
 });
 
 test("shown review keeps its control armed; its portal commits one receipt and its barrier blocks undo", async () => {
