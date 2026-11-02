@@ -170,7 +170,7 @@ export function pendingFixtureEnvironment<P, W>(
       const source = `fixture:${id}`;
       switch (reading.kind) {
         case "derive":
-          sources[source] = { kind: "derive", derive: value };
+          sources[source] = { kind: "derive", key: scope => [scope.page, scope.workRevision], derive: value };
           break;
         case "worker":
           sources[source] = {

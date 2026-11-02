@@ -70,6 +70,12 @@ it("the shipped Snowdon bundle exposes its calculator through the common fixture
   const { graph, adapters } = makePodRoute({ ...row, packageId: "snowdon-circuits", workRoute: "pod.snowdon-circuits.voltage-drop" }, bundle);
   const owner = await createFixtureMount(graph, "calculator", adapters);
   try {
+    const disconnect = owner.connect();
+    const release = owner.readings.mount(["pod.snowdon-circuits.calculation"]);
+    await owner.control("input", {key:"length",value:300}).run();
+    expect((owner.readings.get("pod.snowdon-circuits.calculation").value as any).inputs.length).toBe(300);
+    release();
+    disconnect();
     expect(owner.snapshot().failure).toBeFalsy();
     expect(Object.keys(graph.stages)).toEqual(["calculate"]);
     expect(owner.snapshot().work?.doc).toMatchObject({

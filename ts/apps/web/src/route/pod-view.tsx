@@ -40,6 +40,7 @@ export function makePodRoute(row: contracts.PodRouteDescriptor, bundle: PodRoute
   for (const [key, derive] of Object.entries(module.derives ?? {})) {
     sources[key] = {
       kind: "derive",
+      key: scope => [scope.page, scope.workRevision],
       derive: (context) =>
         derive(
           context.page,
