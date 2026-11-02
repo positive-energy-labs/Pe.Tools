@@ -189,7 +189,6 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = defineRoute
       },
     },
 
-    level: { ...fields.level, role: "query", url: fields.level.url ?? false },
 
     selected: { ...fields.selected, role: "selection", url: fields.selected.url ?? false },
 

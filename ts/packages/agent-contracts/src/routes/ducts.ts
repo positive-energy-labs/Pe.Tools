@@ -45,8 +45,6 @@ const ductsFields = {
    * the last is the active one the write, heal and fan verbs act on. Empty = no picked systems; all resolves the current roster.
    */
   system: manyField("system-name", { url: "push", agent: "set" }),
-  /** A level id; empty = every level. */
-  level: field(text(), { url: "push", agent: "set" }),
   selected: picture.selected,
   systemSearch: field(
     listSearchKey().describe(
@@ -89,7 +87,6 @@ const ductsFields = {
 
 type DuctsFacts = {
   systems?: { name: string }[];
-  levels?: { id: string; name: string }[];
   /** The orbit pose the picture shows, fitted or not, as `viewportCodec` writes it. */
   pose?: string;
 };
@@ -106,7 +103,7 @@ const ductsWords = z.object({
  */
 function resolveDucts(input: Record<string, unknown>, facts: Record<string, unknown>) {
   const patch = { ...input } as Record<string, string>;
-  const { systems = [], levels = [], pose } = facts as DuctsFacts;
+  const { systems = [], pose } = facts as DuctsFacts;
   const keys = [...setKeys(ductsFields), ...Object.keys(ductsWords.shape)];
   const stray = Object.keys(patch).filter((key) => !keys.includes(key));
   if (stray.length)
@@ -137,8 +134,6 @@ function resolveDucts(input: Record<string, unknown>, facts: Record<string, unkn
     }
     patch.system = manyCodec.encode(named);
   }
-  if (patch.level && !levels.some((level) => level.id === patch.level))
-    return { ok: false as const, error: `unknown level '${patch.level}'` };
   if (patch.layers) {
     const known: readonly string[] = DUCTS_LAYERS;
     const unknown = patch.layers.split(",").filter((name) => !known.includes(name.trim()));
@@ -171,7 +166,7 @@ function resolveDucts(input: Record<string, unknown>, facts: Record<string, unkn
   }
   return Object.keys(patch).length
     ? { ok: true as const, patch }
-    : { ok: false as const, error: "name a system, level, selected element, look or viewport" };
+    : { ok: false as const, error: "name a system, selected element, look or viewport" };
 }
 
 export const ductsAddress = {
@@ -179,7 +174,7 @@ export const ductsAddress = {
   title: "Ducts",
   fields: ductsFields,
   agent: {
-    finds: [...DUCTS_FINDS, "system", "level"],
+    finds: [...DUCTS_FINDS, "system"],
     policy:
       "Move the systems subject on /ducts. Set system to the named system keys or all for the current roster. Every picked system stays picked. selected is the single element or finding selection. Fan paths live on /fans, keyed by fan mark plus @portIndex. Page changes do not run verbs or write Work. Geometry and inputs follow the authored subjects.",
     words: ductsWords,
