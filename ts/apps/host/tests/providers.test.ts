@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createProviders } from "../src/harness/providers.ts";
-import { productAccessPath, productProvidersPath } from "../src/product-paths.ts";
+import { productProvidersPath } from "../src/product-paths.ts";
 
 let root: string;
 let previous: string | undefined;
@@ -100,17 +100,6 @@ test.each([
     expect(await readFile(path, "utf8")).toBe(bytes);
   },
 );
-
-test("unreadable approvals fail guarded and refuse overwriting the original", async () => {
-  const path = productAccessPath();
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, "{broken");
-  const providers = createProviders({ probeOnStart: false });
-  const current = await providers.fetch(request("access"));
-  expect(await current.json()).toMatchObject({ guarded: true, readError: expect.any(String) });
-  expect((await providers.fetch(request("access", "PUT", { guarded: false }))).status).toBe(409);
-  expect(await readFile(path, "utf8")).toBe("{broken");
-});
 
 const listen = async (server: Server) => {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));

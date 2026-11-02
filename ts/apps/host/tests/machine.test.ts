@@ -127,7 +127,6 @@ function fixture() {
           probedAt: null,
         },
       ],
-      access: { guarded: true },
     })),
     update: {
       automaticPending: () => false,

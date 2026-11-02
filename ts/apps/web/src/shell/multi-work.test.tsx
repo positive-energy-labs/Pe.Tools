@@ -210,7 +210,9 @@ test("a head and its route share real host admission, undo, redo and author barr
       ).toBe(true);
     });
     await expect.poll(() => mount.snapshot().work?.doc.count).toBe(10);
-    expect(await mount.restore("undo")).toMatchObject({ ok: false, code: "barrier" });
+    // Pea's edit is an undo step (ADR 0027 rule 12): a person's undo reverts it.
+    expect(await mount.restore("undo")).toMatchObject({ ok: true, press: "pea:r5" });
+    await expect.poll(() => mount.snapshot().work?.doc.count).toBe(4);
     expect(workKey(headKey)).toBe(workKey(pageKey));
   } finally {
     disconnect();

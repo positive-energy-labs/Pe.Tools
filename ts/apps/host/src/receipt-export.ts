@@ -890,13 +890,16 @@ export function createThreadReceiptAdapter(
           threadId,
           body: [
             e.toolCall.title ?? "A tool call is waiting.",
-            e.scope === "run" && e.deadline
-              ? `At ${e.deadline}, Pea may write across tools and documents for the rest of this turn, including delegated work. Allow now or Stop writes for this turn.`
-              : "",
+            e.scope !== "run"
+              ? ""
+              : e.deadline
+                ? `At ${e.deadline}, Pea writes across tools and documents for this thread until Stop, including delegated work. Reject to refuse.`
+                : "Auto-approve is off: Pea's writes in this thread wait until you allow them.",
           ]
             .filter(Boolean)
             .join("\n\n"),
           act: { kind: "permission", threadId, requestId: e.requestId, options: e.options },
+          ...(e.deadline ? { deadline: e.deadline } : {}),
         };
       if (e?.kind === "question_request")
         return {

@@ -156,7 +156,7 @@ test("recorded SDK envelopes: only the downloaded local work file crosses the ac
     },
     peers: async () => [],
     years: async () => [],
-    providers: async () => ({ providers: [], access: { guarded: true } }),
+    providers: async () => ({ providers: [] }),
     share: unavailableShare,
     sessions: async () => [
       {

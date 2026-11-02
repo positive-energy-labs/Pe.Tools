@@ -6,7 +6,6 @@ import { NodeServices } from "@effect/platform-node";
 import { z } from "zod";
 import { DOCUMENT_IDENTITY_AUTHORITY, productIdentity } from "@pe/host-contracts/contracts";
 import type {
-  Access,
   ActionReceipt,
   DocumentRef,
   MachineAccess,
@@ -126,7 +125,7 @@ export interface MachineSources {
   years(this: void): Promise<readonly number[]>;
   providers(
     this: void,
-  ): Promise<{ providers: readonly MachineProvider[]; access: Access; readError?: string | null }>;
+  ): Promise<{ providers: readonly MachineProvider[]; readError?: string | null }>;
   readonly update: UpdateReader["Service"];
   readonly share: MachineShareAdapter;
   subscribe?(this: void, notify: () => void): () => void;
@@ -200,7 +199,6 @@ export function createMachine(
   let attachments: readonly AttachmentRead[] = [];
   let years: readonly number[] | null = null;
   let providers: readonly MachineProvider[] | null = null;
-  let access: Access | null = null;
   let share: MachineShare | null = null;
   let legs: Record<string, MachineLeg> = {};
   /** The last fold of the journal this Machine read; an unread actions leg folds nothing. */
@@ -214,7 +212,6 @@ export function createMachine(
     update: sources.update.current(),
     share: null,
     providers: null,
-    access: null,
     legs: {},
   };
 
@@ -275,7 +272,6 @@ export function createMachine(
           : Promise.resolve(true),
         read("providers", sources.providers, (value) => {
           providers = value.providers;
-          access = value.access;
           if (value.readError) throw Error(value.readError);
         }),
         read(
@@ -489,7 +485,6 @@ export function createMachine(
         update: sources.update.current(),
         share,
         providers,
-        access,
         legs: { ...legs },
       };
       if (!closed) for (const accept of listeners) accept(latest);

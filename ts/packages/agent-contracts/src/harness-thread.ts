@@ -156,10 +156,6 @@ export const addProviderRequestSchema = z.object({
 });
 export type AddProviderRequest = z.infer<typeof addProviderRequestSchema>;
 
-/** Harness approval policy only. Guarded starts auto mode; unguarded starts full access. Neither grants Revit rw. */
-export const accessSchema = z.object({ guarded: z.boolean(), readError: z.string().optional() });
-export type Access = z.infer<typeof accessSchema>;
-
 /**
  * One ACP `session/update` notification body, kept verbatim. The web switches on `sessionUpdate`.
  * An update or permission ask over {@link HARNESS_EVENT_MAX_BYTES} is kept bounded: its long

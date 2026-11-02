@@ -215,7 +215,7 @@ async function setup(
     },
     peers: async () => [],
     years: async () => [],
-    providers: async () => ({ providers: [], access: { guarded: true } }),
+    providers: async () => ({ providers: [] }),
     share: unavailableShare,
     update: {
       current: () => update,

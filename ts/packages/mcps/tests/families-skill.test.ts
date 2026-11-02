@@ -12,7 +12,7 @@ test("Pea reads the same Families graph, Work schema, cells and recovery verbs a
   expect(skill).toContain(JSON.stringify(projected, null, 2));
   expect(projected.verbs.apply).toMatchObject({ does: "families.apply", review: "shown" });
   expect(projected.verbs.read).toMatchObject({ does: "families.read", kind: "query" });
-  expect(projected.verbs["work.salvage"]).toMatchObject({ kind: "recovery", review: "required" });
+  expect(projected.verbs["work.salvage"]).toMatchObject({ kind: "recovery", review: "shown" });
   for (const field of ["reading", "sheet", "confirming", "carryOver", "receipts"])
     expect(familiesGraph.fields).not.toHaveProperty(field);
 });

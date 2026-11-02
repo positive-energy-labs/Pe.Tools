@@ -104,8 +104,7 @@ export const dataTablesGraph: RouteGraph<DataTablesPage, DataTablesWork> = {
       {
         label: "Apply",
         input: z.object({}),
-        review: "required",
-        answers: z.object({}),
+        review: "shown",
         chord: "Mod+Enter",
       },
       {

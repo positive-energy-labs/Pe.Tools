@@ -13,6 +13,7 @@ import {
   type PromptCapabilities,
   type Reading,
   type RouteGraph,
+  peaSettingFields,
 } from "@pe/agent-contracts";
 import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { pageVerb, rpcVerb } from "#/shell/verbs";
@@ -139,6 +140,7 @@ export function chatGraph(deps: () => ChatRouteDeps, minOtherSize?: number): Rou
     fields: {
       thread: { ...field(z.string().default(""), {}), role: "transient" },
       mode: { ...field(z.enum(["threads", "world"]).default("threads"), {}), role: "pose" },
+      ...peaSettingFields,
     },
     readings: {
       head: {

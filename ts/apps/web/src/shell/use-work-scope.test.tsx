@@ -401,7 +401,7 @@ test("a stale write raises conflict; writing verbs and undo refuse until an acce
   owner.dispose();
 });
 
-test("unreadable Work offers the start-fresh verb; its required confirm commits once and drops history", async () => {
+test("unreadable Work offers the start-fresh verb; its shown review commits once and drops history", async () => {
   unreadable = true;
   world.sessions = { s1: [{ openId: "o2", title: "Level 2", address: address("C:/Jobs/L2.rvt") }] };
   const ref = { session: "s1", openId: "o2" };
@@ -413,12 +413,11 @@ test("unreadable Work offers the start-fresh verb; its required confirm commits 
   expect(owner.verbs[START_FRESH_VERB]).toMatchObject({
     kind: "recovery",
     label: "Start fresh",
-    review: "required",
+    review: "shown",
   });
   expect(owner.control(START_FRESH_VERB).refusal).toBeNull();
   const review = await owner.control(START_FRESH_VERB).run();
   expect(review).toMatchObject({ state: "review", ticket: { evidence: { work: workKey(key) } } });
-  expect(await owner.control(START_FRESH_VERB).run({})).toMatchObject({ state: "refused" });
   expect(owner.reviews.has(START_FRESH_VERB)).toBe(true);
   expect(host.fresh).not.toHaveBeenCalled();
   const accepted = ack({
@@ -432,7 +431,7 @@ test("unreadable Work offers the start-fresh verb; its required confirm commits 
     aside: "work.aside.json",
   });
   host.fresh.mockResolvedValue({ ok: true, revision: 4, write: accepted });
-  const done = await owner.control(START_FRESH_VERB).run({ confirm: true });
+  const done = await owner.control(START_FRESH_VERB).run();
   expect(done).toMatchObject({
     state: "done",
     kind: "recovery",

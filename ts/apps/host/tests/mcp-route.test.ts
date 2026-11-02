@@ -105,7 +105,6 @@ async function fixture(telemetry?: ReceiptExport) {
     const url = new URL(input instanceof Request ? input.url : String(input));
     const login = new Headers(init?.headers).get("tailscale-user-login");
     seen.push({ path: url.pathname, login });
-    if (url.pathname === "/pe/access") return Response.json({ guarded: true });
     // An external MCP client holds no thread in wave 1: its own scope is absent.
     if (url.pathname === "/pe/scope/self")
       return Response.json({ error: "no thread" }, { status: 404 });

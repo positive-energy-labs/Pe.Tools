@@ -975,7 +975,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
       documents: async () => ({ state: "ok", documents: [] }),
       attachments: () => bridgeAttachments(bridge),
       years: async () => [],
-      providers: async () => ({ providers: [], access: { guarded: true } }),
+      providers: async () => ({ providers: [] }),
       update: {
         current: () => update,
         refresh: async () => update,

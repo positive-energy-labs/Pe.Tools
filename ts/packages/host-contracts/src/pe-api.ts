@@ -130,7 +130,6 @@ function route<const P extends string, B extends z.ZodType, O extends z.ZodType>
 
 /** The schemas a route table names; each domain owner supplies its own. */
 export type PeApiSchemas = Record<
-  | "accessSchema"
   | "addProviderRequestSchema"
   | "providerSchema"
   | "createThreadRequestSchema"
@@ -179,7 +178,6 @@ export type PeApiSchemas = Record<
 
 /** The one route table: every declared door, built from the domain schemas. */
 export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
-  const accessSchema = schemas.accessSchema as S["accessSchema"];
   const pluginStatusSchema = schemas.pluginStatusSchema as S["pluginStatusSchema"];
   const addProviderRequestSchema =
     schemas.addProviderRequestSchema as S["addProviderRequestSchema"];
@@ -372,16 +370,6 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "/pe/providers/:id/open-login",
       none,
       z.object({ opened: z.literal(true) }),
-      "human",
-      "providers",
-      "admin",
-    ),
-    "access.get": route("GET", "/pe/access", none, accessSchema, "read", "providers", "read"),
-    "access.set": route(
-      "PUT",
-      "/pe/access",
-      accessSchema,
-      accessSchema,
       "human",
       "providers",
       "admin",

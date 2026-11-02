@@ -36,7 +36,7 @@ test("Page verbs validate without Work or review and reject command semantics", 
   });
   expect(validateRouteGraph(graph())).toEqual([]);
   expect(projectRouteGraph(graph()).verbs.close).toMatchObject({ kind: "page", chord: "Escape" });
-  for (const patch of [{ review: "required" as const }, { subject: "cell" }, { does: "apply" }])
+  for (const patch of [{ review: "shown" as const }, { subject: "cell" }, { does: "apply" }])
     expect(validateRouteGraph(graph(patch))).toContainEqual({
       code: "invalid-graph",
       path: "verbs.close",
@@ -48,7 +48,7 @@ const verb = (label: string, chord = "Mod+Enter"): VerbDecl => ({
   kind: "command",
   label,
   input: z.object({ id: z.string() }),
-  review: "required",
+  review: "shown",
   chord,
 });
 
@@ -450,13 +450,9 @@ test("every graph with Work projects the kernel's start-fresh recovery; its id a
   expect(json.verbs[START_FRESH_VERB]).toEqual({
     kind: "recovery",
     label: "Start fresh",
-    review: "required",
+    review: "shown",
     says: expect.any(String),
     input: expect.objectContaining({ type: "object", additionalProperties: false }),
-    answers: expect.objectContaining({
-      properties: { confirm: { type: "boolean", const: true } },
-      required: ["confirm"],
-    }),
   });
   expect(projectRouteGraph(ductLoss).verbs).toEqual({});
   const collided = { ...withCells(rules), verbs: { [START_FRESH_VERB]: verb("Fresh") } };
@@ -478,8 +474,7 @@ test("a graph's salvage hook projects the carry-over recovery; its id is reserve
   expect(validateRouteGraph(salvaging)).toEqual([]);
   expect(projectRouteGraph(salvaging).verbs[SALVAGE_VERB]).toMatchObject({
     kind: "recovery",
-    review: "required",
-    answers: expect.objectContaining({ required: ["confirm"] }),
+    review: "shown",
   });
   // Without the hook there is nothing to carry over, so Pea is not offered the verb.
   expect(projectRouteGraph(withCells(rules)).verbs[SALVAGE_VERB]).toBeUndefined();

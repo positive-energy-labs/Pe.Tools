@@ -38,7 +38,7 @@ export interface FieldPolicy {
 export type FieldDecl<S extends z.ZodType = z.ZodType> = Omit<RouteField<S>, keyof FieldPolicy> &
   Partial<FieldPolicy> & {
     label?: string;
-    control?: "color";
+    control?: "color" | "switch";
     editor?: "pane" | "situation";
     picker?: {
       reading: string;
@@ -100,11 +100,12 @@ export interface VerbDecl<S extends z.ZodType = z.ZodType> {
   does?: string;
   /** A query whose result names the subject Work the graph's `workSubject` field then selects. */
   selects?: "work";
-  /** The answer a required review needs, when the declaration states it for Pea. */
+  /** The answer a shown review takes, when the declaration states it for Pea. */
   answers?: z.ZodType;
   subject?: string;
   input: S;
-  review: "none" | "shown" | "required";
+  /** At most `shown` (ADR 0027 rule 11): Pea may skip it; no review blocks on a person. */
+  review: "none" | "shown";
   chord?: Chord;
   label: string;
   says?: string;
@@ -228,9 +229,8 @@ export const startFreshVerb = {
   kind: "recovery",
   label: "Start fresh",
   says: "Set the unreadable Work aside and start it empty; its old bytes are kept beside it",
-  review: "required",
+  review: "shown",
   input: z.strictObject({}).default({}),
-  answers: z.strictObject({ confirm: z.literal(true) }),
 } as const satisfies VerbDecl;
 
 /**
@@ -242,9 +242,8 @@ export const salvageVerb = {
   kind: "recovery",
   label: "Carry over",
   says: "Carry what the set-aside Work held into this Work, as one undoable edit",
-  review: "required",
+  review: "shown",
   input: z.strictObject({}).default({}),
-  answers: z.strictObject({ confirm: z.literal(true) }),
 } as const satisfies VerbDecl;
 
 export interface RouteDirectory {

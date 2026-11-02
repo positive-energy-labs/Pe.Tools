@@ -246,9 +246,6 @@ test("Apply requires a prune review, refuses changed Work, and submits the seale
       startedAt: "2026-10-30T06:00:00Z",
     }),
   );
-  fireEvent.change(within(currentReview).getByLabelText("Apply answers"), {
-    target: { value: "{}" },
-  });
   fireEvent.click(within(currentReview).getByRole("button", { name: "Commit Apply" }));
   await waitFor(() =>
     expect(

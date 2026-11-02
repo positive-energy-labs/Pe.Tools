@@ -42,11 +42,12 @@ export const commandConsentSchema = z.union([
 export type CommandConsent = z.infer<typeof commandConsentSchema>;
 export type RunConsent =
   | { state: "idle" }
-  | { state: "waiting"; requestId: string; deadline: string; commands: string[] }
+  /** No deadline: auto-approve is off and a person must allow. */
+  | { state: "waiting"; requestId: string; deadline?: string; commands: string[] }
   | { state: "allowed"; decision: AllowDecision }
   | {
       state: "closed";
-      reason: "completed" | "stopped" | "restart";
+      reason: "completed" | "failed" | "stopped" | "restart";
       decision: AllowDecision | null;
       at: string;
     };
