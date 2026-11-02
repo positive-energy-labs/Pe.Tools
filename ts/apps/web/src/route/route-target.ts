@@ -83,11 +83,32 @@ export type TargetProvenance =
  * the fallback never writes target, head, or authority; explicit human actions remain subject to
  * existing freshness/admission. The selected conversation never defaults it.
  */
-export function retainSoleDocument(machine: Machine | null, last: DocumentRequest | null) {
+export function retainSoleDocument(
+  machine: Machine | null,
+  last: DocumentRequest | null,
+  live: ReturnType<typeof targetInventory> | null = null,
+) {
   const inventory = machineInventory(machine ?? undefined);
   const busy =
     inventory.kind !== "ready" || Object.values(inventory.sessions).some((s) => s.kind !== "ready");
-  return { request: busy ? last : soleUserDocument(machine), busy };
+  return { request: busy ? (last ?? liveSoleDocument(live)) : soleUserDocument(machine), busy };
+}
+
+/**
+ * The live session inventory's only open document, for a page that has no last-known target while
+ * the machine census is busy (N4: a reload mid-read showed "missing target" for a minute while the
+ * one session stayed open with one document). EXCEPTION to `soleUserDocument`: the inventory rows
+ * carry no access, so this cannot refuse a Pea-opened document. It holds only until the machine
+ * census answers, which then rules as before; native writes stay behind Work and consent.
+ */
+function liveSoleDocument(live: ReturnType<typeof targetInventory> | null): DocumentRequest | null {
+  if (live?.kind !== "ready") return null;
+  const sessions = Object.entries(live.sessions);
+  if (sessions.length !== 1) return null;
+  const [session, found] = sessions[0]!;
+  return found.kind === "ready" && found.values.length === 1
+    ? { kind: "open", ref: { session, openId: found.values[0]!.openId } }
+    : null;
 }
 
 export function useRouteTarget(
@@ -112,6 +133,7 @@ export function useRouteTarget(
   const held = retainSoleDocument(
     machineResult ? (previousOf(machineResult) ?? null) : null,
     lastSole.current,
+    targetInventory(inventoryResult as Parameters<typeof targetInventory>[0]),
   );
   const sole = target || seed ? null : held.request;
   lastSole.current = sole;

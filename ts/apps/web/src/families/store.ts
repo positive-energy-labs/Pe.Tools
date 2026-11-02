@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   stagedFilter,
   workKey,
@@ -82,6 +82,23 @@ export function familyRoster(
     }));
 }
 
+/**
+ * N4: a page draft yields once Work's scope edit moves after this page first read it (an
+ * acknowledged read, another tab, Pea): Work is the scope the next read and the Situation show.
+ * A reload mid-read restored an older draft from tab memory that outranked the r9 scope for good.
+ * The first loaded Work never clears a draft the link carried.
+ */
+export function useDraftYieldsToWork(owner: FamiliesMount, scopeEdit: string | undefined) {
+  const seen = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (scopeEdit === undefined) return;
+    const before = seen.current;
+    seen.current = scopeEdit;
+    if (before !== undefined && before !== scopeEdit && owner.view.read().page.draft !== null)
+      owner.view.setPage({ draft: null }, { history: "replace" });
+  }, [owner, scopeEdit]);
+}
+
 /** Values for the matrix only. Acquisition, Target, Work, writes, tickets and history belong to owner. */
 export function useFamiliesStore(owner: FamiliesMount) {
   const scope: FamiliesScope = {
@@ -96,6 +113,7 @@ export function useFamiliesStore(owner: FamiliesMount) {
     () => scopeDraft(page.draft, work?.doc ?? null),
     [page.draft, work?.doc.scope.edit?.value],
   );
+  useDraftYieldsToWork(owner, work ? JSON.stringify(work.doc.scope.edit?.value ?? null) : undefined);
   const [picker, setPicker] = useState<PickerState>({ open: null, level: null, query: "" });
   const documentTarget = target.kind === "document" ? target.ref : null;
   const documentScope = useMemo(

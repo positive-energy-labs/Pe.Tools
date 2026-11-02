@@ -70,3 +70,30 @@ test("an incomplete or failed census retains the exact fallback; a confirmed clo
     busy: false,
   });
 });
+
+test("N4: a fresh page mid-read (machine census busy, nothing kept) binds the live inventory's only document", () => {
+  const machine = machineFixture([
+    {
+      session: "one",
+      documents: [
+        { openId: "doc", title: "Project", address: "C:/Models/A.rvt", isActive: true, isFamilyDocument: false },
+      ],
+    },
+  ]);
+  const busy = structuredClone(machine);
+  Object.assign(busy.revit.sessions![0]!.attachment!, { documents: null });
+  const live = {
+    kind: "ready" as const,
+    sessions: { one: { kind: "ready" as const, values: [{ openId: "doc", address: null, kind: "project" as const }] } },
+  };
+  expect(retainSoleDocument(busy, null)).toEqual({ request: null, busy: true });
+  expect(retainSoleDocument(busy, null, live)).toEqual({
+    request: { kind: "open", ref: { session: "one", openId: "doc" } },
+    busy: true,
+  });
+  // Two open documents in the live inventory name no sole one; the kept target still wins.
+  const two = { ...live, sessions: { one: { kind: "ready" as const, values: [...live.sessions.one.values, { openId: "b", address: null, kind: "project" as const }] } } };
+  expect(retainSoleDocument(busy, null, two).request).toBeNull();
+  const kept = { kind: "open" as const, ref: { session: "one", openId: "kept" } };
+  expect(retainSoleDocument(busy, kept, live).request).toBe(kept);
+});
