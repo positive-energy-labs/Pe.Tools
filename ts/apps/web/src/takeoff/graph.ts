@@ -29,7 +29,7 @@ export const takeoffGraphPageSchema = takeoffPageSchema
     zones: manyField("UniqueId", {}).schema,
   });
 export type TakeoffGraphPage = z.output<typeof takeoffGraphPageSchema>;
-const json = <S extends z.ZodType>(schema: S) =>
+const json = <S extends z.ZodType>(schema: import("../../../../packages/agent-contracts/src/route-field").BareSchema<S> extends z.ZodArray<any> ? never : S) =>
   field(schema, {}, { encode: JSON.stringify, decode: JSON.parse });
 const a = takeoffsAddress.fields;
 const rowPartitions = Object.assign(

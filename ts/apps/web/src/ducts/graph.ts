@@ -57,7 +57,7 @@ const jsonCodec = {
   },
 };
 
-const transient = <S extends z.ZodType>(schema: S) => ({
+const transient = <S extends z.ZodType>(schema: import("../../../../packages/agent-contracts/src/route-field").BareSchema<S> extends z.ZodArray<any> ? never : S) => ({
   ...field(schema, {}, jsonCodec),
   role: "transient" as const,
   url: false as const,

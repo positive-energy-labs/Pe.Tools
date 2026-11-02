@@ -107,6 +107,15 @@ export function declarationLines(source: ts.SourceFile): number[] {
   tokens(source);
   return [...lines].sort((a, b) => a - b);
 }
+/** Inspect only the Page value's outer schema, not arrays nested in a named object. */
+export function arraySchema(node: ts.Node | undefined): boolean {
+  if (!node || !ts.isCallExpression(node) || !ts.isPropertyAccessExpression(node.expression)) return false;
+  const method = node.expression.name.text;
+  if (method === "array") return true;
+  return ["default", "optional", "nullable", "readonly", "catch", "prefault", "max", "min", "refine", "transform"].includes(method)
+    && arraySchema(node.expression.expression);
+}
+
 export function census() {
   const result: Record<string, string[]> = Object.fromEntries(
     [
@@ -175,7 +184,7 @@ export function census() {
       if (
         ts.isCallExpression(n) &&
         n.expression.getText(source) === "field" &&
-        /(?:\.array\(|z\.array\()/.test(n.arguments[0]?.getText(source) ?? "") &&
+        arraySchema(n.arguments[0]) &&
         !/\bmany\s*:\s*true/.test(n.parent.getText(source))
       )
         add("arrayFields", n);
@@ -188,7 +197,7 @@ export function census() {
           for (const a of obj.properties)
             if (
               ts.isPropertyAssignment(a) &&
-              /(?:\.array\(|z\.array\()/.test(a.initializer.getText(source))
+              arraySchema(a.initializer)
             )
               add("arrayFields", a);
       }

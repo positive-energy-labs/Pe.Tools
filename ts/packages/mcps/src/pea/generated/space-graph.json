@@ -220,20 +220,27 @@
       "role": "pose",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": [],
-        "items": {
-          "maxLength": 4096,
-          "type": "string"
-        },
-        "maxItems": 50000,
-        "type": "array"
+        "anyOf": [
+          {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 50000,
+            "type": "array"
+          },
+          {
+            "const": "all",
+            "type": "string"
+          }
+        ],
+        "default": []
       },
       "share": true,
       "url": "push"
     },
     "ids": {
       "agent": "set",
-      "cardinality": "many",
       "codec": {
         "decode": {
           "runtime": true
@@ -242,17 +249,27 @@
           "runtime": true
         }
       },
-      "keyKind": "name",
       "role": "selection",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": [],
-        "items": {
-          "maximum": 9007199254740991,
-          "minimum": -9007199254740991,
-          "type": "integer"
+        "default": {
+          "elementIds": []
         },
-        "type": "array"
+        "properties": {
+          "elementIds": {
+            "items": {
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991,
+              "type": "integer"
+            },
+            "maxItems": 50000,
+            "type": "array"
+          }
+        },
+        "required": [
+          "elementIds"
+        ],
+        "type": "object"
       },
       "share": true,
       "url": "push"
@@ -275,17 +292,18 @@
         "anyOf": [
           {
             "items": {
-              "maxLength": 4096,
+              "minLength": 1,
               "type": "string"
             },
             "maxItems": 50000,
             "type": "array"
           },
           {
-            "type": "null"
+            "const": "all",
+            "type": "string"
           }
         ],
-        "default": null
+        "default": "all"
       },
       "share": true,
       "url": "push"
@@ -305,26 +323,25 @@
       "role": "pose",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "anyOf": [
+          {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 50000,
+            "type": "array"
+          },
+          {
+            "const": "all",
+            "type": "string"
+          }
+        ],
         "default": [
           "meshes",
           "context",
           "cuts"
-        ],
-        "items": {
-          "enum": [
-            "meshes",
-            "context",
-            "cuts",
-            "boxes",
-            "levels",
-            "tree",
-            "slice",
-            "probe",
-            "sweep"
-          ],
-          "type": "string"
-        },
-        "type": "array"
+        ]
       },
       "share": true,
       "url": "push"
@@ -927,7 +944,7 @@
     "size": 320,
     "sized": "end"
   },
-  "moduleHash": "96c71f7fe43eeb925c2c0d604f70bd8a2735da04315670c8eed8334f4b39db9b",
+  "moduleHash": "1b4c72ada8128701a60649155ac437dc57a9c0f3eb4f49c6b1e7f93d4d2a400c",
   "name": "Space",
   "needs": "document",
   "panes": {

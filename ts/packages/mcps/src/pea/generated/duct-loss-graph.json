@@ -204,6 +204,7 @@
               "minLength": 1,
               "type": "string"
             },
+            "maxItems": 50000,
             "type": "array"
           },
           {

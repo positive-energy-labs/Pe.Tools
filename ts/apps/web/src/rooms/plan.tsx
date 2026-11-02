@@ -280,7 +280,7 @@ export function RoomsPlan({
     dragDistance: dragDist,
     handlers,
   } = viewport;
-  const layers = page.layers;
+  const layers = (ROOMS_LAYERS.filter(layer => page.layers === "all" || page.layers.includes(layer)));
   const mapShapes = useMemo(
     () =>
       world?.shapes.map((shape) => ({ d: shape.d, ink: token(REGION_INK[shape.state].ink!) })) ??
@@ -300,7 +300,7 @@ export function RoomsPlan({
       options: ROOMS_LAYERS.map((key) => ({ key, label: key, says: LAYER_SAYS[key] })),
       onToggle: (key: string) =>
         setPage(
-          { layers: toggleLayer(ROOMS_LAYERS, page.layers, key as Layer) },
+          { layers: toggleLayer(ROOMS_LAYERS, (ROOMS_LAYERS.filter(layer => page.layers === "all" || page.layers.includes(layer))), key as Layer) },
           { history: "push" },
         ),
     },

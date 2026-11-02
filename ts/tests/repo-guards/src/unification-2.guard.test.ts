@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import baseline from "./unification-2.baseline.json" with { type: "json" };
-import { census, declarationLines, selectionSlots, syntax } from "./unification-2-census.ts";
+import { arraySchema, census, declarationLines, selectionSlots, syntax } from "./unification-2-census.ts";
 import { root } from "./unification-2-census.ts";
 import { execFileSync } from "node:child_process";
 
@@ -72,4 +72,10 @@ it("declarations include template tails and graph factories, excluding metadata"
   expect(plain).toEqual([5,6,7,8,9]);
   expect(declarationLines(syntax(`const graph = () => ${body};`))).toEqual(plain);
   expect(declarationLines(syntax(`const graph = {\n key: "r",\n directory: {\n title: "metadata",\n },\n fields: {},\n readings: {},\n verbs: {},\n panes: {},\n stages: {},\n};`))).toEqual([6,7,8,9,10]);
+});
+
+it("array ratchet distinguishes named state from a wrapped array Page value", () => {
+  const value = (text: string) => (syntax(text).statements[0] as import("typescript").ExpressionStatement).expression;
+  expect(arraySchema(value("z.array(z.string()).readonly().default([])"))).toBe(true);
+  expect(arraySchema(value("z.object({ columns: z.array(z.string()) }).default({ columns: [] })"))).toBe(false);
 });

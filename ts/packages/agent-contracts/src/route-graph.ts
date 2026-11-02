@@ -1,6 +1,6 @@
 import type { AppExposure, AppRouteMount, AppSurface } from "./route-directory.ts";
 import { z } from "zod";
-import { bare, manyCodec, stableKeyKinds, type History, type RouteField } from "./route-field.ts";
+import { manyCodec, stableKeyKinds, type History, type RouteField } from "./route-field.ts";
 import type { RouteStatePatch } from "./route-state.ts";
 import type { RouteViewRefusalCode } from "./route-view.ts";
 
@@ -543,9 +543,6 @@ export function validateRouteGraph<P, W>(
         "fields",
         "Page must declare exactly one kernel-owned selection field",
       );
-    for (const [id, field] of Object.entries(graph.fields))
-      if (bare(field.schema).def.type === "array" && field.codec !== manyCodec)
-        refuse("invalid-graph", `fields.${id}`, "Array fields must use kernel manyField");
     if (graph.subjectField) {
       const subject = graph.subjectField;
       if (!subject.noun?.trim() || !["one", "many"].includes(subject.cardinality))

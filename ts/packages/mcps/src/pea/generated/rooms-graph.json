@@ -83,17 +83,21 @@
       "role": "pose",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": [],
-        "items": {
-          "enum": [
-            "rails",
-            "openings",
-            "network",
-            "faces"
-          ],
-          "type": "string"
-        },
-        "type": "array"
+        "anyOf": [
+          {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 50000,
+            "type": "array"
+          },
+          {
+            "const": "all",
+            "type": "string"
+          }
+        ],
+        "default": []
       },
       "share": true,
       "url": "push"
@@ -113,11 +117,21 @@
       "role": "selection",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": [],
-        "items": {
-          "type": "string"
-        },
-        "type": "array"
+        "anyOf": [
+          {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 50000,
+            "type": "array"
+          },
+          {
+            "const": "all",
+            "type": "string"
+          }
+        ],
+        "default": []
       },
       "share": true,
       "url": "replace"
@@ -404,7 +418,7 @@
     "size": 32,
     "sized": "start"
   },
-  "moduleHash": "2f0c011cbe701e120432787a2dee51587e474babf7a2daaf40e7fb7783685c47",
+  "moduleHash": "6043488b0e198500d8e491eeefca589d36c323240a359b573799bb8778852c78",
   "name": "Rooms",
   "needs": "project",
   "panes": {

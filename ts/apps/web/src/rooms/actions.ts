@@ -1,3 +1,6 @@
+import { roomSelection } from "./selection";
+import { inboxCards } from "./cards";
+import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 import { stagedRoomWrites, type RoomsRouteDocument } from "@pe/agent-contracts";
 import type { BindingScope, MountBinding } from "#/shell/mount-owner";
 import type { ReadingState } from "#/shell/readings";
@@ -26,6 +29,11 @@ export function roomsBinding(id: string, row: unknown, scope: RoomsScope): Mount
       refusal,
     });
   const ready = refusal;
+  const snapshot = readingValue<RoomsSnapshot.Res.Response>(scope.readings.snapshot!);
+  const cards = snapshot && scope.work ? inboxCards(scope.work.doc, snapshot, scope.page.view) : [];
+  const selected = scope.page.selected === "all"
+    ? (snapshot?.regions ?? []).filter(region => region.view === scope.page.view && region.role !== "zone").map(region => region.guid)
+    : roomSelection(scope.page.selected, cards).guids;
   if (id === "partition") {
     const rejected = Object.values(scope.work?.doc.marks ?? {})
       .map((cell) => cell.edit?.value)
@@ -47,12 +55,12 @@ export function roomsBinding(id: string, row: unknown, scope: RoomsScope): Mount
     });
   if (id === "merge")
     return bound({
-      request: { view: scope.page.view, guids: scope.page.selected },
+      request: { view: scope.page.view, guids: selected },
       refusal:
         ready ??
         (!scope.page.view
           ? "Pick a plan view"
-          : scope.page.selected.length < 2
+          : selected.length < 2
             ? "Shift-click two or more rooms"
             : null),
     });

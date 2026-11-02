@@ -1,3 +1,4 @@
+import { SPACE_LAYERS } from "./layers";
 /** /space is a graph mount; drawing and cut geometry remain in their existing bodies. */
 import {
   createContext,
@@ -89,7 +90,7 @@ function SpaceMount({ owner, children }: { owner: Owner; children: ReactNode }) 
         scene: captured.response.id,
         selected: null,
         hidden: [],
-        isolated: null,
+        isolated: "all",
         viewport: null,
         row: null,
       },
@@ -143,10 +144,10 @@ function SpaceMount({ owner, children }: { owner: Owner; children: ReactNode }) 
       visibilityMembersBeforeCuts:
         scene?.meshes.instances.filter(
           (instance) =>
-            page.layers.includes("meshes") &&
-            !page.hidden.includes(instance.key) &&
-            (page.isolated === null || page.isolated.includes(instance.key)) &&
-            (page.layers.includes("context") || instance.focus),
+            (SPACE_LAYERS.filter(layer => page.layers === "all" || page.layers.includes(layer))).includes("meshes") &&
+            !(page.hidden === "all" || page.hidden.includes(instance.key)) &&
+            (page.isolated === "all" || page.isolated.includes(instance.key)) &&
+            ((SPACE_LAYERS.filter(layer => page.layers === "all" || page.layers.includes(layer))).includes("context") || instance.focus),
         ).length ?? 0,
       elements:
         scene?.metadata.elements.slice(0, 200).map((e) => ({
@@ -179,7 +180,7 @@ function SpaceBody({ owner, page }: MountBody<SpacePage, null>) {
   const doc = target.kind === "document" ? target.ref : null;
   const answers = answersFor(owner);
   const rows = answers.rows?.response ?? null;
-  const on = useMemo(() => new Set<SpaceLayer>(page.layers), [page.layers]);
+  const on = useMemo(() => new Set<SpaceLayer>((SPACE_LAYERS.filter(layer => page.layers === "all" || page.layers.includes(layer)))), [page.layers]);
   const legend = useMemo(() => (rows ? legendOf(rows, page.encoding) : []), [rows, page.encoding]);
   // One Layer3D per answer that is on, rebuilt only when its answer (or its ink) changes.
   const boxes = useMemo(
@@ -348,7 +349,7 @@ function FactsBody({ owner, page, verbs }: MountBody<SpacePage, null>) {
   const { setPage, setError } = useContext(SpaceContext)!;
   const meshes = matchingScene(page, owner.readings.get("scene"))?.meshes;
   const answers = answersFor(owner);
-  const on = new Set(page.layers);
+  const on = new Set((SPACE_LAYERS.filter(layer => page.layers === "all" || page.layers.includes(layer))));
   return (
     <div className="flex flex-col gap-3">
       <HostIds page={page} setPage={setPage} />

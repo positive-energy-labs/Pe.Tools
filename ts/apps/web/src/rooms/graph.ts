@@ -75,7 +75,6 @@ export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = defineRoute
   },
   needs: "project",
   work: roomsRouteState.schema,
-  // TODO: docs/features/routes/LEDGER.md#s7-0892eb207a Migrate layers and selected sets to kernel manyField; preserve K1c selection ownership.
   subjectField: { field: "view", noun: "view", keyKind: "name", roster: "roster", detail: "snapshot", pane: "scope", },
   fields: {
     threadSearch: { ...fields.threadSearch, role: "query" },

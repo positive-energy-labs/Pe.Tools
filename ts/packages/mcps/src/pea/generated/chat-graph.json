@@ -83,11 +83,21 @@
       "role": "selection",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": [],
-        "items": {
-          "type": "string"
-        },
-        "type": "array"
+        "anyOf": [
+          {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 50000,
+            "type": "array"
+          },
+          {
+            "const": "all",
+            "type": "string"
+          }
+        ],
+        "default": []
       },
       "share": true,
       "url": "replace"
@@ -132,7 +142,7 @@
     "size": 300,
     "sized": "start"
   },
-  "moduleHash": "52c1ed26f75c4f6ec7def8f5a1f7d513c367c53f7a6dcc2ced17c47202ede4b3",
+  "moduleHash": "66fd5683e0b2a6d8216ab1648c79a57bd9f85773db0da5f3a24afd5be0879951",
   "name": "Pea",
   "panes": {
     "chat": {

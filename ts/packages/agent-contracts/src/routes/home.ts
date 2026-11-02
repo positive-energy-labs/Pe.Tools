@@ -16,7 +16,7 @@ export const homeAddress = {
       agent: "set",
     }),
     /** Tool paths whose saved Works are folded away. */
-    folded: manyField("name", { url: "replace", agent: "set" }, z.array(z.string().max(120)).default([])),
+    folded: manyField("name", { url: "replace", agent: "set" }),
   },
   agent: {
     policy:

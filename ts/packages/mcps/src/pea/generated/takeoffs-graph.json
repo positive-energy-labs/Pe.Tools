@@ -335,6 +335,7 @@
               "minLength": 1,
               "type": "string"
             },
+            "maxItems": 50000,
             "type": "array"
           },
           {
@@ -408,6 +409,7 @@
               "minLength": 1,
               "type": "string"
             },
+            "maxItems": 50000,
             "type": "array"
           },
           {
@@ -439,7 +441,7 @@
     "size": 100,
     "sized": "start"
   },
-  "moduleHash": "17406749a79a1f3ee7fadc5dd8b9f9e7c0df1451593c4a58bb0569e1849b1a3e",
+  "moduleHash": "ff9b3a8396bb491719bbbb279520d9a4ef6867eb34a5458c540b57777e9650dd",
   "name": "View adoption",
   "needs": "project",
   "panes": {

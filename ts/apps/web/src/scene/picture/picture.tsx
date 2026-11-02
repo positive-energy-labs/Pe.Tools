@@ -243,6 +243,7 @@ export function Picture<L extends string, F extends string>({
 }) {
   // No document = selection and member registration silently do nothing (the fan sheet's 10-28
   // defect), so a Picture outside an `AttentionRoot` fails loudly instead.
+  const visibleLayers = useMemo(() => content.layerOptions.filter(layer => page.layers === "all" || page.layers.includes(layer.key)).map(layer => layer.key), [page.layers, content.layerOptions]);
   const doc = useContext(AttentionDocument);
   if (!doc) throw new Error("Picture requires an AttentionRoot (attention document)");
   useAttentionDocument(doc, selection);
@@ -278,14 +279,14 @@ export function Picture<L extends string, F extends string>({
     () =>
       captureRequest(
         content.focus,
-        page.layers,
+        visibleLayers,
         page.contextRadiusFt,
         contextRepresentation,
         content.capture?.maxTriangles,
       ),
     [
       content.focus,
-      page.layers,
+      visibleLayers,
       page.contextRadiusFt,
       contextRepresentation,
       content.capture?.maxTriangles,
@@ -346,7 +347,7 @@ export function Picture<L extends string, F extends string>({
   useEffect(() => {
     onPose?.(pose);
   }, [pose, onPose]);
-  const layers = new Set<string>(page.layers);
+  const layers = new Set<string>(visibleLayers);
   // Stable while the layers and the page's toggles hold, so the renderer's layers do too.
   // Strands and over paint are the core's own layer: always drawn while the content gives them.
   const overKeys = useMemo(
@@ -371,9 +372,9 @@ export function Picture<L extends string, F extends string>({
   const drawn = useMemo(
     () => [
       ...(coreLayer ? [coreLayer] : []),
-      ...(content.layers ?? []).filter((l) => !l.toggle || page.layers.includes(l.toggle as L)),
+      ...(content.layers ?? []).filter((l) => !l.toggle || visibleLayers.includes(l.toggle as L)),
     ],
-    [coreLayer, content.layers, page.layers],
+    [coreLayer, content.layers, visibleLayers],
   );
   // A strand lit (its subject hovered here or on a row) or selected flows: the renderer reads it
   // through the same hover and focus rungs an issue mark takes.
@@ -658,7 +659,7 @@ export function Picture<L extends string, F extends string>({
                 }
               : undefined,
             layers: {
-              value: page.layers,
+              value: visibleLayers,
               options: content.layerOptions.map((option) => ({
                 ...option,
                 busy: CONTEXT_KEYS.includes(option.key) && read.pending,
@@ -668,7 +669,7 @@ export function Picture<L extends string, F extends string>({
                   {
                     layers: toggleLayer(
                       content.layerOptions.map((option) => option.key),
-                      page.layers,
+                      visibleLayers,
                       key as L,
                     ),
                   },

@@ -532,7 +532,7 @@ test("Situation renders declared subject, typed Page controls, verbs and a worki
       editor: "situation",
     },
     system: {
-      ...manyField("name", {}, z.array(z.string()).default([])),
+      ...manyField("name", {}),
       role: "subject",
       picker: {
         reading: "capture",

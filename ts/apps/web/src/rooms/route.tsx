@@ -149,8 +149,8 @@ function PlanBody({
     if (fixture && !page.view) owner.view.setPage({ view }, { history: "replace" });
   }, [owner, fixture, page.view, view]);
   const token = useMemo(() => crypto.randomUUID(), [snapshot]);
-  const selected = new Set(page.selected);
-  const { pinned } = roomSelection(page.selected, cards);
+  const selected = new Set(roomSelection(page.selected, cards, regions.map(region => region.guid)).guids);
+  const { pinned } = roomSelection(page.selected, cards, regions.map(region => region.guid));
   const setPinned = (id: string | null) =>
     owner.view.setPage({ selected: id ? [`card:${id}`] : [] });
   const wire = workWire(owner);
@@ -230,8 +230,8 @@ function PlanBody({
             : !add
               ? [guid]
               : selected.has(guid)
-                ? page.selected.filter((item) => item !== guid)
-                : [...page.selected, guid],
+                ? roomSelection(page.selected, cards, regions.map(region => region.guid)).guids.filter((item) => item !== guid)
+                : [...roomSelection(page.selected, cards, regions.map(region => region.guid)).guids, guid],
         });
       }}
       trace={trace}
@@ -266,7 +266,7 @@ function FeedbackBody({ owner, page, renderPane }: Body & { renderPane: PaneApi 
       cards={cards}
       regions={regions}
       labelOf={(guid) => labels.get(guid)}
-      pinned={roomSelection(page.selected, cards).pinned}
+      pinned={roomSelection(page.selected, cards, regions.map(region => region.guid)).pinned}
       onPin={(card) => owner.view.setPage({ selected: [`card:${card}`] })}
       show={page.show}
       onShow={(show) => owner.view.setPage({ show })}

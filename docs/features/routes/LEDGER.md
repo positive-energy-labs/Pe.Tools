@@ -43,7 +43,6 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 - 2026-09-09, the claim that document keys and receipts alone prevent every stale read or duplicate mutation: keys separate open lifetimes; Effect refresh orders reads within one lifetime; host admission and request identity govern retries.
 
 ## Owed
-- (B) Close the `many` codec: `manyField(itemKind, { cap })` builds `ids | "all"` with no caller schema; `field<S>` refuses `ZodArray` by type; a runtime guard only for Pod JSON graphs (REVIEW B8: five routes drop `all`).
 - Kernel ports, in the order a route author gets them wrong (`.artifacts/review/u2-2026-11-02/REVIEW.md` B/C):
   1. Route bodies get the raw Page writer (`shell/mount-pane.tsx:15-25`, `route/pod-view.tsx:104` `setPage`, 40 call sites); give a role-derived page port (read, select, set<setting>, pose) and nothing else writable.
   2. Graph cross-references are bare strings; `subjectField.pane` is never checked. Resolved by (C).
@@ -52,7 +51,7 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
   5. Five kernel Page writers default origin `"page"` (`mount-owner.ts:579,701,725,786,1103`); one `movePage(patch, origin)`, origin mandatory.
   6. `mount-owner.ts` is one closure over ~25 locals because the Target+Work generation/scopeId epoch gate (ADR 0028 rule 4) has no primitive; it is compared ad hoc in `verbs.ts:723-733,753-760,985-994`.
   7. 12 production branches on fixture mode, including a per-reading override at `readings-api.ts:112,122` inside the guard-exempt file.
-  8. The ratchet baseline tolerates ADR 0027 rule 15 zeros: hostCalls 7, reactSelection 9, readWrites 1, arrayFields 3 (B), unscopedGeometry 1.
+  8. The ratchet baseline tolerates ADR 0027 rule 15 zeros: hostCalls 7, reactSelection 9, readWrites 1, arrayFields 0, unscopedGeometry 1.
   9. Two admission doors: `route-registry.ts:40` refuses a missing moduleHash then registers (`:72-74`); `mount-pane.tsx:55` skips admission without a stamp; `pod.` exemption by string prefix.
 - Typecheck passes only with `--declaration false` (S12, 48a52ed6): the TypeScript declaration emitter crashes serializing a type; find the type and make the full typecheck pass.
 - 16 repo-guard failures pre-date S12 (kit-census 8, design 2, host-door 2, action-authority 1, source-accountability 1, declaration ratchets 2); a guard that is always red enforces nothing.
@@ -88,7 +87,6 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 - <a id="s7-d234a3544a"></a> `ts/packages/agent-contracts/src/route-graph.ts`: Consolidate remaining Page selection fields instead of relabeling competing copies.
 - <a id="s7-2f8fa50d55"></a> `ts/packages/agent-contracts/src/ducts-sheet.ts`: G1 render authored Work values separately; badge source from this reading (Work/model/firm/default).
 - <a id="s7-2335ee600e"></a> `ts/apps/web/src/rooms/route.tsx`: Re-run list ? picture/card ? reload in fixture=plan after the shared catalog import cycle and directory hashes are repaired.
-- <a id="s7-0892eb207a"></a> `ts/apps/web/src/rooms/graph.ts`: Migrate layers and selected sets to kernel manyField; preserve K1c selection ownership.
 - <a id="s7-1319af9e7a"></a> `ts/apps/web/src/rooms/graph.ts`: shell/verbs needs admitted command-result Work patches to clear only the cells written.
 - <a id="s7-76a2681e4b"></a> `ts/packages/ducts-domain/src/loss-grid.ts`: compare this interpolation policy with licensed DFDB at interior low-flow points;
 - <a id="s7-6f559ec645"></a> `ts/packages/mcps/src/pea/capability-tools.ts`: with no Target, a row that needs a document is absent from the catalog and refuses as
@@ -97,7 +95,6 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 - <a id="s7-8c7d3a6f01"></a> `ts/apps/web/src/readings.ts`: Repeat the 33-second hide/return proof in a native visible browser; T3 preview pins visibilityState.
 - <a id="s7-8e539bcbeb"></a> `ts/apps/web/src/takeoff/subject.ts`: add native metadata zone enumeration before admitting all zones on a live document.
 - <a id="s7-e8f071edc9"></a> `ts/apps/web/src/takeoff/graph.ts`: native metadata zone roster is missing; saved captures supply zone choices.
-- <a id="s7-29e50b64c1"></a> `ts/apps/web/src/space/graph.ts`: Migrate capture inputs, visibility sets and layers off hand array codecs; preserve region subject.
 - <a id="s7-dc2b076f89"></a> `ts/apps/web/src/space/facts.tsx`: render through the kit Subject text once it lands, so the name also footnotes the picture.
 - <a id="s7-fd4c79938c"></a> `ts/apps/web/src/shell/use-work-scope.ts`: prove on a live host that a Pea ducts preview receipt consumes this Work (receiptsForWork)
 - <a id="s7-a91a2429a1"></a> `ts/apps/web/src/shell/situation-band.tsx`: H2 — Reject is proven rendered and inert on the fixture lane only; press it against a live
@@ -108,11 +105,9 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 - <a id="s7-025b81c8e4"></a> `ts/apps/web/src/family/workspace-table.tsx`: Keep the directional caution gradient until data-tone wash can express it.
 - <a id="s7-bb8eb3a470"></a> `ts/apps/web/src/family/workspace-table.tsx`: Keep on-select until the selection state selector also propagates --pe-on.
 - <a id="s7-a6dd76f300"></a> `ts/apps/web/src/family/workspace-identity-columns.tsx`: a FAMILY-LEVEL suggestion has no value cell of its own — the family-value
-- <a id="s7-fd9848fdb0"></a> `ts/apps/web/src/family/graph.ts`: Migrate ordered sort state and hidden-column sets off hand array codecs; K1c consolidates drill/inspector.
 - <a id="s7-09645d33ea"></a> `ts/apps/host/src/ducts-sheet.ts`: Trace the FC-23 (13760867) sheet self-fetch termination seen in k2-live-proof.log; raw walk succeeds.
 - <a id="s7-d090a2a7d4"></a> `ts/apps/host/src/control.ts`: User ruling 2026-10-29: Pea ReadOnly scripts must run without
 - <a id="s7-f63daadbf0"></a> `ts/apps/web/src/ducts/seeds.ts`: Add mesh-backed fixture evidence for combined multi-fan geometry; this seed proves UI state only.
-- <a id="s7-e23183a490"></a> `ts/apps/web/src/families/graph.ts`: Migrate ordered sort state and hidden-column sets off hand array codecs; K1c consolidates lines/past.
 - <a id="s7-fdab11d1af"></a> `ts/apps/web/src/ducts/actions.ts`: FD1 live re-drive /fans preview on Chadds; retained-payload proof does not certify native writes.
 - <a id="s7-b5f0811256"></a> `ts/apps/web/src/families/store.ts`: Re-run history selection/reload in fixture browser after catalog registration is repaired.
 - <a id="s7-21d900b52e"></a> `ts/apps/web/src/route/pod-view.tsx`: Prove native Pod preview/apply/readback on a controlled Revit session; fixture Work is local and native commands intentionally stay refused.

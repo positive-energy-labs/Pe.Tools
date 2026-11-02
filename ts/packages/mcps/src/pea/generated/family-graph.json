@@ -107,7 +107,6 @@
     },
     "hidden": {
       "agent": "set",
-      "cardinality": "many",
       "codec": {
         "decode": {
           "runtime": true
@@ -116,18 +115,20 @@
           "runtime": true
         }
       },
-      "keyKind": "name",
       "role": "pose",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": [],
-        "items": {
+        "additionalProperties": {
+          "const": true,
+          "type": "boolean"
+        },
+        "default": {},
+        "propertyNames": {
           "maxLength": 512,
           "minLength": 1,
           "type": "string"
         },
-        "maxItems": 500,
-        "type": "array"
+        "type": "object"
       },
       "share": true,
       "url": "replace"
@@ -262,7 +263,6 @@
     },
     "sort": {
       "agent": "set",
-      "cardinality": "many",
       "codec": {
         "decode": {
           "runtime": true
@@ -271,34 +271,43 @@
           "runtime": true
         }
       },
-      "keyKind": "name",
       "role": "query",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": [],
-        "items": {
-          "properties": {
-            "dir": {
-              "enum": [
-                "asc",
-                "desc"
-              ],
-              "type": "string"
-            },
-            "key": {
-              "maxLength": 512,
-              "minLength": 1,
-              "type": "string"
-            }
-          },
-          "required": [
-            "key",
-            "dir"
-          ],
-          "type": "object"
+        "default": {
+          "columns": []
         },
-        "maxItems": 8,
-        "type": "array"
+        "properties": {
+          "columns": {
+            "items": {
+              "properties": {
+                "dir": {
+                  "enum": [
+                    "asc",
+                    "desc"
+                  ],
+                  "type": "string"
+                },
+                "key": {
+                  "maxLength": 512,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key",
+                "dir"
+              ],
+              "type": "object"
+            },
+            "maxItems": 8,
+            "type": "array"
+          }
+        },
+        "required": [
+          "columns"
+        ],
+        "type": "object"
       },
       "share": true,
       "url": "replace"
@@ -515,7 +524,7 @@
     "size": 340,
     "sized": "end"
   },
-  "moduleHash": "aa2f2a1fea45d38aa170b6e96b1b31e475d025615a1c383c7593d5d67cacf139",
+  "moduleHash": "c67f3f03ad939e1760ce3fa03fbd0751384bd01b1f154bed717f2c8d4b6e034b",
   "name": "Family",
   "needs": "family",
   "panes": {

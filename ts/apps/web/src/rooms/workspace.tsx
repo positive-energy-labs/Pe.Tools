@@ -98,7 +98,7 @@ export function RoomsProvider({ owner, children }: { owner: RoomsOwner; children
       Atom.make(
         (get): ReadonlySet<SubjectKey> =>
           new Set<SubjectKey>(
-            roomSelection(get(owner.view.state).page.selected, value.cards).guids.map(
+            roomSelection(get(owner.view.state).page.selected, value.cards, value.regions.map(region => region.guid)).guids.map(
               (guid): SubjectKey => `room:${guid}`,
             ),
           ),

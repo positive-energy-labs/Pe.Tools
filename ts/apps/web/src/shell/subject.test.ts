@@ -36,7 +36,8 @@ test("one subject and kernel many codec are admission rules; query arrays retain
         .map(([key]) => key),
     ).toEqual(["selected"]);
   const custom = { encode: JSON.stringify, decode: JSON.parse };
-  expect(() => field(z.array(z.object({ key: z.string() })), {}, custom)).not.toThrow();
+  // @ts-expect-error Page arrays must use manyField
+  field(z.array(z.object({ key: z.string() })), {}, custom);
   expect(
     validateRouteGraph({
       ...fansGraph,

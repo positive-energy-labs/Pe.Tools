@@ -89,7 +89,6 @@ export const familiesGraph: RouteGraph<FamiliesPage, FamiliesRouteDocument> = de
   name: "Families",
   needs: "project",
   work: familiesRouteState.schema,
-  // TODO: docs/features/routes/LEDGER.md#s7-e23183a490 Migrate ordered sort state and hidden-column sets off hand array codecs; K1c consolidates lines/past.
   subjectField: { kind: "singleton", field: "scope", noun: "family draft scope", keyKind: "name", roster: "scopes", detail: "matrix", pane: "scope", },
   fields: {
     scope: { ...field(familiesPageSchema.shape.scope, {}) },

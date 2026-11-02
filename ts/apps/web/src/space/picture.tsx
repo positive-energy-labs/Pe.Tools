@@ -107,7 +107,7 @@ export function SpacePicture({
   );
   /** The explicit 3D pose an axis was entered from; null = it was the fit, or no record (a URL entry). */
   const returnPose = useRef<OrbitViewport | null>(null);
-  const on = useMemo(() => new Set<SpaceLayer>(page.layers), [page.layers]);
+  const on = useMemo(() => new Set<SpaceLayer>((SPACE_LAYERS.filter(layer => page.layers === "all" || page.layers.includes(layer)))), [page.layers]);
   const bounds = meshes?.bounds ?? null;
   const axis = page.mode === "3d" ? null : page.mode;
 
@@ -118,7 +118,7 @@ export function SpacePicture({
   const orbit = useLiveOrbit(
     axis ? under : pose,
     stageViewport(setPage),
-    `${page.scene}/${page.ids.join(",")}/${page.mode}`,
+    `${page.scene}/${page.ids.elementIds.join(",")}/${page.mode}`,
     page.viewport,
   );
   const plane = useMemo(() => {
@@ -164,11 +164,11 @@ export function SpacePicture({
   };
 
   const selected = useMemo(() => new Set(page.selected ? [page.selected] : []), [page.selected]);
-  const hidden = useMemo(() => new Set(page.hidden), [page.hidden]);
+  const hidden = useMemo(() => new Set(page.hidden === "all" ? (meshes?.instances.map(instance => instance.key) ?? []) : page.hidden), [page.hidden, meshes]);
   const isolated = useMemo(() => {
     if (!meshes) return null;
     if (!on.has("meshes")) return new Set<string>();
-    const shown = page.isolated ? new Set(page.isolated) : null;
+    const shown = page.isolated === "all" ? null : new Set(page.isolated);
     if (on.has("context")) return shown;
     return new Set(
       meshes.instances.filter((i) => i.focus && (!shown || shown.has(i.key))).map((i) => i.key),
@@ -367,10 +367,10 @@ export function SpacePicture({
               })),
             }}
             layers={{
-              value: page.layers,
+              value: (SPACE_LAYERS.filter(layer => page.layers === "all" || page.layers.includes(layer))),
               options: SPACE_LAYERS.map((l) => ({ key: l, label: l, says: LAYER_SAYS[l] })),
               onToggle: (l) =>
-                setPage({ layers: toggleLayer(SPACE_LAYERS, page.layers, l as SpaceLayer) }),
+                setPage({ layers: toggleLayer(SPACE_LAYERS, (SPACE_LAYERS.filter(layer => page.layers === "all" || page.layers.includes(layer))), l as SpaceLayer) }),
             }}
             floaters={meshes ? floaters : undefined}
           >

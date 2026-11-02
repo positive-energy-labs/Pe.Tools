@@ -14,7 +14,7 @@ import { refuse } from "#/route/refusal";
 import { ENCODINGS } from "./layers";
 import { regionSchema, spaceReads, type SpaceReadKey, type SpaceAnswerKey } from "./reads";
 
-const jsonField = <S extends z.ZodType>(schema: S) =>
+const jsonField = <S extends z.ZodType>(schema: import("../../../../packages/agent-contracts/src/route-field").BareSchema<S> extends z.ZodArray<any> ? never : S) =>
   field(
     schema,
     { url: "replace", agent: "set" },
@@ -121,7 +121,6 @@ export const spaceGraph: RouteGraph<SpacePage, null> = defineRouteGraph({
     },
   },
   needs: "document",
-  // TODO: docs/features/routes/LEDGER.md#s7-29e50b64c1 Migrate capture inputs, visibility sets and layers off hand array codecs; preserve region subject.
   subjectField: { field: "region", noun: "region", keyKind: "name", roster: "region", detail: "scene", pane: "picture", },
   fields: {
     ...threadListFields,
@@ -195,7 +194,7 @@ export const spaceGraph: RouteGraph<SpacePage, null> = defineRouteGraph({
       const candidate = { ...current, ...patch };
       const reading = scope?.readings.scene;
       const loaded = reading ? matchingScene(current, reading as ReadingState) : null;
-      const named = [candidate.selected, ...candidate.hidden, ...(candidate.isolated ?? [])].filter(
+      const named = [candidate.selected, ...(candidate.hidden === "all" ? [] : candidate.hidden), ...(candidate.isolated === "all" ? [] : candidate.isolated)].filter(
         (key): key is string => key !== null,
       );
       if (
@@ -240,13 +239,13 @@ export const spaceBinding = (id: string, row: unknown, { page }: { page: SpacePa
     id === "capture" || id === "context"
       ? {
           ...sceneRequest(
-            page.ids.filter((n) => Number.isSafeInteger(n) && n > 0),
+            page.ids.elementIds.filter((n) => Number.isSafeInteger(n) && n > 0),
             false,
             15,
             CONTEXT_DEFAULT,
           ),
           ...(page.region ? { region: page.region } : {}),
-          elementIds: page.region ? [] : page.ids,
+          elementIds: page.region ? [] : page.ids.elementIds,
           focusOnly: !page.region && id === "capture",
           contextRepresentation: !page.region && id === "capture" ? "none" : CONTEXT_DEFAULT,
         }

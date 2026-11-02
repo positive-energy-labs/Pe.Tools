@@ -1,3 +1,4 @@
+import { bare, manyCodec } from "./route-field.ts";
 import { catalogEntries } from "./pe-api.ts";
 import { requireLinkedCatalog, type CatalogAxes } from "./catalog.ts";
 import { routeDirectory } from "./generated/route-directory.ts";
@@ -35,6 +36,13 @@ export function validateRouteModule(module: RouteModule): void {
     (builtin?.moduleHash !== module.moduleHash || module.graph.moduleHash !== module.moduleHash)
   )
     throw Error("Builtin module hash does not match the generated directory");
+  if (module.namespace !== "builtin") {
+    for (const [id, field] of Object.entries(module.graph.fields)) {
+      if (bare(field.schema).def.type === "array" ||
+        (field.cardinality === "many" && (field.codec !== manyCodec || !field.schema.safeParse("all").success)))
+        throw Error(`fields.${id}: Array fields must use kernel manyField with ids | all`);
+    }
+  }
   const errors = validateRouteGraph(module.graph);
   if (errors.length)
     throw Error(errors.map((error) => `${error.path}: ${error.message}`).join("; "));

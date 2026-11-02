@@ -1,4 +1,4 @@
-import { manyCodec } from "../route-field.ts";
+
 import { describe, expect, test } from "vite-plus/test";
 import { routeAddress } from "../route-address.ts";
 
@@ -20,11 +20,11 @@ describe("an entity route's address", () => {
   test("a table's sorts and hidden columns survive names with commas and leading dashes", () => {
     const family = routeAddress("family");
     const page = {
-      sort: [
+      sort: { columns: [
         { key: "Width, Nominal", dir: "desc" as const },
         { key: "-odd", dir: "asc" as const },
-      ],
-      hidden: ["a,b", "c\\d"],
+      ] },
+      hidden: { "a,b": true as const, "c\\d": true as const },
     };
     const link = family.link(page);
     const search = Object.fromEntries(new URL(link, "http://x").searchParams);
@@ -36,15 +36,15 @@ describe("an entity route's address", () => {
     const families = routeAddress("families");
     expect(
       families.agent.read({
-        sort: manyCodec.encode([
+        sort: JSON.stringify({ columns: [
           { key: "Width", dir: "desc" },
           { key: "Name", dir: "asc" },
-        ] as never),
+        ] }),
       }).sort,
-    ).toEqual([
+    ).toEqual({ columns: [
       { key: "Width", dir: "desc" },
       { key: "Name", dir: "asc" },
-    ]);
+    ] });
     expect(families.agent.patch.safeParse({ sort: "-" }).success).toBe(false);
     expect(routeAddress("schedules").agent.patch.safeParse({ cell: "3:1" }).success).toBe(false);
     expect(routeAddress("family").agent.patch.safeParse({ inspector: "part:hinge" }).success).toBe(
@@ -55,7 +55,7 @@ describe("an entity route's address", () => {
   test("a query typed is a step, a sort is a tweak; an agent-only pane makes no entry", () => {
     const families = routeAddress("families");
     expect(families.history({ query: "a" }, { query: "b" })).toBe("push");
-    expect(families.history({ sort: [] }, { sort: [{ key: "x", dir: "asc" }] })).toBe("replace");
+    expect(families.history({ sort: { columns: [] } }, { sort: { columns: [{ key: "x", dir: "asc" }] } })).toBe("replace");
     expect(families.history({ pane: "spec" }, { pane: "output" })).toBeNull();
   });
 

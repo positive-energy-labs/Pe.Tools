@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { layersKey } from "../page-keys.ts";
 import { manyField, field, text, type RouteDeclaration } from "../route-field.ts";
 import { planViewport } from "./shared.ts";
 
@@ -28,9 +27,9 @@ export const roomsAddress = {
     /** The plan view partition runs on; empty = none chosen. */
     view: field(text(), { url: "push" }),
     /** Solver layers drawn on the plan (`rails,openings`); empty = none. */
-    layers: manyField("name", { url: "push" }, layersKey(ROOMS_LAYERS, [])),
+    layers: manyField("name", { url: "push", choices: ROOMS_LAYERS }),
     /** Region GUIDs or card:<id>; every surface projects this exact selection. */
-    selected: manyField("name", { url: "replace", agent: "set" }, z.array(z.string()).default([])),
+    selected: manyField("name", { url: "replace", agent: "set" }),
     /** The review inbox's state filter. */
     show: field(z.enum(ROOMS_CARD_SHOWS).default("all"), { url: "replace" }),
 

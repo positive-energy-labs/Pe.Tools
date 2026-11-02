@@ -18,7 +18,7 @@ import {
   type ScheduleGridDocument,
   type ScheduleReading,
 } from "@pe/agent-contracts";
-import { field, manyField } from "../../../../packages/agent-contracts/src/route-field";
+import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { schedulesAddress } from "../../../../packages/agent-contracts/src/routes/schedules";
 import { threadListFields } from "../../../../packages/agent-contracts/src/routes/shared";
 import { commandVerb, queryVerb, workVerb } from "#/shell/verbs";
@@ -27,8 +27,8 @@ import { NATIVE_APPLY_WAIT_S } from "#/route/waits";
 export const SCHEDULE_SPEC_SCHEMA = "/schemas/settings/CmdScheduleManager/schedules.json";
 const fields = { ...threadListFields, ...schedulesAddress.fields };
 export const schedulesPageSchema = routeAddress("schedules").schema.extend({
-  sort: z.object({ columns: fields.sort.schema }).default({ columns: [] }),
-  hidden: manyField("name", {}).schema,
+  sort: fields.sort.schema,
+  hidden: fields.hidden.schema,
   captureId: z.string().default(""),
 });
 export type SchedulesPage = z.output<typeof schedulesPageSchema>;
@@ -102,7 +102,7 @@ export const schedulesBase: RouteGraph<SchedulesPage, ScheduleGridDocument> = de
       ...field(schedulesPageSchema.shape.sort, {}, { encode: JSON.stringify, decode: JSON.parse }),
       role: "query",
     },
-    hidden: { ...manyField("name", { url: "replace", agent: "set" }) },
+    hidden: fields.hidden,
     lines: { ...fields.lines, role: "query" },
     cell: { ...fields.cell, role: "selection" },
     captureId: {

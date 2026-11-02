@@ -339,6 +339,7 @@
               "minLength": 1,
               "type": "string"
             },
+            "maxItems": 50000,
             "type": "array"
           },
           {
@@ -653,6 +654,20 @@
       "role": "pose",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "anyOf": [
+          {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 50000,
+            "type": "array"
+          },
+          {
+            "const": "all",
+            "type": "string"
+          }
+        ],
         "default": [
           "meshes",
           "system-colours",
@@ -661,22 +676,7 @@
           "no-run",
           "labels",
           "findings"
-        ],
-        "items": {
-          "enum": [
-            "meshes",
-            "system-colours",
-            "stub-labels",
-            "halo",
-            "context",
-            "centrelines",
-            "no-run",
-            "labels",
-            "findings"
-          ],
-          "type": "string"
-        },
-        "type": "array"
+        ]
       },
       "share": true,
       "url": "push"
@@ -1006,6 +1006,7 @@
               "minLength": 1,
               "type": "string"
             },
+            "maxItems": 50000,
             "type": "array"
           },
           {
@@ -1576,7 +1577,7 @@
     "size": 420,
     "sized": "start"
   },
-  "moduleHash": "8025d66f135fe5d27163de9a9eaca4652593d224cbfde48e184925b8e9be3962",
+  "moduleHash": "00c5e7e2bcda896a7e19e7f34f75be6f7a779c86139d05cd5fb84f9d26a6a064",
   "name": "Ducts",
   "needs": "project",
   "panes": {

@@ -96,13 +96,11 @@ function SchedulesProvider({ owner, children }: { owner: SchedulesMount; childre
       query: page.query,
       sorts: page.sort.columns,
       hiddenColumns:
-        page.hidden === "all"
-          ? (shown?.snapshot.columns ?? []).map((column) => String(column.columnNumber))
-          : page.hidden,
+        Object.keys(page.hidden),
     },
     setTable: (next) =>
       owner.view.setPage(
-        { query: next.query, sort: { columns: next.sorts }, hidden: next.hiddenColumns ?? [] },
+        { query: next.query, sort: { columns: next.sorts }, hidden: Object.fromEntries((next.hiddenColumns ?? []).map(key => [key, true as const])) },
         { history: "replace" },
       ),
     cell: page.cell,

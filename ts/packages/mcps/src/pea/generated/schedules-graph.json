@@ -75,7 +75,6 @@
     },
     "hidden": {
       "agent": "set",
-      "cardinality": "many",
       "codec": {
         "decode": {
           "runtime": true
@@ -84,24 +83,20 @@
           "runtime": true
         }
       },
-      "keyKind": "name",
       "role": "pose",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "anyOf": [
-          {
-            "items": {
-              "minLength": 1,
-              "type": "string"
-            },
-            "type": "array"
-          },
-          {
-            "const": "all",
-            "type": "string"
-          }
-        ],
-        "default": []
+        "additionalProperties": {
+          "const": true,
+          "type": "boolean"
+        },
+        "default": {},
+        "propertyNames": {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
+        "type": "object"
       },
       "share": true,
       "url": "replace"
@@ -230,7 +225,6 @@
         },
         "properties": {
           "columns": {
-            "default": [],
             "items": {
               "properties": {
                 "dir": {
@@ -256,6 +250,9 @@
             "type": "array"
           }
         },
+        "required": [
+          "columns"
+        ],
         "type": "object"
       },
       "share": true,
@@ -434,7 +431,7 @@
     "size": 240,
     "sized": "start"
   },
-  "moduleHash": "cd9a685270631eb290ce3bd988f50eaac2800e19032f670e4a523cc5fb2dac13",
+  "moduleHash": "7241f33f5965ef5cc34976cb0edc06763ff3583dac94ccca6050997fef6339c8",
   "name": "Schedules",
   "needs": "project",
   "panes": {

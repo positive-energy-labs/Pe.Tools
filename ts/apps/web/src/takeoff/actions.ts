@@ -35,8 +35,6 @@ const syncReviewSchema = z.object({
  */
 export const takeoffPageSchema = routeAddress("takeoffs").schema.extend({
   work: z.string().optional(),
-  views: z.array(z.string()).readonly().default([]),
-  zones: z.array(z.string()).readonly().default([]),
   r10: z.string().default(""),
   stage: z.enum(["adopt", "audit", "sync"]).default("adopt"),
   panel: z.enum(["sync"]).nullable().default(null),

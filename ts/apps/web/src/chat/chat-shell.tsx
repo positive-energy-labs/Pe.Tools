@@ -346,7 +346,7 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
     >
       {mode === "threads" ? (
         <ThreadsSidebar
-          selected={handle.view.read().page.selected}
+          selected={(() => { const value = handle.view.read().page.selected; return value === "all" ? threads.map(thread => thread.id) : value; })()}
           onSelection={(selected) => handle.view.setPage({ selected })}
           primary
           reading={!rosterRead}

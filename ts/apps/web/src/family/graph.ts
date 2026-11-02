@@ -74,7 +74,6 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = defineRouteGraph
   needs: "family",
   work: familyDraftRouteState.schema,
   // A saved member is input to the document-owned draft, not a different Work.
-  // TODO: docs/features/routes/LEDGER.md#s7-fd9848fdb0 Migrate ordered sort state and hidden-column sets off hand array codecs; K1c consolidates drill/inspector.
   subjectField: { kind: "singleton", field: "family", noun: "family document", keyKind: "name", roster: "document", detail: "family", pane: "matrix", },
   fields: {
     family: { ...field(familyPageSchema.shape.family, {}) },

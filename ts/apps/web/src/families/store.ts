@@ -132,7 +132,7 @@ export function useFamiliesStore(owner: FamiliesMount) {
   const cells = useMemo(() => work?.doc.cells ?? {}, [work?.doc.cells]);
   const excluded = useMemo(() => work?.doc.excluded ?? {}, [work?.doc.excluded]);
   const table = useMemo<TableState>(
-    () => ({ sorts: page.sort, query: page.query, hiddenColumns: page.hidden }),
+    () => ({ sorts: page.sort.columns, query: page.query, hiddenColumns: Object.keys(page.hidden) }),
     [page.sort, page.query, page.hidden],
   );
   const write = useCallback<CellWire["write"]>(
@@ -164,7 +164,7 @@ export function useFamiliesStore(owner: FamiliesMount) {
         }),
       setTable: (value: TableState) =>
         owner.view.setPage(
-          { query: value.query, sort: value.sorts, hidden: value.hiddenColumns ?? [] },
+          { query: value.query, sort: { columns: value.sorts }, hidden: Object.fromEntries((value.hiddenColumns ?? []).map(key => [key, true as const])) },
           { history: "replace" },
         ),
       setPicker: (value: Setter<PickerState>) => setPicker((current) => next(value, current)),

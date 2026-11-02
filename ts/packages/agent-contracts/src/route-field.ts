@@ -70,15 +70,13 @@ const CODECS: Record<string, Codec<unknown>> = {
     decode: (text) =>
       text === "1" || text === "true" ? true : text === "0" || text === "false" ? false : INVALID,
   },
-  array: {
-    encode: (value) => (value as unknown[]).join(","),
-    decode: (text) => text.split(",").filter(Boolean),
-  },
+
 };
 
-/** One field: a plain string, enum, number, boolean or string list needs no codec; any other value brings one. */
+export type BareSchema<S> = S extends z.ZodDefault<infer I> | z.ZodOptional<infer I> | z.ZodNullable<infer I> | z.ZodReadonly<infer I> | z.ZodCatch<infer I> | z.ZodPrefault<infer I> ? BareSchema<I> : S;
+/** One field: a plain string, enum, number or boolean needs no codec; any other value brings one. */
 export function field<S extends z.ZodType, const A extends Access>(
-  schema: S,
+  schema: BareSchema<S> extends z.ZodArray<any> ? never : S,
   access: A,
   codec?: Codec<z.output<S>>,
 ): RouteField<S> & A {
@@ -88,7 +86,7 @@ export function field<S extends z.ZodType, const A extends Access>(
     schema,
     codec: found,
     ...access,
-    ...(bare(schema).def.type === "array" ? { cardinality: "many" as const } : {}),
+
   };
 }
 
@@ -133,53 +131,37 @@ export const setKeys = (fields: Fields) => keysWhere(fields, (field) => field.ag
 /** Exact set spelling, including ids containing commas. `all` resolves against the current roster. */
 export type Many = string[] | "all";
 export const manyCodec: Codec<Many> = {
-  encode: (value) =>
-    value == null
-      ? "~null"
-      : value === "all"
-        ? "all"
-        : (value as unknown[])
-            .map((id) =>
-              typeof id === "string"
-                ? id === "all"
-                  ? "%61ll"
-                  : encodeURIComponent(id).replaceAll("~", "%7E").replaceAll("%20", " ")
-                : "~" + encodeURIComponent(JSON.stringify(id)),
-            )
-            .join(","),
-  decode: (text) => {
+  encode: value => value === "all" ? "all" : value.map(id =>
+    id === "all" ? "%61ll" : encodeURIComponent(id).replaceAll("~", "%7E").replaceAll("%20", " ")
+  ).join(","),
+  decode: text => {
     if (text === "all") return "all";
-    if (text === "~null") return null as never;
-    try {
-      return text
-        ? text
-            .split(",")
-            .map((part) =>
-              part.startsWith("~")
-                ? JSON.parse(decodeURIComponent(part.slice(1)))
-                : decodeURIComponent(part),
-            )
-        : [];
-    } catch {
-      return INVALID;
-    }
+    try { return text ? text.split(",").map(decodeURIComponent) : []; }
+    catch { return INVALID; }
   },
 };
 export const stableKeyKinds = ["UniqueId", "system-name", "name"] as const;
 export type StableKeyKind = (typeof stableKeyKinds)[number];
-export function manyField<
-  const A extends Access,
-  S extends z.ZodType = z.ZodDefault<z.ZodUnion<[z.ZodArray<z.ZodString>, z.ZodLiteral<"all">]>>,
->(keyKind: StableKeyKind, access: A, schema?: S) {
-  if (!stableKeyKinds.includes(keyKind))
-    throw Error("Subject keys must be stable; ElementId is refused");
+export function manyField<const A extends Access & { cap?: number; initial?: Many; choices?: readonly string[] }>(
+  keyKind: StableKeyKind, access: A,
+) {
+  if (!stableKeyKinds.includes(keyKind)) throw Error("Subject keys must be stable; ElementId is refused");
+  const { cap = 50000, initial = [], choices, ...projection } = access;
   return {
-    schema: (schema ?? z.union([z.array(z.string().min(1)), z.literal("all")]).default([])) as S,
-    codec: manyCodec as unknown as Codec<z.output<S>>,
+    schema: z.union([z.array(z.string().min(1).refine(id => !choices || choices.includes(id), "Unknown key")).max(cap), z.literal("all")]).default(initial),
+    codec: manyCodec,
     cardinality: "many" as const,
     keyKind,
-    ...access,
+    ...projection,
   };
 }
+/** Structured Page values have one JSON spelling; arrays belong inside a named object. */
+export const jsonCodec = <S extends z.ZodType>(schema: S): Codec<z.output<S>> => ({
+  encode: JSON.stringify,
+  decode: text => {
+    try { const result = schema.safeParse(JSON.parse(text)); return result.success ? result.data : INVALID; }
+    catch { return INVALID; }
+  },
+});
 export const resolveMany = (value: Many, roster: readonly string[]) =>
   value === "all" ? [...roster] : [...new Set(value)];

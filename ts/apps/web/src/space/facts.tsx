@@ -53,12 +53,12 @@ export function HostIds({
   const refusal =
     !Number.isSafeInteger(id) || id <= 0
       ? "Enter a positive whole host element ID"
-      : page.ids.includes(id)
+      : page.ids.elementIds.includes(id)
         ? "This host element is already named"
         : null;
   const add = () => {
     if (refusal) return;
-    setPage({ ids: [...page.ids, id] });
+    setPage({ ids: { elementIds: [...page.ids.elementIds, id] } });
     setDraft("");
   };
   return (
@@ -106,11 +106,11 @@ export function HostIds({
       <Button label="Add host element ID" refusal={refusal} onClick={add}>
         add
       </Button>
-      {page.ids.map((id, index) => (
+      {page.ids.elementIds.map((id, index) => (
         <Button
           key={`${id}:${index}`}
           label={`Remove host element ${id}`}
-          onClick={() => setPage({ ids: page.ids.filter((value) => value !== id) })}
+          onClick={() => setPage({ ids: { elementIds: page.ids.elementIds.filter((value) => value !== id) } })}
         >
           {id} ×
         </Button>
@@ -156,7 +156,7 @@ function VisibilityControls({
         refusal={page.selected ? null : "Pick an element"}
         onClick={() =>
           page.selected &&
-          setPage({ hidden: [...new Set([...page.hidden, page.selected])], selected: null })
+          setPage({ hidden: page.hidden === "all" ? "all" : [...new Set([...page.hidden, page.selected])], selected: null })
         }
       >
         hide
@@ -168,7 +168,7 @@ function VisibilityControls({
           page.selected &&
           setPage({
             isolated: [page.selected],
-            hidden: page.hidden.filter((key) => key !== page.selected),
+            hidden: (page.hidden === "all" ? [] : page.hidden).filter((key) => key !== page.selected),
           })
         }
       >
@@ -176,8 +176,8 @@ function VisibilityControls({
       </Button>
       <Button
         label="show all"
-        refusal={page.hidden.length || page.isolated !== null ? null : "Everything is shown"}
-        onClick={() => setPage({ hidden: [], isolated: null })}
+        refusal={page.hidden.length || page.isolated !== "all" ? null : "Everything is shown"}
+        onClick={() => setPage({ hidden: [], isolated: "all" })}
       >
         show all
       </Button>
