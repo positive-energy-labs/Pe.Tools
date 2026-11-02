@@ -1,3 +1,4 @@
+import { captureStore } from "./effect-test.ts";
 import { afterEach, expect, test } from "vite-plus/test";
 import { Effect } from "effect";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -87,7 +88,7 @@ async function fixture(
     ...commandResources(bridge, deps, async (id) => (await owner.list(undefined, id))[0]),
     resolve: commandRegistry(
       bridge,
-      new TakeoffCaptures(join(directory, "captures")),
+      captureStore(join(directory, "captures")),
       deps,
       async () => {
         throw Error("No local operation expected");

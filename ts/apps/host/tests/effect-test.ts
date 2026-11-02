@@ -4,6 +4,7 @@ import { TestClock } from "effect/testing";
 import { onTestFinished, test, type TestContext } from "vite-plus/test";
 import { FamiliesReader } from "../src/families-reader.ts";
 import { HarnessThreads, type HarnessThreadsOptions } from "../src/harness/threads.ts";
+import { CaptureStore, type TakeoffCaptures } from "../src/takeoff-captures.ts";
 import {
   MachineOwner,
   machineOwnerPromise,
@@ -205,4 +206,23 @@ export const machineOwner = (
     // Outside a running test: a module fixture, closed with its worker.
   }
   return machineOwnerPromise(Context.get(context, MachineOwner));
+};
+
+/**
+ * {@link CaptureStore} for Promise tests: the live layer over `directory`, built in a scope the
+ * running test closes. Two calls over one directory are two layers over the same files.
+ */
+export const captureStore = (directory: string, apsCachePath?: string): TakeoffCaptures => {
+  const scope = Scope.makeUnsafe();
+  // effect-edge: test-runner
+  const context = Effect.runSync(
+    Layer.buildWithScope(CaptureStore.layer(directory, apsCachePath), scope),
+  );
+  try {
+    // effect-edge: test-runner
+    onTestFinished(() => Effect.runPromise(Scope.close(scope, Exit.void)));
+  } catch {
+    // Outside a running test: a module fixture, closed with its worker.
+  }
+  return Context.get(context, CaptureStore);
 };

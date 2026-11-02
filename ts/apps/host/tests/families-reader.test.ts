@@ -1,3 +1,4 @@
+import { captureStore } from "./effect-test.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -15,7 +16,7 @@ type Input = RevitMatrixLoadedFamilies.Req.Request;
 
 async function fixture(blockSecond: boolean) {
   const dir = await mkdtemp(join(tmpdir(), "families-reader-"));
-  const captures = new TakeoffCaptures(dir);
+  const captures = captureStore(dir);
   const document = { session: randomUUID(), openId: randomUUID() };
   const work = bindWork("families", address(join(dir, "source.rvt")), undefined, document);
   const filter = {

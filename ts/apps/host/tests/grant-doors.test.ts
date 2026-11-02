@@ -1,3 +1,4 @@
+import { captureStore } from "./effect-test.ts";
 import { invokeCommand } from "./command-fixture.ts";
 /**
  * HTTP-level falsifiers for doors 1-3 (WAVE1-PLAN §2): the route is production code, the caller is
@@ -43,7 +44,7 @@ beforeEach(async () => {
   web = HttpRouter.toWebHandler(
     makeCallRoute(
       journal,
-      new TakeoffCaptures(join(root, "captures")),
+      captureStore(join(root, "captures")),
       { sdk: sdkSessions },
       {
         forwardBase: null,

@@ -5,7 +5,7 @@ import { commands, tools, type Command } from "@pe/agent-contracts";
 import { commandCatalogAxes } from "../../../packages/agent-contracts/src/command-axes.ts";
 import { workIntentBoundary } from "../src/work-write-boundary.ts";
 import { commandRegistry } from "../src/command-registry.ts";
-import { TakeoffCaptures } from "../src/takeoff-captures.ts";
+import { captureStore } from "./effect-test.ts";
 import type { CommandContext } from "../src/command-executor.ts";
 import type { ActionExecution } from "../src/action-journal.ts";
 import type { RevitBridge } from "../src/bridge.ts";
@@ -45,7 +45,7 @@ test("the seal follows the axis: a ModelWrite is sealed and nothing else carries
 test("the registry derives a capture's input from Work and never seals it", () => {
   const resolve = commandRegistry(
     {} as RevitBridge["Service"],
-    new TakeoffCaptures("unused-intent-test"),
+    captureStore("unused-intent-test"),
     {},
     async () => {
       throw Error("No I/O in a structure test");

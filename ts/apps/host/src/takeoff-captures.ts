@@ -27,6 +27,7 @@ import {
   type HistoryRow,
   type WorkKey,
 } from "@pe/agent-contracts";
+import { Clock, Context, Effect, Layer } from "effect";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { RevitMatrixLoadedFamilies } from "@pe/host-contracts/generated";
@@ -195,15 +196,26 @@ export class TakeoffCaptures {
   /** Progressive reads this process is running; a stored "reading" revision outside it was interrupted. */
   private readonly liveReads = new Set<string>();
   private readonly listeners = new Set<(key: string) => void>();
+  /**
+   * Every map above lives and dies with this instance. The sets are keyed by document or Work and
+   * bounded by what one host session touches; `close()` empties them and stops every notify, which
+   * is what the owning {@link CaptureStore} scope does on release.
+   */
   constructor(
     readonly directory: string,
-    private readonly apsCachePath = join(
-      productRoot(),
-      productPathNames.stateDirectoryName,
-      productPathNames.globalDirectoryName,
-      "parameters-service-cache.json",
-    ),
+    private readonly apsCachePath: string,
+    /** The wall stamp on a completed reading; the store's layer supplies `Clock`'s. */
+    private readonly now: () => string,
   ) {}
+
+  close() {
+    this.states.clear();
+    this.generations.clear();
+    this.pending.clear();
+    this.familiesSaves.clear();
+    this.liveReads.clear();
+    this.listeners.clear();
+  }
 
   private notify(key: string) {
     for (const listener of this.listeners) listener(key);
@@ -522,7 +534,7 @@ export class TakeoffCaptures {
   ): Promise<FamiliesObservation> {
     const work = workKey(value.work);
     if (value.progress) this.liveReads.delete(value.progress.runId);
-    const completedAt = new Date().toISOString();
+    const completedAt = this.now();
     const id = createHash("sha256")
       .update(JSON.stringify({ ...value, completedAt }))
       .digest("hex");
@@ -753,7 +765,7 @@ export class TakeoffCaptures {
       }),
     );
     const { result: _, ...metadata } = value;
-    const completedAt = new Date().toISOString();
+    const completedAt = this.now();
     const id = createHash("sha256")
       .update(JSON.stringify([metadata, completedAt, records]))
       .digest("hex");
@@ -948,8 +960,41 @@ export class TakeoffCaptures {
   }
 }
 
-let captures: TakeoffCaptures | undefined;
-export const hostTakeoffCaptures = () =>
-  (captures ??= new TakeoffCaptures(
-    join(productRoot(), "state", "host", hostOwnership.serviceName, "takeoff-captures"),
-  ));
+/** Where this host service keeps its Takeoff, schedule and Families readings. */
+export const takeoffCapturesDirectory = () =>
+  join(productRoot(), "state", "host", hostOwnership.serviceName, "takeoff-captures");
+/** The APS Parameters Service cache Families readings reference. */
+export const apsParameterCachePath = () =>
+  join(
+    productRoot(),
+    productPathNames.stateDirectoryName,
+    productPathNames.globalDirectoryName,
+    "parameters-service-cache.json",
+  );
+
+/**
+ * The host's capture files and in-memory readings (ADR 0029 rule 3): built once by a scoped layer,
+ * state dies with the scope, stamps come from `Clock`. A test swaps the directory or the layer.
+ * Its writes stay on `node:fs/promises`: the Promise callers (call-route, the action doors,
+ * families-reader) cannot yet run a `FileSystem` effect without an island this file may not add.
+ */
+export class CaptureStore extends Context.Service<CaptureStore, TakeoffCaptures>()(
+  "pe/CaptureStore",
+) {
+  static readonly layer = (
+    directory: string = takeoffCapturesDirectory(),
+    apsCachePath: string = apsParameterCachePath(),
+  ) =>
+    Layer.effect(
+      CaptureStore,
+      Effect.acquireRelease(
+        Effect.gen(function* () {
+          const clock = yield* Clock.Clock;
+          return new TakeoffCaptures(directory, apsCachePath, () =>
+            new Date(clock.currentTimeMillisUnsafe()).toISOString(),
+          );
+        }),
+        (captures) => Effect.sync(() => captures.close()),
+      ),
+    );
+}

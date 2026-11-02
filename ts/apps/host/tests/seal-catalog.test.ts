@@ -1,3 +1,4 @@
+import { captureStore } from "./effect-test.ts";
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { commands, type Consumed, type Command } from "@pe/agent-contracts";
@@ -30,7 +31,7 @@ function reorder(value: any): any {
   return value && typeof value === "object"
     ? Object.fromEntries(Object.entries(value).reverse().map(([k, v]) => [k, reorder(v)])) : value;
 }
-const resolve = commandRegistry({} as RevitBridge["Service"], new TakeoffCaptures("unused-seal-test"), {}, async () => { throw Error("No I/O in seal properties"); });
+const resolve = commandRegistry({} as RevitBridge["Service"], captureStore("unused-seal-test"), {}, async () => { throw Error("No I/O in seal properties"); });
 const writes = Object.entries(commandCatalogAxes).filter(([, axes]) => axes.effect === "ModelWrite");
 
 test("live MUAS preview/apply seals ignore traversal diagnostics but retain model dependencies", () => {

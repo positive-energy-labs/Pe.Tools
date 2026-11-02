@@ -1,4 +1,4 @@
-import { testConsents } from "./effect-test.ts";
+import { testConsents, captureStore } from "./effect-test.ts";
 import { workWriteBoundary } from "../src/work-write-boundary.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -89,7 +89,7 @@ test.each(["selected", "unrelated", "none"] as const)(
       const rendered = (await work.read(key, "rooms"))!;
       const owner = new ActionJournal(join(directory, "journal.jsonl"));
       const deps = { workspace: work, sdk: sdkSessions };
-      const write = takeoffExecutors(new TakeoffCaptures(directory), bridge, deps)["rooms.write"];
+      const write = takeoffExecutors(captureStore(directory), bridge, deps)["rooms.write"];
       const entries: Record<string, ReturnType<typeof workWriteBoundary>> = {
         "rooms.write": workWriteBoundary(write, bridge, deps),
         "rooms.write.preview": workWriteBoundary(

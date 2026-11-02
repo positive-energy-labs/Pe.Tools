@@ -3,6 +3,7 @@
  * route handler; stand-in native socket and SDK receipts. No host or Revit process.
  * These are ordinary failing tests, not test.fails: missing kernel primitives stay red.
  */
+import { captureStore } from "./effect-test.ts";
 import { connectTestBridge } from "./bridge-fixture.ts";
 import { originalProcess, sdkEnvelope, sdkSessions } from "./native-receipt-fixture.ts";
 import { asCaller, crossingOf, human } from "./callers.ts";
@@ -90,7 +91,7 @@ const lane = <A>(body: (h: Harness) => Effect.Effect<A, unknown, never>, sdk = s
     const workKey = bindWork("ducts", null, undefined, target);
     const owner = new ActionJournal(join(dir, "attempts.json"));
     const web = HttpRouter.toWebHandler(
-      makeCallRoute(owner, new TakeoffCaptures(join(dir, "captures")), {
+      makeCallRoute(owner, captureStore(join(dir, "captures")), {
         sdk,
         workspace: work,
       }).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),

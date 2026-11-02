@@ -1,3 +1,4 @@
+import { captureStore } from "./effect-test.ts";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -50,7 +51,7 @@ export async function partitionFixture(dir: string, target: DocumentRef) {
     blob: "",
     loops: [],
   };
-  const captures = new TakeoffCaptures(join(dir, "captures"));
+  const captures = captureStore(join(dir, "captures"));
   const { capture } = await captures.refresh(
     target,
     async () => ({

@@ -97,6 +97,7 @@ import {
   productRouteWorkPath,
 } from "./product-paths.ts";
 import { hostResourceObserver, markReadings } from "./resource-adapters.ts";
+import { CaptureStore, type TakeoffCaptures } from "./takeoff-captures.ts";
 import {
   MachineOwner,
   hostMachineFace,
@@ -1101,6 +1102,7 @@ function* hostPeRoutes(
   update: UpdateReader["Service"] = makeInstalledUpdateReader(),
   share?: MachineShareAdapter,
   hostWork?: HostWork,
+  captures?: TakeoffCaptures,
 ) {
   const sourceRoot = hostOwnership.sourceRoot;
   const worldRoot = resolvePeaProductHomePath();
@@ -1261,7 +1263,7 @@ function* hostPeRoutes(
   const hostObserve = hostResourceObserver(
     bridge,
     undefined,
-    undefined,
+    captures ? () => captures : undefined,
     hostBaseUrl,
     undefined,
     hostMachineFace,
@@ -1405,6 +1407,7 @@ export const peRoutesLayer = (
       const bridge = Option.getOrUndefined(yield* Effect.serviceOption(RevitBridge));
       const update = yield* UpdateReader;
       const runs = yield* RunConsents;
+      const captures = Option.getOrUndefined(yield* Effect.serviceOption(CaptureStore));
       const { providers, threads, routes, catalog, machineSpec, notices, plugins, tasks } =
         yield* makeHostPeRoutes(
           hostBaseUrl,
@@ -1414,6 +1417,7 @@ export const peRoutesLayer = (
           update,
           share,
           hostWork,
+          captures,
         );
       // Scoped: the layer closes with this one, which stops its poll and unsets the host face.
       const machineContext = yield* Layer.build(

@@ -1,3 +1,4 @@
+import { captureStore } from "./effect-test.ts";
 import { afterEach, beforeEach, expect, test } from "vite-plus/test";
 import { Effect, FileSystem, PlatformError } from "effect";
 import { NodeServices } from "@effect/platform-node";
@@ -203,7 +204,7 @@ test("settings.write saves reviewed member Work and republishes the new basis", 
       },
       crossingOf("human"),
       owner,
-      new TakeoffCaptures(join(root, "captures")),
+      captureStore(join(root, "captures")),
       bridge,
       { workspace: work, podsRoot: root },
     ).then((row) => owner.wait(row.id));

@@ -1,3 +1,4 @@
+import { captureStore } from "./effect-test.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -167,7 +168,7 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
   const get = (captures: TakeoffCaptures) =>
     call(captures, new Request(`${url}?work=${encodeURIComponent(JSON.stringify(work))}`));
   try {
-    const captures = new TakeoffCaptures(dir, cachePath);
+    const captures = captureStore(dir, cachePath);
     const legacy = await captures.saveFamilies({
       work,
       document: target,
@@ -181,7 +182,7 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
     expect(saved).toMatchObject({ document: target, documentTitle: "Air.rvt", filter, result });
     expect(saved.capturedAt).toEqual(expect.any(String));
     expect(saved.completedAt).toEqual(expect.any(String));
-    const rebuilt = new TakeoffCaptures(dir, cachePath);
+    const rebuilt = captureStore(dir, cachePath);
     expect(await (await get(rebuilt)).json()).toEqual(saved);
     const archiveResponse = await call(rebuilt, new Request(url));
     expect(archiveResponse.status).toBe(200);
@@ -337,7 +338,7 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
 test("targeted readback cannot replace a newer manual read or claim error coverage", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-families-readback-"));
   try {
-    const captures = new TakeoffCaptures(dir);
+    const captures = captureStore(dir);
     const base = await captures.saveFamilies({
       work,
       document: target,

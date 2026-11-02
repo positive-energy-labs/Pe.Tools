@@ -27,14 +27,14 @@ import { readFamily, type FamilyActionDependencies } from "./family-actions.ts";
 import { actionAdmissionSchema, workKeySchema } from "@pe/agent-contracts";
 import { z } from "zod";
 import { fileVersion } from "./takeoff-actions.ts";
-import { Effect, Exit, Layer, Schema } from "effect";
+import { Effect, Exit, Layer, Option, Schema } from "effect";
 import {
   addressSchema,
   sameAddress,
   documentRefSchema,
   actionStatusSchema,
 } from "@pe/agent-contracts";
-import { hostTakeoffCaptures, type TakeoffCaptures } from "./takeoff-captures.ts";
+import { CaptureStore as TakeoffCaptureStore, type TakeoffCaptures } from "./takeoff-captures.ts";
 import type { FamiliesReader } from "./families-reader.ts";
 import {
   projectTakeoffSnapshot,
@@ -180,7 +180,12 @@ export function makeCallRoute(
   const recordOperation = composition?.captureHostOp ?? recordHostOp;
   const dispatch: CallRouteDispatch = (...args) =>
     (composition?.dispatch ?? dispatchTsOnlyOperation)(...args);
-  const observations = () => (captures ??= hostTakeoffCaptures());
+  // The injected store, else the `CaptureStore` of the layer that builds these routes (set below,
+  // before any handler can run); a composition with neither fails loudly at first use.
+  const observations = (): TakeoffCaptures => {
+    if (!captures) throw Error("Takeoff captures are unavailable: provide CaptureStore.");
+    return captures;
+  };
   const owner = () => operations;
   type NativeAnswer = Effect.Success<ReturnType<RevitBridge["Service"]["invoke"]>>;
   /**
@@ -446,7 +451,7 @@ export function makeCallRoute(
       }
       const result = isTsOnlyOperationKey(key)
         ? {
-            value: yield* dispatch(key, request, scope, bridge),
+            value: yield* dispatch(key, request, scope, bridge, observations()),
             target: null,
           }
         : entry.snapshot
@@ -974,7 +979,8 @@ export function makeCallRoute(
   return Layer.mergeAll(
     Layer.effectDiscard(
       RevitBridge.use((bridge) =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
+          captures ??= Option.getOrUndefined(yield* Effect.serviceOption(TakeoffCaptureStore));
           operations.bindCommands({
             ...commandResources(
               bridge,
@@ -986,7 +992,7 @@ export function makeCallRoute(
               observations(),
               actionDeps,
               composition?.local ??
-                ((key, input) => executeGatewayLocal(key, input, bridge, actionDeps.launchShell)),
+                ((key, input) => executeGatewayLocal(key, input, bridge, observations(), actionDeps.launchShell)),
               composition?.origin,
             ),
           });
@@ -1107,18 +1113,20 @@ const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
   request: unknown,
   scope: HostSessionScope | undefined,
   bridge: RevitBridge["Service"],
+  captures: TakeoffCaptures,
 ) {
-  return yield* localEntries[key]({ request, scope, bridge });
+  return yield* localEntries[key]({ request, scope, bridge, captures });
 });
 
 type LocalCall = {
   request: unknown;
   scope: HostSessionScope | undefined;
   bridge: RevitBridge["Service"];
+  captures: TakeoffCaptures;
 };
 const localEntries = {
-  "takeoffs.saved": Effect.fnUntraced(function* ({ request }: LocalCall) {
-    return yield* savedTakeoffs(request, hostTakeoffCaptures());
+  "takeoffs.saved": Effect.fnUntraced(function* ({ request, captures }: LocalCall) {
+    return yield* savedTakeoffs(request, captures);
   }),
   "host.status": Effect.fnUntraced(function* ({ bridge }: LocalCall) {
     return yield* Effect.flatMap(
@@ -1378,6 +1386,7 @@ function executeGatewayLocal(
   key: string,
   input: unknown,
   bridge: RevitBridge["Service"],
+  captures: TakeoffCaptures,
   launch?: (path: string) => Promise<void>,
 ): Promise<unknown> {
   if (!isTsOnlyOperationKey(key))
@@ -1385,7 +1394,7 @@ function executeGatewayLocal(
   if (!callEntries.get(key)?.shell)
     // effect-edge: island, phase 5
     return Effect.runPromise(
-      dispatchTsOnlyOperation(key, input, undefined, bridge).pipe(
+      dispatchTsOnlyOperation(key, input, undefined, bridge, captures).pipe(
         Effect.provide(NodeServices.layer),
         Effect.provide(NodeHttpClient.layerUndici),
       ),

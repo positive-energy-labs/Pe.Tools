@@ -27,6 +27,7 @@ import { fileRouteDocumentStore } from "./route-document-store.ts";
 import { productRouteWorkPath } from "./product-paths.ts";
 import { hostActionJournal, releaseHostReceipts } from "./gateway-owner.ts";
 import { releaseHostReceiptExport } from "./receipt-export.ts";
+import { CaptureStore } from "./takeoff-captures.ts";
 import { RevitBridge, RevitBridgeLive } from "./bridge.ts";
 import { RunConsents } from "./run-consent.ts";
 import { getHostStatus } from "./local-ops.ts";
@@ -325,6 +326,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
       Layer.provide(UpdateLive),
       Layer.provide(RunConsents.layer),
       Layer.provide(FamiliesReader.layer),
+      Layer.provide(CaptureStore.layer()),
       Layer.provide(NodeServices.layer),
       Layer.provide(ReceiptLifetime),
     );
@@ -353,6 +355,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
     Layer.provide(Layer.succeed(HostLifecycle, options.lifecycle)),
     Layer.provide(UpdateLive),
     Layer.provide(RunConsents.layer),
+    Layer.provide(CaptureStore.layer()),
     Layer.provide(NodeServices.layer),
     Layer.provide(ReceiptLifetime),
   );
