@@ -131,7 +131,6 @@ function ReadCoverage({ coverage }: { coverage: ProtoProps["coverage"] }) {
         {coverage.reading.length ? ` · reading ${coverage.reading.join(", ")}…` : ""}
         {coverage.report ? ` · ${coverage.report}` : ""}
       </span>
-
     </p>
   );
 }

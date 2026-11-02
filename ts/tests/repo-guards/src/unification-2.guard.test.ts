@@ -73,7 +73,9 @@ it("every graph keeps its behavior declaration within 60 lines", () => {
   expect([...counts].filter(([, count]) => count > 60).map(([p, n]) => `${p}: declaration ${n} > 60`)).toEqual([]);
 });
 it("declarations include template tails and graph factories, excluding metadata", () => {
-  const body = `({key: "r", directory: {title: "metadata"}, seeds: {}, fields: {}, readings: {}, verbs: {label: \`hello \${name}\`}, panes: {}, stages: {x: {}}})`;
-  expect(declarationLines(syntax(`const graph = ${body};`))).toEqual(declarationLines(syntax(`const graph = () => ${body};`)));
+  const body = `({\nkey: "r",\ndirectory: {title: "metadata"},\nseeds: {},\nfields: {},\nreadings: {},\nverbs: {label: \`hello \${name}\`},\npanes: {},\nstages: {x: {}}\n})`;
+  const plain = declarationLines(syntax(`const graph = ${body};`));
+  expect(plain).toEqual([5,6,7,8,9]);
+  expect(declarationLines(syntax(`const graph = () => ${body};`))).toEqual(plain);
   expect(declarationLines(syntax(`const graph = {\n key: "r",\n directory: {\n title: "metadata",\n },\n fields: {},\n readings: {},\n verbs: {},\n panes: {},\n stages: {},\n};`))).toEqual([6,7,8,9,10]);
 });

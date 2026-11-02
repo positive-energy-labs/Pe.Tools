@@ -201,7 +201,6 @@ function DuctsProvider({
         ? {
             ...coverage,
             reading: read.status === "pending" ? page.system : [],
-
           }
         : null,
   };
