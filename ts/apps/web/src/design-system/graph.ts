@@ -1,4 +1,6 @@
 import { type RouteGraph, pane } from "@pe/agent-contracts";
+import { z } from "zod";
+import { field } from "../../../../packages/agent-contracts/src/route-field";
 export const designSystemGraph: RouteGraph = {
   key: "design-system",
   address: "design-system",
@@ -53,15 +55,17 @@ export const designSystemGraph: RouteGraph = {
       tray: false,
     },
   },
-  fields: {},
-  readings: {},
+  // TODO: K1c must declare the kernel selection within the design catalogue.
+  subjectField: { kind: "singleton", field: "catalog", noun: "design language", keyKind: "name", cardinality: "one", roster: "catalog", detail: "catalog", pane: "main", show: (id) => id },
+  fields: { catalog: { ...field(z.enum(["builtin"]).default("builtin"), {}), role: "subject" } },
+  readings: { catalog: { kind: "derive", source: "catalog", retire: "never" } },
   verbs: {},
   panes: {
     main: {
       label: "Design System",
       purpose:
         "The spec and catalogue for the design language \u00e2\u20ac\u201d production components under production tokens, with the gaps they cannot yet express marked in place.",
-      draws: [],
+      draws: ["catalog"],
       verbs: [],
     },
   },

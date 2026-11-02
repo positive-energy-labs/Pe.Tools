@@ -137,12 +137,15 @@ export function chatGraph(deps: () => ChatRouteDeps, minOtherSize?: number): Rou
         load: () => import("./graph-seeds").then((m) => m.chatSeeds["stop"]!),
       },
     },
+  // TODO: K1c must declare the kernel selection within this thread.
+  subjectField: { field: "thread", noun: "thread", keyKind: "name", cardinality: "one", roster: "threads", detail: "head", pane: "threads", show: (id) => id },
     fields: {
-      thread: { ...field(z.string().default(""), {}), role: "transient" },
+      thread: { ...field(z.string().default(""), {}), role: "subject" },
       mode: { ...field(z.enum(["threads", "world"]).default("threads"), {}), role: "pose" },
       ...peaSettingFields,
     },
     readings: {
+      threads: { kind: "use", source: "threads", retire: "never" },
       head: {
         kind: "use",
         source: "head",
@@ -263,7 +266,7 @@ export function chatGraph(deps: () => ChatRouteDeps, minOtherSize?: number): Rou
 
 export function chatAdapters(navigate: () => void): RouteAdapters<ChatPage, unknown> {
   return {
-    sources: Object.fromEntries(
+    sources: { threads: subscriptionSource({ request: () => ({ kind: "threads" }), decode: (value) => value }), ...Object.fromEntries(
       (["head", "machine", "receipts", "capabilities"] as const).map((id) => {
         const live = subscriptionSource({
           request: (ctx) =>
@@ -274,7 +277,7 @@ export function chatAdapters(navigate: () => void): RouteAdapters<ChatPage, unkn
         });
         return [id, live];
       }),
-    ),
+    ) },
     binding: (_id, row) => ({ subject: null, args: row ?? {} }),
     navigate,
     bodies: {},

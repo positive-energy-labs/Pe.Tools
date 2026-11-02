@@ -33,6 +33,8 @@ export const familySeeds = Object.fromEntries(
             dependencies: [],
             validation: { isValid: true, issues: [] },
           },
+          document: [{ id: "current", document: { session: "fixture", openId: "family" } }],
+          family: { id: "current" },
           receipts: [],
           applyReceipt: [],
           captureReceipt: [],

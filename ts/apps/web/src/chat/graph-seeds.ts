@@ -5,7 +5,7 @@ export const chatSeeds = Object.fromEntries(
     {
       title: seed.title,
       page: seed.page,
-      readings: { ...seed.readings, transcript: seed.work, threadWork: CHAT_SEED_THREAD_WORK },
+      readings: { threads: [{ id: name, title: seed.title }], ...seed.readings, transcript: seed.work, threadWork: CHAT_SEED_THREAD_WORK },
     },
   ]),
 );

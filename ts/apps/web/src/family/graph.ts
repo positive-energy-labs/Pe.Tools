@@ -1,5 +1,6 @@
 import { familyQueries } from "../../../../packages/mcps/src/shared/query-client";
 import { z } from "zod";
+import { field } from "../../../../packages/agent-contracts/src/route-field";
 import {
   commands,
   familyDraftRouteState,
@@ -22,7 +23,7 @@ import { NATIVE_APPLY_WAIT_S } from "#/route/waits";
 import { presentFamilyPlan } from "./review";
 
 export const FAMILY_MODEL_SCHEMA = "/schemas/settings/FamilyFoundry/models.json";
-export const familyPageSchema = routeAddress("family").schema;
+export const familyPageSchema = routeAddress("family").schema.extend({ family: z.enum(["current"]).default("current") });
 export type FamilyPage = z.output<typeof familyPageSchema>;
 const fields = { ...threadListFields, ...familyAddress.fields };
 const refusal = z.string().nullable().default(null);
@@ -71,12 +72,15 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = {
   needs: "family",
   work: familyDraftRouteState.schema,
   // A saved member is input to the document-owned draft, not a different Work.
+  // TODO: Migrate ordered sort state and hidden-column sets off hand array codecs; K1c consolidates drill/inspector.
+  subjectField: { kind: "singleton", field: "family", noun: "family document", keyKind: "name", cardinality: "one", roster: "document", detail: "family", pane: "matrix", show: (id) => id },
   fields: {
+    family: { ...field(familyPageSchema.shape.family, {}), role: "subject" },
     threadSearch: { ...fields.threadSearch, role: "query" },
     threadSort: { ...fields.threadSort, role: "query" },
     stage: { ...fields.stage, role: "stage" },
-    pod: { ...fields.pod, role: "subject" },
-    path: { ...fields.path, role: "subject" },
+    pod: { ...fields.pod, role: "query" },
+    path: { ...fields.path, role: "query" },
     pane: { ...fields.pane, role: "pose", url: false },
     query: { ...fields.query, role: "query" },
     sort: { ...fields.sort, role: "query" },
@@ -98,6 +102,8 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = {
     },
   ],
   readings: {
+    family: { kind: "derive", source: "family.draft", retire: "page", deps: ["profile", "captureReceipt"] },
+    document: { kind: "derive", source: "family.document", retire: "target" },
     profile: {
       kind: "use",
       source: "family.profile",

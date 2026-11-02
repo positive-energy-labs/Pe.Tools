@@ -75,6 +75,7 @@ export const receiptControlRpc: ReadEntry<typeof receiptControlInput> = {
 };
 export function opsSources(): Readonly<Record<string, ReadingSource>> {
   return {
+    "ops.operation": { kind: "derive", derive: ({ args, inputs }) => (inputs.catalog?.value as OpsCatalog | undefined)?.operations?.find(op => op.key === args) ?? null },
     "ops.catalog": subscriptionSource({
       request: ({ target }) => ({
         kind: "ops-catalog",

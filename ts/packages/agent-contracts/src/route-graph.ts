@@ -272,6 +272,8 @@ export interface RouteGraph<P = Record<string, unknown>, W = unknown> {
   /** The Situation's sentence about the shareable subject; no reads or effects. */
   subject?: (page: Readonly<P>) => string;
   subjectField: {
+    /** A route-wide catalogue or authored case with one fixed key. Still requires roster/detail. */
+    kind?: "singleton";
     field: keyof P & string;
     noun: string;
     keyKind: import("./route-field.ts").StableKeyKind;
@@ -519,6 +521,13 @@ export function validateRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphRef
       const subject = graph.subjectField;
       if (!subject.noun?.trim() || !["one", "many"].includes(subject.cardinality))
         refuse("invalid-graph", "subjectField", "Subject requires a noun and explicit cardinality");
+      if (subject.kind === "singleton") {
+        const schema = graph.fields[subject.field]?.schema;
+        const definition = schema && unwrapSchema(schema);
+        const entries = definition && (definition as unknown as { entries?: Record<string, string> }).entries;
+        if (subject.cardinality !== "one" || definition?.type !== "enum" || Object.keys(entries ?? {}).length !== 1)
+          refuse("invalid-graph", "subjectField", "A singleton subject requires one fixed named key");
+      }
       const subjects = Object.entries(graph.fields).filter(([, f]) => f.role === "subject");
       if (subjects.length !== 1 || subjects[0]?.[0] !== subject.field)
         refuse("invalid-graph", "subjectField", "Declare exactly one subject field");

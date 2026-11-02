@@ -184,6 +184,7 @@ export function familiesMatrixSource(resources?: Readings): UseSource<FamiliesOb
 const page = (ctx: ReadingContext) => ctx.page as FamiliesPage;
 export function familiesSources(): Readonly<Record<string, ReadingSource>> {
   return {
+    "families.scopes": { kind: "derive", derive: (ctx) => [{ id: "draft", label: "Family draft scope", filter: scopeFilter(ctx) }] },
     "families.matrix": familiesMatrixSource(),
     "families.receipts": subscriptionSource({
       request: () => ({ kind: "receipts" }),

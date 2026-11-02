@@ -74,6 +74,8 @@ export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = {
   },
   needs: "project",
   work: roomsRouteState.schema,
+  // TODO: Migrate layers and selected sets to kernel manyField; preserve K1c selection ownership.
+  subjectField: { field: "view", noun: "view", keyKind: "name", cardinality: "one", roster: "roster", detail: "snapshot", pane: "scope", show: (id) => id },
   fields: {
     threadSearch: { ...fields.threadSearch, role: "query" },
     threadSort: { ...fields.threadSort, role: "query" },
@@ -128,6 +130,7 @@ export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = {
     },
   }),
   readings: {
+    roster: { kind: "use", source: "rooms.roster", retire: "target" },
     snapshot: {
       kind: "use",
       source: "rooms.snapshot",

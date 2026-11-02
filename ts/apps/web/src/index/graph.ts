@@ -1,6 +1,9 @@
 import { type RouteGraph, pane } from "@pe/agent-contracts";
+import { z } from "zod";
+import { field } from "../../../../packages/agent-contracts/src/route-field";
 export const indexGraph: RouteGraph = {
 key: "index", address: "home", name: "Tools",
+seeds: { main: { title: "Tool directory", load: async () => ({ readings: { catalog: { id: "builtin", label: "Tool directory" } } }) } },
 directory: {
   "path": "/",
   "title": "Tools",
@@ -23,5 +26,7 @@ directory: {
     "tray": false
   }
 },
-fields: {}, readings: {}, verbs: {}, panes: { main: {label: "Tools", purpose: "Tools and saved work", draws: [], verbs: []}}, layout: pane("main"), stages: { main: {word: "Tools", panes: ["main"], verbs: []}}
+  // TODO: Mount this directory manifest on home; K1c must declare its kernel selection.
+  subjectField: { kind: "singleton", field: "catalog", noun: "tool directory", keyKind: "name", cardinality: "one", roster: "catalog", detail: "catalog", pane: "main", show: (id) => id },
+fields: { catalog: { ...field(z.enum(["builtin"]).default("builtin"), {}), role: "subject" } }, readings: { catalog: { kind: "derive", source: "catalog", retire: "never" } }, verbs: {}, panes: { main: {label: "Tools", purpose: "Tools and saved work", draws: ["catalog"], verbs: []}}, layout: pane("main"), stages: { main: {word: "Tools", panes: ["main"], verbs: []}}
 };

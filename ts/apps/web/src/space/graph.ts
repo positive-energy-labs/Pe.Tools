@@ -120,6 +120,8 @@ export const spaceGraph: RouteGraph<SpacePage, null> = {
     },
   },
   needs: "document",
+  // TODO: Migrate capture inputs, visibility sets and layers off hand array codecs; preserve region subject.
+  subjectField: { field: "region", noun: "region", keyKind: "name", cardinality: "one", roster: "region", detail: "scene", pane: "picture", show: (id) => id },
   fields: {
     threadSearch: { ...threadListFields.threadSearch, role: "pose" },
     threadSort: { ...threadListFields.threadSort, role: "pose" },
@@ -141,6 +143,7 @@ export const spaceGraph: RouteGraph<SpacePage, null> = {
     sweepInput: { ...fields.sweepInput, role: "pose" },
   },
   readings: {
+    region: { kind: "derive", source: "space.region", retire: "page", args: (page) => page.region },
     scene: {
       kind: "use",
       source: "space.scene",

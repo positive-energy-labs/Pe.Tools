@@ -43,6 +43,7 @@ export const opsGraph: RouteGraph<OpsPage> = {
   address: "ops",
   name: "Ops",
   optionalTarget: "session",
+  subjectField: { field: "op", noun: "operation", keyKind: "name", cardinality: "one", roster: "catalog", detail: "operation", pane: "operation", show: (id) => id },
   fields: {
     op: { ...opsAddress.fields.op, role: "subject", agent: false },
     actionId: { ...opsAddress.fields.actionId, role: "selection", agent: false },
@@ -68,6 +69,7 @@ export const opsGraph: RouteGraph<OpsPage> = {
     },
   }),
   readings: {
+    operation: { kind: "derive", source: "ops.operation", retire: "page", deps: ["catalog"], args: (page) => page.op },
     catalog: { kind: "use", source: "ops.catalog", retire: "target" },
     receipt: { kind: "use", source: "ops.receipt", retire: "page", args: (page) => page.actionId },
     receipts: { kind: "use", source: "ops.receipts", retire: "never" },

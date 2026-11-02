@@ -23,6 +23,6 @@ export const spaceSeeds = {
         ]),
       ),
     },
-    readings: { scene: loadedScene("f".repeat(64), FIXTURE_SCENE), answers: FIXTURE_ANSWERS },
+    readings: { region: (page: { region: unknown }) => page.region ? [{ id: JSON.stringify(page.region), region: page.region }] : [], scene: loadedScene("f".repeat(64), FIXTURE_SCENE), answers: FIXTURE_ANSWERS },
   },
 };

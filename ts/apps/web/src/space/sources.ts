@@ -26,6 +26,7 @@ export function matchingScene(page: SpacePage, read: ReadingState): LoadedSpaceS
 }
 
 export const spaceSources: Readonly<Record<string, ReadingSource>> = {
+  "space.region": { kind: "derive", derive: ({ args }) => args === null ? [] : [{ id: JSON.stringify(args), region: args }] },
   "space.scene": {
     kind: "use",
     open(ctx, deliver) {

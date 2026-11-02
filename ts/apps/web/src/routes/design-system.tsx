@@ -10,7 +10,7 @@ import { ThesisSpecimen } from "#/design-system/specimens/thesis";
 
 const RouteShelledDesignSystem = mountRoute(designSystemGraph, {
   initialPage: {},
-  sources: {},
+  sources: { catalog: { kind: "derive", derive: () => ({ id: "builtin", laws: LAW_POINTERS }) } },
   bodies: { main: () => <DesignSystem /> },
   furniture: {
     main: () => ({

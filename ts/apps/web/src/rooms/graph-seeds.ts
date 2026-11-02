@@ -5,7 +5,7 @@ export const roomsSeeds = {
     title: "Room plan",
     page: { view: DEMO_VIEW },
     work: roomsRouteState.schema.parse({}),
-    readings: { snapshot: DEMO_ROOMS, trace: DEMO_TRACE, plan: { plan: DEMO_PLAN }, receipts: [] },
+    readings: { roster: { levels: DEMO_ROOMS.levels }, snapshot: DEMO_ROOMS, trace: DEMO_TRACE, plan: { plan: DEMO_PLAN }, receipts: [] },
     queries: { "rooms.refresh": DEMO_ROOMS },
   },
 };

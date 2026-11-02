@@ -1,3 +1,4 @@
+import { SETTINGS_SECTIONS } from "../../../../packages/agent-contracts/src/routes/settings";
 import type { Machine, Reading } from "@pe/agent-contracts";
 import { subscriptionSource } from "#/shell/readings-use";
 import type { ReadingSource } from "#/shell/readings";
@@ -8,6 +9,7 @@ const live = subscriptionSource({
   decode: (value) => value as Machine,
 });
 export const settingsSources: Readonly<Record<string, ReadingSource>> = {
+  "settings.scopes": { kind: "derive", derive: () => SETTINGS_SECTIONS.map(id => ({ id, label: id })) },
   "settings.machine": {
     kind: "use",
     open(context, deliver) {

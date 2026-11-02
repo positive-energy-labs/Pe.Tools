@@ -1,8 +1,9 @@
 import { pane, split, type RouteGraph } from "@pe/agent-contracts";
-import type { z } from "zod";
+import { z } from "zod";
+import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { ductLossAddress } from "../../../../packages/agent-contracts/src/routes/duct-loss";
 
-export type DuctLossPage = {
+export type DuctLossPage = { case: "duct" } & {
   [K in keyof typeof ductLossAddress.fields]: z.output<
     (typeof ductLossAddress.fields)[K]["schema"]
   >;
@@ -38,8 +39,11 @@ export const ductLossGraph: RouteGraph<DuctLossPage, null> = {
   key: "duct-loss",
   address: "duct-loss",
   name: "Duct Loss",
+  // TODO: K1c must declare the kernel selection within this hypothetical case.
+  subjectField: { kind: "singleton", field: "case", noun: "hypothetical duct case", keyKind: "name", cardinality: "one", roster: "case", detail: "result", pane: "inputs", show: (id) => id },
   fields: {
-    shape: { ...fields.shape, role: "subject" },
+    case: { ...field(z.enum(["duct"]).default("duct"), {}), role: "subject" },
+    shape: { ...fields.shape, role: "query" },
     a: { ...fields.a, role: "query" },
     b: { ...fields.b, role: "query" },
     cfm: { ...fields.cfm, role: "query" },
@@ -49,6 +53,7 @@ export const ductLossGraph: RouteGraph<DuctLossPage, null> = {
     face: { ...fields.face, role: "pose" },
   },
   readings: {
+    case: { kind: "derive", source: "duct-loss.case", retire: "page" },
     result: {
       kind: "derive",
       source: "duct-loss.solve",

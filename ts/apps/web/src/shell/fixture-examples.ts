@@ -170,7 +170,7 @@ option(
 export const routeExamples = {
   captures: { readings: { captures }, queries: { "captures.list": captures } },
   "data-tables": { readings: { tables }, work: { draft: null } },
-  "design-system": { readings: {} },
+  "design-system": { readings: { catalog: { id: "builtin", label: "Design language" } } },
   "duct-loss": {
     page: {
       shape: "round" as const,
@@ -181,7 +181,7 @@ export const routeExamples = {
       roughness: 0.0003,
       density: 0.075,
     },
-    readings: { result: (page: DuctInput) => solve(page) },
+    readings: { case: [{ id: "duct", label: "Hypothetical duct case" }], result: (page: DuctInput) => solve(page) },
   },
   grilles: {
     page: { project: "Clinic lobby floor grilles" },
@@ -190,7 +190,7 @@ export const routeExamples = {
   ops: {
     target: { kind: "document" as const, ref: { session: "fixture", openId: "clinic" } },
     page: { op: "revit.context.document-session" },
-    readings: { catalog: { operations: hostOpCatalog }, receipt: [], receipts: [] },
+    readings: { operation: (page: { op: string }) => hostOpCatalog.find(op => op.key === page.op) ?? null, catalog: { operations: hostOpCatalog }, receipt: [], receipts: [] },
     queries: {
       "ops.read": {
         kind: "value",

@@ -78,6 +78,8 @@ function receiptSource(key: string): UseSource {
 
 export function familySources(): Readonly<Record<string, ReadingSource>> {
   return {
+    "family.draft": { kind: "derive", derive: ({ target, work, inputs }) => ({ target, draft: work, profile: inputs.profile?.value, captured: inputs.captureReceipt?.value }) },
+    "family.document": { kind: "derive", derive: ({ target }) => target.kind === "document" ? [{ id: "current", document: target.ref }] : [] },
     "family.profile": {
       kind: "use",
       dirties: ["pods"],

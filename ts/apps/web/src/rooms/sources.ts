@@ -76,6 +76,7 @@ export function planOf(response: RevitContextViewImage.Res.Response): Exclude<Pl
 
 export function roomsSources(): Readonly<Record<string, ReadingSource>> {
   return {
+    "rooms.roster": opSource({ key: "rooms.roster", request: ({ target }) => target.kind === "document" ? {} : null, absent: null }),
     "rooms.snapshot": roomsSnapshotSource(),
     "rooms.trace": {
       kind: "use",

@@ -44,7 +44,7 @@ const draft = z
   })
   .nullable()
   .default(null);
-export const familiesPageSchema = routeAddress("families").schema.extend({ draft });
+export const familiesPageSchema = routeAddress("families").schema.extend({ draft, scope: z.enum(["draft"]).default("draft") });
 export type FamiliesPage = z.output<typeof familiesPageSchema>;
 const source = z.object({ pod: z.string(), path: z.string(), sha256: z.string() }).optional();
 const refusal = z.string().nullable().default(null);
@@ -86,12 +86,15 @@ export const familiesGraph: RouteGraph<FamiliesPage, FamiliesRouteDocument> = {
   name: "Families",
   needs: "project",
   work: familiesRouteState.schema,
+  // TODO: Migrate ordered sort state and hidden-column sets off hand array codecs; K1c consolidates lines/past.
+  subjectField: { kind: "singleton", field: "scope", noun: "family draft scope", keyKind: "name", cardinality: "one", roster: "scopes", detail: "matrix", pane: "scope", show: (id) => id },
   fields: {
+    scope: { ...field(familiesPageSchema.shape.scope, {}), role: "subject" },
     threadSearch: { ...fields.threadSearch, role: "query" },
     threadSort: { ...fields.threadSort, role: "query" },
     stage: { ...fields.stage, role: "stage" },
-    pod: { ...fields.pod, role: "subject" },
-    path: { ...fields.path, role: "subject" },
+    pod: { ...fields.pod, role: "query" },
+    path: { ...fields.path, role: "query" },
     pane: { ...fields.pane, role: "pose", url: false },
     query: { ...fields.query, role: "query" },
     sort: { ...fields.sort, role: "query" },
@@ -184,6 +187,7 @@ export const familiesGraph: RouteGraph<FamiliesPage, FamiliesRouteDocument> = {
     },
   ],
   readings: {
+    scopes: { kind: "derive", source: "families.scopes", retire: "page", args: (page) => page.draft },
     matrix: {
       kind: "use",
       source: "families.matrix",

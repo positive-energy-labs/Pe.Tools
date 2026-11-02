@@ -218,6 +218,7 @@ function Charts(body: Body) {
 
 const adapters: RouteAdapters<DuctLossPage, null> = {
   sources: {
+    "duct-loss.case": { kind: "derive", derive: () => [{ id: "duct", label: "Hypothetical duct case" }] },
     "duct-loss.solve": { kind: "derive", derive: ({ args }) => solve(pageSchema.parse(args)) },
   },
   bodies: { wheel: Wheel, inputs: Inputs, charts: Charts },

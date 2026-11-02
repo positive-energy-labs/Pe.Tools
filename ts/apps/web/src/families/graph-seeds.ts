@@ -24,7 +24,7 @@ const reading = {
 };
 const seed: GraphSeedData<FamiliesPage, FamiliesRouteDocument> = {
   work: familiesRouteState.schema.parse({ scope: { edit: { value: filter } } }),
-  readings: {
+  readings: { scopes: [{ id: "draft", label: "Family draft scope" }],
     matrix: reading,
     categories: filter.categoryNames,
     catalog: DEMO_FAMILIES,

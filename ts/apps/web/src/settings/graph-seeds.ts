@@ -4,7 +4,7 @@ export const settingsSeeds = Object.fromEntries(
     name,
     {
       title: seed.title,
-      readings: {
+      readings: { scopes: ["revit", "update", "share", "pea", "host", "notices", "appearance"].map(id => ({ id, label: id })),
         machine: {
           reading: { state: "ready", observation: seed.readings.machine },
           fixture: true,
