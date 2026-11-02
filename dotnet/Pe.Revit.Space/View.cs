@@ -152,7 +152,8 @@ public static class SpaceView {
         foreach (var p in touched)
             foreach (var row in p.Prims) {
                 candidates++;
-                if (!filter.Wants(row)) {
+                // Chadds CAD native bounds meet the reach while some emitted rows lie far below it.
+                if (!filter.Wants(row) || !row.Box.Overlaps(scope)) {
                     skipped++;
                     continue;
                 }
