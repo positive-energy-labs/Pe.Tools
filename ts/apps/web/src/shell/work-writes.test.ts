@@ -226,5 +226,14 @@ test("sequential human edits wait for the acknowledged revision of the same Work
   expect((await first).ok).toBe(true);
   expect((await second).ok).toBe(true);
   expect(port.mock.calls.map(([, request]) => request.expectedRevision)).toEqual([0, 1]);
+  // A query observed r0: it may not overwrite either acknowledged human edit.
+  const query = { kind: "apply" as const, press: "query", expectedRevision: 0,
+    patches: [{ path: ["query"], value: "old observation" }] };
+  await held.writer.write(scope, query, port);
+  expect(port.mock.calls.at(-1)![1].expectedRevision).toBe(0);
+  // A foreign acknowledgement is not our sequential human intent.
+  held.writer.accept({ ...query, key, by: "pea", base: 2, revision: 3, inverse: [], undoable: true });
+  await edit("after-foreign");
+  expect(port.mock.calls.at(-1)![1].expectedRevision).toBe(2);
   held.release();
 });

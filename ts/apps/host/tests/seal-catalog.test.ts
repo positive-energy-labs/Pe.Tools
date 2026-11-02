@@ -150,3 +150,8 @@ test("captured families preparation produces a lossless preview response", async
     derivedRequest: expect.any(Array),
   });
 });
+
+test("captured successful families preview response round-trips without losing its seal", async () => {
+  const { default: captured } = await import("./fixtures/families-live-preview-20261102.json");
+  expect(commands["families.apply"].result.parse(captured.response)).toEqual(captured.response);
+});

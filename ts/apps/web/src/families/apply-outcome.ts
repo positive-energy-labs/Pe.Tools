@@ -1,8 +1,9 @@
 /** Presentation of the single semantic Families Apply result. */
-import { familyApplyResultSchema, type ActionReceipt } from "@pe/agent-contracts";
+import { familyApplyResultSchema, writePreviewSchema, type ActionReceipt } from "@pe/agent-contracts";
 import { refuse, type Refusal } from "#/route/refusal";
 
 export const applyResults = (result: unknown) => {
+  if (writePreviewSchema.safeParse(result).success) return [];
   const parsed = familyApplyResultSchema.parse(result);
   return "results" in parsed ? parsed.results : [parsed];
 };

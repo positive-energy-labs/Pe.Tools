@@ -183,7 +183,7 @@ export function useFamiliesStore(owner: FamiliesMount) {
     ),
   );
   const applied = receipts
-    .filter((row) => row.key === "families.apply" && row.state === "succeeded")
+    .filter((row) => row.key === "families.apply" && row.state === "succeeded" && row.input.previewOnly !== true)
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
   const results = applied?.state === "succeeded" ? applyResults(applied.result) : [];
   const ffReceipts = results.flatMap((result) => result.native.receipts);

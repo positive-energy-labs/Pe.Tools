@@ -69,3 +69,10 @@ test("an uncertain command never presents its one completed native step as a com
     message: expect.stringContaining("effects unproven"),
   });
 });
+
+test("a captured preview is review evidence, not a native apply outcome", async () => {
+  const { default: captured } = await import("../../../host/tests/fixtures/families-live-preview-20261102.json");
+  expect(applyTally(row(captured.response))).toEqual({
+    families: 0, converged: 0, residue: 0, failed: 0, artifact: null,
+  });
+});
