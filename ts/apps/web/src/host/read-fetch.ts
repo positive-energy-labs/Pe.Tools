@@ -1,4 +1,5 @@
-/** One GET in flight per request identity. Each caller owns cancellation and its response body. */
+/** One GET in flight per request identity. Each caller owns its wait and response body.
+ * Aborting HTTP does not cancel host work or an already queued Revit operation. */
 export function createReadFetch(fetcher: typeof fetch) {
   const flights = new Map<
     string,
