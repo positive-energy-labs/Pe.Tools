@@ -65,6 +65,8 @@ beforeAll(async () => {
   hostUrl = `http://127.0.0.1:${service.port}`;
   browserVite = await createViteServer({
     root: webRoot,
+    // Keep the embedded SSR config in one module graph under Vitest (bundling produced HTTP 500).
+    configLoader: "runner",
     configFile: join(webRoot, "vite.config.ts"),
     server: {
       host: "127.0.0.1",

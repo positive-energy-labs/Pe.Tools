@@ -8,7 +8,6 @@ import {
   manyField,
   manyCodec,
   setKeys,
-  text,
   type RouteDeclaration,
 } from "../route-field.ts";
 

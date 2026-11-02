@@ -185,7 +185,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
       },
       "resume": "document"
     },
-    "moduleHash": "1c839aec8bf2c6ee816f6018ae0c08c3bbd16b52bf4931d297cca67f6e7b0289"
+    "moduleHash": "8025d66f135fe5d27163de9a9eaca4652593d224cbfde48e184925b8e9be3962"
   },
   {
     "key": "families",

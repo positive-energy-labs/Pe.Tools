@@ -681,26 +681,6 @@
       "share": true,
       "url": "push"
     },
-    "level": {
-      "agent": "set",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "query",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": "",
-        "maxLength": 200,
-        "type": "string"
-      },
-      "share": true,
-      "url": "push"
-    },
     "picture": {
       "agent": "set",
       "codec": {
@@ -1596,7 +1576,7 @@
     "size": 420,
     "sized": "start"
   },
-  "moduleHash": "1c839aec8bf2c6ee816f6018ae0c08c3bbd16b52bf4931d297cca67f6e7b0289",
+  "moduleHash": "8025d66f135fe5d27163de9a9eaca4652593d224cbfde48e184925b8e9be3962",
   "name": "Ducts",
   "needs": "project",
   "panes": {

@@ -82,7 +82,6 @@ internal static class PeRoutes {
             public const string ContextRadiusFt = "contextRadiusFt";
             public const string SceneView = "sceneView";
             public const string System = "system";
-            public const string Level = "level";
             public const string Selected = "selected";
             public const string SystemSearch = "systemSearch";
             public const string SystemSort = "systemSort";
@@ -150,7 +149,6 @@ internal static class PeRoutes {
             public const string ContextRadiusFt = "contextRadiusFt";
             public const string SceneView = "sceneView";
             public const string System = "system";
-            public const string Level = "level";
             public const string Selected = "selected";
             public const string SystemSearch = "systemSearch";
             public const string SystemSort = "systemSort";
