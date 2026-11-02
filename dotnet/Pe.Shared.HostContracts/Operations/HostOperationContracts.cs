@@ -86,6 +86,9 @@ public sealed record HostOperationDefinition(
     string Key,
     Type RequestType,
     Type ResponseType,
+    OpSubject Subject,
+    OpTouches Touches,
+    OpEffect Effect,
     bool IsPublic = true,
     string? DisplayName = null,
     HostOperationAgentMetadata? Metadata = null,
@@ -93,9 +96,6 @@ public sealed record HostOperationDefinition(
     OpActor Actor = OpActor.Any,
     bool UsesTransactions = false,
     Type? ArtifactMetadataType = null,
-    OpSubject Subject = OpSubject.None,
-    OpTouches Touches = OpTouches.Metadata,
-    OpEffect Effect = OpEffect.Read,
     OpCardinality Cardinality = OpCardinality.One,
     bool Internal = false,
     bool RollsBack = false
@@ -110,12 +110,18 @@ public sealed record HostOperationDefinition(
 
     public static HostOperationDefinition Create<TRequest, TResponse>(
         string key,
+        OpSubject subject,
+        OpTouches touches,
+        OpEffect effect,
         string? displayName = null,
         HostOperationAgentMetadata? metadata = null
     ) => new(
         key,
         typeof(TRequest),
         typeof(TResponse),
+        subject,
+        touches,
+        effect,
         true,
         displayName,
         metadata
@@ -123,12 +129,18 @@ public sealed record HostOperationDefinition(
 
     public static HostOperationDefinition CreateInternal<TRequest, TResponse>(
         string key,
+        OpSubject subject,
+        OpTouches touches,
+        OpEffect effect,
         string? displayName = null,
         HostOperationAgentMetadata? metadata = null
     ) => new(
         key,
         typeof(TRequest),
         typeof(TResponse),
+        subject,
+        touches,
+        effect,
         false,
         displayName,
         metadata

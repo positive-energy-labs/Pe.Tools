@@ -328,6 +328,7 @@ public static class OpRegistry {
             attribute.Key,
             requestType,
             responseType,
+            attribute.Subject, attribute.Touches, attribute.Effect,
             attribute.IsPublic,
             attribute.Title,
             metadata,
@@ -335,7 +336,7 @@ public static class OpRegistry {
             attribute.Actor,
             attribute.UsesTransactions || attribute.Intent == OpIntent.Mutate,
             attribute.ArtifactMetadata,
-            attribute.Subject, attribute.Touches, attribute.Effect, attribute.Cardinality,
+            attribute.Cardinality,
             attribute.Internal, attribute.RollsBack
         );
         Validate(definition);
