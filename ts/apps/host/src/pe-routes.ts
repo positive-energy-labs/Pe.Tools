@@ -1118,7 +1118,17 @@ export function makeHostPeRoutes(
     () => threads.receiptSnapshot(),
     (threadId) => routes.completedWork(threadId),
   );
+  const routeSettings = createRouteSettings(productRouteSettingsPath());
   const threads = createHarnessThreads({
+    // An unreadable settings file asks a person: unknown consent never applies by itself.
+    autoApprove: () => {
+      try {
+        return routeSettings.read("chat").values["autoApprove"] !== false;
+      } catch (error) {
+        console.warn(`Pea auto-approve unreadable; writes ask a person: ${String(error)}`);
+        return false;
+      }
+    },
     prepare: () => content.read(),
     providers,
     updatePending: update.automaticPending,
@@ -1218,6 +1228,7 @@ export function makeHostPeRoutes(
     machine,
   );
   const routes = createPeRoutes({
+    routeSettings,
     workspace: hostWork?.workspace,
     registrations,
     ductsSheets: { call: sheetNativeRead(hostBaseUrl) },

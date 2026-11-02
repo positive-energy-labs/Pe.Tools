@@ -38,7 +38,6 @@ import {
   type NewSessionResponse,
   type PromptResponse,
   type RequestPermissionRequest,
-  type RequestPermissionResponse,
   type SessionConfigOption,
   type SetSessionConfigOptionRequest,
 } from "@agentclientprotocol/sdk";
@@ -161,7 +160,6 @@ type Thread = {
   steers: number;
   /** Prompt ids admitted but not yet logged: a concurrent retry of one is refused, never doubled. */
   admitting: Set<string>;
-  pending: Map<string, Pending<RequestPermissionResponse>>;
   questions: Map<string, Pending<CreateElicitationResponse>>;
   listeners: Set<(event: HarnessEvent) => void>;
   /** The turn marker's clock: re-armed by every session update, cleared at turn end. */
@@ -195,8 +193,10 @@ export type HarnessThreadsOptions = {
   };
   /** The Pea kernel for a harness that does not read MCP instructions (Codex); read per spawn. */
   developerInstructions?: () => Promise<string>;
-  /** Providers: the child's auth env, the access setting, and the keys a record never keeps. */
+  /** Providers: the child's auth env and the keys a record never keeps. */
   providers: Providers;
+  /** Pea's auto-approve setting (route `chat`): on, a thread's first write applies at its deadline. */
+  autoApprove?: () => boolean;
   /** Automatic update admission excludes new harness work through installer handoff. */
   updatePending?: () => boolean;
   /** Admission/import and skill publication must settle before either harness starts. */
@@ -395,6 +395,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       if (t) append(t, event);
     },
     (ref) => options.observeDocument?.({ kind: "open", ref })?.name,
+    options.autoApprove,
   );
   bindControl({ runs });
   /** Synchronization only. Observations and pins are always reconstructed from thread events. */
@@ -461,7 +462,6 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       queue: [],
       steers: 0,
       admitting: new Set(),
-      pending: new Map(),
       questions: new Map(),
       listeners: new Set(),
       waiting: null,
@@ -978,29 +978,6 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     },
   };
 
-  function resolvePermission(
-    t: Thread,
-    requestId: string,
-    optionId: string | null,
-    by: "user" | "cancel" | "expired",
-  ) {
-    const pending = t.pending.get(requestId);
-    if (!pending) return false;
-    t.pending.delete(requestId);
-    const turnId = pending.turnId;
-    append(
-      t,
-      by === "user" && optionId
-        ? { kind: "permission_resolved", turnId, requestId, by, optionId }
-        : { kind: "permission_resolved", turnId, requestId, by: by === "user" ? "cancel" : by },
-    );
-    pending.resolve({
-      outcome: optionId ? { outcome: "selected", optionId } : { outcome: "cancelled" },
-    });
-    scheduleIdle(t);
-    return true;
-  }
-
   function resolveQuestion(
     t: Thread,
     requestId: string,
@@ -1028,7 +1005,6 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
 
   /** Every ask the turn left open ends with the turn. */
   function settleAsks(t: Thread, by: "cancel" | "expired") {
-    for (const requestId of t.pending.keys()) resolvePermission(t, requestId, null, by);
     for (const requestId of t.questions.keys()) resolveQuestion(t, requestId, null, by);
   }
 
@@ -1069,67 +1045,36 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         }
         scheduleIdle(t);
       },
-      requestPermission: (request: RequestPermissionRequest) =>
-        new Promise<RequestPermissionResponse>((resolve) => {
-          if (t.child !== child || t.stopped) return resolve({ outcome: { outcome: "cancelled" } });
-          clearIdle(t);
-          // Only classified reads and Pea's own MCP tools use native approval. Pea's tools cross
-          // the journal themselves (pe_do runs host commands under run consent), and the Claude
-          // ACP adapter reports every MCP tool as kind "other", so 2aecd374's kind-only allowlist
-          // refused every Revit read (2026-10-27 demo thread 06eb2ab8). Other missing and unknown
-          // effects have no immutable host command or footprint and cannot bypass the journal.
-          const peaTool = /^mcp__pea__/.test(request.toolCall.title ?? "");
-          if (
-            !peaTool &&
-            !["read", "search", "fetch", "think"].includes(request.toolCall.kind ?? "")
-          ) {
-            const reason =
-              "Native unjournaled writes are unsupported. Only read, search, fetch, think and Pea's own tools use this door; use Pea host semantic or causal CLI commands.";
-            append(t, {
-              kind: "update",
-              turnId: t.running,
-              update: {
-                sessionUpdate: "tool_call_update",
-                toolCallId: request.toolCall.toolCallId,
-                status: "failed",
-                title: reason,
-              },
-            });
-            const reject =
-              request.options.find((option) => option.kind === "reject_once") ??
-              request.options.find((option) => option.kind.startsWith("reject"));
-            return resolve({
-              outcome: reject
-                ? { outcome: "selected", optionId: reject.optionId }
-                : { outcome: "cancelled" },
-            });
-          }
-          // Unguarded access (`access.json`, the Agent approvals switch) answers the native ask
-          // itself. Consequential writes still cross the journal and the turn's run consent. No
-          // permission event is journaled: no card was shown, and `permission_resolved`'s `by`
-          // values all mean something else (a user, a run-consent deadline, a cancel).
-          if (!options.providers.access().guarded) {
-            const allow =
-              request.options.find((option) => option.kind === "allow_always") ??
-              request.options.find((option) => option.kind.startsWith("allow"));
-            if (allow)
-              return resolve({ outcome: { outcome: "selected", optionId: allow.optionId } });
-          }
-          const requestId = randomUUID();
-          const turnId = t.running;
+      // No per-call card (ADR 0027 rule 11). Reads, search, fetch, think and Pea's own MCP tools are
+      // answered here: Pea's tools cross the journal themselves (pe_do runs host commands under run
+      // consent), and the Claude ACP adapter reports every MCP tool as kind "other", so the title
+      // names them (2026-10-27 demo thread 06eb2ab8). Every other kind has no host command or
+      // footprint and would bypass the journal: refused.
+      requestPermission: async (request: RequestPermissionRequest) => {
+        if (t.child !== child || t.stopped) return { outcome: { outcome: "cancelled" } };
+        const allowed =
+          /^mcp__pea__/.test(request.toolCall.title ?? "") ||
+          ["read", "search", "fetch", "think"].includes(request.toolCall.kind ?? "");
+        const pick = (prefix: "allow" | "reject") =>
+          request.options.find((option) => option.kind === `${prefix}_once`) ??
+          request.options.find((option) => option.kind.startsWith(prefix));
+        if (!allowed)
           append(t, {
-            kind: "permission_request",
-            turnId,
-            requestId,
-            toolCall: { ...request.toolCall, title: request.toolCall.title ?? undefined },
-            options: request.options.map(({ optionId, name, kind }) => ({
-              optionId,
-              name,
-              kind,
-            })),
+            kind: "update",
+            turnId: t.running,
+            update: {
+              sessionUpdate: "tool_call_update",
+              toolCallId: request.toolCall.toolCallId,
+              status: "failed",
+              title:
+                "Native unjournaled writes are unsupported. Only read, search, fetch, think and Pea's own tools use this door; use Pea host semantic or causal CLI commands.",
+            },
           });
-          t.pending.set(requestId, { turnId, resolve });
-        }),
+        const option = pick(allowed ? "allow" : "reject");
+        return option
+          ? { outcome: { outcome: "selected", optionId: option.optionId } }
+          : { outcome: { outcome: "cancelled" } };
+      },
       // A form is the question card. A URL elicitation (MCP OAuth) has no place in Pea: declined.
       createElicitation: (request: CreateElicitationRequest) =>
         new Promise<CreateElicitationResponse>((resolve) => {
@@ -1258,8 +1203,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     for (const [id, value] of Object.entries(wantTraits))
       if (t.meta.traits.find((trait) => trait.id === id)?.current !== value)
         await setTrait(t, live, id, value).catch(notReapplied(`${id} ${String(value)}`));
-    // Product writes cross the journal whatever the access preference; unguarded access only
-    // answers the harness's per-call ask (requestPermission), never this mode.
+    // Product writes cross the journal; requestPermission answers only reads and Pea's tools.
     const offered = new Set(session.modes?.availableModes.map((m) => m.id));
     const required = harness === "codex" ? ["read-only"] : ["default"];
     const mode = required.find((candidate) => offered.has(candidate));
@@ -1319,14 +1263,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
   }
 
   const canIdle = (t: Thread) =>
-    t.child &&
-    t.live &&
-    !t.stopped &&
-    !t.busy &&
-    !t.running &&
-    !t.retiring &&
-    !t.pending.size &&
-    !t.questions.size;
+    t.child && t.live && !t.stopped && !t.busy && !t.running && !t.retiring && !t.questions.size;
 
   /** Detach the child, then stop it: a new use waits for retirement, old callbacks own no thread. */
   function retire(t: Thread) {
@@ -1462,7 +1399,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     const fire = () => {
       const turnId = t.running;
       if (!turnId || t.stopped) return void (t.waiting = null);
-      if (t.pending.size === 0 && t.questions.size === 0)
+      if (t.asks.size === 0)
         append(t, { kind: "waiting", turnId, sinceMs: Date.now() - t.lastUpdateAt });
       t.waiting = setTimeout(fire, WAITING_MS);
     };
@@ -1569,7 +1506,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       });
       outcome = result.stopReason;
     } catch (error) {
-      runs.close(runRef, "stopped");
+      runs.close(runRef, t.stopped ? "stopped" : "failed");
       // A stopped thread's open turn is ended by restart recovery, not by "connection closed".
       if (!t.stopped) {
         const expired = isAuthRefusal(error) ? options.providers.expire(t.meta.providerId) : null;
@@ -1592,7 +1529,11 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     await options
       .pluginHook?.("turn.after", { threadId: t.meta.id, turnId, outcome })
       .catch((error) => warn(`turn.after failed after the run closed: ${String(error)}`));
-    runs.close(runRef, outcome === "cancelled" || outcome === "failed" ? "stopped" : "completed");
+    // Only a Stop closes the thread's consent window; a failed turn keeps it.
+    runs.close(
+      runRef,
+      outcome === "cancelled" ? "stopped" : outcome === "failed" ? "failed" : "completed",
+    );
     t.running = null;
     await retire(t);
     drain(t);
@@ -2031,15 +1972,13 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       case "thread.cancel":
         return json({ cancelled: await cancel(t, caller, url.pathname) });
       case "thread.permission": {
-        requireHuman(caller, url.pathname, "answering a harness approval");
+        requireHuman(caller, url.pathname, "answering a run consent");
         const { requestId, optionId } = await input(permissionResponseSchema);
         const recorded = t.events.findLast(
           (event) => event.kind === "permission_resolved" && event.requestId === requestId,
         );
         if (recorded) return json({ ok: true, decision: recorded });
-        const accepted =
-          runs.decide(t.meta.id, requestId, optionId) ||
-          resolvePermission(t, requestId, optionId, "user");
+        const accepted = runs.decide(t.meta.id, requestId, optionId);
         const decision = t.events.findLast(
           (event) => event.kind === "permission_resolved" && event.requestId === requestId,
         );

@@ -349,7 +349,6 @@ const base = (over: Partial<Machine> = {}): Machine => ({
       probedAt: null,
     },
   ],
-  access: { guarded: true },
   legs: {
     sessions: read,
     attachments: read,

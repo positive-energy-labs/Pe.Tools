@@ -16,7 +16,7 @@ test("Pea reads the product Family graph, exact Work schema, cells and recovery 
   expect(projected.verbs.saved).toMatchObject({ does: "family.saved", kind: "query" });
   expect(projected.verbs["work.start-fresh"]).toMatchObject({
     kind: "recovery",
-    review: "required",
+    review: "shown",
   });
   expect(projected.cells).toHaveLength(1);
   expect(projected.workSubject).toBeUndefined();

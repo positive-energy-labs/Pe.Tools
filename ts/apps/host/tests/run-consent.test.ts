@@ -78,7 +78,7 @@ test("the first command names every effect; other documents share the original d
   const asks = events.filter((event) => event.kind === "permission_request");
   expect(asks).toHaveLength(1);
   expect(asks[0]!.toolCall.title).toBe(
-    "First write: document Office.rvt (revit-1/doc-1), session revit-1, member tools/settings/design.json, directory C:/installation, publication page:@pages/report. Then all writes for this turn.",
+    "First write: document Office.rvt (revit-1/doc-1), session revit-1, member tools/settings/design.json, directory C:/installation, publication page:@pages/report. Then all writes in this thread until Stop.",
   );
   runs.decide(run.thread, asks[0]!.requestId, "allow_now");
   expect(await first).toEqual(await second);
@@ -141,9 +141,15 @@ test("normal completion closes new admission, preserves authorized continuation,
   runs.close(one, "completed");
   expect(() => runs.checkpoint(origin(one), consent)).not.toThrow();
   await expect(runs.authorize(origin(one), "late", footprint)).rejects.toThrow("run.closed");
+  // Per thread: the next turn of this thread carries the decision; another thread waits.
   runs.open(two);
-  const waiting = runs.authorize(origin(two), "waiting", footprint);
-  runs.close(two, "completed");
+  await expect(runs.authorize(origin(two), "carried", footprint)).resolves.toMatchObject({
+    decision: (consent as { decision: unknown }).decision,
+  });
+  const three = ref("three", "elsewhere");
+  runs.open(three);
+  const waiting = runs.authorize(origin(three), "waiting", footprint);
+  runs.close(three, "completed");
   await expect(waiting).rejects.toThrow("consent.stopped");
   expect(() => new RunConsents(() => {}).checkpoint(origin(one), consent)).toThrow("run.closed");
   runs.closeAll();
@@ -173,5 +179,54 @@ test("an unscoped process cannot acquire the next run and native presses need no
     ),
   ).toEqual({ by: "press" });
   expect(events.filter((e) => e.kind === "permission_request")).toHaveLength(0);
+  runs.closeAll();
+});
+
+test("consent lasts per thread until Stop; a failed turn keeps it; auto-approve off waits for a person", async () => {
+  vi.useFakeTimers();
+  const events: ConsentEvent[] = [];
+  let auto = true;
+  const runs = new RunConsents(
+    (_, e) => events.push(e),
+    undefined,
+    () => auto,
+  );
+  const asks = () => events.filter((e) => e.kind === "permission_request");
+  const one = ref("1");
+  runs.open(one);
+  const first = runs.authorize(origin(one), "a", footprint);
+  await vi.advanceTimersByTimeAsync(WRITE_COUNTDOWN_MS);
+  const allowed = await first;
+  runs.close(one, "completed");
+  // A later turn of the same thread reuses the decision: no second ask.
+  const two = ref("2");
+  runs.open(two);
+  expect(await runs.authorize(origin(two), "b", footprint)).toEqual({
+    run: two,
+    decision: (allowed as { decision: unknown }).decision,
+  });
+  runs.close(two, "failed");
+  const three = ref("3");
+  runs.open(three);
+  await runs.authorize(origin(three), "c", footprint);
+  expect(asks()).toHaveLength(1);
+  // Another thread asks on its own.
+  const other = ref("1", "other");
+  runs.open(other);
+  void runs.authorize(origin(other), "x", footprint).catch(() => {});
+  expect(asks()).toHaveLength(2);
+  // Stop closes the window; with auto-approve off the next ask has no deadline and never applies.
+  runs.close(three, "stopped");
+  auto = false;
+  const four = ref("4");
+  runs.open(four);
+  let settled = false;
+  const pending = runs.authorize(origin(four), "d", footprint).then((v) => ((settled = true), v));
+  const manual = asks().at(-1)!;
+  expect(manual.deadline).toBeUndefined();
+  await vi.advanceTimersByTimeAsync(WRITE_COUNTDOWN_MS * 2);
+  expect(settled).toBe(false);
+  expect(runs.decide("thread", manual.requestId, "allow_now")).toBe(true);
+  expect(await pending).toMatchObject({ decision: { by: "human" } });
   runs.closeAll();
 });

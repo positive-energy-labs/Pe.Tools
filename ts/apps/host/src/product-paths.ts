@@ -43,6 +43,3 @@ export const productPeaWorkPath = () => productStatePath("pea-work");
 export const productProvidersPath = () => productStatePath("providers.json");
 export const productPluginDecisionsPath = () => productStatePath("plugins.json");
 export const productRouteTrustPath = () => productStatePath("route-trust.json");
-
-/** The access setting, `{ guarded }` (`harness/providers.ts`). */
-export const productAccessPath = () => productStatePath("access.json");

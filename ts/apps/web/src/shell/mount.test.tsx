@@ -652,46 +652,6 @@ test("accepted foreign deltas, settled late receipts and checkpoint facts enter 
   expect(f.documentChange()).toBeUndefined();
 });
 
-test("required answers stay in the same review until valid, and a different placement cannot commit it", async () => {
-  const f = await fixture();
-  f.graph.verbs = {
-    ...f.graph.verbs,
-    apply: commandVerb(
-      "takeoffs.initialize",
-      {
-        label: "Apply",
-        input: z.object({}),
-        review: "required",
-        answers: z.object({ approved: z.literal(true) }),
-      },
-      { prepare: () => ({ summary: "Review first" }), intent: () => ({ stage: "sheet" }) },
-    ),
-  };
-  const { view } = await mounted(f);
-  const button = view.getByRole("button", { name: "Apply" });
-  fireEvent.click(button);
-  await view.findByLabelText("Apply review");
-  expect(f.owner().control("apply", undefined, "pane:charts").refusal).toContain(
-    "original control",
-  );
-  fireEvent.click(view.getByRole("button", { name: "Commit Apply" }));
-  await view.findByText("Answer the required review before committing");
-  expect(f.owner().reviews.size).toBe(1);
-  expect(transport.run).not.toHaveBeenCalled();
-  fireEvent.change(view.getByLabelText("Apply answers"), {
-    target: { value: '{"approved":true}' },
-  });
-  fireEvent.click(view.getByRole("button", { name: "Commit Apply" }));
-  await waitFor(() => expect(f.owner().reviews.size).toBe(0));
-  expect(transport.run).toHaveBeenCalledOnce();
-  expect(
-    f
-      .owner()
-      .timeline.read()
-      .filter((e) => e.kind === "invocation"),
-  ).toHaveLength(1);
-});
-
 test("a dynamic pane binds only its explicit focused row and keeps row identity on the verb", async () => {
   const f = await fixture();
   const row = { id: "row-a", path: ["rows", "slot"] };
@@ -1145,7 +1105,7 @@ test("a History pane naming an absent reading is refused before mounting", async
   expect(f.subscriptions()).toEqual({ subscriptions: 0, deltaSubscriptions: 0 });
 });
 
-test.each(["shown", "required"] as const)(
+test.each(["shown"] as const)(
   "%s reviews without a presenter show counts and keep raw evidence sealed",
   async (review) => {
     const f = await fixture();
@@ -1156,9 +1116,7 @@ test.each(["shown", "required"] as const)(
         {
           label: "Apply",
           input: z.object({}),
-          ...(review === "required"
-            ? { review, answers: z.object({ ok: z.literal(true) }) }
-            : { review }),
+          review,
         },
         {
           prepare: () => ({

@@ -178,19 +178,13 @@ const edit = () =>
       ],
     },
   );
-function command(review: "none" | "shown" | "required") {
+function command(review: "none" | "shown") {
   const declaration = { label: "initialize", input: z.object({ stage: z.string() }) };
   const implementation = {
     prepare: () => ({ lines: ["Writes shared parameters"] }),
     intent: (_scope: unknown, input: { stage: string }) => input,
   };
-  return review === "required"
-    ? commandVerb(
-        "takeoffs.initialize",
-        { ...declaration, review, answers: z.object({ reason: z.string().min(1) }) },
-        implementation,
-      )
-    : commandVerb("takeoffs.initialize", { ...declaration, review }, implementation);
+  return commandVerb("takeoffs.initialize", { ...declaration, review }, implementation);
 }
 const reviewed = (result: InvocationResult) => {
   expect(result.state).toBe("review");
@@ -252,47 +246,6 @@ test("Work acknowledges forward and inverse paths, and two patches share the own
   ).toBe("done");
 });
 
-test.each(["human", "agent"] as const)(
-  "required review refuses missing or invalid answers for %s",
-  async (caller) => {
-    const env = environment(caller);
-    const verb = command("required");
-    const started = reviewed(await invoke(env.ctx, verb, null, { stage: "sheet" }));
-    expect(started.ticket).toEqual({
-      press: started.press,
-      subject: null,
-      input: { stage: "sheet" },
-      target: env.target,
-      basis: { work: { key, revision: 4 }, value: { readingVersion: 1 } },
-      evidence: { lines: ["Writes shared parameters"] },
-      presentation: { sentence: "initialize: review the proposed changes.", rows: [] },
-    });
-    expect((await commit(env.ctx, verb, started.ticket)).state).toBe("refused");
-    expect((await commit(env.ctx, verb, started.ticket, {})).state).toBe("refused");
-    expect(transport.run).not.toHaveBeenCalled();
-    const run = vi.spyOn(env.owner, "runAction");
-    const result = await commit(env.ctx, verb, started.ticket, { reason: "Needed for takeoff" });
-    expect(result).toMatchObject({ state: "done", kind: "command", press: started.press });
-    expect(run).not.toHaveBeenCalled();
-    expect(transport.run).toHaveBeenCalledExactlyOnceWith(
-      "takeoffs.initialize",
-      { stage: "sheet" },
-      env.target,
-      { key, revision: 4 },
-      "",
-      started.press,
-      120_000,
-    );
-    if (result.state !== "done" || result.kind !== "command")
-      throw new Error("Expected host receipt");
-    expect(result.receipt).toBe(await transport.run.mock.results[0]!.value);
-    expect((await commit(env.ctx, verb, started.ticket, { reason: "again" })).state).toBe(
-      "refused",
-    );
-    expect(env.states).toEqual(["idle", "preparing", "review", "applying", "done"]);
-  },
-);
-
 test("shown review can be skipped by agent, and cannot be skipped by human at type or runtime boundary", async () => {
   const human = environment("human");
   const agent = environment("agent");
@@ -308,10 +261,6 @@ test("shown review can be skipped by agent, and cannot be skipped by human at ty
     "done",
   );
   expect(transport.run).toHaveBeenCalledTimes(2);
-  expect(
-    (await invoke(agent.ctx, command("required"), null, { stage: "sheet" }, { kind: "skip" }))
-      .state,
-  ).toBe("refused");
 });
 
 test("placements evaluate a bounded row function and preserve distinct verb schemas", async () => {
@@ -403,10 +352,10 @@ test("tickets cannot be forged or moved between callers, and explicit cancellati
 
 test("Pea can commit an authentic ticket after JSON transport with the same invocation press", async () => {
   const env = environment("agent");
-  const verb = command("required");
+  const verb = command("shown");
   const review = reviewed(await invoke(env.ctx, verb, null, { stage: "sheet" }));
   const ticket = JSON.parse(JSON.stringify(review.ticket));
-  const result = await commit(env.ctx, verb, ticket, { reason: "Approved" });
+  const result = await commit(env.ctx, verb, ticket);
   expect(result).toMatchObject({ state: "done", kind: "command", press: review.press });
   expect(transport.run).toHaveBeenCalledTimes(1);
 });

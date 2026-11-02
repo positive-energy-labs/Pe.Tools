@@ -540,9 +540,10 @@ export class RouteWorkspace {
   ) {
     const key = workKey(write.key);
     const records = this.#inverses.get(key) ?? [];
-    // Foreign writes are barriers even if a later write happens to put the same values back.
+    // A publish is a barrier even if a later write puts the same values back. Pea's edits are
+    // undo steps (ADR 0027 rule 12), so they keep the chain: undoing in order replays through them.
     const kept =
-      write.by === "pea" || write.kind === "publish"
+      write.kind === "publish"
         ? records.filter(
             (entry) =>
               !entry.write.inverse.some((inverse) =>

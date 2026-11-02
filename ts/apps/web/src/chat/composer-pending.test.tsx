@@ -7,15 +7,6 @@ import type { Approval, Question, ToolCall } from "@pe/agent-contracts/chat-stat
 
 afterEach(cleanup);
 
-const approval: Approval = {
-  requestId: "permission-original",
-  toolCallId: "call-original",
-  toolName: "script_execute",
-  options: [
-    { optionId: "allow-original", name: "Allow once", kind: "allow_once" },
-    { optionId: "deny-original", name: "Deny", kind: "reject_once" },
-  ],
-};
 const call: ToolCall = {
   id: "call-original",
   title: "script_execute",
@@ -33,75 +24,6 @@ const question: Question = {
     properties: { name: { type: "string", title: "Sheet name" } },
   },
 };
-
-test("the queue counts live asks, folds without losing a question answer, and dispatches original IDs", async () => {
-  const resolveApproval = vi.fn(async () => {});
-  const answerQuestion = vi.fn(async () => {});
-  const props = {
-    approvals: [approval],
-    questions: [question],
-    calls: [call],
-    resolveApproval,
-    answerQuestion,
-  };
-  const screen = render(<ComposerPending {...props} />);
-  const queue = screen.getByRole("button", { name: "2 requests need you" });
-  expect(queue.getAttribute("aria-expanded")).toBe("false");
-  expect(screen.queryByRole("button", { name: "Allow once" })).toBeNull();
-  fireEvent.click(queue);
-  fireEvent.change(screen.getByRole("textbox"), { target: { value: "M-205" } });
-  fireEvent.click(queue);
-  fireEvent.click(queue);
-  expect((screen.getByRole("textbox") as HTMLInputElement).value).toBe("M-205");
-  // Another tool's target cannot replace this pending call's exact target.
-  screen.rerender(
-    <ComposerPending
-      {...props}
-      calls={[call, { ...call, id: "next-call", target: "new-session / new-open" }]}
-    />,
-  );
-  expect(screen.getByTestId("approval-target").textContent).toBe(call.target);
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Allow once" })));
-  expect(resolveApproval).toHaveBeenCalledExactlyOnceWith("permission-original", "allow-original");
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Answer" })));
-  expect(answerQuestion).toHaveBeenCalledExactlyOnceWith("question-original", "accept", {
-    name: "M-205",
-  });
-  screen.rerender(<ComposerPending {...props} approvals={[]} />);
-  expect(screen.getByRole("button", { name: "1 request needs you" })).toBeTruthy();
-  screen.rerender(<ComposerPending {...props} approvals={[]} questions={[]} />);
-  expect(screen.queryByRole("region", { name: "Pending requests" })).toBeNull();
-});
-
-test("a pending approval disables every option until the decision finishes", async () => {
-  let finish!: () => void;
-  const resolveApproval = vi.fn(
-    () =>
-      new Promise<void>((resolve) => {
-        finish = resolve;
-      }),
-  );
-  const screen = render(
-    <ComposerPending
-      approvals={[approval]}
-      questions={[]}
-      calls={[call]}
-      resolveApproval={resolveApproval}
-      answerQuestion={vi.fn()}
-    />,
-  );
-  fireEvent.click(screen.getByRole("button", { name: "1 request needs you" }));
-  fireEvent.click(screen.getByRole("button", { name: "Deny" }));
-  expect(screen.getByRole("button", { name: "Allow once" }).getAttribute("aria-disabled")).toBe(
-    "true",
-  );
-  fireEvent.click(screen.getByRole("button", { name: "Allow once" }));
-  expect(resolveApproval).toHaveBeenCalledExactlyOnceWith("permission-original", "deny-original");
-  await act(async () => finish());
-  expect(
-    screen.getByRole("button", { name: "Allow once" }).getAttribute("aria-disabled"),
-  ).toBeNull();
-});
 
 test("required question fields refuse an empty answer and Enter cannot submit the composer", async () => {
   const submit = vi.fn((event: React.FormEvent) => event.preventDefault());
@@ -192,7 +114,7 @@ test("root-turn write consent stays visible, counts down and sends the host opti
       deadline: "2026-10-26T12:01:00Z",
       options: [
         { optionId: "allow_now", name: "Allow now", kind: "allow_once" },
-        { optionId: "stop_writes", name: "Stop writes for this turn", kind: "reject_once" },
+        { optionId: "stop_writes", name: "Reject", kind: "reject_once" },
       ],
     };
     const screen = render(
@@ -211,26 +133,26 @@ test("root-turn write consent stays visible, counts down and sends the host opti
       />,
     );
     expect(screen.queryByRole("button", { name: /request needs you/ })).toBeNull();
-    expect(screen.getByRole("timer").textContent).toBe("60s");
+    expect(screen.getByRole("timer").textContent).toBe("Reject? 60s");
     expect(
       screen.getByText("First write: file C:/user/design.json. Then all writes for this turn."),
     ).toBeTruthy();
     await act(async () => {
       vi.advanceTimersByTime(18_000);
     });
-    expect(screen.getByRole("timer").textContent).toBe("42s");
+    expect(screen.getByRole("timer").textContent).toBe("Reject? 42s");
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Allow now" }));
     });
     expect(resolveApproval).toHaveBeenLastCalledWith("run-approval", "allow_now");
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Stop writes for this turn" }));
+      fireEvent.click(screen.getByRole("button", { name: "Reject" }));
     });
     expect(resolveApproval).toHaveBeenLastCalledWith("run-approval", "stop_writes");
     await act(async () => {
       vi.advanceTimersByTime(60_000);
     });
-    expect(screen.getByRole("timer").textContent).toBe("0s");
+    expect(screen.getByRole("timer").textContent).toBe("Reject? 0s");
     expect(resolveApproval).toHaveBeenCalledTimes(2); // The host alone owns deadline approval.
   } finally {
     vi.useRealTimers();

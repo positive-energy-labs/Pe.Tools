@@ -259,7 +259,7 @@ export function rpcVerb<R extends z.ZodType, S extends z.ZodType>(
   rpc: ReadEntry<R>,
   declaration: Declaration<S> & {
     caller: "human" | "any";
-    review: "none" | "shown" | "required";
+    review: "none" | "shown";
     answers?: z.ZodType;
   },
   implementation: {
@@ -333,11 +333,7 @@ type CommandInput<K extends SemanticActionKey> = WithoutWork<
 >;
 export function commandVerb<K extends SemanticActionKey, S extends z.ZodType>(
   command: K,
-  declaration: Declaration<S> &
-    (
-      | { review: "required"; answers: z.ZodType }
-      | { review: "none" | "shown"; answers?: z.ZodType }
-    ),
+  declaration: Declaration<S> & { review: "none" | "shown"; answers?: z.ZodType },
   implementation: {
     lands?: (result: unknown) => Record<string, unknown>;
     /** Reads the prepared evidence for review, and the receipt result after success. */
@@ -394,11 +390,7 @@ export function sequenceVerb<K extends SemanticActionKey, S extends z.ZodType>(
 /** A host read verb. It writes nothing itself; `subject` names the Work its result selects. */
 export function queryVerb<R extends z.ZodType, S extends z.ZodType>(
   read: ReadEntry<R>,
-  declaration: Declaration<S> &
-    (
-      | { review: "required"; answers: z.ZodType }
-      | { review: "none" | "shown"; answers?: z.ZodType }
-    ),
+  declaration: Declaration<S> & { review: "none" | "shown"; answers?: z.ZodType },
   implementation: {
     ready?: (scope: VerbScope, input: z.output<S>) => string | null;
     prepare?: (scope: VerbScope, input: z.output<S>) => unknown;
@@ -450,15 +442,14 @@ export function queryVerb<R extends z.ZodType, S extends z.ZodType>(
   return verb;
 }
 
-/** A kernel recovery: no route patches, no command; a required review whose answers the declaration states. */
+/** A kernel recovery: no route patches, no command; a shown review (Pea may skip it, rule 11). */
 export function recoveryVerb<S extends z.ZodType>(
   recovery: Recovery,
-  declaration: Omit<VerbDecl<S>, "kind" | "review" | "answers"> & { answers: z.ZodType },
+  declaration: Omit<VerbDecl<S>, "kind" | "review" | "answers">,
 ): VerbDecl<S> {
-  const verb: VerbDecl<S> = { ...declaration, kind: "recovery", review: "required" };
+  const verb: VerbDecl<S> = { ...declaration, kind: "recovery", review: "shown" };
   bindings.set(verb, {
     recover: recovery,
-    answers: declaration.answers,
     ready: (scope) => offeredWhen[recovery](scope.snapshot),
     prepare: (scope) =>
       recovery === "salvage"
@@ -645,8 +636,6 @@ async function invokeCore<C extends Caller>(
       });
       return session.complete;
     }
-    if (verb.review === "required" && phase.answers == null)
-      return failure("refused", "Answer the required review before committing", session.press);
     const checked = binding.answers?.safeParse(phase.answers);
     if (checked && !checked.success)
       return failure("refused", checked.error.message, session.press);
@@ -654,7 +643,7 @@ async function invokeCore<C extends Caller>(
     session.decide({ answers: copy(checked?.data ?? phase.answers) });
     return session.complete;
   }
-  if (phase.kind === "skip" && (ctx.caller !== "agent" || verb.review === "required"))
+  if (phase.kind === "skip" && ctx.caller !== "agent")
     return failure("refused", "This caller cannot skip this review");
 
   let answer!: (value: InvocationResult) => void;

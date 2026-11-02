@@ -73,7 +73,6 @@ export function useProviders(origin: string, enabled = true, snapshot?: Machine)
       const machine = snapshot ?? machineOf(reading);
       return {
         list: machine?.providers,
-        access: machine?.access ?? undefined,
         error: machine?.legs.providers?.error,
       };
     },
@@ -94,8 +93,6 @@ export function useProviders(origin: string, enabled = true, snapshot?: Machine)
   const probe = (id: string) => run(() => client.probe(id));
   return {
     list,
-    /** Agent approvals (`access.json`): guarded asks before each harness tool call. */
-    access: observed.access,
     error: error ?? observed.error,
     probe,
     login,
@@ -122,7 +119,6 @@ export function useProviders(origin: string, enabled = true, snapshot?: Machine)
       }
     },
     remove: (id: string) => run(() => client.removeProvider(id)),
-    setAccess: (guarded: boolean) => run(() => client.setAccess(guarded)),
   };
 }
 

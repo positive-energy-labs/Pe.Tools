@@ -126,29 +126,40 @@ test("two presses 10 ms apart stay two steps, including on the same path", async
   expect((await f.workspace.read(f.key, f.key.route))!.doc).toEqual(f.initial);
 });
 
-test("Pea writes never become steps; disjoint paths remain undoable", async () => {
+test("Pea's Work edits are undo steps a person reverts; a Pea press never joins a person's", async () => {
   const f = fixture();
   await f.apply([{ path: ["settings", "width"], value: 20 }], "human-1");
-  await f.apply([{ path: ["settings", "height"], value: 99 }], "forged-human-press", "pea");
-  expect(f.journal.read().undo.map(({ press }) => press)).toEqual(["human-1"]);
-  expect(await f.journal.undo(f.writer)).toMatchObject({ ok: true, revision: 3 });
+  await f.apply([{ path: ["settings", "height"], value: 99 }], "human-1", "pea");
+  await f.apply([{ path: ["settings", "width"], value: 30 }], null, "pea");
+  expect(f.journal.read().undo.map(({ press }) => press)).toEqual(["human-1", "pea:r2", "pea:r3"]);
+  expect(f.journal.read().undo.at(-1)!.label).toBe("Pea: edit settings.width");
+  expect(await f.journal.undo(f.writer)).toMatchObject({ ok: true, press: "pea:r3" });
+  expect(await f.journal.undo(f.writer)).toMatchObject({ ok: true, press: "pea:r2" });
   expect((await f.workspace.read(f.key, f.key.route))!.doc).toMatchObject({
-    settings: { width: 10, height: 99 },
+    settings: { width: 20, height: 4 },
   });
+  expect(await f.journal.undo(f.writer)).toMatchObject({ ok: true, press: "human-1" });
+  expect((await f.workspace.read(f.key, f.key.route))!.doc).toEqual(f.initial);
 });
 
-test("an overlapping Pea write is a named barrier even after Pea puts the old value back", async () => {
+test("undoing a Pea edit still refuses when its path changed elsewhere", async () => {
   const f = fixture();
-  await f.apply([{ path: ["settings", "width"], value: 20 }], "human-1");
   await f.apply([{ path: ["settings", "width"], value: 99 }], null, "pea");
-  await f.apply([{ path: ["settings", "width"], value: 20 }], null, "pea");
-  const result = await f.journal.undo(f.writer);
-  expect(result).toMatchObject({
-    ok: false,
-    code: "barrier",
-    barrier: { receiptId: `work:${workKey(f.key)}:r2` },
+  // A write this journal did not author (a publish, another surface): foreign, overlapping.
+  f.journal.accept({
+    key: f.key,
+    kind: "publish",
+    by: "human",
+    press: null,
+    base: 1,
+    revision: 2,
+    patches: [{ path: ["settings", "width"], value: 50 }],
+    inverse: [{ path: ["settings", "width"], value: 99 }],
+    undoable: false,
   });
-  expect(!result.ok && result.message).toContain("human-1 was changed elsewhere at r2");
+  const result = await f.journal.undo(f.writer);
+  expect(result).toMatchObject({ ok: false, code: "barrier" });
+  expect(!result.ok && result.message).toContain("changed elsewhere at r2");
   expect(f.requests).toEqual([]);
 });
 

@@ -9,6 +9,10 @@ import type {
   DocumentRef,
 } from "@pe/agent-contracts";
 
+/**
+ * The "Reject?" window before an auto-approved write applies. Paid once per thread (consent lasts
+ * until Stop), so it can stay long enough to notice an OS notice and press Reject.
+ */
 export const WRITE_COUNTDOWN_MS = 60_000;
 const key = (run: RunRef) => JSON.stringify([run.thread, run.turn]);
 type Run = {
@@ -25,7 +29,7 @@ export type ConsentEvent =
       turnId: string;
       requestId: string;
       scope: "run";
-      deadline: string;
+      deadline?: string;
       commands: string[];
       toolCall: { toolCallId: string; title: string };
       options: { optionId: string; name: string; kind: "allow_once" | "reject_once" }[];
@@ -39,9 +43,18 @@ export type ConsentEvent =
     }
   | { kind: "permission_resolved"; turnId: string; requestId: string; by: "cancel" };
 
-/** The transcript owns durable decisions. This registry owns only active waits and their clock. */
+/**
+ * Run consent per thread (ADR 0027 rule 11). The first consequential command in a thread asks once;
+ * the decision then covers every later turn of that thread (and its delegated descendants) until a
+ * Stop. Auto-approve on: the ask carries a deadline and applies when it passes. Off: a person must
+ * allow. Per-turn runs remain the causal identity: a command from an ended turn is still refused.
+ * The transcript owns durable decisions. This registry owns only active waits and their clock; a host
+ * restart forgets thread consent, so the next write asks again.
+ */
 export class RunConsents {
   private readonly runs = new Map<string, Run>();
+  /** Open consent windows: thread id to the decision that opened it. Stop closes it. */
+  private readonly threads = new Map<string, AllowDecision>();
   private readonly answers = new Map<string, string>();
   private readonly listeners = new Set<() => void>();
   subscribe(listener: () => void) {
@@ -51,6 +64,7 @@ export class RunConsents {
   constructor(
     private readonly emit: (run: RunRef, event: ConsentEvent) => void,
     private readonly documentName?: (ref: DocumentRef) => string | undefined,
+    private readonly autoApprove: () => boolean = () => true,
   ) {}
   private describe(footprint: Footprint) {
     return footprint
@@ -78,7 +92,13 @@ export class RunConsents {
   open(ref: RunRef, root = ref) {
     if (key(ref) !== key(root)) this.assertOpen({ caller: { kind: "anonymous" }, run: root, root });
     if (this.runs.has(key(ref))) throw Error("run.closed: a run identity cannot be reopened");
-    const run: Run = { ref, root, state: { state: "idle" }, waiters: new Map() };
+    const carried = key(ref) === key(root) ? this.threads.get(ref.thread) : undefined;
+    const run: Run = {
+      ref,
+      root,
+      state: carried ? { state: "allowed", decision: carried } : { state: "idle" },
+      waiters: new Map(),
+    };
     this.runs.set(key(ref), run);
     this.record(run);
   }
@@ -117,30 +137,38 @@ export class RunConsents {
     );
     if (run.state.state === "idle") {
       const requestId = randomUUID(),
-        deadline = new Date(Date.now() + WRITE_COUNTDOWN_MS).toISOString();
-      run.state = { state: "waiting", requestId, deadline, commands: [id] };
+        auto = this.autoApprove(),
+        deadline = auto ? new Date(Date.now() + WRITE_COUNTDOWN_MS).toISOString() : undefined;
+      run.state = {
+        state: "waiting",
+        requestId,
+        ...(deadline ? { deadline } : {}),
+        commands: [id],
+      };
       this.record(run);
       this.emit(run.ref, {
         kind: "permission_request",
         turnId: run.ref.turn,
         requestId,
-        deadline,
+        ...(deadline ? { deadline } : {}),
         scope: "run",
         commands: [id],
         toolCall: {
           toolCallId: `writes:${run.ref.turn}`,
-          title: `First write: ${this.describe(footprint)}. Then all writes for this turn.`,
+          title: `First write: ${this.describe(footprint)}. Then all writes in this thread until Stop.`,
         },
         options: [
-          { optionId: "allow_now", name: "Allow now", kind: "allow_once" },
-          { optionId: "stop_writes", name: "Stop writes for this turn", kind: "reject_once" },
+          { optionId: "allow_now", name: auto ? "Allow now" : "Allow", kind: "allow_once" },
+          { optionId: "stop_writes", name: "Reject", kind: "reject_once" },
         ],
       });
-      run.timer = setTimeout(
-        () => this.decide(run.ref.thread, requestId, "allow_now", "deadline"),
-        WRITE_COUNTDOWN_MS,
-      );
-      run.timer.unref();
+      if (deadline) {
+        run.timer = setTimeout(
+          () => this.decide(run.ref.thread, requestId, "allow_now", "deadline"),
+          WRITE_COUNTDOWN_MS,
+        );
+        run.timer.unref();
+      }
     } else if (run.state.state === "waiting" && !run.state.commands.includes(id)) {
       run.state.commands.push(id);
       this.record(run);
@@ -172,6 +200,7 @@ export class RunConsents {
       at: new Date().toISOString(),
     };
     run.state = { state: "allowed", decision };
+    this.threads.set(run.ref.thread, decision);
     this.record(run);
     this.emit(run.ref, {
       kind: "permission_resolved",
@@ -209,9 +238,11 @@ export class RunConsents {
         throw Error("consent.stopped: authorization is no longer valid");
     }
   }
-  close(ref: RunRef, reason: "completed" | "stopped" | "restart") {
+  /** `stopped` is a Stop: it also closes the thread's consent window. `failed` keeps it. */
+  close(ref: RunRef, reason: "completed" | "failed" | "stopped" | "restart") {
     const run = this.runs.get(key(ref));
     if (!run) return;
+    if (reason === "stopped" && key(run.ref) === key(run.root)) this.threads.delete(ref.thread);
     if (run.state.state === "closed") return;
     clearTimeout(run.timer);
     const ask = run.state.state === "waiting" ? run.state.requestId : null;

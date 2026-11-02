@@ -137,7 +137,6 @@ test("administration doors refuse every principal except a human", async () => {
   const host = await bootHost();
   try {
     const doors: [string, string, unknown][] = [
-      ["PUT", "/pe/access", { guarded: "not-a-boolean" }],
       ["POST", "/pe/providers", {}],
       ["DELETE", "/pe/providers/nobody", undefined],
       ["POST", "/pe/providers/nobody/open-login", undefined],
@@ -163,11 +162,6 @@ test("administration doors refuse every principal except a human", async () => {
         expect(reached.status, `${door}: ${reached.text}`).not.toBe(403);
       }
     }
-    // The unguarded switch itself: anonymous loopback can no longer turn the approval guard off.
-    expect((await send(`${host.base}/pe/access`, "PUT", {}, { guarded: false })).status).toBe(403);
-    expect(
-      JSON.parse((await send(`${host.base}/pe/access`, "GET", {})).text) as { guarded: boolean },
-    ).toEqual({ guarded: true });
   } finally {
     await host.close();
   }

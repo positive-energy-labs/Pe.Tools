@@ -6,10 +6,8 @@ import { productScratchPath } from "@pe/host-contracts/service-identity";
 import { dirname, join } from "node:path";
 import { PROTOCOL_VERSION, type SessionConfigOption } from "@agentclientprotocol/sdk";
 import {
-  accessSchema,
   addProviderRequestSchema,
   harnessIds,
-  type Access,
   type AddProviderRequest,
   type HarnessId,
   type HarnessModel,
@@ -20,7 +18,7 @@ import {
 } from "@pe/agent-contracts";
 import { Effect } from "effect";
 import { z } from "zod";
-import { productAccessPath, productProvidersPath } from "../product-paths.ts";
+import { productProvidersPath } from "../product-paths.ts";
 import { adapterCli, adapterLogin, adapters, openAdapter, stopChild } from "./adapter.ts";
 import { classifyEndpointFailure } from "./endpoint-failure.ts";
 import { mergePath } from "./user-shell.ts";
@@ -874,20 +872,6 @@ export function createProviders(options: ProvidersOptions) {
     return next;
   }
 
-  const readAccess = (): Access => {
-    const path = productAccessPath();
-    try {
-      return existsSync(path)
-        ? accessSchema.parse(JSON.parse(readFileSync(path, "utf8")))
-        : { guarded: true };
-    } catch {
-      return {
-        guarded: true,
-        readError: `Cannot read ${path}. Agent approvals stay guarded. Repair or restore the file before changing approvals; its bytes are preserved.`,
-      };
-    }
-  };
-
   if (options.probeOnStart ?? true)
     for (const record of records())
       probe(record).catch((error) =>
@@ -961,18 +945,6 @@ export function createProviders(options: ProvidersOptions) {
       const parsed = schema.safeParse(await request.json().catch(() => null));
       return parsed.success ? parsed.data : json({ error: parsed.error.message }, 400);
     };
-    if (declared.id === "access.get" || declared.id === "access.set") {
-      if (method === "GET") return json(readAccess());
-      if (method !== "PUT") return json({ error: `No route ${method} ${url.pathname}` }, 404);
-      const input = await body(accessSchema);
-      if (input instanceof Response) return input;
-      const current = readAccess();
-      if (current.readError) return json({ error: current.readError }, 409);
-      writeJson(productAccessPath(), { guarded: input.guarded });
-      notify();
-      log.info(`access set: guarded ${input.guarded}`);
-      return json(input);
-    }
     const rawId = declared.params.id;
     if (!rawId) {
       if (method === "GET") {
@@ -1068,12 +1040,7 @@ export function createProviders(options: ProvidersOptions) {
     /** Every shell receives the same safe provider views and the same read failure. */
     snapshot: async () => {
       const all = records();
-      const access = readAccess();
-      return {
-        providers: all.map(view),
-        access,
-        readError: providerReadError ?? access.readError ?? null,
-      };
+      return { providers: all.map(view), readError: providerReadError ?? null };
     },
     subscribe: (listener: () => void) => {
       listeners.add(listener);
@@ -1139,13 +1106,12 @@ export function createProviders(options: ProvidersOptions) {
           throw error;
         }
     },
-    access: readAccess,
     /** Every endpoint key, so no thread record keeps one even when a harness echoes it. */
     keys: () => {
       stored();
       return [...knownKeys];
     },
-    /** The web handler for `/pe/providers*` and `/pe/access`. */
+    /** The web handler for `/pe/providers*`. */
     fetch: (request: Request) =>
       handle(request).catch((error) => json({ error: String(error?.message ?? error) }, 502)),
   };

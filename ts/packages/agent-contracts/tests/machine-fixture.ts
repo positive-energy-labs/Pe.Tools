@@ -14,7 +14,6 @@ export function machineFixture(
     host: null,
     share: null,
     providers: null,
-    access: null,
     legs: { sessions: leg, attachments: leg },
     update: {
       plan: null,

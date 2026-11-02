@@ -10,7 +10,7 @@ import type {
 } from "@pe/host-contracts/pe-revit-contract";
 import type { DocumentIdentityAuthority } from "@pe/host-contracts/contracts";
 import type { NativeNotice } from "@pe/host-contracts/native-adapter";
-import type { Access, Provider } from "./harness-thread.ts";
+import type { Provider } from "./harness-thread.ts";
 import { addressSchema, type DocumentRef, type TargetInventory } from "./target.ts";
 
 /** Last confirmed data lives in the field; a failed attempt changes only this evidence. */
@@ -31,7 +31,6 @@ export interface Machine {
   readonly update: MachineUpdate;
   readonly share: MachineShare | null;
   readonly providers: readonly MachineProvider[] | null;
-  readonly access: Access | null;
   readonly legs: Readonly<Record<string, MachineLeg>>;
 }
 
@@ -74,8 +73,8 @@ export interface MachinePeer {
 /**
  * Whose a document is to Pea, projected on the host (ADR 0017/0021). `pea` is a document Pea's own
  * acquisition created (its id is what cleanup and handover name); `target` is a user document a
- * human added to a thread's targets. Whether Pea may write a `read` document as well follows the
- * harness access switch (`Machine.access`). The browser draws access from this and nothing else.
+ * human added to a thread's targets. Writes to any of them still cross run consent (ADR 0027 rule
+ * 11). The browser draws access from this and nothing else.
  */
 export type MachineAccess =
   | { readonly kind: "pea"; readonly acquisition: string }

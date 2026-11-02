@@ -155,7 +155,22 @@ export function createWorkJournal(key: WorkKey) {
       sending?.expectedRevision === ack.base &&
       canonicalRouteInput(sending.patches) === canonicalRouteInput(ack.patches);
     if (ownRestore) return;
-    if (!detail || ack.by !== "human" || ack.kind !== "apply" || !ack.press || !ack.undoable) {
+    // Pea's Work edits are undo steps (ADR 0027 rule 12, reversing ADR 0026): they arrive on the
+    // accepted-delta stream without route detail and may carry no press. A person's own edit needs
+    // the local press detail; anything else (restore, publish, a non-undoable write) is foreign.
+    const pea = ack.by === "pea" && ack.kind === "apply" && ack.undoable;
+    if (pea) {
+      // Namespaced: a Pea press can never join (or forge) a person's step.
+      ack.press = `pea:${ack.press ?? `r${ack.revision}`}`;
+      detail ??= { label: "" };
+    }
+    if (
+      !detail ||
+      (!pea && ack.by !== "human") ||
+      ack.kind !== "apply" ||
+      !ack.press ||
+      !ack.undoable
+    ) {
       for (const step of [...undo, ...redo]) {
         const path = step.transitions
           .flatMap(({ paths }) => paths)
@@ -209,7 +224,7 @@ export function createWorkJournal(key: WorkKey) {
         ...structuredClone(detail),
         label:
           detail.label.trim() ||
-          `Edit ${ack.patches.map(({ path }) => path.join(".") || "Work").join(", ")}`,
+          `${pea ? "Pea: edit" : "Edit"} ${ack.patches.map(({ path }) => path.join(".") || "Work").join(", ")}`,
         press: ack.press,
         transitions: [transition],
         cursor: 1,

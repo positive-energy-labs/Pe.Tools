@@ -14,7 +14,6 @@ import { createRoute } from "@tanstack/react-router";
 import { KeyScope, ScopeKeys, actionScopeKeys, useScopeLive, type ScopeKey } from "@pe/kit/keys";
 import { Button } from "@pe/kit/lang/button";
 import { Popover, SubjectPopoverContent } from "@pe/kit/lang/popover";
-import { Label, Textarea } from "@pe/kit/lang/input";
 import {
   GraphLayoutView,
   type GraphLayoutState,
@@ -934,22 +933,7 @@ function GraphReview<P, W>({
   const review = owner.reviews.get(id)!;
   const verb = owner.verbs[id]!;
   const [anchor] = useState(() => document.activeElement);
-  const [answers, setAnswers] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const press = () => {
-    // A recovery's one answer is the commit press itself.
-    let value: unknown = review && verb.kind === "recovery" ? { confirm: true } : undefined;
-    if (review && verb.kind !== "recovery" && answers.trim()) {
-      try {
-        value = JSON.parse(answers);
-      } catch {
-        setError("Review answers must be valid JSON");
-        return;
-      }
-    }
-    setError(null);
-    void owner.commitReview(id, review.ticket, value);
-  };
+  const press = () => void owner.commitReview(id, review.ticket);
   return (
     <Popover
       open
@@ -976,18 +960,7 @@ function GraphReview<P, W>({
               ))}
             </span>
           )}
-          {verb.review === "required" && verb.kind !== "recovery" && (
-            <Label>
-              Review answers
-              <Textarea
-                aria-label={`${verb.label} answers`}
-                value={answers}
-                onChange={(e) => setAnswers(e.target.value)}
-              />
-            </Label>
-          )}
         </div>
-        {error && <span role="status">{error}</span>}
         <div className="flex shrink-0 items-center justify-between gap-2">
           <Button
             kind="commit"
