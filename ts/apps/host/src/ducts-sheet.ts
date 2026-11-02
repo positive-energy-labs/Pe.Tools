@@ -484,6 +484,7 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
       const layersOf = (snap: DuctSnapshot) => ({
         snapshot: snap,
         work: saved.work,
+        versions: { Work: saved.revision },
         store: snap.store as Parameters<typeof resolveInputs>[0]["store"],
         firm: saved.firm.firm,
         catalogs,
@@ -572,6 +573,7 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
       const inputs = resolveInputs({
         snapshot,
         work: saved.work,
+        versions: { Work: saved.revision },
         store: snapshot.store as Parameters<typeof resolveInputs>[0]["store"],
         firm: saved.firm.firm,
       });

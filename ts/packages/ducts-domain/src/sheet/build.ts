@@ -107,7 +107,8 @@ const basisOf = (snapshot: SheetSnapshot, rest: object) =>
 const round = (n: number) => +n.toFixed(6);
 
 /** A resolved value's provenance as a leg's `lossSource.ref` reads it. */
-const provenance = (v: Resolved<unknown>) => `${v.source}${v.ref ? `:${v.ref}` : ""}`;
+const provenance = (v: Resolved<unknown>) =>
+  `${v.source}${v.ref || v.version != null ? `:${v.ref ?? v.version}` : ""}`;
 const positive = (v: number | null | undefined) => (v != null && v > 0 ? v : null);
 
 /**
@@ -408,7 +409,7 @@ class Pricer {
       ruleSource: rule ? "matched" : "none",
       tableSource: rule
         ? chosen
-          ? chosen.source === "stored"
+          ? chosen.source === "model"
             ? "stored"
             : "typed"
           : "default"
@@ -512,7 +513,7 @@ class Pricer {
       tableSource: !src
         ? null
         : chosen && chosen.value.toUpperCase() === src.table
-          ? chosen.source === "stored"
+          ? chosen.source === "model"
             ? "stored"
             : "typed"
           : src.table === rule?.table
@@ -854,7 +855,9 @@ class Pricer {
         legIds,
         end: e.end,
         knownInWg,
-        complete: blockerIds.size === 0,
+        complete:
+          blockerIds.size === 0 &&
+          legIds.every((id) => this.legs[id]!.lossInWg != null && this.legs[id]!.flowCfm != null),
         blockerIds: [...blockerIds],
       };
     });
@@ -1490,8 +1493,9 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
   // The unit's own flow: typed is the side-stream exception's asserted flow, a Revit or stored value
   // its design parameter; absent both, an ordinary fan's flow is the sum of its ends (never an input).
   const unitCfm = input.inputs.units[String(unit.id)]?.cfm;
-  const typedCfm = unitCfm?.source === "typed" ? unitCfm.value : null;
-  const designCfm = unitCfm && unitCfm.source !== "typed" ? positive(unitCfm.value) : null;
+  const authored = unitCfm?.source === "Work" || unitCfm?.source === "run";
+  const typedCfm = authored ? unitCfm.value : null;
+  const designCfm = unitCfm && !authored ? positive(unitCfm.value) : null;
   const terminalCfm = (id: number) => terminalCfmOf(input.inputs, id);
   const derived =
     assumeHeals && input.assumeServedFlow !== false
@@ -1524,7 +1528,7 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
     // as a typed one does (ducts LEDGER 2026-10-29). A typed 0 is a share; an untyped 0 is unset.
     unitCfm: (unitId) => {
       const u = input.inputs.units[String(unitId)]?.cfm;
-      return u?.value != null && (u.source === "typed" || u.value > 0)
+      return u?.value != null && (u.source === "Work" || u.source === "run" || u.value > 0)
         ? { cfm: u.value, source: provenance(u) }
         : null;
     },
@@ -1706,7 +1710,14 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
             resolved?.value != null
               ? resolved
               : revit != null
-                ? { value: revit, source: "revit", ref: "connector Flow" }
+                ? {
+                    value: revit,
+                    source: "model",
+                    ref: "connector Flow",
+                    units: "cfm",
+                    version: null,
+                    status: "valid",
+                  }
                 : null;
           if (own == null || drawn.some((d) => d.cfm == null) || stated?.value == null) return [];
           const sum = round(own + drawn.reduce((a, d) => a + d.cfm!, 0));

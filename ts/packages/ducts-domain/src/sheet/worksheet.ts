@@ -23,6 +23,7 @@ export interface WorksheetSection {
   knownInWg: number;
   /** Legs with no loss yet; the section's known sum excludes them. */
   unpricedLegs: number;
+  complete: boolean;
   telFt: number;
   maxFpm: number | null;
   overLegIds: string[];
@@ -117,6 +118,7 @@ export function worksheet(sheet: Sheet, limits: WorksheetLimits): Worksheet {
             cfm: null,
             knownInWg: 0,
             unpricedLegs: 0,
+            complete: false,
             telFt: 0,
             maxFpm: null,
             overLegIds: [],
@@ -135,12 +137,16 @@ export function worksheet(sheet: Sheet, limits: WorksheetLimits): Worksheet {
       sec.cfm = legs.at(-1)?.flowCfm ?? null;
       sec.knownInWg = sum(legs, (l) => l.lossInWg);
       sec.unpricedLegs = legs.filter((l) => l.lossInWg == null).length;
+      sec.complete = legs.every((l) => l.lossInWg != null && l.flowCfm != null);
       sec.telFt = sum(legs, (l) => l.equivalentFt);
       sec.maxFpm = maxOf(legs);
       sec.overLegIds = over(legs);
     }
 
     const delivering = paths.filter((p) => delivers(p.end));
+    const complete = (p: SheetPath) =>
+      p.complete && p.legIds.every((id) => leg(id).lossInWg != null && leg(id).flowCfm != null);
+    const certified = delivering.length > 0 && delivering.every(complete);
     const worst = delivering.length ? Math.max(...delivering.map((p) => p.knownInWg)) : null;
     const runs = paths.map((p, i): WorksheetRun => {
       const legs = p.legIds.map(leg);
@@ -154,9 +160,9 @@ export function worksheet(sheet: Sheet, limits: WorksheetLimits): Worksheet {
         cfm: legs.at(-1)?.flowCfm ?? null,
         telFt: sum(legs, (l) => l.equivalentFt),
         knownInWg: p.knownInWg,
-        complete: p.complete,
-        residualInWg: carries && worst != null ? worst - p.knownInWg : null,
-        critical: carries && p.knownInWg === worst,
+        complete: complete(p),
+        residualInWg: certified && carries && worst != null ? worst - p.knownInWg : null,
+        critical: certified && carries && p.knownInWg === worst,
         maxFpm: maxOf(legs),
         overLegIds: over(legs),
       };

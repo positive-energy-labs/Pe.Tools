@@ -25,7 +25,7 @@ const designed = (unit: Graph["all"][number]) =>
  * a fan is credited only with the terminals its own walk reaches, never every terminal on a
  * shared connected network (Chadds FC-23, RV-25 and RV-7 each read 1355 cfm before, 2026-10-28).
  * An ERV is credited only with terminals on its own discharge side; with none it is unknown
- * (0, with a line), never another fan's sum and never its Revit connector flow.
+ * (absent from the result), never another fan's sum and never its Revit connector flow.
  */
 export function assumedFanFlows(
   snapshot: SheetSnapshot,
@@ -50,7 +50,7 @@ export function assumedFanFlows(
   if (saved) return saved;
   const g = graphOf(snapshot);
   const owners = new Map<number, ReturnType<typeof foreignOwners>>();
-  const direct = new Map<string, Map<number, number>>();
+  const direct = new Map<string, Map<number, number | null>>();
   const receiving = new Map<string, Set<string>>();
   const bySide = new Map<
     string,
@@ -58,15 +58,11 @@ export function assumedFanFlows(
       unitId: number;
       ref: string;
       erv: boolean;
-      terminals: Map<number, number>;
+      terminals: Map<number, number | null>;
       receiving: Set<string>;
     }
   >();
   const result = new Map<string, AssumedFlow>();
-  const unknownErv = (ref: string) => ({
-    cfm: 0,
-    source: `unknown (0 assumed): ERV ${ref}'s discharge reaches no terminal it supplies; type the unit design flow`,
-  });
   for (const fan of roster) {
     const unit = g.byId.get(fan.unitId);
     if (!unit) continue;
@@ -74,20 +70,20 @@ export function assumedFanFlows(
     const erv = fan.kind === "erv";
     const ref = `${fan.unitId}:${fan.portIndex}`;
     const sides = [fan.portIndex, fan.inletPortIndex].filter((p): p is number => p != null);
-    const terminalSides: Map<number, number>[] = [];
+    const terminalSides: Map<number, number | null>[] = [];
     const others = new Set<string>();
     for (const connector of new Set(sides)) {
       const w = walkFrom(g, unit, connector, { ...options, roster, owners: owners.get(unit.id) });
       // R-SIB needs no pass here: the walk already stops at every roster fan, so a sibling end
       // never credits a terminal, and the borrow below keeps its own intake-direction gate.
       terminateMerges(w);
-      const terminals = new Map<number, number>();
+      const terminals = new Map<number, number | null>();
       const sideReceiving = new Set<string>();
       for (const e of w.ends) {
         const n = g.byId.get(e.end.elementId);
         if (e.end.kind === "terminal" && n && !isSegment(n)) {
           const flow = terminalCfm(n.id);
-          if (flow != null && flow > 0) terminals.set(n.id, flow);
+          terminals.set(n.id, flow);
         }
         // Borrow only where this unit's discharge lands on another unit's intake (MUAS into an ERV inlet).
         // Other units on a shared trunk are co-sources or co-sinks, not receivers: Chadds' ERVs RV-11 and
@@ -122,8 +118,11 @@ export function assumedFanFlows(
       });
     }
     // The two sides carry the same fan flow; never sum supply and return demand twice.
-    const sum = (m: Map<number, number>) => [...m.values()].reduce((a, v) => a + v, 0);
-    const served = terminalSides.sort((a, b) => sum(b) - sum(a))[0] ?? new Map<number, number>();
+    const sum = (m: Map<number, number | null>) =>
+      [...m.values()].reduce<number>((a, v) => a + (v ?? 0), 0);
+    const served =
+      terminalSides.find(side => [...side.values()].some(v => v == null)) ??
+      terminalSides.sort((a, b) => sum(b) - sum(a))[0] ?? new Map<number, number | null>();
     direct.set(ref, served);
     receiving.set(ref, others);
   }
@@ -137,7 +136,8 @@ export function assumedFanFlows(
     if (!terminals.size)
       for (const other of receiving.get(ref) ?? [])
         for (const [id, flow] of direct.get(other) ?? []) terminals.set(id, flow);
-    const cfm = [...terminals.values()].reduce((a, v) => a + v, 0);
+    if ([...terminals.values()].some((v) => v == null)) continue;
+    const cfm = [...terminals.values()].reduce<number>((a, v) => a + v!, 0);
     const connectorFlow = unit.connectors
       .filter((c) => c.index === fan.portIndex || c.index === fan.inletPortIndex)
       .reduce((max, c) => Math.max(max, c.flowCfm ?? 0), 0);
@@ -146,7 +146,7 @@ export function assumedFanFlows(
         cfm,
         source: `derived from served terminals (assumed); ${terminals.size} covered terminals${direct.get(ref)?.size ? "" : "; via receiving fan"}`,
       });
-    else if (fan.kind === "erv") result.set(ref, unknownErv(ref));
+    else if (fan.kind === "erv") continue;
     else if (connectorFlow > 0)
       result.set(ref, {
         cfm: connectorFlow,
@@ -161,19 +161,20 @@ export function assumedFanFlows(
     // borrowing per side pushed a big ERV's 3164 cfm through RV-11's 4 in discharge (569 implausible).
     const paired = side.terminals.size
       ? side.terminals
-      : (direct.get(side.ref) ?? new Map<number, number>());
+      : (direct.get(side.ref) ?? new Map<number, number | null>());
     const terminals = new Map(paired);
     if (!terminals.size)
       for (const other of side.receiving)
         for (const [id, flow] of direct.get(other) ?? []) terminals.set(id, flow);
-    const cfm = [...terminals.values()].reduce((a, v) => a + v, 0);
+    if ([...terminals.values()].some((v) => v == null)) continue;
+    const cfm = [...terminals.values()].reduce<number>((a, v) => a + v!, 0);
     const connectorFlow = unit.connectors.reduce((max, c) => Math.max(max, c.flowCfm ?? 0), 0);
     if (cfm > 0)
       result.set(key, {
         cfm,
         source: `derived from served terminals (assumed); side ${key}, ${terminals.size} covered terminals${side.terminals.size ? "" : paired.size ? "; via paired side" : "; via receiving fan"}`,
       });
-    else if (side.erv) result.set(key, unknownErv(side.ref));
+    else if (side.erv) continue;
     else if (connectorFlow > 0)
       result.set(key, {
         cfm: connectorFlow,

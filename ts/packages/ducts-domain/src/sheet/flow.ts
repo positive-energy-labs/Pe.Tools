@@ -5,8 +5,8 @@
  * its design parameter flow, split across receiving fan ports by the asserted policy.
  * A-INFLOW (counsel 2026-10-28, reversible): on an ordinary fan (no side-stream design flow) an
  * end at another fan's port or merge is a source joining this stream, not an outlet: it demands
- * no share, carries the other unit's flow (parameter, else assumed served sum, else 0) on the
- * legs only it reaches, and never raises `no-flow`.
+ * no share, carries the other unit's flow (parameter, else complete served sum, else missing) on the
+ * legs only it reaches, and raises `no-flow` when unknown.
  * R-SHARE (ducts LEDGER 2026-10-29, "receiving units' design flows weight the split"): a terminal
  * beyond a sibling's junction is shared. Each sibling draws its own resolved design flow from it,
  * carried on the legs from that junction out to the terminal, so a shared section carries the sum
@@ -55,7 +55,7 @@ export interface Draw {
 export interface Inflow {
   end: number;
   fan: FanPortRef | null;
-  cfm: number;
+  cfm: number | null;
   source: string;
 }
 
@@ -99,14 +99,14 @@ export function flowsOf(
   const isInflow = (e: Walk["ends"][number]) => !!opts.ordinary && !opts.only && isSource(e);
   const inflowOf = (e: Walk["ends"][number]): Omit<Inflow, "end"> => {
     const fan = e.end.fan ?? null;
-    if (!fan) return { fan, cfm: 0, source: "unnamed stream; unknown; 0 assumed" };
+    if (!fan) return { fan, cfm: null, source: "unnamed stream; missing flow" };
     if (fan.unitId === unitId)
-      return { fan, cfm: 0, source: "this fan's own port; unknown; 0 assumed" };
+      return { fan, cfm: null, source: "this fan's own port; missing flow" };
     const design = opts.unitCfm?.(fan.unitId);
     if (design) return { fan, cfm: design.cfm, source: design.source };
     const assumed = opts.receivingAssumedCfm?.get(`${fan.unitId}:${fan.portIndex}`);
     if (assumed) return { fan, cfm: assumed.cfm, source: assumed.source };
-    return { fan, cfm: 0, source: "unknown; 0 assumed" };
+    return { fan, cfm: null, source: "missing flow" };
   };
   const fanPorts = w.ends.filter((e) => isFanEnd(e) && !isInflow(e));
   const fanEnds = fanPorts.length;
@@ -150,7 +150,8 @@ export function flowsOf(
   const shareAt = (e: Walk["ends"][number], k: number) => {
     const stated = terminalAt(e);
     const drawn = drawOn(k);
-    // An unknown draw is the sibling's own `no-flow`; the terminal keeps its stated flow meanwhile.
+    // An unknown sibling draw also withholds the remaining terminal share.
+    if (drawn == null) return null;
     if (!drawn || stated == null) return stated;
     return stated >= drawn ? stated - drawn : null;
   };
@@ -159,7 +160,8 @@ export function flowsOf(
     0,
   );
   const typedSum = terminalSum + fanPorts.reduce((sum, e) => sum + (typedAt(e) ?? 0), 0);
-  const remainder = opts.sideStream ? opts.sideStream.cfm - typedSum : null;
+  const missingTerminal = w.ends.some((e, k) => e.end.kind === "terminal" && shareAt(e, k) == null);
+  const remainder = opts.sideStream && !missingTerminal ? opts.sideStream.cfm - typedSum : null;
   const receiving = (e: Walk["ends"][number]) =>
     e.end.fan
       ? opts.receivingAssumedCfm?.get(`${e.end.fan.unitId}:${e.end.fan.portIndex}`)
@@ -212,8 +214,7 @@ export function flowsOf(
     }
     if (
       cfm == null &&
-      (opts.only ? i === opts.only.end : e.end.kind === "terminal" || isFanEnd(e)) &&
-      !isInflow(e)
+      (opts.only ? i === opts.only.end : e.end.kind === "terminal" || isFanEnd(e))
     ) {
       const terminal = e.end.kind === "terminal";
       const causedBy = w.states[e.state]!.causedBy;

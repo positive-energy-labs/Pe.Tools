@@ -414,7 +414,7 @@ it("a side-stream into another fan's return ends at the merge without a class-ch
     ) as Node[],
   };
   const gInputs = inputsFor(withG, { endCfm: { 300: 100 } });
-  expect(gInputs.units["400"]!.cfm).toMatchObject({ value: 1200, source: "revit" });
+  expect(gInputs.units["400"]!.cfm).toMatchObject({ value: 1200, source: "model" });
   const merged = buildSheet({ ...input1(withG), inputs: gInputs });
   expect(merged.paths.map((p) => p.end.kind)).toContain("joins-other-fan");
   expect(merged.fan.flowCfm).toBe(100);
@@ -786,7 +786,7 @@ it("side-stream design flow: a receiving unit's design flow is its share at its 
   expect(shares.legs["1:0>1"]!.flowCfm).toBe(300);
   expect([3, 4, 5].map((id) => shares.legs[`${id}:0>1`]!.flowCfm)).toEqual([50, 100, 150]);
   expect(shares.legs["4:0>1"]!.flowSource).toContain(
-    "unit design flow revit:PE_M_Fan_AirFlowDesign",
+    "unit design flow model:PE_M_Fan_AirFlowDesign",
   );
   expect(shares.blockers.some((b) => b.kind === "no-flow")).toBe(false);
   // Typed over Revit: the typed share wins; the others keep theirs.
@@ -1135,12 +1135,12 @@ it("R-SHARE: a louver shared with a sibling's inlet carries both consumers; this
   expect(typed.blockers.filter((b) => b.kind === "no-flow")).toEqual([]);
   expect(typed.notes).toContainEqual({
     kind: "sibling",
-    text: "sibling F-200 200:1 draws 50 cfm from shared terminal 30: revit:fanFlow",
+    text: "sibling F-200 200:1 draws 50 cfm from shared terminal 30: model:fanFlow",
     value: 50,
   });
   expect(typed.notes).toContainEqual({
     kind: "sibling",
-    text: "shared terminal 30: consumers sum 200 cfm (this fan 150, siblings 50); the terminal states 1120 (typed)",
+    text: "shared terminal 30: consumers sum 200 cfm (this fan 150, siblings 50); the terminal states 1120 (Work)",
     value: 200,
   });
 
@@ -1297,7 +1297,7 @@ it("R-SHARE + C3: a proposed transition in front of a shared plenum carries this
   // Defect 5: the louver's airflow slot is empty, so its Revit connector flow is the cross-check.
   expect(sheet.notes).toContainEqual({
     kind: "sibling",
-    text: "shared terminal 30: consumers sum 200 cfm (this fan 150, siblings 50); the terminal states 1120 (revit:connector Flow)",
+    text: "shared terminal 30: consumers sum 200 cfm (this fan 150, siblings 50); the terminal states 1120 (model:connector Flow)",
     value: 200,
   });
 });
@@ -1357,3 +1357,25 @@ it.skipIf(
   },
   120_000,
 );
+
+it("a missing terminal flow withholds path completeness and required ESP", () => {
+  const inputs = inputsFor(network);
+  inputs.terminals["6"]!.cfm = {
+    value: null,
+    source: "none",
+    units: "cfm",
+    version: null,
+    status: "missing",
+  };
+  const sheet = buildSheet({
+    snapshot: network,
+    fan: { unitId: 100, portIndex: 0 },
+    roster: [fanPort(100, 0, 1)],
+    grids,
+    inputs,
+  });
+  expect(sheet.paths.find((p) => p.end.elementId === 6)?.complete).toBe(false);
+  expect(sheet.totals.supply.complete).toBe(false);
+  expect(sheet.totals.requiredEspInWg).toBeNull();
+  expect(sheet.blockers.some((b) => b.kind === "no-flow")).toBe(true);
+});

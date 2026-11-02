@@ -281,8 +281,14 @@ public static class DuctApplier {
                     var own = e.LookupParameter(slots.FittingCoefficient) is { StorageType: StorageType.Double };
                     if (!own && table.Length == 0)
                         return new Item(w.Id, kind, null) { Element = e }.Refuse($"the family has no number parameter '{slots.FittingCoefficient}' (the FittingCoefficient slot) and the write names no table; stamp it with ducts.family-patch or name the rule's table");
-                    if (table.Length > 0 && PeLossServer.Table(table) is null)
-                        return new Item(w.Id, kind, null) { Element = e }.Refuse($"Revit ships no readable ASHRAE table {table}");
+                    if (table.Length > 0) {
+                        var grids = PeLossServer.Table(table);
+                        if (grids is null)
+                            return new Item(w.Id, kind, null) { Element = e }.Refuse($"Revit ships no readable ASHRAE table {table}");
+                        // TODO: ADR 0028 replace the native PeLossServer pricing caller with host-priced coefficients, then delete C# pricing.
+                        if (grids.Values.Any(grid => grid.Z is not null))
+                            return new Item(w.Id, kind, null) { Element = e }.Refuse($"The native loss server cannot price three-axis table {table}; use the host engine and SpecificCoefficient");
+                    }
                 }
                 return Lossy(doc, w.Id, kind, BuiltInCategory.OST_DuctFitting, PeLossServer.Id, schemas,
                     [(PeLossServer.ParameterField, slots.FittingCoefficient), (PeLossServer.TableField, table)], 0,
