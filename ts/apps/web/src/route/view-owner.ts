@@ -1,4 +1,4 @@
-import * as Atom from "effect/unstable/reactivity/Atom";
+import * as Atom from "effect/reactivity/Atom";
 import { deepEqual } from "@tanstack/react-router";
 import { routeAddress, type RouteKey } from "@pe/agent-contracts";
 import type { z } from "zod";

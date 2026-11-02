@@ -8,8 +8,8 @@ import type {
 import { type WorkbenchEndpointConfig } from "../config";
 import { type ChatState, type ThreadBody } from "@pe/agent-contracts/chat-state";
 import { type ChatPageStore } from "../store";
-import type * as Atom from "effect/unstable/reactivity/Atom";
-import type * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
+import type * as Atom from "effect/reactivity/Atom";
+import type * as AsyncResult from "effect/reactivity/AsyncResult";
 import type { HeadDraft, ProvidersState } from "./providers";
 import type { PromptRequest } from "./harness-client";
 

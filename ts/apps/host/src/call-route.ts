@@ -54,7 +54,7 @@ import {
 } from "./captures-route.ts";
 import { randomUUID } from "node:crypto";
 import { recordHostFact } from "./receipt-export.ts";
-import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
+import { HttpRouter, HttpServerResponse as Response } from "effect/http";
 import { RevitBridge, BridgeError, CANCEL_OPERATION_KEY, NoRevitSession } from "./bridge.ts";
 import { apsAuthLogin, apsAuthLogout, apsAuthStatus, apsAuthToken } from "./aps-auth.ts";
 import {

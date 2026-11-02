@@ -1,4 +1,4 @@
-import * as Atom from "effect/unstable/reactivity/Atom";
+import * as Atom from "effect/reactivity/Atom";
 import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import { useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import {

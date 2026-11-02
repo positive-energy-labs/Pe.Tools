@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Layer } from "effect";
-import { HttpRouter } from "effect/unstable/http";
+import { HttpRouter } from "effect/http";
 import { expect, test } from "vite-plus/test";
 import { address, bindWork, familiesRouteState } from "@pe/agent-contracts";
 import { RouteWorkspace } from "@pe/runtime";

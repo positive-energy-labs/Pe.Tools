@@ -1,5 +1,5 @@
 ﻿import { useEffect, useState } from "react";
-import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
+import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { inspectAtomRegistry } from "./atom-inspect";
 import { appAtomRegistry } from "#/shell/owner";
 import { inspectRetainedActions } from "../../../../packages/mcps/src/shared/takeoff-action-client";

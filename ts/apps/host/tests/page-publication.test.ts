@@ -6,7 +6,7 @@ import { afterEach, expect, it } from "vite-plus/test";
 import { servePeRoute } from "@pe/agent-contracts/pe-api";
 import { createHash } from "node:crypto";
 import { Context, Effect } from "effect";
-import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
+import { HttpRouter, HttpServerResponse } from "effect/http";
 import { CaptureStore, capturesRoute } from "../src/captures-route.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { RunConsents } from "../src/run-consent.ts";

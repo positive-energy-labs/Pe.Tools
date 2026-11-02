@@ -1,7 +1,7 @@
 ﻿import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { Effect, Layer } from "effect";
-import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
+import { HttpRouter, HttpServerResponse as Response } from "effect/http";
 import { hostOwnership, productRoot } from "./host-ownership.ts";
 import { parsePeRevitEnvelope, peRevitLauncher, withStderr } from "./pe-revit-launch.ts";
 import {

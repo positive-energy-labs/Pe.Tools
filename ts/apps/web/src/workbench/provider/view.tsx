@@ -9,8 +9,8 @@ import type { StoredThreadSummary, WorkbenchContextValue } from "./thread-summar
 import { WorkbenchContext } from "./thread-summary";
 import { chatLoading, useThreadStream } from "./thread-stream";
 import { harnessClient, notFound, type PromptRequest } from "./harness-client";
-import * as Atom from "effect/unstable/reactivity/Atom";
-import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
+import * as Atom from "effect/reactivity/Atom";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { errorMessage } from "./use-workbench";
 import { EMPTY_HEAD, isReady, useProviders, type HeadDraft } from "./providers";
 import { routeAddress, targetKey, type DocumentRequest } from "@pe/agent-contracts";

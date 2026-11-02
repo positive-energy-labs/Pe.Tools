@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { Effect } from "effect";
-import { HttpEffect, HttpRouter } from "effect/unstable/http";
+import { HttpEffect, HttpRouter } from "effect/http";
 import { z } from "zod";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { createFixtureHost } from "../../../packages/host-contracts/src/fixture-host.ts";

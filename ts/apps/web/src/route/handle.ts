@@ -1,5 +1,5 @@
-import type * as Atom from "effect/unstable/reactivity/Atom";
-import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
+import type * as Atom from "effect/reactivity/Atom";
+import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import type { PageSnapshot } from "./view-owner";
 /** Presentation facts shared by the retained ladder and specimens; execution belongs to shell/. */
 import type {

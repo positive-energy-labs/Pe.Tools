@@ -14,7 +14,7 @@ import {
 } from "./share.ts";
 import { mcpRoute } from "./mcp-route.ts";
 import { Deferred, Effect, Layer, Option } from "effect";
-import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
+import { HttpRouter, HttpServerResponse as Response } from "effect/http";
 import { NodeHttpClient, NodeHttpServer, NodeServices } from "@effect/platform-node";
 import { readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";

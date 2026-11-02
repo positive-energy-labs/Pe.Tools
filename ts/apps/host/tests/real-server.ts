@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Deferred, Effect, Layer } from "effect";
 import { NodeHttpClient, NodeHttpServer } from "@effect/platform-node";
-import { HttpRouter } from "effect/unstable/http";
+import { HttpRouter } from "effect/http";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { hostContextTokenPath } from "@pe/host-contracts/service-identity";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";

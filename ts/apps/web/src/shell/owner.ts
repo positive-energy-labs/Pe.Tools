@@ -1,8 +1,8 @@
 /** The route owner: one per route and registry; it holds the log, the runner and the page. */
 import type { InspectableRef } from "../route/inspect";
-import * as Atom from "effect/unstable/reactivity/Atom";
-import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
-import * as Reactivity from "effect/unstable/reactivity/Reactivity";
+import * as Atom from "effect/reactivity/Atom";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import * as Reactivity from "effect/reactivity/Reactivity";
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import type { ExecutionTarget, CellLike } from "@pe/agent-contracts";
 import { Layer } from "effect";

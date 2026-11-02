@@ -28,7 +28,7 @@ import {
   HttpServer,
   HttpServerRequest,
   HttpServerResponse,
-} from "effect/unstable/http";
+} from "effect/http";
 import {
   addressSchema,
   sameAddress,
@@ -1382,7 +1382,7 @@ export const peRoutesLayer = (
   HttpRouter.use((router) =>
     Effect.gen(function* () {
       const { address } = yield* HttpServer.HttpServer;
-      const hostBaseUrl = `http://127.0.0.1:${address._tag === "TcpAddress" ? address.port : 0}`;
+      const hostBaseUrl = `http://127.0.0.1:${address._tag === "UnixPathAddress" ? 0 : address.port}`;
       const bridge = Option.getOrUndefined(yield* Effect.serviceOption(RevitBridge));
       const update = yield* UpdateReader;
       const { providers, threads, routes, catalog, machine, notices, plugins, tasks } =

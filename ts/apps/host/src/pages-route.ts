@@ -12,7 +12,7 @@ import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { Effect, Option } from "effect";
-import { HttpEffect, HttpRouter, HttpServer } from "effect/unstable/http";
+import { HttpEffect, HttpRouter, HttpServer } from "effect/http";
 import {
   HOST_CONTEXT_HEADER,
   HOST_RPC_BRIDGE_SESSION_HEADER,
@@ -924,7 +924,7 @@ export const pagesRoute = (root = productPagesRootPath, pods = productPodsRootPa
   HttpRouter.use((router) =>
     Effect.gen(function* () {
       const { address } = yield* HttpServer.HttpServer;
-      const base = `http://127.0.0.1:${address._tag === "TcpAddress" ? address.port : 0}`;
+      const base = `http://127.0.0.1:${address._tag === "UnixPathAddress" ? 0 : address.port}`;
       const bridge = Option.getOrUndefined(yield* Effect.serviceOption(RevitBridge));
       const live: PageLive = {
         sessions: async () =>

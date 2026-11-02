@@ -16,7 +16,7 @@ import {
   type TargetInventory,
 } from "@pe/agent-contracts";
 import { RegistryContext, useAtomValue } from "@effect/atom-react";
-import * as Atom from "effect/unstable/reactivity/Atom";
+import * as Atom from "effect/reactivity/Atom";
 import { deepEqual } from "@tanstack/react-router";
 import { useCallback, useContext, useMemo, useRef, useSyncExternalStore } from "react";
 import type { Custody, Lane } from "@pe/host-contracts/contracts";

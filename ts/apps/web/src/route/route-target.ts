@@ -14,7 +14,7 @@ import {
   type Reading,
   type TargetResolution,
 } from "@pe/agent-contracts";
-import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { peReadings } from "#/readings";
 import { readingAtom, inventoryOf, previousOf, targetInventory } from "#/shell/readings-hooks";
 import { soleUserDocument } from "#/chat/scope";

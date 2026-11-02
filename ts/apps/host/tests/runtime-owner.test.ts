@@ -1,6 +1,6 @@
 import { Effect, Queue, Layer, Fiber } from "effect";
 import { NodeHttpServer, NodeServices } from "@effect/platform-node";
-import { HttpRouter } from "effect/unstable/http";
+import { HttpRouter } from "effect/http";
 import { createServer, request } from "node:http";
 import { once } from "node:events";
 import {

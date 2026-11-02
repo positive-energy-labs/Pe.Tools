@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { dirname } from "node:path";
 import { Effect, FileSystem, Schema, Semaphore } from "effect";
-import { HttpBody, HttpClient, UrlParams } from "effect/unstable/http";
+import { HttpBody, HttpClient, UrlParams } from "effect/http";
 import {
   ApsAuthFlowKind,
   ApsScopeProfile,

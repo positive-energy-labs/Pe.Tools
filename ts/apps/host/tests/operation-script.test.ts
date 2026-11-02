@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { Deferred, Effect, Layer } from "effect";
 import { NodeHttpClient, NodeHttpServer } from "@effect/platform-node";
-import { HttpRouter } from "effect/unstable/http";
+import { HttpRouter } from "effect/http";
 import { HOST_CONTEXT_HEADER } from "@pe/host-contracts/contracts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { RevitBridge } from "../src/bridge.ts";

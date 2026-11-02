@@ -11,7 +11,7 @@ import { createServer, request as httpRequest } from "node:http";
 import { once } from "node:events";
 import { Effect, Layer, Deferred } from "effect";
 import { NodeHttpServer } from "@effect/platform-node";
-import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
+import { HttpRouter, HttpServerResponse } from "effect/http";
 import { createDevices, DEVICE_COOKIE } from "../src/remote-device.ts";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

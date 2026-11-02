@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import * as Atom from "effect/unstable/reactivity/Atom";
+import * as Atom from "effect/reactivity/Atom";
 import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { useWorkOwner, WorkContext } from "@pe/kit/lang/work";

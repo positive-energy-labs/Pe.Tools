@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ActionJournal } from "../src/action-journal.ts";
 import { Context, Effect, Layer } from "effect";
-import { HttpRouter } from "effect/unstable/http";
+import { HttpRouter } from "effect/http";
 import { expect, test } from "vite-plus/test";
 import { DUCTS_BODY_VERSION_HEADER, DUCTS_REFRESH_HEADER, type Caller } from "@pe/agent-contracts";
 import {

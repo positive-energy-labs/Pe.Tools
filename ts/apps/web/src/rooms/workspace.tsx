@@ -1,5 +1,5 @@
 import { roomSelection } from "./selection";
-import * as Atom from "effect/unstable/reactivity/Atom";
+import * as Atom from "effect/reactivity/Atom";
 import { RegistryContext } from "@effect/atom-react";
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import type { RoomsRouteDocument } from "@pe/agent-contracts";

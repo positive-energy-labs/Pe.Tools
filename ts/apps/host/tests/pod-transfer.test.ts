@@ -8,7 +8,7 @@ import { mkdir, mkdtemp, open, readFile, rm, symlink, writeFile } from "node:fs/
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
-import { HttpRouter } from "effect/unstable/http";
+import { HttpRouter } from "effect/http";
 import type { Caller } from "@pe/agent-contracts";
 import { productPathNames } from "@pe/host-contracts/contracts";
 

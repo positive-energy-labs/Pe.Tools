@@ -6,7 +6,7 @@
  * capture keys on the document and the focus, the camera on the document and the picture mode,
  * so neither remounts when a view or variant swaps its content.
  */
-import type * as Atom from "effect/unstable/reactivity/Atom";
+import type * as Atom from "effect/reactivity/Atom";
 import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import {
   AttentionDocument,

@@ -12,7 +12,7 @@ import { randomUUID } from "node:crypto";
 import { appendFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
+import { HttpRouter, HttpServerResponse as Response } from "effect/http";
 import {
   captureReceiptSchema,
   captureUrl,

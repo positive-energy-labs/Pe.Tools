@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { Effect, Layer } from "effect";
-import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
+import { HttpRouter, HttpServerResponse } from "effect/http";
 import { invocationContext, withInvocationContext, contextFetch } from "@pe/runtime/context";
 import {
   readRequestIdentity as rawReadRequestIdentity,
