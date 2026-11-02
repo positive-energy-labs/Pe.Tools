@@ -99,7 +99,7 @@ public static class DuctApplier {
                 [(PressureLossField, Finite(w.InWg) ? UnitUtils.ConvertToInternalUnits(w.InWg, InWg).ToString("R", CultureInfo.InvariantCulture) : "")], w.InWg, $"specific-loss {w.InWg:0.####} in-wg")));
         foreach (var w in request.Terminals ?? []) items.Add(Duplicate("terminal", w.Id) ?? Plan("terminal", w.Id, () => Terminal(doc, w, slots)));
         foreach (var w in request.Equipment ?? []) items.Add(Duplicate("equipment", w.Id) ?? Plan("equipment", w.Id, () => Equipment(doc, w, slots)));
-        foreach (var w in request.TerminalFlows ?? []) items.Add(Duplicate("terminal-flow", w.Id) ?? Plan("terminal-flow", w.Id, () => TerminalFlow(doc, w, slots)));
+        foreach (var w in request.TerminalFlows ?? []) items.Add(Duplicate("terminal-flow", w.Id) ?? Plan("terminal-flow", w.Id, () => TerminalFlow(doc, w)));
         foreach (var w in request.EquipmentFlows ?? []) items.Add(Duplicate("equipment-flow", w.Id) ?? Plan("equipment-flow", w.Id, () => EquipmentFlow(doc, w, slots)));
         SharedTypes(items, "equipment", (request.Equipment ?? []).Select(w => (w.Id, w.ExternalStaticInWg)), "fan statics");
         SharedTypes(items, "equipment-flow", (request.EquipmentFlows ?? []).Select(w => (w.Id, w.Cfm)), "fan flows");
@@ -438,29 +438,35 @@ public static class DuctApplier {
         };
     }
 
-    /// <summary>The terminal's design flow, written to the TerminalFlow slot on the instance (a terminal carries no type fallback).</summary>
-    private static Item TerminalFlow(Document doc, DuctFlowWrite w, DuctParameterSlots slots) {
+    /// <summary>The terminal's design flow, written to its previewed slot on the instance (a terminal carries no type fallback).</summary>
+    // TODO: Prove per-element Flow writes and readback in controlled u2-r2; deterministic slot checks do not prove Revit writability.
+    private static Item TerminalFlow(Document doc, DuctFlowWrite w) {
         const string kind = "terminal-flow";
+        var slot = w.Slot;
+        if (string.IsNullOrWhiteSpace(slot)) return new Item(w.Id, kind, null).Refuse("no per-element airflow slot was previewed");
+        IReadOnlyList<Parameter> Parameters(Element element) => slot == "revit:Flow"
+            ? element.get_Parameter(BuiltInParameter.RBS_DUCT_FLOW_PARAM) is { } flow ? [flow] : []
+            : element.GetParameters(slot).ToList();
         var e = doc.GetElement(w.Id.ToElementId());
         if (e is null) return new Item(w.Id, kind, null).Refuse($"element {w.Id} is not in the document");
         // A family parameter can share the built-in `Flow`'s name: write the writable air flow one.
-        var named = e.GetParameters(slots.TerminalFlow);
+        var named = Parameters(e);
         var p = named.FirstOrDefault(x => !x.IsReadOnly && IsAirFlow(x)) ?? named.FirstOrDefault();
         var item = new Item(w.Id, kind, p is { HasValue: true, StorageType: StorageType.Double } ? $"{Shown(p, Cfm):0.####} cfm" : null) { Element = e };
         if (e.Category.ToBuiltInCategory() != BuiltInCategory.OST_DuctTerminal) return item.Refuse($"not an air terminal ({e.Category?.Name ?? "no category"})");
-        if (p is null) return item.Refuse($"the instance has no '{slots.TerminalFlow}' (the TerminalFlow slot)");
+        if (p is null) return item.Refuse($"the instance has no '{slot}' (the TerminalFlow slot)");
         if (p.StorageType != StorageType.Double || p.Definition.GetDataType() != SpecTypeId.AirFlow)
-            return item.Refuse($"'{slots.TerminalFlow}' is not an air flow parameter");
-        if (p.IsReadOnly) return item.Refuse($"'{slots.TerminalFlow}' is read-only (a formula, a reporting parameter or a built-in drives it)");
+            return item.Refuse($"'{slot}' is not an air flow parameter");
+        if (p.IsReadOnly) return item.Refuse($"'{slot}' is read-only (a formula, a reporting parameter or a built-in drives it)");
         if (!Finite(w.Cfm) || w.Cfm < 0) return item.Refuse("the flow must be a finite number of 0 or more");
-        var after = $"'{slots.TerminalFlow}' {w.Cfm:0.####} cfm";
+        var after = $"'{slot}' {w.Cfm:0.####} cfm";
         if (p.HasValue && Math.Abs(Shown(p, Cfm) - w.Cfm) < 1e-6 * Math.Max(1, Math.Abs(w.Cfm))) return item.Unchanged(after);
         return item with {
             After = after,
-            Write = () => e.GetParameters(slots.TerminalFlow).FirstOrDefault(x => !x.IsReadOnly && IsAirFlow(x))
+            Write = () => Parameters(e).FirstOrDefault(x => !x.IsReadOnly && IsAirFlow(x))
                 ?.Set(UnitUtils.ConvertToInternalUnits(w.Cfm, Cfm)) == true
                 ? after
-                : throw new InvalidOperationException($"Revit rejected '{slots.TerminalFlow}'")
+                : throw new InvalidOperationException($"Revit rejected '{slot}'")
         };
     }
 

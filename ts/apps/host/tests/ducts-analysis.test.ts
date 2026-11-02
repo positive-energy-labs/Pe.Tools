@@ -73,6 +73,7 @@ function fixture() {
       {
         id: 2,
         kind: "terminal",
+        flowParameter: "revit:Flow",
         category: "Terminal",
         family: "Grille",
         type: "Fixture",
@@ -879,6 +880,7 @@ test("apply-request builds a canonical immutable candidate without reacquiring",
   expect(plan.source.snapshotJsonSha256).toBe(hashJson(input.snapshot));
   expect(plan.source.tablesJsonSha256).toBe(hashJson(input.tables));
   expect(plan.payload.store.customerKeep).toEqual({ exact: [1, "untouched"] });
+  expect(plan.payload.terminalFlows).toContainEqual(expect.objectContaining({ id: 2, slot: "revit:Flow" }));
   expect(plan.payload.terminals).toEqual([{ id: 2, inWg: 0.12, source: "Approved purpose point" }]);
   expect(plan.source.target).toEqual(f.target);
   expect(plan.source.acquisitions.map((r) => r.sha256)).toEqual(
@@ -1108,4 +1110,17 @@ test("the survey joins a sub-tolerance gap, takes the terminal flow from the loa
     expect.objectContaining({ kind: "no-mark", elementIds: [1], clearer: "person" }),
   );
   expect(markless.findingCounts.byClearer).toEqual({ route: 1, pea: 0, person: 3 });
+});
+
+
+test("apply-request refuses a terminal without an observed slot before dispatch", () => {
+  const f = fixture();
+  const doc = candidateWork();
+  f.snapshot.nodes[1]!.flowParameter = null;
+  expect(() => applyRequest(f.snapshot, price(f.snapshot, {}, doc), "fixed", []))
+    .toThrow("Element 2 has no observed airflow parameter");
+  f.snapshot.nodes[1]!.flowParameter = "revit:Flow";
+  doc.parameters.terminalFlow = { edit: { value: "PE_M_Grd_AirFlow" } };
+  expect(() => applyRequest(f.snapshot, price(f.snapshot, {}, doc), "fixed", []))
+    .toThrow("PE_M_Grd_AirFlow");
 });

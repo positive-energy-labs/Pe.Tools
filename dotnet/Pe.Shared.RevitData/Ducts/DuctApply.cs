@@ -41,7 +41,7 @@ public sealed record DuctDropWrite(long Id, double InWg, string? Source);
 public sealed record DuctEquipmentWrite(long Id, double ExternalStaticInWg);
 
 /// <summary>A design flow in cfm and where it came from (override, load preview, rooms, a person's note).</summary>
-public sealed record DuctFlowWrite(long Id, double Cfm, string? Source);
+public sealed record DuctFlowWrite(long Id, double Cfm, string? Source, string? Slot = null);
 
 /// <summary>StoreRevision is the store's WorkRevision after this call (unchanged on preview).</summary>
 public sealed record DuctApplyResult(

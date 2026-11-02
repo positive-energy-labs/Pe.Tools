@@ -4,11 +4,52 @@ import { lifetime } from "./family-actions.ts";
 import type { RevitBridge } from "./bridge.ts";
 import type { SdkReceiptReader } from "./native-receipts.ts";
 import { z } from "zod";
-import { canonicalRouteInput, tools, type Tool, type WorkHandle } from "@pe/agent-contracts";
+import {
+  canonicalRouteInput,
+  tools,
+  type Tool,
+  type WorkHandle,
+  type Consumed,
+} from "@pe/agent-contracts";
 import { refused, type CommandContext, type CommandExecutor } from "./command-executor.ts";
 
 const hash = (value: unknown) =>
   createHash("sha256").update(canonicalRouteInput(value)).digest("hex");
+// Dependency and path collections are sets; request arrays retain their semantic order.
+const canonicalSet = <T>(values: readonly T[]): T[] =>
+  [...new Set(values.map(canonicalRouteInput))].sort().map((value) => JSON.parse(value));
+// TODO: Capture both seals on u2-r2 to identify the historical 6cab7319 mismatch; live apply/readback remains unproven.
+export function writeSeal(
+  request: unknown,
+  input: unknown,
+  work: WorkHandle,
+  incarnation: unknown,
+  consumed: readonly Consumed[],
+  evidence: unknown,
+) {
+  const dependencies = canonicalSet(
+    consumed
+      .filter((item) => item.kind !== "document-mark")
+      .map((item) =>
+        item.kind === "work"
+          ? {
+              ...item,
+              probe: {
+                ...item.probe,
+                paths: canonicalSet(item.probe.paths),
+                edits: canonicalSet(item.probe.edits ?? []),
+              },
+            }
+          : item,
+      ),
+  );
+  return {
+    requestHash: hash(request),
+    work: { handle: work, consumed: dependencies.filter((item) => item.kind === "work") },
+    incarnation,
+    dependencies: hash({ input, dependencies, evidence }),
+  };
+}
 const preparedSchema = z.object({
   input: z.record(z.string(), z.unknown()),
   value: z.unknown(),
@@ -155,26 +196,24 @@ export function workWriteBoundary(
             value && typeof value === "object" && !Array.isArray(value)
               ? (value as Record<string, unknown>)
               : { value };
-          const seal = {
-            requestHash: hash(hooks.preview(request)),
-            work: { handle: work, consumed: ctx.consumed.filter((item) => item.kind === "work") },
-            incarnation: { target, process: observed.process },
-            dependencies: hash({
-              input,
-              dependencies,
-              evidence: (request as Record<string, unknown>).dependencies,
-            }),
-          };
-          if (
-            !previewOnly &&
-            (preview?.state !== "succeeded" ||
-              canonicalRouteInput((preview.result as { seal?: unknown }).seal) !==
-                canonicalRouteInput(seal))
-          )
+          const seal = writeSeal(
+            hooks.preview(request),
+            input,
+            work,
+            { target, process: observed.process },
+            dependencies,
+            (request as Record<string, unknown>).dependencies,
+          );
+          const previousSeal = preview?.state === "succeeded"
+            ? (preview.result as { seal?: Record<string, unknown> }).seal : undefined;
+          if (!previewOnly && canonicalRouteInput(previousSeal) !== canonicalRouteInput(seal)) {
+            const changed = Object.keys(seal).filter((key) =>
+              canonicalRouteInput(previousSeal?.[key]) !== canonicalRouteInput(seal[key as keyof typeof seal]));
             throw refused(
-              "Preview changed; preview the current Work and dependencies again",
+              `Preview changed; preview the current Work and dependencies again (${changed.join(", ")})`,
               "preview.stale",
             );
+          }
           return { input, value, seal, previewOnly, takenAt };
         },
       };
@@ -196,7 +235,8 @@ export function workWriteBoundary(
       const retires = executor.retires;
       if (!p.previewOnly && retires) {
         const paths = retires(result);
-        if (paths.length) await execution.retireWork((p.input.work as WorkHandle).key, route, paths);
+        if (paths.length)
+          await execution.retireWork((p.input.work as WorkHandle).key, route, paths);
       }
       return {
         ...(result as object),

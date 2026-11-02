@@ -1,3 +1,4 @@
+import { flowWriteSlot } from "./flow-write-slot.ts";
 /**
  * The losses view's model, pure: what Revit holds now (the applied tables), what the person
  * edit on top, the two solves, and the `ducts.apply` request built from the edit cells.
@@ -508,11 +509,14 @@ export function applyRequest(
       if (flow?.cfm == null) return [];
       const stated = priced.edit.flows[String(node.id)]?.source;
       return [
-        flowWrite(
-          node.id,
-          flow.cfm,
-          flow.source === "override" ? (stated ?? "override") : flow.source,
-        ),
+        {
+          ...flowWrite(
+            node.id,
+            flow.cfm,
+            flow.source === "override" ? (stated ?? "override") : flow.source,
+          ),
+          slot: flowWriteSlot(node.id, node.flowParameter, priced.edit.parameters.terminalFlow),
+        },
       ];
     })
     .sort((a, b) => a.id - b.id);

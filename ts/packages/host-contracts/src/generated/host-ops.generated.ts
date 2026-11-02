@@ -237,6 +237,7 @@ export namespace DuctsApply {
       id: number;
       cfm: number;
       source?: null | string;
+      slot?: null | string;
     }
     /**
      * Pe's provenance for duct losses: one versioned JSON blob in the hidden Project Information text parameter

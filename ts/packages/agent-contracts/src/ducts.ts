@@ -535,6 +535,7 @@ const writeDrop = z.strictObject({
   source: optionalText,
 });
 const writeFlow = z.strictObject({
+  slot: z.string().min(1).optional(),
   id: z.number().int(),
   cfm: z.number().nonnegative(),
   source: optionalText,

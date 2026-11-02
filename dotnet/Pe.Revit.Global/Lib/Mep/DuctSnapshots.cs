@@ -461,10 +461,24 @@ public static class DuctSnapshots {
     ///     parameter of the same name can sit beside it, so the first nonzero wins), else on its type.
     /// </summary>
     private static (double? Cfm, string? From) SlotFlow(Element e, string slot) {
-        double? First(Element owner) => owner.GetParameters(slot).Where(IsAirFlow)
-            .Select(p => Converted(p, UnitTypeId.CubicFeetPerMinute)).FirstOrDefault(v => v is not null);
-        if (First(e) is { } own) return (own, slot);
-        return (e as FamilyInstance)?.Symbol is { } symbol && First(symbol) is { } typed ? (typed, slot) : (null, null);
+        Parameter? NamedFlow(Element owner) {
+            var candidates = owner.GetParameters(slot).Where(IsAirFlow).ToList();
+            return candidates.FirstOrDefault(p => Converted(p, UnitTypeId.CubicFeetPerMinute) is not null)
+                ?? candidates.FirstOrDefault();
+        }
+        var own = slot == "revit:Flow" ? e.get_Parameter(BuiltInParameter.RBS_DUCT_FLOW_PARAM) : NamedFlow(e);
+        if (Converted(own, UnitTypeId.CubicFeetPerMinute) is { } cfm) return (cfm, slot);
+        var typed = slot != "revit:Flow" && (e as FamilyInstance)?.Symbol is { } symbol ? NamedFlow(symbol) : null;
+        if (Converted(typed, UnitTypeId.CubicFeetPerMinute) is { } typeCfm) return (typeCfm, slot);
+        // The firm default is not present in every family. Resolve the terminal itself, never a roster count.
+        if (own is null && typed is null && slot == new DuctParameterSlots().TerminalFlow
+            && e.Category.ToBuiltInCategory() == BuiltInCategory.OST_DuctTerminal) {
+            own = e.get_Parameter(BuiltInParameter.RBS_DUCT_FLOW_PARAM);
+            slot = "revit:Flow";
+        }
+        var present = own ?? typed;
+        return present is not null && IsAirFlow(present)
+            ? (Converted(present, UnitTypeId.CubicFeetPerMinute), slot) : (null, null);
     }
 
     /// <summary>The element's created (or demolished) phase name; null when it has no phases or none is set.</summary>
