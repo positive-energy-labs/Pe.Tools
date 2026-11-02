@@ -184,6 +184,7 @@ function commandAxes(key: string, action: Command): CatalogLink {
     cost: "Mutation",
     cardinality: "One",
     // Named runtime registry hooks; the graph never interprets Work or executes preview.
+    // TODO: Bind derive/preview names to typed executor exports; these names are not statically resolved yet.
     ...(modelWrite ? { derive: `${key}.bind`, preview: `${key}.prepare` } : {}),
   };
 }
