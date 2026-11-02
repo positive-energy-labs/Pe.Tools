@@ -153,14 +153,15 @@ function nativeUndo(event: KeyboardEvent) {
 }
 
 /**
- * Whether a key event belongs to this route: inside its own mount, or (for the URL's primary
- * route) anywhere outside every route mount — its portaled Situation, the app bar, nothing
- * focused. A docked route (Pea beside Families) answers only inside its own mount.
+ * Whether an undo key belongs to this route: inside its own mount, or (for the URL's primary
+ * route) anywhere no other journal claims — its portaled Situation, the app bar, nothing focused,
+ * or a docked route that holds no Work (Pea's composer, whose Revert writes this route's Work).
  */
 export function routeOwnsKey(mount: HTMLElement | null, primary: boolean, event?: KeyboardEvent) {
   const at = event?.target instanceof Element ? event.target : null;
   const holder = at?.closest("[data-route-mount]") ?? null;
-  return holder ? holder === mount : primary;
+  if (holder === mount && holder) return true;
+  return primary && !holder?.hasAttribute("data-route-journal");
 }
 
 /**

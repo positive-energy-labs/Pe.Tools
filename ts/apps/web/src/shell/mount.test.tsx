@@ -486,22 +486,31 @@ test("D7: Mod+Z and Mod+Shift+Z restore from outside the route mount (a portaled
   }
 });
 
-test("D7: a key inside another route's mount is that route's, never this one's", () => {
+test("D7: a key inside another route's journaled mount is that route's, never this one's", () => {
   const mine = document.createElement("div");
   const theirs = document.createElement("div");
   mine.dataset.routeMount = "families";
   theirs.dataset.routeMount = "chat";
+  theirs.dataset.routeJournal = "";
+  const journalless = document.createElement("div");
+  journalless.dataset.routeMount = "pea";
+  const inPea = document.createElement("button");
+  journalless.append(inPea);
   const inTheirs = document.createElement("input");
   theirs.append(inTheirs);
   const outside = document.createElement("button");
-  document.body.append(mine, theirs, outside);
+  document.body.append(mine, theirs, outside, journalless);
   const at = (target: Element) => ({ target }) as unknown as KeyboardEvent;
   try {
     expect(routeOwnsKey(mine, true, at(mine))).toBe(true);
     expect(routeOwnsKey(mine, true, at(inTheirs))).toBe(false);
     expect(routeOwnsKey(mine, true, at(outside))).toBe(true);
     expect(routeOwnsKey(theirs, false, at(outside))).toBe(false);
+    // A docked route with no Work (Pea's composer Revert) leaves its keys to the URL's route.
+    expect(routeOwnsKey(mine, true, at(inPea))).toBe(true);
+    expect(routeOwnsKey(mine, false, at(inPea))).toBe(false);
   } finally {
+    journalless.remove();
     mine.remove();
     theirs.remove();
     outside.remove();

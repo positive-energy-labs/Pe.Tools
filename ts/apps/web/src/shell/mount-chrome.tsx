@@ -214,6 +214,7 @@ export function GraphRouteView<P, W>({
         <div
           ref={mountElement}
           data-route-mount={graph.key}
+          data-route-journal={owner.snapshot().work ? "" : undefined}
           role="region"
           aria-label={`${graph.name} route`}
           className="flex h-full min-h-0 flex-col"
