@@ -1,4 +1,4 @@
-import { consentService } from "./effect-test.ts";
+import { consentService, harnessThreads } from "./effect-test.ts";
 import { createPeClient, servePeRoute } from "@pe/agent-contracts/pe-api";
 import { afterAll, afterEach, beforeAll, expect, test, vi } from "vite-plus/test";
 import { HostLog } from "../src/host-log.ts";
@@ -30,7 +30,7 @@ import {
   assertRunAdmission,
 } from "../src/control.ts";
 import { createProviders } from "../src/harness/providers.ts";
-import { createHarnessThreads, IDLE_CHILD_MS } from "../src/harness/threads.ts";
+import { IDLE_CHILD_MS, type HarnessThreads } from "../src/harness/threads.ts";
 import * as adapter from "../src/harness/adapter.ts";
 import { productProvidersPath } from "../src/product-paths.ts";
 import { createUpdateReader, type UpdateRunner } from "../src/update-reader.ts";
@@ -43,10 +43,10 @@ type Host = {
   fetch: (request: Request) => Promise<Response>;
   /** Who every request crosses as: the identity middleware's stand-in. */
   as: Caller;
-  launchScheduled: ReturnType<typeof createHarnessThreads>["launchScheduled"];
-  heads: ReturnType<typeof createHarnessThreads>["heads"];
-  observe: ReturnType<typeof createHarnessThreads>["observe"];
-  runs: ReturnType<typeof createHarnessThreads>["runs"];
+  launchScheduled: HarnessThreads["Service"]["launchScheduled"];
+  heads: HarnessThreads["Service"]["heads"];
+  observe: HarnessThreads["Service"]["observe"];
+  runs: HarnessThreads["Service"]["runs"];
   log: HostLog;
   close: () => Promise<unknown>;
   consoles: string[];
@@ -54,13 +54,13 @@ type Host = {
 const hosts: Host[] = [];
 const mcpServer = () => ({ name: "pea", command: "unused", args: [], env: [] });
 /** Threads and providers behind one fetch, as the host's router mounts them. No probe at start. */
-const host = (
+const host = async (
   updatePending?: () => boolean,
   prepare?: () => Promise<unknown>,
   openConsole: (command: string, opened: () => void) => Promise<void> = async (_, opened) =>
     opened(),
   pluginHook?: <N extends PluginHookName>(name: N, event: PluginHooks[N]) => Promise<void>,
-): Host => {
+): Promise<Host> => {
   const consoles: string[] = [];
   const providers = createProviders({
     shellPath: async () => "C:\\canary-bin;C:\\also",
@@ -72,7 +72,7 @@ const host = (
     },
   });
   const log = new HostLog(join(root, ".log", randomUUID()));
-  const threads = createHarnessThreads({
+  const threads = await harnessThreads({
     runs: consentService(),
     log,
     prepare,
@@ -212,7 +212,7 @@ test("automatic update admission refuses a new Pea prompt through download and r
     installed: true,
     pid: 123,
   });
-  const threads = host(updates.automaticPending);
+  const threads = await host(updates.automaticPending);
   const call = caller(threads);
   const read = reader(threads);
   const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
@@ -282,7 +282,7 @@ async function untilIo<T>(read: () => Promise<T>, done: (value: T) => boolean): 
 
 test("turn children retire while conversation history and model choices survive", async () => {
   process.env.FAKE_ACP_SHAPE = "config";
-  const h = host(),
+  const h = await host(),
     call = caller(h),
     read = reader(h);
   const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
@@ -317,7 +317,7 @@ test("connect, model/trait RPCs, active turns and asks prevent idle reaping", as
   process.env.FAKE_ACP_GATE = gates;
   await writeFile(join(gates, "connect"), "hold");
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
-  const threads = host();
+  const threads = await host();
   const call = caller(threads);
   const read = reader(threads);
   const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
@@ -366,7 +366,7 @@ test("connect, model/trait RPCs, active turns and asks prevent idle reaping", as
 });
 
 test("a question parks the turn, a fork copies the log, and a lost session re-feeds the transcript", async () => {
-  const threads = host();
+  const threads = await host();
   const call = caller(threads);
   const read = reader(threads);
   const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
@@ -460,7 +460,7 @@ test("a question parks the turn, a fork copies the log, and a lost session re-fe
   const metaPath = join(root, id, "meta.json");
   const meta = JSON.parse(await readFile(metaPath, "utf8")) as { acpSessionId: string };
   await writeFile(metaPath, JSON.stringify({ ...meta, acpSessionId: "lost" }));
-  const second = host();
+  const second = await host();
   await caller(second)("POST", `/pe/threads/${id}/prompt`, { text: "still there?" });
   const lost = await until(reader(second), id, (b) => turnEnds(b).length === 3);
   expect(lost.events.findLast((e) => e.kind === "session")).toMatchObject({ state: "detached" });
@@ -482,7 +482,7 @@ const said = (body: HarnessThreadBody, name: string) =>
 test("subscription children exclude inherited inference credentials without changing the host", async () => {
   const names = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"];
   for (const name of names) vi.stubEnv(name, "synthetic-inherited-credential");
-  const threads = host();
+  const threads = await host();
   for (const provider of ["claude", "codex"]) {
     const body = await envOf(threads, provider);
     for (const name of names) expect(said(body, name)).toBe("");
@@ -548,7 +548,7 @@ test("an endpoint provider is checked before save, and every thread carries its 
   const codexKey = "sk-codex-secret-4321";
   const claudeKey = "sk-claude-secret-8765";
   try {
-    const threads = host();
+    const threads = await host();
     const call = caller(threads);
     const add = (harness: string, name: string, baseUrl: string, apiKey: string) =>
       call("POST", "/pe/providers", { harness, name, auth: { kind: "endpoint", baseUrl, apiKey } });
@@ -731,7 +731,7 @@ test("an endpoint provider is checked before save, and every thread carries its 
 }, 30_000);
 
 test("both harnesses retain journal-safe modes", async () => {
-  const threads = host();
+  const threads = await host();
   expect(said(await envOf(threads, "claude"), "MODE")).toBe("default");
   expect(said(await envOf(threads, "codex"), "MODE")).toBe("read-only");
 });
@@ -757,7 +757,7 @@ const onDoc = (ref: { session: string; openId: string }) => ({ kind: "document",
 const put = (...requests: unknown[]) => requests.map((request) => ({ request }));
 
 test("access-050: fork retains the targets but never inherits a human admission", async () => {
-  const threads = host();
+  const threads = await host();
   const call = caller(threads);
   const created = await call("POST", "/pe/threads", { providerId: "claude" });
   const id = created.json.id;
@@ -790,7 +790,7 @@ test("door 6: a human adds your open lifetimes with an admission; Pea's own and 
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(T0);
   bindControl(peaAcquiredCopy);
-  const call = caller(host());
+  const call = caller(await host());
   const id = "target-door-6";
   const set = await call("PUT", `/pe/scope/${id}`, { targets: put(yours), expectedRevision: 0 });
   expect(set.status).toBe(200);
@@ -821,7 +821,7 @@ test("door 6: a human adds your open lifetimes with an admission; Pea's own and 
 });
 
 test("thread target changes preserve Pea capability and retain revocation for external grants", async () => {
-  const h = host();
+  const h = await host();
   bindControl({ heads: h.heads.read });
   const call = caller(h),
     id = "target-context";
@@ -837,7 +837,7 @@ test("thread target changes preserve Pea capability and retain revocation for ex
 });
 
 test("Pea context targets are editable defaults and mint no external write admission", async () => {
-  const h = host(),
+  const h = await host(),
     call = caller(h),
     id = "context-only";
   h.as = peaOf(id);
@@ -855,7 +855,7 @@ test("Pea context targets are editable defaults and mint no external write admis
 });
 
 test("Pea cannot create its own independent prompt and target selection grants no write", async () => {
-  const h = host(),
+  const h = await host(),
     call = caller(h),
     id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id;
   await call("PUT", `/pe/scope/${id}`, { targets: put(yours), expectedRevision: 0 });
@@ -882,7 +882,7 @@ const story = (body: HarnessThreadBody) =>
   );
 
 test("a prompt id is the turn id: a retry never sends twice, other content under it is refused", async () => {
-  const threads = host();
+  const threads = await host();
   const call = caller(threads);
   const read = reader(threads);
   const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
@@ -907,7 +907,7 @@ test("a prompt id is the turn id: a retry never sends twice, other content under
 });
 
 test("queue order holds under steer: the steer runs next, then the queue in order", async () => {
-  const threads = host();
+  const threads = await host();
   const call = caller(threads);
   const read = reader(threads);
   const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
@@ -935,7 +935,7 @@ test("queue order holds under steer: the steer runs next, then the queue in orde
 });
 
 test("a restarted host drops the prompts it had queued, saying so", async () => {
-  const first = host();
+  const first = await host();
   const call = caller(first);
   const read = reader(first);
   const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
@@ -944,7 +944,7 @@ test("a restarted host drops the prompts it had queued, saying so", async () => 
   const queued = randomUUID();
   await call("POST", `/pe/threads/${id}/prompt`, { id: queued, text: "later", delivery: "queue" });
   await first.close();
-  const second = host();
+  const second = await host();
   const body = await reader(second)(id);
   expect(body.events.at(-1)).toMatchObject({
     kind: "prompt_dropped",
@@ -958,7 +958,7 @@ test("a restarted host drops the prompts it had queued, saying so", async () => 
 });
 
 test("declared client and actual harness handler share input, output and refusal contracts", async () => {
-  const owner = host();
+  const owner = await host();
   const client = createPeClient("http://host", (url, init) =>
     servePeRoute(new Request(url, init), owner.fetch),
   );
@@ -979,7 +979,7 @@ test("declared client and actual harness handler share input, output and refusal
 });
 
 test("one huge tool result is kept bounded in the record, the log and every reader", async () => {
-  const threads = host();
+  const threads = await host();
   const call = caller(threads);
   const read = reader(threads);
   const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
@@ -1020,7 +1020,7 @@ for (const harness of ["claude", "codex"] as const) {
         };
         return realOpen(...args);
       });
-      const h = host(),
+      const h = await host(),
         call = caller(h),
         read = reader(h);
       try {
@@ -1060,7 +1060,7 @@ for (const harness of ["claude", "codex"] as const) {
       calls.push({ harness: args[0], token: args[2].PE_CONTEXT ?? "" });
       return realOpen(...args);
     });
-    const h = host(),
+    const h = await host(),
       call = caller(h),
       read = reader(h);
     try {
@@ -1119,7 +1119,7 @@ for (const harness of ["claude", "codex"] as const) {
     }
   }, 15000);
   test(`${harness}: Pea's own MCP tools run without a card (ADR 0027 rule 11)`, async () => {
-    const h = host(),
+    const h = await host(),
       call = caller(h),
       read = reader(h);
     try {
@@ -1142,7 +1142,7 @@ for (const harness of ["claude", "codex"] as const) {
     }
   });
   test(`${harness}: a native write approval is refused with the host-command boundary`, async () => {
-    const h = host(),
+    const h = await host(),
       call = caller(h),
       read = reader(h);
     try {
@@ -1173,7 +1173,7 @@ for (const harness of ["claude", "codex"] as const) {
 }
 
 test("recorded run permission answers survive reconnect and restart without approving an old run", async () => {
-  const h = host(),
+  const h = await host(),
     call = caller(h),
     read = reader(h),
     id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string,
@@ -1200,7 +1200,7 @@ test("recorded run permission answers survive reconnect and restart without appr
   });
   expect(repeated.json.decision).toEqual(first.json.decision);
   await h.close();
-  const restarted = host(),
+  const restarted = await host(),
     again = caller(restarted);
   try {
     const recovered = await again("POST", `/pe/threads/${id}/permission`, {
@@ -1222,7 +1222,7 @@ test("recorded run permission answers survive reconnect and restart without appr
     expect(() =>
       restarted.runs.checkpoint(originOf({ ...by, run: next, root: next }), allowed),
     ).toThrow("consent.stopped");
-    const third = host();
+    const third = await host();
     try {
       const fresh = { thread: id, turn: randomUUID() };
       third.runs.open(fresh);
@@ -1247,7 +1247,7 @@ test("delegated thread processes carry host-bound root consent and Stop", async 
     tokens.push(args[2].PE_CONTEXT ?? "");
     return realOpen(...args);
   });
-  const h = host(),
+  const h = await host(),
     call = caller(h),
     read = reader(h);
   const minted = (turn: string) => {
@@ -1307,7 +1307,7 @@ test("delegated thread processes carry host-bound root consent and Stop", async 
 }, 15000);
 
 test("restart rejects an open countdown and requires a fresh full window", async () => {
-  const first = host();
+  const first = await host();
   const id = (await caller(first)("POST", "/pe/threads", { providerId: "claude" })).json
     .id as string;
   const run = { thread: id, turn: randomUUID() };
@@ -1319,7 +1319,7 @@ test("restart rejects an open countdown and requires a fresh full window", async
   const ask = openAsks(await reader(first)(id))[0]!;
   await first.close();
   expect(await stopped).toContain("consent.stopped");
-  const second = host();
+  const second = await host();
   try {
     expect(openAsks(await reader(second)(id))).toHaveLength(0);
     const next = { thread: id, turn: randomUUID() };

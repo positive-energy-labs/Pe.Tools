@@ -7,7 +7,7 @@ import { expect, test, vi } from "vite-plus/test";
 import { address, bindWork } from "@pe/agent-contracts";
 import type { RevitMatrixLoadedFamilies } from "@pe/host-contracts/generated";
 import { CANCEL_OPERATION_KEY, type RevitBridge } from "../src/bridge.ts";
-import { cancelFamiliesRead, readFamiliesProgressively } from "../src/families-reader.ts";
+import { familiesReader } from "./effect-test.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
 
 type Matrix = RevitMatrixLoadedFamilies.Res.Response;
@@ -39,6 +39,7 @@ async function fixture(blockSecond: boolean) {
     isPartial: false,
     placedInstanceCount: 0,
   }));
+  const reader = await familiesReader();
   const bridge = {
     list: Effect.succeed([]),
     subscribe: () => () => {},
@@ -75,7 +76,8 @@ async function fixture(blockSecond: boolean) {
     dir,
     bridge,
     filter,
-    start: () => readFamiliesProgressively({ bridge, captures, document, work, readId, filter }),
+    reader,
+    start: () => reader.read({ bridge, captures, document, work, readId, filter }),
   };
 }
 
@@ -91,9 +93,9 @@ test("a row is available before the next family finishes; exact cancellation ret
     );
     expect(await f.captures.latestFamilies(f.work)).toBeNull();
     await expect(
-      cancelFamiliesRead(f.readId, { ...f.document, openId: "foreign" }),
+      f.reader.cancel(f.readId, { ...f.document, openId: "foreign" }),
     ).rejects.toThrow("no running");
-    await cancelFamiliesRead(f.readId, f.document);
+    await f.reader.cancel(f.readId, f.document);
     const cancel = f.calls.find((c) => c.key === CANCEL_OPERATION_KEY);
     expect(cancel?.input).toEqual({
       requestId: f.calls.find((c) => c.input.familyId === 2)?.requestId,
@@ -120,7 +122,7 @@ test("one persistent Work cannot run competing reads through different document 
     );
     const document = { session: randomUUID(), openId: randomUUID() };
     await expect(
-      readFamiliesProgressively({
+      f.reader.read({
         bridge: f.bridge,
         captures: f.captures,
         document,
@@ -149,4 +151,27 @@ test("short reads finish serially and enrich all supplied families once before p
   } finally {
     await rm(f.dir, { recursive: true, force: true });
   }
+});
+
+test("overlapping lifecycle operations run one at a time, in order, and a failure frees the next", async () => {
+  const reader = await familiesReader();
+  const order: string[] = [];
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const first = reader.lifecycle(async () => {
+    order.push("first:start");
+    await held;
+    order.push("first:end");
+    throw Error("first failed");
+  });
+  const second = reader.lifecycle(async () => {
+    order.push("second:start");
+    return "second";
+  });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(order).toEqual(["first:start"]);
+  release();
+  await expect(first).rejects.toThrow("first failed");
+  await expect(second).resolves.toBe("second");
+  expect(order).toEqual(["first:start", "first:end", "second:start"]);
 });

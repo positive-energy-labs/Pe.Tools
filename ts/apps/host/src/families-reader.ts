@@ -1,6 +1,5 @@
 import { SdkSession } from "./sdk-session.ts";
-import { Effect } from "effect";
-import { NodeServices } from "@effect/platform-node";
+import { Clock, Context, Effect, Layer, Semaphore } from "effect";
 import { randomUUID } from "node:crypto";
 import { copyFile, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -41,32 +40,32 @@ type Run = {
   cancelled: boolean;
   cancelNative: () => Promise<void>;
 };
-const runs = new Map<string, Run>();
 const OP = "revit.matrix.loaded-families";
-const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const detail = (error: unknown) =>
   error instanceof Error || error instanceof BridgeError ? error.message : String(error);
-let lifecycleTail = Promise.resolve();
-/** The SDK serializes checkout lifecycle mutations; keep our own starts/stops in that order too. */
-function lifecycle<T>(operation: () => Promise<T>): Promise<T> {
-  const next = lifecycleTail.then(operation);
-  lifecycleTail = next.then(
-    () => undefined,
-    () => undefined,
-  );
-  return next;
-}
+/** What the reader runs Effects with: the CLI runner's services, captured once by the layer. */
+type Needs = Effect.Services<ReturnType<typeof runPeRevitCli>>;
 
-async function sdk<T>(args: string[]): Promise<T> {
-  // effect-edge: island, phase 5
-  const raw = await Effect.runPromise(runPeRevitCli(args).pipe(Effect.provide(NodeServices.layer)));
-  const envelope = parsePeRevitEnvelope<T>(raw, args, peRevitLauncher());
-  if (envelope.exitCode !== 0)
-    throw Error(envelope.diagnostics.map((d) => `${d.code}: ${d.detail}`).join("; "));
-  return envelope.result!;
-}
+/**
+ * The reader's state and Promise adapters. The read below is Promise code until phase 5, so every
+ * Effect it needs crosses through `run`, the one island, on the services the layer captured.
+ */
+type Reader = {
+  /** Reads in flight; they are cancelled and forgotten when the layer's scope closes. */
+  runs: Map<string, Run>;
+  run: <A, E>(effect: Effect.Effect<A, E, Needs>) => Promise<A>;
+  /** The SDK serializes checkout lifecycle mutations; keep our own starts/stops in that order too. */
+  lifecycle: <T>(operation: () => Promise<T>) => Promise<T>;
+  sdk: <T>(args: string[]) => Promise<T>;
+  now: () => number;
+  sleep: (ms: number) => Promise<void>;
+};
 
-export async function cancelFamiliesRead(id: string, document: DocumentRef) {
+async function cancelFamiliesRead(
+  { runs }: Reader,
+  id: string,
+  document: DocumentRef,
+) {
   const run = runs.get(id);
   if (!run || canonicalRouteInput(run.document) !== canonicalRouteInput(document))
     throw Error("This document has no running Families read with that id.");
@@ -75,7 +74,7 @@ export async function cancelFamiliesRead(id: string, document: DocumentRef) {
 }
 
 /** Host orchestration over the document-owned native reader. No Revit process is launched outside the SDK. */
-export async function readFamiliesProgressively(options: {
+async function readFamiliesProgressively(reader: Reader, options: {
   bridge: RevitBridge["Service"];
   captures: TakeoffCaptures;
   readId: string;
@@ -85,6 +84,7 @@ export async function readFamiliesProgressively(options: {
   filter: AppliedFilter;
 }): Promise<FamiliesObservation> {
   const { bridge, captures, readId, work, document, filter, documentTitle } = options;
+  const { runs, run: runEffect, lifecycle, sdk, now, sleep } = reader;
   if (
     runs.has(readId) ||
     [...runs.values()].some(
@@ -103,15 +103,14 @@ export async function readFamiliesProgressively(options: {
       // Cancel bypasses the per-session FIFO; the owning calls settle before cleanup.
       await Promise.allSettled(
         [...active].map(([requestId, target]) =>
-          // effect-edge: island, phase 5
-          Effect.runPromise(bridge.invoke(CANCEL_OPERATION_KEY, { requestId }, target.session)),
+          runEffect(bridge.invoke(CANCEL_OPERATION_KEY, { requestId }, target.session)),
         ),
       );
     },
   };
   runs.set(readId, run);
   const marks = documentMarks(bridge);
-  const capturedAt = new Date().toISOString();
+  const capturedAt = new Date(now()).toISOString();
   const records = new Map<string, Family>();
   const base = { work, document, documentTitle, filter, capturedAt };
   let total = 0,
@@ -151,8 +150,7 @@ export async function readFamiliesProgressively(options: {
     const requestId = randomUUID();
     active.set(requestId, target);
     try {
-      // effect-edge: island, phase 5
-      const reply = await Effect.runPromise(
+      const reply = await runEffect(
         bridge.invoke(OP, input, target.session, target.openId, requestId),
       );
       assertFresh(marks, document, capturedAt);
@@ -244,7 +242,7 @@ export async function readFamiliesProgressively(options: {
       },
       acquire: async (useful) => {
         const id = `families-${randomUUID().slice(0, 18)}`;
-        const startedAt = Date.now();
+        const startedAt = now();
         let acquired = false;
         const stop = async () => {
           if (acquired) {
@@ -274,7 +272,7 @@ export async function readFamiliesProgressively(options: {
           if (!launched) return null;
           if (launched.phase !== "ready") throw Error("Worker Revit did not become ready.");
           // Even an unused boot teaches us its lower bound; do not repeat the same cheap-start mistake.
-          costs.startupMs = Math.max(costs.startupMs, Date.now() - startedAt);
+          costs.startupMs = Math.max(costs.startupMs, now() - startedAt);
           if (!useful()) {
             await stop();
             return null;
@@ -303,18 +301,19 @@ export async function readFamiliesProgressively(options: {
             return null;
           }
           let target: DocumentRef | undefined;
-          const deadline = Date.now() + 15_000;
+          const deadline = now() + 15_000;
           do {
-            // effect-edge: island, phase 5
-            const attached = await Effect.runPromise(
-              SdkSession.resolve(bridge, { sdkSession: id }).pipe(Effect.orElseSucceed(() => undefined)),
+            const attached = await runEffect(
+              SdkSession.resolve(bridge, { sdkSession: id }).pipe(
+                Effect.orElseSucceed(() => undefined),
+              ),
             );
             if (attached) {
               target = { session: attached.sessionId, openId };
               break;
             }
-            await delay(250);
-          } while (Date.now() < deadline && useful());
+            await sleep(250);
+          } while (now() < deadline && useful());
           if (!target) throw Error("Worker's product bridge did not attach.");
           const check = await invoke(target, { filter, phase: "Prepare" });
           if (
@@ -324,7 +323,7 @@ export async function readFamiliesProgressively(options: {
             ) !== canonicalRouteInput(source.families.map((f) => [f.familyId, f.familyUniqueId]))
           )
             throw Error("Worker copy does not match the requested revision and families.");
-          costs.startupMs = Math.max(1_000, costs.startupMs * 0.5 + (Date.now() - startedAt) * 0.5);
+          costs.startupMs = Math.max(1_000, costs.startupMs * 0.5 + (now() - startedAt) * 0.5);
           workers++;
           await publish("reading", "Reading families");
           return {
@@ -396,4 +395,49 @@ export async function readFamiliesProgressively(options: {
       });
     }
   }
+}
+
+const makeFamiliesReader = Effect.gen(function* () {
+  const services = yield* Effect.context<Needs>();
+  const clock = yield* Clock.clockWith(Effect.succeed);
+  const lock = yield* Semaphore.make(1);
+  const run = <A, E>(effect: Effect.Effect<A, E, Needs>) =>
+    // effect-edge: island, phase 5
+    Effect.runPromiseWith(services)(effect);
+  const reader: Reader = {
+    runs: new Map(),
+    run,
+    lifecycle: (operation) => run(lock.withPermits(1)(Effect.promise(operation))),
+    sdk: async <T>(args: string[]) => {
+      const raw = await run(runPeRevitCli(args));
+      const envelope = parsePeRevitEnvelope<T>(raw, args, peRevitLauncher());
+      if (envelope.exitCode !== 0)
+        throw Error(envelope.diagnostics.map((d) => `${d.code}: ${d.detail}`).join("; "));
+      return envelope.result!;
+    },
+    now: () => clock.currentTimeMillisUnsafe(),
+    sleep: (ms) => run(Effect.sleep(ms)),
+  };
+  yield* Effect.addFinalizer(() =>
+    Effect.promise(async () => {
+      const open = [...reader.runs.values()];
+      reader.runs.clear();
+      for (const r of open) r.cancelled = true;
+      await Promise.allSettled(open.map((r) => r.cancelNative()));
+    }),
+  );
+  return {
+    read: (options: Parameters<typeof readFamiliesProgressively>[1]) =>
+      readFamiliesProgressively(reader, options),
+    cancel: (id: string, document: DocumentRef) => cancelFamiliesRead(reader, id, document),
+    /** Serialized with every SDK start and stop this reader makes; exposed for the one test of that. */
+    lifecycle: reader.lifecycle,
+  };
+});
+
+export class FamiliesReader extends Context.Service<
+  FamiliesReader,
+  Effect.Success<typeof makeFamiliesReader>
+>()("pe/FamiliesReader") {
+  static readonly layer = Layer.effect(FamiliesReader, makeFamiliesReader);
 }

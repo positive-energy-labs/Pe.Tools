@@ -1,7 +1,9 @@
-import { NodeCrypto } from "@effect/platform-node";
+import { NodeCrypto, NodeServices } from "@effect/platform-node";
 import { Cause, Context, Effect, Exit, Layer, Logger, References, Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { onTestFinished, test, type TestContext } from "vite-plus/test";
+import { FamiliesReader } from "../src/families-reader.ts";
+import { HarnessThreads, type HarnessThreadsOptions } from "../src/harness/threads.ts";
 import {
   RunConsents,
   runConsentsPromise,
@@ -93,4 +95,45 @@ export const testConsents = (
   const runs = runConsentsPromise(consentService());
   runs.attach({ emit, persist: () => {}, autoApprove: () => true, ...sink });
   return runs;
+};
+
+/**
+ * {@link HarnessThreads} for Promise tests: the live layer over the node file system, built in a
+ * scope the running test closes (which stops every harness child the store started). Building is
+ * async because the replay is an Effect.
+ */
+export const harnessThreads = async (
+  options: HarnessThreadsOptions,
+): Promise<HarnessThreads["Service"]> => {
+  const scope = Scope.makeUnsafe();
+  try {
+    // effect-edge: test-runner
+    onTestFinished(() => Effect.runPromise(Scope.close(scope, Exit.void)));
+  } catch {
+    // Outside a running test: a module fixture, closed with its worker.
+  }
+  // effect-edge: test-runner
+  const context = await Effect.runPromise(
+    Layer.buildWithScope(
+      HarnessThreads.layer(options).pipe(Layer.provide(NodeServices.layer)),
+      scope,
+    ),
+  );
+  return Context.get(context, HarnessThreads);
+};
+
+/** {@link FamiliesReader} for Promise tests, built over the node services in a scope the test closes. */
+export const familiesReader = async (): Promise<FamiliesReader["Service"]> => {
+  const scope = Scope.makeUnsafe();
+  try {
+    // effect-edge: test-runner
+    onTestFinished(() => Effect.runPromise(Scope.close(scope, Exit.void)));
+  } catch {
+    // Outside a running test: a module fixture, closed with its worker.
+  }
+  // effect-edge: test-runner
+  const context = await Effect.runPromise(
+    Layer.buildWithScope(FamiliesReader.layer.pipe(Layer.provide(NodeServices.layer)), scope),
+  );
+  return Context.get(context, FamiliesReader);
 };

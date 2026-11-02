@@ -35,7 +35,7 @@ import {
   actionStatusSchema,
 } from "@pe/agent-contracts";
 import { hostTakeoffCaptures, type TakeoffCaptures } from "./takeoff-captures.ts";
-import { readFamiliesProgressively, cancelFamiliesRead } from "./families-reader.ts";
+import type { FamiliesReader } from "./families-reader.ts";
 import {
   projectTakeoffSnapshot,
   projectTakeoffViews,
@@ -164,6 +164,8 @@ export function makeCallRoute(
     readonly origin?: () => string;
     readonly captureHostOp?: typeof recordHostOp;
     readonly local?: (key: string, input: unknown) => Promise<unknown>;
+    /** The Families reader the host's layer built; absent where no Revit composition exists. */
+    readonly families?: FamiliesReader["Service"];
   },
 ) {
   const CALL_FORWARD_BASE = process.env.PE_TOOLS_CALL_FORWARD?.trim().replace(/\/$/, "");
@@ -171,6 +173,10 @@ export function makeCallRoute(
     throw Error(
       "Host forwarding is disabled: execution requires this runtime's own host and Revit.",
     );
+  const families = () => {
+    if (!composition?.families) throw Error("Families reads need the FamiliesReader service.");
+    return composition.families;
+  };
   const recordOperation = composition?.captureHostOp ?? recordHostOp;
   const dispatch: CallRouteDispatch = (...args) =>
     (composition?.dispatch ?? dispatchTsOnlyOperation)(...args);
@@ -623,7 +629,7 @@ export function makeCallRoute(
               caller,
               "/families/readings",
             );
-            await cancelFamiliesRead(readId, target);
+            await families().cancel(readId, target);
             return Response.jsonUnsafe({ cancelled: true });
           }
           if (req.method !== "POST") throw Error("Unsupported Families reading method");
@@ -693,7 +699,7 @@ export function makeCallRoute(
             body.work.open.openId !== target.openId
           )
             throw Error("Families Work belongs to another document");
-          const saved = await readFamiliesProgressively({
+          const saved = await families().read({
             bridge,
             captures: observations(),
             readId: body.readId,

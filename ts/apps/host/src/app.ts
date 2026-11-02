@@ -34,6 +34,7 @@ import { isSettingsSchemaUrl } from "./settings.ts";
 import { isNavigation, opsCatalogRoute, type SpaFallback } from "./ops-catalog.ts";
 import { demoRoutes } from "./demo-owner.ts";
 import { makeCallRoute } from "./call-route.ts";
+import { FamiliesReader } from "./families-reader.ts";
 import { instancesReadingsRoute } from "./session-route.ts";
 import {
   adminShutdownRoute,
@@ -142,7 +143,17 @@ function makeRevitComposition(
       hostStatusRoute,
       hostInstallRoute,
       instancesReadingsRoute(currentMachine),
-      makeCallRoute(hostActionJournal(), undefined, { workspace: work?.workspace }, { origin }),
+      Layer.unwrap(
+        Effect.gen(function* () {
+          const families = yield* FamiliesReader;
+          return makeCallRoute(
+            hostActionJournal(),
+            undefined,
+            { workspace: work?.workspace },
+            { origin, families },
+          );
+        }),
+      ),
     ),
   };
 }
@@ -313,6 +324,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
       Layer.provide(Layer.succeed(HostLifecycle, options.lifecycle)),
       Layer.provide(UpdateLive),
       Layer.provide(RunConsents.layer),
+      Layer.provide(FamiliesReader.layer),
       Layer.provide(NodeServices.layer),
       Layer.provide(ReceiptLifetime),
     );

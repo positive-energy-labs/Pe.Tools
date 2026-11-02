@@ -19,6 +19,7 @@ import {
 } from "@pe/agent-contracts";
 import { RouteWorkspace, type RouteWorkspaceRegistration } from "@pe/runtime";
 import { Effect, PubSub } from "effect";
+import { NodeServices } from "@effect/platform-node";
 import type { RevitBridge, HostBridgeEvent, BridgeSessionView } from "../src/bridge.ts";
 import { createPeRoutes, fileRouteDocumentStore, makeHostPeRoutes } from "../src/pe-routes.ts";
 import { withInvocationContext } from "@pe/runtime/context";
@@ -362,13 +363,12 @@ test("host HTTP preserves addressless Work through close and replacement bridge 
               return () => listeners.delete(listener);
             },
           } as unknown as RevitBridge["Service"];
-          const { routes: host, threads } = makeHostPeRoutes(
+          const { routes: host } = yield* makeHostPeRoutes(
             "http://127.0.0.1:0",
             bridge,
             consentService(),
             () => registrations,
           );
-          yield* Effect.addFinalizer(() => Effect.sync(() => threads.close()));
           yield* Effect.gen(function* () {
             yield* Effect.promise(async () => {
               const response = await asHuman(host)(
@@ -431,7 +431,7 @@ test("host HTTP preserves addressless Work through close and replacement bridge 
             });
           });
         }),
-      ),
+      ).pipe(Effect.provide(NodeServices.layer)),
     );
   } finally {
     if (previousLocalAppData === undefined) delete process.env.LOCALAPPDATA;

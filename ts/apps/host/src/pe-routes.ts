@@ -89,7 +89,7 @@ import { RevitBridge } from "./bridge.ts";
 import { documentMarks } from "./document-marks.ts";
 import { createProviders } from "./harness/providers.ts";
 import { peaMcpServer } from "./harness/adapter.ts";
-import { createHarnessThreads } from "./harness/threads.ts";
+import { makeHarnessThreads } from "./harness/threads.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import {
   productDuctsAnalysesPath,
@@ -1092,7 +1092,7 @@ export function createContributionContent(options: {
   };
 }
 
-export function makeHostPeRoutes(
+function* hostPeRoutes(
   hostBaseUrl: string,
   bridge: RevitBridge["Service"] | undefined,
   runs: RunConsents["Service"],
@@ -1148,7 +1148,7 @@ export function makeHostPeRoutes(
     (threadId) => routes.completedWork(threadId),
   );
   const routeSettings = createRouteSettings(productRouteSettingsPath());
-  const threads = createHarnessThreads({
+  const threads = yield* makeHarnessThreads({
     runs,
     // An unreadable settings file asks a person: unknown consent never applies by itself.
     autoApprove: () => {
@@ -1381,6 +1381,12 @@ export function makeHostPeRoutes(
   return { providers, threads, routes, catalog, machine, notices, plugins, tasks };
 }
 
+/**
+ * The host-owned `/pe/*` surface, built in the launch scope: the thread store is a service whose
+ * scope stops every harness child, and the replay of the thread directories happens here.
+ */
+export const makeHostPeRoutes = Effect.fn("peRoutes.make")(hostPeRoutes);
+
 /** {@link makeHostPeRoutes} on the host's router. Harness children die when the launch scope closes. */
 export const peRoutesLayer = (
   registrationsFactory?: typeof createRouteRegistrations,
@@ -1395,7 +1401,15 @@ export const peRoutesLayer = (
       const update = yield* UpdateReader;
       const runs = yield* RunConsents;
       const { providers, threads, routes, catalog, machine, notices, plugins, tasks } =
-        makeHostPeRoutes(hostBaseUrl, bridge, runs, registrationsFactory, update, share, hostWork);
+        yield* makeHostPeRoutes(
+          hostBaseUrl,
+          bridge,
+          runs,
+          registrationsFactory,
+          update,
+          share,
+          hostWork,
+        );
       useHostMachine(machine);
       bindControl({
         heads: threads.heads.read,
