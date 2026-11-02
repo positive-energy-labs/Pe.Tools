@@ -12,3 +12,16 @@ test("runtime admission refuses every omitted axis", () => {
 test("runtime admission links the complete shipped catalog", () => {
   expect(() => requireLinkedCatalog(catalogEntries)).not.toThrow();
 });
+
+test("runtime admission refuses Unset axes and names the op", () => {
+  for (const axis of ["subject", "touches", "effect"]) {
+    const row = {
+      ...catalogEntries[0],
+      key: "test.unset",
+      [axis]: axis === "touches" ? ["Unset"] : "Unset",
+    };
+    expect(() => requireLinkedCatalog([row as unknown as CatalogLink])).toThrow(
+      `test.unset: missing or invalid ${axis}`,
+    );
+  }
+});

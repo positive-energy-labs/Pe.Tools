@@ -20,10 +20,10 @@ public enum OpCost {
 }
 
 /// <summary>Acquisition boundary, independent of the active document requirement.</summary>
-public enum OpSubject { None, Document, FamilyDocument, View, Elements, System, Region, Session }
+public enum OpSubject { Unset = 0, None, Document, FamilyDocument, View, Elements, System, Region, Session }
 [Flags]
-public enum OpTouches { Metadata = 1, Topology = 2, Geometry = 4 }
-public enum OpEffect { Read, TransactRead, SessionWrite, ModelWrite }
+public enum OpTouches { Unset = 0, Metadata = 1, Topology = 2, Geometry = 4 }
+public enum OpEffect { Unset = 0, Read, TransactRead, SessionWrite, ModelWrite }
 public enum OpCardinality { One, Many }
 
 public enum OpTier {
@@ -45,15 +45,15 @@ public enum OpThread {
 }
 
 [AttributeUsage(AttributeTargets.Method)]
-public sealed class OpAttribute(string key) : Attribute {
+public sealed class OpAttribute(string key, OpSubject subject, OpTouches touches, OpEffect effect) : Attribute {
     public string Key { get; } = key;
     public string? Title { get; init; }
     public required string Does { get; init; }
     public string[]? Finds { get; init; }
     public OpIntent Intent { get; init; } = OpIntent.Read;
-    public OpSubject Subject { get; init; }
-    public OpTouches Touches { get; init; } = OpTouches.Metadata;
-    public OpEffect Effect { get; init; }
+    public OpSubject Subject { get; } = subject;
+    public OpTouches Touches { get; } = touches;
+    public OpEffect Effect { get; } = effect;
     public OpCardinality Cardinality { get; init; } = OpCardinality.One;
     public bool Internal { get; init; }
     public bool RollsBack { get; init; }
@@ -230,15 +230,16 @@ public static class OpRegistry {
 
         if ((OpIntent)EnumValue(nameof(OpAttribute.Intent), (int)OpIntent.Read) == OpIntent.Mutate && Named(nameof(OpAttribute.Actor)) is null)
             throw new InvalidOperationException($"[Op({data.ConstructorArguments[0].Value})] must declare Actor for mutation.");
-        return new OpAttribute((string)data.ConstructorArguments[0].Value!) {
+        return new OpAttribute(
+            (string)data.ConstructorArguments[0].Value!,
+            (OpSubject)Convert.ToInt32(data.ConstructorArguments[1].Value),
+            (OpTouches)Convert.ToInt32(data.ConstructorArguments[2].Value),
+            (OpEffect)Convert.ToInt32(data.ConstructorArguments[3].Value)) {
             Title = Named(nameof(OpAttribute.Title)) as string,
             Does = Named(nameof(OpAttribute.Does)) as string
                    ?? throw new InvalidOperationException("[Op] requires Does."),
             Finds = Strings(nameof(OpAttribute.Finds)),
             Intent = (OpIntent)EnumValue(nameof(OpAttribute.Intent), (int)OpIntent.Read),
-            Subject = (OpSubject)EnumValue(nameof(OpAttribute.Subject), 0),
-            Touches = (OpTouches)EnumValue(nameof(OpAttribute.Touches), 1),
-            Effect = (OpEffect)EnumValue(nameof(OpAttribute.Effect), 0),
             Cardinality = (OpCardinality)EnumValue(nameof(OpAttribute.Cardinality), 0),
             Internal = Named(nameof(OpAttribute.Internal)) as bool? ?? false,
             RollsBack = Named(nameof(OpAttribute.RollsBack)) as bool? ?? false,

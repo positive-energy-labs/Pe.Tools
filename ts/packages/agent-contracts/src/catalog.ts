@@ -42,6 +42,7 @@ export function linkCatalog(entries: readonly CatalogLink[]): string[] {
       cardinality: opCardinality,
     }))
       if (
+        (entry as unknown as Record<string, string>)[axis] === "Unset" ||
         !(Object.values(values) as readonly string[]).includes(
           (entry as unknown as Record<string, string>)[axis]!,
         )
@@ -50,7 +51,7 @@ export function linkCatalog(entries: readonly CatalogLink[]): string[] {
     if (
       !Array.isArray(entry.touches) ||
       !entry.touches.length ||
-      entry.touches.some((value) => !Object.values(opTouches).includes(value))
+      entry.touches.some((value) => value === "Unset" || !Object.values(opTouches).includes(value))
     ) {
       errors.push(`${entry.key}: missing or invalid touches`);
       continue;

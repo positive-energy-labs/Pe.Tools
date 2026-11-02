@@ -239,11 +239,10 @@ export function census() {
   for (const p of files("dotnet").filter((p) => p.endsWith(".cs") && !p.includes("Tests/"))) {
     const text = read(p);
     for (const m of text.matchAll(/\[Op\(\s*"([^"]+)"((?:"(?:\\.|[^"\\])*"|[^"])*?)\)\]/gs)) {
-      const axis = (name: string) =>
-        m[2]!.match(new RegExp(`\\b${name}\\s*=\\s*Op\\w+\\.(\\w+)`))?.[1];
-      const effect = axis("Effect");
-      const subject = axis("Subject");
-      const touches = m[2]!.match(/\bTouches\s*=\s*([^,]+)/)?.[1];
+      const axes = m[2]!.match(/^\s*,\s*OpSubject\.(\w+)\s*,\s*(OpTouches\.\w+(?:\s*\|\s*OpTouches\.\w+)*)\s*,\s*OpEffect\.(\w+)/);
+      const subject = axes?.[1];
+      const touches = axes?.[2];
+      const effect = axes?.[3];
       if (
         !effect ||
         !subject ||

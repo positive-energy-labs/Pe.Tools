@@ -10705,6 +10705,7 @@ export const opCost = {
 
 /** Contract constants shared with C#; read these instead of re-typing the numbers. */
 export const opEffect = {
+  "Unset": "Unset",
   "Read": "Read",
   "TransactRead": "TransactRead",
   "SessionWrite": "SessionWrite",
@@ -10713,6 +10714,7 @@ export const opEffect = {
 
 /** Contract constants shared with C#; read these instead of re-typing the numbers. */
 export const opSubject = {
+  "Unset": "Unset",
   "None": "None",
   "Document": "Document",
   "FamilyDocument": "FamilyDocument",
@@ -10725,6 +10727,7 @@ export const opSubject = {
 
 /** Contract constants shared with C#; read these instead of re-typing the numbers. */
 export const opTouches = {
+  "Unset": "Unset",
   "Metadata": "Metadata",
   "Topology": "Topology",
   "Geometry": "Geometry"
