@@ -117,6 +117,7 @@ test("Pods switches seeded members, preserves their memory Work, and undoes edit
 
 test("calculator fixtures recalculate with Page edits rather than freezing an example", async () => {
   const owner = await createFixtureMount(ductLossGraph, "calculate");
+  const disconnect = owner.connect();
   const release = owner.readings.mount(["result"]);
   try {
     const before = owner.readings.get("result").value as { loss: number };
@@ -125,6 +126,7 @@ test("calculator fixtures recalculate with Page edits rather than freezing an ex
     expect(after.loss).toBeGreaterThan(before.loss);
   } finally {
     release();
+    disconnect();
     owner.dispose();
   }
 });

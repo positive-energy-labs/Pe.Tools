@@ -81,8 +81,8 @@ const tables = [
       { heading: "Design flow (CFM)", kind: "Number" },
     ],
     rows: [
-      { key: "sa-1", values: ["SA-1", 450] },
-      { key: "sa-2", values: ["SA-2", 325] },
+      { key: "sa-1", values: ["SA-1", "450"] },
+      { key: "sa-2", values: ["SA-2", "325"] },
     ],
     placements: [{ sheetNumber: "M601" }],
   }),
@@ -173,7 +173,7 @@ export const routeExamples = {
   "design-system": { readings: {} },
   "duct-loss": {
     page: {
-      shape: "round",
+      shape: "round" as const,
       a: 16,
       b: 12,
       cfm: 1200,
@@ -188,7 +188,7 @@ export const routeExamples = {
     readings: { result: (page: GrillesPage) => solvePage(page) },
   },
   ops: {
-    target: { kind: "document", ref: { session: "fixture", openId: "clinic" } },
+    target: { kind: "document" as const, ref: { session: "fixture", openId: "clinic" } },
     page: { op: "revit.context.document-session" },
     readings: { catalog: { operations: hostOpCatalog }, receipt: [], receipts: [] },
     queries: {
@@ -226,7 +226,7 @@ export const routeExamples = {
     },
   },
   "parameter-links": {
-    page: { rail: "open" },
+    page: { rail: "open" as const },
     work,
     readings: { links: [links], receipts: [], options },
     queries: { "parameter-links.read": links },
