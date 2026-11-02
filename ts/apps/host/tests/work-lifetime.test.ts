@@ -18,8 +18,11 @@ import {
   type ThreadHead,
 } from "@pe/agent-contracts";
 import { RouteWorkspace, type RouteWorkspaceRegistration } from "@pe/runtime";
-import { Effect, PubSub } from "effect";
+import { Effect, Layer, PubSub } from "effect";
 import { NodeServices } from "@effect/platform-node";
+import { MachineOwner } from "../src/machine.ts";
+import { hostActionJournal } from "../src/gateway-owner.ts";
+import { createReceiptExport } from "../src/receipt-export.ts";
 import type { RevitBridge, HostBridgeEvent, BridgeSessionView } from "../src/bridge.ts";
 import { createPeRoutes, fileRouteDocumentStore, makeHostPeRoutes } from "../src/pe-routes.ts";
 import { withInvocationContext } from "@pe/runtime/context";
@@ -363,12 +366,24 @@ test("host HTTP preserves addressless Work through close and replacement bridge 
               return () => listeners.delete(listener);
             },
           } as unknown as RevitBridge["Service"];
-          const { routes: host } = yield* makeHostPeRoutes(
+          const telemetry = createReceiptExport({
+            journal: hostActionJournal(),
+            root: directory,
+            stamps: { host: null, web: null },
+          });
+          yield* Effect.addFinalizer(() => Effect.promise(() => telemetry.close()));
+          const { routes: host, machineSpec } = yield* makeHostPeRoutes(
             "http://127.0.0.1:0",
             bridge,
             consentService(),
             () => registrations,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            telemetry,
           );
+          yield* Layer.build(MachineOwner.layer(machineSpec.sources, machineSpec.options));
           yield* Effect.gen(function* () {
             yield* Effect.promise(async () => {
               const response = await asHuman(host)(

@@ -25,7 +25,7 @@ import {
   REFUSAL_HEADER,
   type RoutePermission,
 } from "./control.ts";
-import { recordHostFact, type ReceiptExport } from "./receipt-export.ts";
+import { recordHostFact, type ReceiptExporter } from "./receipt-export.ts";
 import { HostLifecycle } from "./host-lifecycle.ts";
 import { authorizeShutdownFor } from "@pe/host-contracts/pe-service-host";
 import { deviceCredential, DEVICE_COOKIE, type Devices } from "./remote-device.ts";
@@ -45,7 +45,7 @@ export type IdentityResult =
 export interface IdentityOptions {
   readonly devices?: Devices;
   /** Where refusals are counted; the host's own receipt export when absent. */
-  readonly telemetry?: ReceiptExport;
+  readonly telemetry?: ReceiptExporter;
   readonly remoteRequests?: WeakSet<object>;
   /** Host-configured addresses. Never inferred from Forwarded or caller-supplied transport headers. */
   readonly remoteIngress?: readonly { origin: string; transport: "lan" | "ssh" }[];
@@ -383,7 +383,7 @@ function requestPermission(path: string, method: string): RoutePermission {
  * The one place a refusal is counted: admission refuses here, and a door's 403 names its code in
  * `x-pe-refusal`. Only the closed code leaves the machine; a code outside the set is `refused`.
  */
-function countRefusal(telemetry: ReceiptExport | undefined, code: string) {
+function countRefusal(telemetry: ReceiptExporter | undefined, code: string) {
   const parsed = receiptReasonCodeSchema.safeParse(code);
   const fact: ReceiptFact = {
     kind: "usage",

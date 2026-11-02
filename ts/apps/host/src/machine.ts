@@ -192,6 +192,13 @@ export interface MachineOptions {
   fault?: (fault: MachineLegFault) => void;
 }
 
+/**
+ * A leg's error as the wire has always spelled it: `Error: <message>`, so a tagged failure reads
+ * as the plain `Error` it replaced; other throwables keep their own name.
+ */
+const legError = (error: unknown) =>
+  error instanceof Error && "_tag" in error ? `Error: ${error.message}` : String(error);
+
 /** A Promise-world source (the update reader, the journal) becomes a failure value carrying its cause. */
 const attempt = <A>(evaluate: () => PromiseLike<A>) =>
   Effect.tryPromise({ try: evaluate, catch: (error) => error });
@@ -280,7 +287,7 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
           Effect.gen(function* () {
             const error = Cause.squash(cause);
             const wasFailing = legs[key]?.error != null;
-            legs[key] = { ...(legs[key] ?? unreadLeg()), attemptedAtUtc, error: String(error) };
+            legs[key] = { ...(legs[key] ?? unreadLeg()), attemptedAtUtc, error: legError(error) };
             if (!wasFailing)
               options.fault?.({
                 leg: key,
@@ -300,7 +307,7 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
           legs["automatic-update"] = {
             ...(legs["automatic-update"] ?? unreadLeg()),
             attemptedAtUtc,
-            error: String(error),
+            error: legError(error),
           };
         }),
       ),
@@ -427,7 +434,7 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
                 legs["update"] = {
                   ...(legs["update"] ?? unreadLeg()),
                   attemptedAtUtc,
-                  error: String(error),
+                  error: legError(error),
                 };
               }),
             ),
@@ -509,7 +516,7 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
                   Effect.sync(() =>
                     documents.set(key, {
                       ...previous,
-                      leg: { ...previous.leg, attemptedAtUtc, error: String(Cause.squash(cause)) },
+                      leg: { ...previous.leg, attemptedAtUtc, error: legError(Cause.squash(cause)) },
                     }),
                   ),
                 ),

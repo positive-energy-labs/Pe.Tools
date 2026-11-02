@@ -3,8 +3,8 @@ import { requireLinkedCatalog } from "../../../packages/agent-contracts/src/cata
 import { execFile, spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
-import { Deferred, Effect, Layer, type Scope } from "effect";
-import { hostReceiptExport, bindNativeProducers, recordUpdateFact } from "./receipt-export.ts";
+import { Context, Deferred, Effect, Layer, type Scope } from "effect";
+import { ReceiptExport, recordUpdateFact } from "./receipt-export.ts";
 import { serviceFilePath, type ServiceFile } from "@pe/host-contracts/pe-service";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { productRoot } from "@pe/host-contracts/service-identity";
@@ -25,14 +25,8 @@ export const hostProgram = (
   Effect.scoped(
     Effect.gen(function* () {
       requireLinkedCatalog(catalogEntries);
-      const telemetry = hostReceiptExport();
-      const unbindNative = bindNativeProducers(telemetry);
-      yield* Effect.addFinalizer(() =>
-        Effect.promise(async () => {
-          unbindNative();
-          await telemetry.close();
-        }),
-      );
+      // One exporter for the launch: its scope unbinds the native producers and drains pending sends.
+      const telemetry = Context.get(yield* Layer.build(ReceiptExport.layer), ReceiptExport);
       yield* Effect.promise(() =>
         telemetry.record({
           kind: "usage",
@@ -96,6 +90,7 @@ export const hostProgram = (
               : undefined,
         },
         updateReader,
+        receipts: telemetry,
         webRoot: resolveWebRoot(),
       });
 

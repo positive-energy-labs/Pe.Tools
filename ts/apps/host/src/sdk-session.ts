@@ -19,7 +19,8 @@ import type { SdkReceiptReader } from "./native-receipts.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import { hostServiceName, runtimeOwnerRejection } from "@pe/host-contracts/service-identity";
 
-const readSdk: SdkReceiptReader = (args) =>
+/** The one 30 s `pe-revit` read the Promise-world SDK doors share (native-receipts reads through it). */
+export const readSdk: SdkReceiptReader = (args) =>
   // effect-edge: island, phase 5
   Effect.runPromise(
     runPeRevitCli(args).pipe(Effect.provide(NodeServices.layer), Effect.timeout("30 seconds")),

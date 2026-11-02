@@ -26,7 +26,7 @@ import { hostLoadedFamilies } from "../../../packages/mcps/src/pea/families-admi
 import { fileRouteDocumentStore } from "./route-document-store.ts";
 import { productRouteWorkPath } from "./product-paths.ts";
 import { hostActionJournal, releaseHostReceipts } from "./gateway-owner.ts";
-import { releaseHostReceiptExport } from "./receipt-export.ts";
+import { ReceiptExport, type ReceiptExporter } from "./receipt-export.ts";
 import { CaptureStore } from "./takeoff-captures.ts";
 import { RevitBridge, RevitBridgeLive } from "./bridge.ts";
 import { RunConsents } from "./run-consent.ts";
@@ -175,6 +175,11 @@ export interface HttpLiveOptions {
   readonly updateReader?: UpdateReader["Service"];
   /** The spine's intake for update facts, handed to the reader this app builds. */
   readonly updateFact?: (fact: UpdateFact) => void;
+  /**
+   * The launch root's exporter, so the boot record and update facts share it with the routes; a
+   * composition without one builds its own `ReceiptExport` layer for this app's scope.
+   */
+  readonly receipts?: ReceiptExporter;
   /** Built SPA directory, or null to skip static serving (dev/vite). */
   readonly webRoot: string | null;
   /** Route registrations for the host-owned route surface; tests inject their own. */
@@ -193,11 +198,13 @@ export function makeHttpLive(options: HttpLiveOptions) {
   const ReceiptLifetime = Layer.effectDiscard(
     Effect.addFinalizer(() =>
       Effect.promise(async () => {
-        await releaseHostReceiptExport(receiptOwner);
         releaseHostReceipts(receiptOwner);
       }),
     ),
   );
+  const ReceiptsLive = options.receipts
+    ? Layer.succeed(ReceiptExport, options.receipts)
+    : ReceiptExport.layer;
   const UpdateLive = Layer.succeed(
     UpdateReader,
     options.updateReader ?? makeInstalledUpdateReader(options.updateFact),
@@ -327,6 +334,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
       Layer.provide(RunConsents.layer),
       Layer.provide(FamiliesReader.layer),
       Layer.provide(CaptureStore.layer()),
+      Layer.provide(ReceiptsLive),
       Layer.provide(NodeServices.layer),
       Layer.provide(ReceiptLifetime),
     );
@@ -356,6 +364,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
     Layer.provide(UpdateLive),
     Layer.provide(RunConsents.layer),
     Layer.provide(CaptureStore.layer()),
+    Layer.provide(ReceiptsLive),
     Layer.provide(NodeServices.layer),
     Layer.provide(ReceiptLifetime),
   );

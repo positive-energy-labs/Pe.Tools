@@ -9,7 +9,7 @@ import {
   type ReceiptFact,
 } from "@pe/agent-contracts";
 import type { InvocationContext } from "@pe/runtime/context";
-import type { ReceiptExport } from "./receipt-export.ts";
+import type { ReceiptExporter } from "./receipt-export.ts";
 
 const token = (value: unknown) =>
   typeof value === "string" && /^[a-zA-Z0-9][a-zA-Z0-9._+-]{0,127}$/.test(value)
@@ -26,7 +26,7 @@ const clientNames = new Set([
 
 /** SDK payloads never leave this hook. Only rebuilt, schema-valid facts enter the receipt owner. */
 export function mcpBeforeSend(
-  exporter: ReceiptExport,
+  exporter: ReceiptExporter,
   currentJoin: () => ReceiptJoin | undefined,
   sessionId = randomUUID(),
 ): BeforeSendFn {
@@ -126,7 +126,7 @@ export function mcpBeforeSend(
 
 export function instrumentHostMcp(
   server: unknown,
-  exporter: ReceiptExport,
+  exporter: ReceiptExporter,
   context: InvocationContext,
 ) {
   const joins = new AsyncLocalStorage<ReceiptJoin>();

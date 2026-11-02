@@ -153,10 +153,10 @@ import { observePluginOperations } from "./plugin-receipts.ts";
 import { importShippedPods } from "./installed-pods.ts";
 import { receiptQuerySchema } from "@pe/agent-contracts";
 import {
-  hostReceiptExport,
+  ReceiptExport,
   createThreadReceiptAdapter,
   type AgentReportContext,
-  type ReceiptExport,
+  type ReceiptExporter,
 } from "./receipt-export.ts";
 import { createNotices } from "./notices.ts";
 import { alignBootstrap } from "./bootstrap.ts";
@@ -180,7 +180,7 @@ export interface PeRoutesOptions {
   observeHostResource?: ResourceObserver;
   /** Wraps every served Reading, Work included, e.g. with the host's document change mark. */
   markReadings?: (observe: ResourceObserver) => ResourceObserver;
-  telemetry?: ReceiptExport;
+  telemetry?: ReceiptExporter;
   /** The running turn and harness behind a thread, for an agent report's stamps. */
   reportContext?: (thread: string) => AgentReportContext | null;
   /** The host log `log.read` pages; the host's own when absent. */
@@ -570,7 +570,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
       const thread = callerThread(caller);
       try {
         return json(
-          await (options.telemetry ?? hostReceiptExport()).submitAgentFeedback(
+          await telemetryOf(options).submitAgentFeedback(
             parsed.data,
             caller.kind,
             thread,
@@ -592,7 +592,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
           { error: "human.only: Feedback and browser diagnostics require a human caller." },
           { status: 403, headers: refusalHeaders("human.only") },
         );
-      const telemetry = options.telemetry ?? hostReceiptExport();
+      const telemetry = telemetryOf(options);
       if (declared.id === "diagnostics.submit") {
         const parsed = diagnosticsSchema.safeParse(await body());
         if (!parsed.success) return json({ error: "invalid diagnostics" }, 400);
@@ -623,7 +623,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
     // Web read of the receipt spine, including turn/permission facts. Local thread ids are mapped
     // by the owner; query joins and the returned envelopes remain opaque.
     if (method === "GET" && declared.id === "receipts.read") {
-      const journal = (options.telemetry ?? hostReceiptExport()).journal;
+      const journal = telemetryOf(options).journal;
       let query: unknown;
       try {
         query = JSON.parse(url.searchParams.get("query") ?? "{}");
@@ -1094,6 +1094,13 @@ export function createContributionContent(options: {
   };
 }
 
+/** The exporter a route needs but its composition did not provide; reading it is a wiring fault. */
+const missingTelemetry = (): ReceiptExporter => {
+  throw Error("Receipt export is unavailable: provide ReceiptExport.");
+};
+const telemetryOf = (options: { telemetry?: ReceiptExporter }) =>
+  options.telemetry ?? missingTelemetry();
+
 function* hostPeRoutes(
   hostBaseUrl: string,
   bridge: RevitBridge["Service"] | undefined,
@@ -1103,6 +1110,7 @@ function* hostPeRoutes(
   share?: MachineShareAdapter,
   hostWork?: HostWork,
   captures?: TakeoffCaptures,
+  telemetry: ReceiptExporter = missingTelemetry(),
 ) {
   const sourceRoot = hostOwnership.sourceRoot;
   const worldRoot = resolvePeaProductHomePath();
@@ -1143,7 +1151,6 @@ function* hostPeRoutes(
     });
   // Every provider is probed once in the background; the list says `unknown` until then.
   const providers = createProviders({ shellPath });
-  const telemetry = hostReceiptExport();
   const stopOperationHooks = observePluginOperations(telemetry.journal, content.lifecycle.emit);
   const receiptThreads = createThreadReceiptAdapter(
     telemetry,
@@ -1408,6 +1415,7 @@ export const peRoutesLayer = (
       const update = yield* UpdateReader;
       const runs = yield* RunConsents;
       const captures = Option.getOrUndefined(yield* Effect.serviceOption(CaptureStore));
+      const telemetry = yield* ReceiptExport;
       const { providers, threads, routes, catalog, machineSpec, notices, plugins, tasks } =
         yield* makeHostPeRoutes(
           hostBaseUrl,
@@ -1418,6 +1426,7 @@ export const peRoutesLayer = (
           share,
           hostWork,
           captures,
+          telemetry,
         );
       // Scoped: the layer closes with this one, which stops its poll and unsets the host face.
       const machineContext = yield* Layer.build(
