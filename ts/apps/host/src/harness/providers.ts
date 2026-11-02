@@ -44,8 +44,9 @@ type Probed = Pick<Provider, "readiness" | "models" | "traits" | "probedAt">;
 
 const PROBE_MS = 20_000;
 const FRESH_MS = 60_000;
-// effect-edge: island, phase 5
-const run = Effect.runPromise;
+const run = <A, E>(work: Effect.Effect<A, E>): Promise<A> =>
+  // effect-edge: island, phase 5
+  Effect.runPromise(work);
 const log = {
   info: (message: string) => void run(Effect.logInfo(message)),
   warn: (message: string) => void run(Effect.logWarning(message)),

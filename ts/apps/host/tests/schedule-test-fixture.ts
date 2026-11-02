@@ -20,7 +20,6 @@ import {
 } from "@pe/agent-contracts";
 import { buildCapabilities } from "../../../packages/mcps/src/pea/capabilities.ts";
 import { ActionJournal } from "../src/action-journal.ts";
-import { TakeoffCaptures } from "../src/takeoff-captures.ts";
 import { RevitBridge, BridgeError, type HostBridgeEvent } from "../src/bridge.ts";
 import { hostResourceObserver, markReadings } from "../src/resource-adapters.ts";
 import { documentMarks } from "../src/document-marks.ts";
