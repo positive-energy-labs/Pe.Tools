@@ -26,6 +26,7 @@
     "test": "vp run -r test",
     "dev": "vp run --filter @pe/host dev",
     "dev:no-revit": "vp run --filter @pe/host dev:no-revit",
+    "ratchets:tighten": "pnpm --filter @pe/repo-guards ratchets:tighten",
     "test:unification-ratchets": "vp test run --config tests/repo-guards/vite.config.ts tests/repo-guards/src/unification-2.guard.test.ts"
   },
   "devDependencies": {
