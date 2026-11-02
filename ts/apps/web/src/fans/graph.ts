@@ -66,7 +66,9 @@ export const fansGraph = {
     sheet: {
       word: "Fan paths",
       panes: ["sheet-roster", "sheet-inputs", "sheet-picture", "sheet-ledger"],
-      verbs: ["refresh", "preview", "price", "heal-preview", "heal", "fan-preview", "assign-fan"],
+      // Each apply previews first (its `prepare` runs the preview command and shows it as the
+      // review), so the standalone previews stay row/Pea verbs; refresh is the pane head's.
+      verbs: ["price", "heal", "assign-fan"],
     },
   },
   stageOrder: ["sheet"],
