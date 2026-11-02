@@ -71,6 +71,13 @@ export const capabilitySchema = z
     /** JSON Schema of the row's input. */
     input: z.record(z.string(), z.unknown()),
     output: z.record(z.string(), z.unknown()).optional(),
+    /** Compiled vocabulary survives an unavailable or unknown live session. */
+    availability: z
+      .object({
+        state: z.enum(["available", "unavailable", "unknown"]),
+        reason: z.string().optional(),
+      })
+      .optional(),
     /** Who generated this row: catalog, route registry, pod.json, skills. */
     source: z.string(),
     package: contributionSourceSchema.optional(),

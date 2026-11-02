@@ -69,7 +69,7 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
         pendingRequest.Execute(this);
     }
 
-    [Op("scripting.workspace.bootstrap", Subject = OpSubject.None, Touches = OpTouches.Metadata, Effect = OpEffect.ModelWrite, Internal = true, Does = "Create or update a C# Revit scripting pod workspace for authoring: pod.json (no entrypoints until you declare one), PeScripts.csproj with this session's references for editor support, and docs. Existing files are kept.", Title = "Bootstrap Script Workspace", Finds = ["script", "workspace", "pod", "bootstrap", "files"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Tier = OpTier.Expert)]
+    [Op("scripting.workspace.bootstrap", Subject = OpSubject.None, Touches = OpTouches.Metadata, Effect = OpEffect.SessionWrite, Does = "Create or update a C# Revit scripting pod workspace for authoring: pod.json (no entrypoints until you declare one), PeScripts.csproj with this session's references for editor support, and docs. Existing files are kept.", Title = "Bootstrap Script Workspace", Finds = ["script", "workspace", "pod", "bootstrap", "files"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Tier = OpTier.Expert)]
     public Task<ScriptWorkspaceBootstrapData> BootstrapWorkspaceAsync(
         ScriptWorkspaceBootstrapRequest request,
         CancellationToken cancellationToken

@@ -520,7 +520,7 @@ export const hostOpCatalog = [
     "responseSchemaJson": "{\r\n  \"$schema\": \"http://json-schema.org/draft-04/schema#\",\r\n  \"title\": \"FamilyFoundryPlanData\",\r\n  \"type\": \"object\",\r\n  \"additionalProperties\": false,\r\n  \"required\": [\r\n    \"families\",\r\n    \"diagnostics\"\r\n  ],\r\n  \"properties\": {\r\n    \"families\": {\r\n      \"type\": \"array\",\r\n      \"items\": {\r\n        \"$ref\": \"#/definitions/FamilyFoundryFamilyPlanData\"\r\n      }\r\n    },\r\n    \"diagnostics\": {\r\n      \"type\": \"array\",\r\n      \"items\": {\r\n        \"$ref\": \"#/definitions/FamilyFoundryDiagnostic\"\r\n      }\r\n    }\r\n  },\r\n  \"definitions\": {\r\n    \"FamilyFoundryFamilyPlanData\": {\r\n      \"type\": \"object\",\r\n      \"description\": \"One planned family. `familyName` is the requested name byte-exact; `familyId` is the id it resolved to at plan, null when\\nthe name refused (`family-not-found`, `family-name-ambiguous`, `family-not-editable` in `refusals`).\\n            \",\r\n      \"additionalProperties\": false,\r\n      \"required\": [\r\n        \"familyName\",\r\n        \"planHash\",\r\n        \"changes\",\r\n        \"runEffects\",\r\n        \"refusals\",\r\n        \"warnings\"\r\n      ],\r\n      \"properties\": {\r\n        \"familyId\": {\r\n          \"type\": [\r\n            \"integer\",\r\n            \"null\"\r\n          ],\r\n          \"format\": \"int64\"\r\n        },\r\n        \"familyName\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"planHash\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"changes\": {\r\n          \"type\": \"array\",\r\n          \"items\": {\r\n            \"$ref\": \"#/definitions/FamilyFoundryChangeData\"\r\n          }\r\n        },\r\n        \"runEffects\": {\r\n          \"type\": \"array\",\r\n          \"items\": {\r\n            \"type\": \"string\"\r\n          }\r\n        },\r\n        \"refusals\": {\r\n          \"type\": \"array\",\r\n          \"items\": {\r\n            \"$ref\": \"#/definitions/FamilyFoundryDiagnostic\"\r\n          }\r\n        },\r\n        \"warnings\": {\r\n          \"type\": \"array\",\r\n          \"items\": {\r\n            \"$ref\": \"#/definitions/RevitDataIssue\"\r\n          }\r\n        }\r\n      }\r\n    },\r\n    \"FamilyFoundryChangeData\": {\r\n      \"type\": \"object\",\r\n      \"description\": \"One change the reconciler would make: section + key is the address, kind is the verb.\",\r\n      \"additionalProperties\": false,\r\n      \"required\": [\r\n        \"before\",\r\n        \"after\",\r\n        \"section\",\r\n        \"key\",\r\n        \"kind\"\r\n      ],\r\n      \"properties\": {\r\n        \"section\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"key\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"kind\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"mappedFrom\": {\r\n          \"type\": [\r\n            \"null\",\r\n            \"string\"\r\n          ]\r\n        },\r\n        \"before\": {\r\n          \"oneOf\": [\r\n            {},\r\n            {\r\n              \"type\": \"null\"\r\n            }\r\n          ]\r\n        },\r\n        \"after\": {\r\n          \"oneOf\": [\r\n            {},\r\n            {\r\n              \"type\": \"null\"\r\n            }\r\n          ]\r\n        }\r\n      }\r\n    },\r\n    \"FamilyFoundryDiagnostic\": {\r\n      \"type\": \"object\",\r\n      \"description\": \"Diagnostic for the Family Foundry host operations: a closed code, a JSON path, a message, an optional fix.\",\r\n      \"additionalProperties\": false,\r\n      \"required\": [\r\n        \"code\",\r\n        \"path\",\r\n        \"message\"\r\n      ],\r\n      \"properties\": {\r\n        \"code\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"path\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"message\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"suggestion\": {\r\n          \"type\": [\r\n            \"null\",\r\n            \"string\"\r\n          ]\r\n        }\r\n      }\r\n    },\r\n    \"RevitDataIssue\": {\r\n      \"type\": \"object\",\r\n      \"additionalProperties\": false,\r\n      \"required\": [\r\n        \"code\",\r\n        \"severity\",\r\n        \"message\"\r\n      ],\r\n      \"properties\": {\r\n        \"code\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"severity\": {\r\n          \"$ref\": \"#/definitions/RevitDataIssueSeverity\"\r\n        },\r\n        \"message\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"familyName\": {\r\n          \"type\": [\r\n            \"null\",\r\n            \"string\"\r\n          ]\r\n        },\r\n        \"typeName\": {\r\n          \"type\": [\r\n            \"null\",\r\n            \"string\"\r\n          ]\r\n        },\r\n        \"parameterName\": {\r\n          \"type\": [\r\n            \"null\",\r\n            \"string\"\r\n          ]\r\n        }\r\n      }\r\n    },\r\n    \"RevitDataIssueSeverity\": {\r\n      \"type\": \"string\",\r\n      \"description\": \"\",\r\n      \"x-enumNames\": [\r\n        \"Info\",\r\n        \"Warning\",\r\n        \"Error\"\r\n      ],\r\n      \"enum\": [\r\n        \"Info\",\r\n        \"Warning\",\r\n        \"Error\"\r\n      ]\r\n    }\r\n  }\r\n}",
     "actor": "any",
     "usesTransactions": true,
-    "subject": "Document",
+    "subject": "FamilyDocument",
     "touches": "Geometry",
     "effect": "TransactRead",
     "cardinality": "One",
@@ -755,9 +755,9 @@ export const hostOpCatalog = [
     "usesTransactions": true,
     "subject": "Elements",
     "touches": "Metadata",
-    "effect": "ModelWrite",
+    "effect": "SessionWrite",
     "cardinality": "One",
-    "internal": true,
+    "internal": false,
     "rollsBack": false
   },
   {
@@ -984,9 +984,9 @@ export const hostOpCatalog = [
     "usesTransactions": true,
     "subject": "None",
     "touches": "Metadata",
-    "effect": "ModelWrite",
+    "effect": "SessionWrite",
     "cardinality": "One",
-    "internal": true,
+    "internal": false,
     "rollsBack": false
   },
   {
@@ -2936,9 +2936,9 @@ export const hostOpCatalog = [
     "usesTransactions": true,
     "subject": "None",
     "touches": "Metadata",
-    "effect": "ModelWrite",
+    "effect": "SessionWrite",
     "cardinality": "One",
-    "internal": true,
+    "internal": false,
     "rollsBack": false
   },
   {

@@ -6,7 +6,7 @@ import { eligibleThreads, threadHistory } from "./thread-history.ts";
 import { productRoot } from "@pe/host-contracts/service-identity";
 import { normalizePeError } from "@pe/host-contracts/pe-api";
 import { hostDescriptor } from "@pe/host-contracts/host-descriptor";
-import { peRoutes, peRouteUrl, servePeRoute, matchPeRoute } from "@pe/agent-contracts/pe-api";
+import { httpRoutes as peRoutes, peRouteUrl, servePeRoute, matchPeRoute } from "@pe/agent-contracts/pe-api";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import { resolveSdkSession } from "./sdk-session.ts";
 import {

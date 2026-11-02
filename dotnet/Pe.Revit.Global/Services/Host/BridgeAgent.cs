@@ -252,7 +252,7 @@ internal sealed class BridgeAgent : IDisposable {
                     context => op.ExecuteAsync(
                         request.PayloadJson,
                         ResolveDocument(op, request.OpenDocumentId, context.Cancellation),
-                        cancellationToken),
+                        cancellationToken, request.DerivedCommand),
                     new RevitRunOptions { Label = op.Key },
                     cancellationToken
                 ).ConfigureAwait(false);
@@ -272,7 +272,7 @@ internal sealed class BridgeAgent : IDisposable {
                 } else
                     responseTask = run.Value!;
             } else {
-                responseTask = op.ExecuteAsync(request.PayloadJson, null, cancellationToken);
+                responseTask = op.ExecuteAsync(request.PayloadJson, null, cancellationToken, request.DerivedCommand);
             }
 
             var responseEnvelope = await responseTask.ConfigureAwait(false);

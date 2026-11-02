@@ -103,7 +103,8 @@ public sealed class Op {
 
     internal bool SameHandler(Op other) => this._method == other._method;
 
-    public async Task<object?> ExecuteAsync(string payloadJson, object? document, CancellationToken cancellationToken) {
+    public async Task<object?> ExecuteAsync(string payloadJson, object? document, CancellationToken cancellationToken, string? derivedCommand = null) {
+        OpCallGate.Require(this.Definition, derivedCommand, payloadJson);
         object? request;
         try {
             request = JsonConvert.DeserializeObject(payloadJson, this.Definition.RequestType, JsonSettings);
@@ -522,7 +523,9 @@ public static class OpCallGate {
             var kind = payload["selector"]?["kind"]?.ToString();
             if (definition.Key == "ducts.snapshot" && kind is "roster" or "from" or "ids" or "systems") return;
             if (definition.Key == "revit.catalog.electrical-circuits"
-                && payload["options"]?["includeNearbyProxyContext"]?.ToObject<bool>() != true) return;
+                && (payload["options"]?["includeNearbyProxyContext"]?.ToObject<bool>() != true
+                    || payload["filter"]?["panelNames"] is Newtonsoft.Json.Linq.JArray panels
+                        && panels.Any(panel => !string.IsNullOrWhiteSpace(panel.ToString())))) return;
             throw BridgeOperationExceptions.BadRequest($"'{definition.Key}' requires a narrower geometry subject.");
         }
     }

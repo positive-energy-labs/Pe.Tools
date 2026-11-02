@@ -219,7 +219,7 @@ internal sealed class RevitDataRequestService {
     private static RoomsMergeResult MergeRoomsCore(RoomsMergeRequest request, ProjectDocument activeDocument) =>
         RunTakeoff(activeDocument.Value, document => Rooms.Merge(document, request), "Pe Merge Room Regions");
 
-    [Op("revit.apply.parameters-service-cache.refresh", Subject = OpSubject.None, Touches = OpTouches.Metadata, Effect = OpEffect.ModelWrite, Internal = true, Does = "Refresh the global APS Parameters Service cache through the connected Revit runtime.", Title = "Refresh Parameters Service Cache", Finds = ["aps", "parameters", "cache", "refresh", "parameter-service"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Tier = OpTier.Expert, Thread = OpThread.Revit)]
+    [Op("revit.apply.parameters-service-cache.refresh", Subject = OpSubject.None, Touches = OpTouches.Metadata, Effect = OpEffect.SessionWrite, Does = "Refresh the global APS Parameters Service cache through the connected Revit runtime.", Title = "Refresh Parameters Service Cache", Finds = ["aps", "parameters", "cache", "refresh", "parameter-service"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Tier = OpTier.Expert, Thread = OpThread.Revit)]
     private static Task<ParametersServiceCacheData> RefreshParametersServiceCacheCore(
         NoRequest _,
         CancellationToken cancellationToken
@@ -949,7 +949,7 @@ internal sealed class RevitDataRequestService {
         }
     }
 
-    [Op("family.temporary.acquire", Subject = OpSubject.Elements, Touches = OpTouches.Metadata, Effect = OpEffect.ModelWrite, Internal = true, Does = "Acquire an independent inactive copy of a loaded family for multiple calls. Retain acquisitionId before calling; retry only with that ID. Use the returned exact document ref for each query/action. Release at turn end; unchanged cleanup never saves or loads back.", Title = "Acquire Temporary Family", Finds = ["family", "temporary", "acquire", "edit-family"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation)]
+    [Op("family.temporary.acquire", Subject = OpSubject.Elements, Touches = OpTouches.Metadata, Effect = OpEffect.SessionWrite, Does = "Acquire an independent inactive copy of a loaded family for multiple calls. Retain acquisitionId before calling; retry only with that ID. Use the returned exact document ref for each query/action. Release at turn end; unchanged cleanup never saves or loads back.", Title = "Acquire Temporary Family", Finds = ["family", "temporary", "acquire", "edit-family"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private static TemporaryDocumentData AcquireTemporaryFamily(TemporaryFamilyAcquireRequest request, ProjectDocument source) {
         var session = HostRuntime.SessionId ?? throw new InvalidOperationException("Bridge session identity is unavailable.");
         var tracker = DocumentTrackerAccessor.Current ?? throw new InvalidOperationException("Document tracker is unavailable.");

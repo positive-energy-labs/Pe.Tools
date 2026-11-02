@@ -1,3 +1,4 @@
+import { callCatalogRoute, catalogEntries } from "@pe/agent-contracts/pe-api";
 import { createPeClient, peRoutes } from "@pe/agent-contracts/pe-api";
 import { pagePublicationSchema, pagePublicationResultSchema } from "@pe/host-contracts/pe-api";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
@@ -800,46 +801,21 @@ async function dispatch(
     }
     case "route-doc":
     case "route-command": {
-      if (row.key === "route:threads.history") {
-        const response = await createPeClient(base(), fetch).response("threads.history", {
-          query: { query: JSON.stringify(payload) },
-        });
-        return {
-          ok: response.ok,
-          target: { session: null, document: null },
-          result: await response.json(),
-        };
-      }
-      if (row.key === "route:ducts.sheet" || row.key === "route:ducts.roster") {
-        const client = createPeClient(base(), fetch);
-        const response =
-          row.key === "route:ducts.sheet"
-            ? await client.response("ducts.sheet", {
-                body: peRoutes["ducts.sheet"].body.parse(payload),
-              })
-            : await client.response("ducts.roster", {
-                body: peRoutes["ducts.roster"].body.parse(payload),
-              });
+      if (
+        catalogEntries.some(
+          (entry) => entry.discovery?.key === row.key && entry.key.startsWith("route:"),
+        )
+      ) {
+        const response = await callCatalogRoute(base(), row.key, payload, fetch);
         const result = await response.json();
+        if (response.ok && result.artifact?.url)
+          result.artifact.url = new URL(result.artifact.url, base()).toString();
         return {
           ok: response.ok,
-          target: response.ok
-            ? { session: result.target.session, document: result.target.openId }
-            : { session: null, document: null },
-          result,
-        };
-      }
-      if (row.key === "route:ducts.analysis") {
-        const response = await createPeClient(base(), fetch).response("ducts.analysis", {
-          body: peRoutes["ducts.analysis"].body.parse(payload),
-        });
-        const result = await response.json();
-        if (response.ok) result.artifact.url = new URL(result.artifact.url, base()).toString();
-        return {
-          ok: response.ok,
-          target: response.ok
-            ? { session: result.target.session, document: result.target.openId }
-            : { session: null, document: null },
+          target:
+            response.ok && result.target
+              ? { session: result.target.session, document: result.target.openId }
+              : { session: null, document: null },
           result,
         };
       }

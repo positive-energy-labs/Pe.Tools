@@ -2,7 +2,13 @@ import { runInNewContext } from "node:vm";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
-import { createPeClient, peRoutes, matchPeRoute, servePeRoute, peClientScript } from "./pe-api.ts";
+import {
+  createPeClient,
+  httpRoutes as peRoutes,
+  matchPeRoute,
+  servePeRoute,
+  peClientScript,
+} from "./pe-api.ts";
 
 describe("the declared host door", () => {
   it("refuses an undeclared method/path before a handler can run", async () => {
