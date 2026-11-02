@@ -105,7 +105,7 @@ export function useMarks({
             ];
           })
         : scene.nodes.flatMap((f) => {
-            if (f.node.kind !== "terminal") return [];
+            if (f.node.kind !== "terminal" || !f.node.point) return [];
             const total = priced?.next.paths[f.node.id]?.tel;
             return [
               {

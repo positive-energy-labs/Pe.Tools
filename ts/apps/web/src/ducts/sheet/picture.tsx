@@ -228,7 +228,7 @@ export function SheetPicture({
   const encoding = useMemo(() => encodingFor("none"), []);
   const pointOf = (id: number): readonly number[] | null => {
     const node = byId.nodes.get(id);
-    if (node) return node.point;
+    if (node) return node.point ?? null;
     const line = byId.segments.get(id)?.polyline;
     return line ? (line[Math.floor((line.length - 1) / 2)] ?? null) : null;
   };

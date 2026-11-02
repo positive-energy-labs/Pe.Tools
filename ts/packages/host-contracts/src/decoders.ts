@@ -20,7 +20,7 @@ function generatedSchema(key: string, side: "request" | "response"): z.ZodType {
     const op = hostOpCatalog.find((op) => op.key === key);
     const json = op?.[side === "request" ? "requestSchemaJson" : "responseSchemaJson"];
     if (!json) throw Error(`Missing generated ${side} schema for ${key}`);
-    schema = z.fromJSONSchema(JSON.parse(json));
+    schema = generatedJsonSchema(JSON.parse(json));
     cache.set(id, schema);
   }
   return schema;
@@ -41,7 +41,18 @@ export function nativeResponseDefinitionSchema<T>(
   if (!json) throw Error(`Missing generated response schema for ${key}`);
   const root = JSON.parse(json);
   if (!root.definitions?.[definition]) throw Error(`Missing generated definition ${definition}`);
-  return z.fromJSONSchema({ ...root, ...root.definitions[definition] }) as z.ZodType<T>;
+  return generatedJsonSchema({ ...root, ...root.definitions[definition] }) as z.ZodType<T>;
 }
 
-// TODO: G1/D replace the two ducts custom decoders with DuctSnapshot/Catalogs schemas; G4 replace takeoff image and schedule Pod inventory decoders.
+/** JSON Schema date-time permits offsets; Zod 4.3's converter incorrectly accepts UTC only. */
+export function generatedJsonSchema(json: object): z.ZodType {
+  const pattern = z.toJSONSchema(z.iso.datetime({ offset: true })).pattern;
+  const adapted = JSON.parse(JSON.stringify(json, (_key, value) => {
+    if (value && typeof value === "object" && value.format === "date-time") {
+      const { format: _, ...rest } = value;
+      return { ...rest, pattern };
+    }
+    return value;
+  }));
+  return z.fromJSONSchema(adapted);
+}

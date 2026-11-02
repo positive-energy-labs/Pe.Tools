@@ -210,7 +210,7 @@ export function subjectScene(
   });
   const point = (id: number): number[] | null => {
     const node = nodeById.get(id);
-    if (node) return node.point;
+    if (node) return node.point ?? null;
     const line = segmentById.get(id)?.polyline;
     return line ? (line[Math.floor((line.length - 1) / 2)] ?? null) : null;
   };

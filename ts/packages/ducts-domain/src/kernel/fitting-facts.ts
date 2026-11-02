@@ -180,6 +180,7 @@ export function tapDistance(duct: Segment, tap: Node, upstream: Connector | unde
   if (total <= 0) return 0;
   const curve = duct.connectors.find((c) => c.connectedTo?.elementId === tap.id);
   const at = curve?.point ?? tap.point;
+  if (!at) throw Error(`Tap ${tap.id} has no position in this snapshot`);
   let best = { d: Infinity, s: 0 };
   let run = 0;
   poly.slice(1).forEach((b, i) => {

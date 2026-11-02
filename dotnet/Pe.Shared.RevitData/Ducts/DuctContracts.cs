@@ -387,7 +387,7 @@ public sealed record DuctNode(
     string? Type,
     string? PartType,
     long? LevelId,
-    double[] Point,
+    double[]? Point,
     string? GroupId,
     string? SystemName,
     string? Classification,

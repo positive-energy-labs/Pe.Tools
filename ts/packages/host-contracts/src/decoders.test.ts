@@ -1,11 +1,24 @@
 import { Schema } from "effect";
+import { readFileSync } from "node:fs";
 import { expect, test } from "vite-plus/test";
-import {
-  effectDecoder,
-  nativeRequestSchema,
-  nativeResponseSchema,
-  nativeResponseDefinitionSchema,
-} from "./decoders.ts";
+import { generatedJsonSchema, nativeResponseSchema, nativeRequestSchema, nativeResponseDefinitionSchema, effectDecoder } from "./decoders";
+
+test.each(["2026-11-02T08:23:20.757+00:00", "2026-11-02T02:23:20.757-06:00", "2026-11-02T08:23:20Z"])("generated date-time accepts DateTimeOffset %s", (value) => {
+  const schema = generatedJsonSchema({ type: "string", format: "date-time" });
+  expect(schema.parse(value)).toBe(value);
+  expect(schema.safeParse("2026-02-30T08:23:20Z").success).toBe(false);
+  expect(schema.safeParse("yesterday").success).toBe(false);
+});
+
+test.each(["roster", "system-walk", "four-fan-walk"])("real K2 %s round-trips through the web decoder", (name) => {
+  const payload = JSON.parse(readFileSync(new URL(`./fixtures/k2-${name}.json`, import.meta.url), "utf8"));
+  const schema = nativeResponseSchema(name === "roster" ? "ducts.snapshot.roster" : "ducts.snapshot.walk");
+  expect(schema.parse(JSON.parse(JSON.stringify(payload)))).toEqual(payload);
+  const broken = structuredClone(payload);
+  broken.document.readAt = "yesterday";
+  expect(schema.safeParse(broken).success).toBe(false);
+});
+
 test("generated native decoders reject invalid payloads", () => {
   expect(nativeResponseSchema("revit.matrix.loaded-families").safeParse(null).success).toBe(false);
   expect(nativeRequestSchema("revit.matrix.loaded-families").safeParse(null).success).toBe(false);

@@ -860,7 +860,7 @@ export namespace DuctsSnapshotRoster {
       type?: null | string;
       partType?: null | string;
       levelId?: number | null;
-      point: number[];
+      point?: number[] | null;
       groupId?: null | string;
       systemName?: null | string;
       classification?: null | string;
@@ -1475,7 +1475,7 @@ export namespace DuctsSnapshotWalk {
       type?: null | string;
       partType?: null | string;
       levelId?: number | null;
-      point: number[];
+      point?: number[] | null;
       groupId?: null | string;
       systemName?: null | string;
       classification?: null | string;

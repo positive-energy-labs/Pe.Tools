@@ -76,7 +76,7 @@ export function phased(
     for (const side of sides)
       if (
         points.some((p) => {
-          const d = depth(side, p);
+          const d = p ? depth(side, p) : null;
           // A point at a piece's end is where it would connect, not inside it.
           return d != null && d.d <= 0 && d.t > IN && d.t < side.len - IN;
         })

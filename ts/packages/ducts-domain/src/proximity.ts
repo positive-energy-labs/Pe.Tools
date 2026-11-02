@@ -218,7 +218,7 @@ export function axisOf(e: Element, c: Element["connectors"][number]): number[] |
     const first = dist(c.point, poly[0]!) <= dist(c.point, poly.at(-1)!);
     return first ? unit(sub(poly[0]!, poly[1]!)) : unit(sub(poly.at(-1)!, poly.at(-2)!));
   }
-  const out = sub(c.point, e.point);
+  const out = e.point ? sub(c.point, e.point) : [];
   if (Math.hypot(...out) > 0.01) return unit(out);
   const others = e.connectors.filter((o) => o !== c && o.point.length === 3);
   if (!others.length) return null;

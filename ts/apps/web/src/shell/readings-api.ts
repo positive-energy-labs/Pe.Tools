@@ -1,3 +1,4 @@
+import { generatedJsonSchema } from "@pe/host-contracts/decoders";
 import { z } from "zod";
 import {
   DUCTS_BODY_VERSION_HEADER,
@@ -58,7 +59,7 @@ export function opResponseSchema(key: string): Promise<z.ZodType> {
       ({ hostOpCatalog }) => {
         const entry = hostOpCatalog.find((candidate) => candidate.key === key);
         if (!entry) throw Error(`${key} is not in the generated op catalog`);
-        return z.fromJSONSchema(JSON.parse(entry.responseSchemaJson)) as z.ZodType;
+        return generatedJsonSchema(JSON.parse(entry.responseSchemaJson)) as z.ZodType;
       },
     );
     decoders.set(key, decoder);

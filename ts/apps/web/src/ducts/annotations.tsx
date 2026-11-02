@@ -230,7 +230,7 @@ export function Annotations({
       {scene.nodes.map((facts) => {
         const id = facts.node.id;
         const back = halo(id);
-        const xy = project(facts.node.point);
+        const xy = facts.node.point ? project(facts.node.point) : null;
         if (!xy || (!back && !layers.has("centrelines"))) return null;
         const ink = encoding.nodes
           ? strokeOf(encoding, facts).ink
