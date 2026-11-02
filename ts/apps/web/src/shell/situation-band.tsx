@@ -1,7 +1,7 @@
 /**
  * ADR 0027 rule 3: the Situation is one line. The route's name and context lead, one primary verb
  * stands framed, the rest wait in an overflow, and the Timeline head closes the line. Layout only:
- * mount.tsx renders each verb and each context control; this file owns where they sit.
+ * mount-chrome.tsx renders each verb and each context control; this file owns where they sit.
  *
  * The Timeline head's Reject answers the same host consent API as Pea's composer (`thread.permission`).
  * TODO: H2 — Reject is proven rendered and inert on the fixture lane only; press it against a live

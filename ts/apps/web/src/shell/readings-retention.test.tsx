@@ -33,7 +33,7 @@ test("revealing a retained app tab does not reacquire unchanged readings", async
     },
   );
   function Pane() {
-    // The same acquisition boundary as MountedPane in shell/mount.tsx.
+    // The same acquisition boundary as MountedPane in shell/mount-pane.tsx.
     useEffect(() => graph.mount(["model"]), []);
     return null;
   }
