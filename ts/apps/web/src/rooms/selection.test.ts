@@ -20,3 +20,7 @@ test("list and inbox picks share the picture/card projection after a URL round t
   expect(roomSelection(["card:note-1"], cards)).toEqual({ pinned: "note-1", guids: [] });
   expect(roomSelection([], cards)).toEqual({ pinned: null, guids: [] });
 });
+
+test("all includes current regions without inbox cards", () => {
+  expect(roomSelection("all", cards, ["room-3", "room-1"]).guids).toEqual(["room-3", "room-1"]);
+});

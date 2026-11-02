@@ -10,6 +10,8 @@ const typeProof = () => {
   field(z.array(z.string()).default([]), {}, manyCodec);
   // @ts-expect-error callers cannot replace the many schema
   manyField("name", {}, z.array(z.string()));
+  // @ts-expect-error options cannot override the schema either
+  manyField("name", { schema: z.array(z.string()) });
 };
 void typeProof;
 

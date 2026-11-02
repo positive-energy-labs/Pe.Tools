@@ -69,5 +69,5 @@ test("URL projection preserves setting defaults but preserves an explicit empty 
     url.middlewares[0]!({ search, next: (value: Record<string, unknown>) => value } as never);
   expect(project({ stage: "sheet", fan: [] })).toEqual({ stage: "sheet", fan: "" });
   expect(project({ fan: [1, 2] })).toEqual({ fan: [1, 2] });
-  expect(project({ fan: "~null" })).toEqual({ fan: "~null" });
+  expect(project({ fan: "%" })).toEqual({ fan: "%" });
 });

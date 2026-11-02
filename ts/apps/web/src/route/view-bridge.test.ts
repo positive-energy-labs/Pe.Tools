@@ -55,7 +55,7 @@ describe("route addresses match their manifests", () => {
       workspaceId: "w1",
       query: "Model~Mill",
       sort: JSON.stringify({ columns: [{ key: "c2", dir: "desc" }] }),
-      hidden: "c3",
+      hidden: JSON.stringify({ c3: true }),
       cell: "3::1",
     });
     expect(page).toMatchObject({
@@ -63,12 +63,12 @@ describe("route addresses match their manifests", () => {
       workspaceId: "w1",
       query: "Model~Mill",
       sort: { columns: [{ key: "c2", dir: "desc" }] },
-      hidden: ["c3"],
+      hidden: { c3: true },
       cell: "3::1",
     });
     expect(url.write(page)).toMatchObject({
       sort: JSON.stringify({ columns: [{ key: "c2", dir: "desc" }] }),
-      hidden: "c3",
+      hidden: JSON.stringify({ c3: true }),
       cell: "3::1",
     });
     // A typed query is a gesture (the store marks it replace); a stage is a step.

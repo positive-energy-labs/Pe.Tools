@@ -142,17 +142,17 @@ export const manyCodec: Codec<Many> = {
 };
 export const stableKeyKinds = ["UniqueId", "system-name", "name"] as const;
 export type StableKeyKind = (typeof stableKeyKinds)[number];
-export function manyField<const A extends Access & { cap?: number; initial?: Many; choices?: readonly string[] }>(
+export function manyField<const A extends Access & { cap?: number; initial?: Many; choices?: readonly string[]; schema?: never; codec?: never; cardinality?: never; keyKind?: never }>(
   keyKind: StableKeyKind, access: A,
 ) {
   if (!stableKeyKinds.includes(keyKind)) throw Error("Subject keys must be stable; ElementId is refused");
   const { cap = 50000, initial = [], choices, ...projection } = access;
   return {
+    ...projection,
     schema: z.union([z.array(z.string().min(1).refine(id => !choices || choices.includes(id), "Unknown key")).max(cap), z.literal("all")]).default(initial),
     codec: manyCodec,
     cardinality: "many" as const,
     keyKind,
-    ...projection,
   };
 }
 /** Structured Page values have one JSON spelling; arrays belong inside a named object. */

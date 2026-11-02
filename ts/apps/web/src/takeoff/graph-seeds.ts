@@ -8,8 +8,8 @@ export const takeoffSeeds = Object.fromEntries(
       ...seed,
       page: {
         ...seed.page,
-        views: [...(seed.page?.views ?? [])],
-        zones: [...(seed.page?.zones ?? [])],
+        views: seed.page?.views ?? [],
+        zones: seed.page?.zones ?? [],
       },
       queries: {
         "takeoffs.snapshot": seed.readings.snapshot,
