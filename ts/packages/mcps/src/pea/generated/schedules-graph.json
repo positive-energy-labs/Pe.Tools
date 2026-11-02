@@ -16,7 +16,7 @@
       "Revit",
       "data"
     ],
-    "blurb": "Any Revit schedule as a grid — push staged cell values, capture its definition into a pod, or apply a saved spec as a new schedule.",
+    "blurb": "Inspect, edit and review the history of a document schedule.",
     "category": "Coordinate model data",
     "exposure": "Preview",
     "icon": "LayoutGrid",
@@ -75,6 +75,7 @@
     },
     "hidden": {
       "agent": "set",
+      "cardinality": "many",
       "codec": {
         "decode": {
           "runtime": true
@@ -154,14 +155,14 @@
           "runtime": true
         }
       },
-      "role": "subject",
+      "role": "draft",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "",
         "maxLength": 1024,
         "type": "string"
       },
-      "share": true,
+      "share": false,
       "url": "push"
     },
     "pod": {
@@ -174,14 +175,14 @@
           "runtime": true
         }
       },
-      "role": "subject",
+      "role": "draft",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "",
         "maxLength": 200,
         "type": "string"
       },
-      "share": true,
+      "share": false,
       "url": "push"
     },
     "query": {
@@ -206,6 +207,7 @@
     },
     "sort": {
       "agent": "set",
+      "cardinality": "many",
       "codec": {
         "decode": {
           "runtime": true
@@ -395,25 +397,8 @@
         "axis": "v",
         "children": [
           {
-            "axis": "h",
-            "children": [
-              {
-                "id": "grid",
-                "kind": "pane"
-              },
-              {
-                "child": {
-                  "id": "spec",
-                  "kind": "pane"
-                },
-                "kind": "gate",
-                "when": "apply"
-              }
-            ],
-            "id": "schedule-spec",
-            "kind": "split",
-            "size": 420,
-            "sized": "end"
+            "id": "grid",
+            "kind": "pane"
           },
           {
             "child": {
@@ -424,13 +409,13 @@
             "when": "editing"
           }
         ],
-        "id": "schedule-main",
+        "id": "schedule-detail",
         "kind": "split",
         "size": 160,
         "sized": "end"
       }
     ],
-    "id": "schedule-body",
+    "id": "schedules-body",
     "kind": "split",
     "size": 240,
     "sized": "start"
@@ -460,14 +445,6 @@
       "verbs": [
         "read"
       ]
-    },
-    "spec": {
-      "draws": [
-        "pods"
-      ],
-      "label": "Schedule spec",
-      "purpose": "Choose a saved schedule definition",
-      "verbs": []
     },
     "work": {
       "draws": [
@@ -525,6 +502,7 @@
         "runtime": true
       },
       "kind": "use",
+      "query": "schedule.grid.snapshot",
       "retire": "page",
       "source": "schedules.retained"
     },
@@ -538,9 +516,6 @@
     }
   },
   "seeds": {
-    "apply": {
-      "title": "Mechanical equipment"
-    },
     "read": {
       "title": "Mechanical equipment"
     }
@@ -555,14 +530,12 @@
       "panes": [
         "list",
         "grid",
-        "work",
-        "spec"
+        "work"
       ],
       "verbs": [
-        "push",
-        "apply"
+        "push"
       ],
-      "word": "Applying"
+      "word": "Editing"
     },
     "audit": {
       "panes": [
@@ -584,50 +557,22 @@
       "word": "History"
     }
   },
+  "subject": {
+    "runtime": true
+  },
+  "subjectField": {
+    "cardinality": "one",
+    "detail": "retained",
+    "field": "workspaceId",
+    "keyKind": "UniqueId",
+    "noun": "schedule",
+    "pane": "list",
+    "roster": "catalog",
+    "show": {
+      "runtime": true
+    }
+  },
   "verbs": {
-    "apply": {
-      "does": "schedule.apply",
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "additionalProperties": false,
-        "properties": {
-          "refusal": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null
-          },
-          "source": {
-            "properties": {
-              "path": {
-                "type": "string"
-              },
-              "pod": {
-                "type": "string"
-              },
-              "sha256": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "pod",
-              "path",
-              "sha256"
-            ],
-            "type": "object"
-          }
-        },
-        "type": "object"
-      },
-      "kind": "command",
-      "label": "Apply spec",
-      "review": "none"
-    },
     "bind": {
       "does": "schedule.grid.bind",
       "input": {
@@ -637,6 +582,433 @@
             "maximum": 9007199254740991,
             "minimum": 0,
             "type": "integer"
+          },
+          "reading": {
+            "properties": {
+              "capturedAt": {
+                "type": "string"
+              },
+              "document": {
+                "type": "string"
+              },
+              "id": {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              "process": {
+                "additionalProperties": false,
+                "properties": {
+                  "executable": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "pid": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991,
+                    "type": "integer"
+                  },
+                  "processStartUtc": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "pid",
+                  "processStartUtc",
+                  "executable"
+                ],
+                "type": "object"
+              },
+              "snapshot": {
+                "properties": {
+                  "columns": {
+                    "items": {
+                      "properties": {
+                        "columnNumber": {
+                          "maximum": 9007199254740991,
+                          "minimum": -9007199254740991,
+                          "type": "integer"
+                        },
+                        "fieldName": {
+                          "type": "string"
+                        },
+                        "headerText": {
+                          "type": "string"
+                        },
+                        "isCalculated": {
+                          "default": false,
+                          "type": "boolean"
+                        },
+                        "isCombinedParameter": {
+                          "default": false,
+                          "type": "boolean"
+                        },
+                        "parameter": {
+                          "anyOf": [
+                            {
+                              "properties": {
+                                "definition": {
+                                  "anyOf": [
+                                    {
+                                      "properties": {
+                                        "dataTypeId": {
+                                          "anyOf": [
+                                            {
+                                              "type": "string"
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "type": "object"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              },
+                              "type": "object"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "columnNumber",
+                        "headerText",
+                        "fieldName"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "documentTitle": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rows": {
+                    "items": {
+                      "properties": {
+                        "bindings": {
+                          "default": [],
+                          "items": {
+                            "properties": {
+                              "blocker": {
+                                "default": "None",
+                                "type": "string"
+                              },
+                              "columnNumber": {
+                                "maximum": 9007199254740991,
+                                "minimum": -9007199254740991,
+                                "type": "integer"
+                              },
+                              "displayUnit": {
+                                "anyOf": [
+                                  {
+                                    "properties": {
+                                      "label": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "refusal": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "specTypeId": {
+                                        "type": "string"
+                                      },
+                                      "symbol": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "typeId": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "specTypeId"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "displayValue": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "hasMixedValues": {
+                                "default": false,
+                                "type": "boolean"
+                              },
+                              "isEditable": {
+                                "default": false,
+                                "type": "boolean"
+                              },
+                              "isTypeParameter": {
+                                "default": false,
+                                "type": "boolean"
+                              },
+                              "parameterId": {
+                                "anyOf": [
+                                  {
+                                    "maximum": 9007199254740991,
+                                    "minimum": -9007199254740991,
+                                    "type": "integer"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "parameterName": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "rawValue": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "storageType": {
+                                "type": "string"
+                              },
+                              "targetElementIds": {
+                                "default": [],
+                                "items": {
+                                  "maximum": 9007199254740991,
+                                  "minimum": -9007199254740991,
+                                  "type": "integer"
+                                },
+                                "type": "array"
+                              },
+                              "targets": {
+                                "items": {
+                                  "properties": {
+                                    "elementId": {
+                                      "maximum": 9007199254740991,
+                                      "minimum": -9007199254740991,
+                                      "type": "integer"
+                                    },
+                                    "hasValue": {
+                                      "type": "boolean"
+                                    },
+                                    "isReadOnly": {
+                                      "type": "boolean"
+                                    },
+                                    "parameterId": {
+                                      "maximum": 9007199254740991,
+                                      "minimum": -9007199254740991,
+                                      "type": "integer"
+                                    },
+                                    "parameterName": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "rawValue": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "storageType": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "elementId",
+                                    "parameterId",
+                                    "storageType",
+                                    "isReadOnly",
+                                    "hasValue",
+                                    "rawValue"
+                                  ],
+                                  "type": "object"
+                                },
+                                "type": "array"
+                              }
+                            },
+                            "required": [
+                              "columnNumber",
+                              "storageType",
+                              "targets"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "kind": {
+                          "default": "Data",
+                          "type": "string"
+                        },
+                        "rowNumber": {
+                          "maximum": 9007199254740991,
+                          "minimum": -9007199254740991,
+                          "type": "integer"
+                        },
+                        "subjectIds": {
+                          "default": [],
+                          "items": {
+                            "maximum": 9007199254740991,
+                            "minimum": -9007199254740991,
+                            "type": "integer"
+                          },
+                          "type": "array"
+                        },
+                        "values": {
+                          "default": [],
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "rowNumber"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "scheduleId": {
+                    "maximum": 9007199254740991,
+                    "minimum": -9007199254740991,
+                    "type": "integer"
+                  },
+                  "scheduleName": {
+                    "type": "string"
+                  },
+                  "scheduleUniqueId": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "takenAt": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "truncated": {
+                    "default": false,
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "scheduleId",
+                  "scheduleName",
+                  "columns",
+                  "rows"
+                ],
+                "type": "object"
+              },
+              "target": {
+                "additionalProperties": false,
+                "properties": {
+                  "openId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "session": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "session",
+                  "openId"
+                ],
+                "type": "object"
+              },
+              "workspaceId": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "capturedAt",
+              "target",
+              "process",
+              "document",
+              "workspaceId",
+              "snapshot"
+            ],
+            "type": "object"
           },
           "readingId": {
             "minLength": 1,

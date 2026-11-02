@@ -110,6 +110,7 @@
     },
     "layers": {
       "agent": false,
+      "cardinality": "many",
       "codec": {
         "decode": {
           "runtime": true
@@ -138,6 +139,7 @@
     },
     "selected": {
       "agent": false,
+      "cardinality": "many",
       "codec": {
         "decode": {
           "runtime": true

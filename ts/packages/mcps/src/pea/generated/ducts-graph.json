@@ -254,25 +254,6 @@
     "title": "Ducts"
   },
   "fields": {
-    "allFans": {
-      "agent": false,
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "transient",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": false,
-        "type": "boolean"
-      },
-      "share": false,
-      "url": false
-    },
     "contextRadiusFt": {
       "agent": "set",
       "codec": {
@@ -339,6 +320,7 @@
     },
     "fan": {
       "agent": "set",
+      "cardinality": "many",
       "codec": {
         "decode": {
           "runtime": true
@@ -347,12 +329,24 @@
           "runtime": true
         }
       },
-      "role": "selection",
+      "keyKind": "fan-mark",
+      "role": "query",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": "",
-        "pattern": "^(?:\\d+:\\d+)?$",
-        "type": "string"
+        "anyOf": [
+          {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "const": "all",
+            "type": "string"
+          }
+        ],
+        "default": []
       },
       "share": true,
       "url": "push"
@@ -644,28 +638,9 @@
       "share": true,
       "url": "replace"
     },
-    "issue": {
-      "agent": "set",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "selection",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": "",
-        "maxLength": 200,
-        "type": "string"
-      },
-      "share": true,
-      "url": "replace"
-    },
     "layers": {
       "agent": "set",
+      "cardinality": "many",
       "codec": {
         "decode": {
           "runtime": true
@@ -715,7 +690,7 @@
           "runtime": true
         }
       },
-      "role": "subject",
+      "role": "query",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "",
@@ -747,25 +722,6 @@
       },
       "share": true,
       "url": "push"
-    },
-    "readAll": {
-      "agent": false,
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "transient",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": false,
-        "type": "boolean"
-      },
-      "share": false,
-      "url": false
     },
     "rulingSearch": {
       "agent": "set",
@@ -1033,8 +989,7 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "network",
         "enum": [
-          "network",
-          "sheet"
+          "network"
         ],
         "type": "string"
       },
@@ -1043,6 +998,7 @@
     },
     "system": {
       "agent": "set",
+      "cardinality": "many",
       "codec": {
         "decode": {
           "runtime": true
@@ -1051,6 +1007,8 @@
           "runtime": true
         }
       },
+      "editor": "pane",
+      "keyKind": "system-name",
       "picker": {
         "options": {
           "runtime": true
@@ -1061,12 +1019,20 @@
       "role": "subject",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": [],
-        "items": {
-          "maxLength": 200,
-          "type": "string"
-        },
-        "type": "array"
+        "anyOf": [
+          {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "const": "all",
+            "type": "string"
+          }
+        ],
+        "default": []
       },
       "share": true,
       "url": "push"
@@ -1695,6 +1661,7 @@
     },
     "e-systems": {
       "draws": [
+        "fans",
         "roster",
         "ducts",
         "pricing"
@@ -1835,8 +1802,7 @@
     }
   },
   "stageOrder": [
-    "network",
-    "sheet"
+    "network"
   ],
   "stages": {
     "network": {
@@ -1859,28 +1825,22 @@
         "assign-fan"
       ],
       "word": "Pricing systems"
-    },
-    "sheet": {
-      "panes": [
-        "sheet-roster",
-        "sheet-inputs",
-        "sheet-picture",
-        "sheet-ledger"
-      ],
-      "verbs": [
-        "refresh",
-        "preview",
-        "price",
-        "heal-preview",
-        "heal",
-        "fan-preview",
-        "assign-fan"
-      ],
-      "word": "Pricing fans"
     }
   },
   "subject": {
     "runtime": true
+  },
+  "subjectField": {
+    "cardinality": "many",
+    "detail": "ducts",
+    "field": "system",
+    "keyKind": "system-name",
+    "noun": "system",
+    "pane": "e-systems",
+    "roster": "roster",
+    "show": {
+      "runtime": true
+    }
   },
   "transition": {
     "runtime": true

@@ -28,6 +28,7 @@
   "fields": {
     "picked": {
       "agent": "set",
+      "cardinality": "many",
       "codec": {
         "decode": {
           "runtime": true
@@ -91,6 +92,7 @@
     },
     "rows": {
       "agent": "set",
+      "cardinality": "many",
       "codec": {
         "decode": {
           "runtime": true
@@ -235,6 +237,11 @@
       "kind": "derive",
       "retire": "page",
       "source": "grilles.solve"
+    }
+  },
+  "seeds": {
+    "calculate": {
+      "title": "calculate"
     }
   },
   "stageOrder": [

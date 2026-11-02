@@ -45,7 +45,7 @@
       "rhvac",
       "zones"
     ],
-    "blurb": "The takeoff atlas — zones on the plan, rooms in the table, Manual J data through to a synced RHVAC .r10.",
+    "blurb": "Adopt zoning regions from chosen views.",
     "category": "Calculate loads & airflow",
     "exposure": "Main",
     "icon": "Map",
@@ -54,13 +54,18 @@
     "path": "/takeoffs",
     "resume": "document",
     "runtimeNeed": "Revit for model actions; browsing saved data is separate",
-    "satellites": [],
+    "satellites": [
+      {
+        "label": "Zone audit",
+        "to": "/zone-audit"
+      }
+    ],
     "surfaces": {
       "pwa": "full",
       "tray": false,
       "web": "full"
     },
-    "title": "Takeoffs"
+    "title": "View adoption"
   },
   "fields": {
     "fileText": {
@@ -119,8 +124,8 @@
         "maxLength": 200,
         "type": "string"
       },
-      "share": false,
-      "url": false
+      "share": true,
+      "url": "push"
     },
     "room": {
       "agent": "read",
@@ -155,12 +160,8 @@
       "role": "stage",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "const": "adopt",
         "default": "adopt",
-        "enum": [
-          "adopt",
-          "audit",
-          "sync"
-        ],
         "type": "string"
       },
       "share": true,
@@ -308,6 +309,7 @@
     },
     "views": {
       "agent": "set",
+      "cardinality": "many",
       "codec": {
         "decode": {
           "runtime": true
@@ -316,7 +318,14 @@
           "runtime": true
         }
       },
-      "role": "selection",
+      "picker": {
+        "options": {
+          "runtime": true
+        },
+        "placeholder": "Choose views",
+        "reading": "roster"
+      },
+      "role": "subject",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": [],
@@ -327,10 +336,10 @@
         "type": "array"
       },
       "share": true,
-      "url": false
+      "url": "push"
     },
     "work": {
-      "agent": "set",
+      "agent": false,
       "codec": {
         "decode": {
           "runtime": true
@@ -339,15 +348,15 @@
           "runtime": true
         }
       },
-      "role": "subject",
+      "role": "transient",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "",
         "maxLength": 200,
         "type": "string"
       },
-      "share": true,
-      "url": "push"
+      "share": false,
+      "url": false
     },
     "zone": {
       "agent": "read",
@@ -371,6 +380,7 @@
     },
     "zones": {
       "agent": "set",
+      "cardinality": "many",
       "codec": {
         "decode": {
           "runtime": true
@@ -390,7 +400,7 @@
         "type": "array"
       },
       "share": true,
-      "url": false
+      "url": "push"
     }
   },
   "key": "takeoffs",
@@ -402,94 +412,16 @@
         "kind": "pane"
       },
       {
-        "axis": "v",
-        "children": [
-          {
-            "child": {
-              "id": "adoption",
-              "kind": "pane"
-            },
-            "kind": "gate",
-            "when": "adopt"
-          },
-          {
-            "axis": "h",
-            "children": [
-              {
-                "id": "navigation",
-                "kind": "pane"
-              },
-              {
-                "axis": "v",
-                "children": [
-                  {
-                    "id": "plan",
-                    "kind": "pane"
-                  },
-                  {
-                    "axis": "v",
-                    "children": [
-                      {
-                        "axis": "h",
-                        "children": [
-                          {
-                            "id": "rooms",
-                            "kind": "pane"
-                          },
-                          {
-                            "id": "room",
-                            "kind": "pane"
-                          }
-                        ],
-                        "id": "takeoff-table",
-                        "kind": "split",
-                        "maxSize": 520,
-                        "minOtherSize": 360,
-                        "minSize": 240,
-                        "persist": "pe.takeoffs.room-panel-width",
-                        "size": 288,
-                        "sized": "end"
-                      },
-                      {
-                        "id": "review",
-                        "kind": "pane"
-                      }
-                    ],
-                    "id": "takeoff-lower",
-                    "kind": "split",
-                    "size": 180,
-                    "sized": "end"
-                  }
-                ],
-                "id": "takeoff-main",
-                "kind": "split",
-                "maxSize": 754,
-                "minOtherSize": 220,
-                "minSize": 174,
-                "persist": "pe.takeoffs.plan-height",
-                "size": 354,
-                "sized": "start"
-              }
-            ],
-            "id": "takeoff-atlas",
-            "kind": "split",
-            "minSize": 200,
-            "size": 288,
-            "sized": "start"
-          }
-        ],
-        "id": "takeoff-adoption",
-        "kind": "split",
-        "size": 220,
-        "sized": "start"
+        "id": "adoption",
+        "kind": "pane"
       }
     ],
-    "id": "takeoff-body",
+    "id": "adoption-body",
     "kind": "split",
-    "size": 72,
+    "size": 100,
     "sized": "start"
   },
-  "name": "Takeoffs",
+  "name": "View adoption",
   "needs": "project",
   "panes": {
     "adoption": {
@@ -498,52 +430,6 @@
       ],
       "label": "Adopt zoning regions",
       "purpose": "Stage designer region names and system tags",
-      "verbs": []
-    },
-    "navigation": {
-      "draws": [
-        "snapshot",
-        "saved"
-      ],
-      "label": "Zones",
-      "purpose": "Navigate levels and zones",
-      "verbs": {
-        "ids": [
-          "partition"
-        ],
-        "runtime": true
-      }
-    },
-    "plan": {
-      "draws": [
-        "plan"
-      ],
-      "label": "Plan",
-      "purpose": "Inspect model geometry against its registered owner view",
-      "verbs": []
-    },
-    "review": {
-      "draws": [
-        "receipts",
-        "text"
-      ],
-      "label": "Review",
-      "purpose": "Review native partition evidence and authored proposals",
-      "verbs": []
-    },
-    "room": {
-      "draws": [],
-      "label": "Room details",
-      "purpose": "Inspect the selected room",
-      "verbs": []
-    },
-    "rooms": {
-      "draws": [
-        "snapshot",
-        "saved"
-      ],
-      "label": "Rooms",
-      "purpose": "Edit Manual J room data and decide calls",
       "verbs": []
     },
     "scope": {
@@ -610,6 +496,15 @@
       "retire": "page",
       "source": "takeoffs.rhvacVersion"
     },
+    "roster": {
+      "deps": [
+        "snapshot",
+        "saved"
+      ],
+      "kind": "derive",
+      "retire": "target",
+      "source": "takeoffs.roster"
+    },
     "saved": {
       "args": {
         "runtime": true
@@ -666,59 +561,35 @@
     }
   },
   "stageOrder": [
-    "adopt",
-    "audit",
-    "sync"
+    "adopt"
   ],
   "stages": {
     "adopt": {
       "panes": [
         "scope",
-        "adoption",
-        "navigation",
-        "plan",
-        "rooms",
-        "room",
-        "review"
+        "adoption"
       ],
       "verbs": [
         "refresh",
         "initialize",
         "adopt"
       ],
-      "word": "Adopting zones"
-    },
-    "audit": {
-      "panes": [
-        "scope",
-        "navigation",
-        "plan",
-        "rooms",
-        "room",
-        "review"
-      ],
-      "verbs": [
-        "refresh",
-        "partition"
-      ],
-      "word": "Auditing rooms"
-    },
-    "sync": {
-      "panes": [
-        "scope",
-        "navigation",
-        "plan",
-        "rooms",
-        "room",
-        "review"
-      ],
-      "verbs": [
-        "refresh",
-        "sync",
-        "retry-r10",
-        "launch"
-      ],
-      "word": "Syncing RHVAC"
+      "word": "Adopting views"
+    }
+  },
+  "subject": {
+    "runtime": true
+  },
+  "subjectField": {
+    "cardinality": "many",
+    "detail": "candidates",
+    "field": "views",
+    "keyKind": "UniqueId",
+    "noun": "view",
+    "pane": "scope",
+    "roster": "roster",
+    "show": {
+      "runtime": true
     }
   },
   "transition": {
@@ -859,153 +730,6 @@
       "label": "Edit adoption",
       "review": "none"
     },
-    "decide": {
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "additionalProperties": false,
-        "properties": {
-          "refusal": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null
-          },
-          "request": {
-            "properties": {
-              "flag": {
-                "type": "string"
-              },
-              "room": {
-                "type": "string"
-              },
-              "verdict": {
-                "enum": [
-                  "accept",
-                  "dismiss"
-                ],
-                "type": "string"
-              }
-            },
-            "required": [
-              "room",
-              "flag",
-              "verdict"
-            ],
-            "type": "object"
-          }
-        },
-        "required": [
-          "request"
-        ],
-        "type": "object"
-      },
-      "kind": "work",
-      "label": "Decide room call",
-      "review": "none"
-    },
-    "edit": {
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "additionalProperties": false,
-        "properties": {
-          "expectedRevision": {
-            "maximum": 9007199254740991,
-            "minimum": -9007199254740991,
-            "type": "integer"
-          },
-          "patches": {
-            "items": {
-              "properties": {
-                "path": {
-                  "items": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "number"
-                      }
-                    ]
-                  },
-                  "type": "array"
-                },
-                "value": {}
-              },
-              "required": [
-                "path"
-              ],
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "refusal": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null
-          }
-        },
-        "required": [
-          "patches",
-          "expectedRevision"
-        ],
-        "type": "object"
-      },
-      "kind": "work",
-      "label": "Edit takeoff cells",
-      "review": "none"
-    },
-    "flag": {
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "additionalProperties": false,
-        "properties": {
-          "refusal": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null
-          },
-          "request": {
-            "properties": {
-              "shape": {
-                "type": "string"
-              },
-              "zone": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "zone",
-              "shape"
-            ],
-            "type": "object"
-          }
-        },
-        "required": [
-          "request"
-        ],
-        "type": "object"
-      },
-      "kind": "work",
-      "label": "Flag review shape",
-      "review": "none"
-    },
     "initialize": {
       "does": "takeoffs.initialize",
       "input": {
@@ -1045,77 +769,6 @@
       "label": "initialize",
       "review": "none"
     },
-    "launch": {
-      "caller": "human",
-      "does": "rhvac.launch",
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "additionalProperties": false,
-        "properties": {},
-        "type": "object"
-      },
-      "kind": "command",
-      "label": "open in RHVAC",
-      "review": "none"
-    },
-    "partition": {
-      "does": "takeoffs.partition",
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "additionalProperties": false,
-        "properties": {
-          "refusal": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null
-          },
-          "request": {
-            "items": {
-              "properties": {
-                "runId": {
-                  "type": "string"
-                },
-                "view": {
-                  "type": "string"
-                },
-                "zoneGuid": {
-                  "type": "string"
-                },
-                "zoneName": {
-                  "type": "string"
-                },
-                "zoneRegion": {
-                  "maximum": 9007199254740991,
-                  "minimum": -9007199254740991,
-                  "type": "integer"
-                }
-              },
-              "required": [
-                "zoneRegion",
-                "view",
-                "zoneName",
-                "zoneGuid"
-              ],
-              "type": "object"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "request"
-        ],
-        "type": "object"
-      },
-      "kind": "command",
-      "label": "partition",
-      "review": "shown"
-    },
     "refresh": {
       "chord": "Mod+R",
       "does": "takeoffs.snapshot",
@@ -1136,8 +789,24 @@
             "default": null
           },
           "request": {
-            "additionalProperties": false,
-            "properties": {},
+            "properties": {
+              "views": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "zoneGuids": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "views",
+              "zoneGuids"
+            ],
             "type": "object"
           }
         },
@@ -1149,241 +818,6 @@
       "kind": "query",
       "label": "refresh",
       "review": "none"
-    },
-    "retry-r10": {
-      "does": "rhvac.open",
-      "effect": "query",
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "additionalProperties": false,
-        "properties": {
-          "refusal": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null
-          },
-          "request": {
-            "properties": {
-              "path": {
-                "minLength": 1,
-                "type": "string"
-              }
-            },
-            "required": [
-              "path"
-            ],
-            "type": "object"
-          }
-        },
-        "required": [
-          "request"
-        ],
-        "type": "object"
-      },
-      "kind": "query",
-      "label": "retry .r10",
-      "review": "none"
-    },
-    "room": {
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "additionalProperties": false,
-        "properties": {
-          "refusal": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null
-          },
-          "request": {
-            "properties": {
-              "base": {
-                "properties": {
-                  "ceilingFt": {
-                    "type": "number"
-                  },
-                  "equipLatent": {
-                    "type": "number"
-                  },
-                  "equipSensible": {
-                    "type": "number"
-                  },
-                  "lightingW": {
-                    "type": "number"
-                  },
-                  "name": {
-                    "type": "string"
-                  },
-                  "people": {
-                    "type": "number"
-                  },
-                  "role": {
-                    "enum": [
-                      "room",
-                      "zone"
-                    ],
-                    "type": "string"
-                  },
-                  "type": {
-                    "enum": [
-                      "bedroom",
-                      "primary bedroom",
-                      "full bath",
-                      "powder",
-                      "kitchen",
-                      "dining",
-                      "office",
-                      "laundry",
-                      "great room",
-                      "exercise",
-                      "mechanical",
-                      "hall"
-                    ],
-                    "type": "string"
-                  },
-                  "ventilationCfm": {
-                    "type": "number"
-                  }
-                },
-                "type": "object"
-              },
-              "id": {
-                "type": "string"
-              },
-              "next": {
-                "properties": {
-                  "ceilingFt": {
-                    "type": "number"
-                  },
-                  "equipLatent": {
-                    "type": "number"
-                  },
-                  "equipSensible": {
-                    "type": "number"
-                  },
-                  "lightingW": {
-                    "type": "number"
-                  },
-                  "name": {
-                    "type": "string"
-                  },
-                  "people": {
-                    "type": "number"
-                  },
-                  "role": {
-                    "enum": [
-                      "room",
-                      "zone"
-                    ],
-                    "type": "string"
-                  },
-                  "type": {
-                    "enum": [
-                      "bedroom",
-                      "primary bedroom",
-                      "full bath",
-                      "powder",
-                      "kitchen",
-                      "dining",
-                      "office",
-                      "laundry",
-                      "great room",
-                      "exercise",
-                      "mechanical",
-                      "hall"
-                    ],
-                    "type": "string"
-                  },
-                  "ventilationCfm": {
-                    "type": "number"
-                  }
-                },
-                "type": "object"
-              }
-            },
-            "required": [
-              "id",
-              "next",
-              "base"
-            ],
-            "type": "object"
-          }
-        },
-        "required": [
-          "request"
-        ],
-        "type": "object"
-      },
-      "kind": "work",
-      "label": "Edit room",
-      "review": "none"
-    },
-    "sync": {
-      "does": "takeoffs.sync",
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "additionalProperties": false,
-        "properties": {
-          "refusal": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null
-          },
-          "request": {
-            "properties": {
-              "captureId": {
-                "type": "string"
-              },
-              "fileVersion": {
-                "type": "string"
-              },
-              "path": {
-                "minLength": 1,
-                "type": "string"
-              },
-              "plan": {},
-              "zones": {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              }
-            },
-            "required": [
-              "path",
-              "zones",
-              "captureId",
-              "fileVersion",
-              "plan"
-            ],
-            "type": "object"
-          }
-        },
-        "required": [
-          "request"
-        ],
-        "type": "object"
-      },
-      "kind": "command",
-      "label": "sync",
-      "review": "shown"
     },
     "work.start-fresh": {
       "input": {

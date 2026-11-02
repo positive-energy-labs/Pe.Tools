@@ -123,6 +123,7 @@
     },
     "hidden": {
       "agent": "set",
+      "cardinality": "many",
       "codec": {
         "decode": {
           "runtime": true
@@ -274,6 +275,7 @@
     },
     "sort": {
       "agent": "set",
+      "cardinality": "many",
       "codec": {
         "decode": {
           "runtime": true

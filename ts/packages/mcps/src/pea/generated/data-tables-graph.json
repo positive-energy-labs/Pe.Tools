@@ -91,6 +91,11 @@
       "source": "data-tables.tables"
     }
   },
+  "seeds": {
+    "edit": {
+      "title": "edit"
+    }
+  },
   "stageOrder": [
     "edit"
   ],

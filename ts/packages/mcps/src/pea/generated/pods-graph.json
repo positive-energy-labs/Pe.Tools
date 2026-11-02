@@ -16,7 +16,7 @@
     "aliases": [
       "Pods"
     ],
-    "blurb": "Every installed pod — browse members, edit a spec as a form or raw JSON, and see the runs filed against it.",
+    "blurb": "Author a Pod member and inspect its runs.",
     "category": "Ask / automate",
     "exposure": "Preview",
     "icon": "Settings2",
@@ -114,25 +114,6 @@
       "share": false,
       "url": false
     },
-    "pluginEpoch": {
-      "agent": false,
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "transient",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": 0,
-        "type": "number"
-      },
-      "share": false,
-      "url": false
-    },
     "pod": {
       "agent": "read",
       "codec": {
@@ -143,7 +124,7 @@
           "runtime": true
         }
       },
-      "role": "subject",
+      "role": "query",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "",
@@ -333,11 +314,10 @@
     },
     "members": {
       "draws": [
-        "pods",
-        "plugins"
+        "pods"
       ],
       "label": "members",
-      "purpose": "Browse every installed Pod member and activate its plugin",
+      "purpose": "Browse installed Pod members",
       "verbs": []
     },
     "runs": {
@@ -376,14 +356,6 @@
       "kind": "use",
       "retire": "page",
       "source": "pods.member"
-    },
-    "plugins": {
-      "args": {
-        "runtime": true
-      },
-      "kind": "use",
-      "retire": "page",
-      "source": "pods.plugins"
     },
     "pods": {
       "args": {
@@ -436,44 +408,22 @@
       "word": "Browse"
     }
   },
+  "subjectField": {
+    "cardinality": "one",
+    "detail": "member",
+    "field": "path",
+    "keyKind": "name",
+    "noun": "member",
+    "pane": "members",
+    "roster": "pods",
+    "show": {
+      "runtime": true
+    }
+  },
   "transition": {
     "runtime": true
   },
   "verbs": {
-    "activation": {
-      "caller": "human",
-      "does": "plugin.update",
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "properties": {
-          "enabled": {
-            "type": "boolean"
-          },
-          "id": {
-            "type": "string"
-          },
-          "refusal": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null
-          }
-        },
-        "required": [
-          "id",
-          "enabled"
-        ],
-        "type": "object"
-      },
-      "kind": "command",
-      "label": "Change Pod activation",
-      "review": "none"
-    },
     "adopt": {
       "does": "settings.observe",
       "input": {

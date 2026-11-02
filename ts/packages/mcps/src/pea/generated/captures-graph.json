@@ -24,6 +24,7 @@
   "fields": {
     "open": {
       "agent": "set",
+      "cardinality": "many",
       "codec": {
         "decode": {
           "runtime": true
@@ -180,6 +181,11 @@
       "query": "captures.list",
       "retire": "never",
       "source": "captures.list"
+    }
+  },
+  "seeds": {
+    "browse": {
+      "title": "browse"
     }
   },
   "stageOrder": [
