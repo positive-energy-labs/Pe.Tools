@@ -13,7 +13,8 @@ import {
 import { RouteWorkspace } from "../../../../packages/runtime/src/route-workspace";
 import { docAtom } from "./work-document";
 import { makeAtomRegistry } from "#/shell/owner";
-import { previousOf, type Readings } from "../readings";
+import { type Readings } from "../readings";
+import { previousOf } from "#/shell/readings-hooks";
 import { createGraphMount } from "./mount-owner";
 import { workVerb } from "./verbs";
 

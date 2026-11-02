@@ -17,15 +17,8 @@ import { submitAction } from "../../../packages/mcps/src/shared/takeoff-action-c
 import { emptyChatState } from "@pe/agent-contracts/chat-state";
 import { RegistryContext } from "@effect/atom-react";
 
-import {
-  PeReadings,
-  peReadings,
-  readingAtom,
-  previousOf,
-  useReadingSlice,
-  useHostEvents,
-  bindActionReadings,
-} from "./readings";
+import { PeReadings, peReadings, useHostEvents, bindActionReadings } from "./readings";
+import { readingAtom, previousOf, useReadingSlice } from "#/shell/readings-hooks";
 import { useProviders } from "./workbench/provider/providers";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture";
 import { useThreadStream } from "./workbench/provider/thread-stream";

@@ -8,7 +8,7 @@ import {
 } from "@pe/agent-contracts";
 import { fixtureThreadWork, useFixtureName } from "#/shell/fixture-services";
 import { peClient } from "#/host/pe-client";
-import { previousOf, useReading } from "#/readings";
+import { previousOf, useReading } from "#/shell/readings-hooks";
 
 /** The one swap point: the `thread-work` Reading's last good snapshot, checked at the boundary.
  *  Nothing yet (or a malformed payload) is null, and rows keep their conversation titles. */

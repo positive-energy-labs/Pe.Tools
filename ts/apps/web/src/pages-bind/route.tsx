@@ -1,6 +1,6 @@
 import type { HarnessThreadSummary, PageTargetReading } from "@pe/agent-contracts";
 import type { BridgeSessionListEntry } from "@pe/host-contracts/operation-types";
-import { inventoryOf } from "#/readings";
+import { inventoryOf } from "#/shell/readings-hooks";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { routeFromGraph, type RouteAdapters, type MountBody } from "#/shell/mount";
 import { bindGraph, type BindPage } from "./graph";

@@ -1,6 +1,7 @@
 import { peClient } from "#/host/pe-client";
 import { useEffect, useRef, useState } from "react";
-import { peReadings, previousOf, useReading } from "#/readings";
+import { peReadings } from "#/readings";
+import { previousOf, useReading } from "#/shell/readings-hooks";
 import {
   threadHeadSchema,
   putTargetResultSchema,

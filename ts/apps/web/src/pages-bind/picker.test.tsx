@@ -9,7 +9,7 @@ import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
 vi.mock("#/open/bay", () => ({ useThreadSummaries: () => null }));
-vi.mock("#/readings", () => ({
+vi.mock("#/shell/readings-hooks", () => ({
   useInventory: () => ({ state: "absent" }),
   previousOf: () => undefined,
   inventoryOf: () => [],

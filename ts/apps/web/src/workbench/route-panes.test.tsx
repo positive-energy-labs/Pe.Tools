@@ -82,8 +82,6 @@ vi.mock("#/readings", async (actual) => {
   real.peReadings.subscribe = () => () => {};
   return {
     ...real,
-    useReading: () => ({ state: "pending" }),
-    previousOf: () => undefined,
     useHostEvents: (enabled: boolean, onEvent: (event: unknown) => void) =>
       useEffect(() => {
         if (!enabled) return;
@@ -92,6 +90,11 @@ vi.mock("#/readings", async (actual) => {
       }, [enabled, onEvent]),
   };
 });
+vi.mock("#/shell/readings-hooks", async (actual) => ({
+  ...(await actual<typeof import("#/shell/readings-hooks")>()),
+  useReading: () => ({ state: "pending" }),
+  previousOf: () => undefined,
+}));
 vi.mock("#/navigation/surface-host", () => ({ useSurfaceHost: () => ({ surface: "web" }) }));
 const call = vi.hoisted(() =>
   vi.fn(async (door: unknown, ..._: unknown[]) => (door === "view.publish" ? { revision: 1 } : {})),

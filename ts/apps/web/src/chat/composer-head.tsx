@@ -19,7 +19,7 @@ import { useAtomValue } from "@effect/atom-react";
 
 import { Button } from "@pe/kit/lang/button";
 import { useCopy } from "@pe/kit/lib/use-copy";
-import { previousOf } from "#/readings";
+import { previousOf } from "#/shell/readings-hooks";
 import { Ladder } from "#/route/ladder";
 import { Ledger } from "#/route/situation-grids";
 import { useDocumentLadder } from "#/route/situation-ladder";

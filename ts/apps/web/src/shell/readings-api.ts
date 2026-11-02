@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { ductsReadingEnvelopeSchema, type DuctsReadingRequest } from "@pe/agent-contracts";
+import {
+  DUCTS_BODY_VERSION_HEADER,
+  ductsReadingEnvelopeSchema,
+  type DuctsReadingEnvelope,
+  type DuctsReadingRequest,
+} from "@pe/agent-contracts";
+import { createPeClient, type PeRouteId } from "@pe/agent-contracts/pe-api";
 import { readPeError } from "@pe/host-contracts/pe-api";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
@@ -10,7 +16,6 @@ import {
   type OpResponseOf,
 } from "@pe/host-contracts/operation-types";
 import { hostFetch } from "../host/runtime";
-import { readDuctsBody } from "../readings";
 import type { ReadingContext, UseSource } from "./readings";
 import { subscriptionSource } from "./readings-use";
 
@@ -109,6 +114,42 @@ export function opSource<K extends OpKey, T = OpResponseOf<K>>(options: {
   };
 }
 
+const pe = createPeClient(undefined, (url, init) => hostFetch(url, init));
+type ComposeInput<K extends PeRouteId> = Parameters<typeof pe.call<K>>[1];
+type ComposeOutput<K extends PeRouteId> = Awaited<ReturnType<typeof pe.call<K>>>;
+
+/** One host composition, named by its catalog route key and decoded by that route's own schema. */
+export const callCompose = <K extends PeRouteId>(
+  context: Pick<ReadingContext, "signal">,
+  key: K,
+  input: ComposeInput<K>,
+): ReturnType<typeof pe.call<K>> => pe.call(key, input, { signal: context.signal });
+
+/** A reading kind `compose`: a catalog route key (ducts roster, sheet, ...), its input, its schema. */
+export function composeSource<K extends PeRouteId, T = ComposeOutput<K>>(options: {
+  key: K;
+  input(context: ReadingContext): ComposeInput<K> | null;
+  absent: T;
+  map?(response: ComposeOutput<K>): T;
+  dirties?: readonly string[];
+}): UseSource<T> {
+  return {
+    kind: "use",
+    dirties: options.dirties,
+    async open(context, deliver) {
+      const input = options.input(context);
+      if (input === null) return deliver({ kind: "complete", value: options.absent, revision: 0 });
+      try {
+        const response = await callCompose(context, options.key, input);
+        const value = options.map ? options.map(response) : (response as unknown as T);
+        deliver({ kind: "complete", value, revision: 1 });
+      } catch (error) {
+        if (!context.signal.aborted) deliver({ kind: "failure", error });
+      }
+    },
+  };
+}
+
 /** HTTP resources share the kernel's cancellation and generation fence with subscriptions. */
 export function jsonSource<T>(options: {
   request(context: ReadingContext): JsonRequest | null;
@@ -131,6 +172,56 @@ export function jsonSource<T>(options: {
       }
     },
   };
+}
+
+/**
+ * Materialize an admitted immutable body; the envelope and native response headers own freshness.
+ * ponytail: no browser body cache (the old DuctsBodies LRU); `ductsBodySource` retains its last
+ * body per attempt and the host's body cache answers repeat reads. Add one back if /ducts re-reads hurt.
+ */
+async function readDuctsBody(
+  request: DuctsReadingRequest,
+  envelope: DuctsReadingEnvelope,
+  signal: AbortSignal,
+): Promise<{ data: unknown; version: string }> {
+  const { version, session, target } = envelope;
+  const headers: Record<string, string> = {
+    [HOST_RPC_BRIDGE_SESSION_HEADER]: session,
+    [HOST_RPC_ORIGIN_HEADER]: `web:${typeof window === "undefined" ? "/ducts" : window.location.pathname}`,
+  };
+  if (target) headers[HOST_RPC_DOCUMENT_HEADER] = target.openId;
+  if (version) headers[DUCTS_BODY_VERSION_HEADER] = version;
+  const response = await pe.response(
+    "operation.call",
+    {
+      body:
+        request.kind === "ducts-snapshot"
+          ? {
+              key: "ducts.snapshot",
+              request: {
+                ...(request.slots ? { slots: request.slots } : {}),
+                ...(request.labelParameter ? { labelParameter: request.labelParameter } : {}),
+                // The host keys the shared body on the selector too: without it a
+                // scoped read reached Revit as the whole-document read.
+                ...(request.selector ? { selector: request.selector } : {}),
+              },
+            }
+          : { key: "ducts.tables", request: { ids: request.ids } },
+    },
+    { headers, signal: AbortSignal.any([signal, AbortSignal.timeout(120_000)]) },
+  );
+  if (!response.ok) throw Error((await readPeError(response)).message);
+  const bodyVersion = response.headers.get(DUCTS_BODY_VERSION_HEADER);
+  if (
+    response.headers.get("x-pe-resolved-session") !== session ||
+    (target &&
+      decodeURIComponent(response.headers.get("x-pe-resolved-open-id") ?? "") !== target.openId) ||
+    !response.headers.get("x-pe-native-request-id") ||
+    !bodyVersion ||
+    (version && bodyVersion !== version)
+  )
+    throw Error("Ducts response did not confirm the requested observation");
+  return { data: await response.json(), version: bodyVersion };
 }
 
 /** An envelope is permission to fetch a body, never the snapshot itself. */
@@ -176,19 +267,19 @@ export function ductsBodySource<T>(options: {
           });
         if (attempts.has(envelope.revision)) return;
         attempts.add(envelope.revision);
-        void readDuctsBody(request, envelope, { signal: context.signal }).then(
+        void readDuctsBody(request, envelope, context.signal).then(
           (body) => {
-            if (context.signal.aborted || latest !== body.nativeObservation.version) return;
+            if (context.signal.aborted || latest !== body.version) return;
             try {
               retained = {
-                version: body.nativeObservation.version,
+                version: body.version,
                 value: options.decode(body.data),
               };
               deliver({
                 kind: "complete",
                 value: retained.value,
                 revision: ++serial,
-                sourceVersion: body.nativeObservation.version,
+                sourceVersion: body.version,
               });
             } catch (error) {
               deliver({ kind: "failure", error });

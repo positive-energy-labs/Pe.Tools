@@ -9,7 +9,8 @@ import {
   type RouteStateSpec,
   type WorkKey,
 } from "@pe/agent-contracts";
-import { mapReading, readingAtom, peReadings, previousOf, type Readings } from "#/readings";
+import { peReadings, type Readings } from "#/readings";
+import { mapReading, readingAtom, previousOf } from "#/shell/readings-hooks";
 import { isRecord, type Slice } from "./owner";
 
 class RouteAtomKey implements Equal.Equal {

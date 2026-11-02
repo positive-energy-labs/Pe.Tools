@@ -11,7 +11,8 @@ import {
   type RouteGraph,
 } from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";
-import { peReadings, previousOf } from "#/readings";
+import { peReadings } from "#/readings";
+import { previousOf } from "#/shell/readings-hooks";
 import { ProposalHead } from "#/chat/proposal-head";
 import { describeInputHistory, presentInputHistory } from "#/ducts/sheet/input-history";
 import { RouteWorkspace } from "../../../../packages/runtime/src/route-workspace";

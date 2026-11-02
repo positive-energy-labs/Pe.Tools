@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useNavigate, useSearch, useRouter } from "@tanstack/react-router";
 import { resolveWorkbenchConfig } from "../config";
 import { selectRunStatus, selectTurnFailure } from "@pe/agent-contracts/chat-state";
-import { previousOf, useHostStatusSlice } from "#/readings";
+import { previousOf, useHostStatusSlice } from "#/shell/readings-hooks";
 import { appAtomRegistry, useRouteOwner } from "#/shell/owner";
 import { createChatPageStore } from "../store";
 import type { StoredThreadSummary, WorkbenchContextValue } from "./thread-summary";

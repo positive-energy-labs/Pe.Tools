@@ -1,5 +1,7 @@
 import { actionReceiptSchema, type ActionReceipt } from "@pe/agent-contracts";
-import { peReadings, dirty, previousOf, useAction, useReading, type Readings } from "#/readings";
+import { peReadings, dirty, type Readings } from "#/readings";
+import { previousOf, useReading } from "#/shell/readings-hooks";
+import { useAction } from "#/actions/use-action";
 import { actionControls, type ActionControlKey } from "@pe/agent-contracts";
 import { actionControlRpc } from "../../../../packages/mcps/src/shared/rpc-client";
 import { Button } from "@pe/kit/lang/button";

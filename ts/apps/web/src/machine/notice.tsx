@@ -29,7 +29,7 @@ import { harnessClient } from "#/workbench/provider/harness-client";
 import { resolveWorkbenchConfig } from "#/workbench/config";
 import { openFullWindow } from "#/navigation/surface-host";
 import { FailureNote } from "#/components/failure-note";
-import { useAction } from "#/readings";
+import { useAction } from "#/actions/use-action";
 
 import {
   acknowledge,

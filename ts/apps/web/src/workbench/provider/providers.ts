@@ -3,7 +3,8 @@
  */
 import { useCallback, useMemo, useState } from "react";
 import type { AddProviderRequest, Machine, Provider, Reading } from "@pe/agent-contracts";
-import { dirty, useReadingSlice } from "#/readings";
+import { dirty } from "#/readings";
+import { useReadingSlice } from "#/shell/readings-hooks";
 import { machineOf } from "#/machine/model";
 import { harnessClient } from "./harness-client";
 import { errorMessage } from "./use-workbench";

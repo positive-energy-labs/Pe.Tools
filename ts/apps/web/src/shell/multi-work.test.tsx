@@ -12,7 +12,8 @@ import {
   workWriteSchema,
   type RouteGraph,
 } from "@pe/agent-contracts";
-import { peReadings, previousOf } from "#/readings";
+import { peReadings } from "#/readings";
+import { previousOf } from "#/shell/readings-hooks";
 import { acquireWorkJournal } from "#/shell/journal";
 import * as host from "../route/host";
 import { useWorkHandles } from "./use-work-handles";

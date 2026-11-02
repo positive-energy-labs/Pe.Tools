@@ -78,6 +78,11 @@ interface SourcePolicy {
   /** Defaults to the attempt's exact document/session. Disk and service sources declare theirs. */
   effects?(context: ReadingContext): readonly Effect[];
   dirties?: readonly string[];
+  /**
+   * A live subject (one transport subscription): a failure is said, but the attempt keeps
+   * listening, so the subject's next answer recovers it without a refresh press.
+   */
+  recovers?: boolean;
 }
 export interface UseSource<T = unknown> extends SourcePolicy {
   kind: "use" | "feed";
@@ -125,6 +130,8 @@ export interface ReadingGraphDeps<P, W> {
   sources: Readonly<Record<string, ReadingSource>>;
   scope: ReadingScope<P, W>;
   log(entry: ReadingLog): void;
+  /** Seconds an attempt may stay silent before it fails; defaults to `DEFAULT_WAIT_S`. */
+  waitS?: number;
 }
 export class ReadingGraphRefusal extends Error {}
 
@@ -258,15 +265,19 @@ export function createReadingGraph<P, W>(
     node.release = undefined;
     release?.();
   };
+  const waitS = deps.waitS ?? DEFAULT_WAIT_S;
   const awaitProgress = (node: Node<P>) => {
     clearTimeout(node.wait);
     node.wait = setTimeout(() => {
+      node.wait = undefined;
+      // A live subject holding evidence is stale, not failed: its transport recovers it.
+      if (node.source.recovers && node.state.value !== undefined) return;
       if (node.context)
         deliver(node, node.context, {
           kind: "failure",
-          error: `${node.id} sent no answer after ${DEFAULT_WAIT_S}s; explicitly refresh to retry`,
+          error: `${node.id} sent no answer after ${waitS}s; explicitly refresh to retry`,
         });
-    }, DEFAULT_WAIT_S * 1000);
+    }, waitS * 1000);
   };
   const stale = (node: Node<P>, clearPrior = false) => {
     detach(node);
@@ -288,7 +299,16 @@ export function createReadingGraph<P, W>(
       });
       return;
     }
-    if (node.state.status === "failed") return;
+    if (
+      node.state.status === "failed" &&
+      !(
+        node.source.recovers &&
+        (publication.kind === "part" ||
+          publication.kind === "complete" ||
+          publication.kind === "failure")
+      )
+    )
+      return;
     if (publication.kind === "pending" && node.state.complete) {
       deps.log({
         kind: "drop",
@@ -371,7 +391,7 @@ export function createReadingGraph<P, W>(
       if (!node.wait) awaitProgress(node);
     }
     flush();
-    if (owned(node, attempt) && publication.kind === "failure") {
+    if (owned(node, attempt) && publication.kind === "failure" && !node.source.recovers) {
       detach(node);
       node.worker?.stop();
       node.worker = undefined;

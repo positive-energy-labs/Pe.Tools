@@ -1,7 +1,8 @@
 import { useCallback, useRef } from "react";
 
-import type { SessionInventory } from "#/readings";
-import { previousOf, useHostEvents, useHostStatusSlice } from "#/readings";
+import type { SessionInventory } from "#/shell/readings-hooks";
+import { useHostEvents } from "#/readings";
+import { previousOf, useHostStatusSlice } from "#/shell/readings-hooks";
 
 type HostEvent = {
   atMs: number;

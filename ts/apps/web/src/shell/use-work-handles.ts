@@ -1,7 +1,8 @@
 import * as Atom from "effect/unstable/reactivity/Atom";
 import { useEffect, useMemo, useReducer } from "react";
 import { type RouteGraph, type RouteStatePatch, type WorkKey } from "@pe/agent-contracts";
-import { dirty, previousOf } from "#/readings";
+import { dirty } from "#/readings";
+import { previousOf } from "#/shell/readings-hooks";
 import { subscribeAcceptedDeltas, writeRouteWork } from "../route/host";
 import { refuse, writeRefusal } from "../route/refusal";
 import { appAtomRegistry, useOwned, useRouteOwner } from "./owner";

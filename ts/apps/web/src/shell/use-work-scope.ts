@@ -17,7 +17,8 @@ import {
   type WorkWrite,
   type WorkWriteAck,
 } from "@pe/agent-contracts";
-import { dirty, previousOf, readingAtom, peReadings, targetInventory } from "#/readings";
+import { dirty, peReadings } from "#/readings";
+import { previousOf, readingAtom, targetInventory } from "#/shell/readings-hooks";
 import { useRouteSearchSlice } from "../route/activity";
 import {
   salvageRouteWork,

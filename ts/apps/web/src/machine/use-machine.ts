@@ -8,7 +8,9 @@ import type { Machine, Reading } from "@pe/agent-contracts";
 
 import { fixtureMachine, useFixtureName } from "#/shell/fixture-services";
 import { acknowledgeUpdate } from "#/host/install";
-import { dirty, useAction, useReading, useReadingSlice } from "#/readings";
+import { dirty } from "#/readings";
+import { useReading, useReadingSlice } from "#/shell/readings-hooks";
+import { useAction } from "#/actions/use-action";
 
 import { setAccepting } from "./accepting";
 import { machineOf, planWaits } from "./model";

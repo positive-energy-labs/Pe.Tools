@@ -44,10 +44,10 @@ vi.mock("./providers", () => ({
 }));
 // No composer document: the machine has none to offer.
 vi.mock("#/machine/use-machine", () => ({ useMachineSlice: () => null }));
-vi.mock("#/readings", () => ({
+vi.mock("#/readings", () => ({ useHostEvents: () => {} }));
+vi.mock("#/shell/readings-hooks", () => ({
   previousOf: () => undefined,
   useHostStatusSlice: (select: (status: unknown) => unknown) => select({ state: "pending" }),
-  useHostEvents: () => {},
 }));
 vi.mock("#/navigation/surface-host", () => ({ useSurfaceHost: () => ({ surface: "web" }) }));
 vi.mock("#/host/pe-client", () => ({ peClient: { call } }));

@@ -3,7 +3,6 @@ import { z } from "zod";
 import {
   stagedDucts,
   ductsRosterResponseSchema,
-  ductsSheetResponseSchema,
   type DuctsRouteDocument,
   type DuctsSheetRequest,
   type DuctsSheetOverview,
@@ -17,7 +16,7 @@ import { TABLE_IDS } from "@pe/ducts-domain/pricing";
 
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
-import { ductsBodySource, jsonSource, requestJson } from "#/shell/readings-api";
+import { callCompose, composeSource, ductsBodySource, jsonSource } from "#/shell/readings-api";
 import { acquireSource } from "#/shell/readings-use";
 
 import type { ReadingContext, ReadingSource, UseSource } from "#/shell/readings";
@@ -177,21 +176,16 @@ async function sheetDetail<K extends "inputs" | "elements" | "legs" | "worksheet
   kind: K,
   pathId?: string,
 ): Promise<Detail<K>> {
-  const result = await requestJson(
-    {
-      path: "/pe/ducts/sheet",
-      body: {
-        target: overview.target,
-        mode: "fan",
-        unitId: overview.fan!.unitId,
-        portIndex: overview.fan!.portIndex,
-        basis: overview.basis,
-        detail: kind === "legs" ? { kind, pathId } : { kind },
-      },
+  const result = await callCompose(ctx, "ducts.sheet", {
+    body: {
+      target: overview.target,
+      mode: "fan",
+      unitId: overview.fan!.unitId,
+      portIndex: overview.fan!.portIndex,
+      basis: overview.basis,
+      detail: kind === "legs" ? { kind, pathId: pathId! } : { kind },
     },
-    ductsSheetResponseSchema,
-    ctx.signal,
-  );
+  });
 
   if (result.kind !== kind || result.basis !== overview.basis)
     throw Error("Sheet detail does not match its overview");
@@ -235,11 +229,7 @@ function sheets(): UseSource<SheetReading> {
             portIndex: fan.portIndex,
           };
 
-          const result = await requestJson(
-            { path: "/pe/ducts/sheet", body: request },
-            ductsSheetResponseSchema,
-            ctx.signal,
-          );
+          const result = await callCompose(ctx, "ducts.sheet", { body: request });
 
           if (result.kind !== "overview") throw Error("Expected a fan sheet overview");
 
@@ -413,10 +403,9 @@ export function ductsSources(): Readonly<Record<string, ReadingSource>> {
 
     "ducts.fans": {
       key: (scope) => scope.workRevision,
-      ...jsonSource({
-        request: (ctx) =>
-          target(ctx) ? { path: "/pe/ducts/roster", body: { target: target(ctx) } } : null,
-        schema: ductsRosterResponseSchema.nullable(),
+      ...composeSource({
+        key: "ducts.roster",
+        input: (ctx) => (target(ctx) ? { body: { target: target(ctx)! } } : null),
         absent: null,
       }),
       dirties: ["snapshot"],
