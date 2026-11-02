@@ -24,7 +24,7 @@
     "apps/host/src/run-consent.ts": 1,
     "apps/host/src/schedule-actions.ts": 1,
     "apps/host/src/sdk-dispatch.ts": 1,
-    "apps/host/src/sdk-session.ts": 5,
+    "apps/host/src/sdk-session.ts": 2,
     "apps/host/src/session-route.ts": 1,
     "apps/host/src/takeoff-actions.ts": 2,
     "packages/browser/src/attached-guardian.ts": 1,

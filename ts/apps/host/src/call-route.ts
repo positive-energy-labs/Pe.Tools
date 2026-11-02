@@ -7,7 +7,7 @@ import {
   DUCTS_REFRESH_HEADER,
   type DuctsReadingRequest,
 } from "@pe/agent-contracts";
-import { sdkSession, readSessionScope } from "./sdk-session.ts";
+import { sdkSession, readSessionScope, SdkSession } from "./sdk-session.ts";
 import { readSchedule } from "./schedule-actions.ts";
 import { actionControls, commandTool, receiptsForWork } from "@pe/agent-contracts";
 import { NodeHttpClient, NodeServices } from "@effect/platform-node";
@@ -451,11 +451,10 @@ export function makeCallRoute(
                   openId: openDocumentId,
                 });
                 const selected = async () => {
+                  const resolve = SdkSession.resolve(bridge, { session: target.session });
                   // effect-edge: island, phase 5
-                  const sessions = await Effect.runPromise(bridge.list);
-                  return sessions
-                    .find((session) => session.sessionId === target.session)
-                    ?.state?.openDocuments.find((document) => document.openId === target.openId);
+                  const session = await Effect.runPromise(resolve);
+                  return session.state?.openDocuments.find((doc) => doc.openId === target.openId);
                 };
                 const document = await selected();
                 if (!document?.address)
@@ -676,10 +675,10 @@ export function makeCallRoute(
           )
             throw Error("Families read requires the exact project document");
           // effect-edge: island, phase 5
-          const session = (await Effect.runPromise(bridge.list)).find(
-            (row) => row.sessionId === target.session,
+          const session = await Effect.runPromise(
+            SdkSession.resolve(bridge, { session: target.session }),
           );
-          const document = session?.state?.openDocuments.find(
+          const document = session.state?.openDocuments.find(
             (row) => row.openId === target.openId,
           );
           if (body.work.binding === "address") {
@@ -1301,6 +1300,8 @@ function toProblem(error: unknown): {
 } {
   if (error instanceof CommandRejected)
     return { kind: "InvalidRequest", message: error.message, status: 409 };
+  if (error instanceof NoRevitSession)
+    return { kind: "Disconnected", message: error.message, status: 503 };
   if (error instanceof StepFailure)
     return {
       kind: "HostFailure",

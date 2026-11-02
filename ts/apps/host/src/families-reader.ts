@@ -1,3 +1,4 @@
+import { SdkSession } from "./sdk-session.ts";
 import { Effect } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { randomUUID } from "node:crypto";
@@ -305,10 +306,10 @@ export async function readFamiliesProgressively(options: {
           const deadline = Date.now() + 15_000;
           do {
             // effect-edge: island, phase 5
-            const attached = (await Effect.runPromise(bridge.list)).find(
-              (s) => s.connected && s.sdkSessionId === id,
+            const attached = await Effect.runPromise(
+              SdkSession.resolve(bridge, { sdkSession: id }).pipe(Effect.orElseSucceed(() => undefined)),
             );
-            if (attached?.sessionId) {
+            if (attached) {
               target = { session: attached.sessionId, openId };
               break;
             }

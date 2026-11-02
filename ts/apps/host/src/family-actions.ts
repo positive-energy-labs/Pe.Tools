@@ -1,4 +1,4 @@
-import { resolveSdkSession } from "./sdk-session.ts";
+import { resolveSdkSession, SdkSession } from "./sdk-session.ts";
 import { createHash } from "node:crypto";
 import { join, resolve, win32 } from "node:path";
 import { Effect, FileSystem } from "effect";
@@ -268,12 +268,13 @@ async function current(
   process?: NativeProcess,
 ) {
   // effect-edge: island, phase 5
-  const session = (await Effect.runPromise(bridge.list)).find(
-    (s) => s.sessionId === target.session,
+  const session = await Effect.runPromise(
+    SdkSession.resolve(bridge, { session: target.session }).pipe(
+      Effect.mapError((error) => refused(error.message)),
+    ),
   );
-  const doc = session?.state?.openDocuments.find((d) => d.openId === target.openId);
+  const doc = session.state?.openDocuments.find((d) => d.openId === target.openId);
   if (
-    !session ||
     !doc ||
     (family === true && !doc.isFamilyDocument) ||
     (family === "project" && doc.isFamilyDocument) ||

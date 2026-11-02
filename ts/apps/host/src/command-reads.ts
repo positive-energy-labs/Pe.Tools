@@ -1,3 +1,4 @@
+import { SdkSession } from "./sdk-session.ts";
 import { Effect } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import type { CommandResources } from "./command-executor.ts";
@@ -32,12 +33,9 @@ export function commandResources(
     },
     async target(target, needs) {
       if (target.kind !== "document" && target.kind !== "session") return;
+      const session = target.kind === "document" ? target.ref.session : target.session;
       // effect-edge: island, phase 5
-      const selected = (await Effect.runPromise(bridge.list)).find(
-        (row) =>
-          row.sessionId === (target.kind === "document" ? target.ref.session : target.session),
-      );
-      if (!selected) throw Error("Original session is unavailable");
+      const selected = await Effect.runPromise(SdkSession.resolve(bridge, { session }));
       if (target.kind === "session") return;
       const document = selected.state?.openDocuments.find(
         (doc) => doc.openId === target.ref.openId,
@@ -99,14 +97,10 @@ export function commandResources(
           );
           const target = dependency.probe.target;
           if (target.kind === "document" || target.kind === "session") {
+            const id = target.kind === "document" ? target.ref.session : target.session;
             // effect-edge: island, phase 5
-            const session = (await Effect.runPromise(bridge.list)).find(
-              (row) =>
-                row.sessionId ===
-                (target.kind === "document" ? target.ref.session : target.session),
-            );
+            const session = await Effect.runPromise(SdkSession.resolve(bridge, { session: id }));
             if (
-              !session ||
               session.processId !== actual.pid ||
               session.processStartUtcUnixMs !== Date.parse(actual.processStartUtc) ||
               (target.kind === "document" &&
@@ -125,10 +119,10 @@ export function commandResources(
             return session.documents.map((doc) => doc.openId).sort();
           }
           // effect-edge: island, phase 5
-          const session = (await Effect.runPromise(bridge.list)).find(
-            (row) => row.sessionId === dependency.probe.session,
+          const session = await Effect.runPromise(
+            SdkSession.resolve(bridge, { session: dependency.probe.session }),
           );
-          if (!session?.state) throw Error("Document census unavailable");
+          if (!session.state) throw Error("Document census unavailable");
           return session.state.openDocuments.map((doc) => doc.openId).sort();
         }
         case "directory":

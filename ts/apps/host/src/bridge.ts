@@ -165,10 +165,16 @@ const rootOutcome = (issues: BridgeResponse["issues"]) =>
  */
 const UNSETTLED_OUTCOMES = new Set(["AbandonedStillRunning", "TimedOut"]);
 
-/** No Revit process is currently connected to the bridge. */
-export class NoRevitSession {
-  readonly _tag = "NoRevitSession";
-  readonly message = "No Revit session is connected to the bridge.";
+/** No attached Revit answers what was asked: `asked` names it, `attached` lists what is there. */
+export class NoRevitSession extends Schema.TaggedError<NoRevitSession>()("NoRevitSession", {
+  asked: Schema.optional(Schema.String),
+  attached: Schema.optional(Schema.Array(Schema.String)),
+}) {
+  override get message() {
+    return this.asked
+      ? `No attached Revit session is ${this.asked} (attached: ${this.attached?.length ? this.attached.join(", ") : "none"}).`
+      : "No Revit session is connected to the bridge.";
+  }
 }
 
 export type BridgeSessionView = {
