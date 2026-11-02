@@ -21,13 +21,13 @@ import { Button } from "@pe/kit/lang/button";
 import { useCopy } from "@pe/kit/lib/use-copy";
 import { previousOf } from "#/shell/readings-hooks";
 import { Ladder } from "#/route/ladder";
-import { Ledger } from "#/route/situation-grids";
 import { useDocumentLadder } from "#/route/situation-ladder";
 import { parseTarget } from "#/route/route-target";
 import type { RouteHandle } from "#/route/handle";
 import { chatReading, type ChatHandle } from "./graph";
 export type { ChatHandle } from "./graph";
 import { GraphHistory } from "#/shell/mount";
+import { TimelineHead } from "#/shell/situation-band";
 import { SituationBand } from "#/shell/situation-band";
 import { PrimaryRouteControls } from "#/navigation/route-controls";
 import { RouteHelpButton } from "#/route/help";
@@ -272,29 +272,14 @@ export function ChatSituationHead({
 }
 
 /** Lamp · gauge · help · theme for Chat — it rides the thread head, not the composer. */
-export function ChatCluster({
-  handle,
-  situation: { head, threadLabel },
-}: {
-  handle: ChatHandle;
-  situation: ChatSituation;
-}) {
+export function ChatCluster({ handle }: { handle: ChatHandle; situation: ChatSituation }) {
   return (
     <>
       <PrimaryRouteControls route="chat" slot="inspector">
-        <details>
-          <summary>History</summary>
-          <Ledger
-            rows={[
-              ["thread", threadLabel],
-              [
-                "target",
-                head.targets.length ? `r${head.revision}${head.stale ? " ? stale" : ""}` : "none",
-              ],
-            ]}
-          />
-          <GraphHistory owner={handle} />
-        </details>
+        {/* The one Timeline head, in a popover: an inline disclosure in this header slot spilled its
+            rows over the thread header (Manual D). The thread and target already lead the Situation;
+            the target's own "r0" read as the Work revision, so it is not repeated here. */}
+        <TimelineHead owner={handle} history={<GraphHistory owner={handle} />} />
       </PrimaryRouteControls>
       <PrimaryRouteControls route="chat">
         <RouteHelpButton

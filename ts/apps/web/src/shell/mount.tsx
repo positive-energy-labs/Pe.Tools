@@ -37,7 +37,14 @@ import { LadderPicker, useDocumentLadder } from "../route/situation-ladder";
 import { useInitialUrlPage, useUrlPage } from "../route/url";
 import { bindGraphChords } from "./keys";
 import { SituationFields, PageControl } from "./situation-fields";
-import { SituationBand, TimelineHead, rankVerbs } from "./situation-band";
+import {
+  SituationBand,
+  TimelineHead,
+  rankVerbs,
+  stepSource,
+  stepState,
+  useWorkJournal,
+} from "./situation-band";
 import {
   CONFLICT_REFUSAL,
   createGraphMount,
@@ -894,13 +901,15 @@ export function GraphHistory<P, W>({
 }) {
   const [entries, setEntries] = useState(() => owner.timeline.read());
   useEffect(() => owner.timeline.subscribe(() => setEntries(owner.timeline.read())), [owner]);
-  useSyncExternalStore(owner.subscribe, owner.version, owner.version);
+  const journal = useWorkJournal(owner);
   const reading = receipts ? owner.readings.get(receipts) : null;
   const parsed = actionStatusSchema.array().safeParse(reading?.value ?? reading?.previous);
   const scope = owner.snapshot();
   const key = scope.work?.handle.key ?? scope.workKey ?? scope.unreadable;
-  const journal = key ? owner.journals.get(workKey(key))?.read() : null;
-  const steps = journal ? [...journal.undo, ...journal.redo] : [];
+  // Newest first, as the receipts below; redo steps sit above the undo stack they would rejoin.
+  const steps = journal ? [...journal.redo, ...[...journal.undo].reverse()] : [];
+  const undo = journal?.undo.at(-1);
+  const redo = journal?.redo.at(-1);
   const saved =
     !workOnly && parsed.success ? (key ? receiptsForWork(parsed.data, key) : parsed.data) : [];
   const recorded = new Set(saved.map((receipt) => receipt.id));
@@ -911,15 +920,38 @@ export function GraphHistory<P, W>({
     <section aria-label={label}>
       {reading?.status === "failed" && <p role="alert">{reading.error}</p>}
       {!shown.length && !saved.length && !steps.length && <p>No activity yet</p>}
+      {journal && (
+        <p>
+          Work r{journal.revision ?? "?"}{" "}
+          <Button
+            label={undo ? `Undo ${undo.label}` : "Undo"}
+            refusal={
+              owner.journalRefusal() ??
+              undo?.superseded?.message ??
+              (undo ? null : "Nothing to undo: no edit to this Work since this tab opened it")
+            }
+            onClick={() => void owner.restore("undo")}
+          >
+            undo
+          </Button>{" "}
+          <Button
+            label={redo ? `Redo ${redo.label}` : "Redo"}
+            refusal={
+              owner.journalRefusal() ??
+              redo?.superseded?.message ??
+              (redo ? null : "Nothing to redo")
+            }
+            onClick={() => void owner.restore("redo")}
+          >
+            redo
+          </Button>
+        </p>
+      )}
       <ol>
         {steps.map((step) => (
           <li key={`work:${step.press}`}>
-            {step.label} ·{" "}
-            {step.superseded
-              ? `superseded at r${step.superseded.revision}`
-              : journal!.redo.some((entry) => entry.press === step.press)
-                ? "undone"
-                : "applied"}
+            {step.label} · {stepSource(step)} · {stepState(journal!, step)} ·{" "}
+            {activityTime(step.at)}
             {step.superseded && <> · {step.superseded.message}</>}
           </li>
         ))}

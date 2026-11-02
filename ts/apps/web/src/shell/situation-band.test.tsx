@@ -61,8 +61,16 @@ test("a stale builtin stamp refuses that route with the fix, instead of throwing
 });
 
 test("an open consent window draws its countdown with Reject, refused on the fixture lane", () => {
-  // TimelineHead reads only the owner's timeline and fixture lane.
-  const owner = { timeline: createRouteTimeline(), fixture: { name: "f", queries: {} } } as never as Parameters<typeof TimelineHead>[0]["owner"];
+  // TimelineHead reads the owner's timeline, fixture lane, verbs and Work journal (none here).
+  const owner = {
+    timeline: createRouteTimeline(),
+    fixture: { name: "f", queries: {} },
+    verbs: {},
+    subscribe: () => () => {},
+    version: () => 0,
+    snapshot: () => ({}),
+    journals: new Map(),
+  } as never as Parameters<typeof TimelineHead>[0]["owner"];
   owner.timeline.append({
     kind: "receipt",
     at: Date.now(),

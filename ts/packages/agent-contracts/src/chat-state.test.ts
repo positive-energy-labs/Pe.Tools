@@ -297,3 +297,49 @@ describe("following the host log", () => {
     });
   });
 });
+
+describe("run consent window (chaos defect 4)", () => {
+  const ask = (deadline?: string): HarnessEvent[] => [
+    update(1, "t9", {
+      sessionUpdate: "tool_call",
+      toolCallId: "w1",
+      title: "pe_do",
+      status: "in_progress",
+    }),
+    {
+      seq: 2,
+      at,
+      kind: "permission_request",
+      turnId: "t9",
+      requestId: "w",
+      toolCall: { toolCallId: "w1" },
+      options,
+      scope: "run",
+      ...(deadline ? { deadline } : {}),
+    },
+  ];
+  it("carries the host's auto-approve deadline and scope onto the approval", () => {
+    expect(selectApprovals(state(ask("2026-10-01T12:01:00.000Z")))[0]).toMatchObject({
+      deadline: "2026-10-01T12:01:00.000Z",
+      scope: "run",
+    });
+    expect(selectApprovals(state(ask()))[0]!.deadline).toBeUndefined();
+  });
+  it("a deadline answer applies the option; the call is not drawn cancelled", () => {
+    const calls = selectToolCalls(
+      state([
+        ...ask("2026-10-01T12:01:00.000Z"),
+        {
+          seq: 3,
+          at,
+          kind: "permission_resolved",
+          turnId: "t9",
+          requestId: "w",
+          optionId: "allow",
+          by: "deadline",
+        },
+      ]),
+    );
+    expect(calls.find((call) => call.id === "w1")?.status).toBe("in_progress");
+  });
+});

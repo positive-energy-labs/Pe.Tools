@@ -7,11 +7,13 @@
  * TODO: H2 — Reject is proven rendered and inert on the fixture lane only; press it against a live
  * host consent window (a route command from a Pea thread) to prove the round trip.
  */
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { MoreHorizontal } from "lucide-react";
-import type { VerbDecl } from "@pe/agent-contracts";
+import { workKey, type VerbDecl } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
+import { selectApprovals } from "@pe/agent-contracts/chat-state";
 import { harnessClient } from "#/workbench/provider/harness-client";
+import { WorkbenchContext } from "#/workbench/provider/thread-summary";
 import { resolveWorkbenchConfig } from "#/workbench/config";
 import { Popover, PopoverTrigger, SubjectPopoverContent } from "@pe/kit/lang/popover";
 import type { GraphMount } from "./mount-owner";
@@ -97,8 +99,25 @@ export function openConsentWindows(entries: readonly TimelineEntry[], now: numbe
   });
 }
 
+/** The Work journal behind the owner's current scope: the one history of authored edits. */
+export function useWorkJournal<P, W>(owner: GraphMount<P, W>) {
+  useSyncExternalStore(owner.subscribe, owner.version, owner.version);
+  const scope = owner.snapshot();
+  const key = scope.work?.handle.key ?? scope.workKey ?? scope.unreadable;
+  return key ? (owner.journals.get(workKey(key))?.read() ?? null) : null;
+}
+type Journal = NonNullable<ReturnType<typeof useWorkJournal>>;
+export const stepSource = (step: Journal["undo"][number]) => (step.by === "pea" ? "Pea" : "you");
+export const stepState = (journal: Journal, step: Journal["undo"][number]) =>
+  step.superseded
+    ? `superseded at r${step.superseded.revision}`
+    : journal.redo.some((entry) => entry.press === step.press)
+      ? "undone"
+      : "applied";
+
 /**
- * The Timeline's head: the latest entry in one line and every open consent window as its
+ * The Timeline's head: the latest Work edit (who made it, its state, the Work revision), unless a
+ * command ran after it; else the latest entry, in one line and every open consent window as its
  * "Reject?" countdown. The full history opens beneath it; it never takes a row of its own.
  */
 export function TimelineHead<P, W>({
@@ -115,13 +134,23 @@ export function TimelineHead<P, W>({
   const timeline = entries ? owner.timeline.read() : [];
   const [now, setNow] = useState(Date.now);
   const windows = openConsentWindows(timeline, now);
-  const ticking = windows.some((open) => open.left !== null);
+  // The selected thread's run consent (ADR 0027 rule 11) is the same window Pea's composer card
+  // answers; the head shows it too, so a "Reject?" countdown is never only inside the chat pane.
+  const workbench = useContext(WorkbenchContext);
+  const runAsks = workbench
+    ? selectApprovals(workbench.chat).filter((ask) => ask.scope === "run")
+    : [];
+  const ticking = windows.some((open) => open.left !== null) || runAsks.some((ask) => ask.deadline);
   useEffect(() => {
     if (!ticking) return;
     const tick = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(tick);
   }, [ticking]);
-  const last = timeline.at(-1);
+  const journal = useWorkJournal(owner);
+  const step = journal?.last?.step;
+  const command = timeline.findLast((entry) => owner.verbs[entry.verb ?? ""]?.kind === "command");
+  const last =
+    step && !(command && new Date(command.at).getTime() > step.at) ? null : (command ?? timeline.at(-1));
   return (
     <span data-slot="timeline-head" role="group" aria-label="Timeline">
       {windows.map(({ entry, left }) => {
@@ -156,9 +185,36 @@ export function TimelineHead<P, W>({
           </span>
         );
       })}
+      {runAsks.map((ask) => {
+        const left = ask.deadline
+          ? Math.max(0, Math.ceil((Date.parse(ask.deadline) - now) / 1000))
+          : null;
+        const reject = ask.options.find((option) => option.kind.startsWith("reject"));
+        return (
+          <span key={ask.requestId} data-slot="consent-window">
+            <span role="timer" data-tone="caution" aria-label="Pea's writes apply in">
+              Pea writes · {left === null ? "awaiting approval" : `${left}s`}
+            </span>
+            <Button
+              label="Reject Pea's writes in this thread"
+              refusal={reject ? null : "This consent window offers no reject option"}
+              onClick={() => void workbench!.resolveApproval(ask.requestId, reject!.optionId)}
+            >
+              Reject?
+            </Button>
+          </span>
+        );
+      })}
       <Popover>
         <PopoverTrigger aria-label="Open the Timeline" data-slot="timeline-trigger">
-          {last ? (
+          {step && !last ? (
+            <>
+              <span>{step.label}</span>
+              <span data-slot="timeline-state">
+                {stepSource(step)} · {journal!.last!.kind === "apply" ? stepState(journal!, step) : `${journal!.last!.kind === "undo" ? "undone" : "redone"}`} · r{journal!.revision}
+              </span>
+            </>
+          ) : last ? (
             <>
               <span>{last.verb ?? last.kind}</span>
               <span data-slot="timeline-state">

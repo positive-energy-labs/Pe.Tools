@@ -22,6 +22,10 @@ export interface JournalDetail {
 }
 type Step = JournalDetail & {
   press: string;
+  /** Who authored the step: the person in this tab, or Pea through the shared Work door. */
+  by: "human" | "pea";
+  /** When the step was accepted (ms). */
+  at: number;
   transitions: Transition[];
   /** Number of transitions currently applied; a failed multi-write replay resumes here. */
   cursor: number;
@@ -39,28 +43,20 @@ export type JournalResult =
     };
 export type JournalWriter = (write: WorkWrite) => Promise<RouteStateWriteResult>;
 
-const shared = new Map<
-  string,
-  { journal: ReturnType<typeof createWorkJournal>; readers: number }
->();
-/** Mounts of the same persisted Work share history, independent of transport provenance. */
+const shared = new Map<string, ReturnType<typeof createWorkJournal>>();
+/**
+ * Mounts of the same persisted Work share history, independent of transport provenance.
+ * ponytail: a journal lives for the tab's lifetime, so a route switch (/fans -> /ducts -> /fans)
+ * keeps the Work's history; one small journal per Work visited. A Work changed while no mount
+ * listened supersedes its steps on the next ack (base mismatch). Host-durable history is Owed.
+ */
+/** Test lane: a case starts with no history (Work keys repeat across cases). */
+export const forgetWorkJournals = () => shared.clear();
 export function acquireWorkJournal(key: WorkKey) {
   const id = workKey(key);
-  let entry = shared.get(id);
-  if (!entry) {
-    entry = { journal: createWorkJournal(key), readers: 0 };
-    shared.set(id, entry);
-  }
-  entry.readers++;
-  let released = false;
-  return {
-    journal: entry.journal,
-    release: () => {
-      if (released) return;
-      released = true;
-      if (--entry.readers === 0) shared.delete(id);
-    },
-  };
+  let journal = shared.get(id);
+  if (!journal) shared.set(id, (journal = createWorkJournal(key)));
+  return { journal, release: () => {} };
 }
 
 const overlaps = (a: RouteStatePatch["path"], b: RouteStatePatch["path"]) =>
@@ -247,6 +243,8 @@ export function createWorkJournal(key: WorkKey) {
           detail.label.trim() ||
           `${pea ? "Pea: edit" : "Edit"} ${ack.patches.map(({ path }) => path.join(".") || "Work").join(", ")}`,
         press: ack.press,
+        by: pea ? "pea" : "human",
+        at: Date.now(),
         transitions: [transition],
         cursor: 1,
       });
