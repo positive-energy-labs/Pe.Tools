@@ -980,7 +980,13 @@ export class ActionJournal implements ReceiptReader {
     for (const dependency of row.consumes) {
       if (dependency.kind === "work") {
         // Retirement compares each submitted cell against live Work itself.
-        if (postcondition) continue;
+        if (
+          postcondition ||
+          (moment !== "step" && moment !== "dispatch" &&
+            row.recovery.length > 0 &&
+            row.steps.some((step) => step.kind === "native" && step.state === "succeeded" && step.dispatchedAt) &&
+            row.steps.every((step) => step.state === "succeeded"))
+        ) continue;
         const current = await this.environment?.work?.view(
           dependency.probe.handle.key,
           dependency.probe.handle.key.route,
@@ -1067,6 +1073,7 @@ export class ActionJournal implements ReceiptReader {
   async resume(id: string, crossing: Crossing): Promise<ActionReceipt> {
     const row = (await this.readFor(crossing.caller, undefined, id))[0];
     if (!row || !this.environment) throw Error("Original command or its executor is unavailable");
+    if (row.state === "unknown") return this.recover(id);
     return this.invoke(
       { id: row.id, key: row.key, target: row.target, input: row.input },
       crossing,
@@ -1766,7 +1773,7 @@ export class ActionJournal implements ReceiptReader {
           updates.push({ step, evidence: { error: String(error) } });
         }
       }
-    return this.serial(async () => {
+    const recovered = await this.serial(async () => {
       const current = this.rows.get(id)!;
       if (canonicalRouteInput(current) !== canonicalRouteInput(original))
         return structuredClone(current);
@@ -1815,6 +1822,21 @@ export class ActionJournal implements ReceiptReader {
       this.notify();
       return structuredClone(nextRow);
     });
+    // Re-enter only after every effect has a confirmed answer. Step replay reuses results;
+    // conditional retirement compares the frozen edit and preserves newer Work edits.
+    if (
+      (recovered.state === "unknown" || recovered.state === "incomplete") &&
+      recovered.steps.length > 0 &&
+      recovered.steps.every((step) => step.state === "succeeded")
+    ) {
+      await this.invoke(
+        { id: recovered.id, key: recovered.key, target: recovered.target, input: recovered.input },
+        { caller: recovered.caller, basis: recovered.basis },
+        true,
+      );
+      return this.wait(id);
+    }
+    return recovered;
   }
   /** The journal's one write lock. Never await the bridge inside it: the bridge journals through it. */
   private serial<A>(work: () => Promise<A>): Promise<A> {

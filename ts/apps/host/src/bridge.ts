@@ -1,3 +1,4 @@
+import { catalogEntries } from "@pe/agent-contracts/pe-api";
 import { catalogCommandContext } from "./catalog-command-context.ts";
 import { StepFailure } from "./command-executor.ts";
 import { Context, Deferred, Effect, Layer, PubSub, Ref, Schema } from "effect";
@@ -23,6 +24,16 @@ import {
   type BridgeStateSnapshot,
   type Lane,
 } from "@pe/host-contracts/contracts";
+
+/** Provenance grants only the Internal leaves the command declares in the catalog. */
+export function commandLeafRefusal(operationKey: string, command: string | undefined): string | null {
+  const leaf = catalogEntries.find((entry) => entry.key === operationKey);
+  if (!leaf?.internal) return null;
+  const owner = command && catalogEntries.find((entry) => entry.key === `command:${command}`);
+  return owner && owner.uses.some((use) => (typeof use === "string" ? use : use.key) === operationKey)
+    ? null
+    : `Command '${command ?? "(none)"}' does not declare Internal leaf '${operationKey}'`;
+}
 
 // Vocabulary: a SESSION is one Revit process incarnation; a CONNECTION is one WS attachment to
 // it. With stable ids (hash(pid + processStartUtc)) a reconnect re-registers the SAME session id,
@@ -564,6 +575,9 @@ export const RevitBridgeLive = Layer.effect(
       // The gate reserves the reply before it queues, so a cancel can fail it before dispatch.
       reserved?: Deferred.Deferred<BridgeResponse, BridgeError>,
     ) {
+      const provenanceRefusal = commandLeafRefusal(operationKey, catalogCommandContext.getStore());
+      if (provenanceRefusal)
+        return yield* Effect.fail(new BridgeError(provenanceRefusal, 403, { notDispatched: true }));
       const reply = reserved ?? (yield* Deferred.make<BridgeResponse, BridgeError>());
       // A revoke fences dispatch synchronously, before its asynchronous journal census answers.
       // Checking that fence and changing the request phase are one atomic decision.
