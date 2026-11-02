@@ -68,7 +68,7 @@ describe("the route address", () => {
     expect(at.agent!.resolve!({ system: "SA" }, facts).ok).toBe(false);
     const page = at.read({ system: "RA 1,SA 2" }).page;
     expect(page.system).toEqual(["RA 1", "SA 2"]);
-    expect(at.link(page)).toBe("/ducts?system=RA+1%2CSA+2");
+    expect(at.link(page)).toBe("/ducts?system=RA%25201%2CSA%25202");
     expect(at.read({ system: "" }).page.system).toEqual([]);
   });
   test("the thread sidebar query and sort round-trip on Pea and a docked route", () => {

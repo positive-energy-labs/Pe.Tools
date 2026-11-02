@@ -1,12 +1,12 @@
 {
-  "hostCalls": 29,
-  "customDecodes": 13,
+  "hostCalls": 27,
+  "customDecodes": 4,
   "pickFalse": 0,
   "requiredReview": 0,
   "reactSelection": 15,
-  "readWrites": 2,
+  "readWrites": 1,
   "graphDeclarations": 1635,
-  "peaRows": 8,
-  "arrayFields": 10,
+  "peaRows": 0,
+  "arrayFields": 9,
   "unscopedGeometry": 11
 }

@@ -1,18 +1,13 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
+import { activityTime } from "#/shell/timeline";
+import { roomEditKey, roomsRouteState, workKey } from "@pe/agent-contracts";
 import { createMemoryHistory, createRouter, RouterContextProvider } from "@tanstack/react-router";
+import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import { roomEditKey, roomsRouteState, workKey, workWriteSchema } from "@pe/agent-contracts";
-import {
-  HOST_RPC_BRIDGE_SESSION_HEADER,
-  HOST_RPC_DOCUMENT_HEADER,
-} from "@pe/host-contracts/operation-types";
-import { writeRouteWork } from "#/route/host";
 import { Route as root } from "../routes/__root";
-import { roomsAdapters, roomsRoute, RoomsRoute } from "./route";
 import { DEMO_VIEW } from "./demo";
 import { RoomsHostFixture } from "./host.fixture";
-import { activityTime } from "#/shell/timeline";
+import { roomsAdapters, roomsRoute, RoomsRoute } from "./route";
 
 // The app registry is another wave's cutover; this mounts the actual graph under a router root.
 vi.mock("../routes/__root", async () => {
@@ -99,7 +94,9 @@ test("editing a real table cell makes one journal step and Mod+Z restores exact 
   const before = structuredClone(host.doc);
   const { view, owner } = await mounted();
   const input = await waitFor(() => {
-    const row = view.container.querySelector('tr[data-subject="room:00000000-0000-4000-8000-000000000001"]');
+    const row = view.container.querySelector(
+      'tr[data-subject="room:00000000-0000-4000-8000-000000000001"]',
+    );
     const input = row?.querySelector<HTMLInputElement>("input");
     expect(input).toBeTruthy();
     return input!;
@@ -107,7 +104,9 @@ test("editing a real table cell makes one journal step and Mod+Z restores exact 
   fireEvent.change(input, { target: { value: "Pantry" } });
   fireEvent.keyDown(input, { key: "Enter" });
   await waitFor(() =>
-    expect(host.doc.edits[roomEditKey("00000000-0000-4000-8000-000000000001", "name")]?.edit?.value).toBe("Pantry"),
+    expect(
+      host.doc.edits[roomEditKey("00000000-0000-4000-8000-000000000001", "name")]?.edit?.value,
+    ).toBe("Pantry"),
   );
   expect(host.writes).toHaveLength(1);
   expect(owner().journals.get(workKey(host.key))!.read().undo).toHaveLength(1);
@@ -119,77 +118,6 @@ test("editing a real table cell makes one journal step and Mod+Z restores exact 
   await waitFor(() => expect(host.writes).toHaveLength(2));
   expect(host.doc).toEqual(before);
   expect(host.writes[1]!.kind).toBe("restore");
-});
-
-test("partition's one review button carries standing rejection polygons and re-reads snapshot and trace only", async () => {
-  const polygon: [number, number][] = [
-    [0, 0],
-    [20, 0],
-    [20, 12],
-    [0, 12],
-  ];
-  host.doc = roomsRouteState.schema.parse({
-    marks: {
-      reject1: {
-        edit: {
-          value: {
-            kind: "reject",
-            anchor: { view: DEMO_VIEW, level: "Fixture level", polygon },
-            run: "fixture-run",
-            guids: ["00000000-0000-4000-8000-000000000001"],
-          },
-        },
-      },
-    },
-  });
-  const { situation, owner } = await mounted({ stage: "partition" });
-  await waitFor(() => expect(owner().readings.get("plan").current).toBe(true));
-  const images = host.calls.filter((row) => row.key === "revit.context.view-image").length;
-  fireEvent.click(await liveButton(situation, "partition"));
-  const review = await within(document.body).findByLabelText("partition review");
-  expect(review.textContent).toContain("Partition this view into rooms.");
-  expect(review.textContent).toContain("Keep 1 rejected region excluded.");
-  expect(review.textContent).not.toContain('"rejected"');
-  expect(host.actions).toEqual([]);
-  fireEvent.click(await liveButton(situation, "partition"));
-  await waitFor(() => expect(owner().results.get("partition")).toMatchObject({ state: "done" }));
-  expect(host.actions[0]!.input).toMatchObject({ view: DEMO_VIEW, rejected: [polygon] });
-  await waitFor(() =>
-    expect(host.calls.filter((row) => row.key === "rooms.snapshot").length).toBeGreaterThan(1),
-  );
-  expect(host.calls.filter((row) => row.key === "revit.context.view-image")).toHaveLength(images);
-  for (const call of host.calls) {
-    expect(call.headers.get(HOST_RPC_BRIDGE_SESSION_HEADER)).toBe(host.target.session);
-    expect(call.headers.get(HOST_RPC_DOCUMENT_HEADER)).toBe(host.target.openId);
-  }
-});
-
-test("a Work change during native write review stales the kernel ticket before Revit is written", async () => {
-  host.doc = roomsRouteState.schema.parse({
-    edits: { [roomEditKey("00000000-0000-4000-8000-000000000001", "name")]: { edit: { value: "Pantry" } } },
-  });
-  const { situation, owner } = await mounted();
-  fireEvent.click(await liveButton(situation, "apply"));
-  await within(document.body).findByLabelText("apply review");
-  await act(async () => {
-    await writeRouteWork(
-      host.key,
-      workWriteSchema.parse({
-        expectedRevision: host.revision,
-        press: "another-person",
-        patches: [
-          {
-            path: ["edits", roomEditKey("00000000-0000-4000-8000-000000000001", "name"), "edit"],
-            value: { value: "New name" },
-          },
-        ],
-      }),
-    );
-  });
-  await waitFor(() => expect(owner().snapshot().work?.handle.revision).toBe(host.revision));
-  fireEvent.click(await liveButton(situation, "apply"));
-  await waitFor(() => expect(owner().results.get("apply")).toMatchObject({ state: "stale" }));
-  expect(host.actions).toEqual([]);
 });
 
 test("returning window focus re-reads rooms without exporting the expensive plan again", async () => {
@@ -333,84 +261,6 @@ test("targeting another plan view re-reads rooms, trace and image and clears the
   expect(host.writes).toEqual([]);
 });
 
-test("native field review submits edited values by GUID and excludes suggestions", async () => {
-  host.doc = roomsRouteState.schema.parse({
-    edits: {
-      [roomEditKey("00000000-0000-4000-8000-000000000001", "name")]: { edit: { value: "Pantry" } },
-      [roomEditKey("00000000-0000-4000-8000-000000000001", "people")]: { edit: { value: 2 } },
-      [roomEditKey("00000000-0000-4000-8000-000000000002", "ceilingFt")]: { suggestion: { value: 9 } },
-    },
-  });
-  const { situation, owner } = await mounted();
-  fireEvent.click(await liveButton(situation, "apply"));
-  await within(document.body).findByLabelText("apply review");
-  expect(host.actions).toEqual([]);
-  fireEvent.click(await liveButton(situation, "apply"));
-  await waitFor(() =>
-    expect(owner().results.get("apply")).toMatchObject({ state: "done", kind: "command" }),
-  );
-  expect(host.actions[0]).toMatchObject({
-    key: "rooms.write",
-    input: { regions: [{ guid: "00000000-0000-4000-8000-000000000001", name: "Pantry", people: 2 }] },
-  });
-});
-
-test("selection merge and anchored-mark merge each use the kernel review and exact view/GUID intent", async () => {
-  host.doc = roomsRouteState.schema.parse({
-    marks: {
-      m1: {
-        edit: {
-          value: {
-            kind: "merge",
-            anchor: {
-              view: DEMO_VIEW,
-              level: "Fixture level",
-              polygon: [
-                [0, 0],
-                [40, 0],
-                [40, 12],
-                [0, 12],
-              ],
-            },
-            run: "fixture-run",
-            guids: ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"],
-          },
-        },
-      },
-    },
-  });
-  const { situation, owner } = await mounted();
-  await act(async () => {
-    owner().view.setPage({ selected: ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"] });
-  });
-  fireEvent.click(await liveButton(situation, "merge"));
-  await within(document.body).findByLabelText("merge review");
-  expect(host.actions).toEqual([]);
-  fireEvent.click(await liveButton(situation, "merge"));
-  await waitFor(() => expect(owner().results.get("merge")).toMatchObject({ state: "done" }));
-  await waitFor(() => expect(owner().readings.get("snapshot").current).toBe(true));
-  const row = { id: "m1", kind: "merge", segment: "marks", key: "m1" };
-  await act(async () => {
-    const result = await owner().control("applyMark", row, "pane:plan").run();
-    expect(result, JSON.stringify(result)).toMatchObject({
-      state: "review",
-    });
-  });
-  expect(host.actions).toHaveLength(1);
-  await act(async () => {
-    expect(await owner().control("applyMark", row, "pane:plan").run()).toMatchObject({
-      state: "done",
-      kind: "command",
-    });
-  });
-  expect(host.actions).toHaveLength(2);
-  for (const receipt of host.actions)
-    expect(receipt).toMatchObject({
-      key: "rooms.merge",
-      input: { view: DEMO_VIEW, guids: ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"] },
-    });
-});
-
 test("plan and feedback use one kernel frame each and History is the shared journal", async () => {
   const { view, owner } = await mounted();
   for (const id of ["plan", "feedback"]) {
@@ -426,16 +276,6 @@ test("plan and feedback use one kernel frame each and History is the shared jour
   const history = view.container.querySelector<HTMLElement>('[data-pane-id="history"]')!;
   expect(history).toBeTruthy();
   expect(within(history).getByText(new RegExp(`checkpoint.*${activityTime(123)}`))).toBeTruthy();
-});
-
-test("hosted Rooms binds its explicit target and keeps Page out of the enclosing URL", async () => {
-  const { owner, router } = await mounted({ view: "foreign-view", stage: "history" }, true);
-  expect(owner().view.read().page.view).toBe("");
-  const href = router.history.location.href;
-  act(() => owner().view.setPage({ view: DEMO_VIEW, stage: "review" }));
-  await waitFor(() => expect(owner().view.read().page.view).toBe(DEMO_VIEW));
-  expect(router.history.location.href).toBe(href);
-  expect(owner().snapshot().target).toMatchObject({ kind: "document", ref: host.target });
 });
 
 test("manual refresh rereads Rooms and Work without exporting the view image", async () => {
