@@ -7,7 +7,7 @@ import {
   type RouteGraph,
 } from "@pe/agent-contracts";
 import { dataTablesAddress } from "../../../../packages/agent-contracts/src/routes/data-tables";
-import { workVerb, commandVerb } from "#/shell/verbs";
+import { workVerb, commandVerb, prepareCommand } from "#/shell/verbs";
 import { NATIVE_APPLY_WAIT_S } from "#/route/waits";
 import { openTable, tableSchema } from "./sources";
 
@@ -90,8 +90,11 @@ export const dataTablesGraph: RouteGraph<DataTablesPage, DataTablesWork> = {
       { label: "Open table", input: openTable.input },
       {
         patches: (scope, input) => {
-          const table = (scope.readings.tables?.value as TableHandle[] | undefined)?.find(table => table.name === input.name);
-          if (!scope.readings.tables?.current || !table) throw Error("Read the current tables before opening one");
+          const table = (scope.readings.tables?.value as TableHandle[] | undefined)?.find(
+            (table) => table.name === input.name,
+          );
+          if (!scope.readings.tables?.current || !table)
+            throw Error("Read the current tables before opening one");
           return [{ path: ["draft"], value: draftFrom(table) }];
         },
       },
@@ -118,11 +121,13 @@ export const dataTablesGraph: RouteGraph<DataTablesPage, DataTablesWork> = {
               ? "Name the table first"
               : null;
         },
-        prepare: (scope) =>
-          pruneReview(
+        prepare: async (scope) => {
+          await prepareCommand(scope, "data-table.apply", { previewOnly: true });
+          return pruneReview(
             (scope.snapshot.work!.doc as DataTablesWork).draft!,
             scope.readings.tables!.value as TableHandle[],
-          ),
+          );
+        },
         present: (result) => {
           const review = result as ReturnType<typeof pruneReview>;
           return review.table
@@ -135,9 +140,7 @@ export const dataTablesGraph: RouteGraph<DataTablesPage, DataTablesWork> = {
               }
             : { sentence: "Table applied.", rows: [] };
         },
-        intent: (_, __, ___, ticket) => ({
-          table: (ticket!.evidence as ReturnType<typeof pruneReview>).table,
-        }),
+        intent: () => ({}),
         lands: (result) => ({ table: (result as { name: string }).name }),
       },
     ),
@@ -174,5 +177,4 @@ export const dataTablesGraph: RouteGraph<DataTablesPage, DataTablesWork> = {
         "Choose a table or start a new draft. Apply upserts by name and row key and prunes missing rows.",
     },
   },
-
 };

@@ -15,7 +15,7 @@ import {
 import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { roomsAddress } from "../../../../packages/agent-contracts/src/routes/rooms";
 import { threadListFields } from "../../../../packages/agent-contracts/src/routes/shared";
-import { commandVerb, workVerb, queryVerb } from "#/shell/verbs";
+import { commandVerb, workVerb, queryVerb, prepareCommand } from "#/shell/verbs";
 import { roomsQueries } from "./refresh";
 import { NATIVE_APPLY_WAIT_S } from "#/route/waits";
 
@@ -220,8 +220,11 @@ export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = {
         // TODO: shell/verbs needs admitted command-result Work patches to clear only the cells written.
         waitSeconds: NATIVE_APPLY_WAIT_S,
         ready: (_, input) => input.refusal,
-        prepare: (_, input) => input.request,
-        intent: (_, input) => input.request,
+        prepare: async (scope, input) => {
+          await prepareCommand(scope, "rooms.write", { previewOnly: true });
+          return input.request;
+        },
+        intent: () => ({}),
       },
     ),
     merge: commandVerb(

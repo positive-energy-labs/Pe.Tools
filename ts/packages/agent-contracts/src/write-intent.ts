@@ -13,9 +13,10 @@ export function workWriteCommand<const C extends Command>(
   key: string,
   definition: C,
 ) {
+  const { input: authoredInput, work: _work, ...metadata } = definition;
   return {
-    ...definition,
-    authoredInput: definition.input as C["input"],
+    ...metadata,
+    authoredInput: authoredInput as C["input"],
     writeBoundary: { route, key },
     input: z.strictObject({ work: workHandleSchema, previewOnly: z.boolean().default(false) }),
     work: {
