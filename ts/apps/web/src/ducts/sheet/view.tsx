@@ -91,12 +91,8 @@ export function Roster({ props }: { props: SheetViewProps }) {
 }
 
 export function RosterVerbs({ props }: { props: SheetViewProps }) {
-  const wait = props.busy || props.loading ? "Wait for the current read" : null;
   return (
     <span className="flex items-baseline gap-1">
-      <Button kind="framed" label="Compute every fan" refusal={wait} onClick={props.computeAll}>
-        compute all
-      </Button>
       {props.busy && (
         <Button kind="framed" label="Cancel" onClick={props.cancel}>
           cancel

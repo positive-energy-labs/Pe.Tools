@@ -217,9 +217,6 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
         sheetPath: "",
       });
     },
-    computeAll: () => {
-      owner.view.setPage({ fan: "all" });
-    },
     cancel: () => {
       owner.view.setPage({ fan: [] });
     },

@@ -44,7 +44,6 @@ export interface SheetViewProps {
   progress: { done: number; total: number; mark: string; stopped: boolean } | null;
   /** Open (compute) one fan's sheet; compute every fan's overview; cancel what runs. */
   open: (fan: Pick<FanPort, "unitId" | "portIndex">) => void;
-  computeAll: () => void;
   cancel: () => void;
   refresh: () => void;
   /** Edits on Work's own keys through the open sheet (typed cfm and drops, rulings, criteria); the host recomputes. */
