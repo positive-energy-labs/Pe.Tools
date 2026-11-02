@@ -120,6 +120,7 @@ export const systemsEmpty = (coverage: ProtoProps["coverage"]) =>
     ? { message: `None of ${coverage.of} systems read yet`, exit: "Choose systems in Open systems" }
     : { message: "No duct systems in this scope", exit: "Read a model containing duct systems" };
 
+// TODO: "Read every system" is a compute-all verb ADR 0027 rule 4 deletes; the owning unit removes it.
 /** The scoped read's extent and its one verb: read every system, a few per read, into the panes. */
 function ReadCoverage({ coverage }: { coverage: ProtoProps["coverage"] }) {
   const partial = partialWord(coverage);

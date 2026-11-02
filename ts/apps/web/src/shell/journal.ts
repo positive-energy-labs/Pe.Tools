@@ -215,6 +215,8 @@ export function createWorkJournal(key: WorkKey) {
     // replays from its retained window is history this tab inherits (a reload): a step, named by
     // the route's declared Work names. Another tab's live edit, restore, publish and non-undoable
     // writes stay foreign: they supersede, never join this tab's undo.
+    // TODO: prove reload rebuild on the session lane (fixture hosts keep no Work across a reload);
+    // deterministic proof is journal.test.ts against RouteWorkspace.observeAccepted.
     const pea = ack.by === "pea" && ack.kind === "apply" && ack.undoable;
     if (pea) {
       // Namespaced: a Pea press can never join (or forge) a person's step.
