@@ -1,6 +1,6 @@
 import { calculate, sizes } from '../../pages/tour/calc.mjs';
 
-export function register({ z, field, pane, split, descriptor, workWriteCommand, writeIntentSchema }) {
+export function register({ z, field, pane, split, descriptor, workWriteCommands, writeIntentSchema }) {
   const route = descriptor.workRoute, roster = "pod.snowdon-circuits.roster", detail = "pod.snowdon-circuits.calculation";
   const write = "pod.snowdon-circuits.set-wire";
   const wire = z.object({ elementId: z.number().int(), parameterId: z.number().int(), value: z.enum(sizes.map(row => row.size)), expected: z.record(z.string(), z.json()) });
@@ -22,7 +22,7 @@ export function register({ z, field, pane, split, descriptor, workWriteCommand, 
     seeds: { calculator: { title: "Manual voltage drop", load: async () => ({ page: { circuit: "manual" }, work: work.schema.parse({}), readings: { [roster]: { entries: [] } } }) } },
   };
   return { version: 1, namespace: descriptor.packageId, key: `${descriptor.packageId}:${route}`, moduleHash: descriptor.sha256, graph, work,
-    entries: { [write]: workWriteCommand(route, write, { axes: { subject: "Elements", touches: ["Metadata"], effect: "ModelWrite", cost: "Mutation", cardinality: "Many" }, says: "Set circuit wire size", native: ["revit.apply.parameter-values"], needs: "document", effect: "command", dirties: ["snapshot"], input: wire }), [roster]: { axes: { subject: "Document", touches: ["Topology"], effect: "Read", cost: "Cheap", cardinality: "One" }, says: "Read circuit roster", needs: "document", effect: "query", dirties: [], input: z.object({}).default({}) } },
+    entries: { ...workWriteCommands(route, write, { axes: { subject: "Elements", touches: ["Metadata"], effect: "ModelWrite", cost: "Mutation", cardinality: "Many" }, says: "Set circuit wire size", native: ["revit.apply.parameter-values"], needs: "document", effect: "command", dirties: ["snapshot"], input: wire }), [roster]: { axes: { subject: "Document", touches: ["Topology"], effect: "Read", cost: "Cheap", cardinality: "One" }, says: "Read circuit roster", needs: "document", effect: "query", dirties: [], input: z.object({}).default({}) } },
     operations: { [write]: { key: "revit.apply.parameter-values", input: input => ({ dryRun: false, edits: [{ elementId: input.elementId, parameterId: input.parameterId, value: input.value, expected: input.expected }] }), retires: result => result?.dryRun === false && result?.applied === 1 && result?.results?.length === 1 && result.results[0].ok ? [["writeIntent", write]] : [] }, [roster]: { key: "revit.catalog.electrical-circuits.roster", input: () => ({}) } },
     readings: { [roster]: () => ({}) },
     derives: { [detail]: (page, work, readings) => {

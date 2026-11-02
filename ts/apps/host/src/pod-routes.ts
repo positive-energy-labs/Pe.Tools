@@ -44,13 +44,13 @@ export function admitPodModule(
         throw Error("Pod ModelWrite requires retirement and reading invalidation declarations");
       const boundary = (
         executor.definition as contracts.Command & {
-          writeBoundary?: { route: string; key: string; derive: unknown; preview: unknown };
+          writeBoundary?: contracts.WriteBoundaryBinding;
         }
       ).writeBoundary;
       if (
         !boundary ||
         boundary.route !== module.work.route ||
-        boundary.key !== key ||
+        (boundary.phase === "preview" ? boundary.previewKey : boundary.key) !== key ||
         typeof boundary.derive !== "function" ||
         typeof boundary.preview !== "function"
       )
@@ -81,6 +81,21 @@ export function podReadRequest(key: string, input: unknown) {
   if (key.startsWith("pod.") && !isAnyOperationKey(key))
     throw Error(`Pod query unavailable: ${key}`);
   return { key, request: input };
+}
+
+/**
+ * A write's preview entry defaults to the write's operation: the boundary seals the derived
+ * request in the preview phase and never dispatches it, so the Pod author adds nothing.
+ */
+export function podOperation(declaration: contracts.PodModule, key: string) {
+  const boundary = (
+    declaration.entries[key] as { writeBoundary?: contracts.WriteBoundaryBinding } | undefined
+  )?.writeBoundary;
+  const op =
+    declaration.operations[key] ??
+    (boundary?.phase === "preview" ? declaration.operations[boundary.key] : undefined);
+  if (!op) throw Error(`Missing Pod operation: ${key}`);
+  return op;
 }
 
 const trustSchema = z.record(z.string(), z.string().regex(/^[a-f0-9]{64}$/));
@@ -149,8 +164,7 @@ export function createPodRoutes(
           ...declaration,
           bodies: Object.fromEntries(
             Object.entries(declaration.entries).map(([key, definition]) => {
-              const op = declaration.operations[key];
-              if (!op) throw Error(`Missing Pod operation: ${key}`);
+              const op = podOperation(declaration, key);
               if (!options.bridge) throw Error("Native bridge unavailable");
               return [
                 key,

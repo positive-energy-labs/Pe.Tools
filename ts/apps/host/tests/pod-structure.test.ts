@@ -12,14 +12,15 @@ for (const namespace of ["alpha", "beta"]) {
   const route = `pod.${namespace}.tool`, read = `pod.${namespace}.read`, write = `pod.${namespace}.write`;
   function fixture() {
     let transforms = 0;
-    const definition = workWriteCommands(route, write, { axes: { subject: "Elements", touches: ["Metadata"], effect: "ModelWrite", cost: "Mutation", cardinality: "One" }, says: "Write", needs: "document", effect: "command", dirties: ["snapshot"], input: z.object({ value: z.string() }) })[write];
+    const writes = workWriteCommands(route, write, { axes: { subject: "Elements", touches: ["Metadata"], effect: "ModelWrite", cost: "Mutation", cardinality: "One" }, says: "Write", needs: "document", effect: "command", dirties: ["snapshot"], input: z.object({ value: z.string() }) });
+    const definition = writes[write];
     const query = { axes: { subject: "Elements", touches: ["Metadata"], effect: "Read", cost: "Cheap", cardinality: "One" }, says: "Read", needs: "document", effect: "query", dirties: [], input: z.object({ value: z.string() }) } as const;
     const native: CommandExecutor = {
       definition, prepared: z.unknown(),
       bind: async ctx => ({ effects: [], prepare: async () => ctx.admission.input }),
       run: async (ctx, execution) => ({ dispatched: ctx.admission.input, prepared: execution.prepared }),
     };
-    const entries = { [read]: query, [write]: definition };
+    const entries = { [read]: query, ...writes };
     const bodies = Object.fromEntries(Object.entries(entries).map(([key, entry]) => [key, podExecutor({ key: "native.test", definition: entry,
       input: input => { transforms++; return { transformed: input.value }; },
       retires: entry.effect === "command" ? () => [["writeIntent", key]] : undefined,

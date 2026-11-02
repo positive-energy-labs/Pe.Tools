@@ -101,9 +101,12 @@ export function workWriteCommands<
       work: { route, bind: (_input: unknown, handle: WorkHandle) => ({ work: handle }) },
     };
   };
+  // A Pod entry carries its own axes; its preview inherits them as a rolled-back read.
+  const axes = (definition as { axes?: import("./catalog.ts").CatalogAxes }).axes;
   const previewDefinition = (options.preview?.definition ?? {
     ...definition,
     says: `Preview, nothing committed: ${definition.says}`,
+    ...(axes ? { axes: { ...axes, effect: "TransactRead", rollsBack: true } } : {}),
   }) as PC;
   return {
     [key]: entry(definition, "apply"),
