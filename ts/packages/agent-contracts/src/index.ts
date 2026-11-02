@@ -75,3 +75,4 @@ export * from "./route-graph.ts";
 export * from "./route-settings.ts";
 export * from "./ducts-sheet.ts";
 
+export * from "./route-module.ts";

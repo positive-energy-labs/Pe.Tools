@@ -3,6 +3,7 @@ import * as kit from "@pe/kit";
 import { z } from "zod";
 import {
   pane,
+  validateRouteModule,
   podRouteStateSchema,
   split,
   workKey,
@@ -34,7 +35,8 @@ export interface PodApi {
   exportSnapshot(snapshot: unknown): Promise<void>;
 }
 export interface PodRouteBundle {
-  version: number;
+  version: 2;
+  register(base: { graph: RouteGraph<Page, Work>; adapters: RouteAdapters<Page, Work>; field: typeof field; z: typeof z; pane: typeof pane; split: typeof split }): { graph: RouteGraph<Page, Work>; adapters: RouteAdapters<Page, Work> };
   initial: State;
   reducer(state: State, event: Event): State;
   create(api: PodApi): React.ComponentType;
@@ -124,15 +126,21 @@ function readAcknowledged(owner: GraphMount<Page, Work>, ack: WorkWriteAck, sign
 export function makePodRoute(row: PodRouteDescriptor, bundle: PodRouteBundle) {
   if (!row.trusted) throw Error("Trust this Pod route hash before loading.");
   if (
-    bundle.version !== 1 ||
+    bundle.version !== 2 || typeof bundle.register !== "function" ||
     typeof bundle.create !== "function" ||
     typeof bundle.reducer !== "function" ||
     !bundle.initial ||
     typeof bundle.initial !== "object" ||
     Array.isArray(bundle.initial)
   )
-    throw Error("This Pod route does not implement route bundle version 1.");
+    throw Error("This Pod route does not implement route bundle version 2.");
   const graph: RouteGraph<Page, Work> = {
+    directory: {
+      path: podRoutePath(row.key), title: row.name, label: row.name, icon: "Boxes",
+      category: "Ask / automate", blurb: row.description, aliases: [], exposure: "Main",
+      listed: true, runtimeNeed: "Host; Revit for model operations", satellites: [],
+      surfaces: {web: "full", pwa: "full", tray: false},
+    },
     key: row.workRoute,
     address: podRoutePath(row.key).slice(1),
     name: row.name,
@@ -231,7 +239,6 @@ export function makePodRoute(row: PodRouteDescriptor, bundle: PodRouteBundle) {
         teach: row.description,
       },
     },
-    pick: false,
     seeds: Object.fromEntries(
       Object.entries(bundle.fixtures ?? {}).map(([name, seed]) => [
         name,
@@ -346,11 +353,17 @@ export function makePodRoute(row: PodRouteDescriptor, bundle: PodRouteBundle) {
     }),
     bodies: { instrument: (body) => <Instrument {...body} /> },
   };
-  const View = mountRoute(graph, adapters);
+  const authored = bundle.register({ graph, adapters, field, z, pane, split });
+  if (authored.graph.key !== row.workRoute || authored.graph.directory?.path !== podRoutePath(row.key))
+    throw Error("Pod route identity must match its registered member");
+  const registration = { version: 1 as const, namespace: row.packageId, key: `${row.packageId}:${row.workRoute}`, moduleHash: row.sha256, graph: authored.graph, bodies: authored.adapters };
+  validateRouteModule(registration);
+  const View = mountRoute(authored.graph, authored.adapters);
   return {
-    graph,
-    manifest: graph,
-    adapters,
+    registration,
+    graph: authored.graph,
+    manifest: authored.graph,
+    adapters: authored.adapters,
     hosted: ({
       visible,
       ...props

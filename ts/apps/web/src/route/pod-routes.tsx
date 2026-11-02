@@ -39,7 +39,7 @@ export function PodRoutesProvider({ children }: { children: ReactNode }) {
           const bundle = (await import(/* @vite-ignore */ url)) as PodRouteBundle;
           if (!current()) return () => {};
           const route = makePodRoute(row, bundle);
-          return publicRoutes.registerGraph(route.graph, route.hosted);
+          return publicRoutes.registerModule({...route.registration, bodies: route.hosted});
         } finally {
           URL.revokeObjectURL(url);
         }

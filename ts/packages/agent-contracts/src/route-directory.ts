@@ -14,6 +14,7 @@ export type AppRouteMount = "full" | "compact";
 export interface AppRoute {
   key: string;
   moduleHash: string;
+  surfaces: Readonly<Record<AppSurface, AppRouteMount | false>>;
   path: string;
   title: string;
   label: string;
@@ -116,8 +117,5 @@ export const SURFACE_SHELLS: Readonly<Record<AppSurface, SurfaceShell>> = {
 
 export function appRouteMount(path: string, surface: AppSurface): AppRouteMount | undefined {
   const route = appRouteByPath(path);
-  const shell = SURFACE_SHELLS[surface];
-  return route && (shell.routes === "all" || shell.routes.includes(route.key))
-    ? shell.mount
-    : undefined;
+  return route?.surfaces[surface] || undefined;
 }

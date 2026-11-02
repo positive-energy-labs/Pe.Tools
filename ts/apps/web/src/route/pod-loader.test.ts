@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { createPodRouteLoader, verifyBundle } from "./pod-loader";
 import { actionReceiptSchema, podRouteDescriptorSchema, bindWork } from "@pe/agent-contracts";
@@ -22,7 +24,8 @@ const row = podRouteDescriptorSchema.parse({
 describe("Pod route byte custody", () => {
   it("rejects a schema-valid receipt for a different document than the route action admitted", async () => {
     const { graph, adapters } = makePodRoute(row, {
-      version: 1,
+      version: 2,
+      register: ({graph, adapters}) => ({graph, adapters}),
       initial: {},
       reducer: (state) => state,
       create: () => () => null,
@@ -133,14 +136,15 @@ it("a verified Pod bundle registers one executable RouteGraph", async () => {
   const loader = createPodRouteLoader(async (entry) => {
     await verifyBundle(bytes, entry.sha256);
     imported++;
-    const { graph, hosted } = makePodRoute(entry, {
-      version: 1,
+    const { hosted, registration } = makePodRoute(entry, {
+      version: 2,
+      register: ({graph, adapters}) => ({graph, adapters}),
       initial: { value: 1 },
       reducer: (state, event) => ({ ...state, value: event.value }),
       create: () => () => null,
       fixtures: { edit: { title: "Edit", state: { value: 1 } } },
     });
-    return publicRoutes.registerGraph(graph, hosted);
+    return publicRoutes.registerModule({...registration, bodies: hosted});
   });
   try {
     await loader.sync([{ ...trusted, trusted: false }]);
@@ -180,7 +184,7 @@ it("refuses untrusted bundles before creating a graph", () => {
   expect(() =>
     makePodRoute(
       { ...row, trusted: false },
-      { version: 1, initial: {}, reducer: (s) => s, create },
+      { version: 2, register: ({graph, adapters}) => ({graph, adapters}), initial: {}, reducer: (s) => s, create },
     ),
   ).toThrow("Trust");
   expect(create).not.toHaveBeenCalled();
@@ -188,7 +192,8 @@ it("refuses untrusted bundles before creating a graph", () => {
 
 it("keeps raw execution and exports human-only, and refuses mutations through the read door", async () => {
   const { graph } = makePodRoute(row, {
-    version: 1,
+    version: 2,
+    register: ({graph, adapters}) => ({graph, adapters}),
     initial: {},
     reducer: (s) => s,
     create: () => () => null,
@@ -211,15 +216,14 @@ it("keeps raw execution and exports human-only, and refuses mutations through th
 });
 
 it("the shipped Snowdon bundle exposes its calculator through the common fixture lane", async () => {
-  const module = new URL(
-    "../../../../../examples/pods/snowdon-circuits/routes/voltage-drop/index.js",
-    import.meta.url,
-  ).href;
-  const bundle = (await import(/* @vite-ignore */ module)) as PodRouteBundle;
+  const source = await readFile(resolve(process.cwd(), "../../../examples/pods/snowdon-circuits/routes/voltage-drop/index.js"), "utf8");
+  const bundle = (await import(/* @vite-ignore */ `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`)) as PodRouteBundle;
   const { graph, adapters } = makePodRoute(row, bundle);
   const owner = await createFixtureMount(graph, "calculator", adapters);
   try {
     expect(owner.snapshot().failure).toBeFalsy();
+    expect(Object.keys(graph.stages)).toEqual(["calculate", "history"]);
+    expect(graph.fields.stage?.role).toBe("stage");
     expect(owner.snapshot().work?.doc.state).toMatchObject({
       reading: null,
       target: "3",

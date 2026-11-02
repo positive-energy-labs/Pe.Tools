@@ -197,7 +197,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
       "runtimeNeed": "Revit for model actions; browsing saved data is separate",
       "icon": "Table2",
       "category": "Build / audit families",
-      "blurb": "Every loaded family's types Ã— parameters in one table â€” audit it against a profile, plan the reconciliation, apply with receipts.",
+      "blurb": "Every loaded family's types × parameters in one table — audit it against a profile, plan the reconciliation, apply with receipts.",
       "aliases": [
         "audit",
         "reconcile",
@@ -210,9 +210,10 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "web": "full",
         "pwa": "full",
         "tray": false
-      }
+      },
+      "resume": "document"
     },
-    "moduleHash": "d94f149399002d6579a7e474142341132e6a2dcb78850c25a672d803a2cf866e"
+    "moduleHash": "047dead9beed034fc9766c6fe3d7cd10455e44e811c891e80f48ce776e90cd67"
   },
   {
     "key": "family",
@@ -238,9 +239,10 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "web": "full",
         "pwa": "full",
         "tray": false
-      }
+      },
+      "resume": "document"
     },
-    "moduleHash": "781abee7ef55290756b90cc093b4289e0d26634014d43d0e77bedf0bdeb93068"
+    "moduleHash": "f2f1b383727df53c539c6c1ca848fa2c1a78ef8f375dbd54a3fd28c8c6fb351e"
   },
   {
     "key": "grilles",
@@ -463,7 +465,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
       "runtimeNeed": "Revit for model actions; browsing saved data is separate",
       "icon": "LayoutGrid",
       "category": "Coordinate model data",
-      "blurb": "Any Revit schedule as a grid â€” push staged cell values, capture its definition into a pod, or apply a saved spec as a new schedule.",
+      "blurb": "Any Revit schedule as a grid — push staged cell values, capture its definition into a pod, or apply a saved spec as a new schedule.",
       "aliases": [
         "Revit",
         "data"
@@ -474,9 +476,10 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "web": "full",
         "pwa": "full",
         "tray": false
-      }
+      },
+      "resume": "document"
     },
-    "moduleHash": "7da467c98f7fa0fe64d1e6ce4661ee998574f7f2edadf7498df73226e41c2216"
+    "moduleHash": "44998067bc085844f869d10f6bbebaa130e48f8d4550986db86305d8dfe4b4d4"
   },
   {
     "key": "settings",
