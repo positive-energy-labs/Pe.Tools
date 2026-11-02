@@ -15,6 +15,11 @@ import { lifetime } from "./family-actions.ts";
 import type { SdkReceiptReader } from "./native-receipts.ts";
 import { ductsReadings } from "./ducts-readings.ts";
 import { readDuctCatalogs } from "./duct-catalogs.ts";
+import { buildSheet, resolveCriteria, resolveInputs } from "@pe/ducts-domain/sheet/index";
+import { accessoryWrites } from "@pe/ducts-domain/sheet/accessory-writes";
+import { suggestRoster } from "@pe/ducts-domain/roster";
+import { readFirm, workLayer } from "./ducts-inputs.ts";
+import { followAcceptedJoins } from "./ducts-walk.ts";
 import { appliedCellPaths } from "@pe/ducts-domain/staged";
 import type { DuctsApply, DuctsHeal } from "@pe/host-contracts/generated";
 
@@ -52,13 +57,13 @@ export async function healSnapshot(
   return read({ kind: "systems", systemIds });
 }
 
-/** A fan preview acquires its connector walk; network previews acquire their authored groups. */
+/** A fan preview acquires both sides, as its worksheet does; networks acquire their authored groups. */
 export async function lossSnapshot(
   intent: { walk?: { unitId: number; portIndex: number }; groups?: string[] } | undefined,
   read: (selector: Record<string, unknown>) => Promise<DuctSnapshot>,
 ): Promise<DuctSnapshot> {
   const snapshot = await (intent?.walk
-    ? read({ kind: "from", ...intent.walk })
+    ? read({ kind: "from", unitId: intent.walk.unitId })
     : healSnapshot(intent?.groups ?? [], read));
   if (snapshot.walk?.truncated)
     throw refused("The fan walk is truncated; no writes can be previewed from this scope");
@@ -132,17 +137,23 @@ export function ductsExecutors(
       effects: previewOnly ? [] : [{ kind: "document" as const, ref: target }],
       prepare: async () => {
         const intent = doc.writeIntent.edit?.value;
+        const { firm } = await readFirm();
+        const criteria = resolveCriteria(workLayer(doc), null, firm);
         const read = (selector: Record<string, unknown>) =>
           invokeBridge<DuctSnapshot>(
             bridge,
             target,
             selector.kind === "roster" ? "ducts.snapshot.roster" : "ducts.snapshot.walk",
             {
-              selector,
+              selector: selector.kind === "from" ? {
+                ...selector,
+                autoJoinGapIn: criteria.autoJoinGapIn.value,
+                candidateBoxIn: criteria.healBoxIn.value,
+              } : selector,
               slots: stagedDucts(doc).parameters,
             },
           );
-        const snapshot = await {
+        let snapshot = await {
           "assign-fan": () => {
             if (!intent?.fan) throw refused("Stage writeIntent.fan before assigning a fan");
             return read({ kind: "systems", systemIds: [intent.fan.systemId] });
@@ -150,38 +161,82 @@ export function ductsExecutors(
           losses: () => lossSnapshot(intent, read),
           heal: () => healSnapshot(intent?.groups ?? [], read),
         }[kind]();
-        const evidence = ductWriteEvidence(snapshot);
         const { input, dependencies } = await {
           losses: async () => {
-          const tables = await invokeBridge(bridge, target, "ducts.tables", { ids: TABLE_IDS });
-          const grids = toGrids(tables as Parameters<typeof toGrids>[0]);
-          const catalogs = await readDuctCatalogs();
-          // Timestamp is authored-revision stable; wall time would invalidate an identical preview.
-          const request = applyRequest(
-            snapshot,
-            price(snapshot, grids, doc, catalogs.tables),
-            appliedAt ?? "",
-            intent?.groups ?? [],
-          );
-            return { input: request as unknown as Record<string, unknown>, dependencies: { snapshot: evidence, grids, catalogs: catalogs.tables } };
+            const tables = await invokeBridge(bridge, target, "ducts.tables", { ids: TABLE_IDS });
+            const grids = toGrids(tables as Parameters<typeof toGrids>[0]);
+            const catalogs = await readDuctCatalogs();
+            const layers = () => ({
+              snapshot,
+              firm,
+              store: snapshot.store ?? undefined,
+              work: workLayer(doc),
+              catalogs: catalogs.tables,
+            });
+            if (intent?.walk)
+              snapshot = await followAcceptedJoins(
+                snapshot,
+                resolveInputs(layers()).rulings.joins,
+                (unitId) => read({ kind: "from", unitId }),
+              );
+            if (snapshot.walk?.truncated)
+              throw refused("The fan walk or an accepted continuation is truncated; no writes can be previewed");
+            // Timestamp is authored-revision stable; wall time would invalidate an identical preview.
+            const request = applyRequest(
+              snapshot,
+              price(snapshot, grids, doc, catalogs.tables),
+              appliedAt ?? "",
+              intent?.groups ?? [],
+            );
+            if (intent?.walk) {
+              const inputs = resolveInputs(layers());
+              const roster = suggestRoster(snapshot, [], {
+                kinds: Object.fromEntries(Object.entries(inputs.units).map(([id, u]) => [id, u.kind.value])),
+                roles: Object.fromEntries(Object.entries(inputs.units).map(([id, u]) => [id, u.role.value])),
+              });
+              const sheet = buildSheet({
+                snapshot,
+                fan: intent.walk,
+                roster: [...roster.fans, ...roster.suggestions],
+                grids,
+                inputs,
+              });
+              request.components = [
+                ...new Map(
+                  [...accessoryWrites(snapshot, sheet), ...(request.components ?? [])].map((w) => [
+                    w.id,
+                    w,
+                  ]),
+                ).values(),
+              ];
+            }
+            return {
+              input: request as unknown as Record<string, unknown>,
+              dependencies: {
+                snapshot: ductWriteEvidence(snapshot),
+                grids,
+                catalogs: catalogs.tables,
+                firm,
+              },
+            };
           },
           heal: async () => {
-          if (!intent?.groups?.length)
-            throw refused("Stage writeIntent.groups in Work before healing");
-          const plan = healPlan(snapshot, doc);
-          const input = {
-            groups: intent.groups.map((group) => {
-              const found = plan.groups.find((item) => item.group === group);
-              if (!found) throw refused(`Group ${group} has nothing to heal`);
-              return healRequestGroup(found);
-            }),
-          };
-            return { input, dependencies: evidence };
+            if (!intent?.groups?.length)
+              throw refused("Stage writeIntent.groups in Work before healing");
+            const plan = healPlan(snapshot, doc);
+            const input = {
+              groups: intent.groups.map((group) => {
+                const found = plan.groups.find((item) => item.group === group);
+                if (!found) throw refused(`Group ${group} has nothing to heal`);
+                return healRequestGroup(found);
+              }),
+            };
+            return { input, dependencies: ductWriteEvidence(snapshot) };
           },
           "assign-fan": async () => {
-          if (!intent?.fan) throw refused("Stage writeIntent.fan in Work before assigning a fan");
-          fanOf(snapshot, intent.fan);
-            return { input: intent.fan, dependencies: evidence };
+            if (!intent?.fan) throw refused("Stage writeIntent.fan in Work before assigning a fan");
+            fanOf(snapshot, intent.fan);
+            return { input: intent.fan, dependencies: ductWriteEvidence(snapshot) };
           },
         }[kind]();
         return { process, input: { ...input, previewOnly }, dependencies };
@@ -192,8 +247,16 @@ export function ductsExecutors(
     const p = prepared.parse(execution.prepared),
       target = targetOf(ctx);
     const entry = {
-      losses: { key: "ducts.apply", retires: (input: Record<string, unknown>, value: unknown) => appliedCellPaths(input as unknown as DuctsApplyInput, value as DuctsApply.Res.Response) },
-      heal: { key: "ducts.heal", retires: (input: Record<string, unknown>, value: unknown) => healedCellPaths(input, value as DuctsHeal.Res.Response) },
+      losses: {
+        key: "ducts.apply",
+        retires: (input: Record<string, unknown>, value: unknown) =>
+          appliedCellPaths(input as unknown as DuctsApplyInput, value as DuctsApply.Res.Response),
+      },
+      heal: {
+        key: "ducts.heal",
+        retires: (input: Record<string, unknown>, value: unknown) =>
+          healedCellPaths(input, value as DuctsHeal.Res.Response),
+      },
       "assign-fan": { key: "ducts.assign-fan", retires: () => [] as string[][] },
     }[kind];
     const key = entry.key;
@@ -236,7 +299,10 @@ export function ductsExecutors(
             key,
             workWriteBoundary(
               command(commands[key], prepared, {
-                seal: (p) => ({ request: commands[key].derivation.preview(p), evidence: p.dependencies }),
+                seal: (p) => ({
+                  request: commands[key].derivation.preview(p),
+                  evidence: p.dependencies,
+                }),
                 bind: (ctx) => bind(ctx, kind, preview),
                 run: (ctx, execution) => run(ctx, execution, kind),
               }),

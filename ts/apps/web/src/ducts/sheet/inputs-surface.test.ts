@@ -57,6 +57,40 @@ const context = (): InputContext => ({
   fittings: [],
 });
 
+it("puts the model/walked conflict in the fan airflow cell without changing its authored value", () => {
+  const ctx = context();
+  ctx.inputs!.units["13760867"] = {
+    cfm: { ...firm(1200), source: "model", ref: "PE_M_Fan_AirFlow" },
+    esp: firm(null),
+    role: firm("fan"),
+    kind: firm("fan-coil"),
+  } as DuctsInputs["units"][string];
+  ctx.sheet = {
+    overview: { fan: { unitId: 13760867 } },
+    inputs: {
+      notes: [
+        {
+          kind: "flow-conflict",
+          text: "fan 13760867: 1200 cfm (model:PE_M_Fan_AirFlow) conflicts with 942 cfm (walked end sum); 2 open ends",
+        },
+      ],
+    },
+  } as InputContext["sheet"];
+  const row = inputFields(ctx).rows.find((r) => r.key === "unit:13760867:cfm")!;
+  expect(row.control).toMatchObject({ value: 1200 });
+  expect(row.source).toBe(
+    "Conflict: 1200 cfm (model:PE_M_Fan_AirFlow) conflicts with 942 cfm (walked end sum); 2 open ends",
+  );
+  const view = render(createElement(InputsSurface, {
+    ctx, busy: false, elementName: null, onSlot: vi.fn(), apply: vi.fn(), nameOf: () => "FC-23",
+    history: { undoLabel: null, redoLabel: null, undoSuperseded: null, redoSuperseded: null,
+      last: null, cleared: null, undo: vi.fn(), redo: vi.fn(), restore: vi.fn() },
+  }));
+  const source = view.getByText(row.source);
+  expect(source.closest('[data-input-field="unit:13760867:cfm"]')).not.toBeNull();
+  expect(source.className).toContain("whitespace-normal");
+});
+
 it("orders the project criteria and carries source chips from the resolved values", () => {
   const ctx = context();
   ctx.inputs!.criteria.autoJoinGapIn = {

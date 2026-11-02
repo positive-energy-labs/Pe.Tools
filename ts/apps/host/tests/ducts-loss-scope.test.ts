@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { expect, test, vi } from "vite-plus/test";
 import { lossSnapshot } from "../src/ducts-actions.ts";
+import { mergeSnapshots } from "../src/ducts-walk.ts";
 import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";
 import { writeSeal } from "../src/work-write-boundary.ts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
@@ -85,7 +86,7 @@ test("fan preview survives identical re-pricing but rejects changed model inputs
   expect(seal(reread)).not.toEqual(preview);
 });
 
-test("fan loss preparation reads the selected connector walk and carries authored drops into preview", async () => {
+test("fan loss preparation reads both sides and carries authored drops into preview", async () => {
   const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse(
     JSON.parse(
       readFileSync(
@@ -99,7 +100,13 @@ test("fan loss preparation reads the selected connector walk and carries authore
   );
   const read = vi.fn(async () => snapshot);
   expect(await lossSnapshot({ walk: { unitId: 14577391, portIndex: 2 } }, read)).toBe(snapshot);
-  expect(read).toHaveBeenCalledExactlyOnceWith({ kind: "from", unitId: 14577391, portIndex: 2 });
+  expect(read).toHaveBeenCalledExactlyOnceWith({ kind: "from", unitId: 14577391 });
+  const truncated = mergeSnapshots(snapshot, {
+    ...snapshot,
+    walk: { startId: 1, hops: 1, elementsReached: 1, openEnds: 0, candidates: [], elapsedMs: 1, truncated: true },
+  });
+  await expect(lossSnapshot({ walk: { unitId: 14577391, portIndex: 2 } }, async () => truncated))
+    .rejects.toThrow("truncated");
   const node = snapshot.nodes.find((n) => n.id === 14088043)!;
   expect(node).toBeTruthy();
   const work = ductsRouteState.schema.parse({

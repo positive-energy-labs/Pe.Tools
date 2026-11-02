@@ -117,7 +117,13 @@ export function fittingGroups(
         subject,
         ids: idsOf(subject),
         lossInWg: f.lossInWg,
-        note: f.unpriced ?? (f.typed != null ? `typed ${f.typed} in-wg` : null),
+        note:
+          f.unpriced ??
+          (f.typed != null
+            ? `typed ${f.typed} in-wg`
+            : f.derivation
+              ? `controlling path: ${f.derivation}`
+              : null),
       };
     });
     const known = g.rows.filter((f) => f.lossInWg != null);

@@ -214,7 +214,8 @@ public static class DuctApplier {
         if (lossy.Count > 0)
             stages.Add(("not-defined", () => {
                 foreach (var i in lossy)
-                    _ = i.Element!.get_Parameter(BuiltInParameter.RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM).Set(NotDefined.ToString());
+                    if (!i.Element!.get_Parameter(BuiltInParameter.RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM).Set(NotDefined.ToString()))
+                        throw new InvalidOperationException($"Element {i.Id}: Revit refused to reset the loss method");
             }));
         stages.Add(("losses", () => {
             // Terminals, equipment and the store first: a terminal's SubTransaction rollback after the server change
@@ -225,7 +226,12 @@ public static class DuctApplier {
                 var entity = new Entity(schema);
                 foreach (var (field, value) in fields) entity.Set(field, value);
                 i.Element!.SetEntity(entity);
-                _ = i.Element.get_Parameter(BuiltInParameter.RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM).Set(server.ToString());
+                var method = i.Element.get_Parameter(BuiltInParameter.RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM);
+                if (!method.Set(server.ToString()) || !Guid.TryParse(method.AsString(), out var actual) || actual != server)
+                    throw new InvalidOperationException($"Element {i.Id}: Revit refused loss method {Name(server.ToString())}");
+                var written = i.Element.GetEntity(schema);
+                if (!written.IsValid() || fields.Any(f => written.Get<string>(schema.GetField(f.Field)) != f.Value))
+                    throw new InvalidOperationException($"Element {i.Id}: the loss value did not read back under {Name(server.ToString())}");
                 i.Outcome = "written";
             }
         }));

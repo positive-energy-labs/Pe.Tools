@@ -506,6 +506,16 @@ class Pricer {
       : { key, elementId: input.fitting.id };
     const row: FittingPricing = {
       ...identity,
+      ...(src
+        ? {
+            derivation: `${lossSourceOf(src).ref}; ${Object.entries(src.inputs)
+              .filter(([k]) => ["x", "y", "z"].includes(k))
+              .map(([k, v]) => `${k}=${v}`)
+              .join(
+                ", ",
+              )}; Pv=${src.pv} in-wg; extrapolated=${src.notes.some((n) => /extrapolated|clamped/.test(n))}`,
+          }
+        : {}),
       family,
       rule: rule?.key ?? null,
       table: src?.table ?? null,
@@ -525,9 +535,15 @@ class Pricer {
       unpriced: p.unpriced,
       typed: null,
     };
-    // One fitting may be priced on several legs; an unpriced leg is what the census must show.
+    // A tap has both branch and straight prices. Show its controlling loss, never visitation order.
+    // An unpriced leg still withholds the fitting regardless of other priced legs.
     const had = this.fittings.get(key);
-    if (!had || had.unpriced == null) this.fittings.set(key, row);
+    if (
+      !had ||
+      (had.unpriced == null &&
+        (row.unpriced != null || (row.lossInWg ?? -Infinity) > (had.lossInWg ?? -Infinity)))
+    )
+      this.fittings.set(key, row);
     return p;
   }
 

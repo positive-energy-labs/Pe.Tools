@@ -1,3 +1,4 @@
+import { followAcceptedJoins, mergeSnapshots } from "./ducts-walk.ts";
 import { createHash } from "node:crypto";
 import {
   canonicalRouteInput,
@@ -74,28 +75,6 @@ const titlesOf = (grids: ReturnType<typeof toGrids>): Record<string, string> =>
       return title ? [[id, title]] : [];
     }),
   );
-/** Union two `from` reads of one document by element id (a walked copy wins over a candidate copy), and their health by id. */
-function mergeSnapshots(a: DuctSnapshot, b: DuctSnapshot): DuctSnapshot {
-  const union = <T extends { id: number; reason?: string | null }>(
-    x: readonly T[],
-    y: readonly T[],
-  ) => {
-    const byId = new Map(x.map((e) => [e.id, e]));
-    for (const e of y) {
-      const have = byId.get(e.id);
-      if (!have || ((have.reason ?? "walked") !== "walked" && (e.reason ?? "walked") === "walked"))
-        byId.set(e.id, e);
-    }
-    return [...byId.values()];
-  };
-  return {
-    ...a,
-    nodes: union(a.nodes as never[], b.nodes as never[]) as DuctSnapshot["nodes"],
-    segments: union(a.segments as never[], b.segments as never[]) as DuctSnapshot["segments"],
-    // Health is model truth, measured the same way in either read; the first copy of an id stands.
-    issues: [...new Map([...b.issues, ...a.issues].map((i) => [i.id, i])).values()],
-  };
-}
 export interface DuctsSheetSources {
   call: (
     key: "ducts.snapshot.roster" | "ducts.snapshot.walk" | "ducts.tables",
@@ -284,54 +263,6 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
     return response;
   }
   /**
-   * The C# `from` walk follows Revit connectors only, so it stops where an accepted join bridges a gap:
-   * the far side arrives as an open-end candidate and its own connections read as open ends that are
-   * not open in Revit (MUAS-1's FA 43 onto the louver plenum, 2026-10-28). Walk again from the far
-   * element of every accepted pair whose near side was walked, merge, and repeat until no accepted
-   * join points outside the read. Elements are unioned by id; a walked copy wins over a candidate.
-   * ponytail: one extra `from` read per bridged join and round (bounded at four rounds); fold the
-   * seeds into one native read if this gets slow.
-   */
-  async function followAcceptedJoins(
-    snapshot: DuctSnapshot,
-    rulings: readonly { pair: readonly string[]; verdict: string }[],
-    target: DocumentRef,
-    tolerances: Tolerances,
-    slots: SnapshotRequest["slots"],
-  ): Promise<DuctSnapshot> {
-    type Walked = { id: number; reason?: string | null };
-    const elementOf = (end: string) => Number(end.split(":")[0]);
-    const seeded = new Set<number>();
-    let merged = snapshot;
-    for (let round = 0; round < 4; round += 1) {
-      const walked = new Set(
-        [...merged.nodes, ...merged.segments]
-          .filter((e) => ((e as Walked).reason ?? "walked") === "walked")
-          .map((e) => e.id),
-      );
-      const seeds = rulings
-        .filter((r) => r.verdict === "accept")
-        .flatMap((r) => {
-          const [a, b] = r.pair.map(elementOf) as [number, number];
-          return walked.has(a) && !walked.has(b) ? [b] : walked.has(b) && !walked.has(a) ? [a] : [];
-        })
-        .filter((id) => !seeded.has(id));
-      if (seeds.length === 0) break;
-      for (const id of seeds) {
-        seeded.add(id);
-        const more = (await (
-          await readNative(
-            "ducts.snapshot.walk",
-            { ...(slots ? { slots } : {}), selector: { kind: "from", unitId: id, ...tolerances } },
-            target,
-          )
-        ).json()) as DuctSnapshot;
-        merged = mergeSnapshots(merged, more);
-      }
-    }
-    return merged;
-  }
-  /**
    * What lies past each unit this fan's walk stops at (kaitpw 2026-10-30, "yes show"): one short
    * `from` read per stopping unit (BEYOND_HOPS), merged over this sheet's read, then a stub from
    * each of its ports (`beyondOf`). Context
@@ -492,9 +423,14 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
       const snapshot = await followAcceptedJoins(
         first,
         resolveInputs(layersOf(first)).rulings.joins,
-        request.target,
-        tolerances,
-        slots,
+        async (unitId) =>
+          (
+            await readNative(
+              "ducts.snapshot.walk",
+              { slots, selector: { kind: "from", unitId, ...tolerances } },
+              request.target,
+            )
+          ).json(),
       );
       const inputs = resolveInputs(layersOf(snapshot));
       const grids = toGrids(await tables.json());

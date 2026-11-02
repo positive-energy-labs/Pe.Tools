@@ -71,6 +71,7 @@ export interface RowContext {
   inputs: DuctsInputs | null;
   /** The open fan's unit: its ESP is an input of this sheet; another unit's is not. */
   fanUnitId: number | null;
+  flowConflict?: string;
   /** Proposed path keys to the subject that names them (from the fittings census). */
   pathSubject?: (key: string) => SubjectPart[] | null;
 }
@@ -166,6 +167,8 @@ export function inputRows(ctx: RowContext): InputRow[] {
       (cfm) => ({ equipmentFlows: { [id]: { cfm } } }),
       { equipmentFlows: { [id]: null } },
     );
+    if (n === ctx.fanUnitId && ctx.flowConflict)
+      rows[rows.length - 1]!.source = ctx.flowConflict.replace(/^fan \d+: /, "Conflict: ");
     if (n === ctx.fanUnitId || unit.esp.source === "Work")
       number(
         `unit:${id}:esp`,

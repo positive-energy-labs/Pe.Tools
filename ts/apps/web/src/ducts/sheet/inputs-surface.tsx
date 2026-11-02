@@ -79,6 +79,8 @@ type Criterion = {
 );
 /** The settings rows come only from resolved inputs; Work identifies pending join/end rulings. */
 export function inputFields(ctx: InputContext): { criteria: Criterion[]; rows: InputRow[] } {
+  // TODO: X1 browser re-drive of tap provenance and FC-23 flow conflict after the shared host-status
+  // timeout is fixed. Live sheet + rendered-cell tests pass; the full Fans route was unavailable.
   const criteria: Criterion[] = [];
   if (!ctx.inputs) return { criteria, rows: [] };
   const inputs = ctx.inputs;
@@ -139,6 +141,7 @@ export function inputFields(ctx: InputContext): { criteria: Criterion[]; rows: I
       doc: ctx.doc,
       inputs: ctx.inputs,
       fanUnitId: ctx.sheet?.overview.fan?.unitId ?? null,
+      flowConflict: ctx.sheet?.inputs?.notes.find((n) => n.kind === "flow-conflict")?.text,
       pathSubject: (key) => {
         const f = ctx.fittings.find((x) => x.key === key);
         return f ? memberSubject(f) : null;
@@ -449,7 +452,9 @@ function FittingGroupRows({
               <SubjectText text={m.subject} revit={m.ids} owner={`fitting:${m.key}`} />
             </span>
             <span className="face-mono text-right">{inWg(m.lossInWg)}</span>
-            <span className="col-span-2 t-small min-w-0 truncate text-ink-2">{m.note ?? ""}</span>
+            <span className="col-span-2 t-small min-w-0 whitespace-normal text-ink-2">
+              {m.note ?? ""}
+            </span>
           </div>
         ))}
     </div>
@@ -510,6 +515,7 @@ function InputRowView({
           digits={c.digits}
           source={row.source}
           cell={c.cell as WorkCell}
+          sourceWrap={row.source.startsWith("Conflict:")}
           refusal={refusal}
           positive={c.positive}
           clearable={row.clear != null}
