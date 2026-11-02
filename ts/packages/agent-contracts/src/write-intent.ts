@@ -27,7 +27,9 @@ export const writePreviewSchema = writeResponseSchema
   })
   .loose();
 
-export const writeCommandResultSchema = (result: z.ZodType = z.looseObject({})) =>
+export const writeCommandResultSchema = <R extends z.ZodType = z.ZodObject<{}, z.core.$loose>>(
+  result: R = z.looseObject({}) as unknown as R,
+) =>
   z.union([
     writePreviewSchema,
     z.intersection(result, writeResponseSchema.extend({ previewOnly: z.literal(false) })),
@@ -86,7 +88,7 @@ export function workWriteCommands<
     const { input: _input, work: _work, ...metadata } = source;
     return {
       ...metadata,
-      result: writeCommandResultSchema(source.result),
+      result: writeCommandResultSchema(source.result as NonNullable<D["result"]>),
       derivation,
       authoredInput,
       writeBoundary: {

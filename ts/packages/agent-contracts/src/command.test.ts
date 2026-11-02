@@ -71,8 +71,9 @@ describe("portable tool consumers", () => {
 
   it("keeps command input and result types through Work binding", () => {
     const apply = tools.family.commands["family.apply"];
-    // TODO: frozen write-intent.ts widens the result to ZodType; preserve FamilyApplyResult in its generic envelope.
-    expectTypeOf<z.output<NonNullable<typeof apply.result>>>().toEqualTypeOf<FamilyApplyResult>();
+    // The write boundary wraps the result in a preview-or-committed envelope; the committed arm keeps FamilyApplyResult.
+    type Out = z.output<NonNullable<typeof apply.result>>;
+    expectTypeOf<Extract<Out, { previewOnly: false }>>().toExtend<FamilyApplyResult>();
     expectTypeOf<typeof apply>().toExtend<Command>();
     expectTypeOf<
       Exclude<z.output<typeof apply.input>["work"], undefined>
