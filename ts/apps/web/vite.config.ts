@@ -129,6 +129,7 @@ const config = defineConfig(({ mode, command }) => {
         allow: [
           searchForWorkspaceRoot(import.meta.dirname),
           familyFixturesDir,
+          resolve(checkoutRoot, "examples/pods"),
           ...(ductsFixture ? [dirname(ductsFixture)] : []),
         ],
       },
