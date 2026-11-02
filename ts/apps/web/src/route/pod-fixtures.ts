@@ -2,8 +2,8 @@ import { podRouteDescriptorSchema } from "@pe/agent-contracts";
 /** Fixture modules are the shipped bytes; they still pass trust/hash and common module admission. */
 export async function podFixtures() {
   const sources = await Promise.all([
-    import("../../../../../examples/pods/pipes/routes/pipes/index.js?raw").then(m => ["pipes", "pipes", m.default] as const),
-    import("../../../../../examples/pods/snowdon-circuits/routes/voltage-drop/index.js?raw").then(m => ["snowdon-circuits", "voltage-drop", m.default] as const),
+    fetch(new URL("../../../../../examples/pods/pipes/routes/pipes/index.js?raw", import.meta.url)).then(r => r.text()).then(source => ["pipes", "pipes", source] as const),
+    fetch(new URL("../../../../../examples/pods/snowdon-circuits/routes/voltage-drop/index.js?raw", import.meta.url)).then(r => r.text()).then(source => ["snowdon-circuits", "voltage-drop", source] as const),
   ]);
   return Promise.all(sources.map(async ([packageId, member, source]) => {
     const bytes = new TextEncoder().encode(source);
