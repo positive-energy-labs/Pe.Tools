@@ -1320,7 +1320,9 @@ function toProblem(error: unknown): {
     };
   if (error instanceof Refused)
     return { kind: "InvalidRequest", message: error.message, status: 403, notDispatched: true };
-  if (error instanceof Error) return { kind: "HostFailure", message: error.message, status: 500 };
+  // BridgeError is a Schema.TaggedError (an Error) since ADR 0029 phase 3b; its _tag branch below owns it.
+  if (error instanceof Error && !(error instanceof BridgeError))
+    return { kind: "HostFailure", message: error.message, status: 500 };
   if (
     !(
       error instanceof BridgeError ||
