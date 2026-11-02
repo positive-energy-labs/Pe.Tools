@@ -13,6 +13,39 @@ import type {
   ModelZone,
 } from "@pe/agent-contracts";
 import type { RevitCatalogProjectIndex, TakeoffsSnapshot } from "@pe/host-contracts/generated";
+import { Schema } from "effect";
+
+/**
+ * FilledRegion blobs `Pe.Revit.Takeoff` writes with camelCase Newtonsoft (ADR 0029 rule 7):
+ * `TakeoffZoneProvenance(V, View, Name, SystemTag)` on a Zoning Region, `RegionProvenance` on a
+ * materialized room or residue. PascalCase run keys are the pre-camelCase blobs readers still meet.
+ * Promise callers until phase 5 decode with `decodeUnknownSync`; a bad blob throws its path.
+ */
+export const ZoneProvenance = Schema.fromJsonString(
+  Schema.Struct({
+    view: Schema.String,
+    name: Schema.optionalKey(Schema.NullOr(Schema.String)),
+    systemTag: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  }),
+);
+const RunKey = Schema.optionalKey(Schema.NullOr(Schema.String));
+export const RegionProvenance = Schema.fromJsonString(
+  Schema.Struct({
+    runId: RunKey,
+    RunId: RunKey,
+    sourceRoomId: RunKey,
+    SourceRoomId: RunKey,
+    /** `Pe.Revit.Partition.Room`: the enum is a number, a string from a string-enum writer. */
+    partition: Schema.optionalKey(
+      Schema.NullOr(
+        Schema.Struct({
+          disposition: Schema.optionalKey(Schema.Union([Schema.Number, Schema.String])),
+          reason: Schema.optionalKey(Schema.NullOr(Schema.String)),
+        }),
+      ),
+    ),
+  }),
+);
 
 export const takeoffProjectIndexRequest = {
   sections: ["Views"],
@@ -68,11 +101,7 @@ export function projectTakeoffSnapshot(
   ];
   const ordinals = new Map<string, number>();
   const zones: ModelZone[] = zoneFrs.map((region) => {
-    const meta = JSON.parse(region.blob) as {
-      view?: string;
-      name?: string;
-      systemTag?: string;
-    };
+    const meta = Schema.decodeUnknownSync(ZoneProvenance)(region.blob);
     if (!meta.view) throw Error("Zoning Region provenance is missing view");
     const view = region.view || meta.view;
     const name = meta.name?.trim() || `${view} · ${region.elementId}`;
@@ -89,9 +118,7 @@ export function projectTakeoffSnapshot(
     const residues = materialized
       .filter((item) => item.role === "held-residue")
       .map((item) => {
-        const value = JSON.parse(item.blob) as {
-          partition?: { disposition?: number | string };
-        };
+        const value = Schema.decodeUnknownSync(RegionProvenance)(item.blob);
         return {
           id: item.guid,
           reason: disposition(value.partition?.disposition) === "void" ? "void" : "held",
@@ -173,13 +200,7 @@ function savedReview(
   if (regions.length === 0) return null;
   const values = regions.map((region) => ({
     region,
-    value: JSON.parse(region.blob) as {
-      RunId?: string;
-      runId?: string;
-      SourceRoomId?: string;
-      sourceRoomId?: string;
-      partition?: { disposition?: number | string; reason?: string | null };
-    },
+    value: Schema.decodeUnknownSync(RegionProvenance)(region.blob),
   }));
   if (
     values.some(
