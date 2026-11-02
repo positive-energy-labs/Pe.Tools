@@ -223,6 +223,7 @@ public sealed record Stamp(
     Resolved Resolved
 ) {
     /// <summary>The only frame this library speaks. A reader that sees another value must refuse.</summary>
+    public GeometryCost? GeometryCost { get; init; }
     public const string HostInternalFt = "host-internal-ft";
 }
 

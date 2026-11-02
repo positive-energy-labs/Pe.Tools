@@ -76,7 +76,7 @@ export function useCapture(
           ...request,
           focusOnly: true,
           contextPaddingFt: 0,
-          contextRepresentation: "none",
+          contextRepresentation: request.contextRepresentation === "overview" ? "overview" : "none",
         }
       : null,
     doc,

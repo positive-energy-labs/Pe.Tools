@@ -7286,6 +7286,10 @@ export namespace RevitDetailSpaceCensus {
       sources: SourceRow[];
       fresh: boolean;
       resolved: Resolved;
+      /**
+       * The only frame this library speaks. A reader that sees another value must refuse.
+       */
+      geometryCost?: null | GeometryCost;
     }
     /**
      * One row per partition. Carried inside every Stamp.
@@ -7314,6 +7318,23 @@ export namespace RevitDetailSpaceCensus {
       kinds: PrimKind[];
       layers: string[];
       excludedElementIds: number[];
+    }
+    /**
+     * Acquisition evidence, not a memory cap. Native geometry remains allocated until document close.
+     */
+    export interface GeometryCost {
+      plannedCount: number;
+      plannedCost: number;
+      perSource: GeometrySourceCost[];
+      newlyTessellatedCount: number;
+      cumulativeTessellatedCount: number;
+    }
+    export interface GeometrySourceCost {
+      source: string;
+      linkInstanceId?: number | null;
+      count: number;
+      loadOnlyCount: number;
+      cost: number;
     }
     /**
      * How much of the world the verb had to touch to answer. The honesty counter.
@@ -7364,7 +7385,7 @@ export namespace RevitDetailSpaceCensus {
   }
 }
 
-/** Probe straight down and straight up from one point: the first thing under it and over it, with the Handle and distance of each; null when nothing is hit within maxDistanceFt. */
+/** Probe straight down and straight up from one point: the first thing under it and over it, with the Handle and distance of each; null when nothing is hit within maxDistanceFt. The region is admission only: the point must lie inside it, and the column may leave it (a floor slab and ceiling sit at or past a room's box). Only the column is read. Cost is reported in the geometry stamp; large reads remain available. */
 export namespace RevitDetailSpaceProbe {
   export namespace Req {
     export type ProbePurpose = "Obstructions" | "RoomHeights";
@@ -7445,6 +7466,10 @@ export namespace RevitDetailSpaceProbe {
       sources: SourceRow[];
       fresh: boolean;
       resolved: Resolved;
+      /**
+       * The only frame this library speaks. A reader that sees another value must refuse.
+       */
+      geometryCost?: null | GeometryCost;
     }
     /**
      * One row per partition. Carried inside every Stamp.
@@ -7473,6 +7498,23 @@ export namespace RevitDetailSpaceProbe {
       kinds: PrimKind[];
       layers: string[];
       excludedElementIds: number[];
+    }
+    /**
+     * Acquisition evidence, not a memory cap. Native geometry remains allocated until document close.
+     */
+    export interface GeometryCost {
+      plannedCount: number;
+      plannedCost: number;
+      perSource: GeometrySourceCost[];
+      newlyTessellatedCount: number;
+      cumulativeTessellatedCount: number;
+    }
+    export interface GeometrySourceCost {
+      source: string;
+      linkInstanceId?: number | null;
+      count: number;
+      loadOnlyCount: number;
+      cost: number;
     }
     /**
      * How much of the world the verb had to touch to answer. The honesty counter.
@@ -7595,6 +7637,10 @@ export namespace RevitDetailSpaceRows {
       sources: SourceRow[];
       fresh: boolean;
       resolved: Resolved;
+      /**
+       * The only frame this library speaks. A reader that sees another value must refuse.
+       */
+      geometryCost?: null | GeometryCost;
     }
     /**
      * One row per partition. Carried inside every Stamp.
@@ -7625,6 +7671,23 @@ export namespace RevitDetailSpaceRows {
       excludedElementIds: number[];
     }
     /**
+     * Acquisition evidence, not a memory cap. Native geometry remains allocated until document close.
+     */
+    export interface GeometryCost {
+      plannedCount: number;
+      plannedCost: number;
+      perSource: GeometrySourceCost[];
+      newlyTessellatedCount: number;
+      cumulativeTessellatedCount: number;
+    }
+    export interface GeometrySourceCost {
+      source: string;
+      linkInstanceId?: number | null;
+      count: number;
+      loadOnlyCount: number;
+      cost: number;
+    }
+    /**
      * How much of the world the verb had to touch to answer. The honesty counter.
      */
     export interface Searched {
@@ -7637,10 +7700,13 @@ export namespace RevitDetailSpaceRows {
   }
 }
 
-/** Export native meshes, full 3D family frames and sized physical runs in host internal feet, including host insulation. Round and flat-oval profiles use 32 circumscribed facets. radialOverdrawFraction discloses the radius expansion, including float32 vertex rounding; round radial overdraw is below 0.484%. Physical diameterFt remains the outside diameter including insulation; bounds include the drawn expansion. Flex and curved runs retain native meshes. focusOnly captures host elementIds without context. Context is read per focus element: each element's own box (a run's location line and size) grown by contextPaddingFt, in every host and link placement, as one quick filter per source before any element loads; explicit bounds replace that reach. Centre-line helpers, view-owned elements, CAD and link noise classes are excluded before iteration. Fitting/accessory insulation retains its own native mesh; only a represented duct/pipe run with matching thickness absorbs its insulation, classified after loading the host. Every source placement (loaded, unloaded or unavailable) reports what reach counted, kept, excluded by class and cut by a bound; detachedElementIds names focus members far from the rest. Context defaults to oriented family boxes, sized runs and linked DirectShape source-frame envelopes. Other elements without a proven frame retain native meshes. The oriented option retains meshes for DirectShapes. The triangle-boxes option replaces context DirectShapes with envelopes fitted to their own triangles: frame candidates come from the 24 largest triangles, all vertices set extents, and frame=triangles discloses the approximation. The interim link-boxes default uses each linked DirectShape's native source-document bounding box through the link transform, without geometry materialization; frame=link discloses its source frame and possible overdraw for internally rotated geometry. Receipt and metadata linkEnvelopes count boxes per link placement. looseElements is null with unmeasured-without-element-geometry: source bounds cannot identify the internally rotated tail cheaply. contextRepresentation meshes acquires native context in the same reach. none suppresses context. Primitive rows own zero vertices; representation distinguishes mesh, oriented-box and run. Oriented boxes carry center, three unit axes and half sizes. Symbol meshes are tessellated once per native geometry identity and detail during the operation, then placed through the instance and link transforms. Metadata phase distinguishes focus/context, unavailableElements identifies requested ids without meshes, omittedElements counts context excluded by the output budget, and completeness reports deferred context and acquisition resource limits. Successful artifacts preserve focus membership; unsupported parametric focus retains Medium/Fine meshes. Native triangle counts stop further acquisition after each tessellated face, so one already allocated face can exceed the acquisition budget. Completeness discloses omitted or deferred context. RPC returns bounded counts and the artifact id; full typed membership and source transforms remain in PSC1. No document mutation. Browser orbit, visibility and cuts need no further native calls. */
+/** Export native meshes, full 3D family frames and sized physical runs in host internal feet, including host insulation. Round and flat-oval profiles use 32 circumscribed facets. radialOverdrawFraction discloses the radius expansion, including float32 vertex rounding; round radial overdraw is below 0.484%. Physical diameterFt remains the outside diameter including insulation; bounds include the drawn expansion. Flex and curved runs retain native meshes. focusOnly captures host elementIds without context. Context is read per focus element: each element's own box (a run's location line and size) grown by contextPaddingFt, in every host and link placement, as one quick filter per source before any element loads; explicit bounds replace that reach. A region is admission: with elementIds, every focus element must lie inside it and keeps its own reach and the caller's focusOnly; with none, the region box is the bounds. Focus and context are planned together before capture, with cost in the stamp. Centre-line helpers, view-owned elements, CAD and link noise classes are excluded before iteration. Fitting/accessory insulation retains its own native mesh; only a represented duct/pipe run with matching thickness absorbs its insulation, classified after loading the host. Every source placement (loaded, unloaded or unavailable) reports what reach counted, kept, excluded by class and cut by a bound; detachedElementIds names focus members far from the rest. Context defaults to overview: runs and bounding boxes with no native geometry acquisition. Detailed representations must be selected explicitly and use at least 5 ft of context reach. The oriented option retains meshes for DirectShapes. The triangle-boxes option replaces context DirectShapes with envelopes fitted to their own triangles: frame candidates come from the 24 largest triangles, all vertices set extents, and frame=triangles discloses the approximation. The explicit detailed link-boxes choice uses each linked DirectShape's native source-document bounding box through the link transform, without geometry materialization; frame=link discloses its source frame and possible overdraw for internally rotated geometry. Receipt and metadata linkEnvelopes count boxes per link placement. looseElements is null with unmeasured-without-element-geometry: source bounds cannot identify the internally rotated tail cheaply. contextRepresentation meshes acquires native context in the same reach. none suppresses context. Primitive rows own zero vertices; representation distinguishes mesh, oriented-box and run. Oriented boxes carry center, three unit axes and half sizes. Symbol meshes are tessellated once per native geometry identity and detail during the operation, then placed through the instance and link transforms. Metadata phase distinguishes focus/context, unavailableElements identifies requested ids without meshes, omittedElements counts context excluded by the output budget, and completeness reports deferred context and acquisition resource limits. Successful artifacts preserve focus membership; unsupported parametric focus retains Medium/Fine meshes. Native triangle counts stop further acquisition after each tessellated face, so one already allocated face can exceed the acquisition budget. Completeness discloses omitted or deferred context. RPC returns bounded counts and the artifact id; full typed membership and source transforms remain in PSC1. No document mutation. Browser orbit, visibility and cuts need no further native calls. */
 export namespace RevitDetailSpaceScene {
   export namespace Req {
-    export type SceneContextRepresentation = "none" | "oriented" | "triangle-boxes" | "link-boxes" | "meshes";
+    /**
+     * Overview acquires no native geometry. Every other choice is detailed and may retain substantial native memory.
+     */
+    export type SceneContextRepresentation = "overview" | "none" | "oriented" | "triangle-boxes" | "link-boxes" | "meshes";
 
     export interface Request {
       elementIds?: number[] | null;
@@ -7797,7 +7863,7 @@ export namespace RevitDetailSpaceScene {
     export type HeightRole = "None" | "Floor" | "Overhead" | "ByGeometry";
     export type SceneRepresentation = "mesh" | "oriented-box" | "run";
     export type SceneRunShape = "round" | "rectangular" | "oval";
-    export type SceneBoxFrame = "symbol" | "triangles" | "link";
+    export type SceneBoxFrame = "bounds" | "symbol" | "triangles" | "link";
     export type SceneSourceState = "loaded" | "unloaded" | "unavailable";
 
     export interface SceneMetadata {
@@ -7816,6 +7882,11 @@ export namespace RevitDetailSpaceScene {
       detachedElementIds: number[];
       levels: SceneLevels;
       /**
+       * Detailed requests below 5 ft are raised; overview keeps the requested reach.
+       */
+      requestedContextPaddingFt: number;
+      effectiveContextPaddingFt: number;
+      /**
        * Counts by link placement. Bounding boxes alone cannot identify geometry rotated inside the source frame.
        */
       linkEnvelopes: {
@@ -7833,6 +7904,10 @@ export namespace RevitDetailSpaceScene {
       sources: SourceRow[];
       fresh: boolean;
       resolved: Resolved;
+      /**
+       * The only frame this library speaks. A reader that sees another value must refuse.
+       */
+      geometryCost?: null | GeometryCost;
     }
     /**
      * One row per partition. Carried inside every Stamp.
@@ -7861,6 +7936,23 @@ export namespace RevitDetailSpaceScene {
       kinds: PrimKind[];
       layers: string[];
       excludedElementIds: number[];
+    }
+    /**
+     * Acquisition evidence, not a memory cap. Native geometry remains allocated until document close.
+     */
+    export interface GeometryCost {
+      plannedCount: number;
+      plannedCost: number;
+      perSource: GeometrySourceCost[];
+      newlyTessellatedCount: number;
+      cumulativeTessellatedCount: number;
+    }
+    export interface GeometrySourceCost {
+      source: string;
+      linkInstanceId?: number | null;
+      count: number;
+      loadOnlyCount: number;
+      cost: number;
     }
     /**
      * Axis-aligned bounds in host internal feet.
@@ -8165,6 +8257,10 @@ export namespace RevitDetailSpaceSlice {
       sources: SourceRow[];
       fresh: boolean;
       resolved: Resolved;
+      /**
+       * The only frame this library speaks. A reader that sees another value must refuse.
+       */
+      geometryCost?: null | GeometryCost;
     }
     /**
      * One row per partition. Carried inside every Stamp.
@@ -8193,6 +8289,23 @@ export namespace RevitDetailSpaceSlice {
       kinds: PrimKind[];
       layers: string[];
       excludedElementIds: number[];
+    }
+    /**
+     * Acquisition evidence, not a memory cap. Native geometry remains allocated until document close.
+     */
+    export interface GeometryCost {
+      plannedCount: number;
+      plannedCost: number;
+      perSource: GeometrySourceCost[];
+      newlyTessellatedCount: number;
+      cumulativeTessellatedCount: number;
+    }
+    export interface GeometrySourceCost {
+      source: string;
+      linkInstanceId?: number | null;
+      count: number;
+      loadOnlyCount: number;
+      cost: number;
     }
     /**
      * How much of the world the verb had to touch to answer. The honesty counter.
@@ -8280,6 +8393,10 @@ export namespace RevitDetailSpaceStatus {
       sources: SourceRow[];
       fresh: boolean;
       resolved: Resolved;
+      /**
+       * The only frame this library speaks. A reader that sees another value must refuse.
+       */
+      geometryCost?: null | GeometryCost;
     }
     /**
      * One row per partition. Carried inside every Stamp.
@@ -8310,6 +8427,23 @@ export namespace RevitDetailSpaceStatus {
       excludedElementIds: number[];
     }
     /**
+     * Acquisition evidence, not a memory cap. Native geometry remains allocated until document close.
+     */
+    export interface GeometryCost {
+      plannedCount: number;
+      plannedCost: number;
+      perSource: GeometrySourceCost[];
+      newlyTessellatedCount: number;
+      cumulativeTessellatedCount: number;
+    }
+    export interface GeometrySourceCost {
+      source: string;
+      linkInstanceId?: number | null;
+      count: number;
+      loadOnlyCount: number;
+      cost: number;
+    }
+    /**
      * One partition's categories, so a filter can be built without a rows read.
      */
     export interface SourceCategories {
@@ -8337,7 +8471,7 @@ export namespace RevitDetailSpaceStatus {
   }
 }
 
-/** Sweep a rectangular profile (widthFt across, heightFt up) along a polyline and answer HIT, NEAR or CLEAR per segment with the exact gap and the nearest element's Handle. */
+/** Sweep a rectangular profile (widthFt across, heightFt up) along a polyline and answer HIT, NEAR or CLEAR per segment with the exact gap and the nearest element's Handle. The region is admission only: every polyline point must lie inside it, while the profile and clearance may extend past it. Only the sweep's own reach is read (plus CAD ribbons when the filter asks for Curve2D). Cost is reported in the geometry stamp; large reads remain available. */
 export namespace RevitDetailSpaceSweep {
   export namespace Req {
     /**
@@ -8409,6 +8543,10 @@ export namespace RevitDetailSpaceSweep {
       sources: SourceRow[];
       fresh: boolean;
       resolved: Resolved;
+      /**
+       * The only frame this library speaks. A reader that sees another value must refuse.
+       */
+      geometryCost?: null | GeometryCost;
     }
     /**
      * One row per partition. Carried inside every Stamp.
@@ -8437,6 +8575,23 @@ export namespace RevitDetailSpaceSweep {
       kinds: PrimKind[];
       layers: string[];
       excludedElementIds: number[];
+    }
+    /**
+     * Acquisition evidence, not a memory cap. Native geometry remains allocated until document close.
+     */
+    export interface GeometryCost {
+      plannedCount: number;
+      plannedCost: number;
+      perSource: GeometrySourceCost[];
+      newlyTessellatedCount: number;
+      cumulativeTessellatedCount: number;
+    }
+    export interface GeometrySourceCost {
+      source: string;
+      linkInstanceId?: number | null;
+      count: number;
+      loadOnlyCount: number;
+      cost: number;
     }
     /**
      * How much of the world the verb had to touch to answer. The honesty counter.
@@ -8538,6 +8693,10 @@ export namespace RevitDetailSpaceTree {
       sources: SourceRow[];
       fresh: boolean;
       resolved: Resolved;
+      /**
+       * The only frame this library speaks. A reader that sees another value must refuse.
+       */
+      geometryCost?: null | GeometryCost;
     }
     /**
      * One row per partition. Carried inside every Stamp.
@@ -8566,6 +8725,23 @@ export namespace RevitDetailSpaceTree {
       kinds: PrimKind[];
       layers: string[];
       excludedElementIds: number[];
+    }
+    /**
+     * Acquisition evidence, not a memory cap. Native geometry remains allocated until document close.
+     */
+    export interface GeometryCost {
+      plannedCount: number;
+      plannedCost: number;
+      perSource: GeometrySourceCost[];
+      newlyTessellatedCount: number;
+      cumulativeTessellatedCount: number;
+    }
+    export interface GeometrySourceCost {
+      source: string;
+      linkInstanceId?: number | null;
+      count: number;
+      loadOnlyCount: number;
+      cost: number;
     }
     /**
      * One BVH node: its index, depth, leaf flag, subtree triangle count, and six host-feet bounds.

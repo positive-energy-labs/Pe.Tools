@@ -131,7 +131,7 @@ public static class SpaceView {
 
     public static RowsAnswer Rows(Document document, Filter filter, Aabb scope) {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var world = SpaceWorld.Prepare(document, scope);
+        var world = SpaceWorld.Prepare(document, scope, curves: Verbs.Curves(filter));
         var touched = world.Partitions.Where(p => filter.Wants(p.Kind)).ToList();
 
         var categories = new Legend();

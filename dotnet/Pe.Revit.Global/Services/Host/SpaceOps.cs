@@ -58,25 +58,30 @@ internal static class SpaceOps {
             region, request.MaxPieces ?? 50_000);
     }
 
-    [Op("revit.detail.space-probe", OpSubject.Region, OpTouches.Geometry, OpEffect.Read, Does = "Probe straight down and straight up from one point: the first thing under it and over it, with the Handle and distance of each; null when nothing is hit within maxDistanceFt.", Title = "Probe Space World", Finds = ["space", "probe", "floor", "ceiling", "ray"], Cost = OpCost.Expensive)]
+    [Op("revit.detail.space-probe", OpSubject.Region, OpTouches.Geometry, OpEffect.Read, Does = "Probe straight down and straight up from one point: the first thing under it and over it, with the Handle and distance of each; null when nothing is hit within maxDistanceFt. The region is admission only: the point must lie inside it, and the column may leave it (a floor slab and ceiling sit at or past a room's box). Only the column is read. Cost is reported in the geometry stamp; large reads remain available.", Title = "Probe Space World", Finds = ["space", "probe", "floor", "ceiling", "ray"], Cost = OpCost.Expensive)]
     private static ProbeAnswer Probe(ProbeRequest request, ProjectDocument document) {
         var distance = request.MaxDistanceFt ?? 200;
         Positive(distance, nameof(request.MaxDistanceFt));
         var purpose = request.Purpose ?? ProbePurpose.Obstructions;
         if (!Enum.IsDefined(typeof(ProbePurpose), purpose)) throw new ArgumentOutOfRangeException(nameof(request.Purpose));
-        return Verbs.Probe(SpaceWorld.Prepare(document.Value, request.Region.Resolve(document.Value)), Point(request.At, nameof(request.At)),
-            (request.Filter ?? new FilterRequest()).ToFilter(), distance, purpose);
+        var at = Point(request.At, nameof(request.At));
+        request.Region.Resolve(document.Value).AdmitProbe(at);
+        // The region is admission only: Verbs.Probe prepares the probe's own column, never the region box.
+        return Verbs.Probe(document.Value, at, (request.Filter ?? new FilterRequest()).ToFilter(), distance, purpose);
     }
 
-    [Op("revit.detail.space-sweep", OpSubject.Region, OpTouches.Geometry, OpEffect.Read, Does = "Sweep a rectangular profile (widthFt across, heightFt up) along a polyline and answer HIT, NEAR or CLEAR per segment with the exact gap and the nearest element's Handle.", Title = "Sweep Space World", Finds = ["space", "sweep", "clearance", "duct", "collision"], Cost = OpCost.Expensive)]
+    [Op("revit.detail.space-sweep", OpSubject.Region, OpTouches.Geometry, OpEffect.Read, Does = "Sweep a rectangular profile (widthFt across, heightFt up) along a polyline and answer HIT, NEAR or CLEAR per segment with the exact gap and the nearest element's Handle. The region is admission only: every polyline point must lie inside it, while the profile and clearance may extend past it. Only the sweep's own reach is read (plus CAD ribbons when the filter asks for Curve2D). Cost is reported in the geometry stamp; large reads remain available.", Title = "Sweep Space World", Finds = ["space", "sweep", "clearance", "duct", "collision"], Cost = OpCost.Expensive)]
     private static SweepAnswer Sweep(SweepRequest request, ProjectDocument document) {
         if (request.Polyline is not { Length: >= 2 }) throw new ArgumentException("polyline needs at least two coordinate triples.");
         Positive(request.WidthFt, nameof(request.WidthFt));
         Positive(request.HeightFt, nameof(request.HeightFt));
         Finite(request.ClearanceFt, nameof(request.ClearanceFt));
         if (request.ClearanceFt < 0) throw new ArgumentOutOfRangeException(nameof(request.ClearanceFt));
-        return Verbs.Sweep(SpaceWorld.Prepare(document.Value, request.Region.Resolve(document.Value)), request.Polyline.Select(p => Point(p, nameof(request.Polyline))).ToList(),
-            request.WidthFt, request.HeightFt, request.ClearanceFt, (request.Filter ?? new FilterRequest()).ToFilter());
+        var polyline = request.Polyline.Select(p => Point(p, nameof(request.Polyline))).ToList();
+        request.Region.Resolve(document.Value).AdmitSweep(polyline);
+        // The region is admission only: Verbs.Sweep prepares the sweep's own reach and its Curve2D ribbons, never the region box.
+        return Verbs.Sweep(document.Value, polyline, request.WidthFt, request.HeightFt, request.ClearanceFt,
+            (request.Filter ?? new FilterRequest()).ToFilter());
     }
 
     private static Aabb Box(double[]? values, string name) {

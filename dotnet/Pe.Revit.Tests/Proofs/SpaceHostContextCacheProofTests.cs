@@ -31,7 +31,7 @@ public sealed class SpaceHostContextCacheProofTests {
             var generation = SpaceWorld.HostGeneration(document);
             Assert.That(generation, Is.Not.Null);
             using (var warm = new MemoryStream()) {
-                var whole = Scene.Write(document, new SceneRequest([compound.Id.Value()], FocusOnly: true), warm);
+                var whole = Scene.Write(document, new SceneRequest([compound.Id.Value()], FocusOnly: true, ContextRepresentation: SceneContextRepresentation.LinkBoxes), warm);
                 Assert.That(whole.Triangles, Is.EqualTo(24), "Prewarm includes both near and remote bodies.");
             }
             // The retained pack belongs to verb preparation; scene capture may bypass it entirely.
