@@ -148,7 +148,7 @@ function writtenMemberPath(content: string): string | undefined {
   try {
     const value: unknown = JSON.parse(content.replace(/^﻿/, ""));
     return isRecord(value) && typeof value.path === "string" ? value.path : undefined;
-  } catch {
+  } catch (error) { console.warn("ts/apps/host/src/settings.ts: fallback after failure", error);
     return undefined;
   }
 }
@@ -171,7 +171,7 @@ function parseRunSource(content: string): PodRunSource | undefined {
       ...field("sha256"),
       ...field("name"),
     };
-  } catch {
+  } catch (error) { console.warn("ts/apps/host/src/settings.ts: fallback after failure", error);
     return undefined;
   }
 }

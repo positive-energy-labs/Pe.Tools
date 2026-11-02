@@ -1,3 +1,4 @@
+// TODO: docs/features/routes/LEDGER.md#s6-declaration-takeoff Reduce declaration 138 > 60.
 import { manyField } from "../../../../packages/agent-contracts/src/route-field";
 import { z } from "zod";
 import {
@@ -159,7 +160,7 @@ export const takeoffBase: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> = 
     { segment: "reviewFlags", groupOf: (key) => [JSON.parse(key)[0]], noun: "review flags" },
   ],
   readings: {
-    // TODO: native metadata zone roster is missing; saved captures supply zone choices.
+    // TODO: docs/features/routes/LEDGER.md#s7-e8f071edc9 native metadata zone roster is missing; saved captures supply zone choices.
     roster: { kind: "use", source: "takeoffs.roster", retire: "target", deps: ["saved"] },
     snapshot: {
       kind: "use",

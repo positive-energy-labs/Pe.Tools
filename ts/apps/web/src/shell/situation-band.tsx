@@ -4,7 +4,7 @@
  * mount-chrome.tsx renders each verb and each context control; this file owns where they sit.
  *
  * The Timeline head's Reject answers the same host consent API as Pea's composer (`thread.permission`).
- * TODO: H2 — Reject is proven rendered and inert on the fixture lane only; press it against a live
+ * TODO: docs/features/routes/LEDGER.md#s7-a91a2429a1 H2 — Reject is proven rendered and inert on the fixture lane only; press it against a live
  * host consent window (a route command from a Pea thread) to prove the round trip.
  */
 import { useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";

@@ -478,7 +478,7 @@ export function createReceiptExport(options: {
     : options.client
       ? (event: ExportEvent) => {
           const next = delivery.then(() => withDeadline(event, sendClient));
-          delivery = next.catch(() => {});
+          delivery = next.catch((error) => { console.error("receipt-export: asynchronous operation failed", error); });
           return next;
         }
       : undefined;
@@ -1092,7 +1092,7 @@ export async function fatalReceipt(
       })(),
       ms,
     );
-  } catch {
+  } catch (error) { console.warn("ts/apps/host/src/receipt-export.ts: fallback after failure", error);
     /* local record remains */
   } finally {
     exit(1);

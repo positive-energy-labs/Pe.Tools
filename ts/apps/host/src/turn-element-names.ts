@@ -117,7 +117,7 @@ export async function readTurnElementNames(
             seen.add(entry.elementId);
           }
           return { target, entries: value.entries };
-        } catch {
+        } catch (error) { console.warn("ts/apps/host/src/turn-element-names.ts: fallback after failure", error);
           return null;
         }
       }),

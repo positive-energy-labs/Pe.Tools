@@ -598,7 +598,7 @@ async function executeTool(
       result,
     };
   }
-  // TODO: with no Target, a row that needs a document is absent from the catalog and refuses as
+  // TODO: docs/features/routes/LEDGER.md#s7-6f559ec645 with no Target, a row that needs a document is absent from the catalog and refuses as
   // "Unknown capability" instead of "no document" (ACP spike 2026-09-26, REPORT2.md reduced run).
   if (!row)
     return refuse(
@@ -632,7 +632,7 @@ async function executeTool(
     );
   const refusal = gate(row);
   if (refusal) return refuse(row.key, defaultTarget, revision, refusal);
-  // TODO: a temporary document needs an owner that releases it when the harness turn ends.
+  // TODO: docs/features/routes/LEDGER.md#s7-eaaaf0f792 a temporary document needs an owner that releases it when the harness turn ends.
   if (row.key === "op:family.temporary.acquire")
     return refuse(
       row.key,
@@ -1335,7 +1335,7 @@ export const targetSet = createTool({
       params: { id: "self" },
       body,
     });
-    const wire = await response.json().catch(() => null);
+    const wire = await response.json().catch((error) => { console.error("capability-tools: asynchronous operation failed", error); return null; });
     const answer: unknown = response.ok ? wire : wire?.error?.details;
     const result = putTargetResultSchema.safeParse(answer).data;
     // A host refusal (`grant.required`, `human.only`, `context.foreign-thread`) is returned in its own words.

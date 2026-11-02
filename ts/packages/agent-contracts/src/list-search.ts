@@ -18,7 +18,7 @@ export const listSearchCodec: Codec<ListSearch> = {
     try {
       const parsed = listSearchSchema.safeParse(JSON.parse(text));
       if (parsed.success) return parsed.data;
-    } catch {
+    } catch (error) { console.warn("ts/packages/agent-contracts/src/list-search.ts: fallback after failure", error);
       /* Keep a malformed address inspectable and resettable. */
     }
     return { v: 0, keywords: text.slice(0, 4000), pills: [] };

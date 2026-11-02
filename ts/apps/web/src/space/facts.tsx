@@ -129,7 +129,7 @@ const Fact = ({ name, children }: { name: string; children: ReactNode }) => (
 /**
  * A pick's Subject name: its category, the DWG layer it came from, and "linked" when it lives in a
  * link. The element id is a fact beneath the name, never the name (SURFACE-PHILOSOPHY I1).
- * TODO(S2): render through the kit Subject text once it lands, so the name also footnotes the picture.
+ * TODO(S2): docs/features/routes/LEDGER.md#s7-dc2b076f89 render through the kit Subject text once it lands, so the name also footnotes the picture.
  */
 export const pickName = (h: {
   category: string;

@@ -22,7 +22,7 @@ const resolved = <T extends z.ZodType>(value: T) =>
     version: z.union([z.string(), z.number()]).nullable(),
     status: z.enum(["valid", "missing", "invalid"]),
   });
-// TODO: G1 render authored Work values separately; badge source from this reading (Work/model/firm/default).
+// TODO: docs/features/routes/LEDGER.md#s7-2f8fa50d55 G1 render authored Work values separately; badge source from this reading (Work/model/firm/default).
 export type Resolved<T> = Omit<import("./work-value.ts").ValueResolution<T>, "value"> & {
   value: T;
 };

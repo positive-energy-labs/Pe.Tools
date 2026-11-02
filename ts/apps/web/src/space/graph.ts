@@ -1,3 +1,4 @@
+// TODO: docs/features/routes/LEDGER.md#s6-declaration-space Reduce declaration 71 > 60.
 import { spaceQueries, matchingScene } from "./sources";
 import type { ReadingState } from "#/shell/readings";
 import { cutPolygons } from "./state";
@@ -22,7 +23,7 @@ const jsonField = <S extends z.ZodType>(schema: S) =>
       decode: (text) => {
         try {
           return JSON.parse(text);
-        } catch {
+        } catch (error) { console.warn("ts/apps/web/src/space/graph.ts: fallback after failure", error);
           return undefined;
         }
       },
@@ -120,7 +121,7 @@ export const spaceGraph: RouteGraph<SpacePage, null> = {
     },
   },
   needs: "document",
-  // TODO: Migrate capture inputs, visibility sets and layers off hand array codecs; preserve region subject.
+  // TODO: docs/features/routes/LEDGER.md#s7-29e50b64c1 Migrate capture inputs, visibility sets and layers off hand array codecs; preserve region subject.
   subjectField: { field: "region", noun: "region", keyKind: "name", cardinality: "one", roster: "region", detail: "scene", pane: "picture", show: (id) => id },
   fields: {
     threadSearch: { ...threadListFields.threadSearch, role: "pose" },

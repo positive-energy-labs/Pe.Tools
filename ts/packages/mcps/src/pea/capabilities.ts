@@ -123,7 +123,7 @@ export function createCapabilityCatalogSource(options: {
         readScoped(scope),
         recents(),
         options.machine(),
-        options.pages?.().catch(() => undefined),
+        options.pages?.().catch((error) => { console.error("capabilities: asynchronous operation failed", error); return undefined; }),
       ]);
       const catalog = pages
         ? {

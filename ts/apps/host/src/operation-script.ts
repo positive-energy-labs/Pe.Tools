@@ -48,7 +48,7 @@ export async function freezeScript(
             .toString("utf8")
             .replace(/^\uFEFF/, ""),
         ).id;
-      } catch {
+      } catch (error) { console.warn("ts/apps/host/src/operation-script.ts: fallback after failure", error);
         /* Native preparation owns malformed manifest refusal. */
       }
       if (typeof id === "string") await requirePackageEnabled(id);

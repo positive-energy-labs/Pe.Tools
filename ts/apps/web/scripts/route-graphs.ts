@@ -27,6 +27,19 @@ const jiti = createJiti(import.meta.url, {
 });
 const { projectRouteGraph } =
   await jiti.import<typeof import("@pe/agent-contracts")>("@pe/agent-contracts");
+const check = process.argv.includes("--check");
+const stale: string[] = [];
+async function emit(destination: URL, text: string) {
+  if (check) {
+    let current: string | undefined;
+    try { current = await readFile(destination, "utf8"); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+    if (current?.replaceAll("\r\n", "\n") !== text) stale.push(fileURLToPath(destination));
+  } else {
+    await mkdir(new URL(".", destination), { recursive: true });
+    await writeFile(destination, text);
+  }
+}
 const directory = [];
 for (const folder of (await readdir(new URL("../src/", import.meta.url), { withFileTypes: true }))
   .filter((d) => d.isDirectory())
@@ -51,12 +64,13 @@ for (const folder of (await readdir(new URL("../src/", import.meta.url), { withF
       `../../../packages/mcps/src/pea/generated/${graph.key}-graph.json`,
       import.meta.url,
     );
-    await mkdir(new URL(".", destination), { recursive: true });
-    await writeFile(destination, `${JSON.stringify(projectRouteGraph(graph), null, 2)}\n`);
+    await emit(destination, `${JSON.stringify(projectRouteGraph(graph), null, 2)}\n`);
   }
 }
-await writeFile(
+await emit(
   new URL("../../../packages/agent-contracts/src/generated/route-directory.ts", import.meta.url),
   `// Generated from web route graphs by codegen:routes.\nimport type { RouteDirectory } from "../route-graph.ts";\nexport const routeDirectory: readonly {key: string; directory: RouteDirectory; moduleHash: string}[] = ${JSON.stringify(directory, null, 2)};\n`,
 );
 console.log(`Projected ${directory.length} route graphs`);
+
+if (stale.length) throw Error(`Generated route artifacts drifted; regenerate codegen:routes:\n${stale.join("\n")}`);

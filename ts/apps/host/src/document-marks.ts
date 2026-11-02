@@ -78,7 +78,7 @@ export function documentMarks(bridge?: RevitBridge["Service"]): DocumentMarks {
         }
         if (changed) for (const listener of listeners) listener();
       })
-      .catch(() => undefined);
+      .catch((error) => { console.error("document-marks: asynchronous operation failed", error); return undefined; });
   });
 
   const holder: DocumentMarks = {

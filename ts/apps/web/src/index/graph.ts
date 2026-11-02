@@ -26,7 +26,6 @@ directory: {
     "tray": false
   }
 },
-  // TODO: Mount this directory manifest on home; K1c must declare its kernel selection.
   subjectField: { kind: "singleton", field: "catalog", noun: "tool directory", keyKind: "name", cardinality: "one", roster: "catalog", detail: "catalog", pane: "main", show: (id) => id },
 fields: { selected: { ...manyField("name", {}), role: "selection" }, catalog: { ...field(z.enum(["builtin"]).default("builtin"), {}), role: "subject" } }, readings: { catalog: { kind: "derive", source: "catalog", retire: "never" } }, verbs: {}, panes: { main: {label: "Tools", purpose: "Tools and saved work", draws: ["catalog"], verbs: []}}, layout: pane("main"), stages: { main: {word: "Tools", panes: ["main"], verbs: []}}
 };

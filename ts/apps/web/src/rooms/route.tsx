@@ -320,6 +320,6 @@ export const roomsAdapters: RouteAdapters<RoomsPage, RoomsRouteDocument> = {
     regions: (body) => <RegionsBody {...body} />,
   },
 };
-// TODO: Re-run list ? picture/card ? reload in fixture=plan after the shared catalog import cycle and directory hashes are repaired.
+// TODO: docs/features/routes/LEDGER.md#s7-2335ee600e Re-run list ? picture/card ? reload in fixture=plan after the shared catalog import cycle and directory hashes are repaired.
 export const roomsRoute = routeFromGraph(roomsGraph, roomsAdapters, "/rooms");
 export const RoomsRoute = mountRoute(roomsGraph, roomsAdapters);

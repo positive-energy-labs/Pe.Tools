@@ -130,7 +130,7 @@ export function useFamilyStore(owner: FamilyMount) {
   const authored = useMemo((): unknown => {
     try {
       return snapshot ? JSON.parse(snapshot.rawContent.replace(/^\uFEFF/, "")) : null;
-    } catch {
+    } catch (error) { console.warn("ts/apps/web/src/family/store.ts: fallback after failure", error);
       return null;
     }
   }, [snapshot]);

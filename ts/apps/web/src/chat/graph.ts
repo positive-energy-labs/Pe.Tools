@@ -1,3 +1,4 @@
+// TODO: docs/features/routes/LEDGER.md#s6-declaration-chat Reduce declaration 97 > 60.
 import { chatSeedChoices } from "./seed-choices";
 import { manyField } from "@pe/agent-contracts";
 import { z } from "zod";
@@ -104,7 +105,6 @@ export function chatGraph(deps: () => ChatRouteDeps, minOtherSize?: number): Rou
         },
       ]),
     ),
-    // TODO: K1c must declare the kernel selection within this thread.
     subjectField: {
       field: "thread",
       noun: "thread",

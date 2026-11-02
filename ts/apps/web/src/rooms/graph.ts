@@ -1,3 +1,4 @@
+// TODO: docs/features/routes/LEDGER.md#s6-declaration-rooms Reduce declaration 181 > 60.
 import { z } from "zod";
 import {
   gate,
@@ -73,7 +74,7 @@ export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = {
   },
   needs: "project",
   work: roomsRouteState.schema,
-  // TODO: Migrate layers and selected sets to kernel manyField; preserve K1c selection ownership.
+  // TODO: docs/features/routes/LEDGER.md#s7-0892eb207a Migrate layers and selected sets to kernel manyField; preserve K1c selection ownership.
   subjectField: { field: "view", noun: "view", keyKind: "name", cardinality: "one", roster: "roster", detail: "snapshot", pane: "scope", show: (id) => id },
   fields: {
     threadSearch: { ...fields.threadSearch, role: "query" },
@@ -206,7 +207,7 @@ export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = {
       "rooms.write",
       { ...command, label: "apply", input: request(takeoffActions["rooms.write"].input) },
       {
-        // TODO: shell/verbs needs admitted command-result Work patches to clear only the cells written.
+        // TODO: docs/features/routes/LEDGER.md#s7-1319af9e7a shell/verbs needs admitted command-result Work patches to clear only the cells written.
         waitSeconds: NATIVE_APPLY_WAIT_S,
         ready: (_, input) => input.refusal,
         prepare: async (scope, input) => {

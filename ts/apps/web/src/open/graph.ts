@@ -1,3 +1,4 @@
+// TODO: docs/features/routes/LEDGER.md#s6-declaration-open Reduce declaration 125 > 60.
 import { z } from "zod";
 import { instancesActions, pane, split, type RouteGraph } from "@pe/agent-contracts";
 import { field } from "../../../../packages/agent-contracts/src/route-field";

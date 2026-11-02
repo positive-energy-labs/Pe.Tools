@@ -24,7 +24,7 @@ if (hostOwnership.lane === "installed") {
           file,
           `${new Date().toISOString()} ${String(chunk).replace(/\x1b\[[0-9;]*m/g, "")}`,
         );
-      } catch {
+      } catch (error) { write(`Host log append failed: ${String(error)}\n`);
         // The log is a courtesy; never let it take the host down.
       }
       return write(chunk, ...rest);

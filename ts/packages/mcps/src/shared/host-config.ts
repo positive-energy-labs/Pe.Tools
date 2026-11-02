@@ -114,7 +114,7 @@ export function adoptTerminalContext() {
   try {
     const token = readFileSync(hostContextTokenPath(resolveLaneAndRoot().serviceName), "utf8");
     if (token.trim()) process.env[HOST_CONTEXT_VARIABLE] = token.trim();
-  } catch {
+  } catch (error) { console.warn("ts/packages/mcps/src/shared/host-config.ts: fallback after failure", error);
     // No host has written a token for this runtime: reads only.
   }
 }

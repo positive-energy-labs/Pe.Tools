@@ -138,7 +138,7 @@ export class Diagnostics {
         this.detail = "this host has no diagnostic intake; faults stay in this tab";
         retry = true;
       } else if (response.status < 500) {
-        const said = (await response.json().catch(() => null)) as {
+        const said = (await response.json().catch((error) => { console.error("diagnostics: asynchronous operation failed", error); return null; })) as {
           error?: { message?: string };
         } | null;
         this.refused += batch.length;

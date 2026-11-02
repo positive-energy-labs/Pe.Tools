@@ -82,7 +82,7 @@ export function priceRequest(scope: Scope) {
     if ((sheet.opened?.length ?? 1) > 1) throw Error("Choose one fan to preview its writes");
     current<DuctSnapshot>(scope, "sheetSnapshot");
     if (!pendingCount(scope.work.doc, undefined)) throw Error("Nothing edit");
-    // TODO: FD1 live re-drive /fans preview on Chadds; retained-payload proof does not certify native writes.
+    // TODO: docs/features/routes/LEDGER.md#s7-fdab11d1af FD1 live re-drive /fans preview on Chadds; retained-payload proof does not certify native writes.
     // The host derives the actual request from Work and this fan's connector walk at preview.
     const { unitId, portIndex } = sheet.open.overview.fan;
     return { walk: { unitId, portIndex } };

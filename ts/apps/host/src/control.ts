@@ -489,7 +489,7 @@ export const consentedRead = (
   input: unknown,
   target?: DocumentRef,
 ): boolean =>
-  // TODO(readonly-script-isolation): User ruling 2026-10-29: Pea ReadOnly scripts must run without
+  // TODO(readonly-script-isolation): docs/features/routes/LEDGER.md#s7-d090a2a7d4 User ruling 2026-10-29: Pea ReadOnly scripts must run without
   // approval. Revisit sibling-document/filesystem isolation later; do not restore blanket approval.
   readsOnly(key, input) && readConsent(caller, target);
 

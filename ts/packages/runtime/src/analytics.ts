@@ -27,7 +27,7 @@ export function analyticsConfig(lane: "dev" | "installed"): AnalyticsConfig | nu
   const host = typeof config.host === "string" ? config.host : "https://us.i.posthog.com";
   try {
     if (new URL(host).protocol !== "https:") return null;
-  } catch {
+  } catch (error) { console.warn("ts/packages/runtime/src/analytics.ts: fallback after failure", error);
     return null;
   }
   return { apiKey: config.apiKey.trim(), host: host.replace(/\/$/, "") };
@@ -36,7 +36,7 @@ export function analyticsConfig(lane: "dev" | "installed"): AnalyticsConfig | nu
 function readJson(path: string): unknown {
   try {
     return JSON.parse(readFileSync(path, "utf8"));
-  } catch {
+  } catch (error) { console.warn("ts/packages/runtime/src/analytics.ts: fallback after failure", error);
     return undefined;
   }
 }
@@ -60,7 +60,7 @@ export function readOrCreateInstallId(): string | null {
       const winner = read();
       return validId(winner) ? winner : null;
     }
-  } catch {
+  } catch (error) { console.warn("ts/packages/runtime/src/analytics.ts: fallback after failure", error);
     return null;
   }
 }

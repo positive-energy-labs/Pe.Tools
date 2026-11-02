@@ -58,7 +58,7 @@ function schemaTitle(schemaJson: string | undefined): string | undefined {
   try {
     const parsed = JSON.parse(schemaJson) as { title?: unknown };
     return typeof parsed.title === "string" ? parsed.title : undefined;
-  } catch {
+  } catch (error) { console.warn("ts/packages/mcps/src/shared/host-rpc-caller.ts: fallback after failure", error);
     return undefined;
   }
 }
@@ -195,7 +195,7 @@ export class HostRpcCaller {
 
   /** Enrichment lookup against the live catalog; undefined when the catalog is unreachable. */
   async getOperation(key: string): Promise<HostOperationDefinition | undefined> {
-    const catalog = await this.catalog().catch(() => undefined);
+    const catalog = await this.catalog().catch((error) => { console.error("host-rpc-caller: asynchronous operation failed", error); return undefined; });
     return catalog?.ops.find((operation) => operation.key === key);
   }
 
@@ -329,7 +329,7 @@ function readResolvedTarget(response: Response): ResolvedTarget | undefined {
     try {
       const ref = documentRefSchema.safeParse({ session, openId: decodeURIComponent(openId) });
       if (ref.success) nativeObservation = { source: "native", document: ref.data, requestId };
-    } catch {
+    } catch (error) { console.warn("ts/packages/mcps/src/shared/host-rpc-caller.ts: fallback after failure", error);
       // Malformed provenance leaves the read visible but unavailable for native actions.
     }
   }

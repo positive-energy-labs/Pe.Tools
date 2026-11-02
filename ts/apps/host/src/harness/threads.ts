@@ -495,7 +495,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     );
     threads.set(meta.id, t);
     notifySummaries();
-    ensure(t).catch(() => {}); // a failure to start is an `error` event
+    ensure(t).catch((error) => { console.error("threads: asynchronous operation failed", error); }); // a failure to start is an `error` event
     return t;
   }
 
@@ -1167,7 +1167,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
           const live = caps.resume
             ? await conn
                 .resumeSession({ ...request, sessionId: forked.sessionId })
-                .catch(() => null)
+                .catch((error) => { console.error("threads: asynchronous operation failed", error); return null; })
             : null;
           state = "forked";
           return { ...forked, ...live, sessionId: forked.sessionId };
@@ -1469,7 +1469,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       if (runError) throw runError;
       // Configuration may have warmed an unscoped child. Admission is logged before waiting.
       await t.retiring;
-      if (t.live) await t.live.catch(() => null);
+      if (t.live) await t.live.catch((error) => { console.error("threads: asynchronous operation failed", error); return null; });
       if (t.child) await retire(t);
       await options.prepare?.();
       await options.pluginHook?.("turn.before", { threadId: t.meta.id, turnId });
@@ -1661,7 +1661,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     append(t, { kind: "cancel_requested", turnId, by, door });
     runs.close({ thread: t.meta.id, turn: turnId }, "stopped");
     settleAsks(t, "cancel");
-    const live = await connecting?.catch(() => null);
+    const live = await connecting?.catch((error) => { console.error("threads: asynchronous operation failed", error); return null; });
     // A starting turn retires the warm child. Its logged cancellation also prevents prompt
     // dispatch; an old connection must never cancel a queued turn's replacement child.
     const current = () => t.running === turnId && t.live === connecting && t.child === child;
@@ -1925,7 +1925,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
           return json({ error: "Restore this archived thread before sending" }, 409);
         if (attachments) {
           // The harness says what it reads at `initialize`; learn it before admitting the turn.
-          if (!t.meta.promptCapabilities) await ensure(t).catch(() => null);
+          if (!t.meta.promptCapabilities) await ensure(t).catch((error) => { console.error("threads: asynchronous operation failed", error); return null; });
           const refusal = attachmentRefusal(
             attachments,
             t.meta.promptCapabilities,

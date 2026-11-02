@@ -54,7 +54,7 @@ export function admittedDestination(destination: string, origin: string): string
       (appRouteByPath(url.pathname) || podPathWork(url.pathname))
       ? `${url.pathname}${url.search}${url.hash}`
       : null;
-  } catch {
+  } catch (error) { console.warn("ts/apps/web/src/navigation/model.ts: fallback after failure", error);
     return null;
   }
 }

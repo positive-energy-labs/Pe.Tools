@@ -165,7 +165,7 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
             ? " No direct form or connector dimension binding. Other declarations and formulas may still use this parameter."
             : ""
       }`;
-      // TODO(core-reader): a FAMILY-LEVEL suggestion has no value cell of its own — the family-value
+      // TODO(core-reader): docs/features/routes/LEDGER.md#s7-a6dd76f300 a FAMILY-LEVEL suggestion has no value cell of its own — the family-value
       // column is gone, and this identity cell is two lines, so it cannot be a row-scale
       // `StateCell`. It therefore draws the fold and takes the locate click itself, with the
       // grammar's own guard (a click on an inner Press belongs to that Press). The reader has no

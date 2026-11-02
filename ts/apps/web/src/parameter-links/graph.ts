@@ -1,3 +1,4 @@
+// TODO: docs/features/routes/LEDGER.md#s6-declaration-parameter-links Reduce declaration 93 > 60.
 import { familyQueries } from "../../../../packages/mcps/src/shared/query-client";
 import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { z } from "zod";

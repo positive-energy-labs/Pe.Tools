@@ -75,7 +75,7 @@ function useLedgerRows() {
         .then((value) =>
           setReceipts(Array.isArray(value) ? (value as LedgerSources["receipts"]) : []),
         )
-        .catch(() => {});
+        .catch((error) => { console.error("ledger: asynchronous operation failed", error); });
     read();
     const timer = setInterval(read, 15_000);
     window.addEventListener("focus", read);
@@ -96,7 +96,7 @@ function useLedgerRows() {
           const ask = openAsk(body.events);
           if (ask) setAsks((prior) => new Map(prior).set(thread.id, ask));
         })
-        .catch(() => {});
+        .catch((error) => { console.error("ledger: asynchronous operation failed", error); });
     }
   }, [threads]);
   const attentionLines = machine ? attention(machine) : [];

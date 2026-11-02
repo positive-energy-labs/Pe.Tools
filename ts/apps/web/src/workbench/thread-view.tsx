@@ -28,7 +28,7 @@ function storedIntent(thread: string, urlTurn: number | null): LensScrollIntent 
       sessionStorage.getItem(intentKey(thread)) ?? "null",
     ) as StoredIntent | null;
     return stored?.fromUrl === urlTurn ? stored.intent : undefined;
-  } catch {
+  } catch (error) { console.warn("ts/apps/web/src/workbench/thread-view.tsx: fallback after failure", error);
     return undefined;
   }
 }

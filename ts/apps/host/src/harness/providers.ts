@@ -942,7 +942,7 @@ export function createProviders(options: ProvidersOptions) {
           { error: "This route reads a JSON body: send content-type: application/json" },
           415,
         );
-      const parsed = schema.safeParse(await request.json().catch(() => null));
+      const parsed = schema.safeParse(await request.json().catch((error) => { console.error("providers: asynchronous operation failed", error); return null; }));
       return parsed.success ? parsed.data : json({ error: parsed.error.message }, 400);
     };
     const rawId = declared.params.id;

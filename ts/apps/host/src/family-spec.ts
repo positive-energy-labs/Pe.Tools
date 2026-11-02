@@ -219,7 +219,7 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
       if (step.kind !== "file" || step.key !== "family.spec.asset")
         return { step, evidence: { reason: "No independent file witness" } };
       const asset = assetSchema.parse(step.input);
-      const bytes = await readFile(asset.path).catch(() => null);
+      const bytes = await readFile(asset.path).catch((error) => { console.error("family-spec: asynchronous operation failed", error); return null; });
       const hash = bytes ? createHash("sha256").update(bytes).digest("hex") : null;
       return hash === asset.sha256
         ? {

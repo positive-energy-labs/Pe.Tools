@@ -1,3 +1,4 @@
+// TODO: docs/features/routes/LEDGER.md#s6-declaration-families Reduce declaration 210 > 60.
 import { familiesQueries } from "../../../../packages/mcps/src/shared/query-client";
 import { z } from "zod";
 import {
@@ -86,7 +87,7 @@ export const familiesGraph: RouteGraph<FamiliesPage, FamiliesRouteDocument> = {
   name: "Families",
   needs: "project",
   work: familiesRouteState.schema,
-  // TODO: Migrate ordered sort state and hidden-column sets off hand array codecs; K1c consolidates lines/past.
+  // TODO: docs/features/routes/LEDGER.md#s7-e23183a490 Migrate ordered sort state and hidden-column sets off hand array codecs; K1c consolidates lines/past.
   subjectField: { kind: "singleton", field: "scope", noun: "family draft scope", keyKind: "name", cardinality: "one", roster: "scopes", detail: "matrix", pane: "scope", show: (id) => id },
   fields: {
     scope: { ...field(familiesPageSchema.shape.scope, {}), role: "subject" },
@@ -174,7 +175,7 @@ export const familiesGraph: RouteGraph<FamiliesPage, FamiliesRouteDocument> = {
             !Array.isArray(parameters)
           )
             return `${Object.keys(parameters).join(", ")} · ${names.length} named families`;
-        } catch {
+        } catch (error) { console.warn("ts/apps/web/src/families/graph.ts: fallback after failure", error);
           // Invalid source is still reviewable; the route owns validation.
         }
         return source.path;

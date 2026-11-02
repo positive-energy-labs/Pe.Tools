@@ -559,7 +559,7 @@ export class TakeoffCaptures {
       }
     };
     const pending = (this.familiesSaves.get(key) ?? Promise.resolve())
-      .catch(() => undefined)
+      .catch((error) => { console.error("takeoff-captures: asynchronous operation failed", error); return undefined; })
       .then(save);
     this.familiesSaves.set(key, pending);
     try {

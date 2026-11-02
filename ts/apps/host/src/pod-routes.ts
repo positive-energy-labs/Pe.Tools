@@ -194,7 +194,7 @@ export function createPodRoutes(
         else delete trust[key];
         await writeArtifact(dirname(path), path, JSON.stringify(trust), true);
       });
-      tail = write.catch(() => {});
+      tail = write.catch((error) => { console.error("pod-routes: asynchronous operation failed", error); });
       await write;
       return list();
     },

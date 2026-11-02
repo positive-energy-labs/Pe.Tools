@@ -493,7 +493,7 @@ function parsePersistedTokenRecord(value: string): PersistedTokenRecord | null {
       expiresAtUtc: parsed.expiresAtUtc,
       refreshToken: parsed.refreshToken ?? "",
     };
-  } catch {
+  } catch (error) { console.warn("ts/apps/host/src/aps-auth.ts: fallback after failure", error);
     return null;
   }
 }

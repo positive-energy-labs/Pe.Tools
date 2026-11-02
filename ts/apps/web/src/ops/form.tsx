@@ -20,7 +20,7 @@ export function seedValues(schemaJson: string | undefined, exampleJson: string |
     const parsed: unknown = exampleJson ? JSON.parse(exampleJson) : {};
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
       example = parsed as FormValues;
-  } catch {}
+  } catch (error) { console.error("form: asynchronous operation failed", error); }
   const schema = schemaJson ? parseSchema(schemaJson) : undefined;
   const seeded = schema ? applySchemaDefaultsToValue(schema, example, schema) : example;
   return seeded && typeof seeded === "object" && !Array.isArray(seeded)

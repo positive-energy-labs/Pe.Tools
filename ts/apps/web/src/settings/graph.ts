@@ -100,7 +100,6 @@ export const settingsGraph: RouteGraph<SettingsPage> = {
       load: () => import("./graph-seeds").then((m) => m.settingsSeeds["no-revit"]!),
     },
   },
-  // TODO: K1c must declare the kernel selection within this setting scope.
   subjectField: { field: "section", noun: "setting scope", keyKind: "name", cardinality: "one", roster: "scopes", detail: "machine", pane: "settings", show: (id) => id },
   fields: { selected: { ...manyField("name", {}), role: "selection" },
     section: { ...settingsAddress.fields.section, role: "subject" },

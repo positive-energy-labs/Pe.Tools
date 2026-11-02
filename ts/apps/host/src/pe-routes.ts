@@ -438,7 +438,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
     }
     if (method === "GET" && declared.id === "family.spec") return familySpecAsset(url);
     const parts = url.pathname.split("/").slice(2).map(decodeURIComponent); // drop "", "pe"
-    const body = () => request.json().catch(() => null);
+    const body = () => request.json().catch((error) => { console.error("pe-routes: asynchronous operation failed", error); return null; });
 
     if (method === "GET" && declared.id === "contributions.read") {
       const key = url.searchParams.get("key") ?? "";

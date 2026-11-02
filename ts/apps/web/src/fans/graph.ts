@@ -1,4 +1,4 @@
-// TODO: Re-drive duplicate FC-23 picking in the browser after triage regenerates the builtin directory hash (fixture route currently refuses the stale module hash).
+// TODO: docs/features/routes/LEDGER.md#s7-94e9880f72 Re-drive duplicate FC-23 picking in the browser after triage regenerates the builtin directory hash (fixture route currently refuses the stale module hash).
 import { ductsGraph } from "../ducts/graph";
 import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { z } from "zod";

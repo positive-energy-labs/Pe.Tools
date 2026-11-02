@@ -11,7 +11,7 @@ export function selectedTakeoffPage<P extends { views: Many; zones: Many }>(
 ) {
   if ((page.views === "all" || page.zones === "all") && !roster)
     throw Error("Read the current subject roster before expanding all");
-  // TODO: add native metadata zone enumeration before admitting all zones on a live document.
+  // TODO: docs/features/routes/LEDGER.md#s7-8e539bcbeb add native metadata zone enumeration before admitting all zones on a live document.
   if (page.zones === "all" && roster?.zonesComplete === false)
     throw Error("The native metadata zone roster is unavailable; choose explicit zones");
   return {

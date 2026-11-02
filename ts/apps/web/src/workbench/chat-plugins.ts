@@ -39,7 +39,7 @@ const parsed = (value: unknown): unknown => {
   if (typeof value !== "string") return value;
   try {
     return JSON.parse(value);
-  } catch {
+  } catch (error) { console.warn("ts/apps/web/src/workbench/chat-plugins.ts: fallback after failure", error);
     return undefined;
   }
 };

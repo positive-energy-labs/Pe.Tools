@@ -269,7 +269,7 @@ function openIndex(year: number, opts: LocalDocsOptions = {}): DatabaseSync | nu
         | undefined;
       if (row?.value === wanted) return db;
       db.close();
-    } catch {
+    } catch (error) { console.warn("ts/packages/mcps/src/shared/rvt-api/local-docs.ts: fallback after failure", error);
       // corrupt/old cache falls through to rebuild
     }
     rmSync(dbPath, { force: true });

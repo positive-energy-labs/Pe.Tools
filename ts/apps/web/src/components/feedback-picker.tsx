@@ -98,9 +98,9 @@ export function FeedbackPicker({ hideTrigger = false }: { hideTrigger?: boolean 
           if (attempt === capture.current && element.isConnected)
             setPicked({ element, rect: g.getElementBounds(element), context });
         })
-        .catch(() => {
+        .catch((error) => { console.warn("ts/apps/web/src/components/feedback-picker.tsx: fallback after failure", error);
           /* The regular picker remains available when direct capture fails. */
-        });
+         });
     };
     window.addEventListener(START_FEEDBACK, start);
     return () => {

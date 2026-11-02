@@ -39,7 +39,6 @@ export const ductLossGraph: RouteGraph<DuctLossPage, null> = {
   key: "duct-loss",
   address: "duct-loss",
   name: "Duct Loss",
-  // TODO: K1c must declare the kernel selection within this hypothetical case.
   subjectField: { kind: "singleton", field: "case", noun: "hypothetical duct case", keyKind: "name", cardinality: "one", roster: "case", detail: "result", pane: "inputs", show: (id) => id },
   fields: { selected: { ...manyField("name", {}), role: "selection" },
     case: { ...field(z.enum(["duct"]).default("duct"), {}), role: "subject" },

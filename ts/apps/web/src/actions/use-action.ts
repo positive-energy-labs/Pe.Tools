@@ -43,7 +43,7 @@ export function useAction<I, T>(
   );
   useWork(state.pending, "saving…");
   return {
-    mutate: (input: I) => void mutateAsync(input).catch(() => {}),
+    mutate: (input: I) => void mutateAsync(input).catch((error) => { console.error("use-action: asynchronous operation failed", error); }),
     mutateAsync,
     isPending: state.pending,
     error: state.error,

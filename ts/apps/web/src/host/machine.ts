@@ -37,7 +37,7 @@ async function setShare(
 ): Promise<void> {
   const response = await peClient.response("share.set", { body });
   if (!response.ok && response.status !== 409) {
-    const body = (await response.json().catch(() => null)) as {
+    const body = (await response.json().catch((error) => { console.error("machine: asynchronous operation failed", error); return null; })) as {
       error?: { message: string };
     } | null;
     throw Error(body?.error?.message ?? `share switch refused (${response.status})`);

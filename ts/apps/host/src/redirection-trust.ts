@@ -27,7 +27,7 @@ async function readRedirectionTrust(pid = process.pid): Promise<RedirectionTrust
     );
     const flags = Number.parseInt(stdout.trim(), 10);
     return Number.isNaN(flags) ? null : redirectionTrustOf(flags);
-  } catch {
+  } catch (error) { console.warn("ts/apps/host/src/redirection-trust.ts: fallback after failure", error);
     return null;
   }
 }
@@ -59,7 +59,7 @@ export function relaunchOutOfGuard(o: {
       log("pe-host redirection-guard still enforced after a shell relaunch; continuing guarded");
       return false;
     }
-  } catch {
+  } catch (error) { console.warn("ts/apps/host/src/redirection-trust.ts: fallback after failure", error);
     // No marker: first time.
   }
   try {

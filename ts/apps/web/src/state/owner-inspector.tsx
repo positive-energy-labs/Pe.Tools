@@ -43,7 +43,7 @@ export function OwnerInspector({
                   try {
                     const row = JSON.parse(value.value) as { id?: string; steps?: unknown[] };
                     if (row.id && Array.isArray(row.steps)) cause = `receipt ${row.id}`;
-                  } catch {
+                  } catch (error) { console.warn("ts/apps/web/src/state/owner-inspector.tsx: fallback after failure", error);
                     /* opaque cached output */
                   }
                 }

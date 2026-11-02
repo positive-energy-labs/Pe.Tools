@@ -120,8 +120,7 @@ export const systemsEmpty = (coverage: ProtoProps["coverage"]) =>
     ? { message: `None of ${coverage.of} systems read yet`, exit: "Choose systems in Open systems" }
     : { message: "No duct systems in this scope", exit: "Read a model containing duct systems" };
 
-// TODO: "Read every system" is a compute-all verb ADR 0027 rule 4 deletes; the owning unit removes it.
-/** The scoped read's extent and its one verb: read every system, a few per read, into the panes. */
+/** The scoped read's extent. */
 function ReadCoverage({ coverage }: { coverage: ProtoProps["coverage"] }) {
   const partial = partialWord(coverage);
   if (!coverage || (!partial && !coverage.report)) return null;
@@ -132,20 +131,13 @@ function ReadCoverage({ coverage }: { coverage: ProtoProps["coverage"] }) {
         {coverage.reading.length ? ` · reading ${coverage.reading.join(", ")}…` : ""}
         {coverage.report ? ` · ${coverage.report}` : ""}
       </span>
-      {coverage.readAll ? (
-        <Button
-          label="Read every system, a few systems per read, so the totals cover the document"
-          onClick={coverage.readAll}
-        >
-          Read every system
-        </Button>
-      ) : null}
+
     </p>
   );
 }
 
 /** Keep providers and graph demand mounted while the readings acquire or reprice. */
-// TODO: N6: rebuild only changed pane projections on pricing delivery. The worker removes solve
+// TODO: docs/features/routes/LEDGER.md#s7-95843edcb1 N6: rebuild only changed pane projections on pricing delivery. The worker removes solve
 // and triage CPU, but retained-display and result commits still exceed the interaction budget.
 function LoadedScreenBody({
   props,

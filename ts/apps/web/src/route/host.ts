@@ -65,7 +65,7 @@ export async function postRouteWrite(
           body: peRoutes["work.apply"].body.parse(body),
         })
       : await peClient.response("work.fresh", { ...input, body: {} });
-  const wire = await response.json().catch(() => null);
+  const wire = await response.json().catch((error) => { console.error("host: asynchronous operation failed", error); return null; });
   return { status: response.status, result: response.ok ? wire : (wire?.error?.details ?? null) };
 }
 

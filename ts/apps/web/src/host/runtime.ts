@@ -23,7 +23,7 @@ export async function hostFetch(url: string, init?: RequestInit): Promise<Respon
     const body: unknown = await response
       .clone()
       .json()
-      .catch(() => null);
+      .catch((error) => { console.error("runtime: asynchronous operation failed", error); return null; });
     if (contextRefusal.safeParse(body).success) {
       try {
         const previous = sessionStorage.getItem(contextReloadKey);
@@ -33,7 +33,7 @@ export async function hostFetch(url: string, init?: RequestInit): Promise<Respon
           sessionStorage.setItem(contextReloadKey, String(now));
           window.location.reload();
         }
-      } catch {
+      } catch (error) { console.warn("ts/apps/web/src/host/runtime.ts: fallback after failure", error);
         // Without persistent throttling, leave the refusal for the caller rather than loop.
       }
     }

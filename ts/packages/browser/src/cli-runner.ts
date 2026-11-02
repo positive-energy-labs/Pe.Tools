@@ -150,7 +150,7 @@ export async function runBrowserCli(
             if (!method || event.method === method || event.method.startsWith(method + "."))
               output({ targetId, ...event });
           });
-          if (method) await page.sendRaw(`${method.split(".")[0]}.enable`).catch(() => {});
+          if (method) await page.sendRaw(`${method.split(".")[0]}.enable`).catch((error) => { console.error("cli-runner: asynchronous operation failed", error); });
           await new Promise<void>((done) => {
             const timer = setTimeout(done, durationMs);
             process.once("SIGINT", () => {

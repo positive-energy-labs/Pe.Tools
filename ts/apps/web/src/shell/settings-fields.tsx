@@ -28,7 +28,7 @@ export function GraphSettingsFields({
             says={field.label ?? key}
             checked={state.values[key] === true}
             disabled={state.revision < 0 || state.pending}
-            onCheckedChange={(checked) => void owner.set({ [key]: checked }).catch(() => {})}
+            onCheckedChange={(checked) => void owner.set({ [key]: checked }).catch((error) => { console.error("settings-fields: asynchronous operation failed", error); })}
           />
         ) : (
           <Label key={key}>
@@ -44,14 +44,14 @@ export function GraphSettingsFields({
               onChange={
                 field.control === "color"
                   ? (event) => {
-                      void owner.set({ [key]: event.currentTarget.value }).catch(() => {});
+                      void owner.set({ [key]: event.currentTarget.value }).catch((error) => { console.error("settings-fields: asynchronous operation failed", error); });
                     }
                   : undefined
               }
               onBlur={(event) => {
                 if (field.control === "color") return;
                 const value = field.codec.decode(event.currentTarget.value);
-                if (value !== state.values[key]) void owner.set({ [key]: value }).catch(() => {});
+                if (value !== state.values[key]) void owner.set({ [key]: value }).catch((error) => { console.error("settings-fields: asynchronous operation failed", error); });
               }}
             />
           </Label>

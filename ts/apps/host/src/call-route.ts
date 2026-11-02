@@ -591,8 +591,7 @@ export function makeCallRoute(
             }
             if (id) return Response.jsonUnsafe(await observations().families(id));
             if (!raw) return Response.jsonUnsafe(await observations().familiesReadings());
-            const work = workKeySchema.parse(JSON.parse(raw));
-            if (work.route !== "families") throw Error("Families Work required");
+            const work = workKeySchema.and(z.object({ route: z.literal("families") })).parse(JSON.parse(raw));
             return Response.jsonUnsafe(await observations().displayedFamilies(work));
           }
           if (req.method === "DELETE") {
@@ -621,7 +620,7 @@ export function makeCallRoute(
           if (req.method !== "POST") throw Error("Unsupported Families reading method");
           const body = z
             .strictObject({
-              work: workKeySchema,
+              work: workKeySchema.and(z.object({ route: z.literal("families") })),
               expectedRevision: z.number().int().nonnegative().optional(),
               readId: z.uuid(),
               filter: z.strictObject({
@@ -631,7 +630,6 @@ export function makeCallRoute(
               }),
             })
             .parse(await Effect.runPromise(req.json));
-          if (body.work.route !== "families") throw Error("Families Work required");
           const target = documentRefSchema.parse({
             session: req.headers[HOST_RPC_BRIDGE_SESSION_HEADER],
             openId: req.headers[HOST_RPC_DOCUMENT_HEADER],

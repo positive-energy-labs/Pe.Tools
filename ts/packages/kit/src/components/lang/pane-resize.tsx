@@ -145,7 +145,7 @@ function usePaneSize(spec: PaneSizeSpec & { target: PaneSide }) {
     if (spec.persist && typeof window !== "undefined") {
       try {
         window.localStorage.setItem(spec.persist, String(next));
-      } catch {
+      } catch (error) { console.warn("ts/packages/kit/src/components/lang/pane-resize.tsx: fallback after failure", error);
         // Persistence is best-effort; layout must remain usable when storage is unavailable.
       }
     }

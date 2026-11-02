@@ -4,7 +4,7 @@ import ts from "typescript";
 
 export const root = resolve(import.meta.dirname, "../../../..");
 const read = (p: string) => readFileSync(resolve(root, p), "utf8");
-function files(dir: string): string[] {
+export function files(dir: string): string[] {
   return readdirSync(resolve(root, dir), { withFileTypes: true }).flatMap((e) =>
     e.isDirectory()
       ? ["node_modules", "bin", "obj", ".git"].includes(e.name)
@@ -61,12 +61,23 @@ export function selectionSlots(source: ts.SourceFile): ts.Node[] {
 // this is a migration census, not proof that all transitive read effects are pure.
 
 /** Declaration LOC excludes imports, comments, blanks and function/arrow bodies, but counts
- * their signatures and all object/array declarations. Helper declarations count too: moving a
- * body above the manifest must not hide it. Physical lines with mixed content count once. */
+ * their signatures and object/array declarations in subject, fields, readings, verbs, panes,
+ * and stages. Directory/fixtures are metadata. Physical lines with mixed content count once. */
 export function declarationLines(source: ts.SourceFile): number[] {
   const excluded = new Set<number>();
+  const behavior = new Set<number>();
+  const nouns = new Set(["subjectField", "fields", "readings", "verbs", "panes", "stages"]);
+  walk(source, (n) => {
+    if (!ts.isObjectLiteralExpression(n) || !n.properties.some((p) => prop(p, "key")) || !n.properties.some((p) => prop(p, "readings")) || !n.properties.some((p) => prop(p, "panes"))) return;
+    for (const property of n.properties)
+      if (nouns.has(property.name?.getText(source) ?? ""))
+        for (let i = source.getLineAndCharacterOfPosition(property.getStart(source)).line; i <= source.getLineAndCharacterOfPosition(property.end).line; i++) behavior.add(i);
+  });
   const line = (p: number) => source.getLineAndCharacterOfPosition(p).line;
   walk(source, (n) => {
+    // Directory metadata and fixture seeds do not declare route behavior (ADR 0027).
+    if (ts.isPropertyAssignment(n) && ["directory", "seeds"].includes(n.name.getText(source)))
+      for (let i = line(n.getStart(source)); i <= line(n.end); i++) excluded.add(i);
     if (ts.isImportDeclaration(n))
       for (let i = line(n.getStart(source)); i <= line(n.end); i++) excluded.add(i);
     if (
@@ -76,20 +87,24 @@ export function declarationLines(source: ts.SourceFile): number[] {
         ts.isMethodDeclaration(n)) &&
       n.body
     ) {
-      for (let i = line(n.body.getStart(source)) + 1; i < line(n.body.end); i++) excluded.add(i);
+      // A graph factory's body is the manifest itself, not an implementation callback.
+      let graphFactory = false;
+      walk(n.body, (child) => {
+        if (ts.isObjectLiteralExpression(child) && child.properties.some((p) => prop(p, "readings")) && child.properties.some((p) => prop(p, "panes"))) graphFactory = true;
+      });
+      if (!graphFactory)
+        for (let i = line(n.body.getStart(source)) + 1; i < line(n.body.end); i++) excluded.add(i);
     }
   });
-  const scanner = ts.createScanner(
-    ts.ScriptTarget.Latest,
-    true,
-    ts.LanguageVariant.JSX,
-    source.text,
-  );
   const lines = new Set<number>();
-  while (scanner.scan() !== ts.SyntaxKind.EndOfFileToken) {
-    const l = line(scanner.getTokenPos());
-    if (!excluded.has(l)) lines.add(l + 1);
-  }
+  const tokens = (node: ts.Node) => {
+    const children = node.getChildren(source);
+    if (children.length) { children.forEach(tokens); return; }
+    if (node.kind === ts.SyntaxKind.EndOfFileToken || node.kind === ts.SyntaxKind.SyntaxList) return;
+    const l = line(node.getStart(source));
+    if (!excluded.has(l) && (!behavior.size || behavior.has(l))) lines.add(l + 1);
+  };
+  tokens(source);
   return [...lines].sort((a, b) => a - b);
 }
 export function census() {

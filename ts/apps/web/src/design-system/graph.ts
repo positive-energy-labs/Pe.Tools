@@ -55,7 +55,6 @@ export const designSystemGraph: RouteGraph = {
       tray: false,
     },
   },
-  // TODO: K1c must declare the kernel selection within the design catalogue.
   subjectField: { kind: "singleton", field: "catalog", noun: "design language", keyKind: "name", cardinality: "one", roster: "catalog", detail: "catalog", pane: "main", show: (id) => id },
   fields: { selected: { ...manyField("name", {}), role: "selection" }, catalog: { ...field(z.enum(["builtin"]).default("builtin"), {}), role: "subject" } },
   readings: { catalog: { kind: "derive", source: "catalog", retire: "never" } },

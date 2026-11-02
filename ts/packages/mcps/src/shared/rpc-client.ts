@@ -52,7 +52,7 @@ export const automaticUpdatesRpc = {
       body: JSON.stringify(automaticUpdatesInput.parse(input)),
     });
     if (response.ok) return;
-    const body = (await response.json().catch(() => null)) as { error?: string } | null;
+    const body = (await response.json().catch((error) => { console.error("rpc-client: asynchronous operation failed", error); return null; })) as { error?: string } | null;
     throw Error(body?.error ?? `Switch refused (${response.status}).`);
   },
 } satisfies ReadEntry<typeof automaticUpdatesInput>;

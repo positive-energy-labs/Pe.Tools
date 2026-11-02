@@ -82,7 +82,7 @@ function boundedSession(
         }) ?? null,
     };
     if (new TextEncoder().encode(JSON.stringify(summary)).byteLength <= budget) return summary;
-  } catch {
+  } catch (error) { console.warn("ts/packages/agent-contracts/src/discovery-machine.ts: fallback after failure", error);
     // A bad SDK entry must not take every other session out of discovery.
   }
   const label =

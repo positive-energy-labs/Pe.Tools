@@ -45,7 +45,7 @@ export const grillesFields = {
         decode: (text) => {
           try {
             return JSON.parse(text);
-          } catch {
+          } catch (error) { console.warn("ts/apps/web/src/grilles/page.ts: fallback after failure", error);
             return null;
           }
         },

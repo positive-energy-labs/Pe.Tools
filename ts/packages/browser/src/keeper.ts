@@ -38,7 +38,7 @@ const ignore = (body: () => Promise<unknown>) =>
   Effect.promise(async () => {
     try {
       await body();
-    } catch {}
+    } catch (error) { console.error("keeper: asynchronous operation failed", error); }
   });
 
 export async function runBrowserKeeper(configFile: string): Promise<void> {
@@ -100,7 +100,7 @@ export async function runBrowserKeeper(configFile: string): Promise<void> {
         outcome: "not-sent",
       });
     leases.delete(targetId);
-    await cdp!.sendRaw("Target.detachFromTarget", { sessionId: lease.sessionId }).catch(() => {});
+    await cdp!.sendRaw("Target.detachFromTarget", { sessionId: lease.sessionId }).catch((error) => { console.error("keeper: asynchronous operation failed", error); });
     if (close && lease.created) {
       await cdp!.sendRaw("Target.closeTarget", { targetId });
       created.delete(targetId);
@@ -392,7 +392,7 @@ export async function runBrowserKeeper(configFile: string): Promise<void> {
                 return { targetId };
               } catch (error) {
                 if (own) {
-                  await cdp!.sendRaw("Target.closeTarget", { targetId }).catch(() => {});
+                  await cdp!.sendRaw("Target.closeTarget", { targetId }).catch((error) => { console.error("keeper: asynchronous operation failed", error); });
                   created.delete(targetId);
                   await persistCreated();
                 }
@@ -455,7 +455,7 @@ export async function runBrowserKeeper(configFile: string): Promise<void> {
             if (closing) return;
             void locked(async () => {
               for (const [targetId, lease] of leases)
-                if (lease.socket === socket) await retire(targetId, lease.created).catch(() => {});
+                if (lease.socket === socket) await retire(targetId, lease.created).catch((error) => { console.error("keeper: asynchronous operation failed", error); });
             });
           });
           socket.on("data", (chunk: string) => {

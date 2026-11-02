@@ -32,7 +32,7 @@ function ParametersBody() {
       {store.editFailure && (
         <Button
           label="Retry staging"
-          onClick={() => void store.actions.flush().catch(() => undefined)}
+          onClick={() => void store.actions.flush().catch((error) => { console.error("route: asynchronous operation failed", error); return undefined; })}
         >
           Retry staging
         </Button>

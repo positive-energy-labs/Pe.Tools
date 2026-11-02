@@ -225,8 +225,8 @@ async function acquireClient(
         if (!listeners.has(listener)) continue;
         try {
           // `void` callbacks can still return a rejected Promise at runtime.
-          void Promise.resolve(listener(event)).catch(() => {});
-        } catch {
+          void Promise.resolve(listener(event)).catch((error) => { console.error("cdp: asynchronous operation failed", error); });
+        } catch (error) { console.warn("ts/packages/browser/src/cdp.ts: fallback after failure", error);
           /* A consumer cannot take down another consumer or the receive loop. */
         }
       }

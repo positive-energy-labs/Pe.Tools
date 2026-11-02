@@ -49,7 +49,7 @@ export function fileRouteDocumentStore(dir: string): RouteDocumentStore {
       };
       writeFileSync(`${path}.tmp`, JSON.stringify(converted));
       renameSync(`${path}.tmp`, path);
-    } catch {
+    } catch (error) { console.warn("ts/apps/host/src/route-document-store.ts: fallback after failure", error);
       // Conflicts/unreadable records stay exact and fail the normal schema read; no data is guessed.
     }
   }

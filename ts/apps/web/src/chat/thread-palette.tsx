@@ -588,7 +588,7 @@ function initialShelfState(
     try {
       const saved = localStorage.getItem(`pe.shelf.${shelf}`);
       if (saved !== null) return saved !== "open";
-    } catch {
+    } catch (error) { console.warn("ts/apps/web/src/chat/thread-palette.tsx: fallback after failure", error);
       /* The list still works without storage. */
     }
     return shelf === "snoozed" || shelf === "settled" || shelf === "archived";
@@ -814,7 +814,7 @@ export function ThreadsSidebar({
               `pe.shelf.${shelf}`,
               next.closed.includes(SHELF_WORD[shelf]) ? "closed" : "open",
             );
-          } catch {
+          } catch (error) { console.warn("ts/apps/web/src/chat/thread-palette.tsx: fallback after failure", error);
             /* Collapse is still held in page state. */
           }
         }

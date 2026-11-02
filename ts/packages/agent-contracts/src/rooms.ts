@@ -21,7 +21,7 @@ const addressOf = (key: string): { guid: string; field: RoomEditField } | null =
       JSON.stringify(parts) === key
       ? { guid: parts[0], field: parts[1] as RoomEditField }
       : null;
-  } catch {
+  } catch (error) { console.warn("ts/packages/agent-contracts/src/rooms.ts: fallback after failure", error);
     return null;
   }
 };

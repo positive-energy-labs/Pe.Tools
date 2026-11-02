@@ -48,14 +48,14 @@ const read = (): ThreadTab[] => {
 const save = (tabs: ThreadTab[]) => {
   try {
     sessionStorage.setItem(PLACES, JSON.stringify(tabs));
-  } catch {
+  } catch (error) { console.warn("ts/apps/web/src/workbench/tabs.ts: fallback after failure", error);
     /* This window keeps its mounted Places. */
   }
 };
 const readFocus = () => {
   try {
     return sessionStorage.getItem(FOCUS);
-  } catch {
+  } catch (error) { console.warn("ts/apps/web/src/workbench/tabs.ts: fallback after failure", error);
     return null;
   }
 };
@@ -63,7 +63,7 @@ const focus = (id: string | null) => {
   try {
     if (id) sessionStorage.setItem(FOCUS, id);
     else sessionStorage.removeItem(FOCUS);
-  } catch {
+  } catch (error) { console.warn("ts/apps/web/src/workbench/tabs.ts: fallback after failure", error);
     /* The URL still owns the Place. */
   }
 };

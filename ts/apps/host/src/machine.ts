@@ -51,7 +51,7 @@ export interface MachineShareAdapter {
   read(): Promise<MachineShare>;
   subscribe?(notify: () => void): () => void;
 }
-// TODO: wave 4 replaces this with the owner of the verified Serve mapping.
+// TODO: docs/features/routes/LEDGER.md#s7-a1c2bf4a8e wave 4 replaces this with the owner of the verified Serve mapping.
 export const unavailableShare: MachineShareAdapter = {
   read: async () => ({
     desired: "off",
@@ -571,7 +571,7 @@ export function processCustody(
   if (!machine || !pid) return null;
   const latest = machine.current();
   if (!latest.legs.sessions) {
-    void machine.refresh().catch(() => {});
+    void machine.refresh().catch((error) => { console.error("machine: asynchronous operation failed", error); });
     return null;
   }
   const row = latest.revit.sessions?.find((session) => {
@@ -903,7 +903,7 @@ async function readAutostart(executablePath: string): Promise<MachineHost["autos
     const approval = entry.approved?.[0];
     if (approval === 3 || approval === 7) return "disabled-in-windows";
     return approval === undefined || approval === 2 || approval === 6 ? "on" : null;
-  } catch {
+  } catch (error) { console.warn("ts/apps/host/src/machine.ts: fallback after failure", error);
     return null;
   }
 }

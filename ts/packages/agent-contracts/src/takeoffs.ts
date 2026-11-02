@@ -363,7 +363,7 @@ const tupleOf = (key: string, length: number): string[] | null => {
       tupleKey(parts) === key
       ? parts
       : null;
-  } catch {
+  } catch (error) { console.warn("ts/packages/agent-contracts/src/takeoffs.ts: fallback after failure", error);
     return null;
   }
 };

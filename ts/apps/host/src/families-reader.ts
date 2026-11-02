@@ -168,7 +168,7 @@ export async function readFamiliesProgressively(options: {
       typeof stored.families === "object"
     )
       costs = stored;
-  } catch {
+  } catch (error) { console.warn("ts/apps/host/src/families-reader.ts: fallback after failure", error);
     /* A missing or damaged timing file is a cold estimate, never a read failure. */
   }
   const samples: Sample[] = [];
@@ -374,14 +374,14 @@ export async function readFamiliesProgressively(options: {
     return latest!;
   } finally {
     runs.delete(readId);
-    await folder?.then((dir) => rm(dir, { recursive: true, force: true })).catch(() => {});
+    await folder?.then((dir) => rm(dir, { recursive: true, force: true })).catch((error) => { console.error("families-reader: asynchronous operation failed", error); });
     const temp = `${costsPath}.${randomUUID()}.tmp`;
     try {
       await mkdir(join(captures.directory, "families"), { recursive: true });
       await writeFile(temp, JSON.stringify(costs));
       await rename(temp, costsPath);
     } catch {
-      await rm(temp, { force: true }).catch(() => {});
+      await rm(temp, { force: true }).catch((error) => { console.error("families-reader: asynchronous operation failed", error); });
     }
   }
 }

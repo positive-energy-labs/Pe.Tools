@@ -209,7 +209,7 @@ export function useFamiliesStore(owner: FamiliesMount) {
     retainedError: scope.readings.matrix?.error ?? null,
     archive: {
       list: archive,
-      // TODO: Re-run history selection/reload in fixture browser after catalog registration is repaired.
+      // TODO: docs/features/routes/LEDGER.md#s7-b5f0811256 Re-run history selection/reload in fixture browser after catalog registration is repaired.
       selectedId: page.past || null,
       reading: observation,
       loading:

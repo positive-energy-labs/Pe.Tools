@@ -1,3 +1,4 @@
+// TODO: docs/features/routes/LEDGER.md#s6-declaration-ducts Reduce declaration 296 > 60.
 import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { z } from "zod";
 
@@ -49,7 +50,7 @@ const jsonCodec = {
   decode: (text: string) => {
     try {
       return JSON.parse(text);
-    } catch {
+    } catch (error) { console.warn("ts/apps/web/src/ducts/graph.ts: fallback after failure", error);
       return null;
     }
   },

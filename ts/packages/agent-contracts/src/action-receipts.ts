@@ -89,7 +89,7 @@ export const actionStepSchema = z.discriminatedUnion("state", [
     .strict(),
 ]);
 export type ActionStep = z.infer<typeof actionStepSchema>;
-/** Host-filed receipt checkpoint. TODO: resolve these references in the owed ?at= viewer. */
+/** Host-filed receipt checkpoint. TODO: docs/features/routes/LEDGER.md#s7-b8dae54505 resolve these references in the owed ?at= viewer. */
 export const timelineSnapshotSchema = z.strictObject({
   id: z.string(),
   address: workKeySchema,

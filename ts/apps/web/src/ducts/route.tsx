@@ -201,10 +201,7 @@ function DuctsProvider({
         ? {
             ...coverage,
             reading: read.status === "pending" ? page.system : [],
-            readAll:
-              owner.view.read().page.system === "all" || coverage.read === coverage.of
-                ? null
-                : () => setPage({ system: "all" }),
+
           }
         : null,
   };

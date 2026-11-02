@@ -119,7 +119,7 @@ export function rememberPlace(
         const request = documentRequestSchema.safeParse(JSON.parse(at.carry.target));
         if (request.success)
           ({ context, document } = rememberTarget(context, request.data, undefined, observe));
-      } catch {
+      } catch (error) { console.warn("ts/apps/host/src/thread-work-context.ts: fallback after failure", error);
         // A legacy session shorthand is not enough to invent a document relationship.
       }
     }

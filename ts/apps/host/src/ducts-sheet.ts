@@ -271,7 +271,7 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
   });
   // Results are disposable. The raw owner separately bounds acquisition bytes and invalidates versions.
   const entries = new Map<string, Entry>();
-  // TODO: Trace the FC-23 (13760867) sheet self-fetch termination seen in k2-live-proof.log; raw walk succeeds.
+  // TODO: docs/features/routes/LEDGER.md#s7-09645d33ea Trace the FC-23 (13760867) sheet self-fetch termination seen in k2-live-proof.log; raw walk succeeds.
   async function readNative(
     key: "ducts.snapshot.roster" | "ducts.snapshot.walk" | "ducts.tables",
     request: SnapshotRequest | { ids: string[] },

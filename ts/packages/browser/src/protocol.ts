@@ -121,7 +121,7 @@ export async function getBrowserEndpoint(endpoint: Endpoint): Promise<string> {
         /^\/devtools\/browser\/[^/]+$/.test(url.pathname)
       )
         return url.href;
-    } catch {
+    } catch (error) { console.warn("ts/packages/browser/src/protocol.ts: fallback after failure", error);
       /* The response, rather than the caller's endpoint, was malformed. */
     }
   }

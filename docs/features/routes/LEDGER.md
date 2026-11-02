@@ -60,4 +60,53 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 - Family History: `family.capture` receipts carry only the lifetime ref (`executionContext`), not the document Address; the host stamps the Address first, then a History Reading and a read-only member draw in `FamilyWorkspace`. Families pivot: a locate the query hides says nothing; give it the kit `onActiveHidden` refusal Schedules uses. Needs kaitpw: hide the ordinary Families capture verb until capture moves to parameter metadata (`families.capture` in `families/graph.ts`).
 - Review route orientation prose, pane guidance and tutorial geometry with kaitpw; ADR 0027 makes the subject first-class in the tutorial.
 
+- <a id="s7-b8dae54505"></a> `ts/packages/agent-contracts/src/action-receipts.ts`: resolve these references in the owed ?at= viewer.
+- <a id="s7-dd18c610fe"></a> `ts/packages/agent-contracts/src/route-graph.ts`: Supply genuine roster/detail bindings in graphs still missing subjectField; admission stays closed.
+- <a id="s7-d234a3544a"></a> `ts/packages/agent-contracts/src/route-graph.ts`: Consolidate remaining Page selection fields instead of relabeling competing copies.
+- <a id="s7-2f8fa50d55"></a> `ts/packages/agent-contracts/src/ducts-sheet.ts`: G1 render authored Work values separately; badge source from this reading (Work/model/firm/default).
+- <a id="s7-2335ee600e"></a> `ts/apps/web/src/rooms/route.tsx`: Re-run list ? picture/card ? reload in fixture=plan after the shared catalog import cycle and directory hashes are repaired.
+- <a id="s7-0892eb207a"></a> `ts/apps/web/src/rooms/graph.ts`: Migrate layers and selected sets to kernel manyField; preserve K1c selection ownership.
+- <a id="s7-1319af9e7a"></a> `ts/apps/web/src/rooms/graph.ts`: shell/verbs needs admitted command-result Work patches to clear only the cells written.
+- <a id="s7-76a2681e4b"></a> `ts/packages/ducts-domain/src/loss-grid.ts`: compare this interpolation policy with licensed DFDB at interior low-flow points;
+- <a id="s7-6f559ec645"></a> `ts/packages/mcps/src/pea/capability-tools.ts`: with no Target, a row that needs a document is absent from the catalog and refuses as
+- <a id="s7-eaaaf0f792"></a> `ts/packages/mcps/src/pea/capability-tools.ts`: a temporary document needs an owner that releases it when the harness turn ends.
+- <a id="s7-500118f3a3"></a> `ts/apps/web/src/readings.ts`: Fold cursor-resuming thread tails into this transport with the composer owner; they still use a separate SSE.
+- <a id="s7-8c7d3a6f01"></a> `ts/apps/web/src/readings.ts`: Repeat the 33-second hide/return proof in a native visible browser; T3 preview pins visibilityState.
+- <a id="s7-8e539bcbeb"></a> `ts/apps/web/src/takeoff/subject.ts`: add native metadata zone enumeration before admitting all zones on a live document.
+- <a id="s7-e8f071edc9"></a> `ts/apps/web/src/takeoff/graph.ts`: native metadata zone roster is missing; saved captures supply zone choices.
+- <a id="s7-29e50b64c1"></a> `ts/apps/web/src/space/graph.ts`: Migrate capture inputs, visibility sets and layers off hand array codecs; preserve region subject.
+- <a id="s7-dc2b076f89"></a> `ts/apps/web/src/space/facts.tsx`: render through the kit Subject text once it lands, so the name also footnotes the picture.
+- <a id="s7-fd4c79938c"></a> `ts/apps/web/src/shell/use-work-scope.ts`: prove on a live host that a Pea ducts preview receipt consumes this Work (receiptsForWork)
+- <a id="s7-a91a2429a1"></a> `ts/apps/web/src/shell/situation-band.tsx`: H2 — Reject is proven rendered and inert on the fixture lane only; press it against a live
+- <a id="s7-94e9880f72"></a> `ts/apps/web/src/fans/graph.ts`: Re-drive duplicate FC-23 picking in the browser after triage regenerates the builtin directory hash (fixture route currently refuses the stale module hash).
+- <a id="s7-5d8183e3b5"></a> `ts/apps/web/src/shell/fixture-examples.ts`: Link response examples to catalog entries when OpAttribute.Example supports responses.
+- <a id="s7-1cd8580b01"></a> `ts/apps/host/src/takeoff-actions.ts`: rooms.write native receipts report only a count; retain edits until receipts identify confirmed guid/field cells.
+- <a id="s7-a1c2bf4a8e"></a> `ts/apps/host/src/machine.ts`: wave 4 replaces this with the owner of the verified Serve mapping.
+- <a id="s7-025b81c8e4"></a> `ts/apps/web/src/family/workspace-table.tsx`: Keep the directional caution gradient until data-tone wash can express it.
+- <a id="s7-bb8eb3a470"></a> `ts/apps/web/src/family/workspace-table.tsx`: Keep on-select until the selection state selector also propagates --pe-on.
+- <a id="s7-a6dd76f300"></a> `ts/apps/web/src/family/workspace-identity-columns.tsx`: a FAMILY-LEVEL suggestion has no value cell of its own — the family-value
+- <a id="s7-fd9848fdb0"></a> `ts/apps/web/src/family/graph.ts`: Migrate ordered sort state and hidden-column sets off hand array codecs; K1c consolidates drill/inspector.
+- <a id="s7-09645d33ea"></a> `ts/apps/host/src/ducts-sheet.ts`: Trace the FC-23 (13760867) sheet self-fetch termination seen in k2-live-proof.log; raw walk succeeds.
+- <a id="s7-d090a2a7d4"></a> `ts/apps/host/src/control.ts`: User ruling 2026-10-29: Pea ReadOnly scripts must run without
+- <a id="s7-f63daadbf0"></a> `ts/apps/web/src/ducts/seeds.ts`: Add mesh-backed fixture evidence for combined multi-fan geometry; this seed proves UI state only.
+- <a id="s7-e23183a490"></a> `ts/apps/web/src/families/graph.ts`: Migrate ordered sort state and hidden-column sets off hand array codecs; K1c consolidates lines/past.
+- <a id="s7-fdab11d1af"></a> `ts/apps/web/src/ducts/actions.ts`: FD1 live re-drive /fans preview on Chadds; retained-payload proof does not certify native writes.
+- <a id="s7-b5f0811256"></a> `ts/apps/web/src/families/store.ts`: Re-run history selection/reload in fixture browser after catalog registration is repaired.
+- <a id="s7-21d900b52e"></a> `ts/apps/web/src/route/pod-view.tsx`: Prove native Pod preview/apply/readback on a controlled Revit session; fixture Work is local and native commands intentionally stay refused.
+- <a id="s7-f641824eaf"></a> `ts/apps/web/src/scene/grounds.ts`: Filter capture by stable category IDs; these controls filter drawn context and stubs (never subjects).
+- <a id="s7-95843edcb1"></a> `ts/apps/web/src/ducts/proto/e/screen.tsx`: N6: rebuild only changed pane projections on pricing delivery. The worker removes solve
+- <a id="s6-declaration-chat"></a> chat declaration 97 > 60. Reduce behavior in `ts/apps/web/src/chat/graph.ts` without moving declarations to evade the cap.
+- <a id="s6-declaration-data-tables"></a> data-tables declaration 78 > 60. Reduce behavior in `ts/apps/web/src/data-tables/graph.ts` without moving declarations to evade the cap.
+- <a id="s6-declaration-ducts"></a> ducts declaration 296 > 60. Reduce behavior in `ts/apps/web/src/ducts/graph.ts` without moving declarations to evade the cap.
+- <a id="s6-declaration-families"></a> families declaration 210 > 60. Reduce behavior in `ts/apps/web/src/families/graph.ts` without moving declarations to evade the cap.
+- <a id="s6-declaration-family"></a> family declaration 227 > 60. Reduce behavior in `ts/apps/web/src/family/graph.ts` without moving declarations to evade the cap.
+- <a id="s6-declaration-open"></a> open declaration 125 > 60. Reduce behavior in `ts/apps/web/src/open/graph.ts` without moving declarations to evade the cap.
+- <a id="s6-declaration-ops"></a> ops declaration 84 > 60. Reduce behavior in `ts/apps/web/src/ops/graph.ts` without moving declarations to evade the cap.
+- <a id="s6-declaration-parameter-links"></a> parameter-links declaration 93 > 60. Reduce behavior in `ts/apps/web/src/parameter-links/graph.ts` without moving declarations to evade the cap.
+- <a id="s6-declaration-rooms"></a> rooms declaration 181 > 60. Reduce behavior in `ts/apps/web/src/rooms/graph.ts` without moving declarations to evade the cap.
+- <a id="s6-declaration-schedules"></a> schedules declaration 175 > 60. Reduce behavior in `ts/apps/web/src/schedules/graph.ts` without moving declarations to evade the cap.
+- <a id="s6-declaration-space"></a> space declaration 71 > 60. Reduce behavior in `ts/apps/web/src/space/graph.ts` without moving declarations to evade the cap.
+- <a id="s6-declaration-takeoff"></a> takeoff declaration 138 > 60. Reduce behavior in `ts/apps/web/src/takeoff/graph.ts` without moving declarations to evade the cap.
+
 - <a id="s5-durable-journal"></a> S5: prove a completed Pea invocation, consent outcome, and grouped human Work step remain visible after full host restart and browser reload. Deterministic restart and cross-tab journal tests pass; no Revit session or browser restart was driven for S5.
+- <a id="s3-native-seal"></a> S3: prove preview/refetch/apply in browser against a controlled Revit session, including unchanged acquisition and changed model facts. Catalog-wide deterministic properties pass; no Revit session was authorized for S3.

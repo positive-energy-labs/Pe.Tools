@@ -37,7 +37,7 @@ const READING_DEADLINE_MS = 30_000;
 const RETRY_CEILING_MS = 30_000;
 
 /** The one place the web opens an SSE stream: Readings, and a harness thread's tail. */
-// TODO: Fold cursor-resuming thread tails into this transport with the composer owner; they still use a separate SSE.
+// TODO: docs/features/routes/LEDGER.md#s7-500118f3a3 Fold cursor-resuming thread tails into this transport with the composer owner; they still use a separate SSE.
 export const openEventSource = (url: string) => new EventSource(runtimeStreamUrl(url));
 
 /** One browser connection. This map owns subscriptions and retained evidence, never owner truth. */
@@ -173,7 +173,7 @@ export class PeReadings {
 
   private watchWake() {
     if (this.unwatchWake || typeof document === "undefined") return;
-    // TODO: Repeat the 33-second hide/return proof in a native visible browser; T3 preview pins visibilityState.
+    // TODO: docs/features/routes/LEDGER.md#s7-8c7d3a6f01 Repeat the 33-second hide/return proof in a native visible browser; T3 preview pins visibilityState.
     // Visibility is not a change of basis. The live stream keeps delivering while hidden.
     const online = () => {
       if (this.faulted) this.resync();

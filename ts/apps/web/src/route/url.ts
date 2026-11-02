@@ -274,7 +274,7 @@ export function tabPageSearch(pathname: string): Record<string, unknown> | undef
     return tab
       ? Object.fromEntries(new URL(tab.link, "http://tab.invalid").searchParams)
       : undefined;
-  } catch {
+  } catch (error) { console.warn("ts/apps/web/src/route/url.ts: fallback after failure", error);
     return undefined;
   }
 }

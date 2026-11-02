@@ -813,7 +813,7 @@ export function contentHash(value: unknown): string | undefined {
   let text: string;
   try {
     text = canonicalRouteInput(value);
-  } catch {
+  } catch (error) { console.warn("ts/apps/web/src/shell/readings.ts: fallback after failure", error);
     return undefined;
   }
   let h1 = 0xdeadbeef;

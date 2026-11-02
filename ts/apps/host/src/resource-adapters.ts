@@ -190,7 +190,7 @@ export function hostResourceObserver(
               },
               signal: controller.signal,
             });
-            const value: unknown = await response.json().catch(() => null);
+            const value: unknown = await response.json().catch((error) => { console.error("resource-adapters: asynchronous operation failed", error); return null; });
             if (!response.ok)
               throw Error(
                 (value as { error?: string } | null)?.error ??
