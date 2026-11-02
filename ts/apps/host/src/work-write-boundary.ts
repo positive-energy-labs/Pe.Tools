@@ -18,7 +18,6 @@ const hash = (value: unknown) =>
 // Dependency and path collections are sets; request arrays retain their semantic order.
 const canonicalSet = <T>(values: readonly T[]): T[] =>
   [...new Set(values.map(canonicalRouteInput))].sort().map((value) => JSON.parse(value));
-// TODO: Capture both seals on u2-r2 to identify the historical 6cab7319 mismatch; live apply/readback remains unproven.
 export function writeSeal(
   request: unknown,
   input: unknown,

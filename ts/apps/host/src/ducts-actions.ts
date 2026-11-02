@@ -28,6 +28,30 @@ const targetOf = (ctx: CommandContext) => {
 };
 type Kind = "losses" | "heal" | "assign-fan";
 
+const evidenceSet = <T>(items: readonly T[]): T[] =>
+  [...items].sort((a, b) => canonicalRouteInput(a).localeCompare(canonicalRouteInput(b)));
+export const ductWriteEvidence = (snapshot: DuctSnapshot) => ({
+  ...snapshot,
+  nodes: evidenceSet(
+    snapshot.nodes.map((node) => ({ ...node, connectors: evidenceSet(node.connectors) })),
+  ),
+  segments: evidenceSet(
+    snapshot.segments.map((segment) => ({
+      ...segment,
+      connectors: evidenceSet(segment.connectors),
+    })),
+  ),
+  issues: evidenceSet(
+    snapshot.issues.map((issue) => ({
+      ...issue,
+      ...(issue.near ? { near: { ...issue.near, ports: evidenceSet(issue.near.ports) } } : {}),
+    })),
+  ),
+  document: { ...snapshot.document, readAt: "", elapsedMs: 0 },
+  // Acquisition duration is not a model input, including the connector walk's own clock.
+  ...(snapshot.walk ? { walk: { ...snapshot.walk, elapsedMs: 0 } } : {}),
+});
+
 /** Resolve group seeds through metadata, then read only their systems' complete geometry. */
 export async function healSnapshot(
   groups: readonly string[],
@@ -56,8 +80,11 @@ export async function lossSnapshot(
   intent: { walk?: { unitId: number; portIndex: number }; groups?: string[] } | undefined,
   read: (selector: Record<string, unknown>) => Promise<DuctSnapshot>,
 ): Promise<DuctSnapshot> {
-  const snapshot = await (intent?.walk ? read({ kind: "from", ...intent.walk }) : healSnapshot(intent?.groups ?? [], read));
-  if (snapshot.walk?.truncated) throw refused("The fan walk is truncated; no writes can be previewed from this scope");
+  const snapshot = await (intent?.walk
+    ? read({ kind: "from", ...intent.walk })
+    : healSnapshot(intent?.groups ?? [], read));
+  if (snapshot.walk?.truncated)
+    throw refused("The fan walk is truncated; no writes can be previewed from this scope");
   return snapshot;
 }
 
@@ -148,10 +175,7 @@ export function ductsExecutors(
             : kind === "losses"
               ? await lossSnapshot(intent, read)
               : await healSnapshot(intent?.groups ?? [], read);
-        const evidence = {
-          ...snapshot,
-          document: { ...snapshot.document, readAt: "", elapsedMs: 0 },
-        };
+        const evidence = ductWriteEvidence(snapshot);
         let input: Record<string, unknown>,
           dependencies: unknown = evidence;
         if (kind === "losses") {

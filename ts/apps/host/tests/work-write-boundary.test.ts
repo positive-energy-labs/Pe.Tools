@@ -54,18 +54,22 @@ async function fixture() {
   } as unknown as RevitBridge["Service"];
   const receipts: ActionReceipt[] = [];
   let request = "one";
+  let evidence: unknown = { model: 1 };
   const run = vi.fn(async () => ({ applied: true }));
   const executor = workWriteBoundary(
     {
       definition: commands["schedule.apply"],
-      prepared: z.object({ request: z.string() }),
+      prepared: z.object({ request: z.string(), dependencies: z.unknown() }),
       bind: async (ctx) => {
         expect(ctx.admission.input.source).toEqual({
           pod: "p",
           path: "s.json",
           sha256: "a".repeat(64),
         });
-        return { effects: [{ kind: "document", ref }], prepare: async () => ({ request }) };
+        return {
+          effects: [{ kind: "document", ref }],
+          prepare: async () => ({ request, dependencies: evidence }),
+        };
       },
       run,
     },
@@ -98,6 +102,9 @@ async function fixture() {
     executor,
     run,
     receipts,
+    evidence: (value: unknown) => {
+      evidence = value;
+    },
     change: () => {
       request = "changed";
     },
@@ -128,6 +135,29 @@ test("preview exposes a derived request without running the write; changed deriv
   f.change();
   await expect(apply.prepare!()).rejects.toThrow("Preview changed");
   expect(f.run).not.toHaveBeenCalled();
+});
+
+test("re-derived identical inputs apply; a changed dependency refuses before execution", async () => {
+  const f = await fixture();
+  const bound = await f.executor.bind(f.ctx);
+  const preview = await f.executor.run(f.ctx, {
+    prepared: await bound.prepare!(),
+  } as ActionExecution);
+  f.receipts.push({
+    id: "preview",
+    key: "schedule.apply",
+    target: f.ctx.admission.target,
+    state: "succeeded",
+    result: preview,
+  } as ActionReceipt);
+  f.ctx.admission.input.previewOnly = false;
+  f.evidence({ model: 1 });
+  const apply = await f.executor.bind(f.ctx);
+  await f.executor.run(f.ctx, { prepared: await apply.prepare!() } as ActionExecution);
+  expect(f.run).toHaveBeenCalledTimes(1);
+  f.evidence({ model: 2 });
+  await expect(apply.prepare!()).rejects.toThrow("Preview changed");
+  expect(f.run).toHaveBeenCalledTimes(1);
 });
 
 test("missing preview and foreign Work refuse before native execution", async () => {
