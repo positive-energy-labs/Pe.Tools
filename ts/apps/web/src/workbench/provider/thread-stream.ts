@@ -1,8 +1,8 @@
 import { peReadings, type Liveness } from "#/readings";
 import type { HarnessEvent } from "@pe/agent-contracts";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
-import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
-import * as Atom from "effect/unstable/reactivity/Atom";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
+import * as Atom from "effect/reactivity/Atom";
 import { Cause, Effect } from "effect";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { emptyChatState, type ChatState, type ThreadBody } from "@pe/agent-contracts/chat-state";

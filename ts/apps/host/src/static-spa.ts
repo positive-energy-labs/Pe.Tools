@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Layer } from "effect";
-import { HttpStaticServer } from "effect/unstable/http";
+import { HttpStaticServer } from "effect/http";
 import { hostOwnership } from "./host-ownership.ts";
 
 /**

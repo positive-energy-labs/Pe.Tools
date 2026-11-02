@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { HttpEffect, HttpRouter } from "effect/unstable/http";
+import { HttpEffect, HttpRouter } from "effect/http";
 import { peRoutes, servePeRoute } from "@pe/agent-contracts/pe-api";
 import { invocationContext } from "@pe/runtime/context";
 import { DEVICE_COOKIE, type Devices } from "./remote-device.ts";

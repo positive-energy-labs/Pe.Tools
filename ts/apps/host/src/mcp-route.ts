@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Effect } from "effect";
-import { HttpEffect, HttpRouter } from "effect/unstable/http";
+import { HttpEffect, HttpRouter } from "effect/http";
 import { createPeaMcpServer, WebStandardStreamableHTTPServerTransport } from "@pe/mcps/server";
 import { invocationContext, type InvocationContext } from "@pe/runtime/context";
 import { HOST_CONTEXT_HEADER } from "@pe/host-contracts/contracts";

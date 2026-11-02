@@ -1,6 +1,6 @@
 import { createContext, useContext, type ReactNode } from "react";
-import * as Atom from "effect/unstable/reactivity/Atom";
-import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
+import * as Atom from "effect/reactivity/Atom";
+import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { createRouteOwner, useRouteOwner } from "#/shell/owner";
 import type { LensScrollIntent } from "./model";
 

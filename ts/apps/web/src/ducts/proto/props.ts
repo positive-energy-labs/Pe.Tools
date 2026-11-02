@@ -1,4 +1,4 @@
-import type * as Atom from "effect/unstable/reactivity/Atom";
+import type * as Atom from "effect/reactivity/Atom";
 import type { SubjectKey } from "@pe/kit/lang/attention";
 /** The one props object `route.tsx` hands the shell: the reads, the page, the Work and the selection callbacks. */
 import type { DuctClaim, DuctsRouteDocument, OrbitViewport } from "@pe/agent-contracts";

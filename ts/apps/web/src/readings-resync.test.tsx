@@ -5,7 +5,7 @@
  * fresh frame clears the mark. Real frames over stand-in transports; no module is mocked.
  */
 import { act, cleanup, render } from "@testing-library/react";
-import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import {
   actionReceiptSchema,

@@ -21,7 +21,7 @@
     "@agentclientprotocol/claude-agent-acp": "catalog:",
     "@agentclientprotocol/codex-acp": "catalog:",
     "@agentclientprotocol/sdk": "catalog:",
-    "@effect/platform-node": "4.0.0-beta.92",
+    "@effect/platform-node": "4.0.2",
     "@pe/agent-contracts": "workspace:*",
     "@pe/browser": "workspace:*",
     "@pe/ducts-domain": "workspace:*",
@@ -30,7 +30,7 @@
     "@pe/runtime": "workspace:*",
     "@posthog/mcp": "0.22.3",
     "ajv": "catalog:",
-    "effect": "4.0.0-beta.92",
+    "effect": "4.0.2",
     "parse5": "^8.0.1",
     "posthog-node": "5.55.2",
     "zod": "catalog:"

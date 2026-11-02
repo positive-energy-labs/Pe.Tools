@@ -1,5 +1,5 @@
 /** Canonical Work documents: one atom family for every spelling of a Work key. */
-import * as Atom from "effect/unstable/reactivity/Atom";
+import * as Atom from "effect/reactivity/Atom";
 import { Equal, Hash, Option } from "effect";
 import {
   parseRouteDoc,

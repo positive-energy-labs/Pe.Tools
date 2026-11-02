@@ -1,7 +1,7 @@
 import { NodeHttpServer } from "@effect/platform-node";
 import { HOST_CONTEXT_HEADER } from "@pe/host-contracts/contracts";
 import { Deferred,Effect,Layer } from "effect";
-import { HttpEffect,HttpRouter } from "effect/unstable/http";
+import { HttpEffect,HttpRouter } from "effect/http";
 import { randomUUID } from "node:crypto";
 import { mkdtempSync,readFileSync,rmSync } from "node:fs";
 import { createServer } from "node:http";

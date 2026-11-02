@@ -6,7 +6,7 @@
  * sheet ever mounts its picture without them again (the 2026-10-28 defect).
  */
 import { createElement, type ComponentProps } from "react";
-import * as Atom from "effect/unstable/reactivity/Atom";
+import * as Atom from "effect/reactivity/Atom";
 import { RegistryContext } from "@effect/atom-react";
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vite-plus/test";

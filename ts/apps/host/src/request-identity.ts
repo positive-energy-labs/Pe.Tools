@@ -1,5 +1,5 @@
 import { Deferred, Effect, Option } from "effect";
-import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
+import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import {
   BRIDGE_PATH,
   HOST_CONTEXT_HEADER,

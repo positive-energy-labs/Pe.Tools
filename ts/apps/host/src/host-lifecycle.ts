@@ -6,7 +6,7 @@ import { createServer } from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
 import { promisify } from "node:util";
 import { Context, Deferred, Effect, Layer } from "effect";
-import { HttpRouter, HttpServer, HttpServerResponse as Response } from "effect/unstable/http";
+import { HttpRouter, HttpServer, HttpServerResponse as Response } from "effect/http";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import {
   discoverService,
@@ -314,7 +314,7 @@ export const ServiceFileLive = Layer.effectDiscard(
     const server = yield* HttpServer.HttpServer;
     const { handle: handleDeferred, startTray } = yield* HostLifecycle;
     const address = server.address;
-    const port = address._tag === "TcpAddress" ? address.port : 0;
+    const port = address._tag === "UnixPathAddress" ? 0 : address.port;
     const appBase = productRoot();
     // Both variables describe a host that is RUNNING — a spawned child reads them to call back
     // into this process. They become lies the moment the claim releases, so they are scoped to it

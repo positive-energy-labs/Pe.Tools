@@ -8,7 +8,7 @@ import {
   type SdkReading,
   type Machine,
 } from "@pe/agent-contracts";
-import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
+import { HttpRouter, HttpServerResponse as Response } from "effect/http";
 import { join } from "node:path";
 import {
   docListArgv,

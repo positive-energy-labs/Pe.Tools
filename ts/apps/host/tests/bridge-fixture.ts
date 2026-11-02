@@ -1,5 +1,5 @@
 import { Effect, Queue } from "effect";
-import { type HttpServerRequest } from "effect/unstable/http";
+import { type HttpServerRequest } from "effect/http";
 import { BRIDGE_CONTRACT_VERSION, type BridgeFrame } from "@pe/host-contracts/contracts";
 import { RevitBridge } from "../src/bridge.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
@@ -12,11 +12,12 @@ export const connectTestBridge = (processId = 42, ownership: Record<string, unkn
     // invokeSession, BridgeError and operation-owner classification are production code.
     const req = {
       upgrade: Effect.succeed({
-        writer: Effect.succeed((raw: string) =>
-          Queue.offer(outgoing, JSON.parse(raw)).pipe(Effect.asVoid),
-        ),
-        runString: (handle: (raw: string) => Effect.Effect<unknown>) =>
-          Effect.forever(Queue.take(incoming).pipe(Effect.flatMap(handle))),
+        writer: Effect.succeed({
+          write: (raw: string) => Queue.offer(outgoing, JSON.parse(raw)).pipe(Effect.asVoid),
+        }),
+        reader: Effect.succeed({
+          pull: Queue.take(incoming).pipe(Effect.map((raw) => [raw] as const)),
+        }),
       }),
     } as unknown as HttpServerRequest.HttpServerRequest;
     const connection = yield* Effect.forkScoped(bridge.handleConnection(req));

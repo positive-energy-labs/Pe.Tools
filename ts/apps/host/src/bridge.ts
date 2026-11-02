@@ -4,8 +4,9 @@ import { catalogCommandContext } from "./catalog-command-context.ts";
 import type { DispatchRefusal } from "./action-dispatch.ts";
 import { StepFailure } from "./command-executor.ts";
 import { Context, Deferred, Effect, Layer, PubSub, Ref, Schema } from "effect";
-import type { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
-import { HttpServerResponse as Response } from "effect/unstable/http";
+import type { HttpServerRequest, HttpServerResponse } from "effect/http";
+import { Socket } from "effect/socket";
+import { HttpServerResponse as Response } from "effect/http";
 import {
   bridgeDispatchRefusal,
   bridgeValidateDispatch,
@@ -413,7 +414,7 @@ export const RevitBridgeLive = Layer.effect(
       const socket = yield* Effect.orDie(req.upgrade);
       const write = yield* socket.writer;
       const send = (frame: BridgeFrame) =>
-        Effect.flatMap(Effect.orDie(encodeFrame(frame)), (encoded) => Effect.orDie(write(encoded)));
+        Effect.flatMap(Effect.orDie(encodeFrame(frame)), (encoded) => Effect.orDie(write.write(encoded)));
       let session: Session | null = null;
 
       const onFrame = Effect.fnUntraced(function* (raw: string) {
@@ -565,7 +566,12 @@ export const RevitBridgeLive = Layer.effect(
         }
       });
 
-      yield* socket.runString(onFrame).pipe(
+      // 4.0.2 has no Socket.runString: pull string batches and run each frame in order.
+      yield* Effect.flatMap(Socket.readerString(socket), (pullFrames) =>
+        Effect.forever(
+          Effect.flatMap(pullFrames, (frames) => Effect.forEach(frames, onFrame, { discard: true })),
+        ),
+      ).pipe(
         Effect.ensuring(Effect.suspend(() => (session ? cleanupSession(session) : Effect.void))),
         Effect.ignore({ log: true }), // log socket closes
       );

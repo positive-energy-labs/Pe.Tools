@@ -7,7 +7,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Layer } from "effect";
-import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
+import { HttpRouter, HttpServerResponse } from "effect/http";
 import { afterEach, expect, test } from "vite-plus/test";
 import { captureListSchema } from "@pe/agent-contracts";
 import { RevitBridge } from "../src/bridge.ts";

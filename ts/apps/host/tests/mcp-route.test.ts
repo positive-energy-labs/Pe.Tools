@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { PostHog } from "posthog-node";
 import { ActionJournal } from "../src/action-journal.ts";
 import { createReceiptExport, type ReceiptExport } from "../src/receipt-export.ts";
-import { HttpRouter } from "effect/unstable/http";
+import { HttpRouter } from "effect/http";
 import { buildCapabilities } from "@pe/mcps";
 import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
 import type { InvocationContext } from "@pe/runtime/context";

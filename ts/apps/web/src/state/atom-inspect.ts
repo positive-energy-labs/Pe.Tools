@@ -1,5 +1,5 @@
-import type * as Atom from "effect/unstable/reactivity/Atom";
-import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
+import type * as Atom from "effect/reactivity/Atom";
+import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 
 export type OwnerReferences = Partial<
   Record<"work" | "readings" | "operations" | "page", Readonly<Record<string, Atom.Atom<unknown>>>>
@@ -68,7 +68,7 @@ function createInspector(registry: AtomRegistry.AtomRegistry) {
       return {
         census: {
           nodes: live.length,
-          edges: live.reduce((n, node) => n + node.parents.length, 0),
+          edges: live.reduce((n, node) => n + node.parents.size, 0),
           subscribed: live.filter((node) => node.listeners.size > 0).length,
         },
         nodes: live.map((node) => ({
@@ -76,8 +76,8 @@ function createInspector(registry: AtomRegistry.AtomRegistry) {
           label: node.atom.label?.[0] ?? "unlabelled",
           source: node.atom.label?.[1] ?? null,
           ...cached(node.atom),
-          parents: node.parents.map((parent) => idOf(parent.atom)),
-          children: node.children.map((child) => idOf(child.atom)),
+          parents: [...node.parents].map((parent) => idOf(parent.atom)),
+          children: [...node.children].map((child) => idOf(child.atom)),
         })),
         owners: [...owners].map(([id, owner]) => ({
           id,

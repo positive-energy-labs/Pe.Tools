@@ -1,7 +1,7 @@
 import type { ChatPluginRoute } from "./chat-plugins";
 import type { PaneSide } from "@pe/kit/lang/pane";
-import * as Atom from "effect/unstable/reactivity/Atom";
-import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
+import * as Atom from "effect/reactivity/Atom";
+import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 
 import { createRouteOwner } from "#/shell/owner";
 import type { ClosedWork, Resumed } from "#/chat/thread-work";

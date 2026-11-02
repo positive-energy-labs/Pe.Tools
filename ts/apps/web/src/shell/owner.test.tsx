@@ -3,7 +3,7 @@
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { Activity, StrictMode } from "react";
-import * as Atom from "effect/unstable/reactivity/Atom";
+import * as Atom from "effect/reactivity/Atom";
 import { makeAtomRegistry, useOwned, useRouteOwner } from "#/shell/owner";
 import { RouteActivity, type RouteActivityScope } from "../route/activity";
 

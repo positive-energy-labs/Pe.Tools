@@ -1,6 +1,6 @@
 import { useAtomSuspense } from "@effect/atom-react";
-import type * as Atom from "effect/unstable/reactivity/Atom";
-import type * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
+import type * as Atom from "effect/reactivity/Atom";
+import type * as AsyncResult from "effect/reactivity/AsyncResult";
 import type { ChatState, ThreadBody } from "@pe/agent-contracts/chat-state";
 import { Lens } from "./view";
 

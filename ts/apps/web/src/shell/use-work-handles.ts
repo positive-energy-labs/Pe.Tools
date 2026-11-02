@@ -1,4 +1,4 @@
-import * as Atom from "effect/unstable/reactivity/Atom";
+import * as Atom from "effect/reactivity/Atom";
 import { useEffect, useMemo, useReducer } from "react";
 import { type RouteGraph, type RouteStatePatch, type WorkKey } from "@pe/agent-contracts";
 import { dirty } from "#/readings";
