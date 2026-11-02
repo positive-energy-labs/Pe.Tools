@@ -81,7 +81,6 @@ export function ductsExecutors(
   const bind = async (ctx: CommandContext, kind: Kind, previewOnly: boolean) => {
     const target = targetOf(ctx);
     const raw = ctx.admission.input.work as import("@pe/agent-contracts").WorkHandle;
-    const key = raw.key;
     const { process } = await lifetime(bridge, target, "project", deps);
     const doc = await ctx.selectWork(tools.ducts.work, raw, (_doc, cells) => ({
       edits: tools.ducts.work.editable,
