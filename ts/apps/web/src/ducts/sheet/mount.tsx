@@ -9,7 +9,7 @@ import { useRevitSubjectProps } from "#/revit/element-menu";
 import { DuctsOwner } from "../pane-context";
 import type { ProtoProps } from "../proto/props";
 import { subjectNamer } from "../subject-text";
-import { rosterOrder, stableFanKey } from "./model";
+import { rosterOrder, stableFanKey, withComputed } from "./model";
 import { EMPTY_SNAPSHOT } from "./scoped-snapshot";
 import { InputsSurface } from "./inputs-surface";
 import { SheetPicture } from "./picture";
@@ -38,8 +38,12 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
   const value = (reading.value ?? (sameDocument ? prior : undefined)) as SheetReading | undefined;
   const sheet = value?.open ?? null;
   const fans = owner.readings.get("fans");
+  // One computation: the roster's status reads the same sheet value the ledger draws.
   const roster = rosterOrder(
-    (fans.value as { rows: import("./model").FanPort[] } | null)?.rows ?? value?.rows ?? [],
+    withComputed(
+      (fans.value as { rows: import("./model").FanPort[] } | null)?.rows ?? value?.rows ?? [],
+      value?.rows ?? [],
+    ),
   );
   const snapshot = props.snapshot ?? EMPTY_SNAPSHOT;
   const state = useMemo(() => sheetState(sheet), [sheet]);

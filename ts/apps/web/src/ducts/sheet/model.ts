@@ -24,6 +24,28 @@ export const rosterOrder = (rows: readonly FanPort[]) =>
     );
   });
 
+/**
+ * The roster's status columns from the same sheet computation the ledger draws: the geometry-free
+ * roster reading never computes, so a fan the sheet has priced takes its totals from that reading.
+ */
+export const withComputed = (roster: readonly FanPort[], computed: readonly FanPort[]) => {
+  const priced = new Map(
+    computed.filter((row) => row.complete !== undefined).map((row) => [fanKey(row), row]),
+  );
+  return roster.map((row) => {
+    const sheet = priced.get(fanKey(row));
+    return sheet
+      ? {
+          ...row,
+          blockerCount: sheet.blockerCount,
+          requiredEspInWg: sheet.requiredEspInWg,
+          requiredEspAssumedInWg: sheet.requiredEspAssumedInWg,
+          complete: sheet.complete,
+        }
+      : row;
+  });
+};
+
 /** Mark is a display label; only the document's UniqueId and connector identify a fan port. */
 export const stableFanKey = (fan: Pick<FanPort, "uniqueId" | "portIndex">) =>
   `${fan.uniqueId}@${fan.portIndex}`;

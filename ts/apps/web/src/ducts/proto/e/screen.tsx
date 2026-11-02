@@ -111,6 +111,15 @@ const partialWord = (coverage: ProtoProps["coverage"]) =>
     ? `${coverage.read} of ${coverage.of} systems read`
     : null;
 
+/**
+ * The systems list's empty state from the same coverage the read line counts: systems the
+ * document holds but this read has not reached are "not read", never "none in scope".
+ */
+export const systemsEmpty = (coverage: ProtoProps["coverage"]) =>
+  coverage && coverage.of > 0 && coverage.read === 0
+    ? { message: `None of ${coverage.of} systems read yet`, exit: "Choose systems in Open systems" }
+    : { message: "No duct systems in this scope", exit: "Read a model containing duct systems" };
+
 /** The scoped read's extent and its one verb: read every system, a few per read, into the panes. */
 function ReadCoverage({ coverage }: { coverage: ProtoProps["coverage"] }) {
   const partial = partialWord(coverage);
@@ -669,6 +678,7 @@ function LoadedScreenBody({
             drawn={drawn}
             page={systemKeys}
             setPage={setPage}
+            coverage={props.coverage}
           />
         </Scroll>
       </>
@@ -950,6 +960,7 @@ const SystemsList = memo(function SystemsList({
   drawn,
   page,
   setPage,
+  coverage,
 }: {
   systems: ReturnType<typeof systemList>;
   /** The system's fans: its hover hint and the head of its breakdown popover. */
@@ -959,6 +970,7 @@ const SystemsList = memo(function SystemsList({
   drawn: ProtoProps["snapshot"];
   page: Pick<ProtoProps["page"], "system" | "systemSearch" | "systemSort"> & { version: string };
   setPage: ProtoProps["setPage"];
+  coverage: ProtoProps["coverage"];
 }) {
   const searchable = useMemo(() => (drawn ? systemSearch(drawn) : null), [drawn]);
   const search = useCallback(
@@ -1053,10 +1065,7 @@ const SystemsList = memo(function SystemsList({
         );
       }}
       projection={(system) => ({ weight: systemNoteCount(system, notes.get(system.key)).total })}
-      empty={{
-        message: "No duct systems in this scope",
-        exit: "Read a model containing duct systems",
-      }}
+      empty={systemsEmpty(coverage)}
     />
   );
 });
