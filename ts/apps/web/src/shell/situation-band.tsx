@@ -4,6 +4,8 @@
  * mount.tsx renders each verb and each context control; this file owns where they sit.
  *
  * The Timeline head's Reject answers the same host consent API as Pea's composer (`thread.permission`).
+ * TODO: H2 — Reject is proven rendered and inert on the fixture lane only; press it against a live
+ * host consent window (a route command from a Pea thread) to prove the round trip.
  */
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { MoreHorizontal } from "lucide-react";
