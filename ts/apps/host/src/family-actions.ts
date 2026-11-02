@@ -5,6 +5,7 @@ import { Effect, FileSystem } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import {
   commands,
+  familyActions,
   familyReads,
   familyCaptureSchema,
   familyLiveReadSchema,
@@ -1057,7 +1058,7 @@ export function familyExecutors(
     };
   };
   type SourceInput = Pick<
-    z.output<(typeof commands)["families.apply"]["input"]>,
+    z.output<(typeof familyActions)["families.apply"]["input"]>,
     "source" | "sources" | "familyNames" | "executionOptions"
   >;
   const sourcesFor = (input: SourceInput, review: Review) =>
@@ -1088,7 +1089,7 @@ export function familyExecutors(
   /** Direct Apply and preview adoption share one source, reservation and sealed-native algorithm. */
   const applyBinding = async (
     ctx: CommandContext,
-    input: z.output<(typeof commands)["families.apply"]["input"]>,
+    input: z.output<(typeof familyActions)["families.apply"]["input"]>,
     review: Review,
     previewKey: "family.plan" | "families.plan",
   ) => {

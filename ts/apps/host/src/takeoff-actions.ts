@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { lifetime } from "./family-actions.ts";
 import { command, refused, type CommandContext } from "./command-executor.ts";
 import { preparedTakeoffSchema } from "@pe/agent-contracts";
@@ -213,24 +214,33 @@ export function takeoffExecutors(
           return value(ctx, native, "rooms.draw", input);
         }),
     }),
-    "rooms.write": command(commands["rooms.write"], preparedCarrierSchema, {
-      bind: (ctx) =>
-        bindCarrier(ctx, () =>
-          selectRooms(ctx, (_doc, paths) =>
-            paths.filter((path) => {
-              if (path[0] !== "edits") return false;
-              const { guid, field } = roomEditAddress(String(path[1]));
-              return ctx.admission.input.regions.some(
-                (region) => region.guid === guid && region[field] !== undefined,
-              );
-            }),
+    "rooms.write": command(
+      {
+        ...commands["rooms.write"],
+        authoredInput: commands["rooms.write"].authoredInput.extend({
+          regions: z.array(z.object({ guid: z.string() }).passthrough()),
+        }),
+      },
+      preparedCarrierSchema,
+      {
+        bind: (ctx) =>
+          bindCarrier(ctx, () =>
+            selectRooms(ctx, (_doc, paths) =>
+              paths.filter((path) => {
+                if (path[0] !== "edits") return false;
+                const { guid, field } = roomEditAddress(String(path[1]));
+                return ctx.admission.input.regions.some(
+                  (region) => region.guid === guid && region[field] !== undefined,
+                );
+              }),
+            ),
           ),
-        ),
-      run: (ctx, execution) =>
-        runCarrier(ctx, execution, captures, bridge, "Rooms", (native) =>
-          value(ctx, native, "rooms.write", { regions: ctx.admission.input.regions }),
-        ),
-    }),
+        run: (ctx, execution) =>
+          runCarrier(ctx, execution, captures, bridge, "Rooms", (native) =>
+            value(ctx, native, "rooms.write", { regions: ctx.admission.input.regions }),
+          ),
+      },
+    ),
     "rooms.merge": command(commands["rooms.merge"], preparedCarrierSchema, {
       bind: (ctx) =>
         bindCarrier(ctx, () =>

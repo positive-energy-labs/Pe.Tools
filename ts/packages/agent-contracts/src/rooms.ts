@@ -1,3 +1,4 @@
+import { writeIntentSchema } from "./write-intent.ts";
 /**
  * /rooms Work: the seven room fields plus type on each Room Region, one cell per [guid, field];
  * feedback marks as shared cells with edits and optional suggestions; and notes from either author.
@@ -59,6 +60,7 @@ export type RoomsNote = z.infer<typeof noteSchema>;
 
 export const roomsDocumentSchema = z
   .strictObject({
+    writeIntent: writeIntentSchema.optional(),
     edits: z
       .record(
         z.string().refine((key) => addressOf(key) !== null, {

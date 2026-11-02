@@ -53,6 +53,7 @@ async function fixture(
   });
   const sent: { key: string; input: unknown; session?: string; document?: string }[] = [];
   const bridge = {
+    subscribe: () => () => {},
     list: Effect.succeed([
       {
         sessionId: "A",
@@ -99,24 +100,22 @@ async function fixture(
     press: "edit",
     kind: "apply",
   });
-  const invoke = async (
-    table = {
-      name: draft.name,
-      columns: draft.columns,
-      rows: draft.rows,
-      pruneMissingRows: true as const,
-    },
-  ) => {
-    const admitted = await owner.invoke(
-      actionAdmissionSchema.parse({
-        id: crypto.randomUUID(),
-        key: "data-table.apply",
-        target: { kind: "document", ref },
-        input: commands["data-table.apply"].work.bind({ table }, { key, revision: 1 }),
-      }),
-      crossingOf(),
-    );
-    return owner.wait(admitted.id);
+  const invoke = async (raw?: unknown) => {
+    const call = async (input: unknown) => {
+      const admitted = await owner.invoke(
+        actionAdmissionSchema.parse({
+          id: crypto.randomUUID(),
+          key: "data-table.apply",
+          target: { kind: "document", ref },
+          input,
+        }),
+        crossingOf(),
+      );
+      return owner.wait(admitted.id);
+    };
+    if (raw) return call(raw);
+    await call(commands["data-table.apply"].work.bind({ previewOnly: true }, { key, revision: 1 }));
+    return call(commands["data-table.apply"].work.bind({}, { key, revision: 1 }));
   };
   return { work, registrations, sent, invoke };
 }
@@ -135,7 +134,7 @@ test("host registry persists Data Tables Work per document and admits its shared
 test("Apply uses the exact document and settles Work through the command publication", async () => {
   const f = await fixture();
   const result = await f.invoke();
-  expect(result).toMatchObject({
+  expect(result, JSON.stringify(result)).toMatchObject({
     state: "succeeded",
     result: { name: "Loads", warnings: ["Native warning"] },
   });
@@ -157,15 +156,11 @@ test("Apply uses the exact document and settles Work through the command publica
   );
 });
 
-test("Apply refuses a draft mismatch before dispatch and retains Work after native failure", async () => {
+test("Apply refuses caller table payloads before dispatch and retains Work after native failure", async () => {
   const f = await fixture({ fail: true });
-  const mismatch = await f.invoke({
-    name: "Other",
-    columns: draft.columns,
-    rows: draft.rows,
-    pruneMissingRows: true,
-  });
-  expect(mismatch.state).not.toBe("succeeded");
+  await expect(
+    f.invoke({ name: "Other", columns: draft.columns, rows: draft.rows, pruneMissingRows: true }),
+  ).rejects.toThrow();
   expect(f.sent).toHaveLength(0);
   const failed = await f.invoke();
   expect(failed.state).not.toBe("succeeded");
@@ -186,7 +181,7 @@ test("settlement preserves a replacement draft written while native Apply runs",
     },
   });
   const result = await f.invoke();
-  expect(result).toMatchObject({
+  expect(result, JSON.stringify(result)).toMatchObject({
     state: "incomplete",
     steps: expect.arrayContaining([
       expect.objectContaining({ kind: "native", state: "succeeded" }),

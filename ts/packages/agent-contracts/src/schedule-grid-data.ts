@@ -1,3 +1,4 @@
+import { writeIntentSchema } from "./write-intent.ts";
 /**
  * /schedules document — collaborative state for editing schedule cells.
  *
@@ -149,6 +150,7 @@ export type ScheduleGridSnapshot = z.infer<typeof scheduleGridSnapshotSchema>;
 
 /** Authored Work for one schedule subject. Readings are immutable references, not editable facts. */
 export const scheduleGridDocumentSchema = z.object({
+  writeIntent: writeIntentSchema.optional(),
   basis: z
     .object({
       captureId: z.string().regex(/^[a-f0-9]{64}$/),

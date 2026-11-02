@@ -1,3 +1,4 @@
+import { writeIntentSchema } from "./write-intent.ts";
 import { z } from "zod";
 
 import { type RouteStatePatch, type RouteStateSpec } from "./route-state.ts";
@@ -402,6 +403,7 @@ const verdictSchema = z.enum(["accept", "dismiss"]);
  */
 const takeoffsDocumentSchema = z
   .strictObject({
+    writeIntent: writeIntentSchema.optional(),
     edits: z.record(keyed(2, "edit"), editCellSchema).default({}),
     bases: z.record(z.string(), roomEditSchema).default({}),
     /** Keyed by candidate (`<view>:<elementId>`). */

@@ -1,3 +1,4 @@
+import { writeIntentSchema } from "./write-intent.ts";
 import { z } from "zod";
 
 import { isRecord, type RouteStateSpec } from "./route-state.ts";
@@ -298,6 +299,7 @@ export type FamilyExclusions = Record<string, { by: z.infer<typeof exclusionAuth
  */
 const familiesDocumentSchema = z
   .object({
+    writeIntent: writeIntentSchema.optional(),
     /**
      * The audited scope is a shared cell: either author edits or suggests it, and plan reads the
      * current edit. A bare filter is old Work, so it fails closed.

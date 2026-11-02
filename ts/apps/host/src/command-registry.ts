@@ -1,3 +1,4 @@
+import { workWriteBoundary } from "./work-write-boundary.ts";
 import { catalogCommandContext } from "./catalog-command-context.ts";
 import type { CommandExecutor, CommandRegistry } from "./command-executor.ts";
 import type { RevitBridge } from "./bridge.ts";
@@ -64,14 +65,22 @@ export function commandRegistry(
   };
   const complete = (entry: CommandExecutor, key?: string): CommandExecutor => ({
     ...entry,
-    run: (context, execution) => key
-      ? catalogCommandContext.run(key, () => entry.run(context, execution))
-      : entry.run(context, execution),
+    bind: (context) =>
+      key ? catalogCommandContext.run(key, () => entry.bind(context)) : entry.bind(context),
+    run: (context, execution) =>
+      key
+        ? catalogCommandContext.run(key, () => entry.run(context, execution))
+        : entry.run(context, execution),
     recover: entry.recover ?? recover,
     cancel: entry.cancel ?? cancel,
   });
   for (const [key, entry] of Object.entries(implementations))
-    implementations[key] = complete(entry, key);
+    implementations[key] = complete(
+      typeof entry.definition !== "function" && "writeBoundary" in entry.definition
+        ? workWriteBoundary(entry, bridge, deps)
+        : entry,
+      key,
+    );
   for (const key of Object.keys(commands))
     if (!implementations[key]) throw Error(`Semantic command '${key}' has no executor`);
   return (key) =>

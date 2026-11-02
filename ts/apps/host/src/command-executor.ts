@@ -127,12 +127,12 @@ export function command<C extends Command, S extends z.ZodType>(
   implementation: Omit<CommandExecutor, "definition" | "prepared" | "bind" | "run" | "recover"> & {
     bind(
       context: Omit<CommandContext, "admission"> & {
-        admission: Omit<ActionAdmission, "input"> & { input: z.output<C["input"]> };
+        admission: Omit<ActionAdmission, "input"> & { input: AuthoredInput<C> };
       },
     ): Promise<CommandBinding>;
     run(
       context: Omit<CommandContext, "admission"> & {
-        admission: Omit<ActionAdmission, "input"> & { input: z.output<C["input"]> };
+        admission: Omit<ActionAdmission, "input"> & { input: AuthoredInput<C> };
       },
       execution: Omit<ActionExecution, "prepared"> & { readonly prepared: z.output<S> },
     ): Promise<unknown>;
@@ -145,3 +145,7 @@ export function command<C extends Command, S extends z.ZodType>(
 ): CommandExecutor {
   return { definition, prepared, ...implementation } as CommandExecutor;
 }
+
+type AuthoredInput<C extends Command> = C extends { authoredInput: infer S extends z.ZodType }
+  ? z.output<S> & { work: WorkHandle }
+  : z.output<C["input"]>;

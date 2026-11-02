@@ -1,3 +1,4 @@
+import { workWriteCommand, writeIntentSchema } from "./write-intent.ts";
 import { instancesActions, instancesReading, instancesSessionSelection } from "./instances.ts";
 import { scheduleActions, scheduleReads } from "./schedule-actions.ts";
 import { familyActions, familyReads } from "./family-actions.ts";
@@ -119,7 +120,9 @@ export const takeoffActions = definitions;
  */
 const ductsWorkCommand = <C extends Command & { input: z.ZodObject }>(definition: C) => ({
   ...definition,
-  input: z.strictObject({ work: z.strictObject({ key: workKeySchema, expectedRevision: z.number().int().nonnegative() }) }),
+  input: z.strictObject({
+    work: z.strictObject({ key: workKeySchema, expectedRevision: z.number().int().nonnegative() }),
+  }),
   work: {
     route: "ducts",
     bind: (_input: unknown, handle: import("./command.ts").WorkHandle) => ({
@@ -212,6 +215,7 @@ export const dataTableDraftSchema = z.object({
   rows: z.array(z.object({ key: z.string(), values: z.array(z.string().nullable()) })),
 });
 export const dataTablesWorkSchema = z.object({
+  writeIntent: writeIntentSchema.optional(),
   draft: dataTableDraftSchema.nullable().default(null),
 });
 export const tools = {
@@ -223,20 +227,15 @@ export const tools = {
       title: "Data Tables",
       description: "One document's editable synthetic table draft.",
       schema: dataTablesWorkSchema,
-      editable: [],
+      editable: [["writeIntent", "*"]],
     },
     commands: {
-      "data-table.apply": workCommand("data-tables", {
+      "data-table.apply": workWriteCommand("data-tables", "data-table.apply", {
         native: ["data-table.apply"],
         says: "Upsert the reviewed table by name and row key; prune rows absent from the draft.",
         needs: "project-document",
         effect: "command",
-        input: z.object({
-          table: dataTableDraftSchema.omit({ isNew: true }).extend({
-            name: z.string().refine((name) => name.trim().length > 0, "Name the table first"),
-            pruneMissingRows: z.literal(true),
-          }),
-        }),
+        input: z.object({}),
         dirties: ["schedules"],
       }),
     },
@@ -253,34 +252,56 @@ export const tools = {
   family: {
     name: "family",
     says: familyDraftRouteState.description,
-    work: { ...familyDraftRouteState, editable: [["cells", "*"]] },
+    work: {
+      ...familyDraftRouteState,
+      editable: [
+        ["writeIntent", "*"],
+        ["cells", "*"],
+      ],
+    },
     commands: {
       "family.attach-spec": workCommand("family", familyActions["family.attach-spec"]),
       "family.observe": workCommand("family", familyActions["family.observe"], { optional: true }),
-      "family.capture": workCommand("family", familyActions["family.capture"]),
+      "family.capture": workWriteCommand(
+        "family",
+        "family.capture",
+        familyActions["family.capture"],
+      ),
       "family.plan": workCommand("family", familyActions["family.plan"]),
-      "family.apply": workCommand("family", familyActions["family.apply"]),
-      "family.build": workCommand("family", familyActions["family.build"]),
+      "family.apply": workWriteCommand("family", "family.apply", familyActions["family.apply"]),
+      "family.build": workWriteCommand("family", "family.build", familyActions["family.build"]),
     },
   },
   families: {
     name: "families",
     says: familiesRouteState.description,
-    work: { ...familiesRouteState, editable: [["cells", "*"], ["patch"], ["scope"]] },
+    work: {
+      ...familiesRouteState,
+      editable: [["writeIntent", "*"], ["cells", "*"], ["patch"], ["scope"]],
+    },
     commands: {
-      "families.capture": workCommand("families", familyActions["families.capture"]),
+      "families.capture": workWriteCommand(
+        "families",
+        "families.capture",
+        familyActions["families.capture"],
+      ),
       "families.plan": workCommand("families", familyActions["families.plan"]),
-      "families.apply": workCommand("families", familyActions["families.apply"]),
+      "families.apply": workWriteCommand(
+        "families",
+        "families.apply",
+        familyActions["families.apply"],
+      ),
       "families.save-draft": workCommand("families", familyActions["families.save-draft"]),
     },
   },
   "parameter-links": {
     name: "parameter-links",
     says: parameterLinksRouteState.description,
-    work: { ...parameterLinksRouteState, editable: [["profile"]] },
+    work: { ...parameterLinksRouteState, editable: [["writeIntent", "*"], ["profile"]] },
     commands: {
-      "parameter-links.apply": workCommand(
+      "parameter-links.apply": workWriteCommand(
         "parameter-links",
+        "parameter-links.apply",
         familyActions["parameter-links.apply"],
       ),
     },
@@ -288,12 +309,30 @@ export const tools = {
   schedules: {
     name: "schedules",
     says: scheduleGridRouteState.description,
-    work: { ...scheduleGridRouteState, editable: [["cells", "*"]] },
+    work: {
+      ...scheduleGridRouteState,
+      editable: [
+        ["writeIntent", "*"],
+        ["cells", "*"],
+      ],
+    },
     commands: {
       "schedule.grid.bind": scheduleActions["schedule.grid.bind"],
-      "schedule.grid.push": workCommand("schedules", scheduleActions["schedule.grid.push"]),
-      "schedule.capture": workCommand("schedules", scheduleActions["schedule.capture"]),
-      "schedule.apply": workCommand("schedules", scheduleActions["schedule.apply"]),
+      "schedule.grid.push": workWriteCommand(
+        "schedules",
+        "schedule.grid.push",
+        scheduleActions["schedule.grid.push"],
+      ),
+      "schedule.capture": workWriteCommand(
+        "schedules",
+        "schedule.capture",
+        scheduleActions["schedule.capture"],
+      ),
+      "schedule.apply": workWriteCommand(
+        "schedules",
+        "schedule.apply",
+        scheduleActions["schedule.apply"],
+      ),
     },
   },
   takeoffs: {
@@ -302,15 +341,28 @@ export const tools = {
     work: {
       ...takeoffsRouteState,
       editable: [
+        ["writeIntent", "*"],
         ["edits", "*"],
         ["decisions", "*"],
       ],
     },
     commands: {
-      "takeoffs.initialize": definitions["takeoffs.initialize"],
-      "takeoffs.adopt": definitions["takeoffs.adopt"],
-      "takeoffs.partition": definitions["takeoffs.partition"],
-      "takeoffs.sync": workCommand("takeoffs", definitions["takeoffs.sync"]),
+      "takeoffs.initialize": workWriteCommand(
+        "takeoffs",
+        "takeoffs.initialize",
+        definitions["takeoffs.initialize"],
+      ),
+      "takeoffs.adopt": workWriteCommand(
+        "takeoffs",
+        "takeoffs.adopt",
+        definitions["takeoffs.adopt"],
+      ),
+      "takeoffs.partition": workWriteCommand(
+        "takeoffs",
+        "takeoffs.partition",
+        definitions["takeoffs.partition"],
+      ),
+      "takeoffs.sync": workWriteCommand("takeoffs", "takeoffs.sync", definitions["takeoffs.sync"]),
     },
   },
   rooms: {
@@ -319,15 +371,23 @@ export const tools = {
     work: {
       ...roomsRouteState,
       editable: [
+        ["writeIntent", "*"],
         ["edits", "*"],
         ["marks", "*"],
       ],
     },
     commands: {
-      "rooms.partition": workCommand("rooms", definitions["rooms.partition"]),
-      "rooms.draw": workCommand("rooms", definitions["rooms.draw"]),
-      "rooms.write": workCommand("rooms", definitions["rooms.write"]),
-      "rooms.merge": workCommand("rooms", definitions["rooms.merge"]),
+      "rooms.partition": workWriteCommand(
+        "rooms",
+        "rooms.partition",
+        definitions["rooms.partition"],
+      ),
+      "rooms.draw": workWriteCommand("rooms", "rooms.draw", definitions["rooms.draw"]),
+      "rooms.write": workWriteCommand("rooms", "rooms.write", {
+        ...definitions["rooms.write"],
+        input: z.strictObject({}),
+      }),
+      "rooms.merge": workWriteCommand("rooms", "rooms.merge", definitions["rooms.merge"]),
     },
   },
   ducts: {
