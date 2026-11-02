@@ -52,6 +52,9 @@ export const podsGraph: RouteGraph<PodsPage, SettingsRouteDocument> = {
   observe: ["open"],
   fields: { ...podsFields, member: { ...podsFields.member, role: "selection" } },
   transition: podsTransition,
+  workFields: {
+    basis: { label: "read basis", internal: true },
+  },
   cells: [
     { segment: "fields", groupOf: (key) => [key || "raw JSON"], nouns: ["field"], noun: "member" },
   ],

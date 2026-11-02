@@ -132,7 +132,8 @@ test("Pea's Work edits are undo steps a person reverts; a Pea press never joins 
   await f.apply([{ path: ["settings", "height"], value: 99 }], "human-1", "pea");
   await f.apply([{ path: ["settings", "width"], value: 30 }], null, "pea");
   expect(f.journal.read().undo.map(({ press }) => press)).toEqual(["human-1", "pea:r2", "pea:r3"]);
-  expect(f.journal.read().undo.at(-1)!.label).toBe("Pea: edit settings.width");
+  // Named by the route's declared Work names (none here), never by a raw Work path.
+  expect(f.journal.read().undo.at(-1)).toMatchObject({ label: "Edit Work", by: "pea" });
   expect(await f.journal.undo(f.writer)).toMatchObject({ ok: true, press: "pea:r3" });
   expect(await f.journal.undo(f.writer)).toMatchObject({ ok: true, press: "pea:r2" });
   expect((await f.workspace.read(f.key, f.key.route))!.doc).toMatchObject({
@@ -140,6 +141,29 @@ test("Pea's Work edits are undo steps a person reverts; a Pea press never joins 
   });
   expect(await f.journal.undo(f.writer)).toMatchObject({ ok: true, press: "human-1" });
   expect((await f.workspace.read(f.key, f.key.route))!.doc).toEqual(f.initial);
+});
+
+test("a reloaded tab rebuilds steps, the head and undo/redo entries from the host's replayed window", async () => {
+  const f = fixture();
+  await f.apply([{ path: ["settings", "width"], value: 20 }], "human-1");
+  await f.apply([{ path: ["settings", "height"], value: 99 }], null, "pea");
+  expect(await f.journal.undo(f.writer)).toMatchObject({ ok: true });
+  const reloaded = createWorkJournal(f.key);
+  reloaded.name((patches) => ({ label: `Edit ${patches.map(({ path }) => path[0]).join(", ")}` }));
+  const stop = f.workspace.observeAccepted(f.key, (ack) => reloaded.accept(ack));
+  // A live edit from another tab after the reload stays foreign: it is no replay.
+  await f.apply([{ path: ["cells", "one", "edit"], value: { value: "other" } }], "tab-b");
+  stop();
+  const read = reloaded.read();
+  expect(read.undo.map(({ press, by }) => [press, by])).toEqual([["human-1", "human"]]);
+  expect(read.redo.map(({ press, label }) => [press, label])).toEqual([["pea:r2", "Edit settings"]]);
+  expect(read.last).toMatchObject({ kind: "undo", step: { press: "pea:r2" } });
+  expect(read.moves.map(({ kind, press, revision }) => [kind, press, revision])).toEqual([
+    ["apply", "human-1", 1],
+    ["apply", "pea:r2", 2],
+    ["undo", "pea:r2", 3],
+  ]);
+  expect(read.moves.every(({ at }) => typeof at === "number")).toBe(true);
 });
 
 test("Pea's host undo and redo walk the person's journal: same step, same revisions, person redoes", async () => {

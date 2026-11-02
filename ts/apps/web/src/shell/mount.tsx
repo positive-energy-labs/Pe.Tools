@@ -43,7 +43,6 @@ import {
   TimelineHead,
   rankVerbs,
   lastMove,
-  stepSource,
   stepState,
   useWorkJournal,
 } from "./situation-band";
@@ -938,8 +937,9 @@ export function GraphHistory<P, W>({
   const parsed = actionStatusSchema.array().safeParse(reading?.value ?? reading?.previous);
   const scope = owner.snapshot();
   const key = scope.work?.handle.key ?? scope.workKey ?? scope.unreadable;
-  // Newest first, as the receipts below; redo steps sit above the undo stack they would rejoin.
-  const steps = journal ? [...journal.redo, ...[...journal.undo].reverse()] : [];
+  // Newest first, as the receipts below: every edit, undo and redo is its own entry.
+  const steps = journal ? [...journal.redo, ...journal.undo] : [];
+  const moves = journal ? [...journal.moves].reverse() : [];
   const undo = journal?.undo.at(-1);
   const redo = journal?.redo.at(-1);
   const saved =
@@ -951,7 +951,7 @@ export function GraphHistory<P, W>({
   return (
     <section aria-label={label}>
       {reading?.status === "failed" && <p role="alert">{reading.error}</p>}
-      {!shown.length && !saved.length && !steps.length && <p>No activity yet</p>}
+      {!shown.length && !saved.length && !moves.length && <p>No activity yet</p>}
       {journal && (
         <p>
           Work r{journal.revision ?? "?"}
@@ -983,13 +983,18 @@ export function GraphHistory<P, W>({
         </p>
       )}
       <ol>
-        {steps.map((step) => (
-          <li key={`work:${step.press}`}>
-            {step.label} · {stepSource(step)} · {stepState(journal!, step)} ·{" "}
-            {activityTime(step.at)}
-            {step.superseded && <> · {step.superseded.message}</>}
-          </li>
-        ))}
+        {moves.map((entry) => {
+          const step = steps.find((candidate) => candidate.press === entry.press);
+          return (
+            <li key={`work:${entry.revision}:${entry.kind}`}>
+              {entry.kind === "apply" ? "" : entry.kind === "undo" ? "undid " : "redid "}
+              {entry.label} · {entry.by === "pea" ? "Pea" : "you"} ·{" "}
+              {entry.kind === "apply" && step ? stepState(journal!, step) : `r${entry.revision}`} ·{" "}
+              {activityTime(entry.at)}
+              {entry.kind === "apply" && step?.superseded && <> · {step.superseded.message}</>}
+            </li>
+          );
+        })}
         {[
           ...shown
             .filter((entry) => {

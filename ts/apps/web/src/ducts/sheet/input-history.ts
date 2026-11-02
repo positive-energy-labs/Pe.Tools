@@ -53,7 +53,8 @@ export function presentInputHistory(
   const undo = journal?.undo.at(-1);
   const redo = journal?.redo.at(-1);
   const cleared = inputHistoryMetaSchema.safeParse(undo?.meta);
-  const last = journal?.last;
+  // Staging (writeIntent) is History's to name; Inputs speaks only of inputs.
+  const last = journal?.last?.step.internal ? null : journal?.last;
   const meta = inputHistoryMetaSchema.safeParse(last?.step.meta);
   const effect = meta.success ? meta.data.effect : null;
   return {

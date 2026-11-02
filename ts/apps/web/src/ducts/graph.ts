@@ -243,6 +243,15 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
 
   resetOnTarget: ["heal"],
 
+  workFields: {
+    loads: { label: "loads" },
+    subject: { label: "system membership" },
+    claims: { label: "element claims" },
+    labelParameter: { label: "label parameter" },
+    workingPhase: { label: "working phase" },
+    designFriction: { label: "design friction" },
+    systemColours: { label: "system colours" },
+  },
   cells: ductCells([
     {
       segment: "calculation",

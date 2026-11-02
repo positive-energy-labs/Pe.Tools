@@ -19,7 +19,20 @@ type Transition = {
 export interface JournalDetail {
   label: string;
   meta?: unknown;
+  /** Every path is kernel or route staging (`writeIntent`): History names it, Inputs omits it. */
+  internal?: true;
 }
+/** One accepted move on the journal, newest last: History lists undo and redo as entries too. */
+export interface JournalMove {
+  kind: "apply" | "undo" | "redo";
+  press: string;
+  label: string;
+  internal?: true;
+  by: "human" | "pea";
+  at: number;
+  revision: number;
+}
+type Namer = (patches: readonly RouteStatePatch[]) => JournalDetail;
 type Step = JournalDetail & {
   press: string;
   /** Who authored the step: the person in this tab, or Pea through the shared Work door. */
@@ -101,6 +114,29 @@ export function createWorkJournal(key: WorkKey) {
   let redo: Step[] = [];
   /** The latest move and who made it: an undo or redo may be Pea's (`work.history`) or this person's. */
   let last: { kind: "apply" | "undo" | "redo"; step: Step; by: "human" | "pea" } | null = null;
+  let moves: JournalMove[] = [];
+  let namer: Namer = () => ({ label: "Edit Work" });
+  const move = (
+    kind: JournalMove["kind"],
+    step: Step,
+    by: "human" | "pea",
+    at: number,
+  ) => {
+    last = { kind, step, by };
+    // ponytail: the tab keeps its last 100 moves, the host's own retained window.
+    moves = [
+      ...moves,
+      {
+        kind,
+        press: step.press,
+        label: step.label,
+        ...(step.internal && { internal: true as const }),
+        by,
+        at,
+        revision: revision ?? 0,
+      },
+    ].slice(-100);
+  };
   let pending: { direction: "undo" | "redo"; step: Step } | null = null;
   let sending: WorkWrite | null = null;
   let busy = false;
@@ -112,6 +148,7 @@ export function createWorkJournal(key: WorkKey) {
     undo = [];
     redo = [];
     last = null;
+    moves = [];
     pending = null;
     generation++;
   };
@@ -161,7 +198,7 @@ export function createWorkJournal(key: WorkKey) {
       if (undone && back && !undone.superseded && canonicalRouteInput(back.inverse) === sent) {
         back.forward = ack.inverse;
         if (--undone.cursor === 0) redo.push(undo.pop()!);
-        last = { kind: "undo", step: undone, by: ack.by === "pea" ? "pea" : "human" };
+        move("undo", undone, ack.by === "pea" ? "pea" : "human", ack.at ?? Date.now());
         return;
       }
       const redone = redo.at(-1);
@@ -169,18 +206,23 @@ export function createWorkJournal(key: WorkKey) {
       if (redone && ahead && !redone.superseded && canonicalRouteInput(ahead.forward) === sent) {
         ahead.inverse = ack.inverse;
         if (++redone.cursor === redone.transitions.length) undo.push(redo.pop()!);
-        last = { kind: "redo", step: redone, by: ack.by === "pea" ? "pea" : "human" };
+        move("redo", redone, ack.by === "pea" ? "pea" : "human", ack.at ?? Date.now());
         return;
       }
     }
     // Pea's Work edits are undo steps (ADR 0027 rule 12, reversing ADR 0026): they arrive on the
-    // accepted-delta stream without route detail and may carry no press. A person's own edit needs
-    // the local press detail; anything else (restore, publish, a non-undoable write) is foreign.
+    // accepted-delta stream without route detail and may carry no press. A person's edit the host
+    // replays from its retained window is history this tab inherits (a reload): a step, named by
+    // the route's declared Work names. Another tab's live edit, restore, publish and non-undoable
+    // writes stay foreign: they supersede, never join this tab's undo.
     const pea = ack.by === "pea" && ack.kind === "apply" && ack.undoable;
     if (pea) {
       // Namespaced: a Pea press can never join (or forge) a person's step.
       ack.press = `pea:${ack.press ?? `r${ack.revision}`}`;
-      detail ??= { label: "" };
+    }
+    if (ack.kind === "apply" && ack.undoable && (pea || (ack.by === "human" && ack.replay))) {
+      ack.press ??= `r${ack.revision}`;
+      detail ??= namer(ack.patches);
     }
     if (
       !detail ||
@@ -240,16 +282,14 @@ export function createWorkJournal(key: WorkKey) {
     } else
       undo.push({
         ...structuredClone(detail),
-        label:
-          detail.label.trim() ||
-          `${pea ? "Pea: edit" : "Edit"} ${ack.patches.map(({ path }) => path.join(".") || "Work").join(", ")}`,
+        label: detail.label.trim() || namer(ack.patches).label,
         press: ack.press,
         by: pea ? "pea" : "human",
-        at: Date.now(),
+        at: ack.at ?? Date.now(),
         transitions: [transition],
         cursor: 1,
       });
-    last = { kind: "apply", step: undo.at(-1)!, by: pea ? "pea" : "human" };
+    move("apply", undo.at(-1)!, pea ? "pea" : "human", ack.at ?? Date.now());
   };
 
   const replay = async (
@@ -384,7 +424,7 @@ export function createWorkJournal(key: WorkKey) {
       source.splice(index, 1);
       (direction === "undo" ? redo : undo).push(step);
       pending = null;
-      last = { kind: direction, step, by: "human" };
+      move(direction, step, "human", Date.now());
       return { ok: true, press: step.press, revision };
     } catch (cause) {
       return {
@@ -418,11 +458,17 @@ export function createWorkJournal(key: WorkKey) {
     /** Attach cloneable presentation to an accepted press, including a late Reading result. */
     describe(press: string, detail: Partial<JournalDetail>) {
       const step = [...undo, ...redo].find((entry) => entry.press === press);
-      if (step)
-        Object.assign(
-          step,
-          structuredClone({ ...detail, label: detail.label?.trim() || step.label }),
-        );
+      if (!step) return;
+      Object.assign(step, structuredClone({ ...detail, label: detail.label?.trim() || step.label }));
+      for (const entry of moves)
+        if (entry.press === press) {
+          entry.label = step.label;
+          if (step.internal) entry.internal = true;
+        }
+    },
+    /** The mounted route's Work names, for steps that arrive without local detail. */
+    name(next: Namer) {
+      namer = next;
     },
     /** Subscribe this to the route timeline before dispatching commands; retain barriers after its log is trimmed. */
     record,
@@ -432,7 +478,7 @@ export function createWorkJournal(key: WorkKey) {
     },
     undo: (write: JournalWriter, press?: string) => replay("undo", write, press),
     redo: (write: JournalWriter, press?: string) => replay("redo", write, press),
-    read: () => structuredClone({ revision, undo, redo, busy, last }),
+    read: () => structuredClone({ revision, undo, redo, busy, last, moves }),
   };
 }
 

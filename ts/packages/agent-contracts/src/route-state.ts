@@ -122,6 +122,10 @@ export type WorkWriteAck = {
   patches: RouteStatePatch[];
   inverse: RouteStatePatch[];
   undoable: boolean;
+  /** When the host accepted it (ms); a reloaded tab's History reads this, not its own clock. */
+  at?: number;
+  /** Sent from the host's retained window when a reader subscribed: history it inherits, not a live edit. */
+  replay?: true;
   /** Recovery keeps the unparsed envelope at this host-owned location. */
   aside?: string;
 };
@@ -137,6 +141,8 @@ export const workWriteAckSchema: z.ZodType<WorkWriteAck> = z.object({
   patches: z.array(routeStatePatchSchema),
   inverse: z.array(routeStatePatchSchema),
   undoable: z.boolean(),
+  at: z.number().optional(),
+  replay: z.literal(true).optional(),
   aside: z.string().optional(),
 });
 

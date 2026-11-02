@@ -84,6 +84,7 @@ export const dataTablesGraph: RouteGraph<DataTablesPage, DataTablesWork> = {
   name: "Data Tables",
   needs: "project",
   work: dataTablesWorkSchema,
+  workFields: { draft: { label: "table draft" } },
   subjectField: {
     field: "table",
     noun: "table",

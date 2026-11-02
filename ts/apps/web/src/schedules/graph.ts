@@ -111,6 +111,10 @@ export const schedulesBase: RouteGraph<SchedulesPage, ScheduleGridDocument> = {
       url: false,
     },
   },
+  workFields: {
+    basis: { label: "schedule basis", internal: true },
+    takenAt: { label: "capture time", internal: true },
+  },
   cells: [
     {
       segment: "cells",

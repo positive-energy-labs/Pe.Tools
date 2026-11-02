@@ -316,6 +316,7 @@ export class RouteWorkspace {
         patches: routeDocDelta(envelope.doc, landed.envelope.doc),
         inverse: routeDocDelta(landed.envelope.doc, envelope.doc),
         undoable: true,
+        at: Date.now(),
       };
       this.#remember(write, landed.envelope.doc);
       this.#accept(write);
@@ -488,7 +489,8 @@ export class RouteWorkspace {
    */
   observeAccepted(scope: WorkKey, listener: (ack: WorkWriteAck) => void): () => void {
     const key = workKey(scope);
-    for (const ack of this.#accepted.get(key) ?? []) listener(structuredClone(ack));
+    for (const ack of this.#accepted.get(key) ?? [])
+      listener({ ...structuredClone(ack), replay: true });
     const listeners = this.#acceptedListeners.get(key) ?? new Set();
     this.#acceptedListeners.set(key, listeners);
     listeners.add(listener);

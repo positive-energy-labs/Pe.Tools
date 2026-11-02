@@ -131,6 +131,9 @@ export const takeoffBase: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> = 
       ...(patch.level !== undefined && patch.level !== current.level ? { viewport: null } : {}),
     },
   }),
+  workFields: {
+    bases: { label: "read bases", internal: true },
+  },
   cells: [
     {
       segment: "edits",

@@ -141,6 +141,12 @@ export const familiesGraph: RouteGraph<FamiliesPage, FamiliesRouteDocument> = {
         })),
     ];
   },
+  workFields: {
+    excluded: { label: "excluded families" },
+    executionOptions: { label: "run options" },
+    pod: { label: "Pod" },
+    takenAt: { label: "capture time", internal: true },
+  },
   cells: [
     // The audited scope is a root cell Pea proposes (F-J1-10): its own group, beside the cells.
     {

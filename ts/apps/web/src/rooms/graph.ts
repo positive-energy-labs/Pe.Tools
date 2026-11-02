@@ -97,6 +97,9 @@ export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = {
       url: false,
     },
   },
+  workFields: {
+    notes: { label: "notes" },
+  },
   cells: [
     { segment: "edits", groupOf: (key) => [roomEditAddress(key).guid], nouns: ["room"] },
     {

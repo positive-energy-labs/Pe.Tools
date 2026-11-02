@@ -105,7 +105,7 @@ export function useWorkHandles<W>(
                 press: context.press,
               },
               writeRouteWork,
-              graph.cells,
+              graph,
             ),
           )
         : refuse("not-ready", "Choose a Work first");

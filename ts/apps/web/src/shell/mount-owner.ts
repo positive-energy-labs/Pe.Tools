@@ -35,7 +35,7 @@ import {
   type ReadingState,
 } from "./readings";
 import type { WorkJournal } from "./journal";
-import { acquireWorkWriter, type WorkWriter } from "./work-writes";
+import { acquireWorkWriter, writeLabel, type WorkWriter } from "./work-writes";
 import { createRouteTimeline, type TimelineEntry } from "./timeline";
 import { validateGraphChords } from "./keys";
 import { kernelCellVerbs } from "./verbs-cells";
@@ -392,6 +392,8 @@ export function createGraphMount<P, W>(
       const writer = acquired.writer;
       writers.set(id, writer);
       journal = writer.journal;
+      // Before the accepted-delta replay below: a reloaded tab names the host's steps by this graph.
+      journal.name((patches) => writeLabel(patches, graph));
       releaseJournals.push(
         acquired.release,
         writer.describeWrites((request, label) => {
@@ -535,7 +537,7 @@ export function createGraphMount<P, W>(
       scope,
       request,
       (key, request) => adapters.write(key, request),
-      graph.cells,
+      graph,
       history && {
         entry: history.entry,
         accepted: (ack) => {

@@ -221,6 +221,11 @@ export interface CellsDecl<W = unknown> {
   admit?(doc: W, patches: readonly RouteStatePatch[]): { code: string; message: string } | null;
 }
 
+export interface WorkFieldDecl {
+  label: string;
+  internal?: true;
+}
+
 /** The subject type of a cell family's rows, and the reserved verb ids derived from it. */
 export const cellSubjectType = (family: Pick<CellsDecl, "segment" | "key">): string =>
   `cell:${family.segment ?? family.key}`;
@@ -334,6 +339,12 @@ export interface RouteGraph<P = Record<string, unknown>, W = unknown> {
   ) => readonly RouteStatePatch[];
   /** Authored segments of the Work; the kernel owns take, reject, reopen and delete for them. */
   cells?: readonly CellsDecl<W>[];
+  /**
+   * A person's name for each other top-level Work field, declared once; History and Inputs never
+   * show a raw Work path. `internal` fields (staging, bookkeeping) stay out of Inputs. The kernel
+   * declares `writeIntent` itself.
+   */
+  workFields?: Readonly<Record<string, WorkFieldDecl>>;
   transition?: GraphTransition<P>;
   predicates?: Readonly<Record<string, (page: Readonly<P>, work: W | null) => boolean>>;
   /** Defaults to stage declaration order. The projection retains it despite sorting map keys. */

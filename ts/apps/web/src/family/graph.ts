@@ -90,6 +90,11 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = {
     inspector: { ...fields.inspector, role: "selection" },
     doc: { ...fields.doc, role: "pose" },
   },
+  workFields: {
+    reading: { label: "reading", internal: true },
+    spec: { label: "attached spec" },
+    takenAt: { label: "capture time", internal: true },
+  },
   cells: [
     {
       segment: "cells",

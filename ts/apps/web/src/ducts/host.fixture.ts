@@ -135,7 +135,8 @@ export class DuctsHostFixture {
             };
             const event = (value: unknown) => send({ kind: "event", value });
             host.subscriptions.set(id, { request, emit, event });
-            if (request.kind === "work-acks") for (const ack of host.writes) event(ack);
+            if (request.kind === "work-acks")
+              for (const ack of host.writes) event({ ...ack, replay: true });
             emit();
           }
         });

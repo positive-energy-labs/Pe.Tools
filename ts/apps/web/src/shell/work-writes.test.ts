@@ -116,13 +116,15 @@ test("closed, failed, unhydrated, foreign and domain-refused Work never reaches 
       patches: [{ path: ["cells", "a"], value: "mine" }],
     };
     expect(
-      await held.writer.write(scope, request, port, [
-        {
-          segment: "cells",
-          groupOf: () => [],
-          admit: () => ({ code: "not-ready", message: "domain rule" }),
-        },
-      ]),
+      await held.writer.write(scope, request, port, {
+        cells: [
+          {
+            segment: "cells",
+            groupOf: () => [],
+            admit: () => ({ code: "not-ready", message: "domain rule" }),
+          },
+        ],
+      }),
     ).toMatchObject({ ok: false, error: "domain rule" });
     expect(held.writer.pending()).toEqual([request]);
     held.writer.discard("domain");
