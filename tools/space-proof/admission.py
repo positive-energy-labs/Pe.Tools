@@ -152,7 +152,11 @@ def run_variant(variant, model, args, out, results, pins):
         proc.update(s.start(f"{model}-{variant}", R.GUARD_FLOOR_GIB))
         # The payload build leaves compiler and MSBuild servers resident (≈4 GiB): they would count against the open floor.
         subprocess.run(["dotnet", "build-server", "shutdown"], capture_output=True, timeout=120)
-        time.sleep(5)
+        # Other holders' memory moves under us; the floor is a rule, so wait for it with the idle session up (it holds 2.3 GiB).
+        for _ in range(int(os.environ.get("PE_PROOF_WAIT_FREE_S", 300)) // 5):
+            if psutil.virtual_memory().available / 2**30 >= open_floor:
+                break
+            time.sleep(5)
         avail = psutil.virtual_memory().available / 2**30
         proc["availableGiBBeforeOpen"] = round(avail, 2)
         if avail < open_floor:
