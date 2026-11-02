@@ -6,6 +6,9 @@ import { commandRegistry } from "../src/command-registry.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
 import type { RevitBridge } from "../src/bridge.ts";
 import { writeSeal } from "../src/work-write-boundary.ts";
+import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import livePair from "./fixtures/ducts-live-seal-20261102.json" with { type: "json" };
 
 // Structural specimens exercise each real producer projection without acquiring a native session.
 function specimen(schema: any, root = schema, depth = 0): any {
@@ -29,6 +32,43 @@ function reorder(value: any): any {
 }
 const resolve = commandRegistry({} as RevitBridge["Service"], new TakeoffCaptures("unused-seal-test"), {}, async () => { throw Error("No I/O in seal properties"); });
 const writes = Object.entries(commandCatalogAxes).filter(([, axes]) => axes.effect === "ModelWrite");
+
+test("live MUAS preview/apply seals ignore traversal diagnostics but retain model dependencies", () => {
+  const preview = structuredClone(livePair.preview);
+  const apply = structuredClone(preview);
+  // The retained patch reconstructs the exact second capture without duplicating its entire model.
+  for (const { path, value } of livePair.applyChanges) {
+    let parent: any = apply;
+    for (const key of path.slice(0, -1)) parent = parent[key];
+    parent[path.at(-1)!] = value;
+  }
+  expect(apply.seal.requestHash).toBe(preview.seal.requestHash);
+  expect(apply.seal.dependencies).not.toBe(preview.seal.dependencies); // The live red loop.
+  const executor = resolve("ducts.apply-losses");
+  const seal = (capture: typeof preview) => {
+    // Exercise the real producer projection, which runs during acquisition before executor.seal.
+    const value = {
+      ...capture.value,
+      dependencies: {
+        ...capture.value.dependencies,
+        snapshot: ductWriteEvidence(capture.value.dependencies.snapshot as unknown as DuctSnapshot),
+      },
+    };
+    const projection = executor.seal!(value);
+    return writeSeal(projection.request, capture.input, capture.work as any, capture.incarnation, capture.dependencies as Consumed[], projection.evidence);
+  };
+  expect(seal(apply)).toEqual(seal(preview));
+  for (const mutate of [
+    (v: typeof apply) => { v.value.dependencies.snapshot.nodes[0]!.connectors[0]!.point[0]! += 1; },
+    (v: typeof apply) => { v.value.dependencies.snapshot.slots.fanFlow = "different-slot"; },
+    (v: typeof apply) => { v.value.dependencies.snapshot.walk!.truncated = true; },
+    (v: typeof apply) => { v.value.input.components[0]!.inWg += 0.01; },
+  ]) {
+    const changed = structuredClone(apply);
+    mutate(changed);
+    expect(seal(changed)).not.toEqual(seal(preview));
+  }
+});
 test.each(writes)("%s seals semantic evidence across permutation/refetch", (key) => {
   expect(commands).toHaveProperty(key);
   const executor = resolve(key);

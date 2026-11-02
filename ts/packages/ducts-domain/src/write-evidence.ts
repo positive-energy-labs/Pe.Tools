@@ -119,13 +119,11 @@ const DuctAirflowCandidate = (v: DuctsSnapshotWalk.Res.DuctAirflowCandidate) => 
   ...pick(v, "slot", "where", "shared", "have", "of"),
   groups: set(v.groups.map(DuctGroupCoverage))
 });
-const DuctOpenEnd = (v: DuctsSnapshotWalk.Res.DuctOpenEnd) => ({
-  ...pick(v, "elementId", "connector", "point", "candidateCount"),
-  candidateIds: set(v.candidateIds)
-});
 const DuctWalk = (v: DuctsSnapshotWalk.Res.DuctWalk) => ({
-  ...pick(v, "startId", "hops", "elementsReached", "openEnds", "truncated"),
-  candidates: set(v.candidates.map(DuctOpenEnd))
+  // OpenEnd excludes elements already reached *at that instant*. Its candidate IDs and traversal
+  // counters vary with Revit connector enumeration. Final elements/ports and measured near geometry
+  // below are the model evidence; only scope and completeness belong to the walk's write boundary.
+  ...pick(v, "startId", "truncated")
 });
 const DuctHealthTolerances = (v: DuctsSnapshotWalk.Res.DuctHealthTolerances) => ({
   ...pick(v, "candidateBoxIn", "autoJoinGapIn")
@@ -138,7 +136,9 @@ const Response = (v: DuctsSnapshotWalk.Res.Response) => ({
   nodes: set(v.nodes.map(DuctNode)),
   segments: set(v.segments.map(DuctSegment)),
   flows: set(v.flows.map(DuctFlow)),
-  issues: set(v.issues.map(DuctIssue)),
+  // A loop's reported closing element is traversal-dependent too. Preserve the complete physical
+  // adjacency in nodes/segments: changing an actual cycle still invalidates this projection.
+  issues: set(v.issues.filter(i => i.kind !== "loop").map(DuctIssue)),
   layers: set(v.layers.map(DuctLayer)),
   systems: set(v.systems.map(DuctSystem)),
   slots: DuctParameterSlots(v.slots),
