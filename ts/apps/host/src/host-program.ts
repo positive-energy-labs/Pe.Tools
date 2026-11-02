@@ -1,3 +1,5 @@
+import { catalogEntries } from "@pe/agent-contracts/pe-api";
+import { requireLinkedCatalog } from "../../../packages/agent-contracts/src/catalog.ts";
 import { execFile, spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
@@ -22,6 +24,7 @@ export const hostProgram = (
 ) =>
   Effect.scoped(
     Effect.gen(function* () {
+      requireLinkedCatalog(catalogEntries);
       const telemetry = hostReceiptExport();
       const unbindNative = bindNativeProducers(telemetry);
       yield* Effect.addFinalizer(() =>

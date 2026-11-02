@@ -31,6 +31,30 @@ export function linkCatalog(entries: readonly CatalogLink[]): string[] {
   const errors: string[] = [];
   const byKey = new Map<string, CatalogLink>();
   for (const entry of entries) {
+    for (const [axis, values] of Object.entries({
+      subject: opSubject,
+      effect: opEffect,
+      cost: opCost,
+      cardinality: opCardinality,
+    }))
+      if (
+        !(Object.values(values) as readonly string[]).includes(
+          (entry as unknown as Record<string, string>)[axis]!,
+        )
+      )
+        errors.push(`${entry.key}: missing or invalid ${axis}`);
+    if (
+      !Array.isArray(entry.touches) ||
+      !entry.touches.length ||
+      entry.touches.some((value) => !Object.values(opTouches).includes(value))
+    ) {
+      errors.push(`${entry.key}: missing or invalid touches`);
+      continue;
+    }
+    if (!Array.isArray(entry.uses)) {
+      errors.push(`${entry.key}: missing uses`);
+      continue;
+    }
     if (
       entry.key.startsWith("command:") &&
       entry.effect === "ModelWrite" &&
@@ -77,6 +101,12 @@ export function linkCatalog(entries: readonly CatalogLink[]): string[] {
     active.delete(entry.key);
     visited.add(entry.key);
   }
-  entries.forEach(visit);
+  byKey.forEach(visit);
   return errors;
+}
+
+/** Runtime trust boundary: boot and dynamic admission use the same linker. */
+export function requireLinkedCatalog(entries: readonly CatalogLink[]): void {
+  const errors = linkCatalog(entries);
+  if (errors.length) throw Error(`Catalog refused:\n${errors.join("\n")}`);
 }

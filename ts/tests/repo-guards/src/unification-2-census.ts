@@ -1,7 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import ts from "typescript";
-import scopeCensus from "./unification-2-scope.json" with { type: "json" };
 
 export const root = resolve(import.meta.dirname, "../../../..");
 const read = (p: string) => readFileSync(resolve(root, p), "utf8");
@@ -212,23 +211,25 @@ export function census() {
         }
     }
   }
-  // Classification ported from t3/op-scope-cost-catalog-spike @ 6dc7153d. Current [Op]
-  // attributes override the census; unknown reads fail closed until classified explicitly.
+  // Read current Op axes; absent declarations fail closed.
   for (const p of files("dotnet").filter((p) => p.endsWith(".cs") && !p.includes("Tests/"))) {
     const text = read(p);
     for (const m of text.matchAll(/\[Op\(\s*"([^"]+)"((?:"(?:\\.|[^"\\])*"|[^"])*?)\)\]/gs)) {
-      const old = scopeCensus.find((r) => r.key === m[1]);
       const axis = (name: string) =>
         m[2]!.match(new RegExp(`\\b${name}\\s*=\\s*Op\\w+\\.(\\w+)`))?.[1];
-      const intent = axis("Intent") ?? old?.intent ?? "Read";
-      const cost = axis("CostClass") ?? old?.costClass;
-      const scope = axis("Scope") ?? old?.scope;
+      const effect = axis("Effect");
+      const subject = axis("Subject");
+      const touches = m[2]!.match(/\bTouches\s*=\s*([^,]+)/)?.[1];
       if (
-        intent === "Read" &&
-        (!cost || (cost === "Geometry" && (!scope || ["DocumentWide", "None"].includes(scope))))
+        !effect ||
+        !subject ||
+        !touches ||
+        ((effect === "Read" || effect === "TransactRead") &&
+          touches.includes("Geometry") &&
+          ["Document", "None"].includes(subject))
       )
         result.unscopedGeometry!.push(
-          `${p}:${text.slice(0, m.index).split("\n").length}: ${m[1]} (${cost ?? "unclassified"}/${scope ?? "unclassified"})`,
+          `${p}:${text.slice(0, m.index).split("\n").length}: ${m[1]} (${touches ?? "unclassified"}/${subject ?? "unclassified"})`,
         );
     }
   }

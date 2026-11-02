@@ -1,6 +1,6 @@
 import type { AppExposure, AppRouteMount, AppSurface } from "./route-directory.ts";
 import { z } from "zod";
-import { manyCodec, type History, type RouteField } from "./route-field.ts";
+import { bare, manyCodec, type History, type RouteField } from "./route-field.ts";
 import type { RouteStatePatch } from "./route-state.ts";
 import type { RouteViewRefusalCode } from "./route-view.ts";
 
@@ -264,12 +264,14 @@ export interface RouteGraph<P = Record<string, unknown>, W = unknown> {
   /** Browser-only states, selected uniformly by ?fixture=<name>. Payloads load only when selected; titles remain available to discovery. */
   seeds?: Readonly<Record<string, GraphSeed<P, W>>>;
   directory?: RouteDirectory;
+  /** Injected from the source bytes by the build; never copied from the directory. */
+  moduleHash?: string;
   key: string;
   address: string;
   name: string;
   /** The Situation's sentence about the shareable subject; no reads or effects. */
   subject?: (page: Readonly<P>) => string;
-  subjectField?: {
+  subjectField: {
     field: keyof P & string;
     noun: string;
     keyKind: import("./route-field.ts").StableKeyKind;
@@ -495,8 +497,28 @@ export function validateRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphRef
       refusals.push({ code, path, message });
   };
   try {
+    // TODO: Supply genuine roster/detail bindings in graphs still missing subjectField; admission stays closed.
+    if (!graph.subjectField)
+      refuse(
+        "invalid-graph",
+        "subjectField",
+        "Every route must declare its subject field, noun, stable key, cardinality, roster and detail",
+      );
+    // TODO: Consolidate remaining Page selection fields instead of relabeling competing copies.
+    const selections = Object.values(graph.fields).filter((field) => field.role === "selection");
+    if (selections.length !== 1)
+      refuse(
+        "invalid-graph",
+        "fields",
+        "Page must declare exactly one kernel-owned selection field",
+      );
+    for (const [id, field] of Object.entries(graph.fields))
+      if (bare(field.schema).def.type === "array" && field.codec !== manyCodec)
+        refuse("invalid-graph", `fields.${id}`, "Array fields must use kernel manyField");
     if (graph.subjectField) {
       const subject = graph.subjectField;
+      if (!subject.noun?.trim() || !["one", "many"].includes(subject.cardinality))
+        refuse("invalid-graph", "subjectField", "Subject requires a noun and explicit cardinality");
       const subjects = Object.entries(graph.fields).filter(([, f]) => f.role === "subject");
       if (subjects.length !== 1 || subjects[0]?.[0] !== subject.field)
         refuse("invalid-graph", "subjectField", "Declare exactly one subject field");

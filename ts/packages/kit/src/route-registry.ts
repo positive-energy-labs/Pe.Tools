@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import {
   commandTool,
-  ROUTE_DIRECTORY,
   validateRouteModule,
   type RouteModule,
   type RouteGraph,
@@ -43,13 +42,24 @@ export function createRouteRegistry() {
 
   const registry = {
     registerGraph<P, W>(graph: RouteGraph<P, W>, hosted: HostedRouteView) {
-      const moduleHash = ROUTE_DIRECTORY.find(row => row.key === graph.key)?.moduleHash;
-      if (!moduleHash) throw Error(`Regenerate the directory for ${graph.key}`);
-      return registry.registerModule({version: 1, namespace: "builtin", key: `builtin:${graph.key}`, moduleHash, graph, bodies: hosted});
+      const moduleHash = graph.moduleHash;
+      if (!moduleHash) throw Error(`Missing build source hash for ${graph.key}`);
+      return registry.registerModule({
+        version: 1,
+        namespace: "builtin",
+        key: `builtin:${graph.key}`,
+        moduleHash,
+        graph,
+        bodies: hosted,
+      });
     },
     registerModule(module: RouteModule<HostedRouteView>) {
       validateRouteModule(module);
-      return registry.register({manifest: module.graph, graph: module.graph, hosted: module.bodies});
+      return registry.register({
+        manifest: module.graph,
+        graph: module.graph,
+        hosted: module.bodies,
+      });
     },
     /** Built-in and Pod routes take this one path; the answer removes exactly this registration. */
     register(registration: RouteRegistration) {

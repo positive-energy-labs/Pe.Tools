@@ -1,3 +1,4 @@
+import { commandCatalogAxes } from "./command-axes.ts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
 import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
@@ -143,38 +144,24 @@ export interface CatalogRow extends CatalogLink {
 export function nativeEntry(op: HostOperationDefinition): CatalogRow {
   return {
     key: op.key,
-    subject: (op.subject ?? "None") as CatalogRow["subject"],
-    touches: (op.touches?.split(", ") ?? ["Metadata"]) as CatalogRow["touches"],
-    effect: (op.effect ??
-      (op.intent === "Mutate" ? "SessionWrite" : "Read")) as CatalogRow["effect"],
-    cost: op.costTier ?? "Cheap",
-    cardinality: (op.cardinality ?? "One") as CatalogRow["cardinality"],
+    subject: op.subject as CatalogRow["subject"],
+    touches: op.touches.split(", ") as CatalogRow["touches"],
+    effect: op.effect as CatalogRow["effect"],
+    cost: op.costTier,
+    cardinality: op.cardinality as CatalogRow["cardinality"],
     internal: op.internal,
     uses: [],
   };
 }
 function commandAxes(key: string, action: Command): CatalogLink {
   const uses = action.native ?? (hostOpCatalog.some((op) => op.key === key) ? [key] : []);
-  const children = hostOpCatalog.filter((op) => uses.includes(op.key)).map(nativeEntry);
-  const modelWrite =
-    action.effect === "command" && children.some((child) => child.effect === "ModelWrite");
+  const axes = commandCatalogAxes[key as keyof typeof commandCatalogAxes];
+  if (!axes) throw Error(`Command ${key} has no declared catalog axes`);
   return {
     key: `command:${key}`,
     uses,
-    subject: action.needs === "nothing" ? "None" : "Elements",
-    touches: children.length
-      ? [...new Set(children.flatMap((child) => child.touches))]
-      : ["Metadata"],
-    effect: modelWrite
-      ? "ModelWrite"
-      : action.effect === "command"
-        ? "SessionWrite"
-        : children.some((child) => child.effect === "ModelWrite" || child.effect === "TransactRead")
-          ? "TransactRead"
-          : "Read",
-    cost: "Mutation",
-    cardinality: "One",
-    ...(modelWrite ? action.derivation : {}),
+    ...axes,
+    ...(axes.effect === "ModelWrite" ? action.derivation : {}),
   };
 }
 export const catalogEntries: readonly CatalogRow[] = [

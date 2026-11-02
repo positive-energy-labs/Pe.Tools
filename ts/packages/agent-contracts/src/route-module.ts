@@ -1,3 +1,5 @@
+import { catalogEntries } from "./pe-api.ts";
+import { requireLinkedCatalog, type CatalogAxes } from "./catalog.ts";
 import { routeDirectory } from "./generated/route-directory.ts";
 import type { z } from "zod";
 import type { Command } from "./command.ts";
@@ -28,7 +30,10 @@ export function validateRouteModule(module: RouteModule): void {
     module.namespace === "builtin"
       ? routeDirectory.find((row) => row.key === module.graph.key)
       : undefined;
-  if (module.namespace === "builtin" && builtin?.moduleHash !== module.moduleHash)
+  if (
+    module.namespace === "builtin" &&
+    (builtin?.moduleHash !== module.moduleHash || module.graph.moduleHash !== module.moduleHash)
+  )
     throw Error("Builtin module hash does not match the generated directory");
   const errors = validateRouteGraph(module.graph);
   if (errors.length)
@@ -38,7 +43,7 @@ export function validateRouteModule(module: RouteModule): void {
 /** Executable entries travel with the graph and Work, never as a second installation. */
 export interface ExecutableRouteModule<B> extends RouteModule<Record<string, B>> {
   work: RouteStateSpec<z.ZodType>;
-  entries: Readonly<Record<string, Command>>;
+  entries: Readonly<Record<string, Command & { axes: CatalogAxes }>>;
 }
 export function validateExecutableRouteModule<B>(
   module: ExecutableRouteModule<B>,
@@ -46,6 +51,18 @@ export function validateExecutableRouteModule<B>(
 ) {
   validateRouteModule(module);
   if (module.moduleHash !== actualHash) throw Error("Route module hash mismatch");
+  for (const [key, entry] of Object.entries(module.entries))
+    if (entry.needs !== "nothing" && entry.axes?.subject === "None")
+      throw Error(`${key}: a document requirement cannot declare Subject None`);
+  requireLinkedCatalog([
+    ...catalogEntries,
+    ...Object.entries(module.entries).map(([key, entry]) => ({
+      ...entry.axes,
+      key: `command:${key}`,
+      uses: entry.native ?? [],
+      ...entry.derivation,
+    })),
+  ]);
   if (module.work.route !== module.graph.key) throw Error("Work belongs to another route");
   for (const key of Object.keys(module.entries)) {
     if (module.namespace !== "builtin" && !key.startsWith(`pod.${module.namespace}.`))
@@ -58,5 +75,5 @@ export function validateExecutableRouteModule<B>(
 /** Host-local admitted projection; consumers never mutate the executable registry. */
 export const admittedRouteEntries = new Map<
   string,
-  { entries: Readonly<Record<string, Command>>; available: () => boolean }
+  { entries: Readonly<Record<string, Command & { axes: CatalogAxes }>>; available: () => boolean }
 >();
