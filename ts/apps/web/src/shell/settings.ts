@@ -156,13 +156,16 @@ export function graphSettings(graph: RouteGraph<any, any>): SettingsOwner {
           routeSettingsSnapshotSchema,
           signal,
         ),
-      subscribe: (notify) =>
-        peReadings.subscribe({ kind: "world" }, (frame) => {
+      subscribe: (notify) => {
+        const recovered = peReadings.onResync(notify);
+        const release = peReadings.subscribe({ kind: "world" }, (frame) => {
           if (frame.kind === "gap" && frame.dropped !== null) return notify();
           if (frame.kind !== "event") return;
           const event = frame.value as { type?: string; route?: string };
           if (event?.type === "route-settings-changed" && event.route === graph.key) notify();
-        }),
+        });
+        return () => { release(); recovered(); };
+      },
     });
     owners.set(graph, owner);
   }

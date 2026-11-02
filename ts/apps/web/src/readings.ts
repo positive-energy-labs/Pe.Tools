@@ -2,7 +2,7 @@ import { currentFixture } from "#/shell/fixture-lane";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { hostFetch, runtimeStreamUrl } from "#/host/runtime";
 /**
- * The wire. One EventSource per tab: SSE frames, fences, reconnect backoff and wake resync.
+ * The wire. One EventSource per tab: SSE frames, fences, reconnect backoff.
  *
  * This module is a transport only. Every reading's lifecycle (demand, deadline, failure,
  * retention, status) belongs to the shell reading engine (`#/shell/readings`); a View reads a
@@ -70,7 +70,7 @@ export class PeReadings {
   private attempts = 0;
   /** A connection that opened and delivered nothing by the deadline, with keys unanswered, is faulted. */
   private watchdog?: ReturnType<typeof setTimeout>;
-  /** A fault or wake happened; the next open tells every resync listener to re-read. */
+  /** A connection fault happened; the next open tells every resync listener to re-read. */
   private faulted = false;
   private readonly resyncs = new Set<() => void>();
   private unwatchWake?: () => void;
@@ -135,7 +135,7 @@ export class PeReadings {
 
   /**
    * Transports this owner cannot carry (a thread's log tail, which resumes from its own cursor)
-   * follow its liveness: the listener runs when the connection reopens after a fault or a wake,
+   * follow its liveness: the listener runs when the connection reopens after a connection fault,
    * and re-reads its own state from the host. One owner decides when the world is suspect.
    */
   onResync(listener: () => void): () => void {
@@ -144,9 +144,9 @@ export class PeReadings {
   }
 
   /**
-   * The world may have moved without this tab hearing it (the tab woke, the network came back):
+   * The stream lost contact with its host:
    * fence every key, reconnect now, and have every follower re-read. Coalesced per tick, so a
-   * burst of wake signals is one reconnect.
+   * burst of recovery signals is one reconnect.
    */
   resync() {
     if (this.closed) return;
