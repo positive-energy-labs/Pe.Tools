@@ -727,8 +727,9 @@ export function createReadingGraph<P, W>(
       dirties: readonly string[] = [],
     ) {
       if (disposed) return;
-      // A preview with no effects cannot invalidate the evidence it is asking the user to review.
-      if (receipt.input?.previewOnly === true && receipt.effects.length === 0) return;
+      // Successful reads and explicit previews with no effects preserve their review evidence.
+      // Unknown or failed execution still falls back to the target when its effects are uncertain.
+      if (receipt.effects.length === 0 && (receipt.state === "succeeded" || receipt.input?.previewOnly === true)) return;
       if (receipt.state === "waiting" || receipt.state === "running") return;
       const stamp = canonicalRouteInput([receipt.id, receipt.state, receipt.effects, dirties]);
       if (receiptVersions.has(stamp)) return;

@@ -332,6 +332,8 @@ describe("reading graph", () => {
     const previewBasis = graph.get("matrix");
     graph.acceptReceipt(receipt({ id: "preview", input: { previewOnly: true }, effects: [] }), ["families"]);
     expect(graph.get("matrix")).toBe(previewBasis);
+    graph.acceptReceipt(receipt({ id: "plan", effects: [] }));
+    expect(graph.get("matrix")).toBe(previewBasis);
     graph.acceptReceipt(
       receipt({ effects: [{ kind: "document", ref: { session: "session", openId: "B" } }] }),
       ["families"],
