@@ -1,9 +1,57 @@
 import { useState } from "react";
 import type { VerbDecl } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Popover, SubjectPopoverContent } from "@pe/kit/lang/popover";
 import type { GraphMount } from "./mount-owner";
-import { completeVerb } from "./verbs";
+import { completeVerb, type Worksharing } from "./verbs";
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+/** The commit's borrow count; null when the document is not workshared or nothing new is borrowed. */
+export const borrowWords = (w: Worksharing | null | undefined) => {
+  const n = w?.elements.filter((e) => e.status === "borrows").length ?? 0;
+  return w && (n || w.creates.length) ? `borrows ${plural(n + w.creates.length, "element")}` : null;
+};
+
+/** What committing does to the central: every element it borrows, held until the person syncs or relinquishes. */
+export function WorksharingNote({ worksharing: w }: { worksharing: Worksharing }) {
+  const borrows = w.elements.filter((e) => e.status === "borrows");
+  const blocked = w.elements.filter((e) => e.status === "blocked");
+  const central = w.cloud ? "cloud central" : "central";
+  return (
+    <section aria-label="Worksharing" className="flex flex-col">
+      <OutcomeLine
+        kind="advisory"
+        label={
+          borrowWords(w)
+            ? `workshared: commit ${borrowWords(w)} from the ${central}`
+            : `workshared: you already own every element this commit changes`
+        }
+        says="they stay borrowed until you sync with central or relinquish"
+      />
+      <span role="list" className="flex flex-col">
+        {borrows.map((e) => (
+          <span role="listitem" key={e.id}>
+            borrows {e.name} [{e.id}]
+          </span>
+        ))}
+        {w.creates.map((name) => (
+          <span role="listitem" key={name}>
+            creates {name}
+          </span>
+        ))}
+      </span>
+      {blocked.map((e) => (
+        <OutcomeLine
+          key={e.id}
+          kind="refused"
+          label={`${e.name} [${e.id}] is borrowed by ${e.owner ?? "another user"}`}
+          says="Revit refuses this write until they sync or relinquish"
+        />
+      ))}
+    </section>
+  );
+}
 
 /** Key actions for verb ids: one control per verb, armed only while the route is live. */
 export function verbActions<P, W>(
@@ -65,7 +113,9 @@ export function GraphVerb<P, W>({
         refusal={!enabled ? "This route is inactive" : control.refusal}
         onClick={() => void control.run()}
       >
-        {review ? `Commit ${verb.label}` : verb.label}
+        {review
+          ? `Commit ${verb.label}${borrowWords(review.ticket.presentation.worksharing) ? ` · ${borrowWords(review.ticket.presentation.worksharing)}` : ""}`
+          : verb.label}
       </Button>
       {result && (
         <span role="status">
@@ -91,6 +141,8 @@ export function GraphReview<P, W>({
   const verb = owner.verbs[id]!;
   const [anchor] = useState(() => document.activeElement);
   const press = () => void owner.commitReview(id, review.ticket);
+  const borrows = borrowWords(review.ticket.presentation.worksharing);
+  const commit = `Commit ${verb.label}${borrows ? ` · ${borrows}` : ""}`;
   return (
     <Popover
       open
@@ -118,15 +170,18 @@ export function GraphReview<P, W>({
               ))}
             </span>
           )}
+          {review.ticket.presentation.worksharing && (
+            <WorksharingNote worksharing={review.ticket.presentation.worksharing} />
+          )}
         </div>
         <div className="flex shrink-0 items-center justify-between gap-2">
           <Button
             kind="commit"
-            label={`Commit ${verb.label}`}
+            label={commit}
             refusal={!enabled ? "This route is inactive" : null}
             onClick={press}
           >
-            Commit {verb.label}
+            {commit}
           </Button>
           <Button label={`Cancel ${verb.label}`} onClick={() => owner.stop()}>
             Cancel

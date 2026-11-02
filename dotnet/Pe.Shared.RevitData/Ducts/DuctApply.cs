@@ -40,13 +40,17 @@ public sealed record DuctEquipmentWrite(long Id, double ExternalStaticInWg);
 /// <summary>A design flow in cfm and where it came from (override, load preview, rooms, a person's note).</summary>
 public sealed record DuctFlowWrite(long Id, double Cfm, string? Source, string? Slot = null);
 
-/// <summary>StoreRevision is the store's WorkRevision after this call (unchanged on preview).</summary>
+/// <summary>
+///     StoreRevision is the store's WorkRevision after this call (unchanged on preview). Worksharing is set on a preview of a
+///     workshared document: what the commit will borrow.
+/// </summary>
 public sealed record DuctApplyResult(
     bool PreviewOnly,
     IReadOnlyList<DuctWrite> Writes,
     DuctApplyCounts Counts,
     IReadOnlyList<DuctSystem>? SystemsAfter,
-    int StoreRevision);
+    int StoreRevision,
+    WorksharingDisclosure? Worksharing = null);
 
 /// <summary>
 ///     One target's outcome. Kind: fitting, terminal, component, equipment, terminal-flow, equipment-flow, store, and the

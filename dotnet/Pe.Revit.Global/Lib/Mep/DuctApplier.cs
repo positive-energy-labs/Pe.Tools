@@ -4,6 +4,7 @@ using Autodesk.Revit.DB.ExternalService;
 using Autodesk.Revit.DB.Mechanical;
 using Pe.Revit.Failures;
 using Pe.Revit.Tasks;
+using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Ducts;
 using Serilog;
 using System.Globalization;
@@ -117,8 +118,10 @@ public static class DuctApplier {
             store.Refuse($"stale: the model holds store revision {storeRevision}, the request carries {request.Store.WorkRevision}; re-read ducts.snapshot");
         items.Add(store);
 
-        if (request.PreviewOnly || items.All(i => i.Outcome != "planned"))
-            return Result(request.PreviewOnly, items, null, storeRevision);
+        if (request.PreviewOnly)
+            return Result(true, items, null, storeRevision) with { Worksharing = Borrows(doc, items) };
+        if (items.All(i => i.Outcome != "planned"))
+            return Result(false, items, null, storeRevision);
         if (store.Outcome == "refused") {
             foreach (var i in items.Where(i => i.Outcome == "planned")) i.Refuse($"not written: the store was refused ({store.Reason})");
             return Result(false, items, null, storeRevision);
@@ -498,6 +501,18 @@ public static class DuctApplier {
         Verdicts = s.Verdicts.ToDictionary(kv => kv.Key, kv => kv.Value with { RuledAt = default }, StringComparer.Ordinal),
         Roles = s.Roles.ToDictionary(kv => kv.Key, kv => kv.Value with { RuledAt = default })
     }).ToJson();
+
+    /// <summary>The elements a commit changes (the store's line is Project Information) and the parameter it may bind.</summary>
+    private static WorksharingDisclosure? Borrows(Document doc, List<Item> items) {
+        var planned = items.Where(i => i.Outcome == "planned").ToList();
+        var store = planned.Any(i => i.Kind == "store");
+        var ids = planned.Where(i => i.Id is not null && WritingKinds.Contains(i.Kind)).Select(i => i.Id!.Value);
+        if (store && doc.ProjectInformation is { } info) ids = ids.Append(info.Id.Value());
+        var binds = store && doc.ProjectInformation?.get_Parameter(StoreText.Guid) is null;
+        return WorksharingDisclosures.Disclose(doc, ids, binds ? [$"{StoreText.Name} project parameter"] : []);
+    }
+
+    private static readonly HashSet<string> WritingKinds = ["fitting", "terminal", "component", "equipment", "terminal-flow", "equipment-flow"];
 
     private static DuctApplyResult Result(bool preview, List<Item> items, IReadOnlyList<DuctSystem>? systems, int revision) => new(
         preview,

@@ -328,7 +328,9 @@ export namespace DuctsApply {
   }
   export namespace Res {
     /**
-     * StoreRevision is the store's WorkRevision after this call (unchanged on preview).
+     * StoreRevision is the store's WorkRevision after this call (unchanged on preview). Worksharing is set on a preview of a
+     * workshared document: what the commit will borrow.
+     *
      */
     export interface Response {
       previewOnly: boolean;
@@ -336,6 +338,7 @@ export namespace DuctsApply {
       counts: DuctApplyCounts;
       systemsAfter?: DuctSystem[] | null;
       storeRevision: number;
+      worksharing?: null | WorksharingDisclosure;
     }
     /**
      * One target's outcome. Kind: fitting, terminal, component, equipment, terminal-flow, equipment-flow, store, and the
@@ -383,6 +386,27 @@ export namespace DuctsApply {
       flowCfm?: null | number;
       totalPressureLossInWg?: null | number;
       elementIds: number[];
+    }
+    /**
+     * What a model write will borrow on a workshared central. Present only on workshared documents. A commit borrows
+     * every element it changes that the user does not already own, and they stay borrowed until the user syncs with
+     * central or relinquishes; a write never syncs. Creates names model-wide definitions the write adds (new elements
+     * the user owns until sync).
+     *
+     */
+    export interface WorksharingDisclosure {
+      cloud: boolean;
+      elements: WorksharedElement[];
+      creates: string[];
+    }
+    /**
+     * Status: borrows (free now; the commit borrows it), owned (already yours), blocked (Owner holds it; the write is refused by Revit).
+     */
+    export interface WorksharedElement {
+      id: number;
+      name: string;
+      status: string;
+      owner?: null | string;
     }
   }
 }
