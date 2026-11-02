@@ -121,6 +121,15 @@ public static class Scene {
             throw new ArgumentException("contextRepresentation must be none, oriented, triangle-boxes, link-boxes or meshes.");
         if (!Finite(request.ContextPaddingFt) || request.ContextPaddingFt is < 0 or > 1000)
             throw new ArgumentException("contextPaddingFt must be between 0 and 1000.");
+        // A region is admission, not capture bounds (spatial ledger, 2026-11-02): focus elements keep their own context reach
+        // and FocusOnly follows the caller. With no focus the region is the question, so its box is the bounds and the
+        // geometry budget bounds it like any other read.
+        var declared = request.Region?.Resolve(document);
+        if (declared is { } admitted) {
+            if (request.Bounds is { } given && !admitted.Contains(given))
+                throw new ArgumentException("bounds must lie inside the region.");
+            if (request.ElementIds is not { Count: > 0 }) request = request with { Bounds = request.Bounds ?? admitted };
+        }
         if (request.Bounds is { } b && (!Finite(b.MinX, b.MinY, b.MinZ, b.MaxX, b.MaxY, b.MaxZ)
             || b.MinX >= b.MaxX || b.MinY >= b.MaxY || b.MinZ >= b.MaxZ))
             throw new ArgumentException("bounds must be finite ordered host-internal-ft bounds.");
@@ -141,6 +150,11 @@ public static class Scene {
         }
         var levels = Timed("levels", () => Levels.Read(document, cancellationToken));
         var world = SpaceWorld.SceneSources(document);
+        // Admission needs no geometry: a host element's own bounding box, before anything is tessellated.
+        if (declared is { } inside)
+            foreach (var id in ids)
+                if (document.GetElement(id.ToElementId()) is { } candidate && world.Partitions[0].SceneBounds(candidate) is { } box && !inside.Contains(box))
+                    throw new ArgumentException($"Element {id} lies outside the region; a scene's focus elements must lie inside it.");
         foreach (var partition in world.Partitions) partition.BeginScene(world.CurrentEpoch);
         var oriented = new Oriented(budget);
         var focus = new List<(Partition Source, PrimRow Row, Tri[] Triangles)>();
@@ -320,9 +334,16 @@ public static class Scene {
             foreach (var row in runs) Primitive(row.Source, row.Element, row.Bounds, row.Run, true);
             if (context != SceneContextRepresentation.None) {
                 var candidates = new List<(Partition Source, long Id, Aabb Bounds, double Distance)>();
-                foreach (var partition in world.Partitions) {
+                // Every source's context is counted before any is loaded; focus is already read, and is the cheap part.
+                var plans = world.Partitions.Select(partition => {
                     budget.Check();
-                    var read = Timed("reach", () => partition.Reach(reach, bound,
+                    return Timed("reach", () => partition.Plan(reach, bound, light: GeometryBudget.Light(context, partition.Kind)));
+                }).ToList();
+                GeometryBudget.Admit(plans, "this scene's context");
+                foreach (var plan in plans) {
+                    var partition = plan.Source;
+                    budget.Check();
+                    var read = Timed("reach", () => partition.Load(plan,
                         context is SceneContextRepresentation.Oriented or SceneContextRepresentation.TriangleBoxes or SceneContextRepresentation.LinkBoxes));
                     reads[partition] = (read, 0, 0);
                     broad += read.Counted;

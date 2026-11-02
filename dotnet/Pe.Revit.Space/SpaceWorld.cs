@@ -20,9 +20,10 @@ public static class SpaceWorld {
         documents.Closed += key => { lock (Sync) States.Remove(key.Value); };
     }
 
-    public static World Build(Document document) => Prepare(document);
-
-    /// <summary>The whole model. Only status, rows and tree ask for it; one cold Chadds read is 220 s and +9.4 GiB (READING-REVIT U5).</summary>
+    /// <summary>
+    ///     The whole model, with no budget: a measurement and test door. No op asks for it; one cold Chadds read is 220 s and
+    ///     +9.4 GiB (READING-REVIT U5). Every product read goes through the scoped overload and its <see cref="GeometryBudget" />.
+    /// </summary>
     public static World Prepare(Document document) {
         var world = new World(document.GetDocumentKey(), Epoch(document));
         world.BuildAll(document);
@@ -35,6 +36,8 @@ public static class SpaceWorld {
     ///     <paramref name="reach" /> (host-frame boxes as 8 corners; default the scope itself), through the /ducts context
     ///     read: one quick filter per placement, ids counted before any load, triangle-less classes never loaded. A verb
     ///     asks this world only inside <paramref name="scope" />; a question outside it throws instead of answering CLEAR.
+    ///     The ids every source holds in reach are counted first and the read is refused with <see cref="OverBudgetException" />
+    ///     above <see cref="GeometryBudget.Ceiling" />, before any element is loaded.
     ///     <paramref name="curves" /> reads CAD ribbons: a site DWG's ribbons were 2.6 M of a 10 ft Cleremont Sweep's
     ///     2.75 M triangles, and no default question asks for Curve2D.
     /// </summary>
@@ -141,8 +144,12 @@ public sealed class World {
     internal void BuildWithin(Document host, IReadOnlyList<XYZ[]> reach) {
         this.InitializeSources(host);
         var scope = this.Scope!.Value;
-        foreach (var partition in this._partitions) {
-            var near = partition.Reach(reach, scope.Corners(), obstacles: true).Kept;
+        // Every source is counted before any is loaded: a read that is too big is refused having walked nothing.
+        var plans = this._partitions.Select(partition => partition.Plan(reach, scope.Corners(), obstacles: true)).ToList();
+        GeometryBudget.Admit(plans, "this read");
+        foreach (var plan in plans) {
+            var partition = plan.Source;
+            var near = partition.Load(plan).Kept;
             var read = new HashSet<long>(near.Select(e => e.Id.Value()));
             // A DWG's ribbons rise from its curves to the storey above, past the import's own bounds: imports gate in plan.
             List<Element> below = [];

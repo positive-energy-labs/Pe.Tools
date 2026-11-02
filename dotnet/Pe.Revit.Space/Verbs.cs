@@ -100,7 +100,7 @@ public static class Verbs {
         Enumerable.Range(0, Math.Max(0, polyline.Count - 1))
             .Select(i => Obb.FromSegment(polyline[i], polyline[i + 1], widthFt, heightFt).Corners(clearanceFt)).ToList();
 
-    private static bool Curves(Filter? filter) => filter?.Kinds?.Contains(PrimKind.Curve2D) == true;
+    internal static bool Curves(Filter? filter) => filter?.Kinds?.Contains(PrimKind.Curve2D) == true;
 
     private static Aabb Bounds(IEnumerable<XYZ[]> boxes) => boxes.SelectMany(corners => corners)
         .Aggregate(Aabb.Empty, (box, p) => new Aabb(Math.Min(box.MinX, p.X), Math.Min(box.MinY, p.Y), Math.Min(box.MinZ, p.Z),
