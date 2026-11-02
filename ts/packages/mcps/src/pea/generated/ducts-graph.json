@@ -1491,7 +1491,7 @@
               ],
               "id": "stack",
               "kind": "split",
-              "size": 176,
+              "size": 300,
               "sized": "end"
             },
             {
@@ -1596,7 +1596,7 @@
     "size": 420,
     "sized": "start"
   },
-  "moduleHash": "be71a97a94ab5c6f6cbcb35717b3f7f7aa0b6bcec84ff8d3d2341e9c43b6704b",
+  "moduleHash": "1c839aec8bf2c6ee816f6018ae0c08c3bbd16b52bf4931d297cca67f6e7b0289",
   "name": "Ducts",
   "needs": "project",
   "panes": {
