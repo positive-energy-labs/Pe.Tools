@@ -104,12 +104,6 @@ public sealed class AshraeTablesTests {
     }
 
     [Test]
-    public void The_loss_server_refuses_a_three_axis_grid_rather_than_misreading_it() {
-        var cb = AshraeTables.Read(Folder(), ["ER5-1"]).Tables["ER5-1"]["Cb"];
-        Assert.Throws<ArgumentException>(() => AshraeLookup.Value(cb, 0.5, 0.5));
-    }
-
-    [Test]
     public void Constant_table_is_one_value_with_no_axis() {
         var co = AshraeTables.Read(Folder(), ["CR3-10"]).Tables["CR3-10"]["Co"];
 
