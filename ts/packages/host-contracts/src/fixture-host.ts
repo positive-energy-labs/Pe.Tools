@@ -27,7 +27,7 @@ export function createFixtureHost(
         ? example
         : schema
           ? schema.parse(example)
-          : structuredClone(example),
+          : example,
     );
   }
   return {
@@ -51,7 +51,9 @@ export function createFixtureHost(
           ] ?? fallback;
       }
       const schema = entries.get(key)!.responseSchemaJson;
-      return schema ? generatedJsonSchema(JSON.parse(schema)).parse(value) : structuredClone(value);
+      // Derived graph readings can own decoded geometry with prototype getters. Only wire
+      // responses cross a JSON/schema boundary; cloning graph values erases those prototypes.
+      return schema ? generatedJsonSchema(JSON.parse(schema)).parse(value) : value;
     },
     async fetch(request: Request): Promise<Response> {
       if (new URL(request.url).pathname !== "/call" || request.method !== "POST")
