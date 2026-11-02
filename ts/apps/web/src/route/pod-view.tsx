@@ -31,6 +31,7 @@ export interface PodApi {
   kit: typeof kit;
   useState(): { state: State; fire(this: void, event: Event): Promise<void> };
   getState(): State;
+  reading(key: string): unknown;
   target(): Promise<{ session: string; openId: string; title: string }>;
   read(key: string, input: State): Promise<unknown>;
   do(key: string, input: State): Promise<unknown>;
@@ -46,6 +47,7 @@ export interface PodRouteBundle {
   }): {
     work: { schema: z.ZodType };
     entries: Record<string, import("@pe/agent-contracts").Command>;
+    readings?: Record<string, (state: State) => State | null>;
   };
   register(base: {
     graph: RouteGraph<Page, Work>;
@@ -306,6 +308,25 @@ export function makePodRoute(row: PodRouteDescriptor, bundle: PodRouteBundle) {
       ]),
     ),
   };
+  const readingSources: Record<string, import("#/shell/readings").ReadingSource> = {};
+  for (const [key, select] of Object.entries(catalog?.readings ?? {})) {
+    if (catalog?.entries[key]?.effect !== "query") throw Error("Pod reading requires a query entry");
+    graph.readings = { ...graph.readings, [key]: { kind: "use", source: key, retire: "target" } };
+    readingSources[key] = {
+      kind: "use", dirties: ["snapshot"],
+      key: scope => select((scope.work as Work | null)?.state ?? bundle.initial),
+      async open(context, deliver) {
+        const input = select((context.work as Work | null)?.state ?? bundle.initial);
+        if (input === null) return deliver({ kind: "complete", value: null, revision: 0 });
+        try {
+          const value = await podRead.run({ key, input }, { target: context.target } as never);
+          if (!context.signal.aborted) deliver({ kind: "complete", value, revision: 1 });
+        } catch (error) {
+          if (!context.signal.aborted) deliver({ kind: "failure", error });
+        }
+      },
+    };
+  }
   function Instrument({ owner }: MountBody<Page, Work>) {
     const [error, setError] = React.useState<string | null>(null);
     const lifetime = React.useRef(new AbortController());
@@ -346,6 +367,7 @@ export function makePodRoute(row: PodRouteDescriptor, bundle: PodRouteBundle) {
         kit,
         useState: () => ({ state: state(), fire }),
         getState: state,
+        reading: key => owner.readings.get(key).value,
         target: async () => {
           const target = owner.snapshot().target;
           if (target.kind !== "document")
@@ -379,7 +401,7 @@ export function makePodRoute(row: PodRouteDescriptor, bundle: PodRouteBundle) {
             key = captured.key;
             input = captured.input;
           }
-          if (!catalog?.entries[key] && operation(key).intent.toLowerCase() === "read")
+          if (operation(key).intent.toLowerCase() === "read")
             return result(owner, "read", { key, input });
           if (catalog?.entries[key]?.work) {
             const work = owner.snapshot().work;
@@ -405,7 +427,7 @@ export function makePodRoute(row: PodRouteDescriptor, bundle: PodRouteBundle) {
     );
   }
   const adapters: RouteAdapters<Page, Work> = {
-    sources: podSources,
+    sources: { ...podSources, ...readingSources },
     binding: (id, row, scope) => ({
       subject: null,
       args: id === "execute" ? scope.page.request : (row ?? {}),

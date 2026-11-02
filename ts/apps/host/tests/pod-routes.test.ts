@@ -154,11 +154,11 @@ test("the pipes module is admitted from its trusted runtime member and deactivat
   });
   try {
     const [route] = await routes.list();
-    expect(podCommand("pod.pipes.roster")).toBeUndefined();
+    expect(podCommand("pod.pipes.set-parameter")).toBeUndefined();
     await routes.trust(route!.key, route!.sha256, true);
-    expect(podCommand("pod.pipes.roster")).toBeDefined();
+    expect(podCommand("pod.pipes.set-parameter")).toBeDefined();
     await lifecycle.setEnabled("pod:pipes", false);
-    expect(podCommand("pod.pipes.roster")).toBeUndefined();
+    expect(podCommand("pod.pipes.set-parameter")).toBeUndefined();
     expect(await routes.list()).toEqual([]);
   } finally {
     routes.close();

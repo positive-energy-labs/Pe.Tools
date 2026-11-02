@@ -193,6 +193,11 @@ export function workWriteBoundary(
         ...execution,
         prepared: p.value,
       });
+      const retires = executor.retires;
+      if (!p.previewOnly && retires) {
+        const paths = retires(result);
+        if (paths.length) await execution.retireWork((p.input.work as WorkHandle).key, route, paths);
+      }
       return {
         ...(result as object),
         previewOnly: p.previewOnly,

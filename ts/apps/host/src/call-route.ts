@@ -1,3 +1,4 @@
+import { podReadRequest } from "./pod-routes.ts";
 import { peRoutes } from "@pe/agent-contracts/pe-api";
 import { canonicalDuctsSession, ductsReadings } from "./ducts-readings.ts";
 import {
@@ -255,7 +256,8 @@ export function makeCallRoute(
       // call to the user's live Revit — session targeting travels ONLY in the header.
       const unknownKey = Object.keys(body).find((k) => k !== "key" && k !== "request");
       if (unknownKey) return yield* Effect.fail(invalidBody(unknownBodyKeyMessage(unknownKey)));
-      const key = body.key;
+      const resolvedPod = yield* Effect.try({ try: () => podReadRequest(body.key as string, "request" in body ? body.request : undefined), catch: (error) => error });
+      const key = resolvedPod.key;
       const humanDoor = key === "rhvac.launch";
       if (humanDoor && caller.kind !== "human")
         return Response.jsonUnsafe(
@@ -263,7 +265,7 @@ export function makeCallRoute(
           { status: 403 },
         );
       yield* Effect.try({ try: () => admitAnonymousCall(caller, key), catch: (error) => error });
-      const request = "request" in body ? body.request : undefined;
+      const request = resolvedPod.request;
       let scope = yield* Effect.try({
         try: () => readSessionScope(req.headers),
         catch: (error) => invalidBody(String(error)),

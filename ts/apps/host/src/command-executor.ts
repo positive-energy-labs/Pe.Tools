@@ -106,6 +106,8 @@ export interface CommandExecutor {
   bind(context: CommandContext): Promise<CommandBinding>;
   run(context: CommandContext, execution: ActionExecution): Promise<unknown>;
   recover?: StepRecovery;
+  /** Receipt-confirmed cells retired by the shared Work write boundary. */
+  retires?(result: unknown): readonly WorkPath[];
   cancel?(requestId: string): Promise<unknown>;
 }
 export type CommandRegistry = (key: string) => CommandExecutor;

@@ -32,7 +32,7 @@ export const podRead: ReadEntry<typeof podRequest> = {
   key: "pod.read",
   input: podRequest,
   async run({ key, input }, { target }) {
-    if (podOperation(key).intent.toLowerCase() !== "read")
+    if (!key.startsWith("pod.") && podOperation(key).intent.toLowerCase() !== "read")
       throw Error("Mutations require action admission");
     if (target.kind !== "document") throw Error("Choose an exact document");
     return requestJson(

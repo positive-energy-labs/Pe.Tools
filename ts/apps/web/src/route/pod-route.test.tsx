@@ -230,3 +230,31 @@ test("pipes authors a document route with versioned typed Work through the commo
   });
   expect(typeof mounted.hosted).toBe("function");
 });
+
+
+test("Pod catalog readings refresh through the shared receipt invalidation mechanism", async () => {
+  const { createReadingGraph } = await import("#/shell/readings");
+  const { podRead } = await import("./pod-sources");
+  const { readFile } = await import("node:fs/promises");
+  const { resolve } = await import("node:path");
+  const bytes = await readFile(resolve(process.cwd(), "../../../examples/pods/pipes/routes/pipes/index.js"));
+  const bundle = await import(`data:text/javascript;base64,${bytes.toString("base64")}`);
+  const { graph, adapters } = makePodRoute(podRouteDescriptorSchema.parse({
+    key: "route:@pipes/routes/pipes/index.js", packageId: "pipes", workRoute: "pod.pipes.pipes",
+    name: "Pipes", description: "Piping systems", sourcePath: "routes/pipes/index.js", sha256: "a".repeat(64), trusted: true,
+  }), bundle);
+  let value = "P-0";
+  const read = vi.spyOn(podRead, "run").mockImplementation(async () => ({ value }));
+  const target = { kind: "document" as const, ref: { session: "fixture", openId: "pipes" } };
+  const readings = createReadingGraph(graph, { sources: adapters.sources, log() {}, scope: {
+    target, workKey: null, workRevision: 1, page: { request: { key: "", input: {} } }, work: { version: 2, state: { systemId: 12 } },
+  } });
+  const release = readings.mount(["pod.pipes.detail"]);
+  try {
+    await waitFor(() => expect(readings.get("pod.pipes.detail").value).toEqual({ value: "P-0" }));
+    value = "P-1";
+    readings.acceptReceipt({ id: "fixture-apply", state: "succeeded", target, effects: [{ kind: "document", ref: target.ref }] }, ["snapshot"]);
+    await waitFor(() => expect(readings.get("pod.pipes.detail").value).toEqual({ value: "P-1" }));
+    expect(read).toHaveBeenCalledTimes(2);
+  } finally { release(); readings.dispose(); read.mockRestore(); }
+});

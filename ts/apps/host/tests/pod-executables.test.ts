@@ -1,3 +1,5 @@
+import { markDispatched } from "../src/action-dispatch.ts";
+import { podExecutor } from "../src/pod-executor.ts";
 import { test, expect } from "vite-plus/test";
 import { readFile, mkdtemp, rm } from "node:fs/promises";
 import { createHash } from "node:crypto";
@@ -29,7 +31,7 @@ async function fixture() {
     ...contracts,
     z,
     descriptor: { key: "route:@pipes/routes/pipes/index.js", sha256 },
-    operation: (): CommandExecutor => ({
+    operation: (op: Parameters<typeof podExecutor>[0]): CommandExecutor => podExecutor(op, {
       definition: {} as contracts.Command,
       prepared: z.unknown(),
       bind: async (ctx) => ({
@@ -38,7 +40,7 @@ async function fixture() {
       }),
       run: async (_ctx, execution) => {
         writes++;
-        return { applied: execution.prepared };
+        return execution.step("native", op.key, execution.prepared, async id => { await markDispatched(id); return { applied: 1, dryRun: false, results: [{ ok: true }], input: execution.prepared }; }, { process: { pid: 42, processStartUtc: "1970-01-01T00:00:01.0000000Z", executable: "C:/Revit.exe" } });
       },
     }),
   }) as contracts.ExecutableRouteModule<CommandExecutor>;
@@ -127,7 +129,7 @@ test("pipes preview and apply use the shared Work boundary and durable journal",
       [
         {
           path: ["writeIntent", "pod.pipes.set-parameter"],
-          value: { edit: { value: { elementId: 12, parameterId: 4, value: "P-1", expected: {} } } },
+          value: { edit: { value: { elementId: 12, parameterId: 4, value: "P-1", expected: { elementId: 12, parameterId: 4, storageType: "String", isReadOnly: false, hasValue: true, rawValue: "P-0" } } } },
         },
       ],
       0,
@@ -156,6 +158,10 @@ test("pipes preview and apply use the shared Work boundary and durable journal",
       const receipt = await journal.wait(id);
       expect(receipt.state, JSON.stringify(receipt)).toBe("succeeded");
       expect(f.writes()).toBe(previewOnly ? 0 : 1);
+      const result = (receipt as { result: Record<string, unknown> }).result;
+      expect(result.derivedRequest).toMatchObject({ edits: [{ elementId: 12, parameterId: 4, value: "P-1" }], dryRun: false });
+      if (!previewOnly) expect(result.input).toEqual(result.derivedRequest);
+      if (!previewOnly) expect((await f.workspace.view(key, key.route))!.doc).toMatchObject({ writeIntent: {} });
     }
     dispose();
     expect(

@@ -1,3 +1,5 @@
+import { isAnyOperationKey } from "@pe/host-contracts/operation-types";
+import { podExecutor, podOperationBinding, type PodOperation } from "./pod-executor.ts";
 import { gatewayExecutor } from "./gateway-actions.ts";
 import type { RevitBridge } from "./bridge.ts";
 import { createHash } from "node:crypto";
@@ -19,7 +21,7 @@ export function podCommand(key: string) {
   for (const { module, available } of executableModules.values()) {
     if (!available()) continue;
     const executor = module.bodies[key];
-    if (executor) return { executor, work: module.work };
+    if (executor && module.entries[key]?.effect === "command") return { executor, work: module.work };
   }
   return undefined;
 }
@@ -34,7 +36,11 @@ export function admitPodModule(
   for (const [key, executor] of Object.entries(module.bodies)) {
     if (podCommand(key)) throw Error(`Catalog key already admitted: ${key}`);
     if (executor.definition !== module.entries[key]) throw Error("Body and projection disagree");
+    const operation = podOperationBinding(executor);
+    if (!operation) throw Error("Pod bodies require the sealed operation adapter");
     if (executor.definition.effect === "command") {
+      if (typeof operation.retires !== "function" || !executor.definition.dirties.length)
+        throw Error("Pod ModelWrite requires retirement and reading invalidation declarations");
       const boundary = (
         executor.definition as contracts.Command & {
           writeBoundary?: { route: string; key: string; derive: unknown; preview: unknown };
@@ -59,6 +65,21 @@ export function admitPodModule(
     contracts.admittedRouteEntries.delete(module.key);
     removeWork();
   };
+}
+
+/** Resolve a catalog query before the normal /call metadata, policy and dispatch checks. */
+export function podReadRequest(key: string, input: unknown) {
+  for (const { module, available } of executableModules.values()) {
+    if (!available() || !module.entries[key]) continue;
+    const entry = module.entries[key]!;
+    if (entry.effect !== "query") throw Error("Pod mutations require action admission");
+    const op = podOperationBinding(module.bodies[key]!);
+    if (!op) throw Error("Pod read adapter unavailable");
+    return { key: op.key, request: op.input(entry.input.parse(input) as Record<string, unknown>) };
+  }
+  if (key.startsWith("pod.") && !isAnyOperationKey(key))
+    throw Error(`Pod query unavailable: ${key}`);
+  return { key, request: input };
 }
 
 const trustSchema = z.record(z.string(), z.string().regex(/^[a-f0-9]{64}$/));
@@ -120,11 +141,11 @@ export function createPodRoutes(
           z,
           command,
           descriptor: route,
-          operation: (key: string) => {
+          operation: (op: PodOperation) => {
             if (!options.bridge) throw Error("Native bridge unavailable");
-            return gatewayExecutor(key, options.bridge, async () => {
+            return podExecutor(op, gatewayExecutor(op.key, options.bridge, async () => {
               throw Error("Native operation required");
-            });
+            }));
           },
         });
         if (
