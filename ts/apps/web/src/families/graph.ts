@@ -1,4 +1,5 @@
-// TODO: docs/features/routes/LEDGER.md#s6-declaration-families Reduce declaration 210 > 60.
+import { defineRouteGraph } from "@pe/agent-contracts";
+// TODO: docs/features/routes/LEDGER.md#s6-declaration-families Declaration 201 > 60 after kernel defaults. Read/cancel, sealed apply, capture and spec workflows remain distinct.
 import { familiesQueries } from "../../../../packages/mcps/src/shared/query-client";
 import { z } from "zod";
 import {
@@ -51,7 +52,7 @@ const source = z.object({ pod: z.string(), path: z.string(), sha256: z.string() 
 const refusal = z.string().nullable().default(null);
 const guarded = <S extends z.ZodType>(request: S) => z.strictObject({ request, refusal });
 
-export const familiesGraph: RouteGraph<FamiliesPage, FamiliesRouteDocument> = {
+export const familiesGraph: RouteGraph<FamiliesPage, FamiliesRouteDocument> = defineRouteGraph({
   seeds: {
     audit: {
       title: "Loaded family matrix",
@@ -88,18 +89,18 @@ export const familiesGraph: RouteGraph<FamiliesPage, FamiliesRouteDocument> = {
   needs: "project",
   work: familiesRouteState.schema,
   // TODO: docs/features/routes/LEDGER.md#s7-e23183a490 Migrate ordered sort state and hidden-column sets off hand array codecs; K1c consolidates lines/past.
-  subjectField: { kind: "singleton", field: "scope", noun: "family draft scope", keyKind: "name", cardinality: "one", roster: "scopes", detail: "matrix", pane: "scope", show: (id) => id },
+  subjectField: { kind: "singleton", field: "scope", noun: "family draft scope", keyKind: "name", roster: "scopes", detail: "matrix", pane: "scope", },
   fields: {
-    scope: { ...field(familiesPageSchema.shape.scope, {}), role: "subject" },
+    scope: { ...field(familiesPageSchema.shape.scope, {}) },
     threadSearch: { ...fields.threadSearch, role: "query" },
     threadSort: { ...fields.threadSort, role: "query" },
-    stage: { ...fields.stage, role: "stage" },
+    stage: fields.stage,
     pod: { ...fields.pod, role: "query" },
     path: { ...fields.path, role: "query" },
-    pane: { ...fields.pane, role: "pose", url: false },
+    pane: { ...fields.pane, url: false },
     query: { ...fields.query, role: "query" },
     sort: { ...fields.sort, role: "query" },
-    hidden: { ...fields.hidden, role: "pose" },
+    hidden: fields.hidden,
     lines: { ...fields.lines, role: "query" },
     past: { ...fields.past, role: "selection" },
     draft: {
@@ -194,30 +195,24 @@ export const familiesGraph: RouteGraph<FamiliesPage, FamiliesRouteDocument> = {
     },
   ],
   readings: {
-    scopes: { kind: "derive", source: "families.scopes", retire: "page", args: (page) => page.draft },
+    scopes: { kind: "derive", source: "families.scopes", args: (page) => page.draft },
     matrix: {
-      kind: "use",
       source: "families.matrix",
-      retire: "page",
       args: (page) => [page.stage, page.draft],
     },
-    categories: { kind: "use", source: "families.categories", retire: "target" },
-    catalog: { kind: "use", source: "families.catalog", retire: "target" },
-    receipts: { kind: "use", source: "families.receipts", retire: "target" },
+    categories: {  source: "families.categories", },
+    catalog: {  source: "families.catalog", },
+    receipts: {  source: "families.receipts", },
     archive: {
-      kind: "use",
       source: "families.archive",
-      retire: "page",
       args: (page) => page.stage,
     },
     saved: {
-      kind: "use",
       source: "families.saved",
-      retire: "page",
       deps: ["archive"],
       args: (page) => [page.stage, page.past],
     },
-    pods: { kind: "use", source: "families.pods", retire: "never" },
+    pods: {  source: "families.pods", retire: "never" },
   },
   verbs: {
     edit: workVerb(
@@ -378,7 +373,6 @@ export const familiesGraph: RouteGraph<FamiliesPage, FamiliesRouteDocument> = {
       label: "Family matrix",
       purpose: "Inspect and edit parameters across family types",
       draws: ["matrix", "saved", "archive", "receipts"],
-      verbs: [],
     },
     work: {
       label: "Family Work",
@@ -394,13 +388,11 @@ export const familiesGraph: RouteGraph<FamiliesPage, FamiliesRouteDocument> = {
       label: "Family spec",
       purpose: "Choose an exact saved Family Foundry source",
       draws: ["pods"],
-      verbs: [],
     },
     history: {
       label: "Past family reads",
       purpose: "Choose an immutable saved family read",
       draws: ["archive"],
-      verbs: [],
     },
   },
   layout: split(
@@ -432,7 +424,7 @@ export const familiesGraph: RouteGraph<FamiliesPage, FamiliesRouteDocument> = {
       panes: ["scope", "matrix", "work", "spec"],
       verbs: ["apply", "save-draft"],
     },
-    history: { word: "History", panes: ["history", "matrix"], verbs: [] },
+    history: { word: "History", panes: ["history", "matrix"], },
   },
   stageOrder: ["audit", "apply", "history"],
-};
+});

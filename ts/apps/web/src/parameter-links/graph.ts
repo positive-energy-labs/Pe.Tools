@@ -1,4 +1,5 @@
-// TODO: docs/features/routes/LEDGER.md#s6-declaration-parameter-links Reduce declaration 93 > 60.
+import { defineRouteGraph } from "@pe/agent-contracts";
+// TODO: docs/features/routes/LEDGER.md#s6-declaration-parameter-links Declaration 83 > 60 after kernel defaults. Parameter creation, preview/apply and link rules remain distinct.
 import { familyQueries } from "../../../../packages/mcps/src/shared/query-client";
 import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { z } from "zod";
@@ -88,7 +89,7 @@ const read = (label: string, evaluate: boolean, subject: "edit" | "suggestion" =
     },
   );
 
-export const parameterLinksGraph: RouteGraph<ParameterLinksPage, ParameterLinksDocument> = {
+export const parameterLinksGraph: RouteGraph<ParameterLinksPage, ParameterLinksDocument> = defineRouteGraph({
   seeds: {
     links: {
       title: "links",
@@ -124,11 +125,9 @@ export const parameterLinksGraph: RouteGraph<ParameterLinksPage, ParameterLinksD
     field: "profile",
     noun: "parameter-link profile",
     keyKind: "name",
-    cardinality: "one",
     roster: "links",
     detail: "links",
     pane: "profile",
-    show: (id) => id,
   },
   fields: {
     profile: {
@@ -137,10 +136,9 @@ export const parameterLinksGraph: RouteGraph<ParameterLinksPage, ParameterLinksD
         {},
         { encode: String, decode: () => "document" as const },
       ),
-      role: "subject",
     },
     selection: { ...field(parameterLinksPageSchema.shape.selection, {}), role: "selection" },
-    rail: { ...parameterLinksAddress.fields.rail, role: "pose", agent: false },
+    rail: { ...parameterLinksAddress.fields.rail, agent: false },
   },
   cells: [
     {
@@ -152,12 +150,8 @@ export const parameterLinksGraph: RouteGraph<ParameterLinksPage, ParameterLinksD
     },
   ],
   readings: {
-    links: { kind: "use", source: "parameter-links.links", retire: "target" },
-    receipts: { kind: "use", source: "parameter-links.receipts", retire: "target" },
+    receipts: {},
     options: {
-      kind: "use",
-      source: "parameter-links.options",
-      retire: "target",
     },
   },
   verbs: {
@@ -209,13 +203,11 @@ export const parameterLinksGraph: RouteGraph<ParameterLinksPage, ParameterLinksD
       label: "profile",
       purpose: "Edit and review the shared parameter linkage profile",
       draws: ["links", "receipts", "options"],
-      verbs: [],
     },
     evaluation: {
       label: "evaluation",
       purpose: "Inspect projected writes and native updater status",
       draws: ["links"],
-      verbs: [],
     },
   },
   layout: split(
@@ -228,8 +220,7 @@ export const parameterLinksGraph: RouteGraph<ParameterLinksPage, ParameterLinksD
   stages: {
     links: {
       word: "links",
-      panes: ["profile", "evaluation"],
       verbs: ["refresh", "preview", "previewProposal"],
     },
   },
-};
+});

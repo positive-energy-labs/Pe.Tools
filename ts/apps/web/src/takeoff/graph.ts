@@ -1,4 +1,5 @@
-// TODO: docs/features/routes/LEDGER.md#s6-declaration-takeoff Reduce declaration 138 > 60.
+import { defineRouteGraph } from "@pe/agent-contracts";
+// TODO: docs/features/routes/LEDGER.md#s6-declaration-takeoff Declaration 112 > 60 after kernel defaults. Adopt/sync/retry/launch workflows and atlas selection remain distinct.
 import { manyField } from "../../../../packages/agent-contracts/src/route-field";
 import { z } from "zod";
 import {
@@ -35,7 +36,7 @@ const rowPartitions = Object.assign(
   (row: unknown) => ((row as { zone?: string })?.zone ? ["partition"] : []),
   { ids: ["partition"] },
 );
-export const takeoffBase: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> = {
+export const takeoffBase: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> = defineRouteGraph({
   directory: {
     path: "/takeoffs",
     title: "Takeoffs",
@@ -99,19 +100,17 @@ export const takeoffBase: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> = 
     roster: "roster",
     detail: "candidates",
     pane: "scope",
-    show: (id) => id,
   },
   fields: {
     threadSearch: { ...threadListFields.threadSearch, role: "query" },
     threadSort: { ...threadListFields.threadSort, role: "query" },
-    level: { ...a.level, role: "pose", agent: "read" },
-    zone: { ...a.zone, role: "pose", agent: "read" },
+    level: { ...a.level, agent: "read" },
+    zone: { ...a.zone, agent: "read" },
     room: { ...a.room, role: "selection", agent: "read" },
-    viewport: { ...a.viewport, role: "pose" },
+    viewport: a.viewport,
     work: { ...field(text(), {}), role: "transient" },
     views: {
       ...manyField("name", {}),
-      role: "subject",
       picker: {
         reading: "roster",
         placeholder: "Choose views",
@@ -123,7 +122,7 @@ export const takeoffBase: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> = 
     },
     zones: { ...manyField("UniqueId", {}), role: "query", url: "push", share: true },
     r10: { ...field(text(), {}), role: "draft", url: "push", share: true },
-    stage: { ...field(takeoffGraphPageSchema.shape.stage, {}), role: "stage", url: false },
+    stage: { ...field(takeoffGraphPageSchema.shape.stage, {}), url: false },
     fileText: { ...json(takeoffGraphPageSchema.shape.fileText), role: "transient" },
   },
   transition: (current, patch) => ({
@@ -161,48 +160,30 @@ export const takeoffBase: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> = 
   ],
   readings: {
     // TODO: docs/features/routes/LEDGER.md#s7-e8f071edc9 native metadata zone roster is missing; saved captures supply zone choices.
-    roster: { kind: "use", source: "takeoffs.roster", retire: "target", deps: ["saved"] },
+    roster: {    deps: ["saved"] },
     snapshot: {
-      kind: "use",
-      source: "takeoffs.snapshot",
       deps: ["roster"],
-      retire: "page",
       args: (p) => [p.work, p.views, p.zones],
     },
     candidates: {
-      kind: "use",
-      source: "takeoffs.candidates",
       deps: ["roster"],
-      retire: "page",
       args: (p) => [p.work, p.views],
     },
     ownerCrops: {
-      kind: "use",
-      source: "takeoffs.ownerCrops",
-      retire: "page",
       deps: ["snapshot", "saved", "roster"],
       args: (p) => [p.work, p.level, p.views],
     },
     plan: {
-      kind: "use",
-      source: "takeoffs.plan",
-      retire: "page",
       deps: ["snapshot", "saved", "ownerCrops", "roster"],
       args: (p) => [p.work, p.level, p.views],
     },
     rhvacVersion: {
-      kind: "use",
-      source: "takeoffs.rhvacVersion",
-      retire: "page",
       args: (p) => [p.work, p.r10],
     },
-    receipts: { kind: "use", source: "takeoffs.receipts", retire: "target" },
-    captures: { kind: "use", source: "takeoffs.captures", retire: "never" },
-    saved: { kind: "use", source: "takeoffs.saved", retire: "page", args: (p) => p.work },
+    receipts: {},
+    captures: {   retire: "never" },
+    saved: {    args: (p) => p.work },
     text: {
-      kind: "use",
-      source: "takeoffs.text",
-      retire: "page",
       args: (p) => [p.work, p.fileText],
     },
   },
@@ -212,13 +193,11 @@ export const takeoffBase: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> = 
       label: "Takeoff scope",
       purpose: "Choose views, zones and an RHVAC file",
       draws: ["snapshot", "saved", "captures", "rhvacVersion"],
-      verbs: [],
     },
     adoption: {
       label: "Adopt zoning regions",
       purpose: "Stage designer region names and system tags",
       draws: ["candidates"],
-      verbs: [],
     },
     navigation: {
       label: "Zones",
@@ -230,20 +209,17 @@ export const takeoffBase: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> = 
       label: "Plan",
       purpose: "Inspect model geometry against its registered owner view",
       draws: ["plan"],
-      verbs: [],
     },
     rooms: {
       label: "Rooms",
       purpose: "Edit Manual J room data and decide calls",
       draws: ["snapshot", "saved"],
-      verbs: [],
     },
-    room: { label: "Room details", purpose: "Inspect the selected room", draws: [], verbs: [] },
+    room: { label: "Room details", purpose: "Inspect the selected room", },
     review: {
       label: "Review",
       purpose: "Review native partition evidence and authored proposals",
       draws: ["receipts", "text"],
-      verbs: [],
     },
   },
   layout: split(
@@ -296,7 +272,6 @@ export const takeoffBase: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> = 
   stages: {
     adopt: {
       word: "Adopting zones",
-      panes: ["scope", "adoption", "navigation", "plan", "rooms", "room", "review"],
       verbs: ["refresh", "initialize", "adopt"],
     },
     audit: {
@@ -310,9 +285,9 @@ export const takeoffBase: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> = 
       verbs: ["refresh", "sync", "retry-r10", "launch"],
     },
   },
-};
+});
 
-export const takeoffGraph: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> = {
+export const takeoffGraph: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> = defineRouteGraph({
   ...takeoffBase,
   name: "View adoption",
   seeds: Object.fromEntries(
@@ -332,16 +307,6 @@ export const takeoffGraph: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> =
     title: "View adoption",
     blurb: "Adopt zoning regions from chosen views.",
     satellites: [{ to: "/zone-audit", label: "Zone audit" }],
-  },
-  subjectField: {
-    field: "views",
-    noun: "view",
-    keyKind: "name",
-    cardinality: "many",
-    roster: "roster",
-    detail: "candidates",
-    pane: "scope",
-    show: (id) => id,
   },
   subject: (p) => (p.views === "all" ? "All views" : p.views.join(", ")) || "Choose views",
   fields: {
@@ -364,11 +329,10 @@ export const takeoffGraph: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> =
   stages: {
     adopt: {
       word: "Adopting views",
-      panes: ["scope", "adoption"],
       verbs: ["refresh", "initialize", "adopt"],
     },
   },
-};
+});
 
 /** The same atlas detail layout, without the adoption-only branch. */
 export const atlasLayout = split(

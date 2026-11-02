@@ -1,4 +1,4 @@
-// TODO: docs/features/routes/LEDGER.md#s6-declaration-space Reduce declaration 71 > 60.
+import { defineRouteGraph } from "@pe/agent-contracts";
 import { spaceQueries, matchingScene } from "./sources";
 import type { ReadingState } from "#/shell/readings";
 import { cutPolygons } from "./state";
@@ -91,7 +91,7 @@ const read = (key: SpaceReadKey, label: string) =>
             : null,
     },
   );
-export const spaceGraph: RouteGraph<SpacePage, null> = {
+export const spaceGraph: RouteGraph<SpacePage, null> = defineRouteGraph({
   directory: {
     path: "/space",
     title: "Space",
@@ -122,40 +122,21 @@ export const spaceGraph: RouteGraph<SpacePage, null> = {
   },
   needs: "document",
   // TODO: docs/features/routes/LEDGER.md#s7-29e50b64c1 Migrate capture inputs, visibility sets and layers off hand array codecs; preserve region subject.
-  subjectField: { field: "region", noun: "region", keyKind: "name", cardinality: "one", roster: "region", detail: "scene", pane: "picture", show: (id) => id },
+  subjectField: { field: "region", noun: "region", keyKind: "name", roster: "region", detail: "scene", pane: "picture", },
   fields: {
-    threadSearch: { ...threadListFields.threadSearch, role: "pose" },
-    threadSort: { ...threadListFields.threadSort, role: "pose" },
-    scene: { ...fields.scene, role: "pose" },
-    region: { ...fields.region, role: "subject" },
+    ...threadListFields,
+    ...fields,
     ids: { ...fields.ids, role: "selection" },
-    mode: { ...fields.mode, role: "pose" },
-    viewport: { ...fields.viewport, role: "pose" },
-    cuts: { ...fields.cuts, role: "pose" },
-    selected: { ...fields.selected, role: "pose" },
-    hidden: { ...fields.hidden, role: "pose" },
-    isolated: { ...fields.isolated, role: "pose" },
-    layers: { ...fields.layers, role: "pose" },
-    encoding: { ...fields.encoding, role: "pose" },
-    row: { ...fields.row, role: "pose", url: false },
-    treeInput: { ...fields.treeInput, role: "pose" },
-    sliceInput: { ...fields.sliceInput, role: "pose" },
-    probeInput: { ...fields.probeInput, role: "pose" },
-    sweepInput: { ...fields.sweepInput, role: "pose" },
+    row: { ...fields.row, url: false },
   },
   readings: {
-    region: { kind: "derive", source: "space.region", retire: "page", args: (page) => page.region },
+    region: { kind: "derive", args: (page) => page.region },
     scene: {
-      kind: "use",
-      source: "space.scene",
       args: ({ scene }) => scene,
-      retire: "page",
     },
     answers: {
       kind: "derive",
-      source: "space.answers",
       args: ({ scene }) => scene,
-      retire: "page",
     },
   },
   verbs: {
@@ -173,7 +154,6 @@ export const spaceGraph: RouteGraph<SpacePage, null> = {
       label: "Space",
       purpose: "Inspect captured geometry, cuts and query answers",
       draws: ["scene", "answers"],
-      verbs: [],
     },
     facts: {
       label: "Space facts",
@@ -200,7 +180,6 @@ export const spaceGraph: RouteGraph<SpacePage, null> = {
   stages: {
     inspect: {
       word: "Inspecting",
-      panes: ["picture", "facts"],
       verbs: ["capture", "context"],
       teach:
         "Capture host element ids or load their context, then orbit, pick, hide, isolate and cut. Saved scene links reopen artifacts without capturing. Keys 1â€“4 switch 3D, Top, North and East. Escape returns an axis to its saved 3D pose. Each cut constrains the picture by intersection.",
@@ -253,7 +232,7 @@ export const spaceGraph: RouteGraph<SpacePage, null> = {
         : { refusal: refuse("not-ready", conflict.error) }
       : { patch: normalized };
   },
-};
+});
 
 export const spaceBinding = (id: string, row: unknown, { page }: { page: SpacePage }) => ({
   subject: null,

@@ -1,4 +1,5 @@
-// TODO: docs/features/routes/LEDGER.md#s6-declaration-chat Reduce declaration 97 > 60.
+import { defineRouteGraph } from "@pe/agent-contracts";
+// TODO: docs/features/routes/LEDGER.md#s6-declaration-chat Declaration 87 > 60 after kernel defaults. Thread lifecycle verbs, prompt inputs and readiness policy remain distinct.
 import { chatSeedChoices } from "./seed-choices";
 import { manyField } from "@pe/agent-contracts";
 import { z } from "zod";
@@ -74,7 +75,7 @@ export function chatGraph(deps: () => ChatRouteDeps, minOtherSize?: number): Rou
         intent: (scope) => ({ thread: String(scope.page.thread) }),
       },
     );
-  return {
+  return defineRouteGraph({
     directory: {
       path: "/pea",
       title: "Pea",
@@ -109,35 +110,29 @@ export function chatGraph(deps: () => ChatRouteDeps, minOtherSize?: number): Rou
       field: "thread",
       noun: "thread",
       keyKind: "name",
-      cardinality: "one",
       roster: "threads",
       detail: "head",
       pane: "threads",
-      show: (id) => id,
     },
     fields: {
-      thread: { ...field(z.string().default(""), {}), role: "subject" },
+      thread: { ...field(z.string().default(""), {}) },
       selected: {
         ...manyField("name", { url: "replace", agent: "set" }, z.array(z.string()).default([])),
         role: "selection",
       },
-      mode: { ...field(z.enum(["threads", "world"]).default("threads"), {}), role: "pose" },
+      mode: { ...field(z.enum(["threads", "world"]).default("threads"), {}) },
       ...peaSettingFields,
     },
     readings: {
-      threads: { kind: "use", source: "threads", retire: "never" },
+      threads: {  source: "threads", retire: "never" },
       head: {
-        kind: "use",
         source: "head",
-        retire: "page",
         args: (page) => page.thread,
       },
-      machine: { kind: "use", source: "machine", retire: "page", args: (page) => page.thread },
-      receipts: { kind: "use", source: "receipts", retire: "page", args: (page) => page.thread },
+      machine: {  source: "machine", args: (page) => page.thread },
+      receipts: {  source: "receipts", args: (page) => page.thread },
       capabilities: {
-        kind: "use",
         source: "capabilities",
-        retire: "page",
         args: (page) => page.thread,
       },
     },
@@ -216,15 +211,12 @@ export function chatGraph(deps: () => ChatRouteDeps, minOtherSize?: number): Rou
       threads: {
         label: "threads",
         purpose: "Choose a conversation",
-        draws: [],
-        verbs: [],
         frame: { header: false, flush: true, scroll: "clip" },
       },
       chat: {
         label: "chat",
         purpose: "Read and compose",
         draws: ["head", "machine", "receipts", "capabilities"],
-        verbs: [],
         frame: { header: false, flush: true, scroll: "clip" },
       },
     },
@@ -237,11 +229,10 @@ export function chatGraph(deps: () => ChatRouteDeps, minOtherSize?: number): Rou
     stages: {
       conversation: {
         word: "Conversation",
-        panes: ["threads", "chat"],
         verbs: ["threads", "world"],
       },
     },
-  };
+  });
 }
 
 export function chatAdapters(navigate: () => void): RouteAdapters<ChatPage, unknown> {

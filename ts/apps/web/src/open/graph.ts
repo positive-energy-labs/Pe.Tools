@@ -1,4 +1,5 @@
-// TODO: docs/features/routes/LEDGER.md#s6-declaration-open Reduce declaration 125 > 60.
+import { defineRouteGraph } from "@pe/agent-contracts";
+// TODO: docs/features/routes/LEDGER.md#s6-declaration-open Declaration 117 > 60 after kernel defaults. Document launch/close, destination selection and machine/world readings remain distinct.
 import { z } from "zod";
 import { instancesActions, pane, split, type RouteGraph } from "@pe/agent-contracts";
 import { field } from "../../../../packages/agent-contracts/src/route-field";
@@ -41,7 +42,7 @@ const rowVerbs = Object.assign(
   { ids: ["open", "start", "stop", "restart", "close"] },
 );
 
-export const openControls: RouteGraph<OpenPageState> = {
+export const openControls: RouteGraph<OpenPageState> = defineRouteGraph({
   directory: {
     path: "/open",
     title: "Open",
@@ -122,7 +123,6 @@ export const openControls: RouteGraph<OpenPageState> = {
     field: "document",
     noun: "document",
     keyKind: "name",
-    cardinality: "one",
     roster: "recents",
     detail: "machine",
     pane: "bay",
@@ -131,7 +131,7 @@ export const openControls: RouteGraph<OpenPageState> = {
   },
   fields: {
     session: { ...field(z.string().default(""), {}), role: "selection" },
-    document: { ...field(z.string().default(""), {}), role: "subject" },
+    document: { ...field(z.string().default(""), {}) },
     epoch: {
       ...field(openPageSchema.shape.epoch, {}, { encode: String, decode: Number }),
       role: "transient",
@@ -152,25 +152,19 @@ export const openControls: RouteGraph<OpenPageState> = {
   },
   readings: {
     machine: {
-      kind: "use",
       source: "open.machine",
-      retire: "page",
       args: (p) => p.epoch,
     },
     recents: {
-      kind: "use",
       source: "open.recents",
-      retire: "page",
       args: (p) => p.epoch,
     },
-    threads: { kind: "use", source: "open.threads", retire: "page", args: (p) => p.epoch },
+    threads: {  source: "open.threads", args: (p) => p.epoch },
     receipts: {
-      kind: "use",
       source: "open.receipts",
-      retire: "page",
       args: (p) => p.epoch,
     },
-    world: { kind: "feed", source: "open.world", retire: "page", args: (p) => p.epoch },
+    world: { kind: "feed", source: "open.world", args: (p) => p.epoch },
   },
   verbs: {
     refresh: pageVerb(
@@ -239,15 +233,14 @@ export const openControls: RouteGraph<OpenPageState> = {
       label: "History",
       purpose: "Inspect lifecycle receipts and world events",
       draws: ["receipts"],
-      verbs: [],
       history: { receipts: "receipts" },
     },
   },
   layout: split("open-body", { axis: "v", sized: "end", size: 140 }, pane("bay"), pane("history")),
-  stages: { open: { word: "Opening", panes: ["bay", "history"], verbs: ["refresh"] } },
-};
+  stages: { open: { word: "Opening", verbs: ["refresh"] } },
+});
 
-export const openGraph: RouteGraph<OpenPageState> = {
+export const openGraph: RouteGraph<OpenPageState> = defineRouteGraph({
   ...openControls,
   directory: {
     ...openControls.directory!,
@@ -256,17 +249,6 @@ export const openGraph: RouteGraph<OpenPageState> = {
     aliases: ["documents", "model", "launcher"],
   },
   subject: (p) => p.draft.doc ?? "Choose a document",
-  subjectField: {
-    field: "document",
-    noun: "document",
-    keyKind: "name",
-    cardinality: "one",
-    roster: "recents",
-    detail: "machine",
-    pane: "bay",
-    // A path is the key; a cloud path carries project/model GUIDs, so the label is the file name.
-    show: (id: string) => id.replace(/^.*[\\/}]/, ""),
-  },
   fields: {
     ...openControls.fields,
     document: {
@@ -302,4 +284,4 @@ export const openGraph: RouteGraph<OpenPageState> = {
     ...openControls.panes,
     bay: { ...openControls.panes.bay!, label: "Documents", verbs: ["open", "close"] },
   },
-};
+});

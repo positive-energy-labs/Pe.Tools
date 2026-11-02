@@ -1,4 +1,5 @@
-// TODO: docs/features/routes/LEDGER.md#s6-declaration-schedules Reduce declaration 175 > 60.
+import { defineRouteGraph } from "@pe/agent-contracts";
+// TODO: docs/features/routes/LEDGER.md#s6-declaration-schedules Declaration 163 > 60 after kernel defaults. Read/cancel/push/capture/apply verbs and retained/saved readings remain distinct.
 import { scheduleQueries } from "../../../../packages/mcps/src/shared/query-client";
 import { z } from "zod";
 import {
@@ -46,7 +47,7 @@ const push = z.strictObject({
   refusal: z.string().nullable().default(null),
 });
 
-export const schedulesBase: RouteGraph<SchedulesPage, ScheduleGridDocument> = {
+export const schedulesBase: RouteGraph<SchedulesPage, ScheduleGridDocument> = defineRouteGraph({
   directory: {
     path: "/schedules",
     title: "Schedules",
@@ -84,26 +85,24 @@ export const schedulesBase: RouteGraph<SchedulesPage, ScheduleGridDocument> = {
     field: "workspaceId",
     noun: "schedule",
     keyKind: "name",
-    cardinality: "one",
     roster: "catalog",
     detail: "retained",
     pane: "list",
-    show: (id) => id,
   },
   fields: {
     threadSearch: { ...fields.threadSearch, role: "query" },
     threadSort: { ...fields.threadSort, role: "query" },
-    stage: { ...fields.stage, role: "stage" },
+    stage: fields.stage,
     pod: { ...fields.pod, role: "draft" },
     path: { ...fields.path, role: "draft" },
-    pane: { ...fields.pane, role: "pose", url: false },
-    workspaceId: { ...fields.workspaceId, role: "subject" },
+    pane: { ...fields.pane, url: false },
+    workspaceId: fields.workspaceId,
     query: { ...fields.query, role: "query" },
     sort: {
       ...field(schedulesPageSchema.shape.sort, {}, { encode: JSON.stringify, decode: JSON.parse }),
       role: "query",
     },
-    hidden: { ...manyField("name", { url: "replace", agent: "set" }), role: "pose" },
+    hidden: { ...manyField("name", { url: "replace", agent: "set" }) },
     lines: { ...fields.lines, role: "query" },
     cell: { ...fields.cell, role: "selection" },
     captureId: {
@@ -124,33 +123,25 @@ export const schedulesBase: RouteGraph<SchedulesPage, ScheduleGridDocument> = {
     },
   ],
   readings: {
-    catalog: { kind: "use", source: "schedules.catalog", retire: "target" },
+    catalog: {  source: "schedules.catalog", },
     retained: {
-      kind: "use",
       source: "schedules.retained",
       query: "schedule.grid.snapshot",
-      retire: "page",
       args: (page) => page.workspaceId,
     },
     saved: {
-      kind: "use",
       source: "schedules.saved",
-      retire: "page",
       args: (page) => [page.stage, page.captureId],
     },
     history: {
-      kind: "use",
       source: "schedules.history",
-      retire: "page",
       args: (page) => page.workspaceId,
     },
     receipts: {
-      kind: "use",
       source: "schedules.receipts",
-      retire: "target",
     },
-    outcome: { kind: "derive", source: "schedules.outcome", retire: "target", deps: ["receipts"] },
-    pods: { kind: "use", source: "schedules.pods", retire: "never" },
+    outcome: { kind: "derive", source: "schedules.outcome", deps: ["receipts"] },
+    pods: {  source: "schedules.pods", retire: "never" },
   },
   verbs: {
     edit: workVerb(
@@ -272,7 +263,6 @@ export const schedulesBase: RouteGraph<SchedulesPage, ScheduleGridDocument> = {
       label: "Schedule grid",
       purpose: "Inspect and edit schedule cells",
       draws: ["retained", "saved", "receipts", "outcome"],
-      verbs: [],
     },
     work: {
       label: "Schedule Work",
@@ -284,7 +274,6 @@ export const schedulesBase: RouteGraph<SchedulesPage, ScheduleGridDocument> = {
       label: "Schedule spec",
       purpose: "Choose a saved schedule definition",
       draws: ["pods"],
-      verbs: [],
     },
   },
   layout: split(
@@ -306,11 +295,11 @@ export const schedulesBase: RouteGraph<SchedulesPage, ScheduleGridDocument> = {
   predicates: { editing: (page) => page.stage !== "history" },
   stages: {
     audit: { word: "Auditing", panes: ["list", "grid", "work"], verbs: ["capture"] },
-    apply: { word: "Applying", panes: ["list", "grid", "work", "spec"], verbs: ["push", "apply"] },
-    history: { word: "History", panes: ["list", "grid"], verbs: [] },
+    apply: { word: "Applying", verbs: ["push", "apply"] },
+    history: { word: "History", panes: ["list", "grid"], },
   },
   stageOrder: ["audit", "apply", "history"],
-};
+});
 
 export const sameScheduleRows = (
   a: import("@pe/agent-contracts").ScheduleReading,
@@ -325,22 +314,13 @@ export const sameScheduleRows = (
         canonicalRouteInput(b.snapshot.rows[index]!.subjectIds),
   );
 
-export const schedulesGraph: RouteGraph<SchedulesPage, ScheduleGridDocument> = {
+export const schedulesGraph: RouteGraph<SchedulesPage, ScheduleGridDocument> = defineRouteGraph({
   ...schedulesBase,
   directory: {
     ...schedulesBase.directory!,
     blurb: "Inspect, edit and review the history of a document schedule.",
   },
-  subjectField: {
-    field: "workspaceId",
-    noun: "schedule",
-    keyKind: "UniqueId",
-    cardinality: "one",
-    roster: "catalog",
-    detail: "retained",
-    pane: "list",
-    show: (id) => id,
-  },
+  subjectField: { ...schedulesBase.subjectField, keyKind: "UniqueId" },
   subject: (p) => p.workspaceId || "Choose a schedule",
   fields: {
     ...schedulesBase.fields,
@@ -365,4 +345,4 @@ export const schedulesGraph: RouteGraph<SchedulesPage, ScheduleGridDocument> = {
     apply: { word: "Editing", panes: ["list", "grid", "work"], verbs: ["push"] },
     history: schedulesBase.stages.history!,
   },
-};
+});

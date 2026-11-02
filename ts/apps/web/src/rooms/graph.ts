@@ -1,4 +1,5 @@
-// TODO: docs/features/routes/LEDGER.md#s6-declaration-rooms Reduce declaration 181 > 60.
+import { defineRouteGraph } from "@pe/agent-contracts";
+// TODO: docs/features/routes/LEDGER.md#s6-declaration-rooms Declaration 168 > 60 after kernel defaults. Partition/write/merge commands, anchored feedback and plan layers remain distinct.
 import { z } from "zod";
 import {
   gate,
@@ -42,7 +43,7 @@ const feedbackVerbs = Object.assign(
   { ids: ["delete-note", "applyMark"] },
 );
 
-export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = {
+export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = defineRouteGraph({
   directory: {
     path: "/rooms",
     title: "Rooms",
@@ -75,15 +76,15 @@ export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = {
   needs: "project",
   work: roomsRouteState.schema,
   // TODO: docs/features/routes/LEDGER.md#s7-0892eb207a Migrate layers and selected sets to kernel manyField; preserve K1c selection ownership.
-  subjectField: { field: "view", noun: "view", keyKind: "name", cardinality: "one", roster: "roster", detail: "snapshot", pane: "scope", show: (id) => id },
+  subjectField: { field: "view", noun: "view", keyKind: "name", roster: "roster", detail: "snapshot", pane: "scope", },
   fields: {
     threadSearch: { ...fields.threadSearch, role: "query" },
     threadSort: { ...fields.threadSort, role: "query" },
-    stage: { ...fields.stage, role: "stage", agent: false },
-    view: { ...fields.view, role: "subject", agent: false },
-    layers: { ...fields.layers, role: "pose", agent: false },
+    stage: { ...fields.stage, agent: false },
+    view: { ...fields.view, agent: false },
+    layers: { ...fields.layers, agent: false },
     show: { ...fields.show, role: "query", agent: false },
-    viewport: { ...fields.viewport, role: "pose" },
+    viewport: fields.viewport,
     selected: { ...fields.selected, role: "selection" },
     epoch: {
       ...field(
@@ -120,26 +121,16 @@ export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = {
     },
   }),
   readings: {
-    roster: { kind: "use", source: "rooms.roster", retire: "target" },
     snapshot: {
-      kind: "use",
-      source: "rooms.snapshot",
-      retire: "page",
       args: (p) => [p.view, p.epoch],
     },
     trace: {
-      kind: "use",
-      source: "rooms.trace",
-      retire: "page",
       args: (p) => [p.view, p.epoch],
     },
     plan: {
-      kind: "use",
-      source: "rooms.plan",
-      retire: "page",
       args: (p) => p.view,
     },
-    receipts: { kind: "use", source: "rooms.receipts", retire: "target" },
+    receipts: {},
   },
   verbs: {
     refresh: queryVerb(roomsQueries["rooms.refresh"], {
@@ -248,7 +239,6 @@ export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = {
       label: "Plan view",
       purpose: "Choose the level and plan view",
       draws: ["snapshot"],
-      verbs: [],
     },
     plan: {
       label: "Plan",
@@ -268,14 +258,12 @@ export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = {
       label: "Regions",
       purpose: "Edit room names, designation and Manual J fields",
       draws: ["snapshot"],
-      verbs: [],
     },
     history: {
       label: "History",
       history: { receipts: "receipts" },
       purpose: "Inspect this document's rooms receipts",
       draws: ["receipts"],
-      verbs: [],
     },
   },
   layout: split(
@@ -310,4 +298,4 @@ export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = {
     history: { word: "History", panes: ["history"], verbs: ["refresh"] },
   },
   stageOrder: ["partition", "review", "history"],
-};
+});

@@ -1,4 +1,5 @@
-// TODO: docs/features/routes/LEDGER.md#s6-declaration-data-tables Reduce declaration 78 > 60.
+import { defineRouteGraph } from "@pe/agent-contracts";
+// TODO: docs/features/routes/LEDGER.md#s6-declaration-data-tables Declaration 75 > 60 after kernel defaults. Draft editing, prune review and revision checks remain distinct.
 import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { z } from "zod";
 import {
@@ -54,7 +55,7 @@ export function pruneReview(draft: Draft, tables: readonly TableHandle[]) {
   };
 }
 
-export const dataTablesGraph: RouteGraph<DataTablesPage, DataTablesWork> = {
+export const dataTablesGraph: RouteGraph<DataTablesPage, DataTablesWork> = defineRouteGraph({
   seeds: {
     edit: {
       title: "edit",
@@ -90,17 +91,15 @@ export const dataTablesGraph: RouteGraph<DataTablesPage, DataTablesWork> = {
     field: "table",
     noun: "table",
     keyKind: "name",
-    cardinality: "one",
     roster: "tables",
     detail: "tables",
     pane: "tables",
-    show: (id) => id,
   },
   fields: {
     row: { ...field(z.string().default(""), {}), role: "selection" },
-    table: { ...dataTablesAddress.fields.table, role: "subject" },
+    table: dataTablesAddress.fields.table,
   },
-  readings: { tables: { kind: "use", source: "data-tables.tables", retire: "target" } },
+  readings: {},
   verbs: {
     new: workVerb(
       { label: "New table", input: z.object({}) },
@@ -184,16 +183,15 @@ export const dataTablesGraph: RouteGraph<DataTablesPage, DataTablesWork> = {
       draws: ["tables"],
       verbs: Object.assign(() => ["open"], { ids: ["open"] }),
     },
-    draft: { label: "Draft", purpose: "Edit columns and keyed rows", draws: [], verbs: [] },
+    draft: { label: "Draft", purpose: "Edit columns and keyed rows", },
   },
   layout: split("editor", { axis: "h", sized: "start", size: 260 }, pane("tables"), pane("draft")),
   stages: {
     edit: {
       word: "Editing",
-      panes: ["tables", "draft"],
       verbs: ["new", "apply"],
       teach:
         "Choose a table or start a new draft. Apply upserts by name and row key and prunes missing rows.",
     },
   },
-};
+});

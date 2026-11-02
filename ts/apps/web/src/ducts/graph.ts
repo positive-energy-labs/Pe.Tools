@@ -1,4 +1,5 @@
-// TODO: docs/features/routes/LEDGER.md#s6-declaration-ducts Reduce declaration 296 > 60.
+import { defineRouteGraph } from "@pe/agent-contracts";
+// TODO: docs/features/routes/LEDGER.md#s6-declaration-ducts Declaration 274 > 60 after kernel defaults. Pricing, healing, annotations and network/sheet panes remain distinct.
 import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { z } from "zod";
 
@@ -111,7 +112,7 @@ const ductCells = (families: CellsDecl<DuctsRouteDocument>[]): CellsDecl<DuctsRo
     };
   });
 
-export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
+export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = defineRouteGraph({
   seeds: {
     layout: { title: "layout", load: () => import("./seeds").then((m) => m.ductsSeeds["layout"]!) },
     scene: { title: "scene", load: () => import("./seeds").then((m) => m.ductsSeeds["scene"]!) },
@@ -155,7 +156,6 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
     roster: "roster",
     detail: "ducts",
     pane: "e-systems",
-    show: (id) => id,
   },
   subject: (page) =>
     `${page.stage === "sheet" ? "Pricing fans" : "Pricing systems"} on ${page.stage === "sheet" ? (page.fan ? `fan ${page.fan}` : "this document") : (page.system === "all" ? "all systems" : page.system.join(" + ")) || "this document"}`,
@@ -165,19 +165,17 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
   fields: {
     threadSearch: { ...fields.threadSearch, role: "query", url: fields.threadSearch.url },
     threadSort: { ...fields.threadSort, role: "query", url: fields.threadSort.url },
-    stage: { ...field(z.enum(["network"]).default("network"), { url: "push" }), role: "stage" },
+    stage: { ...field(z.enum(["network"]).default("network"), { url: "push" }) },
 
     contextRadiusFt: {
       ...fields.contextRadiusFt,
-      role: "pose",
       url: fields.contextRadiusFt.url ?? false,
     },
 
-    sceneView: { ...fields.sceneView, role: "pose", url: fields.sceneView.url ?? false },
+    sceneView: { ...fields.sceneView, url: fields.sceneView.url ?? false },
 
     system: {
       ...fields.system,
-      role: "subject",
       editor: "pane",
       url: fields.system.url ?? false,
       picker: {
@@ -211,15 +209,15 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
 
     inputSort: { ...fields.inputSort, role: "query", url: fields.inputSort.url ?? false },
 
-    encoding: { ...fields.encoding, role: "pose", url: fields.encoding.url ?? false },
+    encoding: { ...fields.encoding, url: fields.encoding.url ?? false },
 
-    layers: { ...fields.layers, role: "pose", url: fields.layers.url ?? false },
+    layers: { ...fields.layers, url: fields.layers.url ?? false },
 
-    contextStyle: { ...fields.contextStyle, role: "pose", url: fields.contextStyle.url ?? false },
+    contextStyle: { ...fields.contextStyle, url: fields.contextStyle.url ?? false },
 
-    picture: { ...fields.picture, role: "pose", url: fields.picture.url ?? false },
+    picture: { ...fields.picture, url: fields.picture.url ?? false },
 
-    viewport: { ...fields.viewport, role: "pose", url: fields.viewport.url ?? false },
+    viewport: { ...fields.viewport, url: fields.viewport.url ?? false },
 
     fan: { ...fields.fan, role: "query", url: fields.fan.url },
     heal: transient(healReviewSchema.nullable().default(null)),
@@ -437,43 +435,33 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
   ]),
 
   readings: {
-    meshes: { kind: "derive", source: "ducts.meshes", retire: "never" },
-    roster: { kind: "use", source: "ducts.roster", retire: "target" },
+    meshes: { kind: "derive", retire: "never" },
 
     ducts: {
-      kind: "use",
       source: "ducts.networks",
       deps: ["roster"],
       args: (p) => ({ system: p.system }),
-      retire: "page",
     },
 
-    tables: { kind: "use", source: "ducts.tables", retire: "target" },
+    tables: {},
 
-    catalogs: { kind: "use", source: "ducts.catalogs", retire: "never" },
+    catalogs: {   retire: "never" },
 
     pricing: {
       kind: "worker",
-      source: "ducts.pricing",
       deps: ["ducts", "tables", "catalogs", "meshes"],
-      retire: "target",
     },
 
-    fans: { kind: "use", source: "ducts.fans", retire: "target" },
+    fans: {},
 
     sheet: {
-      kind: "use",
-      source: "ducts.sheet",
       deps: ["fans"],
       args: (p) => ({ fan: p.fan, path: p.sheetPath }),
-      retire: "page",
     },
 
     sheetSnapshot: {
-      kind: "use",
       source: "ducts.sheet-snapshot",
       deps: ["sheet"],
-      retire: "target",
     },
   },
 
@@ -633,14 +621,12 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
       label: "Systems",
       purpose: "Choose a system to inspect",
       draws: ["fans", "roster", "ducts", "pricing"],
-      verbs: [],
     },
 
     "e-sidebar": {
       label: "System tree",
       purpose: "Inspect the opened systems and their runs",
       draws: ["pricing"],
-      verbs: [],
     },
 
     "e-inputs": {
@@ -658,21 +644,18 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
       label: "All-systems rules",
       purpose: "Price every read fitting type",
       draws: ["pricing"],
-      verbs: [],
     },
 
     "e-rules": {
       label: "This system's rules",
       purpose: "Review fitting rules for the opened systems",
       draws: ["pricing"],
-      verbs: [],
     },
 
     "e-picture": {
       label: "Picture",
       purpose: "Inspect the model or schematic",
       draws: ["pricing"],
-      verbs: [],
     },
 
     "e-inbox": {
@@ -697,28 +680,24 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
       label: "Fans",
       purpose: "Open a fan port to read its sheet",
       draws: ["fans", "sheet"],
-      verbs: [],
     },
 
     "sheet-inputs": {
       label: "Inputs",
       purpose: "Edit firm, project, fan and element inputs",
       draws: ["sheet"],
-      verbs: [],
     },
 
     "sheet-picture": {
       label: "Picture",
       purpose: "Inspect the fan's walk and blockers",
       draws: ["sheet", "sheetSnapshot"],
-      verbs: [],
     },
 
     "sheet-ledger": {
       label: "Ledger",
       purpose: "Required ESP and blockers by consent tier",
       draws: ["sheet"],
-      verbs: [],
     },
   },
 
@@ -839,4 +818,4 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
   },
 
   stageOrder: ["network"],
-};
+});

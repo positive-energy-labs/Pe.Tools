@@ -1,4 +1,5 @@
-// TODO: docs/features/routes/LEDGER.md#s6-declaration-family Reduce declaration 227 > 60.
+import { defineRouteGraph } from "@pe/agent-contracts";
+// TODO: docs/features/routes/LEDGER.md#s6-declaration-family Declaration 213 > 60 after kernel defaults. Read/build/apply/capture workflows and receipt dependencies remain distinct.
 import { familyQueries } from "../../../../packages/mcps/src/shared/query-client";
 import { z } from "zod";
 import { field } from "../../../../packages/agent-contracts/src/route-field";
@@ -34,7 +35,7 @@ const familyCellParameter = (key: string) => {
   return root === "parameters" && name ? name : null;
 };
 
-export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = {
+export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = defineRouteGraph({
   directory: {
     path: "/family",
     title: "Family",
@@ -74,22 +75,22 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = {
   work: familyDraftRouteState.schema,
   // A saved member is input to the document-owned draft, not a different Work.
   // TODO: docs/features/routes/LEDGER.md#s7-fd9848fdb0 Migrate ordered sort state and hidden-column sets off hand array codecs; K1c consolidates drill/inspector.
-  subjectField: { kind: "singleton", field: "family", noun: "family document", keyKind: "name", cardinality: "one", roster: "document", detail: "family", pane: "matrix", show: (id) => id },
+  subjectField: { kind: "singleton", field: "family", noun: "family document", keyKind: "name", roster: "document", detail: "family", pane: "matrix", },
   fields: {
-    family: { ...field(familyPageSchema.shape.family, {}), role: "subject" },
+    family: { ...field(familyPageSchema.shape.family, {}) },
     threadSearch: { ...fields.threadSearch, role: "query" },
     threadSort: { ...fields.threadSort, role: "query" },
-    stage: { ...fields.stage, role: "stage" },
+    stage: fields.stage,
     pod: { ...fields.pod, role: "query" },
     path: { ...fields.path, role: "query" },
-    pane: { ...fields.pane, role: "pose", url: false },
+    pane: { ...fields.pane, url: false },
     query: { ...fields.query, role: "query" },
     sort: { ...fields.sort, role: "query" },
-    hidden: { ...fields.hidden, role: "pose" },
-    overlay: { ...fields.overlay, role: "pose" },
+    hidden: fields.hidden,
+    overlay: fields.overlay,
     drill: { ...fields.drill, role: "query" },
     inspector: { ...fields.inspector, role: "selection" },
-    doc: { ...fields.doc, role: "pose" },
+    doc: fields.doc,
   },
   workFields: {
     reading: { label: "reading", internal: true },
@@ -109,40 +110,30 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = {
   ],
   readings: {
     family: { kind: "derive", source: "family.draft", retire: "page", deps: ["profile", "captureReceipt"] },
-    document: { kind: "derive", source: "family.document", retire: "target" },
+    document: { kind: "derive", source: "family.document", },
     profile: {
-      kind: "use",
       source: "family.profile",
-      retire: "page",
       args: (page) => [page.pod, page.path],
     },
-    receipts: { kind: "use", source: "family.receipts", retire: "target" },
+    receipts: {  source: "family.receipts", },
     applyReceipt: {
-      kind: "use",
       source: "family.apply-receipt",
-      retire: "target",
       deps: ["receipts"],
     },
     captureReceipt: {
-      kind: "use",
       source: "family.capture-receipt",
-      retire: "target",
       deps: ["receipts"],
     },
     buildReceipt: {
-      kind: "use",
       source: "family.build-receipt",
-      retire: "page",
       deps: ["receipts", "profile"],
       args: (page) => [page.pod, page.path],
     },
     spec: {
-      kind: "use",
       source: "family.spec",
-      retire: "page",
       args: (page) => [page.pod, page.path],
     },
-    pods: { kind: "use", source: "family.pods", retire: "never" },
+    pods: {  source: "family.pods", retire: "never" },
   },
   verbs: {
     read: queryVerb(
@@ -288,19 +279,16 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = {
       label: "Family parameters",
       purpose: "Edit one family's parameters across its types",
       draws: ["profile", "receipts", "applyReceipt", "captureReceipt", "buildReceipt"],
-      verbs: [],
     },
     doc: {
       label: "Family document",
       purpose: "Inspect attached cut-sheet evidence",
       draws: ["spec"],
-      verbs: [],
     },
     work: {
       label: "Family Work",
       purpose: "Review keyed cells and original receipts",
       draws: ["receipts"],
-      verbs: [],
     },
     spec: {
       label: "Family members",
@@ -314,7 +302,6 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = {
     history: {
       label: "Saved family readings",
       purpose: "Inspect immutable captures",
-      draws: [],
       verbs: Object.assign(
         (row: unknown) => ((row as { readingId?: unknown } | null)?.readingId ? ["saved"] : []),
         { ids: ["saved"] },
@@ -362,4 +349,4 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = {
     history: { word: "History", panes: ["history"], verbs: ["close-inspector"] },
   },
   stageOrder: ["audit", "apply", "history"],
-};
+});

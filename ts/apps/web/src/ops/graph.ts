@@ -1,4 +1,5 @@
-// TODO: docs/features/routes/LEDGER.md#s6-declaration-ops Reduce declaration 84 > 60.
+import { defineRouteGraph } from "@pe/agent-contracts";
+// TODO: docs/features/routes/LEDGER.md#s6-declaration-ops Declaration 79 > 60 after kernel defaults. Operation dispatch, receipt control and request/result fields remain distinct.
 import { z } from "zod";
 import { pane, split, type RouteGraph } from "@pe/agent-contracts";
 import { field } from "../../../../packages/agent-contracts/src/route-field";
@@ -15,7 +16,7 @@ export const opsPageSchema = z.object({
   result,
 });
 export type OpsPage = z.output<typeof opsPageSchema>;
-export const opsGraph: RouteGraph<OpsPage> = {
+export const opsGraph: RouteGraph<OpsPage> = defineRouteGraph({
   seeds: {
     inspect: {
       title: "inspect",
@@ -44,9 +45,9 @@ export const opsGraph: RouteGraph<OpsPage> = {
   address: "ops",
   name: "Ops",
   optionalTarget: "session",
-  subjectField: { field: "op", noun: "operation", keyKind: "name", cardinality: "one", roster: "catalog", detail: "operation", pane: "operation", show: (id) => id },
+  subjectField: { field: "op", noun: "operation", keyKind: "name", roster: "catalog", detail: "operation", pane: "operation", },
   fields: {
-    op: { ...opsAddress.fields.op, role: "subject", agent: false },
+    op: { ...opsAddress.fields.op, agent: false },
     actionId: { ...opsAddress.fields.actionId, role: "selection", agent: false },
     values: {
       editor: "pane",
@@ -70,10 +71,9 @@ export const opsGraph: RouteGraph<OpsPage> = {
     },
   }),
   readings: {
-    operation: { kind: "derive", source: "ops.operation", retire: "page", deps: ["catalog"], args: (page) => page.op },
-    catalog: { kind: "use", source: "ops.catalog", retire: "target" },
-    receipt: { kind: "use", source: "ops.receipt", retire: "page", args: (page) => page.actionId },
-    receipts: { kind: "use", source: "ops.receipts", retire: "never" },
+    operation: { kind: "derive", deps: ["catalog"], args: (page) => page.op },
+    receipt: {    args: (page) => page.actionId },
+    receipts: {   retire: "never" },
   },
   verbs: {
     control: rpcVerb(
@@ -108,25 +108,21 @@ export const opsGraph: RouteGraph<OpsPage> = {
       label: "Receipts",
       purpose: "Choose a journaled operation receipt",
       draws: ["receipts"],
-      verbs: [],
     },
     operation: {
       label: "Operation",
       purpose: "Choose a catalog operation and inspect its request and result",
       draws: ["catalog"],
-      verbs: [],
     },
     receipt: {
       label: "Receipt",
       purpose: "Inspect the original journaled action",
       draws: ["receipt"],
-      verbs: [],
     },
     history: {
       label: "History",
       purpose: "Inspect operation invocations and receipts",
       draws: ["receipts"],
-      verbs: [],
       history: { receipts: "receipts" },
     },
   },
@@ -153,4 +149,4 @@ export const opsGraph: RouteGraph<OpsPage> = {
       verbs: ["run"],
     },
   },
-};
+});
