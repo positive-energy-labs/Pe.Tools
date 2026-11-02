@@ -399,7 +399,7 @@ export function ModelPicture({
             <DetailedRead
               refusal={detailRefusal}
               metadata={read.metadata}
-              pending={read.pending}
+              pending={!detailRefusal && contextRepresentation === "meshes" && read.pending}
               overview={contextRepresentation === "meshes"}
               onRead={() =>
                 onContextRepresentation(
