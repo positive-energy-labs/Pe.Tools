@@ -1,6 +1,6 @@
 import type { AppExposure, AppRouteMount, AppSurface } from "./route-directory.ts";
 import { z } from "zod";
-import { manyCodec, stableKeyKinds, type History, type RouteField } from "./route-field.ts";
+import { stableKeyKinds, type History, type RouteField } from "./route-field.ts";
 import type { RouteStatePatch } from "./route-state.ts";
 import type { RouteViewRefusalCode } from "./route-view.ts";
 
@@ -571,12 +571,6 @@ export function validateRouteGraph<P, W>(
           "invalid-graph",
           "subjectField.keyKind",
           "Subject keys must be stable identity, never ElementId or display fields",
-        );
-      if (subject.cardinality === "many" && graph.fields[subject.field]?.codec !== manyCodec)
-        refuse(
-          "invalid-graph",
-          "subjectField",
-          "Subject many fields must use the kernel many codec",
         );
       for (const id of [subject.roster, subject.detail])
         if (!graph.readings[id])

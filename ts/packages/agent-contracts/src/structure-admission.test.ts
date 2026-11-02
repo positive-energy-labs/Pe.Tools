@@ -46,7 +46,7 @@ const messages = (value: RouteGraph<any, any>) =>
   validateRouteGraph(value)
     .map((r) => r.message)
     .join("; ");
-test("missing subject, duplicate selection and handwritten arrays refuse admission", () => {
+test("missing subject and duplicate selection refuse admission", () => {
   const good = graph();
   expect(messages(good)).toBe("");
   expect(messages({ ...good, subjectField: undefined } as any)).toContain("Every route");
@@ -87,6 +87,8 @@ test("Pod admission links axes and refuses missing declarations", () => {
   module.graph.fields.selected = { schema: z.array(z.string()).default([]), codec: { encode: JSON.stringify, decode: JSON.parse }, role: "selection" };
   expect(() => validateExecutableRouteModule(module, module.moduleHash)).toThrow("kernel manyField");
   module.graph.fields.selected = { ...selected, schema: z.array(z.string()).default([]) };
+  expect(() => validateExecutableRouteModule(module, module.moduleHash)).toThrow("kernel manyField");
+  module.graph.fields.selected = { ...selected, codec: { encode: JSON.stringify, decode: JSON.parse } };
   expect(() => validateExecutableRouteModule(module, module.moduleHash)).toThrow("kernel manyField");
   module.graph.fields.selected = selected;
   delete module.entries["pod.test.read"].axes;

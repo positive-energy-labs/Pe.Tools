@@ -25,7 +25,7 @@ test("URL beats tab memory, which beats Page defaults", () => {
   expect(url.read(restorePageSearch({ fan: "memory" }, {})!)).toMatchObject({ fan: ["memory"] });
   expect(url.read({})).toMatchObject({ fan: [], stage: "sheet" });
 });
-test("one subject and kernel many codec are admission rules; query arrays retain their codecs", () => {
+test("typed graphs declare one subject and one kernel selection", () => {
   expect(validateRouteGraph(ductsGraph)).toEqual([]);
   expect(validateRouteGraph(fansGraph)).toEqual([]);
   expect(fansGraph.workRoute).toBe(ductsGraph.key);
@@ -38,12 +38,7 @@ test("one subject and kernel many codec are admission rules; query arrays retain
   const custom = { encode: JSON.stringify, decode: JSON.parse };
   // @ts-expect-error Page arrays must use manyField
   field(z.array(z.object({ key: z.string() })), {}, custom);
-  expect(
-    validateRouteGraph({
-      ...fansGraph,
-      fields: { ...fansGraph.fields, fan: { ...fansGraph.fields.fan, codec: custom } },
-    }),
-  ).toEqual(expect.arrayContaining([expect.objectContaining({ path: "subjectField" })]));
+
 });
 
 test("restore is per field; explicit empty clears memory but absent and undefined do not", () => {
