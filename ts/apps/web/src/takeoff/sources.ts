@@ -16,16 +16,22 @@ import {
   HOST_RPC_DOCUMENT_HEADER,
 } from "@pe/host-contracts/operation-types";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
-import { jsonSource, requestJson, type JsonRequest } from "#/shell/readings-api";
+import { callOp, jsonSource, requestJson, type JsonRequest } from "#/shell/readings-api";
 import { subscriptionSource } from "#/shell/readings-use";
 import type { ReadingContext, ReadingSource } from "#/shell/readings";
 import type { TakeoffGraphPage } from "./graph";
+import { selectedTakeoffPage, type TakeoffRoster } from "./subject";
 import { snapshotOfObservation } from "./actions";
 import { planOf, planView, type OwnerCrop } from "./plan";
 
-const page = (ctx: ReadingContext) => ctx.page as TakeoffGraphPage;
+const rawPage = (ctx: ReadingContext) => ctx.page as TakeoffGraphPage;
+const page = (ctx: ReadingContext) =>
+  selectedTakeoffPage(
+    ctx.page as TakeoffGraphPage,
+    ctx.inputs.roster?.value as TakeoffRoster | undefined,
+  );
 const worldOf = (ctx: ReadingContext): TakeoffModel | undefined =>
-  page(ctx).work
+  rawPage(ctx).work
     ? (ctx.inputs.saved?.value as TakeoffCapture | undefined)?.snapshot.world
     : snapshotOfObservation(
         (ctx.inputs.snapshot?.value ?? ctx.inputs.snapshot?.previous) as
@@ -43,7 +49,7 @@ const levelOf = (ctx: ReadingContext) => {
   );
 };
 function rpc(ctx: ReadingContext, key: string, request: unknown): JsonRequest | null {
-  return ctx.target.kind !== "document" || page(ctx).work
+  return ctx.target.kind !== "document" || rawPage(ctx).work
     ? null
     : {
         path: "/call",
@@ -57,20 +63,36 @@ function rpc(ctx: ReadingContext, key: string, request: unknown): JsonRequest | 
 export function takeoffSources(): Readonly<Record<string, ReadingSource>> {
   return {
     "takeoffs.roster": {
-      kind: "derive",
-      derive: (ctx) => {
-        const world = worldOf(ctx);
-        return {
-          views: (world?.lanes ?? []).map((row) => ({ id: row.view, label: row.label })),
-          zones: (world?.zones ?? []).map((row) => ({ id: row.zone.guid, label: row.name })),
-        };
+      kind: "use",
+      async open(ctx, deliver) {
+        const saved = ctx.inputs.saved?.value as TakeoffCapture | undefined;
+        const index =
+          !saved && ctx.target.kind === "document"
+            ? await callOp(ctx, "revit.catalog.project-index", {
+                sections: ["Views"],
+                includeUnplacedViews: true,
+                projection: { view: "Handles" },
+              })
+            : null;
+        const world = saved?.snapshot.world;
+        deliver({
+          kind: "complete",
+          revision: 1,
+          value: {
+            views: world
+              ? world.lanes.map((row) => ({ id: row.view, label: row.label }))
+              : (index?.views ?? []).map((row) => ({ id: row.name, label: row.name })),
+            zonesComplete: !!saved,
+            zones: (world?.zones ?? []).map((row) => ({ id: row.zone.guid, label: row.name })),
+          },
+        });
       },
     },
     "takeoffs.snapshot": {
       kind: "use",
       dirties: ["snapshot"],
       async open(ctx, deliver) {
-        if (page(ctx).work || ctx.target.kind !== "document")
+        if (rawPage(ctx).work || ctx.target.kind !== "document")
           return deliver({ kind: "complete", value: null, revision: 0 });
         await readTakeoff("takeoffs.snapshot", takeoffReadScope(page(ctx)), ctx.target.ref);
         if (ctx.signal.aborted) return;
@@ -177,10 +199,10 @@ export function takeoffSources(): Readonly<Record<string, ReadingSource>> {
       kind: "use",
       dirties: ["rhvac-open"],
       open(ctx, deliver) {
-        if (page(ctx).work || !page(ctx).r10)
+        if (rawPage(ctx).work || !rawPage(ctx).r10)
           return deliver({ kind: "complete", value: null, revision: 0 });
         return subscriptionSource({
-          request: () => ({ kind: "rhvac-file-version", path: page(ctx).r10 }),
+          request: () => ({ kind: "rhvac-file-version", path: rawPage(ctx).r10 }),
           decode: (value) => z.object({ path: z.string(), fileVersion: z.string() }).parse(value),
         }).open(ctx, deliver);
       },
@@ -196,16 +218,18 @@ export function takeoffSources(): Readonly<Record<string, ReadingSource>> {
     }),
     "takeoffs.saved": jsonSource({
       request: (ctx) =>
-        page(ctx).work
-          ? { path: `/takeoffs/observations?capture=${encodeURIComponent(page(ctx).work)}` }
+        rawPage(ctx).work
+          ? { path: `/takeoffs/observations?capture=${encodeURIComponent(rawPage(ctx).work)}` }
           : null,
       schema: takeoffCaptureSchema.nullable(),
       absent: null,
     }),
     "takeoffs.text": jsonSource({
       request: (ctx) =>
-        page(ctx).work && page(ctx).fileText
-          ? { path: `/takeoffs/observations?capture=${encodeURIComponent(page(ctx).work)}&text=1` }
+        rawPage(ctx).work && rawPage(ctx).fileText
+          ? {
+              path: `/takeoffs/observations?capture=${encodeURIComponent(rawPage(ctx).work)}&text=1`,
+            }
           : null,
       schema: z.object({ path: z.string(), text: z.string() }).nullable(),
       absent: null,

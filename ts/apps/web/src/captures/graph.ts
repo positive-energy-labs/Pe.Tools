@@ -1,10 +1,17 @@
+import { field, manyField } from "../../../../packages/agent-contracts/src/route-field";
 import { z } from "zod";
 import { pane, routeAddress, type RouteGraph } from "@pe/agent-contracts";
 import { capturesAddress } from "../../../../packages/agent-contracts/src/routes/captures";
 import { threadListFields } from "../../../../packages/agent-contracts/src/routes/shared";
 import { queryVerb } from "#/shell/verbs";
 import { captureQueries } from "./host";
-export type CapturesPage = z.output<ReturnType<typeof routeAddress<"captures">>["schema"]>;
+export type CapturesPage = Omit<
+  z.output<ReturnType<typeof routeAddress<"captures">>["schema"]>,
+  "open"
+> & {
+  selection: string;
+  open: import("../../../../packages/agent-contracts/src/route-field").Many;
+};
 export const capturesGraph: RouteGraph<CapturesPage, never> = {
   seeds: {
     browse: {
@@ -34,11 +41,22 @@ export const capturesGraph: RouteGraph<CapturesPage, never> = {
   key: "captures",
   address: "captures",
   name: "Captures",
+  subjectField: {
+    field: "sha",
+    noun: "capture",
+    keyKind: "name",
+    cardinality: "one",
+    roster: "captures",
+    detail: "captures",
+    pane: "captures",
+    show: (id) => id,
+  },
   fields: {
+    selection: { ...field(z.string().default(""), {}), role: "selection" },
     threadSearch: { ...threadListFields.threadSearch, role: "query" },
     threadSort: { ...threadListFields.threadSort, role: "query" },
-    sha: { ...capturesAddress.fields.sha, role: "selection" },
-    open: { ...capturesAddress.fields.open, role: "pose" },
+    sha: { ...capturesAddress.fields.sha, role: "subject" },
+    open: { ...manyField("name", { url: "replace", agent: "set" }), role: "pose" },
   },
   readings: {
     captures: { kind: "use", source: "captures.list", query: "captures.list", retire: "never" },

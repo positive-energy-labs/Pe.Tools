@@ -22,9 +22,11 @@ const FIELD_KEYS: readonly LegendKey[] = [
 
 function edit(body: Body, id: string, patch: Partial<GrilleInput>) {
   body.owner.view.setPage({
-    rows: body.page.rows.map((row) =>
-      row.id === id ? { ...solve({ ...row, ...patch }), id } : row,
-    ),
+    rows: {
+      profiles: body.page.rows.profiles.map((row) =>
+        row.id === id ? { ...solve({ ...row, ...patch }), id } : row,
+      ),
+    },
   });
 }
 
@@ -38,11 +40,13 @@ function Drawing(body: Body) {
           px={26}
           set={(patch) =>
             body.owner.view.setPage({
-              rows: body.page.rows.map((row) => {
-                const next = { ...row, ...patch };
-                const rib = "rib" in patch ? next.rib : Math.max(0, ribToFill(next));
-                return { ...solve({ ...next, rib }), id: row.id };
-              }),
+              rows: {
+                profiles: body.page.rows.profiles.map((row) => {
+                  const next = { ...row, ...patch };
+                  const rib = "rib" in patch ? next.rib : Math.max(0, ribToFill(next));
+                  return { ...solve({ ...next, rib }), id: row.id };
+                }),
+              },
             })
           }
         />
@@ -87,7 +91,9 @@ function Profiles(body: Body) {
   if (!value) return <output role="status">Calculating grilles</output>;
   const { page, owner } = body;
   const setPage = owner.view.setPage;
-  const picked = new Set(page.picked);
+  const picked = new Set(
+    page.picked === "all" ? page.rows.profiles.map((row) => row.id) : page.picked,
+  );
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
@@ -108,7 +114,11 @@ function Profiles(body: Body) {
         >
           export {picked.size} drawing{picked.size === 1 ? "" : "s"}
         </Button>
-        <Button label="reset" kind="framed" onClick={() => setPage({ rows: seedRows() })}>
+        <Button
+          label="reset"
+          kind="framed"
+          onClick={() => setPage({ rows: { profiles: seedRows() } })}
+        >
           reset
         </Button>
       </div>
@@ -120,7 +130,7 @@ function Profiles(body: Body) {
         add={() => {
           const src = value.active ?? value.rows.at(-1) ?? seedRows()[0]!;
           const id = `new${value.rows.length + 1}`;
-          setPage({ rows: [...page.rows, { ...src, id }], row: id });
+          setPage({ rows: { profiles: [...page.rows.profiles, { ...src, id }] }, row: id });
         }}
         picked={picked}
         onPickedChange={(next) => setPage({ picked: [...next] })}

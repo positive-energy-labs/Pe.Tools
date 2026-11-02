@@ -31,6 +31,16 @@ export const grillesGraph: RouteGraph<GrillesPage, null> = {
   key: "grilles",
   address: "grilles",
   name: "Grilles",
+  subjectField: {
+    field: "row",
+    noun: "grille profile",
+    keyKind: "name",
+    cardinality: "one",
+    roster: "result",
+    detail: "result",
+    pane: "profiles",
+    show: (id) => id,
+  },
   fields: grillesFields,
   readings: {
     result: {

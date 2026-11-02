@@ -50,7 +50,7 @@ export const podsGraph: RouteGraph<PodsPage, SettingsRouteDocument> = {
   workSubject: "member",
   optionalTarget: "document",
   observe: ["open"],
-  fields: podsFields,
+  fields: { ...podsFields, member: { ...podsFields.member, role: "selection" } },
   transition: podsTransition,
   cells: [
     { segment: "fields", groupOf: (key) => [key || "raw JSON"], nouns: ["field"], noun: "member" },

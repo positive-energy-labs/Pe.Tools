@@ -21,9 +21,15 @@ export const capturesAdapters: RouteAdapters<CapturesPage, never> = {
             <CapturesList
               captures={captures}
               focus={page.sha}
-              open={page.open}
+              open={page.open === "all" ? captures.map((capture) => capture.sha) : page.open}
               onPage={(next) =>
-                owner.view.setPage({ sha: next.sha, open: [...(next.open ?? page.open)] })
+                owner.view.setPage({
+                  sha: next.sha,
+                  open: [
+                    ...(next.open ??
+                      (page.open === "all" ? captures.map((capture) => capture.sha) : page.open)),
+                  ],
+                })
               }
             />
           ) : null}

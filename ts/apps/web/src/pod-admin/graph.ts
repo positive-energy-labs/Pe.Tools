@@ -4,7 +4,7 @@ import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { podAdminAddress } from "../../../../packages/agent-contracts/src/routes/pod-admin";
 import { pageVerb, rpcVerb } from "#/shell/verbs";
 import { activationRpc, installInput, trustInput, installRpc, trustRpc } from "./sources";
-export type AdminPage = { pod: string; epoch: number };
+export type AdminPage = { pod: string; epoch: number; selection: string };
 const command = { caller: "human" as const, review: "shown" as const };
 const lands = () => ({ epoch: Date.now() });
 export const podAdminGraph: RouteGraph<AdminPage> = {
@@ -36,6 +36,7 @@ export const podAdminGraph: RouteGraph<AdminPage> = {
     show: (id) => id,
   },
   fields: {
+    selection: { ...field(z.string().default(""), {}), role: "selection" },
     pod: { ...podAdminAddress.fields.pod, role: "subject" },
     epoch: { ...field(z.number().default(0), {}), role: "transient", url: false },
   },

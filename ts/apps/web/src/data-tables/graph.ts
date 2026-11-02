@@ -1,3 +1,4 @@
+import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { z } from "zod";
 import {
   pane,
@@ -18,7 +19,7 @@ export { tableSchema };
 export type TableHandle = z.output<typeof tableSchema>;
 export { dataTablesWorkSchema };
 export type DataTablesWork = z.output<typeof dataTablesWorkSchema>;
-export type DataTablesPage = { table: string };
+export type DataTablesPage = { table: string; row: string };
 export const rowKey = () => `row-${crypto.randomUUID().slice(0, 8)}`;
 export const draftFrom = (table: TableHandle): Draft => ({
   name: table.name,
@@ -83,7 +84,20 @@ export const dataTablesGraph: RouteGraph<DataTablesPage, DataTablesWork> = {
   name: "Data Tables",
   needs: "project",
   work: dataTablesWorkSchema,
-  fields: { table: { ...dataTablesAddress.fields.table, role: "subject" } },
+  subjectField: {
+    field: "table",
+    noun: "table",
+    keyKind: "name",
+    cardinality: "one",
+    roster: "tables",
+    detail: "tables",
+    pane: "tables",
+    show: (id) => id,
+  },
+  fields: {
+    row: { ...field(z.string().default(""), {}), role: "selection" },
+    table: { ...dataTablesAddress.fields.table, role: "subject" },
+  },
   readings: { tables: { kind: "use", source: "data-tables.tables", retire: "target" } },
   verbs: {
     new: workVerb(

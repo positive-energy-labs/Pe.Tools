@@ -26,6 +26,7 @@ import { roomEdit, withEditBases } from "./projections";
 import { readZoneMeta } from "./world";
 import { decisionRefusal } from "./room-actions";
 import type { TakeoffGraphPage } from "./graph";
+import { selectedTakeoffPage, type TakeoffRoster } from "./subject";
 
 export type TakeoffScope = BindingScope<TakeoffGraphPage, TakeoffsRouteDocument>;
 export const valueOf = <T>(scope: TakeoffScope, id: string): T | undefined =>
@@ -312,7 +313,12 @@ export function takeoffBinding(id: string, row: unknown, scope: TakeoffScope): M
     for (const [key, choice] of Object.entries(choices)) {
       const cut = key.lastIndexOf(":");
       const view = key.slice(0, cut);
-      if (choice.checked && scope.page.views.includes(view))
+      if (
+        choice.checked &&
+        selectedTakeoffPage(scope.page, valueOf<TakeoffRoster>(scope, "roster")).views.includes(
+          view,
+        )
+      )
         add(view, {
           elementId: Number(key.slice(cut + 1)),
           name: choice.name || `${view} · ${key.slice(cut + 1)}`,
@@ -322,7 +328,9 @@ export function takeoffBinding(id: string, row: unknown, scope: TakeoffScope): M
     for (const region of snapshot?.zoneFrs ?? []) {
       if (
         region.role !== "zoning-region" ||
-        !scope.page.views.includes(region.view) ||
+        !selectedTakeoffPage(scope.page, valueOf<TakeoffRoster>(scope, "roster")).views.includes(
+          region.view,
+        ) ||
         `${region.view}:${region.elementId}` in choices
       )
         continue;
@@ -337,7 +345,9 @@ export function takeoffBinding(id: string, row: unknown, scope: TakeoffScope): M
     why = takeoffRefusal(scope, true) ?? (grouped.size ? null : "Select regions to adopt");
   }
   if (id === "partition") {
-    const ids = input.zone ? [input.zone] : scope.page.zones;
+    const ids = input.zone
+      ? [input.zone]
+      : selectedTakeoffPage(scope.page, valueOf<TakeoffRoster>(scope, "roster")).zones;
     const zones = ids.map((id) => world?.zones.find((zone) => zone.zone.guid === id));
     request = zones.map((zone) => ({
       zoneGuid: zone?.zone.guid ?? "",
@@ -353,7 +363,10 @@ export function takeoffBinding(id: string, row: unknown, scope: TakeoffScope): M
           ? "Refresh the selected adopted zones"
           : null);
   }
-  if (id === "refresh") request = takeoffReadScope(scope.page);
+  if (id === "refresh")
+    request = takeoffReadScope(
+      selectedTakeoffPage(scope.page, valueOf<TakeoffRoster>(scope, "roster")),
+    );
   if (id === "retry-r10") {
     request = { path: scope.page.r10 };
     why ??= scope.page.r10 ? null : "Choose an .r10 file";
@@ -365,14 +378,14 @@ export function takeoffBinding(id: string, row: unknown, scope: TakeoffScope): M
       world && scope.work
         ? syncPlan(
             world,
-            scope.page.zones,
+            selectedTakeoffPage(scope.page, valueOf<TakeoffRoster>(scope, "roster")).zones,
             stagedTakeoffEdits(scope.work.doc),
             stagedDecisions(scope.work.doc),
           )
         : null;
     request = {
       path: scope.page.r10,
-      zones: [...scope.page.zones],
+      zones: [...selectedTakeoffPage(scope.page, valueOf<TakeoffRoster>(scope, "roster")).zones],
       captureId: capture?.id ?? "",
       fileVersion: version?.fileVersion ?? "",
       plan,

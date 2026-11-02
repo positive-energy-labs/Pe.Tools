@@ -1,4 +1,5 @@
 import { familyQueries } from "../../../../packages/mcps/src/shared/query-client";
+import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { z } from "zod";
 import {
   familyCaptureSchema,
@@ -18,6 +19,8 @@ import type { BindingScope } from "#/shell/mount-owner";
 import { applyRefusal, profileSummary } from "./model";
 
 export const parameterLinksPageSchema = z.object({
+  profile: z.literal("document").default("document"),
+  selection: z.string().default(""),
   rail: parameterLinksAddress.fields.rail.schema,
 });
 export type ParameterLinksPage = z.output<typeof parameterLinksPageSchema>;
@@ -101,7 +104,7 @@ export const parameterLinksGraph: RouteGraph<ParameterLinksPage, ParameterLinksD
     icon: "Link2",
     category: "Coordinate model data",
     blurb:
-      "Cross-element parameter links — co-edit the link profile with pea, preview the projected target writes, then apply to reconcile them.",
+      "Cross-element parameter links â€” co-edit the link profile with pea, preview the projected target writes, then apply to reconcile them.",
     aliases: ["Revit", "data"],
     listed: true,
     satellites: [],
@@ -116,7 +119,26 @@ export const parameterLinksGraph: RouteGraph<ParameterLinksPage, ParameterLinksD
   name: "Parameter Links",
   needs: "project",
   work: parameterLinksRouteState.schema,
+  subjectField: {
+    field: "profile",
+    noun: "parameter-link profile",
+    keyKind: "name",
+    cardinality: "one",
+    roster: "links",
+    detail: "links",
+    pane: "profile",
+    show: (id) => id,
+  },
   fields: {
+    profile: {
+      ...field(
+        parameterLinksPageSchema.shape.profile,
+        {},
+        { encode: String, decode: () => "document" as const },
+      ),
+      role: "subject",
+    },
+    selection: { ...field(parameterLinksPageSchema.shape.selection, {}), role: "selection" },
     rail: { ...parameterLinksAddress.fields.rail, role: "pose", agent: false },
   },
   cells: [

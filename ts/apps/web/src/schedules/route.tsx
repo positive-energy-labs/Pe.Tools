@@ -92,10 +92,17 @@ function SchedulesProvider({ owner, children }: { owner: SchedulesMount; childre
     documentScope: shown
       ? { bridgeSessionId: shown.target.session, openDocumentId: shown.target.openId }
       : undefined,
-    table: { query: page.query, sorts: page.sort, hiddenColumns: page.hidden },
+    table: {
+      query: page.query,
+      sorts: page.sort.columns,
+      hiddenColumns:
+        page.hidden === "all"
+          ? (shown?.snapshot.columns ?? []).map((column) => String(column.columnNumber))
+          : page.hidden,
+    },
     setTable: (next) =>
       owner.view.setPage(
-        { query: next.query, sort: next.sorts, hidden: next.hiddenColumns ?? [] },
+        { query: next.query, sort: { columns: next.sorts }, hidden: next.hiddenColumns ?? [] },
         { history: "replace" },
       ),
     cell: page.cell,
@@ -164,7 +171,11 @@ function GridBody() {
       {(error || failure) && (
         <OutcomeLine kind="error" label="Schedule grid" says={error ?? failure!} />
       )}
-      <a href={`/schedule-specs?${new URLSearchParams({ workspaceId: scope.page.workspaceId, pod: scope.page.pod, path: scope.page.path })}`}>Schedule definitions</a>
+      <a
+        href={`/schedule-specs?${new URLSearchParams({ workspaceId: scope.page.workspaceId, pod: scope.page.pod, path: scope.page.path })}`}
+      >
+        Schedule definitions
+      </a>
       <ScheduleGridWorkspace state={state} onRefused={setFailure} onHidden={setFailure} />
     </>
   );
@@ -200,7 +211,7 @@ function WorkBody({ owner, page, verbs }: MountBody<SchedulesPage, ScheduleGridD
           <span>
             {state.snapshot?.columns.find((column) => column.columnNumber === row.columnNumber)
               ?.headerText ?? `Column ${row.columnNumber}`}{" "}
-            · row {row.rowNumber} ·{" "}
+            Â· row {row.rowNumber} Â·{" "}
             {showCellValue(cells[key]?.edit?.value ?? cells[key]?.suggestion?.value)}
           </span>
           {verbs({ segment: "cells", key })}
@@ -216,7 +227,13 @@ function WorkBody({ owner, page, verbs }: MountBody<SchedulesPage, ScheduleGridD
 }
 
 function SpecBody({ owner, page }: MountBody<SchedulesPage, ScheduleGridDocument>) {
-  const scope: SchedulesScope = { ...owner.snapshot(), page, readings: Object.fromEntries(Object.keys(schedulesGraph.readings).map(id => [id, owner.readings.get(id)])) };
+  const scope: SchedulesScope = {
+    ...owner.snapshot(),
+    page,
+    readings: Object.fromEntries(
+      Object.keys(schedulesGraph.readings).map((id) => [id, owner.readings.get(id)]),
+    ),
+  };
   const pods = readingValue<PodList["pods"]>(scope, "pods") ?? [];
   const rows = pods.flatMap((pod) =>
     pod.members
@@ -237,19 +254,24 @@ function SpecBody({ owner, page }: MountBody<SchedulesPage, ScheduleGridDocument
       </EmptyState>
     );
   return (
-    <><a href={`/schedules?workspaceId=${encodeURIComponent(page.workspaceId)}`}>Inspect source schedule</a><ListView
-      list={list}
-      aria-label="Schedule specs"
-      row={(row) => ({
-        label: row.path,
-        sub: row.pod,
-        active: page.pod === row.pod && page.path === row.path,
-        actions: (
-          <a href={routeAddress("pods").link({ pod: row.pod, path: row.path })}>Open in Pods</a>
-        ),
-      })}
-      empty={{ message: "No saved schedule specs", exit: "Capture a schedule into a pod" }}
-    /></>
+    <>
+      <a href={`/schedules?workspaceId=${encodeURIComponent(page.workspaceId)}`}>
+        Inspect source schedule
+      </a>
+      <ListView
+        list={list}
+        aria-label="Schedule specs"
+        row={(row) => ({
+          label: row.path,
+          sub: row.pod,
+          active: page.pod === row.pod && page.path === row.path,
+          actions: (
+            <a href={routeAddress("pods").link({ pod: row.pod, path: row.path })}>Open in Pods</a>
+          ),
+        })}
+        empty={{ message: "No saved schedule specs", exit: "Capture a schedule into a pod" }}
+      />
+    </>
   );
 }
 
@@ -282,6 +304,7 @@ export const schedulesRoute = routeFromGraph(schedulesGraph, schedulesAdapters, 
 
 /** Definition authoring never mounts the document schedule grid or its push controls. */
 export const scheduleSpecsAdapters: RouteAdapters<SchedulesPage, ScheduleGridDocument> = {
-  sources: schedulesSources(), binding: schedulesBinding,
-  bodies: { spec: body => <SpecBody {...body} /> },
+  sources: schedulesSources(),
+  binding: schedulesBinding,
+  bodies: { spec: (body) => <SpecBody {...body} /> },
 };

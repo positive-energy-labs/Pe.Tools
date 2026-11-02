@@ -16,7 +16,7 @@ import {
   type ScheduleGridDocument,
   type ScheduleReading,
 } from "@pe/agent-contracts";
-import { field } from "../../../../packages/agent-contracts/src/route-field";
+import { field, manyField } from "../../../../packages/agent-contracts/src/route-field";
 import { schedulesAddress } from "../../../../packages/agent-contracts/src/routes/schedules";
 import { threadListFields } from "../../../../packages/agent-contracts/src/routes/shared";
 import { commandVerb, queryVerb, workVerb } from "#/shell/verbs";
@@ -25,6 +25,8 @@ import { NATIVE_APPLY_WAIT_S } from "#/route/waits";
 export const SCHEDULE_SPEC_SCHEMA = "/schemas/settings/CmdScheduleManager/schedules.json";
 const fields = { ...threadListFields, ...schedulesAddress.fields };
 export const schedulesPageSchema = routeAddress("schedules").schema.extend({
+  sort: z.object({ columns: fields.sort.schema }).default({ columns: [] }),
+  hidden: manyField("name", {}).schema,
   captureId: z.string().default(""),
 });
 export type SchedulesPage = z.output<typeof schedulesPageSchema>;
@@ -77,22 +79,35 @@ export const schedulesBase: RouteGraph<SchedulesPage, ScheduleGridDocument> = {
   work: scheduleGridRouteState.schema,
   // A schedule's Work is its subject's: picking a schedule or reading one moves this field.
   workSubject: "workspaceId",
+  subjectField: {
+    field: "workspaceId",
+    noun: "schedule",
+    keyKind: "name",
+    cardinality: "one",
+    roster: "catalog",
+    detail: "retained",
+    pane: "list",
+    show: (id) => id,
+  },
   fields: {
     threadSearch: { ...fields.threadSearch, role: "query" },
     threadSort: { ...fields.threadSort, role: "query" },
     stage: { ...fields.stage, role: "stage" },
-    pod: { ...fields.pod, role: "subject" },
-    path: { ...fields.path, role: "subject" },
+    pod: { ...fields.pod, role: "draft" },
+    path: { ...fields.path, role: "draft" },
     pane: { ...fields.pane, role: "pose", url: false },
     workspaceId: { ...fields.workspaceId, role: "subject" },
     query: { ...fields.query, role: "query" },
-    sort: { ...fields.sort, role: "query" },
-    hidden: { ...fields.hidden, role: "pose" },
-    lines: { ...fields.lines, role: "selection" },
+    sort: {
+      ...field(schedulesPageSchema.shape.sort, {}, { encode: JSON.stringify, decode: JSON.parse }),
+      role: "query",
+    },
+    hidden: { ...manyField("name", { url: "replace", agent: "set" }), role: "pose" },
+    lines: { ...fields.lines, role: "query" },
     cell: { ...fields.cell, role: "selection" },
     captureId: {
       ...field(z.string().default(""), {}, { encode: String, decode: String }),
-      role: "selection",
+      role: "query",
       url: false,
     },
   },
@@ -307,12 +322,42 @@ export const sameScheduleRows = (
 
 export const schedulesGraph: RouteGraph<SchedulesPage, ScheduleGridDocument> = {
   ...schedulesBase,
-  directory: { ...schedulesBase.directory!, blurb: "Inspect, edit and review the history of a document schedule." },
-  subjectField: { field: "workspaceId", noun: "schedule", keyKind: "UniqueId", cardinality: "one", roster: "catalog", detail: "retained", pane: "list", show: id => id },
+  directory: {
+    ...schedulesBase.directory!,
+    blurb: "Inspect, edit and review the history of a document schedule.",
+  },
+  subjectField: {
+    field: "workspaceId",
+    noun: "schedule",
+    keyKind: "UniqueId",
+    cardinality: "one",
+    roster: "catalog",
+    detail: "retained",
+    pane: "list",
+    show: (id) => id,
+  },
   subject: (p) => p.workspaceId || "Choose a schedule",
-  fields: { ...schedulesBase.fields, pod: { ...schedulesBase.fields.pod, role: "draft" }, path: { ...schedulesBase.fields.path, role: "draft" } },
+  fields: {
+    ...schedulesBase.fields,
+    pod: { ...schedulesBase.fields.pod, role: "draft" },
+    path: { ...schedulesBase.fields.path, role: "draft" },
+  },
   verbs: Object.fromEntries(Object.entries(schedulesBase.verbs).filter(([id]) => id !== "apply")),
   panes: Object.fromEntries(Object.entries(schedulesBase.panes).filter(([id]) => id !== "spec")),
-  layout: split("schedules-body", { axis: "h", sized: "start", size: 240 }, pane("list"), split("schedule-detail", { axis: "v", sized: "end", size: 160 }, pane("grid"), gate("editing", pane("work")))),
-  stages: { audit: schedulesBase.stages.audit!, apply: { word: "Editing", panes: ["list", "grid", "work"], verbs: ["push"] }, history: schedulesBase.stages.history! },
+  layout: split(
+    "schedules-body",
+    { axis: "h", sized: "start", size: 240 },
+    pane("list"),
+    split(
+      "schedule-detail",
+      { axis: "v", sized: "end", size: 160 },
+      pane("grid"),
+      gate("editing", pane("work")),
+    ),
+  ),
+  stages: {
+    audit: schedulesBase.stages.audit!,
+    apply: { word: "Editing", panes: ["list", "grid", "work"], verbs: ["push"] },
+    history: schedulesBase.stages.history!,
+  },
 };

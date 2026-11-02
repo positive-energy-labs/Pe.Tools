@@ -55,3 +55,15 @@ test("rooms entry reads the roster until a view is chosen, then reads only that 
   );
   if (typeof detail === "function") detail();
 });
+
+test("takeoff metadata roster lists views without requesting a geometry snapshot", async () => {
+  const source = takeoffSources()["takeoffs.roster"]!;
+  if (source.kind !== "use") throw Error("Expected independent metadata source");
+  const deliver = vi.fn();
+  await source.open(context({ views: [], zones: [], work: "" }), deliver);
+  expect(callOp).toHaveBeenCalledWith(expect.anything(), "revit.catalog.project-index", {
+    sections: ["Views"], includeUnplacedViews: true, projection: { view: "Handles" },
+  });
+  expect(requestJson).not.toHaveBeenCalled();
+  expect(deliver).toHaveBeenCalledWith(expect.objectContaining({ value: expect.objectContaining({ zonesComplete: false }) }));
+});

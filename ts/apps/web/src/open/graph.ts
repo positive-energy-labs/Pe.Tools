@@ -42,28 +42,24 @@ const rowVerbs = Object.assign(
 
 export const openControls: RouteGraph<OpenPageState> = {
   directory: {
-  "path": "/open",
-  "title": "Open",
-  "label": "Revit",
-  "exposure": "Main",
-  "runtimeNeed": "Revit for model actions; browsing saved data is separate",
-  "icon": "Server",
-  "category": "Start / open work",
-  "blurb": "Start a Revit, open a model, and see which Revit holds it: the launcher, every recent document across installed years, and each running Revit with its shape, documents and verbs.",
-  "aliases": [
-    "launcher",
-    "model",
-    "session",
-    "documents"
-  ],
-  "listed": true,
-  "satellites": [],
-  "surfaces": {
-    "web": "full",
-    "pwa": "full",
-    "tray": "compact"
-  }
-},
+    path: "/open",
+    title: "Open",
+    label: "Revit",
+    exposure: "Main",
+    runtimeNeed: "Revit for model actions; browsing saved data is separate",
+    icon: "Server",
+    category: "Start / open work",
+    blurb:
+      "Start a Revit, open a model, and see which Revit holds it: the launcher, every recent document across installed years, and each running Revit with its shape, documents and verbs.",
+    aliases: ["launcher", "model", "session", "documents"],
+    listed: true,
+    satellites: [],
+    surfaces: {
+      web: "full",
+      pwa: "full",
+      tray: "compact",
+    },
+  },
   key: "instances",
   address: "open",
   name: "Open",
@@ -121,9 +117,19 @@ export const openControls: RouteGraph<OpenPageState> = {
       load: () => import("./graph-seeds").then((m) => m.openSeeds["no-revit"]!),
     },
   },
+  subjectField: {
+    field: "document",
+    noun: "document",
+    keyKind: "name",
+    cardinality: "one",
+    roster: "recents",
+    detail: "machine",
+    pane: "bay",
+    show: (id) => id,
+  },
   fields: {
     session: { ...field(z.string().default(""), {}), role: "selection" },
-    document: { ...field(z.string().default(""), {}), role: "selection" },
+    document: { ...field(z.string().default(""), {}), role: "subject" },
     epoch: {
       ...field(openPageSchema.shape.epoch, {}, { encode: String, decode: Number }),
       role: "transient",
@@ -241,11 +247,56 @@ export const openControls: RouteGraph<OpenPageState> = {
 
 export const openGraph: RouteGraph<OpenPageState> = {
   ...openControls,
-  directory: { ...openControls.directory!, title: "Open document", blurb: "Choose a document and its destination Revit.", aliases: ["documents", "model", "launcher"] },
+  directory: {
+    ...openControls.directory!,
+    title: "Open document",
+    blurb: "Choose a document and its destination Revit.",
+    aliases: ["documents", "model", "launcher"],
+  },
   subject: (p) => p.draft.doc ?? "Choose a document",
-  subjectField: { field: "document", noun: "document", keyKind: "name", cardinality: "one", roster: "recents", detail: "machine", pane: "bay", show: (id) => id },
-  fields: { ...openControls.fields, document: { ...openControls.fields.document, role: "subject", picker: { reading: "recents", placeholder: "Choose a document", options: (value) => ((value as import("./sources").Recents)?.result?.recents ?? []).map(row => ({ id: row.path, label: row.title })) } } },
-  transition: (current, patch) => ({ patch: { ...patch, ...(patch.document !== undefined ? { draft: { ...current.draft, doc: patch.document } } : patch.draft ? { document: patch.draft.doc ?? "" } : {}) } }),
-  verbs: { refresh: openControls.verbs.refresh!, open: openControls.verbs.open!, close: openControls.verbs.close! },
-  panes: { ...openControls.panes, bay: { ...openControls.panes.bay!, label: "Documents", verbs: ["open", "close"] } },
+  subjectField: {
+    field: "document",
+    noun: "document",
+    keyKind: "name",
+    cardinality: "one",
+    roster: "recents",
+    detail: "machine",
+    pane: "bay",
+    show: (id) => id,
+  },
+  fields: {
+    ...openControls.fields,
+    document: {
+      ...openControls.fields.document,
+      role: "subject",
+      picker: {
+        reading: "recents",
+        placeholder: "Choose a document",
+        options: (value) =>
+          ((value as import("./sources").Recents)?.result?.recents ?? []).map((row) => ({
+            id: row.path,
+            label: row.title,
+          })),
+      },
+    },
+  },
+  transition: (current, patch) => ({
+    patch: {
+      ...patch,
+      ...(patch.document !== undefined
+        ? { draft: { ...current.draft, doc: patch.document } }
+        : patch.draft
+          ? { document: patch.draft.doc ?? "" }
+          : {}),
+    },
+  }),
+  verbs: {
+    refresh: openControls.verbs.refresh!,
+    open: openControls.verbs.open!,
+    close: openControls.verbs.close!,
+  },
+  panes: {
+    ...openControls.panes,
+    bay: { ...openControls.panes.bay!, label: "Documents", verbs: ["open", "close"] },
+  },
 };

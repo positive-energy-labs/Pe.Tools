@@ -36,6 +36,16 @@ export const bindGraph: RouteGraph<BindPage, never> = {
   key: "bind",
   address: "bind",
   name: "Bind",
+  subjectField: {
+    field: "page",
+    noun: "Page",
+    keyKind: "name",
+    cardinality: "one",
+    roster: "inventory",
+    detail: "target",
+    pane: "page",
+    show: (id) => id,
+  },
   fields: {
     threadSearch: { ...threadListFields.threadSearch, role: "query", agent: false },
     threadSort: { ...threadListFields.threadSort, role: "query", agent: false },
