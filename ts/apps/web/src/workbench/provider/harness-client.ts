@@ -26,6 +26,13 @@ export type PromptRequest = Omit<z.input<typeof promptRequestSchema>, "id">;
 
 /** A thread's SSE frame and the thread list's snapshot value, decoded (ADR 0029 rule 7). */
 const ThreadFrame = Schema.fromJsonString(fromStandardSchema(readingFrameSchema, "ReadingFrame"));
+/** One SSE message: the frame and its host log cursor, accepted or refused together. */
+const ThreadMessage = Schema.Struct({
+  data: ThreadFrame,
+  id: Schema.optional(
+    Schema.NumberFromString.pipe(Schema.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))),
+  ),
+});
 const ThreadSummaries = Schema.Array(
   fromStandardSchema(harnessThreadSummarySchema, "HarnessThreadSummary"),
 );
@@ -47,7 +54,7 @@ export function harnessClient(origin: string) {
     update: (id: string, body: UpdateThreadRequest) =>
       client.call("thread.update", { params: { id }, body }),
     summaries: (
-      onChange: (threads: HarnessThreadSummary[]) => void,
+      onChange: (threads: readonly HarnessThreadSummary[]) => void,
       onFault: (error: Error) => void,
     ) => {
       // The one Readings owner carries the list: its fault, backoff, wake and resync are this
@@ -62,7 +69,7 @@ export function harnessClient(origin: string) {
               new Error(`Thread list does not decode: ${Cause.pretty(summaries.cause)}`),
             );
           seen = true;
-          onChange([...summaries.value]);
+          onChange(summaries.value);
         } else if (frame.kind === "stale" && seen)
           onFault(new Error("Thread list is not current; reconnecting."));
       });
@@ -144,16 +151,20 @@ export function streamThread(options: {
     const events = open(readingsUrl(origin, { kind: "thread", thread: threadId }, cursor));
     source = events;
     events.onmessage = (message: MessageEvent<string>) => {
-      if (message.lastEventId) cursor = Number(message.lastEventId);
-      // Promise/React caller until phase 5: a frame that does not decode is a fault, then a reread.
-      const frame = Schema.decodeUnknownExit(ThreadFrame)(message.data);
-      if (Exit.isFailure(frame)) {
+      // Promise/React caller until phase 5: a message that does not decode, whether its frame or
+      // its cursor, is a fault then a reread; the resume cursor moves only for an accepted frame.
+      const accepted = Schema.decodeUnknownExit(ThreadMessage)({
+        data: message.data,
+        id: message.lastEventId || undefined,
+      });
+      if (Exit.isFailure(accepted)) {
         stop();
-        onFault?.(new Error(`Thread frame does not decode: ${Cause.pretty(frame.cause)}`));
+        onFault?.(new Error(`Thread frame does not decode: ${Cause.pretty(accepted.cause)}`));
         onReread();
         return;
       }
-      const step = followThread(last, frame.value);
+      if (accepted.value.id !== undefined) cursor = accepted.value.id;
+      const step = followThread(last, accepted.value.data);
       if (step.kind === "apply") {
         last = step.event.seq;
         onEvent(step.event);

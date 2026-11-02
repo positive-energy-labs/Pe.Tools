@@ -13,7 +13,7 @@ import type {
   ModelZone,
 } from "@pe/agent-contracts";
 import type { RevitCatalogProjectIndex, TakeoffsSnapshot } from "@pe/host-contracts/generated";
-import { Schema } from "effect";
+import { Schema, SchemaGetter } from "effect";
 
 /**
  * FilledRegion blobs `Pe.Revit.Takeoff` writes with camelCase Newtonsoft (ADR 0029 rule 7):
@@ -29,22 +29,45 @@ export const ZoneProvenance = Schema.fromJsonString(
   }),
 );
 const RunKey = Schema.optionalKey(Schema.NullOr(Schema.String));
-export const RegionProvenance = Schema.fromJsonString(
-  Schema.Struct({
-    runId: RunKey,
-    RunId: RunKey,
-    sourceRoomId: RunKey,
-    SourceRoomId: RunKey,
-    /** `Pe.Revit.Partition.Room`: the enum is a number, a string from a string-enum writer. */
-    partition: Schema.optionalKey(
-      Schema.NullOr(
-        Schema.Struct({
-          disposition: Schema.optionalKey(Schema.Union([Schema.Number, Schema.String])),
-          reason: Schema.optionalKey(Schema.NullOr(Schema.String)),
-        }),
-      ),
+/** What is on the wire: both key cases, the PascalCase ones from the pre-camelCase blobs. */
+const RegionBlob = Schema.Struct({
+  runId: RunKey,
+  RunId: RunKey,
+  sourceRoomId: RunKey,
+  SourceRoomId: RunKey,
+  /** `Pe.Revit.Partition.Room`: the enum is a number, a string from a string-enum writer. */
+  partition: Schema.optionalKey(
+    Schema.NullOr(
+      Schema.Struct({
+        disposition: Schema.optionalKey(Schema.Union([Schema.Number, Schema.String])),
+        reason: Schema.optionalKey(Schema.NullOr(Schema.String)),
+      }),
     ),
+  ),
+});
+/** What readers get: one camelCase field per fact, the key case settled here and nowhere else. */
+const Region = Schema.toType(
+  Schema.Struct({
+    runId: Schema.optionalKey(Schema.String),
+    sourceRoomId: Schema.optionalKey(Schema.String),
+    partition: RegionBlob.fields.partition,
   }),
+);
+export const RegionProvenance = Schema.fromJsonString(
+  RegionBlob.pipe(
+    Schema.decodeTo(Region, {
+      decode: SchemaGetter.transform((blob) => {
+        const runId = blob.RunId ?? blob.runId;
+        const sourceRoomId = blob.SourceRoomId ?? blob.sourceRoomId;
+        return {
+          ...(runId ? { runId } : {}),
+          ...(sourceRoomId ? { sourceRoomId } : {}),
+          ...(blob.partition === undefined ? {} : { partition: blob.partition }),
+        };
+      }),
+      encode: SchemaGetter.transform((region) => region),
+    }),
+  ),
 );
 
 export const takeoffProjectIndexRequest = {
@@ -202,13 +225,9 @@ function savedReview(
     region,
     value: Schema.decodeUnknownSync(RegionProvenance)(region.blob),
   }));
-  if (
-    values.some(
-      ({ value }) => !(value.RunId ?? value.runId) || !(value.SourceRoomId ?? value.sourceRoomId),
-    )
-  )
+  if (values.some(({ value }) => !value.runId || !value.sourceRoomId))
     throw Error("Native takeoff review provenance is missing runId or sourceRoomId");
-  const runIds = [...new Set(values.map(({ value }) => (value.RunId ?? value.runId)!))];
+  const runIds = [...new Set(values.map(({ value }) => value.runId!))];
 
   return {
     source: {
@@ -219,8 +238,8 @@ function savedReview(
     zone: { key: zoneKey, name, loops: zoneLoops },
     shapes: values.map(({ region, value }) => ({
       original: {
-        runId: (value.RunId ?? value.runId)!,
-        sourceRoomId: (value.SourceRoomId ?? value.sourceRoomId)!,
+        runId: value.runId!,
+        sourceRoomId: value.sourceRoomId!,
         disposition: disposition(value.partition?.disposition),
         reason: value.partition?.reason ?? null,
       },
@@ -230,7 +249,7 @@ function savedReview(
       reason: [
         `measurements ${region.analysis?.state ?? "unmeasured"}`,
         region.analysis?.hold,
-        `original ${disposition(value.partition?.disposition) ?? "unknown"}: ${value.partition?.reason ?? "no reason"} (${value.RunId ?? value.runId}/${value.SourceRoomId ?? value.sourceRoomId})`,
+        `original ${disposition(value.partition?.disposition) ?? "unknown"}: ${value.partition?.reason ?? "no reason"} (${value.runId}/${value.sourceRoomId})`,
       ]
         .filter(Boolean)
         .join(" | "),

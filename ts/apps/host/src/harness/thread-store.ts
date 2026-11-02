@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { Effect, Schema, SchemaGetter } from "effect";
 import type { Types } from "effect";
 import {
   allowDecisionSchema,
@@ -31,13 +31,10 @@ const summary = harnessThreadSummarySchema.shape;
 const contract = <T>(schema: Parameters<typeof fromStandardSchema<T>>[0], id: string) =>
   fromStandardSchema(schema, id);
 
-export const ThreadMetaFile = Schema.Struct({
+const fields = {
   origin: Schema.optionalKey(contract(summary.origin.unwrap(), "ThreadOrigin")),
   id: Schema.String,
   harness: Schema.Literals(harnessIds),
-  /** Absent on threads from before providers ran on the harness's own login. */
-  providerId: Schema.optionalKey(Schema.String),
-  providerName: Schema.optionalKey(Schema.String),
   title: Schema.String,
   createdAt: Schema.String,
   updatedAt: Schema.String,
@@ -70,29 +67,38 @@ export const ThreadMetaFile = Schema.Struct({
   promptCapabilities: Schema.NullOr(contract(promptCapabilitiesSchema, "PromptCapabilities")).pipe(
     Schema.withDecodingDefaultTypeKey(Effect.succeed(null)),
   ),
+};
+
+/** What `meta.json` holds; the provider identity is absent on threads from before providers. */
+export const ThreadMetaFile = Schema.Struct({
+  ...fields,
+  providerId: Schema.optionalKey(Schema.String),
+  providerName: Schema.optionalKey(Schema.String),
 });
 
-/** A thread record in memory: the decoded file with its provider identity filled. */
-export type Meta = Types.Mutable<
-  Omit<typeof ThreadMetaFile.Type, "providerId" | "providerName"> & {
-    providerId: string;
-    providerName: string;
-  }
->;
-
-const ThreadMetaJson = Schema.fromJsonString(ThreadMetaFile);
+/** A thread record in memory: the file with its provider identity filled, so both are required. */
+const ThreadRecord = Schema.toType(
+  Schema.Struct({ ...fields, providerId: Schema.String, providerName: Schema.String }),
+);
+export type Meta = Types.Mutable<typeof ThreadRecord.Type>;
 
 /** `meta.json` text to a record; `providerName` names a pre-provider thread's harness. */
 export const decodeThreadMeta = Effect.fn("thread.meta")(function* (
   text: string,
   providerName: (harness: Meta["harness"]) => string,
 ) {
-  const file = yield* Schema.decodeUnknownEffect(ThreadMetaJson)(text);
-  return {
-    ...file,
-    providerId: file.providerId ?? file.harness,
-    providerName: file.providerName ?? providerName(file.harness),
-  } satisfies Meta as Meta;
+  const record = ThreadMetaFile.pipe(
+    Schema.decodeTo(ThreadRecord, {
+      decode: SchemaGetter.transform((file) => ({
+        ...file,
+        providerId: file.providerId ?? file.harness,
+        providerName: file.providerName ?? providerName(file.harness),
+      })),
+      encode: SchemaGetter.transform((meta) => meta),
+    }),
+  );
+  const meta: Meta = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(record))(text);
+  return meta;
 });
 
 /**

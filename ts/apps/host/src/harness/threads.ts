@@ -100,12 +100,7 @@ import { z } from "zod";
 import type { HostLog } from "../host-log.ts";
 import { openAdapter, stopChild } from "./adapter.ts";
 import { CodexConfig } from "./edge-schemas.ts";
-import {
-  decodeThreadMeta,
-  HarnessEventLine,
-  replayThreadEvents,
-  type Meta,
-} from "./thread-store.ts";
+import { decodeThreadMeta, replayThreadEvents, type Meta } from "./thread-store.ts";
 import { isAuthRefusal, sessionOffer, type Providers } from "./providers.ts";
 import type { PluginHookName, PluginHooks } from "@pe/agent-contracts";
 import { exportThread } from "../thread-export.ts";
@@ -362,11 +357,48 @@ function bounded(event: Append): Append {
         : value && typeof value === "object"
           ? Object.fromEntries(Object.entries(value).map(([k, v]) => [k, cut(v)]))
           : value;
-  const field = event.kind === "update" ? "update" : "toolCall";
-  let kept = cut((event as Record<string, unknown>)[field]) as Record<string, unknown>;
-  if (Buffer.byteLength(JSON.stringify(kept)) > HARNESS_EVENT_MAX_BYTES)
-    kept = Object.fromEntries(Object.entries(kept).filter(([k]) => IDENTITY.includes(k)));
-  return { ...event, [field]: { ...kept, truncated: bytes } } as Append;
+  // Spreading the cut entries over the body keeps the body's type: the keys are the same.
+  const cutBody = <T extends Record<string, unknown>>(body: T): T => ({
+    ...body,
+    ...Object.fromEntries(Object.entries(body).map(([k, v]) => [k, cut(v)])),
+  });
+  const identity = (body: Record<string, unknown>) =>
+    Object.fromEntries(Object.entries(body).filter(([k]) => IDENTITY.includes(k)));
+  const tooBig = (body: object) =>
+    Buffer.byteLength(JSON.stringify(body)) > HARNESS_EVENT_MAX_BYTES;
+  if (event.kind === "update") {
+    const kept = cutBody(event.update);
+    const body = tooBig(kept)
+      ? { ...identity(kept), sessionUpdate: event.update.sessionUpdate }
+      : kept;
+    return { ...event, update: { ...body, truncated: bytes } };
+  }
+  const { toolCallId, title } = event.toolCall;
+  const kept = cutBody(event.toolCall);
+  const body = tooBig(kept)
+    ? { ...identity(kept), toolCallId, ...(title === undefined ? {} : { title }) }
+    : kept;
+  return { ...event, toolCall: { ...body, truncated: bytes } };
+}
+
+/**
+ * No endpoint key lands in a thread record, even when a harness echoes it: every string in the
+ * event, keys included, shows only its last four characters. Shape-preserving, so the event keeps
+ * its type and the line written from it needs no second decode.
+ */
+function redactKeys<T>(value: T, keys: readonly string[]): T {
+  const text = (s: string) =>
+    keys.reduce((out, key) => out.replaceAll(key, `…${key.slice(-4)}`), s);
+  const walk = (v: unknown): unknown =>
+    typeof v === "string"
+      ? text(v)
+      : Array.isArray(v)
+        ? v.map(walk)
+        : v && typeof v === "object"
+          ? Object.fromEntries(Object.entries(v).map(([k, x]) => [text(k), walk(x)]))
+          : v;
+  // The one cast: `walk` maps strings to strings and keeps every container, so T holds.
+  return walk(value) as T;
 }
 
 /** tmp + rename, so a crash mid-write never leaves a torn file. */
@@ -524,23 +556,24 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
   const writeMeta = (t: Thread) => writeJson(join(options.root, t.meta.id, "meta.json"), t.meta);
 
   function append(t: Thread, event: Append): HarnessEvent {
-    const line = JSON.stringify({
+    const keys = options.providers.keys();
+    const stamped: HarnessEvent = {
       ...bounded(event),
       seq: t.events.length + 1,
       at: new Date().toISOString(),
-    });
-    // No endpoint key lands in a thread record, even when a harness echoes it.
-    const redacted = options.providers
-      .keys()
-      .reduce((text, key) => text.replaceAll(key, `…${key.slice(-4)}`), line);
-    // The writer's own line must decode; a failure here is a writer bug, thrown to the verb.
-    const full = Schema.decodeUnknownSync(HarnessEventLine)(redacted);
+    };
+    const full = keys.length > 0 ? redactKeys(stamped, keys) : stamped;
+    const line = JSON.stringify(full);
     if (
       (full.kind === "turn_element_targets" || full.kind === "turn_element_names") &&
-      Buffer.byteLength(redacted) >= HARNESS_EVENT_MAX_BYTES
+      Buffer.byteLength(line) >= HARNESS_EVENT_MAX_BYTES
     )
       throw Error("Turn element event exceeds the byte bound");
-    appendFileSync(join(options.root, t.meta.id, "events.jsonl"), `${redacted}\n`);
+    appendFileSync(
+      join(options.root, t.meta.id, "events.jsonl"),
+      `${line}
+`,
+    );
     t.events.push(full);
     projectActivity(t, full);
     options.log.append({ kind: "thread", thread: t.meta.id, event: full });

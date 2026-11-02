@@ -15,7 +15,7 @@ import {
   type RoutePage,
 } from "@pe/agent-contracts";
 import { fromStandardSchema } from "@pe/host-contracts/contracts";
-import { Exit, Schema } from "effect";
+import { Cause, Exit, Schema } from "effect";
 import { useRouter, useRouterState, type SearchMiddleware } from "@tanstack/react-router";
 import { useEffect, useState, useRef } from "react";
 import { z } from "zod";
@@ -280,7 +280,13 @@ export function tabPageSearch(pathname: string): Record<string, unknown> | undef
     const memory = Schema.decodeUnknownExit(PlacesMemory)(
       sessionStorage.getItem("pe.places") ?? "[]",
     );
-    if (Exit.isFailure(memory)) return undefined;
+    if (Exit.isFailure(memory)) {
+      console.warn(
+        "ts/apps/web/src/route/url.ts: tab memory does not decode",
+        Cause.pretty(memory.cause),
+      );
+      return undefined;
+    }
     const tabs = memory.value;
     const focused = sessionStorage.getItem("pe.place.focus");
     const matches = tabs.filter(

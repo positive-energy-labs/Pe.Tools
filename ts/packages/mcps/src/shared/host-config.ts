@@ -118,7 +118,7 @@ export function verifyMcpHost(value: string | undefined): string {
     const differ =
       cwdRoot && moduleRoot && normalizeSourceRoot(cwdRoot) !== normalizeSourceRoot(moduleRoot);
     throw Error(
-      `pea mcp cannot start: ${(error as Error).message}${differ ? ` The cwd checkout is ${cwdRoot}; this module's checkout is ${moduleRoot}.` : ""}`,
+      `pea mcp cannot start: ${error instanceof Error ? error.message : String(error)}${differ ? ` The cwd checkout is ${cwdRoot}; this module's checkout is ${moduleRoot}.` : ""}`,
     );
   }
 }

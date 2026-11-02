@@ -7,6 +7,8 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import { Schema } from "effect";
+import { HarnessEventLine } from "../src/harness/thread-store.ts";
 import type {
   Caller,
   HarnessEvent,
@@ -701,7 +703,20 @@ test("an endpoint provider is checked before save, and every thread carries its 
       const log = await readFile(join(root, body.id, "events.jsonl"), "utf8");
       expect(log).not.toContain(codexKey);
       expect(log).not.toContain(claudeKey);
+      // The line on disk is the typed event, redacted on its value: every line decodes as one.
+      for (const line of log.trim().split(/\r?\n/))
+        expect(() => Schema.decodeUnknownSync(HarnessEventLine)(line)).not.toThrow();
     }
+    // An event whose string field carries a key is written with its last four, and still decodes.
+    const echoed = await call("POST", "/pe/threads", { providerId: "codex-vps" });
+    await call("POST", `/pe/threads/${echoed.json.id}/prompt`, { text: `leak ${codexKey}` });
+    const echoLog = await readFile(join(root, echoed.json.id, "events.jsonl"), "utf8");
+    expect(echoLog).not.toContain(codexKey);
+    const promptLine = echoLog.split(/\r?\n/).find((line) => line.includes('"kind":"prompt"'))!;
+    expect(Schema.decodeUnknownSync(HarnessEventLine)(promptLine)).toMatchObject({
+      kind: "prompt",
+      text: "leak …4321",
+    });
 
     expect((await call("DELETE", "/pe/providers/codex-vps")).status).toBe(204);
     expect((await call("DELETE", "/pe/providers/claude-gate")).status).toBe(204);
