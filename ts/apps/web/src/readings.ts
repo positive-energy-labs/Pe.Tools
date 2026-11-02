@@ -48,11 +48,7 @@ import type { Custody, Lane } from "@pe/host-contracts/contracts";
 import type {
   BridgeSessionListEntry,
   HostOpResponse,
-  HostSessionScope,
-  OpCallArgs,
-  OpKey,
 } from "@pe/host-contracts/operation-types";
-import { callHostRpc } from "#/host/client.ts";
 import { createPeClient } from "@pe/agent-contracts/pe-api";
 import {
   HostCallError,
@@ -73,7 +69,6 @@ const failure = (error: unknown) =>
         : String(error),
   );
 import { reportFault } from "#/host/diagnostics";
-import { HOST_READ_WAIT_S } from "#/route/waits";
 import { useWork } from "@pe/kit/lang/work";
 import { resolveWorkbenchConfig } from "#/workbench/config.ts";
 import { deepEqual } from "@tanstack/react-router";
@@ -1068,116 +1063,6 @@ export function targetInventory(
 /* -- Host RPC: a call, not a subject ------------------------------------------------------ */
 
 /**
- * Calls in flight by their deps. A remount (or a second component) asking the same thing joins
- * the pending call instead of queueing another: Revit runs one op at a time and refuses past 8
- * waiting (`ducts.snapshot` remounts filled it). A `refresh` always starts a fresh call.
- */
-const inflight = new Map<string, Promise<unknown>>();
-const flightKey = (deps: readonly unknown[]) => {
-  try {
-    return JSON.stringify(deps);
-  } catch {
-    return null;
-  }
-};
-
-/**
- * A host operation read on mount. Not a Reading: it has no subject key and no owner, so it
- * carries no cache and no revalidation. Call `refresh` after a write that changes its answer.
- */
-export function useHostCall<T>(
-  run: (signal: AbortSignal) => Promise<T>,
-  deps: readonly unknown[],
-  enabled = true,
-  /** Unanswered past this, the read ends as an error ("no answer after Ns") and is aborted. */
-  waitSeconds = HOST_READ_WAIT_S,
-  /** Deps name the call completely (an op key and its request), so equal deps may share it. */
-  shared = false,
-  /** What the owner's busy motif says while this call is unanswered. */
-  label = "readingâ€¦",
-) {
-  const identity = useRef({ deps: [...deps], generation: 0 });
-  if (!sameDeps(identity.current.deps, deps)) {
-    identity.current = { deps: [...deps], generation: identity.current.generation + 1 };
-  }
-  const generation = identity.current.generation;
-  const [state, setState] = useState<{
-    data?: T;
-    error?: Error;
-    pending: boolean;
-    generation: number;
-  }>({ pending: enabled, generation });
-  const [nonce, setNonce] = useState(0);
-  useEffect(() => {
-    if (!enabled) {
-      setState({ pending: false, generation });
-      return;
-    }
-    const controller = new AbortController();
-    setState((current) =>
-      current.generation === generation
-        ? { ...current, pending: true }
-        : { pending: true, generation },
-    );
-    // A read that never answers ends honestly, never as an endless "readingâ€¦" (F-J1-4).
-    const wait = setTimeout(() => {
-      if (controller.signal.aborted) return;
-      controller.abort();
-      setState({ error: Error(`no answer after ${waitSeconds}s`), pending: false, generation });
-    }, waitSeconds * 1000);
-    const key = shared ? flightKey(deps) : null;
-    const joined =
-      key !== null && nonce === 0 ? (inflight.get(key) as Promise<T> | undefined) : undefined;
-    // A shared call outlives the mount that started it, so no one mount's abort cancels it.
-    const call = joined ?? run(key !== null ? new AbortController().signal : controller.signal);
-    if (key !== null && !joined) {
-      inflight.set(key, call);
-      void call.then(
-        () => inflight.get(key) === call && inflight.delete(key),
-        () => inflight.get(key) === call && inflight.delete(key),
-      );
-    }
-    void call
-      .finally(() => clearTimeout(wait))
-      .then(
-        (data) => {
-          if (!controller.signal.aborted) setState({ data, pending: false, generation });
-        },
-        (error: unknown) => {
-          if (!controller.signal.aborted)
-            setState({ error: failure(error), pending: false, generation });
-        },
-      );
-    return () => {
-      clearTimeout(wait);
-      controller.abort();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...deps, enabled, nonce]);
-  const refresh = useCallback(() => setNonce((n) => n + 1), []);
-  const visible =
-    enabled && state.generation === generation
-      ? state
-      : { data: undefined, error: undefined, pending: enabled };
-  useWork(visible.pending, label);
-  return {
-    data: visible.data,
-    error: visible.error,
-    pending: visible.pending,
-    isPending: visible.pending,
-    isLoading: visible.pending,
-    isSuccess: !visible.pending && visible.error === undefined && visible.data !== undefined,
-    refresh,
-  };
-}
-
-function sameDeps(left: readonly unknown[], right: readonly unknown[]): boolean {
-  return (
-    left.length === right.length && left.every((value, index) => Object.is(value, right[index]))
-  );
-}
-
-/**
  * An Action's run, as a component holds it: at most one in flight, its refusal kept, and its
  * success dirtying whatever Readings it names. Not a cache and not a queue.
  */
@@ -1209,39 +1094,6 @@ export function useAction<I, T>(
     isPending: state.pending,
     error: state.error,
   };
-}
-
-/* -- Host RPC reads: not Readings, just one call each over the one /call endpoint ------------ */
-
-export const HOST_QUERY_KEY = ["pe-host"] as const;
-
-type HostQueryOptions = HostSessionScope & {
-  readonly enabled?: boolean;
-  /** How long the read may go unanswered; default `HOST_READ_WAIT_S`. */
-  readonly waitSeconds?: number;
-};
-
-/** Any operation key becomes a one-shot read. A Reading is for a subject the host pushes. */
-export function useHostOp<K extends OpKey>(key: K, ...args: OpCallArgs<K, HostQueryOptions>) {
-  const [request, options] = args;
-  const { enabled, bridgeSessionId, openDocumentId, waitSeconds } = options ?? {};
-  const scope = { bridgeSessionId, openDocumentId };
-  return useHostCall(
-    // Cast: TS cannot resolve the conditional OpCallArgs tuple while K is open; the public
-    // signatures on this hook and callHostRpc enforce it at call sites.
-    () => callHostRpc(key, ...([request, scope] as OpCallArgs<K, HostSessionScope>)),
-    [
-      ...HOST_QUERY_KEY,
-      bridgeSessionId ?? "",
-      key,
-      JSON.stringify(request ?? null),
-      openDocumentId ?? "",
-    ],
-    enabled ?? true,
-    waitSeconds,
-    true,
-    `reading ${key}â€¦`,
-  );
 }
 
 /** A value domain's options (the `revit.catalog.field-options` answer). */
