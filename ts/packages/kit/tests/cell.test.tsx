@@ -250,3 +250,14 @@ test("Enter then blur commits once, even when the commit answers synchronously",
   await act(async () => fireEvent.blur(input));
   expect(onCommit).toHaveBeenCalledTimes(1);
 });
+
+test("an acknowledged retry clears the previous cell refusal", async () => {
+  const onCommit = vi.fn(async () => "Work moved to r3");
+  const view = render(<StateCell value="old" scale="row" onCommit={onCommit} />);
+  const input = screen.getByRole("textbox");
+  fireEvent.change(input, { target: { value: "new" } });
+  await act(async () => fireEvent.keyDown(input, { key: "Enter" }));
+  expect(screen.getByText("Work moved to r3")).toBeTruthy();
+  view.rerender(<StateCell value="new" scale="row" onCommit={onCommit} />);
+  expect(screen.queryByText("Work moved to r3")).toBeNull();
+});

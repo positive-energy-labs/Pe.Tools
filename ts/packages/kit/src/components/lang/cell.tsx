@@ -156,6 +156,7 @@ export function StateCell(props: StateCellProps) {
       editVersion.current++;
       submitted.current = null;
       priorValue.current = value;
+      setRefusal(null);
     }
   }, [value]);
 

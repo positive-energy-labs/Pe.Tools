@@ -241,3 +241,13 @@ test("re-pricing a changed preview remains a successful read and never runs a wr
   }
   expect(f.run).not.toHaveBeenCalled();
 });
+
+test("empty salvage crosses the HTTP response contract as 200 null", async () => {
+  const { servePeRoute } = await import("@pe/agent-contracts/pe-api");
+  const response = await servePeRoute(
+    new Request("http://local/pe/route-state/families/salvage"),
+    async () => Response.json(null),
+  );
+  expect(response.status).toBe(200);
+  expect(await response.json()).toBeNull();
+});

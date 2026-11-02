@@ -175,3 +175,56 @@ test("a transport failure retains the edit and an acknowledgement for another Wo
     held.release();
   }
 });
+
+test("sequential human edits wait for the acknowledged revision of the same Work", async () => {
+  const key = bindWork("queued-human", null, crypto.randomUUID());
+  const held = acquireWorkWriter(key);
+  const scope: MountScope<{}> = {
+    target: { kind: "host" },
+    workKey: key,
+    work: { handle: { key, revision: 0 }, doc: {} },
+  };
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const port = vi.fn(async (_key, request: WorkWrite): Promise<RouteStateWriteResult> => {
+    if (request.press === "first") await gate;
+    return {
+      ok: true,
+      revision: request.expectedRevision + 1,
+      write: {
+        ...request,
+        key,
+        by: "human",
+        base: request.expectedRevision,
+        revision: request.expectedRevision + 1,
+        inverse: [],
+        undoable: true,
+      },
+    };
+  });
+  const edit = (press: string) =>
+    held.writer.write(
+      scope,
+      {
+        kind: "apply",
+        press,
+        expectedRevision: 0,
+        patches: [{ path: [press], value: press }],
+      },
+      port,
+      {},
+      undefined,
+      true,
+    );
+  const first = edit("first");
+  const second = edit("second");
+  await Promise.resolve();
+  expect(port).toHaveBeenCalledTimes(1);
+  release();
+  expect((await first).ok).toBe(true);
+  expect((await second).ok).toBe(true);
+  expect(port.mock.calls.map(([, request]) => request.expectedRevision)).toEqual([0, 1]);
+  held.release();
+});

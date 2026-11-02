@@ -497,7 +497,12 @@ export function createGraphMount<P, W>(
     if (typeof key === "string") journals.get(key)?.record(entry);
     notify();
   });
-  const write = async (key: WorkKey, request: WorkWrite, history?: PendingWorkHistory) => {
+  const write = async (
+    key: WorkKey,
+    request: WorkWrite,
+    history?: PendingWorkHistory,
+    sequential = false,
+  ) => {
     const started = generation;
     const epoch = view.read().epoch;
     const invocation = request.press ? dispatches.get(request.press) : undefined;
@@ -513,6 +518,7 @@ export function createGraphMount<P, W>(
           if (!disposed) recordHistory(key, ack, history, started, epoch);
         },
       },
+      sequential,
     );
     if (
       !disposed &&
@@ -590,7 +596,8 @@ export function createGraphMount<P, W>(
         salvage: salvagePatches(),
       },
     }),
-    write: (key, envelope, history) => write(key, { ...envelope, kind: "apply" }, history),
+    write: (key, envelope, history, sequential) =>
+      write(key, { ...envelope, kind: "apply" }, history, sequential),
     recover: async (key) => {
       if (!adapters.startFresh)
         return { ok: false, kind: "refused", error: "This route has no recovery door", hint: "" };

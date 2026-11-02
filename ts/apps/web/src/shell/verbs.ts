@@ -93,6 +93,7 @@ export interface VerbContext<C extends Caller = Caller> {
     key: WorkKey,
     envelope: { patches: RouteStatePatch[]; expectedRevision: number; press: string },
     history?: PendingWorkHistory,
+    sequential?: boolean,
   ) => Promise<RouteStateWriteResult>;
   readonly changed?: (state: InvocationState, press: string | null) => void;
   readonly waitSeconds?: number;
@@ -1037,6 +1038,7 @@ async function invokeCore<C extends Caller>(
                   readings: history.readings ?? [],
                   complete: (after) => history.describe(before, input, after),
                 },
+                true,
               );
               const refused = writeRefusal(result);
               if (refused) return finish(resultOf(refused, press));

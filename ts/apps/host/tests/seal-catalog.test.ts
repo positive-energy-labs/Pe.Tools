@@ -1,6 +1,6 @@
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
-import { commands, type Consumed } from "@pe/agent-contracts";
+import { commands, type Consumed, type Command } from "@pe/agent-contracts";
 import { commandCatalogAxes } from "../../../packages/agent-contracts/src/command-axes.ts";
 import { commandRegistry } from "../src/command-registry.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
@@ -112,4 +112,41 @@ test.each(writes)("%s seals semantic evidence across permutation/refetch", (key)
   expect(mutations(raw).some(changed => JSON.stringify(executor.seal!(changed)) !== JSON.stringify(executor.seal!(raw))), `${key}: projection dropped every semantic fact`).toBe(true);
   const p = executor.seal!(raw);
   expect(writeSeal([p.request, "a"], {}, work, {}, [], p.evidence)).not.toEqual(writeSeal(["a", p.request], {}, work, {}, [], p.evidence));
+});
+
+test.each(writes)("%s preview round-trips its public response contract", async (key) => {
+  const executor = resolve(key);
+  const value = specimen(z.toJSONSchema(executor.sealInput!, { unrepresentable: "any" }));
+  const prepared = {
+    input: {},
+    value,
+    previewOnly: true,
+    takenAt: "2026-11-02T15:17:11.675Z",
+    seal: { requestHash: "request", work: {}, incarnation: {}, dependencies: "dependencies" },
+  };
+  if (key.startsWith("ducts.")) value.input.previewOnly = true;
+  const result = await executor.run(
+    {
+      admission: {
+        target: { kind: "document", ref: { session: "test", openId: "test" } },
+        input: {},
+      },
+    } as any,
+    { prepared, step: async () => ({ previewOnly: true, results: [] }) } as any,
+  );
+  const definition: Command = commands[key as keyof typeof commands];
+  expect(definition.result, key).toBeDefined();
+  expect(definition.result!.parse(result)).toEqual(result);
+});
+
+test("captured families preparation produces a lossless preview response", async () => {
+  const { default: captured } = await import("./fixtures/families-live-preview-20261102.json");
+  const executor = resolve("families.apply");
+  const result = await executor.run({} as any, { prepared: captured.prepared } as any);
+  expect(commands["families.apply"].result.parse(result)).toEqual(result);
+  expect(result).toMatchObject({
+    previewOnly: true,
+    seal: captured.prepared.seal,
+    derivedRequest: expect.any(Array),
+  });
 });

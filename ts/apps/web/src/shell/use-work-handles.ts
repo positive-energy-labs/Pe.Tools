@@ -106,6 +106,8 @@ export function useWorkHandles<W>(
               },
               writeRouteWork,
               graph,
+              undefined,
+              true,
             ),
           )
         : refuse("not-ready", "Choose a Work first");

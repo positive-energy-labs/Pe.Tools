@@ -802,7 +802,7 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "GET",
       "/pe/route-state/:route/salvage",
       none,
-      object,
+      object.nullable(),
       "human",
       "pe",
       "human",

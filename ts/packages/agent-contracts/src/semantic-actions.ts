@@ -1,5 +1,5 @@
 import { stagedRoomWrites, roomsRouteState as roomsWorkSchema } from "./rooms.ts";
-import { workWriteCommand, writeIntentSchema } from "./write-intent.ts";
+import { workWriteCommand, writeIntentSchema, writeCommandResultSchema } from "./write-intent.ts";
 import { instancesActions, instancesReading, instancesSessionSelection } from "./instances.ts";
 import { scheduleActions, scheduleReads } from "./schedule-actions.ts";
 import { familyActions, familyReads } from "./family-actions.ts";
@@ -130,6 +130,7 @@ const ductsWorkCommand = <C extends Command & { input: z.ZodObject }>(definition
     },
   },
   ...definition,
+  result: writeCommandResultSchema(definition.result),
   input: z.strictObject({
     work: z.strictObject({ key: workKeySchema, expectedRevision: z.number().int().nonnegative() }),
   }),

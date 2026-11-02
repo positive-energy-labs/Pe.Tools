@@ -89,6 +89,9 @@ function createWorkWriter(key: WorkKey, remove: () => void) {
   let retired = false;
   let conflict: number | null = null;
   let observedRevision = 0;
+  let tail = Promise.resolve();
+  // Only our acknowledged edits may advance a queued human intent. Foreign writes still refuse.
+  const acknowledged = new Map<number, { revision: number; doc?: unknown }>();
   const notify = () => {
     for (const listener of listeners) listener();
   };
@@ -138,14 +141,36 @@ function createWorkWriter(key: WorkKey, remove: () => void) {
     port: WritePort,
     names: WorkNames<W> = {},
     history?: WriteHistory,
+    sequential = false,
   ): Promise<RouteStateWriteResult> => {
     request = structuredClone(request);
-    if (names.cells || names.workFields)
-      held.journal.name((patches) => writeLabel(patches, names));
+    if (names.cells || names.workFields) held.journal.name((patches) => writeLabel(patches, names));
     const cells = names.cells ?? [];
     if (request.kind === "apply" && request.press)
       pending.set(request.press, { request, label: writeLabel(request.patches, names), history });
     running++;
+    const before = tail;
+    let release!: () => void;
+    tail = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await before;
+    if (sequential && request.kind === "apply") {
+      let next = acknowledged.get(request.expectedRevision);
+      while (next) {
+        request.expectedRevision = next.revision;
+        if (scope.work)
+          scope = {
+            ...scope,
+            work: {
+              ...scope.work,
+              handle: { ...scope.work.handle, revision: next.revision },
+              doc: (next.doc ?? scope.work.doc) as W,
+            },
+          };
+        next = acknowledged.get(request.expectedRevision);
+      }
+    }
     observe(scope);
     let result: RouteStateWriteResult;
     try {
@@ -192,6 +217,10 @@ function createWorkWriter(key: WorkKey, remove: () => void) {
         else {
           if (Object.hasOwn(result, "doc"))
             held.journal.observe({ revision: ack.revision, doc: result.doc });
+          acknowledged.set(ack.base, {
+            revision: ack.revision,
+            ...(Object.hasOwn(result, "doc") ? { doc: result.doc } : {}),
+          });
           accept(ack);
         }
       } else if (
@@ -207,6 +236,7 @@ function createWorkWriter(key: WorkKey, remove: () => void) {
       result = refused(cause instanceof Error ? cause.message : String(cause));
     } finally {
       running--;
+      release();
       notify();
       retire();
     }

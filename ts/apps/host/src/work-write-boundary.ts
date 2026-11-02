@@ -6,6 +6,7 @@ import type { SdkReceiptReader } from "./native-receipts.ts";
 import { z } from "zod";
 import {
   canonicalRouteInput,
+  writeResponseSchema,
   workBinding,
   tools,
   type Tool,
@@ -53,12 +54,7 @@ export function writeSeal(
 const preparedSchema = z.object({
   input: z.record(z.string(), z.unknown()),
   value: z.unknown(),
-  seal: z.object({
-    requestHash: z.string(),
-    work: z.unknown(),
-    incarnation: z.unknown(),
-    dependencies: z.string(),
-  }),
+  seal: writeResponseSchema.shape.seal,
   previewOnly: z.boolean(),
   takenAt: z.string(),
 });

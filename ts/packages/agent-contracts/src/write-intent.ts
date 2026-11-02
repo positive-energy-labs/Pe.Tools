@@ -8,6 +8,31 @@ export const writeIntentSchema = z.record(
   draftCellSchema(z.record(z.string(), z.json())),
 );
 
+/** The write boundary owns this envelope for preview and commit alike. */
+export const writeResponseSchema = z.object({
+  previewOnly: z.boolean(),
+  derivedRequest: z.unknown(),
+  seal: z.object({
+    requestHash: z.string(),
+    work: z.unknown(),
+    incarnation: z.unknown(),
+    dependencies: z.string(),
+  }),
+  takenAt: z.string(),
+});
+export const writePreviewSchema = writeResponseSchema
+  .extend({
+    previewOnly: z.literal(true),
+    authoredIntent: z.record(z.string(), z.unknown()).optional(),
+  })
+  .loose();
+
+export const writeCommandResultSchema = (result: z.ZodType = z.looseObject({})) =>
+  z.union([
+    writePreviewSchema,
+    z.intersection(result, writeResponseSchema.extend({ previewOnly: z.literal(false) })),
+  ]);
+
 export function workWriteCommand<const C extends Command>(
   route: string,
   key: string,
@@ -28,6 +53,7 @@ export function workWriteCommand<const C extends Command>(
   };
   return {
     ...metadata,
+    result: writeCommandResultSchema(definition.result),
     derivation,
     authoredInput: authoredInput as C["input"],
     writeBoundary: {
