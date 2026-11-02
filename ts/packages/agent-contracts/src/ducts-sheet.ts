@@ -183,6 +183,7 @@ export const sheetNoteSchema = z.strictObject({
     "auto-join",
     "heal",
     "assumed-flow",
+    "flow-conflict",
     "merge",
     "demoted",
   ]),

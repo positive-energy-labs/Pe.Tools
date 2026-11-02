@@ -40,7 +40,7 @@ import {
   withEquivalentLength,
 } from "./equivalent-length.ts";
 import { transitionGeometry } from "./geometry.ts";
-import { GridError, lookupGrid, type Grids } from "./loss-grid.ts";
+import { GridError, lookupBranchLoss, lookupGrid, type Grids } from "./loss-grid.ts";
 import { friction, sectionOf } from "./loss-physics.ts";
 import {
   LOSS_RULES,
@@ -755,7 +755,9 @@ function pathRows(
     if (!grid) return bad(`${table} ${input.res} is not loaded`);
     let found;
     try {
-      found = lookupGrid(grid, input.x, input.y, input.z);
+      found = input.branchLossInterpolation
+        ? lookupBranchLoss(grid, input.x, input.y!)
+        : lookupGrid(grid, input.x, input.y, input.z);
     } catch (e) {
       if (e instanceof GridError) return bad(e.message);
       throw e;

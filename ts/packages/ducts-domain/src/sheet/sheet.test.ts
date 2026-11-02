@@ -1383,3 +1383,46 @@ it("a missing terminal flow withholds path completeness and required ESP", () =>
   expect(sheet.totals.requiredEspInWg).toBeNull();
   expect(sheet.blockers.some((b) => b.kind === "no-flow")).toBe(true);
 });
+
+it("resolved unit flow and walked terminal sum remain visible when they disagree", () => {
+  const input = inputsFor(network, {
+    roles: { 100: "fan" },
+    endCfm: { 100: 1200, 6: 200, 8: 100, 10: 300 },
+  });
+  const sheet = buildSheet({
+    snapshot: network,
+    fan: { unitId: 100, portIndex: 0 },
+    roster: [fanPort(100, 0, 1)],
+    grids,
+    inputs: input,
+  });
+  expect(sheet.notes.find((n) => n.kind === "flow-conflict")?.text).toContain("1200 cfm (Work");
+  expect(sheet.notes.find((n) => n.kind === "flow-conflict")?.text).toContain("walked end sum");
+});
+
+it("model fan flow conflict names its slot and the terminal sum", () => {
+  const snap = structuredClone(network);
+  snap.nodes
+    .find((n) => n.id === 100)!
+    .facts.push({ key: "fanFlow", value: 1200, unit: "cfm", provenance: "designer-stated" });
+  snap.slots = {
+    fanStatic: "",
+    componentDrop: "",
+    fittingCoefficient: "",
+    terminalFlow: "",
+    fanFlow: "PE_M_Fan_AirFlow",
+  };
+  const sheet = buildSheet({
+    snapshot: snap,
+    fan: { unitId: 100, portIndex: 0 },
+    roster: [fanPort(100, 0, 1)],
+    grids,
+    inputs: inputsFor(snap, { roles: { 100: "fan" }, endCfm: { 6: 642, 8: 300, 10: 942 } }),
+  });
+  expect(sheet.notes.find((n) => n.kind === "flow-conflict")).toMatchObject({
+    value: 258,
+    text: expect.stringContaining(
+      "1200 cfm (model:PE_M_Fan_AirFlow) conflicts with 942 cfm (walked end sum)",
+    ),
+  });
+});

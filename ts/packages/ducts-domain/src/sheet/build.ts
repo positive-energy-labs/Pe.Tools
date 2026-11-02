@@ -141,7 +141,7 @@ function lossSourceOf(src: NonNullable<PricedLeg["source"]>, note = ""): Leg["lo
     : src.kind === "rule"
       ? {
           kind: "rule",
-          ref: `${src.rule} ${src.table} ${src.inputs.res}=${round(src.coefficient)}${note}`,
+          ref: `${src.rule} ${src.table} ${src.inputs.res}=${round(src.coefficient)}${note}${src.notes.length ? `; ${src.notes.join("; ")}` : ""}`,
         }
       : { kind: src.source.startsWith("firm default") ? "default" : "drop", ref: src.source };
 }
@@ -1633,6 +1633,12 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
       ? round(sT.worstPath + rT.worstPath + sT.allowanceInWg + rT.allowanceInWg)
       : null;
   const flowCfm = retFirst ? sideSum(returnFlows!, ret!.w) : sideSum(supplyFlows, supply.w);
+  const walkedFlow = supply.w.ends.some((e) => e.end.kind === "terminal")
+    ? sideSum(
+        flowsOf(supply.w, { ...flowOpts, ordinary: true, sideStream: null }, () => ""),
+        supply.w,
+      )
+    : flowCfm;
   const walked = new Set<number>();
   for (const w of [supply.w, ret?.w]) if (w) for (const id of w.depth.keys()) walked.add(id);
 
@@ -1648,6 +1654,17 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
   const tagOf = (unitId: number) => input.roster.find((p) => p.unitId === unitId)?.tag;
   const notes: SheetNote[] = [
     note("direction", `inlet ${inlet ?? "none"}, discharge ${discharge}: ${directionSource}`),
+    // Compare the shared resolver's authored/model value with the independently walked sum.
+    // Open ends make the sum partial; never allocate their unknown flow to erase a conflict.
+    ...(unitCfm?.value != null && walkedFlow != null && Math.abs(unitCfm.value - walkedFlow) > 0.5
+      ? [
+          note(
+            "flow-conflict",
+            `fan ${unit.id}: ${unitCfm.value} cfm (${provenance(unitCfm)}) conflicts with ${round(walkedFlow)} cfm (walked end sum); ${[...supply.w.ends, ...(ret?.w.ends ?? [])].filter((e) => e.end.kind === "open-end").length} open ends; their unknown flow does not establish the difference`,
+            unitCfm.value - walkedFlow,
+          ),
+        ]
+      : []),
     ...[...derived.entries()]
       .filter(([ref]) =>
         [unit.id, ...[...a.ends, ...(b?.ends ?? [])].map((e) => e.end.fan?.unitId)].includes(

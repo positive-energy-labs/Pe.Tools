@@ -187,3 +187,28 @@ export function lookupGrid(grid: Grid, x: number, y?: number | null, z?: number 
     at: { x: clampTo(x, grid.x), y: a.y + t * (b.y - a.y), z: clampTo(z, grid.z) },
   };
 }
+
+/** Low-flow branch tables: interpolate loss on a fixed velocity basis, then restore Cb.
+ * ASHRAE Fundamentals, Duct Design: C2 = C1 (V1/V2)^2. Each table node's branch
+ * velocity changes with Qb/Qc, so interpolating raw Cb across 0.01..0.1 magnifies
+ * the near-zero-flow singularity. This is an interpolation policy, not a new DFDB equation.
+ * Only the sparse low-flow interval uses it; all published nodes remain exact.
+ * TODO: compare this interpolation policy with licensed DFDB at interior low-flow points;
+ * the published grids establish the nodes and velocity basis, not that proprietary algorithm.
+ * Source: https://handbook.ashrae.org/Handbooks/F21/IP/F21_Ch21/F21_Ch21_ip.aspx
+ */
+export function lookupBranchLoss(grid: Grid, x: number, y: number): Lookup {
+  if (x >= 0.1 || grid.z || !grid.y) return lookupGrid(grid, x, y);
+  const normalized: Grid = {
+    ...grid,
+    grid: (grid.grid as number[][]).map((row) => row.map((c, i) => c * grid.x[i]! ** 2)),
+  };
+  const found = lookupGrid(normalized, x, y);
+  found.value /= found.at.x ** 2;
+  found.notes.push(
+    "low-flow interpolation on fixed velocity pressure; coefficient restored to branch Pv",
+  );
+  if (found.at.x !== x || found.at.y !== y)
+    found.notes.push("extrapolated: nearest table-domain boundary used");
+  return found;
+}

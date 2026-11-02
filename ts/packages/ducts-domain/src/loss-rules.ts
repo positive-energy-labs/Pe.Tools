@@ -98,6 +98,7 @@ export interface LossRule {
     leg: Leg,
   ): {
     res: string;
+    branchLossInterpolation?: boolean;
     x: number;
     y?: number;
     z?: number;
@@ -312,6 +313,7 @@ export const LOSS_RULES: readonly LossRule[] = [
       f.junction!.leg === "Cb"
         ? {
             res: "Cb",
+            branchLossInterpolation: true,
             x: flows.qb! / flows.qc!,
             y: f.junction!.branch.section!.areaFt2 / f.inlet.section!.areaFt2,
           }
@@ -343,6 +345,7 @@ export const LOSS_RULES: readonly LossRule[] = [
       if (leg === "Cs") return { res: "Cs", x: flows.qs! / qc, y: 1 };
       return {
         res: "Cb",
+        branchLossInterpolation: _t === "SD5-9",
         x: flows.qb! / qc,
         y: f.abOverAc ?? (f.inlet.section?.areaFt2 ?? NaN) / (f.main?.section?.areaFt2 ?? NaN),
       };
@@ -373,11 +376,12 @@ export const LOSS_RULES: readonly LossRule[] = [
       f.main?.shape === "round" &&
       (flows.qb ?? 0) > 0 &&
       (flows.qc ?? 0) > 0,
-    input: (f, flows) => {
+    input: (f, flows, table) => {
       const x = flows.qb! / flows.qc!;
       const a = areaOf(f.main) / areaOf(f.inlet);
       return {
         res: "Cb1",
+        branchLossInterpolation: table === "SD5-18",
         x,
         y: a,
         factor: atTableVelocity(x, a, (at) => [at.x, at.y]),
