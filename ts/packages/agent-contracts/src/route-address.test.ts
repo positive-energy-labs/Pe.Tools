@@ -63,16 +63,16 @@ describe("the route address", () => {
     const facts = { systems: [{ name: "SA 1" }, { name: "SA 2" }, { name: "RA 1" }] };
     expect(at.agent!.resolve!({ system: "ra 1,sa 2" }, facts)).toEqual({
       ok: true,
-      patch: { system: "RA%201,SA%202" },
+      patch: { system: "RA 1,SA 2" },
     });
     expect(at.agent!.resolve!({ system: "RA%201,SA%202" }, facts)).toEqual({
       ok: true,
-      patch: { system: "RA%201,SA%202" },
+      patch: { system: "RA 1,SA 2" },
     });
     expect(at.agent!.resolve!({ system: "SA" }, facts).ok).toBe(false);
     const page = at.read({ system: "RA 1,SA 2" }).page;
     expect(page.system).toEqual(["RA 1", "SA 2"]);
-    expect(at.link(page)).toBe("/ducts?system=RA%25201%2CSA%25202");
+    expect(at.link(page)).toBe("/ducts?system=RA+1%2CSA+2");
     expect(at.read({ system: "" }).page.system).toEqual([]);
   });
   test("the thread sidebar query and sort round-trip on Pea and a docked route", () => {
@@ -134,7 +134,7 @@ describe("the route address", () => {
       ok: true,
       patch: {
         threadSearch: JSON.stringify(pickListPill(emptyListSearch(), "scope", "attention")),
-        system: "SA%2019",
+        system: "SA 19",
       },
     });
     if (mixed.ok) {
@@ -251,7 +251,7 @@ describe("the thin routes adopt the contract", () => {
     });
     const home = routeAddress("home");
     expect(home.link({ query: "duct", folded: ["/ducts"], sort: "name" })).toBe(
-      "/?query=duct&folded=%2Fducts&sort=name",
+      "/?query=duct&folded=%252Fducts&sort=name",
     );
     expect(routeAddress("settings").link({ section: "none" })).toBe("/settings?section=none");
     expect(routeAddress("data-tables").link({ table: "Loads" })).toBe("/data-tables?table=Loads");

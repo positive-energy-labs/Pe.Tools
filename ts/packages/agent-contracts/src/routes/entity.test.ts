@@ -1,3 +1,4 @@
+import { manyCodec } from "../route-field.ts";
 import { describe, expect, test } from "vite-plus/test";
 import { routeAddress } from "../route-address.ts";
 
@@ -28,12 +29,19 @@ describe("an entity route's address", () => {
     const link = family.link(page);
     const search = Object.fromEntries(new URL(link, "http://x").searchParams);
     expect(family.read(search).page).toMatchObject(page);
-    expect(family.agent.write(page).sort).toBe("-Width\\, Nominal,\\-odd");
+    expect(family.agent.read({ sort: family.agent.write(page).sort! }).sort).toEqual(page.sort);
   });
 
   test("Pea's patch reads through the field's codec, and a bad one is refused by name", () => {
     const families = routeAddress("families");
-    expect(families.agent.read({ sort: "-Width,Name" }).sort).toEqual([
+    expect(
+      families.agent.read({
+        sort: manyCodec.encode([
+          { key: "Width", dir: "desc" },
+          { key: "Name", dir: "asc" },
+        ] as never),
+      }).sort,
+    ).toEqual([
       { key: "Width", dir: "desc" },
       { key: "Name", dir: "asc" },
     ]);
