@@ -47,7 +47,7 @@ vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({
     ...args: Parameters<
       typeof import("../../../../packages/mcps/src/shared/takeoff-action-client").runSemanticAction
     >
-  ) => (args[1]?.previewOnly === true ? transport.preview(...args) : transport.run(...args)),
+  ) => (/\.preview$|^ducts\.preview-/.test(String(args[0])) ? transport.preview(...args) : transport.run(...args)),
   actionResult: (receipt: { result?: unknown }) => receipt.result,
   cancelRunningAdmissions: vi.fn(async () => []),
 }));
