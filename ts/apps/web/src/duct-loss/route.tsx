@@ -4,10 +4,10 @@ import { routeAddress } from "@pe/agent-contracts";
 import { FactChip } from "@pe/kit/lang/chip";
 import { Input } from "@pe/kit/lang/input";
 import { Switcher } from "@pe/kit/lang/switcher";
-import { DuctCharts } from "#/duct/charts";
-import { FACES, type FaceKey } from "#/duct/ductulator";
-import { Ductulator } from "#/duct/wheel";
-import { type DuctInput, type DuctResult, materials, solve } from "#/duct/math";
+import { DuctCharts } from "#/duct-loss/duct/charts";
+import { FACES, type FaceKey } from "#/duct-loss/duct/ductulator";
+import { Ductulator } from "#/duct-loss/duct/wheel";
+import { type DuctInput, type DuctResult, materials, solve } from "#/duct-loss/duct/math";
 import { routeFromGraph, type MountBody, type RouteAdapters } from "#/shell/mount";
 import { ductLossGraph, type DuctLossPage } from "./graph";
 

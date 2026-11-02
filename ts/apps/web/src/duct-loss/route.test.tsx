@@ -5,7 +5,7 @@ import { afterEach, expect, test } from "vite-plus/test";
 import { routeAddress } from "@pe/agent-contracts";
 import { readKeyMeta, readRegistrations } from "@pe/kit/keys";
 import { readTeaching } from "@pe/kit/lang/teach";
-import { solve } from "#/duct/math";
+import { solve } from "#/duct-loss/duct/math";
 import { Route as root } from "../routes/__root";
 import { ductLossGraph } from "./graph";
 import { ductLossRoute } from "./route";
