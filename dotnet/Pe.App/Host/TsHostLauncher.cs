@@ -95,6 +95,9 @@ internal static class TsHostLauncher {
         start.EnvironmentVariables[HostEndpoint.ServiceNameVariable] = ServiceName;
         start.EnvironmentVariables[SourceRootEnvironmentVariable] = sourceRoot;
 
+        // TODO: the dev host this starts outlives `pe-revit session stop`, and nothing authorized can stop it
+        // (/admin/shutdown needs the service token; `pe-revit service` only lists and sweeps). SDK Owed in
+        // docs/features/host/LEDGER.md (2026-11-02, Manual D defect 11).
         return InstalledProduct.EnsureRunning(
             ServiceAppBase, ServiceName, spec, start, Context.Lane, null,
             file => file.Lane == "dev" && PathsEqual(file.SourceRoot, sourceRoot),
