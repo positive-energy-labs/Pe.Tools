@@ -585,6 +585,8 @@ export function createGraphMount<P, W>(
       at: Date.now(),
       receiptId: stamp,
       press,
+      // ADR 0028: a receipt is a Timeline invocation; name it by the route verb that does its command.
+      verb: Object.keys(verbs).find((id) => verbs[id]!.does === receipt.key) ?? receipt.key,
       paths: key ? adapters.receiptPaths?.(receipt, key) : undefined,
       basis: { workKey: identity, receipt },
     });

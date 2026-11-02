@@ -5,6 +5,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  actionReceiptSchema,
   bindWork,
   OLDER_WORK,
   workKey,
@@ -12,6 +13,7 @@ import {
   type TargetResolution,
   type RouteGraph,
   type RouteStateSpec,
+  type ActionReceipt,
   type RouteStateWriteResult,
   type WorkKey,
   type WorkWrite,
@@ -62,6 +64,8 @@ export interface WorkScopePorts<W> {
   /** Ask the host for this Work again. */
   reread(key: WorkKey): void;
   subscribeAcceptedDeltas(key: WorkKey, onAck: (ack: WorkWriteAck) => void): () => void;
+  /** Every receipt that consumed the current Work, Pea's included: the Timeline hears both clients. */
+  subscribeReceipts?(accept: (receipt: ActionReceipt, key: WorkKey | null) => void): () => void;
   status: WorkScopeStatus;
 }
 
@@ -255,6 +259,35 @@ export function useWorkScope<P, W>(
       subscribeAcceptedDeltas: spec
         ? (key: WorkKey, onAck: (ack: WorkWriteAck) => void) => subscribeAcceptedDeltas(key, onAck)
         : noDeltas,
+      subscribeReceipts: (accept: (receipt: ActionReceipt, key: WorkKey | null) => void) => {
+        let current = "";
+        let release = () => {};
+        const follow = () => {
+          const key = store.snapshot.workKey;
+          const id = key ? workKey(key) : "";
+          if (id === current) return;
+          current = id;
+          release();
+          release = () => {};
+          if (!key) return;
+          // The first frame is history: only what is still in flight (a consent window) joins.
+          let baseline = true;
+          release = peReadings.subscribe({ kind: "receipts", work: key }, (frame) => {
+            if (frame.kind !== "snapshot" || frame.stale) return;
+            const rows = actionReceiptSchema.array().safeParse(frame.value);
+            if (!rows.success) return;
+            for (const row of rows.data)
+              if (!baseline || ["waiting", "running"].includes(row.state)) accept(row, key);
+            baseline = false;
+          });
+        };
+        store.listeners.add(follow);
+        follow();
+        return () => {
+          store.listeners.delete(follow);
+          release();
+        };
+      },
     }),
     [store, spec],
   );

@@ -89,3 +89,30 @@ test("an open consent window draws its countdown with Reject, refused on the fix
   expect(html).toMatch(/apply · [23]\ds/);
   expect(html).toMatch(/aria-label="Reject apply" aria-disabled="true"[^>]*>.*Reject\?/);
 });
+
+test("Pea's preview receipt after a Work edit heads the Timeline with its caller and state", () => {
+  const step = { label: "Allowance return", at: Date.now() - 5000, by: "human", press: "p1" };
+  const journal = { last: { kind: "apply", step, by: "human" }, undo: [step], redo: [], revision: 3 };
+  const owner = {
+    timeline: createRouteTimeline(),
+    fixture: null,
+    verbs: { preview: verb({ does: "ducts.preview-losses" }) },
+    subscribe: () => () => {},
+    version: () => 0,
+    snapshot: () => ({ workKey: { binding: "host", route: "ducts" } }),
+    journals: { get: () => ({ read: () => journal }) },
+  } as never as Parameters<typeof TimelineHead>[0]["owner"];
+  const head = () => renderToStaticMarkup(<TimelineHead owner={owner} history={null} />);
+  expect(head()).toContain("Allowance return");
+  for (const state of ["running", "succeeded"] as const)
+    owner.timeline.append({
+      kind: "receipt",
+      at: Date.now(),
+      verb: "preview",
+      receiptId: `r1:${state}`,
+      basis: { receipt: { caller: { kind: "pea", thread: "t1" } } },
+      outcome: { id: "r1", state, input: {}, receiptId: "r1" },
+    });
+  expect(head()).toMatch(/<span>preview<\/span><span data-slot="timeline-state">Pea · succeeded · /);
+  expect(head()).not.toContain("Allowance return");
+});

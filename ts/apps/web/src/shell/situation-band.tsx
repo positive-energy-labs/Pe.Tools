@@ -85,6 +85,13 @@ function consentThread(entry: TimelineEntry, bound?: string) {
   return caller?.kind === "pea" ? caller.thread : bound;
 }
 
+/** Who ran an entry: a receipt names its caller; a press on this page is yours. */
+export const entryCaller = (entry: TimelineEntry) =>
+  (entry.basis as { receipt?: { caller?: { kind: string } } } | undefined)?.receipt?.caller
+    ?.kind === "pea"
+    ? "Pea"
+    : "you";
+
 /** The latest entry per press or receipt; a consent window is open until its entry moves on. */
 export function openConsentWindows(entries: readonly TimelineEntry[], now: number) {
   const latest = new Map<string, TimelineEntry>();
@@ -157,7 +164,10 @@ export function TimelineHead<P, W>({
   }, [ticking]);
   const journal = useWorkJournal(owner);
   const step = journal?.last?.step;
-  const command = timeline.findLast((entry) => owner.verbs[entry.verb ?? ""]?.kind === "command");
+  // A command press or any receipt (Pea's previews included, ADR 0028) outranks an older Work edit.
+  const command = timeline.findLast(
+    (entry) => entry.kind === "receipt" || owner.verbs[entry.verb ?? ""]?.kind === "command",
+  );
   const last =
     step && !(command && new Date(command.at).getTime() > step.at) ? null : (command ?? timeline.at(-1));
   return (
@@ -227,7 +237,7 @@ export function TimelineHead<P, W>({
             <>
               <span>{last.verb ?? last.kind}</span>
               <span data-slot="timeline-state">
-                {last.outcome?.state ?? last.kind} · {activityTime(last.at)}
+                {entryCaller(last)} · {last.outcome?.state ?? last.kind} · {activityTime(last.at)}
               </span>
             </>
           ) : (
