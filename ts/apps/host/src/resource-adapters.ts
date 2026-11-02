@@ -21,7 +21,7 @@ import { listBridgeSessions } from "./local-ops.ts";
 import { observeSdkReading } from "./session-route.ts";
 import { sdkSession } from "./sdk-session.ts";
 import type { DocumentMarks, DocumentRef } from "./document-marks.ts";
-import type { MachineOwner } from "./machine.ts";
+import type { MachineOwnerPromise } from "./machine.ts";
 import { canonicalDuctsSession, ductsReadings } from "./ducts-readings.ts";
 
 /**
@@ -162,7 +162,7 @@ export function hostResourceObserver(
   origin = "http://127.0.0.1",
   // Resolved at the call, not at the build: one observer outlives any one `fetch` binding.
   read: (url: URL, init?: RequestInit) => Promise<Response> = (url, init) => fetch(url, init),
-  machine?: MachineOwner,
+  machine?: MachineOwnerPromise,
   resolveSession: (
     bridge: RevitBridge["Service"],
     scope: HostSessionScope,

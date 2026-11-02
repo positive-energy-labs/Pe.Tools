@@ -21,7 +21,7 @@ import {
 } from "./ducts-analysis.ts";
 import { sdkSessionSelectionSchema } from "@pe/agent-contracts";
 import type { MachineShareAdapter } from "./machine.ts";
-import { Effect, Option, Stream } from "effect";
+import { Context, Effect, Layer, Option, Stream } from "effect";
 import {
   HttpEffect,
   HttpRouter,
@@ -98,11 +98,12 @@ import {
 } from "./product-paths.ts";
 import { hostResourceObserver, markReadings } from "./resource-adapters.ts";
 import {
-  createMachine,
+  MachineOwner,
+  hostMachineFace,
+  type MachineOptions,
   machineAcquisition,
   machineSessionAcquisition,
   machineSources,
-  useHostMachine,
 } from "./machine.ts";
 import {
   bindControl,
@@ -1228,24 +1229,28 @@ function* hostPeRoutes(
     context: receiptThreads.context,
     log: hostLog(),
   });
-  const machine = createMachine(machineSources(bridge, providers, update, share, threads.heads), {
-    fault: (fault) =>
-      telemetry.track(
-        telemetry.record({
-          kind: "diagnostic",
-          code: fault.kind === "deadline" ? "reading.timeout" : "reading.failed",
-          readingKind: "machine",
-          elapsedMs: fault.elapsedMs,
-        }),
-      ),
-    automaticUpdates:
-      hostOwnership.lane === "installed" ? { peaActive: threads.active } : undefined,
-  });
+  // The owner itself is built by the caller's scope (`MachineOwner.layer`); routes reach it late-bound.
+  const machineSpec = {
+    sources: machineSources(bridge, providers, update, share, threads.heads),
+    options: {
+      fault: (fault) =>
+        telemetry.track(
+          telemetry.record({
+            kind: "diagnostic",
+            code: fault.kind === "deadline" ? "reading.timeout" : "reading.failed",
+            readingKind: "machine",
+            elapsedMs: fault.elapsedMs,
+          }),
+        ),
+      automaticUpdates:
+        hostOwnership.lane === "installed" ? { peaActive: threads.active } : undefined,
+    } satisfies MachineOptions,
+  };
   const registrations = hostWork?.registrations ?? registrationsFactory({ hostBaseUrl });
   const catalog = createCapabilityCatalogSource({
     hostBaseUrl,
     registrations,
-    machine: () => machine.refresh(),
+    machine: () => hostMachineFace.refresh(),
     content: async () => {
       await podRoutes.list();
       return content.read();
@@ -1259,7 +1264,7 @@ function* hostPeRoutes(
     undefined,
     hostBaseUrl,
     undefined,
-    machine,
+    hostMachineFace,
   );
   const routes = createPeRoutes({
     routeSettings,
@@ -1378,7 +1383,7 @@ function* hostPeRoutes(
     },
     fetch: createPluginsHandler(content, podRoutes),
   };
-  return { providers, threads, routes, catalog, machine, notices, plugins, tasks };
+  return { providers, threads, routes, catalog, machineSpec, notices, plugins, tasks };
 }
 
 /**
@@ -1400,7 +1405,7 @@ export const peRoutesLayer = (
       const bridge = Option.getOrUndefined(yield* Effect.serviceOption(RevitBridge));
       const update = yield* UpdateReader;
       const runs = yield* RunConsents;
-      const { providers, threads, routes, catalog, machine, notices, plugins, tasks } =
+      const { providers, threads, routes, catalog, machineSpec, notices, plugins, tasks } =
         yield* makeHostPeRoutes(
           hostBaseUrl,
           bridge,
@@ -1410,7 +1415,11 @@ export const peRoutesLayer = (
           share,
           hostWork,
         );
-      useHostMachine(machine);
+      // Scoped: the layer closes with this one, which stops its poll and unsets the host face.
+      const machineContext = yield* Layer.build(
+        MachineOwner.layer(machineSpec.sources, machineSpec.options),
+      );
+      const machine = Context.get(machineContext, MachineOwner);
       bindControl({
         heads: threads.heads.read,
         subscribeHeads: threads.heads.subscribe,
@@ -1427,8 +1436,6 @@ export const peRoutesLayer = (
             acquired: () => null,
             acquiredSession: () => null,
           });
-          useHostMachine(undefined);
-          machine.close();
           notices.close();
         }),
       );

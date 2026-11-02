@@ -5,6 +5,13 @@ import { onTestFinished, test, type TestContext } from "vite-plus/test";
 import { FamiliesReader } from "../src/families-reader.ts";
 import { HarnessThreads, type HarnessThreadsOptions } from "../src/harness/threads.ts";
 import {
+  MachineOwner,
+  machineOwnerPromise,
+  type MachineOptions,
+  type MachineOwnerPromise,
+  type MachineSources,
+} from "../src/machine.ts";
+import {
   RunConsents,
   runConsentsPromise,
   type ConsentSink,
@@ -136,4 +143,66 @@ export const familiesReader = async (): Promise<FamiliesReader["Service"]> => {
     Layer.buildWithScope(FamiliesReader.layer.pipe(Layer.provide(NodeServices.layer)), scope),
   );
   return Context.get(context, FamiliesReader);
+};
+
+/** Run one Effect to a Promise: the test-runner edge for Promise-style assertions. */
+export const settle = <A, E>(effect: Effect.Effect<A, E>): Promise<A> =>
+  // effect-edge: test-runner
+  Effect.runPromise(effect);
+
+type Lifted<F> = F extends (...args: infer Args) => Effect.Effect<infer A, unknown, unknown>
+  ? (...args: Args) => Promise<A>
+  : F;
+/** {@link MachineSources} with its census legs as Promise fakes, the shape older tests mock. */
+export type PromiseMachineSources = {
+  [K in keyof MachineSources]: K extends
+    | "host"
+    | "peers"
+    | "sessions"
+    | "documents"
+    | "holdings"
+    | "attachments"
+    | "years"
+    ? Lifted<MachineSources[K]>
+    : MachineSources[K];
+};
+
+/** Lift a Promise fake into the Effect leg Machine reads; its rejection stays the failure value. */
+export const liftLegs = (sources: PromiseMachineSources): MachineSources => {
+  const lift =
+    <Args extends unknown[], A>(leg: (...args: Args) => Promise<A>) =>
+    (...args: Args) =>
+      Effect.tryPromise({ try: () => leg(...args), catch: (error) => error });
+  return {
+    ...sources,
+    host: lift(sources.host),
+    peers: lift(sources.peers),
+    sessions: lift(sources.sessions),
+    documents: lift(sources.documents),
+    holdings: lift(sources.holdings),
+    attachments: lift(sources.attachments),
+    years: lift(sources.years),
+  };
+};
+
+/**
+ * {@link MachineOwner} for Promise tests: the live layer over Promise-fake legs, built in a scope
+ * the running test closes (which stops its poll and unsets the host face).
+ */
+export const machineOwner = (
+  sources: PromiseMachineSources,
+  options?: MachineOptions,
+): MachineOwnerPromise => {
+  const scope = Scope.makeUnsafe();
+  // effect-edge: test-runner
+  const context = Effect.runSync(
+    Layer.buildWithScope(MachineOwner.layer(liftLegs(sources), options), scope),
+  );
+  try {
+    // effect-edge: test-runner
+    onTestFinished(() => Effect.runPromise(Scope.close(scope, Exit.void)));
+  } catch {
+    // Outside a running test: a module fixture, closed with its worker.
+  }
+  return machineOwnerPromise(Context.get(context, MachineOwner));
 };

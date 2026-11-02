@@ -17,12 +17,11 @@ import { RevitBridge } from "../src/bridge.ts";
 import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
 import { replayAnswer } from "./sdk-replay.ts";
 import {
-  createMachine,
   machineAcquisition,
   machineSessionAcquisition,
-  useHostMachine,
   unavailableShare,
 } from "../src/machine.ts";
+import { machineOwner } from "./effect-test.ts";
 import { bindControl, mintContext } from "../src/control.ts";
 import type { ThreadHead } from "@pe/agent-contracts";
 import { docListArgv, type SessionObservation } from "@pe/host-contracts/pe-revit-contract";
@@ -207,7 +206,7 @@ async function setup(
     receiptLeg: unreadLeg(),
     automatic: true,
   };
-  const machine = createMachine({
+  const machine = machineOwner({
     targets: { targets: () => [], subscribe: () => () => {} },
     actions: () => owner.list(),
     host: async () => {
@@ -260,15 +259,12 @@ async function setup(
       },
     ],
   });
-  useHostMachine(machine);
   bindControl({
     heads: null,
     acquired: machineAcquisition,
     acquiredSession: machineSessionAcquisition,
   });
   cleanup.push(async () => {
-    useHostMachine(undefined);
-    machine.close();
     bindControl({ heads: null, acquired: () => null, acquiredSession: () => null });
   });
   let serial = 0;
