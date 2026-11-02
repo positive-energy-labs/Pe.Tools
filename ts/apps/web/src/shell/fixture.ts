@@ -147,11 +147,11 @@ export function pendingFixtureEnvironment<P, W>(
   const sources: Record<string, ReadingSource> = {};
   const readings = Object.fromEntries(
     Object.entries(graph.readings).map(([id, reading]) => {
-      const value = (context: { page: unknown }) => {
+      const value = (context: { page: unknown; work?: unknown }) => {
         if (!seed || !Object.hasOwn(seed.readings, id))
           throw Error(`Fixture '${name}' has no reading '${id}'`);
         const reading = seed.readings[id];
-        if (typeof reading === "function") return reading(context.page);
+        if (typeof reading === "function") return reading(context.page, context.work);
         if (reading && typeof reading === "object" && "fixtureSelect" in reading) {
           const { fields, values, fallback } = (
             reading as {
