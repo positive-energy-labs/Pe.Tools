@@ -7326,7 +7326,7 @@ export namespace RevitDetailSpaceCensus {
       plannedCount: number;
       plannedCost: number;
       perSource: GeometrySourceCost[];
-      newlyTessellatedIds: TessellatedElement[];
+      newlyTessellatedCount: number;
       cumulativeTessellatedCount: number;
     }
     export interface GeometrySourceCost {
@@ -7335,11 +7335,6 @@ export namespace RevitDetailSpaceCensus {
       count: number;
       loadOnlyCount: number;
       cost: number;
-    }
-    export interface TessellatedElement {
-      documentKey: string;
-      epoch: number;
-      elementId: number;
     }
     /**
      * How much of the world the verb had to touch to answer. The honesty counter.
@@ -7511,7 +7506,7 @@ export namespace RevitDetailSpaceProbe {
       plannedCount: number;
       plannedCost: number;
       perSource: GeometrySourceCost[];
-      newlyTessellatedIds: TessellatedElement[];
+      newlyTessellatedCount: number;
       cumulativeTessellatedCount: number;
     }
     export interface GeometrySourceCost {
@@ -7520,11 +7515,6 @@ export namespace RevitDetailSpaceProbe {
       count: number;
       loadOnlyCount: number;
       cost: number;
-    }
-    export interface TessellatedElement {
-      documentKey: string;
-      epoch: number;
-      elementId: number;
     }
     /**
      * How much of the world the verb had to touch to answer. The honesty counter.
@@ -7687,7 +7677,7 @@ export namespace RevitDetailSpaceRows {
       plannedCount: number;
       plannedCost: number;
       perSource: GeometrySourceCost[];
-      newlyTessellatedIds: TessellatedElement[];
+      newlyTessellatedCount: number;
       cumulativeTessellatedCount: number;
     }
     export interface GeometrySourceCost {
@@ -7696,11 +7686,6 @@ export namespace RevitDetailSpaceRows {
       count: number;
       loadOnlyCount: number;
       cost: number;
-    }
-    export interface TessellatedElement {
-      documentKey: string;
-      epoch: number;
-      elementId: number;
     }
     /**
      * How much of the world the verb had to touch to answer. The honesty counter.
@@ -7959,7 +7944,7 @@ export namespace RevitDetailSpaceScene {
       plannedCount: number;
       plannedCost: number;
       perSource: GeometrySourceCost[];
-      newlyTessellatedIds: TessellatedElement[];
+      newlyTessellatedCount: number;
       cumulativeTessellatedCount: number;
     }
     export interface GeometrySourceCost {
@@ -7968,11 +7953,6 @@ export namespace RevitDetailSpaceScene {
       count: number;
       loadOnlyCount: number;
       cost: number;
-    }
-    export interface TessellatedElement {
-      documentKey: string;
-      epoch: number;
-      elementId: number;
     }
     /**
      * Axis-aligned bounds in host internal feet.
@@ -8317,7 +8297,7 @@ export namespace RevitDetailSpaceSlice {
       plannedCount: number;
       plannedCost: number;
       perSource: GeometrySourceCost[];
-      newlyTessellatedIds: TessellatedElement[];
+      newlyTessellatedCount: number;
       cumulativeTessellatedCount: number;
     }
     export interface GeometrySourceCost {
@@ -8326,11 +8306,6 @@ export namespace RevitDetailSpaceSlice {
       count: number;
       loadOnlyCount: number;
       cost: number;
-    }
-    export interface TessellatedElement {
-      documentKey: string;
-      epoch: number;
-      elementId: number;
     }
     /**
      * How much of the world the verb had to touch to answer. The honesty counter.
@@ -8458,7 +8433,7 @@ export namespace RevitDetailSpaceStatus {
       plannedCount: number;
       plannedCost: number;
       perSource: GeometrySourceCost[];
-      newlyTessellatedIds: TessellatedElement[];
+      newlyTessellatedCount: number;
       cumulativeTessellatedCount: number;
     }
     export interface GeometrySourceCost {
@@ -8467,11 +8442,6 @@ export namespace RevitDetailSpaceStatus {
       count: number;
       loadOnlyCount: number;
       cost: number;
-    }
-    export interface TessellatedElement {
-      documentKey: string;
-      epoch: number;
-      elementId: number;
     }
     /**
      * One partition's categories, so a filter can be built without a rows read.
@@ -8613,7 +8583,7 @@ export namespace RevitDetailSpaceSweep {
       plannedCount: number;
       plannedCost: number;
       perSource: GeometrySourceCost[];
-      newlyTessellatedIds: TessellatedElement[];
+      newlyTessellatedCount: number;
       cumulativeTessellatedCount: number;
     }
     export interface GeometrySourceCost {
@@ -8622,11 +8592,6 @@ export namespace RevitDetailSpaceSweep {
       count: number;
       loadOnlyCount: number;
       cost: number;
-    }
-    export interface TessellatedElement {
-      documentKey: string;
-      epoch: number;
-      elementId: number;
     }
     /**
      * How much of the world the verb had to touch to answer. The honesty counter.
@@ -8768,7 +8733,7 @@ export namespace RevitDetailSpaceTree {
       plannedCount: number;
       plannedCost: number;
       perSource: GeometrySourceCost[];
-      newlyTessellatedIds: TessellatedElement[];
+      newlyTessellatedCount: number;
       cumulativeTessellatedCount: number;
     }
     export interface GeometrySourceCost {
@@ -8777,11 +8742,6 @@ export namespace RevitDetailSpaceTree {
       count: number;
       loadOnlyCount: number;
       cost: number;
-    }
-    export interface TessellatedElement {
-      documentKey: string;
-      epoch: number;
-      elementId: number;
     }
     /**
      * One BVH node: its index, depth, leaf flag, subtree triangle count, and six host-feet bounds.

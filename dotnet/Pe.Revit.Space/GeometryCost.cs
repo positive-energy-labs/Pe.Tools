@@ -1,10 +1,11 @@
 namespace Pe.Revit.Space;
 
-public sealed record TessellatedElement(string DocumentKey, long Epoch, long ElementId);
+internal sealed record TessellatedElement(string DocumentKey, long Epoch, long ElementId);
 public sealed record GeometrySourceCost(string Source, long? LinkInstanceId, int Count, int LoadOnlyCount, double Cost);
 /// <summary>Acquisition evidence, not a memory cap. Native geometry remains allocated until document close.</summary>
 public sealed record GeometryCost(int PlannedCount, double PlannedCost, IReadOnlyList<GeometrySourceCost> PerSource,
-    IReadOnlyList<TessellatedElement> NewlyTessellatedIds, int CumulativeTessellatedCount);
+    int NewlyTessellatedCount, int CumulativeTessellatedCount);
+// ponytail: counts, not ids - a detailed SA 7 read touches ~56k elements, several MiB past the 2 MiB Readings frame cap.
 
 internal static class GeometryLedger {
     private static readonly Dictionary<string, HashSet<TessellatedElement>> Retained = new();
@@ -30,7 +31,7 @@ internal static class GeometryLedger {
             var sources = plans.Select(p => new GeometrySourceCost(p.Source.Doc.Title, p.Source.LinkInstanceId,
                 p.Keep.Count, overview ? p.Keep.Count : 0, overview ? 0 : p.Keep.Count)).ToArray();
             return new GeometryCost(sources.Sum(p => p.Count), sources.Sum(p => p.Cost), sources,
-                after.Except(this._before).OrderBy(e => e.DocumentKey).ThenBy(e => e.Epoch).ThenBy(e => e.ElementId).ToArray(), after.Count);
+                after.Except(this._before).Count(), after.Count);
         }
     }
 }

@@ -97,7 +97,7 @@ public sealed class SpaceRegionAdmissionProofTests {
             Assert.That(scene.Elements.Select(e => e.Handle.ElementId), Does.Contain(second));
             Assert.That(scene.Stamp.GeometryCost!.PlannedCount, Is.EqualTo(2));
             Assert.That(scene.Stamp.GeometryCost.PlannedCost, Is.Zero);
-            Assert.That(scene.Stamp.GeometryCost.NewlyTessellatedIds, Is.Empty);
+            Assert.That(scene.Stamp.GeometryCost.NewlyTessellatedCount, Is.Zero);
             Assert.That(scene.Stamp.GeometryCost.CumulativeTessellatedCount, Is.Zero);
             Assert.That(scene.Work.NativeGeometryCalls, Is.Zero);
             Assert.That(scene.Triangles, Is.Zero);
@@ -114,10 +114,10 @@ public sealed class SpaceRegionAdmissionProofTests {
             var firstRead = Scene.Write(doc, request, bytes);
             Assert.That(firstRead.RequestedContextPaddingFt, Is.EqualTo(2));
             Assert.That(firstRead.EffectiveContextPaddingFt, Is.EqualTo(5));
-            Assert.That(firstRead.Stamp.GeometryCost!.NewlyTessellatedIds.Select(e => e.ElementId), Does.Contain(first));
+            Assert.That(firstRead.Stamp.GeometryCost!.NewlyTessellatedCount, Is.GreaterThan(0));
             using var repeat = new MemoryStream();
             var next = Scene.Write(doc, request, repeat);
-            Assert.That(next.Stamp.GeometryCost!.NewlyTessellatedIds, Is.Empty);
+            Assert.That(next.Stamp.GeometryCost!.NewlyTessellatedCount, Is.Zero);
             Assert.That(next.Stamp.GeometryCost.CumulativeTessellatedCount, Is.EqualTo(firstRead.Stamp.GeometryCost.CumulativeTessellatedCount));
             Assert.That(SpaceWorld.Prepare(doc).GeometryCost!.PlannedCount, Is.GreaterThanOrEqualTo(3));
         } finally { GeometryLedger.Closed(doc.GetDocumentKey()); doc.Close(false); }
