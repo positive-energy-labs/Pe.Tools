@@ -26,7 +26,7 @@ public sealed class SceneAcquisitionBudgetProofTests {
             Assert.That(scene.Completeness.DeferredCandidates, Is.GreaterThan(0));
             Assert.That(scene.Work.PeakRetainedTriangles, Is.LessThanOrEqualTo(60));
             using var repeat = new MemoryStream();
-            var repeated = Scene.Write(doc, new SceneRequest([focus.Id.Value()], FocusOnly: true), repeat);
+            var repeated = Scene.Write(doc, new SceneRequest([focus.Id.Value()], FocusOnly: true, ContextRepresentation: SceneContextRepresentation.LinkBoxes), repeat);
             Assert.That(repeated.Work.ContextGeometryCalls, Is.Zero, "Focus-only capture never acquires context geometry.");
         } finally { doc.Close(false); }
     }
@@ -38,7 +38,7 @@ public sealed class SceneAcquisitionBudgetProofTests {
             DirectShape focus;
             using (var tx = new Transaction(doc, "Create focus budget proof")) { tx.Start(); focus = Cube(doc, 0); tx.Commit(); }
             using var output = new MemoryStream();
-            var error = Assert.Throws<InvalidOperationException>(() => Scene.Write(doc, new SceneRequest([focus.Id.Value()], MaxTriangles: 1, FocusOnly: true), output));
+            var error = Assert.Throws<InvalidOperationException>(() => Scene.Write(doc, new SceneRequest([focus.Id.Value()], MaxTriangles: 1, FocusOnly: true, ContextRepresentation: SceneContextRepresentation.LinkBoxes), output));
             Assert.That(error!.Message, Does.Contain("Exact focus acquisition stopped"));
             Assert.That(output.Length, Is.Zero);
         } finally { doc.Close(false); }

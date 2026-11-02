@@ -5,12 +5,12 @@
 One hold of `.artifacts/locks/revit-slot-1` (ORDER decides; id from PE_PROOF_SESSION). Per model and variant one fresh headless
 SDK-controlled session on the model's local copy (the same Session, floors and peak sampler as run.py / verbs.py). Variants:
     A   --base-ref (default 85db8cb5): the Space files exactly as the damage left them (every verb prepares the whole region box)
-    B   HEAD: Sweep and Probe prepare their own reach, a geometry budget counts every prepare before it loads anything
+    B   HEAD: Sweep and Probe prepare their own reach, cost planning counts every prepare before geometry acquisition
 The driver switches the product files with `git checkout <ref> -- <files>` and renames files A does not have to `*.off`, and refuses to
 finish unless `git diff HEAD` is empty afterwards. Requests are verbs.py's (pinned picks, verbs-requests.json) in the Region shape.
 Per request: pass 1 (first touch) and pass 2 (repeat); wall s, host ms, Revit private bytes before/after and 4 Hz peak. A refusal or
 error is recorded as the answer (A must be able to refuse a Curve2D sweep) and does not stop the run; any IsModified does.
---extras link,meshes,ladder (Chadds): the budget boundary, one kind per process so each first touch is cold. link: SA 7 and SA 7 + EX 7 scenes under
+--extras link,meshes,ladder (Chadds): the read-cost ladder, one kind per process so each first touch is cold. link: SA 7 and SA 7 + EX 7 scenes under
 link-boxes; meshes: SA 7 meshes at 2, 5, 10, 15 ft; ladder: nested boxes through space-census (count, time, memory).
 """
 import argparse, json, os, subprocess, sys, time
@@ -24,7 +24,7 @@ import run as R  # noqa: E402
 import verbs as V  # noqa: E402
 
 MIB = 2**20
-NEW_FILES = ["dotnet/Pe.Revit.Space/GeometryBudget.cs"]
+NEW_FILES = ["dotnet/Pe.Revit.Space/GeometryCost.cs"]
 
 
 def git(*a):
@@ -32,7 +32,7 @@ def git(*a):
 
 
 def changed_files(base):
-    names = git("diff", "--name-only", base, "HEAD", "--", "dotnet").splitlines()
+    names = git("diff", "--name-only", "--diff-filter=ACM", base, "HEAD", "--", "dotnet").splitlines()
     return [n for n in names if "/Pe.Revit.Tests/" not in n and n.endswith(".cs") and n not in NEW_FILES]
 
 
@@ -59,7 +59,7 @@ def log_size():
 
 
 def budget_lines(since):
-    """The geometry budget's own log lines written since `since` (Serilog's file sink; `session logs` does not carry them)."""
+    """Historical budget log lines (new builds report cost in their stamp) written since `since` (Serilog's file sink; `session logs` does not carry them)."""
     if not REVIT_LOG.exists():
         return []
     with REVIT_LOG.open("rb") as f:

@@ -73,7 +73,7 @@ public sealed class SpaceCleanHostGeometryProofTests {
             var dirty = ReadScene(document, subject.Id);
             Assert.That(dirty, Is.Not.EqualTo(first));
             using var dirtyVertices = new MemoryStream();
-            var dirtyScene = Scene.Write(document, new SceneRequest([subject.Id.Value()], FocusOnly: true), dirtyVertices);
+            var dirtyScene = Scene.Write(document, new SceneRequest([subject.Id.Value()], FocusOnly: true, ContextRepresentation: SceneContextRepresentation.LinkBoxes), dirtyVertices);
             Assert.That(dirtyScene.Elements.Min(row => row.Bounds.MinX), Is.EqualTo(10).Within(1e-6),
                 "The dirty host scene must reflect the current moved body, not saved disk rows.");
 
@@ -105,7 +105,7 @@ public sealed class SpaceCleanHostGeometryProofTests {
     private static byte[] ReadScene(Document document, ElementId element) {
         // Scene.Write's stream is only float32 vertices; Stamp/timing metadata is returned separately.
         using var output = new MemoryStream();
-        Scene.Write(document, new SceneRequest([element.Value()], FocusOnly: true), output);
+        Scene.Write(document, new SceneRequest([element.Value()], FocusOnly: true, ContextRepresentation: SceneContextRepresentation.LinkBoxes), output);
         return output.ToArray();
     }
 

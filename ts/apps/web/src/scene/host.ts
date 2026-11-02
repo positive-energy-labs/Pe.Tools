@@ -17,6 +17,7 @@ export const sceneRequest = (
     contextPaddingFt,
     maxTriangles: 1_500_000,
     focusOnly,
-    contextRepresentation: focusOnly ? ("none" as const) : contextRepresentation,
+    contextRepresentation:
+      focusOnly && contextRepresentation !== "overview" ? ("none" as const) : contextRepresentation,
   };
 };

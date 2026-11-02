@@ -126,10 +126,8 @@ export interface PictureContent<L extends string = string, F extends string = st
 
 /** How context is drawn; `none` is the focus read's own and never a choice here. */
 export type PictureContext = Exclude<ContextRepresentation, "none">;
-/** Interim, disclosed default pending kaitpw's IFC drawing ruling (docs/features/spatial/MAP.md
- * Owed): link-frame envelopes are oriented and containing at link-box cost; meshes cost about
- * +5 GiB on Chadds SA 7, against the never-restart goal. The one place the default lives. */
-export const CONTEXT_DEFAULT: PictureContext = "link-boxes";
+/** Zero-native-geometry overview is the default; detail is an explicit read (kaitpw, 2026-11-02). */
+export const CONTEXT_DEFAULT: PictureContext = "overview";
 
 type DocRef = { session: string; openId: string };
 type Move = { history: "push" | "replace" };
@@ -243,7 +241,13 @@ export function Picture<L extends string, F extends string>({
 }) {
   // No document = selection and member registration silently do nothing (the fan sheet's 10-28
   // defect), so a Picture outside an `AttentionRoot` fails loudly instead.
-  const visibleLayers = useMemo(() => content.layerOptions.filter(layer => page.layers === "all" || page.layers.includes(layer.key)).map(layer => layer.key), [page.layers, content.layerOptions]);
+  const visibleLayers = useMemo(
+    () =>
+      content.layerOptions
+        .filter((layer) => page.layers === "all" || page.layers.includes(layer.key))
+        .map((layer) => layer.key),
+    [page.layers, content.layerOptions],
+  );
   const doc = useContext(AttentionDocument);
   if (!doc) throw new Error("Picture requires an AttentionRoot (attention document)");
   useAttentionDocument(doc, selection);

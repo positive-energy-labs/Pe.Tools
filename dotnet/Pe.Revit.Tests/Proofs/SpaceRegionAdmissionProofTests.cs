@@ -1,13 +1,11 @@
-using Pe.Revit.Global.Services.Host;
 using Pe.Revit.Space;
-using Pe.Shared.HostContracts.Operations;
 using System.IO;
 
 namespace Pe.Revit.Tests;
 
 /// <summary>
 ///     A Region is admission, never the read (spatial ledger, 2026-11-02): Sweep, Probe and a scene's focus keep their own
-///     reach, and every geometry prepare is counted by the geometry budget before it loads anything.
+///     reach, and every geometry prepare reports its acquisition cost.
 /// </summary>
 public sealed class SpaceRegionAdmissionProofTests {
     private static readonly Filter Ribbons = new(Kinds: [PrimKind.Curve2D]);
@@ -61,36 +59,6 @@ public sealed class SpaceRegionAdmissionProofTests {
     }
 
     [Test]
-    public void OversizedReadsAreRefusedBeforeAnyGeometryIsReadWithATypedRefusal(UIApplication uiApplication) {
-        var doc = RevitFamilyFixtureHarness.CreateProjectDocument(uiApplication.Application);
-        var ceiling = GeometryBudget.Ceiling;
-        try {
-            Blocks(doc, out _, out _);
-            var wholeModel = new Aabb(-1000, -1000, -1000, 1000, 1000, 1000);
-            GeometryBudget.Ceiling = 2;
-            var refusal = Assert.Throws<OverBudgetException>(() => SpaceWorld.Prepare(doc, wholeModel));
-            Assert.That(refusal!.Count, Is.EqualTo(3), "Three blocks lie in the box; none was loaded to count them.");
-            Assert.That(refusal.Cost, Is.EqualTo(3));
-            Assert.That(refusal.Ceiling, Is.EqualTo(2));
-            Assert.That(refusal.Message, Does.Contain("smaller box"));
-            Assert.Throws<OverBudgetException>(() => Verbs.Census(doc, wholeModel), "A verb's own reach is counted too.");
-
-            var typed = Assert.Throws<BridgeOperationException>(() => SpaceOps.Budgeted(() => SpaceWorld.Prepare(doc, wholeModel)));
-            Assert.That(typed!.Issues.Single().Code, Is.EqualTo("OverBudget"));
-            Assert.That(typed.Issues.Single().InstancePath, Is.EqualTo("$"));
-
-            using var bytes = new MemoryStream();
-            Assert.Throws<OverBudgetException>(() => Scene.Write(doc, new SceneRequest(Bounds: wholeModel, ContextRepresentation: SceneContextRepresentation.Meshes), bytes));
-
-            GeometryBudget.Ceiling = 3;
-            Assert.That(SpaceWorld.Prepare(doc, wholeModel).Partitions[0].Prims.Length, Is.EqualTo(3), "At the ceiling the read proceeds.");
-        } finally {
-            GeometryBudget.Ceiling = ceiling;
-            doc.Close(false);
-        }
-    }
-
-    [Test]
     public void SceneRegionIsAdmissionAndFocusKeepsItsOwnReachAndFocusOnly(UIApplication uiApplication) {
         var doc = RevitFamilyFixtureHarness.CreateProjectDocument(uiApplication.Application);
         try {
@@ -105,7 +73,7 @@ public sealed class SpaceRegionAdmissionProofTests {
             using var contextBytes = new MemoryStream();
             var context = Scene.Write(doc, new SceneRequest([under], 1, Region: wide, ContextRepresentation: SceneContextRepresentation.Meshes), contextBytes);
             Assert.That(context.Elements.Select(e => e.Handle.ElementId), Does.Not.Contain(over),
-                "The region does not replace the focus element's own 1 ft reach: the block 9 ft above it is not context.");
+                "The region does not replace the focus element's effective 5 ft reach: the block 9 ft above it is not context.");
 
             using var regionOnlyBytes = new MemoryStream();
             var regionOnly = Scene.Write(doc, new SceneRequest(Region: wide, ContextRepresentation: SceneContextRepresentation.Meshes), regionOnlyBytes);
@@ -117,6 +85,101 @@ public sealed class SpaceRegionAdmissionProofTests {
             Assert.Throws<ArgumentException>(() => Scene.Write(doc, new SceneRequest([far], FocusOnly: true, Region: wide), outsideBytes),
                 "A focus element outside the region is refused.");
         } finally { doc.Close(false); }
+    }
+
+    [Test]
+    public void DefaultScenePlansFocusAndContextWithoutTessellation(UIApplication uiApplication) {
+        var doc = RevitFamilyFixtureHarness.CreateProjectDocument(uiApplication.Application);
+        try {
+            var first = Blocks(doc, out var second, out _);
+            using var bytes = new MemoryStream();
+            var scene = Scene.Write(doc, new SceneRequest([first]), bytes);
+            Assert.That(scene.Elements.Select(e => e.Handle.ElementId), Does.Contain(second));
+            Assert.That(scene.Stamp.GeometryCost!.PlannedCount, Is.EqualTo(2));
+            Assert.That(scene.Stamp.GeometryCost.PlannedCost, Is.Zero);
+            Assert.That(scene.Stamp.GeometryCost.NewlyTessellatedIds, Is.Empty);
+            Assert.That(scene.Stamp.GeometryCost.CumulativeTessellatedCount, Is.Zero);
+            Assert.That(scene.Work.NativeGeometryCalls, Is.Zero);
+            Assert.That(scene.Triangles, Is.Zero);
+        } finally { GeometryLedger.Closed(doc.GetDocumentKey()); doc.Close(false); }
+    }
+
+    [Test]
+    public void DetailedReadRaisesReachAndRepeatAddsNoTessellatedIds(UIApplication uiApplication) {
+        var doc = RevitFamilyFixtureHarness.CreateProjectDocument(uiApplication.Application);
+        try {
+            var first = Blocks(doc, out _, out _);
+            var request = new SceneRequest([first], 2, ContextRepresentation: SceneContextRepresentation.Meshes);
+            using var bytes = new MemoryStream();
+            var firstRead = Scene.Write(doc, request, bytes);
+            Assert.That(firstRead.RequestedContextPaddingFt, Is.EqualTo(2));
+            Assert.That(firstRead.EffectiveContextPaddingFt, Is.EqualTo(5));
+            Assert.That(firstRead.Stamp.GeometryCost!.NewlyTessellatedIds.Select(e => e.ElementId), Does.Contain(first));
+            using var repeat = new MemoryStream();
+            var next = Scene.Write(doc, request, repeat);
+            Assert.That(next.Stamp.GeometryCost!.NewlyTessellatedIds, Is.Empty);
+            Assert.That(next.Stamp.GeometryCost.CumulativeTessellatedCount, Is.EqualTo(firstRead.Stamp.GeometryCost.CumulativeTessellatedCount));
+            Assert.That(SpaceWorld.Prepare(doc).GeometryCost!.PlannedCount, Is.GreaterThanOrEqualTo(3));
+        } finally { GeometryLedger.Closed(doc.GetDocumentKey()); doc.Close(false); }
+    }
+
+    [Test]
+    public void CadBelowTheQuestionIsIncludedInThePlan(UIApplication uiApplication) {
+        var doc = RevitFamilyFixtureHarness.CreateProjectDocument(uiApplication.Application);
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".dxf");
+        try {
+            File.WriteAllText(path, "0\nSECTION\n2\nENTITIES\n0\nLINE\n8\n0\n10\n0\n20\n0\n30\n0\n11\n10\n21\n0\n31\n0\n0\nENDSEC\n0\nEOF\n");
+            ElementId imported;
+            using (var tx = new Transaction(doc, "Import planned CAD")) {
+                tx.Start();
+                var view = new FilteredElementCollector(doc).OfClass(typeof(ViewPlan)).Cast<ViewPlan>().First(v => !v.IsTemplate);
+                using var options = new DWGImportOptions { ThisViewOnly = false, Unit = ImportUnit.Foot, Placement = ImportPlacement.Origin };
+                Assert.That(doc.Import(path, options, view, out imported), Is.True);
+                tx.Commit();
+            }
+            var scope = new Aabb(-1, -1, 4, 11, 1, 5);
+            var source = SpaceWorld.SceneSources(doc).Partitions[0];
+            var plan = source.WithImports(source.Plan([scope.Corners()], scope.Corners(), obstacles: true), scope);
+            Assert.That(plan.Keep, Does.Contain(imported));
+            var world = SpaceWorld.Prepare(doc, scope, curves: true);
+            Assert.That(world.GeometryCost!.PlannedCount, Is.GreaterThanOrEqualTo(1));
+        } finally { GeometryLedger.Closed(doc.GetDocumentKey()); doc.Close(false); File.Delete(path); }
+    }
+
+    [Test]
+    public void ModifiedFamilyHasFullPlannedCost(UIApplication uiApplication) {
+        var doc = RevitFamilyFixtureHarness.CreateProjectDocument(uiApplication.Application);
+        var familyDoc = RevitFamilyFixtureHarness.CreateFamilyDocument(uiApplication.Application, BuiltInCategory.OST_GenericModel, "Cost fixture");
+        try {
+            using (var tx = new Transaction(familyDoc, "Family block")) {
+                tx.Start();
+                using var plane = Plane.CreateByNormalAndOrigin(XYZ.BasisZ, XYZ.Zero);
+                var sketch = SketchPlane.Create(familyDoc, plane);
+                var profile = new CurveArray();
+                XYZ[] corners = [XYZ.Zero, new(2, 0, 0), new(2, 2, 0), new(0, 2, 0)];
+                for (var i = 0; i < 4; i++) profile.Append(Line.CreateBound(corners[i], corners[(i + 1) % 4]));
+                var profiles = new CurveArrArray(); profiles.Append(profile);
+                familyDoc.FamilyCreate.NewExtrusion(true, profiles, sketch, 2);
+                tx.Commit();
+            }
+            var family = familyDoc.LoadFamily(doc);
+            FamilyInstance first, second;
+            using (var tx = new Transaction(doc, "Join family instances")) {
+                tx.Start();
+                var symbol = (FamilySymbol)doc.GetElement(family.GetFamilySymbolIds().First());
+                symbol.Activate(); doc.Regenerate();
+                first = doc.Create.NewFamilyInstance(XYZ.Zero, symbol, Autodesk.Revit.DB.Structure.StructuralType.NonStructural);
+                second = doc.Create.NewFamilyInstance(new XYZ(1, 0, 0), symbol, Autodesk.Revit.DB.Structure.StructuralType.NonStructural);
+                doc.Regenerate(); JoinGeometryUtils.JoinGeometry(doc, first, second); doc.Regenerate();
+                tx.Commit();
+            }
+            Assert.That(first.HasModifiedGeometry() || second.HasModifiedGeometry(), Is.True);
+            var source = SpaceWorld.SceneSources(doc).Partitions[0];
+            var plan = ReachPlan.Empty(source) with { Keep = new[] { first.Id, second.Id } };
+            var cost = new GeometryLedger.Read([plan]).Report();
+            Assert.That(cost.PlannedCost, Is.EqualTo(2));
+            Assert.That(cost.PerSource.Single().LoadOnlyCount, Is.Zero);
+        } finally { familyDoc.Close(false); GeometryLedger.Closed(doc.GetDocumentKey()); doc.Close(false); }
     }
 
     /// <summary>A lower block, one 10 ft above it, and one far away; returns the lower block's id.</summary>

@@ -133,7 +133,7 @@ internal sealed class Partition {
     }
 
     /// <summary>
-    ///     The one context query of this source instance, split in two so a read can be refused between them:
+    ///     The one context query of this source instance, split in two so planning precedes acquisition:
     ///     <see cref="Plan" /> finds the ids whose bounds meet any reach box and counts them without loading anything,
     ///     then queries the exclusion classes over those ids alone (id-seeded collectors, no reach term);
     ///     <see cref="Load" /> iterates what survives, and iterating loads (≈14 KB per element in the Chadds IFC link).
@@ -145,7 +145,7 @@ internal sealed class Partition {
     /// <param name="obstacles">A verb's read: skip only the classes Ingest draws no triangle for, and keep
     ///     insulation, CAD, planting and site, which a sweep or probe can hit.</param>
     /// <param name="light">The kept elements of this source the read will load but never tessellate (a link's DirectShapes
-    ///     under link-boxes, sized runs and family frames under oriented context); counted for the budget.</param>
+    ///     under link-boxes, sized runs and family frames under oriented context); counted for cost reporting.</param>
     internal ReachPlan Plan(IReadOnlyList<XYZ[]> reach, XYZ[] bound, bool obstacles = false, ElementFilter? light = null) {
         var clock = System.Diagnostics.Stopwatch.StartNew();
         if (reach.Count == 0) return ReachPlan.Empty(this);
@@ -186,6 +186,16 @@ internal sealed class Partition {
             lightCount = collector.GetElementCount();
         }
         return new ReachPlan(this, inside.Count, keep, excluded, lightCount, queried, classified - queried);
+    }
+
+    internal ReachPlan WithImports(ReachPlan plan, Aabb scope) {
+        using var imports = new FilteredElementCollector(this.Doc).OfClass(typeof(ImportInstance));
+        var keep = new HashSet<ElementId>(plan.Keep);
+        foreach (var element in imports)
+            if (Ingest.Allowed(element) && this.SceneBounds(element) is { } b && b.MinZ <= scope.MaxZ
+                && b.MinX <= scope.MaxX && b.MaxX >= scope.MinX && b.MinY <= scope.MaxY && b.MaxY >= scope.MinY)
+                keep.Add(element.Id);
+        return plan with { Keep = keep, Counted = Math.Max(plan.Counted, keep.Count) };
     }
 
     /// <summary>Loads what <see cref="Plan" /> kept. <paramref name="absorbRunInsulation" />: a scene read, where a represented duct/pipe run absorbs its insulation (classified after load).</summary>

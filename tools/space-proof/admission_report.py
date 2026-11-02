@@ -1,10 +1,11 @@
-"""Offline report over an admission.py run directory.
+"""Historical numeric-admission experiment report; not the current cost estimator.
+Offline report over an admission.py run directory.
 
     python tools/space-proof/admission_report.py <runDir>             timing/memory table per process, scene artifact census
     python tools/space-proof/admission_report.py compare <runA> <runB>  answers of A against B (verbs.py's semantic comparison)
 
 The scene census decodes each scene's PSC1 artifact from the product cache and counts what the read walked by representation:
-mesh elements are tessellated (weight 1), oriented boxes and runs are only loaded (weight GeometryBudget.LoadWeight), so the cost
+mesh elements are tessellated (weight 1), oriented boxes and runs are only loaded (historical load weight 0.125), so the cost
 column is the budget's own arithmetic over the artifact, to set beside the measured private-bytes delta.
 """
 import json, sys

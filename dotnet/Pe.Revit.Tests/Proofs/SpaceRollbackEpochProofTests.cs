@@ -54,7 +54,7 @@ public sealed class SpaceRollbackEpochProofTests {
 
             byte[] Read() {
                 using var output = new MemoryStream();
-                Scene.Write(document, new SceneRequest([subject.Id.Value()], FocusOnly: true), output);
+                Scene.Write(document, new SceneRequest([subject.Id.Value()], FocusOnly: true, ContextRepresentation: SceneContextRepresentation.LinkBoxes), output);
                 return output.ToArray();
             }
         } finally {

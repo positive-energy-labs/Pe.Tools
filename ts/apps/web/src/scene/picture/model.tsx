@@ -357,7 +357,7 @@ export function ModelPicture({
           />
         </PaneOverlay>
       )}
-      {(onContextRepresentation && contextMode !== "off") ||
+      {onContextRepresentation ||
       read.completeness?.complete === false ||
       read.contextError ||
       read.omittedElements ||
@@ -389,15 +389,10 @@ export function ModelPicture({
               .filter(Boolean)
               .join(" / ")}
           />
-          {onContextRepresentation && contextMode !== "off" ? (
-            // Only link-boxes and meshes are offered; triangle-boxes stays a request option. The IFC default
-            // is kaitpw's open ruling (docs/features/spatial/LEDGER.md Owed).
+          {onContextRepresentation ? (
+            // Detail is available even when context is hidden; overview remains the default.
             <Button
-              label={
-                contextRepresentation !== "meshes"
-                  ? "Read detailed context"
-                  : "Use simplified context"
-              }
+              label={contextRepresentation !== "meshes" ? "Read detailed" : "Use overview"}
               busy={read.pending}
               onClick={() =>
                 onContextRepresentation(
@@ -405,9 +400,7 @@ export function ModelPicture({
                 )
               }
             >
-              {contextRepresentation !== "meshes"
-                ? "Read detailed context"
-                : "Use simplified context"}
+              {contextRepresentation !== "meshes" ? "Read detailed" : "Use overview"}
             </Button>
           ) : null}
         </PaneOverlay>
