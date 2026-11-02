@@ -1599,6 +1599,7 @@
     "size": 420,
     "sized": "start"
   },
+  "moduleHash": "4883742d9f93c99e952910636fdb2257fbae38b460ff1a979d1177afc91f7a79",
   "name": "Fans",
   "needs": "project",
   "panes": {

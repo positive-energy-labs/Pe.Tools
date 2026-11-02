@@ -8,7 +8,7 @@ import { podRead } from "./pod-sources";
 import { podRoutePath } from "./pod-address";
 export type PodRouteBundle = contracts.PodModuleBundle;
 
-// TODO: Prove the browser pick/stage/preview/apply/readback chain after the contracts barrel initialization and shared fixture command refusal are resolved.
+// TODO: Prove native Pod preview/apply/readback on a controlled Revit session; fixture Work is local and native commands intentionally stay refused.
 /** Pods use the builtin mount. Bodies get only the readings their pane declares. */
 export function makePodRoute(row: contracts.PodRouteDescriptor, bundle: PodRouteBundle) {
   if (!row.trusted) throw Error("Trust this Pod route hash before loading.");

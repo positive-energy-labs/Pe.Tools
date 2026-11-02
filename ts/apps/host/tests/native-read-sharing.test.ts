@@ -67,7 +67,7 @@ async function harness() {
     ) => {
       if (key === "host.ops.catalog")
         return Effect.succeed({
-          value: { operations: [{ key: KEY, intent: "Read", needs: "project-document" }] },
+          value: { operations: [{subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap", key: KEY, intent: "Read", needs: "project-document" }] },
           target: null,
         });
       if (key === "op.cancel")

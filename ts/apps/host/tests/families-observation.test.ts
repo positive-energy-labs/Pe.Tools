@@ -97,7 +97,7 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
           return {
             value: {
               operations: [
-                {
+                {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap",
                   key: "revit.matrix.loaded-families",
                   intent: "Read",
                   needs: "project-document",

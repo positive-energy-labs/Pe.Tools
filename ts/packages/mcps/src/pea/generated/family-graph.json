@@ -515,6 +515,7 @@
     "size": 340,
     "sized": "end"
   },
+  "moduleHash": "12e1d32d8e10bf3cdd3bbf0ed2a798810cc65c5a7e0152eb3e35bf2739b0f64c",
   "name": "Family",
   "needs": "family",
   "panes": {

@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import familyGraph from "../src/pea/generated/family-graph.json";
+import familyGraph from "../src/pea/generated/family-graph.json" with { type: "json" };
 import { renderFamilySkill } from "../src/pea/family-skill.ts";
 import { bundledPeaSkills } from "../src/pea/skills.ts";
 
@@ -17,7 +17,7 @@ test("Pea reads the product Family graph, exact Work schema, cells and recovery 
     review: "shown",
   });
   expect(projected.cells).toHaveLength(1);
-  expect(projected.workSubject).toBeUndefined();
+  expect(projected).not.toHaveProperty("workSubject");
   for (const field of ["reading", "sheet", "confirming", "buildReview", "receipts"])
     expect(familyGraph.fields).not.toHaveProperty(field);
 });

@@ -122,6 +122,7 @@
     "id": "settings",
     "kind": "pane"
   },
+  "moduleHash": "7d1830bc5d82062cc737c693d79ce512455f47e88744329a560668018af590ad",
   "name": "Settings",
   "panes": {
     "settings": {

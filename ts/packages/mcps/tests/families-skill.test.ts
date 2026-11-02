@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import familiesGraph from "../src/pea/generated/families-graph.json";
+import familiesGraph from "../src/pea/generated/families-graph.json" with { type: "json" };
 import { renderFamiliesSkill } from "../src/pea/families-skill.ts";
 import { bundledPeaSkills } from "../src/pea/skills.ts";
 

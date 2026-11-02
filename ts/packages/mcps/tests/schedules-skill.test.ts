@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import schedulesGraph from "../src/pea/generated/schedules-graph.json";
+import schedulesGraph from "../src/pea/generated/schedules-graph.json" with { type: "json" };
 import { renderSchedulesSkill } from "../src/pea/schedules-skill.ts";
 import { bundledPeaSkills } from "../src/pea/skills.ts";
 

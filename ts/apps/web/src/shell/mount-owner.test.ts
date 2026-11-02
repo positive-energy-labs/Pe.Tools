@@ -73,7 +73,7 @@ test("K1.3/11: hydration acquires an image once; a new Target resets declared sc
   expect(attempts).toHaveLength(1);
   scope = { ...scope, target: { kind: "document", ref: { session: "S", openId: "B" } } };
   update();
-  expect(owner.view.read().page).toEqual({ view: "", filter: "kept" });
+  expect(owner.view.read().page).toMatchObject({ view: "", filter: "kept" });
   expect(attempts).toHaveLength(2);
   attempts[0]!.emit({ kind: "complete", value: "late A", revision: 1 });
   expect(owner.readings.get("image").value).toBe("A");

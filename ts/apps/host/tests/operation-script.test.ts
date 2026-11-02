@@ -38,7 +38,7 @@ it.each([
           key === "host.ops.catalog"
             ? {
                 operations: [
-                  {
+                  {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap",
                     key: "scripting.execute",
                     intent: "Mutate",
                     needs: "document",

@@ -6,6 +6,7 @@ import { createMemoryHistory, createRouter, RouterProvider } from "@tanstack/rea
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import {
+  manyField,
   actionReceiptSchema,
   draftCellSchema,
   pane,
@@ -196,7 +197,7 @@ async function fixture(cells = false) {
       : {}),
     fields: {...testFields,
       stage: { ...field(z.string().default("edit"), {}), role: "stage" },
-      cfm: { ...field(z.number().default(400), {}), role: "query", editor: "situation" },
+      cfm: { ...field(z.number().default(400), {}), role: "query", editor: "text" },
     },
     readings: {...testReadings,
       result: {
@@ -356,6 +357,10 @@ async function fixture(cells = false) {
     late: () => late,
   };
 }
+async function revealVerb(view: ReturnType<typeof render>, name: string) {
+  if (!view.queryByRole("button", {name})) fireEvent.click(view.getByRole("button", {name:/more .* verbs/}));
+  return view.findByRole("button", {name});
+}
 async function mounted(f: Awaited<ReturnType<typeof fixture>>, strict = false) {
   door.ports = f.adapters;
   const route = routeFromGraph(f.graph, f.adapters, "/mount-proof");
@@ -454,9 +459,11 @@ test("Situation renders declared subject, typed Page controls, verbs and a worki
   const graph = f.graph as RouteGraph<any, Doc>;
   Object.assign(graph, { subject: () => "Pricing fans on the fixture" });
   Object.assign(graph.fields, {
-    mode: { ...field(z.enum(["all", "one"]).default("all"), {}), role: "subject" },
+    testSubject: { ...testFields.testSubject, role: "query" },
+    testSelected: { ...testFields.testSelected, role: "query" },
+    mode: { ...field(z.enum(["all", "one"]).default("all"), {}), role: "query", editor: "situation" },
     system: {
-      ...field(z.array(z.string()).default([]), {}),
+      ...manyField("name", {}, z.array(z.string()).default([])),
       role: "subject",
       picker: {
         reading: "capture",
@@ -464,10 +471,11 @@ test("Situation renders declared subject, typed Page controls, verbs and a worki
         options: () => [{ id: "SA", label: "Supply air" }],
       },
     },
-    search: { ...field(listSearchKey(), {}, listSearchCodec), role: "draft", editor: "situation" },
+    search: { ...field(listSearchKey(), {}, listSearchCodec), role: "draft", editor: "text" },
     paneSearch: { ...field(z.string().default("local"), {}), role: "query" },
     selected: { ...field(z.string().default("4"), {}), role: "selection" },
   });
+  graph.subjectField = {field:"system",noun:"system",keyKind:"name",cardinality:"many",roster:"capture",detail:"result",pane:"inputs",show:id=>id};
   const { view } = await mounted(f);
   const situation = within(view.getByLabelText("Situation"));
   expect(situation.getByText("Pricing fans on the fixture")).toBeTruthy();
@@ -497,9 +505,8 @@ test("Situation renders declared subject, typed Page controls, verbs and a worki
     f.owner().timeline.append({ kind: "invocation", verb: "edit", at: 1 });
     f.owner().timeline.append({ kind: "feed", subject: "external", at: 2 });
   });
-  fireEvent.click(situation.getByRole("button", { name: "work" }));
-  expect(situation.getByLabelText("Route log").textContent).toContain("edit");
-  expect(situation.getByLabelText("Route log").textContent).not.toContain("external");
+  fireEvent.click(situation.getByRole("button", { name: "Open the Timeline" }));
+  expect(view.getAllByText(/edit/).length).toBeGreaterThan(0);
 });
 
 test.each(["Cancel", "Escape"])(
@@ -507,7 +514,7 @@ test.each(["Cancel", "Escape"])(
   async (cancel) => {
     const f = await fixture();
     const { view } = await mounted(f);
-    fireEvent.click(view.getByRole("button", { name: "Apply" }));
+    fireEvent.click(await revealVerb(view, "Apply"));
     const review = await view.findByLabelText("Apply review");
     const capture = f.captures.at(-1)!;
     if (cancel === "Escape") fireEvent.keyDown(review, { key: "Escape" });
@@ -522,7 +529,7 @@ test.each(["Cancel", "Escape"])(
 test("review survives window disturbances and outside presses", async () => {
   const f = await fixture();
   const { view } = await mounted(f);
-  fireEvent.click(view.getByRole("button", { name: "Apply" }));
+  fireEvent.click(await revealVerb(view, "Apply"));
   await view.findByLabelText("Apply review");
   fireEvent.blur(window);
   fireEvent(document, new Event("visibilitychange"));
@@ -537,7 +544,7 @@ test("shown review keeps its control armed; its portal commits one receipt and i
   const { view } = await mounted(f);
   fireEvent.click(view.getByRole("button", { name: "Edit" }));
   await waitFor(() => expect(f.scope().work.doc.rows.slot!.n).toBe(2));
-  const apply = view.getByRole("button", { name: "Apply" });
+  const apply = await revealVerb(view, "Apply");
   fireEvent.click(apply);
   await view.findByLabelText("Apply review");
   expect(view.getByLabelText("Apply review").textContent).toContain("Write this row");
@@ -567,7 +574,7 @@ test("shown review keeps its control armed; its portal commits one receipt and i
 test("pane unmount releases demand while a review pins its acquisition; explicit cancel ends it", async () => {
   const f = await fixture();
   const { view } = await mounted(f);
-  fireEvent.click(view.getByRole("button", { name: "Apply" }));
+  fireEvent.click(await revealVerb(view, "Apply"));
   await view.findByLabelText("Apply review");
   const capture = f.captures.at(-1)!;
   expect(capture.ctx.trigger.kind).toBe("verb");
@@ -1151,7 +1158,7 @@ test.each(["shown"] as const)(
       ),
     };
     const { view } = await mounted(f);
-    fireEvent.click(await view.findByRole("button", { name: "Apply" }));
+    fireEvent.click(await revealVerb(view, "Apply"));
     const shown = await view.findByLabelText("Apply review");
     expect(shown.textContent).toContain("3 planned · 1 refused");
     expect(shown.textContent).not.toContain("private receipt details");

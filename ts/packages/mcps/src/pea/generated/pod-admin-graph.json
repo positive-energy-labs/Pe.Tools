@@ -87,6 +87,7 @@
     "id": "inventory",
     "kind": "pane"
   },
+  "moduleHash": "70dccdaa2add51f12d415ee079b51169bcc784f3e50900ca0e0c8846faeb7a56",
   "name": "Pod administration",
   "panes": {
     "inventory": {

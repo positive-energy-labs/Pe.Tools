@@ -37,7 +37,7 @@ import {
 } from "../../../apps/host/src/control.ts";
 
 const ops = [
-  {
+  {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap" as const,
     key: "revit.catalog.loaded-families",
     displayName: "Loaded families",
     description: "Inventory of loaded families.",
@@ -46,14 +46,14 @@ const ops = [
     visibility: "ExpertOnly" as const,
     requestSchemaJson: JSON.stringify({ type: "object", title: "LoadedFamiliesRequest" }),
   },
-  {
+  {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap" as const,
     key: "scripting.execute",
     description: "Run C#.",
     needs: "document" as const,
     intent: "Mutate" as const,
   },
   // What the C# catalog serves for a human verb: `[Op(..., Actor = OpActor.Human)]`.
-  ...["families.plan", "families.capture"].map((key) => ({
+  ...["families.plan", "families.capture"].map((key) => ({subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap" as const,
     key,
     description: "Human verb over loaded families.",
     needs: "project-document" as const,
@@ -65,9 +65,9 @@ const ops = [
 test("native Human eligibility and local account requirements project into actual principals", () => {
   const rows = buildCapabilities({
     ops: [
-      { key: "native.human", needs: "document", intent: "Mutate", actor: "human" },
-      { key: "native.any", needs: "nothing", intent: "Read", actor: "any" },
-      { key: "local.human", needs: "nothing", intent: "Mutate", principal: ["human"] },
+      {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap" as const, key: "native.human", needs: "document", intent: "Mutate", actor: "human" },
+      {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap" as const, key: "native.any", needs: "nothing", intent: "Read", actor: "any" },
+      {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap" as const, key: "local.human", needs: "nothing", intent: "Mutate", principal: ["human"] },
       ...tsOnlyOperationCatalog.filter((row) =>
         ["aps.auth.login", "aps.auth.logout", "host.shell.open"].includes(row.key),
       ),
@@ -224,7 +224,7 @@ test.each(["http", "stdio"])(
     });
     const nativeOps = [
       ...ops,
-      { key: "revit.context.view-image", intent: "Read" as const, needs: "document" as const },
+      {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap" as const, key: "revit.context.view-image", intent: "Read" as const, needs: "document" as const },
     ];
     const sessions = [user, own, other].map((ref) => ({
       sessionId: ref.session,
@@ -800,9 +800,9 @@ test("the live head names an open lifetime; reopen needs an explicit override an
   source.capabilities.push(
     ...buildCapabilities({
       ops: [
-        { key: "host.status", needs: "nothing", intent: "Read" },
-        { key: "family.look", needs: "family-document", intent: "Read" },
-        { key: "revit.context.document-session", needs: "nothing", intent: "Read" },
+        {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap" as const, key: "host.status", needs: "nothing", intent: "Read" },
+        {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap" as const, key: "family.look", needs: "family-document", intent: "Read" },
+        {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap" as const, key: "revit.context.document-session", needs: "nothing", intent: "Read" },
       ],
       routes: [],
       packages: [],

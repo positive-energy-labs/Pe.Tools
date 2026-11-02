@@ -14,13 +14,16 @@ test("a route manifest cannot claim another tool's command attribution", () => {
 });
 
 test("a kernel registration exposes the executable graph itself and retires its command route", async () => {
-  const { commands } = await import("@pe/agent-contracts");
+  const { commands, field } = await import("@pe/agent-contracts");
+  const {commands: builtins} = await import("@pe/agent-contracts");
+  const schema = builtins["rooms.merge"].input.shape.work;
   const graph = {
+    subjectField:{field:"catalog" as const,noun:"catalog",keyKind:"name" as const,cardinality:"one" as const,roster:"catalog",detail:"catalog",pane:"body",show:(id:string)=>id},
     key: "rooms",
     address: "rooms",
     name: "Rooms",
-    fields: {},
-    readings: {},
+    fields: {catalog:{...field(schema, {}, {encode:JSON.stringify,decode:JSON.parse}),role:"subject" as const},selected:{...field(schema, {}, {encode:JSON.stringify,decode:JSON.parse}),role:"selection" as const}},
+    readings: {catalog:{kind:"derive" as const,source:"catalog",retire:"never" as const}},
     verbs: {
       merge: {
         kind: "command" as const,

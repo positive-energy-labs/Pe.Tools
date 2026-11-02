@@ -70,7 +70,7 @@ const routeAxes = hostRouteAxes([
   ...tsOnlyOperationCatalog.map(nativeEntry),
   ...Object.entries(hostActions).map(([key, action]) => commandAxes(key, action as Command)),
 ]);
-export const peRoutes = {
+export const peRoutes: {[K in keyof Routes]: Routes[K] & {catalog: CatalogRow}} = {
   ...(Object.fromEntries(
     Object.entries(httpRoutes).map(([key, row]) => [
       key,

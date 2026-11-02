@@ -299,6 +299,7 @@
     "size": 300,
     "sized": "start"
   },
+  "moduleHash": "5abd2c8cb0c510439f322db1968468aa667f13b2bf82ce778b9aa1e37e050ecf",
   "name": "Pods",
   "observe": [
     "open"

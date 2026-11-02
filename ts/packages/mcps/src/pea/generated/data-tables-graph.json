@@ -80,6 +80,7 @@
     "size": 260,
     "sized": "start"
   },
+  "moduleHash": "14e27267f1daa3337a74e239cf6a061de0458bd7fe0017c8d4d93b2c1cc48f65",
   "name": "Data Tables",
   "needs": "project",
   "panes": {

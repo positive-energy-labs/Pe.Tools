@@ -14,7 +14,7 @@ test("CLI has no actor flag; no-context host and script writes get context.missi
     if (url.pathname === "/ops")
       return Response.json({
         bridgeSessionId: "you",
-        operations: [{ key: "scripting.execute", intent: "Mutate", needs: "document" }],
+        operations: [{subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap", key: "scripting.execute", intent: "Mutate", needs: "document" }],
       });
     expect(url.pathname).toBe("/actions");
     const body = JSON.parse(await new Response(init?.body).text());
@@ -160,7 +160,7 @@ test.each([
       if (url.pathname === "/ops")
         return Response.json({
           bridgeSessionId: "fixture-session",
-          operations: [{ key: "scripting.execute", intent: "Mutate", needs: "document" }],
+          operations: [{subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap", key: "scripting.execute", intent: "Mutate", needs: "document" }],
         });
       expect(url.pathname).toBe("/actions");
       const admission = JSON.parse(await new Response(init?.body).text());

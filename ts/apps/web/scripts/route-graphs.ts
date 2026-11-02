@@ -41,6 +41,7 @@ for (const folder of (await readdir(new URL("../src/", import.meta.url), { withF
     ) as Parameters<typeof projectRouteGraph>[0];
     if (!graph || typeof graph !== "object" || !graph.key) continue;
     if (!graph.directory) throw Error(`${graph.key} has no directory declaration`);
+    graph.moduleHash = routeSourceHash(await readFile(new URL(`../src/${folder.name}/graph.ts`, import.meta.url)));
     directory.push({
       key: graph.key,
       directory: graph.directory,

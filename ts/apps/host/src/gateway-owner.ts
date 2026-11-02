@@ -37,7 +37,7 @@ export function releaseHostReceipts(owner: ActionJournal) {
   log = undefined;
 }
 
-export const recordBridgeQueue = (...args: Parameters<ActionJournal["recordQueue"]>) =>
+export const recordBridgeQueue: ActionJournal["recordQueue"] = (...args) =>
   journal
     ? journal.recordQueue(...args)
     : Promise.reject(Error("Receipt owner has not been initialized"));

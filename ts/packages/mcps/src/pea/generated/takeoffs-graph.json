@@ -439,6 +439,7 @@
     "size": 100,
     "sized": "start"
   },
+  "moduleHash": "2965661464fe8dcc1dee4d9e79a3e31f999e6c3718ba658cd63c382b4f3a4e35",
   "name": "View adoption",
   "needs": "project",
   "panes": {

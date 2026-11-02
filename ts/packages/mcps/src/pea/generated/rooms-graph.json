@@ -404,6 +404,7 @@
     "size": 32,
     "sized": "start"
   },
+  "moduleHash": "0bb831592f493d8fc021a7e7c8b395d632836c37af3d233edf130adf107d3373",
   "name": "Rooms",
   "needs": "project",
   "panes": {

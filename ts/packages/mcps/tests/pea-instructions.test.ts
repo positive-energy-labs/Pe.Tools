@@ -99,7 +99,7 @@ test("capture_view refuses null and named targets before host work and preserves
     if (url.pathname === "/pe/scope/self") return Response.json({ thread: "capture", ...head });
     if (url.pathname === "/ops")
       return Response.json({
-        operations: [{ key: "revit.context.view-image", intent: "Read", needs: "document" }],
+        operations: [{subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap", key: "revit.context.view-image", intent: "Read", needs: "document" }],
       });
     if (url.pathname === capturePath) {
       expect(url.origin).toBe("http://127.0.0.1:9");

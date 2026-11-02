@@ -52,14 +52,14 @@ function humanRevit(sent: Sent[], openDocuments: (typeof other)[], onCatalog: ()
           return {
             value: {
               operations: [
-                {
+                {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap",
                   key: "scripting.execute",
                   intent: "Mutate",
                   needs: "document",
                   actor: "any",
                   requestSchemaJson: JSON.stringify({ type: "object" }),
                 },
-                { key: "model.census", intent: "Read", needs: "document", actor: "any" },
+                {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap", key: "model.census", intent: "Read", needs: "document", actor: "any" },
               ],
             },
             target: null,

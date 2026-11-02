@@ -1596,6 +1596,7 @@
     "size": 420,
     "sized": "start"
   },
+  "moduleHash": "d87f4e0cdab6b2b824af576930ebdfccb9ebf30bb206a41e4bd312fa7f6bb422",
   "name": "Ducts",
   "needs": "project",
   "panes": {

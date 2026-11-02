@@ -530,6 +530,7 @@
     "size": 240,
     "sized": "start"
   },
+  "moduleHash": "850e49cc3edff4a537ba41cfaf33af0bf4057628e8daf8cda94829b9c736ccff",
   "name": "Families",
   "needs": "project",
   "panes": {

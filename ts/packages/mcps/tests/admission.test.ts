@@ -8,11 +8,11 @@ import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
 import { bodyText } from "./body-text.ts";
 
 const operations: HostOperationDefinition[] = [
-  { key: "scripting.execute", intent: "Mutate", needs: "document" },
-  { key: "scripting.workspace.bootstrap", intent: "Mutate", needs: "nothing" },
-  { key: "pod.import", intent: "Mutate", needs: "nothing" },
-  { key: "pod.export", intent: "Mutate", needs: "nothing" },
-  { key: "revit.context.summary", intent: "Read", needs: "document" },
+  {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap", key: "scripting.execute", intent: "Mutate", needs: "document" },
+  {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap", key: "scripting.workspace.bootstrap", intent: "Mutate", needs: "nothing" },
+  {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap", key: "pod.import", intent: "Mutate", needs: "nothing" },
+  {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap", key: "pod.export", intent: "Mutate", needs: "nothing" },
+  {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap", key: "revit.context.summary", intent: "Read", needs: "document" },
 ];
 const target = { kind: "open", ref: { session: "A", openId: "open-A" } } as const;
 const destination = { kind: "document", ref: target.ref };

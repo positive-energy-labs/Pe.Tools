@@ -400,6 +400,7 @@
     "id": "spec",
     "kind": "pane"
   },
+  "moduleHash": "1bae867e978c9291afce4f6cdb0aea0ab9a84a7ca33953b5fc6f92b8f2f27001",
   "name": "Schedule definitions",
   "needs": "project",
   "panes": {

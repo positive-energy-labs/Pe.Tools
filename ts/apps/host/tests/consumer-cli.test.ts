@@ -122,7 +122,7 @@ test("actual pea/Gunshi argv crosses local HTTP: actor/id/openId, file/stdin A/B
     data: { succeeded: [1], failed: [{ id: 2, message: "refused" }] },
   };
   const operations = [
-    {
+    {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap",
       key: "scripting.execute",
       intent: "Mutate",
       needs: "document",

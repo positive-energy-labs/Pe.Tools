@@ -3,7 +3,7 @@ import { z } from "zod";
 import { podExecutor } from "../src/pod-executor.ts";
 import { admitPodModule, podCommand, podReadRequest } from "../src/pod-routes.ts";
 import { RouteWorkspace } from "@pe/runtime";
-import { pane, workWriteCommand, writeIntentSchema } from "@pe/agent-contracts";
+import { field, pane, workWriteCommand, writeIntentSchema } from "@pe/agent-contracts";
 import type { CommandContext, CommandExecutor } from "../src/command-executor.ts";
 import type { ActionExecution } from "../src/action-journal.ts";
 
@@ -26,7 +26,7 @@ for (const namespace of ["alpha", "beta"]) {
     }, native)]));
     const module = { version: 1 as const, namespace, key: `${namespace}:${route}`, moduleHash: "a".repeat(64),
       work: { route, schemaVersion: 1, schema: z.object({ writeIntent: writeIntentSchema }), editable: [["writeIntent", "*"]] }, entries, bodies,
-      graph: { stages: { use: { word: "Use", panes: ["main"], verbs: [], teach: "Test" } }, stageOrder: ["use"], key: route, name: "Tool", address: route, directory: { path: `/${route}` }, fields: {}, readings: {}, verbs: {}, panes: { main: { label: "Tool", purpose: "Test", draws: [], verbs: [] } }, layout: pane("main") },
+      graph: { stages: { use: { word: "Use", panes: ["main"], verbs: [], teach: "Test" } }, stageOrder: ["use"], key: route, name: "Tool", address: route, directory: { path: `/${route}` }, subjectField:{kind:"singleton",field:"catalog",noun:"catalog",keyKind:"name",cardinality:"one",roster:"catalog",detail:"catalog",pane:"main",show:(id:string)=>id}, fields:{catalog:{...field(z.enum(["builtin"]).default("builtin"),{}),role:"subject"},selected:{...field(z.string().default(""),{}),role:"selection"}}, readings:{catalog:{kind:"derive",source:"catalog",retire:"never"}}, verbs: {}, panes: { main: { label: "Tool", purpose: "Test", draws: [], verbs: [] } }, layout: pane("main") },
     } as unknown as Parameters<typeof admitPodModule>[0];
     const workspace = new RouteWorkspace({ registrations: [], store: { getState: async () => null, setState: async () => {} } });
     return { module, workspace, transforms: () => transforms };

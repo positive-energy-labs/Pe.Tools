@@ -434,6 +434,7 @@
     "size": 240,
     "sized": "start"
   },
+  "moduleHash": "7fbca53c3d5178bc95bda115d731f6a626551fcbc6883a1073b0ebbe7361aba2",
   "name": "Schedules",
   "needs": "project",
   "panes": {

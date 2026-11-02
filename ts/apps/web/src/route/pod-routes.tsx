@@ -1,3 +1,4 @@
+import { currentFixture } from "#/shell/fixture-lane";
 import { createContext, use, useEffect, useMemo, useState, type ReactNode } from "react";
 import { message, validatePodSource, type PodRouteDescriptor } from "@pe/agent-contracts";
 import { useRouterState } from "@tanstack/react-router";
@@ -27,15 +28,23 @@ export function PodRoutesProvider({ children }: { children: ReactNode }) {
   const { loader, publish } = useMemo(() => {
     const loader = createPodRouteLoader(async (row, current) => {
       try {
+        const fixture = currentFixture() !== null ? (await import("./pod-fixtures")).podFixtures() : null;
+        let bytes: Uint8Array;
+        if (fixture) {
+          const entry = (await fixture).find(entry => entry.row.key === row.key);
+          if (!entry) throw Error("Unknown Pod fixture");
+          bytes = entry.bytes;
+        } else {
         const response = await peClient.response("plugins.routeBundle", {
           params: { key: row.key, hash: row.sha256 },
         });
         if (!response.ok) throw Error((await readPeError(response)).message);
-        const bytes = new Uint8Array(await response.arrayBuffer());
+        bytes = new Uint8Array(await response.arrayBuffer());
+        }
         await verifyBundle(bytes, row.sha256);
         validatePodSource(new TextDecoder().decode(bytes));
         if (!current()) return () => {};
-        const url = URL.createObjectURL(new Blob([bytes], { type: "text/javascript" }));
+        const url = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: "text/javascript" }));
         try {
           const bundle = (await import(/* @vite-ignore */ url)) as PodRouteBundle;
           if (!current()) return () => {};
@@ -69,8 +78,10 @@ export function PodRoutesProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
-    void peClient
-      .call("plugins.routes", {}, { signal: controller.signal })
+    const inventory = currentFixture() !== null
+      ? import("./pod-fixtures").then(m => m.podFixtures()).then(entries => entries.map(entry => entry.row))
+      : peClient.call("plugins.routes", {}, { signal: controller.signal });
+    void inventory
       .then((next) => {
         if (controller.signal.aborted) return;
         return publish(next);
