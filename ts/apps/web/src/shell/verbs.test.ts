@@ -805,26 +805,46 @@ test("K1.2: page.bind resolves its HTTP contract at invocation and validates bef
   }
 });
 
-test("a derived command stages Work before host preview and a refused preview never dispatches the write", async () => {
+// A Work write that reaches Revit is sealed at a host preview. `takeoffs.adopt` is a ModelWrite; the
+// capture `takeoffs.initialize` is SessionWrite and has no preview (ADR 0028), so the two differ here.
+const adoption = { views: [{ view: "plan", items: [{ elementId: 1, name: "Zone", systemTag: "S1" }] }] };
+const sealedWrite = () =>
+  commandVerb(
+    "takeoffs.adopt",
+    { label: "adopt", input: z.object({ stage: z.string() }), review: "none" },
+    { stage: () => adoption, intent: () => ({}) },
+  );
+
+test("a derived write stages Work before host preview and a refused preview never dispatches the write", async () => {
   const env = environment("human");
   transport.preview.mockImplementation(async () => {
     expect(env.doc().writeIntent).toMatchObject({
-      "takeoffs.initialize": { edit: { value: { stage: "sheet" } } },
+      "takeoffs.adopt": { edit: { value: adoption } },
     });
     return { ...succeededReceipt(), state: "refused" };
   });
-  expect((await invoke(env.ctx, command("none"), null, { stage: "sheet" })).state).toBe("failed");
+  expect((await invoke(env.ctx, sealedWrite(), null, { stage: "sheet" })).state).toBe("failed");
   expect(transport.preview).toHaveBeenCalledOnce();
   expect(transport.run).not.toHaveBeenCalled();
 });
 
-test("staged commands prepare and dispatch against their own ack while Work delivery lags", async () => {
+test("staged writes prepare and dispatch against their own ack while Work delivery lags", async () => {
   const env = environment("human");
   const rendered = structuredClone(env.ctx.snapshot());
   const ctx = { ...env.ctx, snapshot: () => rendered };
-  expect((await invoke(ctx, command("none"), null, { stage: "sheet" })).state).toBe("done");
+  expect((await invoke(ctx, sealedWrite(), null, { stage: "sheet" })).state).toBe("done");
   expect(transport.preview.mock.calls[0]![3]).toMatchObject({ revision: 5 });
   expect(transport.run.mock.calls[0]![3]).toMatchObject({ revision: 5 });
+});
+
+test("a capture stages Work and dispatches with no host preview, because it writes nothing to the model", async () => {
+  const env = environment("human");
+  expect((await invoke(env.ctx, command("none"), null, { stage: "sheet" })).state).toBe("done");
+  expect(env.doc().writeIntent).toMatchObject({
+    "takeoffs.initialize": { edit: { value: { stage: "sheet" } } },
+  });
+  expect(transport.preview).not.toHaveBeenCalled();
+  expect(transport.run).toHaveBeenCalledOnce();
 });
 
 test("kernel reviews always project exact changes even when a presenter omits them", async () => {

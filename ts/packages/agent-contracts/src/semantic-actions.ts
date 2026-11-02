@@ -1,5 +1,5 @@
 import { stagedRoomWrites, roomsRouteState as roomsWorkSchema } from "./rooms.ts";
-import { workWriteCommands, writeIntentSchema } from "./write-intent.ts";
+import { workIntent, workWriteCommands, writeIntentSchema } from "./write-intent.ts";
 import { instancesActions, instancesReading, instancesSessionSelection } from "./instances.ts";
 import { scheduleActions, scheduleReads } from "./schedule-actions.ts";
 import { familyActions, familyReads } from "./family-actions.ts";
@@ -247,11 +247,7 @@ export const tools = {
     commands: {
       "family.attach-spec": workCommand("family", familyActions["family.attach-spec"]),
       "family.observe": workCommand("family", familyActions["family.observe"], { optional: true }),
-      ...workWriteCommands(
-        "family",
-        "family.capture",
-        familyActions["family.capture"],
-      ),
+      ...workIntent("family", "family.capture", familyActions["family.capture"]),
       "family.plan": workCommand("family", familyActions["family.plan"]),
       ...workWriteCommands("family", "family.apply", familyActions["family.apply"]),
       ...workWriteCommands("family", "family.build", familyActions["family.build"]),
@@ -265,11 +261,7 @@ export const tools = {
       editable: [["writeIntent", "*"], ["cells", "*"], ["patch"], ["scope"]],
     },
     commands: {
-      ...workWriteCommands(
-        "families",
-        "families.capture",
-        familyActions["families.capture"],
-      ),
+      ...workIntent("families", "families.capture", familyActions["families.capture"]),
       "families.plan": workCommand("families", familyActions["families.plan"]),
       ...workWriteCommands(
         "families",
@@ -309,11 +301,7 @@ export const tools = {
         scheduleActions["schedule.grid.push"],
         { workspace: true },
       ),
-      ...workWriteCommands(
-        "schedules",
-        "schedule.capture",
-        scheduleActions["schedule.capture"],
-      ),
+      ...workIntent("schedules", "schedule.capture", scheduleActions["schedule.capture"]),
       ...workWriteCommands(
         "schedules",
         "schedule.apply",
@@ -333,11 +321,7 @@ export const tools = {
       ],
     },
     commands: {
-      ...workWriteCommands(
-        "takeoffs",
-        "takeoffs.initialize",
-        definitions["takeoffs.initialize"],
-      ),
+      ...workIntent("takeoffs", "takeoffs.initialize", definitions["takeoffs.initialize"]),
       ...workWriteCommands(
         "takeoffs",
         "takeoffs.adopt",
@@ -348,7 +332,7 @@ export const tools = {
         "takeoffs.partition",
         definitions["takeoffs.partition"],
       ),
-      ...workWriteCommands("takeoffs", "takeoffs.sync", definitions["takeoffs.sync"]),
+      ...workIntent("takeoffs", "takeoffs.sync", definitions["takeoffs.sync"]),
     },
   },
   rooms: {

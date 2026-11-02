@@ -134,7 +134,8 @@ export interface Command<I = unknown, R = unknown> {
   /** Executable hooks, shared with the host write boundary; never unresolved symbol names. */
   derivation?: {
     derive(work: unknown, evidence?: unknown): unknown;
-    preview(request: unknown): unknown;
+    /** Only a sealed Work write previews; a SessionWrite capture has none. */
+    preview?(request: unknown): unknown;
   };
   announce?: true;
   /** Native implementation keys hidden when the semantic command owns the callable path. */

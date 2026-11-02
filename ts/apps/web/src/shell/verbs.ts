@@ -779,7 +779,7 @@ async function invokeCore<C extends Caller>(
               if (!snapshot.work || !binding.command)
                 return finish(failure("refused", "Work has not been read yet", press));
               const definition = commands[binding.command];
-              if (!("writeBoundary" in definition))
+              if (!("authoredInput" in definition))
                 return finish(
                   failure("refused", "This command has no Work intent boundary", press),
                 );

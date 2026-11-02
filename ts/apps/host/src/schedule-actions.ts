@@ -599,7 +599,6 @@ export function scheduleExecutors(
     },
   });
   const capture = command(commands["schedule.capture"], preparedScheduleCaptureSchema, {
-    seal: (p) => ({ request: { scheduleId: p.scheduleId, pod: p.pod, path: p.path } }),
     bind: async (ctx) => {
       const target = scheduleTarget(ctx);
       const { input, id } = ctx.admission;

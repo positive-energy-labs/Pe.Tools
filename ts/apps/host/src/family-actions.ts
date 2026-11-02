@@ -1242,7 +1242,6 @@ export function familyExecutors(
     return { members, runs };
   };
   const familyCapture = command(commands["family.capture"], preparedFamilyCaptureSchema, {
-    seal: (p) => ({ request: { input: p.input, pod: p.pod, path: p.path, spec: p.spec } }),
     bind: async (ctx) => {
       if (ctx.admission.input.work)
         await ctx.selectWork(tools.family.work, ctx.admission.input.work, () => ({ cells: [] }));
@@ -1281,7 +1280,6 @@ export function familyExecutors(
     recover,
   });
   const familiesCapture = command(commands["families.capture"], preparedFamiliesCaptureSchema, {
-    seal: (p) => ({ request: { input: p.input, pod: p.pod, path: p.path, spec: p.spec } }),
     bind: async (ctx) => {
       if (ctx.admission.input.work)
         await ctx.selectWork(tools.families.work, ctx.admission.input.work, () => ({ cells: [] }));

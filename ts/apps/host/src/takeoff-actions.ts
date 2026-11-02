@@ -162,7 +162,6 @@ export function takeoffExecutors(
   });
   return {
     "takeoffs.initialize": command(commands["takeoffs.initialize"], preparedCarrierSchema, {
-      seal: (p) => ({ request: { process: p.process } }),
       bind: (ctx) => bindCarrier(ctx),
       run: (ctx, execution) =>
         runCarrier(ctx, execution, captures, bridge, ctx.admission.input.stage, async () => ({
@@ -271,7 +270,6 @@ export function takeoffExecutors(
         }),
     }),
     "takeoffs.sync": command(commands["takeoffs.sync"], preparedSyncSchema, {
-      seal: (p) => ({ request: { edits: p.edits, decisions: p.decisions }, evidence: p.capture }),
       bind: async (ctx) => {
         const { target, process } = await bindModel(ctx, bridge, deps);
         const { input } = ctx.admission;
