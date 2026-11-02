@@ -1,3 +1,4 @@
+import { isAnyOperationKey } from "@pe/host-contracts/operation-types";
 import { podCommand } from "./pod-routes.ts";
 import { workWriteBoundary } from "./work-write-boundary.ts";
 import { catalogCommandContext } from "./catalog-command-context.ts";
@@ -93,7 +94,8 @@ export function commandRegistry(
           : pod.executor,
         key,
       );
-    if (key.startsWith("pod.")) throw Error(`Pod command unavailable: ${key}`);
+    if (key.startsWith("pod.") && !isAnyOperationKey(key))
+      throw Error(`Pod command unavailable: ${key}`);
     return (implementations[key] ??= complete(gatewayExecutor(key, bridge, local, deps.sdk)));
   };
 }

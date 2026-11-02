@@ -306,7 +306,7 @@ test("pod.export and pod.import cross /actions with no session and no native cal
   const archivePath = join(root, "ducts.zip");
 
   const exported = await act("pod.export", { pod: "ducts", archivePath });
-  expect(exported).toMatchObject({ state: "succeeded" });
+  expect(exported, JSON.stringify(exported)).toMatchObject({ state: "succeeded" });
   expect(await act("pod.import", { archivePath })).toMatchObject({ state: "failed" });
   await rm(join(pods, "Renamed In Explorer"), { recursive: true });
   const imported = await act("pod.import", { archivePath });
@@ -376,7 +376,7 @@ test("pod.promote wraps a scratch Page byte for byte, unbound, without touching 
 
   const promoted = await act("pod.promote", { page: "notes", id: "my-notes" });
 
-  expect(promoted).toMatchObject({ state: "succeeded" });
+  expect(promoted, JSON.stringify(promoted)).toMatchObject({ state: "succeeded" });
   expect(JSON.stringify(promoted)).toContain('"key":"page:@my-notes/pages/notes"');
   const inPod = join(pods, "my-notes", "pages", "notes");
   expect(await readFile(join(inPod, "index.html"), "utf8")).toBe(html);

@@ -710,7 +710,10 @@ test("F7: an acquisition records its paths before writing; a crash at any bounda
       });
     },
   });
-  expect(reads).toEqual([["op", "result", openStep.id, "--json"]]);
+  expect(reads).toEqual([
+    ["op", "result", openStep.id, "--json"],
+    ["session", "list", "--json"],
+  ]);
   const recovered = foldAcquisitions(await journal.list());
   expect(recovered[0]).toMatchObject({ state: "held", document: { sdkOpenId: openId } });
   expect(acquiredOpenIds(recovered, originalProcess, certified, [openId]).get(openId)).toBe(

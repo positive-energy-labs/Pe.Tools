@@ -94,9 +94,9 @@ test("the v5 reader preserves original bytes, facts and uncertainty without auth
         async () => ++executions,
       ),
     );
-    await expect(owner.resume(id, { caller: row!.caller, basis: row!.basis })).rejects.toThrow(
-      "Historical schema",
-    );
+    await expect(
+      owner.resume(id, { caller: row!.caller, basis: row!.basis }),
+    ).resolves.toMatchObject({ refusal: { code: "historical-schema" } });
     expect(executions).toBe(0);
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -214,7 +214,7 @@ test.each([4, 6])(
       );
       await expect(
         owner.resume("old-running", { caller: rows[0]!.caller, basis: rows[0]!.basis }),
-      ).rejects.toThrow("Historical schema");
+      ).resolves.toMatchObject({ refusal: { code: "historical-schema" } });
       if (version === 6) {
         registerFixtureCommand(
           owner,
