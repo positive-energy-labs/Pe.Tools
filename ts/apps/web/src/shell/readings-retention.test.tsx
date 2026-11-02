@@ -85,3 +85,43 @@ test("published values carry a content hash: equal content, equal hash; sourceVe
   release();
   graph.dispose();
 });
+
+test("a pane head refresh reacquires a shared root once and keeps old content as previous", () => {
+  const opens: ReadingDelivery[] = [];
+  const graph = createReadingGraph(
+    {
+      readings: {
+        root: { kind: "use", source: "root", retire: "target" },
+        a: { kind: "derive", source: "a", deps: ["root"], retire: "target" },
+        b: { kind: "derive", source: "b", deps: ["root"], retire: "target" },
+      },
+    },
+    {
+      scope: {
+        target: { kind: "document", ref: { session: "s", openId: "d" } },
+        workKey: null,
+        workRevision: null,
+        work: null,
+        page: {},
+      },
+      sources: {
+        root: { kind: "use", open: (_c, d) => void opens.push(d) },
+        a: { kind: "derive", derive: (c) => c.inputs.root!.value },
+        b: { kind: "derive", derive: (c) => c.inputs.root!.value },
+      },
+      log: () => {},
+    },
+  );
+  const release = graph.mount(["a", "b"]);
+  opens[0]!({ kind: "complete", value: 1, revision: 1 });
+  expect(graph.status(["a", "b"])).toBe("ready");
+  graph.refresh(["a", "b"]);
+  expect(opens).toHaveLength(2);
+  expect(graph.status(["a"])).toBe("pending");
+  expect(graph.get("root")).toMatchObject({ status: "pending", previous: 1 });
+  expect(graph.get("a").value ?? graph.get("a").previous).toBe(1);
+  opens[1]!({ kind: "complete", value: 2, revision: 1 });
+  expect(graph.get("b")).toMatchObject({ status: "ready", value: 2 });
+  release();
+  graph.dispose();
+});

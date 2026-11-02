@@ -13,6 +13,7 @@ import { Route as rootRoute } from "../routes/__root";
 import { createRoute } from "@tanstack/react-router";
 import { KeyScope, ScopeKeys, actionScopeKeys, useScopeLive, type ScopeKey } from "@pe/kit/keys";
 import { Button } from "@pe/kit/lang/button";
+import { RefreshCw } from "lucide-react";
 import { Popover, SubjectPopoverContent } from "@pe/kit/lang/popover";
 import { Label, Textarea } from "@pe/kit/lang/input";
 import {
@@ -628,6 +629,7 @@ function MountedPane<P, W>({
       ));
     },
   };
+  const head = <PaneHead owner={owner} draws={draws} enabled={enabled} />;
   const renderPane: PaneApi = (content, furniture) =>
     pane(
       <>
@@ -644,7 +646,15 @@ function MountedPane<P, W>({
         ))}
         {content}
       </>,
-      furniture,
+      {
+        ...furniture,
+        actions: (
+          <>
+            {furniture?.actions}
+            {head}
+          </>
+        ),
+      },
     );
   if (adapters.frames?.[id]) return adapters.frames[id](body, renderPane);
   return renderPane(
@@ -654,6 +664,48 @@ function MountedPane<P, W>({
       adapters.bodies[id]!(body)
     ),
     adapters.furniture?.[id]?.(body),
+  );
+}
+
+/**
+ * ADR 0027 rule 9: the pane head's own loading word and refresh verb over its draws' closure. The
+ * body keeps drawing `value ?? previous`, so old content stays while a refresh runs.
+ */
+function PaneHead<P, W>({
+  owner,
+  draws,
+  enabled,
+}: {
+  owner: GraphMount<P, W>;
+  draws: readonly string[];
+  enabled: boolean;
+}) {
+  const status = useSyncExternalStore(
+    (notify) => owner.readings.watch(draws, notify),
+    () => owner.readings.status(draws),
+  );
+  if (!draws.length) return null;
+  const failed = status.startsWith("failed:") ? status.slice("failed:".length) : null;
+  return (
+    <>
+      {status !== "ready" && (
+        <span
+          role="status"
+          data-slot="pane-reading"
+          data-tone={failed ? "caution" : undefined}
+          className="text-ink-2 text-xs"
+          title={failed ?? undefined}
+        >
+          {failed ? "failed" : status === "pending" ? "reading…" : "stale"}
+        </span>
+      )}
+      <Button
+        label="Refresh"
+        icon={RefreshCw}
+        refusal={enabled ? null : "pane hidden"}
+        onClick={() => owner.readings.refresh(draws)}
+      />
+    </>
   );
 }
 

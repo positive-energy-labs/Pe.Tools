@@ -574,6 +574,36 @@ export function createReadingGraph<P, W>(
     get(id: string): ReadingState {
       return get(id).state;
     },
+    /** A pane head's word over its draws and their dependency closure (ADR 0027 rule 9). */
+    status(ids: readonly string[]): "ready" | "pending" | "stale" | `failed:${string}` {
+      const states = closure(ids).map((node) => node.state);
+      const failed = states.find((state) => state.status === "failed");
+      if (failed) return `failed:${failed.error ?? "unknown error"}`;
+      if (states.some((s) => s.status === "pending" || s.status === "partial")) return "pending";
+      return states.some((s) => s.status === "stale") ? "stale" : "ready";
+    },
+    watch(ids: readonly string[], notify: () => void): Release {
+      const watched = closure(ids);
+      for (const node of watched) node.listeners.add(notify);
+      return () => {
+        for (const node of watched) node.listeners.delete(notify);
+      };
+    },
+    /**
+     * The pane head's refresh verb: reacquire each demanded root of the closure once (shared roots
+     * dedupe by node), letting derives follow. Old values stay as `previous` while pending. Ports
+     * and verb captures are excluded: those are explicit presses, never a refresh side effect.
+     */
+    refresh(ids: readonly string[]) {
+      if (disposed) return;
+      for (const node of closure(ids)) {
+        if (node.decl.deps?.length || !node.demand || node.source.kind === "port") continue;
+        if (node.trigger?.kind === "verb") continue;
+        node.signature = undefined;
+        node.receiptHeld = undefined;
+      }
+      flush();
+    },
     mount(ids: readonly string[]): Release {
       return retain(ids, true);
     },
