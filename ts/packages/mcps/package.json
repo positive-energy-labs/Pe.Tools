@@ -34,7 +34,8 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "catalog:",
+    "@modelcontextprotocol/client": "catalog:",
+    "@modelcontextprotocol/server": "catalog:",
     "@pe/agent-contracts": "workspace:*",
     "@pe/browser": "workspace:*",
     "@pe/ducts-domain": "workspace:*",
