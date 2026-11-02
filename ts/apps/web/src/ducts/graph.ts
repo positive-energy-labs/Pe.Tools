@@ -124,6 +124,34 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
       load: () => import("./seeds").then((m) => m.ductsSeeds["navigation"]!),
     },
   },
+  directory: {
+  "path": "/ducts",
+  "title": "Ducts",
+  "label": "Pressure drop",
+  "exposure": "Main",
+  "runtimeNeed": "Revit for model reads and writes",
+  "icon": "Wind",
+  "category": "Calculate loads & airflow",
+  "blurb": "Review duct systems, stage pressure-drop inputs and rulings, and preview or apply the changes in Revit.",
+  "aliases": [
+    "duct",
+    "pressure",
+    "drop",
+    "static",
+    "pressure",
+    "airflow",
+    "fan",
+    "systems"
+  ],
+  "listed": true,
+  "satellites": [],
+  "surfaces": {
+    "web": "full",
+    "pwa": "full",
+    "tray": false
+  },
+  "resume": "document"
+},
   key: "ducts",
   address: "ducts",
   name: "Ducts",
@@ -802,5 +830,5 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
   },
 
   stageOrder: ["network", "sheet"],
-  pick: false,
+
 };

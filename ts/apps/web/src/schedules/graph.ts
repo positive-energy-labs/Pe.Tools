@@ -44,6 +44,28 @@ const push = z.strictObject({
 });
 
 export const schedulesGraph: RouteGraph<SchedulesPage, ScheduleGridDocument> = {
+  directory: {
+  "path": "/schedules",
+  "title": "Schedules",
+  "label": "Revit data",
+  "exposure": "Preview",
+  "runtimeNeed": "Revit for model actions; browsing saved data is separate",
+  "icon": "LayoutGrid",
+  "category": "Coordinate model data",
+  "blurb": "Any Revit schedule as a grid — push staged cell values, capture its definition into a pod, or apply a saved spec as a new schedule.",
+  "aliases": [
+    "Revit",
+    "data"
+  ],
+  "listed": true,
+  "satellites": [],
+  "surfaces": {
+    "web": "full",
+    "pwa": "full",
+    "tray": false
+  },
+  "resume": "document"
+},
   key: scheduleGridRouteState.route,
   address: "schedules",
   name: "Schedules",

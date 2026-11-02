@@ -29,6 +29,31 @@ const rowPartitions = Object.assign(
   { ids: ["partition"] },
 );
 export const takeoffGraph: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> = {
+  directory: {
+  "path": "/takeoffs",
+  "title": "Takeoffs",
+  "label": "Manual J",
+  "exposure": "Main",
+  "runtimeNeed": "Revit for model actions; browsing saved data is separate",
+  "icon": "Map",
+  "category": "Calculate loads & airflow",
+  "blurb": "The takeoff atlas — zones on the plan, rooms in the table, Manual J data through to a synced RHVAC .r10.",
+  "aliases": [
+    "manual",
+    "j",
+    "loads",
+    "rhvac",
+    "zones"
+  ],
+  "listed": true,
+  "satellites": [],
+  "surfaces": {
+    "web": "full",
+    "pwa": "full",
+    "tray": false
+  },
+  "resume": "document"
+},
   key: "takeoffs",
   address: "takeoffs",
   name: "Takeoffs",

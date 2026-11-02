@@ -1,7 +1,7 @@
 import { z } from "zod";
 import {
   routeAddress,
-  APP_ROUTES,
+  ROUTE_DIRECTORY,
   addressSchema,
   documentRefSchema,
   harnessThreadSummarySchema,
@@ -266,7 +266,7 @@ export async function resumeWork(
 }
 
 const documentRoutes: Readonly<Record<string, string | undefined>> = Object.fromEntries(
-  APP_ROUTES.filter((route) => route.resume === "document").map((route) => [route.key, route.path]),
+  ROUTE_DIRECTORY.filter((route) => route.resume === "document").map((route) => [route.key, route.path]),
 );
 
 function destination(

@@ -61,7 +61,7 @@ export * from "./capture.ts";
 
 export * from "./sdk-session.ts";
 export * from "./navigation.ts";
-export * from "./app-routes.ts";
+export * from "./route-directory.ts";
 export * from "./plugin.ts";
 export * from "./plugin-runtime.ts";
 
@@ -74,3 +74,4 @@ export { threadSearchDefault } from "./routes/shared.ts";
 export * from "./route-graph.ts";
 export * from "./route-settings.ts";
 export * from "./ducts-sheet.ts";
+

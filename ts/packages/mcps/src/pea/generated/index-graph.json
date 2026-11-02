@@ -1,0 +1,54 @@
+{
+  "address": "home",
+  "directory": {
+    "aliases": [
+      "home",
+      "tools",
+      "directory"
+    ],
+    "blurb": "Tools and saved work",
+    "category": "Explore / maintain",
+    "exposure": "Main",
+    "icon": "LayoutGrid",
+    "label": "Tools",
+    "listed": false,
+    "path": "/",
+    "runtimeNeed": "Host navigation",
+    "satellites": [],
+    "surfaces": {
+      "pwa": "full",
+      "tray": false,
+      "web": "full"
+    },
+    "title": "Tools"
+  },
+  "fields": {},
+  "key": "index",
+  "layout": {
+    "id": "main",
+    "kind": "pane"
+  },
+  "name": "Tools",
+  "panes": {
+    "main": {
+      "draws": [],
+      "label": "Tools",
+      "purpose": "Tools and saved work",
+      "verbs": []
+    }
+  },
+  "readings": {},
+  "stageOrder": [
+    "main"
+  ],
+  "stages": {
+    "main": {
+      "panes": [
+        "main"
+      ],
+      "verbs": [],
+      "word": "Tools"
+    }
+  },
+  "verbs": {}
+}

@@ -9,6 +9,26 @@ import { podsReadings, podsPanes, podsLayout } from "./declarations";
 import { podsTransition } from "./actions";
 
 export const podsGraph: RouteGraph<PodsPage, SettingsRouteDocument> = {
+  directory: {
+  "path": "/pods",
+  "title": "Pods",
+  "label": "Pods",
+  "exposure": "Preview",
+  "runtimeNeed": "Host catalogue; Revit depends on the pod",
+  "icon": "Settings2",
+  "category": "Ask / automate",
+  "blurb": "Every installed pod — browse members, edit a spec as a form or raw JSON, and see the runs filed against it.",
+  "aliases": [
+    "Pods"
+  ],
+  "listed": true,
+  "satellites": [],
+  "surfaces": {
+    "web": "full",
+    "pwa": "full",
+    "tray": false
+  }
+},
   key: "pods",
   address: "pods",
   name: "Pods",
@@ -40,5 +60,5 @@ export const podsGraph: RouteGraph<PodsPage, SettingsRouteDocument> = {
         "Select a JSON member, open its Work, review edits and save; apply belongs to its product route.",
     },
   },
-  pick: false,
+
 };

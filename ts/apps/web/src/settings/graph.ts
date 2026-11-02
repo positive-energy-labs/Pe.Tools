@@ -9,6 +9,40 @@ export type SettingsPage = {
   >;
 };
 export const settingsGraph: RouteGraph<SettingsPage> = {
+  directory: {
+  "path": "/settings",
+  "title": "Settings",
+  "label": "Settings",
+  "exposure": "Main",
+  "runtimeNeed": "Host machine configuration",
+  "icon": "Settings2",
+  "category": "Explore / maintain",
+  "blurb": "This machine and every route's user settings: Revit sessions, update, sharing, Pea providers and approvals, host, notifications, appearance, diagnostics, and route preferences.",
+  "aliases": [
+    "machine",
+    "Revit",
+    "update",
+    "share",
+    "providers",
+    "sign-in",
+    "approvals",
+    "host",
+    "startup",
+    "diagnostics",
+    "theme",
+    "route",
+    "preferences",
+    "slots",
+    "colours"
+  ],
+  "listed": true,
+  "satellites": [],
+  "surfaces": {
+    "web": "full",
+    "pwa": "full",
+    "tray": "compact"
+  }
+},
   key: "settings",
   address: "settings",
   name: "Settings",

@@ -39,6 +39,29 @@ const rowVerbs = Object.assign(
 );
 
 export const openGraph: RouteGraph<OpenPageState> = {
+  directory: {
+  "path": "/open",
+  "title": "Open",
+  "label": "Revit",
+  "exposure": "Main",
+  "runtimeNeed": "Revit for model actions; browsing saved data is separate",
+  "icon": "Server",
+  "category": "Start / open work",
+  "blurb": "Start a Revit, open a model, and see which Revit holds it: the launcher, every recent document across installed years, and each running Revit with its shape, documents and verbs.",
+  "aliases": [
+    "launcher",
+    "model",
+    "session",
+    "documents"
+  ],
+  "listed": true,
+  "satellites": [],
+  "surfaces": {
+    "web": "full",
+    "pwa": "full",
+    "tray": "compact"
+  }
+},
   key: "instances",
   address: "open",
   name: "Open",

@@ -1,3 +1,4 @@
+import { routeDirectory } from "./generated/route-directory.ts";
 import { z } from "zod";
 import { INVALID } from "./page-keys.ts";
 import {
@@ -436,7 +437,7 @@ export const routeAt = (pathname: string): RouteKey | null =>
 
 /** The routes that lease a mounted view to Pea. */
 // `filter` cannot narrow by a declaration's `agent` member; `RouteViewRoute` is the same rule, typed.
-export const routeViewRoutes = routeKeys.filter((route) => "agent" in routeAddresses[route]) as [
+export const routeViewRoutes = routeDirectory.map(({directory}) => (directory.path.slice(1) || "home") as RouteKey).filter((route) => route in routeAddresses && "agent" in routeAddresses[route]) as [
   RouteViewRoute,
   ...RouteViewRoute[],
 ];

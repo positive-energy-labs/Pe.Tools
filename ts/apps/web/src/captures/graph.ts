@@ -6,6 +6,27 @@ import { queryVerb } from "#/shell/verbs";
 import { captureQueries } from "./host";
 export type CapturesPage = z.output<ReturnType<typeof routeAddress<"captures">>["schema"]>;
 export const capturesGraph: RouteGraph<CapturesPage, never> = {
+  directory: {
+  "path": "/captures",
+  "title": "Captures",
+  "label": "Revit data",
+  "exposure": "Preview",
+  "runtimeNeed": "Host retained view images",
+  "icon": "Image",
+  "category": "Coordinate model data",
+  "blurb": "Every picture taken of a Revit view, newest first — who took it, which view, the receipt, and the URL a page or a chat links.",
+  "aliases": [
+    "Revit",
+    "data"
+  ],
+  "listed": true,
+  "satellites": [],
+  "surfaces": {
+    "web": "full",
+    "pwa": "full",
+    "tray": false
+  }
+},
   key: "captures",
   address: "captures",
   name: "Captures",

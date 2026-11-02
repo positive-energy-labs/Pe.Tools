@@ -61,6 +61,30 @@ export const familiesGraph: RouteGraph<FamiliesPage, FamiliesRouteDocument> = {
       load: () => import("./graph-seeds").then((m) => m.familiesSeeds["apply"]!),
     },
   },
+  directory: {
+  "path": "/families",
+  "title": "Families",
+  "label": "Family Foundry",
+  "exposure": "Main",
+  "runtimeNeed": "Revit for model actions; browsing saved data is separate",
+  "icon": "Table2",
+  "category": "Build / audit families",
+  "blurb": "Every loaded family's types × parameters in one table — audit it against a profile, plan the reconciliation, apply with receipts.",
+  "aliases": [
+    "audit",
+    "reconcile",
+    "parameters",
+    "types"
+  ],
+  "listed": true,
+  "satellites": [],
+  "surfaces": {
+    "web": "full",
+    "pwa": "full",
+    "tray": false
+  },
+  "resume": "document"
+},
   key: familiesRouteState.route,
   address: "families",
   name: "Families",

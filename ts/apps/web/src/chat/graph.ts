@@ -71,7 +71,30 @@ export function chatGraph(deps: () => ChatRouteDeps, minOtherSize?: number): Rou
       },
     );
   return {
-    key: "chat",
+    directory: {
+  "path": "/pea",
+  "title": "Pea",
+  "label": "Workbench",
+  "exposure": "Main",
+  "runtimeNeed": "Host for conversation; Revit depends on the requested capability",
+  "icon": "MessageSquare",
+  "category": "Ask / automate",
+  "blurb": "The Pea agent workbench — chat and the context world inspector.",
+  "aliases": [
+    "chat",
+    "agent",
+    "assistant",
+    "threads"
+  ],
+  "listed": true,
+  "satellites": [],
+  "surfaces": {
+    "web": "full",
+    "pwa": "full",
+    "tray": "compact"
+  }
+},
+  key: "chat",
     address: "pea",
     name: "Pea",
     seeds: {

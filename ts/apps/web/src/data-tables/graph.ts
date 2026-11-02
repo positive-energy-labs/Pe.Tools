@@ -53,6 +53,27 @@ export function pruneReview(draft: Draft, tables: readonly TableHandle[]) {
 }
 
 export const dataTablesGraph: RouteGraph<DataTablesPage, DataTablesWork> = {
+  directory: {
+  "path": "/data-tables",
+  "title": "Data Tables",
+  "label": "Revit data",
+  "exposure": "Preview",
+  "runtimeNeed": "Revit for model actions; browsing saved data is separate",
+  "icon": "Table",
+  "category": "Coordinate model data",
+  "blurb": "Author synthetic data tables — draft columns and keyed rows, then upsert them in one apply; rows deleted here are pruned in Revit.",
+  "aliases": [
+    "Revit",
+    "data"
+  ],
+  "listed": true,
+  "satellites": [],
+  "surfaces": {
+    "web": "full",
+    "pwa": "full",
+    "tray": false
+  }
+},
   key: "data-tables",
   address: "data-tables",
   name: "Data Tables",
@@ -153,5 +174,5 @@ export const dataTablesGraph: RouteGraph<DataTablesPage, DataTablesWork> = {
         "Choose a table or start a new draft. Apply upserts by name and row key and prunes missing rows.",
     },
   },
-  pick: false,
+
 };

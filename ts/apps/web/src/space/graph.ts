@@ -81,6 +81,31 @@ const read = (key: SpaceReadKey, label: string) =>
     },
   );
 export const spaceGraph: RouteGraph<SpacePage, null> = {
+  directory: {
+  "path": "/space",
+  "title": "Space",
+  "label": "MEP context",
+  "exposure": "Preview",
+  "runtimeNeed": "Revit for capture; saved scenes open without Revit",
+  "icon": "Boxes",
+  "category": "Coordinate model data",
+  "blurb": "Inspect real model geometry, select elements, and draw straight or bent sections locally.",
+  "aliases": [
+    "3d",
+    "mesh",
+    "section",
+    "viewer",
+    "spatial",
+    "context"
+  ],
+  "listed": true,
+  "satellites": [],
+  "surfaces": {
+    "web": "full",
+    "pwa": "full",
+    "tray": false
+  }
+},
   key: "space",
   address: "space",
   name: "Space",
@@ -172,7 +197,7 @@ export const spaceGraph: RouteGraph<SpacePage, null> = {
         "Capture host element ids or load their context, then orbit, pick, hide, isolate and cut. Saved scene links reopen artifacts without capturing. Keys 1â€“4 switch 3D, Top, North and East. Escape returns an axis to its saved 3D pose. Each cut constrains the picture by intersection.",
     },
   },
-  pick: false,
+
   transition: (current, patch, origin, scope) => {
     if (
       origin !== "url" &&

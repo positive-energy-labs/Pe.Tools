@@ -15,6 +15,29 @@ export const opsPageSchema = z.object({
 });
 export type OpsPage = z.output<typeof opsPageSchema>;
 export const opsGraph: RouteGraph<OpsPage> = {
+  directory: {
+  "path": "/ops",
+  "title": "Ops Playground",
+  "label": "Host API",
+  "exposure": "Preview",
+  "runtimeNeed": "Host operation; Revit depends on the operation",
+  "icon": "Terminal",
+  "category": "Explore / maintain",
+  "blurb": "Inspect operation requests and action receipts, and run host reads.",
+  "aliases": [
+    "host",
+    "api",
+    "operations",
+    "playground"
+  ],
+  "listed": true,
+  "satellites": [],
+  "surfaces": {
+    "web": "full",
+    "pwa": "full",
+    "tray": false
+  }
+},
   key: "ops",
   address: "ops",
   name: "Ops",

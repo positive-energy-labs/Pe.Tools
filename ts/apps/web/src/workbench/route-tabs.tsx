@@ -1,5 +1,5 @@
 import { Plus, X } from "lucide-react";
-import { routeAddress, type ThreadTab } from "@pe/agent-contracts";
+import { appRouteByKey, routeAddress, type ThreadTab } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import "./route-tabs.css";
@@ -21,7 +21,7 @@ function tabTitle(tab: ThreadTab) {
             : "page" in page
               ? page.page
               : "";
-  return `${at.title}${typeof subject === "string" && subject ? ` · ${subject}` : ""}`;
+  return `${appRouteByKey(tab.route)?.title ?? at.title}${typeof subject === "string" && subject ? ` · ${subject}` : ""}`;
 }
 
 const TAB_CH = 24;

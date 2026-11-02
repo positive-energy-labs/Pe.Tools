@@ -43,6 +43,30 @@ const feedbackVerbs = Object.assign(
 );
 
 export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = {
+  directory: {
+  "path": "/rooms",
+  "title": "Rooms",
+  "label": "Manual J",
+  "exposure": "Preview",
+  "runtimeNeed": "Revit for model actions; browsing saved data is separate",
+  "icon": "LayoutDashboard",
+  "category": "Calculate loads & airflow",
+  "blurb": "Split a level's plan view into room regions, stage each room's name, type and loads, and write them to the regions in Revit.",
+  "aliases": [
+    "manual",
+    "j",
+    "loads",
+    "regions"
+  ],
+  "listed": true,
+  "satellites": [],
+  "surfaces": {
+    "web": "full",
+    "pwa": "full",
+    "tray": false
+  },
+  "resume": "document"
+},
   key: "rooms",
   address: "rooms",
   name: "Rooms",

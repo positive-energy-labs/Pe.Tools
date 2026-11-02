@@ -1,3 +1,4 @@
+import type { AppExposure, AppRouteMount, AppSurface } from "./route-directory.ts";
 import { z } from "zod";
 import type { History, RouteField } from "./route-field.ts";
 import type { RouteStatePatch } from "./route-state.ts";
@@ -246,9 +247,26 @@ export const salvageVerb = {
   answers: z.strictObject({ confirm: z.literal(true) }),
 } as const satisfies VerbDecl;
 
+export interface RouteDirectory {
+  path: string;
+  title: string;
+  label: string;
+  icon: string;
+  category: string;
+  blurb: string;
+  aliases: readonly string[];
+  exposure: AppExposure;
+  listed: boolean;
+  runtimeNeed: string;
+  resume?: "document";
+  satellites: readonly { to: string; label: string }[];
+  surfaces: Readonly<Record<AppSurface, AppRouteMount | false>>;
+}
+
 export interface RouteGraph<P = Record<string, unknown>, W = unknown> {
   /** Browser-only states, selected uniformly by ?fixture=<name>. Payloads load only when selected; titles remain available to discovery. */
   seeds?: Readonly<Record<string, GraphSeed<P, W>>>;
+  directory?: RouteDirectory;
   key: string;
   address: string;
   name: string;
@@ -333,6 +351,7 @@ type GraphJsonObject = { readonly [key: string]: GraphJsonValue };
 export interface RouteGraphJson {
   readonly seeds?: Readonly<Record<string, { readonly title: string }>>;
   readonly key: string;
+  readonly directory?: RouteDirectory;
   readonly address: string;
   readonly name: string;
   readonly subject?: GraphJsonObject;
@@ -356,7 +375,7 @@ export interface RouteGraphJson {
 
 function sortedJson(value: unknown): GraphJsonValue {
   // Installed Zod 4 owns JSON Schema conversion. Input direction retains preprocessing inputs.
-  if (value instanceof z.ZodType) return sortedJson(z.toJSONSchema(value, { io: "input" }));
+  if (value instanceof z.ZodType) return sortedJson(z.toJSONSchema(value, { io: "input", unrepresentable: "any", override: ({ zodSchema, jsonSchema }) => { if (["custom", "transform"].includes(zodSchema._zod.def.type)) jsonSchema["x-runtime-validation"] = true; } }));
   if (typeof value === "function") {
     const ids = "ids" in value ? value.ids : undefined;
     return ids === undefined ? { runtime: true } : { ids: sortedJson(ids), runtime: true };

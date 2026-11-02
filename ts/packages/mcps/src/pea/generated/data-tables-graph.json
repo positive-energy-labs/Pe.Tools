@@ -1,0 +1,353 @@
+{
+  "address": "data-tables",
+  "directory": {
+    "aliases": [
+      "Revit",
+      "data"
+    ],
+    "blurb": "Author synthetic data tables — draft columns and keyed rows, then upsert them in one apply; rows deleted here are pruned in Revit.",
+    "category": "Coordinate model data",
+    "exposure": "Preview",
+    "icon": "Table",
+    "label": "Revit data",
+    "listed": true,
+    "path": "/data-tables",
+    "runtimeNeed": "Revit for model actions; browsing saved data is separate",
+    "satellites": [],
+    "surfaces": {
+      "pwa": "full",
+      "tray": false,
+      "web": "full"
+    },
+    "title": "Data Tables"
+  },
+  "fields": {
+    "table": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "subject",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "",
+        "maxLength": 200,
+        "type": "string"
+      },
+      "share": true,
+      "url": "push"
+    }
+  },
+  "key": "data-tables",
+  "layout": {
+    "axis": "h",
+    "children": [
+      {
+        "id": "tables",
+        "kind": "pane"
+      },
+      {
+        "id": "draft",
+        "kind": "pane"
+      }
+    ],
+    "id": "editor",
+    "kind": "split",
+    "size": 260,
+    "sized": "start"
+  },
+  "name": "Data Tables",
+  "needs": "project",
+  "panes": {
+    "draft": {
+      "draws": [],
+      "label": "Draft",
+      "purpose": "Edit columns and keyed rows",
+      "verbs": []
+    },
+    "tables": {
+      "draws": [
+        "tables"
+      ],
+      "label": "Tables",
+      "purpose": "Choose a table from the selected document",
+      "verbs": {
+        "ids": [
+          "open"
+        ],
+        "runtime": true
+      }
+    }
+  },
+  "readings": {
+    "tables": {
+      "kind": "use",
+      "retire": "target",
+      "source": "data-tables.tables"
+    }
+  },
+  "stageOrder": [
+    "edit"
+  ],
+  "stages": {
+    "edit": {
+      "panes": [
+        "tables",
+        "draft"
+      ],
+      "teach": "Choose a table or start a new draft. Apply upserts by name and row key and prunes missing rows.",
+      "verbs": [
+        "new",
+        "apply"
+      ],
+      "word": "Editing"
+    }
+  },
+  "verbs": {
+    "apply": {
+      "answers": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {},
+        "type": "object"
+      },
+      "chord": "Mod+Enter",
+      "does": "data-table.apply",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {},
+        "type": "object"
+      },
+      "kind": "command",
+      "label": "Apply",
+      "review": "required"
+    },
+    "edit": {
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "draft": {
+            "properties": {
+              "columns": {
+                "items": {
+                  "properties": {
+                    "heading": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "enum": [
+                        "Text",
+                        "Number"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "heading",
+                    "kind"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "isNew": {
+                "type": "boolean"
+              },
+              "name": {
+                "type": "string"
+              },
+              "rows": {
+                "items": {
+                  "properties": {
+                    "key": {
+                      "type": "string"
+                    },
+                    "values": {
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "values"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "name",
+              "isNew",
+              "columns",
+              "rows"
+            ],
+            "type": "object"
+          },
+          "expectedRevision": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "draft",
+          "expectedRevision"
+        ],
+        "type": "object"
+      },
+      "kind": "work",
+      "label": "Edit table",
+      "review": "none"
+    },
+    "new": {
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {},
+        "type": "object"
+      },
+      "kind": "work",
+      "label": "New table",
+      "review": "none"
+    },
+    "open": {
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "kind": "work",
+      "label": "Open table",
+      "review": "none"
+    },
+    "work.start-fresh": {
+      "answers": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "confirm": {
+            "const": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "confirm"
+        ],
+        "type": "object"
+      },
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "default": {},
+        "properties": {},
+        "type": "object"
+      },
+      "kind": "recovery",
+      "label": "Start fresh",
+      "review": "required",
+      "says": "Set the unreadable Work aside and start it empty; its old bytes are kept beside it"
+    }
+  },
+  "work": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "draft": {
+        "anyOf": [
+          {
+            "properties": {
+              "columns": {
+                "items": {
+                  "properties": {
+                    "heading": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "enum": [
+                        "Text",
+                        "Number"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "heading",
+                    "kind"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "isNew": {
+                "type": "boolean"
+              },
+              "name": {
+                "type": "string"
+              },
+              "rows": {
+                "items": {
+                  "properties": {
+                    "key": {
+                      "type": "string"
+                    },
+                    "values": {
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "values"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "name",
+              "isNew",
+              "columns",
+              "rows"
+            ],
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      }
+    },
+    "type": "object"
+  }
+}

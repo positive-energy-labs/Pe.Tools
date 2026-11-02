@@ -33,6 +33,31 @@ const familyCellParameter = (key: string) => {
 };
 
 export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = {
+  directory: {
+  "path": "/family",
+  "title": "Family",
+  "label": "Family Foundry",
+  "exposure": "Main",
+  "runtimeNeed": "Revit for capture/apply; portable authoring is separate",
+  "icon": "Boxes",
+  "category": "Build / audit families",
+  "blurb": "One family, two lanes: an authored family.json (anatomy, matrix, build) or the family open in Revit's editor. Binding picks the lane; capture bridges them.",
+  "aliases": [
+    "rfa",
+    "author",
+    "build",
+    "capture",
+    "matrix"
+  ],
+  "listed": true,
+  "satellites": [],
+  "surfaces": {
+    "web": "full",
+    "pwa": "full",
+    "tray": false
+  },
+  "resume": "document"
+},
   key: familyDraftRouteState.route,
   address: "family",
   name: "Family",

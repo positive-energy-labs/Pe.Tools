@@ -1,0 +1,78 @@
+{
+  "address": "design-system",
+  "directory": {
+    "aliases": [
+      "Design",
+      "language"
+    ],
+    "blurb": "The spec and catalogue for the design language â€” production components under production tokens, with the gaps they cannot yet express marked in place.",
+    "category": "Explore / maintain",
+    "exposure": "Preview",
+    "icon": "Palette",
+    "label": "Design language",
+    "listed": true,
+    "path": "/design-system",
+    "runtimeNeed": "Browser component catalogue",
+    "satellites": [
+      {
+        "label": "band",
+        "to": "/design-system/band"
+      },
+      {
+        "label": "list",
+        "to": "/design-system/list"
+      },
+      {
+        "label": "arming",
+        "to": "/design-system/arming"
+      },
+      {
+        "label": "popovers",
+        "to": "/design-system/popovers"
+      },
+      {
+        "label": "swatch",
+        "to": "/design-system/swatch"
+      },
+      {
+        "label": "revit",
+        "to": "/design-system/revit"
+      }
+    ],
+    "surfaces": {
+      "pwa": "full",
+      "tray": false,
+      "web": "full"
+    },
+    "title": "Design System"
+  },
+  "fields": {},
+  "key": "design-system",
+  "layout": {
+    "id": "main",
+    "kind": "pane"
+  },
+  "name": "Design System",
+  "panes": {
+    "main": {
+      "draws": [],
+      "label": "Design System",
+      "purpose": "The spec and catalogue for the design language â€” production components under production tokens, with the gaps they cannot yet express marked in place.",
+      "verbs": []
+    }
+  },
+  "readings": {},
+  "stageOrder": [
+    "main"
+  ],
+  "stages": {
+    "main": {
+      "panes": [
+        "main"
+      ],
+      "verbs": [],
+      "word": "Design System"
+    }
+  },
+  "verbs": {}
+}

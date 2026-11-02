@@ -85,6 +85,27 @@ const read = (label: string, evaluate: boolean, subject: "edit" | "suggestion" =
   );
 
 export const parameterLinksGraph: RouteGraph<ParameterLinksPage, ParameterLinksDocument> = {
+  directory: {
+  "path": "/parameter-links",
+  "title": "Parameter Links",
+  "label": "Revit data",
+  "exposure": "Preview",
+  "runtimeNeed": "Revit for model actions; browsing saved data is separate",
+  "icon": "Link2",
+  "category": "Coordinate model data",
+  "blurb": "Cross-element parameter links — co-edit the link profile with pea, preview the projected target writes, then apply to reconcile them.",
+  "aliases": [
+    "Revit",
+    "data"
+  ],
+  "listed": true,
+  "satellites": [],
+  "surfaces": {
+    "web": "full",
+    "pwa": "full",
+    "tray": false
+  }
+},
   key: "parameter-links",
   address: "parameter-links",
   name: "Parameter Links",
@@ -182,5 +203,5 @@ export const parameterLinksGraph: RouteGraph<ParameterLinksPage, ParameterLinksD
       verbs: ["refresh", "preview", "previewProposal"],
     },
   },
-  pick: false,
+
 };
