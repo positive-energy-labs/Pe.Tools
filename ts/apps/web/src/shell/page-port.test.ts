@@ -117,6 +117,16 @@ test("selection and stage leave pose unchanged, and logical no-ops publish nothi
   f.controls.subject(local("A"));
   f.page.pose({ viewport: { x: 3, y: 4 } }, "named");
   f.owner.movePage({}, { kind: "human", source: "query", history: "replace" });
+  expect(f.owner.movePage(basis.page, { kind: "scope", token: basis.scope })).toMatchObject({
+    kind: "accepted",
+    changed: false,
+  });
+  expect(
+    f.owner.movePage(
+      { selected: [], viewport: { x: 9, y: 9 } },
+      { kind: "scope", token: basis.scope },
+    ),
+  ).toMatchObject({ kind: "refused" });
   expect(f.read()).toBe(basis);
   expect(f.published).toHaveLength(4);
 });

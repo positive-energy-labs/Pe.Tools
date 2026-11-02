@@ -378,8 +378,8 @@ export function createPagePolicy<G extends RouteGraphJson, S extends SchemaTable
         for (const [key, field] of fields) if (field.role === "pose") next[key] = field.initial;
       } else if (
         origin.kind !== "restore" &&
-        Object.hasOwn(parsed.data, selectionKey) &&
-        fields.some(([key, field]) => field.role === "pose" && Object.hasOwn(parsed.data, key))
+        !deepEqual(current[selectionKey], next[selectionKey]) &&
+        fields.some(([key, field]) => field.role === "pose" && !deepEqual(current[key], next[key]))
       ) {
         return failure("Selection and pose are separate moves");
       }
