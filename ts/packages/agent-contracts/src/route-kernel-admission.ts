@@ -1,5 +1,6 @@
 import type { BodyBindings, CodecBindings, EntryTable } from "./route-kernel-bodies.ts";
-import type { Immutable, RouteDiagnostic, RouteGraphJson } from "./route-kernel-data.ts";
+import type { RouteDiagnostic, RouteGraphJson } from "./route-kernel-data.ts";
+import type { AdmittedRoute } from "./route-module.ts";
 import type { IdentityBindings, SchemaTable } from "./route-kernel-page.ts";
 
 declare const fingerprint: unique symbol;
@@ -67,12 +68,7 @@ export interface RouteModule<
  * and expose no mutable registry. A private identity table authenticates this EXACT object
  * at registration, mounting and dispatch; copies/proxies/forged prototypes fail validation.
  * Private nominal membership is deliberately lost by object spread. Branding is an API boundary, not a JS security sandbox. */
-export declare class AdmittedRoute<G extends RouteGraphJson = RouteGraphJson> {
-  private constructor();
-  private readonly admissionAuthority: void;
-  readonly data: Immutable<G>;
-  readonly fingerprint: RouteFingerprint;
-}
+export type { AdmittedRoute } from "./route-module.ts";
 export type RouteAdmission<G extends RouteGraphJson> =
   | { readonly ok: true; readonly route: AdmittedRoute<G> }
   | { readonly ok: false; readonly diagnostics: readonly RouteDiagnostic[] };

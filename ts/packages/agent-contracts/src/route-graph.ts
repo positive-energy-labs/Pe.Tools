@@ -803,19 +803,33 @@ export function validateRouteGraph<P, W>(
   return refusals;
 }
 /** Author only deviations from the subject's ordinary read and presentation contract. */
-export type GraphDeclaration<P, W = unknown> = Omit<RouteGraph<P, W>, "subjectField" | "fields" | "readings" | "panes" | "stages"> & {
-  fields: { readonly [K in keyof P]-?: FieldDecl<z.ZodType<P[K]>> & { role?: FieldRole } } &
-    Readonly<Record<string, FieldDecl & { role?: FieldRole }>>;
+export type GraphDeclaration<P, W = unknown> = Omit<
+  RouteGraph<P, W>,
+  "subjectField" | "fields" | "readings" | "panes" | "stages"
+> & {
+  fields: {
+    readonly [K in keyof P]-?: FieldDecl<z.ZodType<P[K]>> & { role?: FieldRole };
+  } & Readonly<Record<string, FieldDecl & { role?: FieldRole }>>;
   subjectField: Omit<RouteGraph<P, W>["subjectField"], "cardinality" | "show"> &
     Partial<Pick<RouteGraph<P, W>["subjectField"], "cardinality" | "show">>;
   readings: Readonly<Record<string, Partial<ReadingDecl<P>>>>;
-  panes: Readonly<Record<string, Omit<PaneDecl, "draws" | "verbs"> & Partial<Pick<PaneDecl, "draws" | "verbs">>>>;
-  stages: Readonly<Record<string, Omit<StageDecl, "panes" | "verbs"> & Partial<Pick<StageDecl, "panes" | "verbs">>>>;
+  panes: Readonly<
+    Record<string, Omit<PaneDecl, "draws" | "verbs"> & Partial<Pick<PaneDecl, "draws" | "verbs">>>
+  >;
+  stages: Readonly<
+    Record<string, Omit<StageDecl, "panes" | "verbs"> & Partial<Pick<StageDecl, "panes" | "verbs">>>
+  >;
 };
 
 /** Expand once, before admission, hashing or either client sees the graph. No route-key branches. */
-export function defineRouteGraph<P, W = unknown>(declaration: GraphDeclaration<P, W>): RouteGraph<P, W> {
-  const subject = { cardinality: "one" as const, show: (id: string) => id, ...declaration.subjectField };
+export function defineRouteGraph<P, W = unknown>(
+  declaration: GraphDeclaration<P, W>,
+): RouteGraph<P, W> {
+  const subject = {
+    cardinality: "one" as const,
+    show: (id: string) => id,
+    ...declaration.subjectField,
+  };
   const readings: Record<string, ReadingDecl<P>> = {};
   for (const [id, reading] of Object.entries(declaration.readings))
     readings[id] = {
@@ -825,22 +839,83 @@ export function defineRouteGraph<P, W = unknown>(declaration: GraphDeclaration<P
       ...reading,
     };
   // A shared roster/detail is a single target-scoped read, not a duplicate page read.
-  readings[subject.roster] ??= { kind: "use", source: `${declaration.key}.${subject.roster}`, retire: "target" };
+  readings[subject.roster] ??= {
+    kind: "use",
+    source: `${declaration.key}.${subject.roster}`,
+    retire: "target",
+  };
   readings[subject.detail] ??= {
-    kind: "use", source: `${declaration.key}.${subject.detail}`, retire: "page",
+    kind: "use",
+    source: `${declaration.key}.${subject.detail}`,
+    retire: "page",
     args: (page) => page[subject.field],
   };
-  const panes = Object.fromEntries(Object.entries(declaration.panes).map(([id, pane]) =>
-    [id, { draws: [], verbs: [], ...pane } satisfies PaneDecl]));
+  const panes = Object.fromEntries(
+    Object.entries(declaration.panes).map(([id, pane]) => [
+      id,
+      { draws: [], verbs: [], ...pane } satisfies PaneDecl,
+    ]),
+  );
   return {
     ...declaration,
     subjectField: subject,
     // Address codecs and policy already exist; only role exceptions belong in the graph.
-    fields: Object.fromEntries(Object.entries(declaration.fields).map(([id, field]) =>
-      [id, { role: id === subject.field ? "subject" : id === "stage" ? "stage" : "pose", ...field }])) as RouteGraph<P, W>["fields"],
+    fields: Object.fromEntries(
+      Object.entries(declaration.fields).map(([id, field]) => [
+        id,
+        { role: id === subject.field ? "subject" : id === "stage" ? "stage" : "pose", ...field },
+      ]),
+    ) as RouteGraph<P, W>["fields"],
     readings,
     panes,
-    stages: Object.fromEntries(Object.entries(declaration.stages).map(([id, stage]) =>
-      [id, { panes: Object.keys(panes), verbs: [], ...stage } satisfies StageDecl])),
+    stages: Object.fromEntries(
+      Object.entries(declaration.stages).map(([id, stage]) => [
+        id,
+        { panes: Object.keys(panes), verbs: [], ...stage } satisfies StageDecl,
+      ]),
+    ),
   };
+}
+
+/** RFC 8785 serialization. Reject before hashing rather than silently erasing data. */
+export function canonicalRouteJson(value: unknown): string {
+  const active = new Set<object>();
+  function encode(value: unknown, path: string): string {
+    if (value === null) return "null";
+    if (typeof value === "string") {
+      if (/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(value))
+        throw Error(`${path}: lone surrogate`);
+      return JSON.stringify(value);
+    }
+    if (typeof value === "boolean") return String(value);
+    if (typeof value === "number" && Number.isFinite(value)) return JSON.stringify(value);
+    if (typeof value !== "object") throw Error(`${path}: not a JSON value`);
+    if (active.has(value)) throw Error(`${path}: cyclic data`);
+    const array = Array.isArray(value);
+    if (
+      !array &&
+      Object.getPrototypeOf(value) !== Object.prototype &&
+      Object.getPrototypeOf(value) !== null
+    )
+      throw Error(`${path}: not a plain JSON object`);
+    active.add(value);
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    if (Object.getOwnPropertySymbols(value).length) throw Error(`${path}: symbol member`);
+    for (const [key, descriptor] of Object.entries(descriptors)) {
+      if (array && key === "length") continue;
+      if (!descriptor.enumerable || !Object.hasOwn(descriptor, "value"))
+        throw Error(`${path}.${key}: non-data member`);
+      if (array && (!/^(0|[1-9][0-9]*)$/.test(key) || Number(key) >= value.length))
+        throw Error(`${path}.${key}: extra array member`);
+    }
+    const result = array
+      ? `[${Array.from({ length: value.length }, (_, i) => encode(descriptors[String(i)]?.value, `${path}.${i}`)).join(",")}]`
+      : `{${Object.keys(descriptors)
+          .sort()
+          .map((key) => `${encode(key, path)}:${encode(descriptors[key]!.value, `${path}.${key}`)}`)
+          .join(",")}}`;
+    active.delete(value);
+    return result;
+  }
+  return encode(value, "data");
 }

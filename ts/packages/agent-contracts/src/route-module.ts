@@ -38,8 +38,11 @@ export function validateRouteModule(module: RouteModule): void {
     throw Error("Builtin module hash does not match the generated directory");
   if (module.namespace !== "builtin") {
     for (const [id, field] of Object.entries(module.graph.fields)) {
-      if (bare(field.schema).def.type === "array" ||
-        (field.cardinality === "many" && (field.codec !== manyCodec || !field.schema.safeParse("all").success)))
+      if (
+        bare(field.schema).def.type === "array" ||
+        (field.cardinality === "many" &&
+          (field.codec !== manyCodec || !field.schema.safeParse("all").success))
+      )
         throw Error(`fields.${id}: Array fields must use kernel manyField with ids | all`);
     }
   }
@@ -91,3 +94,456 @@ export const admittedRouteEntries = new Map<
   string,
   { entries: Readonly<Record<string, Command & { axes: CatalogAxes }>>; available: () => boolean }
 >();
+
+// Kernel admission is prepared independently of the legacy directory above. S2 removes
+// the old executable-graph API when its remaining mount/Pod consumers migrate.
+import { z as kernelZ } from "zod";
+import { canonicalRouteJson } from "./route-graph.ts";
+import {
+  decodeRouteGraph,
+  linkRouteBodies,
+  routeBindingSchema,
+  routeDiagnostic,
+  type RouteBindings,
+} from "./route-bodies.ts";
+import type { CatalogLink } from "./catalog.ts";
+import type {
+  RouteGraphJson as KernelGraph,
+  Immutable,
+  RouteDiagnostic,
+} from "./route-kernel-data.ts";
+import type {
+  RouteFingerprint,
+  RouteFingerprintInput,
+  RouteAdmissionPort,
+  RouteAdmission,
+  AdmittedRouteRegistry,
+} from "./route-kernel-admission.ts";
+
+const sha = kernelZ.string().regex(/^[a-f0-9]{64}$/);
+const packagePath = kernelZ
+  .string()
+  .min(1)
+  .refine(
+    (path) =>
+      !path.includes("\\") &&
+      !path.includes(":") &&
+      path.split("/").every((part) => part !== "" && part !== "." && part !== ".."),
+    "Expected package-relative POSIX path",
+  );
+const envelopeSchema = kernelZ.strictObject({
+  version: kernelZ.literal(1),
+  data: kernelZ.unknown(),
+  contracts: kernelZ
+    .array(kernelZ.strictObject({ id: kernelZ.string().min(1), sha256: sha }))
+    .min(1),
+  executables: kernelZ
+    .array(
+      kernelZ.strictObject({
+        client: kernelZ.enum(["web", "pea", "shared"]),
+        entry: packagePath,
+        members: kernelZ.array(kernelZ.strictObject({ path: packagePath, sha256: sha })).min(1),
+      }),
+    )
+    .min(1),
+});
+const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+function fingerprintEnvelope(input: unknown): RouteFingerprintInput {
+  canonicalRouteJson(input);
+  const parsed = envelopeSchema.parse(input);
+  const decoded = decodeRouteGraph(parsed.data);
+  if (!decoded.ok)
+    throw Error(decoded.diagnostics.map((d) => `${d.path}: ${d.message}`).join("; "));
+  const distinct = (keys: readonly string[]) => {
+    if (new Set(keys).size !== keys.length) throw Error("Duplicate fingerprint member");
+  };
+  distinct(parsed.contracts.map((contract) => contract.id));
+  distinct(parsed.executables.map((executable) => `${executable.client}:${executable.entry}`));
+  for (const executable of parsed.executables) {
+    distinct(executable.members.map((member) => member.path));
+    if (!executable.members.some((member) => member.path === executable.entry))
+      throw Error(`Missing executable entry bytes: ${executable.entry}`);
+  }
+  return {
+    version: 1,
+    data: decoded.data,
+    contracts: parsed.contracts.sort((a, b) => compare(a.id, b.id)),
+    executables: parsed.executables
+      .sort((a, b) => compare(a.client, b.client) || compare(a.entry, b.entry))
+      .map((executable) => ({
+        ...executable,
+        members: executable.members.sort((a, b) => compare(a.path, b.path)),
+      })),
+  };
+}
+async function hashBytes(bytes: Uint8Array): Promise<string> {
+  const hash = await globalThis.crypto.subtle.digest("SHA-256", new Uint8Array(bytes));
+  return Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+export async function routeFingerprint(input: RouteFingerprintInput): Promise<RouteFingerprint> {
+  const hex = await hashBytes(
+    new TextEncoder().encode(`pe.route.v1\n${canonicalRouteJson(fingerprintEnvelope(input))}`),
+  );
+  // The only brand assertion follows the specified SHA-256 computation.
+  return hex as RouteFingerprint;
+}
+/** The loader supplies the complete resolved shipped closure, not function source strings.
+ * Missing/dynamic dependencies must produce resolved:false. Both client variants belong here.
+ * Contract bytes include catalog/schema/codec/kernel implementations or their pinned bundle.
+ * This is loader evidence, not a sandbox for a malicious JavaScript loader. */
+export interface RouteAdmissionEvidence {
+  /** Exact exports evaluated by the loader from the byte closure below. Admission
+   * captures their references before hashing, so a replacement function cannot reuse a stamp. */
+  readonly loadedBindings: unknown;
+  readonly artifact: RouteFingerprintInput;
+  readonly expectedFingerprint: string;
+  readonly contracts: readonly { readonly id: string; readonly bytes: Uint8Array }[];
+  readonly executables: readonly {
+    readonly client: "web" | "pea" | "shared";
+    readonly entry: string;
+    readonly resolved: boolean;
+    readonly members: readonly { readonly path: string; readonly bytes: Uint8Array }[];
+  }[];
+  readonly catalog: readonly CatalogLink[];
+}
+export interface CheckedRouteAdmission extends RouteAdmissionPort {
+  /** Raw JSON/JS gets a runtime-safe handle, never fabricated literal inference. */
+  admitUnknown(module: unknown): RouteAdmission<KernelGraph>;
+}
+const admittedBindings = new WeakMap<object, RouteBindings>();
+const constructionKey = Symbol("checked admission");
+function freezeData<T>(value: T): Immutable<T> {
+  if (value && typeof value === "object") {
+    for (const child of Object.values(value)) freezeData(child);
+    Object.freeze(value);
+  }
+  // Recursion above makes the generic mapped readonly view true at runtime.
+  return value as Immutable<T>;
+}
+function snapshotBindings(bindings: RouteBindings): RouteBindings {
+  // Do not freeze caller-owned Zod internals; clone schemas and capture executable
+  // functions once. Runtime bodies are trusted code, not mutable registry lookups.
+  return Object.freeze({
+    schemas: Object.freeze(
+      Object.fromEntries(
+        Object.entries(bindings.schemas).map(([key, schema]) => [key, schema.clone()]),
+      ),
+    ),
+    codecs: Object.freeze(
+      Object.fromEntries(
+        Object.entries(bindings.codecs).map(([key, codec]) => [key, Object.freeze({ ...codec })]),
+      ),
+    ),
+    identities: Object.freeze(
+      Object.fromEntries(
+        Object.entries(bindings.identities).map(([key, codec]) => [
+          key,
+          Object.freeze({ ...codec }),
+        ]),
+      ),
+    ),
+    entries: Object.freeze(
+      Object.fromEntries(
+        Object.entries(bindings.entries).map(([key, entry]) => [
+          key,
+          Object.freeze({
+            input: entry.input.clone(),
+            output: entry.output.clone(),
+            axes: freezeData(structuredClone(entry.axes)),
+          }),
+        ]),
+      ),
+    ),
+    bodies: Object.freeze(
+      Object.fromEntries(
+        Object.entries(bindings.bodies).map(([key, body]) => [
+          key,
+          Object.freeze({ ...body, source: Object.freeze({ ...body.source }) }),
+        ]),
+      ),
+    ),
+  });
+}
+export class AdmittedRoute<G extends KernelGraph = KernelGraph> {
+  readonly #admissionAuthority = true;
+  readonly data: Immutable<G>;
+  readonly fingerprint: RouteFingerprint;
+  private constructor(
+    key: symbol,
+    data: G,
+    fingerprint: RouteFingerprint,
+    bindings: RouteBindings,
+  ) {
+    if (!this.#admissionAuthority || key !== constructionKey)
+      throw Error("Admission requires the checked factory");
+    this.data = freezeData(structuredClone(data));
+    this.fingerprint = fingerprint;
+    admittedBindings.set(this, snapshotBindings(bindings));
+    Object.freeze(this);
+  }
+  /** Async byte verification precedes the frozen synchronous admission port. */
+  static async prepare(
+    this: void,
+    evidence: RouteAdmissionEvidence,
+  ): Promise<CheckedRouteAdmission> {
+    const diagnostics: RouteDiagnostic[] = [];
+    let envelope: RouteFingerprintInput | undefined;
+    let fingerprint: RouteFingerprint | undefined;
+    let loadedBindings: RouteBindings | undefined;
+    let catalog: readonly CatalogLink[] = [];
+    try {
+      envelope = fingerprintEnvelope(evidence.artifact);
+      loadedBindings = routeBindingSchema.parse(evidence.loadedBindings);
+      // Copy all loader evidence before the first await; callers cannot race verification.
+      const contracts = evidence.contracts.map((item) => ({
+        id: item.id,
+        bytes: new Uint8Array(item.bytes),
+      }));
+      const executables = evidence.executables.map((item) => ({
+        ...item,
+        members: item.members.map((member) => ({
+          path: member.path,
+          bytes: new Uint8Array(member.bytes),
+        })),
+      }));
+      const expected = sha.parse(evidence.expectedFingerprint);
+      catalog = evidence.catalog.map((entry) => ({
+        ...entry,
+        touches: [...entry.touches],
+        uses: entry.uses.map((use) => (typeof use === "string" ? use : { ...use })),
+      }));
+      if (executables.some((executable) => !executable.resolved))
+        throw Error("Unresolved executable dependency closure");
+      const actual: RouteFingerprintInput = {
+        version: 1,
+        data: envelope.data,
+        contracts: await Promise.all(
+          contracts.map(async (item) => ({ id: item.id, sha256: await hashBytes(item.bytes) })),
+        ),
+        executables: await Promise.all(
+          executables.map(async (item) => ({
+            client: item.client,
+            entry: item.entry,
+            members: await Promise.all(
+              item.members.map(async (member) => ({
+                path: member.path,
+                sha256: await hashBytes(member.bytes),
+              })),
+            ),
+          })),
+        ),
+      };
+      if (canonicalRouteJson(fingerprintEnvelope(actual)) !== canonicalRouteJson(envelope))
+        throw Error("Loaded artifact bytes or dependency closure do not match the manifest");
+      fingerprint = await routeFingerprint(envelope);
+      if (fingerprint !== expected) throw Error("Route fingerprint mismatch");
+    } catch (error) {
+      diagnostics.push(
+        routeDiagnostic(
+          {},
+          "artifact",
+          "",
+          "verified route-v1 fingerprint",
+          String(error),
+          "identity",
+        ),
+      );
+    }
+    const inspect = (module: unknown) => {
+      if (diagnostics.length) return { ok: false as const, diagnostics };
+      const input = kernelZ
+        .object({ data: kernelZ.unknown(), artifact: kernelZ.unknown() })
+        .safeParse(module);
+      if (!input.success)
+        return {
+          ok: false as const,
+          diagnostics: [
+            routeDiagnostic({}, "module", "", "RouteModule", input.error.message, "schema"),
+          ],
+        };
+      const decoded = decodeRouteGraph(input.data.data);
+      if (!decoded.ok) return decoded;
+      const bindings = routeBindingSchema.safeParse(module);
+      if (!bindings.success)
+        return {
+          ok: false as const,
+          diagnostics: bindings.error.issues.map((issue) =>
+            routeDiagnostic(
+              decoded.data,
+              issue.path.join("."),
+              "",
+              "binding",
+              issue.message,
+              "schema",
+            ),
+          ),
+        };
+      try {
+        if (
+          canonicalRouteJson(fingerprintEnvelope(input.data.artifact)) !==
+            canonicalRouteJson(envelope) ||
+          canonicalRouteJson(decoded.data) !== canonicalRouteJson(envelope?.data)
+        )
+          throw Error("Module and verified artifact data differ");
+        const errors = linkRouteBodies(decoded.data, bindings.data, catalog);
+        if (!loadedBindings || !sameLoadedBindings(bindings.data, loadedBindings))
+          errors.push(
+            routeDiagnostic(
+              decoded.data,
+              "bodies",
+              "",
+              "verified loaded exports",
+              "Bindings differ from the exports captured with the verified bytes",
+              "identity",
+            ),
+          );
+        for (const [id, body] of Object.entries(bindings.data.bodies))
+          if (
+            !envelope?.executables.some((executable) =>
+              executable.members.some((member) => member.path === body.source.module),
+            )
+          )
+            errors.push(
+              routeDiagnostic(
+                decoded.data,
+                body.slot,
+                id,
+                "packaged executable source",
+                "Body source is absent from the verified closure",
+                "missing",
+                body.source,
+              ),
+            );
+        if (errors.length) return { ok: false as const, diagnostics: errors };
+        return { ok: true as const, data: decoded.data, bindings: bindings.data };
+      } catch (error) {
+        return {
+          ok: false as const,
+          diagnostics: [
+            routeDiagnostic(
+              decoded.data,
+              "artifact",
+              "",
+              "verified artifact",
+              String(error),
+              "identity",
+            ),
+          ],
+        };
+      }
+    };
+    return {
+      admit(module) {
+        try {
+          // Validate before cloning: structuredClone accepts undefined and non-finite numbers.
+          canonicalRouteJson(module.data);
+          const data = structuredClone(module.data);
+          const inspected = inspect({ ...module, data });
+          if (!inspected.ok) return inspected;
+          if (!fingerprint) return { ok: false, diagnostics };
+          return {
+            ok: true,
+            route: new AdmittedRoute(constructionKey, data, fingerprint, inspected.bindings),
+          };
+        } catch (error) {
+          return {
+            ok: false,
+            diagnostics: [
+              routeDiagnostic({}, "data", "", "RouteGraphJson", String(error), "schema"),
+            ],
+          };
+        }
+      },
+      admitUnknown(module) {
+        const inspected = inspect(module);
+        if (!inspected.ok) return inspected;
+        if (!fingerprint) return { ok: false, diagnostics };
+        return {
+          ok: true,
+          route: new AdmittedRoute(
+            constructionKey,
+            inspected.data,
+            fingerprint,
+            inspected.bindings,
+          ),
+        };
+      },
+    };
+  }
+}
+export const createRouteAdmission = AdmittedRoute.prepare;
+export function createAdmittedRouteRegistry(): AdmittedRouteRegistry {
+  const active = new Map<AdmittedRoute, number>();
+  const retired = new WeakSet<AdmittedRoute>();
+  return {
+    resolve(candidate) {
+      return candidate !== null &&
+        typeof candidate === "object" &&
+        admittedBindings.has(candidate) &&
+        candidate instanceof AdmittedRoute &&
+        active.has(candidate)
+        ? candidate
+        : null;
+    },
+    register(route) {
+      if (!admittedBindings.has(route) || retired.has(route))
+        throw Error("Foreign, copied or retired admission");
+      active.set(route, (active.get(route) ?? 0) + 1);
+      let live = true;
+      return {
+        deactivate() {
+          if (!live) return;
+          live = false;
+          const count = active.get(route)! - 1;
+          if (count) active.set(route, count);
+          else {
+            active.delete(route);
+            retired.add(route);
+          }
+        },
+      };
+    },
+  };
+}
+/** Mount/dispatch must resolve through their registry immediately before using these bindings. */
+export function resolveRouteBindings(
+  registry: AdmittedRouteRegistry,
+  candidate: unknown,
+): RouteBindings | null {
+  const route = registry.resolve(candidate);
+  return route ? (admittedBindings.get(route) ?? null) : null;
+}
+
+function sameLoadedBindings(actual: RouteBindings, loaded: RouteBindings): boolean {
+  const sameKeys = (a: object, b: object) =>
+    canonicalRouteJson(Object.keys(a).sort()) === canonicalRouteJson(Object.keys(b).sort());
+  for (const key of ["schemas", "codecs", "identities", "entries", "bodies"] as const)
+    if (!sameKeys(actual[key], loaded[key])) return false;
+  return (
+    Object.entries(actual.schemas).every(([id, schema]) => schema === loaded.schemas[id]) &&
+    Object.entries(actual.codecs).every(
+      ([id, codec]) =>
+        codec.encode === loaded.codecs[id]!.encode && codec.decode === loaded.codecs[id]!.decode,
+    ) &&
+    Object.entries(actual.identities).every(
+      ([id, codec]) =>
+        codec.kind === loaded.identities[id]!.kind &&
+        codec.encode === loaded.identities[id]!.encode &&
+        codec.decode === loaded.identities[id]!.decode &&
+        codec.parts === loaded.identities[id]!.parts,
+    ) &&
+    Object.entries(actual.entries).every(
+      ([id, entry]) =>
+        entry.input === loaded.entries[id]!.input &&
+        entry.output === loaded.entries[id]!.output &&
+        canonicalRouteJson(entry.axes) === canonicalRouteJson(loaded.entries[id]!.axes),
+    ) &&
+    Object.entries(actual.bodies).every(
+      ([id, body]) =>
+        body.run === loaded.bodies[id]!.run &&
+        body.slot === loaded.bodies[id]!.slot &&
+        body.kind === loaded.bodies[id]!.kind &&
+        canonicalRouteJson(body.source) === canonicalRouteJson(loaded.bodies[id]!.source),
+    )
+  );
+}
