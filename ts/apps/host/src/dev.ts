@@ -120,4 +120,5 @@ const program = hostProgram(
   },
 );
 
+// effect-edge: process-main
 NodeRuntime.runMain(Effect.raceFirst(program, parentDisconnected));

@@ -407,7 +407,8 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     if (!existsSync(join(dir, "meta.json"))) continue;
     try {
       const eventsPath = join(dir, "events.jsonl");
-      // effect-edge: island, phase 5 (thread replay runs in the synchronous store constructor)
+      // Thread replay runs in the synchronous store constructor.
+      // effect-edge: island, phase 5
       const { events, meta } = Effect.runSync(
         Effect.all({
           events: existsSync(eventsPath)

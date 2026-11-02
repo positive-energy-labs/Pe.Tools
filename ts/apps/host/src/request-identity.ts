@@ -436,7 +436,8 @@ export const requestIdentityLayer = (options: IdentityOptions) =>
               device: identity.device,
               headers: identity.headers,
             },
-            // effect-edge: AsyncLocalStorage crossing for invocation context; a FiberRef retires it
+            // The AsyncLocalStorage crossing for invocation context; a FiberRef retires it.
+            // effect-edge: als-crossing
             () => Effect.runPromiseExitWith(services)(handler, { signal }),
           ),
         );

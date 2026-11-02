@@ -584,7 +584,7 @@ export async function runBrowserKeeper(configFile: string): Promise<void> {
     }),
   );
   try {
-    // effect-edge: CLI main
+    // effect-edge: cli-main
     await Effect.runPromise(program);
   } catch (error) {
     errorText = error instanceof Error ? error.message : String(error);

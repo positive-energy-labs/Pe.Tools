@@ -202,7 +202,7 @@ export class RunConsents {
     if (run.state.state === "idle") {
       const requestId = randomUUID(),
         auto = this.autoApprove(),
-        // effect-edge: consent window driven from Promise callers until phase 5
+        // effect-edge: island, phase 5
         deadlineMs = auto ? Effect.runSyncWith(this.services)(windowDeadline) : undefined,
         deadline = deadlineMs === undefined ? undefined : new Date(deadlineMs).toISOString();
       run.state = {
@@ -231,7 +231,7 @@ export class RunConsents {
       if (deadlineMs !== undefined) {
         const answered = Deferred.makeUnsafe<void>();
         run.answered = answered;
-        // effect-edge: consent window driven from Promise callers until phase 5
+        // effect-edge: island, phase 5
         Effect.runForkWith(this.services)(
           consentWindow(answered, deadlineMs).pipe(
             Effect.flatMap((end) =>

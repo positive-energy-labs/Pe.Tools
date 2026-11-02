@@ -15,7 +15,8 @@ export const effectTest = <A, E>(
   test(
     name,
     () =>
-      // effect-edge: test runner (the it.effect seam; @effect/vitest needs vitest 5)
+      // The it.effect seam; @effect/vitest needs vitest 5.
+      // effect-edge: test-runner
       Effect.runPromise(
         Effect.suspend(body).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
       ),
