@@ -65,18 +65,19 @@ test("the generated catalog schema is the fixture response authority", () => {
     },
   });
 
-  test("graph examples preserve decoded domain objects with prototype getters", () => {
-    class Scene {
-      get instances() {
-        return [1, 2];
-      }
-    }
-    const scene = new Scene();
-    const host = createFixtureHost([{ key: "scene", effect: "Read" }], { scene });
-    expect(host.read("scene")).toBe(scene);
-    expect((host.read("scene") as Scene).instances).toEqual([1, 2]);
-  });
   expect(() =>
     createFixtureHost(hostOpCatalog, { [entry.key]: { families: "invalid" } }),
   ).toThrow();
+});
+
+test("graph examples preserve decoded domain objects with prototype getters", () => {
+  class Scene {
+    get instances() {
+      return [1, 2];
+    }
+  }
+  const scene = new Scene();
+  const host = createFixtureHost([{ key: "scene", effect: "Read" }], { scene });
+  expect(host.read("scene")).toBe(scene);
+  expect((host.read("scene") as Scene).instances).toEqual([1, 2]);
 });
