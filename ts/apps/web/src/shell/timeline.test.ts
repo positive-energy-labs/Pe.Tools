@@ -79,3 +79,31 @@ test("callers and subscribers cannot mutate recorded timeline evidence", () => {
   timeline.read()[0]!.paths![0]!.push("reader");
   expect(timeline.read()[0]!.paths).toEqual([["width"]]);
 });
+
+test("an invocation keeps its identity and input as its outcome advances", () => {
+  const timeline = createRouteTimeline();
+  timeline.append({
+    kind: "invocation",
+    press: "one",
+    at: 1,
+    outcome: { id: "one", state: "queued", input: { value: 13 } },
+  });
+  timeline.outcome("one", {
+    id: "one",
+    state: "outcome-unknown",
+    input: { value: 13 },
+    reason: "Disconnected",
+    recovery: "reconcile",
+  });
+  expect(timeline.read()).toHaveLength(1);
+  expect(timeline.read()[0]).toMatchObject({
+    at: 1,
+    press: "one",
+    outcome: {
+      state: "outcome-unknown",
+      reason: "Disconnected",
+      recovery: "reconcile",
+      input: { value: 13 },
+    },
+  });
+});

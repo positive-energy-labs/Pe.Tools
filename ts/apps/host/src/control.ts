@@ -350,6 +350,7 @@ const sources: Sources = {
 export const bindControl = (bound: Partial<Sources>) => void Object.assign(sources, bound);
 export const documentAcquisition = (lifetime: DocumentRef) => sources.acquired(lifetime);
 export const sessionAcquisition = (session: string) => sources.acquiredSession(session);
+export const commandConsentWindow = (id: string) => sources.runs?.commandWindow(id);
 export const subscribeRunChanges = (listener: () => void) =>
   sources.runs?.subscribe(listener) ?? (() => {});
 export const assertRunAdmission = (origin: Origin) => {

@@ -1,6 +1,8 @@
 import { z } from "zod";
 import {
   canonicalRouteInput,
+  invocationOutcome,
+  type InvocationOutcome,
   commands,
   workKey,
   type ReadEntry,
@@ -129,7 +131,7 @@ export type InvocationState =
   | "refused"
   | "failed"
   | "stale";
-export type InvocationResult =
+export type VerbDelivery =
   | { state: "done"; press: string; kind: "page"; page: Record<string, unknown> }
   | {
       state: "done";
@@ -169,6 +171,34 @@ export type InvocationResult =
       receipt?: HostReceipt;
       page?: Record<string, unknown>;
     };
+export type VerbCompletion = VerbDelivery & { readonly outcome: InvocationOutcome };
+export function completeVerb(result: VerbDelivery, input: unknown): VerbCompletion {
+  const receipt = "receipt" in result ? result.receipt : undefined;
+  const outcome: InvocationOutcome =
+    receipt && "steps" in receipt
+      ? invocationOutcome(receipt)
+      : receipt?.state === "detached"
+        ? {
+            id: receipt.id,
+            input,
+            state: "outcome-unknown",
+            reason: "Transport ended before the original receipt settled",
+            recovery: "reconcile",
+            receiptId: receipt.id,
+          }
+        : {
+            id: result.press ?? "",
+            input,
+            state:
+              result.state === "done"
+                ? "succeeded"
+                : result.state === "review"
+                  ? "queued"
+                  : result.state,
+            ...("refusal" in result ? { reason: result.refusal.message } : {}),
+          };
+  return { ...result, outcome };
+}
 type HostReceipt = Awaited<ReturnType<typeof runSemanticAction>>;
 /** Host reads outside the command table: they run through the same invocation, never a route fetch. */
 /** Receipt-shaped so the timeline records a read like a command; `subject` is the Work it names. */
@@ -200,7 +230,7 @@ export const recoveryOffered = (verb: VerbDecl, snapshot: VerbSnapshot): boolean
   const recovery = bindings.get(verb)?.recover;
   return recovery !== undefined && offeredWhen[recovery](snapshot) === null;
 };
-type Terminal = Exclude<InvocationResult, { state: "review" }>;
+type Terminal = Exclude<VerbDelivery, { state: "review" }>;
 export type InvocationPhase<C extends Caller> =
   | { kind: "press" }
   | { kind: "commit"; ticket: ReviewTicket; answers?: unknown }
@@ -601,7 +631,7 @@ interface ReviewSession {
   press: string;
   active: boolean;
   decide: (decision: { answers: unknown } | { stop: Terminal }) => void;
-  complete: Promise<InvocationResult>;
+  complete: Promise<VerbDelivery>;
 }
 const reviews = new WeakMap<VerbContext, Map<string, ReviewSession>>();
 
@@ -613,7 +643,7 @@ async function invokeCore<C extends Caller>(
   args: unknown,
   phase: InvocationPhase<C> = { kind: "press" },
   rendered?: VerbSnapshot,
-): Promise<InvocationResult> {
+): Promise<VerbDelivery> {
   if (ctx.fixture && verb.kind === "command")
     return failure(
       "refused",
@@ -657,8 +687,8 @@ async function invokeCore<C extends Caller>(
   if (phase.kind === "skip" && ctx.caller !== "agent")
     return failure("refused", "This caller cannot skip this review");
 
-  let answer!: (value: InvocationResult) => void;
-  const initial = new Promise<InvocationResult>((resolve) => {
+  let answer!: (value: VerbDelivery) => void;
+  const initial = new Promise<VerbDelivery>((resolve) => {
     answer = resolve;
   });
   let terminal: Terminal | undefined;
@@ -803,8 +833,8 @@ async function invokeCore<C extends Caller>(
                 const decision = new Promise<Parameters<ReviewSession["decide"]>[0]>((resolve) => {
                   decide = resolve;
                 });
-                let nextAnswer!: (result: InvocationResult) => void;
-                const complete = new Promise<InvocationResult>((resolve) => {
+                let nextAnswer!: (result: VerbDelivery) => void;
+                const complete = new Promise<VerbDelivery>((resolve) => {
                   nextAnswer = resolve;
                 });
                 session = { verb, ticket, press, active: true, decide, complete };
@@ -1125,7 +1155,7 @@ export const invoke = <C extends Caller>(
   subject: VerbSubject | null,
   args: unknown,
   phase: InvocationPhase<C> = { kind: "press" },
-) => invokeCore(ctx, verb, subject, args, phase);
+) => invokeCore(ctx, verb, subject, args, phase).then((result) => completeVerb(result, args));
 
 export const commit = <C extends Caller>(
   ctx: VerbContext<C>,
@@ -1138,7 +1168,7 @@ export interface BoundVerb<C extends Caller = Caller> {
   readonly label: string;
   readonly chord?: string;
   readonly refusal: string | null;
-  run(phase?: InvocationPhase<C>): Promise<InvocationResult>;
+  run(phase?: InvocationPhase<C>): Promise<VerbCompletion>;
 }
 export function bind<C extends Caller, S extends z.ZodType>(
   verb: VerbDecl<S>,
@@ -1166,7 +1196,10 @@ export function bind<C extends Caller, S extends z.ZodType>(
         ? scope.message
         : (implementation.ready?.(scope, parsed.data) ?? null);
     },
-    run: (phase) => invokeCore(ctx, verb, subject, args, phase, rendered),
+    run: (phase) =>
+      invokeCore(ctx, verb, subject, args, phase, rendered).then((result) =>
+        completeVerb(result, args),
+      ),
   };
 }
 

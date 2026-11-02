@@ -30,7 +30,7 @@ import {
   workVerb,
   type Caller,
   type InvocationPhase,
-  type InvocationResult,
+  type VerbDelivery,
   type VerbContext,
   type VerbSubject,
 } from "./verbs";
@@ -200,7 +200,7 @@ function command(review: "none" | "shown") {
   };
   return commandVerb("takeoffs.initialize", { ...declaration, review }, implementation);
 }
-const reviewed = (result: InvocationResult) => {
+const reviewed = (result: VerbDelivery) => {
   expect(result.state).toBe("review");
   if (result.state !== "review") throw new Error("Expected review");
   return result;

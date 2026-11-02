@@ -26,11 +26,15 @@ import {
 } from "@pe/host-contracts/contracts";
 
 /** Provenance grants only the Internal leaves the command declares in the catalog. */
-export function commandLeafRefusal(operationKey: string, command: string | undefined): string | null {
+export function commandLeafRefusal(
+  operationKey: string,
+  command: string | undefined,
+): string | null {
   const leaf = catalogEntries.find((entry) => entry.key === operationKey);
   if (!leaf?.internal) return null;
   const owner = command && catalogEntries.find((entry) => entry.key === `command:${command}`);
-  return owner && owner.uses.some((use) => (typeof use === "string" ? use : use.key) === operationKey)
+  return owner &&
+    owner.uses.some((use) => (typeof use === "string" ? use : use.key) === operationKey)
     ? null
     : `Command '${command ?? "(none)"}' does not declare Internal leaf '${operationKey}'`;
 }

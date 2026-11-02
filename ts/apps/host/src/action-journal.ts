@@ -61,6 +61,7 @@ import {
   authorizeCommand,
   commandCheckpoint,
   subscribeRunChanges,
+  commandConsentWindow,
   validateFootprintCaller,
   Refused,
 } from "./control.ts";
@@ -875,8 +876,11 @@ export class ActionJournal implements ReceiptReader {
       selectWork: async (spec, handle, select) => {
         if (handle.key.route !== spec.route)
           throw refused("Work belongs to another tool", "work.route");
-        if (admission.target.kind === "document" && handle.key.binding === "open" &&
-            canonicalRouteInput(handle.key.open) !== canonicalRouteInput(admission.target.ref))
+        if (
+          admission.target.kind === "document" &&
+          handle.key.binding === "open" &&
+          canonicalRouteInput(handle.key.open) !== canonicalRouteInput(admission.target.ref)
+        )
           throw refused("Work belongs to another document", "work.target");
         const identity = workKey(handle.key);
         let original = context.consumed.find(
@@ -982,11 +986,15 @@ export class ActionJournal implements ReceiptReader {
         // Retirement compares each submitted cell against live Work itself.
         if (
           postcondition ||
-          (moment !== "step" && moment !== "dispatch" &&
+          (moment !== "step" &&
+            moment !== "dispatch" &&
             row.recovery.length > 0 &&
-            row.steps.some((step) => step.kind === "native" && step.state === "succeeded" && step.dispatchedAt) &&
+            row.steps.some(
+              (step) => step.kind === "native" && step.state === "succeeded" && step.dispatchedAt,
+            ) &&
             row.steps.every((step) => step.state === "succeeded"))
-        ) continue;
+        )
+          continue;
         const current = await this.environment?.work?.view(
           dependency.probe.handle.key,
           dependency.probe.handle.key.route,
@@ -1081,7 +1089,12 @@ export class ActionJournal implements ReceiptReader {
     );
   }
 
-  async invoke(raw: ActionAdmission, crossing: Crossing, resume = false): Promise<ActionReceipt> {
+  async invoke(
+    raw: ActionAdmission,
+    crossing: Crossing,
+    resume = false,
+    retirementOnly = false,
+  ): Promise<ActionReceipt> {
     const admission = actionAdmissionSchema.parse(structuredClone(raw));
     const portable = commands[admission.key as keyof typeof commands];
     if (portable)
@@ -1109,6 +1122,15 @@ export class ActionJournal implements ReceiptReader {
       if (prior.steps.some((step) => step.state === "unknown" || step.state === "running"))
         throw Error("Recover every uncertain step before resuming the original action");
     }
+    // Native evidence authorizes only its host-owned retirement, never a fresh external effect.
+    const gate = (
+      current: ActionReceipt,
+      moment: Parameters<ActionJournal["gate"]>[1],
+      postcondition = false,
+    ) =>
+      retirementOnly && (postcondition || (moment !== "step" && moment !== "dispatch"))
+        ? Promise.resolve()
+        : this.gate(current, moment, postcondition);
     const context = this.context(admission, crossing, prior?.consumes ?? []);
     let executor!: CommandExecutor;
     let definition!: Command;
@@ -1172,7 +1194,7 @@ export class ActionJournal implements ReceiptReader {
           code: "target.required",
           message: "Target does not match the command contract",
         });
-      await this.environment?.target?.(admission.target, definition.needs);
+      if (!retirementOnly) await this.environment?.target?.(admission.target, definition.needs);
       if (prior?.prepared.state === "ready") executor.prepared.parse(prior.prepared.value);
       row = { ...row, input: structuredClone(admission.input) };
       if (!prior) {
@@ -1194,7 +1216,7 @@ export class ActionJournal implements ReceiptReader {
         context.consumed = structuredClone(row.consumes);
         context.basis = row.basis;
       }
-      await this.gate(row, "admit");
+      await gate(row, "admit");
     } catch (error) {
       observed = { error };
     }
@@ -1473,6 +1495,11 @@ export class ActionJournal implements ReceiptReader {
             }
             throw Error("An uncertain effect cannot be replayed");
           }
+          if (retirementOnly && (kind !== "publication" || key !== "work.retire"))
+            throw new ActionIncomplete(
+              "Recovered effects require explicit resume before new external work",
+              null,
+            );
           const incarnation = row.consumes.find(
             (dependency) =>
               dependency.kind === "incarnation" &&
@@ -1517,7 +1544,7 @@ export class ActionJournal implements ReceiptReader {
                   held.state === "succeeded" &&
                   (held.kind === "file" || (held.kind === "native" && held.dispatchedAt)),
               );
-            await this.gate(row, "step", postcondition);
+            await gate(row, "step", postcondition);
             entered = true;
             result = await effect(step.id);
             returned = true;
@@ -1600,8 +1627,15 @@ export class ActionJournal implements ReceiptReader {
       };
       let validated = row.prepared.state === "ready";
       const releaseRun = subscribeRunChanges(() => {
+        const consentWindow = commandConsentWindow(row.id);
+        if (
+          canonicalRouteInput(row.consentWindow ?? null) !==
+          canonicalRouteInput(consentWindow ?? null)
+        )
+          void save((current) => ({ ...current, consentWindow })).catch(() => {});
         try {
-          if (row.effects.length) commandCheckpoint(originOf(row.caller), row.consent);
+          if (!retirementOnly && row.effects.length)
+            commandCheckpoint(originOf(row.caller), row.consent);
         } catch {
           this.cancelWaits.get(row.id)?.();
           void save((current) => ({ ...current, cancellationRequested: true })).catch(() => {});
@@ -1616,7 +1650,7 @@ export class ActionJournal implements ReceiptReader {
               claims: row.claims,
               effects: row.effects,
             });
-          await this.gate(row, "authorize");
+          await gate(row, "authorize");
           const cancelled = new Promise<never>((_, reject) =>
             this.cancelWaits.set(row.id, () =>
               reject(new StepFailure("Command cancelled before authorization", 499, "refused")),
@@ -1625,7 +1659,9 @@ export class ActionJournal implements ReceiptReader {
           let consent: CommandConsent | null;
           try {
             consent = await Promise.race([
-              authorizeCommand(originOf(row.caller), row.id, row.effects),
+              retirementOnly
+                ? Promise.resolve(row.consent)
+                : authorizeCommand(originOf(row.caller), row.id, row.effects),
               cancelled,
             ]);
           } catch (error) {
@@ -1634,7 +1670,7 @@ export class ActionJournal implements ReceiptReader {
             this.cancelWaits.delete(row.id);
           }
           await save((current) => ({ ...current, state: "running", consent }));
-          await this.gate(row, "consented");
+          await gate(row, "consented");
           await this.waitForTurn(row.id);
           if (row.prepared.state !== "ready") {
             const value = structuredClone(
@@ -1644,7 +1680,7 @@ export class ActionJournal implements ReceiptReader {
             await save((current) => ({ ...current, prepared: { state: "ready", value } }));
           }
           validated = true;
-          await this.gate(row, "prepared");
+          await gate(row, "prepared");
           const result = await executor.run(context, execution);
           return definition.result ? definition.result.parse(result) : result;
         })
@@ -1832,6 +1868,7 @@ export class ActionJournal implements ReceiptReader {
       await this.invoke(
         { id: recovered.id, key: recovered.key, target: recovered.target, input: recovered.input },
         { caller: recovered.caller, basis: recovered.basis },
+        true,
         true,
       );
       return this.wait(id);

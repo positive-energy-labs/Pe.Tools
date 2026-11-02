@@ -1,3 +1,4 @@
+import { completeVerb } from "./verbs";
 import {
   useContext,
   useEffect,
@@ -7,7 +8,12 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
-import { actionStatusSchema, receiptsForWork, routeAddress } from "@pe/agent-contracts";
+import {
+  invocationOutcome,
+  actionStatusSchema,
+  receiptsForWork,
+  routeAddress,
+} from "@pe/agent-contracts";
 import type { RouteGraph, VerbDecl } from "@pe/agent-contracts";
 import { Route as rootRoute } from "../routes/__root";
 import { createRoute } from "@tanstack/react-router";
@@ -902,7 +908,7 @@ export function GraphHistory<P, W>({
             })
             .map((entry, index) => (
               <li key={`event:${index}`}>
-                {entry.verb ?? entry.kind} · {entry.kind} ·{" "}
+                {entry.verb ?? entry.kind} · {entry.outcome?.state ?? entry.kind} ·{" "}
                 {activityTime(
                   entry.at,
                   entry.kind === "receipt" && entry.press
@@ -910,6 +916,17 @@ export function GraphHistory<P, W>({
                         (start) => start.kind === "invocation" && start.press === entry.press,
                       )?.at
                     : undefined,
+                )}
+                {entry.outcome?.reason && <> | {entry.outcome.reason}</>}
+                {entry.outcome?.recovery && <> | {entry.outcome.recovery}</>}
+                {entry.outcome?.consentWindow && (
+                  <>
+                    {" "}
+                    | Consent open
+                    {entry.outcome.consentWindow.deadline
+                      ? ` until ${activityTime(entry.outcome.consentWindow.deadline)}`
+                      : "; awaiting approval"}
+                  </>
                 )}
                 {entry.kind === "feed" && <> · {JSON.stringify(entry.subject)}</>}
               </li>
@@ -919,7 +936,19 @@ export function GraphHistory<P, W>({
             .map((receipt) => (
               <li key={receipt.id}>
                 <a href={routeAddress("ops").link({ actionId: receipt.id })}>{receipt.key}</a> ·{" "}
-                {receipt.state} · {activityTime(receipt.startedAt)}
+                {invocationOutcome(receipt).state} · {activityTime(receipt.startedAt)}
+                {invocationOutcome(receipt).recovery && (
+                  <> | {invocationOutcome(receipt).recovery}</>
+                )}
+                {receipt.consentWindow && (
+                  <>
+                    {" "}
+                    | Consent open
+                    {receipt.consentWindow.deadline
+                      ? ` until ${activityTime(receipt.consentWindow.deadline)}`
+                      : "; awaiting approval"}
+                  </>
+                )}
                 {"error" in receipt && receipt.error ? ` · ${String(receipt.error)}` : ""}
               </li>
             )),
@@ -946,7 +975,8 @@ function GraphVerb<P, W>({
 }) {
   const control = owner.control(id, row, pane ? `pane:${pane}` : "stage");
   const review = control.review;
-  const result = owner.results.get(id);
+  const delivered = owner.results.get(id);
+  const result = delivered ? completeVerb(delivered, delivered.outcome?.input) : undefined;
   return (
     <span
       role="group"
@@ -967,7 +997,12 @@ function GraphVerb<P, W>({
       >
         {review ? `Commit ${verb.label}` : verb.label}
       </Button>
-      {result && "refusal" in result && <span role="status">{result.refusal.message}</span>}
+      {result && (
+        <span role="status">
+          {result.outcome.state}
+          {result.outcome.reason ? ` | ${result.outcome.reason}` : ""}
+        </span>
+      )}
     </span>
   );
 }

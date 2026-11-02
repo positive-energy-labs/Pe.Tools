@@ -77,6 +77,13 @@ test("waiting commands are durable, share approval, freeze submitted bytes and s
     expect([a.state, b.state, prepared, effects]).toEqual(["waiting", "waiting", 0, 0]);
     expect(await readFile(h.path, "utf8")).toContain('"state":"waiting"');
     expect(h.events.filter((e) => e.kind === "permission_request")).toHaveLength(1);
+    await vi.waitFor(async () => {
+      const waiting = (await h.journal.list())[0]!;
+      expect(waiting.outcome).toMatchObject({
+        state: "queued",
+        consentWindow: { deadline: expect.any(String) },
+      });
+    });
     h.approve();
     const settled = await Promise.all([h.journal.wait("a"), h.journal.wait("b")]);
     expect(settled.map((r) => r.state)).toEqual(["succeeded", "succeeded"]);

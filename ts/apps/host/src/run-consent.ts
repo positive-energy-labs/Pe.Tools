@@ -61,6 +61,18 @@ export class RunConsents {
     this.listeners.add(listener);
     return () => void this.listeners.delete(listener);
   }
+  /** Only the currently open window for this invocation; decisions stay in the transcript. */
+  commandWindow(id: string): { requestId: string; deadline?: string } | undefined {
+    for (const run of this.runs.values()) {
+      const state = run.state;
+      if (state.state === "waiting" && state.commands.includes(id))
+        return {
+          requestId: state.requestId,
+          ...(state.deadline ? { deadline: state.deadline } : {}),
+        };
+    }
+    return undefined;
+  }
   constructor(
     private readonly emit: (run: RunRef, event: ConsentEvent) => void,
     private readonly documentName?: (ref: DocumentRef) => string | undefined,

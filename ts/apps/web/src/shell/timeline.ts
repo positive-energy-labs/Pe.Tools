@@ -1,4 +1,4 @@
-import type { RouteStatePatch } from "@pe/agent-contracts";
+import type { InvocationOutcome, RouteStatePatch } from "@pe/agent-contracts";
 
 export interface TimelineEntry {
   kind: "invocation" | "receipt" | "checkpoint" | "feed";
@@ -9,6 +9,7 @@ export interface TimelineEntry {
   receiptId?: string;
   paths?: readonly RouteStatePatch["path"][];
   basis?: unknown;
+  outcome?: InvocationOutcome;
 }
 
 // Keep the last 200 route interactions in memory; durable History needs checkpoint storage.
@@ -41,6 +42,15 @@ export function createRouteTimeline() {
       const recorded = structuredClone(entry);
       entries = [...entries, recorded].slice(-TIMELINE_LIMIT);
       for (const listener of listeners) listener(structuredClone(recorded));
+    },
+    outcome(press: string, outcome: InvocationOutcome): void {
+      const index = entries.findIndex(
+        (entry) => entry.kind === "invocation" && entry.press === press,
+      );
+      if (index < 0) return;
+      const updated = { ...entries[index]!, outcome: structuredClone(outcome) };
+      entries = entries.map((entry, at) => (at === index ? updated : entry));
+      for (const listener of listeners) listener(structuredClone(updated));
     },
     read: (): readonly TimelineEntry[] => structuredClone(entries),
     subscribe(listener: (entry: TimelineEntry) => void): () => void {

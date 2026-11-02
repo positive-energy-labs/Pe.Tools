@@ -2,6 +2,7 @@ import { z } from "zod";
 import { graphSettings, type SettingsOwner } from "./settings";
 import {
   canonicalRouteInput,
+  invocationOutcome,
   commands,
   SALVAGE_VERB,
   salvageVerb,
@@ -45,7 +46,9 @@ import {
   recoveryOffered,
   recoveryVerb,
   type WorkHistory,
-  type InvocationResult,
+  type VerbCompletion,
+  type VerbDelivery,
+  completeVerb,
   type ReviewTicket,
   type VerbContext,
   type VerbSubject,
@@ -272,7 +275,7 @@ export function createGraphMount<P, W>(
   >();
   const reviews = new Map<string, { verb: string; ticket: ReviewTicket; origin: string }>();
   const paneRows = new Map<string, unknown>();
-  const results = new Map<string, InvocationResult>();
+  const results = new Map<string, VerbCompletion>();
   const unsettledWorks = new Map<string, WorkKey | null>();
   const sequenceReceipts = new Map<string, ActionReceipt[]>();
   let active: string | null = null;
@@ -558,7 +561,7 @@ export function createGraphMount<P, W>(
     invalidate = true,
   ) => {
     if (disposed) return;
-    if (receipt.state === "waiting" || receipt.state === "running") return;
+
     key = unsettledWorks.has(receipt.id)
       ? unsettledWorks.get(receipt.id)!
       : press && dispatches.has(press)
@@ -569,10 +572,16 @@ export function createGraphMount<P, W>(
     if (invalidate) readings.acceptReceipt(receipt, declaration?.dirties ?? []);
     const identity = key ? workKey(key) : null;
     if (key) journalFor(key);
-    const stamp = canonicalRouteInput([receipt.id, receipt.state, receipt.effects]);
+    const stamp = canonicalRouteInput([
+      receipt.id,
+      receipt.state,
+      receipt.effects,
+      receipt.consentWindow,
+    ]);
     if (timeline.read().some((e) => e.receiptId === stamp)) return;
     timeline.append({
       kind: "receipt",
+      outcome: invocationOutcome(receipt),
       at: Date.now(),
       receiptId: stamp,
       press,
@@ -643,6 +652,7 @@ export function createGraphMount<P, W>(
               at: Date.now(),
               press,
               verb: id,
+              outcome: { id: press, state: "running", input: invoking?.input ?? null },
               basis: { workKey: key ? workKey(key) : null },
             });
             for (const reading of ids)
@@ -679,9 +689,14 @@ export function createGraphMount<P, W>(
     }
     return own;
   };
-  const consume = (id: string, result: InvocationResult) => {
+  const consume = (id: string, delivered: VerbDelivery) => {
+    const result =
+      "outcome" in delivered
+        ? (delivered as VerbCompletion)
+        : completeVerb(delivered, invoking?.input ?? null);
     if (disposed) return result;
     results.set(id, result);
+    if (result.press) timeline.outcome(result.press, result.outcome);
     if (result.state === "review")
       reviews.set(id, {
         verb: id,
@@ -834,14 +849,17 @@ export function createGraphMount<P, W>(
     bound: MountBinding,
     origin: string,
     answers?: unknown,
-  ): Promise<InvocationResult> => {
+  ): Promise<VerbCompletion> => {
     const inactive = blocked(id);
     if (inactive)
-      return {
-        state: "refused" as const,
-        press: null,
-        refusal: refuse("not-ready", inactive),
-      };
+      return completeVerb(
+        {
+          state: "refused" as const,
+          press: null,
+          refusal: refuse("not-ready", inactive),
+        },
+        bound.args,
+      );
     const verb = verbs[id];
     if (!verb) throw Error(`Unknown verb ${id}`);
     const review = reviews.get(id);
@@ -875,14 +893,17 @@ export function createGraphMount<P, W>(
         check();
       });
       if (!observed)
-        return {
-          state: "refused",
-          press: null,
-          refusal: refuse(
-            "not-ready",
-            "The staged Work has not arrived; read Work before previewing",
-          ),
-        };
+        return completeVerb(
+          {
+            state: "refused",
+            press: null,
+            refusal: refuse(
+              "not-ready",
+              "The staged Work has not arrived; read Work before previewing",
+            ),
+          },
+          bound.args,
+        );
     }
     // Another press cannot steal the running invocation's identity.
     active = id;

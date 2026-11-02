@@ -1,3 +1,4 @@
+import { invokeCommand } from "./command-fixture.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -64,10 +65,16 @@ test.each([false, true])(
             await context.selectWork(spec, handle);
             return {
               effects: [{ kind: "file", path: "destination" }],
-
             };
           },
-          recover: async (step) => ({ step: { ...step, state: "succeeded", result: { written: 13 } }, evidence: { nativeReceipt: "confirmed" } }),
+          recover: async (step) => ({
+            step: {
+              ...step,
+              state: "succeeded",
+              result: { written: 13, changes: [{ before: "old", after: "new" }] },
+            },
+            evidence: { nativeReceipt: "confirmed" },
+          }),
           async run(_context, execution) {
             await execution.step("native", "write", {}, async (id) => {
               await journal.markDispatched(id);
@@ -93,19 +100,76 @@ test.each([false, true])(
         { caller: { kind: "human", via: "local" }, basis: null },
       );
       expect((await journal.wait("once")).state).toBe("unknown");
-      if (changed) await work.publish(key, spec.route, [{ path: ["fields", "chosen", "edit"], value: { value: 21 } }], handle.revision);
+      if (changed)
+        await work.publish(
+          key,
+          spec.route,
+          [{ path: ["fields", "chosen", "edit"], value: { value: 21 } }],
+          handle.revision,
+        );
       const restarted = new ActionJournal(join(directory, "commands.jsonl"));
-      restarted.bindCommands({ work, resolve: () => executor, probe: async () => "destination-after" });
+      restarted.bindCommands({
+        work,
+        resolve: () => executor,
+        probe: async () => "destination-after",
+        target: async () => {
+          throw Error("Original session is gone");
+        },
+      });
       const result = await restarted.recover("once");
       expect(writes).toBe(1);
       expect(result.state).toBe("succeeded");
-      expect(result.steps[0]).toMatchObject({ state: "succeeded", result: { written: 13 } });
+      expect(result.steps[0]).toMatchObject({
+        state: "succeeded",
+        result: { written: 13, changes: [{ before: "old", after: "new" }] },
+      });
+      const reloaded = (await new ActionJournal(join(directory, "commands.jsonl")).list())[0]!;
+      expect(reloaded.steps[0]).toMatchObject({
+        result: { changes: [{ before: "old", after: "new" }] },
+      });
+      expect(reloaded.outcome).toMatchObject({ id: "once", state: "succeeded", input: {} });
       const current = schema.parse((await work.view(key, spec.route))!.doc);
       expect(current.fields.chosen?.edit).toEqual(changed ? { value: 21 } : null);
-      expect((await restarted.resume("once", { caller: { kind: "human", via: "local" }, basis: null })).state).toBe("succeeded");
+      expect(
+        (await restarted.resume("once", { caller: { kind: "human", via: "local" }, basis: null }))
+          .state,
+      ).toBe("succeeded");
       expect(writes).toBe(1);
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
   },
 );
+
+test("resume reconciles uncertain native effects before permitting any retry", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "pe-unknown-retry-"));
+  try {
+    const journal = new ActionJournal(join(directory, "commands.jsonl"));
+    let writes = 0,
+      reads = 0;
+    const crossing = { caller: { kind: "human" as const, via: "local" as const }, basis: null };
+    await invokeCommand(
+      journal,
+      { id: "uncertain", key: "probe.uncertain", target: { kind: "host" }, input: {}, ...crossing },
+      async () => null,
+      async (execution) =>
+        execution.step("native", "write", {}, async () => {
+          writes++;
+          throw new StepFailure("Disconnected", 503, "unknown");
+        }),
+      false,
+      {
+        recover: async (step) => {
+          reads++;
+          return { step, evidence: { unavailable: true } };
+        },
+      },
+    );
+    expect((await journal.wait("uncertain")).state).toBe("unknown");
+    expect((await journal.resume("uncertain", crossing)).state).toBe("unknown");
+    expect(reads).toBe(1);
+    expect(writes).toBe(1);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
