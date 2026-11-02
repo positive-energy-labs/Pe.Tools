@@ -1,5 +1,5 @@
 // One registration authors the manifest, typed Work, operations and pane renderers.
-export function register({ z, field, pane, split, workWriteCommand, writeIntentSchema, descriptor }) {
+export function register({ z, field, pane, split, workWriteCommands, writeIntentSchema, descriptor }) {
   const route = descriptor.workRoute;
   const write = "pod.pipes.set-parameter";
   const roster = "pod.pipes.roster", detail = "pod.pipes.detail";
@@ -13,7 +13,7 @@ export function register({ z, field, pane, split, workWriteCommand, writeIntentS
   const entries = {
     [roster]: query("Read piping systems", z.object({}).default({})),
     [detail]: query("Read a piping system", z.object({ uniqueId: z.string() })),
-    [write]: workWriteCommand(route, write, { axes: { subject: "Elements", touches: ["Metadata"], effect: "ModelWrite", cost: "Mutation", cardinality: "Many" }, says: "Set a pipe parameter", native: ["revit.apply.parameter-values"], needs: "document", effect: "command", dirties: ["snapshot"], input: edit }),
+    ...workWriteCommands(route, write, { axes: { subject: "Elements", touches: ["Metadata"], effect: "ModelWrite", cost: "Mutation", cardinality: "Many" }, says: "Set a pipe parameter", native: ["revit.apply.parameter-values"], needs: "document", effect: "command", dirties: ["snapshot"], input: edit }),
   };
   const directory = { path: `/tool/${encodeURIComponent(descriptor.key)}`, title: "Pipes", label: "Pipes", icon: "Boxes", category: "Ask / automate", blurb: work.description, aliases: ["piping"], exposure: "Main", listed: true, runtimeNeed: "Revit", satellites: [], surfaces: { web: "full", pwa: "full", tray: false } };
   const graph = {

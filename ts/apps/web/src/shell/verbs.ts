@@ -12,6 +12,7 @@ import {
   type RouteStatePatch,
   type RouteStateWriteResult,
   type SemanticActionKey,
+  writePreviewKey,
   type StageDecl,
   type VerbDecl,
   type WorkHandle,
@@ -811,8 +812,8 @@ async function invokeCore<C extends Caller>(
             if (binding.command && "writeBoundary" in commands[binding.command] && !ctx.fixture) {
               await prepareCommand(
                 scope,
-                binding.command,
-                { previewOnly: true } as CommandInput<typeof binding.command>,
+                writePreviewKey(binding.command),
+                {} as CommandInput<SemanticActionKey>,
                 binding.waitSeconds,
               );
               const afterPreview = snapshotNow();

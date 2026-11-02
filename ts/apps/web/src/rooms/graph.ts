@@ -202,7 +202,7 @@ export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = defineRoute
         waitSeconds: NATIVE_APPLY_WAIT_S,
         ready: (_, input) => input.refusal,
         prepare: async (scope, input) => {
-          await prepareCommand(scope, "rooms.write", { previewOnly: true });
+          await prepareCommand(scope, "rooms.write.preview", {});
           return input.request;
         },
         intent: () => ({}),

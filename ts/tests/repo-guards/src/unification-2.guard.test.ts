@@ -2,8 +2,6 @@ import { describe, expect, it } from "vite-plus/test";
 import baseline from "./unification-2.baseline.json" with { type: "json" };
 import { census, declarationLines, selectionSlots, syntax } from "./unification-2-census.ts";
 import { root } from "./unification-2-census.ts";
-import { writeFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 
 const baselinePath = "ts/tests/repo-guards/src/unification-2.baseline.json";
@@ -37,10 +35,6 @@ describe("unification 2 ratchets (ADR 0026 D7, ADR 0027/0028)", () => {
       expect(offenders.length, `${law} offenders:\n${offenders.join("\n")}`).toBeLessThanOrEqual(
         cap,
       );
-      if (offenders.length < cap) {
-        (baseline as Record<string, number>)[law] = offenders.length;
-        writeFileSync(resolve(root, baselinePath), `${JSON.stringify(baseline, null, 2)}\n`);
-      }
     });
 });
 

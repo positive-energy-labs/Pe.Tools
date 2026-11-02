@@ -523,8 +523,8 @@ export const workingPhaseOf = (doc: DuctsRouteDocument | null) => {
 };
 
 /**
- * What `ducts.preview-losses` and `ducts.apply-losses` send; the host adds `previewOnly` and calls
- * the native `ducts.apply`. Mirrors the generated `DuctsApply.Req.Request` field for field (the web
+ * What `ducts.preview-losses` and `ducts.apply-losses` send; the host calls the native
+ * `ducts.apply.preview` (TransactRead) or `ducts.apply` (ModelWrite). Mirrors the generated `DuctsApply.Req.Request` field for field (the web
  * test pins the two types to each other). Built by the web from the edited cells and Pe's own
  * lookup: one fitting row per instance of an edited rule under the rule's chosen table; the
  * equipment rows are the edited `esp`, through the `fanStatic` slot, and the flow rows the resolved
@@ -664,8 +664,8 @@ export const ductsApplyInputSchema = z.strictObject({
 export type DuctsApplyInput = z.infer<typeof ductsApplyInputSchema>;
 
 /**
- * What `ducts.preview-heal` and `ducts.apply-heal` send; the host adds `previewOnly` and calls the
- * native `ducts.heal` (`DuctsHeal.Req.Request`). Each group is one transaction on apply. A group's
+ * What `ducts.preview-heal` and `ducts.apply-heal` send; the host calls the native
+ * `ducts.heal.preview` or `ducts.heal` (`DuctsHeal.Req.Request`). Each group is one transaction on apply. A group's
  * items are the route's Heal row (ducts-domain `heal.ts`), keys `elementId:connectorIndex`; a group
  * sent without items is planned by the host from a fresh snapshot with the same classifier, so an
  * agent names the group and reads the plan back from the preview.
@@ -693,8 +693,8 @@ export const ductsHealInputSchema = z.strictObject({
 export type DuctsHealInput = z.infer<typeof ductsHealInputSchema>;
 
 /**
- * What `ducts.preview-assign-fan` and `ducts.apply-assign-fan` send; the host adds `previewOnly` and
- * calls the native `ducts.assign-fan` (`DuctsAssignFan.Req.Request`): make the unit the base equipment
+ * What `ducts.preview-assign-fan` and `ducts.apply-assign-fan` send; the host calls the native
+ * `ducts.assign-fan.preview` or `ducts.assign-fan` (`DuctsAssignFan.Req.Request`): make the unit the base equipment
  * of the Revit system (`ducts.snapshot` systems[].id and an equipment node id).
  */
 export const ductsAssignFanInputSchema = z.strictObject({

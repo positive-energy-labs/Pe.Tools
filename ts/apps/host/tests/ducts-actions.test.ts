@@ -12,6 +12,5 @@ test("heal retires only completely receipt-confirmed intent", () => {
   expect(healedCellPaths(input, receipt("healed"))).toEqual([["writeIntent"]]);
   for (const outcome of ["refused", "failed", "partial"])
     expect(healedCellPaths(input, receipt(outcome))).toEqual([]);
-  expect(healedCellPaths({ ...input, previewOnly: true }, receipt("healed"))).toEqual([]);
   expect(healedCellPaths(input, { ...receipt("healed"), groups: [] })).toEqual([]);
 });

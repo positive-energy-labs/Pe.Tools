@@ -238,11 +238,11 @@ for (const foreign of [false, true])
             undefined,
             foreign
               ? {
-                  work: { key, expectedRevision: staged.revision },
+                  work: { key, revision: staged.revision },
                 }
               : {
                   ...input,
-                  work: { key, expectedRevision: staged.revision },
+                  work: { key, revision: staged.revision },
                 },
           ),
         );
@@ -328,7 +328,7 @@ test("kernel gap: preview seal refuses apply after Work changes", () =>
       );
       yield* post(
         intent("preview", "ducts.preview-losses", undefined, {
-          work: { key: workKey, expectedRevision: staged.revision },
+          work: { key: workKey, revision: staged.revision },
         }),
       );
       const preview = yield* dispatchOrReceipt(owner, outgoing, "preview", answer);
@@ -341,7 +341,7 @@ test("kernel gap: preview seal refuses apply after Work changes", () =>
       expect(changed.ok).toBe(true);
       yield* post(
         intent("apply", "ducts.apply-losses", undefined, {
-          work: { key: workKey, expectedRevision: changed.revision },
+          work: { key: workKey, revision: changed.revision },
         }),
       );
       const next = yield* dispatchOrReceipt(owner, outgoing, "apply", answer);
@@ -369,7 +369,7 @@ test("unknown outcome blocks a new invocation from dispatching the same write", 
       const staged = yield* Effect.promise(() =>
         work.apply(workKey, "ducts", "human", edit(200), 0),
       );
-      const payload = { work: { key: workKey, expectedRevision: staged.revision } };
+      const payload = { work: { key: workKey, revision: staged.revision } };
       yield* post(intent("pre-unknown", "ducts.preview-losses", undefined, payload));
       const preview = yield* dispatchOrReceipt(owner, outgoing, "pre-unknown", answer);
       expect(preview.kind).toBe("dispatch");
@@ -402,7 +402,7 @@ test("host-derived preview and apply send the captured Work flow and retire only
           0,
         ),
       );
-      const payload = { work: { key: workKey, expectedRevision: staged.revision } };
+      const payload = { work: { key: workKey, revision: staged.revision } };
       for (const [id, key, previewOnly] of [
         ["preview-derived", "ducts.preview-losses", true],
         ["apply-derived", "ducts.apply-losses", false],
@@ -410,7 +410,10 @@ test("host-derived preview and apply send the captured Work flow and retire only
         yield* post(intent(id, key, undefined, payload));
         const next = yield* dispatchOrReceipt(owner, outgoing, id, answer);
         expect(next.kind, JSON.stringify(next)).toBe("dispatch");
+        // The preview reaches the TransactRead leaf; only the apply entry reaches the ModelWrite leaf.
+        expect(next.frame.request!.operationKey).toBe(previewOnly ? "ducts.apply.preview" : "ducts.apply");
         const native = JSON.parse(next.frame.request!.payloadJson);
+        expect(native).not.toHaveProperty("previewOnly");
         expect(native.terminalFlows.find((row: { id: number }) => row.id === 4)?.cfm).toBe(200);
         yield* answer(next.frame.request!.requestId, {
           ...response,

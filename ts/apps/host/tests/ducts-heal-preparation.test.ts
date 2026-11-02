@@ -21,10 +21,9 @@ test("heal preparation crosses the geometry gate with bounded seeds, metadata ro
 });
 
 test("heal retires its consumed intent only after every requested item is receipt-confirmed", () => {
-  const input = { previewOnly: false, groups: [{ group: "g10", items: [{ key: "cap:10:0" }] }] };
+  const input = { groups: [{ group: "g10", items: [{ key: "cap:10:0" }] }] };
   const result = { previewOnly: false, groups: [{ group: "g10", outcome: "healed", items: [{ key: "cap:10:0", outcome: "healed" }] }] } as DuctsHeal.Res.Response;
   expect(healedCellPaths(input, result)).toEqual([["writeIntent"]]);
-  expect(healedCellPaths({ ...input, previewOnly: true }, result)).toEqual([]);
   expect(healedCellPaths(input, { ...result, previewOnly: true })).toEqual([]);
   expect(healedCellPaths(input, { ...result, groups: [] })).toEqual([]);
   expect(healedCellPaths(input, { ...result, groups: [{ ...result.groups[0]!, items: [] }] })).toEqual([]);

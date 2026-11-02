@@ -46,9 +46,13 @@ test("live MUAS preview/apply seals ignore traversal diagnostics but retain mode
   expect(apply.seal.dependencies).not.toBe(preview.seal.dependencies); // The live red loop.
   const executor = resolve("ducts.apply-losses");
   const seal = (capture: typeof preview) => {
+    // The 2026-11-02 capture predates the preview entry: its native input carried the retired
+    // previewOnly flag, which the old projection stripped. The mode is now the op key, never input.
+    const { previewOnly: _flag, ...input } = capture.value.input as Record<string, unknown>;
     // Exercise the real producer projection, which runs during acquisition before executor.seal.
     const value = {
       ...capture.value,
+      input,
       dependencies: {
         ...capture.value.dependencies,
         snapshot: ductWriteEvidence(capture.value.dependencies.snapshot as unknown as DuctSnapshot),
@@ -124,7 +128,6 @@ test.each(writes)("%s preview round-trips its public response contract", async (
     takenAt: "2026-11-02T15:17:11.675Z",
     seal: { requestHash: "request", work: {}, incarnation: {}, dependencies: "dependencies" },
   };
-  if (key.startsWith("ducts.")) value.input.previewOnly = true;
   const result = await executor.run(
     {
       admission: {
@@ -154,4 +157,8 @@ test("captured families preparation produces a lossless preview response", async
 test("captured successful families preview response round-trips without losing its seal", async () => {
   const { default: captured } = await import("./fixtures/families-live-preview-20261102.json");
   expect(commands["families.apply"].result.parse(captured.response)).toEqual(captured.response);
+});
+
+test.each(writes)("%s is behind the Work write boundary, keyed by its catalog axis", (key) => {
+  expect(resolve(key).boundary).toBe("work");
 });

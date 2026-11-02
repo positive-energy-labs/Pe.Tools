@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { Effect } from "effect";
 import { expect, test, vi } from "vite-plus/test";
 import { RouteWorkspace } from "@pe/runtime";
-import { address, roomEditKey, tools } from "@pe/agent-contracts";
+import { address, commands, roomEditKey, tools } from "@pe/agent-contracts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { markDispatched } from "../src/action-dispatch.ts";
 import { commandResources } from "../src/command-reads.ts";
@@ -88,21 +88,25 @@ test.each(["selected", "unrelated", "none"] as const)(
       const rendered = (await work.read(key, "rooms"))!;
       const owner = new ActionJournal(join(directory, "journal.jsonl"));
       const deps = { workspace: work, sdk: sdkSessions };
-      const entry = workWriteBoundary(
-        takeoffExecutors(new TakeoffCaptures(directory), bridge, deps)["rooms.write"],
-        bridge,
-        deps,
-      );
+      const write = takeoffExecutors(new TakeoffCaptures(directory), bridge, deps)["rooms.write"];
+      const entries: Record<string, ReturnType<typeof workWriteBoundary>> = {
+        "rooms.write": workWriteBoundary(write, bridge, deps),
+        "rooms.write.preview": workWriteBoundary(
+          { ...write, definition: commands["rooms.write.preview"] },
+          bridge,
+          deps,
+        ),
+      };
       owner.bindCommands({
         ...commandResources(bridge, deps, async (id) => (await owner.list(undefined, id))[0]),
-        resolve: () => entry,
+        resolve: (key) => entries[key]!,
       });
       await owner.invoke(
         {
           id: "preview",
-          key: "rooms.write",
+          key: "rooms.write.preview",
           target: { kind: "document", ref: target },
-          input: { work: { key, revision: rendered.revision }, previewOnly: true },
+          input: { work: { key, revision: rendered.revision } },
         },
         { caller: { kind: "human", via: "local" }, basis: { kind: "human" } },
       );

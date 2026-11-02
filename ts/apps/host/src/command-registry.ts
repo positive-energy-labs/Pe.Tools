@@ -21,7 +21,7 @@ import { readNativeReceipt } from "./native-receipts.ts";
 import { Effect } from "effect";
 import { CANCEL_OPERATION_KEY } from "./bridge.ts";
 import { commandCatalogAxes } from "../../../packages/agent-contracts/src/command-axes.ts";
-import { commands } from "@pe/agent-contracts";
+import { commands, type WriteBoundaryBinding } from "@pe/agent-contracts";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 
 /** Composed once for this exact runtime. Invocation-local facts live only in bind/prepare. */
@@ -79,13 +79,35 @@ export function commandRegistry(
     recover: entry.recover ?? recover,
     cancel: entry.cancel ?? cancel,
   });
-  for (const [key, entry] of Object.entries(implementations))
-    implementations[key] = complete(
+  // A preview entry with no executor of its own is the write's executor bound in its preview phase:
+  // it runs the same bind/prepare and returns the sealed request without calling the write leaf.
+  const ownExecutors = new Set(Object.keys(implementations));
+  for (const [key, definition] of Object.entries(commands)) {
+    const boundary = (definition as { writeBoundary?: WriteBoundaryBinding }).writeBoundary;
+    if (boundary?.phase !== "preview" || implementations[key]) continue;
+    const write = implementations[boundary.key];
+    if (!write) throw Error(`Preview ${key} has no write executor ${boundary.key}`);
+    implementations[key] = { ...write, definition };
+  }
+  // The wrap is keyed on the catalog axis, never on a definition's shape: a ModelWrite whose
+  // definition carries no typed apply-phase `writeBoundary` is refused at boot instead of running unsealed.
+  // Previews (TransactRead) carry the preview phase and are wrapped too; every other command is untouched.
+  for (const [key, entry] of Object.entries(implementations)) {
+    const modelWrite =
+      commandCatalogAxes[key as keyof typeof commandCatalogAxes]?.effect === "ModelWrite";
+    const boundary =
       typeof entry.definition !== "function" && "writeBoundary" in entry.definition
-        ? workWriteBoundary(entry, bridge, deps)
-        : entry,
-      key,
-    );
+        ? (entry.definition.writeBoundary as WriteBoundaryBinding)
+        : undefined;
+    if (modelWrite && boundary?.phase !== "apply")
+      throw Error(`ModelWrite ${key} has no typed apply writeBoundary; build it with workWriteCommands`);
+    const wrapped = boundary
+      ? workWriteBoundary(entry, bridge, deps, undefined, ownExecutors.has(key) && boundary.phase === "preview")
+      : entry;
+    if (modelWrite && wrapped.boundary !== "work")
+      throw Error(`ModelWrite ${key} is not behind the Work write boundary`);
+    implementations[key] = complete(wrapped, key);
+  }
   for (const key of Object.keys(commands))
     if (!implementations[key]) throw Error(`Semantic command '${key}' has no executor`);
   return (key) => {
@@ -93,7 +115,7 @@ export function commandRegistry(
     if (pod)
       return complete(
         "writeBoundary" in pod.executor.definition
-          ? workWriteBoundary(pod.executor, bridge, deps, undefined, pod.work)
+          ? workWriteBoundary(pod.executor, bridge, deps, pod.work)
           : pod.executor,
         key,
       );

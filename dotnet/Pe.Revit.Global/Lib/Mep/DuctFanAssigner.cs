@@ -17,11 +17,11 @@ namespace Pe.Revit.Global.Lib.Mep;
 public static class DuctFanAssigner {
     private sealed class Refused(string message) : Exception(message);
 
-    public static DuctAssignFanResult Assign(Document doc, DuctAssignFanRequest request) {
+    public static DuctAssignFanResult Assign(Document doc, DuctAssignFanRequest request, bool preview) {
         var system = doc.GetElement(request.SystemId.ToElementId()) as MechanicalSystem;
         var before = system is null ? null : DuctSnapshots.RevitSystem(system);
         DuctAssignFanResult Refuse(string reason, int? connector = null) =>
-            new(request.PreviewOnly, request.SystemId, request.UnitId, "refused", reason, connector, null, before, null);
+            new(preview, request.SystemId, request.UnitId, "refused", reason, connector, null, before, null);
         if (system is null) return Refuse($"element {request.SystemId} is not a duct system");
         Connector port;
         try {
@@ -31,7 +31,6 @@ public static class DuctFanAssigner {
         }
 
         var diagnostics = new List<(bool IsError, string Message)>();
-        var preview = request.PreviewOnly;
         using var all = preview ? new TransactionGroup(doc, DocumentSandbox.TransactionNamePrefix + "Pe Assign Fan (preview)") : null;
         _ = all?.Start();
         try {

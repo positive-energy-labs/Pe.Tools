@@ -38,18 +38,15 @@ test.each(writes)(
         id: "foreign",
         key,
         target: { kind: "document", ref: { session: "A", openId: "A" } },
-        input: {
-          work: {
-            key: {
-              binding: "open",
-              route: entry.writeBoundary.route,
-              target: null,
-              open: { session: "A", openId: "B" },
-            },
-            revision: 1,
-          },
-          previewOnly: false,
-        },
+        input: (() => {
+          const foreign = {
+            binding: "open",
+            route: entry.writeBoundary.route,
+            target: null,
+            open: { session: "A", openId: "B" },
+          };
+          return { work: { key: foreign, revision: 1 } };
+        })(),
       },
     } as unknown as CommandContext;
     const boundary = workWriteBoundary(executor, {

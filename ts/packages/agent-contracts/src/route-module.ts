@@ -45,6 +45,11 @@ export interface ExecutableRouteModule<B> extends RouteModule<Record<string, B>>
   work: RouteStateSpec<z.ZodType>;
   entries: Readonly<Record<string, Command & { axes: CatalogAxes }>>;
 }
+const previewOf = (entry: Command) => {
+  const boundary = (entry as { writeBoundary?: import("./write-intent.ts").WriteBoundaryBinding })
+    .writeBoundary;
+  return boundary?.phase === "apply" ? boundary.previewKey : undefined;
+};
 export function validateExecutableRouteModule<B>(
   module: ExecutableRouteModule<B>,
   actualHash: string,
@@ -61,6 +66,7 @@ export function validateExecutableRouteModule<B>(
       key: `command:${key}`,
       uses: entry.native ?? [],
       ...entry.derivation,
+      ...(previewOf(entry) ? { previewBy: `command:${previewOf(entry)}` } : {}),
     })),
   ]);
   if (module.work.route !== module.graph.key) throw Error("Work belongs to another route");

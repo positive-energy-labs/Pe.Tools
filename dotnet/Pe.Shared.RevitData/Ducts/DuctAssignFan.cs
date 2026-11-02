@@ -5,11 +5,11 @@ namespace Pe.Shared.RevitData.Ducts;
 // equipment, the first rung of the fan proposal (`@pe/ducts-domain/unit-roles.ts`). The op refuses a system
 // that already has base equipment (a swap drops the old base from the members and Revit does not put it
 // back), and a unit with no port of the system's air classification in that system or on its ducts (Revit
-// has no such check: a unit of another system becomes the base). PreviewOnly runs the write and its read
+// has no such check: a unit of another system becomes the base). `ducts.assign-fan.preview` runs the write and its read
 // back and rolls it back.
 
 /// <summary>SystemId is the MechanicalSystem; UnitId the mechanical equipment to make its base equipment.</summary>
-public sealed record DuctAssignFanRequest(bool PreviewOnly, long SystemId, long UnitId);
+public sealed record DuctAssignFanRequest(long SystemId, long UnitId);
 
 /// <summary>
 ///     Outcome: planned (preview), assigned, refused (Reason says why; nothing changed). Connector is the

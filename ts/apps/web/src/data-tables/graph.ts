@@ -140,7 +140,7 @@ export const dataTablesGraph: RouteGraph<DataTablesPage, DataTablesWork> = defin
               : null;
         },
         prepare: async (scope) => {
-          await prepareCommand(scope, "data-table.apply", { previewOnly: true });
+          await prepareCommand(scope, "data-table.apply.preview", {});
           return pruneReview(
             (scope.snapshot.work!.doc as DataTablesWork).draft!,
             scope.readings.tables!.value as TableHandle[],

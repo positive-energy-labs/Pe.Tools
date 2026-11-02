@@ -330,7 +330,7 @@ describe("reading graph", () => {
     done(matrix.deliver, 1);
     done(read.attempts[1].deliver, 2);
     const previewBasis = graph.get("matrix");
-    graph.acceptReceipt(receipt({ id: "preview", input: { previewOnly: true }, effects: [] }), ["families"]);
+    graph.acceptReceipt({ ...receipt({ id: "preview", effects: [] }), key: "families.apply.preview" }, ["families"]);
     expect(graph.get("matrix")).toBe(previewBasis);
     graph.acceptReceipt(receipt({ id: "plan", effects: [] }));
     expect(graph.get("matrix")).toBe(previewBasis);

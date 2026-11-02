@@ -10,7 +10,12 @@ describe("portable tool consumers", () => {
   it("lets the host choose sealed preview hashes and rejects competing apply intent", () => {
     const input = tools.families.commands["families.apply"].input;
     const work = { key: bindWork("families", null, "reviewed"), revision: 1 };
-    expect(input.parse({ work })).toEqual({ work, previewOnly: false });
+    expect(input.parse({ work })).toEqual({ work });
+    // The mode is the entry, never a flag: the write input refuses previewOnly outright.
+    expect(input.safeParse({ work, previewOnly: true }).success).toBe(false);
+    const preview = tools.families.commands["families.apply.preview"];
+    expect(preview.writeBoundary).toMatchObject({ phase: "preview", key: "families.apply" });
+    expect(preview.input.parse({ work })).toEqual({ work });
     expect(input.safeParse({ work, plan: "preview", include: ["12"] }).success).toBe(false);
     expect(
       input.safeParse({ rows: { plan: "preview", expectedPlanHashes: { "12": "forged" } } })
@@ -73,7 +78,7 @@ describe("portable tool consumers", () => {
       Exclude<z.output<typeof apply.input>["work"], undefined>
     >().toEqualTypeOf<WorkHandle>();
     const handle: WorkHandle = { key: bindWork("family", null, "reviewed"), revision: 13 };
-    expect(apply.work.bind({}, handle)).toEqual({ previewOnly: false, work: handle });
+    expect(apply.work.bind({}, handle)).toEqual({ work: handle });
     const observe = tools.family.commands["family.observe"];
     expect(observe.work.optional).toBe(true);
     expect(observe.input.parse({ readingId: "capture" })).toEqual({ readingId: "capture" });

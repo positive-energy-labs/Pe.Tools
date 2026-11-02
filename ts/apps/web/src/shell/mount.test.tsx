@@ -46,7 +46,7 @@ vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({
       typeof import("../../../../packages/mcps/src/shared/takeoff-action-client").runSemanticAction
     >
   ) =>
-    args[1]?.previewOnly === true
+    /\.preview$|^ducts\.preview-/.test(String(args[0]))
       ? Promise.resolve({ state: "succeeded", result: {} } as Awaited<
           ReturnType<
             typeof import("../../../../packages/mcps/src/shared/takeoff-action-client").runSemanticAction

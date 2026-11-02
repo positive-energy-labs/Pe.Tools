@@ -431,7 +431,7 @@ export function proposedStatic(snapshot: DuctSnapshot, result: LossResult, unit:
 }
 
 /**
- * The native `ducts.apply` request (less `previewOnly`) from the edit cells only: every instance of a edit rule under
+ * The native `ducts.apply` request from the edit cells only: every instance of a edit rule under
  * its chosen table (instances the table cannot price are left out, and the band says so), every
  * edit drop, the edit parameter slots, the edit `esp`, the resolved flow of every terminal in a
  * priced group (a group with an air mover; every precedence rung, so Revit's own value is carried
