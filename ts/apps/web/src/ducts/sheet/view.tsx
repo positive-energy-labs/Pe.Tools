@@ -11,7 +11,7 @@ import { Button } from "@pe/kit/lang/button";
 import { emptyListState, useList, type ListState } from "@pe/kit/lang/collection";
 import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
 import { Scroll } from "@pe/kit/lang/scroll";
-import { fanKey, stableFanKey, pressure, type FanPort } from "./model";
+import { fanKey, fanLabel, stableFanKey, pressure, type FanPort } from "./model";
 import { BlockerRow } from "./blocker-row";
 import type { Closer } from "./closer";
 import { subjectNamer } from "../subject-text";
@@ -55,18 +55,15 @@ export function Roster({ props }: { props: SheetViewProps }) {
     refusalOf: () => wait,
   });
   // A blank firm tag falls back to the unit's Mark or family; a name shared by two units (Chadds
-  // has two FC-23s) carries the unit id so the person can tell the rows apart.
+  // has two FC-23s) is told apart by level, system or order (fanLabel), never by an id.
   const nameOf = useMemo(() => subjectNamer(props.snapshot), [props.snapshot]);
   const unitName = (fan: FanPort) => fan.mark || nameOf(fan.unitId) || `unit ${fan.unitId}`;
-  const shared = useMemo(() => {
-    const units = new Map<string, Set<number>>();
-    for (const fan of props.roster)
-      units.set(unitName(fan), (units.get(unitName(fan)) ?? new Set()).add(fan.unitId));
-    return new Set([...units].filter(([, ids]) => ids.size > 1).map(([name]) => name));
+  const named = useMemo(
+    () => props.roster.map((fan) => ({ ...fan, mark: unitName(fan) })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.roster, nameOf]);
-  const labelOf = (fan: FanPort) =>
-    `${unitName(fan)}${shared.has(unitName(fan)) ? ` (${fan.unitId})` : ""} · port ${fan.portIndex}`;
+    [props.roster, nameOf],
+  );
+  const labelOf = (fan: FanPort) => fanLabel({ ...fan, mark: unitName(fan) }, named);
   const row = (fan: FanPort): ListRowParts => ({
     label: labelOf(fan),
     aside: fan.kind,

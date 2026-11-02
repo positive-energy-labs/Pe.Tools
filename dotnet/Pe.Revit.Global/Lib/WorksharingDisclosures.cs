@@ -2,6 +2,7 @@ using Pe.Shared.RevitData;
 
 namespace Pe.Revit.Global.Lib;
 
+// TODO: ducts.heal and ducts.assign-fan previews do not disclose yet (heal creates and replaces elements; disclose them from the rolled-back preview). Only ducts.apply does (Manual D defect 8).
 /// <summary>Document-owned: read checkout status for the elements a write will change. Null when not workshared.</summary>
 public static class WorksharingDisclosures {
     public static WorksharingDisclosure? Disclose(Document doc, IEnumerable<long> ids, IEnumerable<string>? creates = null) {
