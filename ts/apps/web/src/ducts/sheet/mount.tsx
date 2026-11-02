@@ -30,11 +30,16 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
   const owner = useContext(DuctsOwner)!;
   const search = useRouteSearchSlice((search) => search);
   const reading = owner.readings.get("sheet");
-  const value = reading.value as SheetReading | undefined;
+  // A failed selection cannot replace the last successful ledger. It is display-only until current.
+  const prior = reading.previous as SheetReading | undefined;
+  const target = owner.snapshot().target;
+  const sameDocument = target.kind === "document" && prior?.open?.overview.target.session === target.ref.session &&
+    prior.open.overview.target.openId === target.ref.openId;
+  const value = (reading.value ?? (sameDocument ? prior : undefined)) as SheetReading | undefined;
   const sheet = value?.open ?? null;
   const fans = owner.readings.get("fans");
   const roster = rosterOrder(
-    value?.rows ?? (fans.value as { rows: import("./model").FanPort[] } | null)?.rows ?? [],
+    (fans.value as { rows: import("./model").FanPort[] } | null)?.rows ?? value?.rows ?? [],
   );
   const snapshot = props.snapshot ?? EMPTY_SNAPSHOT;
   const state = useMemo(() => sheetState(sheet), [sheet]);

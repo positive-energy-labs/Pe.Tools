@@ -13,7 +13,7 @@ import { LAYOUT_FIXTURE, LAYOUT_ROSTER } from "./layout.fixture";
 import { COLOURS_FIXTURE } from "./colours.fixture";
 import { NAVIGATION_FIXTURE } from "./navigation.fixture";
 import { pricingJob } from "./pricing-job";
-import { stableFanKey } from "./sheet/model";
+import { selectedFans } from "./sheet/model";
 import type { DuctsPage } from "./graph";
 import sheetFixture from "./sheet/sheet.fixture.json";
 
@@ -36,7 +36,18 @@ export const ductsSeeds = Object.fromEntries(
     });
     const fans =
       name === "scene" || name === "layout"
-        ? ductsRosterResponseSchema.parse(name === "layout" ? LAYOUT_ROSTER : sheetFixture.roster)
+        ? ductsRosterResponseSchema.parse(
+            name === "layout"
+              ? {
+                  ...LAYOUT_ROSTER,
+                  rows: LAYOUT_ROSTER.rows.map((row, index) =>
+                    index < sheetFixture.roster.rows.length
+                      ? row
+                      : { ...row, uniqueId: `layout-fixture-${index.toString(16).padStart(8, "0")}` },
+                  ),
+                }
+              : sheetFixture.roster,
+          )
         : null;
     const seed: GraphSeedData<DuctsPage, DuctsRouteDocument> = {
       work,
@@ -50,9 +61,7 @@ export const ductsSeeds = Object.fromEntries(
         pricing: "result" in pricing ? pricing.result : null,
         fans,
         sheet: (page: DuctsPage) => {
-          const picked = (fans?.rows ?? []).filter(
-            (row) => page.fan === "all" || page.fan.includes(stableFanKey(row)),
-          );
+          const picked = selectedFans(page.fan, fans?.rows ?? []);
           // Synthetic layout evidence: each picked roster row has an independent overview.
           const opened = picked.map((row) => ({
             overview: ductsSheetOverviewSchema.parse({

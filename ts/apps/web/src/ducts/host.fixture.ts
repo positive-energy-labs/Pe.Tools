@@ -50,6 +50,7 @@ export class DuctsHostFixture {
   sequence = 0;
   prefix = crypto.randomUUID();
   failSheetDetail = false;
+  failFan: number | null = null;
   snapshotFailure: string | null = null;
   version(request: DuctsReadingRequest) {
     const key = readingKey(request);
@@ -177,13 +178,18 @@ export class DuctsHostFixture {
     if (url.pathname === "/pe/ducts/sheet") {
       this.requests.push({ key: "sheet", request: body });
       const detail = body.detail as { kind: string; pathId?: string } | undefined;
+      if (!detail && body.unitId === this.failFan)
+        return Response.json({ error: { code: "bridge", message: "Fan read refused" } }, { status: 409 });
       if (detail && this.failSheetDetail)
         return Response.json(
           { error: { code: "bridge", message: "Stale sheet basis; read a new overview" } },
           { status: 409 },
         );
       const base = { target: { session: "s", openId: "d" }, basis: this.sheetOverview.basis };
-      if (!detail) return Response.json({ ...this.sheetOverview, ...base });
+      if (!detail) return Response.json({ ...this.sheetOverview, ...base,
+        fan: { ...this.sheetOverview.fan!, ...sheetFixture.roster.rows.find((row) =>
+          row.unitId === body.unitId && row.portIndex === body.portIndex) },
+      });
       if (detail.kind === "inputs")
         return Response.json({ ...sheetFixture.inputs, inputs: this.sheetInputs, ...base });
       if (detail.kind === "elements") return Response.json({ ...sheetFixture.elements, ...base });

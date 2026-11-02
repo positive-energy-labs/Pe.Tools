@@ -23,6 +23,6 @@ export const fansAddress = {
   },
   agent: {
     policy:
-      "Pick fan marks with port indices through fan, a list or all. Each fan retains its own total.",
+      "Pick stable UniqueId@port keys from the fan roster through fan, a list or all. Each fan retains its own total.",
   },
 };

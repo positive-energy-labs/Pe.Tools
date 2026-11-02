@@ -24,4 +24,18 @@ export const rosterOrder = (rows: readonly FanPort[]) =>
     );
   });
 
-export const stableFanKey = (fan: Pick<FanPort, "mark" | "portIndex">) => `${fan.mark}@${fan.portIndex}`;
+/** Mark is a display label; only the document's UniqueId and connector identify a fan port. */
+export const stableFanKey = (fan: Pick<FanPort, "uniqueId" | "portIndex">) =>
+  `${fan.uniqueId}@${fan.portIndex}`;
+
+export function selectedFans<T extends Pick<FanPort, "uniqueId" | "portIndex">>(keys: string[] | "all", rows: readonly T[]): T[] {
+  if (keys === "all") return [...rows];
+  return [...new Set(keys)].map((key) => {
+    const row = rows.find((row) => stableFanKey(row) === key);
+    if (row) return row;
+    throw Error(`Fan link '${key}' is unavailable or uses a legacy mark/ElementId. Choose the fan from the roster to create a stable link.`);
+  });
+}
+
+export const fanLabel = (fan: Pick<FanPort, "mark" | "uniqueId" | "portIndex">, rows: readonly Pick<FanPort, "mark" | "uniqueId">[]) =>
+  `${fan.mark}${rows.some((row) => row.mark === fan.mark && row.uniqueId !== fan.uniqueId) ? ` (${fan.uniqueId.slice(-8)})` : ""} / port ${fan.portIndex}`;

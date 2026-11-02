@@ -37,7 +37,7 @@ import { blockerElements } from "./sheet/layers";
 
 import { detailOf } from "./sheet/tiers";
 
-import { stableFanKey, type Detail, type FanPort } from "./sheet/model";
+import { selectedFans, type Detail, type FanPort } from "./sheet/model";
 
 import { EMPTY_SNAPSHOT, sheetSnapshot } from "./sheet/scoped-snapshot";
 
@@ -211,21 +211,16 @@ function sheets(): UseSource<SheetReading> {
       const empty: SheetReading = { open: null, rows: fans?.rows ?? [], progress: null };
 
       const keys = page(ctx).fan;
-      const chosen = (fans?.rows ?? []).filter(
-        (row) => keys === "all" || keys.includes(stableFanKey(row)),
-      );
-      if (chosen.length > 32) return deliver({ kind: "failure", error: "Pick at most 32 fans for one combined picture" });
-      // TODO: Duplicate FC-23 marks (8732550 and 13760867 on Chadds) need stable roster identities before mark selection can distinguish them.
-      if (new Set(chosen.map(stableFanKey)).size !== chosen.length)
-        return deliver({
-          kind: "failure",
-          error: "Fan marks are ambiguous; give each fan a unique mark",
-        });
+      let chosen: FanPort[];
+      try {
+        chosen = selectedFans(keys, fans?.rows ?? []);
+        if (chosen.length > 32) throw Error("Pick at most 32 fans for one combined picture");
+      } catch (error) {
+        return deliver({ kind: "failure", error });
+      }
       if (!ref || !chosen.length) return deliver({ kind: "complete", value: empty, revision: 0 });
       const opened: OpenSheet[] = [];
       let serial = 0;
-
-      let base: DuctsSheetOverview | null = null;
 
       try {
         let rows = [...empty.rows];
@@ -241,8 +236,6 @@ function sheets(): UseSource<SheetReading> {
           const result = await callCompose(ctx, "ducts.sheet", { body: request });
 
           if (result.kind !== "overview") throw Error("Expected a fan sheet overview");
-
-          base = result;
 
           rows = rows.map((row) =>
             row.unitId === fan.unitId && row.portIndex === fan.portIndex
@@ -287,25 +280,7 @@ function sheets(): UseSource<SheetReading> {
       } catch (error) {
         if (ctx.signal.aborted) return;
 
-        // Stale detail is an explicit boundary. A fresh overview may be inspected; old details never survive it.
-
-        if (base && error instanceof Error && /stale sheet basis/i.test(error.message))
-          deliver({
-            kind: "part",
-            value: {
-              ...empty,
-              open: {
-                overview: base,
-                inputs: null,
-                elements: null,
-                worksheet: null,
-                worstLegs: [],
-                legs: null,
-              },
-            },
-            revision: ++serial,
-          });
-
+        // Failed combined reads publish nothing: the previous ledger survives as non-current.
         deliver({ kind: "failure", error });
       }
     },

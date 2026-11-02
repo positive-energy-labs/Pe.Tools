@@ -15,7 +15,8 @@
         "confirmed": false,
         "blockerCount": 1,
         "requiredEspInWg": null,
-        "complete": false
+        "complete": false,
+        "uniqueId": "9cb9f188-28aa-4094-8b76-785395cc35e1-00000001"
       },
       {
         "unitId": 22,
@@ -23,7 +24,8 @@
         "mark": "FC-23",
         "kind": "fan-coil",
         "side": "supply",
-        "ratedEspInWg": 0.4
+        "ratedEspInWg": 0.4,
+        "uniqueId": "9cb9f188-28aa-4094-8b76-785395cc35e1-00000002"
       },
       {
         "unitId": 23,
@@ -34,7 +36,17 @@
         "ratedEspInWg": 0.5,
         "blockerCount": 0,
         "requiredEspInWg": 0.193,
-        "complete": true
+        "complete": true,
+        "uniqueId": "9cb9f188-28aa-4094-8b76-785395cc35e1-00000003"
+      },
+      {
+        "unitId": 13760867,
+        "portIndex": 0,
+        "mark": "FC-23",
+        "kind": "fan-coil",
+        "side": "supply",
+        "ratedEspInWg": 0.4,
+        "uniqueId": "9cb9f188-28aa-4094-8b76-785395cc35e1-00d1fa63"
       }
     ],
     "slots": [

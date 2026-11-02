@@ -522,6 +522,7 @@ export const ductsRosterResponseSchema = z.object({
   rows: z.array(
     z.object({
       unitId: elementId,
+      uniqueId: z.string().min(1),
       portIndex,
       mark: z.string(),
       kind: z.enum(["fan-coil", "air-handler", "erv", "muas", "dehumidifier", "other"]),

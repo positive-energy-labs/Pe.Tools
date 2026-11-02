@@ -1,8 +1,9 @@
+// TODO: Re-drive duplicate FC-23 picking in the browser after triage regenerates the builtin directory hash (fixture route currently refuses the stale module hash).
 import { ductsGraph } from "../ducts/graph";
 import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { z } from "zod";
 import type { FanPort } from "../ducts/sheet/model";
-import { stableFanKey } from "../ducts/sheet/model";
+import { stableFanKey, fanLabel } from "../ducts/sheet/model";
 export const fansGraph = {
   ...ductsGraph,
   workRoute: "ducts",
@@ -21,7 +22,7 @@ export const fansGraph = {
   subjectField: {
     field: "fan" as const,
     noun: "fan",
-    keyKind: "fan-mark" as const,
+    keyKind: "UniqueId" as const,
     cardinality: "many" as const,
     roster: "fans",
     detail: "sheet",
@@ -45,7 +46,7 @@ export const fansGraph = {
         options: (value: unknown) =>
           ((value as { rows: FanPort[] } | null)?.rows ?? []).map((row) => ({
             id: stableFanKey(row),
-            label: `${row.mark} / port ${row.portIndex}`,
+            label: fanLabel(row, (value as { rows: FanPort[] }).rows),
           })),
       },
     },

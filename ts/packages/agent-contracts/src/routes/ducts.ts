@@ -37,7 +37,7 @@ const ductsFields = {
   /** The body under the Situation: the network picture (`network`) or the fan sheet (`sheet`). A view; it runs no verb. */
   stage: field(z.enum(["network", "sheet"]).default("network"), { url: "push", agent: "set" }),
   /** The fan route subjects, stable fan mark plus port index; empty closes them. */
-  fan: manyField("fan-mark", { url: "push", agent: "set" }),
+  fan: manyField("UniqueId", { url: "push", agent: "set" }),
   contextRadiusFt: picture.contextRadiusFt,
   sceneView: picture.sceneView,
   /**

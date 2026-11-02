@@ -609,6 +609,7 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
         const rating = inputs.units[String(port.unitId)]?.esp.value ?? null;
         rows.push({
           unitId: port.unitId,
+          uniqueId: snapshot.nodes.find((node) => node.id === port.unitId)?.uniqueId,
           portIndex: port.portIndex,
           mark: port.tag,
           kind: port.kind,
