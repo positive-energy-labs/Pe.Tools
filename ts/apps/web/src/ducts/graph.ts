@@ -33,7 +33,7 @@ import {
   type HealReview,
 } from "./reviews";
 
-import { capped } from "./selection";
+import { uniqueSystems } from "./selection";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 import { editPatches } from "@pe/ducts-domain/sheet/index";
@@ -64,14 +64,10 @@ const transient = <S extends z.ZodType>(schema: S) => ({
 export const ductsPageSchema = routeAddress("ducts").schema.extend({
   heal: healReviewSchema.nullable().default(null),
   sheetPath: z.string().default(""),
-  readAll: z.boolean().default(false),
-  allFans: z.boolean().default(false),
 });
 export type DuctsPage = { [K in keyof typeof fields]: z.output<(typeof fields)[K]["schema"]> } & {
   heal: HealReview | null;
   sheetPath: string;
-  readAll: boolean;
-  allFans: boolean;
 };
 
 const requestInput = <S extends z.ZodType>(request: S) =>
@@ -97,7 +93,7 @@ const ductCells = (families: CellsDecl<DuctsRouteDocument>[]): CellsDecl<DuctsRo
     return {
       ...family,
 
-      focus: (key) => ({ issue: cellFocus(segment, key) }),
+      focus: (key) => ({ selected: cellFocus(segment, key) }),
 
       ...(segment === "rules"
         ? {
@@ -125,45 +121,47 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
     },
   },
   directory: {
-  "path": "/ducts",
-  "title": "Ducts",
-  "label": "Pressure drop",
-  "exposure": "Main",
-  "runtimeNeed": "Revit for model reads and writes",
-  "icon": "Wind",
-  "category": "Calculate loads & airflow",
-  "blurb": "Review duct systems, stage pressure-drop inputs and rulings, and preview or apply the changes in Revit.",
-  "aliases": [
-    "duct",
-    "pressure",
-    "drop",
-    "static",
-    "pressure",
-    "airflow",
-    "fan",
-    "systems"
-  ],
-  "listed": true,
-  "satellites": [],
-  "surfaces": {
-    "web": "full",
-    "pwa": "full",
-    "tray": false
+    path: "/ducts",
+    title: "Ducts",
+    label: "Pressure drop",
+    exposure: "Main",
+    runtimeNeed: "Revit for model reads and writes",
+    icon: "Wind",
+    category: "Calculate loads & airflow",
+    blurb:
+      "Review duct systems, stage pressure-drop inputs and rulings, and preview or apply the changes in Revit.",
+    aliases: ["duct", "pressure", "drop", "static", "pressure", "airflow", "fan", "systems"],
+    listed: true,
+    satellites: [],
+    surfaces: {
+      web: "full",
+      pwa: "full",
+      tray: false,
+    },
+    resume: "document",
   },
-  "resume": "document"
-},
   key: "ducts",
   address: "ducts",
   name: "Ducts",
+  subjectField: {
+    field: "system",
+    noun: "system",
+    keyKind: "system-name",
+    cardinality: "many",
+    roster: "roster",
+    detail: "ducts",
+    pane: "e-systems",
+    show: (id) => id,
+  },
   subject: (page) =>
-    `${page.stage === "sheet" ? "Pricing fans" : "Pricing systems"} on ${page.stage === "sheet" ? (page.fan ? `fan ${page.fan}` : "this document") : page.system.join(" + ") || "this document"}`,
+    `${page.stage === "sheet" ? "Pricing fans" : "Pricing systems"} on ${page.stage === "sheet" ? (page.fan ? `fan ${page.fan}` : "this document") : (page.system === "all" ? "all systems" : page.system.join(" + ")) || "this document"}`,
   work: ductsRouteSchema,
   needs: "project",
 
   fields: {
     threadSearch: { ...fields.threadSearch, role: "query", url: fields.threadSearch.url },
     threadSort: { ...fields.threadSort, role: "query", url: fields.threadSort.url },
-    stage: { ...fields.stage, role: "stage", url: fields.stage.url ?? false },
+    stage: { ...field(z.enum(["network"]).default("network"), { url: "push" }), role: "stage" },
 
     contextRadiusFt: {
       ...fields.contextRadiusFt,
@@ -176,6 +174,7 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
     system: {
       ...fields.system,
       role: "subject",
+      editor: "pane",
       url: fields.system.url ?? false,
       picker: {
         reading: "roster",
@@ -188,7 +187,7 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
       },
     },
 
-    level: { ...fields.level, role: "subject", url: fields.level.url ?? false },
+    level: { ...fields.level, role: "query", url: fields.level.url ?? false },
 
     selected: { ...fields.selected, role: "selection", url: fields.selected.url ?? false },
 
@@ -218,28 +217,21 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
 
     viewport: { ...fields.viewport, role: "pose", url: fields.viewport.url ?? false },
 
-    issue: { ...fields.issue, role: "selection", url: fields.issue.url ?? false },
-
-    fan: { ...fields.fan, role: "selection", url: fields.fan.url },
+    fan: { ...fields.fan, role: "query", url: fields.fan.url },
     heal: transient(healReviewSchema.nullable().default(null)),
     sheetPath: transient(z.string().default("")),
-    readAll: transient(z.boolean().default(false)),
-    allFans: transient(z.boolean().default(false)),
   },
 
   transition: (current, patch) => {
-    const system = patch.system ? capped(patch.system) : current.system;
+    const system =
+      patch.system === "all" ? "all" : patch.system ? uniqueSystems(patch.system) : current.system;
 
-    const switched =
-      system.join("\n") !== current.system.join("\n") &&
-      !current.system.some((name) => system.includes(name));
-
-    const selected = patch.selected ?? (switched ? "" : current.selected);
+    const switched = JSON.stringify(system) !== JSON.stringify(current.system);
 
     return {
       patch: {
         ...(switched ? { selected: "", viewport: null } : {}),
-        ...(switched || selected !== current.selected ? { issue: "" } : {}),
+
         ...patch,
         ...(patch.system ? { system } : {}),
       },
@@ -439,7 +431,7 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
       kind: "use",
       source: "ducts.networks",
       deps: ["roster"],
-      args: (p) => ({ system: p.system, readAll: p.readAll }),
+      args: (p) => ({ system: p.system }),
       retire: "page",
     },
 
@@ -460,7 +452,7 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
       kind: "use",
       source: "ducts.sheet",
       deps: ["fans"],
-      args: (p) => ({ fan: p.fan, path: p.sheetPath, all: p.allFans }),
+      args: (p) => ({ fan: p.fan, path: p.sheetPath }),
       retire: "page",
     },
 
@@ -474,7 +466,13 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
 
   verbs: {
     "stage-write": workVerb(
-      { label: "Choose write scope", input: z.strictObject({ groups: z.array(z.string()).optional(), fan: z.object({ unitId: z.number().int(), systemId: z.number().int() }).optional() }) },
+      {
+        label: "Choose write scope",
+        input: z.strictObject({
+          groups: z.array(z.string()).optional(),
+          fan: z.object({ unitId: z.number().int(), systemId: z.number().int() }).optional(),
+        }),
+      },
       { patches: (_, input) => [{ path: ["writeIntent", "edit"], value: { value: input } }] },
     ),
     preview: commandVerb(
@@ -512,8 +510,7 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
         ready: requestReady,
 
         present: presentLosses,
-        prepare: (scope) =>
-          prepareCommand(scope, "ducts.preview-losses", {}, NATIVE_APPLY_WAIT_S),
+        prepare: (scope) => prepareCommand(scope, "ducts.preview-losses", {}, NATIVE_APPLY_WAIT_S),
 
         intent: () => ({}),
       },
@@ -619,7 +616,7 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
     "e-systems": {
       label: "Systems",
       purpose: "Choose a system to inspect",
-      draws: ["roster", "ducts", "pricing"],
+      draws: ["fans", "roster", "ducts", "pricing"],
       verbs: [],
     },
 
@@ -821,14 +818,7 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = {
       ],
       verbs: ["refresh", "preview", "price", "heal-preview", "heal", "fan-preview", "assign-fan"],
     },
-
-    sheet: {
-      word: "Pricing fans",
-      panes: ["sheet-roster", "sheet-inputs", "sheet-picture", "sheet-ledger"],
-      verbs: ["refresh", "preview", "price", "heal-preview", "heal", "fan-preview", "assign-fan"],
-    },
   },
 
-  stageOrder: ["network", "sheet"],
-
+  stageOrder: ["network"],
 };

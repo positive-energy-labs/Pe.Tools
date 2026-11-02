@@ -1,3 +1,4 @@
+// TODO: Add mesh-backed fixture evidence for combined multi-fan geometry; this seed proves UI state only.
 import {
   ductsRouteState,
   ductsRosterResponseSchema,
@@ -12,6 +13,7 @@ import { LAYOUT_FIXTURE, LAYOUT_ROSTER } from "./layout.fixture";
 import { COLOURS_FIXTURE } from "./colours.fixture";
 import { NAVIGATION_FIXTURE } from "./navigation.fixture";
 import { pricingJob } from "./pricing-job";
+import { stableFanKey } from "./sheet/model";
 import type { DuctsPage } from "./graph";
 import sheetFixture from "./sheet/sheet.fixture.json";
 
@@ -47,20 +49,28 @@ export const ductsSeeds = Object.fromEntries(
         catalogs: { tables: EMPTY_CATALOGS, findings: [] },
         pricing: "result" in pricing ? pricing.result : null,
         fans,
-        sheet: fans
-          ? {
-              rows: fans.rows,
-              progress: null,
-              open: {
-                overview: ductsSheetOverviewSchema.parse(sheetFixture.overview),
-                inputs: ductsSheetResponseSchema.parse(sheetFixture.inputs),
-                elements: ductsSheetResponseSchema.parse(sheetFixture.elements),
-                legs: ductsSheetResponseSchema.parse(sheetFixture.legs),
-                worstLegs: [],
-                worksheet: null,
+        sheet: (page: DuctsPage) => {
+          const picked = (fans?.rows ?? []).filter(
+            (row) => page.fan === "all" || page.fan.includes(stableFanKey(row)),
+          );
+          // Synthetic layout evidence: each picked roster row has an independent overview.
+          const opened = picked.map((row) => ({
+            overview: ductsSheetOverviewSchema.parse({
+              ...sheetFixture.overview,
+              fan: { ...sheetFixture.overview.fan, ...row },
+              totals: {
+                ...sheetFixture.overview.totals,
+                requiredEspInWg: row.requiredEspInWg ?? null,
               },
-            }
-          : { rows: [], progress: null, open: null },
+            }),
+            inputs: ductsSheetResponseSchema.parse(sheetFixture.inputs),
+            elements: ductsSheetResponseSchema.parse(sheetFixture.elements),
+            legs: ductsSheetResponseSchema.parse(sheetFixture.legs),
+            worstLegs: [],
+            worksheet: null,
+          }));
+          return { rows: fans?.rows ?? [], progress: null, opened, open: opened[0] ?? null };
+        },
         sheetSnapshot: fixture.snapshot,
       },
     };

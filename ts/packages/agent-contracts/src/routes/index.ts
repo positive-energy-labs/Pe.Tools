@@ -1,5 +1,6 @@
 import { zoneAuditAddress, rhvacSyncAddress, scheduleSpecsAddress, sessionAdminAddress } from "./g4-splits.ts";
 import type { RouteDeclaration } from "../route-field.ts";
+import { fansAddress } from "./fans.ts";
 import { ductsAddress } from "./ducts.ts";
 import { familiesAddress } from "./families.ts";
 import { familyAddress } from "./family.ts";
@@ -33,6 +34,7 @@ export const routeAddresses = {
   "schedule-specs": scheduleSpecsAddress,
   "session-admin": sessionAdminAddress,
   ducts: ductsAddress,
+  fans: fansAddress,
   families: familiesAddress,
   family: familyAddress,
   schedules: schedulesAddress,

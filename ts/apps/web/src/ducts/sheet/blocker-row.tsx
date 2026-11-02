@@ -101,7 +101,7 @@ export function BlockerRow({
       }}
       onClick={() => onFocus(focused ? null : blocker.id)}
     >
-      <span className="face-mono t-small text-ink-2" aria-label={blocker.kind} title={blocker.kind}>
+      <span className="face-mono t-small text-ink-2" aria-label={blocker.kind}>
         {GLYPH[blocker.kind]}
       </span>
       <span className="min-w-0 truncate">
@@ -130,9 +130,7 @@ export function BlockerRow({
         {effectWord(blocker.effectInWg)}
       </span>
       {consequence ? (
-        <span className="t-small col-span-2 col-start-2 truncate" title={blocker.detail}>
-          {blocker.detail}
-        </span>
+        <span className="t-small col-span-2 col-start-2 truncate">{blocker.detail}</span>
       ) : (
         <>
           {/* The input and verb act on the blocker, not the row's focus toggle. */}
@@ -175,7 +173,6 @@ export function BlockerRow({
                 triggerLabel={`${closer.verb} for ${blocker.kind}`}
                 aria-label={`${closer.verb} for ${blocker.kind}`}
                 disabled={closer.refusal != null}
-                title={closer.refusal ?? "Choose the table this fitting is priced with"}
                 items={[...closer.choices]}
                 keyOf={(choice) => `${choice.verb}|${choice.detail}`}
                 labelOf={(choice) => `${choice.verb} ${choice.detail}`}
@@ -218,11 +215,7 @@ export function BlockerRow({
             )}
           </span>
           {closer.refusal && (
-            <span
-              className="t-small col-span-2 col-start-2 truncate text-ink-2"
-              title={closer.refusal}
-              data-refusal=""
-            >
+            <span className="t-small col-span-2 col-start-2 truncate text-ink-2" data-refusal="">
               {closer.refusal}
             </span>
           )}

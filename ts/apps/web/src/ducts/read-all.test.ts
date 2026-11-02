@@ -69,7 +69,7 @@ function fixture() {
     workKey: host.key,
     workRevision: host.revision,
     work: host.doc,
-    page: ductsPageSchema.parse({ readAll: true }),
+    page: ductsPageSchema.parse({ system: "all" }),
   };
   const graph = createReadingGraph(ductsGraph, { scope, sources: ductsSources(), log: () => {} });
   releases.push(() => graph.dispose());
@@ -189,7 +189,7 @@ test("a transport recovery during a sweep preserves progress and pricing settles
 test("EX 1 pricing fails with words without read-all, retaining the native network", async () => {
   host.snapshot = noTerminalSnapshot();
   const { graph, scope } = fixture();
-  graph.update({ ...scope, page: { ...scope.page, system: ["EX 1"], readAll: false } });
+  graph.update({ ...scope, page: { ...scope.page, system: ["EX 1"] } });
   releases.push(graph.mount(["pricing"]));
   await waitFor(() => expect(graph.get("pricing").status).toBe("failed"));
   expect(graph.get("pricing").error).toBe(

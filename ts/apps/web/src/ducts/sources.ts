@@ -36,7 +36,7 @@ import { blockerElements } from "./sheet/layers";
 
 import { detailOf } from "./sheet/tiers";
 
-import type { Detail, FanPort } from "./sheet/model";
+import { stableFanKey, type Detail, type FanPort } from "./sheet/model";
 
 import { EMPTY_SNAPSHOT, sheetSnapshot } from "./sheet/scoped-snapshot";
 
@@ -56,6 +56,7 @@ export type OpenSheet = {
 
 export type SheetReading = {
   open: OpenSheet | null;
+  opened?: OpenSheet[];
   rows: FanPort[];
   progress: { done: number; total: number; mark: string; stopped: boolean } | null;
 };
@@ -96,12 +97,14 @@ function networks(): UseSource<NetworkSnapshot | null> {
 
       const roster = ctx.inputs.roster?.value as DuctSnapshot | null;
 
-      const names = page(ctx).system;
+      const authored = page(ctx).system;
+      const names =
+        authored === "all" ? (roster?.systems ?? []).map((system) => system.name) : authored;
 
       const wanted = [
         ...new Set(
           (roster?.systems ?? [])
-            .filter((system) => page(ctx).readAll || names.includes(system.name))
+            .filter((system) => names.includes(system.name))
             .map((system) => system.id),
         ),
       ];
@@ -206,22 +209,25 @@ function sheets(): UseSource<SheetReading> {
 
       const empty: SheetReading = { open: null, rows: fans?.rows ?? [], progress: null };
 
-      const [unitId, portIndex] = page(ctx).fan.split(":").map(Number);
-      const fanPort = page(ctx).fan ? { unitId: unitId!, portIndex: portIndex! } : null;
-
-      if (!ref || (!fanPort && !page(ctx).allFans))
-        return deliver({ kind: "complete", value: empty, revision: 0 });
-
+      const keys = page(ctx).fan;
+      const chosen = (fans?.rows ?? []).filter(
+        (row) => keys === "all" || keys.includes(stableFanKey(row)),
+      );
+      if (new Set(chosen.map(stableFanKey)).size !== chosen.length)
+        return deliver({
+          kind: "failure",
+          error: "Fan marks are ambiguous; give each fan a unique mark",
+        });
+      if (!ref || !chosen.length) return deliver({ kind: "complete", value: empty, revision: 0 });
+      const opened: OpenSheet[] = [];
       let serial = 0;
 
       let base: DuctsSheetOverview | null = null;
 
       try {
-        const chosen = page(ctx).allFans ? (fans?.rows ?? []) : [fanPort!];
-
         let rows = [...empty.rows];
 
-        for (const [index, fan] of chosen.entries()) {
+        for (const fan of chosen) {
           const request: DuctsSheetRequest = {
             target: ref,
             mode: "fan",
@@ -247,65 +253,32 @@ function sheets(): UseSource<SheetReading> {
               : row,
           );
 
-          if (page(ctx).allFans)
-            deliver({
-              kind: "part",
-              value: {
-                open: null,
-                rows,
-                progress: {
-                  done: index + 1,
-                  total: chosen.length,
-                  mark: "mark" in fan && typeof fan.mark === "string" ? fan.mark : "",
-                  stopped: false,
-                },
-              },
-              revision: ++serial,
-            });
-        }
-
-        if (!base || page(ctx).allFans)
-          return deliver({
-            kind: "complete",
-            value: {
-              open: null,
-              rows,
-              progress: { done: chosen.length, total: chosen.length, mark: "", stopped: false },
-            },
-            revision: ++serial,
+          const worst = (["supply", "return"] as const).flatMap((side) =>
+            result.totals?.[side].complete && result.paths[side].paths[0]
+              ? [result.paths[side].paths[0]!.pathId]
+              : [],
+          );
+          const paths = [
+            ...new Set([...worst, ...(page(ctx).sheetPath ? [page(ctx).sheetPath] : [])]),
+          ];
+          const [inputs, elements, worksheet, ...legs] = await Promise.all([
+            sheetDetail(ctx, result, "inputs"),
+            sheetDetail(ctx, result, "elements"),
+            sheetDetail(ctx, result, "worksheet"),
+            ...paths.map((path) => sheetDetail(ctx, result, "legs", path)),
+          ] as const);
+          opened.push({
+            overview: result,
+            inputs,
+            elements,
+            worksheet,
+            legs: legs[page(ctx).sheetPath ? paths.indexOf(page(ctx).sheetPath) : 0] ?? null,
+            worstLegs: legs.slice(0, worst.length),
           });
-
-        const worst = (["supply", "return"] as const).flatMap((side) =>
-          base!.totals?.[side].complete && base!.paths[side].paths[0]
-            ? [base!.paths[side].paths[0]!.pathId]
-            : [],
-        );
-
-        const paths = [
-          ...new Set([...worst, ...(page(ctx).sheetPath ? [page(ctx).sheetPath] : [])]),
-        ];
-
-        const [inputs, elements, worksheet, ...legs] = await Promise.all([
-          sheetDetail(ctx, base, "inputs"),
-          sheetDetail(ctx, base, "elements"),
-          sheetDetail(ctx, base, "worksheet"),
-          ...paths.map((path) => sheetDetail(ctx, base!, "legs", path)),
-        ] as const);
-
+        }
         deliver({
           kind: "complete",
-          value: {
-            rows,
-            progress: null,
-            open: {
-              overview: base,
-              inputs,
-              elements,
-              worksheet,
-              worstLegs: legs.slice(0, worst.length),
-              legs: legs[page(ctx).sheetPath ? paths.indexOf(page(ctx).sheetPath) : 0] ?? null,
-            },
-          },
+          value: { open: opened[0] ?? null, opened, rows, progress: null },
           revision: ++serial,
         });
       } catch (error) {
@@ -424,9 +397,13 @@ export function ductsSources(): Readonly<Record<string, ReadingSource>> {
             open.inputs?.blockers ??
             [...open.overview.blockers, ...open.overview.assumedBlockers].map(detailOf);
 
+          const opens = (ctx.inputs.sheet?.value as SheetReading).opened ?? [open];
           const ids = [
             ...new Set([
-              open.overview.fan.unitId,
+              ...opens.flatMap((sheet) => [
+                sheet.overview.fan!.unitId,
+                ...(sheet.elements?.walkedElementIds ?? []),
+              ]),
               ...(open.elements?.walkedElementIds ?? []),
               ...(open.elements?.beyond ?? []).flatMap((unit) => unit.elementIds),
               ...blockers.flatMap(blockerElements),

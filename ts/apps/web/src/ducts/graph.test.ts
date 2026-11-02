@@ -80,13 +80,13 @@ test("Heal and Preview heal need a current network and Work, even when pricing f
 
 test("a pointed-at Heal row overrides an older element pick and never falls back to another network", () => {
   const scope = scopeFor(ductsRouteState.schema.parse({}));
-  scope.page = { ...scope.page, system: ["RA 23"], selected: "10002955", issue: "heal:g6953999" };
+  scope.page = { ...scope.page, system: ["RA 23"], selected: "heal:g6953999" };
   scope.readings = { ducts: state(twoHealNetworksSnapshot()) };
   expect(ductsBinding("heal-preview", undefined, scope).args).toMatchObject({
     refusal: null,
     request: { groups: [{ group: "g6953999" }] },
   });
-  scope.page.issue = "heal:retired-network";
+  scope.page.selected = "heal:retired-network";
   expect(ductsBinding("heal-preview", undefined, scope).args).toMatchObject({
     refusal: expect.stringContaining("no longer available"),
   });
@@ -100,7 +100,7 @@ test("the product graph keeps all ducts inputs in Work across fourteen cell fami
   expect(graph.fields).not.toHaveProperty("terminalFlow");
   expect(graph.fields).not.toHaveProperty("fanStatic");
   expect(Object.values(graph.fields).some((field) => field.role === "setting")).toBe(false);
-  expect(graph.stageOrder).toEqual(["network", "sheet"]);
+  expect(graph.stageOrder).toEqual(["network"]);
   expect(graph.verbs.price).toMatchObject({ does: "ducts.apply-losses", review: "shown" });
   expect(graph.verbs.heal).toMatchObject({ does: "ducts.apply-heal", review: "shown" });
   expect(graph.verbs["assign-fan"]).toMatchObject({
@@ -148,7 +148,7 @@ test("native writes keep the observed Work slots even when historical Work has a
   });
 });
 
-test("system changes retain a shared camera and selection, clear them for a different subject, and cap open order", () => {
+test("system changes retain a shared camera and selection, clear them for a different subject, and retain every opened system", () => {
   const current = {
     ...ductsPageSchema.parse({ system: ["SA"], selected: "4" }),
     viewport: { kind: "orbit", yaw: 20, elev: 30, zoom: 2, pivot: [0, 0, 0] },
@@ -157,11 +157,11 @@ test("system changes retain a shared camera and selection, clear them for a diff
     patch: { system: ["SA", "RA"] },
   });
   expect(ductsGraph.transition!(current, { system: ["Other"] }, "page")).toMatchObject({
-    patch: { selected: "", viewport: null, issue: "" },
+    patch: { selected: "", viewport: null },
   });
   expect(
     ductsGraph.transition!(current, { system: ["A", "B", "C", "D", "SA"] }, "page"),
-  ).toMatchObject({ patch: { system: ["B", "C", "D", "SA"] } });
+  ).toMatchObject({ patch: { system: ["A", "B", "C", "D", "SA"] } });
 });
 
 test("criteria and kinds review rows keep the sheet's words and grouping", () => {

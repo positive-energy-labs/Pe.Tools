@@ -140,7 +140,7 @@ export function useWorkScope<P, W>(
       : undefined;
   const keyText = JSON.stringify(
     bindWork(
-      graph.key,
+      graph.workRoute ?? graph.key,
       graph.needs ? workAddress : null,
       work,
       graph.needs ? (bound ?? workOpen ?? undefined) : undefined,
@@ -150,7 +150,12 @@ export function useWorkScope<P, W>(
   const spec = useMemo(
     (): RouteStateSpec<NonNullable<typeof graph.work>> | null =>
       graph.work && !fixture
-        ? { route: graph.key, title: graph.name, description: graph.name, schema: graph.work }
+        ? {
+            route: graph.workRoute ?? graph.key,
+            title: graph.name,
+            description: graph.name,
+            schema: graph.work,
+          }
         : null,
     [graph, fixture],
   );

@@ -433,10 +433,7 @@ function RulingsList({
     ...emptyListState(),
     closed: [INBOX_LABELS.diagnostics],
   }));
-  const desired =
-    rows.find((row) => row.key === focused) ??
-    rows.find((row) => row.lit && view.selected.includes(row.key)) ??
-    rows.find((row) => row.lit);
+  const desired = rows.find((row) => row.key === focused) ?? rows.find((row) => row.lit);
   const list = useList({
     ...RULING_READERS,
     persist: address,
@@ -446,15 +443,15 @@ function RulingsList({
       open: desired ? [desired.key] : [],
     },
     items: rows,
-    state: view,
+    state: { ...view, selected: focused ? [focused] : [] },
     onState: (next) => {
-      setView(next);
+      setView({ ...next, selected: [] });
     },
     onPick: (row) => {
       onPick(row.key);
       setView((previous) => ({
         ...previous,
-        selected: [row.key],
+        selected: [],
         open: previous.open.includes(row.key) ? [] : [row.key],
       }));
     },

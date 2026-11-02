@@ -33,7 +33,7 @@ export function SheetCell({
   unit,
   digits,
   source,
-  sourceTitle,
+  sourceTitle: _sourceTitle,
   cell = {},
   refusal,
   positive = false,
@@ -117,7 +117,6 @@ export function SheetCell({
       {source != null && (
         <span
           className="t-small min-w-0 truncate text-ink-2"
-          title={sourceTitle ?? source}
           data-input-source={source}
           data-tone={source === "none" ? "alarm" : undefined}
         >

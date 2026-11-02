@@ -1,3 +1,5 @@
+import { subjectLink } from "../subject-link";
+import { useRouteSearchSlice } from "#/route/activity";
 import { createContext, useContext, useMemo, useRef, type ReactNode } from "react";
 import { elementKey, type SubjectKey } from "@pe/kit/lang/attention";
 import { transitionPatches } from "@pe/agent-contracts";
@@ -7,12 +9,12 @@ import { useRevitSubjectProps } from "#/revit/element-menu";
 import { DuctsOwner } from "../pane-context";
 import type { ProtoProps } from "../proto/props";
 import { subjectNamer } from "../subject-text";
-import { rosterOrder } from "./model";
+import { rosterOrder, stableFanKey } from "./model";
 import { EMPTY_SNAPSHOT } from "./scoped-snapshot";
 import { InputsSurface } from "./inputs-surface";
 import { SheetPicture } from "./picture";
 import type { SheetViewProps } from "./types";
-import { Roster, RosterVerbs, Ledger } from "./view";
+import { Roster, Ledger } from "./view";
 import { sheetState } from "./state";
 import { describeCloser, type Closer } from "./closer";
 import type { DuctsSheetEdits, RouteStatePatch } from "@pe/agent-contracts";
@@ -26,6 +28,7 @@ export function SheetPane({ id }: { id: string }) {
 /** Shared spine only. The kernel owns reading demand, Work, Page, controls and layout. */
 export function SheetProvider({ props, children }: { props: ProtoProps; children: ReactNode }) {
   const owner = useContext(DuctsOwner)!;
+  const search = useRouteSearchSlice((search) => search);
   const reading = owner.readings.get("sheet");
   const value = reading.value as SheetReading | undefined;
   const sheet = value?.open ?? null;
@@ -153,7 +156,7 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
       }
     }, {});
   const selected = Number(props.page.selected.replaceAll('"', ""));
-  const focused = state.blockers.find((blocker) => blocker.id === props.page.issue);
+  const focused = state.blockers.find((blocker) => blocker.id === props.page.selected);
   const elementId =
     focused?.elementId ?? (Number.isInteger(selected) && selected > 0 ? selected : null);
   const element =
@@ -182,6 +185,7 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
     ...state,
     snapshot,
     roster,
+    picked: props.page.fan === "all" ? roster.map(stableFanKey) : props.page.fan,
     sheet,
     slots: fanReading?.slots ?? [],
     activeSlot: fanReading?.activeSlot ?? "",
@@ -189,18 +193,26 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
     loading: fans.status === "pending",
     error: reading.error ?? fans.error ?? null,
     progress: value?.progress ?? null,
-    open: (fan) => {
+    open: (ref) => {
+      const fan = roster.find(
+        (row) => row.unitId === ref.unitId && row.portIndex === ref.portIndex,
+      );
+      if (!fan) return;
       owner.view.setPage({
-        fan: `${fan.unitId}:${fan.portIndex}`,
-        allFans: false,
+        fan:
+          props.page.fan === "all"
+            ? roster.filter((row) => stableFanKey(row) !== stableFanKey(fan)).map(stableFanKey)
+            : props.page.fan.includes(stableFanKey(fan))
+              ? props.page.fan.filter((id) => id !== stableFanKey(fan))
+              : [...props.page.fan, stableFanKey(fan)],
         sheetPath: "",
       });
     },
     computeAll: () => {
-      owner.view.setPage({ allFans: true, fan: "" });
+      owner.view.setPage({ fan: "all" });
     },
     cancel: () => {
-      owner.view.setPage({ allFans: false, fan: "" });
+      owner.view.setPage({ fan: [] });
     },
     refresh: () => {
       void owner.control("refresh").run();
@@ -213,15 +225,16 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
     closerOf,
     close: (closer) => changeInputs(editsFor([closer]), { label: closer.verb }),
     closeMany: (closers) => changeInputs(editsFor(closers)),
-    focusedBlocker: props.page.issue || null,
+    focusedBlocker: props.page.selected || null,
     focusBlocker: (issue) => {
-      props.setPage({ issue: issue ?? "" }, { history: "push" });
+      props.setPage({ selected: issue ?? "" }, { history: "push" });
     },
     picture: (renderPane) => (
       <SheetPicture
         props={props}
         snapshot={snapshot}
         sheet={sheet}
+        opened={value?.opened}
         blockers={state.blockers}
         renderPane={renderPane}
         jump={jump}
@@ -267,8 +280,18 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
   const panes = {
     "sheet-roster": (
       <>
-        <RosterVerbs props={spine} />
         <Roster props={spine} />
+        {[
+          ...new Set(
+            [...snapshot.nodes, ...snapshot.segments]
+              .map((row) => row.systemName)
+              .filter((name): name is string => !!name),
+          ),
+        ].map((name) => (
+          <a key={name} href={subjectLink("ducts", [name], search)}>
+            {name}
+          </a>
+        ))}
       </>
     ),
     "sheet-inputs": spine.inputsSurface,

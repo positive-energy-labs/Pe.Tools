@@ -282,7 +282,6 @@ function HistoryLine({ history, refusal }: { history: InputsHistory; refusal: st
           className="t-small min-w-0 basis-full break-words"
           data-inputs-effect=""
           data-tone={last.refusal ? "alarm" : undefined}
-          title={`${last.label}: ${last.refusal ?? last.words}`}
         >
           {last.label}: <span className="face-mono">{last.refusal ?? last.words}</span>
         </span>
@@ -403,10 +402,7 @@ function FittingGroupRows({
   const [open, setOpen] = useState(group.unpriced > 0 || group.members.length <= 3);
   return (
     <div className="contents" data-fitting-group={group.key} data-fitting-source={group.source}>
-      <span
-        className="col-span-4 mt-1 min-w-0 border-t border-line pt-1"
-        title={`${group.title}: a choice here applies to ${group.reach}`}
-      >
+      <span className="col-span-4 mt-1 min-w-0 border-t border-line pt-1">
         <span className="block font-semibold break-words">{group.title}</span>
         <span className="block t-small text-ink-2 break-words">
           {group.tableMeaning ?? (group.unpriced ? "no table prices these" : "")}
@@ -433,11 +429,7 @@ function FittingGroupRows({
         <span className="t-small text-ink-2">none on this fan</span>
       )}
       <GroupPicker group={group} doc={doc} refusal={refusal} apply={apply} act={act} />
-      <span
-        className="t-small min-w-0 truncate text-ink-2"
-        data-input-source={group.source}
-        title={group.source}
-      >
+      <span className="t-small min-w-0 truncate text-ink-2" data-input-source={group.source}>
         {group.source}
       </span>
       <RowVerb
@@ -456,9 +448,7 @@ function FittingGroupRows({
               <SubjectText text={m.subject} revit={m.ids} owner={`fitting:${m.key}`} />
             </span>
             <span className="face-mono text-right">{inWg(m.lossInWg)}</span>
-            <span className="col-span-2 t-small min-w-0 truncate text-ink-2" title={m.note ?? ""}>
-              {m.note ?? ""}
-            </span>
+            <span className="col-span-2 t-small min-w-0 truncate text-ink-2">{m.note ?? ""}</span>
           </div>
         ))}
     </div>
@@ -491,10 +481,7 @@ function InputRowView({
   const meta = (label: string): EditMeta => ({ label, rowKey: row.key, was, row: retainedRow });
   const name: ReactNode = row.title ? (
     <>
-      <span
-        className="col-span-4 mt-1 min-w-0 break-words"
-        title={`${row.title}: one ruling for every unit of this type`}
-      >
+      <span className="col-span-4 mt-1 min-w-0 break-words">
         {row.title} <span className="text-ink-2">· {row.label}</span>
       </span>
       <span className="min-w-0 truncate pl-2">
@@ -554,11 +541,7 @@ function InputRowView({
             }}
             act={act}
           />
-          <span
-            className="t-small min-w-0 truncate text-ink-2"
-            data-input-source={row.source}
-            title={row.source}
-          >
+          <span className="t-small min-w-0 truncate text-ink-2" data-input-source={row.source}>
             {row.source}
           </span>
         </>
@@ -658,7 +641,7 @@ export function InputsSurface({
           {ctx.firm ? (
             <>
               <span className="face-mono shrink-0">{ctx.firm.version}</span>
-              <span className="face-mono min-w-0 truncate" title={ctx.firm.path}>
+              <span className="face-mono min-w-0 truncate">
                 · {ctx.firm.path.split(/[\\/]/).at(-1)}
               </span>
               {!ctx.firm.present && <span className="shrink-0">· missing, on the seed</span>}

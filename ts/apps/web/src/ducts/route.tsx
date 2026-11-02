@@ -32,7 +32,15 @@ function DuctsProvider({
   children: ReactNode;
 }) {
   const { target, work } = owner.snapshot();
-  const page = owner.view.read().page;
+  const authored = owner.view.read().page;
+  const roster = owner.readings.get("roster").value as DuctSnapshot | null;
+  const page = {
+    ...authored,
+    system:
+      authored.system === "all"
+        ? (roster?.systems ?? []).map((system) => system.name)
+        : authored.system,
+  };
   const doc = target.kind === "document" ? target.ref : null;
   const read = owner.readings.get(page.stage === "sheet" ? "sheetSnapshot" : "ducts");
   const snapshot = (read.value ?? read.previous ?? null) as DuctSnapshot | null;
@@ -57,8 +65,8 @@ function DuctsProvider({
             ? [elementKey(current.selected)]
             : current.selected && /^(run|section):/.test(current.selected)
               ? [current.selected as SubjectKey]
-              : current.issue
-                ? [`issue:${current.issue}` as SubjectKey]
+              : current.selected
+                ? [`issue:${current.selected}` as SubjectKey]
                 : [],
         );
       }),
@@ -132,7 +140,6 @@ function DuctsProvider({
       priced,
     );
   }
-  const roster = owner.readings.get("roster").value as DuctSnapshot | null;
   const coverage = roster ? systemReadCoverage(snapshot, roster) : null;
   const props: ProtoProps = {
     attentionDoc,
@@ -153,8 +160,8 @@ function DuctsProvider({
     claimCells,
     page,
     setPage,
-    onSelect: (id) => setPage({ selected: id == null ? "" : String(id), issue: "" }),
-    onSelectClaim: (claim) => setPage({ selected: claim.id, issue: "" }),
+    onSelect: (id) => setPage({ selected: id == null ? "" : String(id) }),
+    onSelectClaim: (claim) => setPage({ selected: claim.id }),
     work: {
       doc: seen,
       revision: work?.handle.revision ?? null,
@@ -193,9 +200,9 @@ function DuctsProvider({
             ...coverage,
             reading: read.status === "pending" ? page.system : [],
             readAll:
-              page.readAll || coverage.read === coverage.of
+              owner.view.read().page.system === "all" || coverage.read === coverage.of
                 ? null
-                : () => setPage({ readAll: true }),
+                : () => setPage({ system: "all" }),
           }
         : null,
   };

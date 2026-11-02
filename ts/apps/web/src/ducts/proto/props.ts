@@ -38,7 +38,7 @@ export interface ProtoProps {
   /** The claim cells keyed by id as the Work (or the `?fixture=scene` fixture) holds them. */
   claimCells: Record<string, DuctClaim>;
   /** Route page state (selected, issue, system, level, layers, encoding, picture, viewport, ...). */
-  page: DuctsPage;
+  page: Omit<DuctsPage, "system"> & { system: string[] };
   /** A named move pushes, a gesture replaces (`PageMove`). */
   setPage: (next: Partial<DuctsPage>, move?: PageMove<DuctsPage>) => void;
   /** Reports the committed renderer pose as derived facts; never writes Page or gesture previews. */

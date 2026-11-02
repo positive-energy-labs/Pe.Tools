@@ -512,7 +512,7 @@ function LoadedScreenBody({
   const selected = page.selected && /^\d+$/.test(page.selected) ? Number(page.selected) : null;
   const focusKey = inbox
     ? focusRow(
-        page.issue,
+        page.selected,
         new Set(
           [...inbox.fix, ...inbox.set, ...inbox.check, ...inbox.diagnostics].map((i) => i.key),
         ),
@@ -538,7 +538,7 @@ function LoadedScreenBody({
                 node?.groupId ?? snapshot.groups.find((x) => x.rootIds.includes(cell.id))?.id;
               return g ? withSystem(page.system, systemOfGroup(drawn ?? snapshot, g)) : page.system;
             })();
-      setPage({ system: into, selected: String(cell.id), issue: "" });
+      setPage({ system: into, selected: String(cell.id) });
       setCellFocus(cell);
     },
     [drawn, snapshot, chosen, groups, scope, page.system, setPage],
@@ -778,7 +778,7 @@ function LoadedScreenBody({
             cells={props.cells}
             selected={selected}
             focused={focusKey}
-            onPick={(issue) => setPage({ selected: "", issue }, { history: "push" })}
+            onPick={(issue) => setPage({ selected: issue }, { history: "push" })}
             address={{
               scope: `${openKey(page.system)}:${props.captureSource?.version ?? ""}`,
               search: page.rulingSearch,

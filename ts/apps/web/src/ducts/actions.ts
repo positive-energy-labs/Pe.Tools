@@ -161,9 +161,7 @@ export function ductsBinding(id: string, row: unknown, scope: Scope): MountBindi
       const doc = scope.work.doc;
       const active = activeSystem(scope.page);
 
-      const selection = scope.page.issue.startsWith("heal:")
-        ? scope.page.issue
-        : scope.page.selected;
+      const selection = scope.page.selected;
       const group = named.group ?? healTarget(snapshot, doc, active, selection, null);
 
       if (active && !systemScope(snapshot, active).groups.includes(group))

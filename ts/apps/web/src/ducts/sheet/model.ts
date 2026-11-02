@@ -23,3 +23,5 @@ export const rosterOrder = (rows: readonly FanPort[]) =>
       a.portIndex - b.portIndex
     );
   });
+
+export const stableFanKey = (fan: Pick<FanPort, "mark" | "portIndex">) => `${fan.mark}@${fan.portIndex}`;

@@ -35,7 +35,7 @@ import type { RouteHandle } from "../route/handle";
 import { LadderPicker, useDocumentLadder } from "../route/situation-ladder";
 import { useInitialUrlPage, useUrlPage } from "../route/url";
 import { bindGraphChords } from "./keys";
-import { SituationFields } from "./situation-fields";
+import { SituationFields, PageControl } from "./situation-fields";
 import { Switcher } from "@pe/kit/lang/switcher";
 import {
   CONFLICT_REFUSAL,
@@ -634,7 +634,23 @@ function MountedPane<P, W>({
       ));
     },
   };
-  const head = <PaneHead owner={owner} draws={draws} enabled={enabled} />;
+  const subject = graph.subjectField?.pane === id ? graph.subjectField : null;
+  const subjectField = subject ? graph.fields[subject.field] : null;
+  const head = (
+    <>
+      {subject && subjectField && (
+        <PageControl
+          id={subject.field}
+          field={subjectField}
+          value={owner.view.read().page[subject.field]}
+          enabled={enabled}
+          options={subjectField.picker?.options(owner.readings.get(subject.roster).value)}
+          set={(value) => owner.view.setPage({ [subject.field]: value } as Partial<P>)}
+        />
+      )}
+      <PaneHead owner={owner} draws={draws} enabled={enabled} />
+    </>
+  );
   const renderPane: PaneApi = (content, furniture) =>
     pane(
       <>
@@ -699,7 +715,6 @@ function PaneHead<P, W>({
           data-slot="pane-reading"
           data-tone={failed ? "caution" : undefined}
           className="text-ink-2 text-xs"
-          title={failed ?? undefined}
         >
           {failed ? "failed" : status === "pending" ? "reading…" : "stale"}
         </span>

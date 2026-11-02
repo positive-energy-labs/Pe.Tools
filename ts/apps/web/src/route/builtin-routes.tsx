@@ -13,6 +13,7 @@ import { familyGraph } from "#/family/graph";
 import { familiesGraph } from "#/families/graph";
 import { schedulesGraph } from "#/schedules/graph";
 import { settingsGraph } from "#/settings/graph";
+import { fansGraph } from "#/fans/graph";
 import { ductsGraph } from "#/ducts/graph";
 import { dataTablesGraph } from "#/data-tables/graph";
 import { mountRoute, type MountRouteProps } from "#/shell/mount";
@@ -84,3 +85,6 @@ publicRoutes.registerGraph(rhvacSyncGraph, hosted(rhvacSyncRoute));
 const scheduleSpecsRoute = lazy(async () => ({ default: (await import("#/schedule-specs/route")).Body }));
 publicRoutes.registerGraph(scheduleSpecsGraph, hosted(scheduleSpecsRoute));
 
+
+const FansRoute = lazy(async () => ({ default: mountRoute(fansGraph, (await import("#/ducts/route")).ductsAdapters) }));
+publicRoutes.registerGraph(fansGraph, hosted(FansRoute));

@@ -1,6 +1,6 @@
 import type { AppExposure, AppRouteMount, AppSurface } from "./route-directory.ts";
 import { z } from "zod";
-import type { History, RouteField } from "./route-field.ts";
+import { manyCodec, type History, type RouteField } from "./route-field.ts";
 import type { RouteStatePatch } from "./route-state.ts";
 import type { RouteViewRefusalCode } from "./route-view.ts";
 
@@ -271,6 +271,16 @@ export interface RouteGraph<P = Record<string, unknown>, W = unknown> {
   name: string;
   /** The Situation's sentence about the shareable subject; no reads or effects. */
   subject?: (page: Readonly<P>) => string;
+  subjectField?: {
+    field: keyof P & string;
+    noun: string;
+    keyKind: import("./route-field.ts").StableKeyKind;
+    cardinality: "one" | "many";
+    roster: string;
+    detail: string;
+    pane: string;
+    show(id: string): string;
+  };
   fields: {
     readonly [K in keyof P]-?: FieldDecl<z.ZodType<P[K]>> & { role: FieldRole };
   } & Readonly<Record<string, FieldDecl & { role: FieldRole }>>;
@@ -291,6 +301,8 @@ export interface RouteGraph<P = Record<string, unknown>, W = unknown> {
   observe?: readonly string[];
   /** The Work document's schema; required to declare `cells`, whose segments it must contain. */
   work?: z.ZodType<W>;
+  /** Domain Work shared by multiple subject routes; defaults to the graph key. */
+  workRoute?: string;
   /**
    * The Page field whose value names the subject Work (`binding: "workspace"`), so Work follows
    * Page selection. Empty falls back to the `?work=` carry, then the resolved document's Work.
@@ -364,6 +376,7 @@ export interface RouteGraphJson {
   readonly observe?: readonly string[];
   readonly work?: GraphJsonObject;
   readonly workSubject?: string;
+  readonly workRoute?: string;
   readonly cells?: readonly GraphJsonObject[];
   readonly stageOrder: readonly string[];
   readonly transition?: GraphJsonObject;
@@ -372,7 +385,17 @@ export interface RouteGraphJson {
 
 function sortedJson(value: unknown): GraphJsonValue {
   // Installed Zod 4 owns JSON Schema conversion. Input direction retains preprocessing inputs.
-  if (value instanceof z.ZodType) return sortedJson(z.toJSONSchema(value, { io: "input", unrepresentable: "any", override: ({ zodSchema, jsonSchema }) => { if (["custom", "transform"].includes(zodSchema._zod.def.type)) jsonSchema["x-runtime-validation"] = true; } }));
+  if (value instanceof z.ZodType)
+    return sortedJson(
+      z.toJSONSchema(value, {
+        io: "input",
+        unrepresentable: "any",
+        override: ({ zodSchema, jsonSchema }) => {
+          if (["custom", "transform"].includes(zodSchema._zod.def.type))
+            jsonSchema["x-runtime-validation"] = true;
+        },
+      }),
+    );
   if (typeof value === "function") {
     const ids = "ids" in value ? value.ids : undefined;
     return ids === undefined ? { runtime: true } : { ids: sortedJson(ids), runtime: true };
@@ -474,6 +497,23 @@ export function validateRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphRef
       refusals.push({ code, path, message });
   };
   try {
+    if (graph.subjectField) {
+      const subject = graph.subjectField;
+      const subjects = Object.entries(graph.fields).filter(([, f]) => f.role === "subject");
+      if (subjects.length !== 1 || subjects[0]?.[0] !== subject.field)
+        refuse("invalid-graph", "subjectField", "Declare exactly one subject field");
+      if (!["UniqueId", "system-name", "fan-mark", "name"].includes(subject.keyKind))
+        refuse("invalid-graph", "subjectField.keyKind", "ElementId is not a stable subject key");
+      if (subject.cardinality === "many" && graph.fields[subject.field]?.codec !== manyCodec)
+        refuse(
+          "invalid-graph",
+          "subjectField",
+          "Subject many fields must use the kernel many codec",
+        );
+      for (const id of [subject.roster, subject.detail])
+        if (!graph.readings[id])
+          refuse("missing-reading", "subjectField", `Unknown reading '${id}'`);
+    }
     for (const [id, field] of Object.entries(graph.fields))
       if (field.picker && !Object.hasOwn(graph.readings, field.picker.reading))
         refuse(

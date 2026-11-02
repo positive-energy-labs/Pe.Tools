@@ -105,9 +105,11 @@ export function SheetPicture({
   blockers,
   renderPane,
   jump,
+  opened,
 }: {
   props: ProtoProps;
   snapshot: DuctSnapshot;
+  opened?: readonly OpenSheet[];
   sheet: OpenSheet | null;
   blockers: readonly SheetBlocker[];
   renderPane: TeachingPaneRender;
@@ -124,12 +126,16 @@ export function SheetPicture({
   const focusIds = useMemo(
     () =>
       new Set([
-        ...(sheet?.elements?.walkedElementIds ?? []),
-        ...(sheet?.overview.fan ? [sheet.overview.fan.unitId] : []),
+        ...(opened ?? (sheet ? [sheet] : [])).flatMap(
+          (item) => item.elements?.walkedElementIds ?? [],
+        ),
+        ...(opened ?? (sheet ? [sheet] : [])).flatMap((item) =>
+          item.overview.fan ? [item.overview.fan.unitId] : [],
+        ),
         ...blockers.flatMap(blockerElements),
         ...worstPathIds,
       ]),
-    [sheet, blockers, worstPathIds],
+    [sheet, opened, blockers, worstPathIds],
   );
   const contextOn = page.layers.includes("context") || page.layers.includes("halo");
   const beyond = useMemo(
@@ -191,22 +197,22 @@ export function SheetPicture({
         key: "sheet",
         toggle: "findings",
         draw: ({ meshes }) =>
-          sheet
-            ? sheetLayers({
-                snapshot,
-                work: work.doc,
-                overview: sheet.overview,
-                inputs: sheet.inputs,
-                blockers,
-                meshes,
-                worstPathIds,
-                focus: focusIds,
-              })
-            : [],
+          (opened ?? (sheet ? [sheet] : [])).flatMap((item) =>
+            sheetLayers({
+              snapshot,
+              work: work.doc,
+              overview: item.overview,
+              inputs: item.inputs,
+              blockers,
+              meshes,
+              worstPathIds,
+              focus: focusIds,
+            }),
+          ),
       },
       ports,
     ],
-    [snapshot, work.doc, sheet, blockers, worstPathIds, focusIds, ports],
+    [snapshot, work.doc, sheet, opened, blockers, worstPathIds, focusIds, ports],
   );
   const issues = useMemo(() => sheetIssues(blockers, null), [blockers]);
   const byId = useMemo(() => snapshotById(snapshot), [snapshot]);
@@ -238,7 +244,7 @@ export function SheetPicture({
       covered={NONE}
       issues={issues}
       pointOf={pointOf}
-      issue={page.issue}
+      issue={page.selected}
       onRuling={() => {}}
     />
   );
@@ -281,7 +287,7 @@ export function SheetPicture({
         label: "fan sheet",
         refreshing: props.reading.refreshing,
       }}
-      page={page}
+      page={{ ...page, issue: page.selected }}
       setPage={setPage}
       renderPane={renderPane}
       onPose={props.onPose}

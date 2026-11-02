@@ -48,7 +48,7 @@ export function SituationFields<P, W>({
   ));
 }
 
-function PageControl({
+export function PageControl({
   id,
   field,
   value,
@@ -100,8 +100,13 @@ function PageControl({
         id: String(id),
         label: String(id),
       }));
-    const multi = Array.isArray(value);
-    const selected = multi ? (value as string[]) : [typeof value === "string" ? value : ""];
+    const multi = field.cardinality === "many" || Array.isArray(value);
+    const selected =
+      value === "all"
+        ? choices.map((choice) => choice.id)
+        : multi
+          ? (value as string[])
+          : [typeof value === "string" ? value : ""];
     return (
       <Ladder
         disabled={!enabled}

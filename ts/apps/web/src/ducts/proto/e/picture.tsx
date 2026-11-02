@@ -331,7 +331,7 @@ function Content({
   // A page write, as the tree's: the picture registers the selection it becomes.
   const pick = (id: number | null) => {
     setOpenRuling(null);
-    setPage({ selected: id == null ? "" : String(id), issue: "" }, { history: "push" });
+    setPage({ selected: id == null ? "" : String(id) }, { history: "push" });
   };
   useEffect(() => {
     if (!page.selected) setOpenRuling(null);
@@ -348,10 +348,7 @@ function Content({
     const finding =
       r.kind === "claim" ? `claim:${r.claim.id}` : r.kind === "issue" ? r.issue.id : r.finding.id;
     const issue = issues.find((i) => i.findings.includes(finding))?.key ?? finding;
-    setPage(
-      { selected: String(r.at), issue, rulingSearch: emptyListSearch() },
-      { history: "push" },
-    );
+    setPage({ selected: issue, rulingSearch: emptyListSearch() }, { history: "push" });
     setOpenRuling(r.n);
   };
   const schematic = (size: "main" | "inset", readout: ReactNode = null) => (
@@ -504,7 +501,7 @@ function Content({
       ]}
       issues={issues}
       pointOf={pointOf}
-      issue={page.issue}
+      issue={page.selected}
       onRuling={ruling}
     />
   );
@@ -520,7 +517,7 @@ function Content({
         label: page.system.join(", "),
         refreshing: identity.refreshing,
       }}
-      page={page}
+      page={{ ...page, issue: page.selected }}
       setPage={setPage}
       renderPane={renderPane}
       onPose={onPose}
@@ -597,8 +594,7 @@ function Content({
         onIssuePick: (target) =>
           setPage(
             {
-              selected: String(target.elementId),
-              issue: target.key,
+              selected: target.key,
               rulingSearch: emptyListSearch(),
             },
             { history: "push" },

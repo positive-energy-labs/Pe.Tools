@@ -11,7 +11,7 @@ import { Button } from "@pe/kit/lang/button";
 import { emptyListState, useList, type ListState } from "@pe/kit/lang/collection";
 import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
 import { Scroll } from "@pe/kit/lang/scroll";
-import { fanKey, pressure, type FanPort } from "./model";
+import { fanKey, stableFanKey, pressure, type FanPort } from "./model";
 import { BlockerRow } from "./blocker-row";
 import type { Closer } from "./closer";
 import { subjectNamer } from "../subject-text";
@@ -39,18 +39,18 @@ const rosterSearch = (row: FanPort) => ({
 });
 
 export function Roster({ props }: { props: SheetViewProps }) {
-  const openKey = props.sheet
-    ? fanKey(props.sheet.overview.fan ?? { unitId: -1, portIndex: -1 })
-    : null;
   const wait = props.busy || props.loading ? "Wait for the current read" : null;
   const [listState, setListState] = useState<ListState>(emptyListState());
   const list = useList({
     items: props.roster,
     keyOf: fanKey,
     search: rosterSearch,
-    select: "single",
-    state: { ...listState, selected: openKey ? [openKey] : [] },
-    onState: setListState,
+    select: "multi",
+    state: {
+      ...listState,
+      selected: props.roster.filter((row) => props.picked?.includes(stableFanKey(row))).map(fanKey),
+    },
+    onState: (next) => setListState({ ...next, selected: [] }),
     onPick: (row) => props.open(row),
     refusalOf: () => wait,
   });

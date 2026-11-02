@@ -24,6 +24,7 @@ export interface SheetViewProps {
   snapshot: DuctSnapshot;
   /** Every fan port, roster order (incomplete first); each row's state as last computed. */
   roster: readonly FanPort[];
+  picked?: readonly string[];
   /** The open fan sheet, or null until one is opened. */
   sheet: OpenSheet | null;
   /** The open sheet's blockers in detail (closer note and candidate when inputs detail has landed). */

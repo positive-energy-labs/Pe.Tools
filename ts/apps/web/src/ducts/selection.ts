@@ -17,7 +17,6 @@ import { choice, defineKnobs, num } from "#/knobs/knobs";
  */
 export const DUCTS_MULTI = defineKnobs("ducts", "ts/apps/web/src/ducts/selection.ts", {
   selection: {
-    systemCap: num("Open system cap", 4, [1, 12, 1], "refetch"),
     stubFt: num("Stub reach (ft)", 10, [0, 50, 1], "refetch"),
     hop: choice<Hop>(
       "Equipment hop",
@@ -29,23 +28,19 @@ export const DUCTS_MULTI = defineKnobs("ducts", "ts/apps/web/src/ducts/selection
 });
 
 /** The active system: the most recently opened, the one write, heal and fan act on; "" with none. */
-export const activeSystem = (page: { readonly system: readonly string[] }) =>
-  page.system.at(-1) ?? "";
+export const activeSystem = (page: { readonly system: readonly string[] | "all" }) =>
+  page.system === "all" ? "" : (page.system.at(-1) ?? "");
 
-/**
- * The open list as the page keeps it: each name once, at most `systemCap`.
- * ponytail: a pick past the cap closes the OLDEST open system; the newest stays active.
- */
-export const capped = (open: readonly string[]) =>
-  [...new Set(open)].slice(-DUCTS_MULTI.read().selection.systemCap);
+/** Keep every authored subject, in pick order, without duplicates. */
+export const uniqueSystems = (open: readonly string[]) => [...new Set(open)];
 
 /** The open list with `name` opened (it becomes active) or, when it is open, closed. */
 export const toggleSystem = (open: readonly string[], name: string) =>
-  open.includes(name) ? open.filter((n) => n !== name) : capped([...open, name]);
+  open.includes(name) ? open.filter((n) => n !== name) : uniqueSystems([...open, name]);
 
 /** The open list with `name` open: as it is when it already is, else with `name` active. */
 export const withSystem = (open: readonly string[], name: string) =>
-  open.includes(name) ? [...open] : capped([...open, name]);
+  open.includes(name) ? [...open] : uniqueSystems([...open, name]);
 
 /** The neighbours' stub elements that are not already open. */
 export const stubIdsOf = (neighbours: readonly Neighbour[], open: ReadonlySet<number>) =>

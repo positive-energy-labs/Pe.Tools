@@ -6,7 +6,7 @@ import { paintOf } from "#/scene/grounds";
 import { NAVIGATION_FIXTURE } from "./navigation.fixture";
 import {
   activeSystem,
-  capped,
+  uniqueSystems,
   DUCTS_MULTI,
   paintOfDucts,
   toggleSystem,
@@ -16,9 +16,8 @@ import { ductsFocus } from "./page";
 import { captureRequest } from "#/scene/picture/picture";
 afterEach(() => resetKnob());
 
-test("selection opens in order, closes membership, and evicts the oldest over the cap", () => {
-  expect(DUCTS_MULTI.read().selection.systemCap).toBe(4);
-  expect(capped(["A", "B", "C", "D", "E"])).toEqual(["B", "C", "D", "E"]);
+test("selection opens in order, closes membership, and preserves every authored subject", () => {
+  expect(uniqueSystems(["A", "B", "C", "D", "E", "A"])).toEqual(["A", "B", "C", "D", "E"]);
   expect(toggleSystem(["A", "B"], "A")).toEqual(["B"]);
   expect(toggleSystem(["A", "B"], "C")).toEqual(["A", "B", "C"]);
   expect(withSystem(["A", "B"], "A")).toEqual(["A", "B"]);
@@ -28,10 +27,8 @@ test("selection opens in order, closes membership, and evicts the oldest over th
 
 test("selection knobs change admission and disclose the capture cost", () => {
   const spec = knobModules().find((module) => module.name === "ducts")!.spec.selection!;
-  expect(Object.keys(spec)).toEqual(["systemCap", "stubFt", "hop"]);
+  expect(Object.keys(spec)).toEqual(["stubFt", "hop"]);
   expect(Object.values(spec).every((knob) => knob.cost === "refetch")).toBe(true);
-  setKnob("ducts.selection.systemCap", 2);
-  expect(capped(["A", "B", "C"])).toEqual(["B", "C"]);
   setKnob("ducts.selection.hop", "all");
   expect(DUCTS_MULTI.read().selection.hop).toBe("all");
 });

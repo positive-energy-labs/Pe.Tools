@@ -8,7 +8,7 @@
  */
 import { routeAddress, type History, type RouteKey, type RoutePage } from "@pe/agent-contracts";
 import { useRouter, type SearchMiddleware } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { z } from "zod";
 import type { ViewOwner } from "./view-owner";
 import { causeRefusal } from "./refusal";
@@ -129,6 +129,7 @@ export function routeUrlPage<R extends RouteKey>(route: R): UrlPage<RoutePage<R>
 export function useUrlPage<P>(url: UrlPage<P> | null, owner: ViewOwner<P>) {
   const router = useRouter({ warn: false });
   const activity = useRouteActivity();
+  const initialLocation = useRef(router?.history.location);
   useEffect(() => {
     if (!router || !url) return;
     const ownsUrl = () => !activity || activity.current();
@@ -213,7 +214,11 @@ export function useUrlPage<P>(url: UrlPage<P> | null, owner: ViewOwner<P>) {
       schedule();
     });
     // Catch navigation between initialization and subscription without rewriting a bare URL.
-    if (url.history(url.read(location().search), previous.page)) restore();
+    if (
+      router.history.location !== initialLocation.current &&
+      url.history(url.read(location().search), previous.page)
+    )
+      restore();
     return () => {
       active = false;
       generation += 1;
@@ -231,12 +236,19 @@ export function useInitialUrlPage<P>(url: UrlPage<P> | null): Partial<P> {
   return useState(() =>
     url
       ? url.read(
-          activity?.search ??
-            router?.state.location.search ??
+          restorePageSearch(
+            activity?.search,
+            !activity || activity.current() ? router?.state.location.search : undefined,
+          ) ??
             (typeof location === "undefined"
               ? {}
               : Object.fromEntries(new URLSearchParams(location.search))),
         )
       : {},
   )[0];
+}
+
+/** Defaults are applied by UrlPage.read after merging tab memory and explicit deep-link keys. */
+export function restorePageSearch(memory?: Record<string, unknown>, url?: Record<string, unknown>) {
+  return memory || url ? { ...memory, ...url } : undefined;
 }

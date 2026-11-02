@@ -79,8 +79,8 @@ it("a shared louver with no stated flow shows the 350 its run carries, sourced t
   const inputs = {
     terminals: {
       "14088043": {
-        cfm: { value: null, source: "none", ref: "PE_M_Grd_AirFlow" },
-        drop: { value: 0.03, source: "firm", ref: "seed" },
+        cfm: { value: null, source: "none", ref: "PE_M_Grd_AirFlow" , units: null, version: null, status: "valid"},
+        drop: { value: 0.03, source: "firm", ref: "seed" , units: null, version: null, status: "valid"},
       },
     },
   } as unknown as DuctsInputs;

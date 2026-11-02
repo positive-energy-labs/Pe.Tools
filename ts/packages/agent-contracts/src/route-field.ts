@@ -26,6 +26,7 @@ interface Access {
 
 export interface RouteField<S extends z.ZodType = z.ZodType> extends Access {
   /** The typed value; it accepts `undefined` (its default, or absent). */
+  cardinality?: "one" | "many";
   schema: S;
   codec: Codec<z.output<S>>;
 }
@@ -63,7 +64,12 @@ export function field<S extends z.ZodType, const A extends Access>(
 ): RouteField<S> & A {
   const found = codec ?? (CODECS[bare(schema).def.type] as Codec<z.output<S>> | undefined);
   if (!found) throw Error(`a ${bare(schema).def.type} field needs a codec`);
-  return { schema, codec: found, ...access };
+  return {
+    schema,
+    codec: found,
+    ...access,
+    ...(bare(schema).def.type === "array" ? { cardinality: "many" as const } : {}),
+  };
 }
 
 export type Resolve = (
@@ -103,3 +109,34 @@ export const text = (max = 200) => z.string().max(max).default("");
 export const keysWhere = (fields: Fields, keep: (field: RouteField) => boolean) =>
   Object.keys(fields).filter((key) => keep(fields[key]!));
 export const setKeys = (fields: Fields) => keysWhere(fields, (field) => field.agent === "set");
+
+/** Exact set spelling, including ids containing commas. `all` resolves against the current roster. */
+export type Many = string[] | "all";
+export const manyCodec: Codec<Many> = {
+  encode: (value) =>
+    value === "all"
+      ? "all"
+      : value.map((id) => (id === "all" ? "%61ll" : encodeURIComponent(id))).join(","),
+  decode: (text) => {
+    if (text === "all") return "all";
+    try {
+      return text ? text.split(",").map(decodeURIComponent) : [];
+    } catch {
+      return INVALID;
+    }
+  },
+};
+export type StableKeyKind = "UniqueId" | "system-name" | "fan-mark" | "name";
+export function manyField<const A extends Access>(keyKind: StableKeyKind, access: A) {
+  if (!["UniqueId", "system-name", "fan-mark", "name"].includes(keyKind))
+    throw Error("Subject keys must be stable; ElementId is refused");
+  return {
+    schema: z.union([z.array(z.string().min(1)), z.literal("all")]).default([]),
+    codec: manyCodec,
+    cardinality: "many" as const,
+    keyKind,
+    ...access,
+  };
+}
+export const resolveMany = (value: Many, roster: readonly string[]) =>
+  value === "all" ? [...roster] : [...new Set(value)];
