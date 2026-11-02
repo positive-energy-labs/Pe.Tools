@@ -596,6 +596,7 @@ test("an exact-open turn Target reads and writes route Work under its document's
   fakeRuntimeHost("http://127.0.0.1:9");
   const projectA = "C:\\Models\\projectA.rvt";
   const routeCalls: URL[] = [];
+  const historyBodies: unknown[] = [];
   vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     if (typeof init?.body === "string" && JSON.parse(init.body).key === "bridge.sessions.list")
@@ -611,6 +612,7 @@ test("an exact-open turn Target reads and writes route Work under its document's
     if (url.pathname === "/pe/capabilities") return Response.json(catalog());
     if (!url.pathname.includes("/route-state/")) throw Error(`unexpected ${url.pathname}`);
     routeCalls.push(url);
+    if (url.pathname.endsWith("/history")) historyBodies.push(JSON.parse(String(init?.body)));
     return url.searchParams.get("target") === projectA
       ? Response.json({ route: "families", revision: 2, doc: {}, ok: true })
       : Response.json({ error: "unknown route 'families'" }, { status: 404 });
@@ -641,6 +643,22 @@ test("an exact-open turn Target reads and writes route Work under its document's
     )) as { ok: boolean };
     expect(proposed.ok).toBe(true);
     expect(routeCalls.map((url) => url.searchParams.get("target"))).toEqual([projectA, projectA]);
+    // Pea's undo is the journal verb on the same Work key, never a null edit.
+    const undone = (await run(
+      peDo,
+      {
+        key: "route:families.history",
+        input: { direction: "undo" },
+        expectedRevision: 3,
+        timeoutSeconds: 30,
+      },
+      open,
+    )) as { ok: boolean };
+    expect(undone.ok).toBe(true);
+    expect(routeCalls.at(-1)!.pathname).toBe("/pe/route-state/families/history");
+    expect(routeCalls.at(-1)!.searchParams.get("target")).toBe(projectA);
+    expect(historyBodies).toEqual([{ direction: "undo", expectedRevision: 3 }]);
+    routeCalls.pop();
 
     // A Chat document that closed has no Address to key by: refuse, never read Target-less Work.
     const gone = (await run(

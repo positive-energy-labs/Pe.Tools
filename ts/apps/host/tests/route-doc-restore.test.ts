@@ -288,3 +288,41 @@ test("an agent's HTTP write reaches a resource-stream subscriber with its host s
   expect([(await again.next()).revision, (await again.next()).revision]).toEqual([1, 2]);
   again.close();
 });
+
+test("Pea's undo pops its edit off the one journal: pre-edit Work, a restore revision, and redo", async () => {
+  const h = await fixture();
+  const history = (direction: "undo" | "redo", expectedRevision: number, caller: Caller = pea()) =>
+    h.post({ direction, expectedRevision }, caller, "history");
+  expect(await history("undo", 0)).toMatchObject({ ok: false });
+  await h.apply(width(20), 0);
+  const before = ((await h.stored()) as { doc: unknown }).doc;
+  const edited = await h.apply(
+    [{ path: ["cells", "8781191", "edit"], value: { value: "200" } }],
+    1,
+    pea(),
+  );
+  expect(edited.write).toMatchObject({ kind: "apply", by: "pea", revision: 2 });
+
+  // The same write a person's Undo sends (route/work-journal): one restore revision, no null left.
+  const undone = await history("undo", 2);
+  expect(undone.write).toMatchObject({ kind: "restore", by: "pea", base: 2, revision: 3 });
+  expect(undone.doc).toEqual(before);
+  expect(JSON.stringify(undone.doc)).not.toContain("null");
+  expect(undone.write.patches).toEqual(edited.write.inverse);
+
+  const redone = await history("redo", 3);
+  expect(redone.write).toMatchObject({ kind: "restore", by: "pea", revision: 4 });
+  expect(redone.doc.cells["8781191"].edit).toMatchObject({ value: "200", by: "pea" });
+  expect(await history("redo", 4)).toMatchObject({ ok: false });
+
+  // A person's restore and Pea's history walk the same stack: the person's undo is Pea's redo.
+  expect((await h.restore(redone.write)).doc).toEqual(before);
+  expect((await history("redo", 5)).doc.cells["8781191"].edit.value).toBe("200");
+
+  // Undo steps through earlier edits in order, whoever made them; a new edit ends the redo branch.
+  expect((await history("undo", 6)).doc).toEqual(before);
+  expect((await history("undo", 7)).doc).toEqual(h.spec.schema.parse({}));
+  await h.apply(width(30), 8);
+  expect(await history("redo", 9)).toMatchObject({ ok: false });
+  expect(await history("undo", 3)).toMatchObject({ ok: false, code: "stale_revision" });
+});

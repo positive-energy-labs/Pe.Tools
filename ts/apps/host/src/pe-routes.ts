@@ -189,6 +189,7 @@ const feedbackSchema = peRoutes["feedback.submit"].body;
 const diagnosticsSchema = peRoutes["diagnostics.submit"].body;
 const agentFeedbackSchema = peRoutes["agent-feedback.submit"].body;
 const applyBody = peRoutes["work.apply"].body;
+const historyBody = peRoutes["work.history"].body;
 
 const json = (value: unknown, status = 200) => Response.json(value, { status });
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -327,6 +328,14 @@ export function createPeRoutes(options: PeRoutesOptions) {
       hint: "expected { patches, expectedRevision, press, kind? }",
       run: (scope: WorkKey, route: string, by: "pea" | "human", body: unknown) => {
         return work.write(scope, route, by, body as z.infer<typeof applyBody>);
+      },
+    },
+    history: {
+      schema: historyBody,
+      hint: "expected { direction: undo | redo, expectedRevision }",
+      run: (scope: WorkKey, route: string, by: "pea" | "human", body: unknown) => {
+        const { direction, expectedRevision } = body as z.infer<typeof historyBody>;
+        return work.step(scope, route, by, direction, expectedRevision);
       },
     },
     // Authenticated authors share recovery; the workspace preserves unreadable source bytes.

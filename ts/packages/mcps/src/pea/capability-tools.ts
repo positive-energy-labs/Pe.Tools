@@ -998,6 +998,29 @@ async function dispatch(
       if (row.kind === "route-doc") {
         if (input.expectedRevision === undefined)
           throw new Error(`Read route:${parsed.route} first and pass its expectedRevision.`);
+        if (parsed.member === "history") {
+          const direction = payload.direction;
+          if (direction !== "undo" && direction !== "redo")
+            throw new Error(
+              `route:${parsed.route}.history needs payload {direction: undo | redo}.`,
+            );
+          const scope = workspaceId
+            ? {
+                query: new URLSearchParams({ work: workspaceId }).toString(),
+                target: { session: null, document: null },
+              }
+            : await routeWorkScope(workTarget);
+          const result = await routeFetch(
+            parsed.route,
+            scope.query,
+            {
+              direction,
+              expectedRevision: input.expectedRevision,
+            },
+            "work.history",
+          );
+          return { ok: !("isError" in result), target: scope.target, result };
+        }
         // Ducts Work is keyed by document: an unbound write lands in Work no page reads (wave 3, 2026-10-19).
         if (parsed.route === "ducts" && !workspaceId && !workTarget)
           throw new Error(
@@ -1204,17 +1227,24 @@ async function routeFetch(
   route: string,
   queryString: string,
   body?: unknown,
+  write: "work.apply" | "work.history" = "work.apply",
 ): Promise<Record<string, unknown>> {
   const client = createPeClient(base(), fetch);
   const params = { route };
   const query = Object.fromEntries(new URLSearchParams(queryString));
   const response =
     body !== undefined
-      ? await client.response("work.apply", {
-          params,
-          query,
-          body: peRoutes["work.apply"].body.parse(body),
-        })
+      ? write === "work.history"
+        ? await client.response("work.history", {
+            params,
+            query,
+            body: peRoutes["work.history"].body.parse(body),
+          })
+        : await client.response("work.apply", {
+            params,
+            query,
+            body: peRoutes["work.apply"].body.parse(body),
+          })
       : await client.response("work.get", { params, query });
   const wire = (await response.json()) as Record<string, unknown>;
   const payload = response.ok

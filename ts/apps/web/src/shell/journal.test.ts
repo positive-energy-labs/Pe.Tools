@@ -142,6 +142,28 @@ test("Pea's Work edits are undo steps a person reverts; a Pea press never joins 
   expect((await f.workspace.read(f.key, f.key.route))!.doc).toEqual(f.initial);
 });
 
+test("Pea's host undo and redo walk the person's journal: same step, same revisions, person redoes", async () => {
+  const f = fixture();
+  await f.apply([{ path: ["settings", "width"], value: 20 }], "human-1");
+  const before = (await f.workspace.read(f.key, f.key.route))!.doc;
+  await f.apply([{ path: ["settings", "height"], value: 99 }], null, "pea");
+  const pea = (direction: "undo" | "redo", revision: number) =>
+    f.workspace.step(f.key, f.key.route, "pea", direction, revision);
+  expect(await pea("undo", 2)).toMatchObject({ ok: true, revision: 3, write: { kind: "restore" } });
+  expect((await f.workspace.read(f.key, f.key.route))!.doc).toEqual(before);
+  expect(f.journal.read().undo.map(({ press }) => press)).toEqual(["human-1"]);
+  expect(f.journal.read().redo.map(({ press }) => press)).toEqual(["pea:r2"]);
+  // The person's Redo replays the step Pea undid, then Pea's redo-then-undo cycle stays coherent.
+  expect(await f.journal.redo(f.writer)).toMatchObject({ ok: true, press: "pea:r2", revision: 4 });
+  expect(await pea("undo", 4)).toMatchObject({ ok: true, revision: 5 });
+  expect(await pea("redo", 5)).toMatchObject({ ok: true, revision: 6 });
+  expect(f.journal.read().undo.map(({ press }) => press)).toEqual(["human-1", "pea:r2"]);
+  expect(await f.journal.undo(f.writer)).toMatchObject({ ok: true, press: "pea:r2" });
+  expect(await f.journal.undo(f.writer)).toMatchObject({ ok: true, press: "human-1" });
+  expect((await f.workspace.read(f.key, f.key.route))!.doc).toEqual(f.initial);
+  expect(await pea("undo", 8)).toMatchObject({ ok: false });
+});
+
 test("undoing a Pea edit still refuses when its path changed elsewhere", async () => {
   const f = fixture();
   await f.apply([{ path: ["settings", "width"], value: 99 }], null, "pea");

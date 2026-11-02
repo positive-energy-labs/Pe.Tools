@@ -153,7 +153,7 @@ function routeRows(spec: RouteStateSpec<z.ZodType>): Capability[] {
     key: `route:${spec.route}.edit`,
     kind: "route-doc",
     title: `${spec.title}: edit`,
-    description: `Edit shared Work with expectedRevision from the read. Either author may replace an existing edit or leave an optional suggestion. Attribution and host evidence are host-owned. Omit value to delete an authored key. ${spec.finds?.join(" ") ?? ""} ${scopeHint}`,
+    description: `Edit shared Work with expectedRevision from the read. Either author may replace an existing edit or leave an optional suggestion. Attribution and host evidence are host-owned. Omit value to delete an authored key. To take back an edit, use route:${spec.route}.history, never a null or cleared value. ${spec.finds?.join(" ") ?? ""} ${scopeHint}`,
     finds:
       spec.route === "ducts"
         ? ["duct network", "network work"]
@@ -185,7 +185,24 @@ function routeRows(spec: RouteStateSpec<z.ZodType>): Capability[] {
     source: "route registry",
     rank: 0,
   };
-  return [read, edit];
+  const history: Capability = {
+    key: `route:${spec.route}.history`,
+    kind: "route-doc",
+    title: `${spec.title}: undo or redo`,
+    description: `Undo or redo the last step of this Work's one journal, the same step the user's Undo takes: undo restores the Work exactly as it was before the step (no null placeholders) as one new revision, and redo puts it back. The step may be yours or the user's; the result's write names who made it. Refuses, writing nothing, when the step's values changed elsewhere or nothing is left to undo. ${scopeHint}`,
+    finds: ["undo", "redo", "revert", "take back", "roll back edit"],
+    needs: "nothing",
+    effect: "command",
+    mutates: true,
+    principal: capabilityPrincipals(true),
+    input: z.toJSONSchema(z.object({ direction: z.enum(["undo", "redo"]) })) as Record<
+      string,
+      unknown
+    >,
+    source: "route registry",
+    rank: 0,
+  };
+  return [read, edit, history];
 }
 
 function packageRows(pod: PackageProjection): Capability[] {

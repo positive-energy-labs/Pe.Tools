@@ -340,6 +340,32 @@ export class RouteWorkspace {
     });
   }
 
+  /**
+   * Undo or redo the last step of this Work's one journal, whoever wrote it (ADR 0028 noun 4).
+   * The restore is the same write a person's Undo sends: one `restore` revision whose inverse is
+   * the redo. It refuses, writing nothing, when the step's paths changed elsewhere.
+   */
+  async step(
+    scope: WorkKey,
+    route: string,
+    by: WorkAuthor,
+    direction: "undo" | "redo",
+    expectedRevision: number,
+  ): Promise<RouteStateWriteResult> {
+    const { undo, redo } = journal(this.#inverses.get(workKey(scope)) ?? []);
+    const top = (direction === "undo" ? undo : redo).at(-1);
+    if (!top)
+      return refuse(
+        "refused",
+        `nothing to ${direction} in this Work`,
+        "History covers this host lifetime's last 100 writes.",
+      );
+    return this.apply(scope, route, by, top.inverse, expectedRevision, false, {
+      kind: "restore",
+      press: null,
+    });
+  }
+
   /** Observations and conditional retirement are host facts, never raw client edits. */
   publish(scope: WorkKey, route: string, patches: RouteStatePatch[], expectedRevision: number) {
     return this.apply(scope, route, "human", patches, expectedRevision, true);
@@ -584,6 +610,38 @@ export class RouteWorkspace {
     );
     return run;
   }
+}
+
+/**
+ * The undo and redo stacks, derived from the restore receipts rather than kept beside them: an
+ * apply opens a step and ends the redo branch; a restore of a step's inverse moves it across.
+ * ponytail: one accepted write per step; a person's multi-write press undoes write by write here.
+ */
+function journal(records: readonly { write: WorkWriteAck }[]) {
+  const undo: WorkWriteAck[] = [];
+  const redo: WorkWriteAck[] = [];
+  for (const { write } of records) {
+    if (write.kind === "apply") {
+      if (write.undoable) undo.push(write);
+      redo.length = 0;
+      continue;
+    }
+    if (write.kind !== "restore") continue;
+    const restores = (entry: WorkWriteAck) =>
+      canonicalRouteInput(entry.inverse) === canonicalRouteInput(write.patches);
+    const fromUndo = undo.findLastIndex(restores);
+    if (fromUndo >= 0) {
+      undo.splice(fromUndo, 1);
+      redo.push(write);
+      continue;
+    }
+    const fromRedo = redo.findLastIndex(restores);
+    if (fromRedo >= 0) {
+      redo.splice(fromRedo, 1);
+      undo.push(write);
+    }
+  }
+  return { undo, redo };
 }
 
 const overlaps = (a: RouteStatePatch["path"], b: RouteStatePatch["path"]) =>

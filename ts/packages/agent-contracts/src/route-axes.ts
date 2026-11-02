@@ -186,6 +186,7 @@ export function hostRouteAxes(leaves: readonly CatalogLink[]): Record<PeRouteId,
     "work.salvage": axes("Document", "One", ["Metadata"], "Read", "Bounded", []),
     "work.apply": axes("Document", "One", ["Metadata"], "SessionWrite", "Bounded", []),
     "work.fresh": axes("Document", "One", ["Metadata"], "SessionWrite", "Bounded", []),
+    "work.history": axes("Document", "One", ["Metadata"], "SessionWrite", "Bounded", []),
     "ducts.sheet": axes(
       "Elements",
       "One",

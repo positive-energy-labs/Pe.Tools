@@ -155,6 +155,27 @@ export function createWorkJournal(key: WorkKey) {
       sending?.expectedRevision === ack.base &&
       canonicalRouteInput(sending.patches) === canonicalRouteInput(ack.patches);
     if (ownRestore) return;
+    // Pea's undo/redo (`work.history`) or another mount's restore of the top step walks this same
+    // journal: the step moves across exactly as if this mount had replayed it.
+    if (ack.kind === "restore" && !busy && !pending) {
+      const sent = canonicalRouteInput(ack.patches);
+      const undone = undo.at(-1);
+      const back = undone?.transitions[undone.cursor - 1];
+      if (undone && back && !undone.superseded && canonicalRouteInput(back.inverse) === sent) {
+        back.forward = ack.inverse;
+        if (--undone.cursor === 0) redo.push(undo.pop()!);
+        last = { kind: "undo", step: undone };
+        return;
+      }
+      const redone = redo.at(-1);
+      const ahead = redone?.transitions[redone.cursor];
+      if (redone && ahead && !redone.superseded && canonicalRouteInput(ahead.forward) === sent) {
+        ahead.inverse = ack.inverse;
+        if (++redone.cursor === redone.transitions.length) undo.push(redo.pop()!);
+        last = { kind: "redo", step: redone };
+        return;
+      }
+    }
     // Pea's Work edits are undo steps (ADR 0027 rule 12, reversing ADR 0026): they arrive on the
     // accepted-delta stream without route detail and may carry no press. A person's own edit needs
     // the local press detail; anything else (restore, publish, a non-undoable write) is foreign.

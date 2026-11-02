@@ -746,6 +746,19 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "pe",
       "human-or-pea",
     ),
+    // Undo or redo the last step of the Work's one journal; the same restore a person's Undo sends.
+    "work.history": route(
+      "POST",
+      "/pe/route-state/:route/history",
+      z.object({
+        direction: z.enum(["undo", "redo"]),
+        expectedRevision: z.number().int().nonnegative(),
+      }),
+      object,
+      "human-or-pea",
+      "pe",
+      "human-or-pea",
+    ),
     "work.fresh": route(
       "POST",
       "/pe/route-state/:route/start-fresh",
