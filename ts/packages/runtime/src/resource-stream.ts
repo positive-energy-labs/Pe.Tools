@@ -41,6 +41,7 @@ export function observeResources(
     if (request.kind === "work-acks")
       return work.observeAccepted(request.work, (ack) =>
         publish({ kind: "event", key, value: ack }),
+        (error) => publish({ kind: "failure", key, error: error instanceof Error ? error.message : String(error) }),
       );
     if (host) return host(request, publish, after);
     publish({ kind: "failure", key, error: `Resource '${request.kind}' is unavailable` });
@@ -94,8 +95,8 @@ export function resourceResponse(
   limits = {
     frameBytes: READING_MAX_FRAME_BYTES,
     worldEvents: 64,
-    // One Work's retained window is 100 writes (`RouteWorkspace.observeAccepted`); replay must fit.
-    workAckEvents: 128,
+    // Durable Work replay must not be truncated by the connection mailbox.
+    workAckEvents: Infinity,
     stallMs: 10_000,
     logFrames: 4096,
   },
@@ -210,7 +211,7 @@ export function resourceResponse(
     try {
       const encoded = encode(frame);
       if (encoded.byteLength <= limits.frameBytes) bytes = encoded;
-    } catch {
+    } catch (error) { console.warn("ts/packages/runtime/src/resource-stream.ts: fallback after failure", error);
       // A bad owner value fails only this key; healthy resources keep the same connection.
     }
     try {

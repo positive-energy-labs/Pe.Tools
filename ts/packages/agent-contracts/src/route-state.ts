@@ -3,7 +3,7 @@
  * belong to ActionJournal; observations and readback use trusted host publication contracts.
  */
 import { z } from "zod";
-import { addressSchema, documentRefSchema, type Address } from "./target.ts";
+import { addressSchema, documentRefSchema, type Address, type DocumentRef } from "./target.ts";
 
 export interface RouteStateSpec<TSchema extends z.ZodType> {
   /** Route name, e.g. `parameter-links` — the URL segment transport adapters key on. */
@@ -62,6 +62,20 @@ export const workKeySchema = z.discriminatedUnion("binding", [
 ]);
 export type WorkKey = z.infer<typeof workKeySchema>;
 
+/** Each closed binding owns admission; adapters supply current identity, never provenance. */
+export function workBinding(key: WorkKey) {
+  return {
+    admits(target: DocumentRef, address: string | null | undefined, workspace = false): boolean {
+      switch (key.binding) {
+        case "open": return key.open.session === target.session && key.open.openId === target.openId;
+        case "address": return !!address && key.target.replaceAll("/", "\\").toLowerCase() === address.replaceAll("/", "\\").toLowerCase();
+        case "workspace": return workspace;
+        case "host": return false;
+      }
+    },
+  };
+}
+
 /** Construct a binding from the caller's resolved document or explicit workspace. */
 export function bindWork(
   route: string,
@@ -109,6 +123,7 @@ export const workWriteSchema = z.object({
   expectedRevision: z.number().int().nonnegative(),
   press: z.string().min(1).nullable(),
   kind: z.enum(["apply", "restore"]).default("apply"),
+  restoreOf: z.number().int().positive().optional(),
 });
 export type WorkWrite = z.infer<typeof workWriteSchema>;
 export type WorkWriteAck = {
@@ -116,6 +131,9 @@ export type WorkWriteAck = {
   kind: "apply" | "restore" | "publish" | "start-fresh";
   by: import("./route-doc.ts").WorkAuthor;
   press: string | null;
+  /** Host-issued step identity and exact transition restored, never inferred from patch equality. */
+  step?: string;
+  restoreOf?: number;
   base: number;
   revision: number;
   /** The accepted delta, including stamps, parent creation and reconciliation. */
@@ -136,6 +154,8 @@ export const workWriteAckSchema: z.ZodType<WorkWriteAck> = z.object({
   kind: z.enum(["apply", "restore", "publish", "start-fresh"]),
   by: z.enum(["pea", "human"]),
   press: z.string().min(1).nullable(),
+  step: z.string().min(1).optional(),
+  restoreOf: z.number().int().positive().optional(),
   base: z.number().int().nonnegative(),
   revision: z.number().int().nonnegative(),
   patches: z.array(routeStatePatchSchema),

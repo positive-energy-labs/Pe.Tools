@@ -25,6 +25,7 @@
     "@pe/ducts-domain": "workspace:*",
     "@pe/host-contracts": "workspace:*",
     "@pe/kit": "workspace:*",
+    "@pe/runtime": "workspace:*",
     "@pe/schema-core": "workspace:*",
     "@tanstack/react-devtools": "0.10.11",
     "@tanstack/react-router": "1.170.31",

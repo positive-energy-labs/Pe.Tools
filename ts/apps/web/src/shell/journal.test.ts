@@ -95,8 +95,8 @@ test("two accepted writes in one press are one step; undo and redo chain real ho
   expect(f.journal.read().undo[0]!.transitions).toHaveLength(2);
   expect(await f.journal.undo(f.writer)).toEqual({ ok: true, press: "cap-1", revision: 4 });
   expect(f.requests).toEqual([
-    { kind: "restore", patches: second.inverse, expectedRevision: 2, press: null },
-    { kind: "restore", patches: first.inverse, expectedRevision: 3, press: null },
+    { kind: "restore", restoreOf: 2, patches: second.inverse, expectedRevision: 2, press: null },
+    { kind: "restore", restoreOf: 1, patches: first.inverse, expectedRevision: 3, press: null },
   ]);
   expect((await f.workspace.read(f.key, f.key.route))!.doc).toEqual(f.initial);
   expect(f.journal.read().undo).toEqual([]);
@@ -131,11 +131,11 @@ test("Pea's Work edits are undo steps a person reverts; a Pea press never joins 
   await f.apply([{ path: ["settings", "width"], value: 20 }], "human-1");
   await f.apply([{ path: ["settings", "height"], value: 99 }], "human-1", "pea");
   await f.apply([{ path: ["settings", "width"], value: 30 }], null, "pea");
-  expect(f.journal.read().undo.map(({ press }) => press)).toEqual(["human-1", "pea:r2", "pea:r3"]);
+  expect(f.journal.read().undo.map(({ press }) => press)).toEqual(["human-1", "pea:human-1", "pea:r3"]);
   // Named by the route's declared Work names (none here), never by a raw Work path.
   expect(f.journal.read().undo.at(-1)).toMatchObject({ label: "Edit Work", by: "pea" });
   expect(await f.journal.undo(f.writer)).toMatchObject({ ok: true, press: "pea:r3" });
-  expect(await f.journal.undo(f.writer)).toMatchObject({ ok: true, press: "pea:r2" });
+  expect(await f.journal.undo(f.writer)).toMatchObject({ ok: true, press: "pea:human-1" });
   expect((await f.workspace.read(f.key, f.key.route))!.doc).toMatchObject({
     settings: { width: 20, height: 4 },
   });
@@ -151,17 +151,18 @@ test("a reloaded tab rebuilds steps, the head and undo/redo entries from the hos
   const reloaded = createWorkJournal(f.key);
   reloaded.name((patches) => ({ label: `Edit ${patches.map(({ path }) => path[0]).join(", ")}` }));
   const stop = f.workspace.observeAccepted(f.key, (ack) => reloaded.accept(ack));
-  // A live edit from another tab after the reload stays foreign: it is no replay.
+  // Live and replayed edits use the same shared journal, regardless of which tab wrote them.
   await f.apply([{ path: ["cells", "one", "edit"], value: { value: "other" } }], "tab-b");
   stop();
   const read = reloaded.read();
-  expect(read.undo.map(({ press, by }) => [press, by])).toEqual([["human-1", "human"]]);
-  expect(read.redo.map(({ press, label }) => [press, label])).toEqual([["pea:r2", "Edit settings"]]);
-  expect(read.last).toMatchObject({ kind: "undo", step: { press: "pea:r2" } });
+  expect(read.undo.map(({ press, by }) => [press, by])).toEqual([["human-1", "human"], ["tab-b", "human"]]);
+  expect(read.redo).toEqual([]);
+  expect(read.last).toMatchObject({ kind: "apply", step: { press: "tab-b" } });
   expect(read.moves.map(({ kind, press, revision }) => [kind, press, revision])).toEqual([
     ["apply", "human-1", 1],
     ["apply", "pea:r2", 2],
     ["undo", "pea:r2", 3],
+    ["apply", "tab-b", 4],
   ]);
   expect(read.moves.every(({ at }) => typeof at === "number")).toBe(true);
 });

@@ -234,6 +234,9 @@ importers:
       '@pe/kit':
         specifier: workspace:*
         version: link:../../packages/kit
+      '@pe/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
       '@pe/schema-core':
         specifier: workspace:*
         version: link:../../packages/schema-core

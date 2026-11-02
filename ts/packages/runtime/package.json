@@ -25,6 +25,7 @@
       "browser": "./src/invocation-context.browser.ts",
       "default": "./src/invocation-context.ts"
     },
+    "./work-journal": "./src/work-journal.ts",
     "./runtime-owner": "./src/runtime-owner.ts"
   },
   "publishConfig": {

@@ -1,3 +1,4 @@
+import { createWorkJournal } from "./work-journal.ts";
 import { bindWork, workCounts, workKey, workKeySchema, type WorkKey } from "@pe/agent-contracts";
 import { z } from "zod";
 import { OwnerReads, type OwnerValue } from "./owner-read.ts";
@@ -19,6 +20,7 @@ import {
   type RouteStateWriteResult,
   type WorkWrite,
   type WorkWriteAck,
+  workWriteAckSchema,
 } from "@pe/agent-contracts";
 import type { RouteStateSpec, RouteWriteAdmission } from "@pe/agent-contracts";
 
@@ -65,7 +67,6 @@ export class RouteWorkspace {
   #tail = Promise.resolve();
   readonly #listeners = new Set<(event: RouteWorkspaceEvent) => void>();
   readonly #reads = new OwnerReads();
-  readonly #accepted = new Map<string, WorkWriteAck[]>();
   readonly #acceptedListeners = new Map<string, Set<(ack: WorkWriteAck) => void>>();
   readonly #inverses = new Map<
     string,
@@ -129,7 +130,7 @@ export class RouteWorkspace {
             revision = envelope.revision;
             ({ proposals, unfinished } = workCounts(envelope.doc, spec.editable ?? []));
             state = "ready";
-          } catch {
+          } catch (error) { console.warn("ts/packages/runtime/src/route-workspace.ts: fallback after failure", error);
             // Keep the address discoverable without exposing the unreadable document.
           }
         }
@@ -217,7 +218,7 @@ export class RouteWorkspace {
     patches: RouteStatePatch[],
     expectedRevision: number,
     trusted = false,
-    context: Pick<WorkWrite, "press" | "kind"> = { press: null, kind: "apply" },
+    context: Pick<WorkWrite, "press" | "kind" | "restoreOf"> = { press: null, kind: "apply" },
   ): Promise<RouteStateWriteResult> {
     if (scope.route !== route)
       return refuse(
@@ -232,17 +233,21 @@ export class RouteWorkspace {
       const envelope = await this.#load(scope, registration.spec).catch(unreadable);
       if ("ok" in envelope) return envelope;
       const kind = trusted ? "publish" : context.kind;
-      const press = by === "human" && kind === "apply" ? context.press : null;
+      const press = kind === "apply" ? context.press : null;
       const records = this.#inverses.get(workKey(scope)) ?? [];
       const recorded =
         kind === "restore"
           ? records.findLast(
-              (entry) => canonicalRouteInput(entry.write.inverse) === canonicalRouteInput(patches),
+              (entry) => entry.write.revision === context.restoreOf,
             )
           : undefined;
       if (
         kind === "restore" &&
         (!recorded ||
+          records.some((entry) => entry.write.revision > recorded.write.revision &&
+            entry.write.kind === "publish" && entry.write.patches.some((patch) =>
+              recorded.write.inverse.some((inverse) => overlaps(patch.path, inverse.path)))) ||
+          canonicalRouteInput(recorded.write.inverse) !== canonicalRouteInput(patches) ||
           !recorded.write.inverse.every(
             (patch) =>
               canonicalRouteInput(valueAt(envelope.doc, patch.path)) ===
@@ -302,15 +307,13 @@ export class RouteWorkspace {
         return landed;
       }
 
-      await this.#persist(scope, route, {
-        ...landed.envelope,
-        schemaVersion: recorded?.recovery?.schemaVersion ?? registration.spec.schemaVersion ?? 1,
-      });
       const write: WorkWriteAck = {
         key: scope,
         kind,
         by,
         press,
+        ...(kind === "apply" ? { step: by === "pea" ? `pea:${press ?? `r${landed.envelope.revision}`}` : `human:${press ?? `r${landed.envelope.revision}`}` } : {}),
+        ...(recorded ? { step: recorded.write.step, restoreOf: recorded.write.revision } : {}),
         base: envelope.revision,
         revision: landed.envelope.revision,
         patches: routeDocDelta(envelope.doc, landed.envelope.doc),
@@ -318,7 +321,13 @@ export class RouteWorkspace {
         undoable: true,
         at: Date.now(),
       };
-      this.#remember(write, landed.envelope.doc);
+      const history = [...records, { write, after: landed.envelope.doc,
+        ...(recorded?.recovery ? { recovery: { doc: envelope.doc, schemaVersion: registration.spec.schemaVersion ?? 1 } } : {}) }];
+      await this.#persist(scope, route, {
+        ...landed.envelope,
+        schemaVersion: recorded?.recovery?.schemaVersion ?? registration.spec.schemaVersion ?? 1,
+      }, history);
+      this.#inverses.set(workKey(scope), history);
       this.#accept(write);
       await this.#publish({
         type: "route_workspace",
@@ -353,18 +362,19 @@ export class RouteWorkspace {
     direction: "undo" | "redo",
     expectedRevision: number,
   ): Promise<RouteStateWriteResult> {
-    const { undo, redo } = journal(this.#inverses.get(workKey(scope)) ?? []);
-    const top = (direction === "undo" ? undo : redo).at(-1);
-    if (!top)
-      return refuse(
-        "refused",
-        `nothing to ${direction} in this Work`,
-        "History covers this host lifetime's last 100 writes.",
-      );
-    return this.apply(scope, route, by, top.inverse, expectedRevision, false, {
-      kind: "restore",
-      press: null,
+    const snapshot = await this.view(scope, route);
+    if (!snapshot || snapshot.revision !== expectedRevision)
+      return refuse("refused", "Work changed before restoring", "Re-read Work.");
+    const journal = createWorkJournal(scope);
+    for (const { write } of this.#inverses.get(workKey(scope)) ?? [])
+      journal.accept({ ...write, replay: true });
+    journal.observe(snapshot);
+    let accepted: RouteStateWriteResult | undefined;
+    const result = await journal[direction](async (write) => {
+      accepted = await this.write(scope, route, by, write);
+      return accepted;
     });
+    return result.ok && accepted ? accepted : refuse("refused", result.ok ? "Nothing restored" : result.message, "Re-read Work history.");
   }
 
   /** Observations and conditional retirement are host facts, never raw client edits. */
@@ -400,7 +410,6 @@ export class RouteWorkspace {
       const fresh = emptyEnvelope(spec);
       const prior = envelopeSchema.safeParse(raw);
       fresh.revision = (prior.success ? prior.data.revision : 0) + 1;
-      await this.#persist(scope, route, fresh);
       // Recovery is the explicit exception to schema-valid restore: only these host-held bytes return.
       const write: WorkWriteAck = {
         key: scope,
@@ -414,12 +423,13 @@ export class RouteWorkspace {
         undoable: prior.success,
         aside: aside(route, slot),
       };
-      this.#inverses.delete(workKey(scope));
-      if (prior.success)
-        this.#remember(write, fresh.doc, {
-          doc: prior.data.doc,
-          schemaVersion: (raw as { schemaVersion: number }).schemaVersion,
-        });
+      const history = [...historySchema.parse((raw as { history?: unknown }).history ?? []), {
+        write, after: fresh.doc,
+        ...(prior.success ? { recovery: { doc: prior.data.doc,
+          schemaVersion: (raw as { schemaVersion: number }).schemaVersion } } : {}),
+      }];
+      await this.#persist(scope, route, fresh, history);
+      this.#inverses.set(targetKey, history);
       this.#accept(write);
       await this.#publish({
         ...write,
@@ -482,33 +492,33 @@ export class RouteWorkspace {
     return () => this.#listeners.delete(listener);
   }
 
-  /**
-   * Every accepted write of one Work, as the host stamped it: the retained window first (oldest to
-   * newest), then each later write. Replay and subscription share one synchronous step, so no write
-   * falls between them; the window is bounded, so a reader that missed more sees a revision jump.
-   */
-  observeAccepted(scope: WorkKey, listener: (ack: WorkWriteAck) => void): () => void {
+  /** Hydration and subscription share the write tail; restart replay has no arrival gap. */
+  observeAccepted(scope: WorkKey, listener: (ack: WorkWriteAck) => void, failed: (error: unknown) => void = (error) => { throw error; }): () => void {
     const key = workKey(scope);
-    for (const ack of this.#accepted.get(key) ?? [])
-      listener({ ...structuredClone(ack), replay: true });
-    const listeners = this.#acceptedListeners.get(key) ?? new Set();
-    this.#acceptedListeners.set(key, listeners);
-    listeners.add(listener);
+    let disposed = false;
+    void this.#serialized(async () => {
+      const spec = this.#registry.get(scope.route)?.spec;
+      if (!spec || disposed) return;
+      const raw = await this.#carryOver(scope, spec.route);
+      this.#inverses.set(key, historySchema.parse((raw as { history?: unknown } | null)?.history ?? []).map((record) => ({ ...record, write: { ...record.write, key: scope } })));
+      if (disposed) return;
+      for (const { write } of this.#inverses.get(key) ?? [])
+        listener({ ...structuredClone(write), replay: true });
+      const listeners = this.#acceptedListeners.get(key) ?? new Set();
+      this.#acceptedListeners.set(key, listeners);
+      listeners.add(listener);
+    }).catch((error) => { if (!disposed) failed(error); });
     return () => {
-      listeners.delete(listener);
-      if (listeners.size === 0 && this.#acceptedListeners.get(key) === listeners)
-        this.#acceptedListeners.delete(key);
+      disposed = true;
+      const listeners = this.#acceptedListeners.get(key);
+      listeners?.delete(listener);
+      if (!listeners?.size) this.#acceptedListeners.delete(key);
     };
   }
 
   #accept(write: WorkWriteAck) {
-    const key = workKey(write.key);
-    // shortcut: like restore receipts, the window is this host lifetime's last 100 writes per Work.
-    this.#accepted.set(
-      key,
-      [...(this.#accepted.get(key) ?? []), structuredClone(write)].slice(-100),
-    );
-    for (const listener of this.#acceptedListeners.get(key) ?? []) listener(structuredClone(write));
+    for (const listener of this.#acceptedListeners.get(workKey(write.key)) ?? [])
+      listener(structuredClone(write));
   }
 
   #load(scope: WorkKey, spec: RouteStateSpec<z.ZodType>): Promise<RouteEnvelope<unknown>>;
@@ -523,7 +533,11 @@ export class RouteWorkspace {
     create = true,
   ): Promise<RouteEnvelope<unknown> | null> {
     const raw = await this.#carryOver(scope, spec.route);
-    if (raw == null) return create ? emptyEnvelope(spec) : null;
+    if (raw == null) {
+      this.#inverses.delete(workKey(scope));
+      return create ? emptyEnvelope(spec) : null;
+    }
+    this.#inverses.set(workKey(scope), historySchema.parse((raw as { history?: unknown }).history ?? []).map((record) => ({ ...record, write: { ...record.write, key: scope } })));
     let age = (raw as { schemaVersion?: number }).schemaVersion;
     const current = spec.schemaVersion ?? 1;
     if (age !== undefined && age < current && spec.migrations) {
@@ -566,42 +580,17 @@ export class RouteWorkspace {
     return carried;
   }
 
-  async #persist(scope: WorkKey, route: string, envelope: RouteEnvelope<unknown>): Promise<void> {
+  async #persist(scope: WorkKey, route: string, envelope: RouteEnvelope<unknown>, history = this.#inverses.get(workKey(scope)) ?? []): Promise<void> {
     // Closing a native lifetime changes availability, never the user's authored Work.
     await this.options.store.setState({
       targetKey: workKey(scope),
       route,
-      value: envelope,
+      value: { ...envelope, history },
     });
   }
 
   async #publish(event: RouteWorkspaceEvent): Promise<void> {
     for (const listener of this.#listeners) listener(structuredClone(event));
-  }
-
-  #remember(
-    write: WorkWriteAck,
-    after: unknown,
-    recovery?: { doc: unknown; schemaVersion: number },
-  ) {
-    const key = workKey(write.key);
-    const records = this.#inverses.get(key) ?? [];
-    // A publish is a barrier even if a later write puts the same values back. Pea's edits are
-    // undo steps (ADR 0027 rule 12), so they keep the chain: undoing in order replays through them.
-    const kept =
-      write.kind === "publish"
-        ? records.filter(
-            (entry) =>
-              !entry.write.inverse.some((inverse) =>
-                [...write.patches, ...write.inverse].some((patch) =>
-                  overlaps(inverse.path, patch.path),
-                ),
-              ),
-          )
-        : records;
-    kept.push(structuredClone({ write, after, ...(recovery !== undefined ? { recovery } : {}) }));
-    // shortcut: restore receipts cover the last 100 transitions in this host lifetime; persist them for reload survival.
-    this.#inverses.set(key, kept.slice(-100));
   }
 
   #serialized<T>(work: () => Promise<T>): Promise<T> {
@@ -612,38 +601,6 @@ export class RouteWorkspace {
     );
     return run;
   }
-}
-
-/**
- * The undo and redo stacks, derived from the restore receipts rather than kept beside them: an
- * apply opens a step and ends the redo branch; a restore of a step's inverse moves it across.
- * ponytail: one accepted write per step; a person's multi-write press undoes write by write here.
- */
-function journal(records: readonly { write: WorkWriteAck }[]) {
-  const undo: WorkWriteAck[] = [];
-  const redo: WorkWriteAck[] = [];
-  for (const { write } of records) {
-    if (write.kind === "apply") {
-      if (write.undoable) undo.push(write);
-      redo.length = 0;
-      continue;
-    }
-    if (write.kind !== "restore") continue;
-    const restores = (entry: WorkWriteAck) =>
-      canonicalRouteInput(entry.inverse) === canonicalRouteInput(write.patches);
-    const fromUndo = undo.findLastIndex(restores);
-    if (fromUndo >= 0) {
-      undo.splice(fromUndo, 1);
-      redo.push(write);
-      continue;
-    }
-    const fromRedo = redo.findLastIndex(restores);
-    if (fromRedo >= 0) {
-      redo.splice(fromRedo, 1);
-      undo.push(write);
-    }
-  }
-  return { undo, redo };
 }
 
 const overlaps = (a: RouteStatePatch["path"], b: RouteStatePatch["path"]) =>
@@ -659,6 +616,12 @@ function valueAt(doc: unknown, path: RouteStatePatch["path"]): unknown {
   }
   return { exists: true, value };
 }
+
+const historySchema = z.array(z.object({
+  write: workWriteAckSchema,
+  after: z.unknown(),
+  recovery: z.object({ doc: z.unknown(), schemaVersion: z.number().int().positive() }).optional(),
+}));
 
 const envelopeSchema = z.object({
   version: z.literal(ENVELOPE_VERSION),

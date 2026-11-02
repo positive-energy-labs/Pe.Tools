@@ -244,7 +244,7 @@ test("accepted writes reach a stream subscriber with the host's stamps; a Pea wr
   abort.abort();
 });
 
-test("a resubscription replays the retained window; a late reader starts at the window and sees the jump", async () => {
+test("a resubscription replays durable history beyond 100 accepted writes", async () => {
   const module = workspace(memoryStore().store);
   const write = bind(module);
   for (let revision = 0; revision < 3; revision++)
@@ -255,12 +255,12 @@ test("a resubscription replays the retained window; a late reader starts at the 
   expect(revisions.map((value) => value.revision)).toEqual([1, 2, 3]);
   await replay.cancel();
 
-  // 130 writes: the module keeps 100 and the stream tail 128, so a late reader sees the last 100.
+  // Durable replay keeps the beginning even after more than 100 writes.
   for (let revision = 3; revision < 130; revision++)
     await write.apply("pea", [{ path: ["count"], value: revision + 1 }], revision);
   const late = acksStream(module);
   const first = (await readSse(late)).value as { revision: number; base: number };
-  expect(first).toMatchObject({ base: 30, revision: 31 });
+  expect(first).toMatchObject({ base: 0, revision: 1 });
   await late.cancel();
 });
 
@@ -275,6 +275,7 @@ test("a tail that overflows says gap with the count it dropped, then delivers wh
     observeResources(module, { observe: () => () => {} }),
     { frameBytes: 1 << 20, worldEvents: 64, workAckEvents: 2, stallMs: 10_000, logFrames: 8 },
   ).body!.getReader();
+  await module.view(documentA, documentA.route); // let durable hydration fill the mailbox
   expect(await readSse(reader)).toMatchObject({ kind: "gap", dropped: 3 });
   const kept = [(await readSse(reader)).value, (await readSse(reader)).value] as {
     revision: number;

@@ -1,31 +1,9 @@
-import type { InvocationOutcome, RouteStatePatch } from "@pe/agent-contracts";
+import { receiptBarrier, type TimelineBarrier, type TimelineEntry } from "@pe/runtime/work-journal";
+export { receiptBarrier } from "@pe/runtime/work-journal";
+export type { TimelineBarrier, TimelineEntry } from "@pe/runtime/work-journal";
 
-export interface TimelineEntry {
-  kind: "invocation" | "receipt" | "checkpoint" | "feed";
-  at: string | number;
-  press?: string;
-  verb?: string;
-  subject?: unknown;
-  receiptId?: string;
-  paths?: readonly RouteStatePatch["path"][];
-  basis?: unknown;
-  outcome?: InvocationOutcome;
-}
-
-// Keep the last 200 route interactions in memory; durable History needs checkpoint storage.
+// Presentation retention only; accepted Work and invocations replay from durable host history.
 export const TIMELINE_LIMIT = 200;
-
-export type TimelineBarrier = TimelineEntry & {
-  kind: "receipt";
-  paths: readonly RouteStatePatch["path"][];
-};
-
-/** A receipt without a path footprint cannot claim to block unrelated Work. [] inside paths is the root. */
-export function receiptBarrier(entry: TimelineEntry): TimelineBarrier | null {
-  return entry.kind === "receipt" && entry.paths?.length
-    ? (structuredClone(entry) as TimelineBarrier)
-    : null;
-}
 
 export const timelineBarriers = (entries: readonly TimelineEntry[]): TimelineBarrier[] =>
   entries.flatMap((entry) => {

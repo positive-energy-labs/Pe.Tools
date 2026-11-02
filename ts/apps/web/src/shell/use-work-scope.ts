@@ -259,7 +259,7 @@ export function useWorkScope<P, W>(
       subscribeAcceptedDeltas: spec
         ? (key: WorkKey, onAck: (ack: WorkWriteAck) => void) => subscribeAcceptedDeltas(key, onAck)
         : noDeltas,
-      // TODO: prove on a live host that a Pea ducts preview receipt consumes this Work (receiptsForWork)
+      // TODO: docs/features/routes/LEDGER.md#s7-fd4c79938c prove on a live host that a Pea ducts preview receipt consumes this Work (receiptsForWork)
       // and lands in the Timeline head; only the head projection is unit-proven (situation-band.test).
       subscribeReceipts: (accept: (receipt: ActionReceipt, key: WorkKey | null) => void) => {
         let current = "";
@@ -272,15 +272,12 @@ export function useWorkScope<P, W>(
           release();
           release = () => {};
           if (!key) return;
-          // The first frame is history: only what is still in flight (a consent window) joins.
-          let baseline = true;
+          // TODO: docs/features/routes/LEDGER.md#s5-durable-journal prove completed Timeline replay after host restart in the browser.
           release = peReadings.subscribe({ kind: "receipts", work: key }, (frame) => {
             if (frame.kind !== "snapshot" || frame.stale) return;
             const rows = actionReceiptSchema.array().safeParse(frame.value);
             if (!rows.success) return;
-            for (const row of rows.data)
-              if (!baseline || ["waiting", "running"].includes(row.state)) accept(row, key);
-            baseline = false;
+            for (const row of rows.data) accept(row, key);
           });
         };
         store.listeners.add(follow);

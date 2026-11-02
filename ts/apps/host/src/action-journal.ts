@@ -657,6 +657,7 @@ export class ActionJournal implements ReceiptReader {
     const row = action ? this.rows.get(action) : undefined;
     if (!row) return null;
     if (row.cancellationRequested) return "Action cancelled before dispatch";
+    if (row.state === "unknown") return "Action checkpoint is uncertain; resolve before dispatch";
     try {
       if (row.effects.length) commandCheckpoint(originOf(row.caller), row.consent);
       validateFootprintCaller(this.activeCallers.get(row.id) ?? row.caller, row.effects);
@@ -1626,19 +1627,25 @@ export class ActionJournal implements ReceiptReader {
         },
       };
       let validated = row.prepared.state === "ready";
+      const persistenceFailed = (error: unknown) => {
+        console.error("Action consent checkpoint could not be persisted", error);
+        this.cancelWaits.get(row.id)?.();
+        this.index({ ...row, state: "unknown", cancellationRequested: true, status: 503, error: `Consent checkpoint could not be persisted: ${String(error)}` });
+        this.notify();
+      };
       const releaseRun = subscribeRunChanges(() => {
         const consentWindow = commandConsentWindow(row.id);
         if (
           canonicalRouteInput(row.consentWindow ?? null) !==
           canonicalRouteInput(consentWindow ?? null)
         )
-          void save((current) => ({ ...current, consentWindow })).catch(() => {});
+          void save((current) => ({ ...current, consentWindow })).catch(persistenceFailed);
         try {
           if (!retirementOnly && row.effects.length)
             commandCheckpoint(originOf(row.caller), row.consent);
         } catch {
           this.cancelWaits.get(row.id)?.();
-          void save((current) => ({ ...current, cancellationRequested: true })).catch(() => {});
+          void save((current) => ({ ...current, cancellationRequested: true })).catch(persistenceFailed);
         }
       });
       const completion = Promise.resolve()
@@ -1722,7 +1729,7 @@ export class ActionJournal implements ReceiptReader {
           }),
         );
       this.pending.set(row.id, completion);
-      void completion.catch(() => undefined);
+      void completion.catch((error) => { console.error("action-journal: asynchronous operation failed", error); return undefined; });
       return structuredClone(row);
     });
     return admitted ?? this.invoke(raw, crossing, resume);
@@ -1878,7 +1885,7 @@ export class ActionJournal implements ReceiptReader {
   /** The journal's one write lock. Never await the bridge inside it: the bridge journals through it. */
   private serial<A>(work: () => Promise<A>): Promise<A> {
     const next = this.tail
-      .catch(() => undefined)
+      .catch((error) => { console.error("action-journal: asynchronous operation failed", error); return undefined; })
       .then(() => this.loadOnce())
       .then(work);
     this.tail = next.then(
