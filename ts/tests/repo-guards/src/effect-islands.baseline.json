@@ -21,7 +21,7 @@
     "apps/host/src/pe-routes.ts": 5,
     "apps/host/src/resource-adapters.ts": 3,
     "apps/host/src/revoke.ts": 1,
-    "apps/host/src/run-consent.ts": 2,
+    "apps/host/src/run-consent.ts": 1,
     "apps/host/src/schedule-actions.ts": 1,
     "apps/host/src/sdk-dispatch.ts": 1,
     "apps/host/src/sdk-session.ts": 5,

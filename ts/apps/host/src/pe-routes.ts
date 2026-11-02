@@ -114,6 +114,7 @@ import {
 } from "./control.ts";
 import { bindRevoke } from "./revoke.ts";
 import { hostActionJournal, hostLog } from "./gateway-owner.ts";
+import { RunConsents } from "./run-consent.ts";
 import type { HostLog } from "./host-log.ts";
 import { UpdateReader } from "./update-reader.ts";
 import { makeInstalledUpdateReader } from "./update-route.ts";
@@ -1094,6 +1095,7 @@ export function createContributionContent(options: {
 export function makeHostPeRoutes(
   hostBaseUrl: string,
   bridge: RevitBridge["Service"] | undefined,
+  runs: RunConsents["Service"],
   registrationsFactory: typeof createRouteRegistrations = createRouteRegistrations,
   update: UpdateReader["Service"] = makeInstalledUpdateReader(),
   share?: MachineShareAdapter,
@@ -1147,6 +1149,7 @@ export function makeHostPeRoutes(
   );
   const routeSettings = createRouteSettings(productRouteSettingsPath());
   const threads = createHarnessThreads({
+    runs,
     // An unreadable settings file asks a person: unknown consent never applies by itself.
     autoApprove: () => {
       try {
@@ -1390,8 +1393,9 @@ export const peRoutesLayer = (
       const hostBaseUrl = `http://127.0.0.1:${address._tag === "UnixPathAddress" ? 0 : address.port}`;
       const bridge = Option.getOrUndefined(yield* Effect.serviceOption(RevitBridge));
       const update = yield* UpdateReader;
+      const runs = yield* RunConsents;
       const { providers, threads, routes, catalog, machine, notices, plugins, tasks } =
-        makeHostPeRoutes(hostBaseUrl, bridge, registrationsFactory, update, share, hostWork);
+        makeHostPeRoutes(hostBaseUrl, bridge, runs, registrationsFactory, update, share, hostWork);
       useHostMachine(machine);
       bindControl({
         heads: threads.heads.read,

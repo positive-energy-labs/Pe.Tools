@@ -8,7 +8,7 @@ import {
   HOST_RUNTIME_SERVICE_HEADER,
 } from "@pe/host-contracts/contracts";
 import { invocationContext, type RequestPrincipal } from "@pe/runtime/context";
-import type { RunConsents } from "./run-consent.ts";
+import type { RunConsentsPromise } from "./run-consent.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import { pageKeyOf, parseContributionKey } from "@pe/agent-contracts";
 import type {
@@ -332,7 +332,7 @@ export function requireHuman(caller: Caller, door: string, what: string) {
 /* ── Sources: the head store and what Pea's acquisitions hold ─────────────────────────── */
 
 type Sources = {
-  runs?: RunConsents;
+  runs?: RunConsentsPromise;
   heads: ((thread: string) => ThreadHead) | null;
   subscribeHeads?: (notify: () => void) => () => void;
   /** The acquisition that holds this exact lifetime; null (fail closed) when none is proven. */

@@ -1,3 +1,4 @@
+import { testConsents } from "./effect-test.ts";
 import { bindFixtureCommands, invokeCommand } from "./command-fixture.ts";
 import type { CommandResources } from "../src/command-executor.ts";
 import { mkdtemp, rm, readFile } from "node:fs/promises";
@@ -8,7 +9,7 @@ import { readNativeReceipt } from "../src/native-receipts.ts";
 import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { bindControl } from "../src/control.ts";
-import { RunConsents, type ConsentEvent } from "../src/run-consent.ts";
+import type { ConsentEvent } from "../src/run-consent.ts";
 import type { ActionAdmission, Caller } from "@pe/agent-contracts";
 
 const run = { thread: "thread", turn: "turn" };
@@ -25,7 +26,7 @@ const setup = async (probe?: CommandResources["probe"]) => {
   const dir = await mkdtemp(join(tmpdir(), "pe-consent-")),
     path = join(dir, "journal.jsonl");
   const events: ConsentEvent[] = [],
-    runs = new RunConsents((_, e) => events.push(e));
+    runs = testConsents((_, e) => events.push(e));
   runs.open(run);
   bindControl({ runs, acquired: () => null });
   const journal = new ActionJournal(path);

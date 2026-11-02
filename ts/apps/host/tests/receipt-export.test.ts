@@ -1,3 +1,4 @@
+import { testConsents } from "./effect-test.ts";
 import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { spawn } from "node:child_process";
@@ -20,7 +21,6 @@ import {
   abortableFetch,
 } from "../src/receipt-export.ts";
 import { mcpBeforeSend } from "../src/mcp-analytics.ts";
-import { RunConsents } from "../src/run-consent.ts";
 import { harnessEventSchema } from "@pe/agent-contracts";
 
 const stamp = receiptGoldenEnvelope.stamp!;
@@ -278,7 +278,7 @@ test("the countdown notice names the first frozen footprint, deadline and whole-
   const adapter = createThreadReceiptAdapter(f.exporter, () => [
     { id: run.thread, title: "Design", events },
   ]);
-  const runs = new RunConsents((_, event) => {
+  const runs = testConsents((_, event) => {
     const durable = harnessEventSchema.parse({
       ...event,
       seq: events.length + 1,

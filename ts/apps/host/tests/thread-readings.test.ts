@@ -1,3 +1,4 @@
+import { consentService } from "./effect-test.ts";
 import { afterAll, beforeAll, expect, test } from "vite-plus/test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
@@ -31,6 +32,7 @@ afterAll(async () => {
 function host(limits?: { segmentBytes: number; segments: number; entryBytes: number }) {
   const log = new HostLog(join(root, "log", randomUUID()), limits);
   const threads = createHarnessThreads({
+    runs: consentService(),
     root: join(root, "threads"),
     log,
     worldRoot: tmpdir(),

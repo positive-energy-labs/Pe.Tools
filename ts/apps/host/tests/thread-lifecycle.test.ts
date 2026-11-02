@@ -1,3 +1,4 @@
+import { consentService } from "./effect-test.ts";
 import { asCaller, human } from "./callers.ts";
 import { HostLog } from "../src/host-log.ts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
@@ -49,7 +50,7 @@ function fixture(events: HarnessEvent[] = []) {
       invalidate: () => {},
     } as unknown as Providers,
   };
-  const threads = createHarnessThreads(options);
+  const threads = createHarnessThreads({ ...options, runs: consentService() });
   const host = { ...threads, fetch: asCaller(human, threads.fetch) };
   cleanups.push(async () => {
     await host.close();
@@ -102,7 +103,7 @@ test("lifecycle transitions persist, reject stale windows, and keep the exact ta
     revision: 1,
   });
   await host.close();
-  const reopened = createHarnessThreads(options);
+  const reopened = createHarnessThreads({ ...options, runs: consentService() });
   expect(
     (await (await reopened.fetch(new Request("http://host/pe/threads/thread"))).json()).lifecycle,
   ).toMatchObject({ pinned: true, revision: 3 });

@@ -1,3 +1,4 @@
+import { consentService } from "./effect-test.ts";
 import { createPeClient, servePeRoute } from "@pe/agent-contracts/pe-api";
 import { afterAll, afterEach, beforeAll, expect, test, vi } from "vite-plus/test";
 import { HostLog } from "../src/host-log.ts";
@@ -72,6 +73,7 @@ const host = (
   });
   const log = new HostLog(join(root, ".log", randomUUID()));
   const threads = createHarnessThreads({
+    runs: consentService(),
     log,
     prepare,
     pluginHook,

@@ -95,7 +95,7 @@ import {
   sessionAcquisition,
 } from "../control.ts";
 import { Effect, Schema } from "effect";
-import { RunConsents } from "../run-consent.ts";
+import { runConsentsPromise, type RunConsents } from "../run-consent.ts";
 import { z } from "zod";
 import type { HostLog } from "../host-log.ts";
 import { openAdapter, stopChild } from "./adapter.ts";
@@ -178,6 +178,8 @@ export type HarnessThreadsOptions = {
   providers: Providers;
   /** Pea's auto-approve setting (route `chat`): on, a thread's first write applies at its deadline. */
   autoApprove?: () => boolean;
+  /** Run consent, provided once by the host layer; this store attaches its transcript and grants. */
+  runs: RunConsents["Service"];
   /** Automatic update admission excludes new harness work through installer handoff. */
   updatePending?: () => boolean;
   /** Admission/import and skill publication must settle before either harness starts. */
@@ -409,20 +411,21 @@ function writeJson(path: string, value: unknown) {
 
 export function createHarnessThreads(options: HarnessThreadsOptions) {
   const threads = new Map<string, Thread>();
-  const runs = new RunConsents(
-    (run, event) => {
+  const runs = runConsentsPromise(options.runs);
+  runs.attach({
+    emit: (run, event) => {
       const t = threads.get(run.thread);
       if (t) append(t, event);
     },
-    (ref) => options.observeDocument?.({ kind: "open", ref })?.name,
-    options.autoApprove,
-    (thread, decision) => {
+    documentName: (ref) => options.observeDocument?.({ kind: "open", ref })?.name,
+    autoApprove: options.autoApprove ?? (() => true),
+    persist: (thread, decision) => {
       const t = threads.get(thread);
       if (!t) return; // Deletion removes the record before its cancelled turn unwinds.
       t.meta.runConsent = decision;
       writeMeta(t);
     },
-  );
+  });
   bindControl({ runs });
   /** Synchronization only. Observations and pins are always reconstructed from thread events. */
   const elementNameReads = new Map<string, Promise<void>>();

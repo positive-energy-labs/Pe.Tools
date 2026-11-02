@@ -28,6 +28,7 @@ import { productRouteWorkPath } from "./product-paths.ts";
 import { hostActionJournal, releaseHostReceipts } from "./gateway-owner.ts";
 import { releaseHostReceiptExport } from "./receipt-export.ts";
 import { RevitBridge, RevitBridgeLive } from "./bridge.ts";
+import { RunConsents } from "./run-consent.ts";
 import { getHostStatus } from "./local-ops.ts";
 import { isSettingsSchemaUrl } from "./settings.ts";
 import { isNavigation, opsCatalogRoute, type SpaFallback } from "./ops-catalog.ts";
@@ -311,6 +312,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
       Layer.provide(revitComposition.provider),
       Layer.provide(Layer.succeed(HostLifecycle, options.lifecycle)),
       Layer.provide(UpdateLive),
+      Layer.provide(RunConsents.layer),
       Layer.provide(NodeServices.layer),
       Layer.provide(ReceiptLifetime),
     );
@@ -338,6 +340,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
     Layer.provide(NodeHttpClient.layerUndici),
     Layer.provide(Layer.succeed(HostLifecycle, options.lifecycle)),
     Layer.provide(UpdateLive),
+    Layer.provide(RunConsents.layer),
     Layer.provide(NodeServices.layer),
     Layer.provide(ReceiptLifetime),
   );
