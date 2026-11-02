@@ -413,7 +413,7 @@ export type ComposerStatus = { text: string; caution: boolean; detail?: string }
 /** Pea's live asks, then the Work the bound document holds: the top of the composer box, so
  *  approve and reject have one location and the draft sits under what is edit. */
 export function ComposerWork({ situation }: { situation: ChatSituation }) {
-  const { chat, resolveApproval, answerQuestion, store } = useWorkbench();
+  const { chat, resolveApproval, answerQuestion, store, cancel, currentThreadId } = useWorkbench();
   const { inventory, bound, ladder } = situation;
   // Live asks only: an expired ask is a transcript record, never a head row.
   const approvals = selectApprovals(chat);
@@ -439,6 +439,11 @@ export function ComposerWork({ situation }: { situation: ChatSituation }) {
         answerQuestion={answerQuestion}
       />
       <ProposalHead asks={[]} works={works} />
+      {currentThreadId && (
+        <Button label="Revoke writes" onClick={() => void cancel()}>
+          Revoke writes
+        </Button>
+      )}
     </>
   );
 }

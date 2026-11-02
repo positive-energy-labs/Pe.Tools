@@ -120,6 +120,7 @@ type Meta = Omit<HarnessThreadSummary, "lastSeq" | "cursor" | "activity" | "head
   workContext?: ThreadWorkContext;
   /** Host-issued causal delegation; absent for independent and scheduled threads. */
   consentRoot?: RunRef;
+  runConsent?: import("@pe/agent-contracts").AllowDecision | null;
   acpSessionId: string | null;
   models: HarnessThreadBody["models"];
   traits: HarnessThreadBody["traits"];
@@ -396,6 +397,12 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     },
     (ref) => options.observeDocument?.({ kind: "open", ref })?.name,
     options.autoApprove,
+    (thread, decision) => {
+      const t = threads.get(thread);
+      if (!t) return; // Deletion removes the record before its cancelled turn unwinds.
+      t.meta.runConsent = decision;
+      writeMeta(t);
+    },
   );
   bindControl({ runs });
   /** Synchronization only. Observations and pins are always reconstructed from thread events. */
@@ -431,6 +438,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       meta.traitValues ??= {};
       const before = JSON.stringify(meta.workContext);
       threads.set(id, fresh(meta, events));
+      runs.restore(id, meta.runConsent);
       // Backfill only observed context. Work documents and native admission stay untouched.
       if (before !== JSON.stringify(meta.workContext)) writeJson(join(dir, "meta.json"), meta);
     } catch (error) {
@@ -1970,6 +1978,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
           : json({ error: `No turn ${turnId} in thread ${t.meta.id}` }, 404);
       }
       case "thread.cancel":
+        runs.revoke(t.meta.id);
         return json({ cancelled: await cancel(t, caller, url.pathname) });
       case "thread.permission": {
         requireHuman(caller, url.pathname, "answering a run consent");
@@ -2005,6 +2014,8 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         const forked = create(
           {
             ...t.meta,
+            runConsent: null,
+            consentRoot: undefined,
             // A fork copies the targets but no human authority (ADR 0017 rule 4).
             head: {
               targets: t.meta.head.targets.map((target) => ({ ...target, admission: null })),

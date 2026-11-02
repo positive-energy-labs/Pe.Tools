@@ -233,7 +233,7 @@ export const recoveryOffered = (verb: VerbDecl, snapshot: VerbSnapshot): boolean
 type Terminal = Exclude<VerbDelivery, { state: "review" }>;
 export type InvocationPhase<C extends Caller> =
   | { kind: "press" }
-  | { kind: "commit"; ticket: ReviewTicket; answers?: unknown }
+  | { kind: "commit"; ticket: ReviewTicket }
   | { kind: "cancel"; ticket: ReviewTicket }
   | (C extends "agent" ? { kind: "skip" } : never);
 
@@ -258,7 +258,6 @@ interface Binding {
   intent?: (
     scope: VerbScope,
     input: unknown,
-    answers: unknown,
     ticket: ReviewTicket | undefined,
   ) => Record<string, unknown>;
   /** A query's Work edit from its result, applied as one write once the read is admitted. */
@@ -269,7 +268,6 @@ interface Binding {
     input: (request: Record<string, unknown>) => Record<string, unknown>;
   };
   prepare?: (scope: VerbScope, input: unknown) => unknown;
-  answers?: z.ZodType;
   waitSeconds?: number;
   query?: ReadEntry;
   subject?: (value: unknown) => string | null;
@@ -292,7 +290,6 @@ export function rpcVerb<R extends z.ZodType, S extends z.ZodType>(
   declaration: Declaration<S> & {
     caller: "human" | "any";
     review: "none" | "shown";
-    answers?: z.ZodType;
   },
   implementation: {
     ready?: (scope: VerbScope, input: z.output<S>) => string | null;
@@ -303,7 +300,6 @@ export function rpcVerb<R extends z.ZodType, S extends z.ZodType>(
   const verb = { ...declaration, kind: "command" as const, does: rpc.key };
   bindings.set(verb, {
     rpc,
-    answers: declaration.answers,
     lands: implementation.lands,
     ready: (scope, input) => implementation.ready?.(scope, input as z.output<S>) ?? null,
     prepare: (scope, input) => implementation.intent(scope, input as z.output<S>),
@@ -365,7 +361,7 @@ type CommandInput<K extends SemanticActionKey> = WithoutWork<
 >;
 export function commandVerb<K extends SemanticActionKey, S extends z.ZodType>(
   command: K,
-  declaration: Declaration<S> & { review: "none" | "shown"; answers?: z.ZodType },
+  declaration: Declaration<S> & { review: "none" | "shown" },
   implementation: {
     lands?: (result: unknown) => Record<string, unknown>;
     /** Reads the prepared evidence for review, and the receipt result after success. */
@@ -378,12 +374,10 @@ export function commandVerb<K extends SemanticActionKey, S extends z.ZodType>(
     intent: (
       scope: VerbScope,
       input: z.output<S>,
-      answers: unknown,
       ticket: ReviewTicket | undefined,
     ) => CommandInput<K>;
   },
 ): VerbDecl<S> {
-  const { answers } = declaration;
   const verb = { does: command, ...declaration, kind: "command" as const };
   bindings.set(verb, {
     command,
@@ -393,15 +387,14 @@ export function commandVerb<K extends SemanticActionKey, S extends z.ZodType>(
     present: implementation.present,
     lands: implementation.lands,
     waitSeconds: implementation.waitSeconds,
-    answers,
     ready:
       implementation.ready &&
       ((scope, input) => implementation.ready!(scope, input as z.output<S>)),
     prepare:
       implementation.prepare &&
       ((scope, input) => implementation.prepare!(scope, input as z.output<S>)),
-    intent: (scope, input, reply, ticket) =>
-      implementation.intent(scope, input as z.output<S>, reply, ticket) as Record<string, unknown>,
+    intent: (scope, input, ticket) =>
+      implementation.intent(scope, input as z.output<S>, ticket) as Record<string, unknown>,
   });
   return verb;
 }
@@ -431,11 +424,11 @@ export function sequenceVerb<K extends SemanticActionKey, S extends z.ZodType>(
 /** A host read verb. It writes nothing itself; `subject` names the Work its result selects. */
 export function queryVerb<R extends z.ZodType, S extends z.ZodType>(
   read: ReadEntry<R>,
-  declaration: Declaration<S> & { review: "none" | "shown"; answers?: z.ZodType },
+  declaration: Declaration<S> & { review: "none" | "shown" },
   implementation: {
     ready?: (scope: VerbScope, input: z.output<S>) => string | null;
     prepare?: (scope: VerbScope, input: z.output<S>) => unknown;
-    intent?: (scope: VerbScope, input: z.output<S>, answers: unknown) => z.input<R>;
+    intent?: (scope: VerbScope, input: z.output<S>) => z.input<R>;
     subject?: (value: unknown) => string | null;
     /** Work edits from the admitted result: ONE write through the normal door, one undoable step. */
     patches?: (scope: VerbScope, result: unknown) => readonly RouteStatePatch[];
@@ -452,7 +445,6 @@ export function queryVerb<R extends z.ZodType, S extends z.ZodType>(
     };
   } = {},
 ): VerbDecl<S> {
-  const { answers } = declaration;
   const verb: VerbDecl<S> = {
     does: read.key,
     ...declaration,
@@ -463,7 +455,6 @@ export function queryVerb<R extends z.ZodType, S extends z.ZodType>(
   };
   bindings.set(verb, {
     query: read,
-    answers,
     subject: implementation.subject,
     queryPatches: implementation.patches,
     queryCancel: implementation.cancel,
@@ -474,11 +465,8 @@ export function queryVerb<R extends z.ZodType, S extends z.ZodType>(
     prepare:
       implementation.prepare &&
       ((scope, input) => implementation.prepare!(scope, input as z.output<S>)),
-    intent: (scope, input, reply) =>
-      (implementation.intent?.(scope, input as z.output<S>, reply) ?? input) as Record<
-        string,
-        unknown
-      >,
+    intent: (scope, input) =>
+      (implementation.intent?.(scope, input as z.output<S>) ?? input) as Record<string, unknown>,
   });
   return verb;
 }
@@ -486,7 +474,7 @@ export function queryVerb<R extends z.ZodType, S extends z.ZodType>(
 /** A kernel recovery: no route patches, no command; a shown review (Pea may skip it, rule 11). */
 export function recoveryVerb<S extends z.ZodType>(
   recovery: Recovery,
-  declaration: Omit<VerbDecl<S>, "kind" | "review" | "answers">,
+  declaration: Omit<VerbDecl<S>, "kind" | "review">,
 ): VerbDecl<S> {
   const verb: VerbDecl<S> = { ...declaration, kind: "recovery", review: "shown" };
   bindings.set(verb, {
@@ -630,7 +618,7 @@ interface ReviewSession {
   ticket: ReviewTicket;
   press: string;
   active: boolean;
-  decide: (decision: { answers: unknown } | { stop: Terminal }) => void;
+  decide: (decision: { proceed: true } | { stop: Terminal }) => void;
   complete: Promise<VerbDelivery>;
 }
 const reviews = new WeakMap<VerbContext, Map<string, ReviewSession>>();
@@ -677,11 +665,8 @@ async function invokeCore<C extends Caller>(
       });
       return session.complete;
     }
-    const checked = binding.answers?.safeParse(phase.answers);
-    if (checked && !checked.success)
-      return failure("refused", checked.error.message, session.press);
     session.active = false;
-    session.decide({ answers: copy(checked?.data ?? phase.answers) });
+    session.decide({ proceed: true });
     return session.complete;
   }
   if (phase.kind === "skip" && ctx.caller !== "agent")
@@ -782,7 +767,6 @@ async function invokeCore<C extends Caller>(
                   failure("stale", "The invocation basis changed during preview", press),
                 );
             }
-            let answers: unknown;
             let ticket: ReviewTicket | undefined;
             if (verb.review !== "none" && (!binding.raw || binding.raw(scope, input))) {
               const evidence = ctx.fixture
@@ -849,7 +833,6 @@ async function invokeCore<C extends Caller>(
                 answer = nextAnswer;
                 const reply = await decision;
                 if ("stop" in reply) return finish(reply.stop);
-                answers = reply.answers;
               }
             }
             const current = copy(ctx.snapshot());
@@ -906,7 +889,7 @@ async function invokeCore<C extends Caller>(
                 return finish(failure("refused", "Work has not been read yet", press));
               // The read's own contract validates and normalizes what reaches the host.
               const request = binding.query.input.parse(
-                structuredClone(steps?.[step] ?? binding.intent(fresh, input, answers, ticket)),
+                structuredClone(steps?.[step] ?? binding.intent(fresh, input, ticket)),
               ) as Record<string, unknown>;
               let value: unknown;
               // Stop sends the declared cancel for this very request; the native read ends, not just the wait.
@@ -1041,7 +1024,7 @@ async function invokeCore<C extends Caller>(
             }
             if (binding.rpc && binding.intent) {
               const request = binding.rpc.input.parse(
-                binding.intent(fresh, input, answers, ticket),
+                binding.intent(fresh, input, ticket),
               ) as Record<string, unknown>;
               const value = await runQuery(binding.rpc, request, current);
               const after = ctx.snapshot();
@@ -1072,7 +1055,7 @@ async function invokeCore<C extends Caller>(
             // Domain intent stays above the existing semantic runner's Work association and admission.
             const receipt = await runSemanticAction(
               binding.command,
-              structuredClone(steps?.[step] ?? binding.intent(fresh, input, answers, ticket)),
+              structuredClone(steps?.[step] ?? binding.intent(fresh, input, ticket)),
               current.target,
               current.work?.handle,
               "",
@@ -1161,8 +1144,7 @@ export const commit = <C extends Caller>(
   ctx: VerbContext<C>,
   verb: VerbDecl,
   ticket: ReviewTicket,
-  answers?: unknown,
-) => invoke(ctx, verb, ticket.subject, ticket.input, { kind: "commit", ticket, answers });
+) => invoke(ctx, verb, ticket.subject, ticket.input, { kind: "commit", ticket });
 
 export interface BoundVerb<C extends Caller = Caller> {
   readonly label: string;

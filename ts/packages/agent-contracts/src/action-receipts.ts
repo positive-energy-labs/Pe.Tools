@@ -1,5 +1,6 @@
 import { basisSchema, callerSchema } from "./caller.ts";
 import { z } from "zod";
+import { workKeySchema } from "./route-state.ts";
 import { footprintSchema, commandConsentSchema } from "./run-consent.ts";
 import { executionTargetSchema } from "./target.ts";
 import { consumedSchema, claimSchema, commandRefusalSchema } from "./command.ts";
@@ -87,7 +88,17 @@ export const actionStepSchema = z.discriminatedUnion("state", [
     .strict(),
 ]);
 export type ActionStep = z.infer<typeof actionStepSchema>;
+/** Host-filed receipt checkpoint. TODO: resolve these references in the owed ?at= viewer. */
+export const timelineSnapshotSchema = z.strictObject({
+  id: z.string(),
+  address: workKeySchema,
+  workRevision: z.number().int().nonnegative(),
+  readingHashes: z.record(z.string(), z.string()),
+});
+export type TimelineSnapshot = z.infer<typeof timelineSnapshotSchema>;
+
 const actionAttempt = z.object({
+  snapshots: z.array(timelineSnapshotSchema).optional(),
   id: z.string().min(1),
   key: z.string(),
   outcome: invocationOutcomeSchema.optional(),
@@ -205,13 +216,7 @@ export function invocationOutcome(row: ActionReceipt | ActionStatus): Invocation
     input: row.input,
     receiptId: row.id,
     ...(reason ? { reason } : {}),
-    snapshots: row.consumes.flatMap((value) =>
-      value.kind === "capture"
-        ? [value.expected]
-        : value.kind === "receipt"
-          ? [value.probe.id]
-          : [],
-    ),
+    snapshots: row.snapshots?.map((snapshot) => snapshot.id) ?? [],
     ...(state === "outcome-unknown"
       ? { recovery: row.state === "incomplete" ? ("resume" as const) : ("reconcile" as const) }
       : state === "failed" && "notDispatched" in row && row.notDispatched

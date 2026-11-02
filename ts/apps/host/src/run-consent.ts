@@ -48,8 +48,8 @@ export type ConsentEvent =
  * the decision then covers every later turn of that thread (and its delegated descendants) until a
  * Stop. Auto-approve on: the ask carries a deadline and applies when it passes. Off: a person must
  * allow. Per-turn runs remain the causal identity: a command from an ended turn is still refused.
- * The transcript owns durable decisions. This registry owns only active waits and their clock; a host
- * restart forgets thread consent, so the next write asks again.
+ * The thread record owns durable grants. Active waits and their clock are never restored: a restart
+ * rejects an open countdown, and the next write must open a fresh window.
  */
 export class RunConsents {
   private readonly runs = new Map<string, Run>();
@@ -77,7 +77,28 @@ export class RunConsents {
     private readonly emit: (run: RunRef, event: ConsentEvent) => void,
     private readonly documentName?: (ref: DocumentRef) => string | undefined,
     private readonly autoApprove: () => boolean = () => true,
+    private readonly persist: (thread: string, decision: AllowDecision | null) => void = () => {},
   ) {}
+  restore(thread: string, decision: AllowDecision | null | undefined) {
+    if (decision) this.threads.set(thread, decision);
+  }
+  /** Revoke even between turns; completed commands waiting at a checkpoint lose authority too. */
+  revoke(thread: string) {
+    this.persist(thread, null);
+    this.threads.delete(thread);
+    for (const run of this.runs.values())
+      if (run.ref.thread === thread && key(run.ref) === key(run.root)) {
+        if (run.state.state === "closed") {
+          run.state = {
+            state: "closed",
+            reason: "stopped",
+            decision: null,
+            at: new Date().toISOString(),
+          };
+          this.record(run);
+        } else this.close(run.ref, "stopped");
+      }
+  }
   private describe(footprint: Footprint) {
     return footprint
       .map((effect) => {
@@ -211,6 +232,7 @@ export class RunConsents {
       by: by === "deadline" ? "deadline" : "human",
       at: new Date().toISOString(),
     };
+    this.persist(run.ref.thread, decision);
     run.state = { state: "allowed", decision };
     this.threads.set(run.ref.thread, decision);
     this.record(run);
@@ -253,9 +275,11 @@ export class RunConsents {
   /** `stopped` is a Stop: it also closes the thread's consent window. `failed` keeps it. */
   close(ref: RunRef, reason: "completed" | "failed" | "stopped" | "restart") {
     const run = this.runs.get(key(ref));
-    if (!run) return;
-    if (reason === "stopped" && key(run.ref) === key(run.root)) this.threads.delete(ref.thread);
-    if (run.state.state === "closed") return;
+    if (!run || run.state.state === "closed") return;
+    if (reason === "stopped" && key(run.ref) === key(run.root)) {
+      this.persist(ref.thread, null);
+      this.threads.delete(ref.thread);
+    }
     clearTimeout(run.timer);
     const ask = run.state.state === "waiting" ? run.state.requestId : null;
     const root = this.runs.get(key(run.root));

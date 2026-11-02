@@ -704,7 +704,7 @@ export function createGraphMount<P, W>(
         origin: dispatches.get(result.press)!.origin,
       });
     else {
-      // Invalid required answers leave the authentic review open for correction.
+      // A refused commit keeps its authentic review open while the invocation is active.
       const review = reviews.get(id);
       if (
         review &&
@@ -844,12 +844,7 @@ export function createGraphMount<P, W>(
       ? "Read current Work before retrying"
       : null;
   };
-  const run = async (
-    id: string,
-    bound: MountBinding,
-    origin: string,
-    answers?: unknown,
-  ): Promise<VerbCompletion> => {
+  const run = async (id: string, bound: MountBinding, origin: string): Promise<VerbCompletion> => {
     const inactive = blocked(id);
     if (inactive)
       return completeVerb(
@@ -910,7 +905,7 @@ export function createGraphMount<P, W>(
     activeOrigin = origin;
     invoking = { verb: id, input: structuredClone(bound) };
     const result = review
-      ? await commit(ctxFor(id), verb, review.ticket, answers)
+      ? await commit(ctxFor(id), verb, review.ticket)
       : await invoke(ctxFor(id), verb, bound.subject, bound.args);
     return consume(id, result);
   };
@@ -939,10 +934,10 @@ export function createGraphMount<P, W>(
     journals,
     results,
     reviews,
-    commitReview(id: string, ticket: ReviewTicket, answers?: unknown) {
+    commitReview(id: string, ticket: ReviewTicket) {
       const review = reviews.get(id);
       if (review?.ticket !== ticket) return Promise.resolve(undefined);
-      return run(id, { subject: ticket.subject, args: ticket.input }, review.origin, answers);
+      return run(id, { subject: ticket.subject, args: ticket.input }, review.origin);
     },
     context,
     busy: () => registry.get(base.busy),
@@ -1054,7 +1049,7 @@ export function createGraphMount<P, W>(
           const review = reviews.get(id);
           return review?.origin === origin ? review : undefined;
         },
-        run: (answers?: unknown) => {
+        run: () => {
           const refusal = reason();
           return refusal
             ? Promise.resolve(
@@ -1064,7 +1059,7 @@ export function createGraphMount<P, W>(
                   refusal: refuse("not-ready", refusal),
                 }),
               )
-            : run(id, bound, origin, answers);
+            : run(id, bound, origin);
         },
       };
     },

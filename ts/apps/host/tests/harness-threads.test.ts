@@ -307,9 +307,7 @@ test("turn children retire while conversation history and model choices survive"
   await h.close();
 });
 
-// TODO(u2-consent): parked a per-call permission card, deleted by ADR 0027 rule 11. Re-anchor its other
-// assertions on a question_request ask; until then it is skipped, not deleted.
-test.skip("connect, model/trait RPCs, active turns and asks prevent idle reaping", async () => {
+test("connect, model/trait RPCs, active turns and asks prevent idle reaping", async () => {
   process.env.FAKE_ACP_SHAPE = "config";
   const gates = await mkdtemp(join(root, "gates-"));
   process.env.FAKE_ACP_GATE = gates;
@@ -341,16 +339,11 @@ test.skip("connect, model/trait RPCs, active turns and asks prevent idle reaping
       await rm(join(gates, "config"));
       expect((await changed).status).toBe(200);
     }
-    for (const prompt of ["hang", "permission", "question"]) {
+    for (const prompt of ["hang", "question"]) {
       await call("POST", `/pe/threads/${id}/prompt`, { text: prompt });
       await untilIo(
         () => read(id),
-        (b) =>
-          prompt === "permission"
-            ? openAsks(b).length > 0
-            : prompt === "question"
-              ? openQuestions(b).length > 0
-              : lastEcho(b) === "echo: hang",
+        (b) => (prompt === "question" ? openQuestions(b).length > 0 : lastEcho(b) === "echo: hang"),
       );
       await vi.advanceTimersByTimeAsync(2 * IDLE_CHILD_MS);
       const active = await read(id);
@@ -366,222 +359,6 @@ test.skip("connect, model/trait RPCs, active turns and asks prevent idle reaping
     await rm(gates, { recursive: true, force: true });
     await threads.close();
   }
-});
-
-// TODO(u2-consent): parked a per-call permission card, deleted by ADR 0027 rule 11. Re-anchor its other
-// assertions on a question_request ask; until then it is skipped, not deleted.
-test.skip("a thread prompts, parks a permission, cancels, interrupts, renames, and replays over SSE", async () => {
-  process.env.FAKE_ACP_SHAPE = "config";
-  const threads = host();
-  const call = caller(threads);
-  const read = reader(threads);
-  const created = await call("POST", "/pe/threads", { providerId: "claude" });
-  const id = created.json.id as string;
-  const started = await until(read, id, (b) => b.session === "started" && b.models.length > 0);
-  expect(started.models.map((m) => m.modelId)).toEqual(["m1", "m2"]);
-  expect([started.modelId, started.lastSeq]).toEqual(["m1", 1]);
-  expect([started.providerId, started.providerName]).toEqual(["claude", "Claude Code"]);
-  // Traits are the config options beyond model and mode, normalized.
-  expect(started.traits).toEqual([
-    {
-      id: "effort",
-      name: "Effort",
-      kind: "select",
-      options: [
-        { id: "low", name: "Low" },
-        { id: "high", name: "High" },
-      ],
-      current: "low",
-    },
-    { id: "fast", name: "Fast", kind: "boolean", current: false },
-  ]);
-
-  // Prompt -> echo + tool_call -> turn_end.
-  await call("POST", `/pe/threads/${id}/prompt`, { text: "hello" });
-  let body = await until(read, id, (b) => turnEnds(b).length === 1);
-  expect(kinds(body.events)).toEqual([
-    "session",
-    "prompt",
-    "turn_element_targets",
-    "update:agent_message_chunk",
-    "update:tool_call",
-    "turn_end",
-  ]);
-  expect(body.events.map((e) => e.seq)).toEqual(
-    Array.from({ length: body.events.length }, (_, index) => index + 1),
-  );
-  expect(body.lastSeq).toBe(body.events.length);
-
-  // Permission parks the turn until answered.
-  await call("POST", `/pe/threads/${id}/prompt`, { text: "ask permission" });
-  body = await until(read, id, (b) => openAsks(b).length === 1);
-  expect(body.running).toBe(true);
-  const ask = openAsks(body)[0]!;
-  for (const change of [
-    { status: "settled" },
-    { status: "archived" },
-    { snoozedUntil: "2099-10-11T12:00:00.000Z" },
-  ])
-    expect(
-      (
-        await call("PUT", `/pe/threads/${id}`, {
-          expectedRevision: body.lifecycle.revision,
-          ...change,
-        })
-      ).status,
-    ).toBe(409);
-  expect((await read(id)).activity).toMatchObject({ state: "waiting", pending: 1 });
-  expect(ask.toolCall).toMatchObject({ toolCallId: "t-ask permission", title: "fake tool" });
-  expect(
-    (await call("POST", `/pe/threads/${id}/permission`, { requestId: "nope", optionId: "yes" }))
-      .status,
-  ).toBe(409);
-  await call("POST", `/pe/threads/${id}/permission`, {
-    requestId: ask.requestId,
-    optionId: "yes",
-  });
-  body = await until(read, id, (b) => turnEnds(b).length === 2);
-  expect(kinds(body.events).slice(6)).toEqual([
-    "prompt",
-    "turn_element_targets",
-    "update:agent_message_chunk",
-    "update:tool_call",
-    "permission_request",
-    "permission_resolved",
-    "update:agent_message_chunk",
-    "turn_end",
-  ]);
-  expect(body.events.find((e) => e.kind === "permission_resolved")).toMatchObject({
-    by: "user",
-    optionId: "yes",
-  });
-
-  // Cancel a parked permission: it resolves by cancel and the turn ends cancelled.
-  await call("POST", `/pe/threads/${id}/prompt`, { text: "permission again" });
-  await until(read, id, (b) => openAsks(b).length === 1);
-  await call("POST", `/pe/threads/${id}/cancel`);
-  body = await until(read, id, (b) => turnEnds(b).length === 3);
-  const cancelled = body.events.findLast((e) => e.kind === "permission_resolved");
-  expect(cancelled).toMatchObject({ by: "cancel" });
-  expect(cancelled).not.toHaveProperty("optionId");
-  expect(turnEnds(body).at(-1)).toMatchObject({ stopReason: "cancelled" });
-
-  // A prompt sent while a turn runs interrupts it: the turn ends cancelled, then the new one starts.
-  await call("POST", `/pe/threads/${id}/prompt`, { text: "hang" });
-  await until(read, id, (b) => lastEcho(b) === "echo: hang");
-  const interrupting = await call("POST", `/pe/threads/${id}/prompt`, { text: "slow" });
-  expect(interrupting.status).toBe(200);
-  body = await until(read, id, (b) => turnEnds(b).length === 5 && !b.running);
-  expect(
-    body.events
-      .flatMap((e) =>
-        e.kind === "prompt"
-          ? [`prompt ${e.text}`]
-          : e.kind === "turn_end"
-            ? [`end ${e.stopReason}`]
-            : [],
-      )
-      .slice(-4),
-  ).toEqual(["prompt hang", "end cancelled", "prompt slow", "end end_turn"]);
-  expect(body.events.findLast((e) => e.kind === "prompt")).toMatchObject({
-    turnId: interrupting.json.turnId,
-  });
-  // Cancel reads no body, so it needs no content type.
-  expect((await bare(threads, "POST", `/pe/threads/${id}/cancel`)).status).toBe(200);
-  expect(body.events.map((e) => e.seq)).toEqual(body.events.map((_, i) => i + 1));
-
-  // Model and traits (config option branch) go through ACP and land in the log.
-  await call("POST", `/pe/threads/${id}/model`, { modelId: "m2" });
-  await call("POST", `/pe/threads/${id}/trait`, { id: "effort", value: "high" });
-  const fast = await call("POST", `/pe/threads/${id}/trait`, { id: "fast", value: true });
-  expect(fast.json.traits.map((t: { current: unknown }) => t.current)).toEqual(["high", true]);
-  body = await read(id);
-  expect(body.modelId).toBe("m2");
-  expect(body.events.slice(-3)).toMatchObject([
-    { kind: "model_changed", modelId: "m2" },
-    { kind: "trait_changed", traitId: "effort", value: "high" },
-    { kind: "trait_changed", traitId: "fast", value: true },
-  ]);
-  // A trait the harness does not offer, or a value of the wrong kind, is refused.
-  expect((await call("POST", `/pe/threads/${id}/trait`, { id: "nope", value: "x" })).status).toBe(
-    502,
-  );
-  expect((await call("POST", `/pe/threads/${id}/trait`, { id: "fast", value: "on" })).status).toBe(
-    502,
-  );
-  // A refused model surfaces the harness's own error; it does not fall through to `session/set_model`.
-  const refused = await call("POST", `/pe/threads/${id}/model`, { modelId: "nope" });
-  expect([refused.status, refused.json.error]).toEqual([
-    502,
-    expect.stringMatching(/Invalid params/),
-  ]);
-
-  // The harness names the session; a rename by the user is logged the same way.
-  await call("POST", `/pe/threads/${id}/prompt`, { text: "title" });
-  body = await until(read, id, (b) => b.title === "Fake title" && !b.running);
-  expect(kinds(body.events).slice(-3)).toEqual([
-    "update:session_info_update",
-    "title_changed",
-    "turn_end",
-  ]);
-  expect((await call("PUT", `/pe/threads/${id}`, { title: "Renamed" })).json.title).toBe("Renamed");
-  expect((await read(id)).events.at(-1)).toMatchObject({ kind: "title_changed", title: "Renamed" });
-
-  // A route that reads a body refuses one without a JSON content type.
-  expect((await bare(threads, "POST", `/pe/threads/${id}/prompt`)).status).toBe(415);
-}, 30_000);
-
-// TODO(u2-consent): parked a per-call permission card, deleted by ADR 0027 rule 11. Re-anchor its other
-// assertions on a question_request ask; until then it is skipped, not deleted.
-test.skip("a restarted host expires open asks, ends the open turn, resumes, and keeps the model", async () => {
-  // The `models` shape: no config option, so the model goes through `session/set_model`.
-  const first = host();
-  const call = caller(first);
-  const read = reader(first);
-  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
-  await until(read, id, (b) => b.session === "started");
-  await call("POST", `/pe/threads/${id}/model`, { modelId: "m2" });
-  await call("POST", `/pe/threads/${id}/prompt`, { text: "permission" });
-  const parked = await until(read, id, (b) => openAsks(b).length === 1);
-  const turnId = parked.events.findLast((e) => e.kind === "prompt")!.turnId;
-  await first.close();
-
-  // A torn thread directory is skipped, never fatal.
-  await mkdir(join(root, "torn"), { recursive: true });
-  await writeFile(join(root, "torn", "meta.json"), "{ not json");
-
-  const second = host();
-  const reread = reader(second);
-  const recall = caller(second);
-  expect((await recall("POST", `/pe/threads/${id}/prompt`, { text: "after restart" })).status).toBe(
-    200,
-  );
-  const resumed = await until(
-    reread,
-    id,
-    (b) => b.session === "closed" && !b.running && turnEnds(b).length === 1,
-  );
-  const tail = resumed.events
-    .slice(parked.events.length)
-    .filter((event) => event.kind !== "run_consent");
-  expect(kinds(tail)).toEqual([
-    "permission_resolved",
-    "error",
-    "prompt",
-    "turn_element_targets",
-    "session",
-    "model_changed",
-    "update:agent_message_chunk",
-    "update:tool_call",
-    "turn_end",
-  ]);
-  expect(tail[0]).toMatchObject({ by: "expired", requestId: openAsks(parked)[0]!.requestId });
-  expect(tail[1]).toMatchObject({ turnId, message: "host restarted during this turn" });
-  expect(tail[2]).toMatchObject({ text: "after restart" });
-  expect(resumed.modelId).toBe("m2");
-  expect(
-    (await caller(second)("GET", "/pe/threads")).json.map((t: { id: string }) => t.id),
-  ).not.toContain("torn");
 });
 
 test("a question parks the turn, a fork copies the log, and a lost session re-feeds the transcript", async () => {
@@ -1324,32 +1101,6 @@ for (const harness of ["claude", "codex"] as const) {
       await h.close();
     }
   }, 15000);
-  // TODO(u2-consent): parked a per-call permission card, deleted by ADR 0027 rule 11. Re-anchor its other
-  // assertions on a question_request ask; until then it is skipped, not deleted.
-  test.skip(`${harness}: a Pea MCP tool of kind other reaches the permission card instead of a refusal`, async () => {
-    // Claude's ACP adapter reports every MCP tool, Pea's pe_find included, as kind "other".
-    // 2aecd374's kind-only allowlist refused them all and Pea could read nothing (2026-10-27).
-    const h = host(),
-      call = caller(h),
-      read = reader(h);
-    try {
-      const id = (await call("POST", "/pe/threads", { providerId: harness })).json.id as string;
-      await until(read, id, (body) => body.models.length > 0);
-      await call("POST", `/pe/threads/${id}/prompt`, { text: "permission mcp" });
-      const body = await until(read, id, (body) => openAsks(body).length === 1);
-      expect(
-        body.events.some(
-          (event) =>
-            event.kind === "update" &&
-            String(event.update.title).includes("writes are unsupported"),
-        ),
-      ).toBe(false);
-      await call("POST", `/pe/threads/${id}/cancel`);
-      await until(read, id, (body) => !body.running);
-    } finally {
-      await h.close();
-    }
-  });
   test(`${harness}: Pea's own MCP tools run without a card (ADR 0027 rule 11)`, async () => {
     const h = host(),
       call = caller(h),
@@ -1441,6 +1192,32 @@ test("recorded run permission answers survive reconnect and restart without appr
     });
     expect(recovered.json.decision).toEqual(first.json.decision);
     expect(() => restarted.runs.assertOpen(originOf(by))).toThrow("run.closed");
+    const next = { thread: id, turn: randomUUID() };
+    restarted.runs.open(next);
+    const allowed = await restarted.runs.authorize(
+      originOf({ ...by, run: next, root: next }),
+      "next",
+      [],
+    );
+    expect(allowed).toMatchObject({ decision: { id: ask.requestId } });
+    restarted.runs.close(next, "completed");
+    expect((await again("POST", `/pe/threads/${id}/cancel`)).status).toBe(200);
+    expect(() =>
+      restarted.runs.checkpoint(originOf({ ...by, run: next, root: next }), allowed),
+    ).toThrow("consent.stopped");
+    const third = host();
+    try {
+      const fresh = { thread: id, turn: randomUUID() };
+      third.runs.open(fresh);
+      const rejected = third.runs
+        .authorize(originOf({ ...by, run: fresh, root: fresh }), "fresh", [])
+        .catch((error) => error.message);
+      expect(openAsks(await reader(third)(id))).toHaveLength(1);
+      third.runs.revoke(id);
+      expect(await rejected).toContain("consent.stopped");
+    } finally {
+      await third.close();
+    }
   } finally {
     await restarted.close();
   }
@@ -1511,3 +1288,34 @@ test("delegated thread processes carry host-bound root consent and Stop", async 
     await h.close();
   }
 }, 15000);
+
+test("restart rejects an open countdown and requires a fresh full window", async () => {
+  const first = host();
+  const id = (await caller(first)("POST", "/pe/threads", { providerId: "claude" })).json
+    .id as string;
+  const run = { thread: id, turn: randomUUID() };
+  first.runs.open(run);
+  const by: Caller = { kind: "pea", context: "fixture", thread: id, run, root: run };
+  const stopped = first.runs
+    .authorize(originOf(by), "interrupted", [])
+    .catch((error) => error.message);
+  const ask = openAsks(await reader(first)(id))[0]!;
+  await first.close();
+  expect(await stopped).toContain("consent.stopped");
+  const second = host();
+  try {
+    expect(openAsks(await reader(second)(id))).toHaveLength(0);
+    const next = { thread: id, turn: randomUUID() };
+    second.runs.open(next);
+    const rejected = second.runs
+      .authorize(originOf({ ...by, run: next, root: next }), "new", [])
+      .catch((error) => error.message);
+    const fresh = openAsks(await reader(second)(id))[0]!;
+    expect(fresh.requestId).not.toBe(ask.requestId);
+    expect(Date.parse(fresh.deadline!) - Date.now()).toBeGreaterThan(59_000);
+    second.runs.revoke(id);
+    expect(await rejected).toContain("consent.stopped");
+  } finally {
+    await second.close();
+  }
+});

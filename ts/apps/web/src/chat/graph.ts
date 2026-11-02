@@ -205,7 +205,7 @@ export function chatGraph(deps: () => ChatRouteDeps, minOtherSize?: number): Rou
         "thread.cancel",
         "stop",
         () => deps().cancel?.(),
-        () => (!deps().cancel ? "Chat is not ready" : deps().running ? null : "Nothing is running"),
+        () => (!deps().cancel || !deps().thread ? "Chat is not ready" : null),
       ),
       fork: command(
         "thread.fork",

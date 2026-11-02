@@ -1963,6 +1963,41 @@ export class ActionJournal implements ReceiptReader {
 
   /** Append the revisions these rows and facts make, and any freshly minted mappings. */
   private async commit(rows: readonly ActionReceipt[] = [], facts: readonly Receipt[] = []) {
+    // File checkpoints in the same append as the confirmed receipt, including recovery.
+    rows = rows.map((row) => {
+      if (row.state !== "succeeded" || !row.steps.some((step) => step.state === "succeeded"))
+        return row;
+      const readingHashes = Object.fromEntries(
+        row.consumes.flatMap((value, index) =>
+          value.kind === "work"
+            ? []
+            : [
+                [
+                  value.kind === "file" ? `file:${value.probe.path}` : `${value.kind}:${index}`,
+                  (value.kind === "capture" || value.kind === "file" || value.kind === "member") &&
+                  value.expected !== null
+                    ? value.expected
+                    : createHash("sha256").update(canonicalRouteInput(value)).digest("hex"),
+                ],
+              ],
+        ),
+      );
+      const snapshots = row.consumes.flatMap((value) => {
+        if (value.kind !== "work") return [];
+        const snapshot = {
+          address: value.probe.handle.key,
+          workRevision: value.probe.handle.revision,
+          readingHashes,
+        };
+        return [
+          {
+            ...snapshot,
+            id: createHash("sha256").update(canonicalRouteInput(snapshot)).digest("hex"),
+          },
+        ];
+      });
+      return { ...row, snapshots };
+    });
     const at = new Date().toISOString();
     const receipts = rows.flatMap((row) => {
       const old = this.receipts.get(this.actionReceipt.get(row.id) ?? "");

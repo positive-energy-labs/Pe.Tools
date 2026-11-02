@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { bindControl } from "../src/control.ts";
 import { RunConsents } from "../src/run-consent.ts";
 import type { Caller } from "@pe/agent-contracts";
@@ -13,13 +14,14 @@ import { ActionJournal } from "../src/action-journal.ts";
 import { StepFailure, command } from "../src/command-executor.ts";
 
 test.each([
-  [false, false],
-  [true, false],
-  [false, true],
-  [true, true],
+  [false, false, true],
+  [true, false, true],
+  [false, true, true],
+  [true, true, true],
+  [false, false, false],
 ])(
-  "confirmed native commit resumes retirement after restart and preserves later edits: changed=%s pea=%s",
-  async (changed, pea) => {
+  "confirmed native commit resumes retirement after restart and preserves later edits: changed=%s pea=%s uncertain=%s",
+  async (changed, pea, uncertain) => {
     const directory = await mkdtemp(join(tmpdir(), "pe-effect-freshness-"));
     const run = { thread: "recovery", turn: "original" };
     const runs = new RunConsents((_, event) => {
@@ -68,6 +70,7 @@ test.each([
       );
       const handle = { key, revision: (await work.view(key, spec.route))!.revision };
       const journal = new ActionJournal(join(directory, "commands.jsonl"));
+      const readingHash = createHash("sha256").update("observed reading").digest("hex");
       let destination = "destination-before",
         writes = 0;
       const executor = command(
@@ -84,6 +87,7 @@ test.each([
             await context.selectWork(spec, handle);
             return {
               effects: [{ kind: "file", path: "destination" }],
+              consumes: [{ kind: "file", probe: { path: "reading.json" }, expected: readingHash }],
             };
           },
           recover: async (step) => ({
@@ -99,7 +103,8 @@ test.each([
               await journal.markDispatched(id);
               writes++;
               destination = "destination-after";
-              throw new StepFailure("Disconnected after commit", 503, "unknown");
+              if (uncertain) throw new StepFailure("Disconnected after commit", 503, "unknown");
+              return { written: 13, changes: [{ before: "old", after: "new" }] };
             });
 
             return execution.retireWork(key, spec.route, [["fields", "chosen"]]);
@@ -111,14 +116,14 @@ test.each([
         resolve: () => executor,
         probe: async (dependency) => {
           if (dependency.kind !== "file") throw Error("Unexpected source");
-          return destination;
+          return dependency.probe.path === "reading.json" ? readingHash : destination;
         },
       });
       await journal.invoke(
         { id: "once", key: "probe.write", target: { kind: "host" }, input: {} },
         { caller, basis: null },
       );
-      expect((await journal.wait("once")).state).toBe("unknown");
+      expect((await journal.wait("once")).state).toBe(uncertain ? "unknown" : "succeeded");
       runs.closeAll();
       if (changed)
         await work.publish(
@@ -131,7 +136,10 @@ test.each([
       restarted.bindCommands({
         work,
         resolve: () => executor,
-        probe: async () => "destination-after",
+        probe: async (dependency) =>
+          dependency.kind === "file" && dependency.probe.path === "reading.json"
+            ? readingHash
+            : "destination-after",
         target: async () => {
           throw Error("Original session is gone");
         },
@@ -148,6 +156,15 @@ test.each([
         result: { changes: [{ before: "old", after: "new" }] },
       });
       expect(reloaded.outcome).toMatchObject({ id: "once", state: "succeeded", input: {} });
+      expect(reloaded.snapshots).toEqual([
+        {
+          id: expect.stringMatching(/^[a-f0-9]{64}$/),
+          address: key,
+          workRevision: handle.revision,
+          readingHashes: expect.objectContaining({ "file:reading.json": readingHash }),
+        },
+      ]);
+      expect(reloaded.outcome?.snapshots).toEqual(reloaded.snapshots!.map((s) => s.id));
       const current = schema.parse((await work.view(key, spec.route))!.doc);
       expect(current.fields.chosen?.edit).toEqual(changed ? { value: 21 } : null);
       expect((await restarted.resume("once", { caller, basis: null })).state).toBe("succeeded");

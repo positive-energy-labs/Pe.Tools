@@ -493,16 +493,3 @@ test("a graph's salvage hook projects the carry-over recovery; its id is reserve
     },
   ]);
 });
-
-test("a verb's review answers project as JSON Schema; runtime validation is marked in the projection", () => {
-  const answered = (answers: z.ZodType): RouteGraph => ({
-    ...withCells(rules),
-    verbs: { go: { ...verb("Go", "Mod+G"), answers } },
-  });
-  expect(
-    projectRouteGraph(answered(z.strictObject({ confirm: z.literal(true) }))).verbs.go,
-  ).toMatchObject({ answers: { required: ["confirm"] } });
-  expect(projectRouteGraph(answered(z.custom<string>(() => true))).verbs.go).toMatchObject({
-    answers: { "x-runtime-validation": true },
-  });
-});
