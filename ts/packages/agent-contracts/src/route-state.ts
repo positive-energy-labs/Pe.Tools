@@ -134,6 +134,8 @@ export type WorkWriteAck = {
   /** Host-issued step identity and exact transition restored, never inferred from patch equality. */
   step?: string;
   restoreOf?: number;
+  /** Receipt whose confirmed outcome retired these cells. */
+  receiptId?: string;
   base: number;
   revision: number;
   /** The accepted delta, including stamps, parent creation and reconciliation. */
@@ -155,6 +157,7 @@ export const workWriteAckSchema: z.ZodType<WorkWriteAck> = z.object({
   by: z.enum(["pea", "human"]),
   press: z.string().min(1).nullable(),
   step: z.string().min(1).optional(),
+  receiptId: z.string().min(1).optional(),
   restoreOf: z.number().int().positive().optional(),
   base: z.number().int().nonnegative(),
   revision: z.number().int().nonnegative(),

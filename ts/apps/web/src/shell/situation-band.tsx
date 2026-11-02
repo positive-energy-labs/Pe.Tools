@@ -4,7 +4,7 @@
  * mount-chrome.tsx renders each verb and each context control; this file owns where they sit.
  *
  * The Timeline head's Reject answers the same host consent API as Pea's composer (`thread.permission`).
- * TODO: docs/features/routes/LEDGER.md#s7-a91a2429a1 H2 — Reject is proven rendered and inert on the fixture lane only; press it against a live
+ * TODO: docs/features/routes/LEDGER.md#s7-a91a2429a1 H2 — Reject dispatch and host cancellation are proven separately by fixture tests; press it against a live
  * host consent window (a route command from a Pea thread) to prove the round trip.
  */
 import { useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
@@ -118,6 +118,8 @@ export const stepSource = (step: Journal["undo"][number]) => (step.by === "pea" 
 export const stepState = (journal: Journal, step: Journal["undo"][number]) =>
   step.superseded
     ? `superseded at r${step.superseded.revision}`
+    : step.barrier
+      ? (step.barrier.basis as { receiptId?: string } | undefined)?.receiptId ? "committed" : "blocked"
     : journal.redo.some((entry) => entry.press === step.press)
       ? "undone"
       : "applied";
@@ -145,8 +147,9 @@ export function TimelineHead<P, W>({
   history: ReactNode;
   thread?: string;
 }) {
-  const length = () => owner.timeline.read().length;
-  const entries = useSyncExternalStore((notify) => owner.timeline.subscribe(notify), length, length);
+  const entries = useSyncExternalStore(
+    (notify) => owner.timeline.subscribe(notify), owner.timeline.version, owner.timeline.version,
+  );
   const timeline = entries ? owner.timeline.read() : [];
   const [now, setNow] = useState(Date.now);
   const windows = openConsentWindows(timeline, now);

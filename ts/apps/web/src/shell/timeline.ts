@@ -1,3 +1,4 @@
+import type { InvocationOutcome } from "@pe/agent-contracts";
 import { receiptBarrier, type TimelineBarrier, type TimelineEntry } from "@pe/runtime/work-journal";
 export { receiptBarrier } from "@pe/runtime/work-journal";
 export type { TimelineBarrier, TimelineEntry } from "@pe/runtime/work-journal";
@@ -14,9 +15,12 @@ export const timelineBarriers = (entries: readonly TimelineEntry[]): TimelineBar
 /** One instance per mounted route. Append order, rather than wall-clock order, is authoritative. */
 export function createRouteTimeline() {
   let entries: TimelineEntry[] = [];
+  let revision = 0;
   const listeners = new Set<(entry: TimelineEntry) => void>();
   return {
+    version: () => revision,
     append(entry: TimelineEntry): void {
+      revision++;
       const recorded = structuredClone(entry);
       entries = [...entries, recorded].slice(-TIMELINE_LIMIT);
       for (const listener of listeners) listener(structuredClone(recorded));
@@ -26,6 +30,7 @@ export function createRouteTimeline() {
         (entry) => entry.kind === "invocation" && entry.press === press,
       );
       if (index < 0) return;
+      revision++;
       const updated = { ...entries[index]!, outcome: structuredClone(outcome) };
       entries = entries.map((entry, at) => (at === index ? updated : entry));
       for (const listener of listeners) listener(structuredClone(updated));

@@ -1425,7 +1425,7 @@ export class ActionJournal implements ReceiptReader {
                   patches.push(...next);
                 }
                 if (patches.length) {
-                  const publication = await work.publish(key, route, patches, current.revision);
+                  const publication = await work.publish(key, route, patches, current.revision, row.id);
                   if (!publication.ok)
                     throw new ActionIncomplete("Work retirement did not land", publication);
                   return {

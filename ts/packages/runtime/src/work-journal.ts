@@ -232,14 +232,14 @@ export function createWorkJournal(key: WorkKey) {
         const path = step.transitions
           .flatMap(({ paths }) => paths)
           .find((path) => footprint(ack).some((other) => overlaps(path, other)));
-        if (path) supersede(step, ack.revision, path);
+        if (path && !ack.receiptId) supersede(step, ack.revision, path);
       }
       record({
         kind: "receipt",
         at: Date.now(),
-        receiptId: `work:${identity}:r${ack.revision}`,
+        receiptId: ack.receiptId ?? `work:${identity}:r${ack.revision}`,
         paths: footprint(ack),
-        basis: { revision: ack.revision, by: ack.by, kind: ack.kind },
+        basis: { revision: ack.revision, by: ack.by, kind: ack.kind, receiptId: ack.receiptId },
       });
       return;
     }

@@ -424,3 +424,34 @@ test("compaction and restart never forget a command id or replay its successful 
     await h.close();
   }
 });
+
+
+test("a human Commit is approval; Pea's same write waits and Reject leaves the destination unchanged", async () => {
+  const h = await setup();
+  let value = 100;
+  const submit = (id: string, author: Caller) => invokeCommand(h.journal,
+    { ...admission(id), caller: author, basis: null, effects: declaredEffects },
+    async () => ({ before: value, after: 250 }),
+    async (e) => e.step("file", "write", e.prepared, async () => {
+      const before = value;
+      value = 250;
+      return { before, after: value };
+    }));
+  try {
+    await submit("human-commit", { kind: "human", via: "local" });
+    const human = await h.journal.wait("human-commit");
+    expect(human).toMatchObject({ state: "succeeded", consent: { by: "press" },
+      caller: { kind: "human" }, steps: [expect.objectContaining({ result: { before: 100, after: 250 } })] });
+    expect(h.events.some((e) => e.kind === "permission_request")).toBe(false);
+    value = 100;
+    await submit("pea-commit", caller);
+    await h.ready();
+    const waiting = (await h.journal.list()).find((row) => row.id === "pea-commit");
+    expect(waiting).toMatchObject({ state: "waiting", outcome: { state: "queued", consentWindow: { requestId: expect.any(String) } } });
+    const ask = h.events.find((e) => e.kind === "permission_request")!;
+    if (ask.kind !== "permission_request") throw Error("No consent request");
+    h.runs.decide(run.thread, ask.requestId, "stop_writes");
+    expect(await h.journal.wait("pea-commit")).toMatchObject({ state: "cancelled", error: expect.stringContaining("cancelled before authorization") });
+    expect(value).toBe(100);
+  } finally { await h.close(); }
+});

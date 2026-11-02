@@ -218,7 +218,7 @@ export class RouteWorkspace {
     patches: RouteStatePatch[],
     expectedRevision: number,
     trusted = false,
-    context: Pick<WorkWrite, "press" | "kind" | "restoreOf"> = { press: null, kind: "apply" },
+    context: Pick<WorkWrite, "press" | "kind" | "restoreOf"> & { receiptId?: string } = { press: null, kind: "apply" },
   ): Promise<RouteStateWriteResult> {
     if (scope.route !== route)
       return refuse(
@@ -312,6 +312,7 @@ export class RouteWorkspace {
         kind,
         by,
         press,
+        ...(trusted && context.receiptId ? { receiptId: context.receiptId } : {}),
         ...(kind === "apply" ? { step: by === "pea" ? `pea:${press ?? `r${landed.envelope.revision}`}` : `human:${press ?? `r${landed.envelope.revision}`}` } : {}),
         ...(recorded ? { step: recorded.write.step, restoreOf: recorded.write.revision } : {}),
         base: envelope.revision,
@@ -378,8 +379,8 @@ export class RouteWorkspace {
   }
 
   /** Observations and conditional retirement are host facts, never raw client edits. */
-  publish(scope: WorkKey, route: string, patches: RouteStatePatch[], expectedRevision: number) {
-    return this.apply(scope, route, "human", patches, expectedRevision, true);
+  publish(scope: WorkKey, route: string, patches: RouteStatePatch[], expectedRevision: number, receiptId?: string) {
+    return this.apply(scope, route, "human", patches, expectedRevision, true, { kind: "apply", press: null, receiptId });
   }
 
   /**

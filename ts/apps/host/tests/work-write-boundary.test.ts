@@ -226,3 +226,18 @@ test("write admission refuses a producer without a semantic projection", () => {
     bind: async () => ({ effects: [] }), run: async () => null,
   }, {} as RevitBridge["Service"])).toThrow("producer-owned seal projection");
 });
+
+
+test("re-pricing a changed preview remains a successful read and never runs a write", async () => {
+  const f = await fixture();
+  for (const id of ["preview-one", "preview-two"]) {
+    f.ctx.admission.id = id;
+    const bound = await f.executor.bind(f.ctx);
+    const preview = await f.executor.run(f.ctx, { prepared: await bound.prepare!() } as ActionExecution);
+    expect(preview).toMatchObject({ previewOnly: true });
+    f.receipts.push({ id, key: "schedule.apply", target: f.ctx.admission.target,
+      state: "succeeded", result: preview, startedAt: new Date().toISOString() } as ActionReceipt);
+    f.change();
+  }
+  expect(f.run).not.toHaveBeenCalled();
+});

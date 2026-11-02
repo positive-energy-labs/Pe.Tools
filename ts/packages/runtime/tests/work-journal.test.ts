@@ -139,3 +139,21 @@ test("a durable publish remains a barrier after restart even when values return"
   expect((await f.host.step(f.key, f.key.route, "pea", "undo", 3)).ok).toBe(false);
   expect(await f.host.view(f.key, f.key.route)).toMatchObject({ revision: 3, doc: { a: 1 } });
 });
+
+
+test("receipt-confirmed retirement is committed history after restart, never changed elsewhere", async () => {
+  const f = fixture();
+  await f.edit("human", "flow-edit", 950);
+  await f.host.publish(f.key, f.key.route, [{ path: ["a"], value: 0 }], 1, "ducts-write");
+  f.restart();
+  const journal = createWorkJournal(f.key);
+  journal.name(() => ({ label: "Edit fan airflow" }));
+  const stop = f.host.observeAccepted(f.key, (ack) => journal.accept(ack));
+  await f.host.view(f.key, f.key.route);
+  expect(journal.read().undo[0]).toMatchObject({
+    id: "human:flow-edit", by: "human", label: "Edit fan airflow", barrier: { receiptId: "ducts-write" },
+  });
+  expect(journal.read().undo[0]!.superseded).toBeUndefined();
+  expect((await journal.undo(async () => { throw Error("must not write"); })).ok).toBe(false);
+  stop();
+});

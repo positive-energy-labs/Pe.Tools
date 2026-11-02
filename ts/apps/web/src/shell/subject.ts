@@ -66,3 +66,26 @@ export function subjectState(route: string, search: Record<string, unknown>) {
             .join(" + "),
   };
 }
+
+/** A refused subject never becomes input to the next roster pick. Wait for a current roster. */
+export function admittedSubject(graph: Declaration, page: Record<string, unknown>, roster?: unknown) {
+  const subject = graph.subjectField;
+  if (!subject) return null;
+  const field = graph.fields[subject.field]!;
+  const raw = page[subject.field];
+  const { decoded } = decodePageField(field, page, subject.field);
+  if (!decoded.success) return {
+    patch: { [subject.field]: field.schema.parse(undefined) },
+    refusal: `${subject.noun} ${JSON.stringify(raw)} is malformed`,
+  };
+  if (!field.picker || roster === undefined || decoded.data === "all") return null;
+  const options = field.picker.options(roster);
+  const ids = Array.isArray(decoded.data) ? decoded.data : decoded.data ? [decoded.data] : [];
+  const refused = ids.filter((id) => !options.some((option) => option.id === id));
+  if (!refused.length) return null;
+  const kept = ids.filter((id) => !refused.includes(id));
+  return {
+    patch: { [subject.field]: field.cardinality === "many" ? kept : kept[0] ?? field.schema.parse(undefined) },
+    refusal: `${subject.noun} ${refused.join(", ")} not in this model`,
+  };
+}

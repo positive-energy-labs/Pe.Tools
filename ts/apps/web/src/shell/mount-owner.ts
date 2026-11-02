@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { admittedSubject } from "./subject";
 import { graphSettings, type SettingsOwner } from "./settings";
 import {
   canonicalRouteInput,
@@ -170,7 +171,9 @@ export function createGraphMount<P, W>(
         .map(([id, f]) => [id, f.schema]),
     ),
   ) as z.ZodType<P>;
-  const parsedPage = schema.parse({ ...adapters.initialPage, ...initial });
+  const incoming = { ...adapters.initialPage, ...initial };
+  const admission = admittedSubject(graph, incoming);
+  const parsedPage = schema.parse({ ...incoming, ...admission?.patch });
   const normalized = graph.transition?.(parsedPage, parsedPage, "initial", { readings: {} });
   if (normalized && "refusal" in normalized) throw Error(normalized.refusal.message);
   const initialPage = schema.parse({ ...parsedPage, ...normalized?.patch });
@@ -196,6 +199,7 @@ export function createGraphMount<P, W>(
             : {},
         })),
   });
+  if (admission) view.fail(refuse("not-ready", admission.refusal));
   adapters.fixture?.select?.(initialPage);
   let raw = adapters.getSnapshot();
   let scope = raw;
@@ -744,7 +748,7 @@ export function createGraphMount<P, W>(
           ) {
             if (["detached", "waiting", "running"].includes(result.receipt.state))
               unsettledWorks.set(result.receipt.id, dispatch.key);
-            else if (result.receipt.state !== "detached")
+            if (result.receipt.state !== "detached")
               acceptReceipt(result.receipt, dispatch.key, result.press);
           }
           for (const reading of dispatch.readings) {
@@ -763,6 +767,17 @@ export function createGraphMount<P, W>(
     }
     notify();
     return result;
+  };
+  const cleanSubject = () => {
+    const subject = graph.subjectField;
+    if (!subject) return;
+    const state = readings.get(subject.roster);
+    const admitted = state.current
+      ? admittedSubject(graph, view.read().page as Record<string, unknown>, state.value)
+      : null;
+    if (!admitted) return;
+    view.setPage(admitted.patch as Partial<P>);
+    view.fail(refuse("not-ready", admitted.refusal));
   };
   const bindingScope = (): BindingScope<P, W> => ({
     ...scope,
@@ -1106,12 +1121,14 @@ export function createGraphMount<P, W>(
         }),
         adapters.subscribe(update),
         view.subscribe(() => {
+          cleanSubject();
           adapters.fixture?.select?.(view.read().page);
           readings.update(readScope());
           notify();
         }),
         ...Object.keys(graph.readings).map((id) =>
           readings.subscribe(id, () => {
+            if (id === graph.subjectField?.roster) cleanSubject();
             completeHistory();
             notify();
           }),
@@ -1121,6 +1138,7 @@ export function createGraphMount<P, W>(
         releases.push(adapters.subscribeDocumentChanged((ref) => readings.documentChanged(ref)));
       if (adapters.subscribeReceipts) releases.push(adapters.subscribeReceipts(acceptReceipt));
       update();
+      cleanSubject();
       return () => {
         connected = false;
         for (const release of releases.splice(0).reverse()) release();

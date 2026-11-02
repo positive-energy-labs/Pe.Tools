@@ -7,7 +7,7 @@ import {
 } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
 import type { GraphMount } from "./mount-owner";
-import { lastMove, stepState, useWorkJournal } from "./situation-band";
+import { entryCaller, lastMove, stepState, useWorkJournal } from "./situation-band";
 import { activityTime } from "./timeline";
 
 /** One History presentation for graph panes: accepted calls and exact Work receipts. */
@@ -38,7 +38,11 @@ export function GraphHistory<P, W>({
     !workOnly && parsed.success ? (key ? receiptsForWork(parsed.data, key) : parsed.data) : [];
   const recorded = new Set(saved.map((receipt) => receipt.id));
   const shown = entries.filter(
-    (entry) => !workOnly || owner.verbs[entry.verb ?? ""]?.kind === "work",
+    (entry) => (!workOnly || owner.verbs[entry.verb ?? ""]?.kind === "work") &&
+      !(entry.kind === "invocation" && entries.some((receipt) =>
+        receipt.kind === "receipt" && receipt.outcome &&
+        (receipt.press === entry.press || receipt.outcome.receiptId === entry.outcome?.receiptId) &&
+        (receipt.press != null || receipt.outcome.receiptId != null))),
   );
   return (
     <section aria-label={label}>
@@ -98,7 +102,7 @@ export function GraphHistory<P, W>({
             })
             .map((entry, index) => (
               <li key={`event:${index}`}>
-                {entry.verb ?? entry.kind} · {entry.outcome?.state ?? entry.kind} ·{" "}
+                {entry.verb ?? entry.kind} · {entry.outcome?.state ?? entry.kind} ? {entryCaller(entry)} ·{" "}
                 {activityTime(
                   entry.at,
                   entry.kind === "receipt" && entry.press
@@ -134,7 +138,7 @@ export function GraphHistory<P, W>({
             .map((receipt) => (
               <li key={receipt.id}>
                 <a href={routeAddress("ops").link({ actionId: receipt.id })}>{receipt.key}</a> ·{" "}
-                {invocationOutcome(receipt).state} · {activityTime(receipt.startedAt)}
+                {invocationOutcome(receipt).state} ? {receipt.caller.kind === "pea" ? "Pea" : "you"} · {activityTime(receipt.startedAt)}
                 {invocationOutcome(receipt).recovery && (
                   <>
                     {" "}

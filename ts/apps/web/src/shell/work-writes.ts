@@ -32,7 +32,7 @@ export function workPathName<W>(
   const family = names.cells?.find((cell) => path[0] === (cell.segment ?? cell.key));
   const key = family?.segment === null ? path[0] : path[1];
   if (family && typeof key === "string")
-    return { label: family.label?.(key) ?? key, internal: false };
+    return { label: family.label?.(key) ?? family.noun ?? key, internal: false };
   const field = names.workFields?.[String(path[0])] ?? KERNEL_FIELDS[String(path[0])];
   return field ? { label: field.label, internal: field.internal === true } : null;
 }
@@ -140,7 +140,8 @@ function createWorkWriter(key: WorkKey, remove: () => void) {
     history?: WriteHistory,
   ): Promise<RouteStateWriteResult> => {
     request = structuredClone(request);
-    held.journal.name((patches) => writeLabel(patches, names));
+    if (names.cells || names.workFields)
+      held.journal.name((patches) => writeLabel(patches, names));
     const cells = names.cells ?? [];
     if (request.kind === "apply" && request.press)
       pending.set(request.press, { request, label: writeLabel(request.patches, names), history });
