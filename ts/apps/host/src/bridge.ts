@@ -179,6 +179,8 @@ export async function invokeBridge<A = unknown>(
       case "NoRevitSession":
         throw new StepFailure(error.message, 503, "refused");
     }
+    // A failure outside the declared union (a fake, a defect, a future tag) is never a success.
+    throw error;
   }
   return result.success.value as A;
 }
