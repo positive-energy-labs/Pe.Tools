@@ -1,12 +1,6 @@
-import { z } from "zod";
-import { effectDecoder as decode } from "@pe/host-contracts/decoders";
 import type { SettingsRouteDocument } from "@pe/agent-contracts";
-import {
-  podListResponseSchema,
-  podMemberComposeResponseSchema,
-  podRunsResponseSchema,
-} from "@pe/host-contracts/operation-types";
-import { requestJson } from "#/shell/readings-api";
+
+import { callOp } from "#/shell/readings-api";
 import { subscriptionSource } from "#/shell/readings-use";
 import type { ReadingContext, ReadingSource, ReadingScope } from "#/shell/readings";
 import type { PodsPage } from "./page";
@@ -38,11 +32,7 @@ export function podsSources(): Readonly<Record<string, ReadingSource>> {
       dirties: ["pods"],
       async open(ctx, deliver) {
         try {
-          const result = await requestJson(
-            { path: "/call", body: { key: "pod.list", request: {} } },
-            decode(podListResponseSchema),
-            ctx.signal,
-          );
+          const result = await callOp({ signal: ctx.signal }, "pod.list", {});
           if (!("pods" in result))
             throw Error("pod.list returned identity instead of full inventory");
           deliver({ kind: "complete", value: result.pods, revision: 1 });
@@ -61,11 +51,7 @@ export function podsSources(): Readonly<Record<string, ReadingSource>> {
         if (!ref || !ref.path.endsWith(".json"))
           return deliver({ kind: "complete", value: null, revision: 0 });
         try {
-          const read = await requestJson(
-            { path: "/call", body: { key: "pod.member.read", request: ref } },
-            z.object({ content: z.string(), sha256: z.string() }),
-            ctx.signal,
-          );
+          const read = await callOp({ signal: ctx.signal }, "pod.member.read", ref);
           deliver({
             kind: "complete",
             value: { member: ref, ...read } satisfies MemberRead,
@@ -94,14 +80,10 @@ export function podsSources(): Readonly<Record<string, ReadingSource>> {
           return deliver({ kind: "complete", value: null, revision: 0 });
         }
         try {
-          const result = await requestJson(
-            {
-              path: "/call",
-              body: { key: "pod.member.compose", request: { ...ref, content: draft } },
-            },
-            decode(podMemberComposeResponseSchema),
-            ctx.signal,
-          );
+          const result = await callOp({ signal: ctx.signal }, "pod.member.compose", {
+            ...ref,
+            content: draft,
+          });
           deliver({
             kind: "complete",
             value: { member: ref, draft, result } satisfies CompositionRead,
@@ -122,14 +104,10 @@ export function podsSources(): Readonly<Record<string, ReadingSource>> {
         const path = page(ctx).runs === "pod" || !ref ? undefined : ref.path;
         if (!pod) return deliver({ kind: "complete", value: [], revision: 0 });
         try {
-          const result = await requestJson(
-            {
-              path: "/call",
-              body: { key: "pod.runs", request: { pod, ...(path !== undefined && { path }) } },
-            },
-            decode(podRunsResponseSchema),
-            ctx.signal,
-          );
+          const result = await callOp({ signal: ctx.signal }, "pod.runs", {
+            pod,
+            ...(path !== undefined && { path }),
+          });
           deliver({ kind: "complete", value: result.runs, revision: 1 });
         } catch (error) {
           if (!ctx.signal.aborted) deliver({ kind: "failure", error });

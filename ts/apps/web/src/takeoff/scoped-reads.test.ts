@@ -1,14 +1,12 @@
 // @vitest-environment jsdom
 import { expect, test, vi, afterEach } from "vite-plus/test";
-import { HOST_RPC_BRIDGE_SESSION_HEADER } from "@pe/host-contracts/operation-types";
-import { requestJson, callOp } from "#/shell/readings-api";
+import { callOp } from "#/shell/readings-api";
 import { takeoffSources } from "./sources";
 import { roomsSnapshotSource } from "../rooms/sources";
 import type { ReadingContext } from "#/shell/readings";
 
 vi.mock("#/shell/readings-api", async (original) => ({
   ...(await original<typeof import("#/shell/readings-api")>()),
-  requestJson: vi.fn(async () => ({})),
   callOp: vi.fn(async () => ({ levels: [], regions: [] })),
 }));
 vi.mock("#/shell/readings-use", () => ({ subscriptionSource: () => ({ open: () => undefined }) }));
@@ -30,13 +28,10 @@ test("takeoff acquisition sends the chosen views and zones before subscribing", 
   const source = takeoffSources()["takeoffs.snapshot"]!;
   if (source.kind !== "use") throw Error("Expected native source");
   await source.open(context(scope), vi.fn());
-  expect(requestJson).toHaveBeenCalledWith(
-    expect.objectContaining({
-      body: { key: "takeoffs.snapshot", request: { views: [], zoneGuids: scope.zones } },
-      headers: expect.objectContaining({ [HOST_RPC_BRIDGE_SESSION_HEADER]: "owned" }),
-    }),
-    expect.anything(),
-    expect.anything(),
+  expect(callOp).toHaveBeenCalledWith(
+    expect.objectContaining({ target: context(scope).target }),
+    "takeoffs.snapshot",
+    { views: [], zoneGuids: scope.zones },
   );
 });
 
@@ -62,8 +57,12 @@ test("takeoff metadata roster lists views without requesting a geometry snapshot
   const deliver = vi.fn();
   await source.open(context({ views: [], zones: [], work: "" }), deliver);
   expect(callOp).toHaveBeenCalledWith(expect.anything(), "revit.catalog.project-index", {
-    sections: ["Views"], includeUnplacedViews: true, projection: { view: "Handles" },
+    sections: ["Views"],
+    includeUnplacedViews: true,
+    projection: { view: "Handles" },
   });
-  expect(requestJson).not.toHaveBeenCalled();
-  expect(deliver).toHaveBeenCalledWith(expect.objectContaining({ value: expect.objectContaining({ zonesComplete: false }) }));
+
+  expect(deliver).toHaveBeenCalledWith(
+    expect.objectContaining({ value: expect.objectContaining({ zonesComplete: false }) }),
+  );
 });

@@ -9,7 +9,7 @@ import {
   type DuctsSheetOverview,
 } from "@pe/agent-contracts";
 
-import { EMPTY_CATALOGS, catalogTableSchema, type Catalogs } from "@pe/ducts-domain/catalog";
+import { EMPTY_CATALOGS, type Catalogs } from "@pe/ducts-domain/catalog";
 
 import { toGrids } from "@pe/ducts-domain/loss-grid";
 
@@ -17,7 +17,7 @@ import { TABLE_IDS } from "@pe/ducts-domain/pricing";
 
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
-import { callCompose, composeSource, ductsBodySource, jsonSource } from "#/shell/readings-api";
+import { callCompose, opSource, composeSource, ductsBodySource } from "#/shell/readings-api";
 import { acquireSource } from "#/shell/readings-use";
 
 import type { ReadingContext, ReadingSource, UseSource } from "#/shell/readings";
@@ -90,9 +90,10 @@ function networks(): UseSource<NetworkSnapshot | null> {
       if (!ref) return deliver({ kind: "complete", value: null, revision: 0 });
 
       if (saved)
-        return jsonSource({
-          request: () => ({ path: saved }),
-          schema: snapshotSchema.nullable(),
+        return opSource({
+          key: "ducts.snapshot.walk",
+          request: () => ({}),
+          fixture: saved,
           absent: null,
         }).open(ctx, deliver);
 
@@ -302,9 +303,11 @@ export function ductsSources(): Readonly<Record<string, ReadingSource>> {
     "ducts.networks": networks(),
 
     "ducts.tables": saved
-      ? jsonSource({
-          request: () => ({ path: saved.replace(/[^/]*$/, "tables.json") }),
-          schema: z.unknown().transform(toGrids),
+      ? opSource({
+          key: "ducts.tables",
+          request: () => ({ ids: [...TABLE_IDS] }),
+          fixture: saved.replace(/[^/]*$/, "tables.json"),
+          map: toGrids,
           absent: null,
         })
       : ductsBodySource({
@@ -317,12 +320,9 @@ export function ductsSources(): Readonly<Record<string, ReadingSource>> {
         }),
 
     "ducts.catalogs": {
-      ...jsonSource({
-        request: () => ({ path: "/pe/ducts/catalogs" }),
-        schema: z.object({
-          tables: z.record(z.string(), catalogTableSchema),
-          findings: z.array(z.string()),
-        }),
+      ...composeSource({
+        key: "ducts.catalogs",
+        input: () => ({}),
         absent: { tables: EMPTY_CATALOGS, findings: [] },
       }),
       dirties: ["snapshot"],

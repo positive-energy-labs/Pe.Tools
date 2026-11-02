@@ -29,6 +29,10 @@ export function hostRouteAxes(leaves: readonly CatalogLink[]): Record<PeRouteId,
   // The registry resolves both semantic commands and raw gateway operations.
   const commands = leaves.map((row) => row.key);
   const declarations = {
+    "families.readings": axes("None", "One", ["Metadata"], "Read", "Cheap", []),
+    "takeoffs.observations": axes("None", "One", ["Metadata"], "Read", "Cheap", []),
+    "captures.list": axes("None", "One", ["Metadata"], "Read", "Cheap", []),
+    "ducts.catalogs": axes("None", "One", ["Metadata"], "Read", "Cheap", []),
     "notices.presence": axes("Session", "One", ["Metadata"], "SessionWrite", "Cheap", []),
     "features.get": axes("None", "One", ["Metadata"], "Read", "Cheap", []),
     "machine.bootstrap": axes("Session", "One", ["Metadata"], "SessionWrite", "Mutation", []),

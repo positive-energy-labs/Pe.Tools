@@ -75,3 +75,17 @@ export * from "./route-graph.ts";
 export * from "./route-settings.ts";
 export * from "./ducts-sheet.ts";
 
+import { z } from "zod";
+import { nativeResponseDefinitionSchema } from "@pe/host-contracts/decoders";
+import type { RevitMatrixLoadedFamilies } from "@pe/host-contracts/generated";
+export * from "./duct-catalog.ts";
+import { familiesObservationSchema } from "./families.ts";
+export const familyRecordSchema =
+  nativeResponseDefinitionSchema<RevitMatrixLoadedFamilies.Res.FamilySnapshotRecord>(
+    "revit.matrix.loaded-families",
+    "FamilySnapshotRecord",
+  );
+export const familiesPartsSchema = z.object({
+  reading: familiesObservationSchema,
+  records: z.array(z.string()).nullable(),
+});

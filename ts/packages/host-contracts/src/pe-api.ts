@@ -172,7 +172,17 @@ export type PeApiSchemas = Record<
   | "diagnosticBodySchema"
   | "actionAdmissionSchema"
   | "actionReceiptSchema"
-  | "actionControlInputSchema",
+  | "actionControlInputSchema"
+  | "familiesObservationSchema"
+  | "familiesObservationSummarySchema"
+  | "familiesPartsSchema"
+  | "familyRecordSchema"
+  | "takeoffCaptureSchema"
+  | "captureListSchema"
+  | "pageTargetReadingSchema"
+  | "ductCatalogReadingSchema"
+  | "parsedDocViewSchema"
+  | "routeSettingsSnapshotSchema",
   z.ZodType
 >;
 
@@ -255,6 +265,51 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
   });
   /** Public HTTP transport authority. Domain schemas stay with their domain owners. */
   const peRoutes = {
+    "families.readings": route(
+      "GET",
+      "/families/readings",
+      none,
+      z.union([
+        schemas.familiesPartsSchema as S["familiesPartsSchema"],
+        schemas.familyRecordSchema as S["familyRecordSchema"],
+        z.array(schemas.familiesObservationSummarySchema as S["familiesObservationSummarySchema"]),
+        (schemas.familiesObservationSchema as S["familiesObservationSchema"]).nullable(),
+      ]),
+      "read",
+      "gateway",
+      "read",
+    ),
+    "takeoffs.observations": route(
+      "GET",
+      "/takeoffs/observations",
+      none,
+      z.union([
+        (schemas.takeoffCaptureSchema as S["takeoffCaptureSchema"]).nullable(),
+        z.object({ path: z.string(), text: z.string() }),
+      ]),
+      "read",
+      "gateway",
+      "read",
+    ),
+    "captures.list": route(
+      "GET",
+      "/captures",
+      none,
+      schemas.captureListSchema as S["captureListSchema"],
+      "read",
+      "gateway",
+      "read",
+    ),
+    "ducts.catalogs": route(
+      "GET",
+      "/pe/ducts/catalogs",
+      none,
+      schemas.ductCatalogReadingSchema as S["ductCatalogReadingSchema"],
+      "read",
+      "gateway",
+      "read",
+    ),
+
     "notices.presence": route(
       "POST",
       "/pe/notices/presence/:caller",
@@ -292,7 +347,15 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "gateway",
       "caller",
     ),
-    "actions.read": route("GET", "/actions", none, z.unknown(), "read", "gateway", "read"),
+    "actions.read": route(
+      "GET",
+      "/actions",
+      none,
+      z.array(schemas.actionReceiptSchema as S["actionReceiptSchema"]),
+      "read",
+      "gateway",
+      "read",
+    ),
     "action.cancel": route(
       "POST",
       "/actions/cancel",
@@ -654,7 +717,10 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "GET",
       "/pe/family-spec",
       none,
-      z.unknown(),
+      z.union([
+        z.object({ path: z.string() }),
+        schemas.parsedDocViewSchema as S["parsedDocViewSchema"],
+      ]),
       "read",
       "pe",
       "read",
@@ -714,7 +780,7 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "GET",
       "/pe/route-settings/:route",
       none,
-      object,
+      schemas.routeSettingsSnapshotSchema as S["routeSettingsSnapshotSchema"],
       "read",
       "pe",
       "read",
@@ -726,7 +792,7 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
         patch: z.record(z.string(), z.json()),
         expectedRevision: z.number().int().nonnegative(),
       }),
-      object,
+      schemas.routeSettingsSnapshotSchema as S["routeSettingsSnapshotSchema"],
       "human-or-pea",
       "pe",
       "human-or-pea",
@@ -951,7 +1017,15 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "pages",
       "human-or-pea",
     ),
-    "page.target": route("GET", "/pages/:slug/target", none, object, "read", "pages", "read"),
+    "page.target": route(
+      "GET",
+      "/pages/:slug/target",
+      none,
+      schemas.pageTargetReadingSchema as S["pageTargetReadingSchema"],
+      "read",
+      "pages",
+      "read",
+    ),
     "page.call": route(
       "POST",
       "/pages/:slug/call",

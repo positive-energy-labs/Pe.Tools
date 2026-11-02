@@ -1,27 +1,27 @@
 // @vitest-environment jsdom
 import * as hostRuntime from "#/host/runtime";
 import { peReadings } from "#/readings";
-import type { GraphMount,MountAdapters,MountScope } from "#/shell/mount";
-import type { ReadingContext,ReadingDelivery } from "#/shell/readings";
-import { workKey,type WorkKey } from "@pe/agent-contracts";
+import type { GraphMount, MountAdapters, MountScope } from "#/shell/mount";
+import type { ReadingContext, ReadingDelivery } from "#/shell/readings";
+import { workKey, type WorkKey } from "@pe/agent-contracts";
 import {
-HOST_RPC_BRIDGE_SESSION_HEADER,
-HOST_RPC_DOCUMENT_HEADER,
+  HOST_RPC_BRIDGE_SESSION_HEADER,
+  HOST_RPC_DOCUMENT_HEADER,
 } from "@pe/host-contracts/operation-types";
-import { createMemoryHistory,createRouter,RouterProvider } from "@tanstack/react-router";
-import { act,cleanup,fireEvent,render,waitFor } from "@testing-library/react";
-import { afterEach,beforeEach,expect,test,vi } from "vite-plus/test";
+import { createMemoryHistory, createRouter, RouterProvider } from "@tanstack/react-router";
+import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { RouteWorkspace } from "../../../../packages/runtime/src/route-workspace";
 import { Route as root } from "../routes/__root";
 import {
-dataTablesWorkSchema,
-draftFrom,
-pruneReview,
-type DataTablesPage,
-type DataTablesWork,
-type TableHandle,
+  dataTablesWorkSchema,
+  draftFrom,
+  pruneReview,
+  type DataTablesPage,
+  type DataTablesWork,
+  type TableHandle,
 } from "./graph";
-import { dataTablesAdapters,dataTablesRoute } from "./route";
+import { dataTablesAdapters, dataTablesRoute } from "./route";
 import { dataTablesSources } from "./sources";
 
 const door = vi.hoisted(() => ({ ports: null as object | null }));
@@ -61,18 +61,22 @@ vi.mock("../routes/__root", async () => {
 
 const table: TableHandle = {
   name: "Loads",
-  columns: [{ heading: "Load", kind: "Number" }],
-  rows: [
-    { key: "a", values: ["1"] },
-    { key: "b", values: ["2"] },
+  scheduleId: 1,
+  scheduleUniqueId: "schedule-1",
+  columns: [
+    { heading: "Load", kind: "Number", parameterName: "Load", sharedParameterGuid: "guid" },
   ],
-  placements: [{ sheetNumber: "M101" }],
+  rows: [
+    { key: "a", elementId: 2, uniqueId: "row-2", values: ["1"] },
+    { key: "b", elementId: 3, uniqueId: "row-3", values: ["2"] },
+  ],
+  placements: [{ sheetId: 4, sheetNumber: "M101", sheetName: "Mechanical" }],
 };
 const releases: (() => void)[] = [];
 beforeEach(() => {
   command.run.mockReset();
   vi.spyOn(hostRuntime, "hostFetch").mockImplementation(
-    async () => new Response(JSON.stringify({ tables: [table] })),
+    async () => new Response(JSON.stringify({ tables: [table], issues: [] })),
   );
   vi.spyOn(peReadings, "subscribe").mockImplementation(() => () => {});
   vi.stubGlobal(
@@ -207,7 +211,7 @@ test("the real graph mount copies native values into Work once and a refresh pre
   fireEvent.change(name, { target: { value: "Edited" } });
   await waitFor(() => expect(f.scope().work?.doc.draft?.name).toBe("Edited"));
   await act(async () => f.deliver([{ ...table, rows: [] }]));
-  expect(f.scope().work?.doc.draft?.rows).toEqual(table.rows);
+  expect(f.scope().work?.doc.draft?.rows).toEqual(draftFrom(table).rows);
   expect(f.scope().work?.doc.draft?.name).toBe("Edited");
   expect(f.owner().journal(f.scope().work!.handle.key).read().undo).toHaveLength(2);
 });
@@ -262,7 +266,7 @@ test("review counts native destination rows missing by key, including rename col
 test("the native source carries the selected document headers and preserves placements", async () => {
   const fetch = vi
     .spyOn(hostRuntime, "hostFetch")
-    .mockResolvedValue(new Response(JSON.stringify({ tables: [table] })));
+    .mockResolvedValue(new Response(JSON.stringify({ tables: [table], issues: [] })));
   const target = {
     kind: "document" as const,
     ref: { session: "chosen-session", openId: "chosen-document" },

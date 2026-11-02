@@ -1,22 +1,18 @@
+import { rhvacFileVersionSchema } from "@pe/agent-contracts";
 import { readTable } from "../../../../packages/mcps/src/shared/query-client";
 import { takeoffReads, readTakeoff, takeoffReadScope } from "./queries";
 import { z } from "zod";
 import {
   actionReceiptSchema,
   candidateRegionSchema,
-  takeoffCaptureSchema,
   takeoffCaptureSummarySchema,
   takeoffObservationSchema,
   type TakeoffCapture,
   type TakeoffObservation,
   type TakeoffModel,
 } from "@pe/agent-contracts";
-import {
-  HOST_RPC_BRIDGE_SESSION_HEADER,
-  HOST_RPC_DOCUMENT_HEADER,
-} from "@pe/host-contracts/operation-types";
-import { nativeResponseSchema } from "@pe/host-contracts/decoders";
-import { callOp, jsonSource, requestJson, type JsonRequest } from "#/shell/readings-api";
+
+import { callOp, composeSource } from "#/shell/readings-api";
 import { subscriptionSource } from "#/shell/readings-use";
 import type { ReadingContext, ReadingSource } from "#/shell/readings";
 import type { TakeoffGraphPage } from "./graph";
@@ -48,18 +44,6 @@ const levelOf = (ctx: ReadingContext) => {
     ""
   );
 };
-function rpc(ctx: ReadingContext, key: string, request: unknown): JsonRequest | null {
-  return ctx.target.kind !== "document" || rawPage(ctx).work
-    ? null
-    : {
-        path: "/call",
-        body: { key, request },
-        headers: {
-          [HOST_RPC_BRIDGE_SESSION_HEADER]: ctx.target.ref.session,
-          [HOST_RPC_DOCUMENT_HEADER]: ctx.target.ref.openId,
-        },
-      };
-}
 export function takeoffSources(): Readonly<Record<string, ReadingSource>> {
   return {
     "takeoffs.roster": {
@@ -109,19 +93,15 @@ export function takeoffSources(): Readonly<Record<string, ReadingSource>> {
       kind: "use",
       dirties: ["candidates", "snapshot"],
       async open(ctx, deliver) {
-        const requests = page(ctx).views.flatMap((view) => {
-          const request = rpc(ctx, "takeoffs.candidates", { view });
-          return request ? [request] : [];
-        });
         const values = await Promise.all(
-          requests.map((request) =>
-            requestJson(request, z.object({ regions: z.array(z.unknown()) }), ctx.signal),
-          ),
+          ctx.target.kind === "document" && !rawPage(ctx).work
+            ? page(ctx).views.map((view) => callOp(ctx, "takeoffs.candidates", { view }))
+            : [],
         );
         const regions = values
           .flatMap((value) => value.regions)
           .map((raw) => {
-            const region = raw as Record<string, unknown>;
+            const region = raw;
             return { ...region, role: region.role ?? null, guid: region.guid ?? null };
           });
         deliver({
@@ -139,20 +119,8 @@ export function takeoffSources(): Readonly<Record<string, ReadingSource>> {
           worldOf(ctx)?.zones.filter((zone) => zone.zone.lane.label === levelOf(ctx)) ?? [];
         const crops: Record<string, OwnerCrop | null> = {};
         for (const view of [...new Set(zones.map((zone) => zone.zone.lane.view))].sort()) {
-          const request = rpc(ctx, "takeoffs.candidates", { view });
-          if (!request) continue;
-          const result = await requestJson(
-            request,
-            z.object({
-              regions: z.array(
-                z.object({
-                  elementId: z.number(),
-                  ownerCrop: z.enum(["Inside", "Crossing", "Outside"]).nullish(),
-                }),
-              ),
-            }),
-            ctx.signal,
-          );
+          if (ctx.target.kind !== "document" || rawPage(ctx).work) continue;
+          const result = await callOp(ctx, "takeoffs.candidates", { view });
           for (const region of result.regions)
             crops[`${view}:${region.elementId}`] = region.ownerCrop ?? null;
         }
@@ -180,18 +148,10 @@ export function takeoffSources(): Readonly<Record<string, ReadingSource>> {
                 : undefined,
             })),
         );
-        const request = pick.view
-          ? rpc(ctx, "revit.context.view-image", { target: { name: pick.view } })
-          : null;
-        const image = request
-          ? planOf(
-              await requestJson(
-                request,
-                nativeResponseSchema("revit.context.view-image"),
-                ctx.signal,
-              ),
-            )
-          : null;
+        const image =
+          pick.view && ctx.target.kind === "document" && !rawPage(ctx).work
+            ? planOf(await callOp(ctx, "revit.context.view-image", { target: { name: pick.view } }))
+            : null;
         deliver({ kind: "complete", value: { image, note: pick.note ?? null }, revision: 1 });
       },
     },
@@ -203,7 +163,7 @@ export function takeoffSources(): Readonly<Record<string, ReadingSource>> {
           return deliver({ kind: "complete", value: null, revision: 0 });
         return subscriptionSource({
           request: () => ({ kind: "rhvac-file-version", path: rawPage(ctx).r10 }),
-          decode: (value) => z.object({ path: z.string(), fileVersion: z.string() }).parse(value),
+          decode: (value) => rhvacFileVersionSchema.parse(value),
         }).open(ctx, deliver);
       },
     },
@@ -216,22 +176,26 @@ export function takeoffSources(): Readonly<Record<string, ReadingSource>> {
       request: () => ({ kind: "takeoff-saved" }),
       decode: (value) => z.array(takeoffCaptureSummarySchema).parse(value),
     }),
-    "takeoffs.saved": jsonSource({
-      request: (ctx) =>
-        rawPage(ctx).work
-          ? { path: `/takeoffs/observations?capture=${encodeURIComponent(rawPage(ctx).work)}` }
-          : null,
-      schema: takeoffCaptureSchema.nullable(),
+    "takeoffs.saved": composeSource({
+      key: "takeoffs.observations",
+      map: (value) => {
+        if (value !== null && !("snapshot" in value))
+          throw Error("Expected saved Takeoffs reading");
+        return value;
+      },
+      input: (ctx) => (rawPage(ctx).work ? { query: { capture: rawPage(ctx).work } } : null),
       absent: null,
     }),
-    "takeoffs.text": jsonSource({
-      request: (ctx) =>
+    "takeoffs.text": composeSource({
+      key: "takeoffs.observations",
+      map: (value) => {
+        if (value !== null && !("text" in value)) throw Error("Expected saved Takeoffs text");
+        return value;
+      },
+      input: (ctx) =>
         rawPage(ctx).work && rawPage(ctx).fileText
-          ? {
-              path: `/takeoffs/observations?capture=${encodeURIComponent(rawPage(ctx).work)}&text=1`,
-            }
+          ? { query: { capture: rawPage(ctx).work, text: "1" } }
           : null,
-      schema: z.object({ path: z.string(), text: z.string() }).nullable(),
       absent: null,
     }),
   };

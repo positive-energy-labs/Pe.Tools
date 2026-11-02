@@ -7,7 +7,7 @@ import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
   HOST_RPC_DOCUMENT_HEADER,
 } from "@pe/host-contracts/operation-types";
-import { requestJson } from "#/shell/readings-api";
+import { callOp } from "#/shell/readings-api";
 
 export const podRequest = z.object({ key: z.string(), input: z.record(z.string(), z.unknown()) });
 export function podOperation(key: string) {
@@ -27,17 +27,17 @@ export const podRead: ReadEntry<typeof podRequest> = {
     if (!key.startsWith("pod.") && podOperation(key).intent.toLowerCase() !== "read")
       throw Error("Mutations require action admission");
     if (target.kind !== "document") throw Error("Choose an exact document");
-    return requestJson(
+    if (!isAnyOperationKey(key)) throw Error(`Unknown operation ${key}`);
+    return callOp(
       {
-        path: "/call",
-        body: { key, request: input },
+        signal: AbortSignal.timeout(120_000),
         headers: {
           [HOST_RPC_BRIDGE_SESSION_HEADER]: target.ref.session,
           [HOST_RPC_DOCUMENT_HEADER]: target.ref.openId,
         },
       },
-      z.unknown(),
-      AbortSignal.timeout(120_000),
+      key,
+      input,
     );
   },
 };

@@ -21,13 +21,13 @@ import type { ReadingContext, UseSource } from "./readings";
 import { subscriptionSource } from "./readings-use";
 
 /** A reading's host request; `headers` carry the exact document a route-scoped read needs. */
-export interface JsonRequest {
+interface JsonRequest {
   path: string;
   body?: unknown;
   headers?: Readonly<Record<string, string>>;
 }
 
-export async function requestJson<T>(
+async function requestJson<T>(
   request: JsonRequest,
   schema: z.ZodType<T>,
   signal: AbortSignal,
@@ -55,13 +55,19 @@ const decoders = new Map<string, Promise<z.ZodType>>();
 export function opResponseSchema(key: string): Promise<z.ZodType> {
   let decoder = decoders.get(key);
   if (!decoder) {
-    decoder = import("../../../../packages/host-contracts/src/generated/host-catalog.generated").then(
-      ({ hostOpCatalog }) => {
-        const entry = hostOpCatalog.find((candidate) => candidate.key === key);
-        if (!entry) throw Error(`${key} is not in the generated op catalog`);
-        return generatedJsonSchema(JSON.parse(entry.responseSchemaJson)) as z.ZodType;
-      },
-    );
+    decoder = Promise.all([
+      import("@pe/host-contracts/catalog"),
+      import("@pe/host-contracts/operation-types"),
+      import("@pe/host-contracts/decoders"),
+    ]).then(([{ hostOpCatalog }, { tsOnlyOperationSchemas }, { effectDecoder }]) => {
+      if (Object.hasOwn(tsOnlyOperationSchemas, key))
+        return effectDecoder(
+          tsOnlyOperationSchemas[key as keyof typeof tsOnlyOperationSchemas].response,
+        );
+      const entry = hostOpCatalog.find((candidate) => candidate.key === key);
+      if (!entry) throw Error(`${key} is not in the op catalog`);
+      return generatedJsonSchema(JSON.parse(entry.responseSchemaJson));
+    });
     decoders.set(key, decoder);
     decoder.catch(() => decoders.delete(key));
   }
@@ -70,20 +76,26 @@ export function opResponseSchema(key: string): Promise<z.ZodType> {
 
 /** One catalog op over `/call`, scoped to the attempt's document, decoded by its catalog schema. */
 export async function callOp<K extends OpKey>(
-  context: Pick<ReadingContext, "target" | "signal">,
+  context: {
+    target?: ReadingContext["target"];
+    signal: AbortSignal;
+    headers?: Readonly<Record<string, string>>;
+  },
   key: K,
   request: OpRequestOf<K>,
 ): Promise<OpResponseOf<K>> {
-  const headers =
-    context.target.kind === "document"
+  const headers: Record<string, string> | undefined =
+    context.target?.kind === "document"
       ? {
           [HOST_RPC_BRIDGE_SESSION_HEADER]: context.target.ref.session,
           [HOST_RPC_DOCUMENT_HEADER]: context.target.ref.openId,
-          [HOST_RPC_ORIGIN_HEADER]: `web:${window.location.pathname}`,
+          [HOST_RPC_ORIGIN_HEADER]: `web:${typeof window === "undefined" ? "/" : window.location.pathname}`,
         }
-      : undefined;
+      : context.target?.kind === "session"
+        ? { [HOST_RPC_BRIDGE_SESSION_HEADER]: context.target.session }
+        : undefined;
   const value = await requestJson(
-    { path: "/call", body: { key, request }, headers },
+    { path: "/call", body: { key, request }, headers: { ...headers, ...context.headers } },
     z.unknown(),
     context.signal,
   );
@@ -97,15 +109,23 @@ export function opSource<K extends OpKey, T = OpResponseOf<K>>(options: {
   absent: T;
   map?(response: OpResponseOf<K>): T;
   dirties?: readonly string[];
+  fixture?: string;
 }): UseSource<T> {
   return {
     kind: "use",
     dirties: options.dirties,
     async open(context, deliver) {
       const request = options.request(context);
-      if (request === null) return deliver({ kind: "complete", value: options.absent, revision: 0 });
+      if (request === null)
+        return deliver({ kind: "complete", value: options.absent, revision: 0 });
       try {
-        const response = await callOp(context, options.key, request);
+        const response = options.fixture
+          ? ((await requestJson(
+              { path: options.fixture },
+              await opResponseSchema(options.key),
+              context.signal,
+            )) as OpResponseOf<K>)
+          : await callOp(context, options.key, request);
         const value = options.map ? options.map(response) : (response as unknown as T);
         deliver({ kind: "complete", value, revision: 1 });
       } catch (error) {
@@ -121,10 +141,11 @@ type ComposeOutput<K extends PeRouteId> = Awaited<ReturnType<typeof pe.call<K>>>
 
 /** One host composition, named by its catalog route key and decoded by that route's own schema. */
 export const callCompose = <K extends PeRouteId>(
-  context: Pick<ReadingContext, "signal">,
+  context: { signal: AbortSignal; headers?: Readonly<Record<string, string>> },
   key: K,
   input: ComposeInput<K>,
-): ReturnType<typeof pe.call<K>> => pe.call(key, input, { signal: context.signal });
+): ReturnType<typeof pe.call<K>> =>
+  pe.call(key, input, { signal: context.signal, headers: context.headers });
 
 /** A reading kind `compose`: a catalog route key (ducts roster, sheet, ...), its input, its schema. */
 export function composeSource<K extends PeRouteId, T = ComposeOutput<K>>(options: {
@@ -144,30 +165,6 @@ export function composeSource<K extends PeRouteId, T = ComposeOutput<K>>(options
         const response = await callCompose(context, options.key, input);
         const value = options.map ? options.map(response) : (response as unknown as T);
         deliver({ kind: "complete", value, revision: 1 });
-      } catch (error) {
-        if (!context.signal.aborted) deliver({ kind: "failure", error });
-      }
-    },
-  };
-}
-
-/** HTTP resources share the kernel's cancellation and generation fence with subscriptions. */
-export function jsonSource<T>(options: {
-  request(context: ReadingContext): JsonRequest | null;
-  schema: z.ZodType<T>;
-  absent: T;
-}): UseSource<T> {
-  return {
-    kind: "use",
-    async open(context, deliver) {
-      const request = options.request(context);
-      if (!request) return deliver({ kind: "complete", value: options.absent, revision: 0 });
-      try {
-        deliver({
-          kind: "complete",
-          value: await requestJson(request, options.schema, context.signal),
-          revision: 1,
-        });
       } catch (error) {
         if (!context.signal.aborted) deliver({ kind: "failure", error });
       }
@@ -198,7 +195,10 @@ async function readDuctsBody(
       body:
         request.kind === "ducts-snapshot"
           ? {
-              key: request.selector?.kind === "roster" ? "ducts.snapshot.roster" : "ducts.snapshot.walk",
+              key:
+                request.selector?.kind === "roster"
+                  ? "ducts.snapshot.roster"
+                  : "ducts.snapshot.walk",
               request: {
                 ...(request.slots ? { slots: request.slots } : {}),
                 ...(request.labelParameter ? { labelParameter: request.labelParameter } : {}),
@@ -222,7 +222,18 @@ async function readDuctsBody(
     (version && bodyVersion !== version)
   )
     throw Error("Ducts response did not confirm the requested observation");
-  return { data: await response.json(), version: bodyVersion };
+  return {
+    data: (
+      await opResponseSchema(
+        request.kind === "ducts-snapshot"
+          ? request.selector?.kind === "roster"
+            ? "ducts.snapshot.roster"
+            : "ducts.snapshot.walk"
+          : "ducts.tables",
+      )
+    ).parse(await response.json()),
+    version: bodyVersion,
+  };
 }
 
 /** An envelope is permission to fetch a body, never the snapshot itself. */

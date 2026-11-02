@@ -1,4 +1,3 @@
-import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { z } from "zod";
 import type { DocumentRef } from "@pe/agent-contracts";
 import {
@@ -8,7 +7,7 @@ import {
   type OpRequestOf,
   type OpResponseOf,
 } from "@pe/host-contracts/operation-types";
-import { requestJson } from "#/shell/readings-api";
+import { callOp } from "#/shell/readings-api";
 import { NATIVE_READ_WAIT_S } from "#/route/waits";
 
 const xyz = z.tuple([z.number().finite(), z.number().finite(), z.number().finite()]);
@@ -77,18 +76,17 @@ export async function readSpaceCapture<K extends SpaceReadKey>(
 ): Promise<SpaceReadResult<K>> {
   if (!document) throw Error("Choose an exact document before reading Space");
   const request = spaceReads[key].input.parse(input);
-  const response = await requestJson(
+  const response = await callOp(
     {
-      path: "/call",
-      body: { key, request },
+      signal: AbortSignal.timeout(NATIVE_READ_WAIT_S * 1000),
       headers: {
         [HOST_RPC_BRIDGE_SESSION_HEADER]: document.session,
         [HOST_RPC_DOCUMENT_HEADER]: document.openId,
         [HOST_RPC_ORIGIN_HEADER]: "web:/space",
       },
     },
-    nativeResponseSchema(key),
-    AbortSignal.timeout(NATIVE_READ_WAIT_S * 1000),
+    key,
+    request as OpRequestOf<K>,
   );
   return { request: request as OpRequestOf<K>, response, document };
 }

@@ -1,3 +1,4 @@
+// TODO: docs/features/routes/LEDGER.md#s6-declaration-data-tables Reduce declaration 78 > 60.
 import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { z } from "zod";
 import {
@@ -21,7 +22,7 @@ export { dataTablesWorkSchema };
 export type DataTablesWork = z.output<typeof dataTablesWorkSchema>;
 export type DataTablesPage = { table: string; row: string };
 export const rowKey = () => `row-${crypto.randomUUID().slice(0, 8)}`;
-export const draftFrom = (table: TableHandle): Draft => ({
+export const draftFrom = (table: TableHandle): Draft => draftSchema.parse({
   name: table.name,
   isNew: false,
   columns: table.columns.map((column) => ({ ...column })),

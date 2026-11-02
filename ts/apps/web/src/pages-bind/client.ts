@@ -1,10 +1,3 @@
-import { pageTargetReadingSchema } from "@pe/agent-contracts";
-import { requestJson } from "#/shell/readings-api";
-
-/** Chrome's binding chip shares the kernel read door with the graph source. */
+import { callCompose } from "#/shell/readings-api";
 export const readPageTarget = (slug: string, signal = new AbortController().signal) =>
-  requestJson(
-    { path: `/pages/${encodeURIComponent(slug)}/target` },
-    pageTargetReadingSchema,
-    signal,
-  );
+  callCompose({ signal }, "page.target", { params: { slug } });

@@ -6,3 +6,5 @@ export * from "./work-value.ts";
 
 export * from "./pod-module.ts";
 export { field, manyField, manyCodec, resolveMany, decodePageField } from "./route-field.ts";
+
+export * from "./duct-catalog.ts";

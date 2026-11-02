@@ -1,4 +1,3 @@
-import { podListResponseSchema } from "@pe/host-contracts/operation-types";
 import { z } from "zod";
 import {
   actionReceiptListDecoder,
@@ -10,8 +9,8 @@ import {
   type ReadingRequest,
   type ScheduleGridDocument,
 } from "@pe/agent-contracts";
-import { effectDecoder } from "@pe/host-contracts/decoders";
-import { jsonSource } from "#/shell/readings-api";
+
+import { opSource } from "#/shell/readings-api";
 import { subscriptionSource } from "#/shell/readings-use";
 import type { ReadingContext, ReadingSource, UseSource } from "#/shell/readings";
 import type { SchedulesPage } from "./graph";
@@ -156,9 +155,13 @@ export function schedulesSources(): Readonly<Record<string, ReadingSource>> {
         ),
     },
     "schedules.pods": {
-      ...jsonSource({
-        request: () => ({ path: "/call", body: { key: "pod.list", request: {} } }),
-        schema: effectDecoder(podListResponseSchema).transform((row) => row.pods),
+      ...opSource({
+        key: "pod.list",
+        request: () => ({}),
+        map: (value) => {
+          if (!("pods" in value)) throw Error("Expected full pod inventory");
+          return value.pods;
+        },
         absent: [],
       }),
       effects: () => [],

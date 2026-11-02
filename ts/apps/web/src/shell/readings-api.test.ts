@@ -1,37 +1,45 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { z } from "zod";
-import { requestJson } from "./readings-api";
-
+import { callOp, callCompose } from "./readings-api";
 const fetched = vi.hoisted(() => ({ host: vi.fn() }));
 vi.mock("../host/runtime", () => ({ hostFetch: fetched.host }));
 afterEach(() => fetched.host.mockReset());
-
-const ok = () => Promise.resolve(new Response(JSON.stringify({ n: 1 })));
 const signal = new AbortController().signal;
-const schema = z.object({ n: z.number() });
-
-test("requestJson carries the headers a route-scoped read names, beside the JSON content type", async () => {
-  fetched.host.mockImplementation(ok);
-  await requestJson(
-    { path: "/p", body: { a: 1 }, headers: { "x-document": "open-1" } },
-    schema,
-    signal,
+const answer = (value: unknown) =>
+  fetched.host.mockResolvedValue(new Response(JSON.stringify(value)));
+test("native reads keep exact document scope and refuse a payload outside the catalog schema", async () => {
+  answer({});
+  await expect(
+    callOp(
+      { signal, target: { kind: "document", ref: { session: "s", openId: "d" } } },
+      "revit.detail.data-tables",
+      {},
+    ),
+  ).rejects.toThrow();
+  expect(fetched.host).toHaveBeenCalledWith(
+    "/call",
+    expect.objectContaining({
+      headers: expect.objectContaining({
+        "x-pe-bridge-session-id": "s",
+        "x-pe-open-document-id": "d",
+      }),
+      signal,
+    }),
   );
-  expect(fetched.host).toHaveBeenCalledWith("/p", {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-document": "open-1" },
-    body: '{"a":1}',
-    signal,
-  });
 });
-
-test("a bodyless request keeps its GET and still sends its headers", async () => {
-  fetched.host.mockImplementation(ok);
-  await requestJson({ path: "/p", headers: { "x-document": "open-1" } }, schema, signal);
-  expect(fetched.host).toHaveBeenCalledWith("/p", {
-    headers: { "x-document": "open-1" },
-    signal,
-  });
-  await requestJson({ path: "/p" }, schema, signal);
-  expect(fetched.host).toHaveBeenLastCalledWith("/p", { signal });
+test("TS-owned operations decode through their catalog schema too", async () => {
+  answer({ content: "{}", sha256: "hash", bytesBase64: "e30=" });
+  await expect(
+    callOp({ signal }, "pod.member.read", { pod: "p", path: "settings/a.json" }),
+  ).resolves.toMatchObject({ content: "{}", sha256: "hash", bytesBase64: "e30=" });
+  answer({ content: 7 });
+  await expect(
+    callOp({ signal }, "pod.member.read", { pod: "p", path: "settings/a.json" }),
+  ).rejects.toThrow();
+});
+test("compositions decode at their declared route, retaining GET and cancellation", async () => {
+  answer({ captures: [] });
+  await expect(callCompose({ signal }, "captures.list", {})).resolves.toEqual({ captures: [] });
+  expect(fetched.host).toHaveBeenCalledWith("/captures", expect.objectContaining({ signal }));
+  answer({ captures: [42] });
+  await expect(callCompose({ signal }, "captures.list", {})).rejects.toThrow();
 });

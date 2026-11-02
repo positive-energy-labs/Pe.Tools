@@ -1,13 +1,5 @@
-import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { z } from "zod";
-import {
-  appliedScopeSchema,
-  documentRefSchema,
-  familiesReadProgressSchema,
-  workKeySchema,
-  type DocumentRef,
-  type WorkKey,
-} from "@pe/agent-contracts";
+import { appliedScopeSchema, type DocumentRef, type WorkKey } from "@pe/agent-contracts";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
   HOST_RPC_DOCUMENT_HEADER,
@@ -25,34 +17,13 @@ export const familiesReads = {
 } as const;
 export type FamiliesReadKey = keyof typeof familiesReads;
 
-export const familiesObservationSchema = z.object({
-  id: z.string(),
-  work: workKeySchema,
-  document: documentRefSchema,
-  documentTitle: z.string().optional(),
-  filter: appliedScopeSchema,
-  capturedAt: z.string(),
-  completedAt: z.string(),
-  envelope: z.object({ revision: z.number().int() }).optional(),
-  progress: familiesReadProgressSchema.optional(),
-  readback: z
-    .object({
-      sourceId: z.string(),
-      verifiedFamilies: z.array(z.object({ name: z.string(), at: z.string() })),
-    })
-    .optional(),
-  result: nativeResponseSchema("revit.matrix.loaded-families"),
-});
-export const familiesObservationSummarySchema = familiesObservationSchema
-  .omit({ result: true })
-  .extend({ familyCount: z.number(), typeCount: z.number(), issueCount: z.number() });
-export type FamiliesObservation = z.output<typeof familiesObservationSchema>;
-export type FamiliesObservationSummary = Omit<FamiliesObservation, "result"> & {
-  familyCount: number;
-  typeCount: number;
-  issueCount: number;
-};
-
+import { familiesObservationSchema } from "@pe/agent-contracts";
+export {
+  familiesObservationSchema,
+  familiesObservationSummarySchema,
+  type FamiliesObservation,
+  type FamiliesObservationSummary,
+} from "@pe/agent-contracts";
 /** Native matrix queries share the shell invocation door; no route owns a host client. */
 export async function readFamiliesCapture(
   key: FamiliesReadKey,

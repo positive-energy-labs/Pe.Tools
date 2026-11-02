@@ -1,3 +1,8 @@
+import { familiesReadProgressSchema } from "./families-progress.ts";
+export { familiesReadProgressSchema, type FamiliesReadProgress } from "./families-progress.ts";
+import { workKeySchema } from "./route-state.ts";
+import { documentRefSchema } from "./target.ts";
+import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { writeIntentSchema } from "./write-intent.ts";
 import { z } from "zod";
 
@@ -411,3 +416,31 @@ export const familiesRouteState = {
     };
   },
 } satisfies RouteStateSpec<typeof familiesDocumentSchema>;
+
+export const familiesObservationSchema = z.object({
+  id: z.string(),
+  work: workKeySchema,
+  document: documentRefSchema,
+  documentTitle: z.string().optional(),
+  filter: appliedScopeSchema,
+  capturedAt: z.string(),
+  completedAt: z.string(),
+  envelope: z.object({ revision: z.number().int() }).optional(),
+  progress: familiesReadProgressSchema.optional(),
+  readback: z
+    .object({
+      sourceId: z.string(),
+      verifiedFamilies: z.array(z.object({ name: z.string(), at: z.string() })),
+    })
+    .optional(),
+  result: nativeResponseSchema("revit.matrix.loaded-families"),
+});
+export const familiesObservationSummarySchema = familiesObservationSchema
+  .omit({ result: true })
+  .extend({ familyCount: z.number(), typeCount: z.number(), issueCount: z.number() });
+export type FamiliesObservation = z.output<typeof familiesObservationSchema>;
+export type FamiliesObservationSummary = Omit<FamiliesObservation, "result"> & {
+  familyCount: number;
+  typeCount: number;
+  issueCount: number;
+};

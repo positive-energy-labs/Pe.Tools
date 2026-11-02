@@ -1,10 +1,7 @@
 import { z } from "zod";
 import type { DocumentRef } from "@pe/agent-contracts";
-import {
-  HOST_RPC_BRIDGE_SESSION_HEADER,
-  HOST_RPC_DOCUMENT_HEADER,
-} from "@pe/host-contracts/operation-types";
-import { requestJson } from "#/shell/readings-api";
+
+import { callOp } from "#/shell/readings-api";
 
 /** rhvac.open extracts the Jet file; only rhvac.launch starts the RHVAC application. */
 export const takeoffReads = {
@@ -23,19 +20,13 @@ export function readTakeoff(
   target?: DocumentRef,
 ) {
   if (key === "takeoffs.snapshot" && !target) throw Error("Choose an open document first");
-  return requestJson(
+  return callOp(
     {
-      path: "/call",
-      body: { key, request: takeoffReads[key].input.parse(input) },
-      ...(target && {
-        headers: {
-          [HOST_RPC_BRIDGE_SESSION_HEADER]: target.session,
-          [HOST_RPC_DOCUMENT_HEADER]: target.openId,
-        },
-      }),
+      signal: AbortSignal.timeout(120_000),
+      target: target ? { kind: "document", ref: target } : undefined,
     },
-    z.unknown(),
-    AbortSignal.timeout(120_000),
+    key,
+    takeoffReads[key].input.parse(input),
   );
 }
 

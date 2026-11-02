@@ -20,7 +20,10 @@ export const ductsSnapshotSelectorSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("roster") }),
   z.strictObject({ kind: z.literal("ids"), ids: z.array(z.number().int()).min(1).max(4096) }),
   /** The named Revit systems' groups, whole, in the document read's cooked shape: the network page's read. */
-  z.strictObject({ kind: z.literal("systems"), systemIds: z.array(z.number().int()).min(1).max(32) }),
+  z.strictObject({
+    kind: z.literal("systems"),
+    systemIds: z.array(z.number().int()).min(1).max(32),
+  }),
   z.strictObject({
     kind: z.literal("from"),
     unitId: z.number().int(),
@@ -108,16 +111,7 @@ export const familiesMatrixEnvelopeSchema = z
   .nullable();
 export type FamiliesMatrixEnvelope = z.infer<typeof familiesMatrixEnvelopeSchema>;
 
-export const familiesReadProgressSchema = z.object({
-  runId: z.string(),
-  state: z.enum(["reading", "complete", "cancelled", "failed"]),
-  phase: z.string(),
-  completed: z.number().int().nonnegative(),
-  total: z.number().int().nonnegative(),
-  workers: z.number().int().nonnegative(),
-  message: z.string().optional(),
-});
-export type FamiliesReadProgress = z.infer<typeof familiesReadProgressSchema>;
+export { familiesReadProgressSchema, type FamiliesReadProgress } from "./families-progress.ts";
 
 /* ── The lifecycle every Reading has ──────────────────────────────────────────────────────── */
 
@@ -348,3 +342,5 @@ export type ActionReadingKey =
   | "schedules"
   | "sdk"
   | "machine";
+
+export const rhvacFileVersionSchema = z.object({ path: z.string(), fileVersion: z.string() });

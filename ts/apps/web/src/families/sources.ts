@@ -1,7 +1,5 @@
-import { nativeResponseDefinitionSchema } from "@pe/host-contracts/decoders";
-import { effectDecoder } from "@pe/host-contracts/decoders";
-import { podListResponseSchema } from "@pe/host-contracts/operation-types";
-import { z } from "zod";
+import { nativeResponseSchema } from "@pe/host-contracts/decoders";
+
 import {
   actionReceiptListDecoder,
   canonicalRouteInput,
@@ -12,17 +10,12 @@ import {
   type ReadingRequest,
 } from "@pe/agent-contracts";
 import type { RevitMatrixLoadedFamilies } from "@pe/host-contracts/generated";
+
 import {
-  HOST_RPC_BRIDGE_SESSION_HEADER,
-  HOST_RPC_DOCUMENT_HEADER,
-} from "@pe/host-contracts/operation-types";
-import {
-  familiesObservationSummarySchema,
-  familiesObservationSchema,
   type FamiliesObservation,
   type FamiliesObservationSummary,
 } from "../../../../packages/mcps/src/shared/families-client";
-import { jsonSource, requestJson } from "#/shell/readings-api";
+import { callCompose, opSource, composeSource } from "#/shell/readings-api";
 import { subscriptionSource } from "#/shell/readings-use";
 import type { ReadingAttempt, ReadingContext, ReadingSource, UseSource } from "#/shell/readings";
 import type { Readings } from "#/readings";
@@ -56,10 +49,6 @@ const scopeFilter = (scope: { page: unknown; work: unknown }) => {
   return draftFilter(scopeDraft(drafted, scope.work as FamiliesRouteDocument | null));
 };
 
-const partsSchema = z.object({
-  reading: familiesObservationSchema,
-  records: z.array(z.string()).nullable(),
-});
 type FamilyRecord = RevitMatrixLoadedFamilies.Res.FamilySnapshotRecord;
 
 /** A promise keeps the attempt that fetched it. A returned A cannot adopt the first A's parts. */
@@ -90,11 +79,11 @@ export function familiesMatrixSource(resources?: Readings): UseSource<FamiliesOb
       let serial = 0;
       const seen = new Set<string>();
       const accept = async (id: string) => {
-        const { reading, records } = await requestJson(
-          { path: `/families/readings?id=${encodeURIComponent(id)}&format=parts` },
-          partsSchema,
-          ctx.signal,
-        );
+        const parts = await callCompose(ctx, "families.readings", {
+          query: { id, format: "parts" },
+        });
+        if (!parts || !("reading" in parts)) throw Error("Expected Families reading parts");
+        const { reading, records } = parts;
         if (ctx.signal.aborted || latest !== id) return;
         if (
           canonicalRouteInput(reading.document) !== canonicalRouteInput(target) ||
@@ -123,17 +112,18 @@ export function familiesMatrixSource(resources?: Readings): UseSource<FamiliesOb
               records.map((hash) => {
                 let entry = owned.records.get(hash);
                 if (!entry) {
-                  const body = requestJson(
-                    { path: `/families/readings?record=${encodeURIComponent(hash)}` },
-                    nativeResponseDefinitionSchema<FamilyRecord>(
-                      "revit.matrix.loaded-families",
-                      "FamilySnapshotRecord",
-                    ),
-                    owned.signal,
-                  ).catch((error: unknown) => {
-                    owned.records.delete(hash);
-                    throw error;
-                  });
+                  const body = callCompose({ signal: owned.signal }, "families.readings", {
+                    query: { record: hash },
+                  })
+                    .then((value) => {
+                      if (!value || !("familyId" in value))
+                        throw Error("Expected a Families record");
+                      return value;
+                    })
+                    .catch((error: unknown) => {
+                      owned.records.delete(hash);
+                      throw error;
+                    });
                   entry = { attempt: owned.attempt, body };
                   owned.records.set(hash, entry);
                 }
@@ -210,61 +200,46 @@ export function familiesSources(): Readonly<Record<string, ReadingSource>> {
         return subscriptionSource({
           request: () => ({ kind: "field-options", target, key: "category-names" }),
           decode: (value) =>
-            z
-              .object({ items: z.array(z.object({ value: z.string() })) })
+            nativeResponseSchema("revit.catalog.field-options")
               .parse(value)
               .items.map((item) => item.value),
         }).open(ctx, deliver);
       },
     },
-    "families.catalog": jsonSource({
+    "families.catalog": opSource({
+      key: "revit.catalog.loaded-families",
       request: (ctx) =>
-        ctx.target.kind === "document"
-          ? {
-              path: "/call",
-              body: {
-                key: "revit.catalog.loaded-families",
-                request: { filter: {}, budget: { maxEntries: 5000 } },
-              },
-              headers: {
-                [HOST_RPC_BRIDGE_SESSION_HEADER]: ctx.target.ref.session,
-                [HOST_RPC_DOCUMENT_HEADER]: ctx.target.ref.openId,
-              },
-            }
-          : null,
-      schema: z
-        .object({
-          families: z.array(
-            z.object({
-              familyId: z.number(),
-              familyName: z.string(),
-              categoryName: z.string().nullish(),
-              placedInstanceCount: z.number(),
-            }),
-          ),
-        })
-        .transform((value) => value.families),
+        ctx.target.kind === "document" ? { filter: {}, budget: { maxEntries: 5000 } } : null,
+      map: (value) => value.families,
       absent: [],
     }),
-    "families.archive": jsonSource({
-      request: (ctx) => (page(ctx).stage === "history" ? { path: "/families/readings" } : null),
-      schema: z.array(familiesObservationSummarySchema),
-      absent: [],
-    }),
-    "families.saved": jsonSource({
-      request: (ctx) => {
-        const id = page(ctx).past;
-        return page(ctx).stage === "history" && id
-          ? { path: `/families/readings?id=${encodeURIComponent(id)}` }
-          : null;
+    "families.archive": composeSource({
+      key: "families.readings",
+      map: (value) => {
+        if (!Array.isArray(value)) throw Error("Expected Families archive");
+        return value;
       },
-      schema: familiesObservationSchema.nullable(),
+      input: (ctx) => (page(ctx).stage === "history" ? {} : null),
+      absent: [],
+    }),
+    "families.saved": composeSource({
+      key: "families.readings",
+      map: (value) => {
+        if (value !== null && !("result" in value)) throw Error("Expected saved Families reading");
+        return value;
+      },
+      input: (ctx) =>
+        page(ctx).stage === "history" && page(ctx).past ? { query: { id: page(ctx).past } } : null,
       absent: null,
     }),
     "families.pods": {
-      ...jsonSource({
-        request: () => ({ path: "/call", body: { key: "pod.list", request: {} } }),
-        schema: effectDecoder(podListResponseSchema).transform((value) => value.pods),
+      ...opSource({
+        key: "pod.list",
+        request: () => ({}),
+        map: (value) => {
+          if (!("pods" in value)) throw Error("Expected full pod inventory");
+          return value.pods;
+        },
         absent: [],
       }),
       effects: () => [],

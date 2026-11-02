@@ -5,9 +5,9 @@ import {
   type SettingField,
   type RouteSettingsSnapshot,
 } from "@pe/agent-contracts";
-import { peRouteUrl } from "@pe/agent-contracts/pe-api";
+
 import { peReadings } from "../readings";
-import { requestJson } from "./readings-api";
+import { callCompose } from "./readings-api";
 
 export const settingFields = (graph: Pick<RouteGraph<any, any>, "fields">) =>
   Object.fromEntries(
@@ -80,7 +80,9 @@ export function createSettingsOwner(
   let fetching: Promise<void> | undefined;
   const refresh = () =>
     (fetching ??= run(transport.read)
-      .catch(() => {})
+      .catch((error) => {
+        console.error("settings: asynchronous operation failed", error);
+      })
       .finally(() => {
         fetching = undefined;
       }));
@@ -142,20 +144,12 @@ export function graphSettings(graph: RouteGraph<any, any>): SettingsOwner {
   if (!owner) {
     owner = createSettingsOwner(settingFields(graph), {
       read: (signal) =>
-        requestJson(
-          { path: peRouteUrl("route-settings.get", { params: { route: graph.key } }) },
-          routeSettingsSnapshotSchema,
-          signal,
-        ),
+        callCompose({ signal }, "route-settings.get", { params: { route: graph.key } }),
       write: (patch, expectedRevision, signal) =>
-        requestJson(
-          {
-            path: peRouteUrl("route-settings.set", { params: { route: graph.key } }),
-            body: { patch, expectedRevision },
-          },
-          routeSettingsSnapshotSchema,
-          signal,
-        ),
+        callCompose({ signal }, "route-settings.set", {
+          params: { route: graph.key },
+          body: { patch: routeSettingsSnapshotSchema.shape.values.parse(patch), expectedRevision },
+        }),
       subscribe: (notify) => {
         const recovered = peReadings.onResync(notify);
         const release = peReadings.subscribe({ kind: "world" }, (frame) => {
@@ -164,7 +158,10 @@ export function graphSettings(graph: RouteGraph<any, any>): SettingsOwner {
           const event = frame.value as { type?: string; route?: string };
           if (event?.type === "route-settings-changed" && event.route === graph.key) notify();
         });
-        return () => { release(); recovered(); };
+        return () => {
+          release();
+          recovered();
+        };
       },
     });
     owners.set(graph, owner);
