@@ -243,7 +243,7 @@ export const readingRequestSchema = z.discriminatedUnion("kind", [
     kind: z.literal("receipts"),
     target: documentRefSchema.optional(),
     id: z.string().min(1).max(200).optional(),
-    /** A workspace-scoped receipt list, the same subject `readScopedActionStatuses` reads. */
+    /** Full receipts for one Work, including results. Unscoped lists carry ActionStatus only. */
     work: workKeySchema.optional(),
     tool: z.string().optional(),
   }),

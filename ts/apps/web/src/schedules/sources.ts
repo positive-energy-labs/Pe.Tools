@@ -1,7 +1,7 @@
 import { podListResponseSchema } from "@pe/host-contracts/operation-types";
 import { z } from "zod";
 import {
-  actionReceiptSchema,
+  actionReceiptListDecoder,
   historyRowsSchema,
   scheduleCatalogSchema,
   scheduleReadingSchema,
@@ -120,11 +120,18 @@ export function schedulesSources(): Readonly<Record<string, ReadingSource>> {
       schema: historyRowsSchema.nullable(),
       absent: null,
     }),
-    "schedules.receipts": subscriptionSource({
-      request: () => ({ kind: "receipts" }),
-      decode: (value) => z.array(actionReceiptSchema).parse(value),
+    "schedules.receipts": {
+      kind: "use",
       dirties: ["schedules", "receipts"],
-    }),
+      open(ctx, deliver) {
+        const work = ctx.workKey;
+        if (!work) return deliver({ kind: "complete", value: [], revision: 0 });
+        return subscriptionSource({
+          request: () => ({ kind: "receipts", work }),
+          decode: (value) => actionReceiptListDecoder().parse(value),
+        }).open(ctx, deliver);
+      },
+    },
     "schedules.outcome": {
       kind: "derive",
       key: (ctx) => ctx.workKey,

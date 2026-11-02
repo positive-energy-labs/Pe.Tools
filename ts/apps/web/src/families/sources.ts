@@ -3,7 +3,7 @@ import { effectDecoder } from "@pe/host-contracts/decoders";
 import { podListResponseSchema } from "@pe/host-contracts/operation-types";
 import { z } from "zod";
 import {
-  actionReceiptSchema,
+  actionReceiptListDecoder,
   canonicalRouteInput,
   workKey,
   type AppliedFilter,
@@ -184,13 +184,23 @@ export function familiesMatrixSource(resources?: Readings): UseSource<FamiliesOb
 const page = (ctx: ReadingContext) => ctx.page as FamiliesPage;
 export function familiesSources(): Readonly<Record<string, ReadingSource>> {
   return {
-    "families.scopes": { kind: "derive", derive: (ctx) => [{ id: "draft", label: "Family draft scope", filter: scopeFilter(ctx) }] },
+    "families.scopes": {
+      kind: "derive",
+      derive: (ctx) => [{ id: "draft", label: "Family draft scope", filter: scopeFilter(ctx) }],
+    },
     "families.matrix": familiesMatrixSource(),
-    "families.receipts": subscriptionSource({
-      request: () => ({ kind: "receipts" }),
-      decode: (value) => z.array(actionReceiptSchema).parse(value),
+    "families.receipts": {
+      kind: "use",
       dirties: ["families", "receipts"],
-    }),
+      open(ctx, deliver) {
+        const work = ctx.workKey;
+        if (!work) return deliver({ kind: "complete", value: [], revision: 0 });
+        return subscriptionSource({
+          request: () => ({ kind: "receipts", work }),
+          decode: (value) => actionReceiptListDecoder().parse(value),
+        }).open(ctx, deliver);
+      },
+    },
     "families.categories": {
       kind: "use",
       dirties: ["families"],

@@ -580,8 +580,8 @@ test("HTTP authored writes enforce short local revision checks", async () => {
     withInvocationContext({ caller: as }, () =>
       app.fetch(new Request(`http://local/pe/route-state/test-route/salvage?${queryA}`)),
     );
-  expect((await salvage(human)).status).toBe(404);
-  expect((await salvage(pea())).status).toBe(404);
+  expect(await (await salvage(human)).json()).toBeNull();
+  expect(await (await salvage(pea())).json()).toBeNull();
   // Work has no execution endpoint; consequential commands belong to the journal door.
   expect(
     (await post("/pe/route-state/test-route/command", { command: "external", input: {} })).status,

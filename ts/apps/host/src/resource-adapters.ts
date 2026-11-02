@@ -287,7 +287,9 @@ export function hostResourceObserver(
             if (request.tool)
               rows = rows.filter((row) => commandTool(row.key)?.name === request.tool);
             accept(
-              request.id ? { value: rows } : { value: actionStatusSchema.array().parse(rows) },
+              request.id || request.work
+                ? { value: rows }
+                : { value: actionStatusSchema.array().parse(rows) },
             );
           });
         case "takeoff-reading":

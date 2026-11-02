@@ -736,7 +736,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
         const scope = workKey(url, route, "read");
         if (scope instanceof Response) return scope;
         const salvaged = await work.salvage(scope, route);
-        if (!salvaged) return json({ error: `nothing to salvage on '${route}'` }, 404);
+        if (!salvaged) return json(null);
         return "ok" in salvaged ? json(salvaged, 403) : json(salvaged);
       }
       const write = method === "POST" && route && verb ? writes[verb] : undefined;
