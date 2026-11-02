@@ -192,6 +192,8 @@ export function pendingFixtureEnvironment<P, W>(
         default:
           sources[source] = {
             kind: reading.kind,
+            // A seed reading of Work (ducts `sheet`) must reopen on an edit, as the host's does.
+            key: (scope) => scope.workRevision,
             open: (context, deliver) =>
               deliver({ kind: "complete", value: value(context), revision: 0 }),
           };

@@ -4,10 +4,13 @@ import {
   ductsRosterResponseSchema,
   ductsSheetOverviewSchema,
   ductsSheetResponseSchema,
+  stagedDucts,
+  type DuctsFirm,
   type GraphSeedData,
   type DuctsRouteDocument,
 } from "@pe/agent-contracts";
 import { EMPTY_CATALOGS } from "@pe/ducts-domain/catalog";
+import { resolveCriteria } from "@pe/ducts-domain/sheet/index";
 import { SCENE_FIXTURE } from "./scene.fixture";
 import { LAYOUT_FIXTURE, LAYOUT_ROSTER } from "./layout.fixture";
 import { COLOURS_FIXTURE } from "./colours.fixture";
@@ -16,6 +19,19 @@ import { pricingJob } from "./pricing-job";
 import { selectedFans } from "./sheet/model";
 import type { DuctsPage } from "./graph";
 import sheetFixture from "./sheet/sheet.fixture.json";
+
+const sheetInputs = ductsSheetResponseSchema.parse(sheetFixture.inputs);
+if (sheetInputs.kind !== "inputs") throw Error("sheet.fixture.json inputs is not an inputs detail");
+/** The fixture's criteria values become the firm layer; Work edits resolve over it like the host's. */
+const firm: DuctsFirm = {
+  version: sheetInputs.firm.version,
+  criteria: Object.fromEntries(
+    Object.entries(sheetInputs.inputs.criteria).map(([key, c]) => [
+      key,
+      "value" in c ? c.value : { supply: c.supply.value, return: c.return.value },
+    ]),
+  ) as DuctsFirm["criteria"],
+};
 
 export const ductsSeeds = Object.fromEntries(
   Object.entries({
@@ -60,7 +76,15 @@ export const ductsSeeds = Object.fromEntries(
         catalogs: { tables: EMPTY_CATALOGS, findings: [] },
         pricing: "result" in pricing ? pricing.result : null,
         fans,
-        sheet: (page: DuctsPage) => {
+        // Keyed on Work revision by the fixture lane (shell/fixture.ts), so an edit re-resolves here.
+        sheet: (page: DuctsPage, doc: DuctsRouteDocument | null) => {
+          const inputs = {
+            ...sheetInputs,
+            inputs: {
+              ...sheetInputs.inputs,
+              criteria: resolveCriteria(stagedDucts(doc), null, firm),
+            },
+          };
           const picked = selectedFans(page.fan, fans?.rows ?? []);
           // Synthetic layout evidence: each picked roster row has an independent overview.
           const opened = picked.map((row) => ({
@@ -72,7 +96,7 @@ export const ductsSeeds = Object.fromEntries(
                 requiredEspInWg: row.requiredEspInWg ?? null,
               },
             }),
-            inputs: ductsSheetResponseSchema.parse(sheetFixture.inputs),
+            inputs,
             elements: ductsSheetResponseSchema.parse(sheetFixture.elements),
             legs: ductsSheetResponseSchema.parse(sheetFixture.legs),
             worstLegs: [],
