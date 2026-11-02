@@ -165,7 +165,7 @@ export function buildCapabilities(sources: CapabilitySources): Capability[] {
           "sheet",
           ductsSheetRequestSchema,
           "Fan pressure-drop sheet",
-          "Read a bounded per-fan sheet: ranked paths, totals, all compact blockers and basis-bound detail handles. Start with route:ducts.roster for unitId and portIndex; use mode fan. Mode chain takes a start, end and asserted direction and makes no ESP claim. Read blockers back, then propose a sourced default or previewed heal with its effect on the total. Never compute by hand or grep snapshots.",
+          "Read a bounded per-fan sheet: ranked paths, totals, all compact blockers and basis-bound detail handles. Start with route:ducts.roster for unitId and portIndex; use mode fan. Mode chain takes a start, end and asserted direction and makes no ESP claim. Read blockers back, then stage edits through Work verbs at expectedRevision. Model commands send only {target, work:{key,expectedRevision}}; preview then apply the unchanged Work. Never compute by hand or grep snapshots.",
         ],
         [
           "roster",

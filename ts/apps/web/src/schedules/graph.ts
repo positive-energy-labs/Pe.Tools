@@ -8,6 +8,7 @@ import {
   routeStatePatchSchema,
   scheduleGridRouteState,
   scheduleReads,
+  scheduleActions,
   split,
   splitScheduleCellKey,
   showCellValue,
@@ -210,11 +211,11 @@ export const schedulesGraph: RouteGraph<SchedulesPage, ScheduleGridDocument> = {
       },
       { subject: (value) => (value as ScheduleReading).workspaceId },
     ),
-    bind: queryVerb(scheduleQueries["schedule.grid.bind"], {
+    bind: commandVerb("schedule.grid.bind", {
       label: "Bind schedule reading",
       review: "none",
-      input: scheduleReads["schedule.grid.bind"].input,
-    }),
+      input: scheduleActions["schedule.grid.bind"].input,
+    }, { intent: (_, input) => input }),
   },
   panes: {
     list: {

@@ -29,8 +29,8 @@ export function createPluginsHandler(
     } catch (error) {
       return json({ error: message(error) }, 409);
     }
-    await content.lifecycle.refresh();
     if (request.method === "GET") return json(content.lifecycle.inventory());
+    await content.lifecycle.refresh();
     const id = declared.params.id;
     if (!content.lifecycle.inventory().some((p) => p.id === id))
       return json({ error: "Unknown plugin" }, 404);

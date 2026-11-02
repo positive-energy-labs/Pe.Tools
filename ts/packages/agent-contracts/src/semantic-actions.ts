@@ -2,9 +2,9 @@ import { instancesActions, instancesReading, instancesSessionSelection } from ".
 import { scheduleActions, scheduleReads } from "./schedule-actions.ts";
 import { familyActions, familyReads } from "./family-actions.ts";
 import { stagedRoomEditSchema } from "./takeoffs.ts";
-import { ductsApplyInputSchema, ductsAssignFanInputSchema, ductsHealInputSchema } from "./ducts.ts";
 import { nativeProcessSchema } from "./action-receipts.ts";
 import { z } from "zod";
+import { workKeySchema } from "./route-state.ts";
 import { executionTargetSchema } from "./target.ts";
 
 import type { Command } from "./command.ts";
@@ -117,6 +117,17 @@ export const takeoffActions = definitions;
  * /ducts verbs: one native op, `ducts.apply`, once with `previewOnly` and once for real. Their own
  * keys, so `operations call ducts.apply` still names the native op.
  */
+const ductsWorkCommand = <C extends Command & { input: z.ZodObject }>(definition: C) => ({
+  ...definition,
+  input: z.strictObject({ work: z.strictObject({ key: workKeySchema, expectedRevision: z.number().int().nonnegative() }) }),
+  work: {
+    route: "ducts",
+    bind: (_input: unknown, handle: import("./command.ts").WorkHandle) => ({
+      work: { key: handle.key, expectedRevision: handle.revision },
+    }),
+  },
+});
+
 export const ductsActions = {
   "ducts.refresh": {
     says: "Read this document's duct snapshots and pricing inputs again.",
@@ -130,7 +141,7 @@ export const ductsActions = {
     says: "Plan the staged duct loss writes (fitting coefficients, terminal and component drops, fan static) and report each write's outcome without changing Revit.",
     needs: "project-document",
     effect: "query",
-    input: ductsApplyInputSchema,
+    input: z.strictObject({}),
     dirties: [],
   },
   "ducts.apply-losses": {
@@ -138,7 +149,7 @@ export const ductsActions = {
     says: "Write the staged duct loss values to Revit (fitting coefficients, terminal and component drops, fan static) and record their provenance in Project Information.",
     needs: "project-document",
     effect: "command",
-    input: ductsApplyInputSchema,
+    input: z.strictObject({}),
     dirties: ["snapshot"],
   },
   "ducts.preview-heal": {
@@ -146,7 +157,7 @@ export const ductsActions = {
     says: "Preview healing duct groups in Revit: cap dangling open ends, connect coincident same-size ends, close same-size gaps of at most 3 in; runs every repair and Pe's post-check, then rolls all of it back. Name a group without items to preview everything the Ducts route would heal there; show the person the per-item outcome before any apply.",
     needs: "project-document",
     effect: "query",
-    input: ductsHealInputSchema,
+    input: z.strictObject({}),
     dirties: [],
   },
   "ducts.apply-heal": {
@@ -154,7 +165,7 @@ export const ductsActions = {
     says: "Heal duct groups in Revit, one transaction per group, with exactly the items a preview showed and a person approved; an item failing Pe's post-check is refused and rolled back. Revit gives rebuilt elements new ids: read the duct snapshot again after.",
     needs: "project-document",
     effect: "command",
-    input: ductsHealInputSchema,
+    input: z.strictObject({}),
     dirties: ["snapshot"],
   },
   "ducts.preview-assign-fan": {
@@ -162,7 +173,7 @@ export const ductsActions = {
     says: "Preview making a unit the fan of a duct system in Revit (Duct Systems > Select Equipment: the system's base equipment): runs Pe's guards, the write and its read back, then rolls it back. Refuses a system that already has base equipment, and a unit with no port of the system's air classification in that system or on its ducts. Show the person the outcome before any apply.",
     needs: "project-document",
     effect: "query",
-    input: ductsAssignFanInputSchema,
+    input: z.strictObject({}),
     dirties: [],
   },
   "ducts.apply-assign-fan": {
@@ -170,7 +181,7 @@ export const ductsActions = {
     says: "Make a unit the base equipment (the fan) of a duct system in Revit, as a preview showed and a person approved; the system keeps its id, name and type. Read the duct snapshot again after: the unit's role reads base equipment of that system.",
     needs: "project-document",
     effect: "command",
-    input: ductsAssignFanInputSchema,
+    input: z.strictObject({}),
     dirties: ["snapshot"],
   },
 } as const satisfies Record<string, Command>;
@@ -279,6 +290,7 @@ export const tools = {
     says: scheduleGridRouteState.description,
     work: { ...scheduleGridRouteState, editable: [["cells", "*"]] },
     commands: {
+      "schedule.grid.bind": scheduleActions["schedule.grid.bind"],
       "schedule.grid.push": workCommand("schedules", scheduleActions["schedule.grid.push"]),
       "schedule.capture": workCommand("schedules", scheduleActions["schedule.capture"]),
       "schedule.apply": workCommand("schedules", scheduleActions["schedule.apply"]),
@@ -324,6 +336,7 @@ export const tools = {
     work: {
       ...ductsRouteState,
       editable: [
+        ["writeIntent"],
         ["calculation", "*"],
         ["assumptions", "*"],
         ["rules", "*"],
@@ -349,12 +362,12 @@ export const tools = {
     },
     commands: {
       "ducts.refresh": ductsActions["ducts.refresh"],
-      "ducts.preview-losses": workCommand("ducts", ductsActions["ducts.preview-losses"]),
-      "ducts.apply-losses": workCommand("ducts", ductsActions["ducts.apply-losses"]),
-      "ducts.preview-heal": workCommand("ducts", ductsActions["ducts.preview-heal"]),
-      "ducts.apply-heal": workCommand("ducts", ductsActions["ducts.apply-heal"]),
-      "ducts.preview-assign-fan": workCommand("ducts", ductsActions["ducts.preview-assign-fan"]),
-      "ducts.apply-assign-fan": workCommand("ducts", ductsActions["ducts.apply-assign-fan"]),
+      "ducts.preview-losses": ductsWorkCommand(ductsActions["ducts.preview-losses"]),
+      "ducts.apply-losses": ductsWorkCommand(ductsActions["ducts.apply-losses"]),
+      "ducts.preview-heal": ductsWorkCommand(ductsActions["ducts.preview-heal"]),
+      "ducts.apply-heal": ductsWorkCommand(ductsActions["ducts.apply-heal"]),
+      "ducts.preview-assign-fan": ductsWorkCommand(ductsActions["ducts.preview-assign-fan"]),
+      "ducts.apply-assign-fan": ductsWorkCommand(ductsActions["ducts.apply-assign-fan"]),
     },
   },
   instances: {

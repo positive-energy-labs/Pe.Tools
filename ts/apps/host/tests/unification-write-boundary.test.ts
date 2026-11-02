@@ -172,6 +172,7 @@ type Harness = {
   ) => Record<string, unknown> & { id: string };
 };
 
+import { snapshot } from "../../web/src/ducts/test-fixture.ts";
 import { createDuctsSheets } from "../src/ducts-sheet.ts";
 
 const response = {
@@ -191,13 +192,24 @@ const response = {
   storeRevision: 1,
 };
 const edit = (cfm: number) => [{ path: ["flows", "31", "edit"], value: { value: { cfm } } }];
-const dispatchOrReceipt = (owner: ActionJournal, outgoing: Harness["outgoing"], id: string) =>
+const rawDispatchOrReceipt = (owner: ActionJournal, outgoing: Harness["outgoing"], id: string) =>
   Effect.race(
     Queue.take(outgoing).pipe(Effect.map((frame) => ({ kind: "dispatch" as const, frame }))),
     Effect.promise(() => owner.wait(id)).pipe(
       Effect.map((receipt) => ({ kind: "receipt" as const, receipt })),
     ),
   );
+
+const dispatchOrReceipt = (owner: ActionJournal, outgoing: Harness["outgoing"], id: string, answer: Harness["answer"]): Effect.Effect<any> => Effect.gen(function* () {
+  while (true) {
+    const next = yield* rawDispatchOrReceipt(owner, outgoing, id);
+    if (next.kind === "receipt") return next;
+    const request = next.frame.request!;
+    if (request.operationKey === "ducts.snapshot") yield* answer(request.requestId, snapshot);
+    else if (request.operationKey === "ducts.tables") yield* answer(request.requestId, { tables: {}, missing: [], unsupported: [] });
+    else return next;
+  }
+});
 
 for (const foreign of [false, true])
   test(`kernel gap: ${foreign ? "Work A cannot write document B" : "native payload must derive from Work, not caller"}`, () =>
@@ -208,15 +220,22 @@ for (const foreign of [false, true])
           : workKey;
         const staged = yield* Effect.promise(() => work.apply(key, "ducts", "human", edit(200), 0));
         expect(staged.ok).toBe(true);
-        yield* post(
-          intent("mismatch", "ducts.apply-losses", undefined, {
+        const submitted = yield* post(
+          intent("mismatch", "ducts.apply-losses", undefined, foreign ? {
+            work: { key, expectedRevision: staged.revision },
+          } : {
             ...input,
-            work: { key, revision: staged.revision },
+            work: { key, expectedRevision: staged.revision },
           }),
         );
-        const next = yield* dispatchOrReceipt(owner, outgoing, "mismatch");
+        if (!foreign) {
+          expect(submitted.status).toBeGreaterThanOrEqual(400);
+          expect(yield* Queue.size(outgoing)).toBe(0);
+          return;
+        }
+        const next = yield* dispatchOrReceipt(owner, outgoing, "mismatch", answer);
         if (next.kind === "receipt") {
-          expect(next.receipt.state).toBe("refused");
+          expect(next.receipt).toMatchObject({ state: "failed", notDispatched: true, refusal: { kind: "domain" } });
           return;
         }
         const frame = next.frame;
@@ -287,12 +306,12 @@ test("kernel gap: preview seal refuses apply after Work changes", () =>
       );
       yield* post(
         intent("preview", "ducts.preview-losses", undefined, {
-          ...input,
-          work: { key: workKey, revision: staged.revision },
+          work: { key: workKey, expectedRevision: staged.revision },
         }),
       );
-      const preview = yield* Queue.take(outgoing);
-      yield* answer(preview.request!.requestId, { ...response, previewOnly: true });
+      const preview = yield* dispatchOrReceipt(owner, outgoing, "preview", answer);
+      expect(preview.kind).toBe("dispatch");
+      yield* answer(preview.frame.request!.requestId, { ...response, previewOnly: true });
       expect((yield* Effect.promise(() => owner.wait("preview")))?.state).toBe("succeeded");
       const changed = yield* Effect.promise(() =>
         work.apply(workKey, "ducts", "human", edit(300), staged.revision!),
@@ -300,13 +319,12 @@ test("kernel gap: preview seal refuses apply after Work changes", () =>
       expect(changed.ok).toBe(true);
       yield* post(
         intent("apply", "ducts.apply-losses", undefined, {
-          ...input,
-          work: { key: workKey, revision: changed.revision },
+          work: { key: workKey, expectedRevision: changed.revision },
         }),
       );
-      const next = yield* dispatchOrReceipt(owner, outgoing, "apply");
+      const next = yield* dispatchOrReceipt(owner, outgoing, "apply", answer);
       if (next.kind === "receipt") {
-        expect(next.receipt.state).toBe("refused");
+        expect(next.receipt).toMatchObject({ state: "failed", notDispatched: true, refusal: { kind: "domain" } });
         return;
       }
       yield* answer(next.frame.request!.requestId, response);
@@ -320,15 +338,42 @@ test("kernel gap: preview seal refuses apply after Work changes", () =>
 // Falsified audit premise: ActionJournal's effect overlap already prevents this duplicate.
 // Keep this green regression; turning it red artificially would misstate the missing primitive.
 test("unknown outcome blocks a new invocation from dispatching the same write", () =>
-  lane(({ owner, outgoing, post, answer, intent }) =>
+  lane(({ owner, outgoing, post, answer, intent, work, workKey }) =>
     Effect.gen(function* () {
-      yield* post(intent("uncertain", "ducts.apply-losses"));
-      const first = yield* Queue.take(outgoing);
-      yield* answer(first.request!.requestId, null, true);
+      const staged = yield* Effect.promise(() => work.apply(workKey, "ducts", "human", edit(200), 0));
+      const payload = { work: { key: workKey, expectedRevision: staged.revision } };
+      yield* post(intent("pre-unknown", "ducts.preview-losses", undefined, payload));
+      const preview = yield* dispatchOrReceipt(owner, outgoing, "pre-unknown", answer);
+      expect(preview.kind).toBe("dispatch");
+      yield* answer(preview.frame.request!.requestId, { ...response, previewOnly: true });
+      expect((yield* Effect.promise(() => owner.wait("pre-unknown"))).state).toBe("succeeded");
+      yield* post(intent("uncertain", "ducts.apply-losses", undefined, payload));
+      const first = yield* dispatchOrReceipt(owner, outgoing, "uncertain", answer);
+      expect(first.kind).toBe("dispatch");
+      yield* answer(first.frame.request!.requestId, null, true);
       expect((yield* Effect.promise(() => owner.wait("uncertain")))?.state).toBe("unknown");
-      yield* post(intent("retry", "ducts.apply-losses"));
+      yield* post(intent("retry", "ducts.apply-losses", undefined, payload));
       const retry = yield* Effect.promise(() => owner.wait("retry"));
       expect(retry.state, JSON.stringify(retry)).not.toBe("succeeded");
       expect(yield* Queue.size(outgoing), "unknown outcome must block duplicate dispatch").toBe(0);
     }),
   ));
+
+test("host-derived preview and apply send the captured Work flow and retire only confirmed cells", () =>
+  lane(({ owner, outgoing, post, answer, intent, work, workKey }) => Effect.gen(function* () {
+    const staged = yield* Effect.promise(() => work.apply(workKey, "ducts", "human", [{ path: ["flows", "4", "edit"], value: { value: { cfm: 200 } } }], 0));
+    const payload = { work: { key: workKey, expectedRevision: staged.revision } };
+    for (const [id, key, previewOnly] of [["preview-derived", "ducts.preview-losses", true], ["apply-derived", "ducts.apply-losses", false]] as const) {
+      yield* post(intent(id, key, undefined, payload));
+      const next = yield* dispatchOrReceipt(owner, outgoing, id, answer);
+      expect(next.kind, JSON.stringify(next)).toBe("dispatch");
+      const native = JSON.parse(next.frame.request!.payloadJson);
+      expect(native.terminalFlows.find((row: {id:number}) => row.id === 4)?.cfm).toBe(200);
+      yield* answer(next.frame.request!.requestId, { ...response, previewOnly, writes: [{ ...response.writes[0], id: 4, after: "200" }] });
+      const receipt = yield* Effect.promise(() => owner.wait(id));
+      expect(receipt.state, JSON.stringify(receipt)).toBe("succeeded");
+      expect((receipt as any).result.seal.requestHash).toMatch(/^[a-f0-9]{64}$/);
+    }
+    const view = yield* Effect.promise(() => work.view(workKey, "ducts"));
+    expect((view!.doc as any).flows["4"].edit).toBeNull();
+  })));

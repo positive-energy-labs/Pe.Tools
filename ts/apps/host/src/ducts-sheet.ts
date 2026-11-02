@@ -7,7 +7,6 @@ import {
   type DuctsInputs,
   type WorkKey,
   type WorkAuthor,
-  refusalText,
   ductsRosterResponseSchema,
   ductsSheetResponseSchema,
   type DocumentRef,
@@ -35,7 +34,7 @@ import {
   scopeInputs,
 } from "@pe/ducts-domain/sheet/index";
 import { readDuctCatalogs } from "./duct-catalogs.ts";
-import { editPatches, readFirm, workLayer } from "./ducts-inputs.ts";
+import { readFirm, workLayer } from "./ducts-inputs.ts";
 import type { Sheet, Chain, SheetPath } from "@pe/ducts-domain/sheet/types";
 import { worksheet } from "@pe/ducts-domain/sheet/worksheet";
 import { beyondOf, stoppingUnits, type BeyondUnit } from "@pe/ducts-domain/sheet/beyond";
@@ -260,22 +259,6 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
     };
   }
   type Layers = Awaited<ReturnType<typeof loadLayers>>;
-  async function applyEdits(request: DuctsSheetRequest, saved: Layers): Promise<Layers> {
-    if (!request.edits) return saved;
-    if (!work || !saved.scope)
-      throw new BridgeError("Document Work is unavailable for sheet edits", 409, {
-        notDispatched: true,
-      });
-    const result = await work.workspace.apply(
-      saved.scope,
-      "ducts",
-      work.author(),
-      editPatches(request.edits, saved.doc),
-      saved.revision,
-    );
-    if (!result.ok) throw new BridgeError(refusalText(result), 409, { notDispatched: true });
-    return loadLayers(request.target);
-  }
   const firmOf = (saved: Layers) => ({
     version: saved.firm.firm.version,
     path: saved.firm.path,
@@ -397,30 +380,7 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
   }
   return {
     async sheet(request: DuctsSheetRequest): Promise<DuctsSheetResponse> {
-      let saved = await loadLayers(request.target);
-      if (request.proposal) {
-        const entry = request.basis ? entries.get(request.basis) : undefined;
-        // The entry must be this fan's sheet over the layers as saved now.
-        if (!entry || request.detail || entry.subject !== subjectOf(request, saved)) throw stale();
-        await current(entry);
-        const all = allBlockers(entry.value);
-        const choice = request.proposal;
-        // A person may accept the same-class proposal or the class crossing the row offers beside it.
-        const offered = (b: (typeof all)[number]) =>
-          [b.proposal?.pair, b.closer.crossing?.pair].some(
-            (pair) => pair?.every((p) => choice.pair.includes(p)) ?? false,
-          );
-        if (!all.some(offered))
-          throw new BridgeError("Proposal is not on this sheet basis", 409, {
-            notDispatched: true,
-          });
-        // A proposal verdict is a join ruling: one Work edit, like any other input.
-        request = {
-          ...request,
-          edits: { ...request.edits, joins: [...(request.edits?.joins ?? []), choice] },
-        };
-      }
-      saved = await applyEdits(request, saved);
+      const saved = await loadLayers(request.target);
       const subject = subjectOf(request, saved);
       if (request.detail) {
         const entry = request.basis ? entries.get(request.basis) : undefined;

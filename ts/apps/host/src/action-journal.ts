@@ -875,6 +875,9 @@ export class ActionJournal implements ReceiptReader {
       selectWork: async (spec, handle, select) => {
         if (handle.key.route !== spec.route)
           throw refused("Work belongs to another tool", "work.route");
+        if (admission.target.kind === "document" && handle.key.binding === "open" &&
+            canonicalRouteInput(handle.key.open) !== canonicalRouteInput(admission.target.ref))
+          throw refused("Work belongs to another document", "work.target");
         const identity = workKey(handle.key);
         let original = context.consumed.find(
           (value) => value.kind === "work" && workKey(value.probe.handle.key) === identity,

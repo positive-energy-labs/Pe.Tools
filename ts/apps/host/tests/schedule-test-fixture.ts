@@ -47,7 +47,6 @@ async function readScheduleCapture(
   });
   const value = await response.json();
   if (!response.ok) throw Error((value as { error?: string }).error ?? `${response.status}`);
-  if (key === "schedule.grid.bind") return value;
   return key === "schedule.grid.catalog"
     ? scheduleCatalogSchema.parse(value)
     : scheduleReadingSchema.parse(value);
@@ -316,7 +315,18 @@ export async function setup() {
       as = human;
     }
   };
-  await readScheduleCapture("schedule.grid.bind", { readingId: reading.id, expectedRevision: 0 });
+  const bindReading = async (input: { readingId: string; expectedRevision: number }) => {
+    const id = crypto.randomUUID();
+    const response = await fetch("/actions", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id, key: "schedule.grid.bind", target: { kind: "host" }, input }),
+    });
+    if (!response.ok) throw Error(JSON.stringify(await response.json()));
+    const receipt = await owner.wait(id);
+    if (receipt.state !== "succeeded") throw Error(JSON.stringify(receipt));
+    return receipt.result;
+  };
+  await bindReading( { readingId: reading.id, expectedRevision: 0 });
   expect(
     await patch([{ path: ["cells", "1::2"], value: { edit: { value: "150 VA" } } }]),
   ).toMatchObject({ ok: true });
@@ -352,7 +362,7 @@ export async function setup() {
     patch,
     read,
     bind: async (reading: ScheduleReading) =>
-      readScheduleCapture("schedule.grid.bind", {
+      bindReading( {
         readingId: reading.id,
         expectedRevision: (await view()).revision,
       }),

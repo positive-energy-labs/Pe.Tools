@@ -18,7 +18,7 @@ export function createPodRoutes(
   let tail = Promise.resolve();
   const decisions = () => readJson(path, trustSchema, {});
   async function list(): Promise<PodRouteDescriptor[]> {
-    await lifecycle.refresh();
+    await lifecycle.ready;
     const trust = await decisions();
     const descriptors = lifecycle.packages().flatMap((pod) => {
       if (pod.diagnostics.some((d) => d.code === "InvalidRoute")) return [];

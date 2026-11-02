@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { Effect } from "effect";
 import {
   commands,
+  scheduleActions,
   tools,
   scheduleReadingSchema,
   scheduleCellBindingSchema,
@@ -140,36 +141,6 @@ export async function readSchedule(
     return captures.scheduleHistory(scheduleReads[key].input.parse(raw.input).workspaceId);
   if (key === "schedule.grid.work")
     return captures.scheduleWork(scheduleReads[key].input.parse(raw.input).workspaceId);
-  if (key === "schedule.grid.bind") {
-    const input = scheduleReads[key].input.parse(raw.input);
-    const reading = await captures.schedule(input.readingId);
-    const work = deps.workspace;
-    if (!work) throw refused("Schedule Work is unavailable");
-    const scope = {
-      binding: "workspace" as const,
-      route: "schedules",
-      target: null,
-      work: reading.workspaceId,
-    };
-    const view = await work.view(scope, "schedules");
-    if (!view || view.revision !== input.expectedRevision)
-      throw refused("Schedule Work changed; read it and bind again");
-    const document = scheduleGridDocumentSchema.parse(view.doc);
-    const previous = document.basis
-      ? await captures.schedule(document.basis.captureId).catch(() => null)
-      : null;
-    const patches = document.basis
-      ? rebindScheduleWork(document, previous, reading)
-      : [
-          { path: ["basis"], value: { captureId: reading.id } },
-          { path: ["takenAt"], value: reading.capturedAt },
-        ];
-    if (patches.length) {
-      const result = await work.publish(scope, "schedules", patches, input.expectedRevision);
-      if (!result.ok) throw refused(refusalText(result));
-    }
-    return { envelope: await work.read(scope, "schedules") };
-  }
   const target = documentRefSchema.parse(raw.target);
   await resolveSdkSession(
     bridge,
@@ -363,6 +334,39 @@ export function scheduleExecutors(
   bridge: RevitBridge["Service"],
   deps: FamilyActionDependencies = {},
 ) {
+  const bindReading = command(commands["schedule.grid.bind"], z.null(), {
+    bind: async () => ({ effects: [] }),
+    run: async (ctx, execution) => {
+    const input = scheduleActions["schedule.grid.bind"].input.parse(ctx.admission.input);
+    const reading = await captures.schedule(input.readingId);
+    const work = ctx.work;
+    if (!work) throw refused("Schedule Work is unavailable");
+    const scope = {
+      binding: "workspace" as const,
+      route: "schedules",
+      target: null,
+      work: reading.workspaceId,
+    };
+    const view = await work.view(scope, "schedules");
+    if (!view || view.revision !== input.expectedRevision)
+      throw refused("Schedule Work changed; read it and bind again");
+    const document = scheduleGridDocumentSchema.parse(view.doc);
+    const previous = document.basis
+      ? await captures.schedule(document.basis.captureId).catch(() => null)
+      : null;
+    const patches = document.basis
+      ? rebindScheduleWork(document, previous, reading)
+      : [
+          { path: ["basis"], value: { captureId: reading.id } },
+          { path: ["takenAt"], value: reading.capturedAt },
+        ];
+    if (patches.length) {
+      const result = await execution.step("publication", "schedule.bind", { scope, patches, expectedRevision: input.expectedRevision }, () => work.publish(scope, "schedules", patches, input.expectedRevision));
+      if (!result.ok) throw refused(refusalText(result));
+    }
+    return { envelope: await work.read(scope, "schedules") };
+    },
+  });
   const gridPush = command(commands["schedule.grid.push"], preparedSchedulePushSchema, {
     bind: async (ctx) => {
       const target = scheduleTarget(ctx);
@@ -653,7 +657,7 @@ export function scheduleExecutors(
       return { executionContext: target, native };
     },
   });
-  return { "schedule.grid.push": gridPush, "schedule.capture": capture, "schedule.apply": apply };
+  return { "schedule.grid.bind": bindReading, "schedule.grid.push": gridPush, "schedule.capture": capture, "schedule.apply": apply };
 }
 
 /**

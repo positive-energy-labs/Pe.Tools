@@ -7,7 +7,7 @@ import {
   type RouteGraph,
 } from "@pe/agent-contracts";
 import { dataTablesAddress } from "../../../../packages/agent-contracts/src/routes/data-tables";
-import { workVerb, queryVerb, commandVerb } from "#/shell/verbs";
+import { workVerb, commandVerb } from "#/shell/verbs";
 import { NATIVE_APPLY_WAIT_S } from "#/route/waits";
 import { openTable, tableSchema } from "./sources";
 
@@ -65,11 +65,14 @@ export const dataTablesGraph: RouteGraph<DataTablesPage, DataTablesWork> = {
       { label: "New table", input: z.object({}) },
       { patches: () => [{ path: ["draft"], value: blank() }] },
     ),
-    open: queryVerb(
-      openTable,
-      { label: "Open table", input: openTable.input, review: "none" },
+    open: workVerb(
+      { label: "Open table", input: openTable.input },
       {
-        patches: (_, result) => [{ path: ["draft"], value: draftFrom(tableSchema.parse(result)) }],
+        patches: (scope, input) => {
+          const table = (scope.readings.tables?.value as TableHandle[] | undefined)?.find(table => table.name === input.name);
+          if (!scope.readings.tables?.current || !table) throw Error("Read the current tables before opening one");
+          return [{ path: ["draft"], value: draftFrom(table) }];
+        },
       },
     ),
     apply: commandVerb(

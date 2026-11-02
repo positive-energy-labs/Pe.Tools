@@ -360,6 +360,11 @@ export const ductsDocumentSchema = z
     kinds: z
       .record(z.string().min(1), draftCellSchema(z.strictObject({ kind: z.enum(DUCT_UNIT_KINDS) })))
       .default({}),
+    /** Authored scope for host-derived repair and fan commands; never a native request. */
+    writeIntent: draftCellSchema(z.strictObject({
+      groups: z.array(z.string().min(1)).optional(),
+      fan: z.strictObject({ unitId: z.number().int(), systemId: z.number().int() }).optional(),
+    })).default({}),
     calculation: z.record(z.string().min(1), draftCellSchema(ductCalculationSchema)).default({}),
     /** Deletable: a delete edit takes back the verdict the model's store holds at that key. */
     assumptions: z
