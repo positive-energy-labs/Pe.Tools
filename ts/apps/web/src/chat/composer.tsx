@@ -17,9 +17,11 @@ import { useWorkbench } from "#/workbench/provider";
 import { EMPTY_CHAT_DRAFT, type ChatDraft } from "#/workbench/prompt";
 import {
   selectMessages,
+  selectQuestions,
   selectRunStatus,
   selectSkillCommands,
 } from "@pe/agent-contracts/chat-state";
+import { composerAnswer } from "./question-form";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import { useSend, type ChatHandle } from "#/chat/composer-head";
 import { chatReading } from "./graph";
@@ -74,7 +76,15 @@ export function ThreadComposer({
   autoFocus?: boolean;
 }) {
   const [draft, setDraft] = useState(initialDraft);
-  const { chat, providers, config, currentThreadId, threads, draft: head } = useWorkbench();
+  const {
+    chat,
+    providers,
+    config,
+    currentThreadId,
+    threads,
+    draft: head,
+    answerQuestion,
+  } = useWorkbench();
   // Loaded and none ready: the composer carries the first-open doors and Send says why it waits.
   const noneReady = providers.list !== undefined && !providers.list.some(isReady);
   // Some ready, but not the one this head runs on: that provider carries its own repair.
@@ -101,7 +111,17 @@ export function ThreadComposer({
   const catalog = useMemo(() => read && machine && liveCatalog(read, machine), [read, machine]);
   const mentions = useMentions(draft, setDraft, catalog, area, slash.open);
   const setText = (text: string) => setDraft((previous) => withText(previous, text));
-  const sendCurrent = () => void send.run();
+  // A question Pea is waiting on takes the composer's text as its answer (its "Other" box), so
+  // typing while Pea waits is never silently dropped behind a stop button.
+  const asking = selectQuestions(chat)[0];
+  const answer = asking && composerAnswer(asking, draft.text.trim());
+  const answerCurrent = async () => {
+    if (!asking || !answer || !draft.text.trim()) return;
+    const sent = draft;
+    await answerQuestion(asking.requestId, "accept", answer);
+    setDraft((current) => (current === sent ? EMPTY_CHAT_DRAFT : current));
+  };
+  const sendCurrent = () => void (asking ? answerCurrent() : send.run());
   const SkillIcon = MENTION_KINDS.skill.icon;
 
   const paneOwnsFocus = () =>
@@ -269,7 +289,29 @@ export function ThreadComposer({
             </>
           }
           send={
-            isRunning ? (
+            asking ? (
+              <>
+                <Button
+                  label="stop"
+                  icon={Square}
+                  refusal={handle.control("stop").refusal}
+                  onClick={() => void handle.control("stop").run()}
+                />
+                <Button
+                  kind="commit"
+                  label="Answer Pea's question"
+                  icon={ArrowUp}
+                  refusal={
+                    !answer
+                      ? "This question takes a pick, not text: answer it above"
+                      : draft.text.trim()
+                        ? null
+                        : "Type your answer, or pick one above"
+                  }
+                  onClick={sendCurrent}
+                />
+              </>
+            ) : isRunning ? (
               <Button
                 label="stop"
                 icon={Square}
@@ -298,7 +340,13 @@ export function ThreadComposer({
           aria-autocomplete="list"
           aria-haspopup="listbox"
           placeholder={
-            noneReady ? "no provider is ready" : "Ask Pea; / for a skill, @ to point at a thing"
+            noneReady
+              ? "no provider is ready"
+              : asking
+                ? answer
+                  ? "Pea is waiting on your answer; type it here, Enter sends it"
+                  : "Pea is waiting on a pick in the question above"
+                : "Ask Pea; / for a skill, @ to point at a thing"
           }
           autoFocus={autoFocus}
           value={draft.text}

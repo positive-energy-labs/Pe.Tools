@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { ComposerPending } from "./composer-pending";
-import { QuestionForm } from "./question-form";
+import { composerAnswer, QuestionForm } from "./question-form";
 import type { Approval, Question, ToolCall } from "@pe/agent-contracts/chat-state";
 
 afterEach(cleanup);
@@ -157,4 +157,65 @@ test("root-turn write consent stays visible, counts down and sends the host opti
   } finally {
     vi.useRealTimers();
   }
+});
+
+// The Claude adapter's AskUserQuestion shape: a pick plus its own "Other" box (claude-agent-acp elicitation.js).
+const asked: Question = {
+  requestId: "ask-1",
+  message: "Which single input should I stage?",
+  requestedSchema: {
+    type: "object",
+    properties: {
+      question_0: {
+        type: "string",
+        title: "Input",
+        oneOf: [
+          { const: "Terminal cfm", title: "Terminal cfm" },
+          { const: "Stop at preview", title: "Stop at preview" },
+        ],
+      },
+      question_0_custom: { type: "string", title: "Other", description: "Type your own answer" },
+    },
+  },
+};
+
+test("a choice or Other never answers by itself; Other focuses its box and Enter there sends the text", async () => {
+  const answer = vi.fn(async () => {});
+  const screen = render(<QuestionForm question={asked} onAnswer={answer} />);
+  fireEvent.click(screen.getByRole("radio", { name: "Terminal cfm" }));
+  expect(answer).not.toHaveBeenCalled();
+  const other = screen.getByRole("radio", { name: "Other" });
+  fireEvent.click(other);
+  const box = screen.getByRole("textbox");
+  expect(document.activeElement).toBe(box);
+  other.focus();
+  fireEvent.keyDown(other, { key: "Enter" });
+  expect(answer).not.toHaveBeenCalled();
+  expect(document.activeElement).toBe(box);
+  fireEvent.change(box, { target: { value: "8781191 = 150 cfm" } });
+  await act(async () => fireEvent.keyDown(box, { key: "Enter" }));
+  expect(answer).toHaveBeenCalledExactlyOnceWith("accept", {
+    question_0: undefined,
+    question_0_custom: "8781191 = 150 cfm",
+  });
+});
+
+test("composer text answers the pending question through its Other box, keeping a pick made above", () => {
+  const screen = render(<QuestionForm question={asked} onAnswer={vi.fn()} />);
+  expect(composerAnswer(asked, "150 cfm")).toEqual({ question_0_custom: "150 cfm" });
+  fireEvent.click(screen.getByRole("radio", { name: "Stop at preview" }));
+  expect(composerAnswer(asked, "per schedule")).toEqual({
+    question_0: "Stop at preview",
+    question_0_custom: "per schedule",
+  });
+  // A pick-only question has no box for text: the composer refuses rather than dropping it.
+  const pickOnly: Question = {
+    requestId: "ask-2",
+    message: "Pick one",
+    requestedSchema: {
+      type: "object",
+      properties: { choice: { type: "string", oneOf: [{ const: "a", title: "A" }] } },
+    },
+  };
+  expect(composerAnswer(pickOnly, "x")).toBeNull();
 });
