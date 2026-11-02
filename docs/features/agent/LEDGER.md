@@ -181,6 +181,7 @@ restated here.
 
 ## Owed
 
+- 2026-11-02, kaitpw is not settled on the Pea permission model (per-thread run consent, Reject window, cross-thread and cross-tab permissions) and avoids trying alternatives because the host has no owner of lifetime; open a `muse` on it after ADR 0029 phase 5 lands, with fixture prototypes of each model, not before.
 - Approved distillation residue from Fable R2: consolidate repeated incarnation declarations and target narrowing without adding another owner; share the journal's no-dispatch predicate; remove duplicate command eligibility checks while retaining read-door checks; replace the tautological capture dependency with sealed input; make unavailable-resource probes produce typed stale refusals. These six bounded simplifications were explicitly nonblocking; review evidence is archived under `.artifacts/runs/deterministic-20261027-distillation-landing/`.
 
 - Remove the unregistered legacy directory `C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-write-countdown`. Git removed its registration and branch after the port landed, but directory removal stopped with files remaining; automatic approval review rejected the native PowerShell cleanup as blocked by policy. Its 33 changed files and both diffs are verified in `.artifacts/runs/deterministic-20261027-countdown-landing/legacy-write-countdown.zip`.
