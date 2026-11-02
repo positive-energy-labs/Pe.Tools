@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, test, vi } from "vite-plus/test";
-import { lossSnapshot } from "../src/ducts-actions";
+import { lossSnapshot } from "../src/ducts-actions.ts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { ductsRouteState } from "@pe/agent-contracts";
 import { price, applyRequest } from "@pe/ducts-domain/pricing";
@@ -18,3 +18,4 @@ test("fan loss preparation reads the selected connector walk and carries authore
   const request = applyRequest(snapshot, price(snapshot, {}, work, EMPTY_CATALOGS), "2026-11-02T10:00:00Z", []);
   expect(request.components).toContainEqual(expect.objectContaining({ id: node.id, inWg: 0.026 }));
 });
+
