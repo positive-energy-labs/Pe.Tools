@@ -720,7 +720,7 @@ export class ActionJournal implements ReceiptReader {
   async wait(id: string): Promise<ActionReceipt> {
     await this.loadOnce();
     const pending = this.pending.get(id);
-    if (pending) return pending;
+    if (pending) await pending;
     const row = (await this.list(undefined, id))[0];
     if (!row) throw Error(`Action '${id}' has no admitted receipt`);
     return row;

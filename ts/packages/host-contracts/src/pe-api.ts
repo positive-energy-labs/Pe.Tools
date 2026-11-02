@@ -698,7 +698,15 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
     ),
     "receipts.read": route("GET", "/pe/receipt-facts", none, z.array(object), "read", "pe", "read"),
     "resources.stream": route("GET", "/pe/resources", none, object, "read", "pe", "read", "stream"),
-    "resources.subscriptions": route("POST", "/pe/resource-subscriptions", object, object, "read", "pe", "read"),
+    "resources.subscriptions": route(
+      "POST",
+      "/pe/resource-subscriptions",
+      object,
+      object,
+      "read",
+      "pe",
+      "read",
+    ),
     /** Query `after`, `kind`, `thread`, `limit`: one page of the host log after a cursor. */
     "log.read": route("GET", "/pe/log", none, hostLogPageSchema, "read", "pe", "read"),
     "work.list": route("GET", "/pe/route-state", none, z.array(object), "read", "pe", "read"),
@@ -1365,7 +1373,10 @@ export async function readPeError(response: Response) {
 export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
   {
     key: "takeoffs.saved",
-    subject: "None", touches: "Metadata", cardinality: "One", effect: "Read",
+    subject: "None",
+    touches: "Metadata",
+    cardinality: "One",
+    effect: "Read",
     origin: "host-local",
     displayName: "Saved Takeoffs captures",
     description:
@@ -1380,7 +1391,10 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
   },
   {
     key: "host.shell.open",
-    subject: "None", touches: "Metadata", cardinality: "One", effect: "SessionWrite",
+    subject: "None",
+    touches: "Metadata",
+    cardinality: "One",
+    effect: "SessionWrite",
     principal: ["human", "pea"],
     origin: "host-local",
     displayName: "Open Path",
@@ -1396,7 +1410,10 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
   },
   {
     key: "rhvac.open",
-    subject: "None", touches: "Metadata", cardinality: "One", effect: "Read",
+    subject: "None",
+    touches: "Metadata",
+    cardinality: "One",
+    effect: "Read",
     origin: "host-local",
     displayName: "Open RHVAC Project",
     description:
@@ -1411,7 +1428,10 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
   },
   {
     key: "rhvac.assemblies",
-    subject: "None", touches: "Metadata", cardinality: "One", effect: "Read",
+    subject: "None",
+    touches: "Metadata",
+    cardinality: "One",
+    effect: "Read",
     origin: "host-local",
     displayName: "RHVAC Assemblies",
     description:
@@ -1426,7 +1446,10 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
   },
   {
     key: "rhvac.sync",
-    subject: "None", touches: "Metadata", cardinality: "One", effect: "SessionWrite",
+    subject: "None",
+    touches: "Metadata",
+    cardinality: "One",
+    effect: "SessionWrite",
     origin: "host-local",
     displayName: "Sync RHVAC Project",
     description:
@@ -1451,7 +1474,10 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
   },
   {
     key: "rhvac.launch",
-    subject: "None", touches: "Metadata", cardinality: "One", effect: "SessionWrite",
+    subject: "None",
+    touches: "Metadata",
+    cardinality: "One",
+    effect: "SessionWrite",
     origin: "host-local",
     displayName: "Open .r10 in RHVAC",
     description:
@@ -1466,7 +1492,10 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
   },
   {
     key: "rhvac.list",
-    subject: "None", touches: "Metadata", cardinality: "One", effect: "Read",
+    subject: "None",
+    touches: "Metadata",
+    cardinality: "One",
+    effect: "Read",
     origin: "host-local",
     displayName: "List .r10 files",
     description:
@@ -1481,7 +1510,10 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
   },
   {
     key: "rhvac.takeoff",
-    subject: "None", touches: "Metadata", cardinality: "One", effect: "Read",
+    subject: "None",
+    touches: "Metadata",
+    cardinality: "One",
+    effect: "Read",
     origin: "host-local",
     displayName: "RHVAC Takeoff Snapshots",
     description:
@@ -1496,7 +1528,10 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
   },
   {
     key: "pod.list",
-    subject: "None", touches: "Metadata", cardinality: "One", effect: "Read",
+    subject: "None",
+    touches: "Metadata",
+    cardinality: "One",
+    effect: "Read",
     origin: "host-local",
     displayName: "Pods",
     description:
@@ -1511,7 +1546,10 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
   },
   {
     key: "pod.capture",
-    subject: "None", touches: "Metadata", cardinality: "One", effect: "Read",
+    subject: "None",
+    touches: "Metadata",
+    cardinality: "One",
+    effect: "Read",
     origin: "host-local",
     displayName: "Capture Pod",
     description:
@@ -1526,7 +1564,10 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
   },
   {
     key: "pod.export",
-    subject: "None", touches: "Metadata", cardinality: "One", effect: "SessionWrite",
+    subject: "None",
+    touches: "Metadata",
+    cardinality: "One",
+    effect: "SessionWrite",
     origin: "host-local",
     displayName: "Export Pod",
     description:
@@ -1541,7 +1582,10 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
   },
   {
     key: "pod.import",
-    subject: "None", touches: "Metadata", cardinality: "One", effect: "SessionWrite",
+    subject: "None",
+    touches: "Metadata",
+    cardinality: "One",
+    effect: "SessionWrite",
     origin: "host-local",
     displayName: "Import Pod",
     description:
@@ -1556,7 +1600,10 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
   },
   {
     key: "pod.promote",
-    subject: "None", touches: "Metadata", cardinality: "One", effect: "Read",
+    subject: "None",
+    touches: "Metadata",
+    cardinality: "One",
+    effect: "Read",
     origin: "host-local",
     displayName: "Promote Page to Pod",
     description:
@@ -1571,7 +1618,10 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
   },
   {
     key: "pod.runs",
-    subject: "None", touches: "Metadata", cardinality: "One", effect: "Read",
+    subject: "None",
+    touches: "Metadata",
+    cardinality: "One",
+    effect: "Read",
     origin: "host-local",
     displayName: "Pod Runs",
     description:
@@ -1586,7 +1636,10 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
   },
   {
     key: "pod.member.read",
-    subject: "None", touches: "Metadata", cardinality: "One", effect: "Read",
+    subject: "None",
+    touches: "Metadata",
+    cardinality: "One",
+    effect: "Read",
     origin: "host-local",
     displayName: "Read Pod Member",
     description: "Read one pod member's exact text and sha256, addressed as { pod, path }.",
@@ -1600,7 +1653,10 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
   },
   {
     key: "pod.member.write",
-    subject: "None", touches: "Metadata", cardinality: "One", effect: "SessionWrite",
+    subject: "None",
+    touches: "Metadata",
+    cardinality: "One",
+    effect: "SessionWrite",
     origin: "host-local",
     displayName: "Write Pod Member",
     description:
@@ -1615,7 +1671,10 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
   },
   {
     key: "pod.member.save",
-    subject: "None", touches: "Metadata", cardinality: "One", effect: "SessionWrite",
+    subject: "None",
+    touches: "Metadata",
+    cardinality: "One",
+    effect: "SessionWrite",
     origin: "host-local",
     displayName: "Save Pod Member",
     description:
@@ -1630,7 +1689,10 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
   },
   {
     key: "pod.member.compose",
-    subject: "None", touches: "Metadata", cardinality: "One", effect: "SessionWrite",
+    subject: "None",
+    touches: "Metadata",
+    cardinality: "One",
+    effect: "SessionWrite",
     origin: "host-local",
     displayName: "Compose Pod Member",
     description:
@@ -1645,7 +1707,10 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
   },
   {
     key: "aps.auth.status",
-    subject: "None", touches: "Metadata", cardinality: "One", effect: "Read",
+    subject: "None",
+    touches: "Metadata",
+    cardinality: "One",
+    effect: "Read",
     origin: "host-local",
     displayName: "APS Auth Status",
     description:
@@ -1660,7 +1725,10 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
   },
   {
     key: "aps.auth.login",
-    subject: "None", touches: "Metadata", cardinality: "One", effect: "SessionWrite",
+    subject: "None",
+    touches: "Metadata",
+    cardinality: "One",
+    effect: "SessionWrite",
     principal: ["human"],
     origin: "host-local",
     displayName: "APS Auth Login",
@@ -1675,7 +1743,10 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
   },
   {
     key: "aps.auth.logout",
-    subject: "None", touches: "Metadata", cardinality: "One", effect: "SessionWrite",
+    subject: "None",
+    touches: "Metadata",
+    cardinality: "One",
+    effect: "SessionWrite",
     principal: ["human"],
     origin: "host-local",
     displayName: "APS Auth Logout",
@@ -1690,7 +1761,10 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
   },
   {
     key: "aps.auth.token",
-    subject: "None", touches: "Metadata", cardinality: "One", effect: "Read",
+    subject: "None",
+    touches: "Metadata",
+    cardinality: "One",
+    effect: "Read",
     origin: "host-local",
     displayName: "APS Access Token",
     description:
@@ -1705,7 +1779,10 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
   },
   {
     key: "host.topology",
-    subject: "None", touches: "Metadata", cardinality: "One", effect: "Read",
+    subject: "None",
+    touches: "Metadata",
+    cardinality: "One",
+    effect: "Read",
     origin: "host-local",
     displayName: "Session Topology",
     description:
@@ -1720,7 +1797,10 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
   },
   {
     key: "host.status",
-    subject: "None", touches: "Metadata", cardinality: "One", effect: "Read",
+    subject: "None",
+    touches: "Metadata",
+    cardinality: "One",
+    effect: "Read",
     origin: "host-local",
     displayName: "Host Status",
     description:
@@ -1735,7 +1815,10 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
   },
   {
     key: "bridge.sessions.summary",
-    subject: "None", touches: "Metadata", cardinality: "One", effect: "Read",
+    subject: "None",
+    touches: "Metadata",
+    cardinality: "One",
+    effect: "Read",
     origin: "host-local",
     displayName: "Bridge Session Summary",
     description:
@@ -1750,7 +1833,10 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
   },
   {
     key: "bridge.sessions.list",
-    subject: "None", touches: "Metadata", cardinality: "One", effect: "Read",
+    subject: "None",
+    touches: "Metadata",
+    cardinality: "One",
+    effect: "Read",
     origin: "host-local",
     displayName: "Bridge Sessions",
     description: "All connected Revit bridge sessions (process id, version, open documents).",
@@ -1764,7 +1850,10 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
   },
   {
     key: "logs.tail",
-    subject: "None", touches: "Metadata", cardinality: "One", effect: "Read",
+    subject: "None",
+    touches: "Metadata",
+    cardinality: "One",
+    effect: "Read",
     origin: "host-local",
     displayName: "Tail Logs",
     description: "Tail the host and Revit add-in log files for diagnostics.",

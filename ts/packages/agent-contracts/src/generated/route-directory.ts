@@ -51,7 +51,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "tray": "compact"
       }
     },
-    "moduleHash": "fd86854bec294b147a3bb02fe210396deb579be71cc8460059da98749e5466b6"
+    "moduleHash": "d0915c91b37953e9ddb85c3b7c1e92feed7e4ffcf84f9e7a72fa835a54bcd5e7"
   },
   {
     "key": "data-tables",

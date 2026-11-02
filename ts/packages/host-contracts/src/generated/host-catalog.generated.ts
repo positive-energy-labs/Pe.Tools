@@ -5,7 +5,104 @@
 // Live parity: pnpm --filter @pe/host-contracts codegen:verify-live -- --session <id>
 
 /** Host-only C# discovery metadata. Runtime availability is reported separately by the host. */
-export const hostOpCatalog = [
+import type { HostOperationDefinition } from "../contracts/operation-vocabulary.ts";
+type CatalogEntry = HostOperationDefinition & { readonly requestSchemaJson: string; readonly responseSchemaJson: string; readonly description: string; readonly artifactSchemaJson?: string } & (
+  | { readonly key: "data-table.apply" }
+  | { readonly key: "document.temporary.release" }
+  | { readonly key: "document.temporary.status" }
+  | { readonly key: "ducts.apply" }
+  | { readonly key: "ducts.assign-fan" }
+  | { readonly key: "ducts.family-patch" }
+  | { readonly key: "ducts.heal" }
+  | { readonly key: "ducts.ports" }
+  | { readonly key: "ducts.snapshot.roster" }
+  | { readonly key: "ducts.snapshot.walk" }
+  | { readonly key: "ducts.tables" }
+  | { readonly key: "families.apply" }
+  | { readonly key: "families.capture" }
+  | { readonly key: "families.plan" }
+  | { readonly key: "family.apply" }
+  | { readonly key: "family.build" }
+  | { readonly key: "family.capture" }
+  | { readonly key: "family.loadTest" }
+  | { readonly key: "family.look" }
+  | { readonly key: "family.open" }
+  | { readonly key: "family.plan" }
+  | { readonly key: "family.temporary.acquire" }
+  | { readonly key: "host.ops.catalog" }
+  | { readonly key: "op.cancel" }
+  | { readonly key: "pod.member.compose" }
+  | { readonly key: "revit.apply.command.execute" }
+  | { readonly key: "revit.apply.parameter-links" }
+  | { readonly key: "revit.apply.parameter-values" }
+  | { readonly key: "revit.apply.parameters-service-cache.refresh" }
+  | { readonly key: "revit.catalog.concept-evidence" }
+  | { readonly key: "revit.catalog.electrical-circuits" }
+  | { readonly key: "revit.catalog.electrical-circuits.roster" }
+  | { readonly key: "revit.catalog.electrical-load-classifications" }
+  | { readonly key: "revit.catalog.electrical-panels" }
+  | { readonly key: "revit.catalog.field-options" }
+  | { readonly key: "revit.catalog.loaded-families" }
+  | { readonly key: "revit.catalog.parameter-bindings" }
+  | { readonly key: "revit.catalog.parameter-evidence" }
+  | { readonly key: "revit.catalog.project-browser" }
+  | { readonly key: "revit.catalog.project-index" }
+  | { readonly key: "revit.catalog.schedules" }
+  | { readonly key: "revit.catalog.warnings" }
+  | { readonly key: "revit.context.document-session" }
+  | { readonly key: "revit.context.journal" }
+  | { readonly key: "revit.context.lens" }
+  | { readonly key: "revit.context.show-elements" }
+  | { readonly key: "revit.context.summary" }
+  | { readonly key: "revit.context.view-image" }
+  | { readonly key: "revit.context.view-rendering-state" }
+  | { readonly key: "revit.context.visible-summary" }
+  | { readonly key: "revit.detail.data-tables" }
+  | { readonly key: "revit.detail.electrical-circuits.walk" }
+  | { readonly key: "revit.detail.electrical-panel-schedules" }
+  | { readonly key: "revit.detail.elements" }
+  | { readonly key: "revit.detail.parameter-links" }
+  | { readonly key: "revit.detail.schedules" }
+  | { readonly key: "revit.detail.sheets" }
+  | { readonly key: "revit.detail.space-census" }
+  | { readonly key: "revit.detail.space-probe" }
+  | { readonly key: "revit.detail.space-rows" }
+  | { readonly key: "revit.detail.space-scene"; readonly artifactSchemaJson: string }
+  | { readonly key: "revit.detail.space-slice" }
+  | { readonly key: "revit.detail.space-status" }
+  | { readonly key: "revit.detail.space-sweep" }
+  | { readonly key: "revit.detail.space-tree" }
+  | { readonly key: "revit.glance.attention" }
+  | { readonly key: "revit.glance.model" }
+  | { readonly key: "revit.matrix.loaded-families" }
+  | { readonly key: "revit.matrix.parameter-coverage" }
+  | { readonly key: "revit.matrix.schedule-coverage" }
+  | { readonly key: "revit.matrix.schedule-profiles" }
+  | { readonly key: "revit.resolve.family-instances" }
+  | { readonly key: "revit.resolve.references" }
+  | { readonly key: "revit.resolve.unit-value" }
+  | { readonly key: "rooms.draw" }
+  | { readonly key: "rooms.merge" }
+  | { readonly key: "rooms.partition" }
+  | { readonly key: "rooms.roster" }
+  | { readonly key: "rooms.snapshot" }
+  | { readonly key: "rooms.trace" }
+  | { readonly key: "rooms.write" }
+  | { readonly key: "schedule.apply" }
+  | { readonly key: "schedule.capture" }
+  | { readonly key: "schedule.cells.apply" }
+  | { readonly key: "scripting.execute" }
+  | { readonly key: "scripting.workspace.bootstrap" }
+  | { readonly key: "settings.schema" }
+  | { readonly key: "settings.validate" }
+  | { readonly key: "takeoffs.adopt" }
+  | { readonly key: "takeoffs.candidates" }
+  | { readonly key: "takeoffs.initialize-carrier" }
+  | { readonly key: "takeoffs.partition" }
+  | { readonly key: "takeoffs.rhvac-links" }
+  | { readonly key: "takeoffs.snapshot" }
+);
+export const hostOpCatalog: readonly CatalogEntry[] = [
   {
     "key": "data-table.apply",
     "displayName": "Apply Data Table",
@@ -3138,4 +3235,4 @@ export const hostOpCatalog = [
     "internal": false,
     "rollsBack": false
   }
-] as const;
+];

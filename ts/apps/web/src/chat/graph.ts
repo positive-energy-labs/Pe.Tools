@@ -1,3 +1,4 @@
+import { chatSeedChoices } from "./seed-choices";
 import { manyField } from "@pe/agent-contracts";
 import { z } from "zod";
 import {
@@ -74,75 +75,52 @@ export function chatGraph(deps: () => ChatRouteDeps, minOtherSize?: number): Rou
     );
   return {
     directory: {
-  "path": "/pea",
-  "title": "Pea",
-  "label": "Workbench",
-  "exposure": "Main",
-  "runtimeNeed": "Host for conversation; Revit depends on the requested capability",
-  "icon": "MessageSquare",
-  "category": "Ask / automate",
-  "blurb": "The Pea agent workbench — chat and the context world inspector.",
-  "aliases": [
-    "chat",
-    "agent",
-    "assistant",
-    "threads"
-  ],
-  "listed": true,
-  "satellites": [],
-  "surfaces": {
-    "web": "full",
-    "pwa": "full",
-    "tray": "compact"
-  }
-},
-  key: "chat",
-    address: "pea",
-    name: "Pea",
-    seeds: {
-      send: {
-        title: "an idle thread ready for a prompt",
-        load: () => import("./graph-seeds").then((m) => m.chatSeeds["send"]!),
-      },
-      new: {
-        title: "a thread to leave for a fresh one",
-        load: () => import("./graph-seeds").then((m) => m.chatSeeds["new"]!),
-      },
-      diagram: {
-        title: "pea drew a duct system, after one rejected diagram call",
-        load: () => import("./graph-seeds").then((m) => m.chatSeeds["diagram"]!),
-      },
-      attach: {
-        title: "the user attached a photo, a CSV and a PDF; pea read all three",
-        load: () => import("./graph-seeds").then((m) => m.chatSeeds["attach"]!),
-      },
-      skill: {
-        title: "the user ran a slash skill; the harness advertised its commands",
-        load: () => import("./graph-seeds").then((m) => m.chatSeeds["skill"]!),
-      },
-      mention: {
-        title: "the user mentioned a document and a skill with @; pea used their ids",
-        load: () => import("./graph-seeds").then((m) => m.chatSeeds["mention"]!),
-      },
-      closed: {
-        title:
-          "a thread whose bound session has closed; send refuses until a live document is chosen",
-        load: () => import("./graph-seeds").then((m) => m.chatSeeds["closed"]!),
-      },
-      granted: {
-        title: "a human added a second document to the thread; it targets two",
-        load: () => import("./graph-seeds").then((m) => m.chatSeeds["granted"]!),
-      },
-      stop: {
-        title: "pea mid-turn, with an approval owed",
-        load: () => import("./graph-seeds").then((m) => m.chatSeeds["stop"]!),
+      path: "/pea",
+      title: "Pea",
+      label: "Workbench",
+      exposure: "Main",
+      runtimeNeed: "Host for conversation; Revit depends on the requested capability",
+      icon: "MessageSquare",
+      category: "Ask / automate",
+      blurb: "The Pea agent workbench — chat and the context world inspector.",
+      aliases: ["chat", "agent", "assistant", "threads"],
+      listed: true,
+      satellites: [],
+      surfaces: {
+        web: "full",
+        pwa: "full",
+        tray: "compact",
       },
     },
-  // TODO: K1c must declare the kernel selection within this thread.
-  subjectField: { field: "thread", noun: "thread", keyKind: "name", cardinality: "one", roster: "threads", detail: "head", pane: "threads", show: (id) => id },
+    key: "chat",
+    address: "pea",
+    name: "Pea",
+    seeds: Object.fromEntries(
+      Object.entries(chatSeedChoices).map(([name, title]) => [
+        name,
+        {
+          title,
+          load: () => import("./graph-seeds").then((m) => m.chatSeeds[name]!),
+        },
+      ]),
+    ),
+    // TODO: K1c must declare the kernel selection within this thread.
+    subjectField: {
+      field: "thread",
+      noun: "thread",
+      keyKind: "name",
+      cardinality: "one",
+      roster: "threads",
+      detail: "head",
+      pane: "threads",
+      show: (id) => id,
+    },
     fields: {
       thread: { ...field(z.string().default(""), {}), role: "subject" },
-      selected: { ...manyField("name", { url: "replace", agent: "set" }, z.array(z.string()).default([])), role: "selection" },
+      selected: {
+        ...manyField("name", { url: "replace", agent: "set" }, z.array(z.string()).default([])),
+        role: "selection",
+      },
       mode: { ...field(z.enum(["threads", "world"]).default("threads"), {}), role: "pose" },
       ...peaSettingFields,
     },
@@ -268,18 +246,24 @@ export function chatGraph(deps: () => ChatRouteDeps, minOtherSize?: number): Rou
 
 export function chatAdapters(navigate: () => void): RouteAdapters<ChatPage, unknown> {
   return {
-    sources: { threads: subscriptionSource({ request: () => ({ kind: "threads" }), decode: (value) => value }), ...Object.fromEntries(
-      (["head", "machine", "receipts", "capabilities"] as const).map((id) => {
-        const live = subscriptionSource({
-          request: (ctx) =>
-            id === "head"
-              ? { kind: "thread-head", thread: String((ctx.page as ChatPage).thread || "draft") }
-              : { kind: id },
-          decode: (value) => value,
-        });
-        return [id, live];
+    sources: {
+      threads: subscriptionSource({
+        request: () => ({ kind: "threads" }),
+        decode: (value) => value,
       }),
-    ) },
+      ...Object.fromEntries(
+        (["head", "machine", "receipts", "capabilities"] as const).map((id) => {
+          const live = subscriptionSource({
+            request: (ctx) =>
+              id === "head"
+                ? { kind: "thread-head", thread: String((ctx.page as ChatPage).thread || "draft") }
+                : { kind: id },
+            decode: (value) => value,
+          });
+          return [id, live];
+        }),
+      ),
+    },
     binding: (_id, row) => ({ subject: null, args: row ?? {} }),
     navigate,
     bodies: {},

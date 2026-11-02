@@ -229,7 +229,14 @@ const output = chunks.join("\n");
 const catalogOutput = [
   ...banner,
   "/** Host-only C# discovery metadata. Runtime availability is reported separately by the host. */",
-  `export const hostOpCatalog = ${JSON.stringify(operations, null, 2)} as const;`,
+  'import type { HostOperationDefinition } from "../contracts/operation-vocabulary.ts";',
+  "type CatalogEntry = HostOperationDefinition & { readonly requestSchemaJson: string; readonly responseSchemaJson: string; readonly description: string; readonly artifactSchemaJson?: string } & (",
+  ...operations.map(
+    (op) =>
+      `  | { readonly key: ${JSON.stringify(op.key)}${op.artifactSchemaJson ? "; readonly artifactSchemaJson: string" : ""} }`,
+  ),
+  ");",
+  `export const hostOpCatalog: readonly CatalogEntry[] = ${JSON.stringify(operations, null, 2)};`,
   "",
 ].join("\n");
 const outputs = [
