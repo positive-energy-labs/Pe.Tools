@@ -56,3 +56,10 @@
 [data-slot="timeline-state"] {
   color: var(--pe-ink-2);
 }
+/* Overflowed verbs read as menu rows: one width, left-aligned words. */
+[data-slot="situation-overflow"] > *,
+[data-slot="situation-overflow"] .dl-button {
+  display: flex;
+  width: 100%;
+  justify-content: flex-start;
+}
