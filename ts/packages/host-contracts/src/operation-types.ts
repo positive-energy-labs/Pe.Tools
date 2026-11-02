@@ -2,8 +2,8 @@ import {
   bridgeDocumentSnapshotSchema,
   hostRuntimeAssemblyDataSchema,
   type HostOperationDefinition,
-} from "./contracts/index.js";
-import { hostOpKeys, type HostOps } from "./generated/host-ops.generated.js";
+} from "./contracts/index.ts";
+import { hostOpKeys, type HostOps } from "./generated/host-ops.generated.ts";
 import { Schema } from "effect";
 
 /** Bridge op keys, sourced from the checked-in live-session typegen output. */
@@ -73,7 +73,7 @@ export {
   HOST_RPC_BRIDGE_SESSION_HEADER,
   HOST_RPC_DOCUMENT_HEADER,
   HOST_RPC_ORIGIN_HEADER,
-} from "./contracts/bridge-protocol.js";
+} from "./contracts/bridge-protocol.ts";
 
 export const hostSessionScopeSchema = Schema.Struct({
   session: Schema.optional(
@@ -985,12 +985,17 @@ export const hostProblemDetailsSchema = Schema.Record(Schema.String, Schema.Unkn
 export type HostProblemDetails = Schema.Schema.Type<typeof hostProblemDetailsSchema>;
 
 export class HostCallError extends Error {
+  readonly status: number;
+  readonly problem?: HostProblemDetails;
+
   constructor(
     message: string,
-    readonly status: number,
-    readonly problem?: HostProblemDetails,
+    status: number,
+    problem?: HostProblemDetails,
   ) {
     super(message);
+    this.status = status;
+    this.problem = problem;
     this.name = "HostCallError";
   }
 }
