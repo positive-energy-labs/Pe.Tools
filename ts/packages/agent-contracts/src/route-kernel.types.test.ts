@@ -1,3 +1,4 @@
+/* eslint-disable typescript/no-misused-spread -- Deliberate hostile copies test nominal authority refusals. */
 import { describe, expect, it } from "vite-plus/test";
 import { RouteGraphJson, type FieldJson } from "./route-kernel-data.ts";
 import type { BodyBindings } from "./route-kernel-bodies.ts";
@@ -103,9 +104,9 @@ export function typeRefusals(
     ...podBodies.calculate,
     run: ({ page: podPage, readings }) => {
       // @ts-expect-error renaming/removing a field invalidates body access
-      podPage.circuit;
+      void podPage.circuit;
       // @ts-expect-error only declared reading dependencies are visible
-      readings.total;
+      void readings.total;
       return { total: 1 };
     },
   };
@@ -136,7 +137,7 @@ export function typeRefusals(
     ...builtinBodies.main,
     run: (ctx) => {
       // @ts-expect-error no owner/raw writer reaches the pane
-      ctx.owner;
+      void ctx.owner;
       // @ts-expect-error no arbitrary verb string dispatch
       ctx.verbs.unknown({});
       return "ok";
@@ -244,13 +245,13 @@ export function criticRefusals(
     ...builtinBodies.apply,
     run: ({ page, work, readings, captures }) => {
       // @ts-expect-error no Page dependency declared
-      page.search;
+      void page.search;
       // @ts-expect-error work.amount does not grant all Work
-      work.note;
+      void work.note;
       // @ts-expect-error captures do not become invalidating dependencies
-      readings.total;
+      void readings.total;
       // @ts-expect-error only named captures are visible
-      captures.roster;
+      void captures.roster;
       return { amount: captures.total.value?.total ?? work.amount };
     },
   };
@@ -263,9 +264,7 @@ export function criticRefusals(
   // @ts-expect-error arbitrary channel/attempt cannot be minted around an authentic scope
   const forgedAttempt: AcceptanceToken = { scope, channel: "read", attempt: 99 };
   // @ts-expect-error a copied attempt is not an owner-issued attempt
-  owner.acceptWork(
-    { ...attempt, attempt: 99 },
-    {
+  owner.acceptWork({ ...attempt, attempt: 99 }, {
       kind: "snapshot",
       key: { binding: "host", route: "tiny", target: null },
       revision: 1,
@@ -295,7 +294,7 @@ export function criticRefusals(
   };
   // @ts-expect-error cannot erase the services through unconstrained generic arguments
   type EmptyServices = FixtureEnvironment<{}, {}, {}, {}>;
-  const emptyServices: EmptyServices | undefined = undefined;
+  const emptyServices: EmptyServices = {};
   void emptyServices;
   // @ts-expect-error read lifetime cannot be command
   const wrongLifetime: ReadCapability = { ...reads, lifetime: "command" };
@@ -476,3 +475,29 @@ describe("S0 signature witnesses", () => {
     ).toBe(false);
   });
 });
+
+/** Replays s0-recheck's cast-free descriptor rebinding counterexample. Never executed. */
+export function geometryRebind(
+  read: ResolvedRead<GeometryOutcome<string>>,
+  reach: PreparedDetailReach,
+  geometry: GeometryReadCapability,
+  token: AcceptanceToken,
+) {
+  const request: { readonly representation: "meshes"; readonly reach: PreparedDetailReach } = {
+    representation: "meshes", reach,
+  };
+  // @ts-expect-error a generic read plus a request lacks resolver-issued geometry authority
+  return geometry.acquire(Object.assign({}, read, { request }), token);
+}
+
+/** Geometry descriptors have one acquisition door, with geometry authority checks. */
+export function geometryDoors(
+  read: ResolvedGeometryRead<string>,
+  environment: FixtureEnvironment,
+  token: AcceptanceToken,
+) {
+  // @ts-expect-error generic reads cannot bypass geometry acquisition validation
+  environment.reads.acquire(read, token);
+  // @ts-expect-error subscriptions cannot bypass geometry acquisition validation
+  environment.readings.subscribe(read, token, () => {});
+}

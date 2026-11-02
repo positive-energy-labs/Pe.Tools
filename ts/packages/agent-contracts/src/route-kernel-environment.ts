@@ -74,9 +74,20 @@ export declare class ResolvedRead<T> {
   readonly output: z.ZodType<T>;
   readonly route: AdmittedRoute;
 }
-export type ResolvedGeometryRead<T> = ResolvedRead<GeometryOutcome<T>> & {
+/** Resolver-issued composite: request and canonical key are captured together.
+ * Geometry acquisition must authenticate the exact issued instance and validate
+ * key/request/scope/attempt agreement before reuse or dispatch. Generic read and
+ * subscription ports cannot consume this descriptor.
+ * Object.assign can preserve nominal types; copies and rebound descriptors still refuse. */
+export declare class ResolvedGeometryRead<T> {
+  private constructor();
+  private readonly geometryAuthority: void;
+  readonly token: AcceptanceToken;
+  readonly key: ResolvedReadKey;
+  readonly output: z.ZodType<GeometryOutcome<T>>;
+  readonly route: AdmittedRoute;
   readonly request: GeometryRequest<SceneContextRepresentation>;
-};
+}
 /** These are synchronous acquisition/submission ports, not a Promise or fiber runtime.
  * D's scoped Effect services own the acquisitions behind handles; release interrupts reads,
  * unsubscribe closes SSE, and command lifetime belongs to ActionJournal after submit.
@@ -100,6 +111,7 @@ export interface GeometryReadCapability {
     reachFt: number,
     explicit: ExplicitDetailRequest,
   ): DecodeResult<PreparedDetailReach>;
+  /** Refuse copied/rebound descriptors and tokens other than the captured live attempt. */
   acquire<T>(
     request: ResolvedGeometryRead<T>,
     token: AcceptanceToken,
