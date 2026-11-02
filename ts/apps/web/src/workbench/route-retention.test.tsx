@@ -44,6 +44,7 @@ const probeLayout = {
 };
 const graph: typeof ductsGraph = {
   ...ductsGraph,
+  subjectField: undefined,
   fields: Object.fromEntries(
     Object.entries(ductsGraph.fields).map(([id, value]) => [id, { ...value, picker: undefined }]),
   ) as typeof ductsGraph.fields,
@@ -73,6 +74,7 @@ const graph: typeof ductsGraph = {
 };
 const otherGraph: typeof familiesGraph = {
   ...familiesGraph,
+  subjectField: undefined,
   fields: Object.fromEntries(
     Object.entries(familiesGraph.fields).map(([id, value]) => [
       id,

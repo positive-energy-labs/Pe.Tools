@@ -315,7 +315,11 @@ export async function setup() {
       as = human;
     }
   };
-  const bindReading = async (input: { readingId: string; expectedRevision: number }) => {
+  const bindReading = async (input: {
+    readingId: string;
+    expectedRevision: number;
+    reading?: ScheduleReading;
+  }) => {
     const id = crypto.randomUUID();
     const response = await fetch("/actions", {
       method: "POST",
@@ -327,7 +331,7 @@ export async function setup() {
     if (receipt.state !== "succeeded") throw Error(JSON.stringify(receipt));
     return receipt.result;
   };
-  await bindReading({ readingId: reading.id, expectedRevision: 0 });
+  await bindReading({ readingId: reading.id, expectedRevision: 0, reading });
   expect(
     await patch([{ path: ["cells", "1::2"], value: { edit: { value: "150 VA" } } }]),
   ).toMatchObject({ ok: true });
@@ -372,6 +376,7 @@ export async function setup() {
     bind: async (reading: ScheduleReading) =>
       bindReading({
         readingId: reading.id,
+        reading,
         expectedRevision: (await view()).revision,
       }),
     post,

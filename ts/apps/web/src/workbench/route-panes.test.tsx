@@ -250,7 +250,12 @@ const resume = (
 });
 const shown = (router: Awaited<ReturnType<typeof mount>>) => ({
   path: router.state.location.pathname,
-  system: (router.state.location.search as { system?: string }).system,
+  system:
+    routeAddress("ducts").read(router.state.location.search).page.system instanceof Array
+      ? (routeAddress("ducts").read(router.state.location.search).page.system as string[]).join(
+          " + ",
+        )
+      : "all",
   selected: (router.state.location.search as { selected?: string }).selected ?? "",
   target: (router.state.location.search as { target?: string }).target,
   tab: (router.state.location.state as { __peRouteTab?: { id: string } }).__peRouteTab?.id ?? null,

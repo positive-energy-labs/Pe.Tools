@@ -44,7 +44,12 @@ beforeEach(() => {
     "ops.catalog": fixed({
       operations: [
         op,
-        { ...op, key: "document.temporary.status", displayName: "Native status", needs: "session" },
+        {
+          ...op,
+          key: "document.temporary.status",
+          displayName: "Native status",
+          needs: "document",
+        },
         { ...op, key: "settings.save", displayName: "Raw mutation", intent: "Mutate" },
       ],
     }),

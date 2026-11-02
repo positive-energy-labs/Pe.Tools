@@ -84,7 +84,41 @@ beforeEach(() => {
         const key = body.key.slice("revit.detail.space-".length) as keyof typeof FIXTURE_ANSWERS;
         return Response.json(
           body.key === "revit.detail.space-scene"
-            ? { id: sceneB, scene: FIXTURE_SCENE.metadata.stamp }
+            ? {
+                id: sceneB,
+                url: `/space/${sceneB}`,
+                bytes: fixtureSceneBytes().byteLength,
+                scene: {
+                  format: FIXTURE_SCENE.metadata.format,
+                  frame: FIXTURE_SCENE.metadata.stamp.frame,
+                  hostDocumentKey: FIXTURE_SCENE.metadata.stamp.hostDocumentKey,
+                  epoch: FIXTURE_SCENE.metadata.stamp.epoch,
+                  builtUtc: FIXTURE_SCENE.metadata.stamp.builtUtc,
+                  fresh: FIXTURE_SCENE.metadata.stamp.fresh,
+                  bounds: FIXTURE_SCENE.metadata.bounds,
+                  triangles: FIXTURE_SCENE.metadata.work.extractedTriangles,
+                  elements: FIXTURE_SCENE.metadata.elements.length,
+                  focusElements: 2,
+                  contextElements: 5,
+                  requestedElements: 2,
+                  omittedElements: 0,
+                  unavailableElements: 0,
+                  sources: FIXTURE_SCENE.metadata.sources.length,
+                  unreadSources: 0,
+                  detachedElements: 0,
+                  phase: "complete",
+                  work: FIXTURE_SCENE.metadata.work,
+                  completeness: FIXTURE_SCENE.metadata.completeness,
+                  levels: {
+                    levels: 0,
+                    planes: 0,
+                    coincidentGroups: 0,
+                    unavailableSources: 0,
+                    work: FIXTURE_SCENE.metadata.levels.work,
+                  },
+                  linkEnvelopes: {},
+                },
+              }
             : FIXTURE_ANSWERS[key].response,
         );
       }

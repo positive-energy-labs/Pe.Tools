@@ -33,6 +33,7 @@ const action = (label: string) =>
   );
 const graph: typeof ductsGraph = {
   ...ductsGraph,
+  subjectField: undefined,
   fields: Object.fromEntries(
     Object.entries(ductsGraph.fields).map(([id, value]) => [id, { ...value, picker: undefined }]),
   ) as typeof ductsGraph.fields,
