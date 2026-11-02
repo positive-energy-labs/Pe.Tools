@@ -51,8 +51,26 @@ def to_variant(variant, base, files):
         git("checkout", "HEAD", "--", *files)
 
 
+REVIT_LOG = Path(os.environ["LOCALAPPDATA"]) / "Positive Energy" / "Pe.Tools" / "logs" / "revit.log.txt"
+
+
+def log_size():
+    return REVIT_LOG.stat().st_size if REVIT_LOG.exists() else 0
+
+
+def budget_lines(since):
+    """The geometry budget's own log lines written since `since` (Serilog's file sink; `session logs` does not carry them)."""
+    if not REVIT_LOG.exists():
+        return []
+    with REVIT_LOG.open("rb") as f:
+        f.seek(since)
+        text = f.read().decode("utf8", "replace")
+    return [line.strip() for line in text.splitlines() if "Space budget" in line]
+
+
 def call(s, ps, ev, tag, key, request, extra_args=()):
     """One host call with its memory envelope. Errors are answers: the response (or its refusal) is kept."""
+    logged = log_size()
     reqf = ev / f"req-{tag}.json"
     reqf.write_text(json.dumps(request), encoding="utf8")
     before = ps.memory_info().private
@@ -67,15 +85,10 @@ def call(s, ps, ev, tag, key, request, extra_args=()):
             "elapsedMs": (resp or {}).get("elapsedMs"), "queryMs": ((resp or {}).get("response") or {}).get("ms")}
     if code != 0 or resp is None or "response" not in resp:
         read["error"] = json.dumps({k: v for k, v in (resp or {}).items() if k not in ("operation", "resolvedTarget")})[:2500] if resp else f"pea exit {code}"
+    read["budget"] = budget_lines(logged)
     if mod is None or any(mod):
         raise RuntimeError(f"IsModified {mod} after {tag}")
     return read, resp
-
-
-def logs(s, tail=400):
-    code, env = s.sdk("logs", "session", "logs", "--id", R.SID, "--tail", str(tail))
-    text = json.dumps(env)
-    return [m for m in text.replace("\\n", "\n").splitlines() if "Space budget" in m]
 
 
 def ladder(s, ps, ev, proc, centre, cap_cost):
@@ -180,7 +193,6 @@ def run_variant(variant, model, args, out, results, pins):
         if model == "chadds" and "ladder" in extras:
             c = pin["picks"][0]
             ladder(s, ps, ev, proc, ((c["start"][0] + c["end"][0]) / 2, (c["start"][1] + c["end"][1]) / 2), args.ladder_cap)
-        proc["budgetLog"] = logs(s)
         proc["endedUtc"] = R.utc()
     finally:
         try:
