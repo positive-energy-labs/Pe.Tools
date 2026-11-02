@@ -152,6 +152,7 @@ export function AppBar() {
     },
   ]);
   const hasRouteHelp = useRouteControlPresence("controls");
+  const hasSituation = useRouteControlPresence("situation");
   useEffect(() => {
     const node = bar.current;
     if (!node) return;
@@ -306,7 +307,12 @@ export function AppBar() {
               aria-autocomplete="list"
               aria-keyshortcuts="Control+Shift+K"
               aria-expanded={open}
-              placeholder={`${label}${currentWork ? ` / ${currentWork.label}` : ""}`}
+              // The Situation band titles the route when it rides the bar; the pill never repeats it.
+              placeholder={
+                hasSituation && !compact
+                  ? "Find"
+                  : `${label}${currentWork ? ` / ${currentWork.label}` : ""}`
+              }
               value={open ? query : ""}
               onKeyDown={(event) => {
                 if (!open && (event.key === "ArrowDown" || event.key === "Enter")) {

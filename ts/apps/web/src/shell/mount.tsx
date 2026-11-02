@@ -825,6 +825,8 @@ function GraphSituation<P, W>({
 }) {
   const stageId = owner.stage();
   const stage = graph.stages[stageId]!;
+  useSubjects();
+  const subjectLabel = subjectState(graph.key, useRouteSearchSlice((search) => search)).label;
   const stageField = graphFields(graph).find(([, field]) => field.role === "stage")?.[0];
   const verbs = rankVerbs(owner.stageVerbs(), owner.verbs).map((id) => (
     <GraphVerb key={id} id={id} verb={owner.verbs[id]!} owner={owner} enabled={enabled} />
@@ -855,7 +857,12 @@ function GraphSituation<P, W>({
           ) : graph.subject ? null : (
             <span>{stage.word}</span>
           )}
-          {graph.subject && <span>{graph.subject(owner.view.read().page)}</span>}
+          {/* One subject projection (shell/subject.ts) titles the band, the Places and the window. */}
+          {(subjectLabel || graph.subject) && (
+            <span data-slot="situation-subject">
+              {subjectLabel || graph.subject!(owner.view.read().page)}
+            </span>
+          )}
           <SituationFields graph={graph} owner={owner} enabled={enabled} />
         </>
       }
