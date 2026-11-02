@@ -1,0 +1,343 @@
+[
+  {
+    "key": "data-table.apply",
+    "intent": "Mutate",
+    "costClass": "Metadata",
+    "scope": "DocumentWide"
+  },
+  {
+    "key": "document.temporary.release",
+    "intent": "Mutate",
+    "costClass": "Metadata",
+    "scope": "None"
+  },
+  {
+    "key": "document.temporary.status",
+    "intent": "Read",
+    "costClass": "Metadata",
+    "scope": "None"
+  },
+  { "key": "ducts.apply", "intent": "Mutate", "costClass": "Geometry", "scope": "DocumentWide" },
+  { "key": "ducts.assign-fan", "intent": "Mutate", "costClass": "Topology", "scope": "System" },
+  { "key": "ducts.family-patch", "intent": "Read", "costClass": "External", "scope": "None" },
+  { "key": "ducts.heal", "intent": "Mutate", "costClass": "Geometry", "scope": "DocumentWide" },
+  { "key": "ducts.ports", "intent": "Read", "costClass": "Topology", "scope": "ElementIds" },
+  { "key": "ducts.snapshot", "intent": "Read", "costClass": "Geometry", "scope": "DocumentWide" },
+  { "key": "ducts.tables", "intent": "Read", "costClass": "External", "scope": "None" },
+  { "key": "families.apply", "intent": "Mutate", "costClass": "Geometry", "scope": "DocumentWide" },
+  { "key": "families.capture", "intent": "Read", "costClass": "Geometry", "scope": "ElementIds" },
+  { "key": "families.plan", "intent": "Read", "costClass": "Geometry", "scope": "DocumentWide" },
+  { "key": "family.apply", "intent": "Mutate", "costClass": "Geometry", "scope": "DocumentWide" },
+  { "key": "family.build", "intent": "Mutate", "costClass": "Geometry", "scope": "DocumentWide" },
+  { "key": "family.capture", "intent": "Read", "costClass": "Geometry", "scope": "DocumentWide" },
+  { "key": "family.loadTest", "intent": "Read", "costClass": "Geometry", "scope": "DocumentWide" },
+  { "key": "family.look", "intent": "Read", "costClass": "Geometry", "scope": "DocumentWide" },
+  { "key": "family.open", "intent": "Mutate", "costClass": "Metadata", "scope": "ElementIds" },
+  { "key": "family.plan", "intent": "Read", "costClass": "Geometry", "scope": "DocumentWide" },
+  {
+    "key": "family.temporary.acquire",
+    "intent": "Mutate",
+    "costClass": "Metadata",
+    "scope": "ElementIds"
+  },
+  { "key": "host.ops.catalog", "intent": "Read", "costClass": "Metadata", "scope": "None" },
+  { "key": "op.cancel", "intent": "Mutate", "costClass": "Metadata", "scope": "None" },
+  { "key": "pod.member.compose", "intent": "Read", "costClass": "External", "scope": "None" },
+  {
+    "key": "revit.apply.command.execute",
+    "intent": "Mutate",
+    "costClass": "Metadata",
+    "scope": "DocumentWide"
+  },
+  {
+    "key": "revit.apply.parameter-links",
+    "intent": "Mutate",
+    "costClass": "Topology",
+    "scope": "DocumentWide"
+  },
+  {
+    "key": "revit.apply.parameter-values",
+    "intent": "Mutate",
+    "costClass": "Metadata",
+    "scope": "ElementIds"
+  },
+  {
+    "key": "revit.apply.parameters-service-cache.refresh",
+    "intent": "Mutate",
+    "costClass": "External",
+    "scope": "None"
+  },
+  {
+    "key": "revit.catalog.concept-evidence",
+    "intent": "Read",
+    "costClass": "Metadata",
+    "scope": "DocumentWide"
+  },
+  {
+    "key": "revit.catalog.electrical-circuits",
+    "intent": "Read",
+    "costClass": "Topology",
+    "scope": "DocumentWide"
+  },
+  {
+    "key": "revit.catalog.electrical-load-classifications",
+    "intent": "Read",
+    "costClass": "Metadata",
+    "scope": "DocumentWide"
+  },
+  {
+    "key": "revit.catalog.electrical-panels",
+    "intent": "Read",
+    "costClass": "Metadata",
+    "scope": "DocumentWide"
+  },
+  {
+    "key": "revit.catalog.field-options",
+    "intent": "Read",
+    "costClass": "Metadata",
+    "scope": "DocumentWide"
+  },
+  {
+    "key": "revit.catalog.loaded-families",
+    "intent": "Read",
+    "costClass": "Metadata",
+    "scope": "DocumentWide"
+  },
+  {
+    "key": "revit.catalog.parameter-bindings",
+    "intent": "Read",
+    "costClass": "Metadata",
+    "scope": "DocumentWide"
+  },
+  {
+    "key": "revit.catalog.parameter-evidence",
+    "intent": "Read",
+    "costClass": "Metadata",
+    "scope": "DocumentWide"
+  },
+  {
+    "key": "revit.catalog.project-browser",
+    "intent": "Read",
+    "costClass": "Metadata",
+    "scope": "DocumentWide"
+  },
+  {
+    "key": "revit.catalog.project-index",
+    "intent": "Read",
+    "costClass": "Metadata",
+    "scope": "DocumentWide"
+  },
+  {
+    "key": "revit.catalog.schedules",
+    "intent": "Read",
+    "costClass": "Metadata",
+    "scope": "DocumentWide"
+  },
+  {
+    "key": "revit.catalog.warnings",
+    "intent": "Read",
+    "costClass": "Metadata",
+    "scope": "DocumentWide"
+  },
+  {
+    "key": "revit.context.document-session",
+    "intent": "Read",
+    "costClass": "Metadata",
+    "scope": "None"
+  },
+  { "key": "revit.context.journal", "intent": "Read", "costClass": "External", "scope": "None" },
+  {
+    "key": "revit.context.lens",
+    "intent": "Mutate",
+    "costClass": "Geometry",
+    "scope": "ElementIds"
+  },
+  {
+    "key": "revit.context.show-elements",
+    "intent": "Mutate",
+    "costClass": "Metadata",
+    "scope": "ElementIds"
+  },
+  {
+    "key": "revit.context.summary",
+    "intent": "Read",
+    "costClass": "Metadata",
+    "scope": "DocumentWide"
+  },
+  { "key": "revit.context.view-image", "intent": "Read", "costClass": "Geometry", "scope": "View" },
+  {
+    "key": "revit.context.view-rendering-state",
+    "intent": "Read",
+    "costClass": "Metadata",
+    "scope": "View"
+  },
+  {
+    "key": "revit.context.visible-summary",
+    "intent": "Read",
+    "costClass": "Metadata",
+    "scope": "View"
+  },
+  {
+    "key": "revit.detail.data-tables",
+    "intent": "Read",
+    "costClass": "Metadata",
+    "scope": "DocumentWide"
+  },
+  {
+    "key": "revit.detail.electrical-panel-schedules",
+    "intent": "Read",
+    "costClass": "Metadata",
+    "scope": "View"
+  },
+  {
+    "key": "revit.detail.elements",
+    "intent": "Read",
+    "costClass": "Metadata",
+    "scope": "ElementIds"
+  },
+  {
+    "key": "revit.detail.parameter-links",
+    "intent": "Read",
+    "costClass": "Topology",
+    "scope": "DocumentWide"
+  },
+  { "key": "revit.detail.schedules", "intent": "Read", "costClass": "Metadata", "scope": "View" },
+  { "key": "revit.detail.sheets", "intent": "Read", "costClass": "Metadata", "scope": "View" },
+  {
+    "key": "revit.detail.space-build",
+    "intent": "Read",
+    "costClass": "Geometry",
+    "scope": "DocumentWide"
+  },
+  {
+    "key": "revit.detail.space-census",
+    "intent": "Read",
+    "costClass": "Geometry",
+    "scope": "Region"
+  },
+  {
+    "key": "revit.detail.space-probe",
+    "intent": "Read",
+    "costClass": "Geometry",
+    "scope": "Region"
+  },
+  {
+    "key": "revit.detail.space-rows",
+    "intent": "Read",
+    "costClass": "Geometry",
+    "scope": "DocumentWide"
+  },
+  {
+    "key": "revit.detail.space-scene",
+    "intent": "Read",
+    "costClass": "Geometry",
+    "scope": "ElementIds"
+  },
+  {
+    "key": "revit.detail.space-slice",
+    "intent": "Read",
+    "costClass": "Geometry",
+    "scope": "Region"
+  },
+  {
+    "key": "revit.detail.space-status",
+    "intent": "Read",
+    "costClass": "Metadata",
+    "scope": "DocumentWide"
+  },
+  {
+    "key": "revit.detail.space-sweep",
+    "intent": "Read",
+    "costClass": "Geometry",
+    "scope": "Region"
+  },
+  {
+    "key": "revit.detail.space-tree",
+    "intent": "Read",
+    "costClass": "Geometry",
+    "scope": "DocumentWide"
+  },
+  { "key": "revit.glance.attention", "intent": "Read", "costClass": "Metadata", "scope": "View" },
+  {
+    "key": "revit.glance.model",
+    "intent": "Read",
+    "costClass": "Metadata",
+    "scope": "DocumentWide"
+  },
+  {
+    "key": "revit.matrix.loaded-families",
+    "intent": "Read",
+    "costClass": "Metadata",
+    "scope": "DocumentWide"
+  },
+  {
+    "key": "revit.matrix.parameter-coverage",
+    "intent": "Read",
+    "costClass": "Metadata",
+    "scope": "DocumentWide"
+  },
+  {
+    "key": "revit.matrix.schedule-coverage",
+    "intent": "Read",
+    "costClass": "Metadata",
+    "scope": "DocumentWide"
+  },
+  {
+    "key": "revit.matrix.schedule-profiles",
+    "intent": "Read",
+    "costClass": "Metadata",
+    "scope": "DocumentWide"
+  },
+  {
+    "key": "revit.resolve.family-instances",
+    "intent": "Read",
+    "costClass": "Metadata",
+    "scope": "DocumentWide"
+  },
+  {
+    "key": "revit.resolve.references",
+    "intent": "Read",
+    "costClass": "Metadata",
+    "scope": "DocumentWide"
+  },
+  { "key": "revit.resolve.unit-value", "intent": "Read", "costClass": "Metadata", "scope": "None" },
+  { "key": "rooms.draw", "intent": "Mutate", "costClass": "Geometry", "scope": "View" },
+  { "key": "rooms.merge", "intent": "Mutate", "costClass": "Geometry", "scope": "View" },
+  { "key": "rooms.partition", "intent": "Mutate", "costClass": "Geometry", "scope": "View" },
+  { "key": "rooms.snapshot", "intent": "Read", "costClass": "Geometry", "scope": "DocumentWide" },
+  { "key": "rooms.trace", "intent": "Read", "costClass": "External", "scope": "View" },
+  { "key": "rooms.write", "intent": "Mutate", "costClass": "Metadata", "scope": "ElementIds" },
+  { "key": "schedule.apply", "intent": "Mutate", "costClass": "Metadata", "scope": "DocumentWide" },
+  { "key": "schedule.capture", "intent": "Read", "costClass": "Metadata", "scope": "View" },
+  {
+    "key": "schedule.cells.apply",
+    "intent": "Mutate",
+    "costClass": "Metadata",
+    "scope": "ElementIds"
+  },
+  { "key": "scripting.execute", "intent": "Mutate", "costClass": "External", "scope": "None" },
+  {
+    "key": "scripting.workspace.bootstrap",
+    "intent": "Mutate",
+    "costClass": "External",
+    "scope": "None"
+  },
+  { "key": "settings.schema", "intent": "Read", "costClass": "Metadata", "scope": "None" },
+  { "key": "settings.validate", "intent": "Read", "costClass": "Metadata", "scope": "None" },
+  { "key": "takeoffs.adopt", "intent": "Mutate", "costClass": "Geometry", "scope": "View" },
+  { "key": "takeoffs.candidates", "intent": "Read", "costClass": "Geometry", "scope": "View" },
+  {
+    "key": "takeoffs.initialize-carrier",
+    "intent": "Mutate",
+    "costClass": "Metadata",
+    "scope": "DocumentWide"
+  },
+  { "key": "takeoffs.partition", "intent": "Mutate", "costClass": "Geometry", "scope": "Region" },
+  {
+    "key": "takeoffs.rhvac-links",
+    "intent": "Mutate",
+    "costClass": "Metadata",
+    "scope": "ElementIds"
+  },
+  { "key": "takeoffs.snapshot", "intent": "Read", "costClass": "Geometry", "scope": "DocumentWide" }
+]

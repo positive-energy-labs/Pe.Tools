@@ -29,6 +29,8 @@ import {
 import { useProviders } from "./workbench/provider/providers";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture";
 import { useThreadStream } from "./workbench/provider/thread-stream";
+import { createReadingGraph, type ReadingContext } from "./shell/readings";
+import { subscriptionSource } from "./shell/readings-use";
 
 type Fake = {
   url: string;
@@ -71,6 +73,72 @@ function owner(
   );
   return { readings, sources };
 }
+
+test("wake restores identical evidence by identity without recomputing dependents; changed revisions still replace it", async () => {
+  const { readings, sources } = owner();
+  const derive = vi.fn((ctx: ReadingContext) => ctx.inputs.raw!.value);
+  const graph = createReadingGraph(
+    {
+      readings: {
+        raw: { kind: "use", source: "raw", retire: "never" },
+        derived: { kind: "derive", source: "derived", retire: "never", deps: ["raw"] },
+      },
+    },
+    {
+      scope: { target: { kind: "host" }, workKey: null, workRevision: null, work: null, page: {} },
+      sources: {
+        raw: subscriptionSource({
+          request: () => head,
+          decode: (value) => value,
+          resources: readings,
+        }),
+        derived: { kind: "derive", derive },
+      },
+      log: () => {},
+    },
+  );
+  const release = graph.mount(["derived"]);
+  try {
+    await vi.waitFor(() => expect(sources).toHaveLength(1));
+    sources[0]!.onopen!();
+    sources[0]!.onmessage!(snapshot({ revision: "v1", data: { count: 1 } }));
+    const original = graph.get("raw").value;
+    expect(derive).toHaveBeenCalledTimes(1);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+    document.dispatchEvent(new Event("visibilitychange"));
+    vi.setSystemTime(Date.now() + 5_000);
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+    document.dispatchEvent(new Event("visibilitychange"));
+    vi.useRealTimers();
+    expect(graph.get("raw").current).toBe(false);
+    expect(graph.get("derived").current).toBe(false);
+    await vi.waitFor(() => expect(sources).toHaveLength(2));
+    sources[1]!.onopen!();
+    // JSON parsing produces a new object even though the host returned the same observation.
+    sources[1]!.onmessage!(snapshot({ revision: "v1", data: { count: 1 } }));
+    expect(graph.get("raw").value).toBe(original);
+    expect(graph.get("derived")).toMatchObject({ current: true, status: "ready" });
+    expect(derive).toHaveBeenCalledTimes(1);
+
+    readings.dirty(head);
+    expect(graph.get("raw").current).toBe(false);
+    // A pre-write stream may not restore freshness, even with an identical answer.
+    sources[1]!.onmessage!(snapshot({ revision: "v1", data: { count: 1 } }));
+    expect(graph.get("raw").current).toBe(false);
+    await vi.waitFor(() => expect(sources).toHaveLength(3));
+    sources[2]!.onopen!();
+    sources[2]!.onmessage!(snapshot({ revision: "v2", data: { count: 1 } }));
+    expect(graph.get("raw").value).not.toBe(original);
+    expect(graph.get("derived").current).toBe(true);
+    expect(derive).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.useRealTimers();
+    release();
+    graph.dispose();
+    readings.close();
+  }
+});
 
 test("an acknowledged command completes on the existing receipt stream without an HTTP waiter", async () => {
   const { readings, sources } = owner();
