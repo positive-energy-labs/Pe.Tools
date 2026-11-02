@@ -1,24 +1,42 @@
-// Lowers effect-islands.baseline.json to the current census. Refuses to raise a count or add a
-// file: a growing island set is the thing the ratchet exists to stop.
+// Lower counts against both the working baseline and the trusted merge-base baseline.
+import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
-import { census, type Islands } from "./effect-islands-census.ts";
+import { resolve } from "node:path";
+import { census, islandCount, isTestFile, tsRoot, type Islands } from "./effect-islands-census.ts";
+import { tightenedBaseline, trustedBaseline } from "./effect-islands.ts";
 
 const path = new URL("./effect-islands.baseline.json", import.meta.url);
+const trusted = trustedBaseline();
 const actual = census();
-const next: Islands = { src: {}, tests: {} };
-let growth = 0;
 const baseline = JSON.parse(readFileSync(path, "utf8")) as Islands;
-for (const kind of ["src", "tests"] as const) {
-  for (const [file, count] of Object.entries(actual[kind])) {
-    const cap = baseline[kind][file];
-    if (cap === undefined || count > cap) {
-      console.error(`${file}: ${cap ?? "none"} -> ${count} (refused: islands only shrink)`);
-      growth++;
-    } else {
-      if (count < cap) console.log(`${file}: ${cap} -> ${count}`);
-      next[kind][file] = count;
-    }
-  }
+const git = (...args: string[]) =>
+  execFileSync("git", args, {
+    cwd: tsRoot,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+const existing = new Set(
+  git("ls-tree", "--full-tree", "-r", "--name-only", trusted.ref, "--", "ts/apps", "ts/packages")
+    .trim()
+    .split("\n")
+    .map((file) => file.replace(/^ts\//, "")),
+);
+const isNew = (file: string) => !existing.has(file);
+// Census omits zeroes; only genuinely new source files can enter the baseline at zero.
+for (const file of git(
+  "ls-files",
+  "--cached",
+  "--others",
+  "--exclude-standard",
+  "--",
+  "apps",
+  "packages",
+)
+  .trim()
+  .split("\n")) {
+  if (!/\.[cm]?[jt]sx?$/.test(file) || !isNew(file)) continue;
+  const count = islandCount(readFileSync(resolve(tsRoot, file), "utf8"), file);
+  actual[isTestFile(file) ? "tests" : "src"][file] = count;
 }
-if (growth > 0) process.exit(1);
+const next = tightenedBaseline(actual, baseline, trusted.baseline, isNew);
 writeFileSync(path, `${JSON.stringify(next, null, 2)}\n`);
