@@ -748,20 +748,6 @@
       "review": "none"
     },
     "work.start-fresh": {
-      "answers": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "additionalProperties": false,
-        "properties": {
-          "confirm": {
-            "const": true,
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "confirm"
-        ],
-        "type": "object"
-      },
       "input": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "additionalProperties": false,
@@ -771,7 +757,7 @@
       },
       "kind": "recovery",
       "label": "Start fresh",
-      "review": "required",
+      "review": "shown",
       "says": "Set the unreadable Work aside and start it empty; its old bytes are kept beside it"
     }
   },

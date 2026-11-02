@@ -24,6 +24,27 @@
     "title": "Pea"
   },
   "fields": {
+    "autoApprove": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "control": "switch",
+      "label": "Auto-approve Pea writes",
+      "role": "setting",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": true,
+        "type": "boolean"
+      },
+      "share": false,
+      "url": false
+    },
     "mode": {
       "agent": "set",
       "codec": {

@@ -744,183 +744,51 @@
             "default": null
           },
           "request": {
-            "additionalProperties": false,
             "properties": {
-              "previewOnly": {
-                "default": false,
-                "type": "boolean"
-              },
-              "work": {
-                "additionalProperties": false,
-                "properties": {
-                  "key": {
-                    "oneOf": [
-                      {
+              "views": {
+                "items": {
+                  "properties": {
+                    "items": {
+                      "items": {
                         "properties": {
-                          "binding": {
-                            "const": "address",
+                          "elementId": {
+                            "maximum": 9007199254740991,
+                            "minimum": -9007199254740991,
+                            "type": "integer"
+                          },
+                          "name": {
                             "type": "string"
                           },
-                          "from": {
-                            "additionalProperties": false,
-                            "properties": {
-                              "openId": {
-                                "minLength": 1,
-                                "type": "string"
-                              },
-                              "session": {
-                                "minLength": 1,
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "session",
-                              "openId"
-                            ],
-                            "type": "object"
-                          },
-                          "open": {
-                            "not": {}
-                          },
-                          "route": {
-                            "maxLength": 100,
-                            "minLength": 1,
+                          "systemTag": {
                             "type": "string"
-                          },
-                          "target": {
-                            "type": "string"
-                          },
-                          "work": {
-                            "not": {}
                           }
                         },
                         "required": [
-                          "route",
-                          "target",
-                          "binding"
+                          "elementId",
+                          "name",
+                          "systemTag"
                         ],
                         "type": "object"
                       },
-                      {
-                        "properties": {
-                          "binding": {
-                            "const": "open",
-                            "type": "string"
-                          },
-                          "open": {
-                            "additionalProperties": false,
-                            "properties": {
-                              "openId": {
-                                "minLength": 1,
-                                "type": "string"
-                              },
-                              "session": {
-                                "minLength": 1,
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "session",
-                              "openId"
-                            ],
-                            "type": "object"
-                          },
-                          "route": {
-                            "maxLength": 100,
-                            "minLength": 1,
-                            "type": "string"
-                          },
-                          "target": {
-                            "type": "null"
-                          },
-                          "work": {
-                            "not": {}
-                          }
-                        },
-                        "required": [
-                          "route",
-                          "target",
-                          "open",
-                          "binding"
-                        ],
-                        "type": "object"
-                      },
-                      {
-                        "properties": {
-                          "binding": {
-                            "const": "workspace",
-                            "type": "string"
-                          },
-                          "open": {
-                            "not": {}
-                          },
-                          "route": {
-                            "maxLength": 100,
-                            "minLength": 1,
-                            "type": "string"
-                          },
-                          "target": {
-                            "type": "null"
-                          },
-                          "work": {
-                            "maxLength": 200,
-                            "minLength": 1,
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "route",
-                          "target",
-                          "work",
-                          "binding"
-                        ],
-                        "type": "object"
-                      },
-                      {
-                        "properties": {
-                          "binding": {
-                            "const": "host",
-                            "type": "string"
-                          },
-                          "open": {
-                            "not": {}
-                          },
-                          "route": {
-                            "maxLength": 100,
-                            "minLength": 1,
-                            "type": "string"
-                          },
-                          "target": {
-                            "type": "null"
-                          },
-                          "work": {
-                            "not": {}
-                          }
-                        },
-                        "required": [
-                          "route",
-                          "target",
-                          "binding"
-                        ],
-                        "type": "object"
-                      }
-                    ]
+                      "minItems": 1,
+                      "type": "array"
+                    },
+                    "view": {
+                      "type": "string"
+                    }
                   },
-                  "revision": {
-                    "maximum": 9007199254740991,
-                    "minimum": 0,
-                    "type": "integer"
-                  }
+                  "required": [
+                    "view",
+                    "items"
+                  ],
+                  "type": "object"
                 },
-                "required": [
-                  "key",
-                  "revision"
-                ],
-                "type": "object"
+                "minItems": 1,
+                "type": "array"
               }
             },
             "required": [
-              "work"
+              "views"
             ],
             "type": "object"
           }
@@ -1156,183 +1024,14 @@
             "default": null
           },
           "request": {
-            "additionalProperties": false,
             "properties": {
-              "previewOnly": {
-                "default": false,
-                "type": "boolean"
-              },
-              "work": {
-                "additionalProperties": false,
-                "properties": {
-                  "key": {
-                    "oneOf": [
-                      {
-                        "properties": {
-                          "binding": {
-                            "const": "address",
-                            "type": "string"
-                          },
-                          "from": {
-                            "additionalProperties": false,
-                            "properties": {
-                              "openId": {
-                                "minLength": 1,
-                                "type": "string"
-                              },
-                              "session": {
-                                "minLength": 1,
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "session",
-                              "openId"
-                            ],
-                            "type": "object"
-                          },
-                          "open": {
-                            "not": {}
-                          },
-                          "route": {
-                            "maxLength": 100,
-                            "minLength": 1,
-                            "type": "string"
-                          },
-                          "target": {
-                            "type": "string"
-                          },
-                          "work": {
-                            "not": {}
-                          }
-                        },
-                        "required": [
-                          "route",
-                          "target",
-                          "binding"
-                        ],
-                        "type": "object"
-                      },
-                      {
-                        "properties": {
-                          "binding": {
-                            "const": "open",
-                            "type": "string"
-                          },
-                          "open": {
-                            "additionalProperties": false,
-                            "properties": {
-                              "openId": {
-                                "minLength": 1,
-                                "type": "string"
-                              },
-                              "session": {
-                                "minLength": 1,
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "session",
-                              "openId"
-                            ],
-                            "type": "object"
-                          },
-                          "route": {
-                            "maxLength": 100,
-                            "minLength": 1,
-                            "type": "string"
-                          },
-                          "target": {
-                            "type": "null"
-                          },
-                          "work": {
-                            "not": {}
-                          }
-                        },
-                        "required": [
-                          "route",
-                          "target",
-                          "open",
-                          "binding"
-                        ],
-                        "type": "object"
-                      },
-                      {
-                        "properties": {
-                          "binding": {
-                            "const": "workspace",
-                            "type": "string"
-                          },
-                          "open": {
-                            "not": {}
-                          },
-                          "route": {
-                            "maxLength": 100,
-                            "minLength": 1,
-                            "type": "string"
-                          },
-                          "target": {
-                            "type": "null"
-                          },
-                          "work": {
-                            "maxLength": 200,
-                            "minLength": 1,
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "route",
-                          "target",
-                          "work",
-                          "binding"
-                        ],
-                        "type": "object"
-                      },
-                      {
-                        "properties": {
-                          "binding": {
-                            "const": "host",
-                            "type": "string"
-                          },
-                          "open": {
-                            "not": {}
-                          },
-                          "route": {
-                            "maxLength": 100,
-                            "minLength": 1,
-                            "type": "string"
-                          },
-                          "target": {
-                            "type": "null"
-                          },
-                          "work": {
-                            "not": {}
-                          }
-                        },
-                        "required": [
-                          "route",
-                          "target",
-                          "binding"
-                        ],
-                        "type": "object"
-                      }
-                    ]
-                  },
-                  "revision": {
-                    "maximum": 9007199254740991,
-                    "minimum": 0,
-                    "type": "integer"
-                  }
-                },
-                "required": [
-                  "key",
-                  "revision"
-                ],
-                "type": "object"
+              "stage": {
+                "minLength": 1,
+                "type": "string"
               }
             },
             "required": [
-              "work"
+              "stage"
             ],
             "type": "object"
           }
@@ -1378,183 +1077,30 @@
           },
           "request": {
             "items": {
-              "additionalProperties": false,
               "properties": {
-                "previewOnly": {
-                  "default": false,
-                  "type": "boolean"
+                "runId": {
+                  "type": "string"
                 },
-                "work": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "key": {
-                      "oneOf": [
-                        {
-                          "properties": {
-                            "binding": {
-                              "const": "address",
-                              "type": "string"
-                            },
-                            "from": {
-                              "additionalProperties": false,
-                              "properties": {
-                                "openId": {
-                                  "minLength": 1,
-                                  "type": "string"
-                                },
-                                "session": {
-                                  "minLength": 1,
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "session",
-                                "openId"
-                              ],
-                              "type": "object"
-                            },
-                            "open": {
-                              "not": {}
-                            },
-                            "route": {
-                              "maxLength": 100,
-                              "minLength": 1,
-                              "type": "string"
-                            },
-                            "target": {
-                              "type": "string"
-                            },
-                            "work": {
-                              "not": {}
-                            }
-                          },
-                          "required": [
-                            "route",
-                            "target",
-                            "binding"
-                          ],
-                          "type": "object"
-                        },
-                        {
-                          "properties": {
-                            "binding": {
-                              "const": "open",
-                              "type": "string"
-                            },
-                            "open": {
-                              "additionalProperties": false,
-                              "properties": {
-                                "openId": {
-                                  "minLength": 1,
-                                  "type": "string"
-                                },
-                                "session": {
-                                  "minLength": 1,
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "session",
-                                "openId"
-                              ],
-                              "type": "object"
-                            },
-                            "route": {
-                              "maxLength": 100,
-                              "minLength": 1,
-                              "type": "string"
-                            },
-                            "target": {
-                              "type": "null"
-                            },
-                            "work": {
-                              "not": {}
-                            }
-                          },
-                          "required": [
-                            "route",
-                            "target",
-                            "open",
-                            "binding"
-                          ],
-                          "type": "object"
-                        },
-                        {
-                          "properties": {
-                            "binding": {
-                              "const": "workspace",
-                              "type": "string"
-                            },
-                            "open": {
-                              "not": {}
-                            },
-                            "route": {
-                              "maxLength": 100,
-                              "minLength": 1,
-                              "type": "string"
-                            },
-                            "target": {
-                              "type": "null"
-                            },
-                            "work": {
-                              "maxLength": 200,
-                              "minLength": 1,
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "route",
-                            "target",
-                            "work",
-                            "binding"
-                          ],
-                          "type": "object"
-                        },
-                        {
-                          "properties": {
-                            "binding": {
-                              "const": "host",
-                              "type": "string"
-                            },
-                            "open": {
-                              "not": {}
-                            },
-                            "route": {
-                              "maxLength": 100,
-                              "minLength": 1,
-                              "type": "string"
-                            },
-                            "target": {
-                              "type": "null"
-                            },
-                            "work": {
-                              "not": {}
-                            }
-                          },
-                          "required": [
-                            "route",
-                            "target",
-                            "binding"
-                          ],
-                          "type": "object"
-                        }
-                      ]
-                    },
-                    "revision": {
-                      "maximum": 9007199254740991,
-                      "minimum": 0,
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "key",
-                    "revision"
-                  ],
-                  "type": "object"
+                "view": {
+                  "type": "string"
+                },
+                "zoneGuid": {
+                  "type": "string"
+                },
+                "zoneName": {
+                  "type": "string"
+                },
+                "zoneRegion": {
+                  "maximum": 9007199254740991,
+                  "minimum": -9007199254740991,
+                  "type": "integer"
                 }
               },
               "required": [
-                "work"
+                "zoneRegion",
+                "view",
+                "zoneName",
+                "zoneGuid"
               ],
               "type": "object"
             },
@@ -1840,20 +1386,6 @@
       "review": "shown"
     },
     "work.start-fresh": {
-      "answers": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "additionalProperties": false,
-        "properties": {
-          "confirm": {
-            "const": true,
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "confirm"
-        ],
-        "type": "object"
-      },
       "input": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "additionalProperties": false,
@@ -1863,7 +1395,7 @@
       },
       "kind": "recovery",
       "label": "Start fresh",
-      "review": "required",
+      "review": "shown",
       "says": "Set the unreadable Work aside and start it empty; its old bytes are kept beside it"
     }
   },
