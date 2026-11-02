@@ -121,6 +121,8 @@ Rebuilt 2026-10-21 as current truth after the close of the ducts walk; git holds
 
 ## Tried & rejected
 
+- 2026-11-02, Manual D defect 5: K2 as the cause of a new fan-sheet walk boundary is rejected. `2921297f` retains the existing `from` selector and renames its operation. The r52 receipt (`.artifacts/tmp/muas900/f1-inputs.json`) uses fan slot `PE_M_Fan_AirFlow`, including RV-15 35, RV-7 50 and four intake siblings 35/65/35/65 cfm. Default-slot K2 facts omit those flows. Deterministic replay reproduces the three 300 cfm shares and four missing-flow asks on the older graph too; restoring r52 values gives 35/50/815 supply and 1100 at the louver. `sheet/muas-regression.test.ts` retains this distinction. Do not replace unknown flows with zero or alter topology to match a pressure target.
+
 - 2026-10-27, retire the persistent snapshot spike (`archive/2026-10-27/ducts-persistent-cache`, tip `8db991de`). Its IndexedDB value was previous evidence only; every tab still made the authoritative native read and transferred the full body. The 32 ms early-value observation used a 7.6 KB synthetic fixture and did not prove real-model paint or native savings. Preserve the freshness boundary, not this extra cache.
 - 2026-10-27, retire shared pricing compute (`archive/2026-10-27/sharedworker-pricing-cache`, tip `d8e1ee93`). The saved-model result plus exact key required about 196.6 MB of accounting budget; observed warm hits took 5.4–9.0 s versus 2.5 s for the existing dedicated worker. These were uncontrolled observations, not a comparative benchmark, and do not justify another retained result owner. Reports remain reachable at the archive tags.
 
@@ -151,6 +153,8 @@ Rebuilt 2026-10-21 as current truth after the close of the ducts walk; git holds
 - 2026-10-08, shelved loss-server shape revived on the evaluation-order proof; Specific Coefficient alone as a product shape stays off the table (it is the storage Revit charges).
 
 ## Owed
+
+- Manual D FD2: exact current MUAS-1 pressure remains unproven. Re-drive with r52 fan slot `PE_M_Fan_AirFlow`, terminal slot `revit:Flow`, 900 cfm and the accepted intake connection. The 2026-10-29 whole-document snapshot and K2 capture differ in geometry and cap connectivity; they are not an exact before/after acquisition pair. No Revit session was started for FD2.
 
 - 2026-11-02, K2 live Chadds proof at `2921297f`: duplicate FC-23 fan marks (units 8732550 and 13760867, both port 1) collide in the mark-based fan codec. Native exact-subject sheets and combined walks succeed; the route must gain stable roster identities to select either fan. `ts/apps/web/src/ducts/sources.ts` holds the TODO. One FC-23 self-fetch terminated under the shared watcher; the same exact subject succeeded on the frozen host (942 CFM, known supply 0.149277 in-wg and return 0.232903 in-wg). Trace that intermittent transport failure if it recurs. Evidence: `.artifacts/k2-live-proof-final.json`.
 

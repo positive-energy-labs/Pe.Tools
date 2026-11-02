@@ -1067,9 +1067,11 @@ it("R-SHARE: a louver shared with a sibling's inlet carries both consumers; this
   // mouth -> duct 14 -> sibling ERV 200:0 (its outdoor-air inlet; ERV 200:1 feeds grille 40).
   // Discharge: unit 100:1 -> grille 20. Mirrors Chadds MUAS-1 and louver 14088043 (2026-10-29).
   const muas = node(100, "equipment", {
+    family: "MUAS",
     connectors: [conn(0, [11, 0], round(10)), conn(1, [20, 0], round(10))],
   });
   const erv = node(200, "equipment", {
+    family: "ERV",
     connectors: [conn(0, [14, 1], round(6)), conn(1, [40, 0], round(6))],
     facts: [{ key: "fanFlow", value: 50, unit: "cfm", provenance: "designer-stated" }],
   });
@@ -1192,9 +1194,11 @@ it("R-SHARE + C3: a proposed transition in front of a shared plenum carries this
   // nothing of 100's), so the plenum is on unit 100's network, as Chadds' plenum is on MUAS-1's.
   const gap = 2.6 / 12;
   const muas = node(100, "equipment", {
+    family: "MUAS",
     connectors: [conn(0, [11, 0], round(10)), conn(1, [21, 0], round(10))],
   });
   const erv = node(200, "equipment", {
+    family: "ERV",
     connectors: [conn(0, [14, 1], round(6)), conn(1, [42, 1], round(6))],
     facts: [{ key: "fanFlow", value: 50, unit: "cfm", provenance: "designer-stated" }],
   });

@@ -280,6 +280,25 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
         },
         default: { value: suggestRole(n, kind.value), ref: "name" },
       }) as Resolved<"fan" | "passive">;
+      // Revit categorizes inline heaters and silencers as equipment. They need a part drop,
+      // not fan sizing; recognized unit kinds and explicit fan rulings retain their unit inputs.
+      if (kind.value === "other" && role.value === "passive" && n.connectors.length === 2) {
+        components[id] = {
+          drop: pick(
+            {
+              run: { value: run.componentDrops?.[id]?.inWg },
+              Work: {
+                value:
+                  work.componentDrops?.[id]?.inWg ??
+                  (n.family ? work.assumptions?.[`component-drop:${n.family}`]?.inWg : undefined),
+              },
+              model: { value: positive(factOf(n, "pressureDrop")), ref: slots.componentDrop },
+            },
+            "in-wg",
+          ),
+        };
+        continue;
+      }
       const typedCfm = work.equipmentFlows?.[id]?.cfm;
       const storedCfm = store.equipmentFlows?.[id]?.cfm;
       const revitCfm = positive(factOf(n, "fanFlow"));
