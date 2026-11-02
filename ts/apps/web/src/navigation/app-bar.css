@@ -103,12 +103,6 @@
 .pe-appbar-commands > [data-chrome-settings] {
   order: 5;
 }
-.pe-appbar-commands [data-command-word] {
-  display: none;
-}
-.pe-appbar-commands .dl-hotkey-command > .dl-button > svg {
-  display: none;
-}
 @container app-chrome (max-width: 700px) {
   .pe-appbar-row {
     gap: 2px;

@@ -291,19 +291,22 @@ export function Pane({
       {hasContent(tabs) ? (
         tabs
       ) : hasContent(title) ? (
-        <h2 data-slot="pane-title" data-heading={name ? "name" : undefined}>
-          {crumb}
-        </h2>
+        // Help is the title's own hint, never a floating "?" beside it; Tutorial (Alt+/) teaches
+        // the same `purpose` for keyboard readers and for tabbed heads, which carry no title.
+        <TooltipHint content={hasContent(help) ? help : ""}>
+          <h2
+            data-slot="pane-title"
+            data-heading={name ? "name" : undefined}
+            data-help={hasContent(help) || undefined}
+          >
+            {crumb}
+          </h2>
+        </TooltipHint>
       ) : null}
       {!hasContent(tabs) && hasContent(meta) && (
         <TooltipHint content={typeof meta === "string" ? meta : undefined}>
           <span className="face-mono t-small min-w-0 truncate text-ink-mute">{meta}</span>
         </TooltipHint>
-      )}
-      {hasContent(help) && (
-        <span className="shrink-0 self-center">
-          <TooltipHint>{help}</TooltipHint>
-        </span>
       )}
     </>
   );
@@ -353,7 +356,7 @@ export function Pane({
                   }}
                   className={root()}
                 >
-                  {[title, meta, actions, leadingActions, tabs, help, strip].some(hasContent) && (
+                  {[title, meta, actions, leadingActions, tabs, strip].some(hasContent) && (
                     <div data-slot="pane-header" data-title-align={titleAlign} className="shrink-0">
                       <Rail
                         lead={
