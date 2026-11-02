@@ -78,13 +78,21 @@ export function createSettingsOwner(
     }
   };
   let fetching: Promise<void> | undefined;
-  const refresh = () => fetching ??= run(transport.read).catch(() => {}).finally(() => { fetching = undefined; });
+  const refresh = () =>
+    (fetching ??= run(transport.read)
+      .catch(() => {})
+      .finally(() => {
+        fetching = undefined;
+      }));
   let invalidated = false;
   const changed = () => {
     if (fetching) {
       if (invalidated) return;
       invalidated = true;
-      void fetching.then(() => { invalidated = false; void refresh(); });
+      void fetching.then(() => {
+        invalidated = false;
+        void refresh();
+      });
     } else void refresh();
   };
   let users = 0;

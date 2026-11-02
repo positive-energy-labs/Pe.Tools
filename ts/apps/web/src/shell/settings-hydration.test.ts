@@ -5,11 +5,16 @@ import { createSettingsOwner } from "./settings";
 
 test("concurrent mounts, StrictMode remount and hidden return share one settings read", async () => {
   const read = vi.fn(async () => ({ revision: 1, values: { word: "kept" } }));
-  const owner = createSettingsOwner({ word: { ...field(z.string().default(""), {}), role: "setting", label: "Word" } }, {
-    read, write: vi.fn(), subscribe: () => () => {},
-  });
+  const owner = createSettingsOwner(
+    { word: { ...field(z.string().default(""), {}), role: "setting", label: "Word" } },
+    {
+      read,
+      write: vi.fn(),
+      subscribe: () => () => {},
+    },
+  );
   const releases = Array.from({ length: 7 }, () => owner.connect());
-  releases.forEach(release => release());
+  releases.forEach((release) => release());
   const release = owner.connect();
   await vi.waitFor(() => expect(owner.read().revision).toBe(1));
   release();

@@ -36,7 +36,6 @@ const READING_DEADLINE_MS = 30_000;
 /** Reconnect delays double from 1 s to this ceiling, and reset on the first fresh frame. */
 const RETRY_CEILING_MS = 30_000;
 
-
 /** The one place the web opens an SSE stream: Readings, and a harness thread's tail. */
 export const openEventSource = (url: string) => new EventSource(runtimeStreamUrl(url));
 
@@ -51,6 +50,7 @@ export class PeReadings {
       stale: boolean;
     }
   >();
+  private readonly retained = new Map<string, ReadingFrame>();
   private source?: Source;
   private connection = "";
   private sent = new Map<string, ReadingRequest>();
@@ -91,10 +91,20 @@ export class PeReadings {
       const frame = requestAnimationFrame(deliver);
       return () => cancelAnimationFrame(frame);
     },
-    private readonly update: (connection: string, add: ReadingRequest[], remove: string[]) => Promise<void> = async (connection, add, remove) => {
-      const url = new URL(peRouteUrl("resources.subscriptions", {}, resolveWorkbenchConfig().origin));
+    private readonly update: (
+      connection: string,
+      add: ReadingRequest[],
+      remove: string[],
+    ) => Promise<void> = async (connection, add, remove) => {
+      const url = new URL(
+        peRouteUrl("resources.subscriptions", {}, resolveWorkbenchConfig().origin),
+      );
       url.searchParams.set("connection", connection);
-      const response = await hostFetch(url.href, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ add, remove }) });
+      const response = await hostFetch(url.href, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ add, remove }),
+      });
       if (!response.ok) throw Error(`Reading subscriptions: ${response.status}`);
     },
   ) {}
@@ -116,6 +126,7 @@ export class PeReadings {
     this.opening?.close();
     this.opening = undefined;
     this.entries.clear();
+    this.retained.clear();
     this.resyncs.clear();
     this.unwatchWake?.();
     this.unwatchWake = undefined;
@@ -162,7 +173,9 @@ export class PeReadings {
   private watchWake() {
     if (this.unwatchWake || typeof document === "undefined") return;
     // Visibility is not a change of basis. The live stream keeps delivering while hidden.
-    const online = () => { if (this.faulted) this.resync(); };
+    const online = () => {
+      if (this.faulted) this.resync();
+    };
     window.addEventListener("online", online);
     this.unwatchWake = () => window.removeEventListener("online", online);
   }
@@ -181,7 +194,7 @@ export class PeReadings {
     const key = readingKey(request);
     let entry = this.entries.get(key);
     if (!entry) {
-      entry = { request, listeners: new Set(), stale: true };
+      entry = { request, listeners: new Set(), latest: this.retained.get(key), stale: true };
       this.entries.set(key, entry);
       this.schedule(false);
     }
@@ -280,10 +293,18 @@ export class PeReadings {
     const connection = this.connection;
     try {
       while (!this.closed && this.connection === connection) {
-        const remove = [...this.sent.keys()].filter(key => !this.entries.has(key)).slice(0, READING_MAX_KEYS);
-        const add = [...this.entries].filter(([key]) => !this.sent.has(key)).slice(0, READING_MAX_KEYS);
+        const remove = [...this.sent.keys()]
+          .filter((key) => !this.entries.has(key))
+          .slice(0, READING_MAX_KEYS);
+        const add = [...this.entries]
+          .filter(([key]) => !this.sent.has(key))
+          .slice(0, READING_MAX_KEYS);
         if (!remove.length && !add.length) break;
-        await this.update(connection, add.map(([, entry]) => entry.request), remove);
+        await this.update(
+          connection,
+          add.map(([, entry]) => entry.request),
+          remove,
+        );
         if (this.connection !== connection) break;
         for (const key of remove) this.sent.delete(key);
         for (const [key, entry] of add) this.sent.set(key, entry.request);
@@ -315,11 +336,15 @@ export class PeReadings {
     const url = new URL(this.url());
     url.searchParams.set(
       "keys",
-      JSON.stringify([...this.entries.values()].slice(0, READING_MAX_KEYS).map(({ request }) => request)),
+      JSON.stringify(
+        [...this.entries.values()].slice(0, READING_MAX_KEYS).map(({ request }) => request),
+      ),
     );
     this.connection = crypto.randomUUID();
     url.searchParams.set("connection", this.connection);
-    this.sent = new Map([...this.entries].slice(0, READING_MAX_KEYS).map(([key, entry]) => [key, entry.request]));
+    this.sent = new Map(
+      [...this.entries].slice(0, READING_MAX_KEYS).map(([key, entry]) => [key, entry.request]),
+    );
     // Topology changes can overtake a still-opening replacement. Retire that candidate, not the
     // active stream: commands remain live while the newest connection acquires its keys.
     this.opening?.close();
@@ -391,6 +416,7 @@ export class PeReadings {
                   // A new stream must confirm freshness, but identical evidence keeps its identity.
                   if (identical && entry.latest) frame = entry.latest;
                   entry.latest = frame;
+                  this.retained.set(key, frame);
                   entry.stale = false;
                   this.attempts = 0;
                   if (unchanged) continue;

@@ -49,10 +49,16 @@ function owner(
 ) {
   const sources: Fake[] = [];
   const subscriptions = new Set<string>();
-  const update = vi.fn(async (_connection: string, add: import("@pe/agent-contracts").ReadingRequest[], remove: string[]) => {
-    for (const key of remove) subscriptions.delete(key);
-    for (const request of add) subscriptions.add(readingKey(request));
-  });
+  const update = vi.fn(
+    async (
+      _connection: string,
+      add: import("@pe/agent-contracts").ReadingRequest[],
+      remove: string[],
+    ) => {
+      for (const key of remove) subscriptions.delete(key);
+      for (const request of add) subscriptions.add(readingKey(request));
+    },
+  );
   const readings = new PeReadings(
     () => "http://127.0.0.1:5180/readings",
     (url) => {
@@ -64,7 +70,8 @@ function owner(
         closed: false,
         close: () => void (source.closed = true),
       };
-      for (const request of JSON.parse(new URL(url).searchParams.get("keys")!)) subscriptions.add(readingKey(request));
+      for (const request of JSON.parse(new URL(url).searchParams.get("keys")!))
+        subscriptions.add(readingKey(request));
       sources.push(source);
       return source as unknown as EventSource;
     },
@@ -188,7 +195,9 @@ test("late readings join and leave without reopening the page stream", async () 
   const release = readings.subscribe({ kind: "world" }, () => {});
   await Promise.resolve();
   sources[0]!.onopen!();
-  const releases = Array.from({ length: 100 }, (_, n) => readings.subscribe({ kind: "receipts", id: String(n) }, () => {}));
+  const releases = Array.from({ length: 100 }, (_, n) =>
+    readings.subscribe({ kind: "receipts", id: String(n) }, () => {}),
+  );
   await Promise.resolve();
   expect(sources).toHaveLength(1);
   for (const remove of releases) remove();
@@ -567,7 +576,6 @@ test("a tab shown after sleeping retains its thread body and tail", async () => 
   readings.close();
 });
 
-
 test("reopened thread with 100 action records shares each reading and releases all on unmount", async () => {
   const { readings, sources, subscriptions } = owner();
   const registry = AtomRegistry.make();
@@ -575,16 +583,41 @@ test("reopened thread with 100 action records shares each reading and releases a
     const value = useReading({ kind: "receipts", id }, readings);
     return <span>{value.state}</span>;
   }
-  const tree = <RegistryContext.Provider value={registry}>{Array.from({ length: 200 }, (_, i) => <Record key={i} id={String(i % 100)} />)}</RegistryContext.Provider>;
+  const tree = (
+    <RegistryContext.Provider value={registry}>
+      {Array.from({ length: 200 }, (_, i) => (
+        <Record key={i} id={String(i % 100)} />
+      ))}
+    </RegistryContext.Provider>
+  );
   for (let pass = 0; pass < 2; pass++) {
     const view = render(tree);
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
     if (pass === 0) sources[0]!.onopen!();
     await vi.waitFor(() => expect(subscriptions.size).toBe(100));
     expect(sources).toHaveLength(1);
     view.unmount();
     await vi.waitFor(() => expect(subscriptions.size).toBe(0));
   }
+  registry.dispose();
+  readings.close();
+});
+
+test("a remounted reading immediately retains its previous observation while reacquiring", async () => {
+  const { readings, sources } = owner();
+  let registry = AtomRegistry.make();
+  let release = registry.subscribe(readingAtom(head, readings), () => {}, { immediate: true });
+  await Promise.resolve();
+  sources[0]!.onopen!();
+  sources[0]!.onmessage!(snapshot({ revision: 1 }));
+  release();
+  registry.dispose();
+  registry = AtomRegistry.make();
+  release = registry.subscribe(readingAtom(head, readings), () => {}, { immediate: true });
+  expect(previousOf(registry.get(readingAtom(head, readings)))).toEqual({ revision: 1 });
+  release();
   registry.dispose();
   readings.close();
 });

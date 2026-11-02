@@ -20,10 +20,7 @@ import * as Atom from "effect/unstable/reactivity/Atom";
 import { deepEqual } from "@tanstack/react-router";
 import { useCallback, useContext, useMemo, useRef, useSyncExternalStore } from "react";
 import type { Custody, Lane } from "@pe/host-contracts/contracts";
-import type {
-  BridgeSessionListEntry,
-  HostOpResponse,
-} from "@pe/host-contracts/operation-types";
+import type { BridgeSessionListEntry, HostOpResponse } from "@pe/host-contracts/operation-types";
 import { reportFault } from "#/host/diagnostics";
 import { peReadings, type Readings } from "#/readings";
 import { createReadingGraph, type ReadingState, type UseSource } from "./readings";
@@ -86,7 +83,12 @@ function subject(
       return source.subscribe(request, (frame) => {
         if (frame.kind === "snapshot") {
           meta.changed = frame.changed;
-          deliver({ kind: "complete", value: frame.value, revision: ++revision, fresh: !frame.stale });
+          deliver({
+            kind: "complete",
+            value: frame.value,
+            revision: ++revision,
+            fresh: !frame.stale,
+          });
         } else if (frame.kind === "failure") deliver({ kind: "failure", error: frame.error });
         else if (frame.kind === "stale" || frame.kind === "gap") {
           meta.reason = frame.kind === "gap" ? "gap" : "disconnected";

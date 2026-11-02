@@ -48,8 +48,14 @@ export function observeResources(
 }
 
 // Subscription ownership is host-local and scoped to the same observer as the stream.
-const connections = new WeakMap<ResourceObserver, Map<string, (add: ReadingRequest[], remove: string[]) => void>>();
-export async function updateResourceSubscriptions(request: Request, observe: ResourceObserver): Promise<Response> {
+const connections = new WeakMap<
+  ResourceObserver,
+  Map<string, (add: ReadingRequest[], remove: string[]) => void>
+>();
+export async function updateResourceSubscriptions(
+  request: Request,
+  observe: ResourceObserver,
+): Promise<Response> {
   const id = new URL(request.url).searchParams.get("connection") ?? "";
   const update = connections.get(observe)?.get(id);
   if (!update) return Response.json({ error: "Reading connection retired" }, { status: 409 });
@@ -59,7 +65,11 @@ export async function updateResourceSubscriptions(request: Request, observe: Res
   try {
     const value = JSON.parse(raw);
     const add = readingRequestSchema.array().max(32).parse(value.add);
-    if (!Array.isArray(value.remove) || value.remove.length > 32 || value.remove.some((key: unknown) => typeof key !== "string"))
+    if (
+      !Array.isArray(value.remove) ||
+      value.remove.length > 32 ||
+      value.remove.some((key: unknown) => typeof key !== "string")
+    )
       throw Error("Invalid removals");
     update(add, value.remove);
     return Response.json({ ok: true });
@@ -119,8 +129,9 @@ export function resourceResponse(
   const releases = new Map<string, () => void>();
   const connection = url.searchParams.get("connection");
   let registry = connections.get(observe);
-  if (!registry) connections.set(observe, registry = new Map());
-  if (connection && registry.has(connection)) return Response.json({ error: "Connection already exists" }, { status: 409 });
+  if (!registry) connections.set(observe, (registry = new Map()));
+  if (connection && registry.has(connection))
+    return Response.json({ error: "Connection already exists" }, { status: 409 });
   let controller: ReadableStreamDefaultController<Uint8Array>;
   const encode = (frame: ReadingFrame) =>
     encoder.encode(
@@ -252,7 +263,14 @@ export function resourceResponse(
             const key = readingKey(value);
             if (releases.has(key)) continue;
             requested.set(key, value);
-            rejected.set(key, encode({ kind: "failure", key, error: "Resource value exceeds the frame limit or cannot be serialized." }));
+            rejected.set(
+              key,
+              encode({
+                kind: "failure",
+                key,
+                error: "Resource value exceeds the frame limit or cannot be serialized.",
+              }),
+            );
             if (value.kind === "world") publish({ kind: "gap", key, dropped: null });
             try {
               const release = observe(value, publish, after);
