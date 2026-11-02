@@ -1,8 +1,7 @@
-/** Review values preserve every JSON field and numeric digit; formatted text is not authority. */
-export function reviewValue(value: unknown): string {
-  if (typeof value === "string") return value;
-  return value === undefined ? "(absent)" : JSON.stringify(value);
-}
+import { showCellValue } from "@pe/agent-contracts";
+
+/** Review and cells share one projection; the receipt retains authoritative structured values. */
+export const reviewValue = showCellValue;
 export const reviewChange = (before: unknown, after: unknown): string =>
   `${reviewValue(before)} \u2192 ${reviewValue(after)}`;
 

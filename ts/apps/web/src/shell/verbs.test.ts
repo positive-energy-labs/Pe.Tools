@@ -854,7 +854,7 @@ test("kernel reviews always project exact changes even when a presenter omits th
   );
   const result = reviewed(await invoke(env.ctx, verb, null, { stage: "sheet" }));
   expect(result.ticket.presentation.rows).toContain(
-    'Update Amperage: 1.01 A \u2192 {"value":"1.1","unit":"Amperes"}',
+    'Update Amperage: 1.01 A \u2192 1.1 Amperes',
   );
   await invoke(env.ctx, verb, null, { stage: "sheet" }, { kind: "cancel", ticket: result.ticket });
 });

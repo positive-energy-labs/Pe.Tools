@@ -30,13 +30,24 @@ export type MeasuredValue = z.infer<typeof measuredValueSchema>;
 export const scheduleCellValueSchema = z.union([z.string(), measuredValueSchema]);
 export type ScheduleCellValue = z.infer<typeof scheduleCellValueSchema>;
 
-/** The one word for a cell value, wherever it is drawn: a measured value reads with its unit. */
+/** Forge unit ids are transport identities; display their unit name, never the namespace/version. */
+const unitLabel = (unit: string): string => {
+  const name = /^autodesk\.unit\.unit:([^-]+)-[\d.]+$/.exec(unit)?.[1];
+  if (!name) return unit;
+  return name.replace(/([a-z\d])([A-Z])/g, "$1 $2").replace(/^./, c => c.toUpperCase());
+};
+
+/** The shared cell/review projection; formatted text never changes the stored value. */
 export const showCellValue = (value: unknown): string => {
   if (typeof value === "string") return value;
-  const measured = measuredValueSchema.safeParse(value);
-  return measured.success
-    ? (measured.data.display ?? `${measured.data.value} ${measured.data.unit}`)
-    : "";
+  if (value === undefined) return "(absent)";
+  if (value !== null && typeof value === "object" && "value" in value
+      && typeof value.value === "string") {
+    const cell = value as { value: string; unit?: unknown; display?: unknown };
+    return typeof cell.display === "string" ? cell.display
+      : typeof cell.unit === "string" ? `${cell.value} ${unitLabel(cell.unit)}` : cell.value;
+  }
+  return JSON.stringify(value);
 };
 
 /** Trichotomy cell — no provenance extension (schedule cells have no PDF source). */

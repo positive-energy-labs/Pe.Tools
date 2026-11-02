@@ -1,3 +1,4 @@
+import { showCellValue } from "./schedule-grid-data.ts";
 import { familiesReadProgressSchema } from "./families-progress.ts";
 export { familiesReadProgressSchema, type FamiliesReadProgress } from "./families-progress.ts";
 import { workKeySchema } from "./route-state.ts";
@@ -191,7 +192,7 @@ export type FamilyCellValue = z.infer<typeof familyCellValueSchema>;
 /** The one word for a family cell: a measured value reads with its unit. */
 export const showFamilyCell = (value: unknown): string => {
   const cell = familyCellValueSchema.parse(value);
-  return cell.display ?? (cell.unit === undefined ? cell.value : `${cell.value} ${cell.unit}`);
+  return showCellValue(cell);
 };
 export const familyCellStateSchema = draftCellSchema(familyCellValueSchema);
 export type FamilyCellState = z.infer<typeof familyCellStateSchema>;

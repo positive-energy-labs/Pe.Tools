@@ -21,5 +21,5 @@ test("review includes exact before and structured after values for every change"
       ],
     },
   });
-  expect(review.rows.join("\n")).toContain('1.01 A \u2192 {"value":"1.1","unit":"Amperes"}');
+  expect(review.rows.join("\n")).toContain('1.01 A \u2192 1.1 Amperes');
 });
