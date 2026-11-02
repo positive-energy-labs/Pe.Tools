@@ -30,6 +30,32 @@ export interface RouteRegistration {
   readonly hosted: HostedRouteView;
 }
 
+/**
+ * A shipped route's admission refusal, or null. Builtins register at module scope, so a throw there
+ * would blank every route over one stale or bad graph; the refused route draws this message instead
+ * (mountRoute), and the rest stay usable. Pod graphs carry no build stamp and admit through Pod transfer.
+ */
+export function builtinAdmission(graph: RouteGraph<any, any>): string | null {
+  if (graph.key.startsWith("pod.")) return null;
+  if (!graph.moduleHash) return `Missing build source hash for ${graph.key}`;
+  try {
+    validateRouteModule({
+      version: 1,
+      namespace: "builtin",
+      key: `builtin:${graph.key}`,
+      moduleHash: graph.moduleHash,
+      graph,
+      bodies: null,
+    });
+    return null;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return message.includes("hash")
+      ? `${message}. Run \`vp run codegen:routes\` in ts/packages/agent-contracts.`
+      : message;
+  }
+}
+
 /** One registration owns discovery, action attribution and the actual hosted surface. */
 export function createRouteRegistry() {
   const routes = new Map<string, RouteRegistration>();
@@ -41,17 +67,11 @@ export function createRouteRegistry() {
   };
 
   const registry = {
+    /** A refused builtin still registers: its route draws the refusal where a person looks. */
     registerGraph<P, W>(graph: RouteGraph<P, W>, hosted: HostedRouteView) {
-      const moduleHash = graph.moduleHash;
-      if (!moduleHash) throw Error(`Missing build source hash for ${graph.key}`);
-      return registry.registerModule({
-        version: 1,
-        namespace: "builtin",
-        key: `builtin:${graph.key}`,
-        moduleHash,
-        graph,
-        bodies: hosted,
-      });
+      const refusal = builtinAdmission(graph);
+      if (refusal) console.error(`Route ${graph.key} refused: ${refusal}`);
+      return registry.register({ manifest: graph, graph, hosted });
     },
     registerModule(module: RouteModule<HostedRouteView>) {
       validateRouteModule(module);

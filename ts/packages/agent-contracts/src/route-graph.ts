@@ -39,7 +39,11 @@ export type FieldDecl<S extends z.ZodType = z.ZodType> = Omit<RouteField<S>, key
   Partial<FieldPolicy> & {
     label?: string;
     control?: "color" | "switch";
-    editor?: "pane" | "situation";
+    /**
+     * Where a person edits the field. A field with a picker or an enum draws a picker; free text is
+     * the exception the field declares (`text`), never the default for a bare string or number.
+     */
+    editor?: "pane" | "situation" | "text";
     picker?: {
       reading: string;
       placeholder: string;
@@ -108,6 +112,8 @@ export interface VerbDecl<S extends z.ZodType = z.ZodType> {
   label: string;
   says?: string;
   effect?: "query" | "command";
+  /** The Situation band's framed verb. Undeclared, the band frames the stage's first model write. */
+  primary?: true;
 }
 
 /** Dynamic placement declares its possible ids without executing a row callback at admission.
@@ -288,6 +294,8 @@ export interface RouteGraph<P = Record<string, unknown>, W = unknown> {
   } & Readonly<Record<string, FieldDecl & { role: FieldRole }>>;
   readings: Readonly<Record<string, ReadingDecl<P>>>;
   verbs: Readonly<Record<string, VerbDecl>>;
+  /** The verb every pane head's refresh runs (a host cache read again); absent, it re-reads the pane's draws. Never a stage verb. */
+  refresh?: string;
   panes: Readonly<Record<string, PaneDecl>>;
   layout: LayoutNode;
   stages: Readonly<Record<string, StageDecl>>;
@@ -553,6 +561,7 @@ export function validateRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphRef
     const checkVerb = (id: string, path: string) => {
       if (!Object.hasOwn(graph.verbs, id)) refuse("missing-verb", path, `Unknown verb '${id}'`);
     };
+    if (graph.refresh) checkVerb(graph.refresh, "refresh");
     for (const [id, declared] of Object.entries(graph.panes)) {
       for (const reading of declared.draws)
         if (!Object.hasOwn(graph.readings, reading))
@@ -576,6 +585,11 @@ export function validateRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphRef
         scope.set(key, verb);
       };
       for (const verb of verbs) checkVerb(verb, `stages.${id}.verbs`);
+      // The pane head owns refresh; a stage verb that refreshes would draw it twice.
+      if (graph.refresh && stage.verbs.includes(graph.refresh))
+        refuse("invalid-graph", `stages.${id}.verbs`, `'${graph.refresh}' is the pane head's refresh`);
+      if (stage.verbs.filter((verb) => graph.verbs[verb]?.primary).length > 1)
+        refuse("invalid-graph", `stages.${id}.verbs`, "A stage frames at most one primary verb");
       const stageScope = new Map<string, string>();
       for (const verb of stage.verbs) {
         const chord = graph.verbs[verb]?.chord;

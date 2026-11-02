@@ -28,6 +28,7 @@ import {
 } from "../../../../packages/kit/src/components/lang/graph-layout";
 import { reduceLayout } from "../../../../packages/kit/src/components/lang/layout-graph";
 import { PrimaryRouteControls } from "../navigation/route-controls";
+import { builtinAdmission } from "@pe/kit/route-registry";
 import { RouteVisibility, useRouteCurrent, useRouteSearchSlice } from "../route/activity";
 import { routeSearch, useRouteOwner } from "#/shell/owner";
 import { Ladder } from "../route/ladder";
@@ -36,7 +37,7 @@ import { LadderPicker, useDocumentLadder } from "../route/situation-ladder";
 import { useInitialUrlPage, useUrlPage } from "../route/url";
 import { bindGraphChords } from "./keys";
 import { SituationFields, PageControl } from "./situation-fields";
-import { SituationBand, TimelineHead } from "./situation-band";
+import { SituationBand, TimelineHead, rankVerbs } from "./situation-band";
 import {
   CONFLICT_REFUSAL,
   createGraphMount,
@@ -111,6 +112,9 @@ function Refused({ refusals }: { refusals: Readonly<ReturnType<typeof mountRefus
 /** One declaration produces one mounted owner. Admission runs before any owner or resource exists. */
 export function mountRoute<P, W>(graph: RouteGraph<P, W>, adapters: RouteAdapters<P, W>) {
   const refusals = mountRefusals(graph, adapters);
+  // Only stamped graphs (a graph.ts the build compiled) admit as builtins; inline graphs carry none.
+  const admission = graph.moduleHash ? builtinAdmission(graph) : null;
+  if (admission) refusals.push({ code: "invalid-graph", path: "module", message: admission });
   for (const id of Object.keys(graph?.panes ?? {})) {
     if (!adapters.bodies[id] && !adapters.frames?.[id] && !graph.panes[id]?.history)
       refusals.push({
@@ -307,7 +311,7 @@ function FixtureChrome<P, W>({ graph, name }: { graph: RouteGraph<P, W>; name: s
   const router = useRouter({ warn: false });
   return (
     <section aria-label="Fixture lane" data-tone="caution">
-      <b>Fixture · {name}</b> <span>In-memory Work · host commands disabled</span>
+      <b>Fixture · {name}</b> <span>In-memory Work · host commands disabled</span>{" "}
       <label>
         Seed{" "}
         <select
@@ -560,6 +564,7 @@ export function GraphRouteView<P, W>({
               enabled={!hidden && current()}
               status={status}
               hosted={hosted}
+              thread={thread}
             />
           )}
           {layout &&
@@ -648,7 +653,7 @@ function MountedPane<P, W>({
           set={(value) => owner.view.setPage({ [subject.field]: value } as Partial<P>)}
         />
       )}
-      <PaneHead owner={owner} draws={draws} enabled={enabled} />
+      <PaneHead owner={owner} draws={draws} enabled={enabled} refresh={graph.refresh} />
     </>
   );
   const renderPane: PaneApi = (content, furniture) =>
@@ -696,10 +701,13 @@ function PaneHead<P, W>({
   owner,
   draws,
   enabled,
+  refresh,
 }: {
   owner: GraphMount<P, W>;
   draws: readonly string[];
   enabled: boolean;
+  /** The graph's refresh verb: one press reads the host again and invalidates what it dirties. */
+  refresh?: string;
 }) {
   const status = useSyncExternalStore(
     (notify) => owner.readings.watch(draws, notify),
@@ -722,8 +730,10 @@ function PaneHead<P, W>({
       <Button
         label="Refresh"
         icon={RefreshCw}
-        refusal={enabled ? null : "pane hidden"}
-        onClick={() => owner.readings.refresh(draws)}
+        refusal={enabled ? (refresh ? owner.control(refresh).refusal : null) : "pane hidden"}
+        onClick={() =>
+          refresh ? void owner.control(refresh).run() : owner.readings.refresh(draws)
+        }
       />
     </>
   );
@@ -766,19 +776,19 @@ function GraphSituation<P, W>({
   enabled,
   status,
   hosted,
+  thread,
 }: {
   graph: RouteGraph<P, W>;
   owner: GraphMount<P, W>;
   enabled: boolean;
   status: WorkScopeStatus;
   hosted: boolean;
+  thread?: string;
 }) {
   const stageId = owner.stage();
   const stage = graph.stages[stageId]!;
   const stageField = graphFields(graph).find(([, field]) => field.role === "stage")?.[0];
-  const verbs = owner
-    .stageVerbs()
-    .map((id) => (
+  const verbs = rankVerbs(owner.stageVerbs(), owner.verbs).map((id) => (
       <GraphVerb key={id} id={id} verb={owner.verbs[id]!} owner={owner} enabled={enabled} />
     ));
   const content = (
@@ -847,7 +857,11 @@ function GraphSituation<P, W>({
       }
       verbs={verbs}
       timeline={
-        <TimelineHead owner={owner} history={<GraphHistory owner={owner} label="Route log" />} />
+        <TimelineHead
+          owner={owner}
+          thread={thread}
+          history={<GraphHistory owner={owner} label="Route log" />}
+        />
       }
     />
   );

@@ -63,3 +63,8 @@
   width: 100%;
   justify-content: flex-start;
 }
+[data-slot="consent-window"] {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}

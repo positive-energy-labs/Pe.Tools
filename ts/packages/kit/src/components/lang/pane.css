@@ -149,6 +149,12 @@
 [data-slot="pane-strip"] {
   gap: calc(var(--space-unit) * 2);
 }
+/* A word control in the head (the subject picker) gives way by ellipsis; it never paints under the
+   icon beside it (the group already lets it shrink; nowrap alone overflowed). */
+[data-slot="pane-actions"] [data-list-trigger] {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 [data-slot="pane-actions"] > * + *,
 [data-slot="pane-strip"] > * + * {
   border-left: 1px solid var(--pe-line);

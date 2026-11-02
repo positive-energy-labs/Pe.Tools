@@ -3,13 +3,14 @@
  * stands framed, the rest wait in an overflow, and the Timeline head closes the line. Layout only:
  * mount.tsx renders each verb and each context control; this file owns where they sit.
  *
- * TODO: H — graph routes adopt the band through `.artifacts/runs/fixture-20261102-h/band-hook.patch`
- * (GraphSituation renders SituationBand + TimelineHead, SituationLog deleted, the band rides the app
- * bar with the Ctrl+. drawer as the narrow-bar fallback). Unit H may not edit mount.tsx (unit G1's).
- * Owed: the route has no Reject verb for a consent window yet; Reject lives in Pea's composer.
+ * The Timeline head's Reject answers the same host consent API as Pea's composer (`thread.permission`).
  */
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { MoreHorizontal } from "lucide-react";
+import type { VerbDecl } from "@pe/agent-contracts";
+import { Button } from "@pe/kit/lang/button";
+import { harnessClient } from "#/workbench/provider/harness-client";
+import { resolveWorkbenchConfig } from "#/workbench/config";
 import { Popover, PopoverTrigger, SubjectPopoverContent } from "@pe/kit/lang/popover";
 import type { GraphMount } from "./mount-owner";
 import { activityTime, type TimelineEntry } from "./timeline";
@@ -61,6 +62,25 @@ export function SituationBand({
   );
 }
 
+/**
+ * The band's ranking: the verb that declares `primary`, else the stage's first model write (its
+ * press previews, then applies: ADR 0027 rule 10), else the first declared. The rest keep their order.
+ */
+export function rankVerbs(ids: readonly string[], verbs: Readonly<Record<string, VerbDecl>>) {
+  const primary =
+    ids.find((id) => verbs[id]?.primary) ??
+    ids.find((id) => verbs[id]?.effect === "command") ??
+    ids[0];
+  return primary === undefined ? [] : [primary, ...ids.filter((id) => id !== primary)];
+}
+
+/** The thread whose run consent a receipt waits on: Pea's own, else the route's bound thread. */
+function consentThread(entry: TimelineEntry, bound?: string) {
+  const caller = (entry.basis as { receipt?: { caller?: { kind: string; thread?: string } } })
+    ?.receipt?.caller;
+  return caller?.kind === "pea" ? caller.thread : bound;
+}
+
 /** The latest entry per press or receipt; a consent window is open until its entry moves on. */
 export function openConsentWindows(entries: readonly TimelineEntry[], now: number) {
   const latest = new Map<string, TimelineEntry>();
@@ -82,9 +102,11 @@ export function openConsentWindows(entries: readonly TimelineEntry[], now: numbe
 export function TimelineHead<P, W>({
   owner,
   history,
+  thread,
 }: {
   owner: GraphMount<P, W>;
   history: ReactNode;
+  thread?: string;
 }) {
   const entries = useSyncExternalStore(
     (notify) => owner.timeline.subscribe(notify),
@@ -102,16 +124,38 @@ export function TimelineHead<P, W>({
   const last = timeline.at(-1);
   return (
     <span data-slot="timeline-head" role="group" aria-label="Timeline">
-      {windows.map(({ entry, left }) => (
-        <span
-          key={entry.outcome?.receiptId ?? entry.press}
-          role="timer"
-          data-tone="caution"
-          aria-label={`${entry.verb ?? "Command"} applies in`}
-        >
-          {entry.verb ?? "command"} · {left === null ? "awaiting approval" : `Reject? ${left}s`}
-        </span>
-      ))}
+      {windows.map(({ entry, left }) => {
+        const window = entry.outcome!.consentWindow!;
+        const consent = consentThread(entry, thread);
+        return (
+          <span key={entry.outcome?.receiptId ?? entry.press} data-slot="consent-window">
+            <span role="timer" data-tone="caution" aria-label={`${entry.verb ?? "Command"} applies in`}>
+              {entry.verb ?? "command"} · {left === null ? "awaiting approval" : `${left}s`}
+            </span>
+            <Button
+              label={`Reject ${entry.verb ?? "command"}`}
+              refusal={
+                owner.fixture
+                  ? "Fixture lane: host commands disabled"
+                  : consent
+                    ? null
+                    : "No thread holds this consent window"
+              }
+              onClick={() =>
+                // `stop_writes` is the host's reject option (run-consent.ts): it closes the window
+                // and stops this thread's writes until a fresh consent.
+                void harnessClient(resolveWorkbenchConfig().origin).permission(
+                  consent!,
+                  window.requestId,
+                  "stop_writes",
+                )
+              }
+            >
+              Reject?
+            </Button>
+          </span>
+        );
+      })}
       <Popover>
         <PopoverTrigger aria-label="Open the Timeline" data-slot="timeline-trigger">
           {last ? (

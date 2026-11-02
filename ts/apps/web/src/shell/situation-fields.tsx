@@ -21,7 +21,10 @@ export function SituationFields<P, W>({
   const fields = graphFields(graph).filter(
     ([, field]) =>
       field.editor !== "pane" &&
-      (field.editor === "situation" || field.picker || ["subject", "draft"].includes(field.role)),
+      (field.editor === "situation" ||
+        field.editor === "text" ||
+        field.picker ||
+        ["subject", "draft"].includes(field.role)),
   );
   const draws = useMemo(
     () => [...new Set(fields.flatMap(([, field]) => (field.picker ? [field.picker.reading] : [])))],
@@ -148,8 +151,9 @@ export function PageControl({
         />
       </Label>
     );
-  // Structured Page values need a declared picker; a codec is not a human editor.
-  if (!["string", "number"].includes(schema.def.type)) return null;
+  // Free text is declared, never inferred: a bare string has a roster somewhere, and an empty box
+  // beside the route's name reads as a question nobody asked. Structured values need a picker.
+  if (field.editor !== "text" || !["string", "number"].includes(schema.def.type)) return null;
   return (
     <Label>
       {label}
