@@ -342,53 +342,82 @@ const makeRunConsents = Effect.gen(function* () {
     const run = runs.get(key(origin.root!))!;
     if (run.state.state === "allowed")
       return { run: run.ref, decision: run.state.decision } as CommandConsent;
-    const answer = Deferred.makeUnsafe<AllowDecision, ConsentError>();
-    run.waiters.set(id, { run: origin.run!, answer });
-    if (run.state.state === "idle") {
-      const requestId = yield* Effect.orDie(crypto.randomUUIDv4),
-        auto = sink.autoApprove(),
-        deadlineMs = auto ? yield* windowDeadline : undefined,
-        deadline =
-          deadlineMs === undefined ? undefined : DateTime.formatIso(DateTime.makeUnsafe(deadlineMs));
-      run.state = { state: "waiting", requestId, ...(deadline ? { deadline } : {}), commands: [id] };
-      yield* notify(run, {
-        kind: "permission_request",
-        turnId: run.ref.turn,
-        requestId,
-        ...(deadline ? { deadline } : {}),
-        scope: "run",
-        commands: [id],
-        toolCall: {
-          toolCallId: `writes:${run.ref.turn}`,
-          title: `First write: ${describe(footprint, sink.documentName)}. Then all writes in this thread until Stop.`,
-        },
-        options: [
-          { optionId: "allow_now", name: auto ? "Allow now" : "Allow", kind: "allow_once" },
-          { optionId: "stop_writes", name: "Reject", kind: "reject_once" },
-        ],
-      });
-      if (deadlineMs !== undefined) {
-        const answered = Deferred.makeUnsafe<void>();
-        run.answered = answered;
-        // Forked into the service scope: closing it interrupts every open window.
-        yield* Effect.forkIn(
-          consentWindow(answered, deadlineMs).pipe(
-            Effect.flatMap((end) =>
-              end === "deadline"
-                ? decide(run.ref.thread, requestId, "allow_now", "deadline").pipe(
-                    Effect.catch((error) => Effect.logWarning(error.message)),
-                  )
-                : Effect.void,
-            ),
-          ),
-          scope,
+    return yield* Effect.scoped(
+      Effect.gen(function* () {
+        const waiter = yield* Effect.acquireRelease(
+          Effect.sync(() => {
+            const waiter = {
+              run: origin.run!,
+              answer: Deferred.makeUnsafe<AllowDecision, ConsentError>(),
+            };
+            run.waiters.set(id, waiter);
+            return waiter;
+          }),
+          (waiter) =>
+            Effect.gen(function* () {
+              // An older invocation must never unregister a replacement with the same command id.
+              if (run.waiters.get(id) !== waiter) return;
+              run.waiters.delete(id);
+              if (run.state.state === "waiting") {
+                run.state.commands = run.state.commands.filter((command) => command !== id);
+                yield* notify(run);
+              }
+            }),
         );
-      }
-    } else if (run.state.state === "waiting" && !run.state.commands.includes(id)) {
-      run.state.commands.push(id);
-      yield* notify(run);
-    }
-    return { run: run.ref, decision: yield* Deferred.await(answer) } as CommandConsent;
+        if (run.state.state === "idle") {
+          const requestId = yield* Effect.orDie(crypto.randomUUIDv4),
+            auto = sink.autoApprove(),
+            deadlineMs = auto ? yield* windowDeadline : undefined,
+            deadline =
+              deadlineMs === undefined
+                ? undefined
+                : DateTime.formatIso(DateTime.makeUnsafe(deadlineMs));
+          run.state = {
+            state: "waiting",
+            requestId,
+            ...(deadline ? { deadline } : {}),
+            commands: [id],
+          };
+          yield* notify(run, {
+            kind: "permission_request",
+            turnId: run.ref.turn,
+            requestId,
+            ...(deadline ? { deadline } : {}),
+            scope: "run",
+            commands: [id],
+            toolCall: {
+              toolCallId: `writes:${run.ref.turn}`,
+              title: `First write: ${describe(footprint, sink.documentName)}. Then all writes in this thread until Stop.`,
+            },
+            options: [
+              { optionId: "allow_now", name: auto ? "Allow now" : "Allow", kind: "allow_once" },
+              { optionId: "stop_writes", name: "Reject", kind: "reject_once" },
+            ],
+          });
+          if (deadlineMs !== undefined) {
+            const answered = Deferred.makeUnsafe<void>();
+            run.answered = answered;
+            // Forked into the service scope: closing it interrupts every open window.
+            yield* Effect.forkIn(
+              consentWindow(answered, deadlineMs).pipe(
+                Effect.flatMap((end) =>
+                  end === "deadline"
+                    ? decide(run.ref.thread, requestId, "allow_now", "deadline").pipe(
+                        Effect.catch((error) => Effect.logWarning(error.message)),
+                      )
+                    : Effect.void,
+                ),
+              ),
+              scope,
+            );
+          }
+        } else if (run.state.state === "waiting" && !run.state.commands.includes(id)) {
+          run.state.commands.push(id);
+          yield* notify(run);
+        }
+        return { run: run.ref, decision: yield* Deferred.await(waiter.answer) } as CommandConsent;
+      }),
+    );
   });
 
   const closeAll = Effect.suspend(() =>
