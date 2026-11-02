@@ -6,7 +6,16 @@
  * and Forward step through what the Situation targeted; a gesture replaces the entry instead.
  * Nothing here hand-rolls `new URL().searchParams`.
  */
-import { routeAddress, type History, type RouteKey, type RoutePage } from "@pe/agent-contracts";
+import {
+  routeAddress,
+  THREAD_TABS_MAX,
+  threadTabSchema,
+  type History,
+  type RouteKey,
+  type RoutePage,
+} from "@pe/agent-contracts";
+import { fromStandardSchema } from "@pe/host-contracts/contracts";
+import { Exit, Schema } from "effect";
 import { useRouter, useRouterState, type SearchMiddleware } from "@tanstack/react-router";
 import { useEffect, useState, useRef } from "react";
 import { z } from "zod";
@@ -259,13 +268,20 @@ export function useInitialUrlPage<P>(url: UrlPage<P> | null): Partial<P> {
   )[0];
 }
 
+/** Tab memory as `workbench/tabs.ts` writes it: the window's Places, decoded (ADR 0029 rule 7). */
+const PlacesMemory = Schema.fromJsonString(
+  fromStandardSchema(threadTabSchema.array().max(THREAD_TABS_MAX), "Places"),
+);
+
 /** Defaults are applied by UrlPage.read after merging tab memory and explicit deep-link keys. */
 export function tabPageSearch(pathname: string): Record<string, unknown> | undefined {
   try {
-    const tabs = JSON.parse(sessionStorage.getItem("pe.places") ?? "[]") as {
-      id: string;
-      link: string;
-    }[];
+    // React caller until phase 5: memory from another build that does not decode restores nothing.
+    const memory = Schema.decodeUnknownExit(PlacesMemory)(
+      sessionStorage.getItem("pe.places") ?? "[]",
+    );
+    if (Exit.isFailure(memory)) return undefined;
+    const tabs = memory.value;
     const focused = sessionStorage.getItem("pe.place.focus");
     const matches = tabs.filter(
       (tab) => new URL(tab.link, "http://tab.invalid").pathname === pathname,
@@ -274,7 +290,8 @@ export function tabPageSearch(pathname: string): Record<string, unknown> | undef
     return tab
       ? Object.fromEntries(new URL(tab.link, "http://tab.invalid").searchParams)
       : undefined;
-  } catch (error) { console.warn("ts/apps/web/src/route/url.ts: fallback after failure", error);
+  } catch (error) {
+    console.warn("ts/apps/web/src/route/url.ts: fallback after failure", error);
     return undefined;
   }
 }
@@ -288,18 +305,26 @@ export function restorePageSearch(memory?: Record<string, unknown>, url?: Record
     : undefined;
 }
 
-
 /** Restore before device admission, so a bare fixture Place never falls into the host lane. */
 export function useRestoreTabPage() {
   const router = useRouter();
-  const at = useRouterState({select: (state) => state.location});
+  const at = useRouterState({ select: (state) => state.location });
   const explicit = new Set(new URLSearchParams(at.searchStr).keys());
-  const search = restorePageSearch(
-    "__pePageMove" in at.state || "__peRouteTab" in at.state ? undefined : tabPageSearch(at.pathname),
-    Object.fromEntries(Object.entries(at.search).filter(([key]) => explicit.has(key))),
-  ) ?? {};
+  const search =
+    restorePageSearch(
+      "__pePageMove" in at.state || "__peRouteTab" in at.state
+        ? undefined
+        : tabPageSearch(at.pathname),
+      Object.fromEntries(Object.entries(at.search).filter(([key]) => explicit.has(key))),
+    ) ?? {};
   const restoring = Object.keys(search).some((key) => !(key in at.search));
   useEffect(() => {
-    if (restoring) void router.navigate({to:at.pathname,search,replace:true,ignoreBlocker:true} as never);
+    if (restoring)
+      void router.navigate({
+        to: at.pathname,
+        search,
+        replace: true,
+        ignoreBlocker: true,
+      } as never);
   }, [restoring, at.href]);
 }

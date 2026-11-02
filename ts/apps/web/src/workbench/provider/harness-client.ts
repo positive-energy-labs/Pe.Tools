@@ -9,18 +9,26 @@ import type {
   HarnessEvent,
   HarnessThreadSummary,
   promptRequestSchema,
-  ReadingFrame,
   ReadingRequest,
   UpdateThreadRequest,
   PutTarget,
   TurnElementNamesRequest,
 } from "@pe/agent-contracts";
+import { harnessThreadSummarySchema, readingFrameSchema } from "@pe/agent-contracts";
 import { followThread } from "@pe/agent-contracts/chat-state";
+import { fromStandardSchema } from "@pe/host-contracts/contracts";
+import { Cause, Exit, Schema } from "effect";
 import type { z } from "zod";
 import { openEventSource, peReadings } from "#/readings";
 
 /** What a send posts: text, attachments, mentions (`promptRequestSchema`); the client mints its id. */
 export type PromptRequest = Omit<z.input<typeof promptRequestSchema>, "id">;
+
+/** A thread's SSE frame and the thread list's snapshot value, decoded (ADR 0029 rule 7). */
+const ThreadFrame = Schema.fromJsonString(fromStandardSchema(readingFrameSchema, "ReadingFrame"));
+const ThreadSummaries = Schema.Array(
+  fromStandardSchema(harnessThreadSummarySchema, "HarnessThreadSummary"),
+);
 
 export function harnessClient(origin: string) {
   const client = createPeClient(origin, hostFetch);
@@ -47,8 +55,14 @@ export function harnessClient(origin: string) {
       let seen = false;
       return peReadings.subscribe({ kind: "threads" }, (frame) => {
         if (frame.kind === "snapshot") {
+          // React caller until phase 5: a list that does not decode is a fault, never painted.
+          const summaries = Schema.decodeUnknownExit(ThreadSummaries)(frame.value);
+          if (Exit.isFailure(summaries))
+            return onFault(
+              new Error(`Thread list does not decode: ${Cause.pretty(summaries.cause)}`),
+            );
           seen = true;
-          onChange(frame.value as HarnessThreadSummary[]);
+          onChange([...summaries.value]);
         } else if (frame.kind === "stale" && seen)
           onFault(new Error("Thread list is not current; reconnecting."));
       });
@@ -131,7 +145,15 @@ export function streamThread(options: {
     source = events;
     events.onmessage = (message: MessageEvent<string>) => {
       if (message.lastEventId) cursor = Number(message.lastEventId);
-      const step = followThread(last, JSON.parse(message.data) as ReadingFrame);
+      // Promise/React caller until phase 5: a frame that does not decode is a fault, then a reread.
+      const frame = Schema.decodeUnknownExit(ThreadFrame)(message.data);
+      if (Exit.isFailure(frame)) {
+        stop();
+        onFault?.(new Error(`Thread frame does not decode: ${Cause.pretty(frame.cause)}`));
+        onReread();
+        return;
+      }
+      const step = followThread(last, frame.value);
       if (step.kind === "apply") {
         last = step.event.seq;
         onEvent(step.event);

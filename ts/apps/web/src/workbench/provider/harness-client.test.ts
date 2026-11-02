@@ -115,4 +115,33 @@ describe("streamThread", () => {
     expect(sources).toHaveLength(2);
     stop();
   });
+  it("a frame that does not decode is a fault and a reread, never an applied event", () => {
+    const sources: FakeSource[] = [];
+    const open = ((url: string) => {
+      const source = new FakeSource(url);
+      sources.push(source);
+      return source;
+    }) as unknown as OpenEvents;
+    const seen: number[] = [];
+    const faults: string[] = [];
+    let rereads = 0;
+    streamThread({
+      origin: "http://host",
+      threadId: "th 1",
+      cursor: 40,
+      lastSeq: 4,
+      open,
+      onEvent: (event) => seen.push(event.seq),
+      onReread: () => rereads++,
+      onFault: (error) => faults.push(error.message),
+    });
+    sources[0]!.onmessage?.({
+      data: JSON.stringify({ kind: "bogus", key: "k", id: 41 }),
+      lastEventId: "41",
+    } as MessageEvent<string>);
+    expect(seen).toEqual([]);
+    expect(rereads).toBe(1);
+    expect(sources[0]!.closed).toBe(true);
+    expect(faults[0]).toContain("Thread frame does not decode");
+  });
 });
