@@ -168,18 +168,22 @@ export const RulesTree = memo(function RulesTree({
         row={(n) => {
           if (n.kind === "override")
             return {
+              // The drop cell takes its own line: inline beside the name it clipped at 280 px (Manual D #5).
               label: (
                 <span>
                   <span data-tone="caution">override</span> · {nameOf(n.id)}
-                  <DropCell
-                    segment="componentDrops"
-                    id={n.id}
-                    held={snapshot.nodes.find((x) => x.id === n.id)?.loss?.revitPressureDropInWg}
-                    work={work}
-                    label={`stated drop on ${nameOrFallback(nameOf(n.id))}`}
-                  />
                 </span>
               ),
+              sub: (
+                <DropCell
+                  segment="componentDrops"
+                  id={n.id}
+                  held={snapshot.nodes.find((x) => x.id === n.id)?.loss?.revitPressureDropInWg}
+                  work={work}
+                  label={`stated drop on ${nameOrFallback(nameOf(n.id))}`}
+                />
+              ),
+              lines: 2,
             };
           const rule = ruleByKey(n.key);
           const name = rule ? `${rule.family} : ${rule.type}` : n.key;
@@ -233,7 +237,7 @@ export const RulesTree = memo(function RulesTree({
                           snapshot.nodes.find((x) => x.id === first)?.loss?.revitPressureDropInWg
                         }
                         work={work}
-                        label={`stated drop on ${first}`}
+                        label={`stated drop on ${nameOrFallback(nameOf(first))}`}
                       />
                     ) : null}
                   </div>

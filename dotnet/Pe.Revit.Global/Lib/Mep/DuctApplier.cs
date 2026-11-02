@@ -171,14 +171,16 @@ public static class DuctApplier {
     private static IEnumerable<Item> StoreEntries(DuctLossStore? stored, DuctLossStore asked, DuctParameterSlots slots) {
         Item Entry(long? id, string kind, string? key, string before, string after) =>
             new(id, kind, before) { Key = key, After = after, Write = () => after };
-        var had = (stored?.Slots ?? new DuctParameterSlots()).WithDefaults();
+        // A model with no record held no slot: "none", never the C# defaults (Manual D #5 defect 8 read
+        // PE_M_Fan_AirFlowDesign there while the resolver used PE_M_Fan_AirFlow).
+        var had = stored?.Slots?.WithDefaults();
         var names = new[] {
-            ("fanStatic", had.FanStatic, slots.FanStatic),
-            ("fanFlow", had.FanFlow, slots.FanFlow),
-            ("componentDrop", had.ComponentDrop, slots.ComponentDrop),
-            ("terminalDrop", had.TerminalDrop, slots.TerminalDrop),
-            ("fittingCoefficient", had.FittingCoefficient, slots.FittingCoefficient),
-            ("terminalFlow", had.TerminalFlow, slots.TerminalFlow)
+            ("fanStatic", had?.FanStatic, slots.FanStatic),
+            ("fanFlow", had?.FanFlow, slots.FanFlow),
+            ("componentDrop", had?.ComponentDrop, slots.ComponentDrop),
+            ("terminalDrop", had?.TerminalDrop, slots.TerminalDrop),
+            ("fittingCoefficient", had?.FittingCoefficient, slots.FittingCoefficient),
+            ("terminalFlow", had?.TerminalFlow, slots.TerminalFlow)
         };
         foreach (var (name, before, after) in names)
             if (!string.Equals(before, after, StringComparison.Ordinal))

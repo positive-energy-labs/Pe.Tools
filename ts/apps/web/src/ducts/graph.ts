@@ -721,7 +721,8 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = defineRoute
 
         split(
           "stack",
-          { axis: "v", sized: "end", size: 176 },
+          // The rules stack holds editable override rows; 176 px clipped them at 1920 (Manual D #5).
+          { axis: "v", sized: "end", size: 300 },
 
           split(
             "scope-upper",
