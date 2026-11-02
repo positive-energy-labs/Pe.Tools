@@ -179,7 +179,7 @@ export function createWorkJournal(key: WorkKey) {
       message: `${step.label} was changed elsewhere at r${at}`,
     };
   };
-  const accept = (acknowledged: WorkWriteAck, detail?: JournalDetail): void => {
+  const applyAcknowledgement = (acknowledged: WorkWriteAck, detail?: JournalDetail): void => {
     if (workKey(acknowledged.key) !== identity) return;
     const ack = structuredClone(acknowledged);
     // Local callbacks and the host stream can deliver the same acknowledgement twice.
@@ -298,6 +298,28 @@ export function createWorkJournal(key: WorkKey) {
         cursor: 1,
       });
     move("apply", undo.at(-1)!, pea ? "pea" : "human", ack.at ?? Date.now());
+  };
+
+  // Receipts outlive the visible revision and undo branch, including start-fresh.
+  const receipts = new Map<number, WorkWriteAck>();
+  const reconcile = (
+    ack: WorkWriteAck,
+    detail?: JournalDetail,
+  ): "recorded" | "duplicate" | "contradiction" | "wrong-work" => {
+    if (workKey(ack.key) !== identity) return "wrong-work";
+    const canonical = (write: WorkWriteAck) => {
+      const { replay: _replay, key: _key, ...rest } = write;
+      return canonicalRouteInput({ ...rest, key: identity });
+    };
+    const prior = receipts.get(ack.revision);
+    if (prior) return canonical(prior) === canonical(ack) ? "duplicate" : "contradiction";
+    receipts.set(ack.revision, structuredClone(ack));
+    // Late history is retained verbatim. Never replay it into a newer undo branch or Work.
+    applyAcknowledgement(ack, detail);
+    return "recorded";
+  };
+  const accept = (ack: WorkWriteAck, detail?: JournalDetail): void => {
+    reconcile(ack, detail);
   };
 
   const replay = async (
@@ -453,6 +475,7 @@ export function createWorkJournal(key: WorkKey) {
   return {
     key: structuredClone(key),
     accept,
+    reconcile,
     /** A read proves values only at its own revision; a newer acknowledgement invalidates it. */
     observe(snapshot: { revision: number; doc: unknown }) {
       // A delayed Reading cannot erase already accepted history. A revision is not a lifetime id.
@@ -521,7 +544,15 @@ export function createWorkJournal(key: WorkKey) {
             step.notWritten = { invocation: receipt.id, reason: receipt.error };
         }
       }
-      return structuredClone({ revision, undo, redo, busy, last, moves });
+      return structuredClone({
+        revision,
+        undo,
+        redo,
+        busy,
+        last,
+        moves,
+        receipts: [...receipts.values()].sort((a, b) => a.revision - b.revision),
+      });
     },
   };
 }

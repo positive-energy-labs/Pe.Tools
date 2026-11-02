@@ -84,28 +84,46 @@ export type RoleKeys<G extends RouteGraphJson, R> = {
   [K in keyof G["fields"]]: G["fields"][K]["role"] extends R ? K : never;
 }[keyof G["fields"]];
 
-declare const epoch: unique symbol;
-declare const pageEpoch: unique symbol;
+const epoch: unique symbol = Symbol("scope-epoch");
+const pageEpoch: unique symbol = Symbol("page-epoch");
 export type ScopeEpoch = { readonly [epoch]: true };
 export type PageEpoch = { readonly [pageEpoch]: true };
 export interface ScopeIdentity {
   readonly target: Immutable<ExecutionTarget> | null;
   readonly work: Immutable<WorkKey> | null;
 }
-/** Minted by one owner instance. Never reused across A→B→A or remounts. */
-export declare class ScopeToken {
-  private constructor();
-  private readonly scopeAuthority: void;
-  readonly identity: ScopeIdentity;
-  readonly epoch: ScopeEpoch;
+let mintScope: (identity: ScopeIdentity, epoch: ScopeEpoch) => ScopeToken;
+let mintAttempt: (scope: ScopeToken, channel: string, attempt: number) => AcceptanceToken;
+let mintInvocation: (id: string, basis: InvocationBasis) => InvocationToken;
+let mintLease: (basis: InvocationBasis) => LeaseToken;
+let mintRestore: (id: string) => RestoreToken;
+
+/** Minted by one owner instance. Never reused across A?B?A or remounts. */
+export class ScopeToken {
+  declare private readonly scopeAuthority: void;
+  private constructor(
+    readonly identity: ScopeIdentity,
+    readonly epoch: ScopeEpoch,
+  ) {
+    Object.freeze(this);
+  }
+  static {
+    mintScope = (identity, epoch) => new ScopeToken(identity, epoch);
+  }
 }
 /** Attempt sequence is channel-local; it is NOT a Work revision. */
-export declare class AcceptanceToken {
-  private constructor();
-  private readonly attemptAuthority: void;
-  readonly scope: ScopeToken;
-  readonly channel: string;
-  readonly attempt: number;
+export class AcceptanceToken {
+  declare private readonly attemptAuthority: void;
+  private constructor(
+    readonly scope: ScopeToken,
+    readonly channel: string,
+    readonly attempt: number,
+  ) {
+    Object.freeze(this);
+  }
+  static {
+    mintAttempt = (scope, channel, attempt) => new AcceptanceToken(scope, channel, attempt);
+  }
 }
 declare const causalParent: unique symbol;
 export type CausalParentId = string & { readonly [causalParent]: true };
@@ -117,32 +135,114 @@ export interface InvocationBasis {
   readonly workRevision: number | null;
   readonly dependencies: Readonly<Record<string, string>>;
 }
-export declare class InvocationToken implements InvocationBasis {
-  private constructor();
-  private readonly invocationAuthority: void;
-  readonly id: string;
+export class InvocationToken implements InvocationBasis {
+  declare private readonly invocationAuthority: void;
   readonly token: AcceptanceToken;
   readonly pageEpoch: PageEpoch;
   readonly pageRevision: number;
   readonly workRevision: number | null;
   readonly dependencies: Readonly<Record<string, string>>;
   readonly causalParent?: CausalParentId;
+  private constructor(
+    readonly id: string,
+    basis: InvocationBasis,
+  ) {
+    this.token = basis.token;
+    this.pageEpoch = basis.pageEpoch;
+    this.pageRevision = basis.pageRevision;
+    this.workRevision = basis.workRevision;
+    this.dependencies = Object.freeze({ ...basis.dependencies });
+    this.causalParent = basis.causalParent;
+    Object.freeze(this);
+  }
+  static {
+    mintInvocation = (id, basis) => new InvocationToken(id, basis);
+  }
 }
-export declare class LeaseToken implements InvocationBasis {
-  private constructor();
-  private readonly leaseAuthority: void;
+export class LeaseToken implements InvocationBasis {
+  declare private readonly leaseAuthority: void;
   readonly token: AcceptanceToken;
   readonly pageEpoch: PageEpoch;
   readonly pageRevision: number;
   readonly workRevision: number | null;
   readonly dependencies: Readonly<Record<string, string>>;
   readonly causalParent?: CausalParentId;
+  private constructor(basis: InvocationBasis) {
+    this.token = basis.token;
+    this.pageEpoch = basis.pageEpoch;
+    this.pageRevision = basis.pageRevision;
+    this.workRevision = basis.workRevision;
+    this.dependencies = Object.freeze({ ...basis.dependencies });
+    this.causalParent = basis.causalParent;
+    Object.freeze(this);
+  }
+  static {
+    mintLease = (basis) => new LeaseToken(basis);
+  }
 }
-export declare class RestoreToken {
-  private constructor();
-  private readonly restoreAuthority: void;
-  readonly id: string;
+export class RestoreToken {
+  declare private readonly restoreAuthority: void;
+  private constructor(readonly id: string) {
+    Object.freeze(this);
+  }
+  static {
+    mintRestore = (id) => new RestoreToken(id);
+  }
 }
+
+/** Kernel-only mint capability. Keep the issuer private to the owning kernel, not in a pane.
+ * Membership is exact instance identity; fields, prototypes and copied brands confer nothing.
+ * Epoch ownership does not imply freshness: the acceptance owner retires scopes and attempts. */
+export function createRouteTokenIssuer() {
+  const issued = new WeakSet<object>();
+  const pageEpochs = new WeakSet<PageEpoch>();
+  const own = <T extends object>(value: T): T => {
+    issued.add(value);
+    return value;
+  };
+  const owns = (value: unknown): boolean =>
+    typeof value === "object" && value !== null && issued.has(value);
+  const basisOwned = (basis: InvocationBasis) =>
+    basis.token instanceof AcceptanceToken && owns(basis.token) && pageEpochs.has(basis.pageEpoch);
+  return Object.freeze({
+    owns,
+    scope(identity: ScopeIdentity): ScopeToken {
+      const copy = structuredClone(identity);
+      const freeze = (value: unknown): void => {
+        if (value && typeof value === "object" && !Object.isFrozen(value)) {
+          Object.values(value).forEach(freeze);
+          Object.freeze(value);
+        }
+      };
+      freeze(copy);
+      return own(mintScope(copy, own(Object.freeze({ [epoch]: true }))));
+    },
+    pageEpoch(): PageEpoch {
+      const value: PageEpoch = Object.freeze({ [pageEpoch]: true });
+      pageEpochs.add(value);
+      return own(value);
+    },
+    attempt(scope: ScopeToken, channel: string, attempt: number): DecodeResult<AcceptanceToken> {
+      return owns(scope) && scope instanceof ScopeToken
+        ? { ok: true, value: own(mintAttempt(scope, channel, attempt)) }
+        : { ok: false, reason: "foreign-scope" };
+    },
+    invocation(id: string, basis: InvocationBasis): DecodeResult<InvocationToken> {
+      return basisOwned(basis)
+        ? { ok: true, value: own(mintInvocation(id, basis)) }
+        : { ok: false, reason: "foreign-basis" };
+    },
+    lease(basis: InvocationBasis): DecodeResult<LeaseToken> {
+      return basisOwned(basis)
+        ? { ok: true, value: own(mintLease(basis)) }
+        : { ok: false, reason: "foreign-basis" };
+    },
+    restore(id: string): RestoreToken {
+      return own(mintRestore(id));
+    },
+  });
+}
+export type RouteTokenIssuer = ReturnType<typeof createRouteTokenIssuer>;
 export type MoveOrigin =
   | {
       readonly kind: "human";
