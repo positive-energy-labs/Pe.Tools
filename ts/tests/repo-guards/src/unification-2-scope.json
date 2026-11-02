@@ -23,6 +23,8 @@
   { "key": "ducts.heal", "intent": "Mutate", "costClass": "Geometry", "scope": "DocumentWide" },
   { "key": "ducts.ports", "intent": "Read", "costClass": "Topology", "scope": "ElementIds" },
   { "key": "ducts.snapshot", "intent": "Read", "costClass": "Geometry", "scope": "DocumentWide" },
+  {"key": "ducts.snapshot.roster", "intent": "Read", "costClass": "Topology", "scope": "DocumentWide"},
+  {"key": "ducts.snapshot.walk", "intent": "Read", "costClass": "Geometry", "scope": "Selector"},
   { "key": "ducts.tables", "intent": "Read", "costClass": "External", "scope": "None" },
   { "key": "families.apply", "intent": "Mutate", "costClass": "Geometry", "scope": "DocumentWide" },
   { "key": "families.capture", "intent": "Read", "costClass": "Geometry", "scope": "ElementIds" },
@@ -73,6 +75,7 @@
     "costClass": "Metadata",
     "scope": "DocumentWide"
   },
+  {"key": "revit.catalog.electrical-circuits.roster", "intent": "Read", "costClass": "Topology", "scope": "DocumentWide"},
   {
     "key": "revit.catalog.electrical-circuits",
     "intent": "Read",
@@ -201,6 +204,7 @@
     "costClass": "Topology",
     "scope": "DocumentWide"
   },
+  {"key": "revit.detail.electrical-circuits.walk", "intent": "Read", "costClass": "Geometry", "scope": "Panel"},
   { "key": "revit.detail.schedules", "intent": "Read", "costClass": "Metadata", "scope": "View" },
   { "key": "revit.detail.sheets", "intent": "Read", "costClass": "Metadata", "scope": "View" },
   {
