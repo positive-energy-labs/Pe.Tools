@@ -104,16 +104,17 @@ test("lost SDK transport does not invent either dispatch or a no-effect refusal"
 });
 
 test.each([
-  { reason: "consent.stopped: root turn ended", status: 499 },
-  { reason: "Consumed input changed", status: 409 },
+  { kind: "cancelled" as const, reason: "rejected by you", status: 499 },
+  { kind: "refused" as const, reason: "The cancel option changed", status: 409 },
+  { kind: "refused" as const, reason: "Consumed input changed", status: 409 },
 ])(
   "SDK checkpoint $status blocks the process call before it starts",
-  async ({ reason, status }) => {
+  async ({ kind, reason, status }) => {
     const id = crypto.randomUUID();
     let entered = false;
     const release = bindActionDispatch(id, {
-      refusal: () => reason,
-      validate: async () => reason,
+      refusal: () => ({ kind, message: reason }),
+      validate: async () => ({ kind, message: reason }),
       dispatched: async () => {
         throw Error("Must not mark a planned call");
       },

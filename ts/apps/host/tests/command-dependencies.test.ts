@@ -161,7 +161,7 @@ test.each([false, true])(
             execution.step("native", "probe.native", {}, async (requestId) => {
               holdReader = true;
               const refusal = await h.journal.validateDispatch(requestId);
-              if (refusal) throw new StepFailure(refusal, 409, "refused");
+              if (refusal) throw new StepFailure(refusal.message, refusal.kind === "cancelled" ? 499 : 409, "refused");
               await h.journal.markDispatched(requestId);
               return ++dispatched;
             }),

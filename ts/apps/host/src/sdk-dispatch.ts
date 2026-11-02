@@ -66,7 +66,7 @@ export async function dispatchSdk(
   const args = input.argv.map((arg) => (arg === SDK_REQUEST_ID ? requestId : arg));
   const invalid = await validateDispatch(requestId);
   if (invalid)
-    throw new StepFailure(invalid, /cancel|consent.stopped/i.test(invalid) ? 499 : 409, "refused");
+    throw new StepFailure(invalid.message, invalid.kind === "cancelled" ? 499 : 409, "refused");
   const envelope = await sdkEnvelope<unknown>(args, read);
   const result = envelope.result as {
     state?: string;

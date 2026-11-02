@@ -7,7 +7,7 @@ import type {
 import { CommandRejected, StepFailure, refused } from "./command-executor.ts";
 import { readJournalSnapshot } from "./legacy-action-journal.ts";
 import { validateNativeInput } from "./native-input.ts";
-import { bindActionDispatch } from "./action-dispatch.ts";
+import { bindActionDispatch, type DispatchRefusal } from "./action-dispatch.ts";
 import { appendFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { renameReplacing } from "./rename-retry.ts";
 import { dirname, join, win32 } from "node:path";
@@ -627,12 +627,15 @@ export class ActionJournal implements ReceiptReader {
   }
 
   /** The committed step index also fences native work after it has waited in the bridge queue. */
-  async validateDispatch(requestId: string): Promise<string | null> {
+  async validateDispatch(requestId: string): Promise<DispatchRefusal | null> {
     const action = this.stepAction.get(requestId);
     try {
       if (action) await this.gate(this.rows.get(action)!, "dispatch");
     } catch (error) {
-      return String(error);
+      return {
+        kind: error instanceof StepFailure && error.status === 499 ? "cancelled" : "refused",
+        message: messageOf(error),
+      };
     }
     return this.dispatchRefusal(requestId);
   }
@@ -652,19 +655,26 @@ export class ActionJournal implements ReceiptReader {
       this.notify();
     });
   }
-  dispatchRefusal(requestId: string): string | null {
+  dispatchRefusal(requestId: string): DispatchRefusal | null {
     const action = this.stepAction.get(requestId);
     const row = action ? this.rows.get(action) : undefined;
     if (!row) return null;
-    if (row.cancellationRequested) return "Action cancelled before dispatch";
-    if (row.state === "unknown") return "Action checkpoint is uncertain; resolve before dispatch";
+    if (row.cancellationRequested)
+      return { kind: "cancelled", message: "Action cancelled before dispatch" };
+    if (row.state === "unknown")
+      return { kind: "refused", message: "Action checkpoint is uncertain; resolve before dispatch" };
     try {
       if (row.effects.length) commandCheckpoint(originOf(row.caller), row.consent);
+    } catch (error) {
+      return { kind: "cancelled", message: messageOf(error) };
+    }
+    try {
       validateFootprintCaller(this.activeCallers.get(row.id) ?? row.caller, row.effects);
     } catch (error) {
-      return String(error);
+      return { kind: "refused", message: messageOf(error) };
     }
-    return live(row.basis, "native dispatch")?.message ?? null;
+    const dead = live(row.basis, "native dispatch");
+    return dead ? { kind: "refused", message: dead.message } : null;
   }
 
   async list(target?: DocumentRef, id?: string): Promise<ActionReceipt[]> {

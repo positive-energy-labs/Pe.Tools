@@ -1,6 +1,7 @@
 import { admittedRouteEntries } from "@pe/agent-contracts";
 import { catalogEntries } from "@pe/agent-contracts/pe-api";
 import { catalogCommandContext } from "./catalog-command-context.ts";
+import type { DispatchRefusal } from "./action-dispatch.ts";
 import { StepFailure } from "./command-executor.ts";
 import { Context, Deferred, Effect, Layer, PubSub, Ref, Schema } from "effect";
 import type { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
@@ -619,7 +620,7 @@ export const RevitBridgeLive = Layer.effect(
           const invalid = yield* Effect.promise(() => bridgeValidateDispatch(requestId));
           if (invalid)
             return yield* Effect.fail(
-              new BridgeError(invalid, /cancel|consent.stopped/i.test(invalid) ? 499 : 409, {
+              new BridgeError(invalid.message, invalid.kind === "cancelled" ? 499 : 409, {
                 notDispatched: true,
               }),
             );
@@ -629,7 +630,7 @@ export const RevitBridgeLive = Layer.effect(
           (
             requests,
           ): readonly [
-            "cancelled" | "waiting" | "dispatched" | { refusal: string },
+            "cancelled" | "waiting" | "dispatched" | { refusal: DispatchRefusal },
             ReadonlyMap<string, BridgeRequest>,
           ] => {
             if (requests.get(requestId)?.phase === "cancelled")
@@ -646,8 +647,8 @@ export const RevitBridgeLive = Layer.effect(
         if (typeof phase !== "string")
           return yield* Effect.fail(
             new BridgeError(
-              phase.refusal,
-              /cancel|consent.stopped/i.test(phase.refusal) ? 499 : 403,
+              phase.refusal.message,
+              phase.refusal.kind === "cancelled" ? 499 : 403,
               { notDispatched: true },
             ),
           );
