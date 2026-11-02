@@ -189,7 +189,7 @@ Verbs          Pea's Sweep/Slice/Probe/Partition read through the same scoped re
    retain `LinkedGeometryStore` and `Dirty`/`Fresh`; the root linked-path fix, rollback-delta
    filter fix and harness custody logging landed.
    Loaded document version is falsified as an edit key. The pack reuses only within one process.
-Paused 2026-10-28 16:00Z for other work. Step 3 (branch `t3/oriented-representation-module`) is unlanded; step 6 landed 2026-10-31.
+Step 3 (`f1343c26`) and step 6 (`61362210`) are ancestors of main `96cb356a`, checked 2026-11-02. Later overview/detailed work remains in flight; its user ruling does not certify a new native runtime.
 
 6. Pea's verbs read through the scoped read (landed 2026-10-31). Sweep, Probe, Slice and Census prepare only their question's
    scope; Partition and Takeoff read the zone's plan through every knee-probe's reach. PROVEN[session dev controlled, `probe-s6`,

@@ -13,6 +13,85 @@ This doc is the authority for every Pe.* read of Revit geometry: Space, Ducts co
 5. Meshes are first-class. "full data meshes are something i still need for my future dreams of running and visualizing clash detection on the same substrate" (cfdbb202, 2026-10-27 17:14Z).
 6. Context includes other MEP. "we absolutely should not exclude other MEP from the proximity or context. if anything these are actually the most important types of context" (cfdbb202, 2026-10-27 06:19Z).
 
+## Collision use: what these findings establish
+
+Source reconciliation, 2026-11-02, main `96cb356a`. This is a candidate product direction,
+not a claim that Space already implements a complete clash engine. Source thread:
+[Pe.Revit.Space Duct Memory Bloat Risk](t3-thread://v2/f14f112d-ddd1-45d1-9d3d-a1b59329e54d/0eb6e292-1924-40b7-b327-93d83fa3d16d).
+The mining snapshot indexes 610 root messages through position 2527, frozen at the thread's
+2026-11-02 22:29:49Z update. Locators, authorship, hashes and limitations are in
+`.artifacts/runs/thread-20261102-space-clash/`. Topic-focused semantic review does not certify
+every long report or linked native receipt. Measurements below retain their original lanes.
+
+**Acquisition is part of the algorithm.** Moving collision arithmetic outside Revit does not
+avoid the native cost of loading elements and acquiring geometry. Apply reach and category
+filters before iteration. The [scoped-verb measurements](#u6-step-6-peas-spatial-verbs-read-only-their-questions-scope)
+establish this distinction in production; they do not measure a new clash engine.
+Keep the measured disk-pack benefit separate from resident native retention.
+A stable path or element identity alone is not a geometry revision.
+[Cache and revision evidence](#u6-measured-cache-attribution-and-revision-identity-2026-10-28).
+
+**Source type determines the useful representation.** Native straight runs expose physical
+dimensions and profile orientation. [Connector size is not always outside size](#round-run-sizes).
+[Fitting insulation cannot be replaced by a uniformly enlarged fitting box](#fitting-insulation).
+Native family reuse needs geometry identity, not just `FamilySymbol.Id`.
+A family-frame read can acquire native geometry; it is not a zero-tessellation overview.
+IFC-derived `DirectShape` elements can have identity transforms and no usable location line.
+An element frame cannot be inferred from its link frame.
+[Representation premises](#representation-premises-2026-10-28).
+A CAD ribbon with assumed height is not evidence of a physical solid.
+
+**Direct IFC acquisition is promising, not certified replacement geometry.** The source-file
+experiment and its unresolved gates remain in the [spatial ledger](LEDGER.md).
+It ran outside Revit, but still consumed time and process memory. Source discovery used a
+filename convention, not an authoritative binding to the loaded link version.
+Only 91.8% of SA 7 and 92.1% of EX 7 link GUIDs matched source products.
+The EX 7 frame comparison includes a 0.072 ft outlier despite its small typical error.
+Do not replace those limits with the thread's shorter all-aligned summary.
+No `IfcOpeningElement` entities in this file does not mean the faceted bodies have no holes.
+A sidecar must establish source revision, element correspondence, placed transforms and
+coverage before its results can describe the loaded Revit model.
+
+**A picture is not a complete collision world.** [Scene.cs](../../../dotnet/Pe.Revit.Space/Scene.cs)
+can publish approximate boxes, circumscribed runs, cropped triangles and incomplete sources.
+Overlap of containing envelopes establishes a candidate, not a confirmed hard clash.
+Disjoint envelopes establish separation only when containment and source coverage are certified.
+Viewer hiding and section cuts must not remove collision obstacles. Unloaded sources and
+omitted geometry must not produce a building-wide CLEAR verdict. Visual acceptance of filled
+truss holes does not authorize removing those openings from collision geometry.
+
+**The current predicate has a narrower contract.** [Verbs.Sweep](../../../dotnet/Pe.Revit.Space/Verbs.cs)
+finds the nearest triangle surface around each oriented profile box, not every element pair.
+A profile entirely inside a closed solid can miss every boundary triangle.
+[Bvh.BoxTriangle](../../../dotnet/Pe.Revit.Space/Bvh.cs) does not report penetration depth through
+its negative gap magnitude. `PrimKind.Solid` records an ingestion source kind; it does not
+certify a closed, consistently wound exported surface.
+A clash product still needs pair enumeration, containment handling and explicit unknown
+results where the acquired geometry cannot support a verdict.
+
+**Fidelity and clash tolerance answer different questions.** Native vertex containment and
+mesh replay establish representation fidelity on named inputs, not arbitrary solid intersection.
+`Application.VertexTolerance` is not a fabrication clearance. Float32 storage, curved-surface
+tessellation and conservative overdraw need a declared error policy. Double arithmetic cannot
+recover precision lost before the query.
+
+The latest human ruling in source position 2512 rejects numeric refusal caps and removal of
+the public whole-model scripting entry. Pictures default to zero-tessellation overview and
+offer explicit detailed reads with at least 5 ft reach; cost is disclosed.
+Positions 2517-2527 report work pending. A post-freeze checkpoint at 22:51Z (positions
+2537-2553) reports implementation `297fcb91` plus owner fix `9f91b0c1`, with native tests
+on the fix still running and unification/browser acceptance pending. Those are agent reports,
+not runtime proof performed for this synthesis. The supplemental messages are retained with
+the mining snapshot.
+This ruling is not main `96cb356a` behavior. Region admission must not widen each verb's actual
+acquisition reach. A future clash route should use the host's shared read authority rather
+than recreate browser-owned native acquisition.
+
+The candidate is a system- or region-scoped check over revision-stamped geometry, detailed
+acquisition on explicit demand, collision computation outside Revit, and shared Picture
+inspection. Grouping, accepted interfaces and issue history belong above that contract.
+Whole-building correctness and interactive clash latency remain UNPROVEN.
+
 ## Cost model as measured
 
 All values are deltas of Revit private bytes in MiB. Unless a row says otherwise, the lane is session dev, SDK-controlled `pe.app-25`, Chadds, 2026-10-27. Cold means the first read in a fresh process. Evidence: `.artifacts/accept/space-focus-mesh-20261027/REPORT.md` (S2, S3, P2, P3) and `.artifacts/accept/space-memory-night-20261027/REPORT.md` (night).
@@ -86,8 +165,8 @@ Unless stated: PROVEN[session dev, SDK-controlled `pe.app-25` PID 19948, Chadds,
 - **U2, oriented boxes without tessellation.** Route (a) is exact on 800 Chadds instances, but it still pays ≈82 KB per element, so it is a fidelity tool only. `LocationCurve` covers all host MEP runs but none of the 71,688 IFC framing members, which have no `Location`. UNPROVEN on nested or multi-instance families and on direct solids.
 - **U3, first touch.** A full IFC link walk costs ≈13 KB per element (+1,090 MiB, and +1,217 MiB via `GetElement` plus bounding box). PROVEN that `ToElementIds()` on a quick-filtered collector does not expand elements: +0.0 MiB over 91,829 link elements (session dev, probe-25, `b528483c`, 2026-10-27). So a freshness check by id set is free, and the memory win of a bounds cache depends on never touching the elements. Random samples under-read a full walk ≈30× (1,000 random: 0.4 KB per element; 5,000 consecutive: 9.7; all: 13.9), cause UNPROVEN. Measure by walking, never by random `GetElement`. Report: `.artifacts/accept/census-and-verbs-20261027/REPORT.md`.
 - **U7, control against the user's footprint.** The control proves that Revit's 3D display alone reaches 15 to 20 GB on Chadds. UNPROVEN that the user's 10 to 12 GB came from it, because no record shows that a 3D view was open.
-- **U5, Pea's spatial verbs.** MEASURED, not settled. Every verb's document entry calls `SpaceWorld.Prepare`, which tessellates the host and every loaded link; the verb's scope never reaches it. On Chadds one cold Sweep took 220 s and +9.4 GiB (Revit 3.7→13.8 GB); the IFC link was 169 s and +7.7 GiB of that, at ≈1.2 KB per link triangle against ≈0.1 for host MEP. The query itself took 1–64 ms. A host-only world cannot answer Probe (no floor or ceiling) or Partition (refuses: link absent or dirty), because Chadds structure lives in the IFC link (session dev, probe-25, `d6cae510`, 2026-10-27).
-- **U6, `LinkedGeometryStore`.** No proof exists for cloud links, reload, unload or workset changes. `Prune` is untested. FALSIFIED that it survives a restart: the store path carries the session openId (host) and a random per-process id (link, `SpaceWorld.cs:47`, `LinkedGeometryStore.cs:36`), so a new process always misses, and each Prepare writes ≈550 MB into a cache shared with every session and pruned to 1 GiB.
+- **U5, historical whole-world preparation.** The following 2026-10-27 measurement predates the scoped Sweep, Probe, Slice and Census that landed 2026-10-31; see [step 6](#u6-step-6-peas-spatial-verbs-read-only-their-questions-scope). Whole-model build/rows/tree remain separate expensive entry points. On Chadds one cold Sweep took 220 s and +9.4 GiB (Revit 3.7→13.8 GB); the IFC link was 169 s and +7.7 GiB of that, at ≈1.2 KB per link triangle against ≈0.1 for host MEP. The query itself took 1–64 ms. A host-only world cannot answer Probe (no floor or ceiling) or Partition (refuses: link absent or dirty), because Chadds structure lives in the IFC link (session dev, probe-25, `d6cae510`, 2026-10-27).
+- **U6, `LinkedGeometryStore`.** The later linked-path and rollback gates below establish narrower guarantees. Cloud replacement, reload, unload and workset-change coverage remain uncertified. The following restart-key failure describes the original 2026-10-27 implementation. `Prune` is untested. FALSIFIED that it survives a restart: the store path carries the session openId (host) and a random per-process id (link, `SpaceWorld.cs:47`, `LinkedGeometryStore.cs:36`), so a new process always misses, and each Prepare writes ≈550 MB into a cache shared with every session and pruned to 1 GiB.
 - **U15, IFC Solid against Mesh.** The census sampled 4,138 of 4,143 solids with volume, but elements 1422648 and 1341401 tessellate to Mesh only.
 - **The 2026-10-21 "saved Chadds copy without links".** The record does not name the file. UNPROVEN that it was `.artifacts/revit/detached/MEP_YoramLePairArchitects_ChaddsFord_R25_standalone_20261019.rvt`, the only other detached Chadds file. That file has no IFC link, no loaded links and 4,266 pipe insulations (PROVEN[session dev, controlled probe-o, 2026-10-28, step 3 census]), so it fits the description, but it is a different model from every Chadds number in this doc, which was measured on the cloud `Chadds_Clone_Aug_11`. The gate's Chadds copy is `MEP_Chadds_Clone_Aug_11_R25_local_20261028.rvt`, census-equal to that clone.
 - **U16.** Chadds is the only model measured. Second model, 2026-10-28 (Manuella, local copy `.artifacts/revit/detached/MEP_BIG_Manuella_R25_V2_local_20261027.rvt`): all three Revit links unloaded and 7 host walls, so no loaded source holds building geometry; a cold /ducts read is ≈0.5 s and +4–6 MiB. Holds: a 45° wing (now in the host, world box median 2.18× oriented), counting ids is free in memory (but not in time: id queries took 9–71 s), centre-line helpers dominate noise (≈45% of context; 1:1 with pipes, not ducts), insulation from `RBS_REFERENCE_INSULATION_THICKNESS` (136/136 duct). New: view-specific DWGs enter context; 30% of family instances are tilted, so oriented boxes need the full 3D frame; levels repeat at one elevation under two naming sets. Untestable there: the per-element cost of a loaded link. PROVEN[session dev, probe-25, `bd9dd0d4`]; report `.artifacts/accept/manuella-generality-20261027/REPORT.md`. Third model, 2026-10-28 (Cleremont, local copy `.artifacts/revit/detached/MEP_Brodie_Cleremont_Ross_R25_local_20261028.rvt`): four loaded RVT links (site plus three house types) placed six times at different angles, one placement unshared about 2,100 ft away. A loaded RVT link walks at 0.8–2.3 KB per element (≈14 KB is an IFC-link property); Revit pays at open (7.1–7.4 GB). Cold /ducts context 1.6–3.6 s and +57–166 MiB. Breaks: one frame per link document (frames, partitions and oriented boxes belong to the link instance); `Level.Elevation` is relative to the project base point (use `ProjectElevation` through the instance transform; levels are per building); a system's crop can be a 1,500 ft cube because of far members (per-element reach is mandatory: −82%); sketch-based floors, roofs, ceilings and stairs have no cheap frame; links bring new noise (`<Sketch>`, curtain grids, room separations, origin markers, planting, topography, masses, nested DWGs); link availability depends on Desktop Connector sync. PROVEN[session dev, probe-25, `940f2c8f`]; report `.artifacts/accept/cleremont-generality-20261028/REPORT.md`.
