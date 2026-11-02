@@ -11,7 +11,7 @@ import { sceneRequest } from "#/scene/host";
 import { CONTEXT_DEFAULT } from "#/scene/picture/picture";
 import { refuse } from "#/route/refusal";
 import { ENCODINGS } from "./layers";
-import { spaceReads, type SpaceReadKey, type SpaceAnswerKey } from "./reads";
+import { regionSchema, spaceReads, type SpaceReadKey, type SpaceAnswerKey } from "./reads";
 
 const jsonField = <S extends z.ZodType>(schema: S) =>
   field(
@@ -29,13 +29,20 @@ const jsonField = <S extends z.ZodType>(schema: S) =>
     },
   );
 const parameters = {
+  region: jsonField(regionSchema.nullable().default(null)),
   treeInput: jsonField(
-    spaceReads["revit.detail.space-tree"].input.default({ source: 0, maxDepth: 4 }),
+    spaceReads["revit.detail.space-tree"].input
+      .omit({ region: true })
+      .default({ source: 0, maxDepth: 4 }),
   ),
-  sliceInput: jsonField(spaceReads["revit.detail.space-slice"].input.default({ z0: 0, z1: 10 })),
-  probeInput: jsonField(spaceReads["revit.detail.space-probe"].input.default({ at: [0, 0, 5] })),
+  sliceInput: jsonField(
+    z.object({ z0: z.number().finite(), z1: z.number().finite() }).default({ z0: 0, z1: 10 }),
+  ),
+  probeInput: jsonField(
+    spaceReads["revit.detail.space-probe"].input.omit({ region: true }).default({ at: [0, 0, 5] }),
+  ),
   sweepInput: jsonField(
-    spaceReads["revit.detail.space-sweep"].input.default({
+    spaceReads["revit.detail.space-sweep"].input.omit({ region: true }).default({
       polyline: [
         [0, 0, 9],
         [20, 0, 9],
@@ -54,6 +61,7 @@ const parameters = {
 };
 const fields = { ...spaceAddress.fields, ...parameters };
 export const spacePageSchema = routeAddress("space").schema.extend({
+  region: parameters.region.schema,
   treeInput: parameters.treeInput.schema,
   sliceInput: parameters.sliceInput.schema,
   probeInput: parameters.probeInput.schema,
@@ -75,37 +83,33 @@ const read = (key: SpaceReadKey, label: string) =>
       ready: ({ snapshot }, input) =>
         snapshot.target.kind !== "document"
           ? "Choose a document"
-          : label === "capture" && !(input as { elementIds: number[] }).elementIds.length
+          : (label === "capture" || label === "load context") &&
+              !(input as { region?: unknown }).region &&
+              !(input as { elementIds: number[] }).elementIds.length
             ? "Name host element ids to capture"
             : null,
     },
   );
 export const spaceGraph: RouteGraph<SpacePage, null> = {
   directory: {
-  "path": "/space",
-  "title": "Space",
-  "label": "MEP context",
-  "exposure": "Preview",
-  "runtimeNeed": "Revit for capture; saved scenes open without Revit",
-  "icon": "Boxes",
-  "category": "Coordinate model data",
-  "blurb": "Inspect real model geometry, select elements, and draw straight or bent sections locally.",
-  "aliases": [
-    "3d",
-    "mesh",
-    "section",
-    "viewer",
-    "spatial",
-    "context"
-  ],
-  "listed": true,
-  "satellites": [],
-  "surfaces": {
-    "web": "full",
-    "pwa": "full",
-    "tray": false
-  }
-},
+    path: "/space",
+    title: "Space",
+    label: "MEP context",
+    exposure: "Preview",
+    runtimeNeed: "Revit for capture; saved scenes open without Revit",
+    icon: "Boxes",
+    category: "Coordinate model data",
+    blurb:
+      "Inspect real model geometry, select elements, and draw straight or bent sections locally.",
+    aliases: ["3d", "mesh", "section", "viewer", "spatial", "context"],
+    listed: true,
+    satellites: [],
+    surfaces: {
+      web: "full",
+      pwa: "full",
+      tray: false,
+    },
+  },
   key: "space",
   address: "space",
   name: "Space",
@@ -120,7 +124,8 @@ export const spaceGraph: RouteGraph<SpacePage, null> = {
     threadSearch: { ...threadListFields.threadSearch, role: "pose" },
     threadSort: { ...threadListFields.threadSort, role: "pose" },
     scene: { ...fields.scene, role: "pose" },
-    ids: { ...fields.ids, role: "subject" },
+    region: { ...fields.region, role: "subject" },
+    ids: { ...fields.ids, role: "selection" },
     mode: { ...fields.mode, role: "pose" },
     viewport: { ...fields.viewport, role: "pose" },
     cuts: { ...fields.cuts, role: "pose" },
@@ -257,13 +262,17 @@ export const spaceBinding = (id: string, row: unknown, { page }: { page: SpacePa
             15,
             CONTEXT_DEFAULT,
           ),
-          elementIds: page.ids,
-          focusOnly: id === "capture",
-          contextRepresentation: id === "capture" ? "none" : CONTEXT_DEFAULT,
+          ...(page.region ? { region: page.region } : {}),
+          elementIds: page.region ? [] : page.ids,
+          focusOnly: !page.region && id === "capture",
+          contextRepresentation: !page.region && id === "capture" ? "none" : CONTEXT_DEFAULT,
         }
-      : ((row as { input?: unknown } | undefined)?.input ??
-        (page as unknown as Record<string, unknown>)[`${id}Input`] ??
-        {}),
+      : {
+          ...((row as { input?: object } | undefined)?.input ??
+            (page as unknown as Record<string, object>)[`${id}Input`] ??
+            {}),
+          ...(page.region ? { region: page.region } : {}),
+        },
 });
 export const answerKeys: readonly SpaceAnswerKey[] = [
   "status",

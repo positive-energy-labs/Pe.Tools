@@ -517,15 +517,9 @@ public static class OpCallGate {
         if (definition.Effect == OpEffect.TransactRead && !definition.RollsBack)
             throw BridgeOperationExceptions.BadRequest($"'{definition.Key}' must declare rollback.");
         if (definition.Effect is OpEffect.Read or OpEffect.TransactRead
-            && definition.Touches.HasFlag(OpTouches.Geometry) && definition.Subject == OpSubject.Document)
+            && definition.Touches.HasFlag(OpTouches.Geometry) && definition.Subject == OpSubject.Document
+            && definition.Needs != OpNeeds.FamilyDocument)
         {
-            var payload = Newtonsoft.Json.Linq.JObject.Parse(payloadJson ?? "{}");
-            var kind = payload["selector"]?["kind"]?.ToString();
-            if (definition.Key == "ducts.snapshot" && kind is "roster" or "from" or "ids" or "systems") return;
-            if (definition.Key == "revit.catalog.electrical-circuits"
-                && (payload["options"]?["includeNearbyProxyContext"]?.ToObject<bool>() != true
-                    || payload["filter"]?["panelNames"] is Newtonsoft.Json.Linq.JArray panels
-                        && panels.Any(panel => !string.IsNullOrWhiteSpace(panel.ToString())))) return;
             throw BridgeOperationExceptions.BadRequest($"'{definition.Key}' requires a narrower geometry subject.");
         }
     }

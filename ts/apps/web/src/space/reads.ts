@@ -11,9 +11,23 @@ import { requestJson } from "#/shell/readings-api";
 import { NATIVE_READ_WAIT_S } from "#/route/waits";
 
 const xyz = z.tuple([z.number().finite(), z.number().finite(), z.number().finite()]);
+export const regionSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("box"),
+    box: z
+      .tuple([z.number(), z.number(), z.number(), z.number(), z.number(), z.number()])
+      .refine(
+        (b) => b.every(Number.isFinite) && b[0] < b[3] && b[1] < b[4] && b[2] < b[5],
+        "Box needs positive finite extents",
+      ),
+  }),
+  z.object({ kind: z.literal("room"), uniqueId: z.string().min(1) }),
+  z.object({ kind: z.literal("space"), uniqueId: z.string().min(1) }),
+]);
 export const spaceReads = {
   "revit.detail.space-scene": {
     input: z.object({
+      region: regionSchema.optional(),
       elementIds: z.array(z.number().int().positive()),
       contextPaddingFt: z.number().nonnegative(),
       maxTriangles: z.number().int().positive(),
@@ -22,21 +36,23 @@ export const spaceReads = {
     }),
   },
   "revit.detail.space-status": { input: z.object({}) },
-  "revit.detail.space-rows": { input: z.object({}) },
+  "revit.detail.space-rows": { input: z.object({ region: regionSchema }) },
   "revit.detail.space-tree": {
     input: z.object({
+      region: regionSchema,
       source: z.number().int().nonnegative(),
       maxDepth: z.number().int().min(1).max(16),
     }),
   },
   "revit.detail.space-slice": {
     input: z
-      .object({ z0: z.number().finite(), z1: z.number().finite() })
+      .object({ region: regionSchema, z0: z.number().finite(), z1: z.number().finite() })
       .refine((v) => v.z1 > v.z0, "z1 must be above z0"),
   },
-  "revit.detail.space-probe": { input: z.object({ at: xyz }) },
+  "revit.detail.space-probe": { input: z.object({ region: regionSchema, at: xyz }) },
   "revit.detail.space-sweep": {
     input: z.object({
+      region: regionSchema,
       polyline: z.array(xyz).min(2),
       widthFt: z.number().positive(),
       heightFt: z.number().positive(),

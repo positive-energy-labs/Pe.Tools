@@ -21,7 +21,7 @@ import type { SceneInstance } from "#/scene/types";
 
 import { ENCODINGS, ENCODING_SAYS, rowAt, type Legend, type SpaceLayer } from "./layers";
 import type { SpacePage } from "./graph";
-import type { SpaceAnswers } from "./reads";
+import { regionSchema, type SpaceAnswers } from "./reads";
 
 type Element = Psc1Metadata["elements"][number];
 
@@ -33,6 +33,21 @@ export function HostIds({
   page: SpacePage;
   setPage(this: void, patch: Partial<SpacePage>): void;
 }) {
+  const [regionDraft, setRegionDraft] = useState("");
+  const regionText = page.region
+    ? page.region.kind === "box"
+      ? `box:${page.region.box.join(",")}`
+      : `${page.region.kind}:${page.region.uniqueId}`
+    : "";
+  const parseRegion = (text: string) => {
+    const colon = text.indexOf(":");
+    const kind = text.slice(0, colon);
+    const value = text.slice(colon + 1);
+    return regionSchema.safeParse(
+      kind === "box" ? { kind, box: value.split(",").map(Number) } : { kind, uniqueId: value },
+    );
+  };
+  const region = parseRegion(regionDraft);
   const [draft, setDraft] = useState("");
   const id = Number(draft);
   const refusal =
@@ -48,6 +63,29 @@ export function HostIds({
   };
   return (
     <section aria-label="Host elements" className="flex flex-wrap items-center gap-1">
+      <Label>
+        Region
+        <Input
+          aria-label="Spatial region"
+          placeholder="box:x0,y0,z0,x1,y1,z1 or room/space:UniqueId"
+          value={regionDraft || regionText}
+          onChange={(event) => setRegionDraft(event.target.value)}
+        />
+      </Label>
+      <Button
+        label="Set spatial region"
+        refusal={
+          !region.success ? "Enter a region with valid bounds or a room/space UniqueId" : null
+        }
+        onClick={() => {
+          if (region.success) {
+            setPage({ region: region.data });
+            setRegionDraft("");
+          }
+        }}
+      >
+        Set region
+      </Button>
       <Label>
         Host element ID
         <Input

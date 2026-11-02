@@ -185,7 +185,12 @@ export const takeoffVerbs = {
   ),
   refresh: queryVerb(
     takeoffQueries["takeoffs.snapshot"],
-    { label: "refresh", chord: "Mod+R", review: "none", input: guarded(z.strictObject({})) },
+    {
+      label: "refresh",
+      chord: "Mod+R",
+      review: "none",
+      input: guarded(z.object({ views: z.array(z.string()), zoneGuids: z.array(z.string()) })),
+    },
     { ready: (_, input) => input.refusal, intent: (_, input) => input.request },
   ),
   "retry-r10": queryVerb(
@@ -259,7 +264,8 @@ export function takeoffBinding(id: string, row: unknown, scope: TakeoffScope): M
   const snapshot = snapshotOfObservation(valueOf(scope, "snapshot"));
   const world = snapshot?.world;
   const common = takeoffRefusal(scope);
-  let request: unknown = input;
+  let request: unknown =
+    id === "refresh" ? { views: scope.page.views, zoneGuids: scope.page.zones } : input;
   let why = common;
   if (id === "edit") {
     const edited =

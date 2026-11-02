@@ -226,7 +226,8 @@ test("the fixture is a graph-declared answer set and never creates a native targ
 });
 
 test("answer parameters round-trip in the URL while the kernel keeps answer data in its receipt", async () => {
-  const { view, owner, router } = await mounted({ scene: sceneA });
+  const region = { kind: "box", box: [-10, -10, 0, 30, 30, 20] };
+  const { view, owner, router } = await mounted({ scene: sceneA, region: JSON.stringify(region) });
   await waitFor(() => expect(owner().readings.get("scene").status).toBe("ready"));
   fireEvent.change(view.getByLabelText("z1"), { target: { value: "12" } });
   await waitFor(() => expect(router.state.location.search.sliceInput).toEqual({ z0: 0, z1: 12 }));
@@ -234,7 +235,10 @@ test("answer parameters round-trip in the URL while the kernel keeps answer data
   await waitFor(() =>
     expect(owner().results.get("slice")).toMatchObject({ state: "done", kind: "query" }),
   );
-  expect(calls[0]).toMatchObject({ key: "revit.detail.space-slice", request: { z0: 0, z1: 12 } });
+  expect(calls[0]).toMatchObject({
+    key: "revit.detail.space-slice",
+    request: { z0: 0, z1: 12, region },
+  });
   expect(owner().view.read().page).not.toHaveProperty("slice");
 });
 

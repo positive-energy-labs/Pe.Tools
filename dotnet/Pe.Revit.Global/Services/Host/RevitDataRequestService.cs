@@ -46,10 +46,10 @@ namespace Pe.Revit.Global.Services.Host;
 ///     Bridge-backed Revit data requests for browser routes.
 /// </summary>
 internal sealed class RevitDataRequestService {
-    [Op("takeoffs.snapshot", Subject = OpSubject.Document, Touches = OpTouches.Geometry, Effect = OpEffect.Read, Does = "Read Takeoff model status, plan views, zoning regions, materialized rooms, and source identity from the active project.", Title = "Get Takeoff Snapshot", Finds = ["takeoffs", "snapshot", "zones", "rooms", "filled-regions"], Cost = OpCost.Bounded)]
-    private static TakeoffSnapshotResponse GetTakeoffSnapshotCore(NoRequest _, ProjectDocument activeDocument) =>
+    [Op("takeoffs.snapshot", Subject = OpSubject.Region, Touches = OpTouches.Geometry, Effect = OpEffect.Read, Does = "Read Takeoff model status, plan views, zoning regions, materialized rooms, and source identity from the active project.", Title = "Get Takeoff Snapshot", Finds = ["takeoffs", "snapshot", "zones", "rooms", "filled-regions"], Cost = OpCost.Bounded)]
+    private static TakeoffSnapshotResponse GetTakeoffSnapshotCore(TakeoffReadRequest request, ProjectDocument activeDocument) =>
         RunTakeoff(activeDocument.Value, document =>
-            new TakeoffSnapshotResponse(DocumentReading.Here(document), TakeoffAtlas.Snapshot(document)));
+            new TakeoffSnapshotResponse(DocumentReading.Here(document), TakeoffAtlas.Snapshot(document, request)));
 
     [Op("takeoffs.candidates", Subject = OpSubject.View, Touches = OpTouches.Geometry, Effect = OpEffect.Read, Does = "Read Filled Regions and their boundary loops from one named plan view.", Title = "Get Takeoff Candidate Regions", Finds = ["takeoffs", "candidates", "filled-regions", "boundaries", "view"], Cost = OpCost.Bounded)]
     private static TakeoffCandidatesData GetTakeoffCandidatesCore(TakeoffCandidatesRequest request, ProjectDocument activeDocument) =>
@@ -80,9 +80,13 @@ internal sealed class RevitDataRequestService {
             document => new TakeoffRhvacLinksData(TakeoffAtlas.LinkRhvacBatch(document, request)),
             "Pe Link Takeoff Rooms to RHVAC");
 
-    [Op("rooms.snapshot", Subject = OpSubject.Document, Touches = OpTouches.Geometry, Effect = OpEffect.Read, Does = "Read plan-view levels and every zone, room, and held region on them with its parent zone, designation, room fields, geometry, and locked, touched, and stale state.", Title = "Get Rooms Snapshot", Finds = ["rooms", "snapshot", "levels", "room-regions", "filled-regions"], Cost = OpCost.Bounded)]
-    private static RoomsSnapshotData GetRoomsSnapshotCore(NoRequest _, ProjectDocument activeDocument) =>
-        RunTakeoff(activeDocument.Value, Rooms.Snapshot);
+    [Op("rooms.roster", Subject = OpSubject.Document, Touches = OpTouches.Metadata, Effect = OpEffect.Read,
+        Does = "Read plan views and level elevations without region boundaries.", Cost = OpCost.Cheap)]
+    private static RoomsSnapshotData GetRoomsRoster(NoRequest _, ProjectDocument document) => Rooms.Roster(document.Value);
+
+    [Op("rooms.snapshot", Subject = OpSubject.View, Touches = OpTouches.Geometry, Effect = OpEffect.Read, Does = "Read plan-view levels and every zone, room, and held region on them with its parent zone, designation, room fields, geometry, and locked, touched, and stale state.", Title = "Get Rooms Snapshot", Finds = ["rooms", "snapshot", "levels", "room-regions", "filled-regions"], Cost = OpCost.Bounded)]
+    private static RoomsSnapshotData GetRoomsSnapshotCore(RoomsReadRequest request, ProjectDocument activeDocument) =>
+        RunTakeoff(activeDocument.Value, doc => Rooms.Snapshot(doc, request.View));
 
     [Op("ducts.snapshot", Subject = OpSubject.Document, Touches = OpTouches.Geometry, Effect = OpEffect.Read, Does = "Read every duct network in the project: ducts, flex, fittings, accessories, terminals and HVAC equipment with their connectors, grouped by topology with equipment cut out, plus pass-1 terminal flow, fitting geometry ratios, fitting and accessory loss methods, terminal drops, Revit's supply/return/exhaust systems with critical path and sections, issues and the query behind each layer. Slots name the fan static, fan flow, component drop and terminal catalog drop parameters; labelParameter names the instance parameter whose value names equipment for people (each node's label). selector narrows the read: { kind: \"from\", unitId, portIndex?, maxHops?, candidateBoxIn? } walks Revit connectors from one element's HVAC ports through equipment to terminals and open ends, searches a box around each open end for MEP candidates (nodes and segments marked reason open-end-candidate) and reports the walk; { kind: \"ids\", ids } reads exactly those elements; { kind: \"roster\" } reads every HVAC equipment node and air terminal plus Revit's systems without sections (the fan roster and its slot coverage). All are raw: no groups, flows, issues or layers, and only roster carries systems. Absent or kind document is the whole-document read. Read-only.", Title = "Get Duct Snapshot", Finds = ["ducts", "snapshot", "networks", "hvac", "connectors", "flow", "pressure", "loss", "critical-path", "walk"], Cost = OpCost.Bounded, Example = "{ \"selector\": { \"kind\": \"from\", \"unitId\": 9668311 } }")]
     private static DuctSnapshotData GetDuctSnapshotCore(DuctSnapshotRequest request, ProjectDocument activeDocument) =>

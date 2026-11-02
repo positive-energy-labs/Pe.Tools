@@ -26,7 +26,9 @@ export function roomsSnapshotSource(): UseSource<RoomsSnapshot.Res.Response | nu
         const attempt = ++latest;
         deliver({ kind: "stale" });
         try {
-          const value = await callOp(ctx, "rooms.snapshot", {});
+          const value = page(ctx).view
+            ? await callOp(ctx, "rooms.snapshot", { view: page(ctx).view })
+            : await callOp(ctx, "rooms.roster", {});
           if (!ctx.signal.aborted && attempt === latest)
             deliver({ kind: "complete", value, revision: ++serial });
         } catch (error) {

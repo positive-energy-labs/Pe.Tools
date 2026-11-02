@@ -9,10 +9,10 @@ namespace Pe.Revit.Global.Services.Host;
 /// <summary>Document-owned reads over the operation-owned spatial world. Each operation captures only its own question's scope.</summary>
 internal static class SpaceOps {
     /// <summary>Read rows passing Filter; omitted axes use the resolved defaults in the answer stamp.</summary>
-    public sealed record RowsRequest(FilterRequest? Filter = null);
+    public sealed record RowsRequest(Region Region, FilterRequest? Filter = null);
 
     /// <summary>Read Source's BVH through MaxDepth inclusive. Source defaults to host (0), depth to 8.</summary>
-    public sealed record TreeRequest(int? Source = null, int? MaxDepth = null);
+    public sealed record TreeRequest(Region Region, int? Source = null, int? MaxDepth = null);
 
     /// <summary>Count rows overlapping Box, six ordered host-internal-feet bounds, under Filter.</summary>
     public sealed record CensusRequest(double[] Box, FilterRequest? Filter = null);
@@ -21,33 +21,27 @@ internal static class SpaceOps {
     /// Slice z0..z1 in host internal feet. XyClip is six ordered bounds; only x/y reject whole rows.
     /// MaxPieces defaults to 50000 and retains whole elements in source order; zero emits none.
     /// </summary>
-    public sealed record SliceRequest(double Z0, double Z1, FilterRequest? Filter = null, double[]? XyClip = null, int? MaxPieces = null);
+    public sealed record SliceRequest(Region Region, double Z0, double Z1, FilterRequest? Filter = null, double[]? XyClip = null, int? MaxPieces = null);
 
     /// <summary>
     /// Probe At (three host-internal-feet coordinates). MaxDistanceFt defaults to 200.
     /// Purpose defaults to Obstructions; RoomHeights applies architectural height-role predicates.
     /// </summary>
-    public sealed record ProbeRequest(double[] At, FilterRequest? Filter = null, double? MaxDistanceFt = null, ProbePurpose? Purpose = null);
+    public sealed record ProbeRequest(Region Region, double[] At, FilterRequest? Filter = null, double? MaxDistanceFt = null, ProbePurpose? Purpose = null);
 
     /// <summary>Sweep a positive width/height profile in feet along at least two host-coordinate triples, with nonnegative clearance.</summary>
-    public sealed record SweepRequest(double[][] Polyline, double WidthFt, double HeightFt, double ClearanceFt, FilterRequest? Filter = null);
+    public sealed record SweepRequest(Region Region, double[][] Polyline, double WidthFt, double HeightFt, double ClearanceFt, FilterRequest? Filter = null);
 
     [Op("revit.detail.space-status", Subject = OpSubject.Document, Touches = OpTouches.Metadata, Effect = OpEffect.Read, Does = "Read the current change epoch and level elevations without capturing geometry. Geometry is operation-owned; status reports no retained world.", Title = "Get Space World Status", Finds = ["space", "world", "status", "stamp", "sources", "levels"], Cost = OpCost.Cheap)]
     private static StatusAnswer Status(NoRequest _, ProjectDocument document) => SpaceView.Status(document.Value);
 
-    [Op("revit.detail.space-build", Subject = OpSubject.Document, Touches = OpTouches.Geometry, Effect = OpEffect.Read, Does = "Capture host and loaded link geometry for this operation, returning its summary and releasing its triangle soup and BVH afterward. Saved linked geometry may be reused from disk. Minutes on a large model; holds Revit for the capture.", Title = "Build Space World", Finds = ["space", "world", "build", "ingest", "tessellate"], Cost = OpCost.Expensive)]
-    private static StatusAnswer Build(NoRequest _, ProjectDocument document) {
-        var world = SpaceWorld.Build(document.Value);
-        return SpaceView.Status(document.Value, world);
-    }
-
-    [Op("revit.detail.space-rows", Subject = OpSubject.Document, Touches = OpTouches.Geometry, Effect = OpEffect.Read, Does = "Read every element row of the operation-owned world that passes a filter, as parallel arrays with legend lists for category, kind, layer and height role, plus each row's box and triangle count.", Title = "Get Space Rows", Finds = ["space", "rows", "elements", "boxes", "categories"], Cost = OpCost.Expensive)]
+    [Op("revit.detail.space-rows", Subject = OpSubject.Region, Touches = OpTouches.Geometry, Effect = OpEffect.Read, Does = "Read every element row of the operation-owned world that passes a filter, as parallel arrays with legend lists for category, kind, layer and height role, plus each row's box and triangle count.", Title = "Get Space Rows", Finds = ["space", "rows", "elements", "boxes", "categories"], Cost = OpCost.Expensive)]
     private static RowsAnswer Rows(RowsRequest request, ProjectDocument document) =>
-        SpaceView.Rows(document.Value, (request.Filter ?? new FilterRequest()).ToFilter());
+        SpaceView.Rows(document.Value, (request.Filter ?? new FilterRequest()).ToFilter(), request.Region.Resolve(document.Value));
 
-    [Op("revit.detail.space-tree", Subject = OpSubject.Document, Touches = OpTouches.Geometry, Effect = OpEffect.Read, Does = "Read one source's BVH down to a depth: each node's box, depth, leaf flag and triangle count, so a viewer can draw how a sweep prunes.", Title = "Get Space BVH", Finds = ["space", "bvh", "tree", "nodes"], Cost = OpCost.Expensive)]
+    [Op("revit.detail.space-tree", Subject = OpSubject.Region, Touches = OpTouches.Geometry, Effect = OpEffect.Read, Does = "Read one source's BVH down to a depth: each node's box, depth, leaf flag and triangle count, so a viewer can draw how a sweep prunes.", Title = "Get Space BVH", Finds = ["space", "bvh", "tree", "nodes"], Cost = OpCost.Expensive)]
     private static TreeAnswer Tree(TreeRequest request, ProjectDocument document) =>
-        SpaceView.Tree(document.Value, request.Source ?? 0, request.MaxDepth ?? 8);
+        SpaceView.Tree(document.Value, request.Source ?? 0, request.MaxDepth ?? 8, request.Region.Resolve(document.Value));
 
     [Op("revit.detail.space-census", Subject = OpSubject.Region, Touches = OpTouches.Geometry, Effect = OpEffect.Read, Does = "Count what lies inside a box, by source, category, kind and DWG layer, plus the ten fattest elements by triangle count. Reads only that box: an element is admitted when its own-frame box meets the box.", Title = "Census Space World", Finds = ["space", "census", "count", "categories", "box"], Cost = OpCost.Expensive)]
     private static CensusAnswer Census(CensusRequest request, ProjectDocument document) =>
@@ -57,8 +51,11 @@ internal static class SpaceOps {
     private static SliceCapped Slice(SliceRequest request, ProjectDocument document) {
         Finite(request.Z0, nameof(request.Z0));
         Finite(request.Z1, nameof(request.Z1));
+        var region = request.Region.Resolve(document.Value);
+        if (request.Z0 < region.MinZ || request.Z1 > region.MaxZ || request.Z1 <= request.Z0)
+            throw new ArgumentException("Slice heights must lie inside the region.");
         return SpaceView.Slice(document.Value, request.Z0, request.Z1, (request.Filter ?? new FilterRequest()).ToFilter(),
-            request.XyClip is null ? null : Box(request.XyClip, nameof(request.XyClip)), request.MaxPieces ?? 50_000);
+            region, request.MaxPieces ?? 50_000);
     }
 
     [Op("revit.detail.space-probe", Subject = OpSubject.Region, Touches = OpTouches.Geometry, Effect = OpEffect.Read, Does = "Probe straight down and straight up from one point: the first thing under it and over it, with the Handle and distance of each; null when nothing is hit within maxDistanceFt.", Title = "Probe Space World", Finds = ["space", "probe", "floor", "ceiling", "ray"], Cost = OpCost.Expensive)]
@@ -67,7 +64,7 @@ internal static class SpaceOps {
         Positive(distance, nameof(request.MaxDistanceFt));
         var purpose = request.Purpose ?? ProbePurpose.Obstructions;
         if (!Enum.IsDefined(typeof(ProbePurpose), purpose)) throw new ArgumentOutOfRangeException(nameof(request.Purpose));
-        return Verbs.Probe(document.Value, Point(request.At, nameof(request.At)),
+        return Verbs.Probe(SpaceWorld.Prepare(document.Value, request.Region.Resolve(document.Value)), Point(request.At, nameof(request.At)),
             (request.Filter ?? new FilterRequest()).ToFilter(), distance, purpose);
     }
 
@@ -78,7 +75,7 @@ internal static class SpaceOps {
         Positive(request.HeightFt, nameof(request.HeightFt));
         Finite(request.ClearanceFt, nameof(request.ClearanceFt));
         if (request.ClearanceFt < 0) throw new ArgumentOutOfRangeException(nameof(request.ClearanceFt));
-        return Verbs.Sweep(document.Value, request.Polyline.Select(p => Point(p, nameof(request.Polyline))).ToList(),
+        return Verbs.Sweep(SpaceWorld.Prepare(document.Value, request.Region.Resolve(document.Value)), request.Polyline.Select(p => Point(p, nameof(request.Polyline))).ToList(),
             request.WidthFt, request.HeightFt, request.ClearanceFt, (request.Filter ?? new FilterRequest()).ToFilter());
     }
 

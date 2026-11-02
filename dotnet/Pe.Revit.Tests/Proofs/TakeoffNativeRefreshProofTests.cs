@@ -44,7 +44,7 @@ public sealed class TakeoffNativeRefreshProofTests
                 RegionMeasurements.Measure(doc, view, zoneGuid, "measurement-1");
                 tx.Commit();
             }
-            var before = TakeoffAtlas.Snapshot(doc).RegionsByZone[zoneGuid.ToString("D")].Single();
+            var before = TakeoffAtlas.Snapshot(doc, new TakeoffReadRequest(ZoneGuids: [zoneGuid])).RegionsByZone[zoneGuid.ToString("D")].Single();
             Assert.That(before.Analysis!.State, Is.EqualTo("current"));
             using (var tx = new Transaction(doc, "Native edit with unchanged area"))
             {
@@ -53,7 +53,7 @@ public sealed class TakeoffNativeRefreshProofTests
                 view.Name = "Renamed proof view";
                 tx.Commit();
             }
-            var edited = TakeoffAtlas.Snapshot(doc).RegionsByZone[zoneGuid.ToString("D")].Single();
+            var edited = TakeoffAtlas.Snapshot(doc, new TakeoffReadRequest(ZoneGuids: [zoneGuid])).RegionsByZone[zoneGuid.ToString("D")].Single();
             Assert.That(edited.Guid, Is.EqualTo(before.Guid));
             Assert.That(edited.Sqft, Is.EqualTo(before.Sqft));
             Assert.That(edited.Analysis!.State, Is.EqualTo("stale"));
@@ -64,7 +64,7 @@ public sealed class TakeoffNativeRefreshProofTests
                 TakeoffAtlas.Partition(doc, new(zone.Id.Value(), view.Name, "Zone", zoneGuid, "measurement-2"));
                 tx.Commit();
             }
-            var after = TakeoffAtlas.Snapshot(doc).RegionsByZone[zoneGuid.ToString("D")].Single();
+            var after = TakeoffAtlas.Snapshot(doc, new TakeoffReadRequest(ZoneGuids: [zoneGuid])).RegionsByZone[zoneGuid.ToString("D")].Single();
             Assert.That(after.ElementId, Is.EqualTo(before.ElementId));
             Assert.That(after.Guid, Is.EqualTo(before.Guid));
             Assert.That(TakeoffJson.Serialize(after.Outer), Is.EqualTo(geometry));

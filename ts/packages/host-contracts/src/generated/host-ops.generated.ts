@@ -7263,105 +7263,6 @@ export namespace RevitDetailSheets {
   }
 }
 
-/** Capture host and loaded link geometry for this operation, returning its summary and releasing its triangle soup and BVH afterward. Saved linked geometry may be reused from disk. Minutes on a large model; holds Revit for the capture. */
-export namespace RevitDetailSpaceBuild {
-  export namespace Req {
-    export interface Request {}
-  }
-  export namespace Res {
-    /**
-     * Which document a partition reads. One partition per source.
-     */
-    export type SourceKind = "Host" | "RevitLink" | "IfcLink";
-    /**
-     * What a triangle came from. Curve2D is a DWG 2D layer raised into a vertical
-     * ribbon; it is never an obstructor unless a filter names it.
-     *
-     */
-    export type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
-
-    /**
-     * Summary of the operation's capture. Status alone reports Built false because it does not
-     * capture geometry. Other query operations prepare their own World. Bounds union captured row boxes.
-     *
-     */
-    export interface Response {
-      stamp: Stamp;
-      built: boolean;
-      pendingIds: number;
-      categories: SourceCategories[];
-      levels: LevelRow[];
-      bounds?: null | Aabb;
-      ms: number;
-    }
-    /**
-     * Provenance and freshness. Every answer embeds one; it is not optional.
-     */
-    export interface Stamp {
-      hostDocumentKey: string;
-      epoch: number;
-      frame: string;
-      builtUtc: string;
-      sources: SourceRow[];
-      fresh: boolean;
-      resolved: Resolved;
-    }
-    /**
-     * One row per partition. Carried inside every Stamp.
-     */
-    export interface SourceRow {
-      source: number;
-      documentKey: string;
-      linkInstanceId?: number | null;
-      kind: SourceKind;
-      builtAtEpoch: number;
-      dirty: boolean;
-      elements: number;
-      triangles: number;
-      skipped: number;
-    }
-    /**
-     * The options a verb actually ran with, after defaults were applied. Never null and never a
-     * silence: a caller who passed no filter reads back Kinds: [Solid, Mesh] and the sources
-     * and categories spelled out. This is the gate that was in force, not the outcome; what the
-     * verb then had to touch is Searched.
-     *
-     */
-    export interface Resolved {
-      sources: SourceKind[];
-      categories: string[];
-      kinds: PrimKind[];
-      layers: string[];
-      excludedElementIds: number[];
-    }
-    /**
-     * One partition's categories, so a filter can be built without a rows read.
-     */
-    export interface SourceCategories {
-      source: number;
-      categories: string[];
-    }
-    /**
-     * One host level and its project elevation in host internal feet.
-     */
-    export interface LevelRow {
-      name: string;
-      elevationFt: number;
-    }
-    /**
-     * Axis-aligned bounds in host internal feet.
-     */
-    export interface Aabb {
-      minX: number;
-      minY: number;
-      minZ: number;
-      maxX: number;
-      maxY: number;
-      maxZ: number;
-    }
-  }
-}
-
 /** Count what lies inside a box, by source, category, kind and DWG layer, plus the ten fattest elements by triangle count. Reads only that box: an element is admitted when its own-frame box meets the box. */
 export namespace RevitDetailSpaceCensus {
   export namespace Req {
@@ -7511,10 +7412,19 @@ export namespace RevitDetailSpaceProbe {
      * Purpose defaults to Obstructions; RoomHeights applies architectural height-role predicates.
      */
     export interface Request {
+      region: Region;
       at: number[];
       filter?: null | FilterRequest;
       maxDistanceFt?: null | number;
       purpose?: null | ProbePurpose;
+    }
+    /**
+     * A room or space UniqueId, or a box in host internal feet.
+     */
+    export interface Region {
+      kind: string;
+      uniqueId?: null | string;
+      box?: number[] | null;
     }
     /**
      * The filter as the wire spells it: enum names as strings, every axis optional.
@@ -7654,7 +7564,16 @@ export namespace RevitDetailSpaceRows {
      * Read rows passing Filter; omitted axes use the resolved defaults in the answer stamp.
      */
     export interface Request {
+      region: Region;
       filter?: null | FilterRequest;
+    }
+    /**
+     * A room or space UniqueId, or a box in host internal feet.
+     */
+    export interface Region {
+      kind: string;
+      uniqueId?: null | string;
+      box?: number[] | null;
     }
     /**
      * The filter as the wire spells it: enum names as strings, every axis optional.
@@ -7771,6 +7690,7 @@ export namespace RevitDetailSpaceScene {
       bounds?: null | Aabb;
       focusOnly?: boolean;
       contextRepresentation?: SceneContextRepresentation;
+      region?: null | Region;
     }
     /**
      * Axis-aligned bounds in host internal feet.
@@ -7782,6 +7702,14 @@ export namespace RevitDetailSpaceScene {
       maxX: number;
       maxY: number;
       maxZ: number;
+    }
+    /**
+     * A room or space UniqueId, or a box in host internal feet.
+     */
+    export interface Region {
+      kind: string;
+      uniqueId?: null | string;
+      box?: number[] | null;
     }
   }
   export namespace Res {
@@ -8205,11 +8133,20 @@ export namespace RevitDetailSpaceSlice {
      * MaxPieces defaults to 50000 and retains whole elements in source order; zero emits none.
      */
     export interface Request {
+      region: Region;
       z0: number;
       z1: number;
       filter?: null | FilterRequest;
       xyClip?: number[] | null;
       maxPieces?: number | null;
+    }
+    /**
+     * A room or space UniqueId, or a box in host internal feet.
+     */
+    export interface Region {
+      kind: string;
+      uniqueId?: null | string;
+      box?: number[] | null;
     }
     /**
      * The filter as the wire spells it: enum names as strings, every axis optional.
@@ -8445,11 +8382,20 @@ export namespace RevitDetailSpaceSweep {
      * Sweep a positive width/height profile in feet along at least two host-coordinate triples, with nonnegative clearance.
      */
     export interface Request {
+      region: Region;
       polyline: number[][];
       widthFt: number;
       heightFt: number;
       clearanceFt: number;
       filter?: null | FilterRequest;
+    }
+    /**
+     * A room or space UniqueId, or a box in host internal feet.
+     */
+    export interface Region {
+      kind: string;
+      uniqueId?: null | string;
+      box?: number[] | null;
     }
     /**
      * The filter as the wire spells it: enum names as strings, every axis optional.
@@ -8584,8 +8530,17 @@ export namespace RevitDetailSpaceTree {
      * Read Source's BVH through MaxDepth inclusive. Source defaults to host (0), depth to 8.
      */
     export interface Request {
+      region: Region;
       source?: number | null;
       maxDepth?: number | null;
+    }
+    /**
+     * A room or space UniqueId, or a box in host internal feet.
+     */
+    export interface Region {
+      kind: string;
+      uniqueId?: null | string;
+      box?: number[] | null;
     }
   }
   export namespace Res {
@@ -9867,10 +9822,56 @@ export namespace RoomsPartition {
   }
 }
 
+/** Read plan views and level elevations without region boundaries. */
+export namespace RoomsRoster {
+  export namespace Req {
+    export interface Request {}
+  }
+  export namespace Res {
+    export interface Response {
+      levels: RoomsLevel[];
+      regions: RoomsRegion[];
+    }
+    export interface RoomsLevel {
+      name: string;
+      elevation: number;
+      views: string[];
+    }
+    export interface RoomsRegion {
+      elementId: number;
+      guid: string;
+      view: string;
+      level: string;
+      role: string;
+      zone?: null | string;
+      designation?: null | string;
+      name: string;
+      type: string;
+      ceilingFt?: null | number;
+      people?: null | number;
+      lightingW?: null | number;
+      equipSensible?: null | number;
+      equipLatent?: null | number;
+      ventilationCfm?: null | number;
+      sqft: number;
+      outer: number[][];
+      holes: number[][][];
+      label: number[];
+      runId: string;
+      reason?: null | string;
+      touched: boolean;
+      locked: boolean;
+      stale: boolean;
+    }
+  }
+}
+
 /** Read plan-view levels and every zone, room, and held region on them with its parent zone, designation, room fields, geometry, and locked, touched, and stale state. */
 export namespace RoomsSnapshot {
   export namespace Req {
-    export interface Request {}
+    export interface Request {
+      view: string;
+    }
   }
   export namespace Res {
     export interface Response {
@@ -10646,7 +10647,13 @@ export namespace TakeoffsRhvacLinks {
 /** Read Takeoff model status, plan views, zoning regions, materialized rooms, and source identity from the active project. */
 export namespace TakeoffsSnapshot {
   export namespace Req {
-    export interface Request {}
+    /**
+     * Geometry scope. Empty scope reads only the geometry-free roster.
+     */
+    export interface Request {
+      views?: string[] | null;
+      zoneGuids?: string[] | null;
+    }
   }
   export namespace Res {
     export type TakeoffCarrierStage = "Adoption" | "Materialization" | "Rooms";
@@ -10842,7 +10849,6 @@ export interface HostOps {
   "revit.detail.parameter-links": { request: RevitDetailParameterLinks.Req.Request; response: RevitDetailParameterLinks.Res.Response };
   "revit.detail.schedules": { request: RevitDetailSchedules.Req.Request; response: RevitDetailSchedules.Res.Response };
   "revit.detail.sheets": { request: RevitDetailSheets.Req.Request; response: RevitDetailSheets.Res.Response };
-  "revit.detail.space-build": { request: RevitDetailSpaceBuild.Req.Request; response: RevitDetailSpaceBuild.Res.Response };
   "revit.detail.space-census": { request: RevitDetailSpaceCensus.Req.Request; response: RevitDetailSpaceCensus.Res.Response };
   "revit.detail.space-probe": { request: RevitDetailSpaceProbe.Req.Request; response: RevitDetailSpaceProbe.Res.Response };
   "revit.detail.space-rows": { request: RevitDetailSpaceRows.Req.Request; response: RevitDetailSpaceRows.Res.Response };
@@ -10863,6 +10869,7 @@ export interface HostOps {
   "rooms.draw": { request: RoomsDraw.Req.Request; response: RoomsDraw.Res.Response };
   "rooms.merge": { request: RoomsMerge.Req.Request; response: RoomsMerge.Res.Response };
   "rooms.partition": { request: RoomsPartition.Req.Request; response: RoomsPartition.Res.Response };
+  "rooms.roster": { request: RoomsRoster.Req.Request; response: RoomsRoster.Res.Response };
   "rooms.snapshot": { request: RoomsSnapshot.Req.Request; response: RoomsSnapshot.Res.Response };
   "rooms.trace": { request: RoomsTrace.Req.Request; response: RoomsTrace.Res.Response };
   "rooms.write": { request: RoomsWrite.Req.Request; response: RoomsWrite.Res.Response };
@@ -10941,7 +10948,6 @@ export const hostOpKeys = [
   "revit.detail.parameter-links",
   "revit.detail.schedules",
   "revit.detail.sheets",
-  "revit.detail.space-build",
   "revit.detail.space-census",
   "revit.detail.space-probe",
   "revit.detail.space-rows",
@@ -10962,6 +10968,7 @@ export const hostOpKeys = [
   "rooms.draw",
   "rooms.merge",
   "rooms.partition",
+  "rooms.roster",
   "rooms.snapshot",
   "rooms.trace",
   "rooms.write",
@@ -11040,15 +11047,14 @@ export const hostOpSafety = {
   "revit.detail.parameter-links": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"Document","touches":"Topology","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "revit.detail.schedules": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"View","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "revit.detail.sheets": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"View","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
-  "revit.detail.space-build": {"intent":"Read","costTier":"Expensive","usesTransactions":false,"subject":"Document","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "revit.detail.space-census": {"intent":"Read","costTier":"Expensive","usesTransactions":false,"subject":"Region","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "revit.detail.space-probe": {"intent":"Read","costTier":"Expensive","usesTransactions":false,"subject":"Region","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
-  "revit.detail.space-rows": {"intent":"Read","costTier":"Expensive","usesTransactions":false,"subject":"Document","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
-  "revit.detail.space-scene": {"intent":"Read","costTier":"Expensive","usesTransactions":false,"subject":"Elements","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.detail.space-rows": {"intent":"Read","costTier":"Expensive","usesTransactions":false,"subject":"Region","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.detail.space-scene": {"intent":"Read","costTier":"Expensive","usesTransactions":false,"subject":"Region","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "revit.detail.space-slice": {"intent":"Read","costTier":"Expensive","usesTransactions":false,"subject":"Region","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "revit.detail.space-status": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "revit.detail.space-sweep": {"intent":"Read","costTier":"Expensive","usesTransactions":false,"subject":"Region","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
-  "revit.detail.space-tree": {"intent":"Read","costTier":"Expensive","usesTransactions":false,"subject":"Document","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.detail.space-tree": {"intent":"Read","costTier":"Expensive","usesTransactions":false,"subject":"Region","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "revit.glance.attention": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"View","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "revit.glance.model": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "revit.matrix.loaded-families": {"intent":"Read","costTier":"Expensive","usesTransactions":true,"subject":"Document","touches":"Metadata","effect":"TransactRead","cardinality":"One","internal":false,"rollsBack":true},
@@ -11061,7 +11067,8 @@ export const hostOpSafety = {
   "rooms.draw": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"View","touches":"Geometry","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
   "rooms.merge": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"View","touches":"Geometry","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
   "rooms.partition": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"View","touches":"Geometry","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
-  "rooms.snapshot": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"Document","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "rooms.roster": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "rooms.snapshot": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"View","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "rooms.trace": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"View","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "rooms.write": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Elements","touches":"Metadata","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
   "schedule.apply": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Document","touches":"Metadata","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
@@ -11076,5 +11083,5 @@ export const hostOpSafety = {
   "takeoffs.initialize-carrier": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Document","touches":"Metadata","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
   "takeoffs.partition": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Region","touches":"Geometry","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
   "takeoffs.rhvac-links": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Elements","touches":"Metadata","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
-  "takeoffs.snapshot": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"Document","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "takeoffs.snapshot": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"Region","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
 } as const satisfies Record<keyof HostOps, { intent: string; costTier: string; usesTransactions: boolean; subject: string; touches: string; effect: string; cardinality: string; internal: boolean; rollsBack: boolean }>;

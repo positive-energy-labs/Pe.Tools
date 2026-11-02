@@ -215,3 +215,7 @@ public sealed record RoomsZoneTrace(Guid ZoneGuid, string Label, RoomsTrace Trac
 // RunId null reads the newest run that traced a zone on the view.
 public sealed record RoomsTraceRequest(string View, string? RunId = null);
 public sealed record RoomsTraceData(string RunId, IReadOnlyList<RoomsZoneTrace> Zones);
+
+/// <summary>Geometry scope. Empty scope reads only the geometry-free roster.</summary>
+public sealed record TakeoffReadRequest(IReadOnlyList<string>? Views = null, IReadOnlyList<Guid>? ZoneGuids = null);
+public sealed record RoomsReadRequest(string View);

@@ -59,9 +59,15 @@ export function takeoffSources(): Readonly<Record<string, ReadingSource>> {
     "takeoffs.snapshot": {
       kind: "use",
       dirties: ["snapshot"],
-      open(ctx, deliver) {
+      async open(ctx, deliver) {
         if (page(ctx).work || ctx.target.kind !== "document")
           return deliver({ kind: "complete", value: null, revision: 0 });
+        await readTakeoff(
+          "takeoffs.snapshot",
+          { views: page(ctx).views, zoneGuids: page(ctx).zones },
+          ctx.target.ref,
+        );
+        if (ctx.signal.aborted) return;
         return subscriptionSource({
           request: () => ({
             kind: "takeoff-reading",

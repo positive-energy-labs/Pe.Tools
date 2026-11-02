@@ -36,7 +36,8 @@ public sealed record SceneRequest(
     int MaxTriangles = 1500000,
     Aabb? Bounds = null,
     bool FocusOnly = false,
-    SceneContextRepresentation ContextRepresentation = SceneContextRepresentation.LinkBoxes
+    SceneContextRepresentation ContextRepresentation = SceneContextRepresentation.LinkBoxes,
+    Region? Region = null
 );
 
 /// <summary>Straight physical run in host feet, including host insulation. Curved runs use native meshes.</summary>
