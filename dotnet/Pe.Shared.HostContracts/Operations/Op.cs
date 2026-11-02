@@ -19,6 +19,13 @@ public enum OpCost {
     Mutation
 }
 
+/// <summary>Acquisition boundary, independent of the active document requirement.</summary>
+public enum OpSubject { None, Document, FamilyDocument, View, Elements, System, Region, Session }
+[Flags]
+public enum OpTouches { Metadata = 1, Topology = 2, Geometry = 4 }
+public enum OpEffect { Read, TransactRead, SessionWrite, ModelWrite }
+public enum OpCardinality { One, Many }
+
 public enum OpTier {
     Default,
     Escalation,
@@ -44,6 +51,12 @@ public sealed class OpAttribute(string key) : Attribute {
     public required string Does { get; init; }
     public string[]? Finds { get; init; }
     public OpIntent Intent { get; init; } = OpIntent.Read;
+    public OpSubject Subject { get; init; }
+    public OpTouches Touches { get; init; } = OpTouches.Metadata;
+    public OpEffect Effect { get; init; }
+    public OpCardinality Cardinality { get; init; } = OpCardinality.One;
+    public bool Internal { get; init; }
+    public bool RollsBack { get; init; }
     public OpCost Cost { get; init; } = OpCost.Cheap;
     public OpTier Tier { get; init; } = OpTier.Escalation;
     public string? Example { get; init; }
@@ -222,6 +235,12 @@ public static class OpRegistry {
                    ?? throw new InvalidOperationException("[Op] requires Does."),
             Finds = Strings(nameof(OpAttribute.Finds)),
             Intent = (OpIntent)EnumValue(nameof(OpAttribute.Intent), (int)OpIntent.Read),
+            Subject = (OpSubject)EnumValue(nameof(OpAttribute.Subject), 0),
+            Touches = (OpTouches)EnumValue(nameof(OpAttribute.Touches), 1),
+            Effect = (OpEffect)EnumValue(nameof(OpAttribute.Effect), 0),
+            Cardinality = (OpCardinality)EnumValue(nameof(OpAttribute.Cardinality), 0),
+            Internal = Named(nameof(OpAttribute.Internal)) as bool? ?? false,
+            RollsBack = Named(nameof(OpAttribute.RollsBack)) as bool? ?? false,
             Cost = (OpCost)EnumValue(nameof(OpAttribute.Cost), (int)OpCost.Cheap),
             Tier = (OpTier)EnumValue(nameof(OpAttribute.Tier), (int)OpTier.Escalation),
             Example = Named(nameof(OpAttribute.Example)) as string,
@@ -313,7 +332,9 @@ public static class OpRegistry {
             needs,
             attribute.Actor,
             attribute.UsesTransactions || attribute.Intent == OpIntent.Mutate,
-            attribute.ArtifactMetadata
+            attribute.ArtifactMetadata,
+            attribute.Subject, attribute.Touches, attribute.Effect, attribute.Cardinality,
+            attribute.Internal, attribute.RollsBack
         );
         Validate(definition);
         return definition;
@@ -399,7 +420,9 @@ public sealed record HostOpsCatalogEntry(
     string ResponseSchemaJson,
     string Actor,
     bool UsesTransactions,
-    string? ArtifactSchemaJson = null
+    string? ArtifactSchemaJson = null,
+    string Subject = "None", string Touches = "Metadata", string Effect = "Read",
+    string Cardinality = "One", bool Internal = false, bool RollsBack = false
 ) {
     public static HostOpsCatalogEntry FromOp(Op op) {
         return FromDefinition(op.Definition);
@@ -428,7 +451,9 @@ public sealed record HostOpsCatalogEntry(
             BridgeOpSchemaGenerator.GetResponseSchemaJson(definition.ResponseType),
             definition.Actor.ToString().ToLowerInvariant(),
             definition.UsesTransactions,
-            definition.ArtifactMetadataType is { } artifact ? BridgeOpSchemaGenerator.GetResponseSchemaJson(artifact) : null
+            definition.ArtifactMetadataType is { } artifact ? BridgeOpSchemaGenerator.GetResponseSchemaJson(artifact) : null,
+            definition.Subject.ToString(), definition.Touches.ToString(), definition.Effect.ToString(),
+            definition.Cardinality.ToString(), definition.Internal, definition.RollsBack
         );
     }
 }
@@ -442,7 +467,8 @@ public sealed record HostOpsCatalogData(
     ///     Public const fields of each contract-constants class, keyed by camel-cased class and field name.
     ///     The live catalog and the offline `pe-dev ops-catalog` both call this, so they agree.
     /// </summary>
-    public static IReadOnlyDictionary<string, IReadOnlyDictionary<string, object>> ReadConstants() =>
+    public static IReadOnlyDictionary<string, IReadOnlyDictionary<string, object>> ReadConstants() {
+        var result =
         new[] { typeof(Scripting.ScriptPodSourceBounds), typeof(Scripting.ScriptPodMemberBounds), typeof(Pe.Shared.RevitData.ParameterValueApplyBounds) }.OrderBy(type => type.Name, StringComparer.Ordinal).ToDictionary(
             type => CamelCase(type.Name),
             type => (IReadOnlyDictionary<string, object>)type
@@ -450,6 +476,10 @@ public sealed record HostOpsCatalogData(
                 .Where(field => field.IsLiteral)
                 .OrderBy(field => field.MetadataToken)
                 .ToDictionary(field => CamelCase(field.Name), field => field.GetRawConstantValue()!));
+        foreach (var type in new[] { typeof(OpSubject), typeof(OpTouches), typeof(OpEffect), typeof(OpCardinality), typeof(OpCost) })
+            result.Add(CamelCase(type.Name), Enum.GetNames(type).ToDictionary(name => name, name => (object)name));
+        return result;
+    }
 
     private static string CamelCase(string name) => char.ToLowerInvariant(name[0]) + name.Substring(1);
 }
@@ -475,5 +505,25 @@ public static class OpDocumentGate {
         throw BridgeOperationExceptions.BadRequest(
             message,
             [BridgeOperationExceptions.Issue("$", "InvalidRequest", message, $"Open a {expected} and retry.")]);
+    }
+}
+
+/// <summary>The private bridge accepts internal leaves only with host-owned command provenance.</summary>
+public static class OpCallGate {
+    public static void Require(HostOperationDefinition definition, string? derivedCommand, string? payloadJson = null) {
+        if (definition.Internal && string.IsNullOrWhiteSpace(derivedCommand))
+            throw BridgeOperationExceptions.BadRequest($"'{definition.Key}' is internal; invoke its derived command.");
+        if (definition.Effect == OpEffect.TransactRead && !definition.RollsBack)
+            throw BridgeOperationExceptions.BadRequest($"'{definition.Key}' must declare rollback.");
+        if (definition.Effect is OpEffect.Read or OpEffect.TransactRead
+            && definition.Touches.HasFlag(OpTouches.Geometry) && definition.Subject == OpSubject.Document)
+        {
+            var payload = Newtonsoft.Json.Linq.JObject.Parse(payloadJson ?? "{}");
+            var kind = payload["selector"]?["kind"]?.ToString();
+            if (definition.Key == "ducts.snapshot" && kind is "roster" or "from" or "ids" or "systems") return;
+            if (definition.Key == "revit.catalog.electrical-circuits"
+                && payload["options"]?["includeNearbyProxyContext"]?.ToObject<bool>() != true) return;
+            throw BridgeOperationExceptions.BadRequest($"'{definition.Key}' requires a narrower geometry subject.");
+        }
     }
 }

@@ -36,7 +36,7 @@ public sealed class BridgeRequestPump(
         }
     }
 
-    [Op("op.cancel",
+    [Op("op.cancel", Subject = OpSubject.None, Touches = OpTouches.Metadata, Effect = OpEffect.SessionWrite,
         Does = "Signal cooperative cancellation to one in-flight bridge request, named by the requestId it was sent under. The operation stops at its next checkpoint and answers with a cancelled outcome; work already committed inside Revit is not undone, and an operation that never checks its token cannot be interrupted.",
         Title = "Cancel Bridge Request",
         Intent = OpIntent.Mutate, Actor = OpActor.Any,

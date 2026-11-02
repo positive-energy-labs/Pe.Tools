@@ -1,3 +1,4 @@
+import { catalogCommandContext } from "./catalog-command-context.ts";
 import { StepFailure } from "./command-executor.ts";
 import { Context, Deferred, Effect, Layer, PubSub, Ref, Schema } from "effect";
 import type { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
@@ -640,6 +641,7 @@ export const RevitBridgeLive = Layer.effect(
             operationKey,
             payloadJson,
             openDocumentId,
+            derivedCommand: catalogCommandContext.getStore(),
           },
         });
         if (reserved) yield* Effect.promise(() => markBridgeDispatched(requestId));

@@ -98,7 +98,8 @@ public sealed record BridgeRequest(
     string RequestId,
     string OperationKey,
     string PayloadJson,
-    string? OpenDocumentId = null
+    string? OpenDocumentId = null,
+    string? DerivedCommand = null
 );
 
 public sealed record BridgeResponse(

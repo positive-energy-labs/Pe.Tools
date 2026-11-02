@@ -70,16 +70,16 @@ public sealed class OpRegistryTests {
     )]
     private static SchemaData Handle(NoRequest _) => null!;
 
-    [Op("test.revit-document", Does = "Prove presence-based Revit document needs.", IsPublic = false)]
+    [Op("test.revit-document", Subject = OpSubject.None, Touches = OpTouches.Metadata, Effect = OpEffect.Read, Does = "Prove presence-based Revit document needs.", IsPublic = false)]
     private static SchemaData HandleRevitDocument(NoRequest _, RevitDocument document) => null!;
 
-    [Op("test.project-document", Does = "Prove presence-based project document needs.", IsPublic = false)]
+    [Op("test.project-document", Subject = OpSubject.None, Touches = OpTouches.Metadata, Effect = OpEffect.Read, Does = "Prove presence-based project document needs.", IsPublic = false)]
     private static SchemaData HandleProjectDocument(NoRequest _, ProjectDocument document) => null!;
 
-    [Op("test.family-document", Does = "Prove presence-based family document needs.", IsPublic = false)]
+    [Op("test.family-document", Subject = OpSubject.None, Touches = OpTouches.Metadata, Effect = OpEffect.Read, Does = "Prove presence-based family document needs.", IsPublic = false)]
     private static SchemaData HandleFamilyDocument(NoRequest _, FamilyDocument document) => null!;
 
-    [Op("test.human-verb", Does = "Prove a human-only verb is declared on the catalog.", Actor = OpActor.Human, IsPublic = false)]
+    [Op("test.human-verb", Subject = OpSubject.None, Touches = OpTouches.Metadata, Effect = OpEffect.Read, Does = "Prove a human-only verb is declared on the catalog.", Actor = OpActor.Human, IsPublic = false)]
     private static SchemaData HandleHumanVerb(NoRequest _) => null!;
 
     [Test]

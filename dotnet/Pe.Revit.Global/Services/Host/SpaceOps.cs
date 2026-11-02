@@ -32,28 +32,28 @@ internal static class SpaceOps {
     /// <summary>Sweep a positive width/height profile in feet along at least two host-coordinate triples, with nonnegative clearance.</summary>
     public sealed record SweepRequest(double[][] Polyline, double WidthFt, double HeightFt, double ClearanceFt, FilterRequest? Filter = null);
 
-    [Op("revit.detail.space-status", Does = "Read the current change epoch and level elevations without capturing geometry. Geometry is operation-owned; status reports no retained world.", Title = "Get Space World Status", Finds = ["space", "world", "status", "stamp", "sources", "levels"], Cost = OpCost.Cheap)]
+    [Op("revit.detail.space-status", Subject = OpSubject.Document, Touches = OpTouches.Metadata, Effect = OpEffect.Read, Does = "Read the current change epoch and level elevations without capturing geometry. Geometry is operation-owned; status reports no retained world.", Title = "Get Space World Status", Finds = ["space", "world", "status", "stamp", "sources", "levels"], Cost = OpCost.Cheap)]
     private static StatusAnswer Status(NoRequest _, ProjectDocument document) => SpaceView.Status(document.Value);
 
-    [Op("revit.detail.space-build", Does = "Capture host and loaded link geometry for this operation, returning its summary and releasing its triangle soup and BVH afterward. Saved linked geometry may be reused from disk. Minutes on a large model; holds Revit for the capture.", Title = "Build Space World", Finds = ["space", "world", "build", "ingest", "tessellate"], Cost = OpCost.Expensive)]
+    [Op("revit.detail.space-build", Subject = OpSubject.Document, Touches = OpTouches.Geometry, Effect = OpEffect.Read, Does = "Capture host and loaded link geometry for this operation, returning its summary and releasing its triangle soup and BVH afterward. Saved linked geometry may be reused from disk. Minutes on a large model; holds Revit for the capture.", Title = "Build Space World", Finds = ["space", "world", "build", "ingest", "tessellate"], Cost = OpCost.Expensive)]
     private static StatusAnswer Build(NoRequest _, ProjectDocument document) {
         var world = SpaceWorld.Build(document.Value);
         return SpaceView.Status(document.Value, world);
     }
 
-    [Op("revit.detail.space-rows", Does = "Read every element row of the operation-owned world that passes a filter, as parallel arrays with legend lists for category, kind, layer and height role, plus each row's box and triangle count.", Title = "Get Space Rows", Finds = ["space", "rows", "elements", "boxes", "categories"], Cost = OpCost.Expensive)]
+    [Op("revit.detail.space-rows", Subject = OpSubject.Document, Touches = OpTouches.Geometry, Effect = OpEffect.Read, Does = "Read every element row of the operation-owned world that passes a filter, as parallel arrays with legend lists for category, kind, layer and height role, plus each row's box and triangle count.", Title = "Get Space Rows", Finds = ["space", "rows", "elements", "boxes", "categories"], Cost = OpCost.Expensive)]
     private static RowsAnswer Rows(RowsRequest request, ProjectDocument document) =>
         SpaceView.Rows(document.Value, (request.Filter ?? new FilterRequest()).ToFilter());
 
-    [Op("revit.detail.space-tree", Does = "Read one source's BVH down to a depth: each node's box, depth, leaf flag and triangle count, so a viewer can draw how a sweep prunes.", Title = "Get Space BVH", Finds = ["space", "bvh", "tree", "nodes"], Cost = OpCost.Expensive)]
+    [Op("revit.detail.space-tree", Subject = OpSubject.Document, Touches = OpTouches.Geometry, Effect = OpEffect.Read, Does = "Read one source's BVH down to a depth: each node's box, depth, leaf flag and triangle count, so a viewer can draw how a sweep prunes.", Title = "Get Space BVH", Finds = ["space", "bvh", "tree", "nodes"], Cost = OpCost.Expensive)]
     private static TreeAnswer Tree(TreeRequest request, ProjectDocument document) =>
         SpaceView.Tree(document.Value, request.Source ?? 0, request.MaxDepth ?? 8);
 
-    [Op("revit.detail.space-census", Does = "Count what lies inside a box, by source, category, kind and DWG layer, plus the ten fattest elements by triangle count. Reads only that box: an element is admitted when its own-frame box meets the box.", Title = "Census Space World", Finds = ["space", "census", "count", "categories", "box"], Cost = OpCost.Expensive)]
+    [Op("revit.detail.space-census", Subject = OpSubject.Region, Touches = OpTouches.Geometry, Effect = OpEffect.Read, Does = "Count what lies inside a box, by source, category, kind and DWG layer, plus the ten fattest elements by triangle count. Reads only that box: an element is admitted when its own-frame box meets the box.", Title = "Census Space World", Finds = ["space", "census", "count", "categories", "box"], Cost = OpCost.Expensive)]
     private static CensusAnswer Census(CensusRequest request, ProjectDocument document) =>
         Verbs.Census(document.Value, Box(request.Box, nameof(request.Box)), (request.Filter ?? new FilterRequest()).ToFilter());
 
-    [Op("revit.detail.space-slice", Does = "Slice the operation-owned world with a horizontal band z0..z1: every triangle clipped to the band and flattened to convex xy pieces per element, the exact footprint the partition solver reads; capped at maxPieces with whole elements, and the answer says when it truncated and the total it found. Reads only the band (within xyClip when given): an element is admitted when its own-frame box meets that region, and xyClip rejects elements whose box misses the rectangle.", Title = "Slice Space World", Finds = ["space", "slice", "band", "footprint", "plan"], Cost = OpCost.Expensive)]
+    [Op("revit.detail.space-slice", Subject = OpSubject.Region, Touches = OpTouches.Geometry, Effect = OpEffect.Read, Does = "Slice the operation-owned world with a horizontal band z0..z1: every triangle clipped to the band and flattened to convex xy pieces per element, the exact footprint the partition solver reads; capped at maxPieces with whole elements, and the answer says when it truncated and the total it found. Reads only the band (within xyClip when given): an element is admitted when its own-frame box meets that region, and xyClip rejects elements whose box misses the rectangle.", Title = "Slice Space World", Finds = ["space", "slice", "band", "footprint", "plan"], Cost = OpCost.Expensive)]
     private static SliceCapped Slice(SliceRequest request, ProjectDocument document) {
         Finite(request.Z0, nameof(request.Z0));
         Finite(request.Z1, nameof(request.Z1));
@@ -61,7 +61,7 @@ internal static class SpaceOps {
             request.XyClip is null ? null : Box(request.XyClip, nameof(request.XyClip)), request.MaxPieces ?? 50_000);
     }
 
-    [Op("revit.detail.space-probe", Does = "Probe straight down and straight up from one point: the first thing under it and over it, with the Handle and distance of each; null when nothing is hit within maxDistanceFt.", Title = "Probe Space World", Finds = ["space", "probe", "floor", "ceiling", "ray"], Cost = OpCost.Expensive)]
+    [Op("revit.detail.space-probe", Subject = OpSubject.Region, Touches = OpTouches.Geometry, Effect = OpEffect.Read, Does = "Probe straight down and straight up from one point: the first thing under it and over it, with the Handle and distance of each; null when nothing is hit within maxDistanceFt.", Title = "Probe Space World", Finds = ["space", "probe", "floor", "ceiling", "ray"], Cost = OpCost.Expensive)]
     private static ProbeAnswer Probe(ProbeRequest request, ProjectDocument document) {
         var distance = request.MaxDistanceFt ?? 200;
         Positive(distance, nameof(request.MaxDistanceFt));
@@ -71,7 +71,7 @@ internal static class SpaceOps {
             (request.Filter ?? new FilterRequest()).ToFilter(), distance, purpose);
     }
 
-    [Op("revit.detail.space-sweep", Does = "Sweep a rectangular profile (widthFt across, heightFt up) along a polyline and answer HIT, NEAR or CLEAR per segment with the exact gap and the nearest element's Handle.", Title = "Sweep Space World", Finds = ["space", "sweep", "clearance", "duct", "collision"], Cost = OpCost.Expensive)]
+    [Op("revit.detail.space-sweep", Subject = OpSubject.Region, Touches = OpTouches.Geometry, Effect = OpEffect.Read, Does = "Sweep a rectangular profile (widthFt across, heightFt up) along a polyline and answer HIT, NEAR or CLEAR per segment with the exact gap and the nearest element's Handle.", Title = "Sweep Space World", Finds = ["space", "sweep", "clearance", "duct", "collision"], Cost = OpCost.Expensive)]
     private static SweepAnswer Sweep(SweepRequest request, ProjectDocument document) {
         if (request.Polyline is not { Length: >= 2 }) throw new ArgumentException("polyline needs at least two coordinate triples.");
         Positive(request.WidthFt, nameof(request.WidthFt));

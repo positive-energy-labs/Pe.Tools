@@ -1302,6 +1302,1236 @@ export namespace DuctsSnapshot {
   }
 }
 
+/** Read equipment, terminal parameters and port identities without positions or connector frames. */
+export namespace DuctsSnapshotRoster {
+  export namespace Req {
+    export type DuctSelectorKind = "document" | "ids" | "from" | "roster" | "systems";
+
+    /**
+     * Optional: which parameters carry the designer-stated values (absent reads the defaults), and LabelParameter, the
+     * instance parameter whose string value names equipment for people (absent reads the firm tag, PE_G___TagInstance:
+     * PE's alternative to the built-in Mark, never the Mark itself).
+     *
+     */
+    export interface Request {
+      slots?: null | DuctParameterSlots;
+      labelParameter?: null | string;
+      selector?: null | DuctSnapshotSelector;
+    }
+    /**
+     * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
+     * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) and TerminalFlow (CFM) on terminals,
+     * FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
+     * live (the configurable door, kaitpw 2026-10-08).
+     *
+     */
+    export interface DuctParameterSlots {
+      fanStatic?: string;
+      fanFlow?: string;
+      componentDrop?: string;
+      terminalDrop?: null | string;
+      fittingCoefficient?: string;
+      terminalFlow?: string;
+    }
+    /**
+     * Which elements the snapshot reads. Kind `document` is the default and the shape every existing caller gets. Kind
+     * `ids` reads Ids. Kind `from` walks Revit connectors outward from UnitId's HVAC ports (PortIndex names one
+     * connector id; absent walks every port) through ducts, flex, fittings, accessories and equipment (equipment is a
+     * leg, never a cut: the roster decides stops later), stopping at an air terminal, an open end, or MaxHops elements
+     * deep (default 2000). At every open end a box CandidateBoxIn inches on a side (default 36) around the connector is
+     * searched for MEP elements, which join the output marked `open-end-candidate` so a join can be inferred. Every kind
+     * reports model health (Issues) under CandidateBoxIn and AutoJoinGapIn (DuctHealthTolerances). Kind
+     * `systems` reads SystemIds (MechanicalSystem ids): each system's DuctNetwork, Elements and base equipment, grown
+     * along connectors to whole groups (a group is a connected component, so one the systems touch is never cut), and
+     * answers in the `document` shape with Systems holding only the named systems.
+     *
+     */
+    export interface DuctSnapshotSelector {
+      kind?: DuctSelectorKind;
+      ids?: number[] | null;
+      unitId?: number | null;
+      portIndex?: number | null;
+      maxHops?: number | null;
+      candidateBoxIn?: null | number;
+      systemIds?: number[] | null;
+      autoJoinGapIn?: null | number;
+    }
+  }
+  export namespace Res {
+    /**
+     * Physical XYZ and segment LengthFt preserve native model-foot binary64 values; other facts retain their stated units/rounding.
+     */
+    export type DuctCoordinateEncoding = "native-double";
+    export type DuctNodeKind = "equipment" | "terminal" | "fitting" | "accessory" | "cap";
+    export type DuctShape = "round" | "rectangular" | "oval" | "other";
+    /**
+     * Where a value came from. The route prints it beside the value.
+     */
+    export type DuctProvenance = "geometry" | "revit-reported" | "revit-default" | "designer-stated" | "derived";
+    export type DuctLossMethod =
+      | "not-defined"
+      | "ashrae-table"
+      | "specific-coefficient"
+      | "specific-loss"
+      | "pe-server"
+      | "other";
+    export type DuctSegmentKind = "duct" | "flex";
+    /**
+     * The native path form; samples alone do not certify nonlinear curve arclength stations.
+     */
+    export type DuctCurveKind = "line" | "arc" | "flex-polyline" | "other";
+    /**
+     * Model health (ducts LEDGER 2026-10-29): what is true of the model whatever is calculated, keyed by element and
+     * connector, never by group. Pricing findings (leg flow, shared leg, flow mismatch, not priced, implausible loss,
+     * equipment pairing, velocity over) need a named fan and are the TypeScript sheet's.
+     *
+     */
+    export type DuctIssueKind =
+      | "open-end"
+      | "near-miss"
+      | "inline"
+      | "loop"
+      | "stub"
+      | "air-type-change"
+      | "implausible-size"
+      | "default-flex-roughness"
+      | "no-component-drop"
+      | "no-terminal-flow"
+      | "high-velocity";
+
+    /**
+     * Store is Pe's `_PE_DuctLosses` provenance blob, absent when the model has none. StoreError is set instead when
+     * the blob is unreadable or another version (fail-closed: ducts.apply refuses to overwrite it).
+     * AirflowCandidates are the air flow parameters the terminals carry, the picker for the TerminalFlow slot;
+     * FanFlowCandidates the same over HVAC equipment, the picker for the FanFlow slot (coverage per group the unit roots).
+     *
+     */
+    export interface Response {
+      document: DuctDocument;
+      coordinateEncoding: DuctCoordinateEncoding;
+      levels: DuctLevel[];
+      groups: DuctGroup[];
+      nodes: DuctNode[];
+      segments: DuctSegment[];
+      flows: DuctFlow[];
+      issues: DuctIssue[];
+      layers: DuctLayer[];
+      systems: DuctSystem[];
+      slots: DuctParameterSlots;
+      store?: null | DuctLossStore;
+      storeError?: null | string;
+      phases?: null | DuctPhases;
+      airflowCandidates?: DuctAirflowCandidate[] | null;
+      fanFlowCandidates?: DuctAirflowCandidate[] | null;
+      walk?: null | DuctWalk;
+      tolerances?: null | DuctHealthTolerances;
+    }
+    /**
+     * The document read, when, and how long the read took. NetworkBasedCalculations is DuctSettings' engine switch:
+     * read only: the snapshot guards an access violation on it, and apply never sets it (pressure-drop ledger).
+     *
+     */
+    export interface DuctDocument {
+      title: string;
+      readAt: string;
+      elapsedMs: number;
+      networkBasedCalculations: boolean;
+    }
+    /**
+     * A level; ElevationFt is Level.ProjectElevation (geometry frame), never Level.Elevation.
+     */
+    export interface DuctLevel {
+      id: number;
+      name: string;
+      elevationFt: number;
+    }
+    /**
+     * A connected duct network with equipment cut out: the unit a solver runs on. Id is "g" plus the smallest
+     * element id in it, stable while that element exists. RootIds are the equipment it hangs off. IssueIds index the
+     * health findings on its elements (issues are keyed by element, never by group).
+     *
+     */
+    export interface DuctGroup {
+      id: string;
+      rootIds: number[];
+      classifications: string[];
+      systemNames: string[];
+      terminalCount: number;
+      elementCount: number;
+      loops: number;
+      issueIds: string[];
+    }
+    /**
+     * PhaseCreated and PhaseDemolished name the element's phases (null when it has none, or none demolished it).
+     * FlowParameter, on a terminal, is the TerminalFlow slot that supplied its terminalFlow fact; on equipment, the
+     * FanFlow slot that supplied its fanFlow fact; null when none did.
+     *
+     */
+    export interface DuctNode {
+      id: number;
+      kind: DuctNodeKind;
+      category: string;
+      family?: null | string;
+      type?: null | string;
+      partType?: null | string;
+      levelId?: number | null;
+      point: number[];
+      groupId?: null | string;
+      systemName?: null | string;
+      classification?: null | string;
+      connectors: DuctConnector[];
+      facts: DuctFact[];
+      loss?: null | DuctLoss;
+      terminalDrop?: null | DuctTerminalDrop;
+      label?: null | string;
+      uniqueId?: null | string;
+      phaseCreated?: null | string;
+      phaseDemolished?: null | string;
+      flowParameter?: null | string;
+      reason?: null | string;
+    }
+    /**
+     * One physical HVAC connector. Kind is "end" or "curve" (a tap on a duct's side). Direction is Revit's
+     * (in, out, bidirectional); flow direction for the solver comes from the root, never from this.
+     * FlowCfm is Revit's connector flow, read only on the legacy engine: under network-based calculations the getter can
+     * crash Revit 2025 (pressure-drop ledger, W3).
+     * Facing is Connector.CoordinateSystem.BasisZ, the unit axis the connector faces out of its owner, and WidthAxis its
+     * BasisX on a rectangular or oval connector (the side WidthIn runs along), both model coordinates; null when Revit
+     * gives no frame and in snapshots taken before they were read.
+     * IsPrimary and IsSecondary are a duct fitting's MEPConnectorInfo flags (by family convention a tee's run legs);
+     * null on any other element and in snapshots taken before they were read.
+     *
+     */
+    export interface DuctConnector {
+      index: number;
+      kind: string;
+      point: number[];
+      shape: DuctShape;
+      size: string;
+      diameterIn?: null | number;
+      widthIn?: null | number;
+      heightIn?: null | number;
+      flowCfm?: null | number;
+      direction: string;
+      classification?: null | string;
+      connectedTo?: null | DuctRef;
+      areaFt2?: null | number;
+      facing?: number[] | null;
+      widthAxis?: number[] | null;
+      isPrimary?: boolean | null;
+      isSecondary?: boolean | null;
+    }
+    /**
+     * What a connector touches: an element id and that element's connector index.
+     */
+    export interface DuctRef {
+      elementId: number;
+      connector: number;
+    }
+    /**
+     * One stated or reported value with its unit and provenance.
+     */
+    export interface DuctFact {
+      key: string;
+      value?: null | number;
+      text?: null | string;
+      unit: string;
+      provenance: DuctProvenance;
+    }
+    /**
+     * A fitting's or accessory's loss state: the server in RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM and the string
+     * fields of that server's entity on the instance, verbatim in Fields. Table, Coefficient and SpecificLossInWg are
+     * read from them. RevitPressureDropInWg is the element's own RBS_DUCT_PRESSURE_DROP (RBS_PRESSURE_DROP is empty under a stored ASHRAE table).
+     *
+     */
+    export interface DuctLoss {
+      method: DuctLossMethod;
+      serverId?: null | string;
+      table?: null | string;
+      coefficient?: null | number;
+      specificLossInWg?: null | number;
+      revitPressureDropInWg?: null | number;
+      fields: {
+        [k: string]: string;
+      };
+    }
+    /**
+     * A terminal's drop. AssignedPressureDropInWg is the first HVAC connector's AssignedPressureDrop; ConnectorLossMethod
+     * its AssignedDuctLossMethod (NotDefined, Coefficient, SpecificLoss). Writable is true only for SpecificLoss, and
+     * is necessary, not sufficient: Revit refuses the connector setter on a family's Specific Loss connector too (W3), so
+     * ducts.apply writes the instance parameter the family binds to it, named by the TerminalDrop slot.
+     * CatalogDropInWg is the TerminalDrop slot, if one is named.
+     *
+     */
+    export interface DuctTerminalDrop {
+      assignedPressureDropInWg?: null | number;
+      connectorLossMethod?: null | string;
+      writable: boolean;
+      catalogDropInWg?: null | number;
+    }
+    /**
+     * PhaseCreated and PhaseDemolished as on DuctNode. InsulationIn is the host's
+     * RBS_REFERENCE_INSULATION_THICKNESS in inches (null when none): the separate DuctInsulation element is never read.
+     *
+     */
+    export interface DuctSegment {
+      id: number;
+      kind: DuctSegmentKind;
+      curveKind: DuctCurveKind;
+      type?: null | string;
+      shape: DuctShape;
+      size: string;
+      diameterIn?: null | number;
+      widthIn?: null | number;
+      heightIn?: null | number;
+      lengthFt: number;
+      polyline: number[][];
+      levelId?: number | null;
+      groupId?: null | string;
+      systemName?: null | string;
+      classification?: null | string;
+      roughness: DuctRoughness;
+      revit: DuctRevitValues;
+      connectors: DuctConnector[];
+      uniqueId?: null | string;
+      phaseCreated?: null | string;
+      phaseDemolished?: null | string;
+      reason?: null | string;
+      insulationIn?: null | number;
+    }
+    export interface DuctRoughness {
+      valueFt: number;
+      provenance: DuctProvenance;
+    }
+    /**
+     * What Revit reports on the segment. Partial in most models; a check, never an input.
+     */
+    export interface DuctRevitValues {
+      flowCfm?: null | number;
+      velocityFpm?: null | number;
+      frictionInWgPer100Ft?: null | number;
+      pressureDropInWg?: null | number;
+    }
+    /**
+     * Pass-1 flow: terminal design flow summed up the tree from the single root. At a tapped duct it is the upstream-end flow.
+     */
+    export interface DuctFlow {
+      segmentId: number;
+      cfm: number;
+      provenance: DuctProvenance;
+    }
+    /**
+     * One model-health finding. Id is "kind:elementId" plus ":connector" when Connector is set; an assumption verdict
+     * keys on it. Near is set on an open end: what lies within the candidate box of it. A `roster` or `ids` read does not
+     * measure it (null there) and so reports no near miss.
+     *
+     */
+    export interface DuctIssue {
+      id: string;
+      kind: DuctIssueKind;
+      elementId: number;
+      connector?: number | null;
+      point?: number[] | null;
+      note: string;
+      near?: null | DuctNear;
+      inline?: null | DuctInline;
+    }
+    /**
+     * The neighbourhood of one open end, measured from its connector (point, outward axis), never decided: which of
+     * these a calculation joins, and under which ruling, is the pricing engine's. Ports: every connector of every
+     * other element within CandidateBoxIn, vacant or not. Faces: where the end's axis lands on a duct side, a capped
+     * end or an open connector's mouth within 2 in. Bodies: each duct side piece nearby, with the closest distance
+     * and, when the end sits off the side away from its ends, the tap point on its surface within 24 in.
+     *
+     */
+    export interface DuctNear {
+      ports: DuctNearPort[];
+      faces: DuctNearFace[];
+      bodies: DuctNearBody[];
+    }
+    /**
+     * Another connector near an open end. GapIn: centre to centre. FacingDot: cosine of the two outward axes (null
+     * when either is unknown). Opposed: the cosine is at most -0.9. Aligned: opposed, ahead of the end and within
+     * 0.5 in of its axis. AutoJoin: vacant, opposed and within AutoJoinGapIn: the near-miss partner. CappedBy: the end
+     * cap occupying this connector (a fact of the model); a heal there replaces the cap with a transition.
+     *
+     */
+    export interface DuctNearPort {
+      elementId: number;
+      connector: number;
+      gapIn: number;
+      facingDot?: null | number;
+      opposed: boolean;
+      aligned: boolean;
+      autoJoin: boolean;
+      cappedBy?: number | null;
+    }
+    /**
+     * The end's axis landing on a face within 2 in. Kind "collar": an open connector's mouth (Connector set);
+     * "tap": a duct side or an end a cap closes (Connector null, AtFt along the duct, Point on its centerline). GapIn
+     * is signed: negative is inside the face. Opposed as on DuctNearPort.
+     *
+     */
+    export interface DuctNearFace {
+      kind: string;
+      elementId: number;
+      connector?: number | null;
+      gapIn: number;
+      facingDot?: null | number;
+      opposed: boolean;
+      atFt?: null | number;
+      point?: number[] | null;
+    }
+    /**
+     * One duct side piece near an end: GapIn its closest distance; TapGapIn and TapPoint the surface point a tap would land on.
+     */
+    export interface DuctNearBody {
+      segmentId: number;
+      gapIn: number;
+      tapGapIn?: null | number;
+      tapPoint?: number[] | null;
+    }
+    /**
+     * Where an inline part sits: SegmentId the straight duct whose body holds both its open ports, AtFt along that duct
+     * from its first polyline point, Ports the part's two connector indices, the one facing the duct's first point first.
+     *
+     */
+    export interface DuctInline {
+      segmentId: number;
+      atFt: number;
+      ports: number[];
+    }
+    /**
+     * One real query, printed verbatim in Query, and how much of the model it answered.
+     */
+    export interface DuctLayer {
+      key: string;
+      title: string;
+      query: string;
+      coverage: DuctCoverage;
+      provenance: DuctProvenance;
+    }
+    export interface DuctCoverage {
+      have: number;
+      of: number;
+    }
+    /**
+     * One supply, return or exhaust MechanicalSystem as Revit reports it: the check beside Pe's own solve.
+     * CriticalPath is GetCriticalPathSectionNumbers(); empty when Revit found none.
+     *
+     */
+    export interface DuctSystem {
+      id: number;
+      name: string;
+      classification: string;
+      isWellConnected?: boolean | null;
+      baseEquipmentId?: number | null;
+      baseEquipmentConnector?: number | null;
+      criticalPathLossInWg?: null | number;
+      criticalPath: number[];
+      sections: DuctSection[];
+    }
+    /**
+     * One MEPSection: Revit's run of elements carrying one flow.
+     */
+    export interface DuctSection {
+      number: number;
+      flowCfm?: null | number;
+      totalPressureLossInWg?: null | number;
+      elementIds: number[];
+    }
+    /**
+     * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
+     * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) and TerminalFlow (CFM) on terminals,
+     * FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
+     * live (the configurable door, kaitpw 2026-10-08).
+     *
+     */
+    export interface DuctParameterSlots {
+      fanStatic: string;
+      fanFlow: string;
+      componentDrop: string;
+      terminalDrop?: null | string;
+      fittingCoefficient: string;
+      terminalFlow: string;
+    }
+    /**
+     * Pe's provenance for duct losses: one versioned JSON blob in the hidden Project Information text parameter
+     * `_PE_DuctLosses` (pressure-drop ledger: never extensible storage). WorkRevision counts applies; a request
+     * carrying an older revision than the model holds is stale. Unknown keys survive read-modify-write.
+     * v2 adds the rulings that remain after healing (pressure-drop ledger, 2026-10-20): Verdicts keyed by issue or
+     * finding id, Roles keyed by unit id. They live here, not on elements and not in Pe Work; Work holds only pending
+     * edits. A v1 blob reads as v2 with no rulings; every write is v2.
+     *
+     */
+    export interface DuctLossStore {
+      version: number;
+      rules: {
+        [k: string]: DuctRuleChoice;
+      };
+      instances: {
+        [k: string]: DuctInstanceRecord;
+      };
+      terminals: {
+        [k: string]: DuctDropRecord;
+      };
+      terminalFlows: {
+        [k: string]: DuctFlowRecord;
+      };
+      equipmentFlows: {
+        [k: string]: DuctFlowRecord;
+      };
+      verdicts: {
+        [k: string]: DuctVerdictRecord;
+      };
+      roles: {
+        [k: string]: DuctRoleRecord;
+      };
+      slots?: null | DuctParameterSlots;
+      workRevision: number;
+      appliedAt?: null | string;
+      [k: string]: unknown;
+    }
+    /**
+     * A rule's chosen ASHRAE table (rule key is family:type plus a geometry condition, owned by the web).
+     */
+    export interface DuctRuleChoice {
+      table?: null | string;
+    }
+    /**
+     * What Pe wrote on one fitting: the table and lookup inputs behind the coefficient.
+     */
+    export interface DuctInstanceRecord {
+      table?: null | string;
+      inputs?: null | string;
+      coefficient: number;
+      appliedAt: string;
+    }
+    /**
+     * What Pe wrote on one terminal or component: the drop and where it came from (catalog, typed).
+     */
+    export interface DuctDropRecord {
+      inWg: number;
+      source?: null | string;
+      appliedAt: string;
+    }
+    /**
+     * What Pe wrote on one terminal or unit: the design flow in cfm and where it came from.
+     */
+    export interface DuctFlowRecord {
+      cfm: number;
+      source?: null | string;
+      appliedAt: string;
+    }
+    /**
+     * A person's ruling on an issue or inferred-join finding id: `ignore` leaves an open end out of the walk, or
+     * withholds (objects to) an inferred join.
+     *
+     */
+    export interface DuctVerdictRecord {
+      verdict: string;
+      ruledAt: string;
+    }
+    /**
+     * A person's ruling on an air mover: `passive` moves no design air (or `fan`, the default, said aloud).
+     */
+    export interface DuctRoleRecord {
+      role: string;
+      ruledAt: string;
+    }
+    /**
+     * The document's phases, Document.Phases in order (earliest first), and Views: how many non-template plan and 3D
+     * views show each phase (VIEW_PHASE) under each phase filter (VIEW_PHASE_FILTER), most first. A firm models what its
+     * views show; an element in a phase no view shows is often forgotten (pressure-drop ledger, 2026-10-19).
+     *
+     */
+    export interface DuctPhases {
+      order: string[];
+      views: DuctPhaseViews[];
+    }
+    /**
+     * Count views show Phase (null when a view has none) under Filter (null when none).
+     */
+    export interface DuctPhaseViews {
+      phase?: null | string;
+      filter?: null | string;
+      count: number;
+    }
+    /**
+     * One parameter a terminal's design airflow could be read from (pressure-drop ledger, 2026-10-20: the airflow read
+     * slot is a walk step). Slot is the parameter name, the TerminalFlow slot value that reads it; Where is instance or
+     * type; Shared is true for a shared parameter. A terminal's built-in `Flow` (RBS_DUCT_FLOW_PARAM, the connector's
+     * flow) is the instance candidate `Flow`. Have counts terminals with a nonzero value, Of every terminal; Groups the
+     * same per group, for groups where any terminal has one.
+     *
+     */
+    export interface DuctAirflowCandidate {
+      slot: string;
+      where: string;
+      shared: boolean;
+      have: number;
+      of: number;
+      groups: DuctGroupCoverage[];
+    }
+    export interface DuctGroupCoverage {
+      groupId: string;
+      have: number;
+      of: number;
+    }
+    /**
+     * The `from` walk's summary. Hops is the deepest element depth reached from the start; ElementsReached counts walked
+     * elements (the start included, candidates excluded); Truncated is true when MaxHops cut the walk or an open end's
+     * box held more than the candidate cap and was counted, not listed.
+     *
+     */
+    export interface DuctWalk {
+      startId: number;
+      hops: number;
+      elementsReached: number;
+      openEnds: number;
+      candidates: DuctOpenEnd[];
+      truncated: boolean;
+      elapsedMs: number;
+    }
+    /**
+     * One open end the walk stopped at and what the candidate box around it held (CandidateCount first, cheap; CandidateIds only under the cap).
+     */
+    export interface DuctOpenEnd {
+      elementId: number;
+      connector: number;
+      point: number[];
+      candidateCount: number;
+      candidateIds: number[];
+    }
+    /**
+     * The near-miss tolerances Issues were measured under, the one home for both (ducts LEDGER 2026-10-29).
+     * CandidateBoxIn: an open end's neighbourhood, inches either way of its connector (a duct body counts when its
+     * centerline comes within it plus half its largest side). AutoJoinGapIn: a vacant, opposed partner this close is a
+     * near miss the sheet may join without a ruling.
+     *
+     */
+    export interface DuctHealthTolerances {
+      candidateBoxIn: number;
+      autoJoinGapIn: number;
+    }
+  }
+}
+
+/** Read a capped connector walk or explicit elements or systems, including geometry. */
+export namespace DuctsSnapshotWalk {
+  export namespace Req {
+    export type DuctSelectorKind = "document" | "ids" | "from" | "roster" | "systems";
+
+    /**
+     * Optional: which parameters carry the designer-stated values (absent reads the defaults), and LabelParameter, the
+     * instance parameter whose string value names equipment for people (absent reads the firm tag, PE_G___TagInstance:
+     * PE's alternative to the built-in Mark, never the Mark itself).
+     *
+     */
+    export interface Request {
+      slots?: null | DuctParameterSlots;
+      labelParameter?: null | string;
+      selector?: null | DuctSnapshotSelector;
+    }
+    /**
+     * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
+     * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) and TerminalFlow (CFM) on terminals,
+     * FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
+     * live (the configurable door, kaitpw 2026-10-08).
+     *
+     */
+    export interface DuctParameterSlots {
+      fanStatic?: string;
+      fanFlow?: string;
+      componentDrop?: string;
+      terminalDrop?: null | string;
+      fittingCoefficient?: string;
+      terminalFlow?: string;
+    }
+    /**
+     * Which elements the snapshot reads. Kind `document` is the default and the shape every existing caller gets. Kind
+     * `ids` reads Ids. Kind `from` walks Revit connectors outward from UnitId's HVAC ports (PortIndex names one
+     * connector id; absent walks every port) through ducts, flex, fittings, accessories and equipment (equipment is a
+     * leg, never a cut: the roster decides stops later), stopping at an air terminal, an open end, or MaxHops elements
+     * deep (default 2000). At every open end a box CandidateBoxIn inches on a side (default 36) around the connector is
+     * searched for MEP elements, which join the output marked `open-end-candidate` so a join can be inferred. Every kind
+     * reports model health (Issues) under CandidateBoxIn and AutoJoinGapIn (DuctHealthTolerances). Kind
+     * `systems` reads SystemIds (MechanicalSystem ids): each system's DuctNetwork, Elements and base equipment, grown
+     * along connectors to whole groups (a group is a connected component, so one the systems touch is never cut), and
+     * answers in the `document` shape with Systems holding only the named systems.
+     *
+     */
+    export interface DuctSnapshotSelector {
+      kind?: DuctSelectorKind;
+      ids?: number[] | null;
+      unitId?: number | null;
+      portIndex?: number | null;
+      maxHops?: number | null;
+      candidateBoxIn?: null | number;
+      systemIds?: number[] | null;
+      autoJoinGapIn?: null | number;
+    }
+  }
+  export namespace Res {
+    /**
+     * Physical XYZ and segment LengthFt preserve native model-foot binary64 values; other facts retain their stated units/rounding.
+     */
+    export type DuctCoordinateEncoding = "native-double";
+    export type DuctNodeKind = "equipment" | "terminal" | "fitting" | "accessory" | "cap";
+    export type DuctShape = "round" | "rectangular" | "oval" | "other";
+    /**
+     * Where a value came from. The route prints it beside the value.
+     */
+    export type DuctProvenance = "geometry" | "revit-reported" | "revit-default" | "designer-stated" | "derived";
+    export type DuctLossMethod =
+      | "not-defined"
+      | "ashrae-table"
+      | "specific-coefficient"
+      | "specific-loss"
+      | "pe-server"
+      | "other";
+    export type DuctSegmentKind = "duct" | "flex";
+    /**
+     * The native path form; samples alone do not certify nonlinear curve arclength stations.
+     */
+    export type DuctCurveKind = "line" | "arc" | "flex-polyline" | "other";
+    /**
+     * Model health (ducts LEDGER 2026-10-29): what is true of the model whatever is calculated, keyed by element and
+     * connector, never by group. Pricing findings (leg flow, shared leg, flow mismatch, not priced, implausible loss,
+     * equipment pairing, velocity over) need a named fan and are the TypeScript sheet's.
+     *
+     */
+    export type DuctIssueKind =
+      | "open-end"
+      | "near-miss"
+      | "inline"
+      | "loop"
+      | "stub"
+      | "air-type-change"
+      | "implausible-size"
+      | "default-flex-roughness"
+      | "no-component-drop"
+      | "no-terminal-flow"
+      | "high-velocity";
+
+    /**
+     * Store is Pe's `_PE_DuctLosses` provenance blob, absent when the model has none. StoreError is set instead when
+     * the blob is unreadable or another version (fail-closed: ducts.apply refuses to overwrite it).
+     * AirflowCandidates are the air flow parameters the terminals carry, the picker for the TerminalFlow slot;
+     * FanFlowCandidates the same over HVAC equipment, the picker for the FanFlow slot (coverage per group the unit roots).
+     *
+     */
+    export interface Response {
+      document: DuctDocument;
+      coordinateEncoding: DuctCoordinateEncoding;
+      levels: DuctLevel[];
+      groups: DuctGroup[];
+      nodes: DuctNode[];
+      segments: DuctSegment[];
+      flows: DuctFlow[];
+      issues: DuctIssue[];
+      layers: DuctLayer[];
+      systems: DuctSystem[];
+      slots: DuctParameterSlots;
+      store?: null | DuctLossStore;
+      storeError?: null | string;
+      phases?: null | DuctPhases;
+      airflowCandidates?: DuctAirflowCandidate[] | null;
+      fanFlowCandidates?: DuctAirflowCandidate[] | null;
+      walk?: null | DuctWalk;
+      tolerances?: null | DuctHealthTolerances;
+    }
+    /**
+     * The document read, when, and how long the read took. NetworkBasedCalculations is DuctSettings' engine switch:
+     * read only: the snapshot guards an access violation on it, and apply never sets it (pressure-drop ledger).
+     *
+     */
+    export interface DuctDocument {
+      title: string;
+      readAt: string;
+      elapsedMs: number;
+      networkBasedCalculations: boolean;
+    }
+    /**
+     * A level; ElevationFt is Level.ProjectElevation (geometry frame), never Level.Elevation.
+     */
+    export interface DuctLevel {
+      id: number;
+      name: string;
+      elevationFt: number;
+    }
+    /**
+     * A connected duct network with equipment cut out: the unit a solver runs on. Id is "g" plus the smallest
+     * element id in it, stable while that element exists. RootIds are the equipment it hangs off. IssueIds index the
+     * health findings on its elements (issues are keyed by element, never by group).
+     *
+     */
+    export interface DuctGroup {
+      id: string;
+      rootIds: number[];
+      classifications: string[];
+      systemNames: string[];
+      terminalCount: number;
+      elementCount: number;
+      loops: number;
+      issueIds: string[];
+    }
+    /**
+     * PhaseCreated and PhaseDemolished name the element's phases (null when it has none, or none demolished it).
+     * FlowParameter, on a terminal, is the TerminalFlow slot that supplied its terminalFlow fact; on equipment, the
+     * FanFlow slot that supplied its fanFlow fact; null when none did.
+     *
+     */
+    export interface DuctNode {
+      id: number;
+      kind: DuctNodeKind;
+      category: string;
+      family?: null | string;
+      type?: null | string;
+      partType?: null | string;
+      levelId?: number | null;
+      point: number[];
+      groupId?: null | string;
+      systemName?: null | string;
+      classification?: null | string;
+      connectors: DuctConnector[];
+      facts: DuctFact[];
+      loss?: null | DuctLoss;
+      terminalDrop?: null | DuctTerminalDrop;
+      label?: null | string;
+      uniqueId?: null | string;
+      phaseCreated?: null | string;
+      phaseDemolished?: null | string;
+      flowParameter?: null | string;
+      reason?: null | string;
+    }
+    /**
+     * One physical HVAC connector. Kind is "end" or "curve" (a tap on a duct's side). Direction is Revit's
+     * (in, out, bidirectional); flow direction for the solver comes from the root, never from this.
+     * FlowCfm is Revit's connector flow, read only on the legacy engine: under network-based calculations the getter can
+     * crash Revit 2025 (pressure-drop ledger, W3).
+     * Facing is Connector.CoordinateSystem.BasisZ, the unit axis the connector faces out of its owner, and WidthAxis its
+     * BasisX on a rectangular or oval connector (the side WidthIn runs along), both model coordinates; null when Revit
+     * gives no frame and in snapshots taken before they were read.
+     * IsPrimary and IsSecondary are a duct fitting's MEPConnectorInfo flags (by family convention a tee's run legs);
+     * null on any other element and in snapshots taken before they were read.
+     *
+     */
+    export interface DuctConnector {
+      index: number;
+      kind: string;
+      point: number[];
+      shape: DuctShape;
+      size: string;
+      diameterIn?: null | number;
+      widthIn?: null | number;
+      heightIn?: null | number;
+      flowCfm?: null | number;
+      direction: string;
+      classification?: null | string;
+      connectedTo?: null | DuctRef;
+      areaFt2?: null | number;
+      facing?: number[] | null;
+      widthAxis?: number[] | null;
+      isPrimary?: boolean | null;
+      isSecondary?: boolean | null;
+    }
+    /**
+     * What a connector touches: an element id and that element's connector index.
+     */
+    export interface DuctRef {
+      elementId: number;
+      connector: number;
+    }
+    /**
+     * One stated or reported value with its unit and provenance.
+     */
+    export interface DuctFact {
+      key: string;
+      value?: null | number;
+      text?: null | string;
+      unit: string;
+      provenance: DuctProvenance;
+    }
+    /**
+     * A fitting's or accessory's loss state: the server in RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM and the string
+     * fields of that server's entity on the instance, verbatim in Fields. Table, Coefficient and SpecificLossInWg are
+     * read from them. RevitPressureDropInWg is the element's own RBS_DUCT_PRESSURE_DROP (RBS_PRESSURE_DROP is empty under a stored ASHRAE table).
+     *
+     */
+    export interface DuctLoss {
+      method: DuctLossMethod;
+      serverId?: null | string;
+      table?: null | string;
+      coefficient?: null | number;
+      specificLossInWg?: null | number;
+      revitPressureDropInWg?: null | number;
+      fields: {
+        [k: string]: string;
+      };
+    }
+    /**
+     * A terminal's drop. AssignedPressureDropInWg is the first HVAC connector's AssignedPressureDrop; ConnectorLossMethod
+     * its AssignedDuctLossMethod (NotDefined, Coefficient, SpecificLoss). Writable is true only for SpecificLoss, and
+     * is necessary, not sufficient: Revit refuses the connector setter on a family's Specific Loss connector too (W3), so
+     * ducts.apply writes the instance parameter the family binds to it, named by the TerminalDrop slot.
+     * CatalogDropInWg is the TerminalDrop slot, if one is named.
+     *
+     */
+    export interface DuctTerminalDrop {
+      assignedPressureDropInWg?: null | number;
+      connectorLossMethod?: null | string;
+      writable: boolean;
+      catalogDropInWg?: null | number;
+    }
+    /**
+     * PhaseCreated and PhaseDemolished as on DuctNode. InsulationIn is the host's
+     * RBS_REFERENCE_INSULATION_THICKNESS in inches (null when none): the separate DuctInsulation element is never read.
+     *
+     */
+    export interface DuctSegment {
+      id: number;
+      kind: DuctSegmentKind;
+      curveKind: DuctCurveKind;
+      type?: null | string;
+      shape: DuctShape;
+      size: string;
+      diameterIn?: null | number;
+      widthIn?: null | number;
+      heightIn?: null | number;
+      lengthFt: number;
+      polyline: number[][];
+      levelId?: number | null;
+      groupId?: null | string;
+      systemName?: null | string;
+      classification?: null | string;
+      roughness: DuctRoughness;
+      revit: DuctRevitValues;
+      connectors: DuctConnector[];
+      uniqueId?: null | string;
+      phaseCreated?: null | string;
+      phaseDemolished?: null | string;
+      reason?: null | string;
+      insulationIn?: null | number;
+    }
+    export interface DuctRoughness {
+      valueFt: number;
+      provenance: DuctProvenance;
+    }
+    /**
+     * What Revit reports on the segment. Partial in most models; a check, never an input.
+     */
+    export interface DuctRevitValues {
+      flowCfm?: null | number;
+      velocityFpm?: null | number;
+      frictionInWgPer100Ft?: null | number;
+      pressureDropInWg?: null | number;
+    }
+    /**
+     * Pass-1 flow: terminal design flow summed up the tree from the single root. At a tapped duct it is the upstream-end flow.
+     */
+    export interface DuctFlow {
+      segmentId: number;
+      cfm: number;
+      provenance: DuctProvenance;
+    }
+    /**
+     * One model-health finding. Id is "kind:elementId" plus ":connector" when Connector is set; an assumption verdict
+     * keys on it. Near is set on an open end: what lies within the candidate box of it. A `roster` or `ids` read does not
+     * measure it (null there) and so reports no near miss.
+     *
+     */
+    export interface DuctIssue {
+      id: string;
+      kind: DuctIssueKind;
+      elementId: number;
+      connector?: number | null;
+      point?: number[] | null;
+      note: string;
+      near?: null | DuctNear;
+      inline?: null | DuctInline;
+    }
+    /**
+     * The neighbourhood of one open end, measured from its connector (point, outward axis), never decided: which of
+     * these a calculation joins, and under which ruling, is the pricing engine's. Ports: every connector of every
+     * other element within CandidateBoxIn, vacant or not. Faces: where the end's axis lands on a duct side, a capped
+     * end or an open connector's mouth within 2 in. Bodies: each duct side piece nearby, with the closest distance
+     * and, when the end sits off the side away from its ends, the tap point on its surface within 24 in.
+     *
+     */
+    export interface DuctNear {
+      ports: DuctNearPort[];
+      faces: DuctNearFace[];
+      bodies: DuctNearBody[];
+    }
+    /**
+     * Another connector near an open end. GapIn: centre to centre. FacingDot: cosine of the two outward axes (null
+     * when either is unknown). Opposed: the cosine is at most -0.9. Aligned: opposed, ahead of the end and within
+     * 0.5 in of its axis. AutoJoin: vacant, opposed and within AutoJoinGapIn: the near-miss partner. CappedBy: the end
+     * cap occupying this connector (a fact of the model); a heal there replaces the cap with a transition.
+     *
+     */
+    export interface DuctNearPort {
+      elementId: number;
+      connector: number;
+      gapIn: number;
+      facingDot?: null | number;
+      opposed: boolean;
+      aligned: boolean;
+      autoJoin: boolean;
+      cappedBy?: number | null;
+    }
+    /**
+     * The end's axis landing on a face within 2 in. Kind "collar": an open connector's mouth (Connector set);
+     * "tap": a duct side or an end a cap closes (Connector null, AtFt along the duct, Point on its centerline). GapIn
+     * is signed: negative is inside the face. Opposed as on DuctNearPort.
+     *
+     */
+    export interface DuctNearFace {
+      kind: string;
+      elementId: number;
+      connector?: number | null;
+      gapIn: number;
+      facingDot?: null | number;
+      opposed: boolean;
+      atFt?: null | number;
+      point?: number[] | null;
+    }
+    /**
+     * One duct side piece near an end: GapIn its closest distance; TapGapIn and TapPoint the surface point a tap would land on.
+     */
+    export interface DuctNearBody {
+      segmentId: number;
+      gapIn: number;
+      tapGapIn?: null | number;
+      tapPoint?: number[] | null;
+    }
+    /**
+     * Where an inline part sits: SegmentId the straight duct whose body holds both its open ports, AtFt along that duct
+     * from its first polyline point, Ports the part's two connector indices, the one facing the duct's first point first.
+     *
+     */
+    export interface DuctInline {
+      segmentId: number;
+      atFt: number;
+      ports: number[];
+    }
+    /**
+     * One real query, printed verbatim in Query, and how much of the model it answered.
+     */
+    export interface DuctLayer {
+      key: string;
+      title: string;
+      query: string;
+      coverage: DuctCoverage;
+      provenance: DuctProvenance;
+    }
+    export interface DuctCoverage {
+      have: number;
+      of: number;
+    }
+    /**
+     * One supply, return or exhaust MechanicalSystem as Revit reports it: the check beside Pe's own solve.
+     * CriticalPath is GetCriticalPathSectionNumbers(); empty when Revit found none.
+     *
+     */
+    export interface DuctSystem {
+      id: number;
+      name: string;
+      classification: string;
+      isWellConnected?: boolean | null;
+      baseEquipmentId?: number | null;
+      baseEquipmentConnector?: number | null;
+      criticalPathLossInWg?: null | number;
+      criticalPath: number[];
+      sections: DuctSection[];
+    }
+    /**
+     * One MEPSection: Revit's run of elements carrying one flow.
+     */
+    export interface DuctSection {
+      number: number;
+      flowCfm?: null | number;
+      totalPressureLossInWg?: null | number;
+      elementIds: number[];
+    }
+    /**
+     * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
+     * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) and TerminalFlow (CFM) on terminals,
+     * FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
+     * live (the configurable door, kaitpw 2026-10-08).
+     *
+     */
+    export interface DuctParameterSlots {
+      fanStatic: string;
+      fanFlow: string;
+      componentDrop: string;
+      terminalDrop?: null | string;
+      fittingCoefficient: string;
+      terminalFlow: string;
+    }
+    /**
+     * Pe's provenance for duct losses: one versioned JSON blob in the hidden Project Information text parameter
+     * `_PE_DuctLosses` (pressure-drop ledger: never extensible storage). WorkRevision counts applies; a request
+     * carrying an older revision than the model holds is stale. Unknown keys survive read-modify-write.
+     * v2 adds the rulings that remain after healing (pressure-drop ledger, 2026-10-20): Verdicts keyed by issue or
+     * finding id, Roles keyed by unit id. They live here, not on elements and not in Pe Work; Work holds only pending
+     * edits. A v1 blob reads as v2 with no rulings; every write is v2.
+     *
+     */
+    export interface DuctLossStore {
+      version: number;
+      rules: {
+        [k: string]: DuctRuleChoice;
+      };
+      instances: {
+        [k: string]: DuctInstanceRecord;
+      };
+      terminals: {
+        [k: string]: DuctDropRecord;
+      };
+      terminalFlows: {
+        [k: string]: DuctFlowRecord;
+      };
+      equipmentFlows: {
+        [k: string]: DuctFlowRecord;
+      };
+      verdicts: {
+        [k: string]: DuctVerdictRecord;
+      };
+      roles: {
+        [k: string]: DuctRoleRecord;
+      };
+      slots?: null | DuctParameterSlots;
+      workRevision: number;
+      appliedAt?: null | string;
+      [k: string]: unknown;
+    }
+    /**
+     * A rule's chosen ASHRAE table (rule key is family:type plus a geometry condition, owned by the web).
+     */
+    export interface DuctRuleChoice {
+      table?: null | string;
+    }
+    /**
+     * What Pe wrote on one fitting: the table and lookup inputs behind the coefficient.
+     */
+    export interface DuctInstanceRecord {
+      table?: null | string;
+      inputs?: null | string;
+      coefficient: number;
+      appliedAt: string;
+    }
+    /**
+     * What Pe wrote on one terminal or component: the drop and where it came from (catalog, typed).
+     */
+    export interface DuctDropRecord {
+      inWg: number;
+      source?: null | string;
+      appliedAt: string;
+    }
+    /**
+     * What Pe wrote on one terminal or unit: the design flow in cfm and where it came from.
+     */
+    export interface DuctFlowRecord {
+      cfm: number;
+      source?: null | string;
+      appliedAt: string;
+    }
+    /**
+     * A person's ruling on an issue or inferred-join finding id: `ignore` leaves an open end out of the walk, or
+     * withholds (objects to) an inferred join.
+     *
+     */
+    export interface DuctVerdictRecord {
+      verdict: string;
+      ruledAt: string;
+    }
+    /**
+     * A person's ruling on an air mover: `passive` moves no design air (or `fan`, the default, said aloud).
+     */
+    export interface DuctRoleRecord {
+      role: string;
+      ruledAt: string;
+    }
+    /**
+     * The document's phases, Document.Phases in order (earliest first), and Views: how many non-template plan and 3D
+     * views show each phase (VIEW_PHASE) under each phase filter (VIEW_PHASE_FILTER), most first. A firm models what its
+     * views show; an element in a phase no view shows is often forgotten (pressure-drop ledger, 2026-10-19).
+     *
+     */
+    export interface DuctPhases {
+      order: string[];
+      views: DuctPhaseViews[];
+    }
+    /**
+     * Count views show Phase (null when a view has none) under Filter (null when none).
+     */
+    export interface DuctPhaseViews {
+      phase?: null | string;
+      filter?: null | string;
+      count: number;
+    }
+    /**
+     * One parameter a terminal's design airflow could be read from (pressure-drop ledger, 2026-10-20: the airflow read
+     * slot is a walk step). Slot is the parameter name, the TerminalFlow slot value that reads it; Where is instance or
+     * type; Shared is true for a shared parameter. A terminal's built-in `Flow` (RBS_DUCT_FLOW_PARAM, the connector's
+     * flow) is the instance candidate `Flow`. Have counts terminals with a nonzero value, Of every terminal; Groups the
+     * same per group, for groups where any terminal has one.
+     *
+     */
+    export interface DuctAirflowCandidate {
+      slot: string;
+      where: string;
+      shared: boolean;
+      have: number;
+      of: number;
+      groups: DuctGroupCoverage[];
+    }
+    export interface DuctGroupCoverage {
+      groupId: string;
+      have: number;
+      of: number;
+    }
+    /**
+     * The `from` walk's summary. Hops is the deepest element depth reached from the start; ElementsReached counts walked
+     * elements (the start included, candidates excluded); Truncated is true when MaxHops cut the walk or an open end's
+     * box held more than the candidate cap and was counted, not listed.
+     *
+     */
+    export interface DuctWalk {
+      startId: number;
+      hops: number;
+      elementsReached: number;
+      openEnds: number;
+      candidates: DuctOpenEnd[];
+      truncated: boolean;
+      elapsedMs: number;
+    }
+    /**
+     * One open end the walk stopped at and what the candidate box around it held (CandidateCount first, cheap; CandidateIds only under the cap).
+     */
+    export interface DuctOpenEnd {
+      elementId: number;
+      connector: number;
+      point: number[];
+      candidateCount: number;
+      candidateIds: number[];
+    }
+    /**
+     * The near-miss tolerances Issues were measured under, the one home for both (ducts LEDGER 2026-10-29).
+     * CandidateBoxIn: an open end's neighbourhood, inches either way of its connector (a duct body counts when its
+     * centerline comes within it plus half its largest side). AutoJoinGapIn: a vacant, opposed partner this close is a
+     * near miss the sheet may join without a ruling.
+     *
+     */
+    export interface DuctHealthTolerances {
+      candidateBoxIn: number;
+      autoJoinGapIn: number;
+    }
+  }
+}
+
 /** Read ASHRAE duct fitting coefficient grids (Co, Cb, Cs) by table id from the .tbl files Revit installs, verbatim: axes, labels and values for a web lookup. Read-only; needs no document. */
 export namespace DuctsTables {
   export namespace Req {
@@ -2193,6 +3423,12 @@ export namespace HostOpsCatalog {
       actor: string;
       usesTransactions: boolean;
       artifactSchemaJson?: null | string;
+      subject: string;
+      touches: string;
+      effect: string;
+      cardinality: string;
+      internal: boolean;
+      rollsBack: boolean;
     }
     export interface HostOperationRequestExample {
       name: string;
@@ -2650,6 +3886,212 @@ export namespace RevitCatalogConceptEvidence {
 
 /** Read electrical circuit facts, connected load identity, panel names, circuit numbers, optional nearby proxy context, and compact filter diagnostics from the active Revit document. */
 export namespace RevitCatalogElectricalCircuits {
+  export namespace Req {
+    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+
+    export interface Request {
+      filter?: null | ElectricalCircuitFilter;
+      options?: null | ElectricalCircuitsCatalogOptions;
+    }
+    export interface ElectricalCircuitFilter {
+      panelNames?: string[];
+      circuitNumbers?: string[];
+      loadNames?: string[];
+    }
+    export interface ElectricalCircuitsCatalogOptions {
+      parameterQuery?: null | RequestedParameterQuery;
+      includeNearbyProxyContext?: boolean;
+      nearbyRadiusFeet?: number;
+      maxNearbyCandidatesPerElement?: number;
+      maxNearbyCandidatesPerCircuit?: number;
+    }
+    export interface RequestedParameterQuery {
+      parameters?: ParameterReference[];
+    }
+    export interface ParameterReference {
+      identity?: null | ParameterIdentity;
+      name?: null | string;
+      sharedGuid?: null | string;
+    }
+    export interface ParameterIdentity {
+      key: string;
+      kind: ParameterIdentityKind;
+      name: string;
+      builtInParameterId?: number | null;
+      sharedGuid?: null | string;
+      parameterElementId?: number | null;
+    }
+  }
+  export namespace Res {
+    export type ElectricalInsightRole =
+      | "Panel"
+      | "DownstreamPanel"
+      | "LoadFamilyInstance"
+      | "ProxyFixture"
+      | "InlineElectricalEquipment"
+      | "Circuit"
+      | "Wire"
+      | "LoadClassification"
+      | "Element";
+    export type ElementIdentitySource = "None" | "RequestedParameter" | "Mark";
+    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+    export type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
+    export type RequestedParameterValueSource = "None" | "Instance" | "Type";
+    export type ElectricalNearbyProxyCandidateMatchReason =
+      | "NearbyIdentityCandidate"
+      | "RequestedParameterIdentityMatch"
+      | "MarkIdentityMatch";
+    export type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+
+    export interface Response {
+      entries: ElectricalCircuitCatalogEntry[];
+      issues: RevitDataIssue[];
+      filterReport?: null | ElectricalCatalogFilterReport;
+    }
+    export interface ElectricalCircuitCatalogEntry {
+      circuitId: number;
+      circuitUniqueId: string;
+      circuitNumber: string;
+      loadName?: null | string;
+      panelId?: number | null;
+      panelUniqueId?: null | string;
+      panelName?: null | string;
+      slotIndex?: null | string;
+      ways?: null | string;
+      polesNumber: number;
+      voltage?: null | string;
+      apparentLoad?: null | string;
+      apparentCurrent?: null | string;
+      trueLoad?: null | string;
+      trueCurrent?: null | string;
+      rating?: null | string;
+      frame?: null | string;
+      ratingOverride: boolean;
+      ratingOverrideValueDisplay?: null | string;
+      wireSize?: null | string;
+      wireTypeName?: null | string;
+      isEmpty: boolean;
+      isMultipleNetwork: boolean;
+      hasCustomCircuitPath: boolean;
+      hasPathOffset: boolean;
+      hasProxyLikeConnectedElements: boolean;
+      proxyLikeConnectedElementCount: number;
+      proxyInferenceRecommended: boolean;
+      primaryConnectedRole?: null | ElectricalInsightRole;
+      connectedRoles: ElectricalInsightRole[];
+      connectedElements: ElectricalCircuitConnectedElementEntry[];
+      wires: ElectricalCircuitWireEntry[];
+      nearbyProxyCandidates?: ElectricalNearbyProxyCandidateEntry[] | null;
+    }
+    export interface ElectricalCircuitConnectedElementEntry {
+      elementId: number;
+      elementUniqueId: string;
+      className: string;
+      categoryName?: null | string;
+      name: string;
+      familyName?: null | string;
+      typeName?: null | string;
+      mark?: null | string;
+      effectiveIdentity?: null | string;
+      effectiveIdentitySource: ElementIdentitySource;
+      role: ElectricalInsightRole;
+      hasElectricalConnector: boolean;
+      electricalSystemCount: number;
+      requestedParameters?: RequestedElementParameterValue[] | null;
+    }
+    /**
+     * A requested parameter read plus its write surface (all write-surface fields null when the
+     * parameter was not found):
+     * ParameterId — raw parameter handle (Parameter.Id) usable as the write target for
+     * parameter-apply operations; type-ness of the resolved value is already carried by Source
+     * (Instance vs Type).
+     * RawValue — invariant raw value: String as-is, Integer invariant, Double G17 in internal
+     * units, ElementId as long.
+     * IsReadOnly — from Parameter.IsReadOnly ONLY; deliberately not derived from
+     * Parameter.UserModifiable, which reports false for writable built-ins (Mark, Type Comments)
+     * whose Set() succeeds — proven in ScheduleCellBindingProofTests.
+     *
+     */
+    export interface RequestedElementParameterValue {
+      definition: ParameterDefinitionDescriptor;
+      found: boolean;
+      isBlank: boolean;
+      value?: null | string;
+      displayValue?: null | string;
+      storageType: RequestedParameterStorageType;
+      source: RequestedParameterValueSource;
+      parameterId?: number | null;
+      rawValue?: null | string;
+      isReadOnly?: boolean | null;
+      name: string;
+      identity: ParameterIdentity;
+    }
+    export interface ParameterDefinitionDescriptor {
+      identity: ParameterIdentity;
+      isInstance?: boolean | null;
+      dataTypeId?: null | string;
+      dataTypeLabel?: null | string;
+      groupTypeId?: null | string;
+      groupTypeLabel?: null | string;
+      visible?: boolean | null;
+      userModifiable?: boolean | null;
+      description?: null | string;
+    }
+    export interface ParameterIdentity {
+      key: string;
+      kind: ParameterIdentityKind;
+      name: string;
+      builtInParameterId?: number | null;
+      sharedGuid?: null | string;
+      parameterElementId?: number | null;
+    }
+    export interface ElectricalCircuitWireEntry {
+      wireId: number;
+      wireUniqueId: string;
+      wireTypeName?: null | string;
+      wiringType: string;
+      hotConductorCount: number;
+      neutralConductorCount: number;
+      groundConductorCount: number;
+    }
+    export interface ElectricalNearbyProxyCandidateEntry {
+      elementId: number;
+      elementUniqueId: string;
+      className: string;
+      categoryName?: null | string;
+      name: string;
+      familyName?: null | string;
+      typeName?: null | string;
+      mark?: null | string;
+      effectiveIdentity?: null | string;
+      effectiveIdentitySource: ElementIdentitySource;
+      role: ElectricalInsightRole;
+      distanceFeet: number;
+      matchReason: ElectricalNearbyProxyCandidateMatchReason;
+      requestedParameters?: RequestedElementParameterValue[] | null;
+    }
+    export interface RevitDataIssue {
+      code: string;
+      severity: RevitDataIssueSeverity;
+      message: string;
+      familyName?: null | string;
+      typeName?: null | string;
+      parameterName?: null | string;
+    }
+    export interface ElectricalCatalogFilterReport {
+      appliedPanelNames: string[];
+      appliedCircuitNumbers: string[];
+      appliedLoadNames: string[];
+      appliedMarks: string[];
+      ignoredBlankFilterValues: string[];
+      candidateCountBeforeFilter: number;
+      matchedCount: number;
+    }
+  }
+}
+
+/** Read circuit metadata and connected load identities without nearby geometry. */
+export namespace RevitCatalogElectricalCircuitsRoster {
   export namespace Req {
     export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
 
@@ -4811,6 +6253,212 @@ export namespace RevitDetailDataTables {
       familyName?: null | string;
       typeName?: null | string;
       parameterName?: null | string;
+    }
+  }
+}
+
+/** Read nearby proxy geometry for explicitly filtered circuits, within their nearby radius. */
+export namespace RevitDetailElectricalCircuitsWalk {
+  export namespace Req {
+    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+
+    export interface Request {
+      filter?: null | ElectricalCircuitFilter;
+      options?: null | ElectricalCircuitsCatalogOptions;
+    }
+    export interface ElectricalCircuitFilter {
+      panelNames?: string[];
+      circuitNumbers?: string[];
+      loadNames?: string[];
+    }
+    export interface ElectricalCircuitsCatalogOptions {
+      parameterQuery?: null | RequestedParameterQuery;
+      includeNearbyProxyContext?: boolean;
+      nearbyRadiusFeet?: number;
+      maxNearbyCandidatesPerElement?: number;
+      maxNearbyCandidatesPerCircuit?: number;
+    }
+    export interface RequestedParameterQuery {
+      parameters?: ParameterReference[];
+    }
+    export interface ParameterReference {
+      identity?: null | ParameterIdentity;
+      name?: null | string;
+      sharedGuid?: null | string;
+    }
+    export interface ParameterIdentity {
+      key: string;
+      kind: ParameterIdentityKind;
+      name: string;
+      builtInParameterId?: number | null;
+      sharedGuid?: null | string;
+      parameterElementId?: number | null;
+    }
+  }
+  export namespace Res {
+    export type ElectricalInsightRole =
+      | "Panel"
+      | "DownstreamPanel"
+      | "LoadFamilyInstance"
+      | "ProxyFixture"
+      | "InlineElectricalEquipment"
+      | "Circuit"
+      | "Wire"
+      | "LoadClassification"
+      | "Element";
+    export type ElementIdentitySource = "None" | "RequestedParameter" | "Mark";
+    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+    export type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
+    export type RequestedParameterValueSource = "None" | "Instance" | "Type";
+    export type ElectricalNearbyProxyCandidateMatchReason =
+      | "NearbyIdentityCandidate"
+      | "RequestedParameterIdentityMatch"
+      | "MarkIdentityMatch";
+    export type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+
+    export interface Response {
+      entries: ElectricalCircuitCatalogEntry[];
+      issues: RevitDataIssue[];
+      filterReport?: null | ElectricalCatalogFilterReport;
+    }
+    export interface ElectricalCircuitCatalogEntry {
+      circuitId: number;
+      circuitUniqueId: string;
+      circuitNumber: string;
+      loadName?: null | string;
+      panelId?: number | null;
+      panelUniqueId?: null | string;
+      panelName?: null | string;
+      slotIndex?: null | string;
+      ways?: null | string;
+      polesNumber: number;
+      voltage?: null | string;
+      apparentLoad?: null | string;
+      apparentCurrent?: null | string;
+      trueLoad?: null | string;
+      trueCurrent?: null | string;
+      rating?: null | string;
+      frame?: null | string;
+      ratingOverride: boolean;
+      ratingOverrideValueDisplay?: null | string;
+      wireSize?: null | string;
+      wireTypeName?: null | string;
+      isEmpty: boolean;
+      isMultipleNetwork: boolean;
+      hasCustomCircuitPath: boolean;
+      hasPathOffset: boolean;
+      hasProxyLikeConnectedElements: boolean;
+      proxyLikeConnectedElementCount: number;
+      proxyInferenceRecommended: boolean;
+      primaryConnectedRole?: null | ElectricalInsightRole;
+      connectedRoles: ElectricalInsightRole[];
+      connectedElements: ElectricalCircuitConnectedElementEntry[];
+      wires: ElectricalCircuitWireEntry[];
+      nearbyProxyCandidates?: ElectricalNearbyProxyCandidateEntry[] | null;
+    }
+    export interface ElectricalCircuitConnectedElementEntry {
+      elementId: number;
+      elementUniqueId: string;
+      className: string;
+      categoryName?: null | string;
+      name: string;
+      familyName?: null | string;
+      typeName?: null | string;
+      mark?: null | string;
+      effectiveIdentity?: null | string;
+      effectiveIdentitySource: ElementIdentitySource;
+      role: ElectricalInsightRole;
+      hasElectricalConnector: boolean;
+      electricalSystemCount: number;
+      requestedParameters?: RequestedElementParameterValue[] | null;
+    }
+    /**
+     * A requested parameter read plus its write surface (all write-surface fields null when the
+     * parameter was not found):
+     * ParameterId — raw parameter handle (Parameter.Id) usable as the write target for
+     * parameter-apply operations; type-ness of the resolved value is already carried by Source
+     * (Instance vs Type).
+     * RawValue — invariant raw value: String as-is, Integer invariant, Double G17 in internal
+     * units, ElementId as long.
+     * IsReadOnly — from Parameter.IsReadOnly ONLY; deliberately not derived from
+     * Parameter.UserModifiable, which reports false for writable built-ins (Mark, Type Comments)
+     * whose Set() succeeds — proven in ScheduleCellBindingProofTests.
+     *
+     */
+    export interface RequestedElementParameterValue {
+      definition: ParameterDefinitionDescriptor;
+      found: boolean;
+      isBlank: boolean;
+      value?: null | string;
+      displayValue?: null | string;
+      storageType: RequestedParameterStorageType;
+      source: RequestedParameterValueSource;
+      parameterId?: number | null;
+      rawValue?: null | string;
+      isReadOnly?: boolean | null;
+      name: string;
+      identity: ParameterIdentity;
+    }
+    export interface ParameterDefinitionDescriptor {
+      identity: ParameterIdentity;
+      isInstance?: boolean | null;
+      dataTypeId?: null | string;
+      dataTypeLabel?: null | string;
+      groupTypeId?: null | string;
+      groupTypeLabel?: null | string;
+      visible?: boolean | null;
+      userModifiable?: boolean | null;
+      description?: null | string;
+    }
+    export interface ParameterIdentity {
+      key: string;
+      kind: ParameterIdentityKind;
+      name: string;
+      builtInParameterId?: number | null;
+      sharedGuid?: null | string;
+      parameterElementId?: number | null;
+    }
+    export interface ElectricalCircuitWireEntry {
+      wireId: number;
+      wireUniqueId: string;
+      wireTypeName?: null | string;
+      wiringType: string;
+      hotConductorCount: number;
+      neutralConductorCount: number;
+      groundConductorCount: number;
+    }
+    export interface ElectricalNearbyProxyCandidateEntry {
+      elementId: number;
+      elementUniqueId: string;
+      className: string;
+      categoryName?: null | string;
+      name: string;
+      familyName?: null | string;
+      typeName?: null | string;
+      mark?: null | string;
+      effectiveIdentity?: null | string;
+      effectiveIdentitySource: ElementIdentitySource;
+      role: ElectricalInsightRole;
+      distanceFeet: number;
+      matchReason: ElectricalNearbyProxyCandidateMatchReason;
+      requestedParameters?: RequestedElementParameterValue[] | null;
+    }
+    export interface RevitDataIssue {
+      code: string;
+      severity: RevitDataIssueSeverity;
+      message: string;
+      familyName?: null | string;
+      typeName?: null | string;
+      parameterName?: null | string;
+    }
+    export interface ElectricalCatalogFilterReport {
+      appliedPanelNames: string[];
+      appliedCircuitNumbers: string[];
+      appliedLoadNames: string[];
+      appliedMarks: string[];
+      ignoredBlankFilterValues: string[];
+      candidateCountBeforeFilter: number;
+      matchedCount: number;
     }
   }
 }
@@ -9073,6 +10721,47 @@ export namespace TakeoffsSnapshot {
 }
 
 /** Contract constants shared with C#; read these instead of re-typing the numbers. */
+export const opCardinality = {
+  "One": "One",
+  "Many": "Many"
+} as const;
+
+/** Contract constants shared with C#; read these instead of re-typing the numbers. */
+export const opCost = {
+  "Cheap": "Cheap",
+  "Bounded": "Bounded",
+  "Expensive": "Expensive",
+  "Mutation": "Mutation"
+} as const;
+
+/** Contract constants shared with C#; read these instead of re-typing the numbers. */
+export const opEffect = {
+  "Read": "Read",
+  "TransactRead": "TransactRead",
+  "SessionWrite": "SessionWrite",
+  "ModelWrite": "ModelWrite"
+} as const;
+
+/** Contract constants shared with C#; read these instead of re-typing the numbers. */
+export const opSubject = {
+  "None": "None",
+  "Document": "Document",
+  "FamilyDocument": "FamilyDocument",
+  "View": "View",
+  "Elements": "Elements",
+  "System": "System",
+  "Region": "Region",
+  "Session": "Session"
+} as const;
+
+/** Contract constants shared with C#; read these instead of re-typing the numbers. */
+export const opTouches = {
+  "Metadata": "Metadata",
+  "Topology": "Topology",
+  "Geometry": "Geometry"
+} as const;
+
+/** Contract constants shared with C#; read these instead of re-typing the numbers. */
 export const parameterValueApplyBounds = {
   "maxEditsPerCall": 500
 } as const;
@@ -9104,6 +10793,8 @@ export interface HostOps {
   "ducts.heal": { request: DuctsHeal.Req.Request; response: DuctsHeal.Res.Response };
   "ducts.ports": { request: DuctsPorts.Req.Request; response: DuctsPorts.Res.Response };
   "ducts.snapshot": { request: DuctsSnapshot.Req.Request; response: DuctsSnapshot.Res.Response };
+  "ducts.snapshot.roster": { request: DuctsSnapshotRoster.Req.Request; response: DuctsSnapshotRoster.Res.Response };
+  "ducts.snapshot.walk": { request: DuctsSnapshotWalk.Req.Request; response: DuctsSnapshotWalk.Res.Response };
   "ducts.tables": { request: DuctsTables.Req.Request; response: DuctsTables.Res.Response };
   "families.apply": { request: FamiliesApply.Req.Request; response: FamiliesApply.Res.Response };
   "families.capture": { request: FamiliesCapture.Req.Request; response: FamiliesCapture.Res.Response };
@@ -9125,6 +10816,7 @@ export interface HostOps {
   "revit.apply.parameters-service-cache.refresh": { request: RevitApplyParametersServiceCacheRefresh.Req.Request; response: RevitApplyParametersServiceCacheRefresh.Res.Response };
   "revit.catalog.concept-evidence": { request: RevitCatalogConceptEvidence.Req.Request; response: RevitCatalogConceptEvidence.Res.Response };
   "revit.catalog.electrical-circuits": { request: RevitCatalogElectricalCircuits.Req.Request; response: RevitCatalogElectricalCircuits.Res.Response };
+  "revit.catalog.electrical-circuits.roster": { request: RevitCatalogElectricalCircuitsRoster.Req.Request; response: RevitCatalogElectricalCircuitsRoster.Res.Response };
   "revit.catalog.electrical-load-classifications": { request: RevitCatalogElectricalLoadClassifications.Req.Request; response: RevitCatalogElectricalLoadClassifications.Res.Response };
   "revit.catalog.electrical-panels": { request: RevitCatalogElectricalPanels.Req.Request; response: RevitCatalogElectricalPanels.Res.Response };
   "revit.catalog.field-options": { request: RevitCatalogFieldOptions.Req.Request; response: RevitCatalogFieldOptions.Res.Response };
@@ -9144,6 +10836,7 @@ export interface HostOps {
   "revit.context.view-rendering-state": { request: RevitContextViewRenderingState.Req.Request; response: RevitContextViewRenderingState.Res.Response };
   "revit.context.visible-summary": { request: RevitContextVisibleSummary.Req.Request; response: RevitContextVisibleSummary.Res.Response };
   "revit.detail.data-tables": { request: RevitDetailDataTables.Req.Request; response: RevitDetailDataTables.Res.Response };
+  "revit.detail.electrical-circuits.walk": { request: RevitDetailElectricalCircuitsWalk.Req.Request; response: RevitDetailElectricalCircuitsWalk.Res.Response };
   "revit.detail.electrical-panel-schedules": { request: RevitDetailElectricalPanelSchedules.Req.Request; response: RevitDetailElectricalPanelSchedules.Res.Response };
   "revit.detail.elements": { request: RevitDetailElements.Req.Request; response: RevitDetailElements.Res.Response };
   "revit.detail.parameter-links": { request: RevitDetailParameterLinks.Req.Request; response: RevitDetailParameterLinks.Res.Response };
@@ -9199,6 +10892,8 @@ export const hostOpKeys = [
   "ducts.heal",
   "ducts.ports",
   "ducts.snapshot",
+  "ducts.snapshot.roster",
+  "ducts.snapshot.walk",
   "ducts.tables",
   "families.apply",
   "families.capture",
@@ -9220,6 +10915,7 @@ export const hostOpKeys = [
   "revit.apply.parameters-service-cache.refresh",
   "revit.catalog.concept-evidence",
   "revit.catalog.electrical-circuits",
+  "revit.catalog.electrical-circuits.roster",
   "revit.catalog.electrical-load-classifications",
   "revit.catalog.electrical-panels",
   "revit.catalog.field-options",
@@ -9239,6 +10935,7 @@ export const hostOpKeys = [
   "revit.context.view-rendering-state",
   "revit.context.visible-summary",
   "revit.detail.data-tables",
+  "revit.detail.electrical-circuits.walk",
   "revit.detail.electrical-panel-schedules",
   "revit.detail.elements",
   "revit.detail.parameter-links",
@@ -9285,95 +10982,99 @@ export const hostOpKeys = [
 
 /** C# operation safety metadata. Unknown operations never inherit read permission. */
 export const hostOpSafety = {
-  "data-table.apply": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true},
-  "document.temporary.release": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true},
-  "document.temporary.status": {"intent":"Read","costTier":"Cheap","usesTransactions":false},
-  "ducts.apply": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true},
-  "ducts.assign-fan": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true},
-  "ducts.family-patch": {"intent":"Read","costTier":"Cheap","usesTransactions":false},
-  "ducts.heal": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true},
-  "ducts.ports": {"intent":"Read","costTier":"Bounded","usesTransactions":false},
-  "ducts.snapshot": {"intent":"Read","costTier":"Bounded","usesTransactions":false},
-  "ducts.tables": {"intent":"Read","costTier":"Cheap","usesTransactions":false},
-  "families.apply": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true},
-  "families.capture": {"intent":"Read","costTier":"Expensive","usesTransactions":false},
-  "families.plan": {"intent":"Read","costTier":"Expensive","usesTransactions":true},
-  "family.apply": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true},
-  "family.build": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true},
-  "family.capture": {"intent":"Read","costTier":"Bounded","usesTransactions":false},
-  "family.loadTest": {"intent":"Read","costTier":"Expensive","usesTransactions":true},
-  "family.look": {"intent":"Read","costTier":"Expensive","usesTransactions":true},
-  "family.open": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true},
-  "family.plan": {"intent":"Read","costTier":"Expensive","usesTransactions":true},
-  "family.temporary.acquire": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true},
-  "host.ops.catalog": {"intent":"Read","costTier":"Cheap","usesTransactions":false},
-  "op.cancel": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true},
-  "pod.member.compose": {"intent":"Read","costTier":"Cheap","usesTransactions":false},
-  "revit.apply.command.execute": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true},
-  "revit.apply.parameter-links": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true},
-  "revit.apply.parameter-values": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true},
-  "revit.apply.parameters-service-cache.refresh": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true},
-  "revit.catalog.concept-evidence": {"intent":"Read","costTier":"Cheap","usesTransactions":false},
-  "revit.catalog.electrical-circuits": {"intent":"Read","costTier":"Cheap","usesTransactions":false},
-  "revit.catalog.electrical-load-classifications": {"intent":"Read","costTier":"Cheap","usesTransactions":false},
-  "revit.catalog.electrical-panels": {"intent":"Read","costTier":"Cheap","usesTransactions":false},
-  "revit.catalog.field-options": {"intent":"Read","costTier":"Cheap","usesTransactions":false},
-  "revit.catalog.loaded-families": {"intent":"Read","costTier":"Cheap","usesTransactions":false},
-  "revit.catalog.parameter-bindings": {"intent":"Read","costTier":"Cheap","usesTransactions":false},
-  "revit.catalog.parameter-evidence": {"intent":"Read","costTier":"Cheap","usesTransactions":false},
-  "revit.catalog.project-browser": {"intent":"Read","costTier":"Cheap","usesTransactions":false},
-  "revit.catalog.project-index": {"intent":"Read","costTier":"Cheap","usesTransactions":false},
-  "revit.catalog.schedules": {"intent":"Read","costTier":"Cheap","usesTransactions":false},
-  "revit.catalog.warnings": {"intent":"Read","costTier":"Cheap","usesTransactions":false},
-  "revit.context.document-session": {"intent":"Read","costTier":"Cheap","usesTransactions":false},
-  "revit.context.journal": {"intent":"Read","costTier":"Cheap","usesTransactions":false},
-  "revit.context.lens": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true},
-  "revit.context.show-elements": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true},
-  "revit.context.summary": {"intent":"Read","costTier":"Cheap","usesTransactions":false},
-  "revit.context.view-image": {"intent":"Read","costTier":"Cheap","usesTransactions":true},
-  "revit.context.view-rendering-state": {"intent":"Read","costTier":"Cheap","usesTransactions":false},
-  "revit.context.visible-summary": {"intent":"Read","costTier":"Cheap","usesTransactions":false},
-  "revit.detail.data-tables": {"intent":"Read","costTier":"Bounded","usesTransactions":false},
-  "revit.detail.electrical-panel-schedules": {"intent":"Read","costTier":"Bounded","usesTransactions":false},
-  "revit.detail.elements": {"intent":"Read","costTier":"Bounded","usesTransactions":false},
-  "revit.detail.parameter-links": {"intent":"Read","costTier":"Bounded","usesTransactions":false},
-  "revit.detail.schedules": {"intent":"Read","costTier":"Bounded","usesTransactions":false},
-  "revit.detail.sheets": {"intent":"Read","costTier":"Bounded","usesTransactions":false},
-  "revit.detail.space-build": {"intent":"Read","costTier":"Expensive","usesTransactions":false},
-  "revit.detail.space-census": {"intent":"Read","costTier":"Expensive","usesTransactions":false},
-  "revit.detail.space-probe": {"intent":"Read","costTier":"Expensive","usesTransactions":false},
-  "revit.detail.space-rows": {"intent":"Read","costTier":"Expensive","usesTransactions":false},
-  "revit.detail.space-scene": {"intent":"Read","costTier":"Expensive","usesTransactions":false},
-  "revit.detail.space-slice": {"intent":"Read","costTier":"Expensive","usesTransactions":false},
-  "revit.detail.space-status": {"intent":"Read","costTier":"Bounded","usesTransactions":false},
-  "revit.detail.space-sweep": {"intent":"Read","costTier":"Expensive","usesTransactions":false},
-  "revit.detail.space-tree": {"intent":"Read","costTier":"Expensive","usesTransactions":false},
-  "revit.glance.attention": {"intent":"Read","costTier":"Bounded","usesTransactions":false},
-  "revit.glance.model": {"intent":"Read","costTier":"Bounded","usesTransactions":false},
-  "revit.matrix.loaded-families": {"intent":"Read","costTier":"Expensive","usesTransactions":true},
-  "revit.matrix.parameter-coverage": {"intent":"Read","costTier":"Expensive","usesTransactions":false},
-  "revit.matrix.schedule-coverage": {"intent":"Read","costTier":"Expensive","usesTransactions":false},
-  "revit.matrix.schedule-profiles": {"intent":"Read","costTier":"Expensive","usesTransactions":false},
-  "revit.resolve.family-instances": {"intent":"Read","costTier":"Bounded","usesTransactions":false},
-  "revit.resolve.references": {"intent":"Read","costTier":"Bounded","usesTransactions":false},
-  "revit.resolve.unit-value": {"intent":"Read","costTier":"Bounded","usesTransactions":false},
-  "rooms.draw": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true},
-  "rooms.merge": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true},
-  "rooms.partition": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true},
-  "rooms.snapshot": {"intent":"Read","costTier":"Bounded","usesTransactions":false},
-  "rooms.trace": {"intent":"Read","costTier":"Bounded","usesTransactions":false},
-  "rooms.write": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true},
-  "schedule.apply": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true},
-  "schedule.capture": {"intent":"Read","costTier":"Bounded","usesTransactions":false},
-  "schedule.cells.apply": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true},
-  "scripting.execute": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true},
-  "scripting.workspace.bootstrap": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true},
-  "settings.schema": {"intent":"Read","costTier":"Cheap","usesTransactions":false},
-  "settings.validate": {"intent":"Read","costTier":"Cheap","usesTransactions":false},
-  "takeoffs.adopt": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true},
-  "takeoffs.candidates": {"intent":"Read","costTier":"Bounded","usesTransactions":false},
-  "takeoffs.initialize-carrier": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true},
-  "takeoffs.partition": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true},
-  "takeoffs.rhvac-links": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true},
-  "takeoffs.snapshot": {"intent":"Read","costTier":"Bounded","usesTransactions":false},
-} as const satisfies Record<keyof HostOps, { intent: string; costTier: string; usesTransactions: boolean }>;
+  "data-table.apply": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Document","touches":"Metadata","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
+  "document.temporary.release": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"None","touches":"Metadata","effect":"SessionWrite","cardinality":"One","internal":false,"rollsBack":false},
+  "document.temporary.status": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"None","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "ducts.apply": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Document","touches":"Geometry","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
+  "ducts.assign-fan": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"System","touches":"Topology","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
+  "ducts.family-patch": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"None","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "ducts.heal": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Document","touches":"Geometry","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
+  "ducts.ports": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"Elements","touches":"Topology","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "ducts.snapshot": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"Document","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "ducts.snapshot.roster": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"Document","touches":"Topology","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "ducts.snapshot.walk": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"Elements","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "ducts.tables": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"None","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "families.apply": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Document","touches":"Geometry","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
+  "families.capture": {"intent":"Read","costTier":"Expensive","usesTransactions":false,"subject":"Elements","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "families.plan": {"intent":"Read","costTier":"Expensive","usesTransactions":true,"subject":"Document","touches":"Geometry","effect":"TransactRead","cardinality":"One","internal":false,"rollsBack":true},
+  "family.apply": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"FamilyDocument","touches":"Geometry","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
+  "family.build": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"FamilyDocument","touches":"Geometry","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
+  "family.capture": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"FamilyDocument","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "family.loadTest": {"intent":"Read","costTier":"Expensive","usesTransactions":true,"subject":"FamilyDocument","touches":"Geometry","effect":"TransactRead","cardinality":"One","internal":false,"rollsBack":true},
+  "family.look": {"intent":"Read","costTier":"Expensive","usesTransactions":true,"subject":"FamilyDocument","touches":"Geometry","effect":"TransactRead","cardinality":"One","internal":false,"rollsBack":true},
+  "family.open": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Elements","touches":"Metadata","effect":"SessionWrite","cardinality":"One","internal":false,"rollsBack":false},
+  "family.plan": {"intent":"Read","costTier":"Expensive","usesTransactions":true,"subject":"FamilyDocument","touches":"Geometry","effect":"TransactRead","cardinality":"One","internal":false,"rollsBack":true},
+  "family.temporary.acquire": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Elements","touches":"Metadata","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
+  "host.ops.catalog": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"None","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "op.cancel": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"None","touches":"Metadata","effect":"SessionWrite","cardinality":"One","internal":false,"rollsBack":false},
+  "pod.member.compose": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"None","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.apply.command.execute": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Document","touches":"Metadata","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
+  "revit.apply.parameter-links": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Document","touches":"Topology","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
+  "revit.apply.parameter-values": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Elements","touches":"Metadata","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
+  "revit.apply.parameters-service-cache.refresh": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"None","touches":"Metadata","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
+  "revit.catalog.concept-evidence": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.catalog.electrical-circuits": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"Document","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.catalog.electrical-circuits.roster": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"Document","touches":"Topology","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.catalog.electrical-load-classifications": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.catalog.electrical-panels": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.catalog.field-options": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.catalog.loaded-families": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.catalog.parameter-bindings": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.catalog.parameter-evidence": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.catalog.project-browser": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.catalog.project-index": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.catalog.schedules": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.catalog.warnings": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.context.document-session": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"None","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.context.journal": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"None","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.context.lens": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Elements","touches":"Geometry","effect":"SessionWrite","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.context.show-elements": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Elements","touches":"Metadata","effect":"SessionWrite","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.context.summary": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.context.view-image": {"intent":"Read","costTier":"Cheap","usesTransactions":true,"subject":"View","touches":"Geometry","effect":"TransactRead","cardinality":"One","internal":false,"rollsBack":true},
+  "revit.context.view-rendering-state": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"View","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.context.visible-summary": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"View","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.detail.data-tables": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.detail.electrical-circuits.walk": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"Elements","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.detail.electrical-panel-schedules": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"View","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.detail.elements": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"Elements","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.detail.parameter-links": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"Document","touches":"Topology","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.detail.schedules": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"View","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.detail.sheets": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"View","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.detail.space-build": {"intent":"Read","costTier":"Expensive","usesTransactions":false,"subject":"Document","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.detail.space-census": {"intent":"Read","costTier":"Expensive","usesTransactions":false,"subject":"Region","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.detail.space-probe": {"intent":"Read","costTier":"Expensive","usesTransactions":false,"subject":"Region","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.detail.space-rows": {"intent":"Read","costTier":"Expensive","usesTransactions":false,"subject":"Document","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.detail.space-scene": {"intent":"Read","costTier":"Expensive","usesTransactions":false,"subject":"Elements","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.detail.space-slice": {"intent":"Read","costTier":"Expensive","usesTransactions":false,"subject":"Region","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.detail.space-status": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.detail.space-sweep": {"intent":"Read","costTier":"Expensive","usesTransactions":false,"subject":"Region","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.detail.space-tree": {"intent":"Read","costTier":"Expensive","usesTransactions":false,"subject":"Document","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.glance.attention": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"View","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.glance.model": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.matrix.loaded-families": {"intent":"Read","costTier":"Expensive","usesTransactions":true,"subject":"Document","touches":"Metadata","effect":"TransactRead","cardinality":"One","internal":false,"rollsBack":true},
+  "revit.matrix.parameter-coverage": {"intent":"Read","costTier":"Expensive","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.matrix.schedule-coverage": {"intent":"Read","costTier":"Expensive","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.matrix.schedule-profiles": {"intent":"Read","costTier":"Expensive","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.resolve.family-instances": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.resolve.references": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.resolve.unit-value": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"None","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "rooms.draw": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"View","touches":"Geometry","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
+  "rooms.merge": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"View","touches":"Geometry","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
+  "rooms.partition": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"View","touches":"Geometry","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
+  "rooms.snapshot": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"Document","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "rooms.trace": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"View","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "rooms.write": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Elements","touches":"Metadata","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
+  "schedule.apply": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Document","touches":"Metadata","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
+  "schedule.capture": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"View","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "schedule.cells.apply": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Elements","touches":"Metadata","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
+  "scripting.execute": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"None","touches":"Metadata","effect":"ModelWrite","cardinality":"One","internal":false,"rollsBack":false},
+  "scripting.workspace.bootstrap": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"None","touches":"Metadata","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
+  "settings.schema": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"None","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "settings.validate": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"None","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "takeoffs.adopt": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"View","touches":"Geometry","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
+  "takeoffs.candidates": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"View","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "takeoffs.initialize-carrier": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Document","touches":"Metadata","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
+  "takeoffs.partition": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Region","touches":"Geometry","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
+  "takeoffs.rhvac-links": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Elements","touches":"Metadata","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
+  "takeoffs.snapshot": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"Document","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+} as const satisfies Record<keyof HostOps, { intent: string; costTier: string; usesTransactions: boolean; subject: string; touches: string; effect: string; cardinality: string; internal: boolean; rollsBack: boolean }>;

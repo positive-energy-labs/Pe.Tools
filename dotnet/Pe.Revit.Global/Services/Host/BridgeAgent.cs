@@ -242,6 +242,7 @@ internal sealed class BridgeAgent : IDisposable {
             if (!OpRegistry.TryGet(request.OperationKey, out var op))
                 throw new InvalidOperationException($"Unsupported bridge operation '{request.OperationKey}'.");
 
+            OpCallGate.Require(op.Definition, request.DerivedCommand, request.PayloadJson);
             Task<object?> responseTask;
             if (op.Thread == OpThread.Revit) {
                 // The op gets the request's own token, never context.Cancellation: the queue disposes

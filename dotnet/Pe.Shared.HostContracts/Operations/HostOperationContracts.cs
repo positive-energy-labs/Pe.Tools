@@ -92,7 +92,13 @@ public sealed record HostOperationDefinition(
     OpNeeds Needs = OpNeeds.Nothing,
     OpActor Actor = OpActor.Any,
     bool UsesTransactions = false,
-    Type? ArtifactMetadataType = null
+    Type? ArtifactMetadataType = null,
+    OpSubject Subject = OpSubject.None,
+    OpTouches Touches = OpTouches.Metadata,
+    OpEffect Effect = OpEffect.Read,
+    OpCardinality Cardinality = OpCardinality.One,
+    bool Internal = false,
+    bool RollsBack = false
 ) {
     public HostOperationAgentMetadata AgentMetadata => EnrichMetadata(
         this.Key,

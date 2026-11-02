@@ -145,6 +145,7 @@ export const bridgeRegistrationRequestSchema = Schema.Struct({
 export type BridgeRegistrationRequest = Schema.Schema.Type<typeof bridgeRegistrationRequestSchema>;
 
 export const bridgeRequestSchema = Schema.Struct({
+  derivedCommand: nullableString,
   openDocumentId: nullableString,
   operationKey: Schema.String,
   payloadJson: Schema.String,

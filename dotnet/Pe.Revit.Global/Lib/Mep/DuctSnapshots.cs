@@ -47,7 +47,7 @@ public static class DuctSnapshots {
         string? LabelParameter,
         IReadOnlyDictionary<long, string> PhaseNames);
 
-    public static DuctSnapshotData Snapshot(Document doc, DuctParameterSlots? slots = null, string? labelParameter = null, DuctSnapshotSelector? selector = null) {
+    public static DuctSnapshotData Snapshot(Document doc, DuctParameterSlots? slots = null, string? labelParameter = null, DuctSnapshotSelector? selector = null, bool metadataOnly = false) {
         // The names the person staged win, then the names the last apply recorded in the store, then the defaults.
         var (store, storeError) = DuctApplier.ReadStore(doc);
         slots = (slots?.Over(store?.Slots) ?? store?.Slots ?? new DuctParameterSlots()).WithDefaults();
@@ -93,8 +93,8 @@ public static class DuctSnapshots {
                 // The whole-document read exceeded the 16 MiB bridge frame on Chadds (2026-10-28); the roster needs units, base
                 // equipment, and terminals for each airflow slot's coverage.
                 rawNodes = Of(BuiltInCategory.OST_MechanicalEquipment).Where(e => HvacConnectors(e).Any())
-                    .Select(e => Node(e, DuctNodeKind.Equipment, slots, schemas, network, labelParameter))
-                    .Concat(Of(BuiltInCategory.OST_DuctTerminal).Select(e => Node(e, DuctNodeKind.Terminal, slots, schemas, network, labelParameter)))
+                    .Select(e => Node(e, DuctNodeKind.Equipment, slots, schemas, network, labelParameter, metadataOnly))
+                    .Concat(Of(BuiltInCategory.OST_DuctTerminal).Select(e => Node(e, DuctNodeKind.Terminal, slots, schemas, network, labelParameter, metadataOnly)))
                     .ToList();
                 rawSegments = [];
                 rawSystems = AirSystems(doc)
@@ -602,7 +602,7 @@ public static class DuctSnapshots {
     private static DuctNodeKind Fitting(Element e) =>
         (e as FamilyInstance)?.MEPModel is MechanicalFitting { PartType: PartType.Cap } ? DuctNodeKind.Cap : DuctNodeKind.Fitting;
 
-    private static DuctNode Node(Element e, DuctNodeKind kind, DuctParameterSlots slots, Dictionary<Guid, Schema?> schemas, bool network, string? labelParameter) {
+    private static DuctNode Node(Element e, DuctNodeKind kind, DuctParameterSlots slots, Dictionary<Guid, Schema?> schemas, bool network, string? labelParameter, bool metadataOnly = false) {
         var fi = e as FamilyInstance;
         var facts = new List<DuctFact>();
         string? flowParameter = null;
@@ -613,7 +613,7 @@ public static class DuctSnapshots {
                 facts.Add(Fact(DuctNetwork.TerminalFlow, cfm, "cfm", DuctProvenance.DesignerStated));
                 if (fi?.Symbol.LookupParameter("Pe_Catalog")?.AsString() is { Length: > 0 } catalog)
                     facts.Add(new DuctFact("Pe_Catalog", null, catalog, "", DuctProvenance.DesignerStated));
-                if (Space(fi) is { } space) facts.Add(new DuctFact("space", null, space, "", DuctProvenance.Geometry));
+                if (!metadataOnly && Space(fi) is { } space) facts.Add(new DuctFact("space", null, space, "", DuctProvenance.Geometry));
                 break;
             case DuctNodeKind.Accessory:
                 facts.Add(Fact(DuctNetwork.PressureDrop, Converted(Named(e, slots.ComponentDrop), UnitTypeId.InchesOfWater60DegreesFahrenheit), "in-wg", DuctProvenance.DesignerStated));
@@ -652,11 +652,11 @@ public static class DuctSnapshots {
             fi?.Symbol?.Name,
             (fi?.MEPModel as MechanicalFitting)?.PartType.ToString(),
             levelId is { } id && id != ElementId.InvalidElementId ? id.Value() : null,
-            Where(e),
+            metadataOnly ? null : Where(e),
             null,
             Text(e, BuiltInParameter.RBS_SYSTEM_NAME_PARAM),
             Text(e, BuiltInParameter.RBS_SYSTEM_CLASSIFICATION_PARAM),
-            HvacConnectors(e).Select(c => Connector(c, network)).ToList(),
+            HvacConnectors(e).Select(c => Connector(c, network, metadataOnly)).ToList(),
             facts.Where(f => f.Value is not null || f.Text is not null).ToList(),
             kind is DuctNodeKind.Fitting or DuctNodeKind.Accessory ? Loss(e, schemas) : null,
             kind == DuctNodeKind.Terminal ? Terminal(e, slots) : null,
@@ -748,7 +748,7 @@ public static class DuctSnapshots {
                 yield return c;
     }
 
-    private static DuctConnector Connector(Connector c, bool network) {
+    private static DuctConnector Connector(Connector c, bool network, bool metadataOnly = false) {
         var shape = c.Shape switch {
             ConnectorProfileType.Round => DuctShape.Round,
             ConnectorProfileType.Rectangular => DuctShape.Rectangular,
@@ -758,14 +758,14 @@ public static class DuctSnapshots {
         double? diameter = shape == DuctShape.Round ? R(c.Radius * 24) : null;
         double? width = shape is DuctShape.Rectangular or DuctShape.Oval ? R(c.Width * 12) : null;
         double? height = shape is DuctShape.Rectangular or DuctShape.Oval ? R(c.Height * 12) : null;
-        var frame = Try(() => c.CoordinateSystem);
+        var frame = metadataOnly ? null : Try(() => c.CoordinateSystem);
         var info = c.Owner is FamilyInstance { Category: { } category } && category.ToBuiltInCategory() == BuiltInCategory.OST_DuctFitting
             ? Try(() => c.GetMEPConnectorInfo())
             : null;
         return new DuctConnector(
             c.Id,
             c.ConnectorType == ConnectorType.Curve ? "curve" : "end",
-            P(c.Origin),
+            metadataOnly ? [] : P(c.Origin),
             shape,
             diameter is { } d ? $"{d:0.#}\"ø" : width is { } w && height is { } h ? $"{w:0.#}x{h:0.#}" : "",
             diameter,

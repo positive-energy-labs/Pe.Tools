@@ -54,6 +54,12 @@ export type HostOperationRequestExample = Schema.Schema.Type<
 
 export const hostOperationDefinitionSchema = Schema.Struct({
   key: Schema.String,
+  subject: Schema.optional(Schema.String),
+  touches: Schema.optional(Schema.String),
+  effect: Schema.optional(Schema.String),
+  cardinality: Schema.optional(Schema.String),
+  internal: Schema.optional(Schema.Boolean),
+  rollsBack: Schema.optional(Schema.Boolean),
   requestTypeName: Schema.optional(Schema.String),
   responseTypeName: Schema.optional(Schema.String),
   displayName: Schema.optional(Schema.String),

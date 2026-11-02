@@ -24,6 +24,12 @@ import { HOST_RPC_BRIDGE_SESSION_HEADER } from "../src/contracts/bridge-protocol
 
 type CatalogEntry = {
   key: string;
+  subject: string;
+  touches: string;
+  effect: string;
+  cardinality: string;
+  internal: boolean;
+  rollsBack: boolean;
   displayName?: string | null;
   intent: string;
   costTier: string;
@@ -213,9 +219,9 @@ chunks.push(
   "export const hostOpSafety = {",
   ...operations.map(
     (op) =>
-      `  ${JSON.stringify(op.key)}: ${JSON.stringify({ intent: op.intent, costTier: op.costTier, usesTransactions: op.usesTransactions })},`,
+      `  ${JSON.stringify(op.key)}: ${JSON.stringify({ intent: op.intent, costTier: op.costTier, usesTransactions: op.usesTransactions, subject: op.subject, touches: op.touches, effect: op.effect, cardinality: op.cardinality, internal: op.internal, rollsBack: op.rollsBack })},`,
   ),
-  "} as const satisfies Record<keyof HostOps, { intent: string; costTier: string; usesTransactions: boolean }>;",
+  "} as const satisfies Record<keyof HostOps, { intent: string; costTier: string; usesTransactions: boolean; subject: string; touches: string; effect: string; cardinality: string; internal: boolean; rollsBack: boolean }>;",
   "",
 );
 

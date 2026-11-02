@@ -26,9 +26,6 @@ public static class ElectricalCircuitsCatalogCollector {
             "ElectricalCircuitsCatalog"
         );
         var wiresBySystemId = BuildWireMap(doc, issues);
-        var nearbyCandidatePool = options?.IncludeNearbyProxyContext == true
-            ? BuildNearbyProxyCandidatePool(doc, requestedParameters)
-            : null;
 
         var candidates = new FilteredElementCollector(doc)
             .OfClass(typeof(ElectricalSystem))
@@ -43,6 +40,11 @@ public static class ElectricalCircuitsCatalogCollector {
                 loadNames
             ))
             .ToList();
+
+        // Restrict native acquisition before reading candidate locations; filters on the output are too late.
+        var nearbyCandidatePool = options?.IncludeNearbyProxyContext == true
+            ? BuildNearbyProxyCandidatePool(doc, requestedParameters, matchedCandidates, options.NearbyRadiusFeet)
+            : null;
 
         var entries = matchedCandidates
             .OrderBy(circuit => circuit.PanelName, StringComparer.OrdinalIgnoreCase)
@@ -197,10 +199,20 @@ public static class ElectricalCircuitsCatalogCollector {
 
     private static List<NearbyProxyCandidate> BuildNearbyProxyCandidatePool(
         Document doc,
-        IReadOnlyList<ResolvedParameterReference> requestedParameters
-    ) =>
-        new FilteredElementCollector(doc)
+        IReadOnlyList<ResolvedParameterReference> requestedParameters,
+        IReadOnlyList<ElectricalSystem> circuits,
+        double radius
+    ) {
+        if (!double.IsFinite(radius) || radius <= 0 || radius > 100)
+            throw new ArgumentOutOfRangeException(nameof(radius), "Nearby radius must be between 0 and 100 feet.");
+        var delta = new XYZ(radius, radius, radius);
+        var bounds = circuits.SelectMany(circuit => circuit.Elements.Cast<Element>())
+            .Select(ElectricalCollectorSupport.TryGetElementPoint).Where(point => point != null)
+            .Select(point => (ElementFilter)new BoundingBoxIntersectsFilter(new Outline(point! - delta, point! + delta))).ToList();
+        if (bounds.Count == 0) return [];
+        return new FilteredElementCollector(doc)
             .OfClass(typeof(FamilyInstance))
+            .WherePasses(new LogicalOrFilter(bounds))
             .Cast<FamilyInstance>()
             .Select(family => {
                 var role = ElectricalCollectorSupport.DetermineCircuitConnectedElementRole(family);
@@ -231,6 +243,7 @@ public static class ElectricalCircuitsCatalogCollector {
                 !string.IsNullOrWhiteSpace(candidate.EffectiveIdentity)
             )
             .ToList();
+    }
 
     private static List<ElectricalNearbyProxyCandidateEntry> CollectNearbyProxyCandidates(
         ElectricalSystem circuit,

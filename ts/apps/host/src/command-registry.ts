@@ -1,3 +1,4 @@
+import { catalogCommandContext } from "./catalog-command-context.ts";
 import type { CommandExecutor, CommandRegistry } from "./command-executor.ts";
 import type { RevitBridge } from "./bridge.ts";
 import type { TakeoffCaptures } from "./takeoff-captures.ts";
@@ -61,13 +62,16 @@ export function commandRegistry(
     if (result?.cancelled === false) throw Error(result.message ?? "Native request is not running");
     return result;
   };
-  const complete = (entry: CommandExecutor): CommandExecutor => ({
+  const complete = (entry: CommandExecutor, key?: string): CommandExecutor => ({
     ...entry,
+    run: (context, execution) => key
+      ? catalogCommandContext.run(key, () => entry.run(context, execution))
+      : entry.run(context, execution),
     recover: entry.recover ?? recover,
     cancel: entry.cancel ?? cancel,
   });
   for (const [key, entry] of Object.entries(implementations))
-    implementations[key] = complete(entry);
+    implementations[key] = complete(entry, key);
   for (const key of Object.keys(commands))
     if (!implementations[key]) throw Error(`Semantic command '${key}' has no executor`);
   return (key) =>
