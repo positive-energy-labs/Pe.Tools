@@ -138,7 +138,10 @@ test("an acquired document supplies provenance without bypassing the run countdo
         effects: [{ kind: "document", ref: target }],
       },
       async () => null,
-      async (execution) => execution.step("native", "write", {}, async () => ++writes),
+      async (execution) => execution.step("native", "write", {}, async (id) => {
+        expect(id).toBe("acquired-write");
+        return ++writes;
+      }),
     );
     expect(row.state).toBe("waiting");
     await h.ready();
@@ -146,6 +149,8 @@ test("an acquired document supplies provenance without bypassing the run countdo
     h.approve();
     const done = await h.journal.wait(row.id);
     expect(done.state).toBe("succeeded");
+    expect(done.steps[0]!.id).toBe(done.id);
+    expect(done.outcome!.id).toBe(done.id);
     expect(done.consent).toMatchObject({ run, decision: { by: "human" } });
     expect(writes).toBe(1);
   } finally {
@@ -451,7 +456,7 @@ test("a human Commit is approval; Pea's same write waits and Reject leaves the d
     const ask = h.events.find((e) => e.kind === "permission_request")!;
     if (ask.kind !== "permission_request") throw Error("No consent request");
     h.runs.decide(run.thread, ask.requestId, "stop_writes");
-    expect(await h.journal.wait("pea-commit")).toMatchObject({ state: "cancelled", error: expect.stringContaining("cancelled before authorization") });
+    expect(await h.journal.wait("pea-commit")).toMatchObject({ state: "cancelled", error: expect.stringContaining("rejected by you") });
     expect(value).toBe(100);
   } finally { await h.close(); }
 });

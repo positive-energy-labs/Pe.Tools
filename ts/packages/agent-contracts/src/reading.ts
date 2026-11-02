@@ -239,6 +239,8 @@ export const readingRequestSchema = z.discriminatedUnion("kind", [
     id: z.string().min(1).max(200).optional(),
     /** Full receipts for one Work, including results. Unscoped lists carry ActionStatus only. */
     work: workKeySchema.optional(),
+    /** Timeline needs outcomes, not native payloads and prepared snapshots. */
+    detail: z.literal("status").optional(),
     tool: z.string().optional(),
   }),
   /**

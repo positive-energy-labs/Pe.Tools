@@ -287,7 +287,7 @@ export function hostResourceObserver(
             if (request.tool)
               rows = rows.filter((row) => commandTool(row.key)?.name === request.tool);
             accept(
-              request.id || request.work
+              (request.id || request.work) && request.detail !== "status"
                 ? { value: rows }
                 : { value: actionStatusSchema.array().parse(rows) },
             );

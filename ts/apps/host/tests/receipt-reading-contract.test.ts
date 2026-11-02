@@ -65,16 +65,16 @@ test.each(["families", "schedules"])(
             },
           ],
         },
-        async () => null,
+        async () => ({ snapshot: "x".repeat(2 * 1024 * 1024) }),
         async () => ({ failures: [{ key: "cell", error: "refused" }] }),
       );
       const receipt = await journal.wait("applied");
       expect(receipt, JSON.stringify(receipt)).toMatchObject({ state: "succeeded" });
       const observe = hostResourceObserver(undefined, () => journal);
-      const read = (key?: WorkKey) =>
+      const read = (key?: WorkKey, detail?: "status") =>
         new Promise<unknown>((resolve, reject) => {
           releases.push(
-            observe({ kind: "receipts", ...(key && { work: key }) }, (frame: ReadingFrame) => {
+            observe({ kind: "receipts", ...(key && { work: key }), ...(detail && { detail }) }, (frame: ReadingFrame) => {
               if (frame.kind === "snapshot") resolve(JSON.parse(JSON.stringify(frame.value)));
               else if (frame.kind === "failure") reject(Error(frame.error));
             }),
@@ -91,6 +91,10 @@ test.each(["families", "schedules"])(
         prepared: { state: "ready" },
         recovery: [],
       });
+      const timeline = await read(work, "status");
+      expect(timeline).toEqual(actionStatusSchema.array().parse([receipt]));
+      expect(Buffer.byteLength(JSON.stringify(payload))).toBeGreaterThan(2 * 1024 * 1024);
+      expect(Buffer.byteLength(JSON.stringify(timeline))).toBeLessThan(10_000);
       const summaries = actionStatusSchema.array().parse(await read());
       expect(summaries).toHaveLength(1);
       expect(summaries[0]).not.toHaveProperty("prepared");

@@ -1510,7 +1510,9 @@ export class ActionJournal implements ReceiptReader {
             process ??
             (incarnation?.kind === "incarnation" ? incarnation.probe.process : undefined);
           const step: ActionStep = {
-            id: randomUUID(),
+            id: kind === "native" && !row.steps.some((step) => step.kind === "native")
+              ? row.id
+              : randomUUID(),
             kind,
             key,
             input: structuredClone(input),
@@ -1644,7 +1646,7 @@ export class ActionJournal implements ReceiptReader {
           if (!retirementOnly && row.effects.length)
             commandCheckpoint(originOf(row.caller), row.consent);
         } catch {
-          this.cancelWaits.get(row.id)?.();
+          if (row.consent) this.cancelWaits.get(row.id)?.();
           void save((current) => ({ ...current, cancellationRequested: true })).catch(persistenceFailed);
         }
       });

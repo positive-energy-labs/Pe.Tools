@@ -5,7 +5,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  actionReceiptSchema,
+  actionStatusSchema,
   bindWork,
   OLDER_WORK,
   workKey,
@@ -13,7 +13,7 @@ import {
   type TargetResolution,
   type RouteGraph,
   type RouteStateSpec,
-  type ActionReceipt,
+  type ActionStatus,
   type RouteStateWriteResult,
   type WorkKey,
   type WorkWrite,
@@ -67,7 +67,7 @@ export interface WorkScopePorts<W> {
   reread(key: WorkKey): void;
   subscribeAcceptedDeltas(key: WorkKey, onAck: (ack: WorkWriteAck) => void): () => void;
   /** Every receipt that consumed the current Work, Pea's included: the Timeline hears both clients. */
-  subscribeReceipts?(accept: (receipt: ActionReceipt, key: WorkKey | null) => void): () => void;
+  subscribeReceipts?(accept: (receipt: ActionStatus, key: WorkKey | null) => void): () => void;
   status: WorkScopeStatus;
 }
 
@@ -263,7 +263,7 @@ export function useWorkScope<P, W>(
         : noDeltas,
       // TODO: docs/features/routes/LEDGER.md#s7-fd4c79938c prove on a live host that a Pea ducts preview receipt consumes this Work (receiptsForWork)
       // and lands in the Timeline head; only the head projection is unit-proven (situation-band.test).
-      subscribeReceipts: (accept: (receipt: ActionReceipt, key: WorkKey | null) => void) => {
+      subscribeReceipts: (accept: (receipt: ActionStatus, key: WorkKey | null) => void) => {
         let current = "";
         let release = () => {};
         const follow = () => {
@@ -275,9 +275,9 @@ export function useWorkScope<P, W>(
           release = () => {};
           if (!key) return;
           // TODO: docs/features/routes/LEDGER.md#s5-durable-journal prove completed Timeline replay after host restart in the browser.
-          release = peReadings.subscribe({ kind: "receipts", work: key }, (frame) => {
+          release = peReadings.subscribe({ kind: "receipts", work: key, detail: "status" }, (frame) => {
             if (frame.kind !== "snapshot" || frame.stale) return;
-            const rows = actionReceiptSchema.array().safeParse(frame.value);
+            const rows = actionStatusSchema.array().safeParse(frame.value);
             if (!rows.success) return;
             for (const row of rows.data) accept(row, key);
           });
