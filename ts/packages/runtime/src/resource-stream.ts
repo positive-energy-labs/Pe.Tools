@@ -1,5 +1,6 @@
 import {
   READING_MAX_FRAME_BYTES,
+  READING_MAX_KEYS,
   readingRequestSchema,
   READING_MAX_REQUEST_BYTES,
   readingKey,
@@ -64,10 +65,10 @@ export async function updateResourceSubscriptions(
     return Response.json({ error: "Resource request is too large" }, { status: 400 });
   try {
     const value = JSON.parse(raw);
-    const add = readingRequestSchema.array().max(32).parse(value.add);
+    const add = readingRequestSchema.array().max(READING_MAX_KEYS).parse(value.add);
     if (
       !Array.isArray(value.remove) ||
-      value.remove.length > 32 ||
+      value.remove.length > READING_MAX_KEYS ||
       value.remove.some((key: unknown) => typeof key !== "string")
     )
       throw Error("Invalid removals");
