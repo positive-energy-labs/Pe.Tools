@@ -246,8 +246,10 @@ export function StateCell(props: StateCellProps) {
       }
       const settle = (refused: string | CellRefusal | null | void) => {
         if (version !== editVersion.current) return;
-        submitted.current = null;
+        // An accepted text stays submitted until the next keystroke (onChange clears it): the blur
+        // that follows Enter must not commit the same text again, even after a synchronous commit.
         if (refused != null) {
+          submitted.current = null;
           el.value = initial.current; // restore the drawn value, visibly
           setRefusal(typeof refused === "string" ? { message: refused } : refused);
         } else if (refusal != null) {

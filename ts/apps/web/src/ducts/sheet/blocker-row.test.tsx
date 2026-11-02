@@ -44,3 +44,48 @@ it("a typed cfm makes the verb live before Enter, and the press runs that value"
     expect.objectContaining({ action: { kind: "cfm", elementId: 9, value: 100 } }),
   );
 });
+
+it("Enter commits the ask like an Inputs cell, and the verb press after a blur does not run it twice", () => {
+  const onClose = vi.fn<(closer: Closer) => void>();
+  render(
+    <BlockerRow
+      blocker={blocker}
+      focused={false}
+      closerOf={(b, typed) =>
+        describeCloser(b, typed, { terminalDrop: null, nameOf: () => null, wait: null })
+      }
+      onClose={onClose}
+      onFocus={() => {}}
+    />,
+  );
+  const input = screen.getByRole("row").querySelector("input")!;
+  input.focus();
+  fireEvent.change(input, { target: { value: "100" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(onClose).toHaveBeenCalledTimes(1);
+  expect(onClose).toHaveBeenCalledWith(
+    expect.objectContaining({ action: { kind: "cfm", elementId: 9, value: 100 } }),
+  );
+  fireEvent.click(screen.getByText("set flow 100 cfm"));
+  expect(onClose).toHaveBeenCalledTimes(1);
+});
+
+it("Escape cancels the typed ask without running it", () => {
+  const onClose = vi.fn<(closer: Closer) => void>();
+  render(
+    <BlockerRow
+      blocker={blocker}
+      focused={false}
+      closerOf={(b, typed) =>
+        describeCloser(b, typed, { terminalDrop: null, nameOf: () => null, wait: null })
+      }
+      onClose={onClose}
+      onFocus={() => {}}
+    />,
+  );
+  const input = screen.getByRole("row").querySelector("input")!;
+  input.focus();
+  fireEvent.change(input, { target: { value: "100" } });
+  fireEvent.keyDown(input, { key: "Escape" });
+  expect(onClose).not.toHaveBeenCalled();
+});

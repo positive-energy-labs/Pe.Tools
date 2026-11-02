@@ -240,3 +240,13 @@ test("a choice cell greys a disabled option with its reason and refuses to pick 
   expect(pick).toHaveBeenCalledOnce();
   expect(pick).toHaveBeenCalledWith("other");
 });
+
+test("Enter then blur commits once, even when the commit answers synchronously", async () => {
+  const onCommit = vi.fn(() => undefined);
+  render(<StateCell value="10" scale="row" onCommit={onCommit} />);
+  const input = screen.getByRole("textbox") as HTMLInputElement;
+  await act(async () => fireEvent.change(input, { target: { value: "12" } }));
+  await act(async () => fireEvent.keyDown(input, { key: "Enter" }));
+  await act(async () => fireEvent.blur(input));
+  expect(onCommit).toHaveBeenCalledTimes(1);
+});
