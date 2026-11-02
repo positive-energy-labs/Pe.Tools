@@ -260,7 +260,7 @@ export function Picture<L extends string, F extends string>({
   const registry = useContext(RegistryContext);
   const selectedKeys = useAtomValue(selection);
   // A new subject or revision starts cheap; a prior click cannot warm its geometry.
-  const detailScope = JSON.stringify([native, source.version, content.focus]);
+  const detailScope = JSON.stringify([source.native, source.version, content.focus]);
   const [detailedScope, setDetailedScope] = useState<string | null>(null);
   const contextRepresentation: PictureContext =
     detailedScope === detailScope ? "meshes" : CONTEXT_DEFAULT;
@@ -579,7 +579,10 @@ export function Picture<L extends string, F extends string>({
             colour={content.colour}
             contextRadiusFt={page.contextRadiusFt}
             contextRepresentation={contextRepresentation}
-            onContextRepresentation={native ? setContextRepresentation : undefined}
+            onContextRepresentation={setContextRepresentation}
+            detailRefusal={
+              native ? null : "Choose a current Revit document to read detailed geometry"
+            }
             readout={readout}
             read={read}
             capturing={capture.pending}

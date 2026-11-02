@@ -139,6 +139,7 @@ export function ModelPicture({
   contextRadiusFt,
   contextRepresentation,
   onContextRepresentation,
+  detailRefusal,
   kinds,
   colour,
   sceneView,
@@ -169,6 +170,7 @@ export function ModelPicture({
   contextRadiusFt?: number;
   contextRepresentation?: PictureContext;
   onContextRepresentation?: (representation: PictureContext) => void;
+  detailRefusal?: string | null;
   /** Kind to hue and the Colour dial: the two inputs of the paint seam. */
   kinds: Kinds;
   colour: ColourMode;
@@ -395,6 +397,7 @@ export function ModelPicture({
           />
           {onContextRepresentation ? (
             <DetailedRead
+              refusal={detailRefusal}
               metadata={read.metadata}
               pending={read.pending}
               overview={contextRepresentation === "meshes"}
