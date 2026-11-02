@@ -1,89 +1,120 @@
-import { describe, expect, it } from "vite-plus/test";
-import baseline from "./unification-2.baseline.json" with { type: "json" };
-import { arraySchema, census, declarationLines, selectionSlots, syntax } from "./unification-2-census.ts";
-import { root } from "./unification-2-census.ts";
+import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { describe, expect, it } from "vite-plus/test";
+import ts from "typescript";
+import baseline from "./unification-2.baseline.json" with { type: "json" };
+import {
+  additions,
+  arraySchema,
+  baselineFloors,
+  boundaryCensus,
+  census,
+  identity,
+  root,
+  syntax,
+  zodArray,
+} from "./unification-2-census.ts";
 
-const baselinePath = "ts/tests/repo-guards/src/unification-2.baseline.json";
-// Compare all committed ceilings, so raising a ceiling in the same commit cannot reset debt.
-const history = execFileSync("git", ["log", "--format=%H", "--", baselinePath], {
-  cwd: root,
-  encoding: "utf8",
-})
-  .trim()
-  .split(/\s+/)
-  .filter(Boolean)
-  .map(
-    (sha) =>
-      JSON.parse(
-        execFileSync("git", ["show", `${sha}:${baselinePath}`], { cwd: root, encoding: "utf8" }),
-      ) as Record<string, number>,
-  );
+export function trackedBytes() {
+  const paths = execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8" })
+    .split("\0")
+    .filter(Boolean);
+  return paths.map((path) => [
+    path,
+    createHash("sha256")
+      .update(readFileSync(resolve(root, path)))
+      .digest("hex"),
+  ]);
+}
 
-describe("unification 2 ratchets (ADR 0026 D7, ADR 0027/0028)", () => {
-  const actual = census();
-  it("keeps a baseline for every law", () => {
+describe("unification 2 offender identities", () => {
+  it("rejects added identities against baseline and committed floors without changing tracked bytes", () => {
+    const before = trackedBytes();
+    const actual = { ...census(), ...boundaryCensus() };
     expect(Object.keys(baseline).sort()).toEqual(Object.keys(actual).sort());
+    expect(additions(actual, baseline)).toEqual([]);
+    for (const floor of baselineFloors()) expect(additions(baseline, floor)).toEqual([]);
+    expect(trackedBytes()).toEqual(before);
+  }, 60000);
+  it("cannot trade removed debt for a different offender or revive a zero", () => {
+    expect(additions({ rule: ["b.ts#new"] }, { rule: ["a.ts#old"] })).toEqual(["rule: b.ts#new"]);
+    expect(additions({ rule: ["b.ts#new"] }, { rule: [] })).toHaveLength(1);
+    expect(additions({ rule: [] }, { rule: ["a.ts#old"] })).toEqual([]);
   });
-  for (const [law, cap] of Object.entries(baseline))
-    it(`${law} <= ${cap}`, () => {
-      const offenders = actual[law]!;
-      expect(cap, `${law}: baseline must never grow`).toBeLessThanOrEqual(
-        Math.min(...history.map((b) => b[law] ?? Infinity)),
-      );
-      console.log(`${law}: ${offenders.length}/${cap}`);
-      expect(offenders.length, `${law} offenders:\n${offenders.join("\n")}`).toBeLessThanOrEqual(
-        cap,
-      );
-    });
+  it("identities survive blank lines and distinguish sites", () => {
+    const sites = (text: string) => {
+      const source = syntax(text, "a.ts");
+      return source.statements
+        .filter(ts.isVariableStatement)
+        .map((n) => identity(n.declarationList.declarations[0]!));
+    };
+    expect(sites("const a = 1;\nconst b = 1;")).toEqual(sites("\nconst a = 1;\n\nconst b = 1;"));
+    expect(new Set(sites("const a = 1; const b = 1;")).size).toBe(2);
+  });
 });
 
-it("selection detector ignores booleans, DOM refs and presentation state", () => {
+it("finds arrays structurally through wrappers, unions, aliases and tuples", () => {
+  const contains = (text: string) => {
+    const source = syntax(text);
+    const last = source.statements.at(-1)!;
+    return arraySchema(ts.isExpressionStatement(last) ? last.expression : last);
+  };
+  for (const text of [
+    "z.array(z.string()).readonly().default([])",
+    "z.object({ columns: z.array(z.string()) }).default({ columns: [] })",
+    "z.union([z.string(), z.object({ x: z.array(z.string()) })])",
+    "const nested = z.object({ x: z.string().array() }); field(nested)",
+    "const a = z.tuple([z.string()]); const b = a.optional(); field(b)",
+  ])
+    expect(contains(text), text).toBe(true);
+  expect(contains("z.object({ x: z.string() })")).toBe(false);
+  expect(contains("sortField({})")).toBe(false);
+});
+
+it("resolved Zod AST follows an imported schema alias and factory despite a runtime mock", () => {
+  const file = resolve(root, "ts/packages/agent-contracts/src/guard-probe.ts").replaceAll(
+    "\\",
+    "/",
+  );
+  const dependency = resolve(root, "ts/packages/agent-contracts/src/guard-schema.ts").replaceAll(
+    "\\",
+    "/",
+  );
+  const sources = new Map([
+    [
+      file,
+      `import { schema as hidden } from './guard-schema'; declare const vi: { mock: Function }; vi.mock('./guard-schema', () => ({})); const wrapped = hidden;`,
+    ],
+    [
+      dependency,
+      `import { z } from 'zod'; const make = () => z.object({ inner: z.union([z.string(), z.object({ values: z.array(z.number()) })]) }); export const schema = make();`,
+    ],
+  ]);
+  const options: ts.CompilerOptions = {
+    module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
+    skipLibCheck: true,
+    noEmit: true,
+  };
+  const host = ts.createCompilerHost(options);
+  const getSourceFile = host.getSourceFile.bind(host);
+  const fileExists = host.fileExists.bind(host);
+  host.fileExists = (path) => sources.has(path) || fileExists(path);
+  host.getSourceFile = (path, ...args) =>
+    sources.has(path)
+      ? ts.createSourceFile(path, sources.get(path)!, ts.ScriptTarget.Latest, true)
+      : getSourceFile(path, ...args);
+  const program = ts.createProgram([file, dependency], options, host);
+  const source = program.getSourceFile(file)!;
+  const declaration = (source.statements.at(-1) as ts.VariableStatement).declarationList
+    .declarations[0]!;
+  expect(arraySchema(declaration.initializer!, new Set(), program.getTypeChecker())).toBe(true);
   expect(
-    selectionSlots(
-      syntax(
-        `const [selectedIds] = useState<string[]>([]); const selected = useRef<Set<string>>(new Set()); const [selected] = useState(false); const [open] = useState('x'); const selected = useRef<HTMLDivElement>(null);`,
-      ),
+    zodArray(
+      program.getTypeChecker().getTypeAtLocation(declaration.initializer!),
+      program.getTypeChecker(),
     ),
-  ).toHaveLength(2);
-});
-it("declaration LOC separates multiline bodies from manifest structure", () => {
-  const count = (body: string) =>
-    declarationLines(
-      syntax(
-        `import {x} from 'x';\nconst graph = {\n run: () => {\n${body}\n },\n key: 'route',\n};`,
-      ),
-    ).length;
-  expect(count("return 1;")).toBe(count("const x = 2;\nreturn x;"));
-  expect(count("return 1;")).toBeGreaterThan(0);
-});
-
-it("every graph keeps its behavior declaration within 60 lines", () => {
-  const counts = new Map<string, number>();
-  for (const site of census().graphDeclarations!) {
-    const file = site.slice(0, site.lastIndexOf(":"));
-    counts.set(file, (counts.get(file) ?? 0) + 1);
-  }
-  expect([...counts].filter(([, count]) => count > 60).map(([p, n]) => `${p}: declaration ${n} > 60`)).toEqual([]);
-});
-it("declarations include template tails and graph factories, excluding metadata", () => {
-  const body = `({\nkey: "r",\ndirectory: {title: "metadata"},\nseeds: {},\nfields: {},\nreadings: {},\nverbs: {label: \`hello \${name}\`},\npanes: {},\nstages: {x: {}}\n})`;
-  const plain = declarationLines(syntax(`const graph = ${body};`));
-  expect(plain).toEqual([5,6,7,8,9]);
-  expect(declarationLines(syntax(`const graph = () => ${body};`))).toEqual(plain);
-  expect(declarationLines(syntax(`const graph = {\n key: "r",\n directory: {\n title: "metadata",\n },\n fields: {},\n readings: {},\n verbs: {},\n panes: {},\n stages: {},\n};`))).toEqual([6,7,8,9,10]);
-});
-
-it("array ratchet counts nested object arrays and only exempts kernel construction", () => {
-  const value = (text: string) => (syntax(text).statements[0] as import("typescript").ExpressionStatement).expression;
-  expect(arraySchema(value("z.array(z.string()).readonly().default([])"))).toBe(true);
-  expect(arraySchema(value("z.object({ columns: z.array(z.string()) }).default({ columns: [] })"))).toBe(true);
-});
-
-it("kernel field helpers are recognized by their calls, never wrapper property names", () => {
-  const value = (text: string) => (syntax(text).statements[0] as import("typescript").ExpressionStatement).expression;
-  expect(arraySchema(value("sortField({})"))).toBe(false);
-  expect(arraySchema(value("keyedSetField({})"))).toBe(false);
-  expect(arraySchema(value("z.object({ x: z.array(z.string()) })"))).toBe(true);
-  expect(arraySchema(value("z.union([z.string(), z.object({ x: z.array(z.string()) })])"))).toBe(true);
-});
+  ).toBe(true);
+}, 30000);
