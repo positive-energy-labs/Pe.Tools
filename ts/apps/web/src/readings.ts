@@ -167,7 +167,6 @@ export class PeReadings {
 
   private watchWake() {
     if (this.unwatchWake || typeof document === "undefined") return;
-    // TODO: docs/features/routes/LEDGER.md#s7-8c7d3a6f01 Repeat the 33-second hide/return proof in a native visible browser; T3 preview pins visibilityState.
     // Visibility is not a change of basis. The live stream keeps delivering while hidden.
     let offline = false;
     const lostNetwork = () => {

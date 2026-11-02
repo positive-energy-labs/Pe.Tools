@@ -32,6 +32,8 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 - 2026-11-02, kaitpw (C): a route declaration is data decoded by one `RouteGraphJson` Schema for builtins and Pods; expression bodies (args, show, subject, predicates, transition, salvage, picker.options) live in a typed registry keyed by the ids the data names, refused at admission when an id has no body. No TS generation from a manifest (a second source of truth). The 60-line declaration cap becomes moot.
 - 2026-11-02, kaitpw (D): catalog axes have no default: `OpAttribute` takes Subject, Touches and Effect as constructor parameters (C# does not enforce `required` in attribute arguments), and each axis enum's zero is `Unset`, refused by typegen and `requireLinkedCatalog`.
 
+- <a id="s7-8c7d3a6f01"></a> 2026-11-02 tune: transport publication uses a task independent of paint. Native Chrome observed a 33-second hidden tab and immediate retained draft/composer/Work nodes on return, without geometry reads or an SSE reopen. Shared split minima survive suspension, and shell portals detach hidden owners. First Fans CLS fell from 0.3723 to 0.0000. Evidence: `.artifacts/runs/browser-20261102-tune/RESULTS.md` (browser fixture/no-Revit host; a74829ea for final layout, b48ec265 for host retention).
+
 ## Tried & rejected
 - 2026-11-01, a stage per subject inside one route (spike A, `t3/kernel-stage-subject` @ 6010929e, `StageDecl.subject`): it fixed the wrong picker and the URL leak, but it grew the kernel to serve one route's two products and dropped the other stage's subject on a switch. Replaced by the route split (ADR 0027 rule 1).
 - 2026-11-01, keeping readings alive by keeping every source: hiding a tab released readings through React `Activity` (red test `shell/readings-retention.test.tsx`, spike B), but holding every source would keep workers, ports and GPU resources. Retention must be decided per reading kind.
@@ -43,6 +45,7 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 - 2026-09-09, the claim that document keys and receipts alone prevent every stale read or duplicate mutation: keys separate open lifetimes; Effect refresh orders reads within one lifetime; host admission and request identity govern retries.
 
 ## Owed
+- <a id="tune-20261102-cleanup"></a> Remove the stopped tune run's temporary profile/cache directory `C:/Users/kaitp/AppData/Local/Temp/pe-tune-ewm2zs64` and product home `C:/Users/kaitp/AppData/Local/Temp/pe-tune-world`. Automatic approval review rejected scoped recursive deletion with `blocked by policy`. All browsers and servers are stopped; `.artifacts/runs/browser-20261102-tune/cleanup-final.json` records custody.
 - Kernel ports, in the order a route author gets them wrong (`.artifacts/review/u2-2026-11-02/REVIEW.md` B/C):
   1. Route bodies get the raw Page writer (`shell/mount-pane.tsx:15-25`, `route/pod-view.tsx:104` `setPage`, 40 call sites); give a role-derived page port (read, select, set<setting>, pose) and nothing else writable.
   2. Graph cross-references are bare strings; `subjectField.pane` is never checked. Resolved by (C).
@@ -62,7 +65,6 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 - **Host-filed snapshots (`?at=`)**: an immutable checkpoint of address, authored inputs and reading versions, opened read-only, surviving a reload. kaitpw: "i really really really want this". The timeline is in memory only today (`timeline.ts`).
 - Wave 2 technical shape (muse, then build per ADR 0027 rule 15): capability catalog shape; `Scope` and cost class on every C# `[Op]` with a codegen refusal; one reading engine (`readings.ts` and `shell/readings.ts`); reading retention by kind; one revision-ordered acceptance path for Work acks and the stream; when an open review goes stale; roster, click-to-paint and memory budgets.
 - Merge spike B's refocus identity fix (`t3/ducts-reload-and-pane-refresh-research` @ d483fabc, `readings.ts:417`) or fold it into wave 2.
-- `readings.ts` `PeReadings.batch` delivers on `requestAnimationFrame` while the tab is visible; an embedded or occluded tab where rAF never fires (T3 preview, 2026-10-30) delivers no frame, so the 30 s watchdog faults the stream. Fall back to a timer when a frame is not delivered within one tick.
 - Link codecs (ADR 0027 rule 6): C# link producers read `dotnet/Pe.App/Host/PeRoutes.generated.cs` (`pnpm codegen:routes` in `agent-contracts`) but join escaped strings, so a route with a coded key (a viewport, a layers list, a `many` field) cannot be linked from C# until the table carries codec names. Comma-separated lists and empty items need escaping codecs.
 - Variant slot (ADR 0026 protoui bullet): a graph has no look-variant declaration; `prototypes/control-surface/lineup.tsx` and `prototypes/table-controls/lineup.tsx` still run their own lineups.
 - Lease, `route/view-bridge.ts`: refuse on current Page and facts (unsaved Pods typing, nonexistent output); declare fact descriptions. Admit app-owned address fields such as `?inspect` with an access policy; the Cite inspector waits on it (Family readings still open raw JSON through `inspectables.reading`).
@@ -92,7 +94,6 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 - <a id="s7-6f559ec645"></a> `ts/packages/mcps/src/pea/capability-tools.ts`: with no Target, a row that needs a document is absent from the catalog and refuses as
 - <a id="s7-eaaaf0f792"></a> `ts/packages/mcps/src/pea/capability-tools.ts`: a temporary document needs an owner that releases it when the harness turn ends.
 - <a id="s7-500118f3a3"></a> `ts/apps/web/src/readings.ts`: Fold cursor-resuming thread tails into this transport with the composer owner; they still use a separate SSE.
-- <a id="s7-8c7d3a6f01"></a> `ts/apps/web/src/readings.ts`: Repeat the 33-second hide/return proof in a native visible browser; T3 preview pins visibilityState.
 - <a id="s7-8e539bcbeb"></a> `ts/apps/web/src/takeoff/subject.ts`: add native metadata zone enumeration before admitting all zones on a live document.
 - <a id="s7-e8f071edc9"></a> `ts/apps/web/src/takeoff/graph.ts`: native metadata zone roster is missing; saved captures supply zone choices.
 - <a id="s7-dc2b076f89"></a> `ts/apps/web/src/space/facts.tsx`: render through the kit Subject text once it lands, so the name also footnotes the picture.
