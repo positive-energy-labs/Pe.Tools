@@ -404,7 +404,7 @@
     "size": 32,
     "sized": "start"
   },
-  "moduleHash": "0bb831592f493d8fc021a7e7c8b395d632836c37af3d233edf130adf107d3373",
+  "moduleHash": "0f0d2e58faba51098f6b953dbd88f336383539b17a39064031c426962df22318",
   "name": "Rooms",
   "needs": "project",
   "panes": {
@@ -1704,5 +1704,10 @@
       }
     },
     "type": "object"
+  },
+  "workFields": {
+    "notes": {
+      "label": "notes"
+    }
   }
 }

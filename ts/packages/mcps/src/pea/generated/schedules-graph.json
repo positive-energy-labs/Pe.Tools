@@ -434,7 +434,7 @@
     "size": 240,
     "sized": "start"
   },
-  "moduleHash": "7fbca53c3d5178bc95bda115d731f6a626551fcbc6883a1073b0ebbe7361aba2",
+  "moduleHash": "cd9a685270631eb290ce3bd988f50eaac2800e19032f670e4a523cc5fb2dac13",
   "name": "Schedules",
   "needs": "project",
   "panes": {
@@ -1356,6 +1356,9 @@
                         },
                         {
                           "properties": {
+                            "display": {
+                              "type": "string"
+                            },
                             "unit": {
                               "type": "string"
                             },
@@ -1451,6 +1454,9 @@
                         },
                         {
                           "properties": {
+                            "display": {
+                              "type": "string"
+                            },
                             "unit": {
                               "type": "string"
                             },
@@ -1675,6 +1681,16 @@
       }
     },
     "type": "object"
+  },
+  "workFields": {
+    "basis": {
+      "internal": true,
+      "label": "schedule basis"
+    },
+    "takenAt": {
+      "internal": true,
+      "label": "capture time"
+    }
   },
   "workSubject": "workspaceId"
 }

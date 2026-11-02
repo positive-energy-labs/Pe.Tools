@@ -1911,6 +1911,12 @@
     },
     "type": "object"
   },
+  "workFields": {
+    "bases": {
+      "internal": true,
+      "label": "read bases"
+    }
+  },
   "workRoute": "takeoffs",
   "workSubject": "work"
 }

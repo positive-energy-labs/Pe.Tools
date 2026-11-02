@@ -299,7 +299,7 @@
     "size": 300,
     "sized": "start"
   },
-  "moduleHash": "5abd2c8cb0c510439f322db1968468aa667f13b2bf82ce778b9aa1e37e050ecf",
+  "moduleHash": "0af8c753d84cbbccee0aa77707b00217a774e7f069abb6efdc700fd9b1b44eb3",
   "name": "Pods",
   "observe": [
     "open"
@@ -1023,6 +1023,12 @@
       }
     },
     "type": "object"
+  },
+  "workFields": {
+    "basis": {
+      "internal": true,
+      "label": "read basis"
+    }
   },
   "workSubject": "member"
 }

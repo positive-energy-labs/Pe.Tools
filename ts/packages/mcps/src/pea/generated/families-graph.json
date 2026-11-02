@@ -530,7 +530,7 @@
     "size": 240,
     "sized": "start"
   },
-  "moduleHash": "850e49cc3edff4a537ba41cfaf33af0bf4057628e8daf8cda94829b9c736ccff",
+  "moduleHash": "66800d8617b8d44ec4696320f9ce3f62ed84397ba04f4783f82e045d9ccbd248",
   "name": "Families",
   "needs": "project",
   "panes": {
@@ -968,6 +968,9 @@
           "value": {
             "additionalProperties": false,
             "properties": {
+              "display": {
+                "type": "string"
+              },
               "storageType": {
                 "enum": [
                   "String",
@@ -1247,6 +1250,9 @@
                     "value": {
                       "additionalProperties": false,
                       "properties": {
+                        "display": {
+                          "type": "string"
+                        },
                         "storageType": {
                           "enum": [
                             "String",
@@ -1347,6 +1353,9 @@
                     "value": {
                       "additionalProperties": false,
                       "properties": {
+                        "display": {
+                          "type": "string"
+                        },
                         "storageType": {
                           "enum": [
                             "String",
@@ -2037,5 +2046,20 @@
       }
     },
     "type": "object"
+  },
+  "workFields": {
+    "excluded": {
+      "label": "excluded families"
+    },
+    "executionOptions": {
+      "label": "run options"
+    },
+    "pod": {
+      "label": "Pod"
+    },
+    "takenAt": {
+      "internal": true,
+      "label": "capture time"
+    }
   }
 }

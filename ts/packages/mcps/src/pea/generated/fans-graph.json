@@ -1599,7 +1599,7 @@
     "size": 420,
     "sized": "start"
   },
-  "moduleHash": "8aff67fcf8e695df5da94d937793ed3add54f56629f7f4a470e4f8e8a5562d75",
+  "moduleHash": "5e090f5c41f608c332ebce67642320a1d370236c8f022699a6113e9354c612bc",
   "name": "Fans",
   "needs": "project",
   "panes": {
@@ -2347,6 +2347,27 @@
                           ],
                           "type": "string"
                         },
+                        "results": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "coefficient": {
+                                "type": "number"
+                              },
+                              "velocityPressureInWg": {
+                                "minimum": 0,
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "velocityPressureInWg",
+                              "coefficient"
+                            ],
+                            "type": "object"
+                          },
+                          "minItems": 1,
+                          "type": "array"
+                        },
                         "ruleKey": {
                           "anyOf": [
                             {
@@ -2957,6 +2978,27 @@
                             "specific-coefficient"
                           ],
                           "type": "string"
+                        },
+                        "results": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "coefficient": {
+                                "type": "number"
+                              },
+                              "velocityPressureInWg": {
+                                "minimum": 0,
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "velocityPressureInWg",
+                              "coefficient"
+                            ],
+                            "type": "object"
+                          },
+                          "minItems": 1,
+                          "type": "array"
                         },
                         "ruleKey": {
                           "anyOf": [
@@ -13439,6 +13481,29 @@
       }
     },
     "type": "object"
+  },
+  "workFields": {
+    "claims": {
+      "label": "element claims"
+    },
+    "designFriction": {
+      "label": "design friction"
+    },
+    "labelParameter": {
+      "label": "label parameter"
+    },
+    "loads": {
+      "label": "loads"
+    },
+    "subject": {
+      "label": "system membership"
+    },
+    "systemColours": {
+      "label": "system colours"
+    },
+    "workingPhase": {
+      "label": "working phase"
+    }
   },
   "workRoute": "ducts"
 }

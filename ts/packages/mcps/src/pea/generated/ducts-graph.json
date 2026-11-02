@@ -1596,7 +1596,7 @@
     "size": 420,
     "sized": "start"
   },
-  "moduleHash": "d5c059db18e57dbb2b84e88331a0f2d993f8d142bd1d6b9bb71d6e4a2582c1b9",
+  "moduleHash": "be71a97a94ab5c6f6cbcb35717b3f7f7aa0b6bcec84ff8d3d2341e9c43b6704b",
   "name": "Ducts",
   "needs": "project",
   "panes": {
@@ -2347,6 +2347,27 @@
                           ],
                           "type": "string"
                         },
+                        "results": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "coefficient": {
+                                "type": "number"
+                              },
+                              "velocityPressureInWg": {
+                                "minimum": 0,
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "velocityPressureInWg",
+                              "coefficient"
+                            ],
+                            "type": "object"
+                          },
+                          "minItems": 1,
+                          "type": "array"
+                        },
                         "ruleKey": {
                           "anyOf": [
                             {
@@ -2957,6 +2978,27 @@
                             "specific-coefficient"
                           ],
                           "type": "string"
+                        },
+                        "results": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "coefficient": {
+                                "type": "number"
+                              },
+                              "velocityPressureInWg": {
+                                "minimum": 0,
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "velocityPressureInWg",
+                              "coefficient"
+                            ],
+                            "type": "object"
+                          },
+                          "minItems": 1,
+                          "type": "array"
                         },
                         "ruleKey": {
                           "anyOf": [
@@ -13439,5 +13481,28 @@
       }
     },
     "type": "object"
+  },
+  "workFields": {
+    "claims": {
+      "label": "element claims"
+    },
+    "designFriction": {
+      "label": "design friction"
+    },
+    "labelParameter": {
+      "label": "label parameter"
+    },
+    "loads": {
+      "label": "loads"
+    },
+    "subject": {
+      "label": "system membership"
+    },
+    "systemColours": {
+      "label": "system colours"
+    },
+    "workingPhase": {
+      "label": "working phase"
+    }
   }
 }

@@ -515,7 +515,7 @@
     "size": 340,
     "sized": "end"
   },
-  "moduleHash": "12e1d32d8e10bf3cdd3bbf0ed2a798810cc65c5a7e0152eb3e35bf2739b0f64c",
+  "moduleHash": "aa2f2a1fea45d38aa170b6e96b1b31e475d025615a1c383c7593d5d67cacf139",
   "name": "Family",
   "needs": "family",
   "panes": {
@@ -1976,5 +1976,18 @@
       }
     },
     "type": "object"
+  },
+  "workFields": {
+    "reading": {
+      "internal": true,
+      "label": "reading"
+    },
+    "spec": {
+      "label": "attached spec"
+    },
+    "takenAt": {
+      "internal": true,
+      "label": "capture time"
+    }
   }
 }

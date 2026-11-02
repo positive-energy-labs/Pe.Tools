@@ -80,7 +80,7 @@
     "size": 260,
     "sized": "start"
   },
-  "moduleHash": "14e27267f1daa3337a74e239cf6a061de0458bd7fe0017c8d4d93b2c1cc48f65",
+  "moduleHash": "8406e6d046b333e10f0f523b749366091c8a6ba9089a5eb68ba8783e5f8c5c4c",
   "name": "Data Tables",
   "needs": "project",
   "panes": {
@@ -576,5 +576,10 @@
       }
     },
     "type": "object"
+  },
+  "workFields": {
+    "draft": {
+      "label": "table draft"
+    }
   }
 }

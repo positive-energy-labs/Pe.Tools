@@ -718,6 +718,9 @@
                         },
                         {
                           "properties": {
+                            "display": {
+                              "type": "string"
+                            },
                             "unit": {
                               "type": "string"
                             },
@@ -813,6 +816,9 @@
                         },
                         {
                           "properties": {
+                            "display": {
+                              "type": "string"
+                            },
                             "unit": {
                               "type": "string"
                             },
@@ -1037,6 +1043,16 @@
       }
     },
     "type": "object"
+  },
+  "workFields": {
+    "basis": {
+      "internal": true,
+      "label": "schedule basis"
+    },
+    "takenAt": {
+      "internal": true,
+      "label": "capture time"
+    }
   },
   "workSubject": "workspaceId"
 }
