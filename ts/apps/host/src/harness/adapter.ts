@@ -163,12 +163,12 @@ export function openAdapter(
         const code = spawned ? yield* Effect.exit(spawned.exitCode) : undefined;
         if (code && Exit.isSuccess(code)) child.settle(code.value, null);
         else child.settle(null, spawned ? "SIGTERM" : "SIGKILL");
-        yield* Effect.promise(() =>
-          (Exit.isFailure(exit) && !Cause.hasInterrupts(exit.cause)
+        // A writer the reader already cancelled rejects its own close: the stream is over either way.
+        yield* Effect.tryPromise(() =>
+          Exit.isFailure(exit) && !Cause.hasInterrupts(exit.cause)
             ? writer.abort(Cause.squash(exit.cause))
-            : writer.close()
-          ).catch(() => {}),
-        );
+            : writer.close(),
+        ).pipe(Effect.ignore);
       }),
     ),
     Effect.ignore,
