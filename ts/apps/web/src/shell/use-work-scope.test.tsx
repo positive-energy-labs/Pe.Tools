@@ -1,4 +1,4 @@
-import {testSources,testSubject,testFields,testReadings} from '../test-route-subject';
+import { testSources, testSubject, testFields, testReadings } from "../test-route-subject";
 import { scheduleQueries } from "../../../../packages/mcps/src/shared/query-client";
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
@@ -58,14 +58,14 @@ vi.mock("../route/host", async (importOriginal) => ({
 
 const DOC = address("C:/Jobs/Level 1.rvt");
 const workSchema = z.object({ note: z.string().default("") });
-const graph = (
-  needs?: RouteGraph["needs"],
-): RouteGraph<{}, { note: string }> => ({...testSubject,
+const graph = (needs?: RouteGraph["needs"]): RouteGraph<{}, { note: string }> => ({
+  ...testSubject,
+  subjectField: { ...testSubject.subjectField, pane: "only" },
   key: "scope-proof",
   address: "scope-proof",
   name: "Scope proof",
-  fields: {...testFields,},
-  readings: {...testReadings,},
+  fields: { ...testFields },
+  readings: { ...testReadings },
   verbs: {},
   panes: { only: { label: "Only", purpose: "Proof", draws: [], verbs: [] } },
   layout: pane("only"),
@@ -365,7 +365,7 @@ test("a stale write raises conflict; writing verbs and undo refuse until an acce
   const ports = await probe(noted, pin({ kind: "open", ref }));
   await waitFor(() => expect(ports().getSnapshot().work).not.toBeNull());
   const key = ports().getSnapshot().work!.handle.key;
-  const owner = createGraphMount(noted, { sources: {...testSources,}, ...ports() });
+  const owner = createGraphMount(noted, { sources: { ...testSources }, ...ports() });
   const release = owner.connect();
   host.write.mockResolvedValue(STALE);
   expect(await owner.control("note").run()).toMatchObject({ state: "stale" });
@@ -410,7 +410,7 @@ test("unreadable Work offers the start-fresh verb; its shown review commits once
   await waitFor(() => expect(ports().status.unreadable).toBe(true));
   const key = ports().getSnapshot().unreadable!;
   expect(ports().getSnapshot().work).toBeNull();
-  const owner = createGraphMount(noted, { sources: {...testSources,}, ...ports() });
+  const owner = createGraphMount(noted, { sources: { ...testSources }, ...ports() });
   expect(owner.verbs[START_FRESH_VERB]).toMatchObject({
     kind: "recovery",
     label: "Start fresh",
@@ -460,7 +460,7 @@ test("readable Work has nothing to start fresh", async () => {
   const ports = await probe(noted, pin({ kind: "open", ref: { session: "s1", openId: "o1" } }));
   await waitFor(() => expect(ports().getSnapshot().work).not.toBeNull());
   expect(ports().status.unreadable).toBe(false);
-  const owner = createGraphMount(noted, { sources: {...testSources,}, ...ports() });
+  const owner = createGraphMount(noted, { sources: { ...testSources }, ...ports() });
   expect(owner.control(START_FRESH_VERB).refusal).toBe(
     "This Work is readable; there is nothing to recover",
   );
@@ -472,15 +472,20 @@ test("readable Work has nothing to start fresh", async () => {
 // Real routeFromGraph, real door: Page's `ws` names the subject Work.
 type Subject = { ws: string };
 let latest: GraphMount<Subject, { note: string }> | null = null;
-const subjectGraph: RouteGraph<Subject, { note: string }> = {...testSubject,
+const subjectGraph: RouteGraph<Subject, { note: string }> = {
+  ...testSubject,
   key: "subject-proof",
   address: "subject-proof",
   name: "Subject proof",
   needs: "document",
   work: workSchema,
   workSubject: "ws",
-  fields: {...testFields, ws: { ...field(z.string().default(""), {}), role: "subject" } },
-  readings: {...testReadings,},
+  subjectField: { ...testSubject.subjectField, kind: undefined, field: "ws", pane: "only" },
+  fields: {
+    testSelected: testFields.testSelected,
+    ws: { ...field(z.string().default(""), {}), role: "subject" },
+  },
+  readings: { ...testReadings },
   verbs: {
     note: workVerb(
       { label: "note", input: z.strictObject({}).default({}) },
@@ -512,7 +517,7 @@ const subjectGraph: RouteGraph<Subject, { note: string }> = {...testSubject,
 const subjectRoute = routeFromGraph(
   subjectGraph,
   {
-    sources: {...testSources,},
+    sources: { ...testSources },
     bodies: {
       only: ({ owner }) => {
         latest = owner;
@@ -633,8 +638,9 @@ test("unreadable Work puts start-fresh on the stage; its review commits once thr
   const id = crypto.randomUUID();
   const { view, owner } = await mountSubject(`${pin({ kind: "open", ref })}&ws=broken-${id}`);
   const situation = within(await view.findByLabelText("Situation"));
+  fireEvent.click(situation.getByRole("button", { name: /more Scope|more Subject/ }));
   const button = await waitFor(() => {
-    const fresh = situation.getByRole("button", { name: "Start fresh" });
+    const fresh = within(document.body).getByRole("button", { name: "Start fresh" });
     expect(fresh.getAttribute("aria-disabled")).not.toBe("true");
     return fresh;
   });
@@ -648,7 +654,7 @@ test("unreadable Work puts start-fresh on the stage; its review commits once thr
     revision: 4,
     write: ack({ key, kind: "start-fresh", by: "human", revision: 4, patches: [], inverse: [] }),
   });
-  fireEvent.click(situation.getByRole("button", { name: "Start fresh" }));
+  fireEvent.click(within(document.body).getByRole("button", { name: "Commit Start fresh" }));
   await waitFor(() => expect(host.fresh).toHaveBeenCalledWith(key));
   await waitFor(() =>
     expect(owner().results.get(START_FRESH_VERB)).toMatchObject({
@@ -674,7 +680,7 @@ const salvageGraph: RouteGraph<Subject, { note: string }> = {
 const salvageRoute = routeFromGraph(
   salvageGraph,
   {
-    sources: {...testSources,},
+    sources: { ...testSources },
     bodies: {
       only: ({ owner }) => {
         latest = owner;
@@ -770,7 +776,8 @@ test("carry-over is one undoable Work write, offered only while readable Work la
     expect.objectContaining({ binding: "workspace", work: `a-${id}` }),
   );
   const key = owner().snapshot().work!.handle.key;
-  const button = situation.getByRole("button", { name: "Carry over" });
+  fireEvent.click(situation.getByRole("button", { name: /more Salvage/ }));
+  const button = within(document.body).getByRole("button", { name: "Carry over" });
   fireEvent.click(button);
   const review = await view.findByLabelText("Carry over review");
   expect(review.textContent).toContain("Carry over: review the proposed changes.");
@@ -793,7 +800,7 @@ test("carry-over is one undoable Work write, offered only while readable Work la
       }),
     };
   });
-  fireEvent.click(situation.getByRole("button", { name: "Carry over" }));
+  fireEvent.click(within(document.body).getByRole("button", { name: "Commit Carry over" }));
   await waitFor(() =>
     expect(owner().results.get("work.salvage")).toMatchObject({
       state: "done",

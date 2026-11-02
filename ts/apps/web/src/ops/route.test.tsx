@@ -13,6 +13,11 @@ vi.mock("../routes/__root", async () => ({
 }));
 const sources = opsAdapters.sources;
 const op = {
+  subject: "None",
+  touches: "Metadata",
+  effect: "Read",
+  cardinality: "One",
+  costTier: "Cheap",
   key: "logs.tail",
   displayName: "Tail logs",
   intent: "Read",
@@ -41,6 +46,7 @@ const fixed = (value: unknown): ReadingSource => ({
 const releases: (() => void)[] = [];
 beforeEach(() => {
   opsAdapters.sources = {
+    ...sources,
     "ops.catalog": fixed({
       operations: [
         op,

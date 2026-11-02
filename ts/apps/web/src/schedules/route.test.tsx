@@ -71,13 +71,18 @@ const liveButton = async (scope: ReturnType<typeof within>, name: string) =>
 
 test("a URL restores the grid view and an edit round-trips into a reopened URL", async () => {
   const first = await mounted(
-    routeUrl({ query: "Model~Old", sort: "-c1", hidden: "c0", cell: "1::1" }),
+    routeUrl({
+      query: "Model~Old",
+      sort: JSON.stringify({ columns: [{ key: "c1", dir: "desc" }] }),
+      hidden: "c0",
+      cell: "1::1",
+    }),
   );
   expect(first.owner().view.read().page.query).toBe("Model~Old");
   expect(await first.view.findByRole("combobox", { name: "table query" })).toBeTruthy();
   expect(first.situation.queryByLabelText("query")).toBeNull();
   expect(first.router.state.location.search).toMatchObject({
-    sort: "-c1",
+    sort: { columns: [{ key: "c1", dir: "desc" }] },
     hidden: "c0",
     cell: "1::1",
   });

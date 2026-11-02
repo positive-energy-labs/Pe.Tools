@@ -19,7 +19,9 @@ test("borrowed host mode changes only web identity and permits Ducts reads, neve
     vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://127.0.0.1:12345");
     expect(checkoutServiceName()).toBe(sourceHostServiceName(checkoutRoot));
     expect(readHostRequest("GET", '/pe/resources?keys=[{"kind":"inventory"}]')).toBe(true);
-    expect(readHostRequest("POST", "/call", { key: "ducts.snapshot", request: {} })).toBe(true);
+    expect(readHostRequest("POST", "/call", { key: "ducts.snapshot.roster", request: {} })).toBe(
+      true,
+    );
     expect(readHostRequest("POST", "/call", { key: "ducts.tables", request: {} })).toBe(true);
     for (const [method, path, body] of [
       ["POST", "/call", { key: "ducts.apply" }],
@@ -132,13 +134,13 @@ test("borrowed frontend forwards reads with host origin and refuses mutations be
         headers,
         body: JSON.stringify({ key, request: {} }),
       });
-    expect((await send("ducts.snapshot")).status).toBe(200);
+    expect((await send("ducts.snapshot.roster")).status).toBe(200);
     expect(forwarded).toEqual([
       {
         url: "/call",
         origin: target,
         referer: `${target}/ducts`,
-        body: JSON.stringify({ key: "ducts.snapshot", request: {} }),
+        body: JSON.stringify({ key: "ducts.snapshot.roster", request: {} }),
       },
     ]);
     for (const key of ["ducts.apply", "script.execute", "revit.context.show-elements"]) {

@@ -49,6 +49,7 @@ const graph: typeof ductsGraph = {
     Object.entries(ductsGraph.fields).map(([id, value]) => [id, { ...value, picker: undefined }]),
   ) as typeof ductsGraph.fields,
   ...probeLayout,
+  refresh: undefined,
   needs: undefined,
   optionalTarget: undefined,
   observe: undefined,
@@ -82,6 +83,7 @@ const otherGraph: typeof familiesGraph = {
     ]),
   ) as typeof familiesGraph.fields,
   ...probeLayout,
+  refresh: undefined,
   needs: undefined,
   optionalTarget: undefined,
   observe: undefined,
@@ -94,7 +96,7 @@ const otherGraph: typeof familiesGraph = {
 };
 const url = graphUrlPage(graph);
 const adapters = {
-  sources: { testSubject: { kind: "derive" as const, derive: () => [] },},
+  sources: { testSubject: { kind: "derive" as const, derive: () => [] } },
   bodies: {},
   binding: (_id: string, row: unknown) => ({ subject: null, args: row ?? {} }),
 };

@@ -1,22 +1,25 @@
 // @vitest-environment jsdom
-import { familiesRouteState,UNREADABLE_WORK,workKey } from "@pe/agent-contracts";
+import { familiesRouteState, UNREADABLE_WORK, workKey } from "@pe/agent-contracts";
 import {
-HOST_RPC_BRIDGE_SESSION_HEADER,
-HOST_RPC_DOCUMENT_HEADER,
+  HOST_RPC_BRIDGE_SESSION_HEADER,
+  HOST_RPC_DOCUMENT_HEADER,
 } from "@pe/host-contracts/operation-types";
-import { createMemoryHistory,createRouter,RouterContextProvider } from "@tanstack/react-router";
-import { act,cleanup,fireEvent,render,waitFor,within } from "@testing-library/react";
-import { afterEach,beforeEach,expect,test,vi } from "vite-plus/test";
+import { createMemoryHistory, createRouter, RouterContextProvider } from "@tanstack/react-router";
+import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { Route as root } from "../routes/__root";
 import { familiesGraph } from "./graph";
+import { peReadings } from "#/readings";
 import { FamiliesHostFixture } from "./host.fixture";
-import { familiesAdapters,familiesRoute } from "./route";
+import { familiesAdapters, familiesRoute } from "./route";
 
 let host: FamiliesHostFixture;
 const releases: (() => void)[] = [];
 beforeEach(() => {
   host = new FamiliesHostFixture();
-  vi.stubGlobal("EventSource", host.source());
+  vi.spyOn(peReadings, "subscribe").mockImplementation((request, accept) =>
+    host.resources.subscribe(request, accept),
+  );
   vi.stubGlobal("fetch", host.fetch);
   vi.stubGlobal(
     "ResizeObserver",
@@ -62,6 +65,12 @@ async function mounted(url = routeUrl()) {
       ),
     ).not.toEqual(expect.arrayContaining(["pending"])),
   );
+  await waitFor(() =>
+    expect(
+      wrap.mock.calls.at(-1)![0].snapshot().work ??
+        wrap.mock.calls.at(-1)![0].snapshot().unreadable,
+    ).toBeTruthy(),
+  );
   return {
     view,
     router,
@@ -71,7 +80,14 @@ async function mounted(url = routeUrl()) {
 }
 const liveButton = (scope: ReturnType<typeof within>, name: string) =>
   waitFor(() => {
-    const button = scope.getByRole("button", { name, exact: true });
+    const direct =
+      scope.queryByRole("button", { name }) ??
+      within(document.body).queryByRole("button", { name });
+    if (!direct) {
+      const more = scope.queryByRole("button", { name: /more Families verbs/ });
+      if (more && more.getAttribute("aria-expanded") !== "true") fireEvent.click(more);
+    }
+    const button = direct ?? within(document.body).getByRole("button", { name });
     expect(button.getAttribute("aria-disabled")).not.toBe("true");
     return button;
   });
@@ -179,11 +195,12 @@ test("kernel gap: Families salvage uses the kernel recovery review and one undoa
   host.doc = familiesRouteState.schema.parse({ takenAt: host.doc.takenAt });
   host.salvage = { familyNames: ["Fan Coil Unit - Ducted"], familyIds: [], scope: host.filter };
   const before = structuredClone(host.doc);
-  const { view, situation, owner } = await mounted();
+  const { situation, owner } = await mounted();
+  await waitFor(() => expect(owner().stageVerbs()).toContain("work.salvage"));
   fireEvent.click(await liveButton(situation, "Carry over"));
   await within(document.body).findByLabelText("Carry over review");
   expect(host.writes).toEqual([]);
-  fireEvent.click(await liveButton(situation, "Carry over"));
+  fireEvent.click(await liveButton(within(document.body), "Commit Carry over"));
   await waitFor(() => expect(owner().results.get("work.salvage")).toMatchObject({ state: "done" }));
   expect(host.doc.excluded["Fan Coil Unit - Ducted"]).toEqual({ by: "human" });
   expect(host.doc.scope.edit?.value).toEqual(host.filter);
@@ -193,7 +210,10 @@ test("kernel gap: Families salvage uses the kernel recovery review and one undoa
       .timeline.read()
       .some((row) => row.kind === "receipt" && row.paths?.some((path) => path.length === 0)),
   ).toBe(false);
-  fireEvent.keyDown(view.getByLabelText("Families route"), { key: "z", ctrlKey: true });
+  await waitFor(() => expect(owner().snapshot().work?.handle.revision).toBe(host.revision));
+  await act(async () => {
+    expect((await owner().restore("undo"))?.ok).toBe(true);
+  });
   await waitFor(() => expect(host.writes).toHaveLength(2));
   expect(host.doc).toEqual(before);
 });
@@ -201,12 +221,12 @@ test("kernel gap: Families salvage uses the kernel recovery review and one undoa
 test("kernel gap: Families ID-only salvage resolves exact-document catalog names before kernel recovery", async () => {
   host.doc = familiesRouteState.schema.parse({ takenAt: host.doc.takenAt });
   host.salvage = { familyNames: [], familyIds: [3101] };
-  const { situation } = await mounted();
-  await waitFor(() => expect(host.catalogHeaders.length).toBeGreaterThan(0));
+  const { situation, owner } = await mounted();
+  await waitFor(() => expect(owner().stageVerbs()).toContain("work.salvage"));
   fireEvent.click(await liveButton(situation, "Carry over"));
   await within(document.body).findByLabelText("Carry over review");
   expect(host.writes).toEqual([]);
-  fireEvent.click(await liveButton(situation, "Carry over"));
+  fireEvent.click(await liveButton(within(document.body), "Commit Carry over"));
   await waitFor(() => expect(host.doc.excluded["Fan Coil Unit - Ducted"]).toEqual({ by: "human" }));
   expect(host.writes).toHaveLength(1);
 });
@@ -221,7 +241,7 @@ test("kernel gap: unreadable Families Work shows the host refusal and recovers o
   fireEvent.click(await liveButton(situation, "Start fresh"));
   await within(document.body).findByLabelText("Start fresh review");
   expect(host.writes).toEqual([]);
-  fireEvent.click(await liveButton(situation, "Start fresh"));
+  fireEvent.click(await liveButton(within(document.body), "Commit Start fresh"));
   await waitFor(() => expect(host.writes).toHaveLength(1));
   expect(host.writes[0]).toMatchObject({ kind: "start-fresh", undoable: false, aside: "aside-1" });
   await waitFor(() => expect(view.queryByText(UNREADABLE_WORK, { exact: false })).toBeNull());
@@ -231,19 +251,24 @@ test("kernel gap: unreadable Families Work shows the host refusal and recovers o
 test("a scope proposal is a kernel root-cell row before any matrix read exists", async () => {
   host.doc = familiesRouteState.schema.parse({ scope: { suggestion: { value: host.filter } } });
   const before = structuredClone(host.doc);
-  const { view } = await mounted();
+  const { view, owner } = await mounted();
   const row = await view.findByRole("group", { name: "Cell scope" });
   fireEvent.click(await liveButton(within(row), "take"));
   await waitFor(() => expect(host.doc.scope.edit?.value).toEqual(host.filter));
   expect(host.reads).toEqual([]);
   expect(host.writes).toHaveLength(1);
-  fireEvent.keyDown(view.getByLabelText("Families route"), { key: "z", ctrlKey: true });
+  await waitFor(() => expect(owner().journal(host.key).read().busy).toBe(false));
+  await waitFor(() => expect(owner().snapshot().work?.handle.revision).toBe(host.revision));
+  await act(async () => {
+    expect((await owner().restore("undo"))?.ok).toBe(true);
+  });
   await waitFor(() => expect(host.writes).toHaveLength(2));
   expect(host.doc).toEqual(before);
 });
 
 test("native Families read uses the kernel query and records one scope edit", async () => {
   const { view, owner } = await mounted();
+  await waitFor(() => expect(owner().control("read").refusal).toBeNull());
   fireEvent.click(await liveButton(within(view.container), "Read families"));
   await waitFor(() =>
     expect(owner().results.get("read")).toMatchObject({ state: "done", kind: "query" }),
