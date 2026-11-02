@@ -200,6 +200,11 @@ export function useRouteTabs() {
                 tab.route === route &&
                 bindingOf(route, tab.link) === bindingOf(route, link),
             )?.id ??
+            // A deep link arriving from another Place (a /ducts row opening /fans) reuses this
+            // route's Place with the same binding; minting one drew a duplicate tab (Manual D).
+            tabs.find(
+              (tab) => tab.route === route && bindingOf(route, tab.link) === bindingOf(route, link),
+            )?.id ??
             null,
           route,
           link,
