@@ -64,7 +64,7 @@ function fixture(
 const done = (deliver: ReadingDelivery<number>, value: number, revision = 1) =>
   deliver({ kind: "complete", value, revision, sourceVersion: `v${value}` });
 const receipt = (
-  overrides: Partial<Pick<ActionReceipt, "id" | "state" | "effects" | "target">> = {},
+  overrides: Partial<Pick<ActionReceipt, "id" | "state" | "effects" | "target" | "input">> = {},
 ) => ({
   id: "receipt",
   state: "succeeded" as const,
