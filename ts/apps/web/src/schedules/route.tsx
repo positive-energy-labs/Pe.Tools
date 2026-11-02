@@ -164,6 +164,7 @@ function GridBody() {
       {(error || failure) && (
         <OutcomeLine kind="error" label="Schedule grid" says={error ?? failure!} />
       )}
+      <a href={`/schedule-specs?${new URLSearchParams({ workspaceId: scope.page.workspaceId, pod: scope.page.pod, path: scope.page.path })}`}>Schedule definitions</a>
       <ScheduleGridWorkspace state={state} onRefused={setFailure} onHidden={setFailure} />
     </>
   );
@@ -236,7 +237,7 @@ function SpecBody({ owner, page }: MountBody<SchedulesPage, ScheduleGridDocument
       </EmptyState>
     );
   return (
-    <ListView
+    <><a href={`/schedules?workspaceId=${encodeURIComponent(page.workspaceId)}`}>Inspect source schedule</a><ListView
       list={list}
       aria-label="Schedule specs"
       row={(row) => ({
@@ -248,7 +249,7 @@ function SpecBody({ owner, page }: MountBody<SchedulesPage, ScheduleGridDocument
         ),
       })}
       empty={{ message: "No saved schedule specs", exit: "Capture a schedule into a pod" }}
-    />
+    /></>
   );
 }
 

@@ -67,6 +67,7 @@ export function schedulesBinding(id: string, row: unknown, scope: SchedulesScope
   if (id === "bind")
     return noSubject({
       readingId: shownSchedule(scope)?.id ?? "",
+      reading: shownSchedule(scope) ?? undefined,
       expectedRevision: scope.work?.handle.revision ?? 0,
     });
   if (id === "push") {

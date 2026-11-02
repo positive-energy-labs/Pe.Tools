@@ -24,7 +24,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "tray": false
       }
     },
-    "moduleHash": "e562f16c11c61091536c7c81886e59ff15bc364a387514cbd7c515dfb4c4379b"
+    "moduleHash": "e86b1703514da8b39e8edd4791655b3ec95cf1a6e1d26858e5151e498b9d5a23"
   },
   {
     "key": "chat",
@@ -76,7 +76,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "tray": false
       }
     },
-    "moduleHash": "14d37401da017c1c8da445ea994ea65c63d7dd13a085ae97b7e7be93c5831c7c"
+    "moduleHash": "748a3a5873293f43f62dc6f35dea89e96cf930b85903674411a703a7103393f7"
   },
   {
     "key": "design-system",
@@ -126,7 +126,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "tray": false
       }
     },
-    "moduleHash": "15bf7539f0f6e6561af9386bef80205c702a9cadec40eb84857e7c7e3c3975bb"
+    "moduleHash": "227d79605ba19d94f9fcb83694350cac096483d1f3930634e5c8064c8e708333"
   },
   {
     "key": "duct-loss",
@@ -153,7 +153,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "tray": false
       }
     },
-    "moduleHash": "9af3fee88b8a26f16fd403548d4c538f41323cafffdb5262487f5afecde2705b"
+    "moduleHash": "3cbfe8b9ffc9d169d39b885feb1518ed1c65b152b220c243d113e47e233ec97b"
   },
   {
     "key": "ducts",
@@ -185,7 +185,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
       },
       "resume": "document"
     },
-    "moduleHash": "94a01629644a6f2a9df47383f9c918bdc4c60db08d669c9c6c2b810741bbcdff"
+    "moduleHash": "a552b21e05f0865ec93b93aabf9ec7aca2f2736d180e8600e6d732d1e049fb7f"
   },
   {
     "key": "families",
@@ -245,6 +245,33 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
     "moduleHash": "16414417800003edf66bf1ad8a02e79a9a44bb5f650517d5501bd8ee79945871"
   },
   {
+    "key": "fans",
+    "directory": {
+      "path": "/fans",
+      "title": "Fans",
+      "label": "Fan air paths",
+      "exposure": "Main",
+      "runtimeNeed": "Revit for model reads and writes",
+      "icon": "Wind",
+      "category": "Calculate loads & airflow",
+      "blurb": "Review duct systems, stage pressure-drop inputs and rulings, and preview or apply the changes in Revit.",
+      "aliases": [
+        "fan",
+        "ESP",
+        "air path"
+      ],
+      "listed": true,
+      "satellites": [],
+      "surfaces": {
+        "web": "full",
+        "pwa": "full",
+        "tray": false
+      },
+      "resume": "document"
+    },
+    "moduleHash": "e9b25cb807d78abd93045669a45572f8a60732a29671173cde54ba0098b670eb"
+  },
+  {
     "key": "grilles",
     "directory": {
       "path": "/grilles",
@@ -271,7 +298,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "tray": false
       }
     },
-    "moduleHash": "16125caca910ee8185f702eead17619c18e1b8fe31e2af1928a95326c889e2e2"
+    "moduleHash": "2323c2c560aef90414cdd5022b5c701e353f9d80c2617d7037858f58095d32f6"
   },
   {
     "key": "index",
@@ -303,18 +330,17 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
     "key": "instances",
     "directory": {
       "path": "/open",
-      "title": "Open",
+      "title": "Open document",
       "label": "Revit",
       "exposure": "Main",
       "runtimeNeed": "Revit for model actions; browsing saved data is separate",
       "icon": "Server",
       "category": "Start / open work",
-      "blurb": "Start a Revit, open a model, and see which Revit holds it: the launcher, every recent document across installed years, and each running Revit with its shape, documents and verbs.",
+      "blurb": "Choose a document and its destination Revit.",
       "aliases": [
-        "launcher",
+        "documents",
         "model",
-        "session",
-        "documents"
+        "launcher"
       ],
       "listed": true,
       "satellites": [],
@@ -324,7 +350,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "tray": "compact"
       }
     },
-    "moduleHash": "b54a2f5318d787e357687608295dc087ed261afaa9d549cf0124306eb09a0d18"
+    "moduleHash": "a12b1343a126d70ea545efed2269837ac930ea1c322dfccaf57f8d45959ad7a8"
   },
   {
     "key": "ops",
@@ -351,7 +377,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "tray": false
       }
     },
-    "moduleHash": "04833e8a2ebe935c433b82c624c397ef60489414f959f0d4146d56645711c040"
+    "moduleHash": "1841fe5b092402f808e1ce0c95b72af9210ef440c9cc047ff27fcfa693f48692"
   },
   {
     "key": "bind",
@@ -376,7 +402,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "tray": false
       }
     },
-    "moduleHash": "54e67e5be41274e0f4e0a962cfe024991caf5ca20f8d9f80d1ee7f76dd393c11"
+    "moduleHash": "eaa3420e711607149d67edb328295c4d83a6f12167fc8d53958fe0b5aefcb76c"
   },
   {
     "key": "parameter-links",
@@ -401,7 +427,33 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "tray": false
       }
     },
-    "moduleHash": "4aa57abe6dddaddd36b4360202afe0eab8f4ce413bcbe6a4590e925d5307784c"
+    "moduleHash": "4ccad94c771c5ce8f798b0df7384d8fc779744582fd7712792c8777408099946"
+  },
+  {
+    "key": "pod-admin",
+    "directory": {
+      "path": "/pod-admin",
+      "title": "Pod administration",
+      "label": "Pod administration",
+      "icon": "Settings2",
+      "category": "Ask / automate",
+      "exposure": "Preview",
+      "runtimeNeed": "Host",
+      "blurb": "Install Pods and manage activation and executable route trust.",
+      "aliases": [
+        "install",
+        "trust",
+        "plugins"
+      ],
+      "listed": true,
+      "satellites": [],
+      "surfaces": {
+        "web": "full",
+        "pwa": "full",
+        "tray": false
+      }
+    },
+    "moduleHash": "e30fb2e959d144c9501898b73dbf3945cb7b013ce86c6678e71c2d25060a173b"
   },
   {
     "key": "pods",
@@ -413,7 +465,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
       "runtimeNeed": "Host catalogue; Revit depends on the pod",
       "icon": "Settings2",
       "category": "Ask / automate",
-      "blurb": "Every installed pod — browse members, edit a spec as a form or raw JSON, and see the runs filed against it.",
+      "blurb": "Author a Pod member and inspect its runs.",
       "aliases": [
         "Pods"
       ],
@@ -425,7 +477,36 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "tray": false
       }
     },
-    "moduleHash": "2b158b02e456901952fa6bda9733043d334f98ccb3ccd7a19946c7f9bf70256a"
+    "moduleHash": "c538291b5e1f06f0abd95b172ce8becd1bd4c1066b585a2604950f86a737af2d"
+  },
+  {
+    "key": "rhvac-sync",
+    "directory": {
+      "path": "/rhvac-sync",
+      "title": "RHVAC sync",
+      "label": "Manual J",
+      "exposure": "Main",
+      "runtimeNeed": "Revit for model actions; browsing saved data is separate",
+      "icon": "Map",
+      "category": "Calculate loads & airflow",
+      "blurb": "Sync selected zones to one RHVAC file.",
+      "aliases": [
+        "manual",
+        "j",
+        "loads",
+        "rhvac",
+        "zones"
+      ],
+      "listed": true,
+      "satellites": [],
+      "surfaces": {
+        "web": "full",
+        "pwa": "full",
+        "tray": false
+      },
+      "resume": "document"
+    },
+    "moduleHash": "9d7dd0cb059fe7b3ce2202934233807d3db90dadfb6587ce1861401052f5aa3e"
   },
   {
     "key": "rooms",
@@ -456,16 +537,16 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
     "moduleHash": "913a44c968944c3169874cb26e17527cad8f1112cae9794b7b361e11f2c92581"
   },
   {
-    "key": "schedules",
+    "key": "schedule-specs",
     "directory": {
-      "path": "/schedules",
-      "title": "Schedules",
+      "path": "/schedule-specs",
+      "title": "Schedule definitions",
       "label": "Revit data",
       "exposure": "Preview",
       "runtimeNeed": "Revit for model actions; browsing saved data is separate",
       "icon": "LayoutGrid",
       "category": "Coordinate model data",
-      "blurb": "Any Revit schedule as a grid — push staged cell values, capture its definition into a pod, or apply a saved spec as a new schedule.",
+      "blurb": "Author a saved schedule definition and apply it as a new schedule.",
       "aliases": [
         "Revit",
         "data"
@@ -479,7 +560,58 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
       },
       "resume": "document"
     },
-    "moduleHash": "2ce0a48507e543d5bb3597b94c4f7df087bd0e1fce3645026a4082c2cd339eb8"
+    "moduleHash": "130c03fd3a12df48381cd5985570f6d51e1e64685fed745d10bcfaa2d4c23b79"
+  },
+  {
+    "key": "schedules",
+    "directory": {
+      "path": "/schedules",
+      "title": "Schedules",
+      "label": "Revit data",
+      "exposure": "Preview",
+      "runtimeNeed": "Revit for model actions; browsing saved data is separate",
+      "icon": "LayoutGrid",
+      "category": "Coordinate model data",
+      "blurb": "Inspect, edit and review the history of a document schedule.",
+      "aliases": [
+        "Revit",
+        "data"
+      ],
+      "listed": true,
+      "satellites": [],
+      "surfaces": {
+        "web": "full",
+        "pwa": "full",
+        "tray": false
+      },
+      "resume": "document"
+    },
+    "moduleHash": "0f6f8ead6b3859e42ca363f395f1659d3f0f426bc3393d458b47111a665d98e0"
+  },
+  {
+    "key": "session-admin",
+    "directory": {
+      "path": "/session-admin",
+      "title": "Sessions",
+      "label": "Revit",
+      "exposure": "Main",
+      "runtimeNeed": "Revit for model actions; browsing saved data is separate",
+      "icon": "Server",
+      "category": "Start / open work",
+      "blurb": "Start, stop or restart one Revit session.",
+      "aliases": [
+        "session",
+        "administration"
+      ],
+      "listed": true,
+      "satellites": [],
+      "surfaces": {
+        "web": "full",
+        "pwa": "full",
+        "tray": "compact"
+      }
+    },
+    "moduleHash": "fb5c81d39bc8a5a279f7f0473c9c51896c432aa2d739fd09015a37f51fd46be0"
   },
   {
     "key": "settings",
@@ -546,19 +678,53 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "tray": false
       }
     },
-    "moduleHash": "c5948b5957f7f80481c35646817bd367d951775108ff3ddece7d5e7dd1295fcc"
+    "moduleHash": "f0a3279b2f24cf03446cc3bfbff0c448792bb64b267187e664391717dacbf0c7"
   },
   {
     "key": "takeoffs",
     "directory": {
       "path": "/takeoffs",
-      "title": "Takeoffs",
+      "title": "View adoption",
       "label": "Manual J",
       "exposure": "Main",
       "runtimeNeed": "Revit for model actions; browsing saved data is separate",
       "icon": "Map",
       "category": "Calculate loads & airflow",
-      "blurb": "The takeoff atlas — zones on the plan, rooms in the table, Manual J data through to a synced RHVAC .r10.",
+      "blurb": "Adopt zoning regions from chosen views.",
+      "aliases": [
+        "manual",
+        "j",
+        "loads",
+        "rhvac",
+        "zones"
+      ],
+      "listed": true,
+      "satellites": [
+        {
+          "to": "/zone-audit",
+          "label": "Zone audit"
+        }
+      ],
+      "surfaces": {
+        "web": "full",
+        "pwa": "full",
+        "tray": false
+      },
+      "resume": "document"
+    },
+    "moduleHash": "188f966c58e66c1da506ef0802ddf5c61e7342de7bb3a24817478eeecaecfc62"
+  },
+  {
+    "key": "zone-audit",
+    "directory": {
+      "path": "/zone-audit",
+      "title": "Zone audit",
+      "label": "Manual J",
+      "exposure": "Main",
+      "runtimeNeed": "Revit for model actions; browsing saved data is separate",
+      "icon": "Map",
+      "category": "Calculate loads & airflow",
+      "blurb": "Audit rooms in selected zones.",
       "aliases": [
         "manual",
         "j",
@@ -575,6 +741,6 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
       },
       "resume": "document"
     },
-    "moduleHash": "c64cd88f4a79fcb3e7473decfffc8d40715a326e09fe2b614e8279d7a3875fff"
+    "moduleHash": "9ee3ffdc5951866210b2c624f48264c72335486f7390d2cc889eea7653b2c016"
   }
 ];

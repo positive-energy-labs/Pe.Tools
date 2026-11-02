@@ -68,7 +68,8 @@
       "default": "./src/pe-api.ts"
     },
     "./native-adapter": "./src/native-adapter.ts",
-    "./host-descriptor": "./src/host-descriptor.ts"
+    "./host-descriptor": "./src/host-descriptor.ts",
+    "./decoders": "./src/decoders.ts"
   },
   "publishConfig": {
     "access": "public"

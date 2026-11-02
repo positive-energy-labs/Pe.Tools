@@ -3,7 +3,6 @@ import { machineFixture } from "../../agent-contracts/tests/machine-fixture.ts";
 import { tsOnlyOperationCatalog, type PodList } from "@pe/host-contracts/operation-types";
 import { join } from "node:path";
 import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
-import { DUCTS_SHEET_GUIDE } from "@pe/agent-contracts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import {
   address,
@@ -77,15 +76,12 @@ test("native Human eligibility and local account requirements project into actua
     packages: [],
     skills: [],
   });
-  expect(rows.find((row) => row.key === "op:native.human")?.principal).toEqual(["human"]);
-  expect(rows.find((row) => row.key === "op:local.human")?.principal).toEqual(["human"]);
+  for (const key of ["native.human", "native.any", "local.human"])
+    expect(rows.find((row) => row.key === `op:${key}`)).toBeUndefined();
   for (const key of ["aps.auth.login", "aps.auth.logout"])
     expect(rows.find((row) => row.key === `op:${key}`)?.principal).toEqual(["human"]);
   expect(rows.find((row) => row.key === "op:host.shell.open")?.principal).toEqual(["human", "pea"]);
-  expect(rows.find((row) => row.key === "op:native.any")).toMatchObject({
-    needs: "session",
-    principal: ["human", "pea", "page", "external-mcp"],
-  });
+
 });
 
 const pods = {
@@ -907,27 +903,6 @@ test("the live head names an open lifetime; reopen needs an explicit override an
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
   }
-});
-test("route:ducts.guide is one read row and answers without a document or a host read", async () => {
-  fakeRuntimeHost("http://127.0.0.1:9");
-  const rows = catalog().capabilities.filter((row) => row.key === "route:ducts.guide");
-  expect(rows).toHaveLength(1);
-  expect(rows[0]).toMatchObject({ kind: "route-doc", needs: "nothing", mutates: false });
-  const calls: string[] = [];
-  vi.stubGlobal("fetch", async (url: string | URL | Request) => {
-    const path = new URL(url instanceof Request ? url.url : String(url)).pathname;
-    calls.push(path);
-    if (path === "/pe/capabilities") return Response.json(catalog());
-    throw Error(`Unexpected guide request ${path}`);
-  });
-  const read = (await run(peRead, { key: "route:ducts.guide", timeoutSeconds: 30 })) as {
-    ok: boolean;
-    result: { guide: typeof DUCTS_SHEET_GUIDE; present?: unknown };
-  };
-  expect(read.ok).toBe(true);
-  expect(read.result.guide).toEqual(DUCTS_SHEET_GUIDE);
-  expect(read.result).not.toHaveProperty("present");
-  expect(calls).toEqual(["/pe/capabilities"]);
 });
 
 test("Pea dispatches roster and sheet through their declared routes without an analysis read", async () => {

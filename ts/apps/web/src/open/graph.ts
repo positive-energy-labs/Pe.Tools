@@ -24,6 +24,8 @@ const table = z
   .default(() => ({ query: "", sorts: [] }));
 export const openPageSchema = z.object({
   epoch: z.number().default(0),
+  session: z.string().default(""),
+  document: z.string().default(""),
   draft,
   table,
 });
@@ -38,7 +40,7 @@ const rowVerbs = Object.assign(
   { ids: ["open", "start", "stop", "restart", "close"] },
 );
 
-export const openGraph: RouteGraph<OpenPageState> = {
+export const openControls: RouteGraph<OpenPageState> = {
   directory: {
   "path": "/open",
   "title": "Open",
@@ -120,6 +122,8 @@ export const openGraph: RouteGraph<OpenPageState> = {
     },
   },
   fields: {
+    session: { ...field(z.string().default(""), {}), role: "selection" },
+    document: { ...field(z.string().default(""), {}), role: "selection" },
     epoch: {
       ...field(openPageSchema.shape.epoch, {}, { encode: String, decode: Number }),
       role: "transient",
@@ -233,4 +237,15 @@ export const openGraph: RouteGraph<OpenPageState> = {
   },
   layout: split("open-body", { axis: "v", sized: "end", size: 140 }, pane("bay"), pane("history")),
   stages: { open: { word: "Opening", panes: ["bay", "history"], verbs: ["refresh"] } },
+};
+
+export const openGraph: RouteGraph<OpenPageState> = {
+  ...openControls,
+  directory: { ...openControls.directory!, title: "Open document", blurb: "Choose a document and its destination Revit.", aliases: ["documents", "model", "launcher"] },
+  subject: (p) => p.draft.doc ?? "Choose a document",
+  subjectField: { field: "document", noun: "document", keyKind: "name", cardinality: "one", roster: "recents", detail: "machine", pane: "bay", show: (id) => id },
+  fields: { ...openControls.fields, document: { ...openControls.fields.document, role: "subject", picker: { reading: "recents", placeholder: "Choose a document", options: (value) => ((value as import("./sources").Recents)?.result?.recents ?? []).map(row => ({ id: row.path, label: row.title })) } } },
+  transition: (current, patch) => ({ patch: { ...patch, ...(patch.document !== undefined ? { draft: { ...current.draft, doc: patch.document } } : patch.draft ? { document: patch.draft.doc ?? "" } : {}) } }),
+  verbs: { refresh: openControls.verbs.refresh!, open: openControls.verbs.open!, close: openControls.verbs.close! },
+  panes: { ...openControls.panes, bay: { ...openControls.panes.bay!, label: "Documents", verbs: ["open", "close"] } },
 };

@@ -217,16 +217,16 @@ export async function readSchedule(
   if (!snapshot.scheduleUniqueId) throw refused("Schedule unique identity is missing");
   const workspaceId = scheduleWorkId(document, snapshot.scheduleUniqueId);
   await current(bridge, target, process);
-  const reading = await captures.saveSchedule({
+  const value = {
     target,
     process,
     document,
     workspaceId,
     snapshot,
     capturedAt,
-  });
+  };
   await current(bridge, target, process);
-  return reading;
+  return scheduleReadingSchema.parse({ ...value, id: createHash("sha256").update(canonicalRouteInput(value)).digest("hex") });
 }
 
 /**
@@ -338,7 +338,11 @@ export function scheduleExecutors(
     bind: async () => ({ effects: [] }),
     run: async (ctx, execution) => {
     const input = scheduleActions["schedule.grid.bind"].input.parse(ctx.admission.input);
-    const reading = await captures.schedule(input.readingId);
+    const reading = input.reading ?? await captures.schedule(input.readingId);
+    if (reading.id !== input.readingId) throw refused("Reading identity differs from the requested evidence");
+    const { id, ...value } = reading;
+    if (input.reading && createHash("sha256").update(canonicalRouteInput(value)).digest("hex") !== id)
+      throw refused("Schedule evidence hash differs from its content");
     const work = ctx.work;
     if (!work) throw refused("Schedule Work is unavailable");
     const scope = {
@@ -360,6 +364,7 @@ export function scheduleExecutors(
           { path: ["basis"], value: { captureId: reading.id } },
           { path: ["takenAt"], value: reading.capturedAt },
         ];
+    if (input.reading) await execution.step("publication", "schedule.retain", { id }, () => captures.saveSchedule(value));
     if (patches.length) {
       const result = await execution.step("publication", "schedule.bind", { scope, patches, expectedRevision: input.expectedRevision }, () => work.publish(scope, "schedules", patches, input.expectedRevision));
       if (!result.ok) throw refused(refusalText(result));

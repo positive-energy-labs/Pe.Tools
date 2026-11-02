@@ -1,0 +1,27 @@
+import { z } from "zod";
+import { type ReadEntry } from "@pe/agent-contracts";
+import { peClient } from "#/host/pe-client";
+import { requestJson } from "#/shell/readings-api";
+import { effectDecoder } from "@pe/host-contracts/decoders";
+import { podImportResponseSchema } from "@pe/host-contracts/operation-types";
+export const installInput = z.object({ archivePath: z.string().min(1) });
+export const installRpc: ReadEntry<typeof installInput> = {
+  key: "pod.import",
+  input: installInput,
+  run: (request) =>
+    requestJson(
+      { path: "/call", body: { key: "pod.import", request } },
+      effectDecoder(podImportResponseSchema),
+      AbortSignal.timeout(30000),
+    ),
+};
+export const trustInput = z.object({
+  key: z.string(),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/),
+  trusted: z.boolean(),
+});
+export const trustRpc: ReadEntry<typeof trustInput> = {
+  key: "plugins.routeTrust",
+  input: trustInput,
+  run: ({ key, ...body }) => peClient.call("plugins.routeTrust", { params: { key }, body }),
+};

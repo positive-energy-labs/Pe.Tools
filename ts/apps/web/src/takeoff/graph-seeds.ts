@@ -9,6 +9,7 @@ export const takeoffSeeds = Object.fromEntries(
         "rhvac.open": { path: "C:/Fixtures/projectA.r10" },
       },
       readings: {
+        roster: { views: [], zones: [] },
         candidates: DEMO_CANDIDATES,
         ownerCrops: null,
         plan: null,

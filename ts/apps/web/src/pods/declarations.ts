@@ -23,19 +23,13 @@ export const podsReadings = {
     retire: "page",
     args: (p) => [selectedMember(p), p.pod, p.runs],
   },
-  plugins: {
-    kind: "use",
-    source: "pods.plugins",
-    retire: "page",
-    args: (p) => p.pluginEpoch,
-  },
 } satisfies RouteGraph<PodsPage>["readings"];
 
 export const podsPanes = {
   members: {
     label: "members",
-    purpose: "Browse every installed Pod member and activate its plugin",
-    draws: ["pods", "plugins"],
+    purpose: "Browse installed Pod members",
+    draws: ["pods"],
     verbs: [],
   },
   spec: {

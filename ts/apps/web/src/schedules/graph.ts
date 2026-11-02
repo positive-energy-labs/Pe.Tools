@@ -43,7 +43,7 @@ const push = z.strictObject({
   refusal: z.string().nullable().default(null),
 });
 
-export const schedulesGraph: RouteGraph<SchedulesPage, ScheduleGridDocument> = {
+export const schedulesBase: RouteGraph<SchedulesPage, ScheduleGridDocument> = {
   directory: {
     path: "/schedules",
     title: "Schedules",
@@ -71,10 +71,6 @@ export const schedulesGraph: RouteGraph<SchedulesPage, ScheduleGridDocument> = {
     read: {
       title: "Mechanical equipment",
       load: () => import("./graph-seeds").then((m) => m.schedulesSeeds["read"]!),
-    },
-    apply: {
-      title: "Mechanical equipment",
-      load: () => import("./graph-seeds").then((m) => m.schedulesSeeds["apply"]!),
     },
   },
   needs: "project",
@@ -112,6 +108,7 @@ export const schedulesGraph: RouteGraph<SchedulesPage, ScheduleGridDocument> = {
     retained: {
       kind: "use",
       source: "schedules.retained",
+      query: "schedule.grid.snapshot",
       retire: "page",
       args: (page) => page.workspaceId,
     },
@@ -307,3 +304,15 @@ export const sameScheduleRows = (
       canonicalRouteInput(row.subjectIds) ===
         canonicalRouteInput(b.snapshot.rows[index]!.subjectIds),
   );
+
+export const schedulesGraph: RouteGraph<SchedulesPage, ScheduleGridDocument> = {
+  ...schedulesBase,
+  directory: { ...schedulesBase.directory!, blurb: "Inspect, edit and review the history of a document schedule." },
+  subjectField: { field: "workspaceId", noun: "schedule", keyKind: "UniqueId", cardinality: "one", roster: "catalog", detail: "retained", pane: "list", show: id => id },
+  subject: (p) => p.workspaceId || "Choose a schedule",
+  fields: { ...schedulesBase.fields, pod: { ...schedulesBase.fields.pod, role: "draft" }, path: { ...schedulesBase.fields.path, role: "draft" } },
+  verbs: Object.fromEntries(Object.entries(schedulesBase.verbs).filter(([id]) => id !== "apply")),
+  panes: Object.fromEntries(Object.entries(schedulesBase.panes).filter(([id]) => id !== "spec")),
+  layout: split("schedules-body", { axis: "h", sized: "start", size: 240 }, pane("list"), split("schedule-detail", { axis: "v", sized: "end", size: 160 }, pane("grid"), gate("editing", pane("work")))),
+  stages: { audit: schedulesBase.stages.audit!, apply: { word: "Editing", panes: ["list", "grid", "work"], verbs: ["push"] }, history: schedulesBase.stages.history! },
+};

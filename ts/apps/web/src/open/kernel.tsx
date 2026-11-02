@@ -1,7 +1,7 @@
 import { createContext, useContext, useSyncExternalStore, type ReactNode } from "react";
 import { useGraphRoute, type GraphMount, type RouteAdapters } from "#/shell/mount";
 import type { VerbCompletion } from "#/shell/verbs";
-import { openGraph, type OpenPageState } from "./graph";
+import { openControls as openGraph, type OpenPageState } from "./graph";
 import { openSources } from "./sources";
 export type OpenOwner = GraphMount<OpenPageState, unknown>;
 export const OpenOwnerContext = createContext<OpenOwner | null>(null);

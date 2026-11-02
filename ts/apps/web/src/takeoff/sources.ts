@@ -56,6 +56,10 @@ function rpc(ctx: ReadingContext, key: string, request: unknown): JsonRequest | 
 }
 export function takeoffSources(): Readonly<Record<string, ReadingSource>> {
   return {
+    "takeoffs.roster": { kind: "derive", derive: (ctx) => {
+      const world = worldOf(ctx);
+      return { views: (world?.lanes ?? []).map(row => ({ id: row.view, label: row.label })), zones: (world?.zones ?? []).map(row => ({ id: row.zone.guid, label: row.name })) };
+    } },
     "takeoffs.snapshot": {
       kind: "use",
       dirties: ["snapshot"],

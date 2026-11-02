@@ -1,3 +1,7 @@
+import { route as scheduleSpecsRoute } from "./schedule-specs/route";
+import { route as rhvacSyncRoute } from "./rhvac-sync/route";
+import { route as zoneAuditRoute } from "./zone-audit/route";
+import { sessionsRoute } from "./sessions/route";
 import {
   createRouter as createTanStackRouter,
   Link,
@@ -32,6 +36,10 @@ import { Route as rootRoute } from "./routes/__root";
 // routes once this module re-evaluates (SSR runner, HMR); re-adding by path keeps the tree idempotent.
 const pathOf = (route: AnyRoute) => (route.options as { path?: string }).path;
 const codeRoutes: AnyRoute[] = [
+  sessionsRoute,
+  zoneAuditRoute,
+  rhvacSyncRoute,
+  scheduleSpecsRoute,
   settingsRoute,
   opsRoute,
   openRoute,

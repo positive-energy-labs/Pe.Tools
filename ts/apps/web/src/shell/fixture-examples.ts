@@ -202,7 +202,17 @@ export const routeExamples = {
   "pages-bind": {
     page: { page: "clinic-review", view: false },
     readings: {
-      target: null,
+      target: {
+        page: "clinic-review",
+        slot: "default",
+        binding: { kind: "pinned", address: "C:/Fixtures/Clinic.rvt" },
+        resolution: {
+          kind: "resolved",
+          target: { kind: "document", ref: { session: "fixture", openId: "clinic" } },
+        },
+        document: { session: "fixture", openId: "clinic", title: "Clinic" },
+        write: null,
+      },
       threads: [],
       inventory: {
         sessions: [

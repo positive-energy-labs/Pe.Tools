@@ -1,3 +1,5 @@
+import { effectDecoder } from "@pe/host-contracts/decoders";
+import { hostOperationDefinitionSchema } from "@pe/host-contracts/contracts";
 import { z } from "zod";
 import { actionReceiptSchema, actionStatusSchema, type ReadEntry } from "@pe/agent-contracts";
 import {
@@ -13,7 +15,7 @@ import { runOp } from "./run";
 import type { HostOperationCatalogEntry } from "./manifest";
 export type OpsCatalog = { operations?: HostOperationCatalogEntry[]; bridgeCatalogError?: string };
 export const opReadInput = z.object({
-  op: z.custom<HostOperationCatalogEntry>(),
+  op: effectDecoder(hostOperationDefinitionSchema),
   request: z.unknown(),
 });
 export const opRead: ReadEntry<typeof opReadInput> = {

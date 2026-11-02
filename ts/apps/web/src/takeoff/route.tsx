@@ -1,8 +1,8 @@
 import { mountRoute, type MountRouteProps } from "#/shell/mount";
 import { takeoffGraph } from "./graph";
-import { takeoffAdapters } from "./graph-route";
+import { takeoffAdaptersFor } from "./graph-route";
 
-const TakeoffMount = mountRoute(takeoffGraph, takeoffAdapters);
+const TakeoffMount = mountRoute(takeoffGraph, takeoffAdaptersFor(takeoffGraph));
 export function TakeoffsRoute(props: MountRouteProps) {
   return <TakeoffMount {...props} />;
 }

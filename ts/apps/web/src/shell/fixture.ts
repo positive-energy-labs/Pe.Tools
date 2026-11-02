@@ -17,6 +17,9 @@ import type { WorkScopePorts } from "./use-work-scope";
 export { fixtureName, currentFixture } from "./fixture-lane";
 
 export async function fixtureEnvironment<P, W>(graph: RouteGraph<P, W>, name: string) {
+  // Companion chat must not borrow another route's seed or block its editor as a running Pea.
+  if (graph.key === "chat" && typeof location !== "undefined" && location.pathname !== "/pea")
+    name = "attach";
   const declaration = graph.seeds?.[name];
   if (!declaration)
     return pendingFixtureEnvironment(

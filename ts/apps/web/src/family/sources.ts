@@ -1,3 +1,5 @@
+import { effectDecoder } from "@pe/host-contracts/decoders";
+import { podListResponseSchema } from "@pe/host-contracts/operation-types";
 import { z } from "zod";
 import {
   actionReceiptSchema,
@@ -10,7 +12,6 @@ import {
   type PodMember,
   type SettingsSnapshot,
 } from "@pe/agent-contracts";
-import type { PodList } from "@pe/host-contracts/operation-types";
 import { jsonSource, requestJson } from "#/shell/readings-api";
 import { subscriptionSource } from "#/shell/readings-use";
 import type { ReadingContext, ReadingSource, UseSource } from "#/shell/readings";
@@ -185,9 +186,7 @@ export function familySources(): Readonly<Record<string, ReadingSource>> {
     "family.pods": {
       ...jsonSource({
         request: () => ({ path: "/call", body: { key: "pod.list", request: {} } }),
-        schema: z
-          .object({ pods: z.array(z.custom<PodList["pods"][number]>()) })
-          .transform((value) => value.pods),
+        schema: effectDecoder(podListResponseSchema).transform((value) => value.pods),
         absent: [],
       }),
       effects: () => [],

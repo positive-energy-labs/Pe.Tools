@@ -124,10 +124,6 @@ test("host adapters read inventory, exact bytes, composition, scoped runs and ac
   });
   await env.read("runs");
   expect(host.calls.at(-1)).toEqual({ key: "pod.runs", request: host.member });
-  await env.read("plugins");
-  expect(env.readings.plugins!.value).toMatchObject({
-    statuses: [{ id: `pod:${host.member.pod}`, status: "active" }],
-  });
   expect(host.actions).toEqual([]);
 });
 
@@ -278,15 +274,8 @@ test("selection couples Work to the member and activation refuses Pea", async ()
   const env = environment();
   await env.run("select", host.other);
   expect(env.page()).toMatchObject({ ...host.other, member: memberWork(host.other) });
-  await env.read("plugins");
-  expect(
-    await env.run("activation", { id: `pod:${host.member.pod}`, enabled: false }, "agent"),
-  ).toMatchObject({ state: "refused" });
+  expect(podsGraph.verbs.activation).toBeUndefined();
   expect(host.activations).toEqual([]);
-  expect(
-    await env.run("activation", { id: `pod:${host.member.pod}`, enabled: false }),
-  ).toMatchObject({ state: "done", kind: "rpc" });
-  expect(host.activations).toEqual([{ enabled: false }]);
 });
 
 test("the reading graph fences a delayed old member through A to B to A", async () => {

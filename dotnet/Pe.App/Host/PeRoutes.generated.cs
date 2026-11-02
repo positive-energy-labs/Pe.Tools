@@ -96,7 +96,6 @@ internal static class PeRoutes {
             public const string ContextStyle = "contextStyle";
             public const string Picture = "picture";
             public const string Viewport = "viewport";
-            public const string Issue = "issue";
         }
     }
 
@@ -138,6 +137,36 @@ internal static class PeRoutes {
         }
     }
 
+    /// <summary>Fans: <c>/fans</c>.</summary>
+    internal static class Fans {
+        public const string Path = "/fans";
+        /// <summary>The URL keys a link may carry.</summary>
+        internal static class Keys {
+            public const string ThreadSearch = "threadSearch";
+            public const string ThreadSort = "threadSort";
+            public const string Stage = "stage";
+            public const string Fan = "fan";
+            public const string ContextRadiusFt = "contextRadiusFt";
+            public const string SceneView = "sceneView";
+            public const string System = "system";
+            public const string Level = "level";
+            public const string Selected = "selected";
+            public const string SystemSearch = "systemSearch";
+            public const string SystemSort = "systemSort";
+            public const string RulingSearch = "rulingSearch";
+            public const string RulingSort = "rulingSort";
+            public const string TreeSearch = "treeSearch";
+            public const string TreeSort = "treeSort";
+            public const string InputSearch = "inputSearch";
+            public const string InputSort = "inputSort";
+            public const string Encoding = "encoding";
+            public const string Layers = "layers";
+            public const string ContextStyle = "contextStyle";
+            public const string Picture = "picture";
+            public const string Viewport = "viewport";
+        }
+    }
+
     /// <summary>Grilles: <c>/grilles</c>.</summary>
     internal static class Grilles {
         public const string Path = "/grilles";
@@ -164,7 +193,7 @@ internal static class PeRoutes {
         }
     }
 
-    /// <summary>Open: <c>/open</c>.</summary>
+    /// <summary>Open document: <c>/open</c>.</summary>
     internal static class Open {
         public const string Path = "/open";
         /// <summary>The URL keys a link may carry.</summary>
@@ -211,6 +240,17 @@ internal static class PeRoutes {
         }
     }
 
+    /// <summary>Pod administration: <c>/pod-admin</c>.</summary>
+    internal static class PodAdmin {
+        public const string Path = "/pod-admin";
+        /// <summary>The URL keys a link may carry.</summary>
+        internal static class Keys {
+            public const string ThreadSearch = "threadSearch";
+            public const string ThreadSort = "threadSort";
+            public const string Pod = "pod";
+        }
+    }
+
     /// <summary>Pods: <c>/pods</c>.</summary>
     internal static class Pods {
         public const string Path = "/pods";
@@ -221,6 +261,23 @@ internal static class PeRoutes {
             public const string Pod = "pod";
             public const string Path = "path";
             public const string Runs = "runs";
+        }
+    }
+
+    /// <summary>RHVAC sync: <c>/rhvac-sync</c>.</summary>
+    internal static class RhvacSync {
+        public const string Path = "/rhvac-sync";
+        /// <summary>The URL keys a link may carry.</summary>
+        internal static class Keys {
+            public const string ThreadSearch = "threadSearch";
+            public const string ThreadSort = "threadSort";
+            public const string Level = "level";
+            public const string Zone = "zone";
+            public const string Room = "room";
+            public const string Viewport = "viewport";
+            public const string Views = "views";
+            public const string Zones = "zones";
+            public const string R10 = "r10";
         }
     }
 
@@ -241,6 +298,25 @@ internal static class PeRoutes {
         }
     }
 
+    /// <summary>Schedule definitions: <c>/schedule-specs</c>.</summary>
+    internal static class ScheduleSpecs {
+        public const string Path = "/schedule-specs";
+        /// <summary>The URL keys a link may carry.</summary>
+        internal static class Keys {
+            public const string ThreadSearch = "threadSearch";
+            public const string ThreadSort = "threadSort";
+            public const string Stage = "stage";
+            public const string Pod = "pod";
+            public const string Path = "path";
+            public const string WorkspaceId = "workspaceId";
+            public const string Query = "query";
+            public const string Sort = "sort";
+            public const string Hidden = "hidden";
+            public const string Lines = "lines";
+            public const string Cell = "cell";
+        }
+    }
+
     /// <summary>Schedules: <c>/schedules</c>.</summary>
     internal static class Schedules {
         public const string Path = "/schedules";
@@ -257,6 +333,17 @@ internal static class PeRoutes {
             public const string Hidden = "hidden";
             public const string Lines = "lines";
             public const string Cell = "cell";
+        }
+    }
+
+    /// <summary>Sessions: <c>/session-admin</c>.</summary>
+    internal static class SessionAdmin {
+        public const string Path = "/session-admin";
+        /// <summary>The URL keys a link may carry.</summary>
+        internal static class Keys {
+            public const string ThreadSearch = "threadSearch";
+            public const string ThreadSort = "threadSort";
+            public const string Session = "session";
         }
     }
 
@@ -291,7 +378,7 @@ internal static class PeRoutes {
         }
     }
 
-    /// <summary>Takeoffs: <c>/takeoffs</c>.</summary>
+    /// <summary>View adoption: <c>/takeoffs</c>.</summary>
     internal static class Takeoffs {
         public const string Path = "/takeoffs";
         /// <summary>The URL keys a link may carry.</summary>
@@ -302,6 +389,23 @@ internal static class PeRoutes {
             public const string Zone = "zone";
             public const string Room = "room";
             public const string Viewport = "viewport";
+        }
+    }
+
+    /// <summary>Zone audit: <c>/zone-audit</c>.</summary>
+    internal static class ZoneAudit {
+        public const string Path = "/zone-audit";
+        /// <summary>The URL keys a link may carry.</summary>
+        internal static class Keys {
+            public const string ThreadSearch = "threadSearch";
+            public const string ThreadSort = "threadSort";
+            public const string Level = "level";
+            public const string Zone = "zone";
+            public const string Room = "room";
+            public const string Viewport = "viewport";
+            public const string Views = "views";
+            public const string Zones = "zones";
+            public const string R10 = "r10";
         }
     }
 }

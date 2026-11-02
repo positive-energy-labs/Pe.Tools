@@ -1,3 +1,4 @@
+import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { z } from "zod";
 import {
   appliedScopeSchema,
@@ -7,7 +8,6 @@ import {
   type DocumentRef,
   type WorkKey,
 } from "@pe/agent-contracts";
-import type { RevitMatrixLoadedFamilies } from "@pe/host-contracts/generated";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
   HOST_RPC_DOCUMENT_HEADER,
@@ -41,8 +41,11 @@ export const familiesObservationSchema = z.object({
       verifiedFamilies: z.array(z.object({ name: z.string(), at: z.string() })),
     })
     .optional(),
-  result: z.custom<RevitMatrixLoadedFamilies.Res.Response>(),
+  result: nativeResponseSchema("revit.matrix.loaded-families"),
 });
+export const familiesObservationSummarySchema = familiesObservationSchema
+  .omit({ result: true })
+  .extend({ familyCount: z.number(), typeCount: z.number(), issueCount: z.number() });
 export type FamiliesObservation = z.output<typeof familiesObservationSchema>;
 export type FamiliesObservationSummary = Omit<FamiliesObservation, "result"> & {
   familyCount: number;

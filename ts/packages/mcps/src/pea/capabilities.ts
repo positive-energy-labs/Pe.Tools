@@ -1,33 +1,9 @@
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { catalogEntries } from "@pe/agent-contracts/pe-api";
-import { discoveryMachine } from "@pe/agent-contracts";
-import type { HostSessionScope } from "@pe/host-contracts/operation-types";
-import { contextFetch as fetch } from "@pe/runtime/context";
 import {
+  discoveryMachine,
   capabilityPrincipals,
-  nativePrincipals,
-  DUCTS_FINDS,
   commands,
-  admittedRouteEntries,
-  settingsRouteState,
-  scheduleGridRouteState,
-  routeAddress,
-  routeViewRoutes,
-  type RouteViewRoute,
-} from "@pe/agent-contracts";
-/** One discovery projection and ranker: native availability is contextual; installed content
- * comes from one admitted snapshot, independent of the native catalog. Session/document readings
- * remain fresh; missing sources report their diagnostic instead of hiding the answering ones. */
-import { z } from "zod";
-import { ductsGuideInputSchema } from "./ducts-skill.ts";
-import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
-import {
-  HOST_RPC_SDK_SESSION_HEADER,
-  HOST_RPC_BRIDGE_SESSION_HEADER,
-  isTsOnlyOperationKey,
-  tsOnlyOperationCatalog,
-} from "@pe/host-contracts/operation-types";
-import {
   capabilityRecentSchema,
   type Machine,
   type Capability,
@@ -35,8 +11,19 @@ import {
   type CapabilityRecent,
   type RouteStateSpec,
   type PackageProjection,
-  parseContributionKey,
 } from "@pe/agent-contracts";
+import type { HostSessionScope } from "@pe/host-contracts/operation-types";
+import { contextFetch as fetch } from "@pe/runtime/context";
+import { z } from "zod";
+import { opRow, dynamicCapabilityProvider, podCapabilities } from "./capability-projections.ts";
+export { dynamicCapabilityProvider } from "./capability-projections.ts";
+import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
+import {
+  HOST_RPC_SDK_SESSION_HEADER,
+  HOST_RPC_BRIDGE_SESSION_HEADER,
+  isTsOnlyOperationKey,
+  tsOnlyOperationCatalog,
+} from "@pe/host-contracts/operation-types";
 import type { SkillSnapshot } from "./skill-publication.ts";
 import type { RouteRegistration } from "./routes.ts";
 
@@ -59,14 +46,6 @@ export function buildCapabilities(sources: CapabilitySources): Capability[] {
     hostOpCatalog.map((op) => [op.key, op as OpsCatalogEntry]),
   );
   for (const op of tsOnlyOperationCatalog) generated.set(op.key, op);
-  // Runtime registrations overlay compiled vocabulary; they do not author it.
-  for (const op of sources.ops) {
-    const compiled = generated.get(op.key);
-    generated.set(
-      op.key,
-      compiled ? { ...compiled, needs: op.needs, actor: op.actor ?? compiled.actor } : op,
-    );
-  }
   const hidden = new Set(
     Object.values(commands).flatMap(
       (command) => (command as import("@pe/agent-contracts").Command).native ?? [],
@@ -106,274 +85,6 @@ export function buildCapabilities(sources: CapabilitySources): Capability[] {
     ...dynamicCapabilityProvider(sources),
   ];
 }
-
-function podCapabilities(): Capability[] {
-  return [...admittedRouteEntries.values()]
-    .filter((row) => row.available())
-    .flatMap(({ entries }) =>
-      Object.entries(entries).map(
-        ([key, entry]): Capability => ({
-          key: `op:${key}`,
-          kind: "op",
-          title: entry.says,
-          description: entry.says,
-          needs: entry.needs,
-          effect: entry.effect,
-          mutates: entry.effect === "command",
-          principal: capabilityPrincipals(entry.effect === "command", entry.principal),
-          input: z.toJSONSchema(entry.input) as Record<string, unknown>,
-          source: "catalog",
-          rank: 2,
-        }),
-      ),
-    );
-}
-
-/** The runtime provider for packages, skills, Pages, route Work docs and leased views. */
-export function dynamicCapabilityProvider(sources: CapabilitySources): Capability[] {
-  return [
-    ...podCapabilities(),
-    ...sources.routes.flatMap(routeRows),
-    {
-      key: "route:ducts.guide",
-      kind: "route-doc",
-      title: "Ducts guide",
-      description:
-        "The shared per-fan sheet guide: roster, fan or asserted chain, blockers, provenance and basis-bound detail. Read only; no document acquisition or mutation.",
-      finds: [
-        "ducts",
-        "tutorial",
-        "guide",
-        "pressure drop",
-        "esp",
-        "where does it live",
-        "what can pea do",
-        "limits",
-        "cases",
-        ...DUCTS_FINDS,
-      ],
-      needs: "nothing",
-      effect: "query",
-      mutates: false,
-      principal: capabilityPrincipals(false),
-      input: z.toJSONSchema(ductsGuideInputSchema) as Record<string, unknown>,
-      source: "Ducts guide",
-      rank: 2,
-    },
-    ...routeViewRoutes.flatMap(routeViewRows),
-    ...sources.packages.flatMap(packageRows),
-    ...sources.skills.map(skillRow),
-    ...(sources.pages ?? []),
-  ];
-}
-
-/** DefaultVisible outranks EscalationVisible outranks ExpertOnly. A rank, never a filter. */
-const visibilityRank: Record<string, number> = {
-  DefaultVisible: 2,
-  EscalationVisible: 1,
-  ExpertOnly: 0,
-};
-
-function opRow(op: OpsCatalogEntry): Capability {
-  return {
-    key: `op:${op.key}`,
-    kind: "op",
-    title: op.displayName ?? op.key,
-    description: [op.description ?? "", ...(op.callGuidance ?? [])].filter(Boolean).join(" "),
-    // [Op(Finds = ...)] is the op's search vocabulary; without it "point at" or "highlight" never reach the op.
-    ...(op.searchTerms?.length ? { finds: [...op.searchTerms] } : {}),
-    needs: op.needs === "nothing" && !isTsOnlyOperationKey(op.key) ? "session" : op.needs,
-    effect: op.intent !== "Read" ? "command" : "query",
-    mutates: op.intent !== "Read",
-    principal: capabilityPrincipals(
-      op.intent !== "Read",
-      op.principal ?? nativePrincipals(op.actor),
-    ),
-    input: parseSchema(op.requestSchemaJson),
-    output: op.responseSchemaJson ? parseSchema(op.responseSchemaJson) : undefined,
-    source: "catalog",
-    rank: visibilityRank[op.visibility ?? "DefaultVisible"] ?? 0,
-  };
-}
-
-/** A route that leases its view (`routeAddress(route).agent`) gets one read and one set, both over the person's open page. */
-function routeViewRows(route: RouteViewRoute): Capability[] {
-  const spec = routeAddress(route);
-  const { policy, words, keys, fields, finds = [] } = spec.agent;
-  const sets = Object.keys(fields.shape);
-  const lower = spec.title.toLowerCase();
-  return [
-    {
-      key: `route:${route}.view`,
-      kind: "route-command",
-      title: `${spec.title} visible view`,
-      description: `Read the ${spec.title} page associated with this conversation in the person's browser: its keys (${keys.join(", ")}; settable: ${sets.join(", ")}) with their current values, the identity of what is shown, and the facts it derives. ${policy} Returns instance and revision for ${`route:${route}.set-view`}. If two panes are open, pass an instance from the ambiguity result. No Revit read.`,
-      finds: [lower, "visible", "page", ...finds],
-      needs: "nothing",
-      effect: "query",
-      mutates: false,
-      principal: capabilityPrincipals(false),
-      input: z.toJSONSchema(z.object({ instance: z.uuid().optional() })) as Record<string, unknown>,
-      source: "browser Page",
-      rank: 2,
-    },
-    {
-      key: `route:${route}.set-view`,
-      kind: "route-command",
-      title: `Set ${spec.title} visible view`,
-      description: `${policy} For a mounted view, read route:${route}.view first, then pass its instance and revision. To explicitly open this tool in the browser showing this conversation, omit both instance and revision; the call waits for that command's rendered view and uses its revision, or returns applied: false if none mounts. Browser Places and saved Work remain independent of the conversation. Pass a nonempty subset of ${sets.join(", ")}${words ? ` or ${Object.keys(words.shape).join(", ")}` : ""}. The browser acknowledges an applied render before this returns.`,
-      finds: [lower, "filter", "visible", "page", ...finds],
-      needs: "nothing",
-      effect: "command",
-      mutates: true,
-      principal: capabilityPrincipals(true),
-      input: z.toJSONSchema(
-        z.union([
-          z.object({
-            instance: z.uuid(),
-            revision: z.number().int().nonnegative(),
-            ...fields.partial().shape,
-            ...words?.partial().shape,
-          }),
-          z.object({
-            instance: z.never().optional(),
-            revision: z.never().optional(),
-            ...fields.partial().shape,
-            ...words?.partial().shape,
-          }),
-        ]),
-      ) as Record<string, unknown>,
-      source: "browser Page",
-      rank: 2,
-    },
-  ];
-}
-
-function routeRows(spec: RouteStateSpec<z.ZodType>): Capability[] {
-  const scopeHint =
-    spec.route === settingsRouteState.route
-      ? "Use op:pod.list to enumerate members. Supply workspaceId for the member's Work opened by the editor; edit fields against its adopted basis. This is shared file Work independent of Revit."
-      : spec.route === scheduleGridRouteState.route
-        ? "Supply workspaceId from the schedule reading to address its Work."
-        : "Pass any exact open target to select document-owned Work. Thread targets supply defaults only.";
-  const read: Capability = {
-    key: `route:${spec.route}`,
-    kind: "route-doc",
-    title: spec.title,
-    description: `Read the ${spec.title} document you co-edit with the user: current doc, revision, JSON Schema, and commands. ${spec.description} ${spec.route === "families" ? "For the currently visible matrix or past reading, use route:families.view first. Work scope can differ from the visible reading. This does not start a matrix read." : ""} ${scopeHint}`,
-    needs: "nothing",
-    effect: "query",
-    mutates: false,
-    principal: capabilityPrincipals(false),
-    input: {},
-    source: "route registry",
-    rank: 1,
-  };
-  const edit: Capability = {
-    key: `route:${spec.route}.edit`,
-    kind: "route-doc",
-    title: `${spec.title}: edit`,
-    description: `Edit shared Work with expectedRevision from the read. Either author may replace an existing edit or leave an optional suggestion. Attribution and host evidence are host-owned. Omit value to delete an authored key. ${spec.finds?.join(" ") ?? ""} ${scopeHint}`,
-    finds:
-      spec.route === "ducts"
-        ? ["duct network", "network work"]
-        : spec.finds
-          ? [...spec.finds]
-          : undefined,
-    needs: "nothing",
-    effect: "command",
-    mutates: true,
-    principal: capabilityPrincipals(true),
-    input: z.toJSONSchema(
-      z.object({
-        patches: z
-          .array(z.object({ path: z.array(z.union([z.string(), z.number()])), value: z.unknown() }))
-          .min(1)
-          .optional(),
-        ...(spec.route === "ducts"
-          ? {
-              loadsText: z
-                .string()
-                .optional()
-                .describe(
-                  "The load tool's Load Preview pasted raw (tab-separated); parsed and proposed as loads/preview.",
-                ),
-            }
-          : {}),
-      }),
-    ) as Record<string, unknown>,
-    source: "route registry",
-    rank: 0,
-  };
-  return [read, edit];
-}
-
-function packageRows(pod: PackageProjection): Capability[] {
-  if (pod.diagnostics.some((d) => d.severity === "error")) return [];
-  return pod.contributions
-    .filter((c) => parseContributionKey(c.key)?.kind !== "skill")
-    .map((entry) => {
-      const reference = parseContributionKey(entry.key)!;
-      const member = pod.members.find((m) => m.path === entry.sourcePath)!;
-      return {
-        key: entry.key,
-        kind: reference.kind,
-        title: entry.title,
-        description:
-          entry.description ||
-          (reference.kind === "script"
-            ? "Runs the admitted source through scripting.execute; ReadOnly rolls back changes."
-            : reference.kind === "member"
-              ? "Read or mention this member. It cannot execute."
-              : "Read this Page's shared state and binding; append events or request your own binding through pe_do."),
-        needs: reference.kind === "script" ? "document" : "nothing",
-        effect: reference.kind === "script" ? "command" : "query",
-        mutates: reference.kind === "script",
-        principal: capabilityPrincipals(reference.kind === "script"),
-        input: reference.kind === "script" ? podInputSchema : {},
-        package: { id: pod.id, path: member.path, sha256: member.sha256 },
-        projection: entry.projection,
-        source: "packages",
-        rank: 1,
-      };
-    });
-}
-
-const podInputSchema = z.toJSONSchema(
-  z.object({
-    permissionMode: z.enum(["ReadOnly", "WriteTransaction", "NoTransaction"]).optional(),
-    timeoutSeconds: z.number().int().min(1).max(3600).optional(),
-  }),
-) as Record<string, unknown>;
-
-function skillRow(skill: SkillSnapshot): Capability {
-  return {
-    key: skill.key,
-    kind: "skill",
-    title: skill.name,
-    description: /^description:\s*(.+)$/m.exec(skill.content)?.[1]?.trim() ?? "",
-    needs: "nothing",
-    effect: "query",
-    mutates: false,
-    principal: capabilityPrincipals(false),
-    input: {},
-    source: "skills",
-    package: skill.package,
-    rank: 0,
-  };
-}
-
-function parseSchema(json: string | undefined): Record<string, unknown> {
-  if (!json) return {};
-  try {
-    const parsed: unknown = JSON.parse(json);
-    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
-  } catch {
-    return {};
-  }
-}
-
-/* ── live source ─────────────────────────────────────────────────────────── */
 
 const CATALOG_TTL_MS = 30_000;
 // SDK resolution allows 30 s before native catalog dispatch; host-only sources keep their 2 s budget.
@@ -428,7 +139,9 @@ export function createCapabilityCatalogSource(options: {
       return {
         ...catalog,
         capabilities: [
-          ...catalog.capabilities.filter((row) => !row.key.startsWith("op:pod.")),
+          ...catalog.capabilities.filter(
+            (row) => !podCapabilities().some((pod) => pod.key === row.key),
+          ),
           ...podCapabilities(),
         ],
         machine: discoveryMachine(machine),

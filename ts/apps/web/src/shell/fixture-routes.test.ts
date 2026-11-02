@@ -1,3 +1,5 @@
+import { selectRunStatus } from "@pe/agent-contracts/chat-state";
+import { fixtureThread } from "./fixture-services";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { createFixtureMount } from "./fixture";
 import type { RouteGraph } from "@pe/agent-contracts";
@@ -129,4 +131,12 @@ test("calculator fixtures recalculate with Page edits rather than freezing an ex
     disconnect();
     owner.dispose();
   }
+});
+
+test("companion chat stays idle and mounts its own seed beside another route", async () => {
+  vi.stubGlobal("location", { pathname: "/parameter-links" });
+  expect(selectRunStatus(fixtureThread("links"))).toBe("idle");
+  const owner = await createFixtureMount(chatGraph(() => ({ thread: "" })), "links");
+  try { expect(owner.snapshot().failure).toBeNull(); }
+  finally { owner.dispose(); }
 });

@@ -1,3 +1,4 @@
+import { manyCodec } from "../../../../packages/agent-contracts/src/route-field";
 import { type ReactNode } from "react";
 import { RegistryContext } from "@effect/atom-react";
 import { type TakeoffsRouteDocument, type takeoffCaptureSummarySchema } from "@pe/agent-contracts";
@@ -62,6 +63,7 @@ function ScopeBody({ owner, page }: Body) {
   const health = takeoffReadingHealth(store.snapshot);
   return (
     <>
+      <nav aria-label="Takeoff siblings">{[["/takeoffs", "View adoption"], ["/zone-audit", "Zone audit"], ["/rhvac-sync", "RHVAC sync"]].map(([path, label]) => <a key={path} href={`${path}?${new URLSearchParams({ views: manyCodec.encode([...page.views]), zones: manyCodec.encode([...page.zones]), r10: page.r10, work: page.work, ...(store.scope.target.kind === "document" ? { target: JSON.stringify(store.scope.target.ref) } : {}), ...(owner.fixture ? { fixture: owner.fixture.name } : {}) })}`}>{label} </a>)}</nav>
       {health && <OutcomeLine kind="advisory" label="Takeoff reading" says={health} />}
       {store.snapshot.state === "failed" && store.snapshot.previous && (
         <OutcomeLine
@@ -245,4 +247,9 @@ export const takeoffAdapters: RouteAdapters<TakeoffGraphPage, TakeoffsRouteDocum
     review: (body) => <ReviewBody {...body} />,
   },
 };
-export const takeoffsRoute = routeFromGraph(takeoffGraph, takeoffAdapters, "/takeoffs");
+export const takeoffsRoute = routeFromGraph(takeoffGraph, takeoffAdaptersFor(takeoffGraph), "/takeoffs");
+
+export function takeoffAdaptersFor(graph: import("@pe/agent-contracts").RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument>): typeof takeoffAdapters {
+  const only = (values: Readonly<Record<string, readonly string[]>> | undefined) => Object.fromEntries(Object.entries(values ?? {}).filter(([id]) => graph.verbs[id]));
+  return { ...takeoffAdapters, verbDepends: only(takeoffAdapters.verbDepends), verbReadings: only(takeoffAdapters.verbReadings) };
+}

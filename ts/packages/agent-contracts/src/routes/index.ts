@@ -1,3 +1,4 @@
+import { zoneAuditAddress, rhvacSyncAddress, scheduleSpecsAddress, sessionAdminAddress } from "./g4-splits.ts";
 import type { RouteDeclaration } from "../route-field.ts";
 import { ductsAddress } from "./ducts.ts";
 import { familiesAddress } from "./families.ts";
@@ -27,6 +28,10 @@ export { GALVANIZED_STEEL_ROUGHNESS } from "./duct-loss.ts";
 
 /** Every route's address, by route key; each route declares its own in `routes/<route>.ts`. */
 export const routeAddresses = {
+  "zone-audit": zoneAuditAddress,
+  "rhvac-sync": rhvacSyncAddress,
+  "schedule-specs": scheduleSpecsAddress,
+  "session-admin": sessionAdminAddress,
   ducts: ductsAddress,
   families: familiesAddress,
   family: familyAddress,

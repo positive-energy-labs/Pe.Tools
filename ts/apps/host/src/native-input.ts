@@ -1,3 +1,4 @@
+import { nativeRequestSchema } from "@pe/host-contracts/decoders";
 import { Ajv, type ValidateFunction } from "ajv";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { refused } from "./command-executor.ts";
@@ -32,7 +33,4 @@ export function validateNativeInput(key: string, input: unknown, json = contract
 
 /** Prepared payloads use the same generated DTO authority as the native dispatch boundary. */
 export const nativeInputSchema = <K extends HostOperationKey>(key: K): z.ZodType<OpRequestOf<K>> =>
-  z.custom<OpRequestOf<K>>().superRefine((input, context) => {
-    const problem = nativeInputProblem(key, input);
-    if (problem) context.addIssue({ code: "custom", message: problem });
-  });
+  nativeRequestSchema(key);

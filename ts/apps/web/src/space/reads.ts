@@ -1,3 +1,4 @@
+import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { z } from "zod";
 import type { DocumentRef } from "@pe/agent-contracts";
 import {
@@ -86,7 +87,7 @@ export async function readSpaceCapture<K extends SpaceReadKey>(
         [HOST_RPC_ORIGIN_HEADER]: "web:/space",
       },
     },
-    z.custom<OpResponseOf<K>>(),
+    nativeResponseSchema(key),
     AbortSignal.timeout(NATIVE_READ_WAIT_S * 1000),
   );
   return { request: request as OpRequestOf<K>, response, document };

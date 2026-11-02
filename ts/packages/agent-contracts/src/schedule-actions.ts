@@ -76,6 +76,7 @@ export const scheduleActions = {
     dirties: [],
     input: z.object({
       readingId: z.string().min(1),
+      reading: scheduleReadingSchema.optional(),
       expectedRevision: z.number().int().nonnegative(),
     }),
   },

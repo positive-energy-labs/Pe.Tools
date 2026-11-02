@@ -1,3 +1,6 @@
+import { nativeResponseDefinitionSchema } from "@pe/host-contracts/decoders";
+import { effectDecoder } from "@pe/host-contracts/decoders";
+import { podListResponseSchema } from "@pe/host-contracts/operation-types";
 import { z } from "zod";
 import {
   actionReceiptSchema,
@@ -9,12 +12,12 @@ import {
   type ReadingRequest,
 } from "@pe/agent-contracts";
 import type { RevitMatrixLoadedFamilies } from "@pe/host-contracts/generated";
-import type { PodList } from "@pe/host-contracts/operation-types";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
   HOST_RPC_DOCUMENT_HEADER,
 } from "@pe/host-contracts/operation-types";
 import {
+  familiesObservationSummarySchema,
   familiesObservationSchema,
   type FamiliesObservation,
   type FamiliesObservationSummary,
@@ -122,7 +125,10 @@ export function familiesMatrixSource(resources?: Readings): UseSource<FamiliesOb
                 if (!entry) {
                   const body = requestJson(
                     { path: `/families/readings?record=${encodeURIComponent(hash)}` },
-                    z.custom<FamilyRecord>(),
+                    nativeResponseDefinitionSchema<FamilyRecord>(
+                      "revit.matrix.loaded-families",
+                      "FamilySnapshotRecord",
+                    ),
                     owned.signal,
                   ).catch((error: unknown) => {
                     owned.records.delete(hash);
@@ -231,7 +237,7 @@ export function familiesSources(): Readonly<Record<string, ReadingSource>> {
     }),
     "families.archive": jsonSource({
       request: (ctx) => (page(ctx).stage === "history" ? { path: "/families/readings" } : null),
-      schema: z.array(z.custom<FamiliesObservationSummary>()),
+      schema: z.array(familiesObservationSummarySchema),
       absent: [],
     }),
     "families.saved": jsonSource({
@@ -249,9 +255,7 @@ export function familiesSources(): Readonly<Record<string, ReadingSource>> {
     "families.pods": {
       ...jsonSource({
         request: () => ({ path: "/call", body: { key: "pod.list", request: {} } }),
-        schema: z
-          .object({ pods: z.array(z.custom<PodList["pods"][number]>()) })
-          .transform((value) => value.pods),
+        schema: effectDecoder(podListResponseSchema).transform((value) => value.pods),
         absent: [],
       }),
       effects: () => [],

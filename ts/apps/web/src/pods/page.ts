@@ -14,7 +14,7 @@ export type PodsPage = z.output<typeof podsPageSchema>;
 export const podsFields = {
   threadSearch: { ...threadListFields.threadSearch, role: "query" as const },
   threadSort: { ...threadListFields.threadSort, role: "query" as const },
-  pod: { ...podsAddress.fields.pod, role: "subject" as const },
+  pod: { ...podsAddress.fields.pod, role: "query" as const },
   path: { ...podsAddress.fields.path, role: "subject" as const },
   runs: { ...podsAddress.fields.runs, role: "query" as const },
   member: {

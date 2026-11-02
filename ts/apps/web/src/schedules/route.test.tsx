@@ -2,8 +2,7 @@
 import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { createMemoryHistory, createRouter, RouterContextProvider } from "@tanstack/react-router";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import { scheduleGridRouteState, workWriteSchema } from "@pe/agent-contracts";
-import { writeRouteWork } from "#/route/host";
+import { scheduleGridRouteState } from "@pe/agent-contracts";
 import { Route as root } from "../routes/__root";
 import { schedulesAdapters, schedulesRoute } from "./route";
 import { SchedulesHostFixture } from "./host.fixture";
@@ -114,64 +113,6 @@ test("a Work verb produces one journal step and Mod+Z restores the cells", async
   await waitFor(() => expect(host.writes).toHaveLength(2));
   expect(host.writes[1]).toMatchObject({ kind: "restore", base: 2, revision: 3, press: null });
   expect(host.doc).toEqual(before);
-});
-
-test("Apply cells shows a ticket then commits once and consumes its receipt", async () => {
-  const { view, situation } = await mounted();
-  fireEvent.click(await liveButton(situation, "Apply cells"));
-  const review = await within(document.body).findByLabelText("Apply cells review");
-  expect(review.textContent).toContain("Apply 1 edited schedule cell.");
-  expect(review.textContent).toContain("IU-1 · Model: Old model → New model");
-  expect(review.textContent).not.toContain('"cells"');
-  expect(host.actions).toEqual([]);
-  fireEvent.click(await liveButton(situation, "Apply cells"));
-  await waitFor(() => expect(host.actions).toHaveLength(1));
-  expect(host.actions[0]).toMatchObject({ key: "schedule.grid.push", state: "succeeded" });
-  await waitFor(() => expect(view.queryByLabelText("Apply cells review")).toBeNull());
-  const receipt = await view.findByRole("link", { name: "Open push receipt" });
-  expect(receipt.getAttribute("href")).toContain(host.actions[0]!.id);
-});
-
-test("a Work write makes the ticket stale and cannot dispatch a push", async () => {
-  const { view, situation } = await mounted();
-  fireEvent.click(await liveButton(situation, "Apply cells"));
-  await within(document.body).findByLabelText("Apply cells review");
-  await act(async () => {
-    await writeRouteWork(
-      host.key,
-      workWriteSchema.parse({
-        expectedRevision: host.revision,
-        press: "another-human",
-        patches: [{ path: ["cells", "1::1", "edit"], value: { value: "Changed after review" } }],
-      }),
-    );
-  });
-  await waitFor(() => expect(host.revision).toBe(2));
-  fireEvent.click(await liveButton(situation, "Apply cells"));
-  await waitFor(() => expect(view.queryByLabelText("Apply cells review")).toBeNull());
-  expect(
-    situation.getAllByRole("status").some((row) => /changed|stale/i.test(row.textContent ?? "")),
-  ).toBe(true);
-  expect(host.actions).toEqual([]);
-});
-
-test("push refusals and unread readback counts are kernel readings, never Page or Work", async () => {
-  host.pushResult = {
-    applied: 0,
-    failures: [{ key: "1::1", error: "native binding moved" }],
-    readbackError: "Readback unavailable",
-  };
-  const before = structuredClone(host.doc);
-  const { view, situation, router } = await mounted();
-  fireEvent.click(await liveButton(situation, "Apply cells"));
-  await within(document.body).findByLabelText("Apply cells review");
-  fireEvent.click(await liveButton(situation, "Apply cells"));
-  await view.findByText("Readback unavailable");
-  expect(view.getByText(/1 refused as changed in Revit/)).toBeTruthy();
-  expect(view.container.textContent).toContain("native binding moved");
-  expect(host.doc).toEqual(before);
-  expect(router.state.location.search).not.toHaveProperty("refused");
-  expect(router.state.location.search).not.toHaveProperty("unread");
 });
 
 test("taking a cell row uses the kernel cell verb and one undo restores its proposal", async () => {

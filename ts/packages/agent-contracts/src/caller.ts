@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { pageKeySchema } from "./contribution.ts";
-import { addressSchema, documentRefSchema, type TargetResolution } from "./target.ts";
+import { addressSchema, documentRefSchema, executionTargetSchema } from "./target.ts";
 
 /* ── Caller identity (ADR 0017 D2) ───────────────────────────────────────────────────── */
 
@@ -151,11 +151,15 @@ export type PageWrite =
   | { kind: "thread"; thread: string }
   | { kind: "read"; refusal: Refusal };
 /** `GET /pages/<slug>/target`: one slot, resolved against the live Revits. Never a guess. */
-export type PageTargetReading = {
-  page: string;
-  slot: "default";
-  binding: PageChoice;
-  resolution: TargetResolution;
-  document: { session: string; openId: string; title: string } | null;
-  write: PageWrite | null;
-};
+export const pageTargetReadingSchema = z.object({
+  page: z.string(), slot: z.literal("default"), binding: pageChoiceSchema,
+  resolution: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("resolved"), target: executionTargetSchema }),
+    z.object({ kind: z.literal("checking") }), z.object({ kind: z.literal("failed"), message: z.string() }),
+    z.object({ kind: z.literal("choose"), reason: z.enum(["missing", "several-targets", "session-gone", "document-closed", "wrong-document-kind", "ambiguous"]) }),
+  ]),
+  document: z.object({ session: z.string(), openId: z.string(), title: z.string() }).nullable(),
+  write: z.discriminatedUnion("kind", [z.object({ kind: z.literal("pea") }), z.object({ kind: z.literal("thread"), thread: z.string() }), z.object({ kind: z.literal("read"), refusal: refusalSchema })]).nullable(),
+});
+export type PageTargetReading = z.output<typeof pageTargetReadingSchema>;
+

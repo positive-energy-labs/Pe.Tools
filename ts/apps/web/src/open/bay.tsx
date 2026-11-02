@@ -115,7 +115,9 @@ function PatchBayBody({
   fixture,
   layout,
   refusal: shellRefusal = null,
+  administration = true,
 }: {
+  administration?: boolean;
   machine: Machine | null;
   loading: boolean;
   rows: readonly DocRow[];
@@ -450,6 +452,7 @@ function PatchBayBody({
             key={key}
             session={session}
             refusal={refusal}
+            administration={administration}
             hr={layout === "row"}
             doc={plan.doc}
             refuse={refuse}
@@ -731,6 +734,7 @@ function FreeSocket({
 
 /** One running Revit as a socket: its documents, its free hole, Pea's job, the strips. */
 function Socket({
+  administration = true,
   session,
   refusal,
   hr,
@@ -746,6 +750,7 @@ function Socket({
 }: {
   session: MachineSession;
   refusal: string | null;
+  administration?: boolean;
   /** Whether hr is offered here (the wide bay; the drawer keeps it off). */
   hr: boolean;
   doc: DocRow | null;
@@ -766,10 +771,10 @@ function Socket({
       session={session}
       facts={facts}
       anchor={keyOf(session)}
-      verbs={verbs}
+      verbs={!administration ? <a href={`/session-admin?session=${encodeURIComponent(keyOf(session))}`}>Manage session</a> : verbs}
       strip={
         <>
-          {lifecycle}
+          {administration && lifecycle}
           {strip}
         </>
       }

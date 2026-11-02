@@ -14,6 +14,6 @@ export const fixtureRecents = (name: string) =>
   (openSeeds[name as keyof typeof openSeeds] ?? openSeeds.refresh).readings
     .recents as typeof BAY_RECENTS;
 export const fixtureThread = (name: string) =>
-  (chatSeeds[name] ?? chatSeeds.send)!.readings.transcript as HarnessThreadBody;
+  (chatSeeds[name] ?? chatSeeds.attach)!.readings.transcript as HarnessThreadBody;
 export const fixtureThreadWork = (name: string) =>
   (chatSeeds[name] ?? chatSeeds.send)!.readings.threadWork as ThreadWorkSnapshot;

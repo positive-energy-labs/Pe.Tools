@@ -173,12 +173,12 @@ test("hosted selection stays local to chat and a hidden mount cannot activate a 
       ),
     ).toBe(true),
   );
-  const toggle = await view.findByRole("switch", { name: "Fixture pod" });
-  fireEvent.click(toggle);
-  await waitFor(() => expect(host.activations).toEqual([{ enabled: false }]));
+  expect(view.queryByRole("switch")).toBeNull();
+  expect(view.getByText("Manage Pod installation and trust").getAttribute("href")).toBe(
+    "/pod-admin",
+  );
   hide();
-  fireEvent.click(await view.findByRole("switch", { name: "Fixture pod" }));
-  expect(host.activations).toHaveLength(1);
+  expect(host.activations).toEqual([]);
 });
 
 test("a visible member without a basis observes once and publishes its lease facts", async () => {
@@ -199,7 +199,7 @@ test("a visible member without a basis observes once and publishes its lease fac
 
 test("fixture browsing keeps raw fragment bytes and makes no host or Work requests", async () => {
   const { view } = await mounted({ demo: true });
-  await view.findByText("fixture", { exact: true });
+  await view.findByRole("region", { name: "Fixture lane" });
   fireEvent.click(await view.findByText("settings/_fields/Header.json", { exact: true }));
   await view.findByLabelText("spec JSON");
   expect(host.calls).toEqual([]);

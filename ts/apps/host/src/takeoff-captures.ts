@@ -365,7 +365,7 @@ export class TakeoffCaptures {
   }
 
   async saveSchedule(value: Omit<ScheduleReading, "id">): Promise<ScheduleReading> {
-    const id = createHash("sha256").update(JSON.stringify(value)).digest("hex");
+    const id = createHash("sha256").update(canonicalRouteInput(value)).digest("hex");
     const reading = scheduleReadingSchema.parse({ ...value, id });
     const directory = join(this.directory, "schedules");
     await mkdir(directory, { recursive: true });

@@ -71,7 +71,6 @@ import type { RevitCatalogLoadedFamilies } from "@pe/host-contracts/generated";
 import { coerceJsonObject } from "../shared/coerce.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
 import { peSourceTree } from "./source-tree.ts";
-import { ductsGuideInputSchema, ductsGuideReading } from "./ducts-skill.ts";
 
 function base(): string {
   // Hosted tools inherit the authority already admitted by the host middleware.
@@ -819,14 +818,7 @@ async function dispatch(
           result,
         };
       }
-      if (row.key === "route:ducts.guide") {
-        const { section } = ductsGuideInputSchema.parse(payload);
-        return {
-          ok: true,
-          target: { session: null, document: null },
-          result: { guide: ductsGuideReading(section) },
-        };
-      }
+
       const view = /^route:([a-z-]+)\.(view|set-view)$/.exec(row.key);
       const route = view && routeViewRoutes.find((key) => key === view[1]);
       if (view && route) {
