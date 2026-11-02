@@ -265,7 +265,7 @@ export function takeoffBinding(id: string, row: unknown, scope: TakeoffScope): M
   const snapshot = snapshotOfObservation(valueOf(scope, "snapshot"));
   const world = snapshot?.world;
   const common = takeoffRefusal(scope);
-  let request: unknown = id === "refresh" ? takeoffReadScope(scope.page) : input;
+  let request: unknown = input;
   let why = common;
   if (id === "edit") {
     const edited =
@@ -353,7 +353,7 @@ export function takeoffBinding(id: string, row: unknown, scope: TakeoffScope): M
           ? "Refresh the selected adopted zones"
           : null);
   }
-  if (id === "refresh") request = {};
+  if (id === "refresh") request = takeoffReadScope(scope.page);
   if (id === "retry-r10") {
     request = { path: scope.page.r10 };
     why ??= scope.page.r10 ? null : "Choose an .r10 file";
