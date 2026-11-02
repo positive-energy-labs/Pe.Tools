@@ -6,6 +6,7 @@ import type { SdkReceiptReader } from "./native-receipts.ts";
 import { z } from "zod";
 import {
   canonicalRouteInput,
+  workBinding,
   tools,
   type Tool,
   type WorkHandle,
@@ -73,6 +74,7 @@ export interface WriteBinding {
   handle?(input: Record<string, unknown>): WorkHandle;
 }
 
+// TODO: docs/features/routes/LEDGER.md#s3-native-seal Prove preview/refetch/apply in browser against a controlled Revit session.
 /** Keep native derivation/recovery in its owner; admit only authored, revisioned Work. */
 export function workWriteBoundary(
   executor: CommandExecutor,
@@ -88,6 +90,8 @@ export function workWriteBoundary(
   const hooks = binding ?? definition.writeBoundary;
   if (!hooks || typeof hooks.derive !== "function" || typeof hooks.preview !== "function")
     throw Error("Write command requires typed derive and preview bindings");
+  if (!executor.seal) throw Error("Write command requires a producer-owned seal projection");
+  const project = executor.seal;
   const { route, key } = hooks;
   const spec = (registeredWork ??
     (tools[route as keyof typeof tools] as Tool)?.work)! as NonNullable<Tool["work"]> & {
@@ -110,29 +114,12 @@ export function workWriteBoundary(
       const work = hooks.handle ? hooks.handle(ctx.admission.input) : parsed.work;
       const previewOnly = hooks.previewOnly ?? parsed.previewOnly;
       if (ctx.admission.target.kind !== "document") throw refused("Exact document required");
-      // Address binding must be checked against the current open, never provenance `from`.
-      if (
-        work.key.binding !== "open" &&
-        work.key.binding !== "address" &&
-        !(hooks.workspace && work.key.binding === "workspace")
-      )
-        throw refused("Document Work required");
-      if (
-        work.key.binding === "open" &&
-        canonicalRouteInput(work.key.open) !== canonicalRouteInput(ctx.admission.target.ref)
-      )
-        throw refused("Work belongs to another document", "work.target");
       const target = ctx.admission.target.ref;
       const observed = await lifetime(bridge, target, false, deps);
       const address = observed.session.state?.openDocuments.find(
         (doc) => doc.openId === target.openId,
       )?.address;
-      if (
-        work.key.binding === "address" &&
-        (!address ||
-          String(address).replaceAll("/", "\\").toLowerCase() !==
-            String(work.key.target).replaceAll("/", "\\").toLowerCase())
-      )
+      if (!workBinding(work.key).admits(target, address, hooks.workspace))
         throw refused("Work belongs to another document", "work.target");
       // Each owner also resolves the native incarnation. The address check uses that same bound dependency below.
       const doc = (await ctx.selectWork(spec, work, (_doc, cells) => ({
@@ -190,18 +177,14 @@ export function workWriteBoundary(
           const dependencies = [...ctx.consumed, ...(bound.consumes ?? [])].filter(
             (item) => item.kind !== "document-mark",
           );
-          // Capture filing timestamps do not change the native request or authored destination.
-          const { at: _at, ...request } =
-            value && typeof value === "object" && !Array.isArray(value)
-              ? (value as Record<string, unknown>)
-              : { value };
+          const projection = project(value);
           const seal = writeSeal(
-            hooks.preview(request),
+            projection.request,
             input,
             work,
             { target, process: observed.process },
             dependencies,
-            (request as Record<string, unknown>).dependencies,
+            projection.evidence,
           );
           const previousSeal = preview?.state === "succeeded"
             ? (preview.result as { seal?: Record<string, unknown> }).seal : undefined;
@@ -222,7 +205,7 @@ export function workWriteBoundary(
       if (p.previewOnly && !hooks.nativePreview)
         return {
           previewOnly: true,
-          derivedRequest: hooks.preview(p.value),
+          derivedRequest: project(p.value).request,
           authoredIntent: p.input,
           seal: p.seal,
           takenAt: p.takenAt,
@@ -240,7 +223,7 @@ export function workWriteBoundary(
       return {
         ...(result as object),
         previewOnly: p.previewOnly,
-        derivedRequest: hooks.preview(p.value),
+        derivedRequest: project(p.value).request,
         seal: p.seal,
         takenAt: p.takenAt,
       };

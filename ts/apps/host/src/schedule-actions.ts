@@ -356,7 +356,7 @@ export function scheduleExecutors(
       throw refused("Schedule Work changed; read it and bind again");
     const document = scheduleGridDocumentSchema.parse(view.doc);
     const previous = document.basis
-      ? await captures.schedule(document.basis.captureId).catch(() => null)
+      ? await captures.schedule(document.basis.captureId).catch((error) => { console.error("schedule-actions: asynchronous operation failed", error); return null; })
       : null;
     const patches = document.basis
       ? rebindScheduleWork(document, previous, reading)
@@ -373,6 +373,7 @@ export function scheduleExecutors(
     },
   });
   const gridPush = command(commands["schedule.grid.push"], preparedSchedulePushSchema, {
+    seal: (p) => ({ request: { scheduleId: p.reading.snapshot.scheduleId, scheduleUniqueId: p.reading.snapshot.scheduleUniqueId, edits: p.edits }, evidence: p.failures }),
     bind: async (ctx) => {
       const target = scheduleTarget(ctx);
       const { input } = ctx.admission;
@@ -569,6 +570,7 @@ export function scheduleExecutors(
     },
   });
   const capture = command(commands["schedule.capture"], preparedScheduleCaptureSchema, {
+    seal: (p) => ({ request: { scheduleId: p.scheduleId, pod: p.pod, path: p.path } }),
     bind: async (ctx) => {
       const target = scheduleTarget(ctx);
       const { input, id } = ctx.admission;
@@ -618,6 +620,7 @@ export function scheduleExecutors(
     },
   });
   const apply = command(commands["schedule.apply"], preparedScheduleApplySchema, {
+    seal: (p) => ({ request: p.input }),
     bind: async (ctx) => {
       const target = scheduleTarget(ctx);
       const process = (await lifetime(bridge, target, "project", deps)).process;

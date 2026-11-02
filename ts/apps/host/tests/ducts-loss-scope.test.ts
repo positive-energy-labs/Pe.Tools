@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { expect, test, vi } from "vite-plus/test";
-import { ductWriteEvidence, lossSnapshot } from "../src/ducts-actions.ts";
+import { lossSnapshot } from "../src/ducts-actions.ts";
+import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";
 import { writeSeal } from "../src/work-write-boundary.ts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { ductsRouteState } from "@pe/agent-contracts";
@@ -49,6 +50,27 @@ test("fan preview survives identical re-pricing but rejects changed model inputs
     truncated: false,
     elapsedMs: 12,
   };
+  // Every set-valued collection may be enumerated differently by a fresh native read.
+  const permute = (value: unknown, key = "", parent = ""): unknown => {
+    if (Array.isArray(value)) {
+      const items = value.map(item => permute(item, "", key));
+      return ["point", "tapPoint", "facing", "widthAxis", "polyline", "order", "criticalPath"].includes(key) || parent === "polyline" || (key === "ports" && parent === "inline") ? items : items.reverse();
+    }
+    return value && typeof value === "object"
+      ? Object.fromEntries(Object.entries(value).reverse().map(([k, v]) => [k, permute(v, k, key)])) : value;
+  };
+  const facts = ductWriteEvidence(snapshot);
+  const permuted = permute(snapshot) as typeof snapshot;
+  Object.assign(permuted.document, { readAt: "new clock", elapsedMs: 900, futureDiagnostic: "new" });
+  Object.assign(permuted.walk!, { elapsedMs: 1000, futureDiagnostic: "new" });
+  for (const node of permuted.nodes) Object.assign(node, { futureDiagnostic: "new" });
+  expect(ductWriteEvidence(permuted)).toEqual(facts);
+  const geometry = structuredClone(snapshot);
+  geometry.nodes[0]!.connectors[0]!.point[0]! += 1;
+  expect(ductWriteEvidence(geometry)).not.toEqual(facts);
+  const topology = structuredClone(snapshot);
+  topology.nodes[0]!.connectors[0]!.connectedTo = { elementId: 999, connector: 4 };
+  expect(ductWriteEvidence(topology)).not.toEqual(facts);
   const preview = seal(snapshot);
   const reread = structuredClone(snapshot);
   reread.document.readAt = "2026-11-02T12:00:00Z";

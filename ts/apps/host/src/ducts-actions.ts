@@ -1,3 +1,4 @@
+import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";
 import { workWriteBoundary } from "./work-write-boundary.ts";
 import { commands, tools, canonicalRouteInput, type DuctsApplyInput } from "@pe/agent-contracts";
 import { healPlan, healRequestGroup } from "@pe/ducts-domain/heal";
@@ -27,30 +28,6 @@ const targetOf = (ctx: CommandContext) => {
   return ctx.admission.target.ref;
 };
 type Kind = "losses" | "heal" | "assign-fan";
-
-const evidenceSet = <T>(items: readonly T[]): T[] =>
-  [...items].sort((a, b) => canonicalRouteInput(a).localeCompare(canonicalRouteInput(b)));
-export const ductWriteEvidence = (snapshot: DuctSnapshot) => ({
-  ...snapshot,
-  nodes: evidenceSet(
-    snapshot.nodes.map((node) => ({ ...node, connectors: evidenceSet(node.connectors) })),
-  ),
-  segments: evidenceSet(
-    snapshot.segments.map((segment) => ({
-      ...segment,
-      connectors: evidenceSet(segment.connectors),
-    })),
-  ),
-  issues: evidenceSet(
-    snapshot.issues.map((issue) => ({
-      ...issue,
-      ...(issue.near ? { near: { ...issue.near, ports: evidenceSet(issue.near.ports) } } : {}),
-    })),
-  ),
-  document: { ...snapshot.document, readAt: "", elapsedMs: 0 },
-  // Acquisition duration is not a model input, including the connector walk's own clock.
-  ...(snapshot.walk ? { walk: { ...snapshot.walk, elapsedMs: 0 } } : {}),
-});
 
 /** Resolve group seeds through metadata, then read only their systems' complete geometry. */
 export async function healSnapshot(
@@ -165,20 +142,17 @@ export function ductsExecutors(
               slots: stagedDucts(doc).parameters,
             },
           );
-        const snapshot =
-          kind === "assign-fan"
-            ? intent?.fan
-              ? await read({ kind: "systems", systemIds: [intent.fan.systemId] })
-              : (() => {
-                  throw refused("Stage writeIntent.fan before assigning a fan");
-                })()
-            : kind === "losses"
-              ? await lossSnapshot(intent, read)
-              : await healSnapshot(intent?.groups ?? [], read);
+        const snapshot = await {
+          "assign-fan": () => {
+            if (!intent?.fan) throw refused("Stage writeIntent.fan before assigning a fan");
+            return read({ kind: "systems", systemIds: [intent.fan.systemId] });
+          },
+          losses: () => lossSnapshot(intent, read),
+          heal: () => healSnapshot(intent?.groups ?? [], read),
+        }[kind]();
         const evidence = ductWriteEvidence(snapshot);
-        let input: Record<string, unknown>,
-          dependencies: unknown = evidence;
-        if (kind === "losses") {
+        const { input, dependencies } = await {
+          losses: async () => {
           const tables = await invokeBridge(bridge, target, "ducts.tables", { ids: TABLE_IDS });
           const grids = toGrids(tables as Parameters<typeof toGrids>[0]);
           const catalogs = await readDuctCatalogs();
@@ -189,24 +163,27 @@ export function ductsExecutors(
             appliedAt ?? "",
             intent?.groups ?? [],
           );
-          input = request as unknown as Record<string, unknown>;
-          dependencies = { snapshot: evidence, tables, catalogs };
-        } else if (kind === "heal") {
+            return { input: request as unknown as Record<string, unknown>, dependencies: { snapshot: evidence, grids, catalogs: catalogs.tables } };
+          },
+          heal: async () => {
           if (!intent?.groups?.length)
             throw refused("Stage writeIntent.groups in Work before healing");
           const plan = healPlan(snapshot, doc);
-          input = {
+          const input = {
             groups: intent.groups.map((group) => {
               const found = plan.groups.find((item) => item.group === group);
               if (!found) throw refused(`Group ${group} has nothing to heal`);
               return healRequestGroup(found);
             }),
           };
-        } else {
+            return { input, dependencies: evidence };
+          },
+          "assign-fan": async () => {
           if (!intent?.fan) throw refused("Stage writeIntent.fan in Work before assigning a fan");
           fanOf(snapshot, intent.fan);
-          input = intent.fan;
-        }
+            return { input: intent.fan, dependencies: evidence };
+          },
+        }[kind]();
         return { process, input: { ...input, previewOnly }, dependencies };
       },
     };
@@ -214,7 +191,12 @@ export function ductsExecutors(
   const run = async (ctx: CommandContext, execution: ActionExecution, kind: Kind) => {
     const p = prepared.parse(execution.prepared),
       target = targetOf(ctx);
-    const key = kind === "losses" ? "ducts.apply" : `ducts.${kind}`;
+    const entry = {
+      losses: { key: "ducts.apply", retires: (input: Record<string, unknown>, value: unknown) => appliedCellPaths(input as unknown as DuctsApplyInput, value as DuctsApply.Res.Response) },
+      heal: { key: "ducts.heal", retires: (input: Record<string, unknown>, value: unknown) => healedCellPaths(input, value as DuctsHeal.Res.Response) },
+      "assign-fan": { key: "ducts.assign-fan", retires: () => [] as string[][] },
+    }[kind];
+    const key = entry.key;
     const value = await execution.step(
       "native",
       key,
@@ -223,12 +205,7 @@ export function ductsExecutors(
       { process: p.process as import("@pe/agent-contracts").NativeProcess },
     );
     const handle = ctx.admission.input.work as { key: import("@pe/agent-contracts").WorkKey };
-    const paths =
-      kind === "losses"
-        ? appliedCellPaths(p.input as unknown as DuctsApplyInput, value as DuctsApply.Res.Response)
-        : kind === "heal"
-          ? healedCellPaths(p.input, value as DuctsHeal.Res.Response)
-          : [];
+    const paths = entry.retires(p.input, value);
     const retired = paths.length
       ? await execution.retireWork(handle.key, "ducts", paths)
       : undefined;
@@ -259,6 +236,7 @@ export function ductsExecutors(
             key,
             workWriteBoundary(
               command(commands[key], prepared, {
+                seal: (p) => ({ request: commands[key].derivation.preview(p), evidence: p.dependencies }),
                 bind: (ctx) => bind(ctx, kind, preview),
                 run: (ctx, execution) => run(ctx, execution, kind),
               }),

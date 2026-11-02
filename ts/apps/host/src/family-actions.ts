@@ -1161,12 +1161,14 @@ export function familyExecutors(
     recover,
   });
   const familyApply = command(commands["family.apply"], familyAppliesSchema, {
+    seal: (p) => ({ request: p.kind === "batch" ? p.items.map(({ input }) => input) : p.input }),
     bind: async (ctx) =>
       applyBinding(ctx, ctx.admission.input, await reviewFamily(ctx), "family.plan"),
     run: (ctx, execution) => runApply(ctx, execution, false),
     recover,
   });
   const familiesApply = command(commands["families.apply"], familiesAppliesSchema, {
+    seal: (p) => ({ request: p.kind === "batch" ? p.items.map(({ input }) => input) : p.input }),
     bind: async (ctx) =>
       applyBinding(
         ctx,
@@ -1237,6 +1239,7 @@ export function familyExecutors(
     return { members, runs };
   };
   const familyCapture = command(commands["family.capture"], preparedFamilyCaptureSchema, {
+    seal: (p) => ({ request: { input: p.input, pod: p.pod, path: p.path, spec: p.spec } }),
     bind: async (ctx) => {
       if (ctx.admission.input.work)
         await ctx.selectWork(tools.family.work, ctx.admission.input.work, () => ({ cells: [] }));
@@ -1275,6 +1278,7 @@ export function familyExecutors(
     recover,
   });
   const familiesCapture = command(commands["families.capture"], preparedFamiliesCaptureSchema, {
+    seal: (p) => ({ request: { input: p.input, pod: p.pod, path: p.path, spec: p.spec } }),
     bind: async (ctx) => {
       if (ctx.admission.input.work)
         await ctx.selectWork(tools.families.work, ctx.admission.input.work, () => ({ cells: [] }));
@@ -1493,6 +1497,7 @@ export function familyExecutors(
     },
   });
   const parameterApply = command(commands["parameter-links.apply"], parameterApplySchema, {
+    seal: (p) => ({ request: p.input }),
     bind: async (ctx) => {
       const handle = handleOf(ctx),
         doc = await ctx.selectWork(tools["parameter-links"].work, handle, () => ({ facts: [] })),
@@ -1565,6 +1570,7 @@ export function familyExecutors(
     recover,
   });
   const build = command(commands["family.build"], buildSchema, {
+    seal: (p) => ({ request: p.input }),
     bind: async (ctx) => {
       if (ctx.admission.input.work) await familySelection(ctx);
       const bound = await nativeBinding(ctx, false),

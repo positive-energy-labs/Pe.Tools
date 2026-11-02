@@ -162,6 +162,7 @@ export function takeoffExecutors(
   });
   return {
     "takeoffs.initialize": command(commands["takeoffs.initialize"], preparedCarrierSchema, {
+      seal: (p) => ({ request: { process: p.process } }),
       bind: (ctx) => bindCarrier(ctx),
       run: (ctx, execution) =>
         runCarrier(ctx, execution, captures, bridge, ctx.admission.input.stage, async () => ({
@@ -169,6 +170,7 @@ export function takeoffExecutors(
         })),
     }),
     "takeoffs.adopt": command(commands["takeoffs.adopt"], preparedCarrierSchema, {
+      seal: (p) => ({ request: { process: p.process } }),
       bind: (ctx) => bindCarrier(ctx),
       run: (ctx, execution) =>
         runCarrier(ctx, execution, captures, bridge, "Adoption", async (native) => {
@@ -180,6 +182,7 @@ export function takeoffExecutors(
         }),
     }),
     "takeoffs.partition": command(commands["takeoffs.partition"], preparedCarrierSchema, {
+      seal: (p) => ({ request: { process: p.process } }),
       bind: (ctx) => bindCarrier(ctx),
       run: (ctx, execution) =>
         runCarrier(ctx, execution, captures, bridge, "Materialization", (native) =>
@@ -190,6 +193,7 @@ export function takeoffExecutors(
         ),
     }),
     "rooms.partition": command(commands["rooms.partition"], preparedCarrierSchema, {
+      seal: (p) => ({ request: { process: p.process } }),
       bind: (ctx) =>
         bindCarrier(ctx, () =>
           selectRooms(ctx, (doc, paths) =>
@@ -207,6 +211,7 @@ export function takeoffExecutors(
         }),
     }),
     "rooms.draw": command(commands["rooms.draw"], preparedCarrierSchema, {
+      seal: (p) => ({ request: { process: p.process } }),
       bind: (ctx) => bindCarrier(ctx, () => selectRooms(ctx, () => [])),
       run: (ctx, execution) =>
         runCarrier(ctx, execution, captures, bridge, "Rooms", (native) => {
@@ -214,7 +219,7 @@ export function takeoffExecutors(
           return value(ctx, native, "rooms.draw", input);
         }),
     }),
-    // TODO: rooms.write native receipts report only a count; retain edits until receipts identify confirmed guid/field cells.
+    // TODO: docs/features/routes/LEDGER.md#s7-1cd8580b01 rooms.write native receipts report only a count; retain edits until receipts identify confirmed guid/field cells.
     "rooms.write": command(
       {
         ...commands["rooms.write"],
@@ -224,6 +229,7 @@ export function takeoffExecutors(
       },
       preparedCarrierSchema,
       {
+        seal: (p) => ({ request: { process: p.process } }),
         bind: (ctx) =>
           bindCarrier(ctx, () =>
             selectRooms(ctx, (_doc, paths) =>
@@ -243,6 +249,7 @@ export function takeoffExecutors(
       },
     ),
     "rooms.merge": command(commands["rooms.merge"], preparedCarrierSchema, {
+      seal: (p) => ({ request: { process: p.process } }),
       bind: (ctx) =>
         bindCarrier(ctx, () =>
           selectRooms(ctx, (doc, paths) =>
@@ -264,6 +271,7 @@ export function takeoffExecutors(
         }),
     }),
     "takeoffs.sync": command(commands["takeoffs.sync"], preparedSyncSchema, {
+      seal: (p) => ({ request: { edits: p.edits, decisions: p.decisions }, evidence: p.capture }),
       bind: async (ctx) => {
         const { target, process } = await bindModel(ctx, bridge, deps);
         const { input } = ctx.admission;

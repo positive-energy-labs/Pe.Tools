@@ -2,7 +2,7 @@ import { expect, test, vi } from "vite-plus/test";
 import { Effect } from "effect";
 import { z } from "zod";
 import { commands, tools, type Command, type ActionReceipt } from "@pe/agent-contracts";
-import { workWriteBoundary, writeSeal } from "../src/work-write-boundary.ts";
+import { workWriteBoundary } from "../src/work-write-boundary.ts";
 import type { CommandContext } from "../src/command-executor.ts";
 import type { ActionExecution } from "../src/action-journal.ts";
 import type { RevitBridge } from "../src/bridge.ts";
@@ -70,6 +70,10 @@ async function fixture() {
           effects: [{ kind: "document", ref }],
           prepare: async () => ({ request, dependencies: evidence }),
         };
+      },
+      seal: (raw) => {
+        const p = z.object({ request: z.string(), dependencies: z.unknown() }).parse(raw);
+        return { request: { request: p.request }, evidence: p.dependencies };
       },
       run,
     },
@@ -215,45 +219,10 @@ test("refetching the same dependency set in a different order preserves the prev
   });
 });
 
-test("seal properties: canonical keys, dependency sets and Work paths; every real input remains binding", () => {
-  const work = {
-    key: {
-      binding: "open" as const,
-      route: "schedules",
-      target: null,
-      open: { session: "A", openId: "doc" },
-    },
-    revision: 1,
-  };
-  const consumed = [
-    {
-      kind: "work" as const,
-      probe: { handle: work, paths: [["a"], ["b"]], edits: [["a"], ["b"]] },
-      expected: { a: 1, b: 2 },
-    },
-  ];
-  const seal = (
-    request = { a: 1, b: 2 },
-    handle = work,
-    incarnation = { openId: "doc" },
-    deps = consumed,
-    evidence = { version: 1 },
-  ) => writeSeal(request, { a: 1 }, handle, incarnation, deps, evidence);
-  const baseline = seal();
-  for (let i = 0; i < 64; i++) {
-    const refetch = structuredClone(consumed);
-    if (i % 2) refetch[0]!.probe.paths.reverse();
-    if (i % 3) refetch[0]!.probe.edits.reverse();
-    if (i % 5) refetch.push(structuredClone(refetch[0]!));
-    expect(seal({ b: 2, a: 1 }, structuredClone(work), { openId: "doc" }, refetch)).toEqual(
-      baseline,
-    );
-  }
-  expect(seal({ a: 2, b: 2 })).not.toEqual(baseline);
-  expect(seal(undefined, { ...work, revision: 2 })).not.toEqual(baseline);
-  expect(seal(undefined, undefined, { openId: "reopened" })).not.toEqual(baseline);
-  expect(seal(undefined, undefined, undefined, undefined, { version: 2 })).not.toEqual(baseline);
-  const changed = structuredClone(consumed);
-  changed[0]!.expected.a = 3;
-  expect(seal(undefined, undefined, undefined, changed)).not.toEqual(baseline);
+
+test("write admission refuses a producer without a semantic projection", () => {
+  expect(() => workWriteBoundary({
+    definition: commands["schedule.apply"], prepared: z.unknown(),
+    bind: async () => ({ effects: [] }), run: async () => null,
+  }, {} as RevitBridge["Service"])).toThrow("producer-owned seal projection");
 });

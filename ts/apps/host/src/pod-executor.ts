@@ -20,6 +20,7 @@ export function podExecutor(declaration: PodOperation, native: CommandExecutor):
     definition: op.definition,
     retires: op.retires,
     prepared,
+    seal: (raw) => { const p = prepared.parse(raw); return { request: p.input, evidence: native.seal?.(p.value) }; },
     async bind(ctx) {
       if (op.definition.effect === "query") throw Error("Pod reads require /call, never the mutation gateway");
       const input = structuredClone(op.input(ctx.admission.input));

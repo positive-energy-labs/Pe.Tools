@@ -19,6 +19,7 @@ export function dataTableExecutors(
         input: nativeInputSchema("data-table.apply"),
       }),
       {
+        seal: (p) => ({ request: p.input }),
         bind: async (ctx) => {
           const { target, input } = ctx.admission;
           if (target.kind !== "document") throw refused("Exact project document required");

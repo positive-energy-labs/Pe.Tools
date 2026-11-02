@@ -20,6 +20,7 @@ import { hostCaptures } from "./captures-route.ts";
 import { readNativeReceipt } from "./native-receipts.ts";
 import { Effect } from "effect";
 import { CANCEL_OPERATION_KEY } from "./bridge.ts";
+import { commandCatalogAxes } from "../../../packages/agent-contracts/src/command-axes.ts";
 import { commands } from "@pe/agent-contracts";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 
@@ -52,6 +53,8 @@ export function commandRegistry(
   ]) {
     for (const [key, factory] of Object.entries(group)) {
       if (implementations[key]) throw Error(`Command '${key}' has two executors`);
+      if (commandCatalogAxes[key as keyof typeof commandCatalogAxes]?.effect === "ModelWrite" && !factory.seal)
+        throw Error(`ModelWrite ${key} requires a producer-owned seal projection`);
       implementations[key] = factory;
     }
   }
