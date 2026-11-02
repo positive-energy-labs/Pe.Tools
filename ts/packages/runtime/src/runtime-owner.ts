@@ -1,6 +1,10 @@
 import { join } from "node:path";
 import { isSea } from "node:sea";
-import { hostProcessIdentity, productInstallLayout } from "@pe/host-contracts/contracts";
+import {
+  HOST_CONTEXT_VARIABLE,
+  hostProcessIdentity,
+  productInstallLayout,
+} from "@pe/host-contracts/contracts";
 import { normalizeSourceRoot } from "@pe/host-contracts/pe-service";
 import {
   checkoutRootFrom,
@@ -56,8 +60,17 @@ export function resolveLaneAndRoot(): {
   )
     throw Error(`Configured host service '${serviceName}' does not belong to this runtime.`);
   const owner = { lane, sourceRoot, installedRoot, serviceName };
+  // Departs from "operator cwd picks the checkout": a host-spawned child (the Pea MCP server) carries
+  // the host's URL and context, so the host already named the runtime, and the harness's cwd (its
+  // world root) may sit in any checkout. The source-root variable and module checkout still hold.
+  const hostSpawned =
+    /^https?:\/\//i.test(process.env[hostProcessIdentity.hostBaseUrlVariable]?.trim() ?? "") &&
+    Boolean(process.env[HOST_CONTEXT_VARIABLE]?.trim());
   if (lane === "dev") {
-    for (const candidate of [process.env[sourceRootVariable]?.trim(), cwdRoot]) {
+    for (const candidate of [
+      process.env[sourceRootVariable]?.trim(),
+      hostSpawned ? null : cwdRoot,
+    ]) {
       if (!candidate) continue;
       const rejection = runtimeOwnerRejection(owner, { ...owner, sourceRoot: candidate });
       if (rejection) throw Error(rejection);
