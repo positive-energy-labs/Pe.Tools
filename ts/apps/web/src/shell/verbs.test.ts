@@ -47,7 +47,10 @@ vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({
     ...args: Parameters<
       typeof import("../../../../packages/mcps/src/shared/takeoff-action-client").runSemanticAction
     >
-  ) => (/\.preview$|^ducts\.preview-/.test(String(args[0])) ? transport.preview(...args) : transport.run(...args)),
+  ) =>
+    /\.preview$|^ducts\.preview-/.test(String(args[0]))
+      ? transport.preview(...args)
+      : transport.run(...args),
   actionResult: (receipt: { result?: unknown }) => receipt.result,
   cancelRunningAdmissions: vi.fn(async () => []),
 }));
@@ -822,4 +825,36 @@ test("staged commands prepare and dispatch against their own ack while Work deli
   expect((await invoke(ctx, command("none"), null, { stage: "sheet" })).state).toBe("done");
   expect(transport.preview.mock.calls[0]![3]).toMatchObject({ revision: 5 });
   expect(transport.run.mock.calls[0]![3]).toMatchObject({ revision: 5 });
+});
+
+test("kernel reviews always project exact changes even when a presenter omits them", async () => {
+  const env = environment("human");
+  const verb = commandVerb(
+    "takeoffs.initialize",
+    { label: "Initialize", input: z.object({ stage: z.string() }), review: "shown" },
+    {
+      stage: (_scope, input) => input,
+      intent: () => ({}),
+      prepare: () => ({
+        plan: [
+          {
+            changes: [
+              {
+                kind: "Update",
+                key: "Amperage",
+                before: "1.01 A",
+                after: { value: "1.1", unit: "Amperes" },
+              },
+            ],
+          },
+        ],
+      }),
+      present: () => ({ sentence: "Summary", rows: [] }),
+    },
+  );
+  const result = reviewed(await invoke(env.ctx, verb, null, { stage: "sheet" }));
+  expect(result.ticket.presentation.rows).toContain(
+    'Update Amperage: 1.01 A \u2192 {"value":"1.1","unit":"Amperes"}',
+  );
+  await invoke(env.ctx, verb, null, { stage: "sheet" }, { kind: "cancel", ticket: result.ticket });
 });

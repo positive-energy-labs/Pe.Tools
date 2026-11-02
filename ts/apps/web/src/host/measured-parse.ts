@@ -50,7 +50,7 @@ export function useMeasuredParse(basis: unknown, scope?: HostCallOptions) {
             ...(answer.text != null && {
               display: /feetFractionalInches|fractionalInches/.test(displayUnit.typeId)
                 ? answer.text
-                : `${answer.text} ${word}`,
+                : `${answer.value} ${word}`,
             }),
           }
         : { refusal: answer.refusal ?? `Revit could not read "${text}" here.` };

@@ -1,3 +1,4 @@
+import { reviewChanges } from "./review-value";
 import { z } from "zod";
 import {
   canonicalRouteInput,
@@ -844,6 +845,8 @@ async function invokeCore<C extends Caller>(
                 ...(binding.present?.(evidence, scope) ?? genericReview(verb, evidence)),
                 worksharing: worksharingOf(evidence),
               };
+              // Exact changes are mandatory even when a route supplies its own summary.
+              presentation.rows = [...new Set([...presentation.rows, ...reviewChanges(evidence)])];
               const { page, ...words } = presentation;
               if (page && ctx.landReview) {
                 ctx.landReview(copy(page));
