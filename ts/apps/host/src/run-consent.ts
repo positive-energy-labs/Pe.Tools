@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { Clock, Context, Deferred, Effect } from "effect";
 import type {
   AllowDecision,
   CommandConsent,
@@ -14,13 +15,41 @@ import type {
  * until Stop), so it can stay long enough to notice an OS notice and press Reject.
  */
 export const WRITE_COUNTDOWN_MS = 60_000;
+
+/** How a window ends: a person's answer through `decide`, or its deadline passing. */
+export type WindowEnd = "answered" | "deadline";
+
+/** The window's deadline, read from `Clock`: the timestamp the ask shows is the one the window keeps. */
+export const windowDeadline = Clock.currentTimeMillis.pipe(
+  Effect.map((now) => now + WRITE_COUNTDOWN_MS),
+);
+
+/**
+ * The consent window (ADR 0027 rule 11) on `Clock`: it ends when `answered` completes (Allow,
+ * Reject or a close) or at `deadlineMs`, whichever comes first. Sleeping to the stored deadline,
+ * not for a fresh 60 s, keeps the auto-approve instant equal to the deadline the UI read.
+ */
+export const consentWindow = Effect.fn("consent.window")(function* (
+  answered: Deferred.Deferred<void>,
+  deadlineMs: number,
+) {
+  const now = yield* Clock.currentTimeMillis;
+  return yield* Deferred.await(answered).pipe(
+    Effect.as<WindowEnd>("answered"),
+    Effect.timeoutOrElse({
+      duration: Math.max(0, deadlineMs - now),
+      orElse: () => Effect.succeed<WindowEnd>("deadline"),
+    }),
+  );
+});
 const key = (run: RunRef) => JSON.stringify([run.thread, run.turn]);
 type Run = {
   ref: RunRef;
   root: RunRef;
   state: RunConsent;
   waiters: Map<string, { run: RunRef; resolve: (decision: AllowDecision | null) => void }>;
-  timer?: ReturnType<typeof setTimeout>;
+  /** Completed by any answer or close; the window fiber then ends without auto-approving. */
+  answered?: Deferred.Deferred<void>;
   rejectedBy?: string;
 };
 export type ConsentEvent =
@@ -79,6 +108,8 @@ export class RunConsents {
     private readonly documentName?: (ref: DocumentRef) => string | undefined,
     private readonly autoApprove: () => boolean = () => true,
     private readonly persist: (thread: string, decision: AllowDecision | null) => void = () => {},
+    /** Services the window runs on; a test passes a context carrying `TestClock`. */
+    private readonly services: Context.Context<never> = Context.empty(),
   ) {}
   restore(thread: string, decision: AllowDecision | null | undefined) {
     if (decision) this.threads.set(thread, decision);
@@ -171,7 +202,9 @@ export class RunConsents {
     if (run.state.state === "idle") {
       const requestId = randomUUID(),
         auto = this.autoApprove(),
-        deadline = auto ? new Date(Date.now() + WRITE_COUNTDOWN_MS).toISOString() : undefined;
+        // effect-edge: consent window driven from Promise callers until phase 5
+        deadlineMs = auto ? Effect.runSyncWith(this.services)(windowDeadline) : undefined,
+        deadline = deadlineMs === undefined ? undefined : new Date(deadlineMs).toISOString();
       run.state = {
         state: "waiting",
         requestId,
@@ -195,19 +228,31 @@ export class RunConsents {
           { optionId: "stop_writes", name: "Reject", kind: "reject_once" },
         ],
       });
-      if (deadline) {
-        run.timer = setTimeout(
-          () => this.decide(run.ref.thread, requestId, "allow_now", "deadline"),
-          WRITE_COUNTDOWN_MS,
+      if (deadlineMs !== undefined) {
+        const answered = Deferred.makeUnsafe<void>();
+        run.answered = answered;
+        // effect-edge: consent window driven from Promise callers until phase 5
+        Effect.runForkWith(this.services)(
+          consentWindow(answered, deadlineMs).pipe(
+            Effect.flatMap((end) =>
+              end === "deadline"
+                ? Effect.sync(() => this.decide(run.ref.thread, requestId, "allow_now", "deadline"))
+                : Effect.void,
+            ),
+          ),
         );
-        run.timer.unref();
       }
     } else if (run.state.state === "waiting" && !run.state.commands.includes(id)) {
       run.state.commands.push(id);
       this.record(run);
     }
     const decision = await answer;
-    if (!decision) throw Error(run.rejectedBy ? `rejected by ${run.rejectedBy}` : "consent.stopped: writes stopped before approval");
+    if (!decision)
+      throw Error(
+        run.rejectedBy
+          ? `rejected by ${run.rejectedBy}`
+          : "consent.stopped: writes stopped before approval",
+      );
     return { run: run.ref, decision };
   }
   decide(thread: string, requestId: string, optionId: string, by: "user" | "deadline" = "user") {
@@ -221,7 +266,7 @@ export class RunConsents {
     if (!run) return false;
     if (run.state.state === "allowed") return true;
     if (optionId !== "allow_now" && optionId !== "stop_writes") return false;
-    clearTimeout(run.timer);
+    this.endWindow(run);
     this.answers.set(requestId, thread);
     if (optionId === "stop_writes") {
       run.rejectedBy = "you";
@@ -281,7 +326,7 @@ export class RunConsents {
       this.persist(ref.thread, null);
       this.threads.delete(ref.thread);
     }
-    clearTimeout(run.timer);
+    this.endWindow(run);
     const ask = run.state.state === "waiting" ? run.state.requestId : null;
     const root = this.runs.get(key(run.root));
     const decision =
@@ -307,6 +352,9 @@ export class RunConsents {
           waiter.resolve(null);
           root.waiters.delete(id);
         }
+  }
+  private endWindow(run: Run) {
+    if (run.answered) Deferred.doneUnsafe(run.answered, Effect.void);
   }
   closeAll() {
     for (const run of this.runs.values()) this.close(run.ref, "restart");

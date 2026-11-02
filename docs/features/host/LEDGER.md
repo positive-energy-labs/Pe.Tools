@@ -197,6 +197,7 @@ Rebuilt 2026-10-22 against `a553a15a`; C# declarations and generated metadata ow
 
 ## Owed
 
+- 2026-11-02, retire `ts/apps/host/tests/effect-test.ts` (`effectTest`, the `it.effect` stand-in under `TestClock`) for `@effect/vitest` once vite-plus runs vitest 5: `@effect/vitest` 4.0.x peers on `vitest >=5 <6`, while vite-plus 0.2.1 runs vitest 4.1.9, so installing it today would register `it.effect` on a second vitest instance that `vp test` never runs.
 - 2026-11-02, ADR 0029 phases 3 to 8 (scoped services, spawner, one fiber per request, Schedule/Stream idioms, FileSystem writers, schema unification on Effect Schema) on `t3/u2-effect`; each phase merges green through the wave's fast-forward recipe. Progress reports: `.artifacts/review/u2-2026-11-02/effect-phase-*.md`.
 - 2026-11-02, `%LOCALAPPDATA%` holds 553 `PeGcFixture*` directories left by tests between 2026-08-20 and 2026-08-29; find the fixture that creates them (grep `PeGcFixture` in dotnet tests) and make it clean up, then sweep the residue.
 - 2026-11-02, a host started with the product-home override writes thread state under `<home>/.local-state` but its service receipt under `%LOCALAPPDATA%/Positive Energy/Pe.Tools/state/service`; rule whether that split is by design (so an isolated run is discoverable by the owner's tools) or a leak, and write the ruling at `productRoot()` in `service-identity.ts`.
