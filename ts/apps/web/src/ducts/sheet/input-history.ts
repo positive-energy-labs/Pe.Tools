@@ -5,6 +5,7 @@ import type { DuctsSheetEdits, DuctsSheetOverview, RouteStatePatch } from "@pe/a
 import type { ReadingState } from "#/shell/readings";
 import type { WorkJournal } from "#/shell/journal";
 import type { SheetReading } from "../sources";
+import { CRITERION_WORDS } from "./criterion-words";
 
 export type Totals = DuctsSheetOverview["totals"];
 
@@ -157,7 +158,10 @@ export function editLabel(edits: DuctsSheetEdits, nameOf: (id: number) => string
     const name = /^\d+$/.test(key) ? (nameOf(Number(key)) ?? key) : key;
     return `${value === null ? "clear " : ""}${noun} ${name}`;
   }
-  if (edits.criteria) return `criteria ${Object.keys(edits.criteria).join(", ")}`;
+  if (edits.criteria)
+    return `criteria ${Object.keys(edits.criteria)
+      .map((key) => CRITERION_WORDS[key as keyof typeof CRITERION_WORDS] ?? key)
+      .join(", ")}`;
   if (edits.joins?.length) return `join ${edits.joins[0]!.verdict}`;
   if (edits.ends?.length) return `end ${edits.ends[0]!.verdict}`;
   return "edit";

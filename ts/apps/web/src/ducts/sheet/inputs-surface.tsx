@@ -14,6 +14,7 @@ import { SubjectText } from "@pe/kit/lang/subject-text";
 import { airflowOptions, type AirflowOption } from "../airflow";
 import { ChoiceCell, type CellAct } from "./choice-cell";
 import { criterionLabel } from "./criterion-words";
+import { editLabel } from "./input-history";
 import { fittingGroups, memberSubject, type FittingGroup } from "./fitting-groups";
 import type { EditMeta } from "./input-history";
 import { inputRows, SECTION_WORDS, type InputRow, type InputSection } from "./input-rows";
@@ -616,7 +617,7 @@ export function InputsSurface({
   const refusal = !ctx.sheet ? "Open a fan first" : busy ? "Wait for the current read" : null;
   const criteriaRefusal = refusal ?? (ctx.inputs ? null : "Wait for inputs");
   const changeInputs = (edits: DuctsSheetEdits) =>
-    apply(edits, { label: `criteria ${Object.keys(edits.criteria ?? {}).join(", ")}` });
+    apply(edits, { label: editLabel(edits, () => null) });
   const groups = fittingGroups(ctx.fittings, ctx.inputs, ctx.tableTitles ?? {});
   const typedCount = fields.rows.filter((r) => r.typed).length;
   const shown = fields.rows.filter(
