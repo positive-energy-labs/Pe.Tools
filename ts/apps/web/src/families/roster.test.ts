@@ -31,3 +31,13 @@ test("N2: the family picker draws one row per name, keyed by that name, however 
     familyRoster(catalog, { categories: ["Mechanical Equipment"], placement: "UnplacedOnly" }).map((o) => o.id),
   ).toEqual(["Unplaced Pump"]);
 });
+
+test("D7: a family cell's undo step is named in words, never its JSON key", async () => {
+  const { familiesGraph } = await import("./graph");
+  const { writeLabel } = await import("#/shell/work-writes");
+  const { familyCellKey } = await import("@pe/agent-contracts");
+  const key = familyCellKey({ familyName: "Fan Coil Unit - Ducted", typeName: "FCU-1", parameter: "PE_G___Model" });
+  expect(writeLabel([{ path: ["cells", key, "edit"], value: { value: "X" } }], familiesGraph).label).toBe(
+    "Edit PE_G___Model · FCU-1",
+  );
+});

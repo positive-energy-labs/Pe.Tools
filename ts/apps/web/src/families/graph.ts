@@ -5,6 +5,7 @@ import { z } from "zod";
 import {
   appliedScopeSchema,
   familiesRouteState,
+  familyCellAddress,
   familyCellKey,
   familyCellValueSchema,
   familyPlanResultSchema,
@@ -187,6 +188,16 @@ export const familiesGraph: RouteGraph<FamiliesPage, FamiliesRouteDocument> = de
       segment: "cells",
       groupOf: familiesGroupOf,
       nouns: ["parameter", "family"],
+      // History, the Timeline head and Undo name a cell `PE_G___Model · FCU-1`, never its JSON key;
+      // a group path (already words) passes through.
+      label: (key) => {
+        try {
+          const { parameter, typeName } = familyCellAddress(key);
+          return `${parameter} · ${typeName}`;
+        } catch {
+          return key;
+        }
+      },
       show: (value) =>
         String(
           typeof value === "object" && value !== null && "value" in value ? value.value : value,

@@ -44,6 +44,8 @@ type CatalogFamily = {
  * (`familyNames`), so a name can never draw two rows or two React keys (N2: a live Chadds catalog
  * drew duplicate rows). Rows that share a name merge, their placed counts summed, and the row
  * says so rather than hiding it. Placed families first, then by name.
+ * TODO: N2 owed — why the live Chadds catalog repeated rows is UNPROVEN (the C# collector emits one
+ * row per Family element); and the kit ListPopup draws every row (~800 here): virtualize it there.
  */
 export function familyRoster(
   catalog: readonly CatalogFamily[],
