@@ -16,6 +16,7 @@ import {
 import type { Providers } from "../src/harness/providers.ts";
 import { unreadLeg } from "../src/update-reader.ts";
 import { planAcquisition } from "../src/acquisition.ts";
+import { hostResourceObserver } from "../src/resource-adapters.ts";
 import { sdkBinary, sdkCommand } from "./sdk-replay.ts";
 
 const sdkRun = vi.hoisted(() => vi.fn<(args: readonly string[]) => Promise<string>>());
@@ -508,5 +509,57 @@ test("U-02: an automatic apply slower than the leg deadline is not a failed read
     machine.close();
     f.machine.close();
     vi.useRealTimers();
+  }
+});
+
+test("the machine resource publishes holdings counts while scoped reads retain the canonical ids", async () => {
+  const f = fixture();
+  vi.mocked(f.sources.holdings).mockResolvedValue([
+    {
+      openId: "sdk-open",
+      title: "Model",
+      holdings: {
+        elements: Array.from({ length: 100000 }, (_, id) => ({
+          id,
+          category: "Ducts",
+          name: "HELD_SENTINEL",
+          changedSinceSync: null,
+          requesters: [],
+        })),
+        worksets: [],
+        empty: false,
+        savedNotSynced: null,
+        unsaved: false,
+        workshared: true,
+      },
+    },
+  ]);
+  try {
+    await f.machine.refresh();
+    let snapshot: unknown;
+    const release = hostResourceObserver(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      f.machine,
+    )({ kind: "machine" }, (frame) => {
+      snapshot = frame;
+    });
+    try {
+      const json = JSON.stringify(snapshot);
+      expect(json).not.toContain("HELD_SENTINEL");
+      expect(JSON.parse(json).value.revit.sessions[0].holdings[0].holdings.elementCount).toBe(
+        100000,
+      );
+      expect(f.machine.current().revit.sessions![0]!.holdings![0]!.holdings.elements).toHaveLength(
+        100000,
+      );
+    } finally {
+      release();
+    }
+  } finally {
+    f.machine.close();
   }
 });

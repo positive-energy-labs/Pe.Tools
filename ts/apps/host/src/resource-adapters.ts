@@ -4,6 +4,7 @@ import { hostOwnership } from "./host-ownership.ts";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { Effect } from "effect";
 import {
+  discoveryMachine,
   readingKey,
   actionStatusSchema,
   receiptsForWork,
@@ -261,7 +262,7 @@ export function hostResourceObserver(
             accept({ error: "Machine owner is unavailable" });
             return () => {};
           }
-          return machine.observe((value) => accept({ value }));
+          return machine.observe((value) => accept({ value: discoveryMachine(value) }));
         case "sdk":
           return observeSdkReading(
             request,

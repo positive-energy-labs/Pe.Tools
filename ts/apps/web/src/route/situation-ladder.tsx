@@ -61,6 +61,7 @@ export function useDocumentLadder(
               ? session.row.id
               : `Revit · pid ${attachment.pid}`,
           allowed: session?.row.execution?.allowed === true,
+          censusError: session?.holdingsLeg.error,
         };
       }),
       unloaded: (observed?.revit.sessions ?? [])
@@ -126,7 +127,9 @@ export function useDocumentLadder(
               id: item.session,
               label: name(item),
               refusal: !item.allowed ? "Runtime ownership is not verified" : undefined,
-              sub: item.documents === null ? "documents unknown" : `${item.documents.length} open`,
+              sub:
+                item.censusError ??
+                (item.documents === null ? "documents unknown" : `${item.documents.length} open`),
             })),
             note: note ?? "no Revit answers the host",
             extra: unloaded.length ? (
