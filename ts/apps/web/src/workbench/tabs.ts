@@ -170,7 +170,7 @@ export function useRouteTabs() {
   const explicit = new Set(new URLSearchParams(location.searchStr).keys());
   const search =
     restorePageSearch(
-      "__pePageMove" in location.state ? undefined : tabPageSearch(location.pathname),
+      "__pePageMove" in location.state || "__peRouteTab" in location.state ? undefined : tabPageSearch(location.pathname),
       Object.fromEntries(Object.entries(location.search).filter(([key]) => explicit.has(key))),
     ) ?? {};
   const subject = subjectState(route ?? "", search);

@@ -295,7 +295,7 @@ export function useRestoreTabPage() {
   const at = useRouterState({select: (state) => state.location});
   const explicit = new Set(new URLSearchParams(at.searchStr).keys());
   const search = restorePageSearch(
-    "__pePageMove" in at.state ? undefined : tabPageSearch(at.pathname),
+    "__pePageMove" in at.state || "__peRouteTab" in at.state ? undefined : tabPageSearch(at.pathname),
     Object.fromEntries(Object.entries(at.search).filter(([key]) => explicit.has(key))),
   ) ?? {};
   const restoring = Object.keys(search).some((key) => !(key in at.search));
