@@ -1539,6 +1539,7 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
   markSiblings(swap ? b! : a, "supply");
   if (b) markSiblings(swap ? a : b, "return");
   const flowOpts: FlowOptions = {
+    name: g.name,
     terminalCfm,
     // Whatever its source: a receiving unit's design flow read from Revit weights the split exactly
     // as a typed one does (ducts LEDGER 2026-10-29). A typed 0 is a share; an untyped 0 is unset.
@@ -1622,7 +1623,7 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
       kind: "open-end",
       elementId: unit.id,
       effectInWg: null,
-      detail: `the roster names no inlet for ${unit.id}; the return side is not walked`,
+      detail: `the roster names no inlet for ${g.name(unit.id)}; the return side is not walked`,
       closer: {
         kind: "ruling",
         note: "check the fan's paired duct ports; no inlet could be identified",
@@ -1676,7 +1677,7 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
       ? [
           note(
             "flow-conflict",
-            `fan ${unit.id}: ${unitCfm.value} cfm (${provenance(unitCfm)}) conflicts with ${round(walkedFlow)} cfm (walked end sum); ${[...supply.w.ends, ...(ret?.w.ends ?? [])].filter((e) => e.end.kind === "open-end").length} open ends; their unknown flow does not establish the difference`,
+            `fan ${g.name(unit.id)}: ${unitCfm.value} cfm (${provenance(unitCfm)}) conflicts with ${round(walkedFlow)} cfm (walked end sum); ${[...supply.w.ends, ...(ret?.w.ends ?? [])].filter((e) => e.end.kind === "open-end").length} open ends; their unknown flow does not establish the difference`,
             unitCfm.value - walkedFlow,
           ),
         ]
@@ -1696,11 +1697,11 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
     ].map(([w, x]) => {
       const e = w.ends[x.end]!.end;
       const from = x.fan
-        ? `${tagOf(x.fan.unitId) || "unit"} ${x.fan.unitId}:${x.fan.portIndex}`
+        ? tagOf(x.fan.unitId) || g.name(x.fan.unitId)
         : "unnamed stream";
       return note(
         "inflow",
-        `inflow from ${from} at ${e.elementId}${assumeHeals ? " (assumed)" : ""}: ${x.source}`,
+        `inflow from ${from} at ${g.name(e.elementId)}${assumeHeals ? " (assumed)" : ""}: ${x.source}`,
         x.cfm,
       );
     }),
@@ -1714,7 +1715,7 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
         const fan = e.end.fan!;
         return note(
           "sibling",
-          `sibling ${tagOf(fan.unitId) || "unit"} ${fan.unitId}:${fan.portIndex} at ${e.end.elementId}: reached at its ${e.reached} on this fan's ${side} side; shares the trunk`,
+          `sibling ${tagOf(fan.unitId) || g.name(fan.unitId)} at ${g.name(e.end.elementId)}: reached at its ${e.reached} on this fan's ${side} side; shares the trunk`,
         );
       }),
     // R-SHARE: each sibling's draw on a shared terminal, then each shared terminal's consumers
@@ -1725,7 +1726,7 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
           const fan = w.ends[d.sibling]!.end.fan!;
           return note(
             "sibling",
-            `sibling ${tagOf(fan.unitId) || "unit"} ${fan.unitId}:${fan.portIndex} draws ${d.cfm == null ? "an unknown flow" : `${round(d.cfm)} cfm`} from shared terminal ${w.ends[d.terminal]!.end.elementId}: ${d.source ?? "no design flow"}`,
+            `sibling ${tagOf(fan.unitId) || g.name(fan.unitId)} draws ${d.cfm == null ? "an unknown flow" : `${round(d.cfm)} cfm`} from shared terminal ${g.name(w.ends[d.terminal]!.end.elementId)}: ${d.source ?? "no design flow"}`,
             d.cfm == null ? null : round(d.cfm),
           );
         }),
@@ -1758,7 +1759,7 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
           return [
             note(
               "sibling",
-              `shared terminal ${id}: consumers sum ${sum} cfm (this fan ${round(own)}, siblings ${drawn.map((d) => round(d.cfm!)).join(" + ")}); the terminal states ${stated.value} (${provenance(stated)})`,
+              `shared terminal ${g.name(id)}: consumers sum ${sum} cfm (this fan ${round(own)}, siblings ${drawn.map((d) => round(d.cfm!)).join(" + ")}); the terminal states ${stated.value} (${provenance(stated)})`,
               sum,
             ),
           ];
@@ -1770,7 +1771,7 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
       ...new Map(
         [...a.capped, ...(b?.capped ?? [])].map((c) => [`${c.elementId}:${c.connector}`, c]),
       ).values(),
-    ].map((c) => note("capped", `open end ${c.elementId}:${c.connector} ruled capped`)),
+    ].map((c) => note("capped", `an open end on ${g.name(c.elementId)} ruled capped`)),
     // Every auto-join the walks took, priced leg or not: a join that closes two walked stubs
     // into a loop (R-FACE) leaves no leg on any path, and is still a closure the engine took.
     ...[
@@ -1784,7 +1785,7 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
     ),
     ...Object.values(pricer.legs)
       .filter((l) => l.lossSource.ref.startsWith("merge boundary"))
-      .map((l) => note("merge", `merge ${l.elementId} branch loss: ${l.lossSource.ref}`)),
+      .map((l) => note("merge", `merge ${g.name(l.elementId)} branch loss: ${l.lossSource.ref}`)),
   ];
   // R3 (kaitpw 2026-10-28): `externalStatic` is PE_M_Fan_ExternalStaticPressure, the required ESP slot Pe writes; the page labels it "required (written)".
   const ratedEsp = input.inputs.units[String(unit.id)]?.esp.value ?? null;
@@ -1890,7 +1891,7 @@ export function buildChain(input: BuildChainInput): Chain {
       kind: "open-end",
       elementId: input.end.elementId,
       effectInWg: null,
-      detail: `${input.end.elementId} is not reached from ${input.start.elementId} under the walk's stop rules`,
+      detail: `${g.name(input.end.elementId)} is not reached from ${g.name(input.start.elementId)} under the walk's stop rules`,
       closer: { kind: "ruling", note: "check the start connector, or rule the stops between" },
     });
   else {

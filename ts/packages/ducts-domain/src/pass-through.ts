@@ -66,7 +66,7 @@ export function passThrough(snapshot: DuctSnapshot, passive: ReadonlySet<number>
           id: `open-end:passive:${id}:${c.index}`,
           kind: "open-end",
           elementIds: [id],
-          note: `passive ${markOf(unit) ?? id} port ${c.index} connects to nothing: no path through it to a fan on that side; connect it in Revit`,
+          note: `passive ${markOf(unit) ?? unit.type ?? unit.family ?? "unit"}: a port connects to nothing: no path through it to a fan on that side; connect it in Revit`,
           assumed: null,
           clearer: "person",
         });

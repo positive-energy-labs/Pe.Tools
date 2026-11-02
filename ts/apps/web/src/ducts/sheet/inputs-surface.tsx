@@ -473,10 +473,10 @@ function InputRowView({
   history: InputsHistory;
   refusal: string | null;
   apply: (edits: DuctsSheetEdits, meta: EditMeta) => void | Promise<unknown>;
-  nameOf: (id: number) => string | null;
+  nameOf: (id: number) => string;
   act?: CellAct;
 }) {
-  const who = row.title ?? row.ids.map((id) => nameOf(id) ?? String(id)).join(", ");
+  const who = row.title ?? row.ids.map((id) => nameOf(id)).join(", ");
   const c = row.control;
   const was =
     c.kind === "number"
@@ -602,7 +602,7 @@ export function InputsSurface({
   /** One input edit through the open sheet, recorded for undo with what it was. */
   apply: (edits: DuctsSheetEdits, meta: EditMeta) => void | Promise<unknown>;
   history: InputsHistory;
-  nameOf: (id: number) => string | null;
+  nameOf: (id: number) => string;
   /** Take or unsuggest a Pea suggestion on a choice's Work cell. */
   act?: CellAct;
 }): JSX.Element {

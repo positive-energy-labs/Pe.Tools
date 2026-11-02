@@ -390,7 +390,7 @@ it("open ends of different classifications 0.4 in apart warn and stay open; a co
   // Joined against the evidence by a person: anomalous, its note naming the repair.
   expect(joined.findings[0]).toMatchObject({ id, kind: "joined-by-proximity", grade: "anomalous" });
   expect(joined.findings[0]!.note).toBe(
-    "6ø duct 1 (SA 1) and 6ø duct 2 (RA 1) are joined across air classifications by a person's connect verdict. Fix: put both on one system in Revit.",
+    "6″ duct (SA 1) and 6″ duct (RA 1) are joined across air classifications by a person's connect verdict. Fix: put both on one system in Revit.",
   );
   // An ignore verdict on the warning silences it.
   expect(inferJoints(before, 1, ignoring(id)).findings).toEqual([]);
@@ -466,7 +466,7 @@ it("a damper C# finds inside a duct's body is spliced inline on it", () => {
         id,
         kind: "inline-by-inference",
         elementIds: [9, 1],
-        note: "accessory (Damper_Volume_Round) lies inside duct 1, 4.00 ft along it and aligned with it, with neither end connected; counted inline on it",
+        note: "accessory (Damper_Volume_Round) lies inside 6″ duct (SA 1), 4.00 ft along it and aligned with it, with neither end connected; counted inline on it",
         grade: "stretched",
       },
     ]);

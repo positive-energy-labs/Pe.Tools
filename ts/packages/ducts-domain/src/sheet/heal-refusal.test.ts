@@ -43,7 +43,7 @@ it.skipIf(!existsSync(CHADDS))(
       expect(open.kind).toBe("open-end");
       expect(open.closer.kind).toBe("ruling");
       expect(open.closer.note).toBe(
-        `nearest candidate is 13770538:0 on FC-23 (${OTHER_FC23})'s network; a tee there would merge streams (Q4); rule in Revit`,
+        `nearest candidate is 8″x6″ duct on FC-23's network; a tee there would merge streams (Q4); rule in Revit`,
       );
       expect(open.proposal).toBeUndefined();
       expect(w.heals.some((h) => h.proposal.from.elementId === 13756998)).toBe(false);

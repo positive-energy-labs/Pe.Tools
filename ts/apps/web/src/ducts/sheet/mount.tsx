@@ -92,7 +92,7 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
       fan: sheet?.overview.fan
         ? {
             unitId: sheet.overview.fan.unitId,
-            name: sheet.overview.fan.mark || nameOf(sheet.overview.fan.unitId) || "unit",
+            name: sheet.overview.fan.mark || nameOf(sheet.overview.fan.unitId),
           }
         : null,
       receiving: ({ elementId, connector }) => {
@@ -104,7 +104,7 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
         )?.fan;
         if (!fan || fan.unitId === sheet?.overview.fan?.unitId) return null;
         const mark = roster.find((row) => row.unitId === fan.unitId)?.mark;
-        return { unitId: fan.unitId, name: mark || nameOf(fan.unitId) || `unit ${fan.unitId}` };
+        return { unitId: fan.unitId, name: mark || nameOf(fan.unitId) };
       },
       fittingOf: (key) => sheet?.inputs?.fittings.find((f) => f.key === key) ?? null,
       tableTitles: sheet?.inputs?.tableTitles ?? {},

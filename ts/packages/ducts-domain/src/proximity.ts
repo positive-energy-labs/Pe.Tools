@@ -36,6 +36,7 @@
  * that end anyway, always `anomalous`, its note naming the reversed connector and the repair.
  */
 import { subjectName } from "./words.ts";
+import { elementLabeler } from "./element-label.ts";
 import type { DuctInferenceGrade, DuctsRouteDocument } from "@pe/agent-contracts";
 import { cells } from "./geometry.ts";
 import type { DuctSnapshot } from "./types.ts";
@@ -544,14 +545,11 @@ function infer(
   );
   const { find, union } = components(elements, equipment);
   const byId = new Map(elements.map((e) => [e.id, e]));
-  /** A person's name for an element: family and type (or size) and kind, its id, its system. */
+  /** A person's name for an element (elementLabeler, never its id) and its system. */
+  const label = elementLabeler(snapshot);
   const named = (id: number) => {
-    const e = byId.get(id)!;
-    const what =
-      "polyline" in e
-        ? `${e.size.replaceAll('"', "")} ${e.kind} ${id}`
-        : `${[e.family, e.type, e.kind].filter(Boolean).join(" ")} ${id}`;
-    return e.systemName ? `${what} (${e.systemName})` : what;
+    const system = byId.get(id)?.systemName;
+    return system ? `${label(id)} (${system})` : label(id);
   };
   /**
    * An open-to-open join's grade: `anomalous` across classes (a person's connect) or with both
@@ -595,7 +593,7 @@ function infer(
         id: `loop-by-inference:${id.slice("proximity:".length)}`,
         kind: "loop-by-inference",
         elementIds: [a, b],
-        note: `inferring ${id} closes a loop: ${a} and ${b} were already connected another way`,
+        note: "this inferred join closes a loop: its two ends were already connected another way",
         grade: null,
       });
     union(a, b);
@@ -626,7 +624,7 @@ function infer(
       id,
       kind: "inline-by-inference",
       elementIds: [n.id, host.segmentId],
-      note: `${subjectName(n.kind)}${n.family ? ` (${n.family})` : ""} lies inside duct ${host.segmentId}, ${at.toFixed(2)} ft along it and aligned with it, with neither end connected; counted inline on it`,
+      note: `${subjectName(n.kind)}${n.family ? ` (${n.family})` : ""} lies inside ${named(host.segmentId)}, ${at.toFixed(2)} ft along it and aligned with it, with neither end connected; counted inline on it`,
       grade: "stretched",
     });
     closes(id, n.id, host.segmentId);
@@ -724,13 +722,13 @@ function infer(
       }
       const lands =
         "port" in onto
-          ? `open end ${p.k} lands on open connector ${onto.port.k}'s face, ${how}, ${dist(p.point, onto.port.point) * 12 > 0.005 ? `${(dist(p.point, onto.port.point) * 12).toFixed(2)} in from its centre` : "centred"}`
-          : `open end ${p.k} lands on the ${face.label} of duct ${face.owner}, ${how}, ${onto.at.toFixed(2)} ft along it`;
+          ? `an open end of ${named(p.id)} lands on an open connector of ${named(onto.port.id)}, ${how}, ${dist(p.point, onto.port.point) * 12 > 0.005 ? `${(dist(p.point, onto.port.point) * 12).toFixed(2)} in from its centre` : "centred"}`
+          : `an open end of ${named(p.id)} lands on the ${face.label} of ${named(face.owner)}, ${how}, ${onto.at.toFixed(2)} ft along it`;
       if (crossing && verdict !== "connect") {
         across(
           id,
           [p.id, face.owner],
-          `${lands}, but ${p.k} is ${p.cls} and ${face.owner} is ${face.cls}; not joined`,
+          `${lands}, but one is ${p.cls} and the other ${face.cls}; not joined`,
         );
         continue;
       }
@@ -820,7 +818,7 @@ function infer(
       across(
         id,
         [p.id, s.id],
-        `${named(p.id)} ${where}, but ${p.k} is ${p.cls} and ${q.k} is ${q.cls}; not joined`,
+        `${named(p.id)} ${where}, but one is ${p.cls} and the other ${q.cls}; not joined`,
       );
       continue;
     }
@@ -831,7 +829,7 @@ function infer(
       id,
       kind: "joined-by-proximity",
       elementIds: [p.id, s.id],
-      note: `${named(p.id)}'s connector ${p.k} faces ${dot(p.axis, q.axis!) > 0 ? "away from" : "into"} its duct and it ${where}; treated as ${s.systemName ?? `duct ${s.id}`}'s terminal. Fix: replace the stand-in family or flip its connector (Family Foundry migration).`,
+      note: `${named(p.id)}'s connector faces ${dot(p.axis, q.axis!) > 0 ? "away from" : "into"} its duct and it ${where}; treated as ${s.systemName ?? named(s.id)}'s terminal. Fix: replace the stand-in family or flip its connector (Family Foundry migration).`,
       grade: "anomalous",
     });
     closes(id, p.id, s.id);
@@ -862,7 +860,7 @@ function infer(
         elementIds: ports.map((p) => p.id),
         connectors,
         gapIn,
-        note: `Open ends ${connectors.join(" and ")} are ${gapIn.toFixed(2)} in apart with opposed faces; possible missed join, not joined or priced across the gap.`,
+        note: `Open ends of ${named(ports[0]!.id)} and ${named(ports[1]!.id)} are ${gapIn.toFixed(2)} in apart with opposed faces; possible missed join, not joined or priced across the gap.`,
         grade: null,
       });
     }

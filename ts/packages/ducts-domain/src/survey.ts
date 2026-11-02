@@ -29,6 +29,7 @@ import { withStoredRulings } from "./rulings.ts";
 import { groupTree } from "./topology.ts";
 import { passiveOf, unitRoles, type UnitRole } from "./unit-roles.ts";
 import type { DuctSnapshot } from "./types.ts";
+import { elementLabeler } from "./element-label.ts";
 
 export interface Survey {
   snapshot: DuctSnapshot;
@@ -83,7 +84,7 @@ const ASSUMES = new Set([
   "out-of-phase",
 ]);
 
-const flowFinding = (f: FlowFinding): DuctFinding => {
+const flowFinding = (name: (id: number) => string) => (f: FlowFinding): DuctFinding => {
   switch (f.kind) {
     case "tag-without-mark":
       return {
@@ -99,7 +100,7 @@ const flowFinding = (f: FlowFinding): DuctFinding => {
         id: `flow:mark:${f.equipment}`,
         kind: f.kind,
         elementIds: [f.equipment],
-        note: `equipment ${f.equipment} is marked ${f.mark}; the load preview has no system tagged ${f.mark}`,
+        note: `${name(f.equipment)} is marked ${f.mark}; the load preview has no system tagged ${f.mark}`,
         assumed: null,
         clearer: "person",
       };
@@ -108,7 +109,7 @@ const flowFinding = (f: FlowFinding): DuctFinding => {
         id: `flow:no-terminals:${f.equipment}`,
         kind: f.kind,
         elementIds: [f.equipment],
-        note: `${f.mark} (${f.equipment}) roots no tree with a terminal; its load has nowhere to go`,
+        note: `${f.mark} roots no tree with a terminal; its load has nowhere to go`,
         assumed: null,
         clearer: "person",
       };
@@ -117,7 +118,7 @@ const flowFinding = (f: FlowFinding): DuctFinding => {
         id: `flow:no-mark:${f.equipment}`,
         kind: f.kind,
         elementIds: [f.equipment],
-        note: `${f.label} (${f.equipment}) feeds terminals but carries no Mark; no load preview system can match it`,
+        note: `${f.label} feeds terminals but carries no Mark; no load preview system can match it`,
         assumed: null,
         clearer: "person",
       };
@@ -126,7 +127,7 @@ const flowFinding = (f: FlowFinding): DuctFinding => {
         id: `flow:no-flow:${f.terminal}`,
         kind: f.kind,
         elementIds: [f.terminal],
-        note: `terminal ${f.terminal} has no design flow: no override, no load preview share, no positive Revit flow`,
+        note: `${name(f.terminal)} has no design flow: no override, no load preview share, no positive Revit flow`,
         assumed: null,
         clearer: "pea",
       };
@@ -284,7 +285,7 @@ export function survey(
       assumed: ASSUMES.has(f.kind) ? f.note : null,
       clearer: "person" as const,
     })),
-    ...flows.findings.map(flowFinding),
+    ...flows.findings.map(flowFinding(elementLabeler(snapshot))),
     ...m.issues.map((i) => ({
       id: i.id,
       kind: i.kind,

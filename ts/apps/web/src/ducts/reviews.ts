@@ -122,7 +122,7 @@ export function presentHeal(result: unknown, scope: VerbScope): VerbPresentation
             port?.shape === "round"
               ? `${port.diameterIn ?? "?"} in round`
               : `${port?.widthIn ?? "?"}×${port?.heightIn ?? "?"} in`;
-          return `${name(id!) ?? "duct element"} (element ${id}, end ${index}, ${size})`;
+          return `${name(id!) ?? "duct element"} (${size})`;
         })
         .join(" to ");
       return `${item.kind === "cap" ? "Place a cap on" : `Join by ${item.how ?? target.how}`} ${subjects}: ${item.outcome}${item.reason || item.check ? ` · ${item.reason ?? item.check}` : ""}`;
@@ -191,6 +191,15 @@ const METHODS: Record<string, string> = {
   "specific-coefficient": "Specific Coefficient",
   "ashrae-table": "ASHRAE table",
 };
+/** The loss record's slot keys (C# `DuctApplier.StoreEntries`), as a person reads them. */
+const SLOT_WORDS: Record<string, string> = {
+  fanStatic: "fan static",
+  fanFlow: "fan flow",
+  componentDrop: "component drop",
+  terminalDrop: "terminal drop",
+  fittingCoefficient: "fitting coefficient",
+  terminalFlow: "terminal flow",
+};
 const spoken = (value: string | null | undefined) =>
   value?.replace(/^(no server|not-defined|pe-server|specific-loss|specific-coefficient|ashrae-table)/, (m) => METHODS[m]!);
 
@@ -256,9 +265,12 @@ export function presentLosses(result: unknown, scope: VerbScope): VerbPresentati
               : "derived Work";
       const tail = `${write.outcome}${write.reason ? ` · ${write.reason}` : ""}`;
       // The store row is Pe's provenance record in Project Information; its "absent"/"revision n" are machine words.
+      // A slot entry names the slot the value resolver now reads (after), not only the record's old name.
+      if (write.id == null && write.kind === "slot")
+        return `Pe loss record (Project Information): ${SLOT_WORDS[write.key ?? ""] ?? write.key} slot ${spoken(write.before) ?? "none"} → ${spoken(write.after) ?? "none"} · ${tail}`;
       if (write.id == null)
         return `Pe loss record (Project Information): ${write.before === "absent" ? "none yet → created" : `${spoken(write.before) ?? "not available"} → updated`} · ${tail}`;
-      return `${name(write.id) ?? "element"} [${write.id}] · ${slot ?? write.kind}: ${spoken(write.before) ?? "not available"} → ${spoken(write.after) ?? next ?? "derived from Work"} · source: ${source} · ${tail}`;
+      return `${name(write.id) ?? "element"} · ${slot ?? write.kind}: ${spoken(write.before) ?? "not available"} → ${spoken(write.after) ?? next ?? "derived from Work"} · source: ${source} · ${tail}`;
     }),
   };
 }

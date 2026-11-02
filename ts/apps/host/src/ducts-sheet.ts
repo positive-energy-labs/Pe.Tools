@@ -39,6 +39,7 @@ import { readFirm, workLayer } from "./ducts-inputs.ts";
 import type { Sheet, Chain, SheetPath } from "@pe/ducts-domain/sheet/types";
 import { worksheet } from "@pe/ducts-domain/sheet/worksheet";
 import { beyondOf, stoppingUnits, type BeyondUnit } from "@pe/ducts-domain/sheet/beyond";
+import { elementLabeler } from "@pe/ducts-domain/element-label";
 /** Hops a beyond read walks from a stopping unit: enough for its stubs' 15 ft, never its whole network. */
 const BEYOND_HOPS = 12;
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
@@ -466,7 +467,7 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
               JSON.stringify([request.target, saved.layers, version]),
               tolerances,
               slots,
-              (unitId) => ports.find((p) => p.unitId === unitId)?.tag ?? `unit ${unitId}`,
+              (unitId) => ports.find((p) => p.unitId === unitId)?.tag || elementLabeler(snapshot)(unitId),
             )
           : [];
       // The engine hashes its inputs; the host also binds the native observation and exact request.
@@ -516,6 +517,7 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
       const roster = suggestRoster(snapshot, [], rosterInputs(inputs));
       const activeSlot = staged.terminalFlow ?? snapshot.slots?.terminalFlow ?? "terminalFlow";
       const rows = [];
+      const label = elementLabeler(snapshot);
       for (const port of [...roster.fans, ...roster.suggestions]) {
         const cached = [...entries.values()]
           .reverse()
@@ -548,7 +550,9 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
           unitId: port.unitId,
           uniqueId: unit?.uniqueId,
           portIndex: port.portIndex,
-          mark: port.tag,
+          // A blank tag reads as the unit's type/family (elementLabeler), never its id; the
+          // roster's `mark` is its display name, and fanLabel tells twins apart by place.
+          mark: port.tag || label(port.unitId),
           level: snapshot.levels.find((level) => level.id === unit?.levelId)?.name ?? null,
           system: unit?.systemName ?? null,
           kind: port.kind,

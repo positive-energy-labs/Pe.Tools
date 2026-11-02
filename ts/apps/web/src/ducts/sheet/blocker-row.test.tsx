@@ -29,7 +29,7 @@ it("a typed cfm makes the verb live before Enter, and the press runs that value"
       blocker={blocker}
       focused={false}
       closerOf={(b, typed) =>
-        describeCloser(b, typed, { terminalDrop: null, nameOf: () => null, wait: null })
+        describeCloser(b, typed, { terminalDrop: null, nameOf: () => "duct", wait: null })
       }
       onClose={onClose}
       onFocus={() => {}}
@@ -52,7 +52,7 @@ it("Enter commits the ask like an Inputs cell, and the verb press after a blur d
       blocker={blocker}
       focused={false}
       closerOf={(b, typed) =>
-        describeCloser(b, typed, { terminalDrop: null, nameOf: () => null, wait: null })
+        describeCloser(b, typed, { terminalDrop: null, nameOf: () => "duct", wait: null })
       }
       onClose={onClose}
       onFocus={() => {}}
@@ -77,7 +77,7 @@ it("Escape cancels the typed ask without running it", () => {
       blocker={blocker}
       focused={false}
       closerOf={(b, typed) =>
-        describeCloser(b, typed, { terminalDrop: null, nameOf: () => null, wait: null })
+        describeCloser(b, typed, { terminalDrop: null, nameOf: () => "duct", wait: null })
       }
       onClose={onClose}
       onFocus={() => {}}

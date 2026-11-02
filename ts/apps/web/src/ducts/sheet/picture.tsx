@@ -220,7 +220,7 @@ export function SheetPicture({
   const nameOf = (id: number) => {
     const mark = beyond.markOf.get(id);
     const name = namer(id);
-    return mark ? `${name ?? `element ${id}`} · ${beyondWords(mark)}` : name;
+    return mark ? `${name} · ${beyondWords(mark)}` : name;
   };
   // Hovering a context element names it in the readout (no tooltip): whose air it is.
   const { hovered } = useElementAttention();

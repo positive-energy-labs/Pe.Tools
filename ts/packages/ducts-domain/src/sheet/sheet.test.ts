@@ -487,10 +487,10 @@ it("an open end blocks its side; a vacant opposed port within the default gap au
   expect(sheet.blockers.some((b) => b.id === "inferred-join:52:1")).toBe(false);
   expect(
     sheet.notes.some((i) =>
-      i.text.includes("auto-joined 52:1 to 53:0 across 0.400 in, default \u22643 in"),
+      i.text.includes("across 0.400 in, default \u22643 in"),
     ),
   ).toBe(true);
-  expect(sheet.legs["53:0>1"]!.lossSource.ref).toContain("auto-joined 52:1 to 53:0");
+  expect(sheet.legs["53:0>1"]!.lossSource.ref).toContain("auto-joined");
   expect(ret.complete).toBe(true);
   expect(sheet.totals.requiredEspInWg).toBeNull();
   // A person's accept closes the join; the open supply end still withholds ESP.
@@ -634,7 +634,7 @@ it("R-FACE: two walked stubs whose vacant ends face each other propose a join; w
     ["terminal", 70],
     ["terminal", 71],
   ]);
-  expect(close.notes.some((i) => i.text.includes("auto-joined 64:1 to 65:1 across 2.400 in"))).toBe(
+  expect(close.notes.some((i) => i.text.startsWith("auto-joined") && i.text.includes("across 2.400 in"))).toBe(
     true,
   );
   expect(close.walkedElementIds).toEqual(expect.arrayContaining([64, 65]));
@@ -658,7 +658,7 @@ it.skipIf(!existsSync(CHADDS))(
     });
     expect(sheet.walkedElementIds.length).toBeLessThan(500); // W0-A's all-to-all walk leaked to 1470
     const plenum = sheet.blockers.find((b) => b.id === "inferred-join:14122436:1")!;
-    expect(plenum.detail).toMatch(/14106988:1, already capped by 14107111/);
+    expect(plenum.detail).toMatch(/^this end faces .+, already capped/);
     expect(plenum.closer.candidate).toMatchObject({ toElementId: 14106988, toConnector: 1 });
     expect(sheet.paths.find((p) => p.end.kind === "joins-other-fan")!.end.fan).toMatchObject({
       unitId: 13760867,
@@ -1137,12 +1137,12 @@ it("R-SHARE: a louver shared with a sibling's inlet carries both consumers; this
   expect(typed.blockers.filter((b) => b.kind === "no-flow")).toEqual([]);
   expect(typed.notes).toContainEqual({
     kind: "sibling",
-    text: "sibling F-200 200:1 draws 50 cfm from shared terminal 30: model:fanFlow",
+    text: expect.stringMatching(/^sibling F-200 draws 50 cfm from shared terminal .+: model:fanFlow$/),
     value: 50,
   });
   expect(typed.notes).toContainEqual({
     kind: "sibling",
-    text: "shared terminal 30: consumers sum 200 cfm (this fan 150, siblings 50); the terminal states 1120 (Work)",
+    text: expect.stringMatching(/^shared terminal .+: consumers sum 200 cfm \(this fan 150, siblings 50\); the terminal states 1120 \(Work\)$/),
     value: 200,
   });
 
@@ -1301,7 +1301,7 @@ it("R-SHARE + C3: a proposed transition in front of a shared plenum carries this
   // Defect 5: the louver's airflow slot is empty, so its Revit connector flow is the cross-check.
   expect(sheet.notes).toContainEqual({
     kind: "sibling",
-    text: "shared terminal 30: consumers sum 200 cfm (this fan 150, siblings 50); the terminal states 1120 (model:connector Flow)",
+    text: expect.stringMatching(/^shared terminal .+: consumers sum 200 cfm \(this fan 150, siblings 50\); the terminal states 1120 \(model:connector Flow\)$/),
     value: 200,
   });
 });

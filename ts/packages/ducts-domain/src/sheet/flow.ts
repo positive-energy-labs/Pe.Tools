@@ -40,6 +40,8 @@ export interface FlowOptions {
   ordinary?: boolean;
   /** R-SHARE: a sibling consumer's resolved design flow; null when unknown (a `no-flow` on the sibling). */
   siblingCfm?: (fan: FanPortRef) => { cfm: number; source: string } | null;
+  /** `elementLabeler` over the walked graph; provenance names units this way, never by id. */
+  name?: (id: number) => string;
 }
 
 /** R-SHARE: one sibling's draw on one shared terminal, from the sibling's junction out. */
@@ -228,13 +230,13 @@ export function flowsOf(
           detail: opts.only
             ? "the chain carries no flow; type one"
             : terminal && terminalAt(e) != null
-              ? `shared terminal ${e.end.elementId} states ${terminalAt(e)} cfm, less than its siblings draw (${drawOn(i) ?? "unknown"})`
+              ? `this shared terminal states ${terminalAt(e)} cfm, less than its siblings draw (${drawOn(i) ?? "unknown"})`
               : terminal
-                ? `terminal ${e.end.elementId} has no design flow: nothing typed, no load, and its airflow slot is empty`
+                ? `this terminal has no design flow: nothing typed, no load, and its airflow slot is empty`
                 : remainder != null && remainder < 0
                   ? "the receiving units' design flows at their ports: their total exceeds this unit's design flow; no nonnegative remainder to split"
                   : fanEnds === 1
-                    ? `the fan's own flow into ${e.end.elementId} has no typed share or unit design-flow value`
+                    ? `the fan's own flow into this end has no typed share or unit design-flow value`
                     : `the fan's own flow splits across ${fanEnds} receiving fan/merge ends; no unit design flow or complete typed shares are available`,
           closer: {
             kind: terminal ? "default" : "ruling",
@@ -294,7 +296,7 @@ export function flowsOf(
         elementId: s.end.elementId,
         ...(s.end.connector == null ? {} : { connector: s.end.connector }),
         effectInWg: null,
-        detail: `sibling ${s.end.fan!.unitId} draws from shared terminal ${w.ends[d.terminal]!.end.elementId}; its design flow is unknown`,
+        detail: "this sibling unit draws from a shared terminal; its design flow is unknown",
         closer: {
           kind: "ruling",
           note: "set the unit design-flow parameter, or type the unit's flow",
@@ -313,7 +315,7 @@ export function flowsOf(
         at.cfm = null;
         at.missing.push(unknown.get(d.sibling)!);
       } else if (at.cfm != null) at.cfm += d.cfm;
-      at.sources.add(`sibling ${s.end.fan!.unitId}: ${d.source ?? "unknown"}`);
+      at.sources.add(`sibling ${opts.name?.(s.end.fan!.unitId) ?? "unit"}: ${d.source ?? "unknown"}`);
     });
   }
   return { end, endSource, leg, inflows, draws };

@@ -153,7 +153,7 @@ export function guardFindings(result: LossResult): DuctFinding[] {
       id: `mixed-classification:el:${c.id}:${c.from}`,
       kind: "mixed-classification",
       elementIds: [c.id, c.from],
-      note: `${Math.round(c.cfm)} cfm of ${c.fromClassification} air below ${c.from} is kept off ${c.classification} element ${c.id}`,
+      note: `${Math.round(c.cfm)} cfm of ${c.fromClassification} air from upstream is kept off this ${c.classification} element`,
       assumed: null,
       clearer: "person",
     });

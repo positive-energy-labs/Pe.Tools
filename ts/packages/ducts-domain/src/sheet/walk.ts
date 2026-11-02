@@ -23,6 +23,7 @@ import {
 } from "../kernel/inferred-joins.ts";
 import type { Blocker, EndRuling, FanPortRef, HealProposal, PathEnd, Side } from "./types.ts";
 import { proposeHeals, rulingFor } from "./heal.ts";
+import { elementLabeler } from "../element-label.ts";
 
 type Connector = Element["connectors"][number];
 
@@ -34,6 +35,8 @@ export interface Graph {
   /** The tolerances the neighbourhood was measured under (`snapshot.tolerances`, C#'s one home), in. */
   candidateBoxIn: number | null;
   autoJoinGapIn: number | null;
+  /** `elementLabeler`: every finding names elements this way, never by id (Manual D #5 defect 7). */
+  name: (id: number) => string;
 }
 export const graphOf = (
   s: Pick<DuctSnapshot, "nodes" | "segments"> &
@@ -47,6 +50,7 @@ export const graphOf = (
     near,
     candidateBoxIn: s.tolerances?.candidateBoxIn ?? null,
     autoJoinGapIn: s.tolerances?.autoJoinGapIn ?? null,
+    name: elementLabeler(s),
   };
 };
 export const isSegment = (e: Element): e is DuctSnapshot["segments"][number] => "polyline" in e;
@@ -252,7 +256,7 @@ function nearestOf(near: Near | undefined, g: Graph, withinIn: number) {
     const c = g.byId.get(p.elementId)?.connectors.find((x) => x.index === p.connector);
     if (c)
       choices.push({
-        label: connectorKey(p.elementId, p.connector),
+        label: g.name(p.elementId),
         gapIn: p.gapIn,
         state: c.connectedTo ? "occupied" : "vacant",
       });
@@ -260,7 +264,7 @@ function nearestOf(near: Near | undefined, g: Graph, withinIn: number) {
   for (const body of near?.bodies ?? [])
     if (g.byId.has(body.segmentId))
       choices.push({
-        label: `${body.segmentId} duct body`,
+        label: `${g.name(body.segmentId)} (its body)`,
         gapIn: body.gapIn,
         state: "occupied surface (no vacant port)",
       });
@@ -340,10 +344,10 @@ export function walkFrom(
           elementId: e.id,
           connector: ci,
           effectInWg: null,
-          detail: `${e.family ?? "equipment"} ${e.id} has ${e.connectors.length} duct connectors and is not a roster fan; which one air leaves by is not known`,
+          detail: `${g.name(e.id)} has ${e.connectors.length} duct connectors and is not a roster fan; which one air leaves by is not known`,
           closer: {
             kind: "ruling",
-            note: `rule a connector pair through ${e.id}, or confirm it as a roster fan`,
+            note: `rule a connector pair through ${g.name(e.id)}, or confirm it as a roster fan`,
           },
         },
         causedBy,
@@ -400,7 +404,7 @@ export function walkFrom(
           elementId: st.el.id,
           connector: c.index,
           effectInWg: null,
-          detail: `${st.el.id}:${c.index} connects to ${to.elementId}:${to.connector}, which the snapshot does not hold`,
+          detail: `this end connects to an element outside this read`,
           closer: { kind: "default", note: "re-read with the element in scope" },
         },
         st.causedBy,
@@ -490,7 +494,7 @@ export function walkFrom(
         .connectors.find((p) => p.index === follow.toConnector)!;
       const gapIn = Math.hypot(...targetPort.point.map((v, i) => v - c.point[i]!)) * 12;
       if (auto === follow) {
-        const note = `auto-joined ${open.k} to ${follow.toElement}:${follow.toConnector} across ${gapIn.toFixed(3)} in, default \u2264${g.autoJoinGapIn} in`;
+        const note = `auto-joined ${g.name(st.el.id)} to ${g.name(follow.toElement)} across ${gapIn.toFixed(3)} in, default \u2264${g.autoJoinGapIn} in`;
         autoJoins.push({
           from: [st.el.id, c.index],
           to: [follow.toElement, follow.toConnector!],
@@ -525,7 +529,7 @@ export function walkFrom(
               elementId: target.id,
               connector: targetPort.index,
               effectInWg: null,
-              detail: `tee continuation ${targetPort.connectedTo.elementId} is absent from the snapshot`,
+              detail: "the tee continues into an element outside this read",
               closer: { kind: "default", note: "re-read with the occupied connection in scope" },
             },
             healCause,
@@ -540,20 +544,17 @@ export function walkFrom(
     if (refused && !proposal) {
       // R-A: the nearest heal lands on another fan's network; the end stays open in both passes.
       const owner = opts.owners!.get(refused.to.elementId)!;
-      const landing =
-        refused.to.connector == null
-          ? `${refused.to.elementId} duct body`
-          : `${refused.to.elementId}:${refused.to.connector}`;
+      const landing = g.name(refused.to.elementId);
       const id = block(
         {
           kind: "open-end",
           elementId: st.el.id,
           connector: c.index,
           effectInWg: null,
-          detail: `${st.el.id}:${c.index} is open; nearest candidate ${landing} at ${refused.gapIn.toFixed(3)} in is on another roster fan's network`,
+          detail: `this end is open; the nearest candidate, ${landing} at ${refused.gapIn.toFixed(3)} in, is on another roster fan's network`,
           closer: {
             kind: "ruling",
-            note: `nearest candidate is ${landing} on ${owner.tag || "unit"} (${owner.unitId})'s network; a ${refused.kind} there would merge streams (Q4); rule in Revit`,
+            note: `nearest candidate is ${landing} on ${owner.tag || g.name(owner.unitId)}'s network; a ${refused.kind} there would merge streams (Q4); rule in Revit`,
           },
         },
         st.causedBy,
@@ -583,15 +584,15 @@ export function walkFrom(
           connector: c.index,
           effectInWg: null,
           detail: capped
-            ? `open ${open.k} faces ${best.toElement}:${port!.index}, already capped by ${capped.id}: face gap ${best.gapIn.toFixed(3)} in, connector gap ${gapNative!.toFixed(3)} in`
+            ? `this end faces ${g.name(best.toElement)}, already capped: face gap ${best.gapIn.toFixed(3)} in, connector gap ${gapNative!.toFixed(3)} in`
             : best.toConnector == null
-              ? `open ${open.k} lands on ${best.toElement} duct body at face gap ${best.gapIn.toFixed(3)} in, occupied surface (no vacant port)`
-              : `open ${open.k} nearest candidate ${best.toElement}:${best.toConnector} at ${gapNative!.toFixed(3)} in, ${port?.connectedTo ? "occupied" : "vacant"}, ${best.opposed ? "opposed" : "sideways or facing unknown"}; default auto-join requires vacant opposed ports within ${g.autoJoinGapIn} in`,
+              ? `this end lands on ${g.name(best.toElement)} (its body) at face gap ${best.gapIn.toFixed(3)} in, occupied surface (no vacant port)`
+              : `this end's nearest candidate is ${g.name(best.toElement)} at ${gapNative!.toFixed(3)} in, ${port?.connectedTo ? "occupied" : "vacant"}, ${best.opposed ? "opposed" : "sideways or facing unknown"}; default auto-join requires vacant opposed ports within ${g.autoJoinGapIn} in`,
           ...(proposal ? { proposal } : {}),
           closer: {
             kind: "heal",
             note: capped
-              ? `remove cap ${capped.id} and connect, or rule the pair`
+              ? "remove the cap and connect, or rule the pair"
               : "heal the join in Revit, or rule the pair",
             candidate: {
               toElementId: best.toElement,
@@ -614,8 +615,8 @@ export function walkFrom(
         connector: c.index,
         effectInWg: null,
         detail: nearest
-          ? `${st.el.id}:${c.index} is open; nearest candidate ${nearest.label} at ${nearest.gapIn.toFixed(3)} in, ${nearest.state}`
-          : `${st.el.id}:${c.index} is open with nothing within ${searchIn} in`,
+          ? `this end is open; nearest candidate ${nearest.label} at ${nearest.gapIn.toFixed(3)} in, ${nearest.state}`
+          : `this end is open with nothing within ${searchIn} in`,
         ...(proposal ? { proposal } : {}),
         closer: {
           kind: proposal ? "heal" : "ruling",

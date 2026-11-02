@@ -55,7 +55,8 @@ test("RA 23's one cap names its element, connector and size and draws without an
   };
   const review = presentHeal({ value: response }, current).page!.heal as HealReview;
   expect(review.sentence).toBe("RA 23: 1 planned");
-  expect(review.rows[0]).toMatch(/10002955.*end 9.*8 in round.*planned/);
+  expect(review.rows[0]).toMatch(/^Place a cap on 8 in duct \(8 in round\).*planned/);
+  expect(review.rows[0]).not.toMatch(/10002955|end 9/);
   expect(healReviewLayers(ducts, null, review)).toEqual(
     expect.arrayContaining([
       expect.objectContaining({

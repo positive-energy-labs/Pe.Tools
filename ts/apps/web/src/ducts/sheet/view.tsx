@@ -57,7 +57,7 @@ export function Roster({ props }: { props: SheetViewProps }) {
   // A blank firm tag falls back to the unit's Mark or family; a name shared by two units (Chadds
   // has two FC-23s) is told apart by level, system or order (fanLabel), never by an id.
   const nameOf = useMemo(() => subjectNamer(props.snapshot), [props.snapshot]);
-  const unitName = (fan: FanPort) => fan.mark || nameOf(fan.unitId) || `unit ${fan.unitId}`;
+  const unitName = (fan: FanPort) => fan.mark || nameOf(fan.unitId);
   const named = useMemo(
     () => props.roster.map((fan) => ({ ...fan, mark: unitName(fan) })),
     // eslint-disable-next-line react-hooks/exhaustive-deps

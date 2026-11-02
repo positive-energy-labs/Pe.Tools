@@ -876,7 +876,7 @@ function pathRows(
         kind: "terminal",
         leg: "ps",
         dp: manual,
-        desc: `terminal ${node.id}, manual pressure override`,
+        desc: "terminal, manual pressure override",
       });
       return;
     }
@@ -893,7 +893,7 @@ function pathRows(
         kind: "terminal",
         leg: "ps",
         dp: held,
-        desc: `terminal ${node.id} at ${cfm ?? "?"} cfm, terminal drop`,
+        desc: `terminal at ${cfm ?? "?"} cfm, terminal drop`,
       });
       return;
     }
@@ -902,7 +902,7 @@ function pathRows(
       id: node.id,
       kind: "terminal",
       ...loss,
-      desc: `terminal ${node.id} at ${cfm ?? "?"} cfm, catalog total pressure`,
+      desc: `terminal at ${cfm ?? "?"} cfm, catalog total pressure`,
     });
   };
 
@@ -971,7 +971,7 @@ function pathRows(
         id,
         kind: "fitting",
         dp: overrides.componentDrop[id]!,
-        desc: `passive equipment ${id}, sourced design-point drop`,
+        desc: "passive equipment, sourced design-point drop",
       });
       return;
     }

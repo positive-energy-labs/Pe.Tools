@@ -46,7 +46,9 @@ it("leaves the fan-to-terminal trunk clear and groups the open and capped side b
   expect([...result.keys()].sort()).toEqual([4, 5, 7, 8]);
   expect(result.get(4)).toEqual({
     elements: [4, 5],
-    reasons: [{ kind: "open", at: 5, text: "Ends open at 5:1" }],
+    reasons: [
+      { kind: "open", at: 5, connector: 1, text: expect.stringMatching(/^Ends open at \D+$/) },
+    ],
   });
   expect(result.get(7)?.reasons.map((r) => r.kind)).toEqual(["capped"]);
 });

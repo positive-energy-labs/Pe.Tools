@@ -67,7 +67,8 @@ export type Closer = {
 export type CloserContext = {
   /** The resolved default terminal drop (firm or project), with its source; null until inputs land. */
   terminalDrop: Resolved<number> | null;
-  nameOf: (id: number) => string | null;
+  /** `elementLabeler`: total, never an id. */
+  nameOf: (id: number) => string;
   /** The sheet-wide refusal (busy, inputs detail not yet read); null when verbs may run. */
   wait: string | null;
   /** The open fan's unit, for closers that set its design flow; null with no fan open. */
@@ -128,8 +129,6 @@ export function priceChoices(
 const candidateId = (blocker: SheetBlocker): number | null =>
   blocker.closer.candidate?.toElementId ?? blocker.proposal?.to.elementId ?? null;
 
-const nameOrId = (nameOf: CloserContext["nameOf"], id: number) => nameOf(id) ?? `element ${id}`;
-
 export function describeCloser(
   blocker: SheetBlocker,
   typed: number | null,
@@ -142,7 +141,7 @@ export function describeCloser(
   return {
     ...closer,
     crossing: {
-      verb: `accept join → ${nameOrId(context.nameOf, crossing.toElementId)} (crosses ${crossing.classes[0]}→${crossing.classes[1]} air)`,
+      verb: `accept join → ${context.nameOf(crossing.toElementId)} (crosses ${crossing.classes[0]}→${crossing.classes[1]} air)`,
       refusal: context.wait,
       action: { kind: "rule", pair: crossing.pair },
       distanceIn: crossing.distanceIn,
@@ -163,7 +162,7 @@ function describeBase(blocker: SheetBlocker, typed: number | null, context: Clos
   });
   const pair = healPair(blocker);
   const to = candidateId(blocker);
-  const toName = to == null ? null : nameOrId(context.nameOf, to);
+  const toName = to == null ? null : context.nameOf(to);
 
   switch (blocker.kind) {
     case "open-end": {
@@ -210,7 +209,7 @@ function describeBase(blocker: SheetBlocker, typed: number | null, context: Clos
           ? null
           : row.proposed
             ? {
-                verb: `set path drop ${typed} in-wg${toward == null ? " (straight)" : ` → ${nameOrId(context.nameOf, toward)}`}`,
+                verb: `set path drop ${typed} in-wg${toward == null ? " (straight)" : ` → ${context.nameOf(toward)}`}`,
                 refusal: context.wait,
                 action: { kind: "pathDrop" as const, key: row.key, value: typed },
               }
