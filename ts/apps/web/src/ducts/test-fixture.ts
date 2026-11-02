@@ -43,6 +43,7 @@ export const snapshot = {
   ],
   nodes: [100, 2, 4, 6].map((id) => ({
     id,
+    flowParameter: "Observed flow",
     kind: id === 100 ? "equipment" : id === 2 ? "fitting" : "terminal",
     category: "duct node",
     point: [id === 100 ? 0 : id, 0, 0],

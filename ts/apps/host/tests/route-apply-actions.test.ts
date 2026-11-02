@@ -1,10 +1,15 @@
-import { expect, test } from "vite-plus/test";
+import { expect, test, vi } from "vite-plus/test";
 import { commands } from "@pe/agent-contracts";
 import { catalogEntries, linkCatalog } from "@pe/agent-contracts/pe-api";
 import { workWriteBoundary } from "../src/work-write-boundary.ts";
 import type { CommandExecutor, CommandContext } from "../src/command-executor.ts";
 import type { RevitBridge } from "../src/bridge.ts";
 import { z } from "zod";
+
+vi.mock("../src/family-actions.ts", async (actual) => ({
+  ...(await actual<typeof import("../src/family-actions.ts")>()),
+  lifetime: async () => ({ session: { state: { openDocuments: [] } }, process: {} }),
+}));
 
 // Payload/plan-ticket fixtures belonged to the retired caller-payload boundary.
 // Every migrated command must bind executable derivation and refuse foreign Work first.
@@ -18,6 +23,9 @@ test.each(writes)(
     const executor: CommandExecutor = {
       definition,
       prepared: z.unknown(),
+      seal: () => {
+        throw Error("must not project foreign Work");
+      },
       bind: async () => {
         throw Error("must not derive foreign Work");
       },

@@ -54,19 +54,19 @@ test("restore is per field; explicit empty clears memory but absent and undefine
   expect(url.read(restorePageSearch({ fan: "saved" }, { fan: [] })!)).toMatchObject({ fan: [] });
 });
 
-test("graph URL elides defaults and round-trips changed subject fields", () => {
+test("graph URL preserves explicit defaults and round-trips changed subject fields", () => {
   const url = graphUrlPage(fansGraph);
   const defaults = url.read({});
-  expect(Object.values(url.write(defaults)).every((value) => value === undefined)).toBe(true);
+  expect(url.read(url.write(defaults))).toEqual(defaults);
   const page = { ...defaults, fan: ["uid,1@2"] };
   expect(url.read(url.write(page))).toEqual(page);
 });
 
-test("URL projection removes setting defaults but preserves an explicit empty subject over memory", () => {
+test("URL projection preserves setting defaults but preserves an explicit empty subject over memory", () => {
   const url = graphUrlPage(fansGraph);
   const project = (search: Record<string, unknown>) =>
     url.middlewares[0]!({ search, next: (value: Record<string, unknown>) => value } as never);
-  expect(project({ stage: "sheet", fan: [] })).toEqual({ fan: "" });
+  expect(project({ stage: "sheet", fan: [] })).toEqual({ stage: "sheet", fan: "" });
   expect(project({ fan: [1, 2] })).toEqual({ fan: [1, 2] });
   expect(project({ fan: "~null" })).toEqual({ fan: "~null" });
 });

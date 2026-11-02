@@ -1,3 +1,4 @@
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * The worksheet (ducts LEDGER 2026-10-29, "TS"): per side, one row per run from the fan to an end,
  * critical first; a row opens into its sections, the stretches of constant flow between
@@ -67,9 +68,11 @@ function CfmCell({ run, ws, editing }: { run: Run; ws: Ws; editing: WorksheetEdi
         }
       />
       {carried && (
-        <span className="t-small text-ink-2" title={flowSource ?? undefined}>
-          {run.cfm} cfm computed ? {derivedFlowSource(flowSource)}
-        </span>
+        <TooltipHint content={flowSource}>
+          <span className="t-small text-ink-2">
+            {run.cfm} cfm computed ? {derivedFlowSource(flowSource)}
+          </span>
+        </TooltipHint>
       )}
     </>
   );

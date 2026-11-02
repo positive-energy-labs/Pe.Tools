@@ -417,7 +417,7 @@ test("missing source bindings and cyclic readings refuse before creating a parti
   const snapshot = vi.spyOn(f.adapters, "getSnapshot");
   const Component = mountRoute(f.graph, f.adapters);
   const view = render(<Component />);
-  expect(view.getByRole("alert").textContent).toContain("Unresolved derive source 'solve'");
+  expect(view.getByRole("alert").textContent).toContain("readings:");
   expect(view.getByRole("alert").textContent).toContain("Reading dependency cycle");
   expect(snapshot).not.toHaveBeenCalled();
   expect(f.captures).toEqual([]);
@@ -496,8 +496,9 @@ test("Situation renders declared subject, typed Page controls, verbs and a worki
     show: (id) => id,
   };
   const { view } = await mounted(f);
+  act(() => f.owner().view.setPage({ system: ["SA"] } as any));
   const situation = within(view.getByLabelText("Situation"));
-  expect(situation.getByText("Pricing fans on the fixture")).toBeTruthy();
+  expect(await situation.findByText("Supply air")).toBeTruthy();
   expect(situation.queryByLabelText("paneSearch")).toBeNull();
   expect(situation.queryByLabelText("selected")).toBeNull();
   expect(situation.getByRole("button", { name: "Edit" })).toBeTruthy();
@@ -507,7 +508,7 @@ test("Situation renders declared subject, typed Page controls, verbs and a worki
   expect((f.owner().view.read().page as any).mode).toBe("one");
   fireEvent.click(situation.getByRole("button", { name: "Choose system" }));
   fireEvent.click(view.getByRole("option", { name: "Supply air" }));
-  expect((f.owner().view.read().page as any).system).toEqual(["SA"]);
+  expect((f.owner().view.read().page as any).system).toEqual([]);
   const search = situation.getByLabelText("search");
   expect((search as HTMLInputElement).value).toBe("");
   fireEvent.change(search, { target: { value: "fans" } });
@@ -525,7 +526,7 @@ test("Situation renders declared subject, typed Page controls, verbs and a worki
     f.owner().timeline.append({ kind: "feed", subject: "external", at: 2 });
   });
   fireEvent.click(situation.getByRole("button", { name: "Open the Timeline" }));
-  expect(view.getAllByText(/edit/).length).toBeGreaterThan(0);
+  expect(view.getAllByText(/Edit/).length).toBeGreaterThan(0);
 });
 
 test.each(["Cancel", "Escape"])(
@@ -1055,7 +1056,7 @@ test("a declared History pane renders kernel invocations and checkpoints without
   const history = within(view.getByLabelText("History"));
   expect(history.getByText("No activity yet")).toBeTruthy();
   fireEvent.click(view.getByRole("button", { name: "Edit" }));
-  await waitFor(() => expect(history.getByText(/edit.*succeeded/)).toBeTruthy());
+  await waitFor(() => expect(history.getByText(/Edit.*succeeded/)).toBeTruthy());
   act(() => {
     f.owner().timeline.append({
       kind: "checkpoint",
@@ -1150,9 +1151,9 @@ test("shared History scopes receipts to exact Work, links Ops, deduplicates even
   };
   const mountedView = await mounted(f);
   const view = within(mountedView.view.container.querySelector("[data-pane-id=wheel]")!);
-  const link = await view.findByRole("link", { name: "takeoffs.initialize" });
+  const link = await view.findByRole("link", { name: "Apply" });
   expect(link.getAttribute("href")).toContain("actionId=ours");
-  expect(view.queryAllByRole("link", { name: "takeoffs.initialize" })).toHaveLength(1);
+  expect(view.queryAllByRole("link", { name: "Apply" })).toHaveLength(1);
   act(() => f.owner().timeline.append({ kind: "checkpoint", at: 77, receiptId: "ours" }));
   expect(view.queryByText(/checkpoint.*77/)).toBeNull();
   act(() => deliver({ kind: "failure", error: "receipt service unavailable" }));

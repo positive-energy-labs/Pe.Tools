@@ -21,6 +21,15 @@ import { useGraphRoute } from "#/shell/mount";
 import { familiesGraph } from "#/families/graph";
 import { useRouteThread } from "#/shell/binding";
 
+import { registerSubject } from "#/shell/subject";
+import { ductsGraph } from "#/ducts/graph";
+registerSubject("ducts", {
+  ...ductsGraph,
+  fields: Object.fromEntries(
+    Object.entries(ductsGraph.fields).map(([id, value]) => [id, { ...value, picker: undefined }]),
+  ),
+});
+
 const store = createChatPageStore({
   registry: appAtomRegistry,
   search: { mode: "threads", patch: async () => {} },
@@ -103,6 +112,7 @@ vi.mock("#/host/pe-client", () => ({ peClient: { call } }));
 
 const familiesProbeGraph: typeof familiesGraph = {
   ...familiesGraph,
+  subjectField: { ...familiesGraph.subjectField, roster: "probe", detail: "probe" },
   fields: Object.fromEntries(
     Object.entries(familiesGraph.fields).map(([id, value]) => [
       id,
@@ -113,8 +123,9 @@ const familiesProbeGraph: typeof familiesGraph = {
   workSubject: undefined,
   salvage: undefined,
   observe: undefined,
+  refresh: undefined,
   needs: undefined,
-  readings: {},
+  readings: { probe: { kind: "derive" as const, source: "probe", retire: "never" as const } },
   verbs: {},
   cells: undefined,
   layout: { kind: "pane" as const, id: "probe" },
@@ -122,7 +133,11 @@ const familiesProbeGraph: typeof familiesGraph = {
   stageOrder: ["probe"],
   stages: { probe: { word: "Probe", panes: ["probe"], verbs: [] } },
 };
-const familiesProbeAdapters = { sources: {}, bodies: {} };
+registerSubject("families", familiesProbeGraph);
+const familiesProbeAdapters = {
+  sources: { probe: { kind: "derive" as const, derive: () => [] } },
+  bodies: {},
+};
 function FamiliesProbe() {
   const handle = useGraphRoute(familiesProbeGraph, familiesProbeAdapters, {
     thread: useRouteThread() ?? undefined,
@@ -677,16 +692,16 @@ test("a Pea open of a new tool keeps its first lease instance, and a set against
       instance,
       commandId: "55555555-5555-4555-8555-555555555555",
       revision: 1,
-      patch: { sort: "Name" },
+      patch: {
+        sort: routeAddress("families").agent.write({ sort: [{ key: "Name", dir: "asc" }] }).sort!,
+      },
     }),
   );
   expect(hostCalls("view.ack")).toEqual([]);
   await act(async () => finishPublish!({ revision: 1 }));
   await waitFor(() => expect(hostCalls("view.ack").length).toBe(1));
   await settle();
-  expect((hostCalls("view.ack")[0]![1] as { body: { outcome: string } }).body.outcome).not.toBe(
-    "refused",
-  );
+  expect((hostCalls("view.ack")[0]![1] as { body: unknown }).body).not.toHaveProperty("refusal");
   expect(hostCalls("view.remove")).toEqual([]);
   expect(leases()).toEqual(new Set([instance]));
   expect(places().some((tab) => tab.route === "families")).toBe(true);
@@ -717,7 +732,9 @@ test("after first-Send promotion and a chat pick, a Pea open keeps one lease and
     await settle();
     expect(hostCalls("view.remove")).toEqual([]);
     expect(places().filter((tab) => tab.route === "families")).toHaveLength(1);
-    expect(screen.getAllByRole("button", { name: "Families" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "Families \u00b7 draft" }).length).toBeGreaterThan(
+      0,
+    );
   } finally {
     threads.pop();
   }

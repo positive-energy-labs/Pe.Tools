@@ -130,7 +130,11 @@ export class RouteWorkspace {
             revision = envelope.revision;
             ({ proposals, unfinished } = workCounts(envelope.doc, spec.editable ?? []));
             state = "ready";
-          } catch (error) { console.warn("ts/packages/runtime/src/route-workspace.ts: fallback after failure", error);
+          } catch (error) {
+            console.warn(
+              "ts/packages/runtime/src/route-workspace.ts: fallback after failure",
+              error,
+            );
             // Keep the address discoverable without exposing the unreadable document.
           }
         }
@@ -218,7 +222,10 @@ export class RouteWorkspace {
     patches: RouteStatePatch[],
     expectedRevision: number,
     trusted = false,
-    context: Pick<WorkWrite, "press" | "kind" | "restoreOf"> & { receiptId?: string } = { press: null, kind: "apply" },
+    context: Pick<WorkWrite, "press" | "kind" | "restoreOf"> & { receiptId?: string } = {
+      press: null,
+      kind: "apply",
+    },
   ): Promise<RouteStateWriteResult> {
     if (scope.route !== route)
       return refuse(
@@ -237,16 +244,19 @@ export class RouteWorkspace {
       const records = this.#inverses.get(workKey(scope)) ?? [];
       const recorded =
         kind === "restore"
-          ? records.findLast(
-              (entry) => entry.write.revision === context.restoreOf,
-            )
+          ? records.findLast((entry) => entry.write.revision === context.restoreOf)
           : undefined;
       if (
         kind === "restore" &&
         (!recorded ||
-          records.some((entry) => entry.write.revision > recorded.write.revision &&
-            entry.write.kind === "publish" && entry.write.patches.some((patch) =>
-              recorded.write.inverse.some((inverse) => overlaps(patch.path, inverse.path)))) ||
+          records.some(
+            (entry) =>
+              entry.write.revision > recorded.write.revision &&
+              entry.write.kind === "publish" &&
+              entry.write.patches.some((patch) =>
+                recorded.write.inverse.some((inverse) => overlaps(patch.path, inverse.path)),
+              ),
+          ) ||
           canonicalRouteInput(recorded.write.inverse) !== canonicalRouteInput(patches) ||
           !recorded.write.inverse.every(
             (patch) =>
@@ -313,7 +323,14 @@ export class RouteWorkspace {
         by,
         press,
         ...(trusted && context.receiptId ? { receiptId: context.receiptId } : {}),
-        ...(kind === "apply" ? { step: by === "pea" ? `pea:${press ?? `r${landed.envelope.revision}`}` : `human:${press ?? `r${landed.envelope.revision}`}` } : {}),
+        ...(kind === "apply"
+          ? {
+              step:
+                by === "pea"
+                  ? `pea:${press ?? `r${landed.envelope.revision}`}`
+                  : `human:${press ?? `r${landed.envelope.revision}`}`,
+            }
+          : {}),
         ...(recorded ? { step: recorded.write.step, restoreOf: recorded.write.revision } : {}),
         base: envelope.revision,
         revision: landed.envelope.revision,
@@ -322,12 +339,30 @@ export class RouteWorkspace {
         undoable: true,
         at: Date.now(),
       };
-      const history = [...records, { write, after: landed.envelope.doc,
-        ...(recorded?.recovery ? { recovery: { doc: envelope.doc, schemaVersion: registration.spec.schemaVersion ?? 1 } } : {}) }];
-      await this.#persist(scope, route, {
-        ...landed.envelope,
-        schemaVersion: recorded?.recovery?.schemaVersion ?? registration.spec.schemaVersion ?? 1,
-      }, history);
+      const history = [
+        ...records,
+        {
+          write,
+          after: landed.envelope.doc,
+          ...(recorded?.recovery
+            ? {
+                recovery: {
+                  doc: envelope.doc,
+                  schemaVersion: registration.spec.schemaVersion ?? 1,
+                },
+              }
+            : {}),
+        },
+      ];
+      await this.#persist(
+        scope,
+        route,
+        {
+          ...landed.envelope,
+          schemaVersion: recorded?.recovery?.schemaVersion ?? registration.spec.schemaVersion ?? 1,
+        },
+        history,
+      );
       this.#inverses.set(workKey(scope), history);
       this.#accept(write);
       await this.#publish({
@@ -365,7 +400,7 @@ export class RouteWorkspace {
   ): Promise<RouteStateWriteResult> {
     const snapshot = await this.view(scope, route);
     if (!snapshot || snapshot.revision !== expectedRevision)
-      return refuse("refused", "Work changed before restoring", "Re-read Work.");
+      return refuse("refused", "Work changed before restoring", "Re-read Work.", "stale_revision");
     const journal = createWorkJournal(scope);
     for (const { write } of this.#inverses.get(workKey(scope)) ?? [])
       journal.accept({ ...write, replay: true });
@@ -375,12 +410,24 @@ export class RouteWorkspace {
       accepted = await this.write(scope, route, by, write);
       return accepted;
     });
-    return result.ok && accepted ? accepted : refuse("refused", result.ok ? "Nothing restored" : result.message, "Re-read Work history.");
+    return result.ok && accepted
+      ? accepted
+      : refuse("refused", result.ok ? "Nothing restored" : result.message, "Re-read Work history.");
   }
 
   /** Observations and conditional retirement are host facts, never raw client edits. */
-  publish(scope: WorkKey, route: string, patches: RouteStatePatch[], expectedRevision: number, receiptId?: string) {
-    return this.apply(scope, route, "human", patches, expectedRevision, true, { kind: "apply", press: null, receiptId });
+  publish(
+    scope: WorkKey,
+    route: string,
+    patches: RouteStatePatch[],
+    expectedRevision: number,
+    receiptId?: string,
+  ) {
+    return this.apply(scope, route, "human", patches, expectedRevision, true, {
+      kind: "apply",
+      press: null,
+      receiptId,
+    });
   }
 
   /**
@@ -424,11 +471,21 @@ export class RouteWorkspace {
         undoable: prior.success,
         aside: aside(route, slot),
       };
-      const history = [...historySchema.parse((raw as { history?: unknown }).history ?? []), {
-        write, after: fresh.doc,
-        ...(prior.success ? { recovery: { doc: prior.data.doc,
-          schemaVersion: (raw as { schemaVersion: number }).schemaVersion } } : {}),
-      }];
+      const history = [
+        ...historySchema.parse((raw as { history?: unknown }).history ?? []),
+        {
+          write,
+          after: fresh.doc,
+          ...(prior.success
+            ? {
+                recovery: {
+                  doc: prior.data.doc,
+                  schemaVersion: (raw as { schemaVersion: number }).schemaVersion,
+                },
+              }
+            : {}),
+        },
+      ];
       await this.#persist(scope, route, fresh, history);
       this.#inverses.set(targetKey, history);
       this.#accept(write);
@@ -494,21 +551,34 @@ export class RouteWorkspace {
   }
 
   /** Hydration and subscription share the write tail; restart replay has no arrival gap. */
-  observeAccepted(scope: WorkKey, listener: (ack: WorkWriteAck) => void, failed: (error: unknown) => void = (error) => { throw error; }): () => void {
+  observeAccepted(
+    scope: WorkKey,
+    listener: (ack: WorkWriteAck) => void,
+    failed: (error: unknown) => void = (error) => {
+      throw error;
+    },
+  ): () => void {
     const key = workKey(scope);
     let disposed = false;
     void this.#serialized(async () => {
       const spec = this.#registry.get(scope.route)?.spec;
       if (!spec || disposed) return;
       const raw = await this.#carryOver(scope, spec.route);
-      this.#inverses.set(key, historySchema.parse((raw as { history?: unknown } | null)?.history ?? []).map((record) => ({ ...record, write: { ...record.write, key: scope } })));
+      this.#inverses.set(
+        key,
+        historySchema
+          .parse((raw as { history?: unknown } | null)?.history ?? [])
+          .map((record) => ({ ...record, write: { ...record.write, key: scope } })),
+      );
       if (disposed) return;
       for (const { write } of this.#inverses.get(key) ?? [])
         listener({ ...structuredClone(write), replay: true });
       const listeners = this.#acceptedListeners.get(key) ?? new Set();
       this.#acceptedListeners.set(key, listeners);
       listeners.add(listener);
-    }).catch((error) => { if (!disposed) failed(error); });
+    }).catch((error) => {
+      if (!disposed) failed(error);
+    });
     return () => {
       disposed = true;
       const listeners = this.#acceptedListeners.get(key);
@@ -538,7 +608,12 @@ export class RouteWorkspace {
       this.#inverses.delete(workKey(scope));
       return create ? emptyEnvelope(spec) : null;
     }
-    this.#inverses.set(workKey(scope), historySchema.parse((raw as { history?: unknown }).history ?? []).map((record) => ({ ...record, write: { ...record.write, key: scope } })));
+    this.#inverses.set(
+      workKey(scope),
+      historySchema
+        .parse((raw as { history?: unknown }).history ?? [])
+        .map((record) => ({ ...record, write: { ...record.write, key: scope } })),
+    );
     let age = (raw as { schemaVersion?: number }).schemaVersion;
     const current = spec.schemaVersion ?? 1;
     if (age !== undefined && age < current && spec.migrations) {
@@ -581,7 +656,12 @@ export class RouteWorkspace {
     return carried;
   }
 
-  async #persist(scope: WorkKey, route: string, envelope: RouteEnvelope<unknown>, history = this.#inverses.get(workKey(scope)) ?? []): Promise<void> {
+  async #persist(
+    scope: WorkKey,
+    route: string,
+    envelope: RouteEnvelope<unknown>,
+    history = this.#inverses.get(workKey(scope)) ?? [],
+  ): Promise<void> {
     // Closing a native lifetime changes availability, never the user's authored Work.
     await this.options.store.setState({
       targetKey: workKey(scope),
@@ -618,11 +698,13 @@ function valueAt(doc: unknown, path: RouteStatePatch["path"]): unknown {
   return { exists: true, value };
 }
 
-const historySchema = z.array(z.object({
-  write: workWriteAckSchema,
-  after: z.unknown(),
-  recovery: z.object({ doc: z.unknown(), schemaVersion: z.number().int().positive() }).optional(),
-}));
+const historySchema = z.array(
+  z.object({
+    write: workWriteAckSchema,
+    after: z.unknown(),
+    recovery: z.object({ doc: z.unknown(), schemaVersion: z.number().int().positive() }).optional(),
+  }),
+);
 
 const envelopeSchema = z.object({
   version: z.literal(ENVELOPE_VERSION),

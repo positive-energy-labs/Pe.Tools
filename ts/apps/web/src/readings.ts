@@ -175,11 +175,22 @@ export class PeReadings {
     if (this.unwatchWake || typeof document === "undefined") return;
     // TODO: docs/features/routes/LEDGER.md#s7-8c7d3a6f01 Repeat the 33-second hide/return proof in a native visible browser; T3 preview pins visibilityState.
     // Visibility is not a change of basis. The live stream keeps delivering while hidden.
-    const online = () => {
-      if (this.faulted) this.resync();
+    let offline = false;
+    const lostNetwork = () => {
+      offline = true;
     };
+    const online = () => {
+      if (offline || this.faulted) {
+        offline = false;
+        this.resync();
+      }
+    };
+    window.addEventListener("offline", lostNetwork);
     window.addEventListener("online", online);
-    this.unwatchWake = () => window.removeEventListener("online", online);
+    this.unwatchWake = () => {
+      window.removeEventListener("offline", lostNetwork);
+      window.removeEventListener("online", online);
+    };
   }
 
   subscribe(raw: ReadingRequest, listener: (frame: Frame) => void): () => void {

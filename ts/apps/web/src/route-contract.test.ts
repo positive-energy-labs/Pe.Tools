@@ -140,12 +140,21 @@ test("a declared transition clears selection atomically when the subject changes
     key: "ducts",
     address: "ducts",
     name: "Ducts",
-    subjectField: {field:"system",noun:"system",keyKind:"name",cardinality:"one",roster:"roster",detail:"roster",pane:"picture",show:id=>id},
+    subjectField: {
+      field: "system",
+      noun: "system",
+      keyKind: "name",
+      cardinality: "one",
+      roster: "roster",
+      detail: "roster",
+      pane: "picture",
+      show: (id) => id,
+    },
     fields: {
       system: { ...field(text(), {}), role: "subject" },
       selected: { ...field(text(), {}), role: "selection" },
     },
-    readings: {roster:{kind:"derive",source:"roster",retire:"never"}},
+    readings: { roster: { kind: "derive", source: "roster", retire: "never" } },
     verbs: {},
     panes: { picture: { label: "Picture", purpose: "See the system", draws: [], verbs: [] } },
     layout: gate("hasSystem", pane("picture")),
@@ -177,6 +186,7 @@ test("a missing reading and two verbs sharing one chord both refuse admission", 
   };
   expect(validateRouteGraph(broken)).toEqual([
     { code: "missing-reading", path: "panes.wheel.draws", message: "Unknown reading 'missing'" },
+    { code: "missing-reading", path: "stages.calculate", message: "Unknown reading 'missing'" },
     {
       code: "chord-conflict",
       path: "stages.calculate.chords",

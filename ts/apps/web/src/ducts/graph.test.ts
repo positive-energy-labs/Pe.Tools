@@ -124,7 +124,12 @@ test("the price request is scoped and stable for one reading basis; standing Set
   };
   expect(first.refusal).toBeNull();
   expect(first.request.equipment).toEqual([]);
-  expect(first.request.terminalFlows).toContainEqual({ id: 4, cfm: 100, source: "override" });
+  expect(first.request.terminalFlows).toContainEqual({
+    id: 4,
+    cfm: 100,
+    source: "override",
+    slot: "Observed flow",
+  });
   expect((ductsBinding("price", undefined, scope).args as { request: unknown }).request).toBe(
     first.request,
   );
@@ -133,7 +138,7 @@ test("the price request is scoped and stable for one reading basis; standing Set
     refusal: expect.stringContaining("Pricing is refreshing"),
   });
 });
-test("native writes keep the observed Work slots even when historical Work has another slot", () => {
+test("native writes refuse a historical slot that conflicts with the observed element slot", () => {
   const scope = scopeFor(
     ductsRouteState.schema.parse({
       parameters: { terminalFlow: { edit: { value: "Historical flow" } } },
@@ -143,8 +148,7 @@ test("native writes keep the observed Work slots even when historical Work has a
   const observed = { ...snapshot, slots: { ...snapshot.slots, terminalFlow: "Observed flow" } };
   scope.readings = { ...scope.readings, ducts: state(observed) };
   expect(ductsBinding("price", undefined, scope).args).toMatchObject({
-    refusal: null,
-    request: { slots: { terminalFlow: "Observed flow" } },
+    refusal: expect.stringContaining("no observed airflow parameter 'Historical flow'"),
   });
 });
 
@@ -221,9 +225,11 @@ test("Work choices stage the selected heal network, fan pair and system before c
 });
 
 test("fan write previews use the fan reading, never undemanded network pricing", () => {
-  const scope = scopeFor(ductsRouteState.schema.parse({
-    componentDrops: { "10": { edit: { value: { inWg: 0.18 } } } },
-  }));
+  const scope = scopeFor(
+    ductsRouteState.schema.parse({
+      componentDrops: { "10": { edit: { value: { inWg: 0.18 } } } },
+    }),
+  );
   scope.page = { ...scope.page, stage: "sheet" };
   scope.readings = {
     sheet: state({ open: { overview: { fan: { unitId: 14577391, portIndex: 2 } } } }),
@@ -232,6 +238,7 @@ test("fan write previews use the fan reading, never undemanded network pricing",
   const bound = ductsBinding("price", undefined, scope);
   expect(bound.args).toMatchObject({ refusal: null });
   expect(ductsWriteStage("price", bound, scope)).toEqual({
-    verb: "stage-write", input: { walk: { unitId: 14577391, portIndex: 2 } },
+    verb: "stage-write",
+    input: { walk: { unitId: 14577391, portIndex: 2 } },
   });
 });

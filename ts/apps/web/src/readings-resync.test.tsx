@@ -621,3 +621,22 @@ test("a remounted reading immediately retains its previous observation while rea
   registry.dispose();
   readings.close();
 });
+
+test("online replaces a socket that never reported its offline failure", async () => {
+  const { readings, sources } = owner();
+  const received: unknown[] = [];
+  const release = readings.subscribe(head, (frame) => received.push(frame));
+  await Promise.resolve();
+  sources[0]!.onopen!();
+  sources[0]!.onmessage!(snapshot({ revision: 1 }));
+  window.dispatchEvent(new Event("offline"));
+  window.dispatchEvent(new Event("online"));
+  await Promise.resolve();
+  expect(sources).toHaveLength(2);
+  expect(received.at(-1)).toMatchObject({ kind: "stale" });
+  sources[1]!.onopen!();
+  sources[1]!.onmessage!(snapshot({ revision: 2 }));
+  expect(received.at(-1)).toMatchObject({ kind: "snapshot", value: { revision: 2 } });
+  release();
+  readings.close();
+});

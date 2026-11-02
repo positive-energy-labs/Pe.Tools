@@ -1,3 +1,4 @@
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * The sheet's one editable number: the kit's row-scale `StateCell` (the cell the network stage's
  * inputs and settings use), its unit drawn inside the box and its source word beside it. Every
@@ -117,14 +118,15 @@ export function SheetCell({
         />
       </span>
       {source != null && (
-        <span
-          className={`t-small min-w-0 text-ink-2 ${sourceWrap ? "whitespace-normal" : "truncate"}`}
-          data-input-source={source}
-          title={sourceTitle}
-          data-tone={source === "none" ? "alarm" : undefined}
-        >
-          {source}
-        </span>
+        <TooltipHint content={sourceTitle}>
+          <span
+            className={`t-small min-w-0 text-ink-2 ${sourceWrap ? "whitespace-normal" : "truncate"}`}
+            data-input-source={source}
+            data-tone={source === "none" ? "alarm" : undefined}
+          >
+            {source}
+          </span>
+        </TooltipHint>
       )}
     </span>
   );

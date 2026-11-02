@@ -131,7 +131,11 @@ test("Pea's Work edits are undo steps a person reverts; a Pea press never joins 
   await f.apply([{ path: ["settings", "width"], value: 20 }], "human-1");
   await f.apply([{ path: ["settings", "height"], value: 99 }], "human-1", "pea");
   await f.apply([{ path: ["settings", "width"], value: 30 }], null, "pea");
-  expect(f.journal.read().undo.map(({ press }) => press)).toEqual(["human-1", "pea:human-1", "pea:r3"]);
+  expect(f.journal.read().undo.map(({ press }) => press)).toEqual([
+    "human-1",
+    "pea:human-1",
+    "pea:r3",
+  ]);
   // Named by the route's declared Work names (none here), never by a raw Work path.
   expect(f.journal.read().undo.at(-1)).toMatchObject({ label: "Edit Work", by: "pea" });
   expect(await f.journal.undo(f.writer)).toMatchObject({ ok: true, press: "pea:r3" });
@@ -155,7 +159,10 @@ test("a reloaded tab rebuilds steps, the head and undo/redo entries from the hos
   await f.apply([{ path: ["cells", "one", "edit"], value: { value: "other" } }], "tab-b");
   stop();
   const read = reloaded.read();
-  expect(read.undo.map(({ press, by }) => [press, by])).toEqual([["human-1", "human"], ["tab-b", "human"]]);
+  expect(read.undo.map(({ press, by }) => [press, by])).toEqual([
+    ["human-1", "human"],
+    ["tab-b", "human"],
+  ]);
   expect(read.redo).toEqual([]);
   expect(read.last).toMatchObject({ kind: "apply", step: { press: "tab-b" } });
   expect(read.moves.map(({ kind, press, revision }) => [kind, press, revision])).toEqual([
@@ -461,12 +468,12 @@ test("empty descriptions cannot remove the accepted entry's required label", asy
   expect(f.journal.read().undo[0]).toMatchObject({ label: "width", meta: { late: true } });
 });
 
-test("a Work read back below the journal's revision is a new lifetime: its history is dropped", async () => {
+test("an older reread cannot roll back the journal revision or discard history", async () => {
   const f = fixture();
   await f.apply([{ path: ["settings", "width"], value: 20 }], "human-1");
   await f.apply([{ path: ["settings", "width"], value: 30 }], "human-2");
   expect(f.journal.read()).toMatchObject({ revision: 2, undo: [{}, {}] });
   // The tab-lifetime journal meets its Work recreated at r0 (fixture remount, start-fresh elsewhere).
   f.journal.observe({ revision: 0, doc: f.initial });
-  expect(f.journal.read()).toMatchObject({ revision: 0, undo: [], redo: [], last: null });
+  expect(f.journal.read()).toMatchObject({ revision: 2, undo: [{}, {}], redo: [] });
 });

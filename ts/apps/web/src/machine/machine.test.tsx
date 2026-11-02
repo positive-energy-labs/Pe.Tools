@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { useState, type ComponentProps } from "react";
 import type { Machine, Reading } from "@pe/agent-contracts";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vite-plus/test";
@@ -44,8 +45,20 @@ afterEach(() => {
   surface.native = false;
 });
 
+function Body({ reading, shell }: { reading: Reading<Machine>; shell: "web" | "tray" }) {
+  const [group, setGroup] = useState<ComponentProps<typeof SettingsBody>["group"]>();
+  return (
+    <SettingsBody
+      reading={reading}
+      fixture={false}
+      shell={shell}
+      group={group}
+      onGroup={setGroup}
+    />
+  );
+}
 const body = (reading: Reading<Machine>, shell: "web" | "tray" = "web") =>
-  render(<SettingsBody reading={reading} fixture={false} shell={shell} />);
+  render(<Body reading={reading} shell={shell} />);
 
 const header = (label: string) =>
   within(screen.getByRole("region", { name: label })).getAllByRole("button")[0]!;

@@ -38,11 +38,19 @@ export function GraphHistory<P, W>({
     !workOnly && parsed.success ? (key ? receiptsForWork(parsed.data, key) : parsed.data) : [];
   const recorded = new Set(saved.map((receipt) => receipt.id));
   const shown = entries.filter(
-    (entry) => (!workOnly || owner.verbs[entry.verb ?? ""]?.kind === "work") &&
-      !(entry.kind === "invocation" && entries.some((receipt) =>
-        receipt.kind === "receipt" && receipt.outcome &&
-        (receipt.press === entry.press || receipt.outcome.receiptId === entry.outcome?.receiptId) &&
-        (receipt.press != null || receipt.outcome.receiptId != null))),
+    (entry) =>
+      (!workOnly || owner.verbs[entry.verb ?? ""]?.kind === "work") &&
+      !(
+        entry.kind === "invocation" &&
+        entries.some(
+          (receipt) =>
+            receipt.kind === "receipt" &&
+            receipt.outcome &&
+            (receipt.press === entry.press ||
+              receipt.outcome.receiptId === entry.outcome?.receiptId) &&
+            (receipt.press != null || receipt.outcome.receiptId != null),
+        )
+      ),
   );
   return (
     <section aria-label={label}>
@@ -112,6 +120,10 @@ export function GraphHistory<P, W>({
                       )?.at
                     : undefined,
                 )}
+                {entry.kind === "feed" &&
+                  typeof (entry.subject as { message?: unknown } | null)?.message === "string" && (
+                    <> | {String((entry.subject as { message: string }).message)}</>
+                  )}
                 {entry.outcome?.reason && <> | {entry.outcome.reason}</>}
                 {entry.outcome?.recovery && entry.outcome.receiptId && (
                   <>
@@ -141,8 +153,8 @@ export function GraphHistory<P, W>({
                   {Object.values(owner.verbs).find((verb) => verb.does === receipt.key)?.label ??
                     receipt.key}
                 </a>{" "}
-                ·{" "}
-                {invocationOutcome(receipt).state} · {receipt.caller.kind === "pea" ? "Pea" : "you"} · {activityTime(receipt.startedAt)}
+                · {invocationOutcome(receipt).state} ·{" "}
+                {receipt.caller.kind === "pea" ? "Pea" : "you"} · {activityTime(receipt.startedAt)}
                 {invocationOutcome(receipt).recovery && (
                   <>
                     {" "}

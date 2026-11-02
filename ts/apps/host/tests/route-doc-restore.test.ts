@@ -83,7 +83,13 @@ async function fixture() {
   const apply = (patches: RouteStatePatch[], revision: number, caller: Caller = human) =>
     post({ patches, expectedRevision: revision, press: "press-1" }, caller);
   const restore = (write: WorkWriteAck, revision = write.revision) =>
-    post({ patches: write.inverse, expectedRevision: revision, press: "ignored", kind: "restore" });
+    post({
+      patches: write.inverse,
+      expectedRevision: revision,
+      press: null,
+      kind: "restore",
+      restoreOf: write.revision,
+    });
   const stored = () => store.getState({ targetKey: workKey(scope), route: scope.route });
   return { app, store, scope, spec, post, apply, restore, stored, events };
 }
@@ -99,7 +105,7 @@ test("HTTP apply overwrites client by with the principal, and restore preserves 
   expect(seeded.write).toMatchObject({
     kind: "apply",
     by: "pea",
-    press: null,
+    press: "press-1",
     base: 0,
     revision: 1,
   });
@@ -225,7 +231,7 @@ test("startFresh returns the set-aside inverse and recovery restores the unparse
     doc: original.doc,
     write: { kind: "restore", press: null },
   });
-  expect(await h.stored()).toEqual({ ...original, revision: 9 });
+  expect(await h.stored()).toMatchObject({ ...original, revision: 9, history: expect.any(Array) });
 });
 
 test("startFresh refuses an unmarked malformed envelope and preserves its exact bytes", async () => {
@@ -274,7 +280,7 @@ test("an agent's HTTP write reaches a resource-stream subscriber with its host s
   expect(agent).toMatchObject({
     kind: "apply",
     by: "pea",
-    press: null,
+    press: "press-1",
     base: 0,
     revision: 1,
     patches: [{ path: ["settings", "width"], value: 20 }],

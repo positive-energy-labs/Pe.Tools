@@ -1,4 +1,4 @@
-/** Browser proof against the isolated host: capture and one Apply with filed receipts on `/pods`. */
+/** Real isolated-host browser proof: draft retention and durable-thread recovery. */
 import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { createServer as createNodeServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -10,10 +10,8 @@ import { afterAll, beforeAll, expect, test } from "vite-plus/test";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
 import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/service-identity";
-import { address, bindWork } from "@pe/agent-contracts";
 import { makeHttpLive } from "../src/app.ts";
 import { hostOwnership, productRoot } from "../src/host-ownership.ts";
-import { hostTakeoffCaptures } from "../src/takeoff-captures.ts";
 
 const webRoot = resolve(import.meta.dirname, "..", "..", "web");
 
@@ -125,16 +123,15 @@ test("unissued Pea draft survives Home and Back without creating a conversation"
   const draft = "Unsent Home Back draft: preserve the original composer.";
   const evidence: Record<string, unknown> = {};
   try {
-    await page.goto(`${baseUrl}/ducts?demo=navigation`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${baseUrl}/pea`, { waitUntil: "domcontentloaded" });
     await expect
-      .poll(() => page.getByRole("button", { name: "All systems", exact: true }).count(), {
+      .poll(() => page.getByRole("textbox", { name: "Message", exact: true }).count(), {
         timeout: 30_000,
       })
       .toBeGreaterThan(0);
     expect(new URL(page.url()).searchParams.has("thread")).toBe(false);
     const issuedThread = new URL(page.url()).searchParams.get("thread");
     // Closing the last Place reveals the unissued composer without choosing a conversation.
-    await page.getByRole("button", { name: "Close Ducts", exact: true }).click();
     await expect.poll(() => new URL(page.url()).pathname).toBe("/pea");
     expect(new URL(page.url()).searchParams.get("thread")).toBe(issuedThread);
     const address = page.url();
@@ -194,12 +191,12 @@ test("unsent draft remains current across real offline/online stream recovery", 
       (response) => response.status === 200 && response.url.includes("/pe/resources"),
     ).length;
   try {
-    await page.goto(`${baseUrl}/ducts?demo=navigation`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${baseUrl}/pea`, { waitUntil: "domcontentloaded" });
     const composer = page.getByRole("textbox", { name: "Message", exact: true });
     await expect.poll(() => composer.isVisible(), { timeout: 30_000 }).toBe(true);
     expect(new URL(page.url()).searchParams.has("thread")).toBe(false);
     await expect
-      .poll(() => page.getByRole("button", { name: "All systems", exact: true }).count(), {
+      .poll(() => page.getByRole("textbox", { name: "Message", exact: true }).count(), {
         timeout: 30_000,
       })
       .toBeGreaterThan(0);
@@ -253,9 +250,9 @@ test("empty persisted thread stays fenced until its real host reread lands", asy
     responses.push({ status: response.status(), url: response.url() }),
   );
   try {
-    await page.goto(`${baseUrl}/ducts?demo=navigation`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${baseUrl}/pea`, { waitUntil: "domcontentloaded" });
     await expect
-      .poll(() => page.getByRole("button", { name: "All systems", exact: true }).count(), {
+      .poll(() => page.getByRole("textbox", { name: "Message", exact: true }).count(), {
         timeout: 30_000,
       })
       .toBeGreaterThan(0);
@@ -282,12 +279,12 @@ test("empty persisted thread stays fenced until its real host reread lands", asy
         (response) => response.status === 200 && new URL(response.url).pathname === bodyPath,
       ).length;
     const before = bodies();
-    await page.goto(`${baseUrl}/ducts?demo=navigation&thread=${created.id}`, {
+    await page.goto(`${baseUrl}/pea?thread=${created.id}`, {
       waitUntil: "domcontentloaded",
     });
     await expect.poll(bodies, { timeout: 30_000 }).toBeGreaterThan(before);
     await expect
-      .poll(() => page.getByRole("button", { name: "All systems", exact: true }).count(), {
+      .poll(() => page.getByRole("textbox", { name: "Message", exact: true }).count(), {
         timeout: 30_000,
       })
       .toBeGreaterThan(0);
@@ -382,497 +379,3 @@ test("empty persisted thread stays fenced until its real host reread lands", asy
 
 /** The app bar folds the Situation into a drawer that is inert until pinned (Ctrl+.); pin it so
  * its head, verbs and ladder are on the page. Pinning is page state, so every load pins again. */
-async function pinSituation(page: Page) {
-  const door = page.getByRole("button", { name: "Show Situation", exact: true });
-  await expect.poll(() => door.getAttribute("aria-disabled"), { timeout: 30_000 }).toBeNull();
-  if ((await door.getAttribute("aria-pressed")) !== "true") await door.click();
-  await expect.poll(() => page.getByRole("region", { name: "Situation drawer" }).count()).toBe(1);
-}
-
-async function go(page: Page, url: string) {
-  await page.goto(url, { waitUntil: "domcontentloaded" });
-  await pinSituation(page);
-}
-
-async function openLive(page: Page, path: string, query: string) {
-  await page.goto(`${baseUrl}${path}?${query}`, { waitUntil: "domcontentloaded" });
-  // The lane creates the owner, then reloads bound to its one session.
-  await expect
-    .poll(() => new URL(page.url()).searchParams.get("target"), { timeout: 30_000 })
-    .toMatch(/^demo-/);
-  await pinSituation(page);
-  return new URL(page.url()).searchParams.get("target")!;
-}
-
-const verb = (page: Page, label: string) =>
-  page.getByRole("button", { name: new RegExp(`^${label}`) }).first();
-
-async function run(page: Page, label: string) {
-  const button = verb(page, label);
-  await expect.poll(() => button.isEnabled(), { timeout: 30_000 }).toBe(true);
-  await button.click();
-}
-
-async function landed(page: Page, pattern: RegExp) {
-  await expect
-    .poll(() => decodeURIComponent(new URL(page.url()).searchParams.get("path") ?? ""), {
-      timeout: 30_000,
-    })
-    .toMatch(pattern);
-  return decodeURIComponent(new URL(page.url()).searchParams.get("path")!);
-}
-
-/** The page log drew a row for the verb whose hover says `says`: the row ends in the label, hover says the rest. */
-async function logged(page: Page, label: string, says: string) {
-  // The head's log is folded to its newest row (MAP ruling 21); any tab press opens the column.
-  const situation = page.locator('section[aria-label="Situation"][data-surface="page"]');
-  const allTab = situation.locator('[aria-description="all entries"]');
-  if (await allTab.count()) await allTab.first().click();
-  // The log is a kit list: a row is whatever element carries the hint, and its time sits after the label.
-  const rows = situation.locator(`[aria-description$=" · ${says}"]`);
-  const row = rows.filter({ hasText: label });
-  await expect.poll(() => row.count(), { timeout: 30_000 }).toBeGreaterThan(0);
-}
-
-/** The table query becomes exactly `text`: every query chip is removed, then its words are typed. */
-async function setQuery(page: Page, text: string) {
-  const box = page.getByRole("combobox", { name: "table query" });
-  const remove = page.locator(
-    '[data-slot="query-box"] [aria-description^="A word of the query"] button[aria-label^="Remove the"]',
-  );
-  while (await remove.count()) await remove.first().click();
-  await box.fill(text ? `${text} ` : "");
-  await box.press("Escape");
-}
-
-/** `/pods` for the member: the run receipt the apply filed, as the page draws it. */
-async function receiptOnPods(page: Page, pod: string, path: string, operation: string) {
-  await page.goto(
-    `${baseUrl}/pods?demo=browse&live=1&pod=${encodeURIComponent(pod)}&path=${encodeURIComponent(path)}`,
-    { waitUntil: "domcontentloaded" },
-  );
-  const body = page.locator("body");
-  await expect.poll(() => body.innerText(), { timeout: 30_000 }).toContain(operation);
-  return body.innerText();
-}
-
-/** Runs one loop; returns what `/pods` showed and the workflow keys the page admitted, in order. */
-async function liveLoop(name: string, loop: (page: Page) => Promise<string>) {
-  const page = await browser!.newPage();
-  const errors: string[] = [];
-  const workflows: string[] = [];
-  page.on("pageerror", (error: { message: string }) => errors.push(`page error: ${error.message}`));
-  page.on("request", (request: { method(): string; url(): string; postDataJSON(): unknown }) => {
-    if (request.method() !== "POST" || !/\/demo\/instances\/[^/]+\/actions$/.test(request.url()))
-      return;
-    const admission = request.postDataJSON() as { key: string };
-    workflows.push(admission.key);
-  });
-  try {
-    const shown = await loop(page);
-    if (SCRATCH) await page.screenshot({ path: join(SCRATCH, `${name}.png`), fullPage: true });
-    expect(errors, `${name} threw`).toEqual([]);
-    return { shown, workflows };
-  } catch (error) {
-    if (SCRATCH) {
-      await page.screenshot({ path: join(SCRATCH, `${name}-failed.png`), fullPage: true });
-      console.log(`${name} failed at ${page.url()}\n${await page.locator("body").innerText()}`);
-      const receipts = await page
-        .evaluate(
-          `import("/src/host/runtime.ts").then(async m => {
-          const rows = await (await m.hostFetch("/actions")).json();
-          return (await Promise.all(rows.map(async row =>
-            (await m.hostFetch("/actions?id=" + encodeURIComponent(row.id))).json()))).flat();
-        })`,
-        )
-        .catch((cause: unknown) => ({ evidenceError: String(cause) }));
-      writeFileSync(
-        join(SCRATCH, `${name}-failed-receipts.json`),
-        JSON.stringify(receipts, null, 2),
-      );
-    }
-    throw error;
-  } finally {
-    await page.close();
-  }
-}
-
-test("live /schedules: capture then apply files a run receipt", async () => {
-  const { shown, workflows } = await liveLoop("schedules", async (page) => {
-    const pod = await openLive(page, "/schedules", "demo=capture&live=1");
-    // The user can see the session is simulated: the ladder popup's breadcrumb names the resolved
-    // demo document (the document word left the sentence, MAP ruling 28), never "choose a session".
-    await page.getByRole("button", { name: "Open page palette" }).click();
-    const ladder = page.locator("[data-open]").filter({ hasText: "Isolated demo (simulated)" });
-    await expect.poll(() => ladder.count(), { timeout: 30_000 }).toBeGreaterThan(0);
-    await expect.poll(() => ladder.first().isVisible()).toBe(true);
-    expect(await page.locator("body").innerText()).not.toContain("choose a session");
-    await page.keyboard.press("Escape");
-    await go(page, `${page.url()}&pod=${pod}`);
-    // The schedule list is the Situation's Ladder, opened by Ctrl K (MAP rulings 19, 23).
-    await page.getByRole("button", { name: "Open page palette" }).click();
-    await page
-      .getByRole("option", { name: /DX Fan Coil Unit Schedule/ })
-      .first()
-      .click();
-    await run(page, "capture schedule");
-    const path = await landed(page, /^captures\/schedule-481223-[a-f0-9]+\.json$/);
-    // Apply names the opened spec when no cell is edited.
-    await go(page, `${page.url()}&stage=apply`);
-    await run(page, "apply spec");
-    await logged(page, "apply", "ran");
-    return receiptOnPods(page, pod, path, "schedule.apply");
-  });
-  expect(shown).toContain("Succeeded");
-  // Every capture writes a run: the capture's own run sits on this member beside the apply's.
-  expect(shown).toContain("schedule.capture");
-  expect(workflows.filter((key) => !key.endsWith(".observe"))).toEqual([
-    "schedule.capture",
-    "schedule.apply",
-  ]);
-}, 180_000);
-
-test("live /family: capture, then one apply press (plan and send) files a run receipt", async () => {
-  const { shown, workflows } = await liveLoop("family", async (page) => {
-    const pod = await openLive(page, "/family", "demo=capture&live=1");
-    await go(page, `${page.url()}&pod=${pod}`);
-    await run(page, "capture family");
-    const path = await landed(page, /^captures\/[a-f0-9]+-0\.json$/);
-    // The capture's receipt is a log row whose label opens the member it filed.
-    await logged(page, "captured 1 family", path);
-    if (SCRATCH) await page.screenshot({ path: join(SCRATCH, "family-captured.png") });
-    // Apply is an Applying verb: one press plans and applies (ruling 52); no sheet opens.
-    await go(page, `${page.url()}&stage=apply`);
-    await run(page, "apply");
-    // The log prints the verb the user pressed, never the action key (w4-revit defect 9).
-    await logged(page, "apply", "ran");
-    // The owner answers the lamp's host-status read, so the head names no broken host.
-    expect(await page.locator("body").innerText()).not.toContain("unreachable");
-    return receiptOnPods(page, pod, path, "family.apply");
-  });
-  expect(shown).toContain("Succeeded");
-  // The capture filed a run of its own on this member: that run holds the unmodeled facts.
-  expect(shown).toContain("family.capture");
-  // Arrival may read the native baseline; saving and applying each use their own semantic command.
-  expect(workflows.filter((key) => key === "family.apply")).toEqual(["family.apply"]);
-  expect(workflows).not.toContain("family.plan");
-  expect(workflows).toContain("family.capture");
-}, 180_000);
-
-async function readMechanicalFamilies(page: Page, expectedValue = "Fan Coil Unit - Ducted model") {
-  await page.getByRole("button", { name: "Choose category" }).click();
-  await page
-    .getByRole("option", { name: /Mechanical Equipment/ })
-    .first()
-    .click();
-  // The multi-pick list stays open and, in the docked Situation, covers the verbs; Esc folds it.
-  await page.keyboard.press("Escape");
-  await run(page, "read families");
-  await expectModelValue(page, "Fan Coil Unit - Ducted", expectedValue);
-}
-
-const modelCell = (page: Page, family: string) =>
-  page
-    .getByRole("gridcell", { name: `PE_G___Model · ${family} · Type 1`, exact: true })
-    .locator("input");
-
-const expectModelValue = (page: Page, family: string, value: string) =>
-  expect.poll(() => modelCell(page, family).inputValue(), { timeout: 30_000 }).toBe(value);
-
-test("/families History inspects a saved reading without a target or Revit connection", async () => {
-  const work = bindWork("families", address("C:/archive/Offline.rvt"));
-  const parameter = (name: string, value: string) => ({
-    definition: {
-      identity: { key: `name:${name}`, kind: "NameFallback", name },
-      isInstance: false,
-    },
-    kind: "FamilyParameter",
-    scope: "Family",
-    storageType: "String",
-    formulaState: "None",
-    valuesPerType: { "24x24": value },
-  });
-  const saved = await hostTakeoffCaptures().saveFamilies({
-    work,
-    document: { session: "closed-session", openId: "closed-document" },
-    filter: { categoryNames: ["Air Terminals"], familyNames: [], placementScope: "AllLoaded" },
-    capturedAt: "2026-09-22T12:00:00.000Z",
-    result: {
-      families: [
-        {
-          familyId: 1,
-          familyUniqueId: "offline-family",
-          familyName: "Offline diffuser",
-          categoryName: "Air Terminals",
-          typeNames: ["24x24"],
-          parameters: [parameter("Model", "ARCH-1"), parameter("Only unplaced", "Unplaced")],
-          issues: [],
-          isPartial: false,
-          placedInstanceCount: 0,
-        },
-        {
-          familyId: 2,
-          familyUniqueId: "placed-family",
-          familyName: "Placed_Diffuser-2",
-          categoryName: "Air Terminals",
-          typeNames: ["24x24"],
-          parameters: [parameter("Model", "ARCH-2")],
-          issues: [],
-          isPartial: false,
-          placedInstanceCount: 2,
-        },
-      ],
-      issues: [{ code: "FamilyEditWarning", severity: "Warning", message: "saved warning" }],
-      page: { totalCount: 2, returnedCount: 2, isTruncated: false },
-    },
-  });
-  const { shown } = await liveLoop("families-archive-offline", async (page) => {
-    const writes: string[] = [];
-    page.on("request", (request: { method(): string; url(): string; postDataJSON(): unknown }) => {
-      if (request.method() !== "POST") return;
-      if (request.url().includes("/families/readings")) writes.push("families.read");
-      if (request.url().includes("/pe/route-state/")) writes.push("work.write");
-      if (request.url().endsWith("/actions")) writes.push("action.write");
-      if (request.url().endsWith("/call"))
-        writes.push((request.postDataJSON() as { key?: string }).key ?? "unknown call");
-    });
-    await go(page, `${baseUrl}/families?stage=history`);
-    await expect
-      .poll(
-        () =>
-          page.getByRole("columnheader", { name: "Offline diffuser · 24x24", exact: true }).count(),
-        { timeout: 30_000 },
-      )
-      .toBe(1);
-    const rules = page.getByRole("combobox", { name: "table query" });
-    await setQuery(page, "!absent placed>0");
-    await expect
-      .poll(() =>
-        page.getByRole("columnheader", { name: "Offline diffuser · 24x24", exact: true }).count(),
-      )
-      .toBe(0);
-    expect(await page.getByRole("rowheader", { name: "Only unplaced", exact: true }).count()).toBe(
-      0,
-    );
-    await setQuery(page, "fams>=2");
-    expect(await page.getByRole("rowheader", { name: "Only unplaced", exact: true }).count()).toBe(
-      0,
-    );
-    await setQuery(page, "!empty !absent family!=Placed_Diffuser-2");
-    expect(
-      await page
-        .getByRole("columnheader", { name: "Placed_Diffuser-2 · 24x24", exact: true })
-        .count(),
-    ).toBe(0);
-    await page
-      .getByRole("button", {
-        name: 'Remove the "family is not Placed_Diffuser-2" narrowing',
-      })
-      .click();
-    await expect
-      .poll(() =>
-        page.getByRole("columnheader", { name: "Placed_Diffuser-2 · 24x24", exact: true }).count(),
-      )
-      .toBe(1);
-    await setQuery(page, 'family!="Offline diffuser"');
-    expect(
-      await page
-        .getByRole("columnheader", { name: "Offline diffuser · 24x24", exact: true })
-        .count(),
-    ).toBe(0);
-    // An empty, focused box offers every field (MAP ruling 22).
-    await rules.fill("");
-    await rules.click();
-    await expect.poll(() => page.getByRole("option", { name: /^fams/ }).count()).toBe(1);
-    await setQuery(page, "!empty !absent");
-    const savedCell = page.getByRole("gridcell", {
-      name: "Model · Offline diffuser · 24x24",
-      exact: true,
-    });
-    await expect.poll(() => savedCell.innerText()).toContain("ARCH-1");
-    expect(await savedCell.locator("input").count()).toBe(0);
-    const body = await page.locator("body").innerText();
-    expect(new URL(page.url()).searchParams.get("target")).toBeNull();
-    expect(body).toContain("Offline.rvt");
-    const archive = page.getByRole("main").filter({
-      has: page.getByRole("grid", { name: "parameters × family types", exact: true }),
-    });
-    expect(await archive.count()).toBe(1);
-    expect(await archive.getByRole("textbox").count()).toBe(0);
-    expect(await page.getByRole("textbox", { name: "Message", exact: true }).count()).toBe(1);
-    expect(
-      await page.getByRole("button", { name: /^read families|^plan|^apply families/ }).count(),
-    ).toBe(0);
-    // The shared shell may list Pods; Archive itself dispatches no native or Work action.
-    expect(writes.every((key) => key === "pod.list")).toBe(true);
-    expect(writes).not.toContain("families.read");
-    expect(writes).not.toContain("work.write");
-    expect(writes.filter((key) => key.startsWith("revit.") || key === "family.open")).toEqual([]);
-    return saved.id;
-  });
-  expect(shown).toBe(saved.id);
-}, 180_000);
-
-/**
- * THE EDITABLE TABLE, on keyed cells. Two cells are typed across two families: a typed value
- * edits shared Work directly and survives reload. Returning to the native value clears the edit.
- * One Apply submits all source bytes, plans internally, checks native hashes and retires only
- * unchanged edits after success. `/pods` shows each source's run without creating a saved member.
- */
-test("live /families: retained readback supports repeated shared Apply commands", async () => {
-  const { shown, workflows } = await liveLoop("families-table", async (page) => {
-    let fullReads = 0;
-    page.on("request", (request: { method(): string; url(): string }) => {
-      if (request.method() === "POST" && request.url().includes("/families/readings")) fullReads++;
-    });
-    const pod = await openLive(page, "/families", "demo=edit&live=1");
-    await go(page, `${page.url()}&pod=${pod}`);
-    await readMechanicalFamilies(page);
-    // The read dirties the matrix Reading: the log grows its tab (MAP ruling 3).
-    await expect
-      .poll(() => page.locator('[aria-label="log kind"] button').allInnerTexts(), {
-        timeout: 30_000,
-      })
-      .toContain("matrix");
-    if (SCRATCH)
-      await page
-        .locator('section[aria-label="Situation"][data-surface="page"]')
-        .screenshot({ path: join(SCRATCH, "families-read.png") });
-    // The Work sentence counts edits and suggestions without guessing their authors.
-    const band = (open: number, edited: number) => {
-      const says = [
-        edited ? `${edited} edited cell${edited === 1 ? "" : "s"}` : "",
-        open ? `${open} suggestion${open === 1 ? "" : "s"}` : "",
-      ].filter(Boolean);
-      return expect
-        .poll(() => page.locator('[data-slot="situation-band"]').innerText(), { timeout: 30_000 })
-        .toMatch(
-          says.length
-            ? new RegExp(`^${says.join(", ")}( ·|$)`)
-            : /^(?![\s\S]*(?:edited cells?|suggestions?))/,
-        );
-    };
-    const type = async (family: string, current: string, next: string) => {
-      const cell = modelCell(page, family);
-      await expectModelValue(page, family, current);
-      await cell.fill(next);
-      await cell.press("Enter");
-      // Edit one cell at a time, as a person does, and wait for Work to show each value.
-      await expectModelValue(page, family, next);
-    };
-    let typed = 0;
-    for (const [family, next] of [
-      ["Fan Coil Unit - Ducted", "FXMQ20"],
-      ["Heat Pump - Split", "RXL30"],
-    ]) {
-      await type(family, `${family} model`, next!);
-      typed += 1;
-      await band(0, typed);
-    }
-    // Staged cells are Work, not page memory: a reload still finds them.
-    await page.reload({ waitUntil: "domcontentloaded" });
-    await pinSituation(page);
-    await band(0, 2);
-    const auditUrl = new URL(page.url());
-    auditUrl.searchParams.set("stage", "audit");
-    await go(page, auditUrl.href);
-    // The host's retained matrix restores without another expensive Read.
-    await expectModelValue(page, "Fan Coil Unit - Ducted", "FXMQ20");
-    // Returning a cell to Revit's value clears its edit.
-    await type("Heat Pump - Split", "RXL30", "Heat Pump - Split model");
-    await band(0, 1);
-    await expectModelValue(page, "Heat Pump - Split", "Heat Pump - Split model");
-    if (SCRATCH)
-      await page.screenshot({ path: join(SCRATCH, "families-table-edited.png"), fullPage: true });
-    let releaseReadback!: () => void;
-    const heldReadback = new Promise<void>((resolve) => {
-      releaseReadback = resolve;
-    });
-    let readbackRequested = false;
-    let readbackUrl = "";
-    await page.route(
-      "**/families/readings?*",
-      async (route: { request(): { url(): string }; continue(): Promise<void> }) => {
-        if (!route.request().url().includes("id=")) return route.continue();
-        readbackRequested = true;
-        readbackUrl = route.request().url();
-        await heldReadback;
-        await route.continue();
-      },
-    );
-    await run(page, "apply");
-    await expect.poll(() => readbackRequested, { timeout: 30_000 }).toBe(true);
-    // Read the saved body independently of the held browser request before judging its display.
-    const savedReadback = await page.request.get(readbackUrl, {
-      headers: { [HOST_RUNTIME_SERVICE_HEADER]: hostOwnership.serviceName },
-    });
-    expect(savedReadback.status()).toBe(200);
-    const savedParts = await savedReadback.json();
-    expect(
-      savedParts.reading.result.families.find(
-        (family: { familyName: string }) => family.familyName === "Fan Coil Unit - Ducted",
-      ).parameters[0].valuesPerType["Type 1"],
-    ).toBe("FXMQ20");
-    if (SCRATCH)
-      writeFileSync(
-        join(SCRATCH, "families-first-readback.json"),
-        JSON.stringify(savedParts, null, 2),
-      );
-    await page.getByRole("combobox", { name: "table query" }).fill("parameter~model ");
-    releaseReadback();
-    // The owner changes simulated native state; the Host's targeted matrix readback, not the
-    // submitted input, supplies the value that the table draws after Apply.
-    await expectModelValue(page, "Fan Coil Unit - Ducted", "FXMQ20");
-    // The apply is one log row; the simulated engine writes no bundle, so it links nothing.
-    await logged(page, "apply", "ran");
-    if (SCRATCH) await page.screenshot({ path: join(SCRATCH, "families-applied.png") });
-    await page.getByRole("combobox", { name: "table query" }).focus();
-    await expect
-      .poll(() =>
-        page.getByRole("button", { name: "parameter contains model", exact: true }).count(),
-      )
-      .toBe(1);
-    // The retained observation supplies the baseline for the next Apply across two families.
-    await type("Fan Coil Unit - Ducted", "FXMQ20", "FXMQ21");
-    await type("Heat Pump - Split", "Heat Pump - Split model", "RXL31");
-    await band(0, 2);
-    await run(page, "apply");
-    await expectModelValue(page, "Fan Coil Unit - Ducted", "FXMQ21");
-    await expectModelValue(page, "Heat Pump - Split", "RXL31");
-    await band(0, 0);
-    expect(fullReads).toBe(1);
-    // Plan filed no spec nobody authored: the page names no member.
-    expect(new URL(page.url()).searchParams.get("path") ?? "").toBe("");
-    await logged(page, "apply", "ran");
-    // The applied unchanged edits retire; the receipt remains the record.
-    await band(0, 0);
-    // The run is filed under the draft's name; `/pods` browses members, and none was filed.
-    // A string, so vitest leaves the page's own dynamic import alone.
-    const runs = (await page.evaluate(
-      `import("/src/host/pods.ts").then((m) => m.listRuns(${JSON.stringify(pod)}, "edit/Fan-Coil-Unit---Ducted.json"))`,
-    )) as { receipt: unknown }[];
-    const members = await receiptOnPods(page, pod, "", "Members");
-    expect(members).not.toContain("edit/Fan-Coil-Unit---Ducted.json");
-    return JSON.stringify(runs.map((r) => r.receipt));
-  });
-  expect(JSON.parse(shown)).toEqual([
-    expect.objectContaining({
-      operation: "families.apply",
-      outcome: "Succeeded",
-      podId: null,
-      origin: "SuppliedDraft",
-      memberPath: null,
-      memberSha256: null,
-    }),
-    expect.objectContaining({
-      operation: "families.apply",
-      outcome: "Succeeded",
-      podId: null,
-      origin: "SuppliedDraft",
-      memberPath: null,
-      memberSha256: null,
-    }),
-  ]);
-  // Two human presses each submit one semantic Apply, even when the second covers two sources.
-  expect(workflows).toEqual(["families.apply", "families.apply"]);
-}, 180_000);

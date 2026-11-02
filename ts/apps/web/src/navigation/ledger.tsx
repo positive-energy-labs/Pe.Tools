@@ -7,6 +7,7 @@ import { ListView } from "@pe/kit/lang/list-view";
 import { Scroll } from "@pe/kit/lang/scroll";
 import { Button } from "@pe/kit/lang/button";
 import type { HarnessThreadSummary } from "@pe/agent-contracts";
+import { currentFixture } from "#/shell/fixture-lane";
 import { peClient } from "#/host/pe-client";
 import { useMachine } from "#/machine/use-machine";
 import { attention, machineOf } from "#/machine/model";
@@ -68,6 +69,7 @@ function useLedgerRows() {
     [],
   );
   useEffect(() => {
+    if (currentFixture() !== null) return;
     // ponytail: receipts are read on focus and every 15 s; a receipts stream (wave B) replaces this.
     const read = () =>
       void peClient
@@ -75,7 +77,9 @@ function useLedgerRows() {
         .then((value) =>
           setReceipts(Array.isArray(value) ? (value as LedgerSources["receipts"]) : []),
         )
-        .catch((error) => { console.error("ledger: asynchronous operation failed", error); });
+        .catch((error) => {
+          console.error("ledger: asynchronous operation failed", error);
+        });
     read();
     const timer = setInterval(read, 15_000);
     window.addEventListener("focus", read);
@@ -96,7 +100,9 @@ function useLedgerRows() {
           const ask = openAsk(body.events);
           if (ask) setAsks((prior) => new Map(prior).set(thread.id, ask));
         })
-        .catch((error) => { console.error("ledger: asynchronous operation failed", error); });
+        .catch((error) => {
+          console.error("ledger: asynchronous operation failed", error);
+        });
     }
   }, [threads]);
   const attentionLines = machine ? attention(machine) : [];

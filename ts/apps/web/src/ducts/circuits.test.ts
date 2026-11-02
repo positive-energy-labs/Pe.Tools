@@ -30,6 +30,7 @@ const port = (index: number, owner: number, connector: number, direction = "bidi
 const eq = (id: number, connectors: ReturnType<typeof port>[]) => ({
   id,
   uniqueId: `purpose-${id}`,
+  flowParameter: "Observed flow",
   kind: "equipment",
   category: "Equipment",
   family: "Purpose fixture",
@@ -42,6 +43,7 @@ const eq = (id: number, connectors: ReturnType<typeof port>[]) => ({
 const terminal = (id: number, owner: number, connector: number, groupId: string, drop = 0.03) => ({
   id,
   uniqueId: `purpose-${id}`,
+  flowParameter: "Observed flow",
   kind: "terminal",
   point: [0, 0, 0],
   groupId,
@@ -52,6 +54,7 @@ const terminal = (id: number, owner: number, connector: number, groupId: string,
 const segment = (id: number, groupId: string, connectors: ReturnType<typeof port>[]) => ({
   id,
   uniqueId: `purpose-${id}`,
+  flowParameter: "Observed flow",
   kind: "duct",
   curveKind: "line",
   shape: "round",
@@ -589,7 +592,13 @@ function parallelFlowFixture() {
     const a = port(0, 500, i + 1),
       b = port(1, 600, i);
     b.point = [5, 0, 0];
-    return { ...fixture().segments[0]!, id, uniqueId: `purpose-${id}`, connectors: [a, b] };
+    return {
+      ...fixture().segments[0]!,
+      id,
+      uniqueId: `purpose-${id}`,
+      flowParameter: "Observed flow",
+      connectors: [a, b],
+    };
   });
   delete e.b;
   if (e.a?.kind !== "fan" || e.t?.kind !== "terminal") throw Error("fixture roles");
@@ -870,7 +879,14 @@ it("retains shared tap station continuity without inventing a zero-length fricti
     main.connectors.push(p);
     const back = port(0, 10, index);
     back.point = [4, 0, 0];
-    s.nodes.push({ ...owner, id, uniqueId: `purpose-${id}`, kind: "cap", connectors: [back] });
+    s.nodes.push({
+      ...owner,
+      id,
+      uniqueId: `purpose-${id}`,
+      flowParameter: "Observed flow",
+      kind: "cap",
+      connectors: [back],
+    });
   }
   const before = price(s, {}, work(e)).next.design;
   e.flow = {
@@ -942,6 +958,7 @@ function refusedContinuityFixture() {
     ...owner,
     id,
     uniqueId: `purpose-${id}`,
+    flowParameter: "Observed flow",
     connectors: [{ ...port(0, 10, index), point: points[index]! }],
   }));
   s.segments = [
@@ -1173,6 +1190,7 @@ it("preserves all six ports and two actual native shared stations from retained9
       ...owner,
       id,
       uniqueId: `purpose-${id}`,
+      flowParameter: "Observed flow",
       kind: "cap",
       connectors: [{ ...port(0, 10, i), point: points[i]! }],
     });

@@ -32,7 +32,11 @@ export interface RouteField<S extends z.ZodType = z.ZodType> extends Access {
 }
 
 /** Presence survives decoding: an explicit empty/default value must override Place memory. */
-export function decodePageField(field: RouteField, search: Record<string, unknown>, id: string) {
+export function decodePageField(
+  field: Pick<RouteField, "schema" | "codec">,
+  search: Record<string, unknown>,
+  id: string,
+) {
   const present = Object.hasOwn(search, id) && search[id] !== undefined;
   const raw = search[id];
   let decoded = field.schema.safeParse(raw);
