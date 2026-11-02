@@ -3,15 +3,19 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { Script } from "node:vm";
 
-const routeUrl = new URL(
-  "../../../../examples/pods/snowdon-circuits/routes/voltage-drop/index.js",
-  import.meta.url,
-);
 const sharedUrl = new URL(
   "../../../../examples/pods/snowdon-circuits/pages/tour/instruments.mjs",
   import.meta.url,
 );
-const module = () => import(routeUrl);
+// Page factory/reducer coverage; the Pod register() graph is exercised through
+// the real kernel in apps/web/src/route/pod-loader.test.ts.
+const module = async () => {
+  const { createInstruments } = await import(sharedUrl);
+  const { initialCircuitState, circuitReduce } = await import(
+    "../../../../examples/pods/snowdon-circuits/pages/tour/circuits.mjs"
+  );
+  return { initial: initialCircuitState, reducer: circuitReduce, create: createInstruments };
+};
 
 test("authored instrument labels retain their exact Unicode", async () => {
   const source = await readFile(sharedUrl, "utf8");
@@ -71,40 +75,11 @@ function button(tree, label) {
   return all(tree).find((node) => node.props.label === label);
 }
 
-test("the authored route applies saved theme through the shared kit", async () => {
+test("the portable Page authors theme changes through its reducer", async () => {
   const route = await module();
   const h = harness({ ...route.initial, theme: "dark" }, route.reducer);
-  route.create(h.api)();
-  for (const effect of h.effects) effect();
-  assert.deepEqual(h.themes, ["dark"]);
-});
-
-test("bundled route uses the same explicit factory and reducer as the Page", async () => {
-  const route = await module();
-  const shared = await import(sharedUrl);
-  const circuit = await import(
-    new URL("../../../../examples/pods/snowdon-circuits/pages/tour/circuits.mjs", import.meta.url)
-  );
-  const routeHarness = harness(route.initial, route.reducer);
-  const pageHarness = harness(circuit.initialCircuitState, circuit.circuitReduce);
-  const shape = (tree) =>
-    JSON.stringify(tree, (_key, value) => (typeof value === "function" ? value.toString() : value));
-  assert.equal(
-    shape(route.create(routeHarness.api)()),
-    shape(shared.createInstruments(pageHarness.api)()),
-  );
-  const event = { v: route.version, type: "input", key: "amps", value: "12" };
-  assert.deepEqual(
-    route.reducer(route.initial, event),
-    circuit.circuitReduce(circuit.initialCircuitState, event),
-  );
-  const source = await readFile(routeUrl, "utf8");
-  assert.doesNotMatch(source, /^(?:import|export .* from) /m);
-  const executable = source.replace(/^const authoredSources = .*;$/m, "");
-  assert.doesNotMatch(
-    executable,
-    /\b(?:pe|window|globalThis)\.|(?<![.\w])document\.(?:getElement|querySelector|documentElement|createElement)|eval\(|new Function/,
-  );
+  button(route.create(h.api)(), "Change theme").props.onClick();
+  assert.equal(h.state().theme, "light");
 });
 
 test("generated portable Page executes the shared instruments with its pe.kernel adapter", async () => {
@@ -174,7 +149,7 @@ test("generated portable Page executes the shared instruments with its pe.kernel
   assert.equal(window.pageState.state.v, 1);
 });
 
-test("both adapters keep real reading identity through snapshot export and offline calculation", async () => {
+test("the portable Page keeps real reading identity through snapshot export and offline calculation", async () => {
   const route = await module();
   const row = {
     id: 91,
