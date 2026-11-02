@@ -414,11 +414,13 @@ export class PeReadings {
             for (const [key, frames] of pending) {
               const entry = this.entries.get(key);
               if (!entry) continue;
-              for (const frame of frames) {
+              for (let frame of frames) {
                 if (frame.kind === "gap") entry.stale = true;
                 if (frame.kind === "snapshot" || frame.kind === "failure") {
-                  const unchanged =
-                    !entry.stale && deepEqual(entry.latest, frame, { ignoreUndefined: false });
+                  const identical = deepEqual(entry.latest, frame, { ignoreUndefined: false });
+                  const unchanged = !entry.stale && identical;
+                  // A new stream must confirm freshness, but identical evidence keeps its identity.
+                  if (identical && entry.latest) frame = entry.latest;
                   entry.latest = frame;
                   entry.stale = false;
                   this.attempts = 0;
