@@ -667,3 +667,59 @@ test("online replaces a socket that never reported its offline failure", async (
   release();
   readings.close();
 });
+
+test("retention evicts least-recent revisits, exempts mounted subjects, and refetches evictions", async () => {
+  const { readings, sources, update } = owner();
+  const request = (thread: string) => ({ kind: "thread-head", thread }) as const;
+  const emit = (thread: string, revision = 1) =>
+    sources[0]!.onmessage!({
+      data: JSON.stringify({
+        kind: "snapshot",
+        key: readingKey(request(thread)),
+        value: { revision },
+      }),
+    });
+  const releaseMounted = readings.subscribe(request("mounted"), () => {});
+  try {
+    await Promise.resolve();
+    sources[0]!.onopen!();
+    emit("mounted");
+    for (let i = 0; i < 64; i++) {
+      const release = readings.subscribe(request(String(i)), () => {});
+      emit(String(i));
+      release();
+    }
+    const revisit = vi.fn();
+    readings.subscribe(request("0"), revisit)();
+    expect(revisit).toHaveBeenCalledWith(expect.objectContaining({ kind: "snapshot" }));
+    const releaseExtra = readings.subscribe(request("extra"), () => {});
+    emit("extra");
+    releaseExtra();
+    const recent = vi.fn();
+    readings.subscribe(request("0"), recent)();
+    expect(recent).toHaveBeenCalledWith(expect.objectContaining({ kind: "snapshot" }));
+    const mountedAgain = vi.fn();
+    readings.subscribe(request("mounted"), mountedAgain)();
+    expect(mountedAgain).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "snapshot", stale: false }),
+    );
+    const evicted = vi.fn();
+    const releaseEvicted = readings.subscribe(request("1"), evicted);
+    expect(evicted.mock.calls).toEqual([[{ kind: "stale", key: readingKey(request("1")) }]]);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(
+      update.mock.calls.some(([, add]) =>
+        add.some((r) => readingKey(r) === readingKey(request("1"))),
+      ),
+    ).toBe(true);
+    emit("1", 2);
+    expect(evicted).toHaveBeenLastCalledWith(
+      expect.objectContaining({ kind: "snapshot", value: { revision: 2 } }),
+    );
+    releaseEvicted();
+  } finally {
+    releaseMounted();
+    readings.close();
+  }
+});

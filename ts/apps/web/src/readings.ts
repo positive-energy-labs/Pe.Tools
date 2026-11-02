@@ -51,6 +51,8 @@ export class PeReadings {
       stale: boolean;
     }
   >();
+  // Keep 64 inactive subjects: several dozen recent revisits; mounted readings live in entries.
+  private readonly retainedLimit = 64;
   private readonly retained = new Map<string, ReadingFrame>();
   private source?: Source;
   private connection = "";
@@ -201,6 +203,7 @@ export class PeReadings {
     let entry = this.entries.get(key);
     if (!entry) {
       entry = { request, listeners: new Set(), latest: this.retained.get(key), stale: true };
+      this.retained.delete(key);
       this.entries.set(key, entry);
       this.schedule(false);
     }
@@ -211,6 +214,12 @@ export class PeReadings {
     return () => {
       found.listeners.delete(listener);
       if (found.listeners.size === 0 && this.entries.get(key) === found) {
+        if (found.latest) {
+          this.retained.delete(key);
+          this.retained.set(key, found.latest);
+          if (this.retained.size > this.retainedLimit)
+            this.retained.delete(this.retained.keys().next().value!);
+        }
         this.entries.delete(key);
         this.pending.delete(key);
         this.schedule(false);
@@ -422,7 +431,6 @@ export class PeReadings {
                   // A new stream must confirm freshness, but identical evidence keeps its identity.
                   if (identical && entry.latest) frame = entry.latest;
                   entry.latest = frame;
-                  this.retained.set(key, frame);
                   entry.stale = false;
                   this.attempts = 0;
                   if (unchanged) continue;
