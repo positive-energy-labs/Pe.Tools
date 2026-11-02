@@ -63,14 +63,37 @@ interface WorkIntentOptions {
   derive?: (work: unknown) => unknown;
 }
 
+const workWriteInputSchema = z.strictObject({ work: workHandleSchema });
+
+/** Named boundaries keep declaration emit out of the local generic entry closure (TS 6.0.3). */
+type IntentEntry<D extends Command> = Omit<D, "input" | "work"> & {
+  authoredInput: D["input"];
+  workIntent: WorkIntentBinding;
+  input: typeof workWriteInputSchema;
+  work: { route: string; bind: (input: unknown, handle: WorkHandle) => { work: WorkHandle } };
+};
+
+type WriteEntry<D extends Command, P extends WriteBoundaryBinding["phase"]> = Omit<
+  IntentEntry<D>,
+  "result"
+> & {
+  result: ReturnType<typeof writeCommandResultSchema<NonNullable<D["result"]>>>;
+  derivation: Pick<WriteBoundaryBinding, "derive" | "preview">;
+  writeBoundary: WriteBoundaryBinding & { phase: P };
+};
+
 /** The Work-derived entry shape both primitives share; `derivation`, `result` and the seal half are theirs. */
-function intentEntry<D extends Command>(source: D, route: string, intent: WorkIntentBinding) {
+function intentEntry<D extends Command>(
+  source: D,
+  route: string,
+  intent: WorkIntentBinding,
+): IntentEntry<D> {
   const { input: _input, work: _work, ...metadata } = source;
   return {
     ...metadata,
     authoredInput: source.input as D["input"],
     workIntent: intent,
-    input: z.strictObject({ work: workHandleSchema }),
+    input: workWriteInputSchema,
     work: { route, bind: (_input: unknown, handle: WorkHandle) => ({ work: handle }) },
   };
 }
@@ -100,12 +123,12 @@ export function workIntent<const K extends string, const C extends Command>(
   key: K,
   definition: C,
   options: WorkIntentOptions = {},
-) {
+): { [P in K]: IntentEntry<C> & { derivation: Pick<WorkIntentBinding, "derive"> } } {
   const intent = bindIntent(route, key, definition, options);
   return {
     [key]: { ...intentEntry(definition, route, intent), derivation: { derive: intent.derive } },
   } as {
-    [P in K]: ReturnType<typeof intentEntry<C>> & { derivation: { derive(work: unknown): unknown } };
+    [P in K]: IntentEntry<C> & { derivation: Pick<WorkIntentBinding, "derive"> };
   };
 }
 
@@ -123,7 +146,9 @@ export function workWriteCommands<
   key: K,
   definition: C,
   options: WorkIntentOptions & { preview?: { key: PK; definition: PC } } = {},
-) {
+): { [P in K]: WriteEntry<C, "apply"> } & {
+  [P in [PK] extends [never] ? `${K}.preview` : PK]: WriteEntry<PC, "preview">;
+} {
   const intent = bindIntent(route, key, definition, options);
   const derivation = { derive: intent.derive, preview: (request: unknown) => request };
   type PreviewKey = [PK] extends [never] ? `${K}.preview` : PK;
@@ -131,17 +156,20 @@ export function workWriteCommands<
   const entry = <D extends Command, const P extends WriteBoundaryBinding["phase"]>(
     source: D,
     phase: P,
-  ) => ({
-    ...intentEntry(source, route, intent),
-    result: writeCommandResultSchema(source.result as NonNullable<D["result"]>),
-    derivation,
-    writeBoundary: {
-      ...intent,
-      previewKey: previewKey as string,
-      phase,
-      preview: derivation.preview,
-    },
-  });
+  ): WriteEntry<D, P> => {
+    const { result: _result, ...metadata } = intentEntry(source, route, intent);
+    return {
+      ...metadata,
+      result: writeCommandResultSchema(source.result as NonNullable<D["result"]>),
+      derivation,
+      writeBoundary: {
+        ...intent,
+        previewKey: previewKey as string,
+        phase,
+        preview: derivation.preview,
+      },
+    };
+  };
   // A Pod entry carries its own axes; its preview inherits them as a rolled-back read.
   const axes = (definition as { axes?: import("./catalog.ts").CatalogAxes }).axes;
   const previewDefinition = (options.preview?.definition ?? {
@@ -152,7 +180,7 @@ export function workWriteCommands<
   return {
     [key]: entry(definition, "apply"),
     [previewKey]: entry(previewDefinition, "preview"),
-  } as { [P in K]: ReturnType<typeof entry<C, "apply">> } & {
-    [P in PreviewKey]: ReturnType<typeof entry<PC, "preview">>;
+  } as { [P in K]: WriteEntry<C, "apply"> } & {
+    [P in PreviewKey]: WriteEntry<PC, "preview">;
   };
 }
