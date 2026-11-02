@@ -26,11 +26,11 @@ test.skipIf(!existsSync(retained))(
     const bridge = {
       invoke: (key: string, request: unknown) =>
         Effect.sync(() => {
-          expect(["ducts.snapshot", "ducts.tables"]).toContain(key);
+          expect(["ducts.snapshot.roster", "ducts.snapshot.walk", "ducts.tables"]).toContain(key);
           requests.push(request);
           return {
             value:
-              key === "ducts.snapshot" ? snapshot : { tables: {}, missing: [], unsupported: [] },
+              key.startsWith("ducts.snapshot.") ? snapshot : { tables: {}, missing: [], unsupported: [] },
             target: { session: target.session, document: "Chadds", documentRef: target },
           };
         }),

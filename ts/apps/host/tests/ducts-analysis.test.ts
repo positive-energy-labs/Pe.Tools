@@ -151,7 +151,7 @@ function fixture() {
     call: async (key) => {
       nativeReads++;
       return Response.json(
-        key === "ducts.snapshot" ? snapshot : { tables: {}, missing: [], unsupported: [] },
+        key.startsWith("ducts.snapshot.") ? snapshot : { tables: {}, missing: [], unsupported: [] },
         { headers: { "x-pe-native-request-id": `fixture-${nativeReads}` } },
       );
     },
@@ -172,8 +172,8 @@ function fixture() {
     },
   };
 }
-const read = (source: unknown, selector: unknown = { kind: "document" }, extra: object = {}) =>
-  ductsAnalysisRequestSchema.parse({ source, selector, ...extra });
+const read = (source: unknown, selector: unknown = (source as { kind: string }).kind === "fresh" ? { kind: "equipment", id: 1 } : { kind: "document" }, extra: object = {}) =>
+  ductsAnalysisRequestSchema.parse({ source, selector: (source as { kind: string }).kind === "fresh" && (selector as { kind: string }).kind === "document" ? { kind: "equipment", id: 1 } : selector, ...extra });
 
 test("headless acquisition uses project Work slots", async () => {
   const f = fixture();
@@ -188,7 +188,7 @@ test("headless acquisition uses project Work slots", async () => {
   const call = f.sources.call;
   let requested: unknown;
   f.sources.call = async (key, request, target) => {
-    if (key === "ducts.snapshot") requested = request;
+    if (key === "ducts.snapshot.walk") requested = request;
     return call(key, request, target);
   };
   await f.api.read(read({ kind: "fresh", target: f.target }));
@@ -254,7 +254,7 @@ test("the declared host route reads canonical Work and unreadable Work refuses b
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         source: { kind: "fresh", target: f.target },
-        selector: { kind: "document" },
+        selector: { kind: "equipment", id: 1 },
       }),
     });
   const response = await routes.fetch(request());
@@ -579,13 +579,8 @@ test("analysis pages obey byte budget and preserve complete historical row cover
       family: "X".repeat(10000),
       connectors: [],
     });
-  const first = await f.api.read(
-    read(
-      { kind: "fresh", target: f.target },
-      { kind: "document" },
-      { projection: "summary", limit: 100 },
-    ),
-  );
+  const acquisition = await f.api.read(read({ kind: "fresh", target: f.target }));
+  const first = await f.api.read(read({ kind: "artifact", id: acquisition.analysisId }, { kind: "document" }, { projection: "summary", limit: 100 }));
   expect(first.rows.length).toBeLessThan(21);
   expect(first.page.nextCursor).not.toBeNull();
   const ids = first.rows.map((r) => r.id);
@@ -963,7 +958,7 @@ test("apply-request refuses changed producer outputs, custody, Work and unsuppor
     expect(
       ductsAnalysisRequestSchema.safeParse({
         source: { kind: "artifact", id: fresh.analysisId },
-        selector: { kind: "document" },
+        selector: { kind: "equipment", id: 1 },
         projection: "apply-request",
         ...extra,
       }).success,

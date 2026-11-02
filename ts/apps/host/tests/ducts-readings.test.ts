@@ -9,7 +9,7 @@ import { canonicalDuctsSession, DuctsReadings } from "../src/ducts-readings.ts";
 import type { RevitBridge } from "../src/bridge.ts";
 
 const target = { session: "bridge-a", openId: "open-a" };
-const snapshot: DuctsSnapshotReading = { kind: "ducts-snapshot", target };
+const snapshot: DuctsSnapshotReading = { kind: "ducts-snapshot", target, selector: { kind: "roster" } };
 const tables: DuctsTablesReading = {
   kind: "ducts-tables",
   session: target.session,

@@ -88,12 +88,6 @@ internal sealed class RevitDataRequestService {
     private static RoomsSnapshotData GetRoomsSnapshotCore(RoomsReadRequest request, ProjectDocument activeDocument) =>
         RunTakeoff(activeDocument.Value, doc => Rooms.Snapshot(doc, request.View));
 
-    [Op("ducts.snapshot", Subject = OpSubject.Document, Touches = OpTouches.Geometry, Effect = OpEffect.Read, Does = "Read every duct network in the project: ducts, flex, fittings, accessories, terminals and HVAC equipment with their connectors, grouped by topology with equipment cut out, plus pass-1 terminal flow, fitting geometry ratios, fitting and accessory loss methods, terminal drops, Revit's supply/return/exhaust systems with critical path and sections, issues and the query behind each layer. Slots name the fan static, fan flow, component drop and terminal catalog drop parameters; labelParameter names the instance parameter whose value names equipment for people (each node's label). selector narrows the read: { kind: \"from\", unitId, portIndex?, maxHops?, candidateBoxIn? } walks Revit connectors from one element's HVAC ports through equipment to terminals and open ends, searches a box around each open end for MEP candidates (nodes and segments marked reason open-end-candidate) and reports the walk; { kind: \"ids\", ids } reads exactly those elements; { kind: \"roster\" } reads every HVAC equipment node and air terminal plus Revit's systems without sections (the fan roster and its slot coverage). All are raw: no groups, flows, issues or layers, and only roster carries systems. Absent or kind document is the whole-document read. Read-only.", Title = "Get Duct Snapshot", Finds = ["ducts", "snapshot", "networks", "hvac", "connectors", "flow", "pressure", "loss", "critical-path", "walk"], Cost = OpCost.Bounded, Example = "{ \"selector\": { \"kind\": \"from\", \"unitId\": 9668311 } }")]
-    private static DuctSnapshotData GetDuctSnapshotCore(DuctSnapshotRequest request, ProjectDocument activeDocument) =>
-        request.Selector?.Kind == DuctSelectorKind.Roster
-            ? GetDuctRoster(request, activeDocument)
-            : Lib.Mep.DuctSnapshots.Snapshot(activeDocument.Value, request.Slots, request.LabelParameter, request.Selector);
-
     [Op("ducts.snapshot.roster", Does = "Read equipment, terminal parameters and port identities without positions or connector frames.", Subject = OpSubject.Document, Touches = OpTouches.Topology, Effect = OpEffect.Read, Cost = OpCost.Bounded)]
     private static DuctSnapshotData GetDuctRoster(DuctSnapshotRequest request, ProjectDocument document) =>
         Lib.Mep.DuctSnapshots.Snapshot(document.Value, request.Slots, request.LabelParameter,
@@ -103,10 +97,10 @@ internal sealed class RevitDataRequestService {
     private static DuctSnapshotData GetDuctWalk(DuctSnapshotRequest request, ProjectDocument document) {
         if (request.Selector is not { } selector || selector.Kind is DuctSelectorKind.Document or DuctSelectorKind.Roster
             || selector.Kind == DuctSelectorKind.From && selector.UnitId is null
-            || selector.Kind == DuctSelectorKind.Ids && selector.Ids is not { Count: > 0 }
-            || selector.Kind == DuctSelectorKind.Systems && selector.SystemIds is not { Count: > 0 })
+            || selector.Kind == DuctSelectorKind.Ids && selector.Ids is not { Count: > 0 and <= 4096 }
+            || selector.Kind == DuctSelectorKind.Systems && selector.SystemIds is not { Count: > 0 and <= 32 })
             throw BridgeOperationExceptions.BadRequest("A walk requires a start unit, explicit element ids or system ids.");
-        return GetDuctSnapshotCore(request, document);
+        return Lib.Mep.DuctSnapshots.Snapshot(document.Value, request.Slots, request.LabelParameter, selector);
     }
 
     [Op("ducts.ports", Subject = OpSubject.Elements, Touches = OpTouches.Topology, Effect = OpEffect.Read, Does = "Read every physical HVAC connector of 1 to 32 explicit element IDs in this exact open project document: connector ids, origin and raw connector frame in host-model feet (BasisZ is approach orientation, not airflow), shape and inches, connected state, all physical peers, element level, connector system and system type, direction, Revit-calculated and assigned connector flow, and the family's associated airflow parameter. Each optional fact is value, absent or error, never a silent zero; Revit-calculated flow is withheld under network-based calculations. A detail read for exact connections; reread after regeneration. Use ducts.snapshot for whole networks. Read-only.", Title = "Inspect Duct Ports", Finds = ["ducts", "ports", "connectors", "equipment", "terminals", "geometry", "flow"], Cost = OpCost.Bounded, Example = "{ \"elementIds\": [6049638, 6894092] }")]

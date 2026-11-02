@@ -1,3 +1,4 @@
+import { ductsSnapshotReadingSchema } from "@pe/agent-contracts";
 import { podReadRequest } from "./pod-routes.ts";
 import { peRoutes } from "@pe/agent-contracts/pe-api";
 import { canonicalDuctsSession, ductsReadings } from "./ducts-readings.ts";
@@ -270,7 +271,7 @@ export function makeCallRoute(
         try: () => readSessionScope(req.headers),
         catch: (error) => invalidBody(String(error)),
       });
-      if ((key === "ducts.snapshot" || key === "ducts.tables") && scope.bridgeSessionId) {
+      if (((key === "ducts.snapshot.roster" || key === "ducts.snapshot.walk") || key === "ducts.tables") && scope.bridgeSessionId) {
         const bridgeForScope = yield* RevitBridge;
         const canonicalSession = yield* Effect.tryPromise({
           try: () => canonicalDuctsSession(bridgeForScope, scope.bridgeSessionId!),
@@ -369,15 +370,16 @@ export function makeCallRoute(
           }
         }
       }
-      if (key === "ducts.snapshot" || key === "ducts.tables") {
+      if ((key === "ducts.snapshot.roster" || key === "ducts.snapshot.walk") || key === "ducts.tables") {
         const target =
-          key === "ducts.snapshot"
+          (key === "ducts.snapshot.roster" || key === "ducts.snapshot.walk")
             ? documentRefSchema.parse({ session: bridgeSessionId, openId: openDocumentId })
             : { session: bridgeSessionId!, openId: undefined };
         const subject: DuctsReadingRequest =
-          key === "ducts.snapshot"
+          (key === "ducts.snapshot.roster" || key === "ducts.snapshot.walk")
             ? {
                 ...(request as object),
+                selector: ductsSnapshotReadingSchema.shape.selector.parse(key === "ducts.snapshot.roster" ? { kind: "roster" } : (request as { selector?: unknown }).selector),
                 kind: "ducts-snapshot",
                 target: documentRefSchema.parse(target),
               }

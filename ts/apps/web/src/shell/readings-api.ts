@@ -197,7 +197,7 @@ async function readDuctsBody(
       body:
         request.kind === "ducts-snapshot"
           ? {
-              key: "ducts.snapshot",
+              key: request.selector?.kind === "roster" ? "ducts.snapshot.roster" : "ducts.snapshot.walk",
               request: {
                 ...(request.slots ? { slots: request.slots } : {}),
                 ...(request.labelParameter ? { labelParameter: request.labelParameter } : {}),

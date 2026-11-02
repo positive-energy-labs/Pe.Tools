@@ -49,7 +49,6 @@ type SnapshotRequest = {
   /** Work's parameter slots (the airflow slot among them): the C# read measures under these. */
   slots?: Partial<Record<string, string>>;
   selector:
-    | { kind: "document" }
     | { kind: "roster" }
     | ({ kind: "from"; unitId: number; portIndex?: number; maxHops?: number } & Tolerances);
 };
@@ -99,7 +98,7 @@ function mergeSnapshots(a: DuctSnapshot, b: DuctSnapshot): DuctSnapshot {
 }
 export interface DuctsSheetSources {
   call: (
-    key: "ducts.snapshot" | "ducts.tables",
+    key: "ducts.snapshot.roster" | "ducts.snapshot.walk" | "ducts.tables",
     request: SnapshotRequest | { ids: string[] },
     target: DocumentRef,
     version?: string,
@@ -272,8 +271,9 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
   });
   // Results are disposable. The raw owner separately bounds acquisition bytes and invalidates versions.
   const entries = new Map<string, Entry>();
+  // TODO: Trace the FC-23 (13760867) sheet self-fetch termination seen in k2-live-proof.log; raw walk succeeds.
   async function readNative(
-    key: "ducts.snapshot" | "ducts.tables",
+    key: "ducts.snapshot.roster" | "ducts.snapshot.walk" | "ducts.tables",
     request: SnapshotRequest | { ids: string[] },
     target: DocumentRef,
     version?: string,
@@ -321,7 +321,7 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
         seeded.add(id);
         const more = (await (
           await readNative(
-            "ducts.snapshot",
+            "ducts.snapshot.walk",
             { ...(slots ? { slots } : {}), selector: { kind: "from", unitId: id, ...tolerances } },
             target,
           )
@@ -356,7 +356,7 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
       if (!read) {
         read = (await (
           await readNative(
-            "ducts.snapshot",
+            "ducts.snapshot.walk",
             {
               ...(slots ? { slots } : {}),
               selector: { kind: "from", unitId, maxHops: BEYOND_HOPS, ...tolerances },
@@ -373,7 +373,7 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
   }
   async function current(entry: Entry) {
     const responses = await Promise.all([
-      readNative("ducts.snapshot", entry.request, entry.target, entry.version),
+      readNative("ducts.snapshot.walk", entry.request, entry.target, entry.version),
       readNative("ducts.tables", tableRequest, entry.target, entry.tablesVersion),
     ]);
     await Promise.all(responses.map((response) => response.body?.cancel()));
@@ -470,7 +470,7 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
               },
       };
       const [response, tables] = await Promise.all([
-        readNative("ducts.snapshot", acquisition, request.target),
+        readNative("ducts.snapshot.walk", acquisition, request.target),
         readNative("ducts.tables", tableRequest, request.target),
       ]);
       const version = response.headers.get(DUCTS_BODY_VERSION_HEADER);
@@ -568,7 +568,7 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
         ...(Object.keys(staged).length ? { slots: staged } : {}),
         selector: { kind: "roster" },
       };
-      const response = await readNative("ducts.snapshot", acquisition, request.target);
+      const response = await readNative("ducts.snapshot.roster", acquisition, request.target);
       const snapshot = (await response.json()) as DuctSnapshot;
       const inputs = resolveInputs({
         snapshot,

@@ -65,7 +65,7 @@ export type DuctsAnalysisRequest = z.infer<typeof ductsAnalysisRequestSchema>;
  */
 export const DUCTS_ANALYSIS_FIRST_CALL = JSON.stringify({
   source: { kind: "fresh", target: { session: "<session>", openId: "<openId>" } },
-  selector: { kind: "document" },
+  selector: { kind: "equipment", id: 9668311 },
   projection: "summary",
 });
 
@@ -344,7 +344,7 @@ export const ductsApplyRequestArtifactSchema = z.strictObject({
           byteSize: z.number().int(),
         }),
       )
-      .length(2),
+      .length(3),
   }),
   group: z.string(),
   payload: ductsApplyInputSchema,

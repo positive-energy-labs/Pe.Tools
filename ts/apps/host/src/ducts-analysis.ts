@@ -56,7 +56,7 @@ export interface DuctsAnalysisSources {
   marks: DocumentMarks;
   resolve: (target: DocumentRef) => Promise<Observation>;
   call: (
-    key: "ducts.snapshot" | "ducts.tables",
+    key: "ducts.snapshot.roster" | "ducts.snapshot.walk" | "ducts.tables",
     request: unknown,
     target: DocumentRef,
   ) => Promise<Response>;
@@ -306,7 +306,7 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
       throw Error("Analysis artifact integrity failed");
     return bytes;
   };
-  async function acquire(target: DocumentRef): Promise<Artifact> {
+  async function acquire(target: DocumentRef, selector: DuctsAnalysisRequest["selector"]): Promise<Artifact> {
     const began = Date.now();
     const beforeMark = sources.marks.changedAt(target);
     const observedSince = sources.marks.observedSince;
@@ -324,7 +324,7 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
     const work = salvaged?.doc ?? null;
     const workDropped = salvaged?.dropped ?? [];
     const acquisition: Artifact["acquisition"] = [];
-    async function read(key: "ducts.snapshot" | "ducts.tables", request: unknown) {
+    async function read(key: "ducts.snapshot.roster" | "ducts.snapshot.walk" | "ducts.tables", request: unknown) {
       const response = await sources.call(key, request, target);
       const bytes = Buffer.from(await response.arrayBuffer());
       if (bytes.length > MAX_BYTES)
@@ -348,10 +348,16 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
     }
     const staged = stagedDucts(work);
     const slots = staged.parameters;
-    const snapshot = (await read("ducts.snapshot", {
+    const readOptions = {
       ...(Object.keys(slots).length ? { slots } : {}),
       ...(staged.labelParameter ? { labelParameter: staged.labelParameter } : {}),
-    })) as DuctSnapshot;
+    };
+    await read("ducts.snapshot.roster", { ...readOptions, selector: { kind: "roster" } }) as DuctSnapshot;
+    const scope = selector.kind === "equipment" || selector.kind === "terminal"
+      ? { kind: "from", unitId: selector.id }
+      : null;
+    if (!scope) throw Error("Fresh analysis requires an equipment or terminal subject; read the roster first. Document/group projections remain available on saved artifacts.");
+    const snapshot = await read("ducts.snapshot.walk", { ...readOptions, selector: scope }) as DuctSnapshot;
     const tables = await read("ducts.tables", { ids: [...TABLE_IDS] });
     const catalogs = await (sources.catalogs ?? readDuctCatalogs)();
     const inputJson = JSON.stringify({
@@ -433,8 +439,8 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
       throw Error("Apply request Work key does not match its observation");
     const work = ductsDocumentSchema.parse(input.work);
     if (input.snapshot.storeError) throw Error("Apply request provenance store is unreadable");
-    if (artifact.acquisition.length !== 2) throw Error("Apply request acquisitions are incomplete");
-    for (const [index, key] of ["ducts.snapshot", "ducts.tables"].entries()) {
+    if (artifact.acquisition.length !== 3) throw Error("Apply request acquisitions are incomplete");
+    for (const [index, key] of ["ducts.snapshot.roster", "ducts.snapshot.walk", "ducts.tables"].entries()) {
       const row = artifact.acquisition[index]!;
       const raw = Buffer.from(row.bodyUtf8, "utf8");
       if (
@@ -443,8 +449,8 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
         row.status >= 300 ||
         raw.length !== row.byteSize ||
         sha256Hex(raw) !== row.sha256 ||
-        JSON.stringify(JSON.parse(row.bodyUtf8)) !==
-          JSON.stringify(index === 0 ? input.snapshot : input.tables)
+        (index > 0 && JSON.stringify(JSON.parse(row.bodyUtf8)) !==
+          JSON.stringify(index === 1 ? input.snapshot : input.tables))
       )
         throw Error("Apply request acquisition custody failed");
     }
@@ -555,7 +561,7 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
     async read(request: DuctsAnalysisRequest): Promise<DuctsAnalysisResponse> {
       let artifact: Artifact, bytes: Buffer, id: string;
       if (request.source.kind === "fresh") {
-        artifact = await acquire(request.source.target);
+        artifact = await acquire(request.source.target, request.selector);
         bytes = Buffer.from(JSON.stringify(artifact));
         if (bytes.length > MAX_BYTES)
           throw Error("Analysis artifact exceeds byte budget; no partial artifact was published");
