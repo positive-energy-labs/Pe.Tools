@@ -39,6 +39,11 @@ export function GraphHistory<P, W>({
       (!workOnly || owner.verbs[entry.verb ?? ""]?.kind === "work") &&
       !(
         entry.kind === "invocation" &&
+        owner.verbs[entry.verb ?? ""]?.kind === "work" &&
+        moves.some((move) => move.press === entry.press)
+      ) &&
+      !(
+        entry.kind === "invocation" &&
         entries.some(
           (receipt) =>
             receipt.kind === "receipt" &&
@@ -59,7 +64,7 @@ export function GraphHistory<P, W>({
           {journal.last && journal.last.kind !== "apply" && (
             <>
               {" "}
-              · {lastMove(journal)} {journal.last.step.label}
+              · {lastMove(journal)} {journal.moves.at(-1)?.label}
             </>
           )}{" "}
           <JournalButtons owner={owner} words />
@@ -90,7 +95,9 @@ export function GraphHistory<P, W>({
                 {entry.outcome?.state ?? entry.kind} · {entryCaller(entry)} ·{" "}
                 {activityTime(
                   entry.at,
-                  entry.kind === "receipt" && entry.press
+                  entry.kind === "receipt" &&
+                    entry.press &&
+                    !(entry.basis as { receipt?: unknown } | undefined)?.receipt
                     ? entries.find(
                         (start) => start.kind === "invocation" && start.press === entry.press,
                       )?.at

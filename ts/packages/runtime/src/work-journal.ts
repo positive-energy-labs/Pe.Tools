@@ -8,7 +8,7 @@ import {
   type WorkWrite,
   type WorkWriteAck,
 } from "@pe/agent-contracts";
-import type { InvocationOutcome } from "@pe/agent-contracts";
+import type { InvocationOutcome, ActionStatus } from "@pe/agent-contracts";
 export interface TimelineEntry {
   kind: "invocation" | "receipt" | "checkpoint" | "feed";
   at: string | number;
@@ -25,7 +25,9 @@ export type TimelineBarrier = TimelineEntry & {
   paths: readonly RouteStatePatch["path"][];
 };
 export const receiptBarrier = (entry: TimelineEntry): TimelineBarrier | null =>
-  entry.kind === "receipt" && entry.paths?.length
+  entry.kind === "receipt" &&
+  entry.paths?.length &&
+  (!entry.outcome || ["succeeded", "outcome-unknown"].includes(entry.outcome.state))
     ? (structuredClone(entry) as TimelineBarrier)
     : null;
 
@@ -64,6 +66,7 @@ type Step = JournalDetail & {
   /** Number of transitions currently applied; a failed multi-write replay resumes here. */
   cursor: number;
   barrier?: TimelineBarrier;
+  notWritten?: { invocation: string; reason: string };
   superseded?: { revision: number; path: RouteStatePatch["path"]; message: string };
 };
 
@@ -121,6 +124,7 @@ export function createWorkJournal(key: WorkKey) {
   let last: { kind: "apply" | "undo" | "redo"; step: Step; by: "human" | "pea" } | null = null;
   let moves: JournalMove[] = [];
   let namer: Namer = () => ({ label: "Edit Work" });
+  const unnamed = new Set<string>();
   const move = (kind: JournalMove["kind"], step: Step, by: "human" | "pea", at: number) => {
     last = { kind, step, by };
     moves = [
@@ -128,7 +132,7 @@ export function createWorkJournal(key: WorkKey) {
       {
         kind,
         press: step.press,
-        label: step.label,
+        label: namer(step.transitions.flatMap((transition) => transition.forward)).label,
         ...(step.internal && { internal: true as const }),
         by,
         at,
@@ -148,10 +152,14 @@ export function createWorkJournal(key: WorkKey) {
     redo = [];
     last = null;
     moves = [];
+    unnamed.clear();
     pending = null;
     generation++;
   };
+  const writes = new Map<string, ActionStatus>();
   const record = (entry: TimelineEntry): void => {
+    const receipt = (entry.basis as { receipt?: ActionStatus } | undefined)?.receipt;
+    if (receipt?.effects.length) writes.set(receipt.id, structuredClone(receipt));
     const barrier = receiptBarrier(entry);
     if (!barrier) return;
     for (const step of [...undo, ...redo])
@@ -219,6 +227,7 @@ export function createWorkJournal(key: WorkKey) {
       ack.press = pea
         ? `pea:${ack.press ?? `r${ack.revision}`}`
         : (ack.press ?? `r${ack.revision}`);
+      if (!detail) unnamed.add(ack.step ?? ack.press);
       detail ??= namer(ack.patches);
     }
     if (
@@ -454,19 +463,25 @@ export function createWorkJournal(key: WorkKey) {
     describe(press: string, detail: Partial<JournalDetail>) {
       const step = [...undo, ...redo].find((entry) => entry.press === press);
       if (!step) return;
+      unnamed.delete(step.id);
       Object.assign(
         step,
         structuredClone({ ...detail, label: detail.label?.trim() || step.label }),
       );
       for (const entry of moves)
         if (entry.press === press) {
-          entry.label = step.label;
+          entry.label = namer(step.transitions.flatMap((transition) => transition.forward)).label;
           if (step.internal) entry.internal = true;
         }
     },
     /** The mounted route's Work names, for steps that arrive without local detail. */
     name(next: Namer) {
       namer = next;
+      for (const step of [...undo, ...redo]) {
+        const detail = namer(step.transitions.flatMap((transition) => transition.forward));
+        if (unnamed.has(step.id)) Object.assign(step, detail);
+        for (const entry of moves) if (entry.press === step.press) Object.assign(entry, detail);
+      }
     },
     /** Subscribe this to the route timeline before dispatching commands; retain barriers after its log is trimmed. */
     record,
@@ -476,7 +491,33 @@ export function createWorkJournal(key: WorkKey) {
     },
     undo: (write: JournalWriter, press?: string) => replay("undo", write, press),
     redo: (write: JournalWriter, press?: string) => replay("redo", write, press),
-    read: () => structuredClone({ revision, undo, redo, busy, last, moves }),
+    read: () => {
+      for (const step of [...undo, ...redo]) {
+        delete step.notWritten;
+        for (const receipt of [...writes.values()].sort((a, b) =>
+          a.startedAt.localeCompare(b.startedAt),
+        )) {
+          const consumed = receipt.consumes.find(
+            (item) => item.kind === "work" && workKey(item.probe.handle.key) === identity,
+          );
+          if (
+            consumed?.kind !== "work" ||
+            step.transitions.some((t) => t.revision > consumed.probe.handle.revision)
+          )
+            continue;
+          if (
+            !step.transitions.some((t) =>
+              t.paths.some((path) => consumed.probe.paths.some((other) => overlaps(path, other))),
+            )
+          )
+            continue;
+          if (receipt.state === "succeeded") delete step.notWritten;
+          else if (receipt.state === "cancelled" && receipt.error.includes("rejected by"))
+            step.notWritten = { invocation: receipt.id, reason: receipt.error };
+        }
+      }
+      return structuredClone({ revision, undo, redo, busy, last, moves });
+    },
   };
 }
 

@@ -22,7 +22,14 @@ export function createRouteTimeline() {
     append(entry: TimelineEntry): void {
       revision++;
       const recorded = structuredClone(entry);
-      entries = [...entries, recorded].slice(-TIMELINE_LIMIT);
+      // Host receipts are current invocation state, identical on live delivery and replay.
+      const prior =
+        recorded.kind === "receipt" && recorded.outcome?.id
+          ? entries.filter(
+              (entry) => entry.kind !== "receipt" || entry.outcome?.id !== recorded.outcome?.id,
+            )
+          : entries;
+      entries = [...prior, recorded].slice(-TIMELINE_LIMIT);
       for (const listener of listeners) listener(structuredClone(recorded));
     },
     outcome(press: string, outcome: InvocationOutcome): void {

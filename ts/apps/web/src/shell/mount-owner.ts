@@ -12,6 +12,7 @@ import {
   validateRouteGraph,
   workKey,
   type ActionReceipt,
+  type ActionStatus,
   type DocumentRef,
   type ExecutionTarget,
   type FieldDecl,
@@ -122,7 +123,7 @@ export interface MountAdapters<P, W> extends VerbReadingEdges {
   /** Native effects name their actual Work footprint; [[]] explicitly means the whole Work. */
   receiptPaths?(receipt: ActionReceipt, key: WorkKey): readonly RouteStatePatch["path"][];
   subscribeReceipts?(
-    accept: (receipt: ActionReceipt, key: WorkKey | null, press?: string) => void,
+    accept: (receipt: ActionReceipt | ActionStatus, key: WorkKey | null, press?: string) => void,
   ): () => void;
   subscribeDocumentChanged?(accept: (ref: DocumentRef) => void): () => void;
   logReading?(entry: ReadingLog): void;
@@ -531,8 +532,9 @@ export function createGraphMount<P, W>(
     notify();
     return result;
   };
+  const receiptStamps = new Map<string, string>();
   const acceptReceipt = (
-    receipt: ActionReceipt,
+    receipt: ActionReceipt | ActionStatus,
     key: WorkKey | null,
     press?: string,
     invalidate = true,
@@ -555,17 +557,21 @@ export function createGraphMount<P, W>(
       receipt.effects,
       receipt.consentWindow,
     ]);
-    if (timeline.read().some((e) => e.receiptId === stamp)) return;
+    if (receiptStamps.get(receipt.id) === stamp) return;
+    receiptStamps.set(receipt.id, stamp);
     timeline.append({
       kind: "receipt",
       outcome: invocationOutcome(receipt),
-      at: Date.now(),
-      receiptId: stamp,
-      press,
+      at: receipt.startedAt,
+      receiptId: receipt.id,
+      press: press ?? receipt.id,
       // ADR 0028: a receipt is a Timeline invocation; name it by the route verb that does its command.
       verb: Object.keys(verbs).find((id) => verbs[id]!.does === receipt.key) ?? receipt.key,
-      paths: key ? adapters.receiptPaths?.(receipt, key) : undefined,
-      basis: { workKey: identity, receipt },
+      paths:
+        key && "steps" in receipt && (receipt.effects.length || receipt.state === "succeeded")
+          ? adapters.receiptPaths?.(receipt, key)
+          : undefined,
+      basis: { workKey: identity, receipt, receiptId: receipt.id },
     });
   };
   const context: VerbContext<"human"> = {
@@ -1146,6 +1152,8 @@ export function createGraphMount<P, W>(
       if (adapters.subscribeReceipts) releases.push(adapters.subscribeReceipts(acceptReceipt));
       update();
       cleanSubject();
+      // The restored Page and a picker edit drive the same page-scoped detail subscription.
+      if (graph.subjectField) releases.push(readings.mount([graph.subjectField.detail]));
       return () => {
         connected = false;
         for (const release of releases.splice(0).reverse()) release();

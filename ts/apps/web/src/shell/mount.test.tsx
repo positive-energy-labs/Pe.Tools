@@ -9,6 +9,7 @@ import { z } from "zod";
 import {
   manyField,
   actionReceiptSchema,
+  actionStatusSchema,
   draftCellSchema,
   pane,
   split,
@@ -17,6 +18,7 @@ import {
   type WorkKey,
   type WorkWrite,
   type ActionReceipt,
+  type ActionStatus,
 } from "@pe/agent-contracts";
 import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { listSearchKey, listSearchCodec } from "@pe/agent-contracts";
@@ -185,7 +187,7 @@ async function fixture(cells = false) {
   let subscriptions = 0;
   let deltaSubscriptions = 0;
   let documentChange: ((ref: { session: string; openId: string }) => void) | undefined;
-  let late: ((receipt: ActionReceipt, key: WorkKey | null, press?: string) => void) | undefined;
+  let late: ((receipt: ActionReceipt | ActionStatus, key: WorkKey | null, press?: string) => void) | undefined;
   const graph: RouteGraph<Page, Doc> = {
     ...testSubject,
     key: "mount-proof",
@@ -1113,7 +1115,7 @@ test("a declared History pane renders kernel invocations and checkpoints without
   const history = within(view.getByLabelText("History"));
   expect(history.getByText("No activity yet")).toBeTruthy();
   fireEvent.click(view.getByRole("button", { name: "Edit" }));
-  await waitFor(() => expect(history.getByText(/Edit.*succeeded/)).toBeTruthy());
+  await waitFor(() => expect(history.getByText(/Edit Work.*applied/)).toBeTruthy());
   act(() => {
     f.owner().timeline.append({
       kind: "checkpoint",
@@ -1258,3 +1260,20 @@ test.each(["shown"] as const)(
     expect(transport.run).not.toHaveBeenCalled();
   },
 );
+
+
+test.each(["succeeded", "failed", "cancelled"] as const)("Pea's compact %s receipt closes its route Timeline and a second write is recorded", async (state) => {
+  const f = await fixture(), owner = createGraphMount(f.graph, f.adapters);
+  owner.connect();
+  cleanups.push(() => owner.dispose());
+  const base = actionStatusSchema.parse({ ...receipt(), caller: { kind: "pea", context: "minted", thread: "t" } });
+  const row = (id: string, status: string) => actionStatusSchema.parse({
+    ...base, id, state: status, ...(status === "failed" || status === "cancelled" ? { error: status === "cancelled" ? "rejected by you" : "write failed", status: 499 } : {}),
+  });
+  f.late()!(row("first", "running"), key);
+  f.late()!(row("first", state), key);
+  f.late()!(row("second", "succeeded"), key);
+  const entries = owner.timeline.read().filter((entry) => entry.kind === "receipt");
+  expect(entries.findLast((entry) => entry.outcome?.id === "first")?.outcome?.state).toBe(state);
+  expect(entries.find((entry) => entry.outcome?.id === "second")?.outcome?.state).toBe("succeeded");
+});
