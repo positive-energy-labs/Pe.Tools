@@ -283,11 +283,12 @@ test("a fan without terminals shows its pricing failure and native picture while
   );
 });
 
-test("the ordered network and sheet stages have no picker and render only their graph panes", async () => {
+test("the ordered network and sheet stages show the in-app stage switch and render only their graph panes", async () => {
   const { view, router, situation } = await mounted();
   expect(ductsGraph.stageOrder).toEqual(["network", "sheet"]);
   expect(situation.getByText(/^Pricing systems on /)).toBeTruthy();
-  expect(situation.queryByRole("button", { name: "Choose stage" })).toBeNull();
+  // A PWA has no URL bar: every multi-stage route shows its own stage switch.
+  expect(situation.getByRole("button", { name: "Choose stage" })).toBeTruthy();
   expect(situation.queryByRole("button", { name: "Pricing systems" })).toBeNull();
   expect(view.container.querySelector("[data-pane-id='e-inbox']")).not.toBeNull();
   expect(view.container.querySelector("[data-pane-id='sheet-roster']")).toBeNull();
@@ -314,7 +315,7 @@ test("the ordered network and sheet stages have no picker and render only their 
     "Make the fan",
   ])
     expect(sheetSituation.getByRole("button", { name })).toBeTruthy();
-  expect(situation.queryByRole("button", { name: "Choose stage" })).toBeNull();
+  expect(situation.getByRole("button", { name: "Choose stage" })).toBeTruthy();
   expect(
     host.requests.some((request) => request.key === "ducts.snapshot" && !request.request.selector),
   ).toBe(false);

@@ -101,7 +101,6 @@ test("the product graph keeps all ducts inputs in Work across fourteen cell fami
   expect(graph.fields).not.toHaveProperty("fanStatic");
   expect(Object.values(graph.fields).some((field) => field.role === "setting")).toBe(false);
   expect(graph.stageOrder).toEqual(["network", "sheet"]);
-  expect(graph.pick).toBe(false);
   expect(graph.verbs.price).toMatchObject({ does: "ducts.apply-losses", review: "shown" });
   expect(graph.verbs.heal).toMatchObject({ does: "ducts.apply-heal", review: "shown" });
   expect(graph.verbs["assign-fan"]).toMatchObject({

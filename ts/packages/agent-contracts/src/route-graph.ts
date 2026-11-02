@@ -313,7 +313,6 @@ export interface RouteGraph<P = Record<string, unknown>, W = unknown> {
   ) => readonly RouteStatePatch[];
   /** Authored segments of the Work; the kernel owns take, reject, reopen and delete for them. */
   cells?: readonly CellsDecl<W>[];
-  pick?: false;
   transition?: GraphTransition<P>;
   predicates?: Readonly<Record<string, (page: Readonly<P>, work: W | null) => boolean>>;
   /** Defaults to stage declaration order. The projection retains it despite sorting map keys. */
@@ -368,7 +367,6 @@ export interface RouteGraphJson {
   readonly workSubject?: string;
   readonly cells?: readonly GraphJsonObject[];
   readonly stageOrder: readonly string[];
-  readonly pick?: false;
   readonly transition?: GraphJsonObject;
   readonly predicates?: Readonly<Record<string, GraphJsonObject>>;
 }
@@ -630,7 +628,7 @@ export function validateRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphRef
     const stages = Object.keys(graph.stages);
     const order = graph.stageOrder ?? stages;
     if (
-      (graph.pick === false || graph.stageOrder !== undefined) &&
+      graph.stageOrder !== undefined &&
       (!order.length ||
         order.length !== stages.length ||
         new Set(order).size !== stages.length ||

@@ -764,7 +764,7 @@ function GraphSituation<P, W>({
     >
       <b>{graph.name}</b>
       {graph.needs && !owner.fixture && <GraphTarget status={status} disabled={!enabled} />}
-      {graph.pick !== false && stageField && Object.keys(graph.stages).length > 1 ? (
+      {stageField && Object.keys(graph.stages).length > 1 ? (
         <Ladder
           disabled={!enabled}
           levels={[
