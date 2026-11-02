@@ -21,6 +21,7 @@ type Run = {
   state: RunConsent;
   waiters: Map<string, { run: RunRef; resolve: (decision: AllowDecision | null) => void }>;
   timer?: ReturnType<typeof setTimeout>;
+  rejectedBy?: string;
 };
 export type ConsentEvent =
   | { kind: "run_consent"; run: RunRef; consent: RunConsent }
@@ -103,13 +104,12 @@ export class RunConsents {
     return footprint
       .map((effect) => {
         switch (effect.kind) {
-          case "document": {
-            const identity = `${effect.ref.session}/${effect.ref.openId}`;
-            const name = this.documentName?.(effect.ref);
-            return `document ${name ? `${name} (${identity})` : identity}`;
-          }
+          // A person reads document names, never session/open ids (Manual D #5 defect 7); the
+          // decision record keeps the exact refs.
+          case "document":
+            return `document ${this.documentName?.(effect.ref) ?? "(unnamed)"}`;
           case "session":
-            return `session ${effect.session}`;
+            return "the Revit session";
           case "member":
             return `member ${effect.pod}/${effect.path}`;
           case "file":
@@ -207,7 +207,7 @@ export class RunConsents {
       this.record(run);
     }
     const decision = await answer;
-    if (!decision) throw Error("consent.stopped: writes stopped before approval");
+    if (!decision) throw Error(run.rejectedBy ? `rejected by ${run.rejectedBy}` : "consent.stopped: writes stopped before approval");
     return { run: run.ref, decision };
   }
   decide(thread: string, requestId: string, optionId: string, by: "user" | "deadline" = "user") {
@@ -224,6 +224,7 @@ export class RunConsents {
     clearTimeout(run.timer);
     this.answers.set(requestId, thread);
     if (optionId === "stop_writes") {
+      run.rejectedBy = "you";
       this.close(run.ref, "stopped");
       return true;
     }

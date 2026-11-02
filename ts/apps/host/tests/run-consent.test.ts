@@ -78,7 +78,7 @@ test("the first command names every effect; other documents share the original d
   const asks = events.filter((event) => event.kind === "permission_request");
   expect(asks).toHaveLength(1);
   expect(asks[0]!.toolCall.title).toBe(
-    "First write: document Office.rvt (revit-1/doc-1), session revit-1, member tools/settings/design.json, directory C:/installation, publication page:@pages/report. Then all writes in this thread until Stop.",
+    "First write: document Office.rvt, the Revit session, member tools/settings/design.json, directory C:/installation, publication page:@pages/report. Then all writes in this thread until Stop.",
   );
   runs.decide(run.thread, asks[0]!.requestId, "allow_now");
   expect(await first).toEqual(await second);
