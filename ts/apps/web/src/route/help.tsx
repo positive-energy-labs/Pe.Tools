@@ -1,8 +1,8 @@
+import { useSelectionPage } from "#/shell/selection-page";
 import {
   useContext,
   useEffect,
   useRef,
-  useState,
   useSyncExternalStore,
   type ReactNode,
 } from "react";
@@ -112,7 +112,7 @@ export function HelpWorld({ facts }: { facts: readonly Teaching[] }) {
   const regions = facts.flatMap((fact) =>
     fact.kind === "region" ? [{ ...fact, key: fact.id }] : [],
   );
-  const [picked, setPicked] = useState<string>();
+  const [picked, setPicked] = useSelectionPage<string | undefined>("tutorial", undefined);
   const selected =
     regions.find((region) => region.key === picked) ??
     regions.find((region) => region.visibility === "visible") ??

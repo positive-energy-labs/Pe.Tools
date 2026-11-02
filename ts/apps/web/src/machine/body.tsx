@@ -1,5 +1,4 @@
 /** One canonical Settings renderer on web, PWA, and tray: every machine group, then appearance. */
-import { useState } from "react";
 import type { AppSurface, Machine, Reading } from "@pe/agent-contracts";
 import { Accordion, type AccordionGroup } from "@pe/kit/lang/accordion";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
@@ -86,7 +85,6 @@ export function SettingsBody({
   onGroup?: (group: GroupKey | null) => void;
 }) {
   const machine = machineOf(reading);
-  const [picked, setPicked] = useState<GroupKey | null | undefined>(group);
   const gap = reading.state !== "ready";
   const waits = machine ? attention(machine) : [];
   const refusal = fixture
@@ -175,14 +173,14 @@ export function SettingsBody({
     },
   ];
   // An address names the group (`null`: all folded); without one (the tray), what waits opens, else
-  // the first header that disagrees, and the person's pick is remembered here.
+  // the first header that disagrees. The Page owns every subsequent choice.
   const automatic =
     autoOpen(machine) ??
     (machine
       ? (machineGroups.find((entry) => entry.tone === "caution" || entry.tone === "alarm")?.key ??
         null)
       : null);
-  const open = group !== undefined ? group : picked === undefined ? automatic : picked;
+  const open = group !== undefined ? group : automatic;
   return (
     <div className="flex min-w-0 flex-col gap-2" data-shell={shell} aria-label="settings">
       <p className="m-0" data-tone={gap || waits.length ? "caution" : undefined} role="status">
@@ -202,7 +200,6 @@ export function SettingsBody({
         label="settings groups"
         open={open}
         onOpen={(key) => {
-          setPicked(key as GroupKey | null);
           onGroup?.(key as GroupKey | null);
         }}
         groups={groups}

@@ -8,6 +8,7 @@ export const peaAddress = {
   title: "Pea",
   fields: {
     ...threadListFields,
+    selected: field(z.array(z.string()).default([]), { url: "replace", agent: "set" }),
     mode: field(modeKey(["threads", "world"], "threads"), { url: "replace" }),
     /** The turn to focal-scroll on open; absent = the tail. */
     turn: field(z.number().int().positive().optional(), { url: "replace" }),

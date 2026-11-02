@@ -65,9 +65,12 @@ it("keeps holes, dispositions and reasons through selection, flagging and export
     ],
   });
   function Review() {
+    const [selected, setSelected] = useState<string | null>(null);
     const [flags, setFlags] = useState<string[]>([]);
     return (
       <PartitionReview
+        selected={selected}
+        onSelect={setSelected}
         review={{ zone: "zone", data, flags, source: "fresh solver" }}
         onFlag={(key) => setFlags(flags.includes(key) ? [] : [key])}
       />

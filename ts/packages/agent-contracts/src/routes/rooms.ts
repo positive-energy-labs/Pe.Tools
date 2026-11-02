@@ -29,12 +29,11 @@ export const roomsAddress = {
     view: field(text(), { url: "push" }),
     /** Solver layers drawn on the plan (`rails,openings`); empty = none. */
     layers: field(layersKey(ROOMS_LAYERS, []), { url: "push" }),
-    /** Region labels (`R12,R3`): selected and zoomed to once drawn. */
-    focus: field(text(1024), { url: "replace" }),
+    /** Region GUIDs or card:<id>; every surface projects this exact selection. */
+    selected: field(z.array(z.string()).default([]), { url: "replace", agent: "set" }),
     /** The review inbox's state filter. */
     show: field(z.enum(ROOMS_CARD_SHOWS).default("all"), { url: "replace" }),
-    /** The pinned inbox card (a mark or note id): its verbs are pressable and the plan projects it. */
-    card: field(text(), { url: "replace" }),
+
     viewport: planViewport,
   },
   agent: {

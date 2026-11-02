@@ -1,3 +1,4 @@
+import { useSelectionPage } from "#/shell/selection-page";
 import { useList } from "@pe/kit/lang/collection";
 import { PlainList } from "@pe/kit/lang/list-view";
 /** The Situation's grids: the ledger behind the gauge and the page log column. */
@@ -49,7 +50,7 @@ export function PageLog({
   manifest: PresentationFacts;
   collapsible?: boolean;
 }) {
-  const [picked, setPicked] = useState("all");
+  const [picked, setPicked] = useSelectionPage("page-log", "all");
   const [all, setAll] = useState(false);
   const [open, setOpen] = useState(!collapsible);
   const actions = (manifest.actions ?? {}) as Record<string, { dirties?: readonly string[] }>;

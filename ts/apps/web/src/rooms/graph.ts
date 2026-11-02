@@ -20,7 +20,6 @@ import { roomsQueries } from "./refresh";
 import { NATIVE_APPLY_WAIT_S } from "#/route/waits";
 
 export const roomsPageSchema = routeAddress("rooms").schema.extend({
-  selected: z.array(z.string()).default([]),
   epoch: z.number().default(0),
 });
 export type RoomsPage = z.output<typeof roomsPageSchema>;
@@ -82,22 +81,9 @@ export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = {
     stage: { ...fields.stage, role: "stage", agent: false },
     view: { ...fields.view, role: "subject", agent: false },
     layers: { ...fields.layers, role: "pose", agent: false },
-    focus: { ...fields.focus, role: "selection", agent: false },
     show: { ...fields.show, role: "query", agent: false },
-    card: { ...fields.card, role: "selection", agent: false },
     viewport: { ...fields.viewport, role: "pose" },
-    selected: {
-      ...field(
-        roomsPageSchema.shape.selected,
-        {},
-        {
-          encode: JSON.stringify,
-          decode: JSON.parse,
-        },
-      ),
-      role: "transient",
-      url: false,
-    },
+    selected: { ...fields.selected, role: "selection" },
     epoch: {
       ...field(
         roomsPageSchema.shape.epoch,

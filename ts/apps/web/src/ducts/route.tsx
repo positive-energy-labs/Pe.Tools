@@ -61,7 +61,9 @@ function DuctsProvider({
       Atom.make((get): ReadonlySet<SubjectKey> => {
         const current = get(owner.view.state).page;
         return new Set(
-          current.selected && /^\d+$/.test(current.selected)
+          current.selected.startsWith("elements:")
+            ? current.selected.slice("elements:".length).split(",").map(elementKey)
+            : current.selected && /^\d+$/.test(current.selected)
             ? [elementKey(current.selected)]
             : current.selected && /^(run|section):/.test(current.selected)
               ? [current.selected as SubjectKey]

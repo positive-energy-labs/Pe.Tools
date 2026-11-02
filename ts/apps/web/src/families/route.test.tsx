@@ -267,8 +267,8 @@ test("holding a named family back is one Work verb and undo restores its inclusi
   expect(host.doc).toEqual(before);
 });
 
-test("History opens the newest immutable read without native catalog, capture or edit controls", async () => {
-  const { view } = await mounted(routeUrl({ stage: "history" }));
+test("History opens the selected immutable read without native catalog, capture or edit controls", async () => {
+  const { view } = await mounted(routeUrl({ stage: "history", past: host.reading.id }));
   await view.findByLabelText("PE_G___Model · Fan Coil Unit - Ducted · FCU-1");
   expect(view.container.querySelectorAll('[role="gridcell"] input')).toHaveLength(0);
   expect(view.queryByRole("button", { name: "Read families" })).toBeNull();

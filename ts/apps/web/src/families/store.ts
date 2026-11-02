@@ -209,7 +209,8 @@ export function useFamiliesStore(owner: FamiliesMount) {
     retainedError: scope.readings.matrix?.error ?? null,
     archive: {
       list: archive,
-      selectedId: page.past || archive[0]?.id || null,
+      // TODO: Re-run history selection/reload in fixture browser after catalog registration is repaired.
+      selectedId: page.past || null,
       reading: observation,
       loading:
         scope.readings.saved?.status === "pending" || scope.readings.archive?.status === "pending",

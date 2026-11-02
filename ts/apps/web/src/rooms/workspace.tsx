@@ -1,3 +1,4 @@
+import { roomSelection } from "./selection";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import { RegistryContext } from "@effect/atom-react";
 import { createContext, useContext, useMemo, type ReactNode } from "react";
@@ -97,10 +98,12 @@ export function RoomsProvider({ owner, children }: { owner: RoomsOwner; children
       Atom.make(
         (get): ReadonlySet<SubjectKey> =>
           new Set<SubjectKey>(
-            get(owner.view.state).page.selected.map((guid): SubjectKey => `room:${guid}`),
+            roomSelection(get(owner.view.state).page.selected, value.cards).guids.map(
+              (guid): SubjectKey => `room:${guid}`,
+            ),
           ),
       ),
-    [owner],
+    [owner, value.cards],
   );
   const members = useMemo(
     () =>

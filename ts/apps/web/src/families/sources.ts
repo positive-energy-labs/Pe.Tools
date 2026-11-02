@@ -243,9 +243,7 @@ export function familiesSources(): Readonly<Record<string, ReadingSource>> {
     }),
     "families.saved": jsonSource({
       request: (ctx) => {
-        const id =
-          page(ctx).past ||
-          (ctx.inputs.archive?.value as FamiliesObservationSummary[] | undefined)?.[0]?.id;
+        const id = page(ctx).past;
         return page(ctx).stage === "history" && id
           ? { path: `/families/readings?id=${encodeURIComponent(id)}` }
           : null;

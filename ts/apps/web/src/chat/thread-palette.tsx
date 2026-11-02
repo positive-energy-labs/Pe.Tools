@@ -580,7 +580,9 @@ function CompactThreadTrail({ thread, now }: { thread: RosterThread; now: number
 
 export type ThreadSort = "recent" | "title";
 
-function initialShelfState(current: RosterThread | undefined): ListState<ThreadSort> {
+function initialShelfState(
+  current: RosterThread | undefined,
+): Omit<ListState<ThreadSort>, "selected"> {
   const closed = SHELF_ORDER.filter((shelf) => {
     if (current && shelfOf(current) === shelf) return false;
     try {
@@ -591,7 +593,7 @@ function initialShelfState(current: RosterThread | undefined): ListState<ThreadS
     }
     return shelf === "snoozed" || shelf === "settled" || shelf === "archived";
   }).map((shelf) => SHELF_WORD[shelf]);
-  return { search: threadSearchDefault(), sort: "", closed, open: [], selected: [] };
+  return { search: threadSearchDefault(), sort: "" as const, closed, open: [] };
 }
 
 function ThreadActivityMark({
@@ -644,6 +646,8 @@ function ThreadActivityMark({
 const searchThread = (thread: RosterThread) => ({ text: [threadSearchText(thread)] });
 
 export function ThreadsSidebar({
+  selected = [],
+  onSelection,
   threads,
   currentThreadId,
   onSelect,
@@ -654,6 +658,8 @@ export function ThreadsSidebar({
   reading = false,
   ...verbs
 }: ThreadVerbs & {
+  selected?: string[];
+  onSelection?: (ids: string[]) => void;
   threads: RosterThread[];
   currentThreadId: string;
   onSelect: (id: string) => void;
@@ -796,9 +802,11 @@ export function ThreadsSidebar({
       order: SHELF_ORDER.map((key) => SHELF_WORD[key]),
     },
     select: "multi",
-    state: view,
+    state: { ...view, selected },
     onState: (next) => {
-      setView(next);
+      const { selected: selection, ...pose } = next;
+      setView(pose);
+      if (selection !== selected) onSelection?.([...selection]);
       if (next.closed !== view.closed)
         for (const shelf of SHELF_ORDER) {
           try {
@@ -812,7 +820,7 @@ export function ThreadsSidebar({
         }
     },
     onPick: (thread) => {
-      setView((previous) => ({ ...previous, selected: [] }));
+      onSelection?.([]);
       onSelect(thread.id);
     },
   });

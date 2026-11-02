@@ -1,3 +1,4 @@
+import { useSelectionPage } from "#/shell/selection-page";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Popover } from "@base-ui/react/popover";
@@ -38,7 +39,7 @@ export function FeedbackPicker({ hideTrigger = false }: { hideTrigger?: boolean 
   const capture = useRef(0);
   const [picking, setPicking] = useState(false);
   const [hover, setHover] = useState<Rect | null>(null);
-  const [picked, setPicked] = useState<Picked | null>(null);
+  const [picked, setPicked] = useSelectionPage<Picked | null>("feedback", null);
   const [note, setNote] = useState("");
   const [kept, setKept] = useState<FeedbackReceipt | null>(null);
   const [cancelHost, setCancelHost] = useState<HTMLElement | null>(null);

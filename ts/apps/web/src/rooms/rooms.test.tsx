@@ -83,8 +83,6 @@ test("a locked stale region keeps both facts in the plan, legend and table, and 
         planRefusal={null}
         planError={null}
         empty={null}
-        zoomTo={[]}
-        focusMissing={[]}
         onSelect={onSelect}
         trace={{ data: null, none: "fixture" }}
         page={page}

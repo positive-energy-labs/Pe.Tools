@@ -13,7 +13,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test("a null viewport fits without a write, wheel preserves its cursor point, and focus can return after leaving", async () => {
+test("a null viewport fits without a write, wheel preserves its cursor point, and selecting never moves the camera", async () => {
   vi.stubGlobal(
     "ResizeObserver",
     class {
@@ -45,8 +45,6 @@ test("a null viewport fits without a write, wheel preserves its cursor point, an
         planRefusal={null}
         planError={null}
         empty={null}
-        zoomTo={page.focus ? [rows[1]!.region.guid] : []}
-        focusMissing={[]}
         onSelect={() => {}}
         trace={{ data: null, none: "no trace" }}
         page={page}
@@ -75,13 +73,7 @@ test("a null viewport fits without a write, wheel preserves its cursor point, an
   expect((200 - initial.tx) / initial.scale).toBeCloseTo((200 - next.tx) / next.scale);
   expect((150 - initial.ty) / initial.scale).toBeCloseTo((150 - next.ty) / next.scale);
   expect(writes.mock.calls[0]![1]).toEqual({ history: "replace" });
-  act(() => navigate({ focus: "R2" }));
-  await waitFor(() => expect(writes).toHaveBeenCalledTimes(2));
-  expect(writes.mock.calls[1]![1]).toEqual({ history: "push" });
-  fireEvent.wheel(host, { clientX: 200, clientY: 150, deltaY: 120 });
-  await waitFor(() => expect(writes).toHaveBeenCalledTimes(3));
-  act(() => navigate({ focus: "" }));
-  act(() => navigate({ focus: "R2" }));
-  await waitFor(() => expect(writes).toHaveBeenCalledTimes(4));
-  expect(writes.mock.calls[3]![1]).toEqual({ history: "push" });
+  act(() => navigate({ selected: [rows[1]!.region.guid] }));
+  expect(writes).toHaveBeenCalledTimes(1);
+  expect(pose()).toEqual(next);
 });

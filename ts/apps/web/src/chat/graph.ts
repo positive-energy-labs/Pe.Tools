@@ -38,7 +38,7 @@ export interface ChatRouteDeps {
   providerName?: string;
   draftTarget?: DocumentRequest | null;
 }
-export type ChatPage = { thread: string; mode: "threads" | "world" };
+export type ChatPage = { thread: string; selected: string[]; mode: "threads" | "world" };
 export type ChatHandle = GraphMount<ChatPage, unknown>;
 const { id: _requestId, ...promptFields } = promptRequestSchema.shape;
 const promptInput = z.object(promptFields);
@@ -141,6 +141,7 @@ export function chatGraph(deps: () => ChatRouteDeps, minOtherSize?: number): Rou
   subjectField: { field: "thread", noun: "thread", keyKind: "name", cardinality: "one", roster: "threads", detail: "head", pane: "threads", show: (id) => id },
     fields: {
       thread: { ...field(z.string().default(""), {}), role: "subject" },
+      selected: { ...field(z.array(z.string()).default([]), { url: "replace", agent: "set" }), role: "selection" },
       mode: { ...field(z.enum(["threads", "world"]).default("threads"), {}), role: "pose" },
       ...peaSettingFields,
     },

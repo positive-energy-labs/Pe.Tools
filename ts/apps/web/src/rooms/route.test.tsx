@@ -70,19 +70,17 @@ const liveButton = (scope: ReturnType<typeof within>, name: string) =>
     return button;
   });
 
-test("the rooms URL restores layers, focus, filter, card and viewport without staging Work", async () => {
+test("the rooms URL restores layers, selection, filter and viewport without staging Work", async () => {
   const { router, view } = await mounted({
     layers: "rails,faces",
-    focus: "R2",
+    selected: "card:m1",
     show: "accepted",
-    card: "m1",
     viewport: "plane:2,10,20",
   });
   expect(router.state.location.search).toMatchObject({
     layers: "rails,faces",
-    focus: "R2",
+    selected: "card:m1",
     show: "accepted",
-    card: "m1",
     viewport: "plane:2,10,20",
   });
   expect(view.getByRole("button", { name: "apply" }).getAttribute("aria-disabled")).toBe("true");
