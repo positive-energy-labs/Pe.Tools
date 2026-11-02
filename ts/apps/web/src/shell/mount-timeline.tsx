@@ -117,7 +117,7 @@ export function GraphHistory<P, W>({
                     </a>
                   </>
                 )}
-                {entry.outcome?.consentWindow && (
+                {entry.outcome?.consentWindow && ["queued", "running"].includes(entry.outcome.state) && (
                   <>
                     {" "}
                     | Consent open
@@ -147,7 +147,7 @@ export function GraphHistory<P, W>({
                     </a>
                   </>
                 )}
-                {receipt.consentWindow && (
+                {receipt.consentWindow && ["queued", "running"].includes(invocationOutcome(receipt).state) && (
                   <>
                     {" "}
                     | Consent open

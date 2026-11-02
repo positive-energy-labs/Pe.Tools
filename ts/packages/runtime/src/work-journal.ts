@@ -507,7 +507,10 @@ export function createWorkJournal(key: WorkKey) {
             continue;
           if (
             !step.transitions.some((t) =>
-              t.paths.some((path) => consumed.probe.paths.some((other) => overlaps(path, other))),
+              t.forward.some((patch) =>
+                consumed.probe.paths.some((other) => overlaps(patch.path, other)) &&
+                canonicalRouteInput(valueAt(consumed.expected, patch.path)) === canonicalRouteInput(patch.value),
+              ),
             )
           )
             continue;

@@ -60,7 +60,8 @@ test("D8: a head mounted long before a window opens counts the host's 60 s, and 
 test("History records a write receipt and caller once rather than echoing its invocation", async () => {
   const { GraphHistory } = await import("./mount-timeline");
   const timeline = createRouteTimeline();
-  const outcome = { id: "write-1", receiptId: "write-1", state: "succeeded" as const, input: {} };
+  const outcome = { id: "write-1", receiptId: "write-1", state: "cancelled" as const, input: {},
+    consentWindow: { requestId: "ask-1", deadline: new Date(Date.now() + 60_000).toISOString() } };
   timeline.append({ kind: "invocation", at: Date.now(), press: "p1", verb: "apply", outcome });
   timeline.append({ kind: "receipt", at: Date.now(), press: "p1", verb: "apply", outcome,
     basis: { receipt: { id: "write-1", caller: { kind: "pea", thread: "t1" } } } });
@@ -69,6 +70,7 @@ test("History records a write receipt and caller once rather than echoing its in
   const ui = render(<GraphHistory owner={owner} />);
   expect(ui.getAllByRole("listitem")).toHaveLength(1);
   expect(ui.getByRole("listitem").textContent).toContain("Pea");
-  expect(ui.getByRole("listitem").textContent).toContain("succeeded");
+  expect(ui.getByRole("listitem").textContent).toContain("cancelled");
+  expect(ui.getByRole("listitem").textContent).not.toContain("Consent open");
   cleanup();
 });

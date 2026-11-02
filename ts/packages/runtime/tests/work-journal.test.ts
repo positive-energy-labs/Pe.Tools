@@ -182,6 +182,8 @@ test("a delayed Work read cannot clear accepted undo history", async () => {
 
 test("Reject flags consumed intent without reverting it; later edits and a successful retry stay distinct", async () => {
   const f = fixture(), journal = createWorkJournal(f.key);
+  const previous = await f.edit("pea", "previous", 1000);
+  journal.accept(previous.write);
   const edit = await f.edit("pea", "authored", 1050);
   journal.accept(edit.write);
   const receipt = actionStatusSchema.parse({
@@ -193,8 +195,9 @@ test("Reject flags consumed intent without reverting it; later edits and a succe
   });
   const record = (row: typeof receipt) => journal.record({ kind: "receipt", at: row.startedAt, paths: [["a"]], outcome: invocationOutcome(row), basis: { receipt: row } });
   record(receipt);
-  expect(journal.read().undo[0]).toMatchObject({ notWritten: { invocation: "reject", reason: "rejected by you" } });
-  expect(journal.read().undo[0]!.barrier).toBeUndefined();
+  expect(journal.read().undo[0]!.notWritten).toBeUndefined();
+  expect(journal.read().undo[1]).toMatchObject({ notWritten: { invocation: "reject", reason: "rejected by you" } });
+  expect(journal.read().undo[1]!.barrier).toBeUndefined();
   expect((await f.host.view(f.key, f.key.route))!.doc).toMatchObject({ a: 1050 });
   const late = createWorkJournal(f.key);
   late.record({ kind: "receipt", at: receipt.startedAt, outcome: invocationOutcome(receipt), basis: { receipt } });
@@ -202,5 +205,5 @@ test("Reject flags consumed intent without reverting it; later edits and a succe
   expect(late.read().undo[0]!.notWritten?.invocation).toBe("reject");
   const { error, status, ...base } = receipt as typeof receipt & { error: string; status: number };
   record(actionStatusSchema.parse({ ...base, id: "retry", state: "succeeded", startedAt: "2026-11-02T15:01:00Z" }));
-  expect(journal.read().undo[0]!.notWritten).toBeUndefined();
+  expect(journal.read().undo[1]!.notWritten).toBeUndefined();
 });

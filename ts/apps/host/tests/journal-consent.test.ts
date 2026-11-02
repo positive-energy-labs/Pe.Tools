@@ -4,6 +4,8 @@ import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, vi } from "vite-plus/test";
+import { readNativeReceipt } from "../src/native-receipts.ts";
+import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { bindControl } from "../src/control.ts";
 import { RunConsents, type ConsentEvent } from "../src/run-consent.ts";
@@ -122,6 +124,7 @@ test("an acquired document supplies provenance without bypassing the run countdo
   const h = await setup();
   bindControl({ acquired: () => "pea-acquisition" });
   let writes = 0;
+  let nativeId = "";
   try {
     const target = { session: "owned-session", openId: "owned-document" };
     const row = await invokeCommand(
@@ -139,6 +142,7 @@ test("an acquired document supplies provenance without bypassing the run countdo
       },
       async () => null,
       async (execution) => execution.step("native", "write", {}, async (id) => {
+        nativeId = id;
         expect(id).toBe("acquired-write");
         return ++writes;
       }),
@@ -151,6 +155,17 @@ test("an acquired document supplies provenance without bypassing the run countdo
     expect(done.state).toBe("succeeded");
     expect(done.steps[0]!.id).toBe(done.id);
     expect(done.outcome!.id).toBe(done.id);
+    const recovered = await readNativeReceipt(done.steps[0]!, originalProcess, async () => sdkEnvelope({
+      state: "ok", requestId: nativeId,
+      receipt: {
+        requestId: nativeId, key: "write", pid: originalProcess.pid,
+        processStartUtc: originalProcess.processStartUtc, verdict: "ok",
+        responsePath: "native-response.json", startedUtc: originalProcess.processStartUtc,
+        completedUtc: "1970-01-01T00:00:02.0000000Z",
+      },
+      response: { written: writes },
+    }));
+    expect(recovered.step).toMatchObject({ id: done.id, state: "succeeded", result: { written: 1 } });
     expect(done.consent).toMatchObject({ run, decision: { by: "human" } });
     expect(writes).toBe(1);
   } finally {
