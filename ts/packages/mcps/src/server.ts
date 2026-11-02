@@ -1,15 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { withInvocationContext, type InvocationContext } from "@pe/runtime/context";
 /** Pea's tool registration shared by stdio and HTTP transports. */
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer, type CallToolResult, type ServerContext } from "@modelcontextprotocol/server";
 import { peaProductTools } from "./pea/index.ts";
 import { peaAgentInstructions } from "./pea/instructions.ts";
 import type { McpTool } from "./shared/tool.ts";
 
-type Content = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
-
 /** A tool result as MCP content: model output parts when the tool shapes them, else JSON text. */
-function toContent(tool: McpTool, result: unknown): { content: Content[]; isError?: boolean } {
+function toContent(tool: McpTool, result: unknown): CallToolResult {
   const modelOutput = tool.toModelOutput?.(result) as
     | {
         type: "content";
@@ -49,12 +47,12 @@ export async function createPeaMcpServer(context: InvocationContext): Promise<Mc
   for (const tool of Object.values(peaProductTools))
     server.registerTool(
       tool.id,
-      { description: tool.description, inputSchema: tool.inputSchema as never },
-      ((input: unknown, extra: unknown) =>
-        withInvocationContext(bound, async () => {
+      { description: tool.description, inputSchema: tool.inputSchema },
+      (input: unknown, ctx: ServerContext) =>
+        withInvocationContext(bound, async (): Promise<CallToolResult> => {
           try {
             await bound.beforeTool?.(tool.id);
-            const requestId = (extra as { requestId: string | number }).requestId;
+            const requestId = ctx.mcpReq.id;
             let id = calls.get(requestId);
             if (!id) {
               id = randomUUID();
@@ -64,7 +62,8 @@ export async function createPeaMcpServer(context: InvocationContext): Promise<Mc
               tool,
               await tool.execute(input as never, {
                 agent: { toolCallId: id },
-                mcp: { extra },
+                // v2 moved the request id to ctx.mcpReq.id; tools still read the v1-shaped extra.requestId.
+                mcp: { extra: { requestId } },
               }),
             );
           } catch (error) {
@@ -75,9 +74,9 @@ export async function createPeaMcpServer(context: InvocationContext): Promise<Mc
               ],
             };
           }
-        })) as never,
+        }),
     );
   return server;
 }
 
-export { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+export { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/server";

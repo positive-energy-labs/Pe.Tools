@@ -1,6 +1,5 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { createPeaMcpServer } from "../src/server.ts";
 
 afterEach(() => vi.unstubAllGlobals());

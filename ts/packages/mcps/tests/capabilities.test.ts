@@ -22,9 +22,8 @@ import { fakeRuntimeHost } from "./runtime-host-fixture.ts";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import { createHash } from "node:crypto";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
+import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { contextFetch, withInvocationContext } from "@pe/runtime/context";
 import { createMcpDoor } from "../../../apps/host/src/mcp-route.ts";
 import {
