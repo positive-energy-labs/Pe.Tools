@@ -27,7 +27,7 @@ import { ContinuationMarks } from "#/scene/continuations";
 import { type LiveOrbit } from "@pe/kit/lang/live-orbit";
 import { PaneOverlay } from "@pe/kit/lang/pane";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
-import { Button } from "@pe/kit/lang/button";
+import { DetailedRead } from "./detail";
 import { CONTEXT_DEFAULT, type PictureContext } from "#/scene/picture/picture";
 import { Scene3D } from "#/scene/scene3d";
 import type { SceneRead } from "#/scene/use-scene";
@@ -281,7 +281,7 @@ export function ModelPicture({
   const status =
     said ??
     (read.error
-      ? `scene: ${read.error}`
+      ? `scene: ${read.error instanceof Error ? read.error.message : JSON.stringify(read.error)}`
       : !meshes
         ? "no meshes: choose a system on a Revit document"
         : null);
@@ -370,10 +370,12 @@ export function ModelPicture({
               onContextRepresentation
                 ? contextRepresentation === "meshes"
                   ? "Detailed context"
-                  : "Link-frame envelopes"
+                  : "Overview"
                 : "",
               read.notice ?? "",
-              read.contextError ? `context: ${read.contextError}` : "",
+              read.contextError
+                ? `context: ${read.contextError instanceof Error ? read.contextError.message : JSON.stringify(read.contextError)}`
+                : "",
               read.completeness?.complete === false
                 ? (CONTEXT_LIMITS[read.completeness.limitReason ?? ""] ?? "Context limited")
                 : "",
@@ -392,18 +394,16 @@ export function ModelPicture({
               .join(" / ")}
           />
           {onContextRepresentation ? (
-            // Detail is available even when context is hidden; overview remains the default.
-            <Button
-              label={contextRepresentation !== "meshes" ? "Read detailed" : "Use overview"}
-              busy={read.pending}
-              onClick={() =>
+            <DetailedRead
+              metadata={read.metadata}
+              pending={read.pending}
+              overview={contextRepresentation === "meshes"}
+              onRead={() =>
                 onContextRepresentation(
-                  contextRepresentation !== "meshes" ? "meshes" : CONTEXT_DEFAULT,
+                  contextRepresentation === "meshes" ? CONTEXT_DEFAULT : "meshes",
                 )
               }
-            >
-              {contextRepresentation !== "meshes" ? "Read detailed" : "Use overview"}
-            </Button>
+            />
           ) : null}
         </PaneOverlay>
       ) : null}

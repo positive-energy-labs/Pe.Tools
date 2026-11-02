@@ -233,20 +233,16 @@ it("reports failed optional context separately from the usable focus", async () 
     meshes: { id: "context-failure-focus" },
     focusReady: true,
     error: null,
-    contextError: "Error: context could not be acquired",
+    contextError: expect.objectContaining({ message: "context could not be acquired" }),
   });
 });
 
-it("keeps overview cheap for both the first focus and subsequent context read", async () => {
+it("overview completes in one zero-tessellation read without focus warming", async () => {
   const request = sceneRequest([7199], false, 15, "overview");
-  renderHook(() => useCapture(request, doc, "overview-default"));
-  expect(native.calls[0]!.request).toMatchObject({
-    focusOnly: true,
-    contextRepresentation: "overview",
-  });
-  await finish(0, "overview-focus");
-  await waitFor(() => expect(native.calls).toHaveLength(2));
-  expect(native.calls[1]!.request.contextRepresentation).toBe("overview");
-  await finish(1, "overview-context");
+  const view = renderHook(() => useCapture(request, doc, "overview-default"));
+  expect(native.calls[0]!.request).toEqual(request);
+  await finish(0, "overview-scene");
+  await waitFor(() => expect(view.result.current.pending).toBe(false));
+  expect(native.calls).toHaveLength(1);
   expect(sceneRequest([7199], true, 15, "overview").contextRepresentation).toBe("overview");
 });

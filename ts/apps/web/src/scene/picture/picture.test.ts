@@ -65,3 +65,11 @@ test("a jump frames the named element alone, and a run by its element leaves", (
   // An undeclared group has no elements to frame: the picture says it is not here.
   expect(jumpSubject("run:gone", members).ids.size).toBe(0);
 });
+
+test("detailed capture keeps five feet of context even with context layers hidden", () => {
+  expect(captureRequest({ walked: ["e:1"], near: [] }, [], 2, "meshes")).toMatchObject({
+    contextRepresentation: "meshes",
+    contextPaddingFt: 5,
+    focusOnly: false,
+  });
+});

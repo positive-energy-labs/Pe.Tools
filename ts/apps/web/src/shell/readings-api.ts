@@ -13,8 +13,6 @@ import {
   HOST_RPC_DOCUMENT_HEADER,
   HOST_RPC_ORIGIN_HEADER,
   HostCallError,
-  geometryOverBudget,
-  geometryBudgetSentence,
   type OpKey,
   type OpRequestOf,
   type OpResponseOf,
@@ -47,9 +45,8 @@ async function requestJson<T>(
   });
   if (!response.ok) {
     const failure = await readPeError(response);
-    const budget = geometryOverBudget(failure.details);
     throw new HostCallError(
-      budget ? geometryBudgetSentence(budget) : failure.message,
+      failure.message,
       response.status,
       failure.details && typeof failure.details === "object"
         ? (failure.details as Record<string, unknown>)
@@ -226,9 +223,8 @@ async function readDuctsBody(
   );
   if (!response.ok) {
     const failure = await readPeError(response);
-    const budget = geometryOverBudget(failure.details);
     throw new HostCallError(
-      budget ? geometryBudgetSentence(budget) : failure.message,
+      failure.message,
       response.status,
       failure.details && typeof failure.details === "object"
         ? (failure.details as Record<string, unknown>)

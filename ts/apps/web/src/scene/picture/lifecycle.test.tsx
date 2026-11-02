@@ -48,15 +48,13 @@ afterEach(() => {
 const selection = Atom.make<ReadonlySet<SubjectKey>>(new Set<SubjectKey>());
 const content: PictureContent = {
   geometry: {
-    subject: "picked",
     overview: {
       elementIds: [7311],
       contextPaddingFt: 0,
       focusOnly: false,
-      contextRepresentation: "link-boxes",
+      contextRepresentation: "overview",
       maxTriangles: 100000,
     },
-    narrow: "Open fewer subjects for full geometry.",
   },
   focus: { walked: ["e:7311"], near: [] },
   lines: [],

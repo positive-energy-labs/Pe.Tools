@@ -6,8 +6,9 @@ import type { Psc1Metadata } from "./psc1";
 
 export type SceneRead = {
   meshes: SceneMeshes | null;
+  metadata?: Psc1Metadata | null;
   /** Why there are no meshes: the capture or the artifact failed; null otherwise. */
-  error: string | null;
+  error: unknown;
   pending: boolean;
   notice?: string | null;
   /** Current-scope exact focus is usable while its optional context is pending. */
@@ -19,7 +20,7 @@ export type SceneRead = {
   completeness: Psc1Metadata["completeness"] | null;
   levels?: Psc1Metadata["levels"] | null;
   /** Optional context failed; the exact focus remains usable. */
-  contextError?: string | null;
+  contextError?: unknown;
 };
 
 const idle = { meshes: null, metadata: null, error: null, pending: false };
@@ -47,10 +48,9 @@ export function useScene(
   request: ReturnType<typeof sceneRequest> | null,
   document: { session: string; openId: string } | null,
   revision: number | string,
-  geometry?: Extract<SceneSource, { kind: "capture" }>["geometry"],
 ): SceneRead {
   const read = useSource(
-    request && document ? { kind: "capture", request, document, revision, geometry } : null,
+    request && document ? { kind: "capture", request, document, revision } : null,
   );
   return {
     meshes: read.meshes,
@@ -61,13 +61,14 @@ export function useScene(
     unavailableElements: read.metadata?.unavailableElements.length ?? 0,
     completeness: read.metadata?.completeness ?? null,
     levels: read.metadata?.levels ?? null,
+    metadata: read.metadata,
   };
 }
 export type ArtifactRead = {
   notice?: string | null;
   meshes: SceneMeshes | null;
   metadata: Psc1Metadata | null;
-  error: string | null;
+  error: unknown;
   pending: boolean;
 };
 export function useSceneArtifact(id: string | null): ArtifactRead {

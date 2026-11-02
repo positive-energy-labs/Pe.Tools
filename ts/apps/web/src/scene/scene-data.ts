@@ -1,4 +1,3 @@
-import { readGeometry, budgetSentence, geometryBudget } from "#/shell/geometry";
 import { NATIVE_READ_WAIT_S } from "#/route/waits";
 import { callHostRpc } from "#/host/client";
 import { HostCallError } from "@pe/host-contracts/operation-types";
@@ -9,7 +8,6 @@ import { sceneMemory, type SceneMemoryLease } from "./scene-memory";
 import type { SceneMeshes } from "./types";
 import type { sceneRequest } from "./host";
 
-// TODO: docs/features/routes/LEDGER.md#geometry-pane-fallback Wire subject representation and the separate metadata overview when the host admission contract lands.
 export type SceneSource =
   | { kind: "artifact"; id: string }
   | {
@@ -17,17 +15,12 @@ export type SceneSource =
       document: { session: string; openId: string };
       revision: string | number;
       request: ReturnType<typeof sceneRequest>;
-      geometry?: {
-        overview: ReturnType<typeof sceneRequest>;
-        subject: "all" | "picked";
-        narrow: string;
-      };
     };
 type Decoded = { metadata: Psc1Metadata; positions: Float32Array; meshes: SceneMeshes };
 export type SourceSnapshot =
   | { state: "pending" }
   | { state: "ready"; data: Decoded; notice?: string | null }
-  | { state: "failed"; error: string };
+  | { state: "failed"; error: unknown };
 const PENDING: SourceSnapshot = { state: "pending" };
 /** A refused Revit queue (`BridgeBusy`, not dispatched) is transient: resend 1 s, doubling to 15 s,
  * until the read's own deadline. Any other refusal or failure is final. */
@@ -47,7 +40,6 @@ const identity = (source: SceneSource) =>
         source.document.openId,
         source.revision,
         source.request,
-        source.geometry,
       ]);
 
 /** Freshness belongs to the exact source identity; there is no elapsed-time substitute for a revision.
@@ -135,31 +127,7 @@ class SceneData {
             openDocumentId: source.document.openId,
             signal: abort.signal,
           });
-        const operation = source.geometry
-          ? readGeometry(
-              {
-                overview: () => call(source.geometry!.overview),
-                narrow: source.geometry.narrow,
-              },
-              source.geometry.subject,
-              source.request.contextRepresentation === "none"
-                ? "meshes"
-                : source.request.contextRepresentation,
-              (representation) =>
-                call(
-                  representation === "link-boxes"
-                    ? {
-                        ...source.request,
-                        focusOnly: false,
-                        contextPaddingFt: source.request.focusOnly
-                          ? 0
-                          : source.request.contextPaddingFt,
-                        contextRepresentation: "link-boxes",
-                      }
-                    : source.request,
-                ),
-            )
-          : call(source.request).then((value) => ({ value, notice: null }));
+        const operation = call(source.request).then((value) => ({ value, notice: null }));
         void operation
           .then(({ value: { id }, notice }) => {
             clearTimeout(timeout);
@@ -178,7 +146,7 @@ class SceneData {
             clearTimeout(timeout);
             publish({
               state: "failed",
-              error: geometryBudget(error) ? budgetSentence(geometryBudget(error)!) : String(error),
+              error,
             });
           });
       };
@@ -209,7 +177,7 @@ class SceneData {
         lease?.release();
         publish({
           state: "failed",
-          error: geometryBudget(error) ? budgetSentence(geometryBudget(error)!) : String(error),
+          error,
         });
       });
   }

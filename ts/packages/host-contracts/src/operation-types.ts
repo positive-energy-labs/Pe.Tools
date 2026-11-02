@@ -979,39 +979,6 @@ export type HostOpRequest<K extends AnyOperationKey> = K extends TsOnlyOperation
     ? HostOps[K]["request"]
     : never;
 
-/** Native admission refusal, preserved through the bridge problem envelope. */
-export interface GeometryOverBudget {
-  kind: "over-budget";
-  count: number;
-  ceiling: number;
-  representation: string;
-  perSource?: unknown;
-}
-
-export function geometryOverBudget(value: unknown): GeometryOverBudget | null {
-  if (!value || typeof value !== "object") return null;
-  const budget = value as Record<string, unknown>;
-  return budget.kind === "over-budget" &&
-    typeof budget.count === "number" &&
-    Number.isFinite(budget.count) &&
-    budget.count >= 0 &&
-    typeof budget.ceiling === "number" &&
-    Number.isFinite(budget.ceiling) &&
-    budget.ceiling >= 0 &&
-    typeof budget.representation === "string"
-    ? {
-        kind: "over-budget",
-        count: budget.count,
-        ceiling: budget.ceiling,
-        representation: budget.representation,
-        ...(budget.perSource === undefined ? {} : { perSource: budget.perSource }),
-      }
-    : null;
-}
-
-export const geometryBudgetSentence = (budget: GeometryOverBudget) =>
-  `Over the geometry budget (${budget.representation}): ${budget.count} > ${budget.ceiling}.`;
-
 export const hostProblemDetailsSchema = Schema.Record(Schema.String, Schema.Unknown);
 
 export type HostProblemDetails = Schema.Schema.Type<typeof hostProblemDetailsSchema>;

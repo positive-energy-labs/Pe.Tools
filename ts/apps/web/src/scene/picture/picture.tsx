@@ -79,11 +79,11 @@ export interface PictureContent<L extends string = string, F extends string = st
   hoverGroups?: (group: SubjectKey) => boolean;
   /** A picked element's selection, widened (E: its leg). Absent = the single element. */
   widen?: (key: SubjectKey) => readonly SubjectKey[];
-  /** Every geometry pane declares its link-boxes overview reading and narrowing advice. */
+  /** Routes can declare only the zero-tessellation default. The kernel owns detail. */
   geometry: {
-    overview: ReturnType<typeof sceneRequest>;
-    subject: "all" | "picked";
-    narrow: string;
+    overview: ReturnType<typeof sceneRequest> & {
+      contextRepresentation: Extract<ContextRepresentation, "overview">;
+    };
   };
   /** Capture limits and clipping; `meshes` substitutes a dev fixture for the capture. */
   capture?: { maxTriangles?: number; cuts?: SceneMeshes["cuts"]; meshes?: SceneMeshes | null };
@@ -131,9 +131,9 @@ export interface PictureContent<L extends string = string, F extends string = st
 }
 
 /** How context is drawn; `none` is the focus read's own and never a choice here. */
-export type PictureContext = Exclude<ContextRepresentation, "none">;
+export type PictureContext = Extract<ContextRepresentation, "overview" | "meshes">;
 /** Zero-native-geometry overview is the default; detail is an explicit read (kaitpw, 2026-11-02). */
-export const CONTEXT_DEFAULT: PictureContext = "overview";
+export const CONTEXT_DEFAULT = "overview" satisfies PictureContext;
 
 type DocRef = { session: string; openId: string };
 type Move = { history: "push" | "replace" };
@@ -152,8 +152,8 @@ export function captureRequest(
   return {
     ...sceneRequest(
       ids.sort((a, b) => a - b),
-      !CONTEXT_KEYS.some((key) => layers.includes(key)),
-      radiusFt,
+      representation !== "meshes" && !CONTEXT_KEYS.some((key) => layers.includes(key)),
+      representation === "meshes" ? Math.max(5, radiusFt) : radiusFt,
       representation,
     ),
     // Whole-document exact focus exceeds 1.5M triangles on Project A. Never drop focus to fit.
@@ -259,7 +259,13 @@ export function Picture<L extends string, F extends string>({
   useAttentionDocument(doc, selection);
   const registry = useContext(RegistryContext);
   const selectedKeys = useAtomValue(selection);
-  const [contextRepresentation, setContextRepresentation] = useState(CONTEXT_DEFAULT);
+  // A new subject or revision starts cheap; a prior click cannot warm its geometry.
+  const detailScope = JSON.stringify([native, source.version, content.focus]);
+  const [detailedScope, setDetailedScope] = useState<string | null>(null);
+  const contextRepresentation: PictureContext =
+    detailedScope === detailScope ? "meshes" : CONTEXT_DEFAULT;
+  const setContextRepresentation = (representation: PictureContext) =>
+    setDetailedScope(representation === "meshes" ? detailScope : null);
   const { lit: attentionLit, selected: attentionSelected } = useElementAttention();
   // Reverse hover answers a hovered element only, never a row's expansion into elements.
   const over = useAtomValue(hoveredRef);
@@ -303,11 +309,10 @@ export function Picture<L extends string, F extends string>({
     ],
   );
   const captured = useCapture(
-    pictureSize ? request : null,
+    pictureSize ? (contextRepresentation === "meshes" ? request : content.geometry.overview) : null,
     native,
     source.version,
     content.capture?.cuts,
-    content.geometry,
   );
   const fixture = content.capture?.meshes;
   const capture = fixture ? { ...captured, meshes: fixture, focusMeshes: fixture } : captured;
@@ -567,7 +572,7 @@ export function Picture<L extends string, F extends string>({
             sceneView={page.sceneView}
             paint={content.paint}
             contextMode={
-              // Main's rule: neither context layer on = no context at all (the capture asks none).
+              // Layer visibility changes drawing only; detailed acquisition stays explicit.
               CONTEXT_KEYS.some((key) => layers.has(key)) ? page.contextStyle : "off"
             }
             kinds={content.kinds}

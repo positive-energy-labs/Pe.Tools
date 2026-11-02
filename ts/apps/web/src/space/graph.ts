@@ -14,7 +14,11 @@ import { refuse } from "#/route/refusal";
 import { ENCODINGS } from "./layers";
 import { regionSchema, spaceReads, type SpaceReadKey, type SpaceAnswerKey } from "./reads";
 
-const jsonField = <S extends z.ZodType>(schema: import("../../../../packages/agent-contracts/src/route-field").BareSchema<S> extends z.ZodArray<any> ? never : S) =>
+const jsonField = <S extends z.ZodType>(
+  schema: import("../../../../packages/agent-contracts/src/route-field").BareSchema<S> extends z.ZodArray<any>
+    ? never
+    : S,
+) =>
   field(
     schema,
     { url: "replace", agent: "set" },
@@ -23,7 +27,8 @@ const jsonField = <S extends z.ZodType>(schema: import("../../../../packages/age
       decode: (text) => {
         try {
           return JSON.parse(text);
-        } catch (error) { console.warn("ts/apps/web/src/space/graph.ts: fallback after failure", error);
+        } catch (error) {
+          console.warn("ts/apps/web/src/space/graph.ts: fallback after failure", error);
           return undefined;
         }
       },
@@ -121,7 +126,14 @@ export const spaceGraph: RouteGraph<SpacePage, null> = defineRouteGraph({
     },
   },
   needs: "document",
-  subjectField: { field: "region", noun: "region", keyKind: "name", roster: "region", detail: "scene", pane: "picture", },
+  subjectField: {
+    field: "region",
+    noun: "region",
+    keyKind: "name",
+    roster: "region",
+    detail: "scene",
+    pane: "picture",
+  },
   fields: {
     ...threadListFields,
     ...fields,
@@ -141,6 +153,7 @@ export const spaceGraph: RouteGraph<SpacePage, null> = defineRouteGraph({
   verbs: {
     capture: read("revit.detail.space-scene", "capture"),
     context: read("revit.detail.space-scene", "load context"),
+    detailed: read("revit.detail.space-scene", "Read detailed"),
     status: read("revit.detail.space-status", "read status"),
     rows: read("revit.detail.space-rows", "read rows"),
     tree: read("revit.detail.space-tree", "read tree"),
@@ -159,7 +172,17 @@ export const spaceGraph: RouteGraph<SpacePage, null> = defineRouteGraph({
       purpose: "Edit axis cuts and read answer layers",
       draws: ["scene", "answers"],
       verbs: Object.assign((row: { verb: string }) => [row.verb], {
-        ids: ["capture", "context", "status", "rows", "tree", "slice", "probe", "sweep"],
+        ids: [
+          "capture",
+          "context",
+          "detailed",
+          "status",
+          "rows",
+          "tree",
+          "slice",
+          "probe",
+          "sweep",
+        ],
       }),
     },
   },
@@ -194,9 +217,11 @@ export const spaceGraph: RouteGraph<SpacePage, null> = defineRouteGraph({
       const candidate = { ...current, ...patch };
       const reading = scope?.readings.scene;
       const loaded = reading ? matchingScene(current, reading as ReadingState) : null;
-      const named = [candidate.selected, ...(candidate.hidden === "all" ? [] : candidate.hidden), ...(candidate.isolated === "all" ? [] : candidate.isolated)].filter(
-        (key): key is string => key !== null,
-      );
+      const named = [
+        candidate.selected,
+        ...(candidate.hidden === "all" ? [] : candidate.hidden),
+        ...(candidate.isolated === "all" ? [] : candidate.isolated),
+      ].filter((key): key is string => key !== null);
       if (
         (named.length || Object.hasOwn(patch, "cuts")) &&
         (!loaded || loaded.id !== candidate.scene)
@@ -236,18 +261,20 @@ export const spaceGraph: RouteGraph<SpacePage, null> = defineRouteGraph({
 export const spaceBinding = (id: string, row: unknown, { page }: { page: SpacePage }) => ({
   subject: null,
   args:
-    id === "capture" || id === "context"
+    id === "capture" || id === "context" || id === "detailed"
       ? {
           ...sceneRequest(
-            ((row as { input?: { elementIds?: number[] } } | undefined)?.input?.elementIds ?? []),
+            (row as { input?: { elementIds?: number[] } } | undefined)?.input?.elementIds ?? [],
             false,
             15,
             CONTEXT_DEFAULT,
           ),
           ...(page.region ? { region: page.region } : {}),
-          elementIds: page.region ? [] : ((row as { input?: { elementIds?: number[] } } | undefined)?.input?.elementIds ?? []),
-          focusOnly: !page.region && id === "capture",
-          contextRepresentation: !page.region && id === "capture" ? "none" : CONTEXT_DEFAULT,
+          elementIds: page.region
+            ? []
+            : ((row as { input?: { elementIds?: number[] } } | undefined)?.input?.elementIds ?? []),
+          focusOnly: false,
+          contextRepresentation: id === "detailed" ? "meshes" : CONTEXT_DEFAULT,
         }
       : {
           ...((row as { input?: object } | undefined)?.input ??

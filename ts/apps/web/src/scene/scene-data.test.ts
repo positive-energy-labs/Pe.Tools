@@ -70,61 +70,20 @@ it("resends a read refused by a full Revit queue with 1 s then 2 s backoff, then
   unsubscribe();
 });
 
-it("all goes directly to the declared overview without capturing the union", async () => {
-  io.call.mockResolvedValue({ id: "overview-only" });
-  const overview = sceneRequest([91], false, 0, "link-boxes");
+it("preserves a capture failure and its validation issues without a fallback read", async () => {
+  const error = new HostCallError("invalid", 422, {
+    issues: [{ path: "region", message: "required" }],
+  });
+  io.call.mockRejectedValue(error);
   const data = sceneData({
     kind: "capture",
-    document: { session: "overview", openId: "doc" },
-    revision: "all",
-    request: sceneRequest([101, 102, 103], false, 10, "meshes"),
-    geometry: { subject: "all", overview, narrow: "Open fewer fans for full geometry." },
+    document: { session: "error", openId: "doc" },
+    revision: "invalid",
+    request: sceneRequest([101], false, 0, "overview"),
   });
   const release = data.subscribe(() => {});
-  await vi.waitFor(() => expect(data.read().state).toBe("ready"));
-  expect(io.call).toHaveBeenCalledExactlyOnceWith(
-    "revit.detail.space-scene",
-    overview,
-    expect.objectContaining({ bridgeSessionId: "overview", openDocumentId: "doc" }),
-  );
-  expect(data.read()).toMatchObject({
-    notice: expect.stringContaining("overview of all subjects"),
-  });
-  release();
-});
-
-it("typed mesh and box refusals reach the overview within one initiating action", async () => {
-  const refused = (representation: string) =>
-    new HostCallError("admission", 422, {
-      kind: "over-budget",
-      count: 200,
-      ceiling: 100,
-      representation,
-    });
-  io.call
-    .mockRejectedValueOnce(refused("meshes"))
-    .mockRejectedValueOnce(refused("link-boxes"))
-    .mockResolvedValueOnce({ id: "fallback-overview" });
-  const overview = sceneRequest([91], false, 0, "link-boxes");
-  const data = sceneData({
-    kind: "capture",
-    document: { session: "fallback", openId: "doc" },
-    revision: "chain",
-    request: sceneRequest([101, 102], false, 10, "meshes"),
-    geometry: { subject: "picked", overview, narrow: "Open fewer fans for full geometry." },
-  });
-  const release = data.subscribe(() => {});
-  await vi.waitFor(() => expect(data.read().state).toBe("ready"));
-  expect(io.call.mock.calls.map((call) => call[1].elementIds)).toEqual([
-    [101, 102],
-    [101, 102],
-    [91],
-  ]);
-  expect(io.call.mock.calls.map((call) => call[1].contextRepresentation)).toEqual([
-    "meshes",
-    "link-boxes",
-    "link-boxes",
-  ]);
-  expect(data.read()).toMatchObject({ notice: expect.stringContaining("(meshes): 200 > 100.") });
+  await vi.waitFor(() => expect(data.read().state).toBe("failed"));
+  expect(data.read()).toEqual({ state: "failed", error });
+  expect(io.call).toHaveBeenCalledTimes(1);
   release();
 });

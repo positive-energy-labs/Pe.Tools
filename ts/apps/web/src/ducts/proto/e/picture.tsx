@@ -526,15 +526,12 @@ function Content({
       jump={jump}
       content={{
         geometry: {
-          subject:
-            owner?.view.read().page.system === "all" || !page.system.length ? "all" : "picked",
           overview: sceneRequest(
             snapshot.nodes.filter((node) => node.kind === "equipment").map((node) => node.id),
             false,
             0,
-            "link-boxes",
+            "overview",
           ),
-          narrow: "Open fewer systems for full geometry.",
         },
         focus,
         members: membership,

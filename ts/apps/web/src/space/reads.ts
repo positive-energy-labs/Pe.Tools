@@ -1,4 +1,3 @@
-import { readGeometry } from "#/shell/geometry";
 import { z } from "zod";
 import type { DocumentRef } from "@pe/agent-contracts";
 import {
@@ -33,7 +32,7 @@ export const spaceReads = {
       contextPaddingFt: z.number().nonnegative(),
       maxTriangles: z.number().int().positive(),
       focusOnly: z.boolean(),
-      contextRepresentation: z.enum(["none", "oriented", "triangle-boxes", "link-boxes", "meshes"]),
+      contextRepresentation: z.enum(["overview", "meshes"]),
     }),
   },
   "revit.detail.space-status": { input: z.object({}) },
@@ -91,37 +90,6 @@ export async function readSpaceCapture<K extends SpaceReadKey>(
       key,
       request,
     );
-  if (key === "revit.detail.space-scene") {
-    const scene = request as OpRequestOf<"revit.detail.space-scene">;
-    const overview = {
-      ...scene,
-      focusOnly: false,
-      contextPaddingFt: 0,
-      contextRepresentation: "link-boxes" as const,
-    };
-    const result = await readGeometry(
-      {
-        overview: () => call(overview as OpRequestOf<K>),
-        narrow: "Choose a smaller region for full geometry.",
-      },
-      "picked",
-      scene.contextRepresentation === "none"
-        ? "meshes"
-        : (scene.contextRepresentation ?? "link-boxes"),
-      (representation) =>
-        call({
-          ...scene,
-          focusOnly: false,
-          contextRepresentation: representation,
-        } as OpRequestOf<K>),
-    );
-    return {
-      request: scene as OpRequestOf<K>,
-      response: result.value,
-      document,
-      notice: result.notice,
-    };
-  }
   const response = await call(request as OpRequestOf<K>);
   return { request: request as OpRequestOf<K>, response, document };
 }

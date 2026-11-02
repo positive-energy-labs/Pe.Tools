@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import type { HostOperationCatalogEntry } from "#/ops/manifest";
 import { runOp } from "#/ops/run";
 import type { HostCaller } from "#/shell/host-call";
@@ -32,4 +33,19 @@ it("the catalog runner refuses unknown runtime keys before invoking the typed ca
     runOp({ ...request, op: { ...request.op, key: "logs.tail" } }),
   ).resolves.toMatchObject({ kind: "value", value: {} });
   expect(call).toHaveBeenCalledWith("logs.tail", {});
+});
+
+const io = vi.hoisted(() => ({ fetch: vi.fn() }));
+vi.mock("./runtime", () => ({ hostFetch: io.fetch }));
+it("retains validation issues in the host problem", async () => {
+  const issues = [{ path: ["region"], message: "required" }];
+  io.fetch.mockResolvedValue(
+    new Response(
+      JSON.stringify({ error: { code: "invalid", message: "Invalid input", details: issues } }),
+      { status: 422 },
+    ),
+  );
+  await expect(callHostRpc("revit.detail.space-scene", { elementIds: [] })).rejects.toMatchObject({
+    problem: { issues, operationKey: "revit.detail.space-scene", status: 422 },
+  });
 });

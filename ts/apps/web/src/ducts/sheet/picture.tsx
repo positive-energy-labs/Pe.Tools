@@ -295,16 +295,14 @@ export function SheetPicture({
       jump={jump}
       content={{
         geometry: {
-          subject: page.fan === "all" ? "all" : "picked",
           overview: sceneRequest(
             (opened ?? (sheet ? [sheet] : [])).flatMap((item) =>
               item.overview.fan ? [item.overview.fan.unitId] : [],
             ),
             false,
             0,
-            "link-boxes",
+            "overview",
           ),
-          narrow: "Open fewer fans for full geometry.",
         },
         focus,
         members,
