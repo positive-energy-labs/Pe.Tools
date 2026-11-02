@@ -124,9 +124,10 @@ afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 describe("pe/effect-edge closes every way around the marker", () => {
   for (const [name, [, diagnostics]] of Object.entries(flagged))
-    it(`flags ${name}`, () =>
-      expect(byFile.get(name) ?? 0).toBeGreaterThanOrEqual(1) &&
-      expect(byFile.get(name)).toBe(diagnostics));
+    it(`flags ${name}`, () => {
+      expect(byFile.get(name) ?? 0).toBeGreaterThanOrEqual(1);
+      expect(byFile.get(name)).toBe(diagnostics);
+    });
   for (const name of Object.keys(allowed))
     it(`passes ${name}`, () => expect(byFile.get(name) ?? 0).toBe(0));
 });
