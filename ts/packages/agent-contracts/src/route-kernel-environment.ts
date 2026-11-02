@@ -23,20 +23,51 @@ export type GeometryScope =
     }
   | { readonly kind: "region"; readonly id: IdentityId<"local"> }
   | { readonly kind: "family-document"; readonly id: IdentityId<"document"> };
+let mintExplicit: (token: AcceptanceToken) => ExplicitDetailRequest;
+let mintReach: (
+  subject: GeometryScope,
+  reachFt: number,
+  explicit: ExplicitDetailRequest,
+) => PreparedDetailReach;
+let mintRead: <T>(
+  key: ResolvedReadKey,
+  output: z.ZodType<T>,
+  route: AdmittedRoute,
+) => ResolvedRead<T>;
+let mintGeometry: <T>(
+  key: ResolvedReadKey,
+  output: z.ZodType<GeometryOutcome<T>>,
+  route: AdmittedRoute,
+  token: AcceptanceToken,
+  request: GeometryRequest<SceneContextRepresentation>,
+) => ResolvedGeometryRead<T>;
+let mintNative: (
+  submit: (request: NativeWriteRequest) => JournalCommandHandle,
+) => NativeWriteCapability;
+
 /** Owner-issued for a human/Pea explicit request, never a dependency/focus refresh. */
-export declare class ExplicitDetailRequest {
-  private constructor();
-  private readonly explicitAuthority: void;
-  readonly token: AcceptanceToken;
+export class ExplicitDetailRequest {
+  declare private readonly explicitAuthority: void;
+  private constructor(readonly token: AcceptanceToken) {
+    Object.freeze(this);
+  }
+  static {
+    mintExplicit = (token) => new ExplicitDetailRequest(token);
+  }
 }
-/** Prepared by the geometry owner; finite reach >= 5 feet. Region only admits this reach.
- * Exact instance is checked on use, so copying reachFt cannot substitute a smaller reach. */
-export declare class PreparedDetailReach {
-  private constructor();
-  private readonly reachAuthority: void;
-  readonly reachFt: number;
-  readonly subject: GeometryScope;
-  readonly explicit: ExplicitDetailRequest;
+/** Prepared by the geometry owner; finite reach >= 5 feet. */
+export class PreparedDetailReach {
+  declare private readonly reachAuthority: void;
+  private constructor(
+    readonly subject: GeometryScope,
+    readonly reachFt: number,
+    readonly explicit: ExplicitDetailRequest,
+  ) {
+    Object.freeze(this);
+  }
+  static {
+    mintReach = (subject, reachFt, explicit) => new PreparedDetailReach(subject, reachFt, explicit);
+  }
 }
 /** An unparameterized request can ONLY ask for the zero-tessellation overview. */
 export type GeometryRequest<R extends SceneContextRepresentation = "overview"> =
@@ -67,26 +98,42 @@ export interface ResolvedReadKey {
   readonly sortedKeyInput: string;
   readonly freshnessGeneration: number;
 }
-export declare class ResolvedRead<T> {
-  private constructor();
-  private readonly readAuthority: void;
-  readonly key: ResolvedReadKey;
-  readonly output: z.ZodType<T>;
-  readonly route: AdmittedRoute;
+export class ResolvedRead<T> {
+  declare private readonly readAuthority: void;
+  private constructor(
+    readonly key: ResolvedReadKey,
+    readonly output: z.ZodType<T>,
+    readonly route: AdmittedRoute,
+  ) {
+    Object.freeze(this);
+  }
+  static {
+    mintRead = <T>(key: ResolvedReadKey, output: z.ZodType<T>, route: AdmittedRoute) =>
+      new ResolvedRead(key, output, route);
+  }
 }
-/** Resolver-issued composite: request and canonical key are captured together.
- * Geometry acquisition must authenticate the exact issued instance and validate
- * key/request/scope/attempt agreement before reuse or dispatch. Generic read and
- * subscription ports cannot consume this descriptor.
- * Object.assign can preserve nominal types; copies and rebound descriptors still refuse. */
-export declare class ResolvedGeometryRead<T> {
-  private constructor();
-  private readonly geometryAuthority: void;
-  readonly token: AcceptanceToken;
-  readonly key: ResolvedReadKey;
-  readonly output: z.ZodType<GeometryOutcome<T>>;
-  readonly route: AdmittedRoute;
-  readonly request: GeometryRequest<SceneContextRepresentation>;
+/** Exact resolver-issued composite; copies/proxies refuse at acquisition. Membership does
+ * not establish admission, document freshness or the current scope/attempt. */
+export class ResolvedGeometryRead<T> {
+  declare private readonly geometryAuthority: void;
+  private constructor(
+    readonly key: ResolvedReadKey,
+    readonly output: z.ZodType<GeometryOutcome<T>>,
+    readonly route: AdmittedRoute,
+    readonly token: AcceptanceToken,
+    readonly request: GeometryRequest<SceneContextRepresentation>,
+  ) {
+    Object.freeze(this);
+  }
+  static {
+    mintGeometry = <T>(
+      key: ResolvedReadKey,
+      output: z.ZodType<GeometryOutcome<T>>,
+      route: AdmittedRoute,
+      token: AcceptanceToken,
+      request: GeometryRequest<SceneContextRepresentation>,
+    ) => new ResolvedGeometryRead(key, output, route, token, request);
+  }
 }
 /** These are synchronous acquisition/submission ports, not a Promise or fiber runtime.
  * D's scoped Effect services own the acquisitions behind handles; release interrupts reads,
@@ -137,18 +184,107 @@ export interface NativeWriteRequest {
   readonly entry: string;
   readonly input: unknown;
 }
-export declare class NativeWriteCapability {
-  private constructor();
-  private readonly submitAuthority: void;
-  readonly lifetime: "command";
-  /** Admission and invocation are revalidated, then journal accepts responsibility before return. */
-  submit(request: NativeWriteRequest): JournalCommandHandle;
+export class NativeWriteCapability {
+  declare private readonly submitAuthority: void;
+  readonly lifetime = "command";
+  private constructor(readonly submit: (request: NativeWriteRequest) => JournalCommandHandle) {
+    Object.freeze(this);
+  }
+  static {
+    mintNative = (submit) => new NativeWriteCapability(submit);
+  }
 }
+
+/** Recursively sorted JSON input, with array order retained. */
+export function canonicalEnvironmentInput(value: unknown): string {
+  const sorted = (part: unknown): unknown => {
+    if (Array.isArray(part)) return part.map(sorted);
+    if (part !== null && typeof part === "object")
+      return Object.fromEntries(
+        Object.entries(part)
+          .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+          .map(([key, item]) => [key, sorted(item)]),
+      );
+    return part;
+  };
+  const encoded = JSON.stringify(sorted(value));
+  if (encoded === undefined) throw new Error("Read input must be JSON");
+  return encoded;
+}
+
+/** Kernel-private authority, retained at composition rather than exposed to route bodies.
+ * Validators at acquisition still own admission and token/invocation freshness. */
+export function createRouteEnvironmentIssuer() {
+  const issued = new WeakSet<object>();
+  const own = <T extends object>(value: T): T => {
+    issued.add(value);
+    return value;
+  };
+  const owns = (value: unknown): boolean =>
+    typeof value === "object" && value !== null && issued.has(value);
+  return Object.freeze({
+    owns,
+    mintExplicit: (token: AcceptanceToken) => own(mintExplicit(token)),
+    mintReach: (subject: GeometryScope, reachFt: number, explicit: ExplicitDetailRequest) => {
+      if (
+        !owns(explicit) ||
+        !(explicit instanceof ExplicitDetailRequest) ||
+        !Number.isFinite(reachFt) ||
+        reachFt < 5
+      )
+        throw new Error("Invalid explicit detail reach");
+      const captured: GeometryScope =
+        subject.kind === "subjects"
+          ? Object.freeze({
+              ...subject,
+              ids: Object.freeze([subject.ids[0], ...subject.ids.slice(1)] as const),
+            })
+          : Object.freeze({ ...subject });
+      return own(mintReach(captured, reachFt, explicit));
+    },
+    mintRead: <T>(key: ResolvedReadKey, output: z.ZodType<T>, route: AdmittedRoute) =>
+      own(mintRead(Object.freeze({ ...key }), output, route)),
+    mintGeometry: <T>(
+      key: ResolvedReadKey,
+      output: z.ZodType<GeometryOutcome<T>>,
+      route: AdmittedRoute,
+      token: AcceptanceToken,
+      request: GeometryRequest<SceneContextRepresentation>,
+    ) => {
+      if (
+        request.representation === "overview"
+          ? request.scope !== token.scope
+          : !owns(request.reach) ||
+            !(request.reach instanceof PreparedDetailReach) ||
+            request.reach.explicit.token !== token
+      )
+        throw new Error("Geometry request/attempt mismatch");
+      const captured =
+        request.representation === "overview"
+          ? Object.freeze({
+              ...request,
+              subjects:
+                request.subjects.kind === "all"
+                  ? Object.freeze({ kind: "all" as const })
+                  : Object.freeze({
+                      kind: "ids" as const,
+                      ids: Object.freeze([...request.subjects.ids]),
+                    }),
+            })
+          : Object.freeze({ ...request });
+      if (key.sortedKeyInput !== canonicalEnvironmentInput(captured))
+        throw new Error("Geometry key/request mismatch");
+      return own(mintGeometry(Object.freeze({ ...key }), output, route, token, captured));
+    },
+    mintNative: (submit: (request: NativeWriteRequest) => JournalCommandHandle) =>
+      own(mintNative(submit)),
+  });
+}
+export type RouteEnvironmentIssuer = ReturnType<typeof createRouteEnvironmentIssuer>;
+
 export interface WorkReadCapability {
   readonly lifetime: "read";
-  read(
-    scope: ScopeToken,
-  ): {
+  read(scope: ScopeToken): {
     readonly key: Immutable<WorkKey>;
     readonly revision: number;
     readonly value: unknown;
