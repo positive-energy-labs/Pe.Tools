@@ -36,9 +36,19 @@ import {
 } from "./verbs";
 import { kernelCellVerbs } from "./verbs-cells";
 
-const transport = vi.hoisted(() => ({ run: vi.fn(), families: vi.fn(), schedule: vi.fn() }));
+const transport = vi.hoisted(() => ({
+  run: vi.fn(),
+  preview: vi.fn(),
+  families: vi.fn(),
+  schedule: vi.fn(),
+}));
 vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({
-  runSemanticAction: transport.run,
+  runSemanticAction: (
+    ...args: Parameters<
+      typeof import("../../../../packages/mcps/src/shared/takeoff-action-client").runSemanticAction
+    >
+  ) => (args[1]?.previewOnly === true ? transport.preview(...args) : transport.run(...args)),
+  actionResult: (receipt: { result?: unknown }) => receipt.result,
   cancelRunningAdmissions: vi.fn(async () => []),
 }));
 
@@ -52,6 +62,7 @@ vi.mock("../../../../packages/mcps/src/shared/schedule-client", () => ({
 
 const key: WorkKey = { binding: "workspace", route: "verb-proof", target: null, work: "one" };
 const schema = z.object({
+  writeIntent: z.record(z.string(), z.unknown()).default({}),
   rows: z.record(z.string(), z.object({ id: z.string(), value: z.number(), note: z.string() })),
   cells: z.record(z.string(), draftCellSchema(z.string())),
 });
@@ -81,6 +92,8 @@ const succeededReceipt = () =>
     result: { wrote: true },
   });
 beforeEach(() => {
+  transport.preview.mockReset();
+  transport.preview.mockResolvedValue(succeededReceipt());
   transport.run.mockReset();
   transport.families.mockReset();
   transport.schedule.mockReset();
@@ -182,7 +195,8 @@ function command(review: "none" | "shown") {
   const declaration = { label: "initialize", input: z.object({ stage: z.string() }) };
   const implementation = {
     prepare: () => ({ lines: ["Writes shared parameters"] }),
-    intent: (_scope: unknown, input: { stage: string }) => input,
+    stage: (_scope: unknown, input: { stage: string }) => input,
+    intent: () => ({}),
   };
   return commandVerb("takeoffs.initialize", { ...declaration, review }, implementation);
 }
@@ -409,7 +423,7 @@ test("validation, readiness and busy admission prevent writes", async () => {
     press: null,
     refusal: { code: "busy" },
   });
-  expect(env.writes).toEqual([]);
+  expect(env.writes).toHaveLength(1); // The review staged intent; busy admission added no write.
   await invoke(env.ctx, reviewVerb, null, undefined, { kind: "cancel", ticket: review.ticket });
 });
 
@@ -440,7 +454,8 @@ test("drift while preparing cannot issue a usable review ticket", async () => {
         env.drift();
         return { preview: true };
       },
-      intent: (_scope, input) => input,
+      stage: (_scope, input) => input,
+      intent: () => ({}),
     },
   );
   expect((await invoke(env.ctx, verb, null, { stage: "sheet" })).state).toBe("stale");
@@ -516,16 +531,14 @@ test("intent reads the evidence its review ticket froze, so an apply names the a
     { label: "initialize", input: z.object({ stage: z.string() }), review: "shown" },
     {
       prepare: () => ({ plan: { id: "plan-1" } }),
-      intent: (_scope, input, _answers, ticket) => ({
-        ...input,
-        stage: (ticket!.evidence as { plan: { id: string } }).plan.id,
-      }),
+      stage: () => ({ stage: "plan-1" }),
+      intent: () => ({}),
     },
   );
   const { ticket } = reviewed(await invoke(env.ctx, verb, null, { stage: "ignored" }));
   expect(ticket.evidence).toEqual({ plan: { id: "plan-1" } });
   expect(await commit(env.ctx, verb, ticket)).toMatchObject({ state: "done", kind: "command" });
-  expect(transport.run.mock.calls[0]![1]).toEqual({ stage: "plan-1" });
+  expect(transport.run.mock.calls[0]![1]).toEqual({});
 });
 
 test("a families read reaches the families client with the Work key and exact document", async () => {
@@ -667,7 +680,8 @@ test("K1.5: command lands its result and fences late Page changes after A-B-A", 
     "takeoffs.initialize",
     { label: "Initialize", input: z.object({}), review: "none" },
     {
-      intent: () => ({ stage: "sheet" }),
+      stage: () => ({ stage: "sheet" }),
+      intent: () => ({}),
       lands: (result) => ({ selected: (result as { wrote: boolean }).wrote }),
     },
   );
@@ -697,15 +711,16 @@ test("K1.6: a sequence has one press, separate reviewed receipts, and stops at f
     "takeoffs.initialize",
     { label: "Initialize all", input: z.object({}), review: "shown" },
     {
-      intent: () => [{ stage: "first" }, { stage: "second" }, { stage: "third" }],
+      stage: () => [{ stage: "first" }, { stage: "second" }, { stage: "third" }],
+      intent: () => [{}, {}, {}],
     },
   );
   const first = reviewed(await invoke(ctx, verb, null, {}));
-  expect(first.ticket).toMatchObject({ step: 0, evidence: { stage: "first" } });
+  expect(first.ticket).toMatchObject({ step: 0, evidence: {} });
   expect(transport.run).not.toHaveBeenCalled();
   const second = reviewed(await commit(ctx, verb, first.ticket));
   expect(second.press).toBe(first.press);
-  expect(second.ticket).toMatchObject({ step: 1, evidence: { stage: "second" } });
+  expect(second.ticket).toMatchObject({ step: 1, evidence: {} });
   expect(receipts).toHaveBeenCalledTimes(1);
   transport.run.mockResolvedValueOnce({
     ...succeededReceipt(),
@@ -785,4 +800,17 @@ test("K1.2: page.bind resolves its HTTP contract at invocation and validates bef
   } finally {
     vi.unstubAllGlobals();
   }
+});
+
+test("a derived command stages Work before host preview and a refused preview never dispatches the write", async () => {
+  const env = environment("human");
+  transport.preview.mockImplementation(async () => {
+    expect(env.doc().writeIntent).toMatchObject({
+      "takeoffs.initialize": { edit: { value: { stage: "sheet" } } },
+    });
+    return { ...succeededReceipt(), state: "refused" };
+  });
+  expect((await invoke(env.ctx, command("none"), null, { stage: "sheet" })).state).toBe("failed");
+  expect(transport.preview).toHaveBeenCalledOnce();
+  expect(transport.run).not.toHaveBeenCalled();
 });

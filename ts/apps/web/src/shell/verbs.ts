@@ -215,6 +215,7 @@ interface Binding {
     scope: VerbScope,
     input: unknown,
   ) => { key: string; input: Record<string, unknown> } | null;
+  stageSequence?: (scope: VerbScope, input: unknown) => readonly Record<string, unknown>[];
   sequence?: (scope: VerbScope, input: unknown) => readonly Record<string, unknown>[];
   page?: (scope: VerbScope, input: unknown) => Record<string, unknown>;
   rpc?: ReadEntry;
@@ -223,6 +224,7 @@ interface Binding {
   patches?: (scope: VerbScope, input: unknown) => readonly RouteStatePatch[];
   history?: WorkHistory<unknown>;
   command?: SemanticActionKey;
+  stage?: (scope: VerbScope, input: unknown) => Record<string, unknown>;
   intent?: (
     scope: VerbScope,
     input: unknown,
@@ -339,6 +341,7 @@ export function commandVerb<K extends SemanticActionKey, S extends z.ZodType>(
     /** Reads the prepared evidence for review, and the receipt result after success. */
     present?: (result: unknown, scope: VerbScope) => VerbPresentation;
     waitSeconds?: number;
+    stage?: (scope: VerbScope, input: z.output<S>) => Record<string, unknown>;
     ready?: (scope: VerbScope, input: z.output<S>) => string | null;
     prepare?: (scope: VerbScope, input: z.output<S>) => unknown;
     /** `ticket` is the review the person (or Pea) saw, with the evidence `prepare` sealed; absent when `review` is none. */
@@ -354,6 +357,9 @@ export function commandVerb<K extends SemanticActionKey, S extends z.ZodType>(
   const verb = { does: command, ...declaration, kind: "command" as const };
   bindings.set(verb, {
     command,
+    stage:
+      implementation.stage &&
+      ((scope, input) => implementation.stage!(scope, input as z.output<S>)),
     present: implementation.present,
     lands: implementation.lands,
     waitSeconds: implementation.waitSeconds,
@@ -374,14 +380,19 @@ export function commandVerb<K extends SemanticActionKey, S extends z.ZodType>(
 export function sequenceVerb<K extends SemanticActionKey, S extends z.ZodType>(
   command: K,
   declaration: Parameters<typeof commandVerb<K, S>>[1],
-  implementation: Omit<Parameters<typeof commandVerb<K, S>>[2], "intent"> & {
+  implementation: Omit<Parameters<typeof commandVerb<K, S>>[2], "intent" | "stage"> & {
+    stage?: (scope: VerbScope, input: z.output<S>) => readonly Record<string, unknown>[];
     intent: (scope: VerbScope, input: z.output<S>) => readonly CommandInput<K>[];
   },
 ): VerbDecl<S> {
   const verb = commandVerb(command, declaration, {
     ...implementation,
+    stage: implementation.stage && ((scope, input) => implementation.stage!(scope, input)[0]!),
     intent: (scope, input) => implementation.intent(scope, input)[0]!,
   });
+  if (implementation.stage)
+    bindings.get(verb)!.stageSequence = (scope, input) =>
+      implementation.stage!(scope, input as z.output<S>);
   bindings.get(verb)!.sequence = (scope, input) =>
     implementation.intent(scope, input as z.output<S>) as readonly Record<string, unknown>[];
   return verb;
@@ -699,10 +710,48 @@ async function invokeCore<C extends Caller>(
                 failure("stale", "The bound invocation basis changed; bind again", press),
               );
             const boundSubject = copy(subject);
-            const scope = resolve(ctx, verb, boundSubject, snapshot);
+            let scope = resolve(ctx, verb, boundSubject, snapshot);
             if (isRefusal(scope)) return finish(resultOf(scope, press));
             const ready = binding.ready?.(scope, input);
             if (ready) return finish(failure("refused", ready, press));
+            if (binding.stage) {
+              if (!snapshot.work || !binding.command)
+                return finish(failure("refused", "Work has not been read yet", press));
+              const definition = commands[binding.command];
+              if (!("writeBoundary" in definition))
+                return finish(
+                  failure("refused", "This command has no Work intent boundary", press),
+                );
+              const value = definition.authoredInput.parse(
+                binding.stageSequence?.(initialScope, input)[step] ?? binding.stage(scope, input),
+              );
+              const written = await ctx.write(snapshot.work.handle.key, {
+                patches: [{ path: ["writeIntent", binding.command], value: { edit: { value } } }],
+                expectedRevision: snapshot.work.handle.revision,
+                press,
+              });
+              if (!written.ok) return finish(resultOf(writeRefusal(written)!, press));
+              snapshot = copy(ctx.snapshot());
+              scope = resolve(ctx, verb, boundSubject, snapshot);
+              if (isRefusal(scope)) return finish(resultOf(scope, press));
+            }
+            // Derived writes require the host's seal even when this verb has no shown review.
+            if (binding.command && "writeBoundary" in commands[binding.command] && !ctx.fixture) {
+              await prepareCommand(
+                scope,
+                binding.command,
+                { previewOnly: true } as CommandInput<typeof binding.command>,
+                binding.waitSeconds,
+              );
+              const afterPreview = ctx.snapshot();
+              if (
+                !equal(snapshot.target, afterPreview.target) ||
+                !equal(basisOf(snapshot), basisOf(afterPreview))
+              )
+                return finish(
+                  failure("stale", "The invocation basis changed during preview", press),
+                );
+            }
             let answers: unknown;
             let ticket: ReviewTicket | undefined;
             if (verb.review !== "none" && (!binding.raw || binding.raw(scope, input))) {

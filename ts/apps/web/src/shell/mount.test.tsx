@@ -35,7 +35,19 @@ import { peReadings } from "#/readings";
 
 const transport = vi.hoisted(() => ({ run: vi.fn() }));
 vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({
-  runSemanticAction: transport.run,
+  runSemanticAction: (
+    ...args: Parameters<
+      typeof import("../../../../packages/mcps/src/shared/takeoff-action-client").runSemanticAction
+    >
+  ) =>
+    args[1]?.previewOnly === true
+      ? Promise.resolve({ state: "succeeded", result: {} } as Awaited<
+          ReturnType<
+            typeof import("../../../../packages/mcps/src/shared/takeoff-action-client").runSemanticAction
+          >
+        >)
+      : transport.run(...args),
+  actionResult: (receipt: { result?: unknown }) => receipt.result,
   cancelRunningAdmissions: vi.fn(async () => []),
 }));
 // The kernel's Target/Work door, faked with the fixture's ports; null runs the real door.
@@ -96,7 +108,14 @@ function receipt(): ActionReceipt {
     caller: { kind: "human", via: "local" },
     target: { kind: "host" },
     basis: null,
-    input: { stage: "sheet" },
+    input: {},
+    consumes: [
+      {
+        kind: "work",
+        probe: { handle: { key, revision: 1 }, paths: [["rows"], ["writeIntent"]] },
+        expected: {},
+      },
+    ],
     steps: [],
     prepared: { state: "unprepared" },
     recovery: [],
@@ -115,8 +134,9 @@ type Doc = {
 };
 const key: WorkKey = { binding: "workspace", route: "mount-proof", target: null, work: "one" };
 const rows = z.record(z.string(), z.object({ id: z.string(), n: z.number() }));
-const docSchema = z.object({ rows });
+const docSchema = z.object({ rows, writeIntent: z.record(z.string(), z.unknown()).default({}) });
 const cellDocSchema = z.object({
+  writeIntent: z.record(z.string(), z.unknown()).default({}),
   rows,
   rules: z.record(z.string(), draftCellSchema(z.string())).default({}),
 });
@@ -210,7 +230,8 @@ async function fixture(cells = false) {
             rows: ["2 planned writes"],
             page: { cfm: 412 },
           }),
-          intent: () => ({ stage: "sheet" }),
+          stage: () => ({ stage: "sheet" }),
+          intent: () => ({}),
         },
       ),
     },
@@ -288,7 +309,7 @@ async function fixture(cells = false) {
     }),
     subjects: { row: (value) => (value as { id: string }).id },
     verbReadings: { apply: ["capture"] },
-    receiptPaths: () => [["rows", "slot", "n"]],
+    receiptPaths: () => [["rows", "slot", "n"], ["writeIntent"]],
     subscribeDocumentChanged: (accept) => {
       documentChange = accept;
       return () => {
@@ -1123,7 +1144,8 @@ test.each(["shown"] as const)(
             counts: { planned: 3, refused: 1 },
             secret: "private receipt details",
           }),
-          intent: () => ({ stage: "sheet" }),
+          stage: () => ({ stage: "sheet" }),
+          intent: () => ({}),
         },
       ),
     };

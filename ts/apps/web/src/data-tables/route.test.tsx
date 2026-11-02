@@ -31,7 +31,18 @@ vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", async (ori
   ...(await original<
     typeof import("../../../../packages/mcps/src/shared/takeoff-action-client")
   >()),
-  runSemanticAction: command.run,
+  runSemanticAction: (
+    ...args: Parameters<
+      typeof import("../../../../packages/mcps/src/shared/takeoff-action-client").runSemanticAction
+    >
+  ) =>
+    args[1]?.previewOnly === true
+      ? Promise.resolve({ state: "succeeded", result: {} } as Awaited<
+          ReturnType<
+            typeof import("../../../../packages/mcps/src/shared/takeoff-action-client").runSemanticAction
+          >
+        >)
+      : command.run(...args),
 }));
 vi.mock("../shell/use-work-scope", () => ({
   useWorkScope: () => ({

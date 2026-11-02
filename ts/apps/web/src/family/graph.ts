@@ -34,30 +34,25 @@ const familyCellParameter = (key: string) => {
 
 export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = {
   directory: {
-  "path": "/family",
-  "title": "Family",
-  "label": "Family Foundry",
-  "exposure": "Main",
-  "runtimeNeed": "Revit for capture/apply; portable authoring is separate",
-  "icon": "Boxes",
-  "category": "Build / audit families",
-  "blurb": "One family, two lanes: an authored family.json (anatomy, matrix, build) or the family open in Revit's editor. Binding picks the lane; capture bridges them.",
-  "aliases": [
-    "rfa",
-    "author",
-    "build",
-    "capture",
-    "matrix"
-  ],
-  "listed": true,
-  "satellites": [],
-  "surfaces": {
-    "web": "full",
-    "pwa": "full",
-    "tray": false
+    path: "/family",
+    title: "Family",
+    label: "Family Foundry",
+    exposure: "Main",
+    runtimeNeed: "Revit for capture/apply; portable authoring is separate",
+    icon: "Boxes",
+    category: "Build / audit families",
+    blurb:
+      "One family, two lanes: an authored family.json (anatomy, matrix, build) or the family open in Revit's editor. Binding picks the lane; capture bridges them.",
+    aliases: ["rfa", "author", "build", "capture", "matrix"],
+    listed: true,
+    satellites: [],
+    surfaces: {
+      web: "full",
+      pwa: "full",
+      tray: false,
+    },
+    resume: "document",
   },
-  "resume": "document"
-},
   key: familyDraftRouteState.route,
   address: "family",
   name: "Family",
@@ -216,10 +211,8 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = {
           const preview = await prepareCommand(scope, "family.plan", {}, NATIVE_APPLY_WAIT_S);
           return { ...preview, plan: familyPlanResultSchema.parse(preview.response) };
         },
-        intent: (_scope, _input, _answers, ticket) => ({
-          plan: familyPlanResultSchema.parse((ticket?.evidence as { plan?: unknown })?.plan).id,
-          include: "all",
-        }),
+        stage: () => ({ include: "all" }),
+        intent: () => ({}),
       },
     ),
     capture: commandVerb(
@@ -231,7 +224,8 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = {
       },
       {
         ready: (_, input) => input.refusal,
-        intent: (_, input) => ({ pod: input.pod, ...(input.spec ? { spec: input.spec } : {}) }),
+        stage: (_, input) => ({ pod: input.pod, ...(input.spec ? { spec: input.spec } : {}) }),
+        intent: () => ({}),
         lands: (result) => {
           const member = z
             .object({ member: z.object({ pod: z.string(), path: z.string() }) })
@@ -261,9 +255,8 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = {
               }
             : { sentence: "Family build completed.", rows: [] };
         },
-        intent: (_scope, _input, _answers, ticket) => ({
-          source: podMemberSourceSchema.parse((ticket?.evidence as { source?: unknown })?.source),
-        }),
+        stage: (_, input) => ({ source: input.source! }),
+        intent: () => ({}),
       },
     ),
     "attach-spec": commandVerb(

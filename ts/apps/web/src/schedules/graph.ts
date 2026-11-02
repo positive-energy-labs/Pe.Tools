@@ -45,27 +45,25 @@ const push = z.strictObject({
 
 export const schedulesGraph: RouteGraph<SchedulesPage, ScheduleGridDocument> = {
   directory: {
-  "path": "/schedules",
-  "title": "Schedules",
-  "label": "Revit data",
-  "exposure": "Preview",
-  "runtimeNeed": "Revit for model actions; browsing saved data is separate",
-  "icon": "LayoutGrid",
-  "category": "Coordinate model data",
-  "blurb": "Any Revit schedule as a grid — push staged cell values, capture its definition into a pod, or apply a saved spec as a new schedule.",
-  "aliases": [
-    "Revit",
-    "data"
-  ],
-  "listed": true,
-  "satellites": [],
-  "surfaces": {
-    "web": "full",
-    "pwa": "full",
-    "tray": false
+    path: "/schedules",
+    title: "Schedules",
+    label: "Revit data",
+    exposure: "Preview",
+    runtimeNeed: "Revit for model actions; browsing saved data is separate",
+    icon: "LayoutGrid",
+    category: "Coordinate model data",
+    blurb:
+      "Any Revit schedule as a grid — push staged cell values, capture its definition into a pod, or apply a saved spec as a new schedule.",
+    aliases: ["Revit", "data"],
+    listed: true,
+    satellites: [],
+    surfaces: {
+      web: "full",
+      pwa: "full",
+      tray: false,
+    },
+    resume: "document",
   },
-  "resume": "document"
-},
   key: scheduleGridRouteState.route,
   address: "schedules",
   name: "Schedules",
@@ -195,7 +193,8 @@ export const schedulesGraph: RouteGraph<SchedulesPage, ScheduleGridDocument> = {
             }),
           };
         },
-        intent: (_, input) => (input.pod ? { pod: input.pod } : {}),
+        stage: (_, input) => (input.pod ? { pod: input.pod } : {}),
+        intent: () => ({}),
       },
     ),
     capture: commandVerb(
@@ -207,7 +206,8 @@ export const schedulesGraph: RouteGraph<SchedulesPage, ScheduleGridDocument> = {
       },
       {
         ready: (_, input) => input.refusal,
-        intent: (_, input) => ({ pod: input.pod, scheduleId: input.scheduleId! }),
+        stage: (_, input) => ({ pod: input.pod, scheduleId: input.scheduleId! }),
+        intent: () => ({}),
       },
     ),
     apply: commandVerb(
@@ -220,7 +220,8 @@ export const schedulesGraph: RouteGraph<SchedulesPage, ScheduleGridDocument> = {
       {
         waitSeconds: NATIVE_APPLY_WAIT_S,
         ready: (_, input) => input.refusal,
-        intent: (_, input) => ({ source: input.source! }),
+        stage: (_, input) => ({ source: input.source! }),
+        intent: () => ({}),
       },
     ),
     // Host reads, never a fake authored Work edit (ADR 0026); a read selects its subject's Work.
@@ -233,11 +234,15 @@ export const schedulesGraph: RouteGraph<SchedulesPage, ScheduleGridDocument> = {
       },
       { subject: (value) => (value as ScheduleReading).workspaceId },
     ),
-    bind: commandVerb("schedule.grid.bind", {
-      label: "Bind schedule reading",
-      review: "none",
-      input: scheduleActions["schedule.grid.bind"].input,
-    }, { intent: (_, input) => input }),
+    bind: commandVerb(
+      "schedule.grid.bind",
+      {
+        label: "Bind schedule reading",
+        review: "none",
+        input: scheduleActions["schedule.grid.bind"].input,
+      },
+      { intent: (_, input) => input },
+    ),
   },
   panes: {
     list: {

@@ -142,10 +142,15 @@ export const takeoffVerbs = {
   ),
   initialize: commandVerb(
     "takeoffs.initialize",
-    { label: "initialize", review: "none", input: guarded(commands["takeoffs.initialize"].input) },
+    {
+      label: "initialize",
+      review: "none",
+      input: guarded(commands["takeoffs.initialize"].authoredInput),
+    },
     {
       ready: (_, input) => input.refusal,
-      intent: (_, input) => input.request,
+      stage: (_, input) => input.request,
+      intent: () => ({}),
       waitSeconds: NATIVE_APPLY_WAIT_S,
     },
   ),
@@ -155,11 +160,12 @@ export const takeoffVerbs = {
       label: "adopt",
       chord: "Mod+Shift+A",
       review: "none",
-      input: guarded(commands["takeoffs.adopt"].input),
+      input: guarded(commands["takeoffs.adopt"].authoredInput),
     },
     {
       ready: (_, input) => input.refusal,
-      intent: (_, input) => input.request,
+      stage: (_, input) => input.request,
+      intent: () => ({}),
       waitSeconds: NATIVE_APPLY_WAIT_S,
     },
   ),
@@ -168,11 +174,12 @@ export const takeoffVerbs = {
     {
       label: "partition",
       review: "shown",
-      input: guarded(z.array(commands["takeoffs.partition"].input)),
+      input: guarded(z.array(commands["takeoffs.partition"].authoredInput)),
     },
     {
       ready: (_, input) => input.refusal,
-      intent: (_, input) => input.request,
+      stage: (_, input) => input.request,
+      intent: (_, input) => input.request.map(() => ({})),
       waitSeconds: NATIVE_APPLY_WAIT_S,
     },
   ),
@@ -223,12 +230,13 @@ export const takeoffVerbs = {
           ],
         };
       },
-      intent: (_, { request }) => ({
+      stage: (_, { request }) => ({
         path: request.path,
         zones: request.zones,
         captureId: request.captureId,
         fileVersion: request.fileVersion,
       }),
+      intent: () => ({}),
       waitSeconds: NATIVE_APPLY_WAIT_S,
     },
   ),

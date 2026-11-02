@@ -62,29 +62,25 @@ export const familiesGraph: RouteGraph<FamiliesPage, FamiliesRouteDocument> = {
     },
   },
   directory: {
-  "path": "/families",
-  "title": "Families",
-  "label": "Family Foundry",
-  "exposure": "Main",
-  "runtimeNeed": "Revit for model actions; browsing saved data is separate",
-  "icon": "Table2",
-  "category": "Build / audit families",
-  "blurb": "Every loaded family's types × parameters in one table — audit it against a profile, plan the reconciliation, apply with receipts.",
-  "aliases": [
-    "audit",
-    "reconcile",
-    "parameters",
-    "types"
-  ],
-  "listed": true,
-  "satellites": [],
-  "surfaces": {
-    "web": "full",
-    "pwa": "full",
-    "tray": false
+    path: "/families",
+    title: "Families",
+    label: "Family Foundry",
+    exposure: "Main",
+    runtimeNeed: "Revit for model actions; browsing saved data is separate",
+    icon: "Table2",
+    category: "Build / audit families",
+    blurb:
+      "Every loaded family's types × parameters in one table — audit it against a profile, plan the reconciliation, apply with receipts.",
+    aliases: ["audit", "reconcile", "parameters", "types"],
+    listed: true,
+    satellites: [],
+    surfaces: {
+      web: "full",
+      pwa: "full",
+      tray: false,
+    },
+    resume: "document",
   },
-  "resume": "document"
-},
   key: familiesRouteState.route,
   address: "families",
   name: "Families",
@@ -333,10 +329,8 @@ export const familiesGraph: RouteGraph<FamiliesPage, FamiliesRouteDocument> = {
           );
           return { ...preview, plan: familyPlanResultSchema.parse(preview.response) };
         },
-        intent: (_scope, _input, _answers, ticket) => ({
-          plan: familyPlanResultSchema.parse((ticket?.evidence as { plan?: unknown })?.plan).id,
-          include: "all",
-        }),
+        stage: () => ({ include: "all" }),
+        intent: () => ({}),
       },
     ),
     capture: commandVerb(
@@ -348,7 +342,8 @@ export const familiesGraph: RouteGraph<FamiliesPage, FamiliesRouteDocument> = {
       },
       {
         ready: (_, input) => input.refusal,
-        intent: (_, input) => ({ pod: input.pod, familyIds: input.familyIds }),
+        stage: (_, input) => ({ pod: input.pod, familyIds: input.familyIds }),
+        intent: () => ({}),
       },
     ),
     "save-draft": commandVerb(
