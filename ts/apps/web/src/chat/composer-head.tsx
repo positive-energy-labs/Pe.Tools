@@ -28,6 +28,7 @@ import type { RouteHandle } from "#/route/handle";
 import { chatReading, type ChatHandle } from "./graph";
 export type { ChatHandle } from "./graph";
 import { GraphHistory } from "#/shell/mount";
+import { SituationBand } from "#/shell/situation-band";
 import { PrimaryRouteControls } from "#/navigation/route-controls";
 import { RouteHelpButton } from "#/route/help";
 import { useThreadScope } from "#/chat/scope";
@@ -246,26 +247,27 @@ export function ChatSituationHead({
     stamp: `${threadLabel}|${kind}|${head.revision}|${head.stale}|${status.detail ?? ""}`,
   });
   return (
-    <div data-surface="page" className="flex min-w-0 flex-col gap-2 p-3" aria-label="Pea Situation">
-      <Ledger
-        rows={[
-          [
-            "thread",
-            threadId && threadLabel === threadId ? "Untitled thread" : threadLabel || "New thread",
-          ],
-          ...(threadId
-            ? [["thread id", <ThreadIdentity key={threadId} id={threadId} />] as const]
-            : []),
-          [
-            "target",
-            head.targets.length ? (situation.ladder.docWord ?? targetLabel({ head })) : "none",
-          ],
-          // I6: a word, not a sentence; the composer's own controls show the wait.
-          ["state", head.stale ? `${status.text} · stale` : status.text],
-        ]}
-      />
-      {status.detail && <p data-tone="caution">{status.detail}</p>}
-    </div>
+    <SituationBand
+      label="Pea Situation"
+      name="Pea"
+      context={
+        <>
+          <span>
+            {threadId && threadLabel === threadId ? "Untitled thread" : threadLabel || "New thread"}
+          </span>
+          {threadId && <ThreadIdentity key={threadId} id={threadId} />}
+          <span>
+            {head.targets.length
+              ? (situation.ladder.docWord ?? targetLabel({ head }))
+              : "no target"}
+          </span>
+          {/* I6: a word, not a sentence; the composer's own controls show the wait. */}
+          <span>{head.stale ? `${status.text} · stale` : status.text}</span>
+        </>
+      }
+      alerts={status.detail && <span data-tone="caution">{status.detail}</span>}
+      verbs={[]}
+    />
   );
 }
 
