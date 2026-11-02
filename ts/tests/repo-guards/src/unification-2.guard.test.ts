@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
-import baseline from "./unification-2.baseline.json";
-import { census, declarationLines, selectionSlots, syntax } from "./unification-2-census";
-import { root } from "./unification-2-census";
+import baseline from "./unification-2.baseline.json" with { type: "json" };
+import { census, declarationLines, selectionSlots, syntax } from "./unification-2-census.ts";
+import { root } from "./unification-2-census.ts";
 import { execFileSync } from "node:child_process";
 
 const baselinePath = "ts/tests/repo-guards/src/unification-2.baseline.json";

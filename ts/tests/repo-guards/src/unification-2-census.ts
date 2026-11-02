@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import ts from "typescript";
-import scopeCensus from "./unification-2-scope.json";
+import scopeCensus from "./unification-2-scope.json" with { type: "json" };
 
 export const root = resolve(import.meta.dirname, "../../../..");
 const read = (p: string) => readFileSync(resolve(root, p), "utf8");
@@ -195,9 +195,17 @@ export function census() {
       if (pattern)
         for (const m of source.text.matchAll(pattern)) {
           // schedule.bind now publishes through an explicit ActionJournal command.
-          if (p.endsWith("schedule-actions.ts") && m.index! > source.text.indexOf("export function scheduleExecutors")) continue;
+          if (
+            p.endsWith("schedule-actions.ts") &&
+            m.index! > source.text.indexOf("export function scheduleExecutors")
+          )
+            continue;
           // The GET branch returns before the explicit plugin update reconciles lifecycle.
-          if (p.endsWith("plugins-handler.ts") && source.text.slice(0, m.index).includes('if (request.method === "GET") return')) continue;
+          if (
+            p.endsWith("plugins-handler.ts") &&
+            source.text.slice(0, m.index).includes('if (request.method === "GET") return')
+          )
+            continue;
           result.readWrites!.push(
             `${p}:${source.getLineAndCharacterOfPosition(m.index!).line + 1}: ${m[0]}`,
           );
