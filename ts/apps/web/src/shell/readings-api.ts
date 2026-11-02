@@ -119,7 +119,6 @@ export function opSource<K extends OpKey, T = OpResponseOf<K>>(options: {
   absent: T;
   map?(response: OpResponseOf<K>): T;
   dirties?: readonly string[];
-  fixture?: string;
 }): UseSource<T> {
   return {
     kind: "use",
@@ -129,13 +128,7 @@ export function opSource<K extends OpKey, T = OpResponseOf<K>>(options: {
       if (request === null)
         return deliver({ kind: "complete", value: options.absent, revision: 0 });
       try {
-        const response = options.fixture
-          ? ((await requestJson(
-              { path: options.fixture },
-              await opResponseSchema(options.key),
-              context.signal,
-            )) as OpResponseOf<K>)
-          : await callOp(context, options.key, request);
+        const response = await callOp(context, options.key, request);
         const value = options.map ? options.map(response) : (response as unknown as T);
         deliver({ kind: "complete", value, revision: 1 });
       } catch (error) {

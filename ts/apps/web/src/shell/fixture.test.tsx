@@ -1,4 +1,4 @@
-import {testSubject,testFields} from '../test-route-subject';
+import { testSubject, testFields } from "../test-route-subject";
 // @vitest-environment jsdom
 import { cleanup, render, waitFor, fireEvent } from "@testing-library/react";
 import { createMemoryHistory, createRouter, RouterContextProvider } from "@tanstack/react-router";
@@ -25,13 +25,15 @@ const read = {
     throw Error("Real query called");
   },
 };
-const graph: RouteGraph<{ stage: string }, { value: number }> = {...testSubject, subjectField: { ...testSubject.subjectField, roster: "derive", detail: "derive" },
+const graph: RouteGraph<{ stage: string }, { value: number }> = {
+  ...testSubject,
+  subjectField: { ...testSubject.subjectField, roster: "derive", detail: "derive" },
   key: "fixture-proof",
   address: "fixture-proof",
   name: "Fixture proof",
   needs: "project",
   work: z.object({ value: z.number().default(0) }),
-  fields: {...testFields, stage: { ...field(z.string().default("edit"), {}), role: "stage" } },
+  fields: { ...testFields, stage: { ...field(z.string().default("edit"), {}), role: "stage" } },
   readings: Object.fromEntries(
     (["use", "feed", "derive", "worker", "port"] as const).map((kind) => [
       kind,
@@ -258,4 +260,24 @@ test("a failed seed import stays isolated and refuses Work", async () => {
   expect(owner.snapshot().failure).toContain("missing chunk");
   expect((await owner.control("edit").run()).state).toBe("refused");
   owner.dispose();
+});
+
+test("separate instances of the same fixture have separate Work keys and edits", async () => {
+  const a = await fixtureEnvironment(graph, "one");
+  const b = await fixtureEnvironment(graph, "one");
+  const first = a.ports.getSnapshot();
+  expect(first.workKey).not.toEqual(b.ports.getSnapshot().workKey);
+  if (!first.workKey) throw Error("Fixture Work key missing");
+  expect(
+    (
+      await a.ports.write(first.workKey, {
+        kind: "apply",
+        expectedRevision: 0,
+        press: null,
+        patches: [{ path: ["value"], value: 7 }],
+      })
+    ).ok,
+  ).toBe(true);
+  expect(a.ports.getSnapshot().work?.doc.value).toBe(7);
+  expect(b.ports.getSnapshot().work?.doc.value).toBe(1);
 });

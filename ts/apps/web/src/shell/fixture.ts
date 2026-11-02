@@ -17,7 +17,16 @@ import type { WorkScopePorts } from "./use-work-scope";
 
 export { fixtureName, currentFixture } from "./fixture-lane";
 
-export async function fixtureEnvironment<P, W>(graph: RouteGraph<P, W>, name: string) {
+interface FixtureMountEnvironment<P, W> {
+  graph: RouteGraph<P, W>;
+  ports: WorkScopePorts<W>;
+  adapters: MountAdapters<P, W>;
+}
+
+export async function fixtureEnvironment<P, W>(
+  graph: RouteGraph<P, W>,
+  name: string,
+): Promise<FixtureMountEnvironment<P, W>> {
   // Companion chat must not borrow another route's seed or block its editor as a running Pea.
   if (
     typeof location !== "undefined" &&
@@ -48,10 +57,11 @@ export function pendingFixtureEnvironment<P, W>(
   name: string,
   failure: string | null = "Loading fixture…",
   seed?: GraphSeedData<P, W>,
-) {
+): FixtureMountEnvironment<P, W> {
   // A fresh identity also keeps the shared journal separate from every real or previous Work.
-  const isolatedAddress = address(`C:/Fixtures/${crypto.randomUUID()}.rvt`);
-  let key = bindWork(graph.key, isolatedAddress, name);
+  const fixtureId = crypto.randomUUID();
+  const isolatedAddress = address(`C:/Fixtures/${fixtureId}.rvt`);
+  let key = bindWork(graph.key, isolatedAddress, `${fixtureId}/${name}`);
   const target =
     seed?.target ??
     (graph.needs
@@ -63,7 +73,7 @@ export function pendingFixtureEnvironment<P, W>(
   const accepted = new Set<{ key: string; notify(ack: WorkWriteAck): void }>();
   const select = (page: P) => {
     const subject = graph.workSubject ? String(page[graph.workSubject] || name) : name;
-    const nextKey = bindWork(graph.key, isolatedAddress, subject);
+    const nextKey = bindWork(graph.key, isolatedAddress, `${fixtureId}/${subject}`);
     const id = workKey(nextKey);
     if (stored.has(id) && workKey(key) === id) return;
     key = nextKey;
