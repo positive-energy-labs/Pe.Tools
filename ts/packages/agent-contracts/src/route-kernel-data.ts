@@ -26,7 +26,7 @@ export const routeFieldJsonSchema = z.discriminatedUnion("role", [
     role: z.literal("subject"),
     ...scalar,
     cardinality: z.enum(["one", "many"]),
-    identity: ref,
+    identity: z.union([ref, refs.min(2)]),
     picker: z.strictObject({ reading: ref, options: ref }),
   }),
   z.strictObject({ role: z.literal("selection"), kinds: refs }),
@@ -54,16 +54,18 @@ export const geometryDemandSchema = z.discriminatedUnion("representation", [
     entry: ref,
     overview: ref,
     trigger: z.literal("explicit"),
-    budget: z.literal("host-weighted"),
+    reachFt: z.number().min(5),
   }),
 ]);
-export const routeReadingJsonSchema = z.discriminatedUnion("kind", [
+// Detail demand/refresh are coupled at the outer reading, not advisory nested flags.
+const useReading = { kind: z.literal("use"), entry: ref, args: ref.optional(), ...readingPolicy };
+export const routeReadingJsonSchema = z.union([
+  z.strictObject({ ...useReading, geometry: geometryDemandSchema.options[0].optional() }),
   z.strictObject({
-    kind: z.literal("use"),
-    entry: ref,
-    args: ref.optional(),
-    ...readingPolicy,
-    geometry: geometryDemandSchema.optional(),
+    ...useReading,
+    demand: z.literal("explicit"),
+    refresh: z.literal("explicit"),
+    geometry: geometryDemandSchema.options[1],
   }),
   z.strictObject({ kind: z.literal("derive"), output: ref, derive: ref, ...readingPolicy }),
   z.strictObject({
@@ -152,7 +154,12 @@ export const RouteGraphJson = z.strictObject({
   }),
   subjectText: ref.optional(),
   work: z
-    .strictObject({ schema: ref, route: ref, version: z.number().int().positive() })
+    .strictObject({
+      schema: ref,
+      route: ref,
+      version: z.number().int().positive(),
+      migrations: z.record(z.string().regex(/^[1-9][0-9]*$/), ref),
+    })
     .optional(),
   readings: z.record(ref, routeReadingJsonSchema),
   verbs: z.record(ref, routeVerbJsonSchema),

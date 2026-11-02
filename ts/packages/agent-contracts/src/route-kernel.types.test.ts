@@ -5,10 +5,28 @@ import type {
   AdmittedRoute,
   AdmittedRouteRegistry,
   RouteFingerprint,
+  RouteModule,
 } from "./route-kernel-admission.ts";
-import type { FixtureEnvironment, NativeWriteCapability } from "./route-kernel-environment.ts";
+import type {
+  FixtureEnvironment,
+  NativeWriteCapability,
+  GeometryRequest,
+  GeometryOutcome,
+  PreparedDetailReach,
+  ReadCapability,
+  ResolvedRead,
+  ResolvedGeometryRead,
+  GeometryReadCapability,
+  JournalCommandHandle,
+} from "./route-kernel-environment.ts";
 import type {
   AcceptanceToken,
+  ScopeToken,
+  InvocationToken,
+  AcceptanceOwner,
+  WorkDelivery,
+  PageOf,
+  CausalParentId,
   FieldControls,
   IdentityCodecs,
   IdentityId,
@@ -22,6 +40,9 @@ import {
   builtinBodies,
   podData,
   podBodies,
+  podEntries,
+  builtinModule,
+  podModule,
   ductsData,
   ductsBodies,
   schemas,
@@ -29,7 +50,7 @@ import {
 } from "./route-kernel.fixtures.ts";
 
 type Builtin = BodyBindings<typeof builtinData, typeof schemas, typeof entries, string>;
-type Pod = BodyBindings<typeof podData, typeof schemas, typeof entries, string>;
+type Pod = BodyBindings<typeof podData, typeof schemas, typeof podEntries, string>;
 type Ducts = BodyBindings<typeof ductsData, typeof schemas, typeof entries, string>;
 
 /** Never executed. tsc checks every refusal with declarations ON; Vitest checks the data. */
@@ -45,6 +66,7 @@ export function typeRefusals(
   codecs: IdentityCodecs,
   local: IdentityId<"local">,
   element: IdentityId<"element">,
+  fixtureBase: FixtureEnvironment,
 ): void {
   // @ts-expect-error roles are required, never inferred as pose
   const field: FieldJson = {
@@ -132,6 +154,9 @@ export function typeRefusals(
   page.set("system", local);
   // @ts-expect-error subject cannot hide in a camera patch
   page.pose({ system: local }, "gesture");
+  const widerPose = { viewport: { x: 1, y: 2 }, system: local };
+  // @ts-expect-error role validation also rejects wider variables, not only object literals
+  page.pose(widerPose, "gesture");
   // @ts-expect-error snapshots are immutable
   page.read().viewport.x = 3;
   // @ts-expect-error no raw Page writer on the public port
@@ -162,12 +187,8 @@ export function typeRefusals(
   const admitted: AdmittedRoute = { data: builtinData, fingerprint };
   // @ts-expect-error no unchecked registry door
   registry.register(builtinData);
-  const fixture: FixtureEnvironment<{}, {}, {}, {}> = {
-    reads: {},
-    work: {},
-    clock: {},
-    geometry: {},
-    availability: {},
+  const fixture: FixtureEnvironment = {
+    ...fixtureBase,
     // @ts-expect-error fixture capability excludes native writes structurally
     nativeWrite: native,
   };
@@ -191,13 +212,244 @@ export function typeRefusals(
   ];
 }
 
+/** Exact critic programs plus isolated field accesses: each must remain a compiler error. */
+export function criticRefusals(
+  owner: AcceptanceOwner<typeof builtinData, typeof schemas>,
+  original: AdmittedRoute,
+  registry: AdmittedRouteRegistry,
+  scope: ScopeToken,
+  attempt: AcceptanceToken,
+  invocation: InvocationToken,
+  restore: RestoreToken,
+  system: IdentityId<"local">,
+  native: () => void,
+  reads: ReadCapability,
+  resolved: ResolvedRead<string>,
+  geometry: GeometryReadCapability,
+  resolvedGeometry: ResolvedGeometryRead<string>,
+  reach: PreparedDetailReach,
+  handle: JournalCommandHandle,
+): void {
+  const hiddenArgs: Builtin["rosterArgs"] = {
+    ...builtinBodies.rosterArgs,
+    // @ts-expect-error critic R2: neither density nor note is a declared dependency
+    run: ({ page, work }) => ({ filter: String(page.density) + work?.note }),
+  };
+  const hiddenDerive: Builtin["calculate"] = {
+    ...builtinBodies.calculate,
+    // @ts-expect-error critic R2: work.amount does not grant note or page.density
+    run: ({ page, work }) => ({ total: work.amount + work.note.length + page.density }),
+  };
+  const separate: Builtin["apply"] = {
+    ...builtinBodies.apply,
+    run: ({ page, work, readings, captures }) => {
+      // @ts-expect-error no Page dependency declared
+      page.search;
+      // @ts-expect-error work.amount does not grant all Work
+      work.note;
+      // @ts-expect-error captures do not become invalidating dependencies
+      readings.total;
+      // @ts-expect-error only named captures are visible
+      captures.roster;
+      return { amount: captures.total.value?.total ?? work.amount };
+    },
+  };
+  // @ts-expect-error critic R5: no partial restore through the move door
+  owner.movePage({ system }, { kind: "restore", source: "url", token: restore });
+  // @ts-expect-error critic R1: reconstructed scope does not inherit authority from an epoch
+  const rebound: ScopeToken = { identity: { target: null, work: null }, epoch: scope.epoch };
+  // @ts-expect-error copies lose the nominal private owner membership
+  const copiedScope: ScopeToken = { ...scope, identity: { target: null, work: null } };
+  // @ts-expect-error arbitrary channel/attempt cannot be minted around an authentic scope
+  const forgedAttempt: AcceptanceToken = { scope, channel: "read", attempt: 99 };
+  // @ts-expect-error a copied attempt is not an owner-issued attempt
+  owner.acceptWork(
+    { ...attempt, attempt: 99 },
+    {
+      kind: "snapshot",
+      key: { binding: "host", route: "tiny", target: null },
+      revision: 1,
+      value: { amount: 1, note: "" },
+      hash: "x",
+    },
+  );
+  // @ts-expect-error copied invocation cannot revive a stale Page revision
+  owner.acceptPage({ ...invocation, pageRevision: 999 }, { search: "x" });
+  // @ts-expect-error critic R6: spread does not carry the admission authority
+  registry.register({
+    ...original,
+    data: { ...original.data, key: "pod.rebound", address: "/rebound" },
+  });
+  // @ts-expect-error even unchanged copies require the exact kernel-owned handle
+  registry.register({ ...original });
+  const fixture: FixtureEnvironment = {
+    // @ts-expect-error critic R4: read transport is not a read capability
+    reads: { callNative: native },
+    // @ts-expect-error concrete Work operations required
+    work: {},
+    // @ts-expect-error concrete clock operation required
+    clock: {},
+    // @ts-expect-error concrete admitted geometry acquisition required
+    geometry: {},
+    availability: {},
+  };
+  // @ts-expect-error cannot erase the services through unconstrained generic arguments
+  type EmptyServices = FixtureEnvironment<{}, {}, {}, {}>;
+  const emptyServices: EmptyServices | undefined = undefined;
+  void emptyServices;
+  // @ts-expect-error read lifetime cannot be command
+  const wrongLifetime: ReadCapability = { ...reads, lifetime: "command" };
+  // @ts-expect-error acquisition requires an owner-issued attempt
+  reads.acquire(resolved);
+  geometry.acquire(resolvedGeometry, attempt);
+  // @ts-expect-error geometry cannot dispatch a raw logical operation
+  geometry.acquire({ op: "scene" }, attempt);
+  // @ts-expect-error default GeometryRequest is overview only
+  const automaticDetail: GeometryRequest = { representation: "meshes", reach };
+  const shortReach: GeometryRequest<"meshes"> = {
+    representation: "meshes",
+    // @ts-expect-error detail requires prepared/validated reach, not a numeric assertion
+    reach: { ...reach, reachFt: 1 },
+  };
+  const budget: GeometryOutcome<string> = {
+    // @ts-expect-error cost-based refusal is no longer an outcome
+    kind: "over-budget",
+    estimatedCost: 100,
+    budget: 1,
+    overviewEntry: "x",
+  };
+  // @ts-expect-error every successful result has generated GeometryCost metadata
+  const uncosted: GeometryOutcome<string> = {
+    kind: "ready",
+    value: "x",
+    representation: "overview",
+  };
+  // @ts-expect-error a submitted command is a journal handle, not an invocation function
+  handle.invoke();
+  // @ts-expect-error causal parents are opaque, not free-form correlation strings
+  const parent: CausalParentId = "made-up";
+  // @ts-expect-error snapshot cannot impersonate an ack with no inverse/provenance
+  const lostReceipt: WorkDelivery<unknown> = { kind: "ack", revision: 1, value: {} };
+  // @ts-expect-error typed cells reject undeclared keys
+  podBodies.cellGroup.run("anything");
+  const nativeId = podModule.identities.element.encode({
+    document: "doc",
+    link: null,
+    uniqueId: "unique",
+  });
+  if (nativeId.ok) {
+    const wrongSubject: PageOf<typeof podData, typeof schemas>["system"] = {
+      kind: "manual",
+      // @ts-expect-error manual subjects cannot carry native ids
+      id: nativeId.value,
+    };
+    void wrongSubject;
+  }
+  const omittedGeometry = {
+    ...podData,
+    readings: {
+      ...podData.readings,
+      overview: { ...builtinData.readings.roster, entry: "scene" as const },
+    },
+  };
+  const unguardedModule: RouteModule<
+    typeof omittedGeometry,
+    typeof schemas,
+    typeof podEntries,
+    string
+  > = {
+    ...podModule,
+    // @ts-expect-error Geometry catalog footprint cannot opt out by omitting geometry
+    data: omittedGeometry,
+  };
+  // @ts-expect-error explicit detail cannot be scheduled from subject demand
+  const automaticGeometry: RouteGraphJson["readings"][string] = {
+    ...podData.readings.detail,
+    demand: "subject",
+  };
+  // @ts-expect-error explicit detail cannot refresh on dependency changes
+  const refreshingGeometry: RouteGraphJson["readings"][string] = {
+    ...podData.readings.detail,
+    refresh: "dependencies",
+  };
+  void [unguardedModule, automaticGeometry, refreshingGeometry];
+  void [
+    hiddenArgs,
+    hiddenDerive,
+    separate,
+    rebound,
+    copiedScope,
+    forgedAttempt,
+    fixture,
+    wrongLifetime,
+    automaticDetail,
+    shortReach,
+    budget,
+    uncosted,
+    parent,
+    lostReceipt,
+  ];
+}
+
 describe("S0 signature witnesses", () => {
   it.each([builtinData, podData, ductsData])("decodes $key with the same data schema", (data) => {
     expect(RouteGraphJson.parse(JSON.parse(JSON.stringify(data)))).toEqual(data);
   });
   it("exercises 26 fields and separate builtin/Pod bodies", () => {
     expect(Object.keys(ductsData.fields)).toHaveLength(26);
-    expect(Object.keys(builtinBodies)).toEqual(Object.keys(podBodies));
+    expect(podModule.bodies.upgradeV1.run({ amount: 3 })).toEqual({ amount: 3, note: "" });
+    expect(builtinModule.data).toBe(builtinData);
+    expect(podModule.artifact.data).toBe(podData);
+  });
+  it("keeps detail explicit and validates its minimum reach without a cost cap", () => {
+    const parse = (detail: unknown) =>
+      RouteGraphJson.safeParse({ ...podData, readings: { ...podData.readings, detail } }).success;
+    expect(parse(podData.readings.detail)).toBe(true);
+    expect(parse({ ...podData.readings.detail, demand: "subject" })).toBe(false);
+    expect(parse({ ...podData.readings.detail, refresh: "dependencies" })).toBe(false);
+    expect(
+      parse({
+        ...podData.readings.detail,
+        geometry: { ...podData.readings.detail.geometry, reachFt: 4.99 },
+      }),
+    ).toBe(false);
+    expect(
+      parse({
+        ...podData.readings.detail,
+        geometry: { ...podData.readings.detail.geometry, reachFt: 50000 },
+      }),
+    ).toBe(true);
+    expect(
+      parse({
+        ...podData.readings.detail,
+        geometry: { ...podData.readings.detail.geometry, budget: "host-weighted" },
+      }),
+    ).toBe(false);
+  });
+  it("round trips both Pod subject kinds through its bound field codec", () => {
+    const manual = podModule.identities.local.encode({
+      namespace: "pod.circuits",
+      subject: "manual",
+    });
+    const native = podModule.identities.element.encode({
+      document: "doc",
+      link: null,
+      uniqueId: "circuit-uid",
+    });
+    if (!manual.ok || !native.ok) throw new Error("Witness identity codec refused valid parts");
+    const values = [
+      { kind: "manual", id: manual.value },
+      { kind: "circuit", id: native.value },
+    ] as const;
+    for (const value of values)
+      expect(podModule.codecs.subject.decode(podModule.codecs.subject.encode(value))).toEqual({
+        ok: true,
+        value,
+      });
+    expect(
+      podModule.codecs.subject.decode(JSON.stringify({ kind: "manual", id: native.value })).ok,
+    ).toBe(false);
+    expect(podModule.bodies.cellGroup.run("voltage")).toEqual(["electrical"]);
   });
   it("refuses missing roles, executable data, unknown policy, and required review", () => {
     const { role: _role, ...unroled } = builtinData.fields.search;

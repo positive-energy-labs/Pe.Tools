@@ -1,6 +1,6 @@
 import type { z } from "zod";
 import type { ExecutionTarget } from "./target.ts";
-import type { WorkKey } from "./route-state.ts";
+import type { WorkKey, WorkWriteAck } from "./route-state.ts";
 import type { Immutable, RouteGraphJson } from "./route-kernel-data.ts";
 
 export type SchemaTable = Readonly<Record<string, z.ZodType>>;
@@ -59,15 +59,19 @@ type FieldValue<G extends RouteGraphJson, S extends SchemaTable, F> = F extends 
   kinds: readonly (infer K)[];
 }
   ? readonly Extract<SelectionItem<G>, { kind: K }>[]
-  : F extends { role: "subject"; identity: infer K; cardinality: infer C }
-    ? K extends keyof G["identities"]
-      ? C extends "many"
-        ? Many<IdentityId<G["identities"][K]["kind"]>>
-        : IdentityId<G["identities"][K]["kind"]> | null
-      : never
-    : F extends { schema: infer K }
-      ? SchemaValue<S, K>
-      : never;
+  : F extends { role: "subject"; identity: readonly (infer K)[]; cardinality: infer C }
+    ? C extends "many"
+      ? Many<Extract<SelectionItem<G>, { kind: K }>>
+      : Extract<SelectionItem<G>, { kind: K }> | null
+    : F extends { role: "subject"; identity: infer K; cardinality: infer C }
+      ? K extends keyof G["identities"]
+        ? C extends "many"
+          ? Many<IdentityId<G["identities"][K]["kind"]>>
+          : IdentityId<G["identities"][K]["kind"]> | null
+        : never
+      : F extends { schema: infer K }
+        ? SchemaValue<S, K>
+        : never;
 export type PageOf<G extends RouteGraphJson, S extends SchemaTable> = {
   readonly [K in keyof G["fields"]]: Immutable<FieldValue<G, S, G["fields"][K]>>;
 };
@@ -82,9 +86,6 @@ export type RoleKeys<G extends RouteGraphJson, R> = {
 
 declare const epoch: unique symbol;
 declare const pageEpoch: unique symbol;
-declare const lease: unique symbol;
-declare const invocation: unique symbol;
-declare const restore: unique symbol;
 export type ScopeEpoch = { readonly [epoch]: true };
 export type PageEpoch = { readonly [pageEpoch]: true };
 export interface ScopeIdentity {
@@ -92,29 +93,56 @@ export interface ScopeIdentity {
   readonly work: Immutable<WorkKey> | null;
 }
 /** Minted by one owner instance. Never reused across A→B→A or remounts. */
-export interface ScopeToken {
+export declare class ScopeToken {
+  private constructor();
+  private readonly scopeAuthority: void;
   readonly identity: ScopeIdentity;
   readonly epoch: ScopeEpoch;
 }
 /** Attempt sequence is channel-local; it is NOT a Work revision. */
-export interface AcceptanceToken {
+export declare class AcceptanceToken {
+  private constructor();
+  private readonly attemptAuthority: void;
   readonly scope: ScopeToken;
   readonly channel: string;
   readonly attempt: number;
 }
+declare const causalParent: unique symbol;
+export type CausalParentId = string & { readonly [causalParent]: true };
 export interface InvocationBasis {
+  readonly causalParent?: CausalParentId;
   readonly token: AcceptanceToken;
   readonly pageEpoch: PageEpoch;
   readonly pageRevision: number;
   readonly workRevision: number | null;
   readonly dependencies: Readonly<Record<string, string>>;
 }
-export type InvocationToken = InvocationBasis & {
+export declare class InvocationToken implements InvocationBasis {
+  private constructor();
+  private readonly invocationAuthority: void;
   readonly id: string;
-  readonly [invocation]: true;
-};
-export type LeaseToken = InvocationBasis & { readonly [lease]: true };
-export type RestoreToken = { readonly id: string; readonly [restore]: true };
+  readonly token: AcceptanceToken;
+  readonly pageEpoch: PageEpoch;
+  readonly pageRevision: number;
+  readonly workRevision: number | null;
+  readonly dependencies: Readonly<Record<string, string>>;
+  readonly causalParent?: CausalParentId;
+}
+export declare class LeaseToken implements InvocationBasis {
+  private constructor();
+  private readonly leaseAuthority: void;
+  readonly token: AcceptanceToken;
+  readonly pageEpoch: PageEpoch;
+  readonly pageRevision: number;
+  readonly workRevision: number | null;
+  readonly dependencies: Readonly<Record<string, string>>;
+  readonly causalParent?: CausalParentId;
+}
+export declare class RestoreToken {
+  private constructor();
+  private readonly restoreAuthority: void;
+  readonly id: string;
+}
 export type MoveOrigin =
   | {
       readonly kind: "human";
@@ -145,8 +173,9 @@ export interface PagePort<G extends RouteGraphJson, S extends SchemaTable> {
   read(): PageOf<G, S>;
   select(next: PageOf<G, S>[RoleKeys<G, "selection">]): MoveResult;
   set<K extends RoleKeys<G, "setting">>(key: K, value: PageOf<G, S>[K]): MoveResult;
-  pose(
-    patch: Partial<Pick<PageOf<G, S>, RoleKeys<G, "pose">>>,
+  /** Runtime rejects keys outside the pose role, including wider objects and raw JS. */
+  pose<P extends Partial<Pick<PageOf<G, S>, RoleKeys<G, "pose">>>>(
+    patch: P & Record<Exclude<keyof P, RoleKeys<G, "pose">>, never>,
     intent: "gesture" | "named",
   ): MoveResult;
 }
@@ -161,12 +190,96 @@ export type PagePatch<G extends RouteGraphJson, S extends SchemaTable> = Partial
 /** Presence-aware restore: explicit empty/default wins over memory. Membership can remain
  * unresolved while evidence loads; never discard an explicitly restored selection on arrival.
  * Subject changes outside restore clear selection and frame in the SAME publication.
+ * Runtime rejects restore origins at movePage, and checks role-specific keys before mutation.
  * Selection-only moves preserve pose. Stale invocations cannot exempt themselves from epochs. */
 export interface PageOwner<G extends RouteGraphJson, S extends SchemaTable> {
-  movePage(patch: PagePatch<G, S>, origin: MoveOrigin): MoveResult;
+  movePage(patch: PagePatch<G, S>, origin: Exclude<MoveOrigin, { kind: "restore" }>): MoveResult;
   restorePage(
     state: Pick<PageOf<G, S>, RoleKeys<G, "subject" | "selection">> &
       Partial<Pick<PageOf<G, S>, RoleKeys<G, "pose" | "stage" | "query" | "draft">>>,
     origin: Extract<MoveOrigin, { kind: "restore" }>,
   ): MoveResult;
+}
+
+/** Full snapshots and accepted deltas are distinct. A snapshot never fabricates journal history. */
+export type WorkDelivery<W> =
+  | {
+      readonly kind: "snapshot";
+      readonly key: Immutable<WorkKey>;
+      readonly revision: number;
+      readonly value: Immutable<W>;
+      readonly hash: string;
+    }
+  | { readonly kind: "ack"; readonly write: Immutable<WorkWriteAck> }
+  | { readonly kind: "stream"; readonly write: Immutable<WorkWriteAck> };
+export type WorkReduction =
+  | { readonly kind: "published"; readonly revision: number; readonly receipt: "recorded" | "none" }
+  | {
+      readonly kind: "duplicate";
+      readonly revision: number;
+      readonly receipt: "recorded" | "duplicate" | "none";
+    }
+  | { readonly kind: "receipt-only"; readonly key: Immutable<WorkKey>; readonly revision: number }
+  | {
+      readonly kind: "recover";
+      readonly key: Immutable<WorkKey>;
+      readonly after: number | null;
+      readonly reason: "gap" | "contradiction";
+    }
+  | {
+      readonly kind: "refused";
+      readonly reason: "foreign-token" | "wrong-work" | "retired" | "closed";
+    };
+export interface AcceptanceSnapshot<G extends RouteGraphJson, S extends SchemaTable> {
+  readonly scope: ScopeToken;
+  readonly pageEpoch: PageEpoch;
+  readonly pageRevision: number;
+  readonly page: PageOf<G, S>;
+  readonly work: { readonly revision: number; readonly value: Immutable<WorkOf<G, S>> } | null;
+}
+/** B implements this one owner below React. C's Page transactions use this owner, not a second store.
+ * TODO: B proves A -> B -> A, remount, both ack/stream orders, contradiction, gap and late receipt schedules.
+ * enter always mints a fresh scope AND Page epoch, including same-identity re-entry. It retires
+ * prior attempts and atomically commits Page plus unloaded Work BEFORE any subscriber runs.
+ * capture retires the prior attempt in that channel. Authority is exact owner-issued object
+ * identity (private tables), never equality of epoch/id fields. Reject copies and foreign owners.
+ * Snapshot revision < current is ignored. Equal revision requires equal canonical content hash;
+ * disagreement requests recovery without publishing. A newer full snapshot may bridge a gap.
+ * Deltas use WorkWriteAck.base/revision, never attempt numbers. A contiguous delta publishes once.
+ * Ack and stream share one canonical ack identity (Work key + revision); exclude replay from
+ * equality. Equal canonical acks deduplicate; unequal ones recover, never overwrite history.
+ * A snapshot arriving before its ack does NOT consume that ack: the ack still files its inverse,
+ * provenance and receipt into the original Work journal without republishing Work. Keep delta
+ * fingerprints or verify against recovered history when a snapshot skipped their revisions.
+ * Gapped deltas request a full snapshot and retain their receipts for reconciliation.
+ * Retired/departed attempts cannot publish Page or Work, even after A -> B -> A. Authentic command
+ * acks still file to their ORIGINAL Work journal, including after close; late reads are refused.
+ * close releases subscriptions and disables publication, not journal receipt delivery.
+ */
+export interface AcceptanceOwner<G extends RouteGraphJson, S extends SchemaTable> extends PageOwner<
+  G,
+  S
+> {
+  enter(identity: ScopeIdentity, page: PageOf<G, S>): ScopeToken;
+  capture(channel: string): AcceptanceToken;
+  retire(token: AcceptanceToken): void;
+  /** Captures current revisions and declared dependencies; refuses stale/foreign attempts. */
+  invocation(
+    token: AcceptanceToken,
+    dependencies: Readonly<Record<string, string>>,
+    causalParent?: CausalParentId,
+  ): DecodeResult<InvocationToken>;
+  acceptWork(
+    token: InvocationToken,
+    delivery: Extract<WorkDelivery<WorkOf<G, S>>, { kind: "ack" }>,
+  ): WorkReduction;
+  acceptWork(
+    token: AcceptanceToken,
+    delivery: Exclude<WorkDelivery<WorkOf<G, S>>, { kind: "ack" }>,
+  ): WorkReduction;
+  /** Rechecks scope, Page epoch/revision and dependency basis before the single publication. */
+  acceptPage(token: InvocationToken | LeaseToken, patch: PagePatch<G, S>): MoveResult;
+  read(): AcceptanceSnapshot<G, S> | null;
+  subscribe(listener: (snapshot: AcceptanceSnapshot<G, S>) => void): () => void;
+  close(): void;
 }

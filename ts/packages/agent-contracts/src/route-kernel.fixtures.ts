@@ -1,7 +1,9 @@
 import { z } from "zod";
 import type { RouteGraphJson } from "./route-kernel-data.ts";
 import type { BodyBindings, EntryTable } from "./route-kernel-bodies.ts";
-import type { IdentityId } from "./route-kernel-page.ts";
+import type { RouteModule, RouteFingerprintInput } from "./route-kernel-admission.ts";
+import type { CodecBindings } from "./route-kernel-bodies.ts";
+import type { DecodeResult, IdentityCodec, IdentityId } from "./route-kernel-page.ts";
 
 // Fixture schema only. C implements the shared identity codecs used by real authors.
 const localId = z.custom<IdentityId<"local">>((text: unknown) => {
@@ -18,7 +20,24 @@ const localId = z.custom<IdentityId<"local">>((text: unknown) => {
     return false;
   }
 });
+const linkParts = z.tuple([z.string().min(1), z.string().min(1), z.string().min(1)]);
+const nativeParts = z.tuple([z.string().min(1), linkParts.nullable(), z.string().min(1)]);
+const elementId = z.custom<IdentityId<"element">>((text: unknown) => {
+  if (typeof text !== "string") return false;
+  try {
+    const parts = nativeParts.safeParse(JSON.parse(text));
+    return parts.success && JSON.stringify(parts.data) === text;
+  } catch {
+    return false;
+  }
+});
+const mixedSubject = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("manual"), id: localId }),
+  z.strictObject({ kind: z.literal("circuit"), id: elementId }),
+]);
 export const schemas = {
+  mixedSubject: mixedSubject.nullable(),
+  cellKey: z.enum(["voltage", "length"]),
   subjectOne: localId.nullable(),
   subjectMany: z.discriminatedUnion("kind", [
     z.strictObject({ kind: z.literal("ids"), ids: z.array(localId) }),
@@ -106,7 +125,7 @@ export const builtinData = {
     search: text,
   },
   subject: { field: "system", noun: "system", roster: "roster", detail: "total", pane: "main" },
-  work: { schema: "work", route: "tiny", version: 1 },
+  work: { schema: "work", route: "tiny", version: 1, migrations: {} },
   readings: {
     roster: {
       kind: "use",
@@ -194,7 +213,7 @@ export const builtinBodies = {
     slot: "verbs.apply.intent",
     kind: "intent",
     source,
-    run: ({ work }) => ({ amount: work.amount }),
+    run: ({ work, captures }) => ({ amount: captures.total.value?.total ?? work.amount }),
   },
   main: {
     slot: "panes.main.body",
@@ -204,26 +223,215 @@ export const builtinBodies = {
   },
 } satisfies BodyBindings<typeof builtinData, typeof schemas, typeof entries, string>;
 
-// A checked Pod uses the identical contract. No register(api), privileged executor or TS generation.
+// Complete representative Pod: manual/native subjects, migration, typed cell key and bindings.
 export const podData = {
   ...builtinData,
   key: "pod.circuits",
   address: "/pod/circuits",
   name: "Circuit calculator",
-  work: { schema: "work", route: "pod.circuits", version: 2 },
+  identities: {
+    manual: { kind: "local", codec: "local" },
+    circuit: { kind: "element", codec: "element" },
+  },
+  fields: {
+    ...builtinData.fields,
+    system: {
+      ...builtinData.fields.system,
+      identity: ["manual", "circuit"],
+      schema: "mixedSubject",
+    },
+    selected: { role: "selection", kinds: ["manual", "circuit"] },
+  },
+  work: { schema: "work", route: "pod.circuits", version: 2, migrations: { "1": "upgradeV1" } },
+  readings: {
+    ...builtinData.readings,
+    overview: {
+      kind: "use",
+      entry: "scene",
+      deps: { ...emptyDeps, page: ["system"] },
+      ...readingPolicy,
+      geometry: { representation: "overview", entry: "scene" },
+    },
+    detail: {
+      kind: "use",
+      entry: "scene",
+      deps: { ...emptyDeps, page: ["system"] },
+      ...readingPolicy,
+      demand: "explicit",
+      refresh: "explicit",
+      geometry: {
+        representation: "detailed",
+        entry: "scene",
+        overview: "overview",
+        trigger: "explicit",
+        reachFt: 5,
+      },
+    },
+  },
+  cells: {
+    input: {
+      segment: null,
+      key: "cellKey",
+      value: "number",
+      groupOf: "cellGroup",
+      focus: "cellFocus",
+      take: "cellTake",
+      deps: { ...emptyDeps, work: ["amount"] },
+    },
+  },
 } as const satisfies RouteGraphJson;
+export const podEntries = {
+  ...entries,
+  scene: {
+    input: schemas.empty,
+    output: z.object({ artifact: z.string() }),
+    axes: {
+      subject: "Elements",
+      touches: ["Geometry"],
+      effect: "Read",
+      cost: "Expensive",
+      cardinality: "Many",
+    },
+  },
+  roster: {
+    ...entries.roster,
+    output: z.array(z.strictObject({ id: mixedSubject, name: z.string() })),
+  },
+} as const satisfies EntryTable;
 export const podBodies = {
-  ...builtinBodies,
+  pick: {
+    ...builtinBodies.pick,
+    run: (reading) => reading.value?.map((s) => ({ id: s.id, label: s.name })) ?? [],
+  },
+  rosterArgs: { ...builtinBodies.rosterArgs, run: ({ page }) => ({ filter: page.search }) },
   calculate: {
-    slot: "readings.total.derive",
-    kind: "derive",
-    source,
+    ...builtinBodies.calculate,
     run: ({ page, work, readings }) => ({
       total:
-        page.system === null ? work.amount : work.amount * (readings.roster.value?.length ?? 1),
+        page.system?.kind === "manual"
+          ? work.amount
+          : work.amount * (readings.roster.value?.length ?? 1),
     }),
   },
-} satisfies BodyBindings<typeof podData, typeof schemas, typeof entries, string>;
+  edit: {
+    ...builtinBodies.edit,
+    run: (_ctx, input) => [{ path: ["amount"], value: input.amount }],
+  },
+  apply: {
+    ...builtinBodies.apply,
+    run: ({ work, captures }) => ({ amount: captures.total.value?.total ?? work.amount }),
+  },
+  main: { ...builtinBodies.main, run: ({ page }) => page.read().system?.kind ?? "none" },
+  upgradeV1: {
+    slot: "work.migrations.1",
+    kind: "migration",
+    source,
+    run: (raw) => ({ amount: z.object({ amount: z.number() }).parse(raw).amount, note: "" }),
+  },
+  cellGroup: {
+    slot: "cells.input.groupOf",
+    kind: "group",
+    source,
+    run: (key) => [key === "voltage" ? "electrical" : "layout"],
+  },
+  cellFocus: { slot: "cells.input.focus", kind: "focus", source, run: (key) => ({ search: key }) },
+  cellTake: {
+    slot: "cells.input.take",
+    kind: "take",
+    source,
+    run: ({ work }, key) => [{ path: ["amount"], value: key === "length" ? work.amount : 120 }],
+  },
+} satisfies BodyBindings<typeof podData, typeof schemas, typeof podEntries, string>;
+
+function decoded<T>(schema: z.ZodType<T>, value: unknown): DecodeResult<T> {
+  const parsed = schema.safeParse(value);
+  return parsed.success
+    ? { ok: true, value: parsed.data }
+    : { ok: false, reason: parsed.error.message };
+}
+function jsonCodec<T>(schema: z.ZodType<T>) {
+  return {
+    encode: (value: T): string => JSON.stringify(value),
+    decode: (text: string): DecodeResult<T> => {
+      try {
+        return decoded(schema, JSON.parse(text));
+      } catch {
+        return { ok: false, reason: "Invalid JSON" };
+      }
+    },
+  };
+}
+export const localCodec: IdentityCodec<"local"> = {
+  kind: "local",
+  encode: (parts) => decoded(localId, JSON.stringify([parts.namespace, parts.subject])),
+  decode: (text) => decoded(localId, text),
+  parts: (id) => {
+    const parts = z.tuple([z.string(), z.string()]).parse(JSON.parse(id));
+    return { namespace: parts[0], subject: parts[1] };
+  },
+};
+export const elementCodec: IdentityCodec<"element"> = {
+  kind: "element",
+  encode: (parts) =>
+    decoded(
+      elementId,
+      JSON.stringify([
+        parts.document,
+        parts.link
+          ? [parts.link.document, parts.link.linkUniqueId, parts.link.linkedDocument]
+          : null,
+        parts.uniqueId,
+      ]),
+    ),
+  decode: (text) => decoded(elementId, text),
+  parts: (id) => {
+    const [document, link, uniqueId] = nativeParts.parse(JSON.parse(id));
+    return {
+      document,
+      uniqueId,
+      link: link ? { document: link[0], linkUniqueId: link[1], linkedDocument: link[2] } : null,
+    };
+  },
+};
+const builtinCodecs = {
+  subject: jsonCodec(schemas.subjectOne),
+  number: jsonCodec(schemas.number),
+  viewport: jsonCodec(schemas.viewport),
+  text: jsonCodec(schemas.text),
+} satisfies CodecBindings<typeof builtinData, typeof schemas>;
+// Envelope shape witness only: A must verify actual packaged bytes, not trust these sample hashes.
+function artifact(data: RouteGraphJson): RouteFingerprintInput {
+  return {
+    version: 1,
+    data,
+    contracts: [{ id: "kernel-v1", sha256: "0".repeat(64) }],
+    executables: [
+      {
+        client: "shared",
+        entry: "bodies.js",
+        members: [{ path: "bodies.js", sha256: "1".repeat(64) }],
+      },
+    ],
+  };
+}
+export const builtinModule = {
+  data: builtinData,
+  schemas,
+  entries,
+  bodies: builtinBodies,
+  codecs: builtinCodecs,
+  identities: { local: localCodec, element: elementCodec },
+  artifact: artifact(builtinData),
+} satisfies RouteModule<typeof builtinData, typeof schemas, typeof entries, string>;
+export const podModule = {
+  data: podData,
+  schemas,
+  entries: podEntries,
+  bodies: podBodies,
+  codecs: { ...builtinCodecs, subject: jsonCodec(schemas.mixedSubject) },
+  identities: { local: localCodec, element: elementCodec },
+  artifact: artifact(podData),
+} satisfies RouteModule<typeof podData, typeof schemas, typeof podEntries, string>;
 
 // Twenty-six actual field declarations stress declaration emit, not a generated numeric range.
 export const ductsData = {

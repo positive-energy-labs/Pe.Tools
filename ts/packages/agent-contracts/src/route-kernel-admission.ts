@@ -2,7 +2,6 @@ import type { BodyBindings, CodecBindings, EntryTable } from "./route-kernel-bod
 import type { Immutable, RouteDiagnostic, RouteGraphJson } from "./route-kernel-data.ts";
 import type { IdentityBindings, SchemaTable } from "./route-kernel-page.ts";
 
-declare const admitted: unique symbol;
 declare const fingerprint: unique symbol;
 export type RouteFingerprint = string & { readonly [fingerprint]: "sha256:route-v1" };
 export interface ExecutableMember {
@@ -34,13 +33,28 @@ export interface RouteFingerprintInput {
     readonly members: readonly ExecutableMember[];
   }[];
 }
+/** Direct geometry entries cannot omit their policy even in checked TS authoring.
+ * Admission also traverses catalog/Reading dependencies, which this finite map cannot infer. */
+type LinkedReadings<G extends RouteGraphJson, E extends EntryTable> = {
+  readonly [K in keyof G["readings"]]: G["readings"][K] &
+    (G["readings"][K] extends { entry: infer C extends keyof E }
+      ? "Geometry" extends E[C]["axes"]["touches"][number]
+        ? {
+            readonly kind: "use";
+            readonly geometry: NonNullable<
+              Extract<RouteGraphJson["readings"][string], { kind: "use" }>["geometry"]
+            >;
+          }
+        : unknown
+      : unknown);
+};
 export interface RouteModule<
   G extends RouteGraphJson,
   S extends SchemaTable,
   E extends EntryTable,
   Render = unknown,
 > {
-  readonly data: G;
+  readonly data: G & { readonly readings: LinkedReadings<G, E> };
   readonly schemas: S;
   readonly codecs: CodecBindings<G, S>;
   readonly identities: IdentityBindings<G>;
@@ -50,15 +64,23 @@ export interface RouteModule<
 }
 /** Only A's admission implementation mints this value after all checks succeed.
  * Freeze/copy data and binding tables at runtime, capture executable references once,
- * and expose no mutable registry. Branding is an API boundary, not a JS security sandbox. */
-export interface AdmittedRoute<G extends RouteGraphJson = RouteGraphJson> {
-  readonly [admitted]: true;
+ * and expose no mutable registry. A private identity table authenticates this EXACT object
+ * at registration, mounting and dispatch; copies/proxies/forged prototypes fail validation.
+ * Private nominal membership is deliberately lost by object spread. Branding is an API boundary, not a JS security sandbox. */
+export declare class AdmittedRoute<G extends RouteGraphJson = RouteGraphJson> {
+  private constructor();
+  private readonly admissionAuthority: void;
   readonly data: Immutable<G>;
   readonly fingerprint: RouteFingerprint;
 }
 export type RouteAdmission<G extends RouteGraphJson> =
   | { readonly ok: true; readonly route: AdmittedRoute<G> }
   | { readonly ok: false; readonly diagnostics: readonly RouteDiagnostic[] };
+/** TODO: A validates linked catalog footprint, not route opt-in: every Geometry leaf and
+ * transitive geometry dependency requires an overview or explicit-detail declaration. Default
+ * overview closure contains no detailed request. Detail demand AND refresh must be explicit.
+ * Validate mixed-subject schema/identity agreement, finite dependency keys and the complete
+ * migration chain (saved age to work.version), then hash migration bytes with all other bodies. */
 export interface RouteAdmissionPort {
   admit<G extends RouteGraphJson, S extends SchemaTable, E extends EntryTable, Render>(
     module: RouteModule<G, S, E, Render>,
@@ -67,5 +89,7 @@ export interface RouteAdmissionPort {
 /** Registration/discovery/execution consume the same admitted handle. Refused descriptors
  * have no executable handle. No namespace prefix bypass, no publication before admission. */
 export interface AdmittedRouteRegistry {
+  /** Return only the exact issued handle; copied/foreign/retired handles return null. */
+  resolve(candidate: unknown): AdmittedRoute | null;
   register(route: AdmittedRoute): { deactivate(): void };
 }

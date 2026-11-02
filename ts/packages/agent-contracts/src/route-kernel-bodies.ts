@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import type { RouteStateSpec } from "./route-state.ts";
 import type { CatalogAxes } from "./catalog.ts";
 import type { ExecutionTarget } from "./target.ts";
 import type { Immutable, RouteGraphJson } from "./route-kernel-data.ts";
@@ -51,17 +52,43 @@ export type ReadingSnapshot<T> =
 type Reads<G extends RouteGraphJson, S extends SchemaTable, E extends EntryTable, K> = {
   readonly [R in Extract<K, keyof G["readings"]>]: ReadingSnapshot<ReadingValue<G, S, E, R>>;
 };
-type Deps<D> = D extends { deps: { readings: readonly (infer R)[] } } ? R : never;
+type DepKeys<D, K extends "page" | "work" | "readings"> = D extends {
+  deps: { [P in K]: readonly (infer R)[] };
+}
+  ? R
+  : never;
+/** The linker validates finite top-level keys. The runtime constructs these projections;
+ * it must never pass a full Page/Work object behind a narrowed static type. */
 export interface BodyContext<
   G extends RouteGraphJson,
   S extends SchemaTable,
   E extends EntryTable,
-  R,
+  D,
+> {
+  readonly page: Pick<PageOf<G, S>, Extract<DepKeys<D, "page">, keyof PageOf<G, S>>>;
+  readonly work: Immutable<Pick<WorkOf<G, S>, Extract<DepKeys<D, "work">, keyof WorkOf<G, S>>>>;
+  readonly readings: Reads<G, S, E, DepKeys<D, "readings">>;
+}
+/** Presentation/predicates/salvage are global observers: invalidate on every Page/Work/reading
+ * publication. They are never scheduled under a reading's narrower dependency declaration. */
+export interface GlobalBodyContext<
+  G extends RouteGraphJson,
+  S extends SchemaTable,
+  E extends EntryTable,
 > {
   readonly page: PageOf<G, S>;
   readonly work: Immutable<WorkOf<G, S>> | null;
-  readonly readings: Reads<G, S, E, R>;
+  readonly readings: Reads<G, S, E, keyof G["readings"]>;
 }
+type InvocationContext<
+  G extends RouteGraphJson,
+  S extends SchemaTable,
+  E extends EntryTable,
+  D,
+> = BodyContext<G, S, E, D> & {
+  /** Frozen at invocation capture, separate from invalidating dependencies. */
+  readonly captures: Reads<G, S, E, D extends { captures: readonly (infer K)[] } ? K : never>;
+};
 /** Top-level replacement patches keep value/path correlated without a recursively expanding
  * dot-path type. Nested edits replace their typed segment; the journal computes inverse paths. */
 export type WorkPatch<W> = {
@@ -107,14 +134,12 @@ type Slot<Id, Path extends string, Kind extends string, Fn> = Id extends string
 type At<T, K extends PropertyKey> = K extends keyof T ? T[K] : never;
 /** Nonempty Work dependencies gate invocation until that Work is loaded. Roster-only
  * bodies can run before Work resolves; panes always account for unavailable Work. */
-type Ctx<G extends RouteGraphJson, S extends SchemaTable, E extends EntryTable, D> = Omit<
-  BodyContext<G, S, E, Deps<D>>,
-  "work"
-> & {
-  readonly work: D extends { deps: { work: readonly [string, ...string[]] } }
-    ? Immutable<WorkOf<G, S>>
-    : Immutable<WorkOf<G, S>> | null;
-};
+type Ctx<G extends RouteGraphJson, S extends SchemaTable, E extends EntryTable, D> = BodyContext<
+  G,
+  S,
+  E,
+  D
+>;
 type ReadingSlots<G extends RouteGraphJson, S extends SchemaTable, E extends EntryTable> = {
   [K in keyof G["readings"] & string]:
     | Slot<
@@ -161,14 +186,17 @@ type VerbSlots<G extends RouteGraphJson, S extends SchemaTable, E extends EntryT
         At<G["verbs"][K], "patches">,
         `verbs.${K}.patches`,
         "work",
-        (ctx: Ctx<G, S, E, G["verbs"][K]>, input: VerbInput<G, S, K>) => WorkPatches<G, S>
+        (
+          ctx: InvocationContext<G, S, E, G["verbs"][K]>,
+          input: VerbInput<G, S, K>,
+        ) => WorkPatches<G, S>
       >
     | Slot<
         At<G["verbs"][K], "patch">,
         `verbs.${K}.patch`,
         "page",
         (
-          ctx: Ctx<G, S, E, G["verbs"][K]>,
+          ctx: InvocationContext<G, S, E, G["verbs"][K]>,
           input: VerbInput<G, S, K>,
         ) => PageVerbPatch<G, S, G["verbs"][K]>
       >
@@ -177,7 +205,7 @@ type VerbSlots<G extends RouteGraphJson, S extends SchemaTable, E extends EntryT
         `verbs.${K}.intent`,
         "intent",
         (
-          ctx: Ctx<G, S, E, G["verbs"][K]>,
+          ctx: InvocationContext<G, S, E, G["verbs"][K]>,
           input: VerbInput<G, S, K>,
         ) => Input<E, At<G["verbs"][K], "entry">>
       >
@@ -186,7 +214,7 @@ type VerbSlots<G extends RouteGraphJson, S extends SchemaTable, E extends EntryT
         `verbs.${K}.args`,
         "args",
         (
-          ctx: Ctx<G, S, E, G["verbs"][K]>,
+          ctx: InvocationContext<G, S, E, G["verbs"][K]>,
           input: VerbInput<G, S, K>,
         ) => Input<E, At<G["verbs"][K], "entry">>
       >
@@ -194,7 +222,7 @@ type VerbSlots<G extends RouteGraphJson, S extends SchemaTable, E extends EntryT
         At<G["verbs"][K], "ready">,
         `verbs.${K}.ready`,
         "ready",
-        (ctx: Ctx<G, S, E, G["verbs"][K]>, input: VerbInput<G, S, K>) => true | string
+        (ctx: InvocationContext<G, S, E, G["verbs"][K]>, input: VerbInput<G, S, K>) => true | string
       >
     | Slot<
         At<G["verbs"][K], "present">,
@@ -224,13 +252,14 @@ type PaneSlots<G extends RouteGraphJson, S extends SchemaTable, E extends EntryT
           >
         : never);
 }[keyof G["panes"] & string];
+type CellKey<S extends SchemaTable, C> = C extends { key: infer K } ? SchemaValue<S, K> : string;
 type CellSlots<G extends RouteGraphJson, S extends SchemaTable, E extends EntryTable> = {
   [K in keyof G["cells"] & string]:
     | Slot<
         G["cells"][K]["groupOf"],
         `cells.${K}.groupOf`,
         "group",
-        (key: string) => readonly string[]
+        (key: CellKey<S, G["cells"][K]>) => readonly string[]
       >
     | Slot<
         At<G["cells"][K], "show">,
@@ -243,20 +272,20 @@ type CellSlots<G extends RouteGraphJson, S extends SchemaTable, E extends EntryT
         At<G["cells"][K], "focus">,
         `cells.${K}.focus`,
         "focus",
-        (key: string) => PagePatch<G, S>
+        (key: CellKey<S, G["cells"][K]>) => PagePatch<G, S>
       >
     | Slot<
         At<G["cells"][K], "take">,
         `cells.${K}.take`,
         "take",
-        (ctx: Ctx<G, S, E, G["cells"][K]>, key: string) => WorkPatches<G, S>
+        (ctx: Ctx<G, S, E, G["cells"][K]>, key: CellKey<S, G["cells"][K]>) => WorkPatches<G, S>
       >
     | Slot<
         At<G["cells"][K], "admit">,
         `cells.${K}.admit`,
         "admit",
         (
-          work: Immutable<WorkOf<G, S>>,
+          work: BodyContext<G, S, E, G["cells"][K]>["work"],
           patches: WorkPatches<G, S>,
         ) => DecodeResult<WorkPatches<G, S>>
       >;
@@ -284,6 +313,16 @@ export type BodySlots<
   E extends EntryTable,
   Render = unknown,
 > =
+  | (G extends { work: { migrations: infer M } }
+      ? {
+          [K in keyof M & string]: Slot<
+            M[K],
+            `work.migrations.${K}`,
+            "migration",
+            NonNullable<RouteStateSpec<z.ZodType>["migrations"]>[number]
+          >;
+        }[keyof M & string]
+      : never)
   | ReadingSlots<G, S, E>
   | PickerSlots<G, S, E>
   | VerbSlots<G, S, E>
@@ -294,7 +333,7 @@ export type BodySlots<
         G["predicates"][K],
         `predicates.${K}`,
         "predicate",
-        (ctx: BodyContext<G, S, E, keyof G["readings"]>) => boolean
+        (ctx: GlobalBodyContext<G, S, E>) => boolean
       >;
     }[keyof G["predicates"] & string]
   | {
@@ -315,7 +354,7 @@ export type BodySlots<
       At<G, "subjectText">,
       "subjectText",
       "subject",
-      (ctx: BodyContext<G, S, E, keyof G["readings"]>) => string
+      (ctx: GlobalBodyContext<G, S, E>) => string
     >
   | Slot<
       At<G, "transition">,
@@ -331,10 +370,7 @@ export type BodySlots<
       At<G, "salvage">,
       "salvage",
       "salvage",
-      (
-        old: unknown,
-        ctx: BodyContext<G, S, E, keyof G["readings"]>,
-      ) => DecodeResult<WorkPatches<G, S>>
+      (old: unknown, ctx: GlobalBodyContext<G, S, E>) => DecodeResult<WorkPatches<G, S>>
     >;
 export type BodyBindings<
   G extends RouteGraphJson,
