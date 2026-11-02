@@ -299,6 +299,7 @@ test("empty persisted thread stays fenced until its real host reread lands", asy
           )
         );
       }).length;
+    // TODO: full host run intermittently sees no empty-thread /pe/resources response in 15 s; instrumented rerun passes. Prove attachment versus response flushing before changing this wait.
     await expect.poll(follows, { timeout: 15_000 }).toBeGreaterThan(0);
     expect(
       await page.evaluate(
