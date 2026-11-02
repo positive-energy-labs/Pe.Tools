@@ -50,7 +50,7 @@ const LEADING_GROUPS = LEDGER_GROUPS.map((group) => GROUP_NAME[group]);
 
 /** The host's open work, live: thread summaries stream; receipts are read. */
 function useLedgerRows() {
-  const [threads, setThreads] = useState<HarnessThreadSummary[] | null>(null);
+  const [threads, setThreads] = useState<readonly HarnessThreadSummary[] | null>(null);
   const [fault, setFault] = useState<string | null>(null);
   const [asks, setAsks] = useState<LedgerSources["asks"]>(new Map());
   const [receipts, setReceipts] = useState<LedgerSources["receipts"]>([]);
