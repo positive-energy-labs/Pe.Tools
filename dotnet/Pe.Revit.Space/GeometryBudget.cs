@@ -32,11 +32,21 @@ public sealed class OverBudgetException(string message, int count, double cost, 
 ///     </para>
 /// </summary>
 public static class GeometryBudget {
-    /// <summary>Load-only elements as a fraction of a tessellated one. See the spatial ledger, 2026-11-02, for the measurement.</summary>
+    /// <summary>
+    ///     A load-only element as a fraction of a tessellated one. Measured on Chadds SA 7 at 15 ft, cold processes, 2026-11-02:
+    ///     meshes cost 56,443 elements for +6,274 MiB (0.111 MiB each); link-boxes read the same ids for +1,145 MiB with 3,074
+    ///     tessellated and 53,369 load-only, which solves to 0.135. 1/8 keeps the model's error under 10%.
+    /// </summary>
     internal const double LoadWeight = 0.125;
 
-    /// <summary>Weighted elements one read may walk. See the spatial ledger, 2026-11-02, for the measurement it comes from.</summary>
-    public static double Ceiling { get; internal set; } = double.PositiveInfinity;
+    /// <summary>
+    ///     Weighted elements one read may walk: 20,000. The slope is measured (0.111 MiB per weighted element on Chadds SA 7 meshes:
+    ///     14,208 → +1,375 MiB, 22,949 → +2,787, 41,167 → +6,038, 56,443 → +6,274 cumulative, cold), so 20,000 is about 2.2 GiB of
+    ///     Revit private bytes. The 2 GiB allowance is a product choice, not a measurement: it admits step 6's verbs (tens to a few
+    ///     thousand), Chadds SA 7 and SA 7 + EX 7 link-boxes (9,745 and 12,536) and meshes at 2 ft of reach (14,208), and refuses
+    ///     SA 7 meshes at 5 ft and beyond (22,949 to 56,443) and every whole-model box. Spatial ledger, 2026-11-02.
+    /// </summary>
+    public static double Ceiling { get; internal set; } = 20_000;
 
     internal static double Cost(IEnumerable<ReachPlan> plans) => plans.Sum(plan => plan.Keep.Count - plan.Light + (LoadWeight * plan.Light));
 
