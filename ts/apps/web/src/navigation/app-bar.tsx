@@ -321,13 +321,17 @@ export function AppBar() {
           </span>
         </div>
       )}
+      {/* The Situation band rides the bar itself; the Ctrl+. drawer is the narrow-bar fallback. */}
+      {!compact && (
+        <RouteControlsOutlet slot="situation" as="div" className="pe-appbar-situation" />
+      )}
       <div
         className="pe-appbar-commands"
         data-compact={compact || undefined}
         role="group"
         aria-label="Situation, Page and Tutorial shortcuts"
       >
-        <SituationDrawer barAnchor={shellRef.current} rail={compact ? actions : undefined} />
+        {compact && <SituationDrawer barAnchor={shellRef.current} rail={actions} />}
         {pageSlug && <PageBindingChip slug={pageSlug} />}
         {!compact && actions}
       </div>

@@ -354,3 +354,16 @@
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }
+/* The Situation band in the bar: it takes the free middle and gives way before the commands. */
+.pe-appbar-situation {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  order: 1;
+  padding-inline: 0.5rem;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+.pe-appbar-situation:empty {
+  display: none;
+}

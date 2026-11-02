@@ -36,7 +36,7 @@ import { LadderPicker, useDocumentLadder } from "../route/situation-ladder";
 import { useInitialUrlPage, useUrlPage } from "../route/url";
 import { bindGraphChords } from "./keys";
 import { SituationFields, PageControl } from "./situation-fields";
-import { Switcher } from "@pe/kit/lang/switcher";
+import { SituationBand, TimelineHead } from "./situation-band";
 import {
   CONFLICT_REFUSAL,
   createGraphMount,
@@ -776,73 +776,80 @@ function GraphSituation<P, W>({
   const stageId = owner.stage();
   const stage = graph.stages[stageId]!;
   const stageField = graphFields(graph).find(([, field]) => field.role === "stage")?.[0];
+  const verbs = owner
+    .stageVerbs()
+    .map((id) => (
+      <GraphVerb key={id} id={id} verb={owner.verbs[id]!} owner={owner} enabled={enabled} />
+    ));
   const content = (
-    <section
-      aria-label="Situation"
-      data-surface="page"
-      className="flex flex-wrap items-center gap-2"
-    >
-      <b>{graph.name}</b>
-      {graph.needs && !owner.fixture && <GraphTarget status={status} disabled={!enabled} />}
-      {stageField && Object.keys(graph.stages).length > 1 ? (
-        <Ladder
-          disabled={!enabled}
-          levels={[
-            {
-              key: "stage",
-              label: stage.word,
-              placeholder: "choose a stage",
-              options: (graph.stageOrder ?? Object.keys(graph.stages)).map((id) => ({
-                id,
-                label: graph.stages[id]!.word,
-              })),
-              picked: (id) => id === stageId,
-              pick: (id) => owner.view.setPage({ [stageField]: id } as Partial<P>),
-            },
-          ]}
-        />
-      ) : graph.subject ? null : (
-        <span>{stage.word}</span>
-      )}
-      {graph.subject && <span>{graph.subject(owner.view.read().page)}</span>}
-      <SituationFields graph={graph} owner={owner} enabled={enabled} />
-      {/* The host's own sentence for Work it cannot read; recovery is the kernel review beside it. */}
-      {status.failure && <span role="alert">{status.failure}</span>}
-      {/* The stage's verbs, then each kernel recovery only while its predicate holds. */}
-      {owner.stageVerbs().map((id) => (
-        <GraphVerb key={id} id={id} verb={owner.verbs[id]!} owner={owner} enabled={enabled} />
-      ))}
-      {owner.snapshot().conflict && (
-        <span role="status">
-          {CONFLICT_REFUSAL}
-          <Button label="Read Work again" onClick={() => owner.reread()}>
-            Read again
-          </Button>
-        </span>
-      )}
-      {owner.rejected() && (
-        <span role="status">
-          Unaccepted edit: {owner.verbs[owner.rejected()!.verb]?.label}
-          <Button
-            label="Retry edit"
-            refusal={!enabled ? "This route is inactive" : owner.retryRefusal()}
-            onClick={() => void owner.retry()}
-          >
-            Retry
-          </Button>
-          <Button label="Discard edit" onClick={() => owner.discard()}>
-            Discard
-          </Button>
-        </span>
-      )}
-      {owner.busy() && (
-        <Button label="Stop" onClick={() => owner.stop()}>
-          Stop
-        </Button>
-      )}
-      {owner.journalRefusal() && <span role="status">{owner.journalRefusal()}</span>}
-      <SituationLog owner={owner} />
-    </section>
+    <SituationBand
+      name={graph.name}
+      context={
+        <>
+          {graph.needs && !owner.fixture && <GraphTarget status={status} disabled={!enabled} />}
+          {stageField && Object.keys(graph.stages).length > 1 ? (
+            <Ladder
+              disabled={!enabled}
+              levels={[
+                {
+                  key: "stage",
+                  label: stage.word,
+                  placeholder: "choose a stage",
+                  options: (graph.stageOrder ?? Object.keys(graph.stages)).map((id) => ({
+                    id,
+                    label: graph.stages[id]!.word,
+                  })),
+                  picked: (id) => id === stageId,
+                  pick: (id) => owner.view.setPage({ [stageField]: id } as Partial<P>),
+                },
+              ]}
+            />
+          ) : graph.subject ? null : (
+            <span>{stage.word}</span>
+          )}
+          {graph.subject && <span>{graph.subject(owner.view.read().page)}</span>}
+          <SituationFields graph={graph} owner={owner} enabled={enabled} />
+        </>
+      }
+      alerts={
+        <>
+          {status.failure && <span role="alert">{status.failure}</span>}
+          {owner.snapshot().conflict && (
+            <span role="status">
+              {CONFLICT_REFUSAL}
+              <Button label="Read Work again" onClick={() => owner.reread()}>
+                Read again
+              </Button>
+            </span>
+          )}
+          {owner.rejected() && (
+            <span role="status">
+              Unaccepted edit: {owner.verbs[owner.rejected()!.verb]?.label}
+              <Button
+                label="Retry edit"
+                refusal={!enabled ? "This route is inactive" : owner.retryRefusal()}
+                onClick={() => void owner.retry()}
+              >
+                Retry
+              </Button>
+              <Button label="Discard edit" onClick={() => owner.discard()}>
+                Discard
+              </Button>
+            </span>
+          )}
+          {owner.busy() && (
+            <Button label="Stop" onClick={() => owner.stop()}>
+              Stop
+            </Button>
+          )}
+          {owner.journalRefusal() && <span role="status">{owner.journalRefusal()}</span>}
+        </>
+      }
+      verbs={verbs}
+      timeline={
+        <TimelineHead owner={owner} history={<GraphHistory owner={owner} label="Route log" />} />
+      }
+    />
   );
   return hosted ? (
     content
@@ -850,25 +857,6 @@ function GraphSituation<P, W>({
     <PrimaryRouteControls route={graph.key} slot="situation">
       {content}
     </PrimaryRouteControls>
-  );
-}
-
-function SituationLog<P, W>({ owner }: { owner: GraphMount<P, W> }) {
-  const [kind, setKind] = useState<"all" | "work">("all");
-  return (
-    <section aria-label="Log" className="basis-full">
-      <span className="t-small t-upper">log</span>
-      <Switcher
-        ariaLabel="log kind"
-        value={kind}
-        onChange={setKind}
-        options={[
-          { value: "all", label: "all", title: "All route activity" },
-          { value: "work", label: "work", title: "Work edits" },
-        ]}
-      />
-      <GraphHistory owner={owner} workOnly={kind === "work"} label="Route log" />
-    </section>
   );
 }
 
