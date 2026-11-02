@@ -1,8 +1,7 @@
 import { machineFixture } from "../../agent-contracts/tests/machine-fixture.ts";
 import { expect, test, vi } from "vite-plus/test";
 import { createHash } from "node:crypto";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { address, emptyThreadHead, type ThreadHead } from "@pe/agent-contracts";
 import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
 import { createPeaMcpServer } from "../src/server.ts";
