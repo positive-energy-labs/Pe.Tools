@@ -41,6 +41,11 @@ export interface ReadingState<T = unknown> {
   readonly complete: boolean;
   readonly basis: ReadingBasis | null;
   readonly version: number;
+  /**
+   * Content hash of `value` (ADR 0028 snapshot groundwork): the source's own version when it
+   * declares one, else a hash of the value's canonical JSON. Absent for non-JSON values.
+   */
+  readonly hash?: string;
   readonly error?: string;
 }
 
@@ -333,6 +338,7 @@ export function createReadingGraph<P, W>(
       put(node, {
         status: !fresh ? "stale" : complete ? "ready" : "partial",
         value: publication.value,
+        hash: publication.sourceVersion ?? contentHash(publication.value),
         previous: node.state.previous,
         complete,
         current: complete && fresh,
@@ -741,6 +747,27 @@ export function createReadingGraph<P, W>(
 }
 
 export type ReadingGraph<P, W> = ReturnType<typeof createReadingGraph<P, W>>;
+
+/** ponytail: 53-bit cyrb53 over canonical JSON, sync and cheap; full-body cost on large values
+ * that declare no sourceVersion. Swap for SubtleCrypto SHA-256 if snapshots cross a trust line. */
+export function contentHash(value: unknown): string | undefined {
+  let text: string;
+  try {
+    text = canonicalRouteInput(value);
+  } catch {
+    return undefined;
+  }
+  let h1 = 0xdeadbeef;
+  let h2 = 0x41c6ce57;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 2654435761);
+    h2 = Math.imul(h2 ^ c, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+}
 
 function targetEffects(target: ExecutionTarget): readonly Effect[] {
   return target.kind === "document"
