@@ -1,4 +1,5 @@
 /** Presentation of the single semantic Families Apply result. */
+// TODO: F3a live write proof remains owed: Broan reload refused system compatibility (7524f854-2853-4b41-9929-d551a7d8319e); see .artifacts/accept/u2-f3a/RESULTS.md.
 import { familyApplyResultSchema, writePreviewSchema, type ActionReceipt } from "@pe/agent-contracts";
 import { refuse, type Refusal } from "#/route/refusal";
 
