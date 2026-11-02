@@ -814,3 +814,12 @@ test("a derived command stages Work before host preview and a refused preview ne
   expect(transport.preview).toHaveBeenCalledOnce();
   expect(transport.run).not.toHaveBeenCalled();
 });
+
+test("staged commands prepare and dispatch against their own ack while Work delivery lags", async () => {
+  const env = environment("human");
+  const rendered = structuredClone(env.ctx.snapshot());
+  const ctx = { ...env.ctx, snapshot: () => rendered };
+  expect((await invoke(ctx, command("none"), null, { stage: "sheet" })).state).toBe("done");
+  expect(transport.preview.mock.calls[0]![3]).toMatchObject({ revision: 5 });
+  expect(transport.run.mock.calls[0]![3]).toMatchObject({ revision: 5 });
+});

@@ -1,6 +1,6 @@
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
-import { actionStatusSchema } from "./action-receipts.ts";
+import { actionReceiptListDecoder, actionStatusSchema } from "./action-receipts.ts";
 
 test.each([
   ["waiting", "queued", undefined],
@@ -31,4 +31,31 @@ test.each([
 
 test("receipt projections remain representable as the public JSON schema", () => {
   expect(z.toJSONSchema(actionStatusSchema)).toBeDefined();
+});
+
+test("not-dispatched Families receipts retain defaults and outcomes", () => {
+  const rows = actionReceiptListDecoder().parse([
+    {
+      id: "stale-families",
+      key: "families.apply",
+      caller: { kind: "human", via: "local" },
+      target: { kind: "host" },
+      basis: null,
+      input: {},
+      startedAt: "now",
+      steps: [],
+      prepared: { state: "unprepared" },
+      recovery: [],
+      state: "failed",
+      error: "Work changed",
+      status: 409,
+      notDispatched: true,
+    },
+  ]);
+  expect(rows[0]).toMatchObject({
+    consent: null,
+    effects: [],
+    consumes: [],
+    outcome: { state: "failed", recovery: "retry" },
+  });
 });

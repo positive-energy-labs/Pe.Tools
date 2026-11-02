@@ -8,6 +8,7 @@ import { z } from "zod";
 import {
   address,
   routeBindingsSchema,
+  workWriteSchema,
   takeoffsRouteState,
   threadHeadSchema,
   tools,
@@ -22,6 +23,7 @@ import { createPeRoutes, fileRouteDocumentStore, makeHostPeRoutes } from "../src
 import { withInvocationContext } from "@pe/runtime/context";
 import type { Caller } from "@pe/agent-contracts";
 import { human, pea } from "./callers.ts";
+import { peRoutes } from "@pe/agent-contracts/pe-api";
 import { admitCrossing, bindControl } from "../src/control.ts";
 
 afterEach(() =>
@@ -41,7 +43,16 @@ test("HTTP Work shares edits independently of thread targets and refuses forged 
     openId: "outside",
     address: address("C:/Models/Other.rvt"),
   };
-  let documents = [a, b, outside];
+  let documents = [
+    a,
+    b,
+    outside,
+    {
+      session: "foreign",
+      openId: "detached",
+      address: "relative-detached.rvt" as typeof a.address,
+    },
+  ];
   let head: ThreadHead = {
     revision: 4,
     targets: [
@@ -586,4 +597,17 @@ test("HTTP authored writes enforce short local revision checks", async () => {
   expect(
     (await post("/pe/route-state/test-route/command", { command: "external", input: {} })).status,
   ).toBe(404);
+});
+
+test("HTTP Work writes use the producer schema including restore identity", () => {
+  expect(peRoutes["work.apply"].body).toBe(workWriteSchema);
+  expect(
+    peRoutes["work.apply"].body.parse({
+      kind: "restore",
+      restoreOf: 12,
+      patches: [],
+      expectedRevision: 15,
+      press: null,
+    }),
+  ).toMatchObject({ restoreOf: 12 });
 });

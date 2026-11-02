@@ -446,14 +446,8 @@ export function createWorkJournal(key: WorkKey) {
     accept,
     /** A read proves values only at its own revision; a newer acknowledgement invalidates it. */
     observe(snapshot: { revision: number; doc: unknown }) {
-      // The journal outlives its mounts (tab lifetime); a Work read back BELOW the journal's
-      // revision is a new lifetime of that Work (recreated, fixture remount), so its history is
-      // not this Work's and the head must not claim it.
-      if (revision !== null && snapshot.revision < revision) {
-        clear();
-        revision = snapshot.revision;
-        current = null;
-      }
+      // A delayed Reading cannot erase already accepted history. A revision is not a lifetime id.
+      if (revision !== null && snapshot.revision < revision) return;
       if (!current || snapshot.revision >= current.revision) current = structuredClone(snapshot);
     },
     /** Attach cloneable presentation to an accepted press, including a late Reading result. */

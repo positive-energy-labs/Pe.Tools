@@ -79,6 +79,7 @@ function ScopeBody({ owner, page }: MountBody<FamiliesPage, FamiliesRouteDocumen
         levels={[
           {
             key: "category",
+            multi: true,
             label: draftCategories.join(", ") || null,
             placeholder: "choose categories",
             options: categories.map((id) => ({ id, label: id })),
@@ -92,10 +93,29 @@ function ScopeBody({ owner, page }: MountBody<FamiliesPage, FamiliesRouteDocumen
           },
           {
             key: "family",
-            label: pickedFamilies?.join(", ") ?? "every family",
+            multi: true,
+            label:
+              pickedFamilies === null
+                ? "every family"
+                : pickedFamilies.length === 0
+                  ? "no families"
+                  : pickedFamilies.length === 1
+                    ? pickedFamilies[0]!
+                    : `${pickedFamilies.length} families`,
+            extra: (
+              <>
+                <Button label="All families" onClick={() => setPickedFamilies(null)}>
+                  all
+                </Button>
+                <Button label="No families" onClick={() => setPickedFamilies([])}>
+                  none
+                </Button>
+              </>
+            ),
             placeholder: "choose families",
             options: [...(familyFeed.options ?? [])],
             picked: (id) => pickedFamilies === null || pickedFamilies.includes(id),
+            only: (id) => setPickedFamilies([id]),
             pick: (id) => {
               const all = familyFeed.options?.map((row) => row.id) ?? [];
               const names = pickedFamilies ?? all;

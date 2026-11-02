@@ -33,3 +33,16 @@ test("kernel gap: Families query refusals preserve host status and reason for th
     readFamiliesCapture("families.cancel-read", { readId: crypto.randomUUID() }, work, target),
   ).rejects.toMatchObject({ status: 409, message: "The document lifetime changed" });
 });
+
+test("Families ingress plain-text refusals keep their status and reason", async () => {
+  vi.stubGlobal(
+    "fetch",
+    async () => new Response("This browser page has no checkout runtime owner", { status: 403 }),
+  );
+  await expect(
+    readFamiliesCapture("families.cancel-read", { readId: crypto.randomUUID() }, work, target),
+  ).rejects.toMatchObject({
+    status: 403,
+    message: "This browser page has no checkout runtime owner",
+  });
+});

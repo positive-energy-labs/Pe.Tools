@@ -140,7 +140,6 @@ test("a durable publish remains a barrier after restart even when values return"
   expect(await f.host.view(f.key, f.key.route)).toMatchObject({ revision: 3, doc: { a: 1 } });
 });
 
-
 test("receipt-confirmed retirement is committed history after restart, never changed elsewhere", async () => {
   const f = fixture();
   await f.edit("human", "flow-edit", 950);
@@ -151,9 +150,31 @@ test("receipt-confirmed retirement is committed history after restart, never cha
   const stop = f.host.observeAccepted(f.key, (ack) => journal.accept(ack));
   await f.host.view(f.key, f.key.route);
   expect(journal.read().undo[0]).toMatchObject({
-    id: "human:flow-edit", by: "human", label: "Edit fan airflow", barrier: { receiptId: "ducts-write" },
+    id: "human:flow-edit",
+    by: "human",
+    label: "Edit fan airflow",
+    barrier: { receiptId: "ducts-write" },
   });
   expect(journal.read().undo[0]!.superseded).toBeUndefined();
-  expect((await journal.undo(async () => { throw Error("must not write"); })).ok).toBe(false);
+  expect(
+    (
+      await journal.undo(async () => {
+        throw Error("must not write");
+      })
+    ).ok,
+  ).toBe(false);
   stop();
+});
+
+test("a delayed Work read cannot clear accepted undo history", async () => {
+  const f = fixture();
+  const journal = browserJournal(f.key);
+  const written = await f.edit("human", "edit", 2);
+  journal.accept(written.write);
+  journal.observe({ revision: written.revision, doc: written.doc });
+  journal.observe({ revision: written.revision - 1, doc: { a: 0, b: 0 } });
+  expect(journal.read().undo).toHaveLength(1);
+  expect(
+    await journal.undo((write) => f.host.write(f.key, f.key.route, "human", write)),
+  ).toMatchObject({ ok: true });
 });

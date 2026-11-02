@@ -181,6 +181,7 @@ export const familyCellValueSchema = z
   .object({
     value: z.string(),
     unit: z.string().min(1).optional(),
+    display: z.string().optional(),
     storageType: z.enum(["String", "Integer", "Double", "ElementId", "None"]),
   })
   .strict();
@@ -190,7 +191,7 @@ export type FamilyCellValue = z.infer<typeof familyCellValueSchema>;
 /** The one word for a family cell: a measured value reads with its unit. */
 export const showFamilyCell = (value: unknown): string => {
   const cell = familyCellValueSchema.parse(value);
-  return cell.unit === undefined ? cell.value : `${cell.value} ${cell.unit}`;
+  return cell.display ?? (cell.unit === undefined ? cell.value : `${cell.value} ${cell.unit}`);
 };
 export const familyCellStateSchema = draftCellSchema(familyCellValueSchema);
 export type FamilyCellState = z.infer<typeof familyCellStateSchema>;

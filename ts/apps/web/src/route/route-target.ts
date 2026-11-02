@@ -3,6 +3,7 @@ import type { BridgeSessionListEntry } from "@pe/host-contracts/operation-types"
 import { useMemo, useRef } from "react";
 import {
   addressSchema,
+  machineInventory,
   documentRequestSchema,
   resolveCallTarget,
   sameAddress,
@@ -82,6 +83,13 @@ export type TargetProvenance =
  * the fallback never writes target, head, or authority; explicit human actions remain subject to
  * existing freshness/admission. The selected conversation never defaults it.
  */
+export function retainSoleDocument(machine: Machine | null, last: DocumentRequest | null) {
+  const inventory = machineInventory(machine ?? undefined);
+  const busy =
+    inventory.kind !== "ready" || Object.values(inventory.sessions).some((s) => s.kind !== "ready");
+  return { request: busy ? last : soleUserDocument(machine), busy };
+}
+
 export function useRouteTarget(
   manifest: { readonly needs?: "session" | "document" | "project" | "family" },
   registry: AtomRegistry.AtomRegistry,
@@ -100,7 +108,17 @@ export function useRouteTarget(
     [seed, target],
   );
   const machineResult = useOwned(registry, machineAtom) as Reading<Machine> | null;
-  const sole = machineResult ? soleUserDocument(previousOf(machineResult) ?? null) : null;
+  const lastSole = useRef<DocumentRequest | null>(null);
+  const held = retainSoleDocument(
+    machineResult ? (previousOf(machineResult) ?? null) : null,
+    lastSole.current,
+  );
+  const sole = target || seed ? null : held.request;
+  lastSole.current = sole;
+  const busy =
+    !seed &&
+    (inventoryResult.state !== "ready" ||
+      (!target && (held.busy || machineResult?.state !== "ready")));
   const soleKey = JSON.stringify(sole);
   const fallback = useMemo((): DocumentRequest[] => (sole ? [sole] : []), [soleKey]);
   const resolution: TargetResolution = useMemo(() => {
@@ -262,6 +280,7 @@ export function useRouteTarget(
         : { source: "none" };
   return {
     inventoryResult,
+    busy,
     resolution,
     bindingLost,
     bindingLostRef,

@@ -1,6 +1,7 @@
 import { expect, test } from "vite-plus/test";
 import { documentRequestSchema, sameAddress } from "@pe/agent-contracts";
-import { parseTarget } from "./route-target";
+import { machineFixture } from "../../../../packages/agent-contracts/tests/machine-fixture";
+import { retainSoleDocument, parseTarget } from "./route-target";
 
 test("an admitted exact open request retains both executable identities through the URL", () => {
   const request = documentRequestSchema.parse({
@@ -40,3 +41,32 @@ test.each(['{"kind":"open"', ' {"kind":"wrong"}', '[{"kind":"open"}]'])(
     expect(parseTarget(raw)).toMatchObject({ kind: "invalid", raw });
   },
 );
+
+test("an incomplete or failed census retains the exact fallback; a confirmed close clears it", () => {
+  const machine = machineFixture([
+    {
+      session: "one",
+      documents: [
+        {
+          openId: "doc",
+          title: "Project",
+          address: "C:/Models/A.rvt",
+          isActive: true,
+          isFamilyDocument: false,
+        },
+      ],
+    },
+  ]);
+  const first = retainSoleDocument(machine, null);
+  expect(first).toMatchObject({ busy: false, request: { ref: { session: "one", openId: "doc" } } });
+  const slow = structuredClone(machine);
+  Object.assign(slow.legs, { attachments: { ...slow.legs.attachments!, error: "Revit is busy" } });
+  expect(retainSoleDocument(slow, first.request)).toEqual({ request: first.request, busy: true });
+  Object.assign(slow.legs, { attachments: machine.legs.attachments! });
+  Object.assign(slow.revit.sessions![0]!.attachment!, { documents: null });
+  expect(retainSoleDocument(slow, first.request)).toEqual({ request: first.request, busy: true });
+  expect(retainSoleDocument(machineFixture(), first.request)).toEqual({
+    request: null,
+    busy: false,
+  });
+});

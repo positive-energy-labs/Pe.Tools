@@ -1,4 +1,4 @@
-import {testSources,testSubject,testFields,testReadings} from '../test-route-subject';
+import { testSources, testSubject, testFields, testReadings } from "../test-route-subject";
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { expect, test, vi } from "vite-plus/test";
@@ -34,13 +34,14 @@ async function scenario() {
     rules: z.record(z.string(), draftCellSchema(z.object({ table: z.string() }))).default({}),
   });
   type Work = z.output<typeof schema>;
-  const graph: RouteGraph<{}, Work> = {...testSubject,
+  const graph: RouteGraph<{}, Work> = {
+    ...testSubject,
     key: route,
     address: route,
     name: "Ducts",
     work: schema,
-    fields: {...testFields,},
-    readings: {...testReadings, sheet: { kind: "derive", source: "sheet", retire: "target" } },
+    fields: { ...testFields },
+    readings: { ...testReadings, sheet: { kind: "derive", source: "sheet", retire: "target" } },
     cells: [{ segment: "rules", groupOf: (key) => [key], label: () => LABEL, noun: "loss rules" }],
     verbs: {
       edit: workVerb(
@@ -97,7 +98,9 @@ async function scenario() {
     expect(operation).toBe("work.apply");
     const request = workWriteSchema.parse((input as { body: unknown }).body);
     const result = await workspace.write(key, route, "human", request);
-    return new Response(JSON.stringify(result), { status: result.ok ? 200 : 409 });
+    return new Response(JSON.stringify(result.ok ? result : { error: { details: result } }), {
+      status: result.ok ? 200 : 409,
+    });
   });
   const entries = [{ graph, key }];
   function Head() {
@@ -145,7 +148,8 @@ async function scenario() {
       };
     },
     subscribe: (notify) => appAtomRegistry.subscribe(atom, notify),
-    sources: {...testSources,
+    sources: {
+      ...testSources,
       sheet: {
         kind: "derive",
         key: (scope) => scope.workRevision,
@@ -239,11 +243,13 @@ test("D8.7: edit → composer revert → edit → undo → undo names the restor
     );
     await one.edit("CD3-3");
     await act(async () => {
-      expect((await one.owner.restore("undo"))?.ok).toBe(true);
+      const restored = await one.owner.restore("undo");
+      expect(restored?.ok, JSON.stringify(restored)).toBe(true);
     });
     expect(one.doc().rules).toEqual({});
     await act(async () => {
-      expect((await one.owner.restore("undo"))?.ok).toBe(true);
+      const restored = await one.owner.restore("undo");
+      expect(restored?.ok, JSON.stringify(restored)).toBe(true);
     });
     expect(one.doc().rules[RULE]!.edit).toEqual(original);
     const history = one.owner.journal(one.owner.snapshot().work!.handle.key).read();

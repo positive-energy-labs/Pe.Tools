@@ -158,6 +158,7 @@ export type PeApiSchemas = Record<
   | "turnElementNamesRequestSchema"
   | "turnElementNamesObservationSchema"
   | "routeStatePatchSchema"
+  | "workWriteSchema"
   | "ductsSheetRequestSchema"
   | "ductsSheetResponseSchema"
   | "ductsRosterRequestSchema"
@@ -214,7 +215,6 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
   const capabilityCatalogSchema = schemas.capabilityCatalogSchema as S["capabilityCatalogSchema"];
   const navigationSnapshotSchema =
     schemas.navigationSnapshotSchema as S["navigationSnapshotSchema"];
-  const routeStatePatchSchema = schemas.routeStatePatchSchema as S["routeStatePatchSchema"];
   const routeViewSchema = schemas.routeViewSchema as S["routeViewSchema"];
   const routeViewSetSchema = schemas.routeViewSetSchema as S["routeViewSetSchema"];
   const routeViewAckSchema = schemas.routeViewAckSchema as S["routeViewAckSchema"];
@@ -810,12 +810,7 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
     "work.apply": route(
       "POST",
       "/pe/route-state/:route/apply",
-      z.object({
-        patches: z.array(routeStatePatchSchema),
-        expectedRevision: z.number().int().nonnegative(),
-        press: z.string().min(1).nullable(),
-        kind: z.enum(["apply", "restore"]).default("apply"),
-      }),
+      schemas.workWriteSchema as S["workWriteSchema"],
       object,
       "human-or-pea",
       "pe",

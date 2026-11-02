@@ -688,6 +688,20 @@ async function invokeCore<C extends Caller>(
     return "refusal" in result ? result.refusal : null;
   };
   ctx.changed?.("idle", null);
+  // The write acknowledgement is authoritative before its Reading reaches React.
+  // TODO: verify Families preview, consent and Revit readback in the fresh detached-local drive.
+  let acknowledged: VerbSnapshot | null = null;
+  const snapshotNow = (): VerbSnapshot => {
+    const seen = ctx.snapshot();
+    return acknowledged?.work &&
+      seen.work &&
+      seen.generation === acknowledged.generation &&
+      equal(seen.target, acknowledged.target) &&
+      equal(seen.work.handle.key, acknowledged.work.handle.key) &&
+      seen.work.handle.revision < acknowledged.work.handle.revision
+      ? { ...seen, work: acknowledged.work }
+      : seen;
+  };
   void ctx.owner
     .runAction(
       verb.label,
@@ -698,7 +712,7 @@ async function invokeCore<C extends Caller>(
           const parsed = verb.input.safeParse(args);
           if (!parsed.success) return finish(failure("refused", parsed.error.message, press));
           const input = copy(parsed.data);
-          const initialSnapshot = copy(ctx.snapshot());
+          const initialSnapshot = copy(snapshotNow());
           const initialScope = resolve(ctx, verb, copy(subject), initialSnapshot);
           if (isRefusal(initialScope)) return finish(resultOf(initialScope, press));
           const steps = binding.sequence?.(initialScope, input);
@@ -706,7 +720,7 @@ async function invokeCore<C extends Caller>(
             return finish(failure("refused", "This sequence has no commands", press));
           for (let step = 0; step < (steps?.length ?? 1); step++) {
             if (terminal) return "refusal" in terminal ? terminal.refusal : null;
-            let snapshot = copy(ctx.snapshot());
+            let snapshot = copy(snapshotNow());
             if (
               snapshot.generation !== initialSnapshot.generation ||
               !equal(snapshot.target, initialSnapshot.target) ||
@@ -746,7 +760,20 @@ async function invokeCore<C extends Caller>(
                 press,
               });
               if (!written.ok) return finish(resultOf(writeRefusal(written)!, press));
-              snapshot = copy(ctx.snapshot());
+              acknowledged = {
+                ...snapshot,
+                work: {
+                  handle: { ...snapshot.work.handle, revision: written.revision },
+                  doc: {
+                    ...(snapshot.work.doc as Record<string, unknown>),
+                    writeIntent: {
+                      ...((snapshot.work.doc as { writeIntent?: object }).writeIntent ?? {}),
+                      [binding.command]: { edit: { value } },
+                    },
+                  },
+                },
+              };
+              snapshot = copy(snapshotNow());
               scope = resolve(ctx, verb, boundSubject, snapshot);
               if (isRefusal(scope)) return finish(resultOf(scope, press));
             }
@@ -758,7 +785,7 @@ async function invokeCore<C extends Caller>(
                 { previewOnly: true } as CommandInput<typeof binding.command>,
                 binding.waitSeconds,
               );
-              const afterPreview = ctx.snapshot();
+              const afterPreview = snapshotNow();
               if (
                 !equal(snapshot.target, afterPreview.target) ||
                 !equal(basisOf(snapshot), basisOf(afterPreview))
@@ -774,7 +801,7 @@ async function invokeCore<C extends Caller>(
                 : steps
                   ? copy(steps[step])
                   : await binding.prepare?.(scope, input);
-              const prepared = ctx.snapshot();
+              const prepared = snapshotNow();
               if (
                 !equal(snapshot.target, prepared.target) ||
                 !equal(basisOf(snapshot), basisOf(prepared))
@@ -787,7 +814,7 @@ async function invokeCore<C extends Caller>(
               const { page, ...words } = presentation;
               if (page && ctx.landReview) {
                 ctx.landReview(copy(page));
-                const landed = copy(ctx.snapshot());
+                const landed = copy(snapshotNow());
                 if (
                   snapshot.generation !== landed.generation ||
                   !equal(snapshot.target, landed.target) ||
@@ -835,7 +862,7 @@ async function invokeCore<C extends Caller>(
                 if ("stop" in reply) return finish(reply.stop);
               }
             }
-            const current = copy(ctx.snapshot());
+            const current = copy(snapshotNow());
             if (
               !equal(snapshot.target, current.target) ||
               !equal(basisOf(snapshot), basisOf(current))
@@ -924,7 +951,7 @@ async function invokeCore<C extends Caller>(
                 );
               }
               // A result for a Target or Work the person has left must not select anything now.
-              const after = ctx.snapshot();
+              const after = snapshotNow();
               if (
                 current.generation !== after.generation ||
                 !equal(current.target, after.target) ||
@@ -997,7 +1024,7 @@ async function invokeCore<C extends Caller>(
               const receipt =
                 (await recoverAction(press, raw.key, raw.input, current.target, "", wait)) ??
                 (await submitAction({ id: press, ...raw, target: current.target }, "", wait));
-              const after = ctx.snapshot();
+              const after = snapshotNow();
               const page =
                 binding.receiptPage &&
                 current.generation === after.generation &&
@@ -1027,7 +1054,7 @@ async function invokeCore<C extends Caller>(
                 binding.intent(fresh, input, ticket),
               ) as Record<string, unknown>;
               const value = await runQuery(binding.rpc, request, current);
-              const after = ctx.snapshot();
+              const after = snapshotNow();
               const sameScope =
                 current.generation === after.generation &&
                 equal(current.target, after.target) &&
@@ -1067,7 +1094,7 @@ async function invokeCore<C extends Caller>(
                 ctx.receipt?.(receipt, press);
                 continue;
               }
-              const after = ctx.snapshot();
+              const after = snapshotNow();
               const sameScope =
                 current.generation === after.generation &&
                 equal(current.target, after.target) &&

@@ -302,8 +302,8 @@ export const useInventory = (enabled = true) =>
 export function targetInventory(
   reading: Reading<{ sessions: BridgeSessionListEntry[] }>,
 ): TargetInventory {
-  if (reading.state === "failed") return { kind: "failed", message: reading.message };
   const seen = previousOf(reading);
+  if (reading.state === "failed" && !seen) return { kind: "failed", message: reading.message };
   if (!seen) return { kind: "checking" };
   const sessions: Record<
     string,

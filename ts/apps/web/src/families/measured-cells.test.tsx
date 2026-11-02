@@ -131,7 +131,7 @@ test("a measured parameter with no reported display unit is locked with a reason
 
 test("the row's unit and Yes/No kind win over another family's shared column", async () => {
   const propose = vi.fn(async () => null);
-  const parse = vi.fn(async () => null);
+  const parse = vi.fn(async () => ({ value: "2", unit: "'", display: "2' - 0\"" }));
   const rows: TypeRow[] = [
     { ...ROWS[0]!, displayUnits: { [PARAMETER]: CFM }, yesNos: { [PARAMETER]: false } },
     {
@@ -149,7 +149,7 @@ test("the row's unit and Yes/No kind win over another family's shared column", a
   await type(inputs[1]!, "2");
   expect(propose).toHaveBeenCalledWith(
     expect.objectContaining({ familyName: "Other" }),
-    { value: "2", unit: "'", storageType: "Double" },
+    { value: "2", unit: "'", display: "2' - 0\"", storageType: "Double" },
     "1'",
   );
 });

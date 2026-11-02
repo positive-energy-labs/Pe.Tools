@@ -1,3 +1,4 @@
+import { contextFetch as fetch } from "@pe/runtime/context";
 import { z } from "zod";
 import { appliedScopeSchema, type DocumentRef, type WorkKey } from "@pe/agent-contracts";
 import {
@@ -43,13 +44,20 @@ export async function readFamiliesCapture(
     },
     body: JSON.stringify(key === "families.read" ? { work, ...parsed } : parsed),
   });
-  const body = await response.json();
   if (!response.ok) {
-    const reason = typeof body.error === "string" ? body.error : body.error?.message;
+    const text = await response.text();
+    let reason = text;
+    try {
+      const body = JSON.parse(text);
+      reason = typeof body.error === "string" ? body.error : (body.error?.message ?? text);
+    } catch {
+      // Ingress refusals can be plain text; preserve their reason.
+    }
     throw Object.assign(Error(reason ?? `Families query failed (${response.status})`), {
       status: response.status,
     });
   }
+  const body = await response.json();
   return key === "families.read"
     ? familiesObservationSchema.parse(body)
     : z.object({ cancelled: z.literal(true) }).parse(body);

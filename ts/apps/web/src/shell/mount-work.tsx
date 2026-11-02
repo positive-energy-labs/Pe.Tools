@@ -185,6 +185,11 @@ export function GraphTarget({ status, disabled }: { status: WorkScopeStatus; dis
   return (
     <>
       <LadderPicker ladder={ladder} disabled={disabled} />
+      {status.busy && resolution.kind === "resolved" ? (
+        <span role="status" className="text-ink-2">
+          inventory busy; keeping the last known target
+        </span>
+      ) : null}
       {resolution.kind === "checking" ? (
         <span role="status" className="text-ink-2">
           checking the inventory

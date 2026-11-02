@@ -1,6 +1,5 @@
 import { basisSchema, callerSchema } from "./caller.ts";
 import { z } from "zod";
-import { generatedJsonSchema } from "@pe/host-contracts/decoders";
 import { workKeySchema } from "./route-state.ts";
 import { footprintSchema, commandConsentSchema } from "./run-consent.ts";
 import { executionTargetSchema } from "./target.ts";
@@ -161,13 +160,11 @@ export type ActionReceipt = z.infer<typeof actionReceiptDefinition>;
 export const actionReceiptSchema: z.ZodType<ActionReceipt> = actionReceiptDefinition.overwrite(
   (row) => ({ ...row, outcome: invocationOutcome(row) }),
 );
-let receiptWireSchema: z.ZodType<ActionReceipt[]> | undefined;
-/** Browser decoder projected from the journal owner's schema; no parallel receipt shape. */
+/** The owner's decoder preserves defaults and derived outcomes that JSON Schema cannot execute. */
 export function actionReceiptListDecoder(): z.ZodType<ActionReceipt[]> {
-  return (receiptWireSchema ??= generatedJsonSchema(
-    z.toJSONSchema(actionReceiptSchema.array(), { unrepresentable: "any" }),
-  ) as z.ZodType<ActionReceipt[]>);
+  return actionReceiptSchema.array();
 }
+
 const statusAttempt = actionAttempt.omit({ steps: true, prepared: true, recovery: true });
 const actionStatusDefinition = z.discriminatedUnion("state", [
   statusAttempt.extend({ state: z.literal("waiting") }),

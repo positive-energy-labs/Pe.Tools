@@ -19,7 +19,11 @@ import { draftCellSchema } from "./draft.ts";
  * cell draws "`value` `unit`" — one rendering rule, so what is reviewed is what is applied. The
  * text the person typed is not kept (ruling 2026-09-22).
  */
-export const measuredValueSchema = z.object({ value: z.string(), unit: z.string() });
+export const measuredValueSchema = z.object({
+  value: z.string(),
+  unit: z.string(),
+  display: z.string().optional(),
+});
 export type MeasuredValue = z.infer<typeof measuredValueSchema>;
 
 /** A cell holds text, or — on a measured column — a number with the unit it was staged in. */
@@ -30,7 +34,9 @@ export type ScheduleCellValue = z.infer<typeof scheduleCellValueSchema>;
 export const showCellValue = (value: unknown): string => {
   if (typeof value === "string") return value;
   const measured = measuredValueSchema.safeParse(value);
-  return measured.success ? `${measured.data.value} ${measured.data.unit}` : "";
+  return measured.success
+    ? (measured.data.display ?? `${measured.data.value} ${measured.data.unit}`)
+    : "";
 };
 
 /** Trichotomy cell — no provenance extension (schedule cells have no PDF source). */

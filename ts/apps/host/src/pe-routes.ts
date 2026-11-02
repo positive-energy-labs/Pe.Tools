@@ -214,9 +214,14 @@ export function createPeRoutes(options: PeRoutesOptions) {
       return refused("Document-owned route Work requires this caller's thread targets.");
     let documents;
     try {
-      documents = z
-        .array(documentRefSchema.extend({ address: addressSchema.nullable() }))
-        .parse(await options.navigation?.documents());
+      const entries = z.array(z.unknown()).parse(await options.navigation?.documents());
+      documents = entries.flatMap((entry) => {
+        const ref = documentRefSchema.strip().safeParse(entry);
+        if (!ref.success) return [];
+        // An unsaved/foreign relative path has no Address, but keeps its exact open identity.
+        const address = addressSchema.safeParse((entry as { address?: unknown }).address);
+        return [{ ...ref.data, address: address.success ? address.data : null }];
+      });
     } catch {
       return refused("Current document bindings are unavailable; retained Work has not changed.");
     }
@@ -438,7 +443,11 @@ export function createPeRoutes(options: PeRoutesOptions) {
     }
     if (method === "GET" && declared.id === "family.spec") return familySpecAsset(url);
     const parts = url.pathname.split("/").slice(2).map(decodeURIComponent); // drop "", "pe"
-    const body = () => request.json().catch((error) => { console.error("pe-routes: asynchronous operation failed", error); return null; });
+    const body = () =>
+      request.json().catch((error) => {
+        console.error("pe-routes: asynchronous operation failed", error);
+        return null;
+      });
 
     if (method === "GET" && declared.id === "contributions.read") {
       const key = url.searchParams.get("key") ?? "";

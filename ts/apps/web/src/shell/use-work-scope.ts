@@ -49,6 +49,8 @@ export type WorkScopeStatus = Pick<
   ReturnType<typeof useRouteTarget>,
   "resolution" | "bindingLost" | "targetProvenance"
 > & {
+  /** No inventory is acquired by fixture mounts. */
+  busy?: boolean;
   /** Readable Work whose document is not live: shown, never armed (no writer, no verb). */
   closed: boolean;
   /** The host holds Work it cannot read: the kernel's start-fresh verb is the one recovery. */
@@ -293,13 +295,14 @@ export function useWorkScope<P, W>(
   const status = useMemo(
     (): WorkScopeStatus => ({
       resolution,
+      busy: target.busy,
       bindingLost: target.bindingLost,
       targetProvenance: target.targetProvenance,
       closed,
       unreadable,
       failure,
     }),
-    [statusText, closed, unreadable, failure], // eslint-disable-line react-hooks/exhaustive-deps
+    [statusText, target.busy, closed, unreadable, failure], // eslint-disable-line react-hooks/exhaustive-deps
   );
   return useMemo(() => fixture ?? { ...ports, status }, [ports, status, fixture]);
 }

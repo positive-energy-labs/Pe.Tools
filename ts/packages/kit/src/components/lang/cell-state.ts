@@ -232,7 +232,11 @@ export function readMeasuredText(
     return { kind: "refuse", reason: "blank commits nothing — a cleared cell is not zero" };
   // Revit failed to read this spec's unit: nothing may be assumed, so the cell says why.
   if (displayUnit?.refusal) return { kind: "refuse", reason: displayUnit.refusal };
-  if (!BARE_NUMBER.test(typed)) return { kind: "parse", text: typed };
+  if (
+    !BARE_NUMBER.test(typed) ||
+    /feetFractionalInches|fractionalInches/.test(displayUnit?.typeId ?? "")
+  )
+    return { kind: "parse", text: typed };
   const unit = displayUnit ? unitWord(displayUnit) : null;
   return unit
     ? { kind: "set", edit: { value: typed, unit } }
