@@ -16,7 +16,7 @@ import {
   type PageOf,
   type PagePatch,
   type SchemaTable,
-  type ScopeToken,
+  ScopeToken,
   type WorkDelivery,
   type WorkOf,
   type WorkReduction,
@@ -273,6 +273,14 @@ export function createRouteScopeGate<G extends RouteGraphJson, S extends SchemaT
     return { kind: "published", revision, receipt: receipt === "none" ? "none" : "recorded" };
   }
   return {
+    current(token) {
+      if (token instanceof ScopeToken)
+        return !closed && issuer.owns(token) && state?.scope === token;
+      if (token instanceof AcceptanceToken) return active(token);
+      if (token instanceof InvocationToken || token instanceof LeaseToken)
+        return basisCurrent(token);
+      return false;
+    },
     enter(identity, page): ScopeToken {
       if (closed) throw new Error("Acceptance owner is closed");
       attempts.clear();

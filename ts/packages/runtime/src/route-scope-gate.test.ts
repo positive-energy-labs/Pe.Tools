@@ -46,6 +46,71 @@ const snapshot = (revision = 0, amount = revision) => ({
   value: { amount, note: "" },
   hash: canonicalRouteInput({ amount, note: "" }),
 });
+
+test("current is read-only and follows accepted Page and Work continuations", () => {
+  let preparations = 0;
+  const f = fixture((current, patch) => {
+    preparations++;
+    return { ok: true, value: { page: { ...current, ...patch }, changed: true, membership: "verified" } };
+  });
+  const token = f.invocation();
+  const state = f.owner.read()!;
+  let publications = 0;
+  f.owner.subscribe(() => publications++);
+  for (const candidate of [state.scope, f.read, token]) expect(f.owner.current(candidate)).toBe(true);
+  expect(f.owner.read()).toBe(state);
+  expect(preparations).toBe(0);
+  expect(publications).toBe(0);
+  expect(f.owner.acceptPage(token, { search: "review" }).kind).toBe("accepted");
+  expect(f.owner.current(token)).toBe(true);
+  expect(f.owner.acceptWork(token, { kind: "ack", write: ack() }).kind).toBe("published");
+  expect(f.owner.current(token)).toBe(true);
+  expect(token.pageRevision).toBe(0);
+  expect(token.workRevision).toBe(0);
+  f.dependencies.total = "changed";
+  expect(f.owner.current(token)).toBe(false);
+});
+
+test("current rejects copied, foreign, retired, replaced and closed authority", () => {
+  const f = fixture();
+  const scope = f.owner.read()!.scope;
+  const token = f.invocation();
+  for (const candidate of [scope, f.read, token]) {
+    expect(f.owner.current(Object.assign({}, candidate))).toBe(false);
+    expect(f.owner.current(new Proxy(candidate, {}))).toBe(false);
+    expect(fixture().owner.current(candidate)).toBe(false);
+  }
+  f.owner.retire(token.token);
+  expect(f.owner.current(token)).toBe(false);
+  expect(f.owner.current(token.token)).toBe(false);
+  const replaced = f.invocation();
+  f.owner.capture("write");
+  expect(f.owner.current(replaced)).toBe(false);
+  f.enter(other);
+  f.enter();
+  expect(f.owner.current(scope)).toBe(false);
+  expect(f.owner.current(f.read)).toBe(false);
+  const fresh = f.invocation();
+  const freshScope = f.owner.read()!.scope;
+  f.owner.close();
+  expect(f.owner.current(fresh)).toBe(false);
+  expect(f.owner.current(freshScope)).toBe(false);
+});
+
+test("current checks lease continuations and independently moved Page", () => {
+  const f = fixture();
+  const state = f.owner.read()!;
+  const issued = f.issuer.lease({
+    token: f.read, pageEpoch: state.pageEpoch, pageRevision: state.pageRevision,
+    workRevision: state.work!.revision, dependencies: {},
+  });
+  if (!issued.ok) throw new Error(issued.reason);
+  expect(f.owner.current(issued.value)).toBe(true);
+  expect(f.owner.acceptPage(issued.value, { search: "lease move" }).kind).toBe("accepted");
+  expect(f.owner.current(issued.value)).toBe(true);
+  f.owner.movePage({ search: "human move" }, { kind: "human", source: "query", history: "replace" });
+  expect(f.owner.current(issued.value)).toBe(false);
+});
 type Options = ScopeGateOptions<typeof builtinData, typeof schemas>;
 function fixture(prepare?: Options["preparePage"]) {
   const journals = new Map<string, ReturnType<typeof createWorkJournal>>();

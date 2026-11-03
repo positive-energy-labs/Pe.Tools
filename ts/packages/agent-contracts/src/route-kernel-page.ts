@@ -363,6 +363,9 @@ export interface AcceptanceOwner<G extends RouteGraphJson, S extends SchemaTable
   enter(identity: ScopeIdentity, page: PageOf<G, S>): ScopeToken;
   capture(channel: string): AcceptanceToken;
   retire(token: AcceptanceToken): void;
+  /** Read-only freshness authority, including accepted invocation/lease continuations.
+   * Rejects foreign, copied, retired, replaced and closed tokens without preparing Page. */
+  current(token: ScopeToken | AcceptanceToken | InvocationToken | LeaseToken): boolean;
   /** Captures current revisions and declared dependencies; refuses stale/foreign attempts. */
   invocation(
     token: AcceptanceToken,
