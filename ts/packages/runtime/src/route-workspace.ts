@@ -822,8 +822,12 @@ export class RouteWorkspace {
   }
 
   /** Install the live listener and acquire snapshot/history on the same write tail. */
-  observeFeed(scope: WorkKey, snapshot: (value: unknown) => void,
-    listener: (ack: WorkWriteAck) => void, failed: (error: unknown) => void): () => void {
+  observeFeed(
+    scope: WorkKey,
+    snapshot: (value: unknown) => void,
+    listener: (ack: WorkWriteAck) => void,
+    failed: (error: unknown) => void,
+  ): () => void {
     const key = workKey(scope);
     let disposed = false;
     void this.#serialized(async () => {
@@ -835,10 +839,17 @@ export class RouteWorkspace {
       const envelope = await this.#load(scope, spec, true);
       if (disposed || !envelope) return;
       const records = this.#retain(this.#inverses.get(key) ?? [], envelope.revision);
-      snapshot({ doc: structuredClone(envelope.doc), revision: envelope.revision,
-        history: { from: records[0]?.write.revision ?? envelope.revision + 1,
-          acks: structuredClone(records.map(({write}) => write)) } });
-    }).catch((error) => { if (!disposed) failed(error); });
+      snapshot({
+        doc: structuredClone(envelope.doc),
+        revision: envelope.revision,
+        history: {
+          from: records[0]?.write.revision ?? envelope.revision + 1,
+          acks: structuredClone(records.map(({ write }) => write)),
+        },
+      });
+    }).catch((error) => {
+      if (!disposed) failed(error);
+    });
     return () => {
       disposed = true;
       const listeners = this.#acceptedListeners.get(key);

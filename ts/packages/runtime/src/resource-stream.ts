@@ -74,9 +74,16 @@ export function observeResources(
                 )
               : work.observeFeed(
                   scope,
-                  (value) => { if (!closed) accept({ value }); },
+                  (value) => {
+                    if (!closed) accept({ value });
+                  },
                   (ack) => publish({ kind: "event", key, value: ack }),
-                  (error) => publish({ kind: "failure", key, error: String(error) }),
+                  (error) =>
+                    publish({
+                      kind: "failure",
+                      key,
+                      error: error instanceof Error ? error.message : String(error),
+                    }),
                 );
         },
         (error) => {
