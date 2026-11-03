@@ -26,7 +26,7 @@ export function globalItems(
           kind: "Tools" as const,
           label: route.name,
           context: route.packageId,
-          aliases: `${route.description} ${route.sourcePath}`,
+          aliases: `${route.description} ${route.artifact}`,
           state: route.trusted ? "Trusted Pod route" : "Trust required",
           url: podRoutePath(route.key),
           reason: null,

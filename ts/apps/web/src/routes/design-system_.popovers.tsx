@@ -37,12 +37,12 @@ const documentFixture = {
 const podFixture = {
   key: "route:@mechanical/routes/air-balance",
   packageId: "mechanical",
-  sourcePath: "routes/air-balance/index.js",
+  artifact: "routes/air-balance/route.artifact",
   name: "Air balance",
   description: "Compare supply and return observations by room.",
   page: "pages/air-balance",
   workRoute: "air-balance",
-  sha256: "a".repeat(64),
+  fingerprint: `pod-bytes:${"a".repeat(64)}`,
   trusted: false,
 } satisfies PodRouteDescriptor;
 type PagePeek = { title: string; url: string | null; slug: string };

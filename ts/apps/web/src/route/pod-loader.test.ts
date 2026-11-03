@@ -1,19 +1,15 @@
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
-import { createPodRouteLoader, verifyBundle } from "./pod-loader";
+import { createPodRouteLoader } from "./pod-loader";
 import { podRouteDescriptorSchema } from "@pe/agent-contracts";
-import { makePodRoute, type PodRouteBundle } from "./pod-view";
-import { createFixtureMount } from "#/shell/fixture";
 
 const row = podRouteDescriptorSchema.parse({
-  key: "route:@test/routes/tool/index.js",
+  key: "route:@test/routes/tool/route.artifact",
   workRoute: "pod.test.tool",
   packageId: "test",
   name: "Tool",
   description: "Test",
-  sourcePath: "routes/tool/index.js",
-  sha256: "a".repeat(64),
+  artifact: "routes/tool/route.artifact",
+  fingerprint: `pod-bytes:${"a".repeat(64)}`,
   trusted: true,
 });
 
@@ -21,15 +17,17 @@ describe("Pod route byte custody", () => {
   it("never imports untrusted bytes and disposes a changed or disabled route", async () => {
     const events: string[] = [];
     const loader = createPodRouteLoader(async (entry) => {
-      events.push(`load:${entry.sha256.slice(0, 1)}`);
+      events.push(`load:${entry.fingerprint.slice(-1)}`);
       return () => {
-        events.push(`dispose:${entry.sha256.slice(0, 1)}`);
+        events.push(`dispose:${entry.fingerprint.slice(-1)}`);
       };
     });
     await loader.sync([{ ...row, trusted: false }]);
     expect(events).toEqual([]);
     await loader.sync([row]);
-    await loader.sync([podRouteDescriptorSchema.parse({ ...row, sha256: "b".repeat(64) })]);
+    await loader.sync([
+      podRouteDescriptorSchema.parse({ ...row, fingerprint: `pod-bytes:${"b".repeat(64)}` }),
+    ]);
     await loader.sync([]);
     expect(events).toEqual(["load:a", "dispose:a", "load:b", "dispose:b"]);
   });
@@ -50,38 +48,4 @@ describe("Pod route byte custody", () => {
     await pending;
     expect(disposed).toBe(true);
   });
-  it("checks the received bytes against the trusted hash before import", async () => {
-    const bytes = new TextEncoder().encode("export const version = 1;");
-    const digest = await crypto.subtle.digest("SHA-256", bytes);
-    const sha256 = Array.from(new Uint8Array(digest), (byte) =>
-      byte.toString(16).padStart(2, "0"),
-    ).join("");
-    const trusted = podRouteDescriptorSchema.parse({ ...row, sha256 });
-    await expect(verifyBundle(bytes, trusted.sha256)).resolves.toBeUndefined();
-    await expect(
-      verifyBundle(new TextEncoder().encode("export const version = 2;"), trusted.sha256),
-    ).rejects.toThrow("changed");
-  });
-});
-
-it("the shipped Snowdon bundle exposes its calculator through the common fixture lane", async () => {
-  const source = await readFile(resolve(process.cwd(), "../../../examples/pods/snowdon-circuits/routes/voltage-drop/index.js"), "utf8");
-  const bundle = (await import(/* @vite-ignore */ `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`)) as PodRouteBundle;
-  const { graph, adapters } = makePodRoute({ ...row, packageId: "snowdon-circuits", workRoute: "pod.snowdon-circuits.voltage-drop" }, bundle);
-  const owner = await createFixtureMount(graph, "calculator", adapters);
-  try {
-    const disconnect = owner.connect();
-    const release = owner.readings.mount(["pod.snowdon-circuits.calculation"]);
-    await owner.control("input", {key:"length",value:300}).run();
-    expect((owner.readings.get("pod.snowdon-circuits.calculation").value as any).inputs.length).toBe(300);
-    release();
-    disconnect();
-    expect(owner.snapshot().failure).toBeFalsy();
-    expect(Object.keys(graph.stages)).toEqual(["calculate"]);
-    expect(owner.snapshot().work?.doc).toMatchObject({
-      inputs: { size: "10" },
-    });
-  } finally {
-    owner.dispose();
-  }
 });

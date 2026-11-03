@@ -68,14 +68,16 @@ function Inventory({ owner, page }: MountBody<AdminPage, unknown>) {
             refusal={
               owner.control("trust", {
                 key: route.key,
-                sha256: route.sha256,
+                fingerprint: route.fingerprint,
                 trusted: !route.trusted,
               }).refusal
             }
             onCheckedChange={(trusted) =>
-              void owner.control("trust", { key: route.key, sha256: route.sha256, trusted }).run()
+              void owner
+                .control("trust", { key: route.key, fingerprint: route.fingerprint, trusted })
+                .run()
             }
-            says={`Executable module ${route.sha256}`}
+            says={`Executable module ${route.fingerprint}`}
           />
         ))}
     </>

@@ -1,11 +1,11 @@
 import { currentFixture } from "#/shell/fixture-lane";
 import { createContext, use, useEffect, useMemo, useState, type ReactNode } from "react";
-import { message, validatePodSource, type PodRouteDescriptor } from "@pe/agent-contracts";
+import { message, type PodRouteDescriptor } from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";
 import { readPeError } from "@pe/host-contracts/pe-api";
-import { registerLegacyModule } from "#/shell/legacy-route-door";
-import { createPodRouteLoader, verifyBundle } from "./pod-loader";
-import { makePodRoute, type PodRouteBundle } from "./pod-view";
+import { podRoutes } from "./pod-registry";
+import { admitPodArtifact } from "./pod-artifact";
+import { createPodRouteLoader } from "./pod-loader";
 
 type Inventory = {
   rows: PodRouteDescriptor[];
@@ -28,34 +28,23 @@ export function PodRoutesProvider({ children }: { children: ReactNode }) {
       try {
         const fixture =
           currentFixture() !== null ? (await import("./pod-fixtures")).podFixtures() : null;
-        let bytes: Uint8Array;
+        let artifact: unknown;
         if (fixture) {
           const entry = (await fixture).find((entry) => entry.row.key === row.key);
           if (!entry) throw Error("Unknown Pod fixture");
-          bytes = entry.bytes;
+          artifact = entry.envelope;
         } else {
           const response = await peClient.response("plugins.routeBundle", {
-            params: { key: row.key, hash: row.sha256 },
+            params: { key: row.key, hash: row.fingerprint },
           });
           if (!response.ok) throw Error((await readPeError(response)).message);
-          bytes = new Uint8Array(await response.arrayBuffer());
+          artifact = await response.json();
         }
-        await verifyBundle(bytes, row.sha256);
-        validatePodSource(new TextDecoder().decode(bytes));
+        const route = await admitPodArtifact(row, artifact);
         if (!current()) return () => {};
-        const url = URL.createObjectURL(
-          new Blob([bytes as Uint8Array<ArrayBuffer>], { type: "text/javascript" }),
-        );
-        try {
-          const bundle = (await import(/* @vite-ignore */ url)) as PodRouteBundle;
-          if (!current()) return () => {};
-          const route = makePodRoute(row, bundle);
-          return registerLegacyModule({ ...route.registration, bodies: route.hosted });
-        } finally {
-          URL.revokeObjectURL(url);
-        }
+        return podRoutes.register(row.key, route);
       } catch (error) {
-        setErrors((prior) => ({ ...prior, [row.key]: message(error) }));
+        if (current()) setErrors((prior) => ({ ...prior, [row.key]: message(error) }));
         throw error;
       }
     });
@@ -103,7 +92,7 @@ export function PodRoutesProvider({ children }: { children: ReactNode }) {
   const trust = async (row: PodRouteDescriptor, trusted: boolean) => {
     const next = await peClient.call("plugins.routeTrust", {
       params: { key: row.key },
-      body: { sha256: row.sha256, trusted },
+      body: { fingerprint: row.fingerprint, trusted },
     });
     await publish(next);
   };
