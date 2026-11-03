@@ -1,3 +1,5 @@
+import { createElement, Fragment, type ReactNode } from "react";
+import { CapturesList } from "./list";
 import type { RouteModule } from "../../../../packages/agent-contracts/src/route-kernel-admission";
 import { z } from "zod";
 import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data";
@@ -93,6 +95,7 @@ const local = z.custom<IdentityId<"local">>(
 );
 export const schemas = {
   subject: local.nullable(),
+  // orderedListField has no all mode; retain the existing open-all URL behavior.
   open: z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("ids"), ids: z.array(z.string()) }),
     z.object({ kind: z.literal("all") }),
@@ -160,9 +163,32 @@ export const bodies = {
     slot: "panes.captures.body",
     kind: "pane",
     source,
-    run: (ctx) => ({ reading: ctx.readings.captures, page: ctx.page.read() }),
+    run: (ctx) => {
+      const page = ctx.page.read();
+      const reading = ctx.readings.captures;
+      const captures = reading.value ?? [];
+      return createElement(
+        Fragment,
+        null,
+        !reading.current && createElement("p", null, reading.reason),
+        createElement(CapturesList, {
+          captures,
+          focus:
+            (page.selected[0]?.id ?? page.sha)
+              ? identityCodecs.local.parts((page.selected[0]?.id ?? page.sha)!).subject
+              : undefined,
+          open: page.open.kind === "all" ? captures.map((c) => c.sha) : page.open.ids,
+          onPage: (next) => {
+            // Selection owns the picked row; subject changes remain kernel-controlled.
+            if (next.sha !== undefined)
+              ctx.page.select([{ kind: "capture", id: captureId(next.sha) }]);
+            if (next.open) ctx.page.pose({ open: { kind: "ids", ids: next.open } }, "named");
+          },
+        }),
+      );
+    },
   },
-} satisfies BodyBindings<typeof capturesData, typeof schemas, typeof entries>;
+} satisfies BodyBindings<typeof capturesData, typeof schemas, typeof entries, ReactNode>;
 export const module = {
   data: capturesData,
   schemas,
@@ -171,14 +197,11 @@ export const module = {
   identities: { local: identityCodecs.local },
   codecs: {
     subject: {
-      encode: (value: z.output<typeof schemas.subject>) => JSON.stringify(value),
+      encode: (value: z.output<typeof schemas.subject>) => value ?? "",
       decode: (text: string) => {
-        try {
-          const value = schemas.subject.parse(JSON.parse(text));
-          return { ok: true as const, value };
-        } catch {
-          return { ok: false as const, reason: "Invalid capture subject" };
-        }
+        if (text === "") return { ok: true as const, value: null };
+        const decoded = identityCodecs.local.decode(text);
+        return { ok: true as const, value: decoded.ok ? decoded.value : captureId(text) };
       },
     },
     json: {
@@ -187,9 +210,18 @@ export const module = {
         try {
           return { ok: true as const, value: schemas.open.parse(JSON.parse(text)) };
         } catch {
-          return { ok: false as const, reason: "Invalid open captures" };
+          return {
+            ok: true as const,
+            value:
+              text === "all"
+                ? { kind: "all" as const }
+                : { kind: "ids" as const, ids: text ? text.split(",") : [] },
+          };
         }
       },
     },
   },
-} satisfies Omit<RouteModule<typeof capturesData, typeof schemas, typeof entries>, "artifact">;
+} satisfies Omit<
+  RouteModule<typeof capturesData, typeof schemas, typeof entries, ReactNode>,
+  "artifact"
+>;

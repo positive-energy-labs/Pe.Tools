@@ -158,5 +158,3 @@ export async function loadRouteArtifact(
   });
   return admission.admitUnknown({ ...module, artifact });
 }
-
-export { loadBuiltinRoute, builtinRouteStamp } from "./builtin-inventory";

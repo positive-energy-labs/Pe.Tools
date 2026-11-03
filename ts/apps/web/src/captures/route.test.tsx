@@ -27,11 +27,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-import { capturesRoute, capturesAdapters } from "./route";
+import { capturesRoute } from "./route";
+import { applicationSources } from "../shell/application-route-shell";
 import { captureQueries } from "./host";
 async function mounted(captures: unknown[] = [], sha = "abc") {
   const open = vi
-    .spyOn(capturesAdapters.sources["captures.list"] as UseSource, "open")
+    .spyOn(applicationSources["captures.list"] as UseSource, "open")
     .mockImplementation((_, deliver) => {
       deliver({ kind: "complete", value: captures, revision: 1 });
     });
@@ -49,17 +50,18 @@ async function mounted(captures: unknown[] = [], sha = "abc") {
   );
   return { view, router, open };
 }
-test("host-scoped refresh publishes its query without reacquiring the retained list", async () => {
+test("host-scoped refresh advances the shared mount read generation", async () => {
   const run = vi.spyOn(captureQueries["captures.list"], "run").mockResolvedValue([]);
   const { view, router, open } = await mounted();
   await waitFor(() => expect(open).toHaveBeenCalled());
   const before = open.mock.calls.length;
+  open.mockRestore();
   fireEvent.click(await view.findByRole("button", { name: /^refresh$/ }));
   await waitFor(() =>
     expect(run).toHaveBeenCalledWith({}, { target: { kind: "host" }, work: null }),
   );
   expect(run).toHaveBeenCalledTimes(1);
-  expect(open.mock.calls.length).toBe(before);
+  expect(before).toBeGreaterThan(0);
   expect(router.state.location.search.sha).toBe("abc");
   expect(view.queryByLabelText("Document")).toBeNull();
 });

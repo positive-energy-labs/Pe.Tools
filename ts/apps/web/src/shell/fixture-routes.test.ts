@@ -1,7 +1,10 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { routeDirectory } from "../../../../packages/agent-contracts/src/generated/route-directory";
 import { admitCaptures } from "../captures/admission";
-import { createCapturesMount } from "../captures/mount";
+import { createRouteShell } from "./admitted-mount";
+import { sourceRouteServices } from "./source-route-services";
+import { renderToStaticMarkup } from "react-dom/server";
+import type { ReactNode } from "react";
 import { createFixtureMount } from "./fixture";
 import { legacyGraphs as routes } from "../legacy-test-inventory.test-support";
 import { builtinAdmission, legacyBuiltinKeys } from "./legacy-route-door";
@@ -20,16 +23,18 @@ test.each(routeDirectory.map((entry) => [entry.directory.path, entry.key] as con
       const open = vi.fn(() => {
         throw Error("Real host called");
       });
-      const mounted = createCapturesMount(
-        route,
-        route.fingerprint,
-        { kind: "use", open },
-        { fixture: "browse" },
-        () => {},
-      );
+      const mounted = createRouteShell(
+        sourceRouteServices({ "captures.list": { kind: "use", open } }),
+      ).mount(route, {
+        read: () => new URLSearchParams({ fixture: "browse" }),
+        write: () => {},
+        subscribe: () => () => {},
+      });
       try {
-        expect(mounted.read().reading.current).toBe(true);
-        await mounted.refresh();
+        expect(renderToStaticMarkup(mounted.read("captures") as ReactNode)).toContain(
+          "Ground plan",
+        );
+        mounted.refresh();
         expect(open).not.toHaveBeenCalled();
       } finally {
         mounted.close();

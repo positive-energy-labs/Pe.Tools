@@ -1,4 +1,4 @@
-import { loadBuiltinRoute, builtinRouteStamp } from "../route/route-artifact";
+import { loadBuiltinRoute, builtinRouteStamp } from "../route/builtin-inventory";
 
 // The loader inventory owns source imports and evidence; no executable byte JSON.
 export const capturesArtifact = Object.freeze({ fingerprint: builtinRouteStamp("captures") });

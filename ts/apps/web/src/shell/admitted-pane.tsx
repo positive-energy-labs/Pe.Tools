@@ -1,7 +1,11 @@
+import { useRouter } from "@tanstack/react-router";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
+import { Button } from "@pe/kit/lang/button";
 import {
   Fragment,
   createElement,
   useEffect,
+  useMemo,
   useState,
   useSyncExternalStore,
   type ReactNode,
@@ -31,7 +35,13 @@ export function admittedRouterAddress(history: {
 
 function Pane({ mount, pane }: { mount: AdmittedMount; pane: string }) {
   useSyncExternalStore(mount.subscribe, mount.revision, mount.revision);
-  return createElement(Fragment, null, mount.read(pane) as ReactNode);
+  return createElement(
+    Fragment,
+    null,
+    mount.refreshable &&
+      createElement(Button, { label: "refresh", onClick: () => mount.refresh() }, "refresh"),
+    mount.read(pane) as ReactNode,
+  );
 }
 
 /** Composition runs after commit, including StrictMode cleanup/remount. No owner publishes in render. */
@@ -55,4 +65,53 @@ export function AdmittedPane({
     return mount.close;
   }, [shell, route, address]);
   return mounted?.route === route ? createElement(Pane, { mount: mounted.mount, pane }) : null;
+}
+
+/** Router search stays codec text; field names and types come from the admitted declaration. */
+export function admittedRouteSearch<
+  G extends import("../../../../packages/agent-contracts/src/route-kernel-data").RouteGraphJson,
+>(_data: G) {
+  return (search: Record<string, unknown>) =>
+    Object.fromEntries(
+      Object.entries(search).map(([key, value]) => [
+        key,
+        typeof value === "string" ? value : JSON.stringify(value),
+      ]),
+    ) as { [K in keyof G["fields"]]?: string } & { fixture?: string };
+}
+
+/** Shared async admission/router boundary. Domain routes supply only a loader and pane id. */
+export function AdmittedRouteView({
+  shell,
+  load,
+  pane,
+}: {
+  shell: ReturnType<typeof createRouteShell>;
+  load: () => Promise<AdmittedRoute>;
+  pane: string;
+}) {
+  const router = useRouter();
+  const address = useMemo(() => admittedRouterAddress(router.history), [router]);
+  const [route, setRoute] = useState<AdmittedRoute | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let retired = false;
+    setRoute(null);
+    setError(null);
+    void load()
+      .then((route) => {
+        if (!retired) setRoute(route);
+      })
+      .catch((cause: unknown) => {
+        if (!retired) setError(String(cause));
+      });
+    return () => {
+      retired = true;
+    };
+  }, [load]);
+  if (error)
+    return createElement(OutcomeLine, { kind: "error", label: "route refused", says: error });
+  return route
+    ? createElement(AdmittedPane, { shell, route, address, pane })
+    : createElement("p", null, "Reading route...");
 }

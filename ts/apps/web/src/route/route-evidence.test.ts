@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { loadBuiltinRoute, builtinRouteStamp } from "./route-artifact";
+import { loadBuiltinRoute, builtinRouteStamp } from "./builtin-inventory";
 import { module } from "../captures/kernel";
 import generated from "../captures/source-closure.generated.json";
 import {

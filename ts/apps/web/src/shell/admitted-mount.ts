@@ -299,6 +299,9 @@ export function createRouteShell(services: KernelServices) {
           };
         },
         revision: () => revision,
+        refreshable: Object.values(route.data.readings).some(
+          (reading) => reading.refresh === "explicit",
+        ),
         restore: () => transport!.restore(),
         refresh(id?: string) {
           resolve();
