@@ -9,6 +9,8 @@ import {
 } from "../../../packages/agent-contracts/src/route-module.ts";
 import type { HostRouteModule } from "../../../packages/agent-contracts/src/host-route-admission.ts";
 import { createRouteRegistrations } from "../../../packages/mcps/src/pea/routes.ts";
+import type { HostWorkRegistration } from "../../../packages/agent-contracts/src/host-route-admission.ts";
+import { composeHostRouteRegistration } from "../src/host-route-registration.ts";
 import { builtinEnrollments } from "../src/builtin-enrollment.ts";
 
 const schema = z.object({ value: z.number().default(0), reviewed: z.boolean().default(false) });
@@ -27,8 +29,13 @@ const fixture = {
   }),
   salvage: (raw: unknown) => raw,
 } satisfies Required<RouteStateSpec<typeof schema>>;
-const legacy = createRouteRegistrations({ admittedKeys: [] });
-async function parity(module: HostRouteModule, spec: RouteStateSpec<z.ZodType>) {
+const loadedFamilies = vi.fn(async () => [
+  { familyName: "Loaded family", types: [{ typeName: "Loaded type" }] },
+]);
+const legacy = createRouteRegistrations({ admittedKeys: [], loadedFamilies });
+async function parity(source: HostRouteModule, registration: HostWorkRegistration) {
+  const { spec } = registration;
+  const module = composeHostRouteRegistration(source, [registration]);
   const envelope = {
     source: "builtin-closure" as const,
     version: 1 as const,
@@ -50,21 +57,35 @@ async function parity(module: HostRouteModule, spec: RouteStateSpec<z.ZodType>) 
   }).prepare(module.data.key, fingerprint);
   const admitted = port.admitHost(module);
   if (!admitted.ok) throw Error(JSON.stringify(admitted.diagnostics));
-  const store = {
-    getState: async () => undefined,
-    setState: async () => {},
-    listState: async () => ({ records: [], unreadable: 0, unindexed: 0, truncated: false }),
-  };
-  const ws = new RouteWorkspace({ registrations: [], store });
+  function store() {
+    let saved: unknown = {
+      version: 1,
+      schemaVersion: spec.schemaVersion ?? 1,
+      revision: 0,
+      doc: spec.schema.parse({}),
+      history: [],
+    };
+    return {
+      getState: async () => structuredClone(saved),
+      setState: async ({ value }: { value: unknown }) => {
+        saved = structuredClone(value);
+      },
+      listState: async () => ({ records: [], unreadable: 0, unindexed: 0, truncated: false }),
+    };
+  }
+  const ws = new RouteWorkspace({ registrations: [], store: store() });
   const register = vi.spyOn(ws, "register");
   const receipt = ws.registerAdmitted(admitted.route);
   try {
     expect(await receipt.ready).toBeNull();
-    const installed = register.mock.calls[0]![0].spec;
+    const installedRegistration = register.mock.calls[0]![0];
+    expect(Object.keys(installedRegistration).sort()).toEqual(Object.keys(registration).sort());
+    expect(installedRegistration.admit).toBe(registration.admit);
+    const installed = installedRegistration.spec;
     expect(Object.keys(installed).sort()).toEqual(Object.keys(spec).sort());
     for (const key of Object.keys(spec) as (keyof typeof spec)[])
       if (key !== "schema") expect(installed[key]).toEqual(spec[key]);
-    const direct = new RouteWorkspace({ registrations: [{ spec }], store });
+    const direct = new RouteWorkspace({ registrations: [registration], store: store() });
     const scope = bindWork(spec.route, null);
     expect(await ws.view(scope, spec.route)).toEqual(await direct.view(scope, spec.route));
     for (const raw of [{}, null, { invalid: true }])
@@ -74,6 +95,29 @@ async function parity(module: HostRouteModule, spec: RouteStateSpec<z.ZodType>) 
       expect(
         applyPatches(installed, { version: 1, revision: 0, doc }, "human", patches, 0),
       ).toEqual(applyPatches(spec, { version: 1, revision: 0, doc }, "human", patches, 0));
+    // Both writers exercise the actual workspace boundary, including async admission.
+    for (const by of ["human", "pea"] as const) {
+      for (const patches of [
+        [],
+        [{ path: ["value"], value: 4 }],
+        [{ path: ["value"], value: -1 }],
+      ]) {
+        const before = await ws.read(scope, spec.route);
+        const write = {
+          kind: "apply" as const,
+          expectedRevision: before!.revision,
+          press: "parity",
+          patches,
+        };
+        const actual = await ws.write(scope, spec.route, by, write);
+        const expected = await direct.write(scope, spec.route, by, write);
+        expect(actual.ok).toBe(expected.ok);
+        if (!actual.ok && !expected.ok) expect(actual).toEqual(expected);
+        expect((await ws.read(scope, spec.route))?.revision).toBe(
+          (await direct.read(scope, spec.route))?.revision,
+        );
+      }
+    }
     if (spec.salvage) expect(installed.salvage!({ old: 1 })).toEqual(spec.salvage({ old: 1 }));
     for (const [age, run] of Object.entries(spec.migrations ?? {}))
       expect(installed.migrations![Number(age)]!({ old: 1 })).toEqual(run({ old: 1 }));
@@ -82,8 +126,18 @@ async function parity(module: HostRouteModule, spec: RouteStateSpec<z.ZodType>) 
   }
 }
 // Every legacy builtin becomes a host fixture; future fields are checked without a field allowlist.
-for (const spec of [...legacy.map((r) => r.spec), fixture])
-  test(`complete Work parity: ${spec.route}`, async () => {
+for (const registration of [
+  ...legacy,
+  {
+    spec: fixture,
+    admit: async (doc: unknown) =>
+      (doc as { value: number }).value < 0
+        ? { ok: false as const, code: "blocked", agentHint: "Negative value refused" }
+        : null,
+  } satisfies HostWorkRegistration,
+])
+  test(`complete registration parity: ${registration.spec.route}`, async () => {
+    const { spec } = registration;
     const migrations = Object.fromEntries(
       Object.keys(spec.migrations ?? {}).map((age) => [age, `migrate-${age}`]),
     );
@@ -123,13 +177,13 @@ for (const spec of [...legacy.map((r) => r.spec), fixture])
             : []),
         ]),
       },
-      spec,
+      registration,
     );
   });
-test("actual builtin enrollment overlap preserves the legacy spec", async () => {
+test("actual builtin enrollment overlap preserves the full legacy registration", async () => {
   for (const entry of builtinEnrollments) {
     const module = await entry.load();
-    const spec = legacy.find((r) => r.spec.route === module.data.key)?.spec;
-    if (spec && module.data.work?.schema) await parity(module, spec);
+    const registration = legacy.find((r) => r.spec.route === module.data.key);
+    if (registration && module.data.work?.schema) await parity(module, registration);
   }
 });
