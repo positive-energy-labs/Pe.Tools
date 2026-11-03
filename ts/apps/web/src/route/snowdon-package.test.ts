@@ -5,7 +5,10 @@ import { verifyBundle } from "./pod-loader";
 
 test("Snowdon's shipped route refuses changed or truncated package bytes", async () => {
   const bytes = await readFile(
-    new URL("../../../../../examples/pods/snowdon-circuits/routes/voltage-drop/index.js", import.meta.url),
+    new URL(
+      "../../../../../examples/pods/snowdon-circuits/routes/voltage-drop/index.js",
+      import.meta.url,
+    ),
   );
   const trustedHash = createHash("sha256").update(bytes).digest("hex");
   await expect(verifyBundle(bytes, trustedHash)).resolves.toBeUndefined();
