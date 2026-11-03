@@ -350,3 +350,30 @@ effectTest("retire an empty line, reconnect the same process, and the next op di
     expect(Exit.isSuccess(yield* Fiber.await(op))).toBe(true);
   }),
 );
+
+effectTest("interrupted waiters take their jobs and payloads out of the physical line", () =>
+  Effect.gen(function* () {
+    const { call, sent, answer, bridge, target } = yield* harness;
+    const lineJobs = Effect.map(bridge.snapshot(target.session), (view) => view.lineJobs);
+    const a = yield* call("test.a");
+    const runningA = yield* sent; // A holds the slot; 7 more fill the line to its 8 places
+    const payload = () => ({ bytes: "x".repeat(1024) });
+    const waiters = [];
+    for (let i = 0; i < 7; i++) waiters.push(yield* call(`test.w${i}`, payload()));
+    yield* turns();
+    for (const waiter of waiters.slice(0, 6)) yield* Fiber.interrupt(waiter);
+    yield* turns();
+    expect(yield* lineJobs).toBe(1); // one live waiter: one retained job, one payload
+    // Churn behind a running A: every enqueue-then-leave returns its place AND its storage.
+    for (let i = 0; i < 50; i++) {
+      const churn = yield* call(`test.churn${i}`, payload());
+      yield* turns(1);
+      yield* Fiber.interrupt(churn);
+    }
+    expect(yield* lineJobs).toBe(1);
+    yield* answer(runningA.requestId);
+    yield* Fiber.await(a);
+    const next = yield* sent;
+    expect(next.operationKey).toBe("test.w6");
+  }),
+);

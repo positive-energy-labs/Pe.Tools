@@ -278,6 +278,8 @@ export type BridgeSessionView = {
   readonly sdkSessionId?: string | null;
   readonly buildStamp?: string | null;
   readonly state?: BridgeStateSnapshot;
+  /** Jobs physically retained in the line, waiting (each holds its payload). Diagnostic. */
+  readonly lineJobs?: number;
 };
 
 /**
@@ -490,6 +492,7 @@ export const RevitBridgeLive = Layer.effect(
         sdkSessionId: connection.sdkSessionId,
         buildStamp: connection.buildStamp,
         state: yield* Ref.get(session.state),
+        lineJobs: yield* Queue.size(session.line),
       } satisfies BridgeSessionView;
     });
 
@@ -1185,9 +1188,35 @@ export const RevitBridgeLive = Layer.effect(
         state === "queued" ? ([true, "left"] as const) : ([false, state] as const),
       );
 
-    /** A waiter that leaves before its turn takes itself out of the line, and nothing else. */
+    /**
+     * A waiter that leaves before its turn takes itself out of the line, and nothing else. Its Job
+     * (payload, deferreds) leaves the physical Queue too, so retained bytes follow live waiters:
+     * the bound is MAX_QUEUED_OPS jobs, each holding one payload no larger than the request body
+     * the route admitted. Effect's Queue has no remove, so this rotates the buffer in one
+     * synchronous step (no fiber can offer or take in between, so FIFO holds); n <= MAX_QUEUED_OPS.
+     */
     const leave = Effect.fnUntraced(function* (session: Session, job: Job) {
-      if (yield* claimQueued(job)) yield* retire(session, job);
+      if (!(yield* claimQueued(job))) return;
+      const refused = yield* Effect.sync(() => {
+        const kept: Job[] = [];
+        for (let n = Queue.sizeUnsafe(session.line); n > 0; n--) {
+          const next = Queue.takeUnsafe(session.line);
+          if (next && Exit.isSuccess(next) && next.value !== job) kept.push(next.value);
+        }
+        return Queue.offerAllUnsafe(session.line, kept);
+      });
+      yield* retire(session, job);
+      // A line that closed meanwhile refuses the rotation: settle those as closeLine would.
+      for (const other of refused) {
+        if (!(yield* claimQueued(other))) continue;
+        yield* Deferred.fail(
+          other.result,
+          new BridgeError("The Revit bridge line closed before this request reached it.", 503, {
+            notDispatched: true,
+          }),
+        );
+        yield* retire(session, other);
+      }
     });
 
     /**
