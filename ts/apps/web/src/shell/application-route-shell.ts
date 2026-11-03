@@ -1,16 +1,34 @@
 import { createElement, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { createRouteShell } from "./admitted-mount";
-import { AdmittedPane, type AdmittedPaneProps } from "./admitted-pane";
+import {
+  AdmittedPlaceBoundary,
+  AdmittedPlacePane,
+  type AdmittedPaneProps,
+  type PanePlace,
+} from "./admitted-pane";
 import { sourceRouteServices } from "./source-route-services";
 import { admittedSources } from "./admitted-sources";
 import { useRouteTarget } from "../route/route-target";
 import { appAtomRegistry } from "./owner";
 import { fixtureName } from "./fixture-lane";
 
-/** Reuse the selected-document owner. A new target replaces the shell through AdmittedPane's
- * effect cleanup/remount boundary, so old reads, Work and reviews retire together. */
-function ApplicationRouteShell({ route, address, pane }: Omit<AdmittedPaneProps, "shell">) {
+/** Resolve application inputs only after Place custody; target changes retire the mounted owner. */
+function ApplicationRouteShell(props: Omit<AdmittedPaneProps, "shell">) {
+  return createElement(AdmittedPlaceBoundary, {
+    route: props.route,
+    address: props.address,
+    children: (place) =>
+      createElement(PlaceRouteShell, { route: props.route, pane: props.pane, place }),
+  });
+}
+
+function PlaceRouteShell({
+  route,
+  pane,
+  place,
+}: Pick<AdmittedPaneProps, "route" | "pane"> & { place: PanePlace }) {
+  const address = place.address;
   const search = useSyncExternalStore(
     (notify) => address.subscribe(notify),
     () => address.read().toString(),
@@ -50,7 +68,13 @@ function ApplicationRouteShell({ route, address, pane }: Omit<AdmittedPaneProps,
       label: "Choose a document",
       says: selected.resolution.kind,
     });
-  return createElement(AdmittedPane, { shell, route, address, pane, writable: resolved !== null });
+  return createElement(AdmittedPlacePane, {
+    shell,
+    route,
+    place,
+    pane,
+    writable: resolved !== null,
+  });
 }
 
 export { ApplicationRouteShell as applicationRouteShell };

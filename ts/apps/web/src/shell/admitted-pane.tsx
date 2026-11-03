@@ -12,6 +12,7 @@ import {
   useState,
   useSyncExternalStore,
   type ComponentType,
+  type ReactNode,
 } from "react";
 import type { AdmittedRoute } from "../../../../packages/agent-contracts/src/route-kernel-admission";
 import { type AdmittedMount, createRouteShell } from "./admitted-mount";
@@ -99,32 +100,38 @@ export interface AdmittedPaneProps {
   writable?: boolean;
 }
 
-/** Composition runs after commit, including StrictMode cleanup/remount. No owner publishes in render. */
-export function AdmittedPane({ shell, route, address, writable = true }: AdmittedPaneProps) {
+type PlaceMount = {
+  shell: ReturnType<typeof createRouteShell>;
+  mount: AdmittedMount;
+  dispose(): void;
+};
+export type PanePlace = AdmittedPlace<PlaceMount>;
+
+/** Establish Place custody before any application input is resolved. */
+export function AdmittedPlaceBoundary({
+  route,
+  address,
+  children,
+}: {
+  route: AdmittedRoute;
+  address: AdmittedAddressPort;
+  children: (place: PanePlace) => ReactNode;
+}) {
   const scope = useRouteActivity();
   const visible = useContext(RouteVisibility);
-  const held = useRef<AdmittedPlace<AdmittedMount> | null>(null);
-  const lifetime = useRef({ shell, route, address });
-  const [mounted, setMounted] = useState<{
-    route: AdmittedRoute;
-    shell: ReturnType<typeof createRouteShell>;
-    mount: AdmittedMount;
-  } | null>(null);
+  const held = useRef<PanePlace | null>(null);
+  const lifetime = useRef({ route, address });
+  const [ready, setReady] = useState<PanePlace | null>(null);
   useEffect(() => {
     let place = held.current;
-    if (
-      place &&
-      (lifetime.current.shell !== shell ||
-        lifetime.current.route !== route ||
-        lifetime.current.address !== address)
-    ) {
+    if (place && (lifetime.current.route !== route || lifetime.current.address !== address)) {
       if (scope) scope.retire(place);
       else place.dispose();
       place = null;
       held.current = null;
     }
     if (!place) {
-      lifetime.current = { shell, route, address };
+      lifetime.current = { route, address };
       const captured = scope
         ? new URLSearchParams(
             Object.entries(scope.search).filter(
@@ -132,7 +139,7 @@ export function AdmittedPane({ shell, route, address, writable = true }: Admitte
             ),
           )
         : address.read();
-      place = createAdmittedPlace<AdmittedMount>({
+      place = createAdmittedPlace<PlaceMount>({
         scope: scope ?? {
           pathname: route.data.address,
           search: Object.fromEntries(captured),
@@ -147,28 +154,66 @@ export function AdmittedPane({ shell, route, address, writable = true }: Admitte
       held.current = place;
     }
     place.setVisible(visible);
-    const mount = place.state(() => shell.mount(route, place.address, () => place.memory()));
-    mount.setVisible(visible);
-    mount.setWritable(writable);
-    const publish = () => {
-      place.remember(mount.page.read());
-    };
-    publish();
-    const unsubscribe = mount.subscribe(publish);
-    setMounted({ route, shell, mount });
+    setReady(place);
     return () => {
-      unsubscribe();
       place.setVisible(false);
-      mount.setVisible(false);
       if (!scope) {
         place.dispose();
         held.current = null;
       }
     };
-  }, [shell, route, address, scope, visible, writable]);
-  return mounted?.route === route && mounted.shell === shell
-    ? createElement(Pane, { mount: mounted.mount, route })
+  }, [route, address, scope, visible]);
+  return ready && lifetime.current.route === route && lifetime.current.address === address
+    ? children(ready)
     : null;
+}
+
+/** Composition runs after commit, including StrictMode cleanup/remount. */
+export function AdmittedPlacePane({
+  shell,
+  route,
+  place,
+  writable = true,
+}: Omit<AdmittedPaneProps, "address"> & {
+  place: PanePlace;
+}) {
+  const visible = useContext(RouteVisibility);
+  const [mounted, setMounted] = useState<PlaceMount | null>(null);
+  useEffect(() => {
+    const state = place.state(() => ({
+      shell,
+      mount: shell.mount(route, place.address, () => place.memory()),
+      dispose() {
+        this.mount.dispose();
+      },
+    }));
+    if (state.shell !== shell) {
+      state.mount.dispose();
+      place.remember({});
+      state.shell = shell;
+      state.mount = shell.mount(route, place.address, () => place.memory());
+    }
+    const { mount } = state;
+    mount.setVisible(visible);
+    mount.setWritable(writable);
+    const publish = () => place.remember(mount.page.read());
+    publish();
+    const unsubscribe = mount.subscribe(publish);
+    setMounted({ ...state });
+    return () => {
+      unsubscribe();
+      mount.setVisible(false);
+    };
+  }, [shell, route, place, visible, writable]);
+  return mounted?.shell === shell ? createElement(Pane, { mount: mounted.mount, route }) : null;
+}
+
+export function AdmittedPane({ address, ...props }: AdmittedPaneProps) {
+  return createElement(AdmittedPlaceBoundary, {
+    route: props.route,
+    address,
+    children: (place) => createElement(AdmittedPlacePane, { ...props, place }),
+  });
 }
 
 /** Router search stays codec text; field names and types come from the admitted declaration. */

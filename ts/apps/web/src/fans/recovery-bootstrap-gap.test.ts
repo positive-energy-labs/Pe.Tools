@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { createElement } from "react";
-import { cleanup as cleanupView, render, screen } from "@testing-library/react";
+import { act, cleanup as cleanupView, render, screen } from "@testing-library/react";
 import { z } from "zod";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import {
@@ -11,6 +11,7 @@ import {
   ductsRouteState,
   salvageDuctsWork,
   type WorkWriteAck,
+  documentRequestSchema,
 } from "@pe/agent-contracts";
 import { RouteWorkspace, observeResources } from "@pe/runtime";
 import {
@@ -33,6 +34,7 @@ import * as recoveryHost from "../route/host";
 import * as sourceServices from "../shell/source-route-services";
 import { applicationRouteShell } from "../shell/application-route-shell";
 import { useRouteTarget } from "../route/route-target";
+import { RouteActivity, RouteVisibility, type RouteActivityScope } from "../route/activity";
 vi.mock("../route/route-target", async (original) => ({
   ...(await original<typeof import("../route/route-target")>()),
   useRouteTarget: vi.fn(),
@@ -583,3 +585,81 @@ test("P02/P04: the application opens saved Ducts Work by document Address", asyn
     bindWork("ducts", workAddress, undefined, { session: "fixture", openId: "w1f" }),
   );
 });
+
+// TODO: P07 the application's Target must use its Place's captured search before mounting Work.
+test.each(["w1f", "other-document"])(
+  "P07: a hidden Place keeps its own Work when the active target is %s",
+  async (activeOpenId) => {
+    const f = await witness();
+    f.mount.close();
+    const own = { kind: "open", ref: { session: "fixture", openId: "w1f" } } as const;
+    const ownPin = JSON.stringify(own);
+    const activePin = JSON.stringify({
+      kind: "open",
+      ref: { session: "fixture", openId: activeOpenId },
+    });
+    let search = new URLSearchParams({ target: ownPin });
+    const listeners = new Set<() => void>();
+    const address = {
+      read: () => search,
+      write() {},
+      subscribe: (listener: () => void) => {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
+    };
+    const owners = new Set<{ dispose(): void }>();
+    cleanup.push(() => owners.forEach((owner) => owner.dispose()));
+    let visible = true;
+    const scope: RouteActivityScope = {
+      pathname: "/ducts",
+      search: { target: ownPin },
+      current: () => visible,
+      retain: (owner) => {
+        owners.add(owner);
+      },
+      retire: (owner) => {
+        owners.delete(owner);
+        owner.dispose();
+      },
+    };
+    vi.mocked(useRouteTarget).mockImplementation((_manifest, _registry, _seed, target) => {
+      const request = documentRequestSchema.parse(JSON.parse(target!));
+      if (request.kind !== "open") throw Error("Expected exact fixture lifetime");
+      return {
+        resolution: { kind: "resolved", target: { kind: "document", ref: request.ref } },
+        workAddress: null,
+        resolvedAddress: null,
+        workOpen: null,
+      } as ReturnType<typeof useRouteTarget>;
+    });
+    vi.spyOn(sourceServices, "sourceRouteServices").mockImplementation((_sources, composition) => ({
+      ...f.services,
+      target: composition?.target,
+    }));
+    const open = vi.spyOn(f.services.work, "open");
+    const tree = () =>
+      createElement(
+        RouteActivity,
+        { value: scope },
+        createElement(
+          RouteVisibility,
+          { value: visible },
+          createElement(applicationRouteShell, { route: f.route, address, pane: "captures" }),
+        ),
+      );
+    const view = render(tree());
+    await vi.waitFor(() => expect(open).toHaveBeenCalled());
+    visible = false;
+    view.rerender(tree());
+    act(() => {
+      search = new URLSearchParams({ target: activePin });
+      listeners.forEach((listener) => listener());
+    });
+    expect(open.mock.calls.map(([scope]) => workKey(scope.key))).toEqual([
+      workKey(bindWork("ducts", null, undefined, own.ref)),
+    ]);
+  },
+);
