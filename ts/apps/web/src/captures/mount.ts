@@ -11,11 +11,12 @@ import {
   selectionCodec,
 } from "../shell/page-port";
 import {
-  createFixtureRouteEnvironment,
+  createNamedFixtureRouteEnvironment,
   selectRouteEnvironment,
   fixtureName,
 } from "../shell/fixture-lane";
 import { createRouteEnvironment, type EnvironmentOptions } from "../shell/route-environment";
+import { createAdmittedReadingPlan } from "../shell/admitted-reading-plan";
 import { mountAdmittedRoute } from "../shell/admitted-mount";
 import { capturesData, schemas, captureId, entries } from "./kernel";
 import { canonicalRouteJson } from "../../../../packages/agent-contracts/src/route-graph";
@@ -59,11 +60,6 @@ export function createCapturesMount(
   const initial = policy.initial();
   if (!initial.ok) throw Error(initial.reason);
   const owner = createRouteScopeGate({
-    workSchema: z.never(),
-    hashWork: JSON.stringify,
-    journal: () => {
-      throw Error("Captures has no Work");
-    },
     dependencies: () => ({}),
     preparePage: policy.prepare,
     issuer,
@@ -117,7 +113,8 @@ export function createCapturesMount(
     sortedKeyInput: "{}",
     freshnessGeneration: 0,
   };
-  const request = environmentIssuer.mintRead(key, entries["captures.list"].output, route);
+  const plan = createAdmittedReadingPlan({ route, issuer: environmentIssuer, key });
+  const request = plan.request("captures", { page: {}, work: {}, readings: {} })!;
   const environmentOptions: EnvironmentOptions = {
     issuer: environmentIssuer,
     validate: {
@@ -170,21 +167,10 @@ export function createCapturesMount(
     search,
     live: () => createRouteEnvironment(environmentOptions),
     fixture: (name) => {
-      const seed =
-        name === "browse"
-          ? z
-              .object({ readings: z.object({ captures: entries["captures.list"].output }) })
-              .parse(bindings.bodies.browse!.run()).readings.captures
-          : undefined;
-      return createFixtureRouteEnvironment({
+      return createNamedFixtureRouteEnvironment({
         ...environmentOptions,
-        seed: seed ? { readings: { "captures.list": seed } } : undefined,
-        workSpec: {
-          route: "captures",
-          title: "Captures",
-          description: "No Work",
-          schema: z.never(),
-        },
+        name,
+        plan,
         now: Date.now,
       });
     },
@@ -271,6 +257,7 @@ export function createCapturesMount(
       owner.close();
       unsubscribe();
       environment.close();
+      plan.close();
       mount.close();
       void Promise.resolve(releaseSource).then((release) => release?.());
     },

@@ -27,14 +27,24 @@ import {
   RouteEnvironmentService,
   type EnvironmentPorts,
 } from "./route-environment";
-import { createFixtureRouteEnvironment, selectRouteEnvironment } from "./fixture-lane";
+import { createAdmittedReadingPlan } from "./admitted-reading-plan";
+import {
+  createNamedFixtureRouteEnvironment,
+  createFixtureRouteEnvironment,
+  selectRouteEnvironment,
+} from "./fixture-lane";
 import type { RouteFingerprintInput } from "../../../../packages/agent-contracts/src/route-kernel-admission.ts";
 const unwrap = <T>(result: DecodeResult<T>): T => {
   if (!result.ok) throw new Error(result.reason);
   return result.value;
 };
-async function setup(readOnly = false) {
-  const source = readOnly ? readOnlyModule : builtinModule;
+async function setup(
+  readOnly = false,
+  sourceOverride?: Omit<typeof builtinModule, "data"> & {
+    data: import("../../../../packages/agent-contracts/src/route-kernel-data").RouteGraphJson;
+  },
+) {
+  const source = sourceOverride ?? (readOnly ? readOnlyModule : builtinModule);
   const bytes = new TextEncoder().encode("test bodies");
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   const artifact: RouteFingerprintInput = {
@@ -156,7 +166,10 @@ async function setup(readOnly = false) {
     },
   };
   const options = { issuer, validate, ports };
+  const plan = createAdmittedReadingPlan({ route, issuer, key });
+  const fixtureRead = plan.request("roster", { page: { search: "" }, work: {}, readings: {} })!;
   const fixtureOptions = {
+    plan,
     issuer,
     validate,
     workSpec: {
@@ -171,6 +184,7 @@ async function setup(readOnly = false) {
     ...createRouteEnvironment(options),
     options,
     fixtureOptions,
+    fixtureRead,
     issuer,
     token,
     scope,
@@ -312,7 +326,7 @@ test.each(["live", "fixture"] as const)("%s uses the same lifetime interface", a
       ? s
       : createFixtureRouteEnvironment({
           ...s.fixtureOptions,
-          seed: { readings: { read: 7 }, work: { amount: 1 } },
+          seed: { readings: { roster: [] }, work: { amount: 1 } },
         });
   expect(owner.environment.reads.acquire(s.read, s.token).lifetime).toBe("read");
   expect(owner.environment.readings.lifetime).toBe("subscription");
@@ -338,15 +352,15 @@ test("missing/empty seed never calls live factory, and fixtures keep independent
   }
   expect(real).not.toHaveBeenCalled();
   expect(s.dispatch).not.toHaveBeenCalled();
-  const seed = { readings: { read: 7 }, work: { amount: 1 } };
+  const seed = { readings: { roster: [] }, work: { amount: 1 } };
   const a = createFixtureRouteEnvironment({ ...s.fixtureOptions, seed });
   const b = createFixtureRouteEnvironment({
     ...s.fixtureOptions,
     seed: { ...seed, work: { amount: 9 } },
   });
-  expect(a.environment.reads.acquire(s.read, s.token).read()).toMatchObject({
+  expect(a.environment.reads.acquire(s.fixtureRead, s.token).read()).toMatchObject({
     status: "ready",
-    value: 7,
+    value: [],
   });
   expect(a.environment.work.read.read(s.scope)?.value).toEqual({ amount: 1 });
   seed.work.amount = 8;
@@ -457,7 +471,7 @@ test("mounted capabilities select once, isolate Works, and gate reads, SSE and g
       live,
       fixture: (name) => ({
         ...s.fixtureOptions,
-        seed: name === "seed" ? { readings: { read: 7 }, work: { amount: 1 } } : undefined,
+        seed: name === "seed" ? { readings: { roster: [] }, work: { amount: 1 } } : undefined,
       }),
     });
   const graph: RouteGraph<Record<string, unknown>, unknown> = {
@@ -486,11 +500,11 @@ test("mounted capabilities select once, isolate Works, and gate reads, SSE and g
   const a = mount(make("seed"));
   const b = mount(make("seed"));
   const missing = mount(make("missing"));
-  const read = s.issuer.mintRead(s.key, z.number(), s.route);
-  expect(a.readings.acquire(read, token).read()).toMatchObject({ status: "ready", value: 7 });
+  const read = s.fixtureRead;
+  expect(a.readings.acquire(read, token).read()).toMatchObject({ status: "ready", value: [] });
   const delivery = vi.fn();
   const unsubscribe = a.readings.subscribeResolved(read, token, delivery);
-  expect(delivery).toHaveBeenCalledWith(expect.objectContaining({ value: 7 }));
+  expect(delivery).toHaveBeenCalledWith(expect.objectContaining({ value: [] }));
   expect(missing.readings.acquire(read, token).read()).toMatchObject({ status: "unavailable" });
   expect(a.readWork(scope)?.value).toEqual({ amount: 1 });
   expect(b.readWork(scope)?.value).toEqual({ amount: 1 });
@@ -520,11 +534,12 @@ test("mounted capabilities select once, isolate Works, and gate reads, SSE and g
     request,
   );
   expect(() => a.readings.acquireGeometry(Object.assign({}, geometry), token)).toThrow();
-  expect(a.readings.acquireGeometry(geometry, token).read().status).toBe("failed");
+  // This route declares no geometry capability.
+  expect(() => a.readings.acquireGeometry(geometry, token)).toThrow();
   gate.retire(token);
   expect(() => a.readings.acquire(read, token)).toThrow("stale");
   expect(() => a.readings.subscribeResolved(read, token, delivery)).toThrow("stale");
-  expect(() => a.readings.acquireGeometry(geometry, token)).toThrow("stale");
+  expect(() => a.readings.acquireGeometry(geometry, token)).toThrow();
   expect(live).not.toHaveBeenCalled();
   expect(s.dispatch).not.toHaveBeenCalled();
   unsubscribe();
@@ -620,5 +635,126 @@ test("declared groups require exact transports at runtime as well as at the type
     kernel.bind(declaration, s.options.validate, {});
   }).toThrow("Capability service mismatch");
   owner.close();
+  s.close();
+});
+
+test("fixture plan separates the same operation by reading id and exact descriptor, then derives normally", async () => {
+  const source = {
+    ...builtinModule,
+    data: {
+      ...builtinModule.data,
+      seeds: { example: { title: "Example", load: "exampleSeed" } },
+      readings: {
+        ...builtinModule.data.readings,
+        rosterAgain: { ...builtinModule.data.readings.roster, args: "againArgs" },
+        total: {
+          ...builtinModule.data.readings.total,
+          deps: {
+            ...builtinModule.data.readings.total.deps,
+            readings: ["roster", "rosterAgain"] as const,
+          },
+        },
+      },
+    },
+    bodies: {
+      ...builtinModule.bodies,
+      exampleSeed: {
+        slot: "seeds.example.load",
+        kind: "seed",
+        source: builtinModule.bodies.rosterArgs.source,
+        run: () => ({ readings: { roster: [], rosterAgain: [] }, work: { amount: 2 } }),
+      },
+      againArgs: {
+        ...builtinModule.bodies.rosterArgs,
+        slot: "readings.rosterAgain.args",
+        run: () => ({ filter: "second" }),
+      },
+    },
+  };
+  const s = await setup(false, source);
+  const first = {
+    id: unwrap(localCodec.encode({ namespace: "fixture", subject: "one" })),
+    name: "First",
+  };
+  const fixture = createFixtureRouteEnvironment({
+    ...s.fixtureOptions,
+    seed: {
+      readings: { roster: [first], rosterAgain: [], total: { total: 999 } },
+      work: { amount: 3 },
+    },
+  });
+  const plan = s.fixtureOptions.plan;
+  const named = createNamedFixtureRouteEnvironment({ ...s.fixtureOptions, name: "example" });
+  expect(named.read("roster", { page: { search: "" }, work: null }, s.token)).toMatchObject({
+    current: true,
+    value: [],
+  });
+  named.close();
+  const second = plan.request("rosterAgain", { page: {}, work: {}, readings: {} })!;
+  expect(second.key.op).toBe(s.fixtureRead.key.op);
+  expect(second.key.sortedKeyInput).not.toBe(s.fixtureRead.key.sortedKeyInput);
+  expect(fixture.environment.reads.acquire(s.fixtureRead, s.token).read()).toMatchObject({
+    current: true,
+    value: [first],
+  });
+  expect(fixture.environment.reads.acquire(second, s.token).read()).toMatchObject({
+    current: true,
+    value: [],
+  });
+  const unbound = s.issuer.mintRead(second.key, second.output, s.route);
+  expect(fixture.environment.reads.acquire(unbound, s.token).read()).toMatchObject({
+    status: "unavailable",
+  });
+  expect(() => fixture.environment.reads.acquire(Object.assign({}, second), s.token)).toThrow();
+  expect(
+    fixture.read("total", { page: { system: null, search: "" }, work: { amount: 3 } }, s.token),
+  ).toMatchObject({ current: true, value: { total: 3 } });
+  const bad = createFixtureRouteEnvironment({
+    ...s.fixtureOptions,
+    seed: { readings: { roster: 42, rosterAgain: [] } },
+  });
+  expect(bad.environment.reads.acquire(s.fixtureRead, s.token).read()).toMatchObject({
+    status: "failed",
+  });
+  const missing = createFixtureRouteEnvironment({
+    ...s.fixtureOptions,
+    seed: { readings: { roster: [first] } },
+  });
+  expect(missing.read("total", { page: {}, work: { amount: 3 } }, s.token)).toMatchObject({
+    status: "unavailable",
+  });
+  expect(s.dispatch).not.toHaveBeenCalled();
+  fixture.close();
+  bad.close();
+  missing.close();
+  plan.close();
+  s.close();
+});
+
+test("named fixtures refuse unknown and empty names before live factories; read-only fixtures have no Work", async () => {
+  const s = await setup(true);
+  const { workSpec: _unused, ...options } = s.fixtureOptions;
+  const live = vi.fn(() => s);
+  for (const name of ["", "unknown", "toString"]) {
+    const fixture = selectRouteEnvironment({
+      search: { fixture: name },
+      live,
+      fixture: (name) => createNamedFixtureRouteEnvironment({ ...options, name }),
+    });
+    expect(fixture.environment.reads.acquire(s.fixtureRead, s.token).read()).toMatchObject({
+      status: "unavailable",
+    });
+    expect(fixture.environment.work).toBeUndefined();
+    fixture.close();
+  }
+  expect(live).not.toHaveBeenCalled();
+  expect(s.dispatch).not.toHaveBeenCalled();
+  const fixture = createFixtureRouteEnvironment({
+    ...options,
+    seed: { readings: { roster: [] }, work: { amount: 42 } },
+  });
+  expect(fixture.environment.work).toBeUndefined();
+  fixture.close();
+  s.fixtureOptions.plan.close();
   s.close();
 });
