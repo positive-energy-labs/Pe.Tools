@@ -3,12 +3,13 @@ import { ductsDocumentSchema, type DuctsRouteDocument } from "@pe/agent-contract
 import type {
   BodyBindings,
   WorkPatches,
+  BodyContext,
+  PaneContext,
 } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
 import type { WorkOf } from "../../../../packages/agent-contracts/src/route-kernel-page";
 import { capturesData } from "../captures/kernel";
 
-// TODO: W1e H6: carry the admitted owner's schema into presenter authoring types.
-// Runtime resolves the owner, but these public types still index G.work.schema.
+import { withWorkOwner } from "../../../../packages/agent-contracts/src/route-work-owner";
 const owner = {
   ...capturesData,
   key: "ducts",
@@ -28,37 +29,40 @@ const owner = {
   },
 } as const;
 const presenter = { ...owner, key: "fans", address: "/fans", work: { route: "ducts" } } as const;
-const schemas = { work: ductsDocumentSchema };
+const ownerSchemas = { work: ductsDocumentSchema };
+const schemas = withWorkOwner({}, { data: owner, schemas: ownerSchemas });
 const slot = {
   path: ["parameters", "fanFlow"],
   value: { edit: { value: "PE_M_Fan_AirFlow" } },
 } as const;
-const ownerSlot: WorkPatches<typeof owner, typeof schemas> = [slot];
-// @ts-expect-error H6: a schema-less presenter rejects its resolved owner's keyed patch.
+const ownerSlot: WorkPatches<typeof owner, typeof ownerSchemas> = [slot];
 const presenterSlot: WorkPatches<typeof presenter, typeof schemas> = [slot];
 
-// This compiles today: schema loss also silently admits invalid root fields/values.
+// The presenter cannot author a field absent from the owner schema.
 const uncheckedRoot: WorkPatches<typeof presenter, typeof schemas> = [
+  // @ts-expect-error Owner schema has no such field.
   { path: ["notADuctsField"], value: 42 },
 ];
-type OwnerWork = WorkOf<typeof owner, typeof schemas>;
+type OwnerWork = WorkOf<typeof owner, typeof ownerSchemas>;
 type PresenterWork = WorkOf<typeof presenter, typeof schemas>;
 function workTypes(ownerWork: OwnerWork, presenterWork: PresenterWork) {
   const positive: DuctsRouteDocument | null = ownerWork;
-  // @ts-expect-error H6: presenter Work collapses to null; an owner document is rejected.
   const negative: PresenterWork = ownerWork;
   return [positive, negative, presenterWork];
 }
-const ownerBody: BodyBindings<typeof owner, typeof schemas, {}>["slot"] = {
+const ownerBody: BodyBindings<typeof owner, typeof ownerSchemas, {}>["slot"] = {
   slot: "verbs.slot.patches",
   kind: "work",
   source: { module: "fans/owner-schema-gap.test.ts", export: "ownerBody" },
-  run: () => ownerSlot,
+  run: (ctx) => {
+    const field: string | undefined = ctx.work.parameters.fanFlow?.edit?.value;
+    void field;
+    return ownerSlot;
+  },
 };
-// @ts-expect-error H6: reusing correctly typed owner bodies cannot repair presenter authoring.
 const presenterBody: BodyBindings<typeof presenter, typeof schemas, {}>["slot"] = ownerBody;
 
-test("owner-reference Work loses keyed paths and Work context in public authoring types", () => {
+test("owner-reference Work retains owner keyed paths and callback types", () => {
   expect(presenter.work).toEqual({ route: "ducts" });
   expect(ownerSlot).toEqual(presenterSlot);
   expect(ductsDocumentSchema.safeParse({ notADuctsField: 42 }).success).toBe(false);
@@ -66,3 +70,49 @@ test("owner-reference Work loses keyed paths and Work context in public authorin
   expect(presenterBody).toBe(ownerBody);
   expect(workTypes).toBeTypeOf("function");
 });
+
+const described = {
+  ...presenter,
+  verbs: { slot: { ...presenter.verbs.slot, describe: "describe" } },
+} as const;
+const describe: BodyBindings<typeof described, typeof schemas, {}>["describe"] = {
+  slot: "verbs.slot.describe",
+  kind: "describe",
+  source: { module: "fans/owner-schema-gap.test.ts", export: "describe" },
+  run: (_input, ctx) => String(ctx.work.parameters.fanFlow?.edit?.value),
+};
+function ownerEvidence(
+  ctx: BodyContext<typeof presenter, typeof schemas, {}, typeof presenter.verbs.slot>,
+  pane: PaneContext<typeof presenter, typeof schemas, {}, keyof typeof presenter.panes>,
+) {
+  const value = ctx.work.parameters.fanFlow?.edit?.value;
+  const paneValue = pane.work?.parameters.fanFlow?.edit?.value;
+  // @ts-expect-error Typed owner callbacks cannot read absent Work fields.
+  void ctx.work.notADuctsField;
+  return [value, paneValue, pane.workBasis];
+}
+void [describe, ownerEvidence];
+
+const presented = {
+  ...presenter,
+  verbs: {
+    apply: {
+      kind: "command",
+      input: "none",
+      label: "Apply",
+      review: "shown",
+      deps: presenter.verbs.slot.deps,
+      captures: [],
+      entry: "apply",
+      intent: "apply",
+      present: "present",
+    },
+  },
+} as const;
+const present: BodyBindings<typeof presented, typeof schemas, {}>["present"] = {
+  slot: "verbs.apply.present",
+  kind: "present",
+  source: { module: "fans/owner-schema-gap.test.ts", export: "present" },
+  run: (_result, evidence) => String(evidence.work.parameters.fanFlow?.edit?.value),
+};
+void present;
