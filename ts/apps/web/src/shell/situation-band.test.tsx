@@ -70,7 +70,10 @@ test("an open consent window draws its countdown with Reject, refused on the fix
     version: () => 0,
     snapshot: () => ({}),
     journals: new Map(),
-  } as never as Parameters<typeof TimelineHead>[0]["owner"];
+  } as never as Extract<
+    Parameters<typeof TimelineHead>[0]["owner"],
+    { timeline: ReturnType<typeof createRouteTimeline> }
+  >;
   owner.timeline.append({
     kind: "receipt",
     at: Date.now(),
@@ -107,7 +110,10 @@ test("Pea's preview receipt after a Work edit heads the Timeline with its caller
     snapshot: () => ({ workKey: { binding: "host", route: "ducts" } }),
     journalRefusal: () => null,
     journals: { get: () => ({ read: () => journal }) },
-  } as never as Parameters<typeof TimelineHead>[0]["owner"];
+  } as never as Extract<
+    Parameters<typeof TimelineHead>[0]["owner"],
+    { timeline: ReturnType<typeof createRouteTimeline> }
+  >;
   const head = () => renderToStaticMarkup(<TimelineHead owner={owner} history={null} />);
   expect(head()).toContain("Allowance return");
   for (const state of ["running", "succeeded"] as const)
