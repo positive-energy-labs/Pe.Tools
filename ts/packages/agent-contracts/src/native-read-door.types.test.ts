@@ -7,12 +7,11 @@ import type {
   ReadCost,
   ResolvedReadDescriptor,
 } from "./native-read-door.ts";
-import type { Observation, Unsubscribe } from "./work-journal-door.ts";
+import type { JournalSubmission, Observation, Unsubscribe } from "./work-journal-door.ts";
 import type {
   GeometryOutcome,
   GeometryRequest,
   SceneContextRepresentation,
-  WorkSubmitCapability,
 } from "./route-kernel-environment.ts";
 import type { ScopeToken } from "./route-kernel-page.ts";
 
@@ -24,7 +23,7 @@ export function nativeReadTypeRefusals(
   descriptor: ResolvedReadDescriptor,
   value: GeometryOutcome<string>,
   cost: ReadCost,
-  command: Pick<WorkSubmitCapability, "lifetime">,
+  command: Pick<JournalSubmission, "lifetime">,
 ): void {
   const resolved: Observation<ResolvedReadDescriptor | NativeReadRefusal> = door.resolve(
     request,
