@@ -426,3 +426,17 @@ test("host refuses a persisted history hole before emitting a snapshot", async (
     error: "Work history is not contiguous through its snapshot",
   });
 });
+
+test("an admitted live-only ack subscription never floods the transport with historical events", async () => {
+  const module = workspace(memoryStore().store);
+  const write = bind(module);
+  for (let revision = 0; revision < 130; revision++)
+    await write.apply("pea", [{ path: ["count"], value: revision + 1 }], revision);
+  const seen: unknown[] = [];
+  const stop = module.observeAccepted(documentA, (ack) => seen.push(ack), undefined, false);
+  await module.view(documentA, documentA.route);
+  expect(seen).toEqual([]);
+  await write.apply("pea", [{ path: ["count"], value: 131 }], 130);
+  expect(seen).toMatchObject([{ revision: 131 }]);
+  stop();
+});

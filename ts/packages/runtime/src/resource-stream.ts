@@ -76,6 +76,7 @@ export function observeResources(
                   scope,
                   (ack) => publish({ kind: "event", key, value: ack }),
                   (error) => publish({ kind: "failure", key, error: String(error) }),
+                  false,
                 );
         },
         (error) => {

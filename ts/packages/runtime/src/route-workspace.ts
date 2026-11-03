@@ -786,6 +786,7 @@ export class RouteWorkspace {
     failed: (error: unknown) => void = (error) => {
       throw error;
     },
+    replay = true,
   ): () => void {
     const key = workKey(scope);
     let disposed = false;
@@ -803,8 +804,9 @@ export class RouteWorkspace {
         ),
       );
       if (disposed) return;
-      for (const { write } of this.#inverses.get(key) ?? [])
-        listener({ ...structuredClone(write), replay: true });
+      if (replay)
+        for (const { write } of this.#inverses.get(key) ?? [])
+          listener({ ...structuredClone(write), replay: true });
       const listeners = this.#acceptedListeners.get(key) ?? new Set();
       this.#acceptedListeners.set(key, listeners);
       listeners.add(listener);
