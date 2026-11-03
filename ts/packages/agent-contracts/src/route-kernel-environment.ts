@@ -292,6 +292,8 @@ export interface WorkReadCapability {
 }
 export interface WorkSubmitCapability {
   readonly lifetime: "command";
+  // TODO: U11 needs journal-owned ack/stream delivery to B, retained after mount departure.
+  // A command handle plus a reread snapshot cannot supply the accepted inverse or receipt.
   submit(
     route: AdmittedRoute,
     invocation: InvocationToken,
