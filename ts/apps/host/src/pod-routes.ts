@@ -12,6 +12,7 @@ import type { RouteWorkspace } from "@pe/runtime";
 import type { createPackageLifecycle } from "./package-lifecycle.ts";
 import { productRouteTrustPath } from "./product-paths.ts";
 import { readJson, writeArtifact } from "./page-artifacts.ts";
+import { admitPodArtifact, verifyPodArtifact } from "./pod-artifact.ts";
 
 /** Builtin source admission and verified Pod-byte admission share this host-owned door.
  * The caller supplies the exact authenticated handle, never a browser schema or migration. */
@@ -107,7 +108,7 @@ export function podOperation(declaration: contracts.PodModule, key: string) {
   return op;
 }
 
-const trustSchema = z.record(z.string(), z.string().regex(/^[a-f0-9]{64}$/));
+const trustSchema = z.record(z.string(), z.string().regex(/^pod-bytes:[a-f0-9]{64}$/));
 
 /** Trusted browser extensions have the shell's authority. Trust is local, explicit and content-pinned. */
 export function createPodRoutes(
@@ -116,6 +117,7 @@ export function createPodRoutes(
 ) {
   const path = options.trustPath ?? productRouteTrustPath();
   const registrations = new Map<string, { hash: string; dispose: () => void }>();
+  let closed = false;
   let tail = Promise.resolve();
   const decisions = () => readJson(path, trustSchema, {});
   let listing = Promise.resolve<PodRouteDescriptor[]>([]);
@@ -124,28 +126,49 @@ export function createPodRoutes(
     listing = next;
     return next;
   }
+  function current(key: string, fingerprint: string) {
+    return lifecycle
+      .packages()
+      .some(
+        (pod) =>
+          !pod.diagnostics.some((d) => d.code === "InvalidRoute") &&
+          pod.routes?.some(
+            (route) =>
+              `route:@${pod.id}/${route.artifact}` === key && route.fingerprint === fingerprint,
+          ),
+      );
+  }
+  // Withdrawal releases the exact registration even when no client asks for inventory again.
+  const stopChanges = lifecycle.observeChanges(() => {
+    for (const [key, registration] of registrations) {
+      if (!current(key, registration.hash)) {
+        registration.dispose();
+        registrations.delete(key);
+      }
+    }
+  });
   async function readList(): Promise<PodRouteDescriptor[]> {
     await lifecycle.ready;
+    if (closed) return [];
     const trust = await decisions();
     const descriptors = lifecycle.packages().flatMap((pod) => {
       if (pod.diagnostics.some((d) => d.code === "InvalidRoute")) return [];
       return (pod.routes ?? []).map((route) => {
-        const key = `route:@${pod.id}/${route.sourcePath}`;
-        const member = pod.members.find((m) => m.path === route.sourcePath)!;
+        const key = `route:@${pod.id}/${route.artifact}`;
         return {
           ...route,
           key,
           packageId: pod.id,
-          workRoute: `pod.${pod.id}.${route.sourcePath.split("/")[1]}`,
-          sha256: member.sha256,
-          trusted: trust[key] === member.sha256,
+          workRoute: `pod.${pod.id}.${route.artifact.split("/")[1]}`,
+          fingerprint: route.fingerprint,
+          trusted: trust[key] === route.fingerprint,
         };
       });
     });
     for (const [key, registration] of registrations) {
       if (
         !descriptors.some(
-          (route) => route.key === key && route.trusted && route.sha256 === registration.hash,
+          (route) => route.key === key && route.trusted && route.fingerprint === registration.hash,
         )
       ) {
         registration.dispose();
@@ -155,52 +178,16 @@ export function createPodRoutes(
     for (const route of descriptors) {
       if (route.trusted && !registrations.has(route.key) && options.workspace) {
         const pod = lifecycle.packages().find((pod) => pod.id === route.packageId)!;
-        const bytes = pod.members.find((member) => member.path === route.sourcePath)!.bytes;
-        const actualHash = createHash("sha256").update(bytes).digest("hex");
-        if (actualHash !== route.sha256) throw Error("Route module hash mismatch");
-        contracts.validatePodSource(Buffer.from(bytes).toString("utf8"));
-        const loaded = await import(
-          `data:text/javascript;base64,${Buffer.from(bytes).toString("base64")}`
-        );
-        contracts.validatePodBundle(loaded);
-        const declaration = loaded.register({
-          ...contracts,
-          z,
-          descriptor: route,
-        }) as contracts.PodModule;
-        contracts.validatePodDeclaration(declaration);
-        const module = {
-          ...declaration,
-          bodies: Object.fromEntries(
-            Object.entries(declaration.entries).map(([key, definition]) => {
-              const op = podOperation(declaration, key);
-              if (!options.bridge) throw Error("Native bridge unavailable");
-              return [
-                key,
-                podExecutor(
-                  { ...op, definition },
-                  gatewayExecutor(op.key, options.bridge, async () => {
-                    throw Error("Native operation required");
-                  }),
-                ),
-              ];
-            }),
-          ),
-        };
-        if (module.namespace !== route.packageId || module.graph.key !== route.workRoute)
-          throw Error("Executable route identity differs from its admitted member");
-        const dispose = admitPodModule(module, actualHash, options.workspace, () =>
-          lifecycle
-            .packages()
-            .some(
-              (pod) =>
-                pod.id === route.packageId &&
-                pod.members.some(
-                  (member) => member.path === route.sourcePath && member.sha256 === actualHash,
-                ),
-            ),
-        );
-        registrations.set(route.key, { hash: route.sha256, dispose });
+        const bytes = pod.members.find((member) => member.path === route.artifact)!.bytes;
+        const value: unknown = JSON.parse(Buffer.from(bytes).toString("utf8"));
+        const admitted = await admitPodArtifact(value, route.fingerprint);
+        if (admitted.data.key !== route.workRoute || admitted.data.work?.route !== route.workRoute)
+          throw Error("Admitted route identity differs from its package declaration");
+        if (closed) return [];
+        if (!current(route.key, route.fingerprint)) continue;
+        const registration = registerAdmittedHostRoute(admitted, options.workspace);
+        const dispose = registration.close;
+        registrations.set(route.key, { hash: route.fingerprint, dispose });
       }
     }
     return descriptors;
@@ -210,7 +197,7 @@ export function createPodRoutes(
     async trust(key: string, hash: string, trusted: boolean) {
       const write = tail.then(async () => {
         const route = (await list()).find((route) => route.key === key);
-        if (!route || route.sha256 !== hash)
+        if (!route || route.fingerprint !== hash)
           throw Error("Route changed or is inactive; inspect its current bytes before trusting");
         const trust = await decisions();
         if (trusted) trust[key] = hash;
@@ -225,15 +212,19 @@ export function createPodRoutes(
     },
     async bundle(key: string, hash: string) {
       const route = (await list()).find((route) => route.key === key);
-      if (!route || route.sha256 !== hash || !route.trusted)
+      if (!route || route.fingerprint !== hash || !route.trusted)
         throw Error("Route trust is absent or its bytes changed");
       const pod = lifecycle.packages().find((pod) => pod.id === route.packageId)!;
-      return Buffer.from(
-        pod.members.find((member) => member.path === route.sourcePath && member.sha256 === hash)!
-          .bytes,
-      ).toString("utf8");
+      const member = pod.members.find((member) => member.path === route.artifact)!;
+      const { wire } = await verifyPodArtifact(
+        JSON.parse(Buffer.from(member.bytes).toString("utf8")),
+        route.fingerprint,
+      );
+      return wire;
     },
     close() {
+      closed = true;
+      stopChanges();
       for (const registration of registrations.values()) registration.dispose();
       registrations.clear();
     },

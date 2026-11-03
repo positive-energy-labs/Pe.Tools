@@ -60,8 +60,13 @@ export function createPackageLifecycle(
   let initialized = false;
   const signatures = new Map<string, string>();
   let initialListing: Awaited<ReturnType<typeof listPackages>> | undefined;
+  const listeners = new Set<() => void>();
+  const changed = () => {
+    options.changed?.();
+    for (const listener of listeners) listener();
+  };
   const runtime = createPluginRuntime<Contribution>({
-    changed: options.changed,
+    changed,
     persist: async (id, enabled) => {
       const next = { ...decisions, [id]: enabled };
       await writeArtifact(dirname(decisionsPath), decisionsPath, JSON.stringify(next), true);
@@ -149,6 +154,12 @@ export function createPackageLifecycle(
   }
   return {
     ready,
+    observeChanges(listener: () => void) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
     initialized: () => initialized,
     /** Explicit import, activation and update reconcile setup/cleanup; inventory reads use listing. */
     refresh: async (initial = false) => {
@@ -170,6 +181,7 @@ export function createPackageLifecycle(
     close: async () => {
       await ready;
       await runtime.close();
+      changed();
     },
   };
 }
