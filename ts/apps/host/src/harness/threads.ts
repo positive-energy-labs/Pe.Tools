@@ -1,4 +1,5 @@
 import { matchPeRoute } from "@pe/agent-contracts/pe-api";
+import { peaProductTools } from "@pe/mcps";
 import { classifyEndpointFailure } from "./endpoint-failure.ts";
 import type { AdapterChild } from "./adapter.ts";
 import { createHash, randomUUID } from "node:crypto";
@@ -110,6 +111,30 @@ import {
   rememberTarget,
   type ObserveDocument,
 } from "../thread-work-context.ts";
+
+function isPeaTool(
+  call: RequestPermissionRequest["toolCall"],
+  events: HarnessEvent[],
+  turn: string | null,
+): boolean {
+  // Codex's correlated approval omits identity; its preceding tool_call owns that identity.
+  const recorded = events.findLast(
+    (event) =>
+      event.kind === "update" &&
+      event.turnId === turn &&
+      event.update.sessionUpdate === "tool_call" &&
+      event.update.toolCallId === call.toolCallId,
+  );
+  const tool = { ...(recorded?.kind === "update" ? recorded.update : {}), ...call };
+  if (tool.kind === "edit" || tool.kind === "delete" || tool.kind === "move") return false;
+  const input = tool.rawInput as { server?: unknown; tool?: unknown } | null | undefined;
+  const claude = tool._meta?.claudeCode as { toolName?: unknown } | undefined;
+  return Object.keys(peaProductTools).some(
+    (name) =>
+      (input?.server === "pea" && input.tool === name) ||
+      claude?.toolName === `mcp__pea__${name}`,
+  );
+}
 
 /** The thread wire of ADR 0015; contract and route list in `@pe/agent-contracts` `harness-thread.ts`. */
 
@@ -1086,13 +1111,12 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
       },
       // No per-call card (ADR 0027 rule 11). Reads, search, fetch, think and Pea's own MCP tools are
       // answered here: Pea's tools cross the journal themselves (pe_do runs host commands under run
-      // consent), and the Claude ACP adapter reports every MCP tool as kind "other", so the title
-      // names them (2026-10-27 demo thread 06eb2ab8). Every other kind has no host command or
-      // footprint and would bypass the journal: refused.
+      // consent). Adapter display titles are not tool identities. Every other kind has no host
+      // command or footprint and would bypass the journal: refused.
       requestPermission: async (request: RequestPermissionRequest) => {
         if (t.child !== child || t.stopped) return { outcome: { outcome: "cancelled" } };
         const allowed =
-          /^mcp__pea__/.test(request.toolCall.title ?? "") ||
+          isPeaTool(request.toolCall, t.events, t.running) ||
           ["read", "search", "fetch", "think"].includes(request.toolCall.kind ?? "");
         const pick = (prefix: "allow" | "reject") =>
           request.options.find((option) => option.kind === `${prefix}_once`) ??

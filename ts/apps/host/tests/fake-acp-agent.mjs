@@ -382,12 +382,27 @@ new AgentSideConnection(
         title: text.includes("mcp") ? "mcp__pea__pe_find" : "fake tool",
         kind: text.includes("raw-write") ? "edit" : text.includes("mcp") ? "other" : "read",
         status: "pending",
+        ...(text.includes("mcp") ? { _meta: { claudeCode: { toolName: "mcp__pea__pe_find" } } } : {}),
+        ...(text.includes("codex")
+          ? {
+              title: "mcp.pea.pe_find",
+              kind: text.includes("edit") ? "edit" : "execute",
+              rawInput: text.includes("shell")
+                ? { command: "echo native" }
+                : text.includes("edit")
+                  ? { changes: [] }
+                  : { server: "pea", tool: "pe_find", arguments: {} },
+              _meta: { is_mcp_tool_call: true },
+            }
+          : {}),
       };
       await conn.sessionUpdate({ sessionId, update: { sessionUpdate: "tool_call", ...toolCall } });
       if (text.includes("permission")) {
         const answer = await conn.requestPermission({
           sessionId,
-          toolCall,
+          toolCall: text.includes("codex")
+            ? { toolCallId: toolCall.toolCallId, kind: toolCall.kind, status: "pending" }
+            : toolCall,
           options: [
             { optionId: "yes", name: "Allow", kind: "allow_once" },
             { optionId: "no", name: "Reject", kind: "reject_once" },

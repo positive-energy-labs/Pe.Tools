@@ -1189,6 +1189,31 @@ for (const harness of ["claude", "codex"] as const) {
   });
 }
 
+test("Codex correlated Pea approval uses recorded identity and still refuses native shell/edit", async () => {
+  const h = await host(),
+    call = caller(h),
+    read = reader(h);
+  try {
+    const id = (await call("POST", "/pe/threads", { providerId: "codex" })).json.id as string;
+    await until(read, id, (body) => body.models.length > 0);
+    for (const [index, text] of [
+      "permission codex",
+      "permission codex shell",
+      "permission codex edit",
+    ].entries()) {
+      await call("POST", `/pe/threads/${id}/prompt`, { text });
+      const body = await until(read, id, (body) => !body.running && turnEnds(body).length === index + 1);
+      const turn = turnEnds(body).at(-1)!.turnId;
+      const events = body.events.filter((event) => "turnId" in event && event.turnId === turn);
+      expect(openAsks(body)).toHaveLength(0);
+      expect(JSON.stringify(events)).toContain(index === 0 ? "chose yes" : "chose no");
+      expect(JSON.stringify(events).includes("Native unjournaled writes are unsupported")).toBe(index !== 0);
+    }
+  } finally {
+    await h.close();
+  }
+});
+
 test("recorded run permission answers survive reconnect and restart without approving an old run", async () => {
   const h = await host(),
     call = caller(h),
