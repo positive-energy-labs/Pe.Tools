@@ -196,3 +196,38 @@ test.each([3, "all"] as const)("fan %s overview survives a failed sheet", async 
     expect(view.container.querySelector('[data-picture]')!.getAttribute("aria-busy")).toBeNull();
   } finally { view.unmount(); release(); disconnect(); owner.dispose(); }
 });
+
+// Exact Manual D drive 6 URL, h4-reload.log (c510da4b).
+const drive6Url = "http://127.0.0.1:5626/fans?threadSearch=\"{\\\"v\\\":1,\\\"keywords\\\":\\\"\\\",\\\"pills\\\":[{\\\"field\\\":\\\"scope\\\",\\\"op\\\":\\\"=\\\",\\\"value\\\":\\\"all\\\"}]}\"&threadSort=&stage=sheet&contextRadiusFt=10&sceneView=\"{\\\"preset\\\":\\\"all\\\",\\\"section\\\":null}\"&system=&level=&selected=&systemSearch=\"{\\\"v\\\":1,\\\"keywords\\\":\\\"\\\",\\\"pills\\\":[]}\"&systemSort=&rulingSearch=\"{\\\"v\\\":1,\\\"keywords\\\":\\\"\\\",\\\"pills\\\":[]}\"&rulingSort=&treeSearch=\"{\\\"v\\\":1,\\\"keywords\\\":\\\"\\\",\\\"pills\\\":[]}\"&treeSort=&inputSearch=\"{\\\"v\\\":1,\\\"keywords\\\":\\\"\\\",\\\"pills\\\":[]}\"&inputSort=&encoding=health&layers=meshes,system-colours,stub-labels,halo,no-run,labels,findings&contextStyle=glass&picture=model&viewport=&fan=78fb66ed-41aa-47c4-907e-6ccf601ad7b3-00de62f1%402";
+test.each([fansGraph, ductsGraph])("drive 6 URL restores $key fan across delayed binding", (graph) => {
+  const initial = graphUrlPage(graph).read(parseSearchWith(JSON.parse)(new URL(drive6Url.replace('/fans?', `/${graph.key}?`)).search));
+  const fan = "78fb66ed-41aa-47c4-907e-6ccf601ad7b3-00de62f1@2";
+  const ref = { session: "drive6-restore", openId: graph.key };
+  let bound = false;
+  let notify = () => {};
+  const requests: unknown[] = [];
+  const sources = Object.fromEntries(Object.keys(ductsAdapters.sources).map(id => [id, {
+    kind: "use" as const,
+    open: (ctx: any, emit: (event: ReadingPublication) => void) => {
+      if (id === "ducts.sheet") requests.push(ctx.page.fan);
+      emit({ kind: "complete", value: null, revision: 0 });
+    },
+  }]));
+  sources["ducts.meshes"] = ductsAdapters.sources["ducts.meshes"]! as any;
+  sources["ducts.pricing"] = ductsAdapters.sources["ducts.pricing"]! as any;
+  const owner = createGraphMount(graph, {
+    ...ductsAdapters, sources,
+    getSnapshot: () => ({ target: bound ? { kind: "document", ref } : { kind: "host" }, work: { handle: { key: bindWork("ducts", null, undefined, ref), revision: 0 }, doc: ductsRouteState.schema.parse({}) } }),
+    subscribe: fn => { notify = fn; return () => {}; },
+    write: vi.fn(), subscribeAcceptedDeltas: () => () => {},
+  }, initial);
+  const disconnect = owner.connect();
+  const release = owner.readings.mount(["sheet"]);
+  try {
+    expect(owner.view.read().page.fan).toEqual([fan]);
+    bound = true;
+    notify();
+    expect(owner.view.read().page.fan).toEqual([fan]);
+    expect(requests).toContainEqual([fan]);
+  } finally { release(); disconnect(); owner.dispose(); }
+});
