@@ -7,6 +7,7 @@ import type {
   KernelServices,
   ResolvedRead,
 } from "../../../../packages/agent-contracts/src/route-kernel-environment";
+import type { AcceptanceToken } from "../../../../packages/agent-contracts/src/route-kernel-page";
 import type { ReadingSnapshot } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
 import type { ReadingSource, UseSource } from "./readings";
 
@@ -28,10 +29,10 @@ export function sourceRouteServices(
     target: composition.target,
     reads: {
       lifetime: "read",
-      acquire<T>(request: ResolvedRead<T>) {
+      acquire<T>(request: ResolvedRead<T>, token: AcceptanceToken) {
         const state = {
           controller: new AbortController(),
-          target: composition.target?.() ?? { kind: "host" as const },
+          target: token.scope.identity.target ?? { kind: "host" as const },
           snapshot: {
             status: "pending",
             current: false,
@@ -94,13 +95,13 @@ export function sourceRouteServices(
         const release = Promise.resolve(
           source.open(
             {
-              target: { kind: "host" },
+              target: state.target,
               workKey: null,
               workRevision: null,
               page: {},
               work: null,
               attempt: {
-                target: { kind: "host" },
+                target: state.target,
                 workKey: null,
                 generation: request.key.freshnessGeneration,
               },
