@@ -27,3 +27,11 @@ test("a criteria edit is named in words, never by its key", () => {
     "criteria allowance",
   );
 });
+
+
+test("reverting a value keeps Revert in History and its undo description", () => {
+  const label = editLabel({ componentDrops: { "7": null } }, () => "DS-1");
+  expect(label).toBe("Revert part drop DS-1");
+  const journal = { undo: [], redo: [], last: { kind: "undo", step: { label }, by: "human" } };
+  expect(presentInputHistory(journal as never, null).last?.label).toBe("undid Revert part drop DS-1");
+});

@@ -156,7 +156,7 @@ export function editLabel(edits: DuctsSheetEdits, nameOf: (id: number) => string
     const [key, value] = Object.entries(record ?? {})[0] ?? [];
     if (key == null) continue;
     const name = /^\d+$/.test(key) ? (nameOf(Number(key)) ?? key) : key;
-    return `${value === null ? "clear " : ""}${noun} ${name}`;
+    return `${value === null ? "Revert " : ""}${noun} ${name}`;
   }
   if (edits.criteria)
     return `criteria ${Object.keys(edits.criteria)

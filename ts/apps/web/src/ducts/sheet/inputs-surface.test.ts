@@ -220,3 +220,21 @@ it.each(["terminal:7:cfm", "join:1:0|2:0"])(
     expect(view.queryByRole("button", { name: "Restore 100 cfm" })).toBeNull();
   },
 );
+
+
+it("labels the undoable row action Revert and records the same History name", () => {
+  const ctx = context();
+  ctx.sheet = { overview: { fan: null } } as NonNullable<InputContext["sheet"]>;
+  ctx.inputs!.terminals["7"] = { cfm: { ...firm(100), source: "Work" }, drop: firm(0.03) };
+  const apply = vi.fn();
+  const { getAllByRole } = render(createElement(InputsSurface, {
+    ctx, apply, busy: false, elementName: null, onSlot: vi.fn(), nameOf: () => "Terminal",
+    history: { undoLabel: null, redoLabel: null, undoSuperseded: null, redoSuperseded: null, last: null, cleared: null,
+      undo: vi.fn(), redo: vi.fn(), restore: vi.fn() },
+  }));
+  const button = getAllByRole("button").find(b => b.textContent === "Revert");
+  expect(button).toBeTruthy();
+  expect(button!.getAttribute("aria-label")).toMatch(/^Revert /);
+  fireEvent.click(button!);
+  expect(apply).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ label: expect.stringMatching(/^Revert /), clear: true }));
+});

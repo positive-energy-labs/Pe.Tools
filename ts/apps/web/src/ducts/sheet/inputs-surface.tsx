@@ -328,12 +328,12 @@ function RowVerb({
   if (!clear) return <span />;
   return (
     <Button
-      label={`Clear ${label}`}
+      label={`Revert ${label}`}
       reason="Return to the source underneath; restore stays offered until the next edit"
       refusal={refusal}
-      onPress={() => apply(clear, { label: `clear ${label}`, rowKey, clear: true, was, row })}
+      onPress={() => apply(clear, { label: `Revert ${label}`, rowKey, clear: true, was, row })}
     >
-      clear
+      Revert
     </Button>
   );
 }
@@ -522,7 +522,7 @@ function InputRowView({
           onValue={(value) =>
             value == null
               ? row.clear
-                ? apply(row.clear, { ...meta(`clear ${row.label} ${who}`), clear: true })
+                ? apply(row.clear, { ...meta(`Revert ${row.label} ${who}`), clear: true })
                 : undefined
               : apply(c.edit(value), meta(`${row.label} ${who} → ${value} ${c.unit}`))
           }
