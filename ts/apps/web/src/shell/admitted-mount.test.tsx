@@ -1358,8 +1358,11 @@ test("a departed mount recovers undo history solely from open's feed", async () 
     ...f.door,
     open: (scope) => ({
       subscribe(deliver) {
-        deliver({ kind: "ready", snapshot: { key: scope.key, revision: 1, value: { amount: 6 } } });
-        for (const ack of f.acks) deliver({ kind: "ack", ack });
+        deliver({
+          kind: "ready",
+          snapshot: { key: scope.key, revision: 1, value: { amount: 6 } },
+          history: { from: 1, acks: f.acks },
+        });
         return () => {};
       },
     }),

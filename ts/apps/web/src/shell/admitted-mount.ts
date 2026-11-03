@@ -354,7 +354,18 @@ export function createRouteShell(services: KernelServices) {
           : route.data.work
             ? { ...environment.environment.work.read, ...environment.environment.work.submit }
             : undefined;
-      const work = createAdmittedWork(route, owner, door, () => schedule());
+      const work = createAdmittedWork(
+        route,
+        owner,
+        door,
+        () => schedule(),
+        (key, state) => {
+          mountJournal(key).restoreView(
+            { revision: state.snapshot.revision, doc: state.snapshot.value },
+            state.history,
+          );
+        },
+      );
       let savedRecovery: { from: string; value: unknown } | null = null;
       let recoverySentence: string | null = null;
       let recoveryProblem: string | null = null;

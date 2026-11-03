@@ -175,13 +175,13 @@ test("drive-7 S8a row/value labels persist through reload, replay, undo, redo an
         ) {
           deliver({
             kind: "ready",
+            history: { from: 1, acks: saved },
             snapshot: {
               key: scope.key,
               revision: 2,
               value: { drops: { "DS-1": 0.0132, "SH-1": 0.18 } },
             },
           });
-          for (const ack of saved) deliver({ kind: "ack", ack });
           return () => {};
         },
       }),

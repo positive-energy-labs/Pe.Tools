@@ -19,7 +19,12 @@ export function createFixtureWorkDoor(
 ): WorkJournalDoor {
   const states = new Map<
     string,
-    { revision: number; value: unknown; listeners: Set<(state: WorkFeedState) => void> }
+    {
+      revision: number;
+      value: unknown;
+      acks: WorkWriteAck[];
+      listeners: Set<(state: WorkFeedState) => void>;
+    }
   >();
   const stateFor = (scope: WorkScope) => {
     const id = workKey(scope.key);
@@ -27,6 +32,7 @@ export function createFixtureWorkDoor(
     if (!state) {
       state = {
         revision: 0,
+        acks: [],
         value: spec.schema.parse(structuredClone(seed)),
         listeners: new Set(),
       };
@@ -44,6 +50,10 @@ export function createFixtureWorkDoor(
           state.listeners.add(deliver);
           deliver({
             kind: "ready",
+            history: {
+              from: state.acks[0]?.revision ?? state.revision + 1,
+              acks: structuredClone(state.acks),
+            },
             snapshot: {
               key: scope.key,
               revision: state.revision,
@@ -101,6 +111,7 @@ export function createFixtureWorkDoor(
             undoable: true,
             ...(write.restoreOf !== undefined && { restoreOf: write.restoreOf }),
           };
+          state.acks.push(ack);
           state.revision = ack.revision;
           state.value = result.envelope.doc;
           state.listeners.forEach((deliver) => deliver({ kind: "ack", ack }));

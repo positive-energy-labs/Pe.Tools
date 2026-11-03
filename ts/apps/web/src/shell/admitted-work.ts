@@ -18,6 +18,13 @@ export function createAdmittedWork(
   owner: Owner,
   door: WorkJournalDoor | undefined,
   notify: () => void,
+  restoreHistory: (
+    key: WorkScope["key"],
+    state: Extract<
+      import("../../../../packages/agent-contracts/src/work-journal-door").WorkFeedState,
+      { kind: "ready" }
+    >,
+  ) => void,
 ) {
   let stop = () => {};
   let scopeToken: ReturnType<Owner["capture"]>["scope"] | undefined;
@@ -81,6 +88,8 @@ export function createAdmittedWork(
           problem = null;
           failure = null;
           ready = result.kind === "published" || result.kind === "duplicate";
+          if (ready && owner.read()?.work?.revision === state.snapshot.revision)
+            restoreHistory(capturedScope.key, state);
           reopened?.(ready ? undefined : "Work snapshot refused");
           reopened = undefined;
           notify();

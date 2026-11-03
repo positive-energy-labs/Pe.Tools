@@ -384,6 +384,7 @@ function feedSnapshot(module: RouteWorkspace) {
 test.each([
   { maxCount: 2, maxBytes: 1_000_000, from: 3 },
   { maxCount: 20, maxBytes: 0, from: 5 },
+  { maxCount: 20, maxBytes: 100, from: 5 },
 ])(
   "host history is a bounded contiguous suffix ($maxCount/$maxBytes)",
   async ({ maxCount, maxBytes, from }) => {

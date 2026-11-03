@@ -250,3 +250,29 @@ test("Reject flags consumed intent without reverting it; later edits and a succe
   );
   expect(journal.read().undo[2]!.notWritten).toBeUndefined();
 });
+
+test("a fresh history acquisition during undo interrupts the old cursor without losing its accepted restore", async () => {
+  const f = fixture();
+  const first = await f.edit("human", "one", 1);
+  const journal = createWorkJournal(f.key);
+  const snapshot = { revision: 1, doc: { a: 1, b: 0 } };
+  const history = { from: 1, acks: [first.write] };
+  journal.restoreView(snapshot, history);
+  let request: import("@pe/agent-contracts").WorkWrite | undefined;
+  let finish: ((value: import("@pe/agent-contracts").RouteStateWriteResult) => void) | undefined;
+  const undo = journal.undo((write) => {
+    request = write;
+    return new Promise((resolve) => {
+      finish = resolve;
+    });
+  });
+  journal.restoreView(snapshot, history);
+  if (!request || !finish) throw Error("Restore did not dispatch");
+  const accepted = await f.host.write(f.key, f.key.route, "human", request);
+  finish(accepted);
+  expect(await undo).toMatchObject({ ok: false, code: "interrupted" });
+  expect(journal.read().undo).toHaveLength(0);
+  expect(journal.read().redo).toHaveLength(1);
+  expect(journal.read().redo[0]!.cursor).toBe(0);
+  expect(journal.read().revision).toBe(2);
+});

@@ -64,7 +64,7 @@ export interface RouteDocumentStore {
 }
 
 /** Host undo-window configuration: both limits bound the retained suffix. */
-export const DEFAULT_WORK_HISTORY_LIMITS = { maxCount: 256, maxBytes: 4 * 1024 * 1024 } as const;
+export const DEFAULT_WORK_HISTORY_LIMITS = { maxCount: 256, maxBytes: 512 * 1024 } as const;
 export interface RouteWorkspaceOptions {
   registrations: readonly RouteWorkspaceRegistration[];
   store: RouteDocumentStore;
@@ -938,10 +938,12 @@ export class RouteWorkspace {
     )
       throw Error("Work history is not contiguous through its snapshot");
     const limits = this.options.workHistoryLimits ?? DEFAULT_WORK_HISTORY_LIMITS;
-    let bytes = 0;
+    let bytes = 2; // JSON array brackets; records include their after-values.
     let start = suffix.length;
     while (start > 0 && suffix.length - start < limits.maxCount) {
-      const size = new TextEncoder().encode(JSON.stringify(suffix[start - 1])).byteLength;
+      const size =
+        new TextEncoder().encode(JSON.stringify(suffix[start - 1])).byteLength +
+        (start < suffix.length ? 1 : 0);
       if (bytes + size > limits.maxBytes) break;
       bytes += size;
       start--;

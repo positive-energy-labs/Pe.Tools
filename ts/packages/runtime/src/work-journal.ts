@@ -117,6 +117,7 @@ function project(doc: unknown, patches: RouteStatePatch[]): unknown {
 export function createWorkJournal(key: WorkKey) {
   const identity = workKey(key);
   let revision: number | null = null;
+  let from = 0;
   let current: { revision: number; doc: unknown } | null = null;
   let undo: Step[] = [];
   let redo: Step[] = [];
@@ -198,7 +199,7 @@ export function createWorkJournal(key: WorkKey) {
     if (ownRestore) return;
     // Pea's undo/redo (`work.history`) or another mount's restore of the top step walks this same
     // journal: the step moves across exactly as if this mount had replayed it.
-    if (ack.kind === "restore" && !busy && !pending) {
+    if (ack.kind === "restore" && !pending) {
       const undone = undo.at(-1);
       const back = undone?.transitions[undone.cursor - 1];
       if (undone && back && !undone.superseded && back.revision === ack.restoreOf) {
@@ -407,6 +408,8 @@ export function createWorkJournal(key: WorkKey) {
     busy = true;
     pending = { direction, step };
     const started = generation;
+    let acceptedAt = Date.now();
+    let acceptedBy: "human" | "pea" = "human";
     try {
       while (direction === "undo" ? step.cursor > 0 : step.cursor < step.transitions.length) {
         const barrier = blocked();
@@ -422,18 +425,29 @@ export function createWorkJournal(key: WorkKey) {
           expectedRevision: revision,
           press: null,
         };
-        const result = await write(structuredClone(sending));
+        const request = structuredClone(sending);
+        const result = await write(request);
         if (!result.ok) return { ok: false, code: "write-refused", message: refusalText(result) };
         if (
           workKey(result.write.key) !== identity ||
           result.write.kind !== "restore" ||
-          result.write.base !== sending.expectedRevision
+          result.write.base !== request.expectedRevision
         )
           return {
             ok: false,
             code: "write-refused",
             message: "Restore acknowledgement does not match this Work and revision",
           };
+        if (started !== generation) {
+          accept(result.write);
+          return {
+            ok: false,
+            code: "interrupted",
+            message: "Work history changed while restoring; re-read Work",
+          };
+        }
+        acceptedAt = result.write.at ?? Date.now();
+        acceptedBy = result.write.by === "pea" ? "pea" : "human";
         accept(result.write);
         if (Object.hasOwn(result, "doc") && (!current || result.write.revision >= current.revision))
           current = { revision: result.write.revision, doc: structuredClone(result.doc) };
@@ -457,7 +471,7 @@ export function createWorkJournal(key: WorkKey) {
       source.splice(index, 1);
       (direction === "undo" ? redo : undo).push(step);
       pending = null;
-      move(direction, step, "human", Date.now());
+      move(direction, step, acceptedBy, acceptedAt);
       return { ok: true, press: step.press, revision };
     } catch (cause) {
       return {
@@ -477,6 +491,26 @@ export function createWorkJournal(key: WorkKey) {
     key: structuredClone(key),
     accept,
     reconcile,
+    /** Rebuild only the journal view from the host's canonical acquisition. Never publish Work. */
+    restoreView(
+      snapshot: { revision: number; doc: unknown },
+      history: Extract<
+        import("../../agent-contracts/src/work-journal-door.ts").WorkFeedState,
+        { kind: "ready" }
+      >["history"],
+    ) {
+      if (revision !== null && snapshot.revision < revision) return;
+      clear();
+      sending = null;
+      revision = null;
+      from = history.from;
+      for (const ack of history.acks) {
+        receipts.set(ack.revision, structuredClone(ack));
+        applyAcknowledgement(ack);
+      }
+      revision = snapshot.revision;
+      current = structuredClone(snapshot);
+    },
     /** A read proves values only at its own revision; a newer acknowledgement invalidates it. */
     observe(snapshot: { revision: number; doc: unknown }) {
       // A delayed Reading cannot erase already accepted history. A revision is not a lifetime id.
@@ -555,6 +589,7 @@ export function createWorkJournal(key: WorkKey) {
       }
       return structuredClone({
         revision,
+        from,
         undo,
         redo,
         busy,

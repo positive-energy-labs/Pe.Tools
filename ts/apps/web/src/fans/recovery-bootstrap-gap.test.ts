@@ -74,8 +74,8 @@ const bodies = {
     slot: "verbs.slot.patches",
     kind: "work",
     source,
-    run: () => [
-      { path: ["parameters", "fanFlow"], value: { edit: { value: "PE_M_Fan_AirFlow" } } },
+    run: (_ctx, value) => [
+      { path: ["parameters", "fanFlow"], value: { edit: { value: value || "PE_M_Fan_AirFlow" } } },
     ],
   },
   describe: {
@@ -138,7 +138,11 @@ const settle = (o: Observation<WorkWriteOutcome>) =>
       () => {},
     ),
   );
-async function witness(raw?: unknown, failure?: "throw" | "invalid") {
+async function witness(
+  raw?: unknown,
+  failure?: "throw" | "invalid",
+  limits?: { maxCount: number; maxBytes: number },
+) {
   const module = {
     ...captures,
     data,
@@ -181,6 +185,7 @@ async function witness(raw?: unknown, failure?: "throw" | "invalid") {
   const saved = new Map<string, unknown>(raw ? [["ducts", raw]] : []);
   const ws = new RouteWorkspace({
     registrations: [],
+    workHistoryLimits: limits,
     store: {
       getState: async ({ route }) => saved.get(route),
       setState: async ({ route, value }) => {
@@ -192,8 +197,42 @@ async function witness(raw?: unknown, failure?: "throw" | "invalid") {
   await registration.ready;
   cleanup.push(() => registration.close());
   const observe = observeResources(ws, { observe: () => () => {} });
-  const work = createWorkFeedClient(
-    { subscribe: (request, deliver) => observe(request, deliver), dirty() {} },
+  let skipped = 0;
+  type Frame = Parameters<Parameters<typeof observe>[1]>[0];
+  const subscriptions = new Set<{
+    request: Parameters<typeof observe>[0];
+    deliver(frame: Frame): void;
+    stop(): void;
+  }>();
+  const client = createWorkFeedClient(
+    {
+      subscribe(request, deliver) {
+        const entry = {
+          request,
+          deliver: (frame: Frame) => {
+            if (request.kind === "work-acks" && frame.kind === "event" && skipped > 0) {
+              skipped--;
+              return;
+            }
+            deliver(frame);
+          },
+          stop: () => {},
+        };
+        entry.stop = observe(request, entry.deliver);
+        subscriptions.add(entry);
+        return () => {
+          entry.stop();
+          subscriptions.delete(entry);
+        };
+      },
+      dirty(request) {
+        for (const entry of subscriptions)
+          if (entry.request.kind === request.kind) {
+            entry.stop();
+            entry.stop = observe(entry.request, (frame) => entry.deliver(frame));
+          }
+      },
+    },
     {
       write: (key, write) => ws.write(key, "ducts", "human", write),
       submit: async () => {
@@ -201,6 +240,18 @@ async function witness(raw?: unknown, failure?: "throw" | "invalid") {
       },
     },
   );
+  const states: import("../../../../packages/agent-contracts/src/work-journal-door").WorkFeedState[] =
+    [];
+  const work = {
+    ...client,
+    open: (scope: Parameters<typeof client.open>[0]) => ({
+      subscribe: (...[deliver, end]: Parameters<ReturnType<typeof client.open>["subscribe"]>) =>
+        client.open(scope).subscribe((state) => {
+          states.push(state);
+          deliver(state);
+        }, end),
+    }),
+  };
   const services = {
     ...sourceRouteServices(
       {
@@ -222,6 +273,10 @@ async function witness(raw?: unknown, failure?: "throw" | "invalid") {
     mount,
     ws,
     saved,
+    states,
+    skipAcks(count: number) {
+      skipped = count;
+    },
     reopen() {
       const next = createRouteShell(services).mount(web.route, address);
       cleanup.push(next.close);
@@ -274,7 +329,7 @@ test.each(["throw", "invalid"] as const)(
     expect(ductsDocumentSchema.parse(f.mount.work()!.value).componentDrops).toEqual({});
   },
 );
-test("H8: the host retains and replays the label but a remount restores no journal or undo", async () => {
+test("H8: real host history restores labels and undo across a remount", async () => {
   const f = await witness();
   await vi.waitFor(() => expect(f.mount.workBasis()).not.toBeNull());
   await settle(f.mount.invoke("slot", "") as Observation<WorkWriteOutcome>);
@@ -292,8 +347,9 @@ test("H8: the host retains and replays the label but a remount restores no journ
   await vi.waitFor(() =>
     expect(acks.map((ack) => ack.label)).toEqual(["fanFlow → PE_M_Fan_AirFlow"]),
   );
-  expect(next.journal()!.moves).toEqual([]);
-  expect(await next.history!.undo()).toMatchObject({ ok: false });
+  expect(next.journal()!.moves.map((m) => m.label)).toEqual(["fanFlow \u2192 PE_M_Fan_AirFlow"]);
+  expect(await next.history!.undo()).toMatchObject({ ok: true });
+  expect(ductsDocumentSchema.parse(next.work()!.value).parameters.fanFlow?.edit).toBeUndefined();
 });
 
 test("H7: a later Work edit hides named recovery evidence and refuses stale confirmation", async () => {
@@ -304,4 +360,78 @@ test("H7: a later Work edit hides named recovery evidence and refuses stale conf
   await settle(f.mount.invoke("slot", "") as Observation<WorkWriteOutcome>);
   expect(f.mount.review("work.salvage")).toMatchObject({ sentence: null, rows: [], stale: true });
   expect(() => f.mount.confirm("work.salvage")).toThrow(/stale/);
+});
+
+test("H8: undo then remount retains the undone step and host-issued redo", async () => {
+  const f = await witness();
+  await vi.waitFor(() => expect(f.mount.workBasis()).not.toBeNull());
+  await settle(f.mount.invoke("slot", "") as Observation<WorkWriteOutcome>);
+  expect(await f.mount.history!.undo()).toMatchObject({ ok: true });
+  f.mount.close();
+  const next = f.reopen();
+  await vi.waitFor(() => expect(next.workBasis()).not.toBeNull());
+  expect(next.journal()!.undo).toHaveLength(0);
+  expect(next.journal()!.redo).toHaveLength(1);
+  expect(next.journal()!.redo[0]!.cursor).toBe(0);
+  expect(next.journal()!.moves.map((m) => m.kind)).toEqual(["apply", "undo"]);
+  expect(await next.history!.redo()).toMatchObject({ ok: true });
+  expect(ductsDocumentSchema.parse(next.work()!.value).parameters.fanFlow?.edit?.value).toBe(
+    "PE_M_Fan_AirFlow",
+  );
+});
+test("H8: two shells on the same Work agree on live and restored history", async () => {
+  const f = await witness();
+  await vi.waitFor(() => expect(f.mount.workBasis()).not.toBeNull());
+  await settle(f.mount.invoke("slot", "A") as Observation<WorkWriteOutcome>);
+  const next = f.reopen();
+  await vi.waitFor(() => expect(next.workBasis()).not.toBeNull());
+  expect(next.journal()!.undo).toEqual(f.mount.journal()!.undo);
+  expect(await next.history!.undo()).toMatchObject({ ok: true });
+  await vi.waitFor(() => expect(f.mount.journal()!.redo).toEqual(next.journal()!.redo));
+  expect(f.mount.journal()!.moves).toEqual(next.journal()!.moves);
+  expect(await f.mount.history!.redo()).toMatchObject({ ok: true });
+  await vi.waitFor(() => expect(f.mount.journal()!.undo).toEqual(next.journal()!.undo));
+});
+test("H8: trimmed history cannot undo beyond the retained from boundary", async () => {
+  const f = await witness(undefined, undefined, { maxCount: 1, maxBytes: 1_000_000 });
+  await vi.waitFor(() => expect(f.mount.workBasis()).not.toBeNull());
+  for (const input of ["A", "B", "C"])
+    await settle(f.mount.invoke("slot", input) as Observation<WorkWriteOutcome>);
+  f.mount.close();
+  const next = f.reopen();
+  await vi.waitFor(() => expect(next.workBasis()).not.toBeNull());
+  expect(next.journal()!.from).toBe(3);
+  expect(next.journal()!.undo).toHaveLength(1);
+  expect(await next.history!.undo()).toMatchObject({ ok: true });
+  expect(await next.history!.undo()).toMatchObject({ ok: false, code: "empty" });
+  expect(ductsDocumentSchema.parse(next.work()!.value).parameters.fanFlow?.edit?.value).toBe("B");
+});
+test("H8: a gap reacquires real host history and resets the view", async () => {
+  const f = await witness(undefined, undefined, { maxCount: 1, maxBytes: 1_000_000 });
+  await vi.waitFor(() => expect(f.mount.workBasis()).not.toBeNull());
+  await settle(f.mount.invoke("slot", "Initial") as Observation<WorkWriteOutcome>);
+  const key = f.mount.workBasis()!.token.scope.identity.work!;
+  f.skipAcks(1);
+  await f.ws.write(key, "ducts", "pea", {
+    kind: "apply",
+    expectedRevision: 1,
+    press: "external",
+    label: "External slot",
+    patches: [{ path: ["parameters", "fanFlow"], value: { edit: { value: "A" } } }],
+  });
+  await f.ws.write(key, "ducts", "pea", {
+    kind: "apply",
+    expectedRevision: 2,
+    press: "external-2",
+    label: "Second slot",
+    patches: [{ path: ["parameters", "fanFlow"], value: { edit: { value: "B" } } }],
+  });
+  await vi.waitFor(() => expect(f.mount.work()?.revision).toBe(3));
+  expect(f.states.map((s) => s.kind)).toContain("gap");
+  expect(f.states.filter((s) => s.kind === "ready")).toHaveLength(2);
+  expect(f.mount.journal()!.moves.map((m) => m.label)).toEqual(["Second slot"]);
+  expect(await f.mount.history!.undo()).toMatchObject({ ok: true });
+  expect(ductsDocumentSchema.parse(f.mount.work()!.value).parameters.fanFlow?.edit?.value).toBe(
+    "A",
+  );
 });
