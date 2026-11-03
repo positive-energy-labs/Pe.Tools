@@ -79,6 +79,7 @@ export const admittedMountBodyKinds: readonly string[] = Object.freeze([
   "present",
   "group",
   "label",
+  "focus",
 ]);
 
 /** Application services are installed once. Routes supply only admission and location. */
@@ -849,6 +850,12 @@ export function createRouteShell(services: KernelServices) {
         subjectDisplay: observers.subject,
         subjectText: observers.text,
         cells: cells.rows,
+        focusCell(id: string, key: unknown) {
+          action(); resolve();
+          const issued = owner.invocation(owner.capture(`cell-focus:${id}`), {});
+          if (!issued.ok) throw Error(issued.reason);
+          return owner.acceptPage(issued.value, cells.focus(id, key) as Parameters<typeof owner.acceptPage>[1]);
+        },
         predicates: observers.predicates,
         visible: observers.visible,
         initialRestore: transport.initial,
