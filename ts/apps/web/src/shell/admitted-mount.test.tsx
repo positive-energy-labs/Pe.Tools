@@ -1,3 +1,4 @@
+import { actionReceiptSchema } from "@pe/agent-contracts";
 // @vitest-environment jsdom
 import { createElement, StrictMode } from "react";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -180,10 +181,16 @@ const module = {
 async function admitted(
   explicit = false,
   query = false,
-  amendment: { data?: Record<string, unknown>; bodies?: Record<string, unknown> } = {},
+  amendment: {
+    data?: Record<string, unknown>;
+    bodies?: Record<string, unknown>;
+    sources?: Record<string, unknown>;
+    landing?: boolean;
+  } = {},
 ) {
   const selectedModule = {
     ...module,
+    sources: amendment.sources ?? {},
     schemas: { ...schemas, ids: z.object({ elementIds: z.array(z.number()) }) },
     bodies: {
       ...bodies,
@@ -216,6 +223,7 @@ async function admitted(
                 label: "Capture",
                 review: "none" as const,
                 cancellation: "scope" as const,
+                ...(amendment.landing ? { lands: "landQuery" } : {}),
                 deps: { page: [], work: [], readings: [] },
                 captures: [],
               },
@@ -1018,23 +1026,9 @@ test("a preview for another Work revision never becomes a review", async () => {
   expect(f.submit).not.toHaveBeenCalled();
 });
 
-import * as actionClient from "../../../../packages/mcps/src/shared/takeoff-action-client";
-import { actionReceiptSchema } from "@pe/agent-contracts";
 import { sourceRouteServices } from "./source-route-services";
 test("shared preview transport renders before-to-after review and commits identical Work through the door", async () => {
-  const previewCall = vi.spyOn(actionClient, "submitAction").mockImplementation(async (admission) =>
-    actionReceiptSchema.parse({
-      ...admission,
-      state: "succeeded",
-      caller: { kind: "human", via: "local" },
-      basis: null,
-      steps: [],
-      prepared: { state: "ready", value: null },
-      recovery: [],
-      result: sealedPreview((admission.input as { work: WorkHandle }).work),
-      startedAt: "2026-11-03T00:00:00Z",
-    }),
-  );
+  const previewCall = vi.fn(async (input: { work: WorkHandle }) => sealedPreview(input.work));
   try {
     const store = createFixtureWorkDoor(
       { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
@@ -1043,7 +1037,21 @@ test("shared preview transport renders before-to-after review and commits identi
     const submit = vi.fn((command: Parameters<WorkJournalDoor["submit"]>[0]) =>
       store.submit(command),
     );
-    const shell = createRouteShell({ ...sourceRouteServices({}), work: { ...store, submit } });
+    const shell = createRouteShell({
+      ...sourceRouteServices({
+        "native.write.preview": {
+          kind: "use",
+          async open(ctx, deliver) {
+            deliver({
+              kind: "complete",
+              revision: 0,
+              value: await previewCall(ctx.args as { work: WorkHandle }),
+            });
+          },
+        },
+      }),
+      work: { ...store, submit },
+    });
     const mounted = vi.spyOn(shell, "mount");
     render(
       createElement(AdmittedPane, {
@@ -1068,11 +1076,11 @@ test("shared preview transport renders before-to-after review and commits identi
     expect(submit).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({
         key: "native.write",
-        input: previewCall.mock.calls[0]![0].input,
+        input: previewCall.mock.calls[0]![0],
       }),
     );
   } finally {
-    previewCall.mockRestore();
+    previewCall.mockReset();
   }
 });
 
@@ -1595,7 +1603,7 @@ test("transition dependency references are linked at admission", async () => {
   ).rejects.toThrow(/missing/);
 });
 
-import { applicationSources, applicationRouteShell } from "./application-route-shell";
+import { applicationRouteShell } from "./application-route-shell";
 import { useRouteTarget } from "../route/route-target";
 vi.mock("../route/route-target", async (original) => ({
   ...(await original<typeof import("../route/route-target")>()),
@@ -1676,7 +1684,7 @@ test.each([
 test("application target change remounts once and retires the old ordinary source", async () => {
   const contexts: Parameters<import("./readings").UseSource["open"]>[0][] = [];
   const released = vi.fn();
-  Object.assign(applicationSources, {
+  const sources = {
     "notes.read": {
       kind: "use",
       open(
@@ -1688,12 +1696,12 @@ test("application target change remounts once and retires the old ordinary sourc
         return released;
       },
     },
-  });
+  };
   const selected = vi.mocked(useRouteTarget);
   selected.mockReturnValue({ resolution: { kind: "resolved", target: documentA } } as ReturnType<
     typeof useRouteTarget
   >);
-  const route = await admitted(false, false, { data: { needs: "document" } });
+  const route = await admitted(false, false, { data: { needs: "document" }, sources });
   const address = locationPort().address;
   try {
     const view = render(createElement(applicationRouteShell, { route, address, pane: "main" }));
@@ -1712,7 +1720,7 @@ test("application target change remounts once and retires the old ordinary sourc
     view.unmount();
     expect(contexts[1]!.signal.aborted).toBe(true);
   } finally {
-    Reflect.deleteProperty(applicationSources, "notes.read");
+    selected.mockReset();
   }
 });
 
@@ -2147,20 +2155,48 @@ test("mount admits absent output only when the submitted schema permits undefine
 });
 
 test("migration bodies stay on the host; mount exposes typed registration refusal without reopening an old tab", async () => {
-  const migrate = vi.fn(() => { throw Error("must never execute in browser"); });
+  const migrate = vi.fn(() => {
+    throw Error("must never execute in browser");
+  });
   const route = await admitted(false, false, {
-    data: { capabilities: ["work"], workSubject: "note", work: { route: "note", schema: "pose", version: 2, migrations: { 1: "upgrade" } } },
+    data: {
+      capabilities: ["work"],
+      workSubject: "note",
+      work: { route: "note", schema: "pose", version: 2, migrations: { 1: "upgrade" } },
+    },
     bodies: { upgrade: { slot: "work.migrations.1", kind: "migration", source, run: migrate } },
   });
-  const failure = { kind: "registration-mismatch" as const, routeKey: route.data.key, expected: route.workFingerprint, received: route.workFingerprint };
-  const open = vi.fn<WorkJournalDoor["open"]>((scope) => ({ subscribe(deliver, end) {
-    expect(scope.fingerprint).toBe(route.workFingerprint);
-    deliver({ kind: "pending" }); deliver({ kind: "failed", failure }); end(); return () => {};
-  } }));
-  const door: WorkJournalDoor = { lifetime: "subscription", open, submitWork: () => { throw Error("unavailable"); },
-    submit: () => { throw Error("unavailable"); }, accepted: () => ({ kind: "pending" }) };
+  const failure = {
+    kind: "registration-mismatch" as const,
+    routeKey: route.data.key,
+    expected: route.workFingerprint,
+    received: route.workFingerprint,
+  };
+  const open = vi.fn<WorkJournalDoor["open"]>((scope) => ({
+    subscribe(deliver, end) {
+      expect(scope.fingerprint).toBe(route.workFingerprint);
+      deliver({ kind: "pending" });
+      deliver({ kind: "failed", failure });
+      end();
+      return () => {};
+    },
+  }));
+  const door: WorkJournalDoor = {
+    lifetime: "subscription",
+    open,
+    submitWork: () => {
+      throw Error("unavailable");
+    },
+    submit: () => {
+      throw Error("unavailable");
+    },
+    accepted: () => ({ kind: "pending" }),
+  };
   const location = locationPort();
-  const mount = createRouteShell({ ...transports().services, work: door }).mount(route, location.address);
+  const mount = createRouteShell({ ...transports().services, work: door }).mount(
+    route,
+    location.address,
+  );
   closes.push(mount.close);
   expect(mount.workFailure()).toEqual(failure);
   expect(mount.workProblem()).toContain("Reload this tab");
@@ -2168,4 +2204,47 @@ test("migration bodies stay on the host; mount exposes typed registration refusa
   location.navigate("/note?note=%5B%22note%22%2C%22B%22%5D");
   expect(open).toHaveBeenCalledOnce();
   expect(migrate).not.toHaveBeenCalled();
+});
+
+test("query lands once through transition on current success and refuses stale/superseded/decode failure", async () => {
+  const land = vi.fn((value: string) => ({ pose: { x: value.length } }));
+  const transition = vi.fn((_page, patch) => ({
+    ok: true,
+    value: patch.pose ? { ...patch, pose: { x: patch.pose.x + 1 } } : patch,
+  }));
+  const route = await admitted(true, true, {
+    landing: true,
+    data: { transition: "transition", transitionDeps: { page: [], work: [], readings: [] } },
+    bodies: {
+      landQuery: { slot: "verbs.capture.lands", kind: "lands", source, run: land },
+      transition: { slot: "transition", kind: "transition", source, run: transition },
+    },
+  });
+  const t = transports();
+  const m = createRouteShell(t.services).mount(route, locationPort().address);
+  closes.push(m.close);
+  const invoke = () => (m.read("main") as any).verbs.capture({ elementIds: [1] });
+  invoke();
+  const first = t.frames.at(-1)!;
+  first({ status: "pending", current: false, reason: "pending" });
+  expect(land).not.toHaveBeenCalled();
+  invoke();
+  const second = t.frames.at(-1)!;
+  first(ready("superseded"));
+  second({ status: "unavailable", current: false, value: "stale", reason: "stale" });
+  expect(land).not.toHaveBeenCalled();
+  second(ready("yes"));
+  expect(land).toHaveBeenCalledOnce();
+  expect(m.page.read().pose).toEqual({ x: 4 });
+  second(ready("again"));
+  expect(land).toHaveBeenCalledOnce();
+  invoke();
+  t.frames.at(-1)!(ready(17 as any));
+  expect(m.queryLanding("notes")).toMatchObject({ kind: "result-undecodable", key: "notes.read" });
+  expect(land).toHaveBeenCalledOnce();
+  invoke();
+  const departed = t.frames.at(-1)!;
+  m.controls.query("query", "new scope");
+  departed(ready("departed"));
+  expect(land).toHaveBeenCalledOnce();
 });

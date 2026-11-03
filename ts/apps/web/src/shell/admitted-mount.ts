@@ -351,9 +351,12 @@ export function createRouteShell(services: KernelServices) {
         string,
         {
           input: unknown;
+          landing?: string;
+          landed?: boolean;
           invocation: import("../../../../packages/agent-contracts/src/route-kernel-page").InvocationToken;
         }
       >();
+      const queryLandings = new Map<string, CommandResultDecode>();
       const subjectField = route.data.subject.field;
       let drawing = false;
       let scheduling = false;
@@ -450,6 +453,16 @@ export function createRouteShell(services: KernelServices) {
                         return;
                       }
                       const parsed = request.output.safeParse(snapshot.value);
+                      if (!parsed.success) {
+                        const query = queryInputs.get(readingId);
+                        if (query?.landing)
+                          queryLandings.set(readingId, {
+                            kind: "result-undecodable",
+                            key: request.key.op,
+                            receiptId: query.invocation.id,
+                            problem: parsed.error.message,
+                          });
+                      }
                       record.snapshot = parsed.success
                         ? freezePage({ ...snapshot, value: parsed.data })
                         : { status: "failed", current: false, reason: parsed.error.message };
@@ -479,6 +492,40 @@ export function createRouteShell(services: KernelServices) {
               work: owner.read()!.work?.value ?? null,
               readings,
             });
+            for (const [readingId, query] of queryInputs) {
+              const result = readings[readingId];
+              if (
+                !query.landing ||
+                query.landed ||
+                !result?.current ||
+                result.status !== "ready" ||
+                !owner.current(query.invocation)
+              )
+                continue;
+              const declaration = route.data.readings[readingId]!;
+              if (declaration.kind === "derive") continue;
+              const value =
+                declaration.kind === "use" && declaration.geometry
+                  ? (result.value as { kind: string; value?: unknown }).value
+                  : result.value;
+              const decoded = bindings.entries[declaration.entry]!.output.safeParse(value);
+              query.landed = true;
+              if (!decoded.success) {
+                queryLandings.set(readingId, {
+                  kind: "result-undecodable",
+                  key: declaration.entry,
+                  receiptId: query.invocation.id,
+                  problem: decoded.error.message,
+                });
+                continue;
+              }
+              queryLandings.set(readingId, { kind: "decoded", value: decoded.data });
+              const patch = bindings.bodies[query.landing]!.run(
+                freezePage(decoded.data),
+                owner.read()!.page,
+              );
+              owner.acceptPage(query.invocation, patch as Parameters<typeof owner.acceptPage>[1]);
+            }
             for (const [key, field] of Object.entries(route.data.fields)) {
               if (field.role === "subject")
                 pickerOptions[key] = freezePage(
@@ -775,7 +822,8 @@ export function createRouteShell(services: KernelServices) {
           send = () => {
             const previous = queryInputs.get(readingId);
             if (previous) owner.retire(previous.invocation.token);
-            queryInputs.set(readingId, { input: args, invocation });
+            queryLandings.delete(readingId);
+            queryInputs.set(readingId, { input: args, invocation, landing: declaration.lands });
             demanded.add(readingId);
             generations.set(readingId, (generations.get(readingId) ?? 0) + 1);
             retire(readingId);
@@ -1041,9 +1089,12 @@ export function createRouteShell(services: KernelServices) {
         },
         work: () => owner.read()?.work ?? null,
         workBasis,
+        queryLanding: (readingId: string) => queryLandings.get(readingId) ?? null,
         commandLanding: (id: string) => landings.get(id) ?? null,
         commandProblems: () =>
-          [...landings.values()].filter((result) => result.kind === "result-undecodable"),
+          [...landings.values(), ...queryLandings.values()].filter(
+            (result) => result.kind === "result-undecodable",
+          ),
         workProblem: work.problem,
         workFailure: work.failure,
         history,

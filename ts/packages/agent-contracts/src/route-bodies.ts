@@ -488,6 +488,7 @@ export function linkRouteBodies(
       case "query":
         entryRef(verb.entry, `${path}.entry`, true);
         body(verb.args, `${path}.args`, "args");
+        body(verb.lands, `${path}.lands`, "lands");
         break;
     }
   }
