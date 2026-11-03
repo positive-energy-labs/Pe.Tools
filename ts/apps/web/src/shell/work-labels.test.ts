@@ -2,19 +2,15 @@ import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import type { RouteGraph } from "@pe/agent-contracts";
 import { dataTablesGraph } from "../data-tables/graph";
-import { ductsGraph } from "../ducts/graph";
-import { fansGraph } from "../fans/graph";
 import { familyGraph } from "../family/graph";
 import { parameterLinksGraph } from "../parameter-links/graph";
 import { podsGraph } from "../pods/graph";
 import { roomsGraph } from "../rooms/graph";
 import { takeoffGraph } from "../takeoff/graph";
-import { workPathName, writeLabel } from "./work-writes";
+import { workPathName } from "./work-writes";
 
 const graphs = [
   dataTablesGraph,
-  ductsGraph,
-  fansGraph,
 
   familyGraph,
   parameterLinksGraph,
@@ -48,13 +44,4 @@ test("every Work field a route can write has a declared name for History and Inp
     }
   }
   expect(unnamed).toEqual([]);
-});
-
-test("staging names itself in History and stays out of Inputs", () => {
-  expect(
-    writeLabel([{ path: ["writeIntent", "edit"], value: { value: { fan: {} } } }], ductsGraph),
-  ).toEqual({ label: "Edit write scope", internal: true });
-  const edit = writeLabel([{ path: ["flows", "12"], value: 50 }], ductsGraph);
-  expect(edit.internal).toBeUndefined();
-  expect(edit.label).not.toMatch(/\./);
 });

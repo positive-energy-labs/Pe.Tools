@@ -9,7 +9,7 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
 import type { FanPort } from "./model";
 import type { Closer } from "./closer";
-import type { OpenSheet } from "../sources";
+import type { OpenSheet } from "../neutral.ts";
 import type { SheetBlocker, Tier } from "./tiers";
 
 /** The open sheet's resolved criteria and firm layer (ducts LEDGER 2026-10-29), or null until a sheet's inputs land. */
@@ -43,8 +43,6 @@ export interface SheetViewProps {
   error: string | null;
   progress: { done: number; total: number; mark: string; stopped: boolean } | null;
   /** Open (compute) one fan's sheet; compute every fan's overview; cancel what runs. */
-  open: (fan: Pick<FanPort, "unitId" | "portIndex">) => void;
-  cancel: () => void;
   refresh: () => void;
   /** Edits on Work's own keys through the open sheet (typed cfm and drops, rulings, criteria); the host recomputes. */
   changeInputs: (edits: DuctsSheetEdits) => void;

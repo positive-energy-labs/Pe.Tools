@@ -11,6 +11,8 @@
 import { Route as rootRouteImport } from "./routes/__root";
 import { Route as IndexRouteImport } from "./routes/index";
 import { Route as DesignSystemRouteImport } from "./routes/design-system";
+import { Route as DuctsRouteImport } from "./routes/ducts";
+import { Route as FansRouteImport } from "./routes/fans";
 import { Route as PeaRouteImport } from "./routes/pea";
 import { Route as DesignSystemArmingRouteImport } from "./routes/design-system_.arming";
 import { Route as DesignSystemBandRouteImport } from "./routes/design-system_.band";
@@ -32,6 +34,16 @@ const IndexRoute = IndexRouteImport.update({
 const DesignSystemRoute = DesignSystemRouteImport.update({
   id: "/design-system",
   path: "/design-system",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const DuctsRoute = DuctsRouteImport.update({
+  id: "/ducts",
+  path: "/ducts",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const FansRoute = FansRouteImport.update({
+  id: "/fans",
+  path: "/fans",
   getParentRoute: () => rootRouteImport,
 } as any);
 const PeaRoute = PeaRouteImport.update({
@@ -100,6 +112,8 @@ const ApiPdfAuditParseParseIdRoute = ApiPdfAuditParseParseIdRouteImport.update({
 export interface FileRoutesByFullPath {
   "/": typeof IndexRoute;
   "/design-system": typeof DesignSystemRoute;
+  "/ducts": typeof DuctsRoute;
+  "/fans": typeof FansRoute;
   "/pea": typeof PeaRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/band": typeof DesignSystemBandRoute;
@@ -116,6 +130,8 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   "/": typeof IndexRoute;
   "/design-system": typeof DesignSystemRoute;
+  "/ducts": typeof DuctsRoute;
+  "/fans": typeof FansRoute;
   "/pea": typeof PeaRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/band": typeof DesignSystemBandRoute;
@@ -133,6 +149,8 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport;
   "/": typeof IndexRoute;
   "/design-system": typeof DesignSystemRoute;
+  "/ducts": typeof DuctsRoute;
+  "/fans": typeof FansRoute;
   "/pea": typeof PeaRoute;
   "/design-system_/arming": typeof DesignSystemArmingRoute;
   "/design-system_/band": typeof DesignSystemBandRoute;
@@ -151,6 +169,8 @@ export interface FileRouteTypes {
   fullPaths:
     | "/"
     | "/design-system"
+    | "/ducts"
+    | "/fans"
     | "/pea"
     | "/design-system/arming"
     | "/design-system/band"
@@ -167,6 +187,8 @@ export interface FileRouteTypes {
   to:
     | "/"
     | "/design-system"
+    | "/ducts"
+    | "/fans"
     | "/pea"
     | "/design-system/arming"
     | "/design-system/band"
@@ -183,6 +205,8 @@ export interface FileRouteTypes {
     | "__root__"
     | "/"
     | "/design-system"
+    | "/ducts"
+    | "/fans"
     | "/pea"
     | "/design-system_/arming"
     | "/design-system_/band"
@@ -200,6 +224,8 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute;
   DesignSystemRoute: typeof DesignSystemRoute;
+  DuctsRoute: typeof DuctsRoute;
+  FansRoute: typeof FansRoute;
   PeaRoute: typeof PeaRoute;
   DesignSystemArmingRoute: typeof DesignSystemArmingRoute;
   DesignSystemBandRoute: typeof DesignSystemBandRoute;
@@ -227,6 +253,20 @@ declare module "@tanstack/react-router" {
       path: "/design-system";
       fullPath: "/design-system";
       preLoaderRoute: typeof DesignSystemRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/ducts": {
+      id: "/ducts";
+      path: "/ducts";
+      fullPath: "/ducts";
+      preLoaderRoute: typeof DuctsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/fans": {
+      id: "/fans";
+      path: "/fans";
+      fullPath: "/fans";
+      preLoaderRoute: typeof FansRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/pea": {
@@ -330,6 +370,8 @@ const ApiPdfAuditParseRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DesignSystemRoute: DesignSystemRoute,
+  DuctsRoute: DuctsRoute,
+  FansRoute: FansRoute,
   PeaRoute: PeaRoute,
   DesignSystemArmingRoute: DesignSystemArmingRoute,
   DesignSystemBandRoute: DesignSystemBandRoute,

@@ -1,1695 +1,339 @@
 {
-  "address": "schedules",
-  "cells": [
-    {
-      "groupOf": {
-        "runtime": true
-      },
-      "nouns": [
-        "column"
-      ],
-      "segment": "cells"
-    }
+  "version": 1,
+  "capabilities": [
+    "work",
+    "native-write"
   ],
+  "key": "schedules",
+  "address": "/schedules",
+  "name": "Schedules",
   "directory": {
+    "group": "Coordinate model data",
+    "summary": "Inspect document schedules",
+    "label": "Revit data",
+    "icon": "LayoutGrid",
+    "exposure": "Preview",
+    "surfaces": {
+      "web": "full",
+      "pwa": "full",
+      "tray": false
+    },
     "aliases": [
       "Revit",
       "data"
     ],
-    "blurb": "Inspect, edit and review the history of a document schedule.",
-    "category": "Coordinate model data",
-    "exposure": "Preview",
-    "icon": "LayoutGrid",
-    "label": "Revit data",
+    "runtimeNeed": "Open project document",
     "listed": true,
-    "path": "/schedules",
-    "resume": "document",
-    "runtimeNeed": "Revit for model actions; browsing saved data is separate",
     "satellites": [],
-    "surfaces": {
-      "pwa": "full",
-      "tray": false,
-      "web": "full"
-    },
-    "title": "Schedules"
+    "resume": "document"
   },
   "fields": {
-    "captureId": {
-      "agent": "set",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "query",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": "",
-        "type": "string"
-      },
-      "share": true,
-      "url": false
-    },
-    "cell": {
-      "agent": "set",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "selection",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": "",
-        "pattern": "^(\\d+::\\d+)?$",
-        "type": "string"
-      },
-      "share": true,
-      "url": "replace"
-    },
-    "hidden": {
-      "agent": "set",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "pose",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "additionalProperties": {
-          "const": true,
-          "type": "boolean"
-        },
-        "default": {},
-        "propertyNames": {
-          "maxLength": 512,
-          "minLength": 1,
-          "type": "string"
-        },
-        "type": "object"
-      },
-      "share": true,
-      "url": "replace"
-    },
-    "lines": {
-      "agent": "set",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "query",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "enum": [
-          "suggestions",
-          "edits",
-          "all"
-        ],
-        "type": "string"
-      },
-      "share": true,
-      "url": "replace"
-    },
-    "pane": {
-      "agent": "set",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "pose",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": "spec",
-        "enum": [
-          "spec",
-          "output"
-        ],
-        "type": "string"
-      },
-      "share": true,
-      "url": false
-    },
-    "path": {
-      "agent": "read",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "draft",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": "",
-        "maxLength": 1024,
-        "type": "string"
-      },
-      "share": false,
-      "url": "push"
-    },
-    "pod": {
-      "agent": "read",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "draft",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": "",
-        "maxLength": 200,
-        "type": "string"
-      },
-      "share": false,
-      "url": "push"
-    },
-    "query": {
-      "agent": "set",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "query",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": "",
-        "maxLength": 4096,
-        "type": "string"
-      },
-      "share": true,
-      "url": "push"
-    },
-    "sort": {
-      "agent": "set",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "query",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "additionalProperties": false,
-        "default": {
-          "columns": []
-        },
-        "properties": {
-          "columns": {
-            "items": {
-              "additionalProperties": false,
-              "properties": {
-                "dir": {
-                  "enum": [
-                    "asc",
-                    "desc"
-                  ],
-                  "type": "string"
-                },
-                "key": {
-                  "maxLength": 512,
-                  "minLength": 1,
-                  "type": "string"
-                }
-              },
-              "required": [
-                "key",
-                "dir"
-              ],
-              "type": "object"
-            },
-            "maxItems": 8,
-            "type": "array"
-          }
-        },
-        "required": [
-          "columns"
-        ],
-        "type": "object"
-      },
-      "share": true,
-      "url": "replace"
-    },
-    "stage": {
-      "agent": "set",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "stage",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": "audit",
-        "enum": [
-          "audit",
-          "apply",
-          "history"
-        ],
-        "type": "string"
-      },
-      "share": true,
-      "url": "push"
-    },
-    "threadSearch": {
-      "agent": "set",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "query",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": {
-          "keywords": "",
-          "pills": [
-            {
-              "field": "scope",
-              "op": "=",
-              "value": "all"
-            }
-          ],
-          "v": 1
-        },
-        "description": "JSON {v:1,keywords:string,pills:[{field,op:'=',value}]}. Literal keywords and equality pills. Fields: target, provider, state, unread, scope. Scope values: attention, all, archived.",
-        "properties": {
-          "keywords": {
-            "maxLength": 4000,
-            "type": "string"
-          },
-          "pills": {
-            "items": {
-              "properties": {
-                "field": {
-                  "type": "string"
-                },
-                "op": {
-                  "type": "string"
-                },
-                "value": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "field",
-                "op",
-                "value"
-              ],
-              "type": "object"
-            },
-            "maxItems": 32,
-            "type": "array"
-          },
-          "v": {
-            "maximum": 9007199254740991,
-            "minimum": -9007199254740991,
-            "type": "integer"
-          }
-        },
-        "required": [
-          "v",
-          "keywords",
-          "pills"
-        ],
-        "type": "object"
-      },
-      "share": true,
-      "url": "replace"
-    },
-    "threadSort": {
-      "agent": "set",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "query",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": "",
-        "enum": [
-          "",
-          "recent",
-          "title"
-        ],
-        "type": "string"
-      },
-      "share": true,
-      "url": "replace"
-    },
     "workspaceId": {
-      "agent": "read",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
       "role": "subject",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": "",
-        "maxLength": 200,
-        "type": "string"
-      },
+      "schema": "subject",
+      "codec": "subject",
+      "initial": null,
+      "url": "push",
       "share": true,
-      "url": "replace"
-    }
-  },
-  "key": "schedules",
-  "layout": {
-    "axis": "h",
-    "children": [
-      {
-        "id": "list",
-        "kind": "pane"
-      },
-      {
-        "axis": "v",
-        "children": [
-          {
-            "id": "grid",
-            "kind": "pane"
-          },
-          {
-            "child": {
-              "id": "work",
-              "kind": "pane"
-            },
-            "kind": "gate",
-            "when": "editing"
-          }
-        ],
-        "id": "schedule-detail",
-        "kind": "split",
-        "size": 160,
-        "sized": "end"
+      "agent": "set",
+      "cardinality": "one",
+      "identity": "schedule",
+      "picker": {
+        "reading": "catalog",
+        "options": "pick"
       }
-    ],
-    "id": "schedules-body",
-    "kind": "split",
-    "size": 240,
-    "sized": "start"
-  },
-  "moduleHash": "7241f33f5965ef5cc34976cb0edc06763ff3583dac94ccca6050997fef6339c8",
-  "name": "Schedules",
-  "needs": "project",
-  "panes": {
-    "grid": {
-      "draws": [
-        "retained",
-        "saved",
-        "receipts",
-        "outcome"
-      ],
-      "label": "Schedule grid",
-      "purpose": "Inspect and edit schedule cells",
-      "verbs": []
     },
-    "list": {
-      "draws": [
-        "catalog",
-        "retained",
-        "history"
-      ],
-      "label": "Schedules",
-      "purpose": "Choose a schedule in this document",
-      "verbs": [
-        "read"
+    "selected": {
+      "role": "selection",
+      "kinds": [
+        "schedule"
       ]
     },
-    "work": {
-      "draws": [
-        "retained",
-        "saved",
-        "receipts",
-        "outcome"
-      ],
-      "label": "Schedule Work",
-      "purpose": "Review proposed and edited cells",
-      "verbs": [
-        "bind"
-      ]
+    "table": {
+      "role": "pose",
+      "schema": "table",
+      "codec": "json",
+      "initial": {
+        "query": "",
+        "sorts": [],
+        "hiddenColumns": []
+      },
+      "url": "replace",
+      "share": true,
+      "agent": "set"
     }
   },
-  "predicates": {
-    "editing": {
-      "runtime": true
+  "identities": {
+    "schedule": {
+      "kind": "local",
+      "codec": "local"
     }
+  },
+  "subject": {
+    "field": "workspaceId",
+    "noun": "schedule",
+    "roster": "catalog",
+    "detail": "retained",
+    "pane": "grid"
+  },
+  "work": {
+    "schema": "work",
+    "route": "schedules",
+    "version": 1,
+    "migrations": {}
   },
   "readings": {
     "catalog": {
       "kind": "use",
-      "retire": "target",
-      "source": "schedules.catalog"
-    },
-    "history": {
-      "args": {
-        "runtime": true
+      "entry": "schedules.catalog",
+      "args": "empty",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": []
       },
-      "kind": "use",
-      "retire": "page",
-      "source": "schedules.history"
+      "demand": "visible",
+      "retain": {
+        "evidence": "scope",
+        "resource": "scope"
+      },
+      "refresh": "dependencies"
     },
-    "outcome": {
-      "deps": [
-        "receipts"
-      ],
-      "kind": "derive",
-      "retire": "target",
-      "source": "schedules.outcome"
-    },
-    "pods": {
+    "retained": {
       "kind": "use",
-      "retire": "never",
-      "source": "schedules.pods"
+      "entry": "schedules.retained",
+      "args": "workspace",
+      "deps": {
+        "page": [
+          "workspaceId"
+        ],
+        "work": [],
+        "readings": []
+      },
+      "demand": "visible",
+      "retain": {
+        "evidence": "scope",
+        "resource": "scope"
+      },
+      "refresh": "dependencies"
+    },
+    "saved": {
+      "kind": "use",
+      "entry": "schedules.saved",
+      "args": "savedArgs",
+      "deps": {
+        "page": [],
+        "work": [
+          "basis"
+        ],
+        "readings": []
+      },
+      "demand": "visible",
+      "retain": {
+        "evidence": "scope",
+        "resource": "scope"
+      },
+      "refresh": "dependencies"
     },
     "receipts": {
       "kind": "use",
-      "retire": "target",
-      "source": "schedules.receipts"
-    },
-    "retained": {
-      "args": {
-        "runtime": true
+      "entry": "schedules.receipts",
+      "args": "receiptArgs",
+      "deps": {
+        "page": [
+          "workspaceId"
+        ],
+        "work": [],
+        "readings": []
       },
-      "kind": "use",
-      "query": "schedule.grid.snapshot",
-      "retire": "page",
-      "source": "schedules.retained"
-    },
-    "saved": {
-      "args": {
-        "runtime": true
+      "demand": "visible",
+      "retain": {
+        "evidence": "scope",
+        "resource": "scope"
       },
+      "refresh": "dependencies"
+    },
+    "outcome": {
+      "kind": "derive",
+      "output": "outcome",
+      "derive": "outcome",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": [
+          "receipts"
+        ]
+      },
+      "demand": "visible",
+      "retain": {
+        "evidence": "scope",
+        "resource": "scope"
+      },
+      "refresh": "dependencies"
+    },
+    "preview": {
       "kind": "use",
-      "retire": "page",
-      "source": "schedules.saved"
-    }
-  },
-  "seeds": {
-    "read": {
-      "title": "Mechanical equipment"
-    }
-  },
-  "stageOrder": [
-    "audit",
-    "apply",
-    "history"
-  ],
-  "stages": {
-    "apply": {
-      "panes": [
-        "list",
-        "grid",
-        "work"
-      ],
-      "verbs": [
-        "push"
-      ],
-      "word": "Editing"
+      "entry": "schedule.grid.push.preview",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": []
+      },
+      "demand": "explicit",
+      "retain": {
+        "evidence": "scope",
+        "resource": "scope"
+      },
+      "refresh": "explicit"
     },
-    "audit": {
-      "panes": [
-        "list",
-        "grid",
-        "work"
-      ],
-      "verbs": [
-        "capture"
-      ],
-      "word": "Auditing"
-    },
-    "history": {
-      "panes": [
-        "list",
-        "grid"
-      ],
-      "verbs": [],
-      "word": "History"
-    }
-  },
-  "subject": {
-    "runtime": true
-  },
-  "subjectField": {
-    "cardinality": "one",
-    "detail": "retained",
-    "field": "workspaceId",
-    "keyKind": "UniqueId",
-    "noun": "schedule",
-    "pane": "list",
-    "roster": "catalog",
-    "show": {
-      "runtime": true
+    "snapshot": {
+      "kind": "use",
+      "entry": "schedule.grid.snapshot",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": []
+      },
+      "demand": "explicit",
+      "retain": {
+        "evidence": "scope",
+        "resource": "scope"
+      },
+      "refresh": "explicit"
     }
   },
   "verbs": {
-    "bind": {
-      "does": "schedule.grid.bind",
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "properties": {
-          "expectedRevision": {
-            "maximum": 9007199254740991,
-            "minimum": 0,
-            "type": "integer"
-          },
-          "reading": {
-            "properties": {
-              "capturedAt": {
-                "type": "string"
-              },
-              "document": {
-                "type": "string"
-              },
-              "id": {
-                "pattern": "^[a-f0-9]{64}$",
-                "type": "string"
-              },
-              "process": {
-                "additionalProperties": false,
-                "properties": {
-                  "executable": {
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "pid": {
-                    "exclusiveMinimum": 0,
-                    "maximum": 9007199254740991,
-                    "type": "integer"
-                  },
-                  "processStartUtc": {
-                    "minLength": 1,
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "pid",
-                  "processStartUtc",
-                  "executable"
-                ],
-                "type": "object"
-              },
-              "snapshot": {
-                "properties": {
-                  "columns": {
-                    "items": {
-                      "properties": {
-                        "columnNumber": {
-                          "maximum": 9007199254740991,
-                          "minimum": -9007199254740991,
-                          "type": "integer"
-                        },
-                        "fieldName": {
-                          "type": "string"
-                        },
-                        "headerText": {
-                          "type": "string"
-                        },
-                        "isCalculated": {
-                          "default": false,
-                          "type": "boolean"
-                        },
-                        "isCombinedParameter": {
-                          "default": false,
-                          "type": "boolean"
-                        },
-                        "parameter": {
-                          "anyOf": [
-                            {
-                              "properties": {
-                                "definition": {
-                                  "anyOf": [
-                                    {
-                                      "properties": {
-                                        "dataTypeId": {
-                                          "anyOf": [
-                                            {
-                                              "type": "string"
-                                            },
-                                            {
-                                              "type": "null"
-                                            }
-                                          ]
-                                        }
-                                      },
-                                      "type": "object"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ]
-                                }
-                              },
-                              "type": "object"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        }
-                      },
-                      "required": [
-                        "columnNumber",
-                        "headerText",
-                        "fieldName"
-                      ],
-                      "type": "object"
-                    },
-                    "type": "array"
-                  },
-                  "documentTitle": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "rows": {
-                    "items": {
-                      "properties": {
-                        "bindings": {
-                          "default": [],
-                          "items": {
-                            "properties": {
-                              "blocker": {
-                                "default": "None",
-                                "type": "string"
-                              },
-                              "columnNumber": {
-                                "maximum": 9007199254740991,
-                                "minimum": -9007199254740991,
-                                "type": "integer"
-                              },
-                              "displayUnit": {
-                                "anyOf": [
-                                  {
-                                    "properties": {
-                                      "label": {
-                                        "anyOf": [
-                                          {
-                                            "type": "string"
-                                          },
-                                          {
-                                            "type": "null"
-                                          }
-                                        ]
-                                      },
-                                      "refusal": {
-                                        "anyOf": [
-                                          {
-                                            "type": "string"
-                                          },
-                                          {
-                                            "type": "null"
-                                          }
-                                        ]
-                                      },
-                                      "specTypeId": {
-                                        "type": "string"
-                                      },
-                                      "symbol": {
-                                        "anyOf": [
-                                          {
-                                            "type": "string"
-                                          },
-                                          {
-                                            "type": "null"
-                                          }
-                                        ]
-                                      },
-                                      "typeId": {
-                                        "anyOf": [
-                                          {
-                                            "type": "string"
-                                          },
-                                          {
-                                            "type": "null"
-                                          }
-                                        ]
-                                      }
-                                    },
-                                    "required": [
-                                      "specTypeId"
-                                    ],
-                                    "type": "object"
-                                  },
-                                  {
-                                    "type": "null"
-                                  }
-                                ]
-                              },
-                              "displayValue": {
-                                "anyOf": [
-                                  {
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "null"
-                                  }
-                                ]
-                              },
-                              "hasMixedValues": {
-                                "default": false,
-                                "type": "boolean"
-                              },
-                              "isEditable": {
-                                "default": false,
-                                "type": "boolean"
-                              },
-                              "isTypeParameter": {
-                                "default": false,
-                                "type": "boolean"
-                              },
-                              "parameterId": {
-                                "anyOf": [
-                                  {
-                                    "maximum": 9007199254740991,
-                                    "minimum": -9007199254740991,
-                                    "type": "integer"
-                                  },
-                                  {
-                                    "type": "null"
-                                  }
-                                ]
-                              },
-                              "parameterName": {
-                                "anyOf": [
-                                  {
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "null"
-                                  }
-                                ]
-                              },
-                              "rawValue": {
-                                "anyOf": [
-                                  {
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "null"
-                                  }
-                                ]
-                              },
-                              "storageType": {
-                                "type": "string"
-                              },
-                              "targetElementIds": {
-                                "default": [],
-                                "items": {
-                                  "maximum": 9007199254740991,
-                                  "minimum": -9007199254740991,
-                                  "type": "integer"
-                                },
-                                "type": "array"
-                              },
-                              "targets": {
-                                "items": {
-                                  "properties": {
-                                    "elementId": {
-                                      "maximum": 9007199254740991,
-                                      "minimum": -9007199254740991,
-                                      "type": "integer"
-                                    },
-                                    "hasValue": {
-                                      "type": "boolean"
-                                    },
-                                    "isReadOnly": {
-                                      "type": "boolean"
-                                    },
-                                    "parameterId": {
-                                      "maximum": 9007199254740991,
-                                      "minimum": -9007199254740991,
-                                      "type": "integer"
-                                    },
-                                    "parameterName": {
-                                      "anyOf": [
-                                        {
-                                          "type": "string"
-                                        },
-                                        {
-                                          "type": "null"
-                                        }
-                                      ]
-                                    },
-                                    "rawValue": {
-                                      "anyOf": [
-                                        {
-                                          "type": "string"
-                                        },
-                                        {
-                                          "type": "null"
-                                        }
-                                      ]
-                                    },
-                                    "storageType": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "required": [
-                                    "elementId",
-                                    "parameterId",
-                                    "storageType",
-                                    "isReadOnly",
-                                    "hasValue",
-                                    "rawValue"
-                                  ],
-                                  "type": "object"
-                                },
-                                "type": "array"
-                              }
-                            },
-                            "required": [
-                              "columnNumber",
-                              "storageType",
-                              "targets"
-                            ],
-                            "type": "object"
-                          },
-                          "type": "array"
-                        },
-                        "kind": {
-                          "default": "Data",
-                          "type": "string"
-                        },
-                        "rowNumber": {
-                          "maximum": 9007199254740991,
-                          "minimum": -9007199254740991,
-                          "type": "integer"
-                        },
-                        "subjectIds": {
-                          "default": [],
-                          "items": {
-                            "maximum": 9007199254740991,
-                            "minimum": -9007199254740991,
-                            "type": "integer"
-                          },
-                          "type": "array"
-                        },
-                        "values": {
-                          "default": [],
-                          "items": {
-                            "type": "string"
-                          },
-                          "type": "array"
-                        }
-                      },
-                      "required": [
-                        "rowNumber"
-                      ],
-                      "type": "object"
-                    },
-                    "type": "array"
-                  },
-                  "scheduleId": {
-                    "maximum": 9007199254740991,
-                    "minimum": -9007199254740991,
-                    "type": "integer"
-                  },
-                  "scheduleName": {
-                    "type": "string"
-                  },
-                  "scheduleUniqueId": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "takenAt": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "truncated": {
-                    "default": false,
-                    "type": "boolean"
-                  }
-                },
-                "required": [
-                  "scheduleId",
-                  "scheduleName",
-                  "columns",
-                  "rows"
-                ],
-                "type": "object"
-              },
-              "target": {
-                "additionalProperties": false,
-                "properties": {
-                  "openId": {
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "session": {
-                    "minLength": 1,
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "session",
-                  "openId"
-                ],
-                "type": "object"
-              },
-              "workspaceId": {
-                "minLength": 1,
-                "type": "string"
-              }
-            },
-            "required": [
-              "id",
-              "capturedAt",
-              "target",
-              "process",
-              "document",
-              "workspaceId",
-              "snapshot"
-            ],
-            "type": "object"
-          },
-          "readingId": {
-            "minLength": 1,
-            "type": "string"
-          }
-        },
-        "required": [
-          "readingId",
-          "expectedRevision"
-        ],
-        "type": "object"
-      },
-      "kind": "command",
-      "label": "Bind schedule reading",
-      "review": "none"
-    },
-    "capture": {
-      "does": "schedule.capture",
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "additionalProperties": false,
-        "properties": {
-          "pod": {
-            "type": "string"
-          },
-          "refusal": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null
-          },
-          "scheduleId": {
-            "maximum": 9007199254740991,
-            "minimum": -9007199254740991,
-            "type": "integer"
-          }
-        },
-        "required": [
-          "pod"
-        ],
-        "type": "object"
-      },
-      "kind": "command",
-      "label": "Capture schedule",
-      "review": "none"
-    },
-    "edit": {
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "additionalProperties": false,
-        "properties": {
-          "expectedRevision": {
-            "maximum": 9007199254740991,
-            "minimum": -9007199254740991,
-            "type": "integer"
-          },
-          "patches": {
-            "items": {
-              "properties": {
-                "path": {
-                  "items": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "number"
-                      }
-                    ]
-                  },
-                  "type": "array"
-                },
-                "value": {}
-              },
-              "required": [
-                "path"
-              ],
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "refusal": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null
-          }
-        },
-        "required": [
-          "patches",
-          "expectedRevision"
-        ],
-        "type": "object"
-      },
-      "kind": "work",
-      "label": "Edit schedule cells",
-      "review": "none"
-    },
-    "push": {
-      "chord": "Mod+Enter",
-      "does": "schedule.grid.push",
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "additionalProperties": false,
-        "properties": {
-          "pod": {
-            "type": "string"
-          },
-          "refusal": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null
-          }
-        },
-        "type": "object"
-      },
-      "kind": "command",
-      "label": "Apply cells",
-      "review": "shown",
-      "says": "Review these exact cell edits and their native bindings, then push them to Revit"
-    },
     "read": {
-      "does": "schedule.grid.snapshot",
-      "effect": "query",
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "properties": {
-          "maxRows": {
-            "default": 200,
-            "maximum": 2000,
-            "minimum": 1,
-            "type": "integer"
-          },
-          "scheduleId": {
-            "maximum": 9007199254740991,
-            "minimum": -9007199254740991,
-            "type": "integer"
-          },
-          "scheduleName": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
       "kind": "query",
+      "input": "read",
       "label": "Read schedule",
       "review": "none",
-      "selects": "work"
-    },
-    "work.start-fresh": {
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "additionalProperties": false,
-        "default": {},
-        "properties": {},
-        "type": "object"
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": []
       },
-      "kind": "recovery",
-      "label": "Start fresh",
+      "captures": [],
+      "entry": "schedule.grid.snapshot",
+      "args": "readArgs",
+      "cancellation": "scope",
+      "lands": "readLands"
+    },
+    "bind": {
+      "kind": "command",
+      "input": "none",
+      "label": "Bind schedule",
+      "review": "none",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": [
+          "retained"
+        ]
+      },
+      "captures": [],
+      "entry": "schedule.grid.bind",
+      "intent": "bind"
+    },
+    "push": {
+      "kind": "command",
+      "input": "none",
+      "label": "Apply cells",
       "review": "shown",
-      "says": "Set the unreadable Work aside and start it empty; its old bytes are kept beside it"
-    }
-  },
-  "work": {
-    "$defs": {
-      "__schema0": {
-        "anyOf": [
-          {
-            "type": "string"
-          },
-          {
-            "type": "number"
-          },
-          {
-            "type": "boolean"
-          },
-          {
-            "type": "null"
-          },
-          {
-            "items": {
-              "$ref": "#/$defs/__schema0"
-            },
-            "type": "array"
-          },
-          {
-            "additionalProperties": {
-              "$ref": "#/$defs/__schema0"
-            },
-            "propertyNames": {
-              "type": "string"
-            },
-            "type": "object"
-          }
-        ]
-      }
-    },
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "properties": {
-      "basis": {
-        "anyOf": [
-          {
-            "properties": {
-              "captureId": {
-                "pattern": "^[a-f0-9]{64}$",
-                "type": "string"
-              },
-              "stale": {
-                "items": {
-                  "properties": {
-                    "key": {
-                      "type": "string"
-                    },
-                    "was": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "required": [
-                    "key",
-                    "was"
-                  ],
-                  "type": "object"
-                },
-                "type": "array"
-              }
-            },
-            "required": [
-              "captureId"
-            ],
-            "type": "object"
-          },
-          {
-            "type": "null"
-          }
-        ]
-      },
-      "cells": {
-        "additionalProperties": {
-          "additionalProperties": false,
-          "properties": {
-            "edit": {
-              "anyOf": [
-                {
-                  "additionalProperties": false,
-                  "properties": {
-                    "at": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "base": {
-                      "anyOf": [
-                        {
-                          "maximum": 9007199254740991,
-                          "minimum": 0,
-                          "type": "integer"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
-                      "type": "string"
-                    },
-                    "confidence": {
-                      "anyOf": [
-                        {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "delete": {
-                      "not": {}
-                    },
-                    "note": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "value": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "properties": {
-                            "display": {
-                              "type": "string"
-                            },
-                            "unit": {
-                              "type": "string"
-                            },
-                            "value": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "value",
-                            "unit"
-                          ],
-                          "type": "object"
-                        }
-                      ]
-                    }
-                  },
-                  "required": [
-                    "value"
-                  ],
-                  "type": "object"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "suggestion": {
-              "anyOf": [
-                {
-                  "additionalProperties": false,
-                  "properties": {
-                    "at": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "base": {
-                      "anyOf": [
-                        {
-                          "maximum": 9007199254740991,
-                          "minimum": 0,
-                          "type": "integer"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
-                      "type": "string"
-                    },
-                    "confidence": {
-                      "anyOf": [
-                        {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "delete": {
-                      "not": {}
-                    },
-                    "note": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "value": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "properties": {
-                            "display": {
-                              "type": "string"
-                            },
-                            "unit": {
-                              "type": "string"
-                            },
-                            "value": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "value",
-                            "unit"
-                          ],
-                          "type": "object"
-                        }
-                      ]
-                    }
-                  },
-                  "required": [
-                    "value"
-                  ],
-                  "type": "object"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            }
-          },
-          "type": "object"
-        },
-        "default": {},
-        "propertyNames": {
-          "type": "string"
-        },
-        "type": "object"
-      },
-      "takenAt": {
-        "anyOf": [
-          {
-            "type": "string"
-          },
-          {
-            "type": "null"
-          }
+      "deps": {
+        "page": [],
+        "work": [
+          "basis",
+          "cells"
         ],
-        "default": null
+        "readings": [
+          "saved",
+          "receipts"
+        ]
       },
-      "writeIntent": {
-        "additionalProperties": {
-          "additionalProperties": false,
-          "properties": {
-            "edit": {
-              "anyOf": [
-                {
-                  "additionalProperties": false,
-                  "properties": {
-                    "at": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "base": {
-                      "anyOf": [
-                        {
-                          "maximum": 9007199254740991,
-                          "minimum": 0,
-                          "type": "integer"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
-                      "type": "string"
-                    },
-                    "confidence": {
-                      "anyOf": [
-                        {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "delete": {
-                      "not": {}
-                    },
-                    "note": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "value": {
-                      "additionalProperties": {
-                        "$ref": "#/$defs/__schema0"
-                      },
-                      "propertyNames": {
-                        "type": "string"
-                      },
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "value"
-                  ],
-                  "type": "object"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "suggestion": {
-              "anyOf": [
-                {
-                  "additionalProperties": false,
-                  "properties": {
-                    "at": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "base": {
-                      "anyOf": [
-                        {
-                          "maximum": 9007199254740991,
-                          "minimum": 0,
-                          "type": "integer"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
-                      "type": "string"
-                    },
-                    "confidence": {
-                      "anyOf": [
-                        {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "delete": {
-                      "not": {}
-                    },
-                    "note": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "value": {
-                      "additionalProperties": {
-                        "$ref": "#/$defs/__schema0"
-                      },
-                      "propertyNames": {
-                        "type": "string"
-                      },
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "value"
-                  ],
-                  "type": "object"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            }
-          },
-          "type": "object"
-        },
-        "propertyNames": {
-          "type": "string"
-        },
-        "type": "object"
-      }
+      "captures": [],
+      "ready": "pushReady",
+      "present": "presentPush",
+      "entry": "schedule.grid.push",
+      "intent": "push"
     },
-    "type": "object"
-  },
-  "workFields": {
-    "basis": {
-      "internal": true,
-      "label": "schedule basis"
-    },
-    "takenAt": {
-      "internal": true,
-      "label": "capture time"
+    "edit": {
+      "kind": "work",
+      "input": "edit",
+      "label": "Edit schedule cells",
+      "review": "none",
+      "deps": {
+        "page": [
+          "workspaceId"
+        ],
+        "work": [
+          "cells",
+          "basis",
+          "takenAt"
+        ],
+        "readings": [
+          "retained"
+        ]
+      },
+      "captures": [],
+      "ready": "editReady",
+      "patches": "edit",
+      "describe": "describeEdit"
     }
   },
-  "workSubject": "workspaceId"
+  "panes": {
+    "grid": {
+      "label": "Schedules",
+      "purpose": "Inspect and edit schedule cells",
+      "draws": [
+        "catalog",
+        "retained",
+        "snapshot",
+        "saved",
+        "receipts",
+        "outcome"
+      ],
+      "verbs": [
+        "read",
+        "edit",
+        "bind",
+        "push"
+      ],
+      "body": "grid"
+    }
+  },
+  "layout": {
+    "kind": "pane",
+    "id": "grid"
+  },
+  "stages": {
+    "main": {
+      "word": "Schedules",
+      "panes": [
+        "grid"
+      ],
+      "verbs": [
+        "read",
+        "edit",
+        "bind",
+        "push"
+      ]
+    }
+  },
+  "stageOrder": [
+    "main"
+  ],
+  "predicates": {},
+  "cells": {},
+  "workFields": {},
+  "seeds": {
+    "read": {
+      "title": "Mechanical equipment",
+      "load": "seed"
+    }
+  },
+  "needs": "project",
+  "workSubject": "workspaceId",
+  "resetOnTarget": [],
+  "observe": []
 }

@@ -7,7 +7,21 @@ import { builtinAdmission } from "./legacy-route-door";
 import { rankVerbs, TimelineHead } from "./situation-band";
 import { createRouteTimeline } from "./timeline";
 import { PageControl } from "./situation-fields";
-import { ductsGraph } from "../ducts/graph";
+import { podsGraph } from "../pods/graph";
+import { systemSubjectGraph } from "./subject.test-support";
+const ductsGraph = {
+  ...systemSubjectGraph,
+  refresh: "refresh",
+  verbs: {
+    refresh: {
+      kind: "command",
+      label: "Refresh",
+      input: z.object({}),
+      review: "none",
+      effect: "query",
+    },
+  },
+} as const;
 
 const verb = (extra: Partial<VerbDecl>): VerbDecl => ({
   kind: "command",
@@ -56,7 +70,7 @@ test("ducts refreshes from the pane head, never from a stage verb", () => {
 });
 
 test("a stale builtin stamp refuses that route with the fix, instead of throwing", () => {
-  const stale = { ...ductsGraph, moduleHash: "0".repeat(64) };
+  const stale = { ...podsGraph, moduleHash: "0".repeat(64) };
   expect(builtinAdmission(stale as never)).toMatch(/hash.*codegen:routes/);
 });
 

@@ -22,7 +22,7 @@ import { familyGraph as familiesGraph } from "#/family/graph";
 import { useRouteThread } from "#/shell/binding";
 
 import { registerSubject } from "#/shell/subject";
-import { ductsGraph } from "#/ducts/graph";
+import { ductsPageGraph as ductsGraph } from "#/shell/subject.test-support";
 registerSubject("ducts", {
   ...ductsGraph,
   fields: Object.fromEntries(

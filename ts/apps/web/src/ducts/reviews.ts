@@ -3,14 +3,16 @@ import type { DuctsApply, DuctsAssignFan, DuctsHeal } from "@pe/host-contracts/g
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { healPlan } from "@pe/ducts-domain/heal";
 import { healSystems, healWords, networkWord, outcomeWords } from "@pe/ducts-domain/words";
-import {
-  canonicalRouteInput,
-  ductsHealInputSchema,
-  type DuctsRouteDocument,
-} from "@pe/agent-contracts";
-import type { VerbPresentation, VerbScope } from "#/shell/verbs";
-import { subjectNamer } from "./subject-text";
-import type { PricingResult } from "./pricing-job";
+import { ductsHealInputSchema, type DuctsRouteDocument } from "@pe/agent-contracts";
+interface ReviewScope {
+  readonly page?: { readonly stage?: string };
+  readonly readings: {
+    readonly ducts?: { readonly value?: unknown };
+    readonly sheetSnapshot?: { readonly value?: unknown };
+  };
+  readonly work?: unknown;
+}
+import { elementLabeler as subjectNamer } from "@pe/ducts-domain/element-label";
 
 export const healReviewSchema = z.object({
   group: z.string(),
@@ -45,51 +47,17 @@ const responseOf = <T>(result: unknown): T => {
   const envelope = result as { response?: T; value?: T };
   return envelope.response ?? envelope.value ?? (result as T);
 };
-const snapshotOf = (scope: VerbScope) => scope.readings.ducts?.value as DuctSnapshot | undefined;
+const snapshotOf = (scope: ReviewScope) =>
+  (scope.page?.stage === "sheet"
+    ? scope.readings.sheetSnapshot?.value
+    : scope.readings.ducts?.value) as DuctSnapshot | undefined;
 
-export const healReviewBasis = (scope: VerbScope) =>
-  canonicalRouteInput({
-    target: scope.snapshot.target,
-    work: scope.snapshot.work?.handle,
-    network: scope.readings.ducts?.basis?.sourceVersion ?? scope.readings.ducts?.version,
-  });
-
-export function previewedHeal(scope: VerbScope, request: z.output<typeof ductsHealInputSchema>) {
-  const review = scope.page.heal as HealReview | null;
-  if (review?.mode !== "preview" || !request.groups.some((g) => g.group === review.group))
-    return null;
-  if (!scope.readings.ducts?.current || review.basis !== healReviewBasis(scope))
-    throw Error("The network or Work changed since the heal preview; preview again");
-  return review;
-}
-
-export function plannedHeal(request: z.output<typeof ductsHealInputSchema>, evidence: unknown) {
-  const response = responseOf<DuctsHeal.Res.Response>(evidence);
-  const planned = {
-    ...request,
-    groups: request.groups
-      .map((group) => ({
-        ...group,
-        items: (group.items ?? []).filter((item) =>
-          response.groups.some(
-            (g) =>
-              g.group === group.group &&
-              g.items.some((i) => i.key === item.key && i.outcome === "planned"),
-          ),
-        ),
-      }))
-      .filter((group) => group.items.length),
-  };
-  if (!planned.groups.length) throw Error("Nothing passed the heal preview");
-  return planned;
-}
-
-export function presentHeal(result: unknown, scope: VerbScope): VerbPresentation {
+export function presentHeal(result: unknown, scope: ReviewScope) {
   const response = responseOf<DuctsHeal.Res.Response>(result);
   const snapshot = snapshotOf(scope);
   const name = snapshot ? subjectNamer(snapshot) : () => null;
   const plan = snapshot
-    ? healPlan(snapshot, scope.snapshot.work?.doc as DuctsRouteDocument | null)
+    ? healPlan(snapshot, (scope.work ?? null) as DuctsRouteDocument | null)
     : null;
   const targets = response.groups.flatMap((group) =>
     group.items.map((item) => {
@@ -142,44 +110,7 @@ export function presentHeal(result: unknown, scope: VerbScope): VerbPresentation
       ) ?? networkWord(snapshot, group))
     : "Duct network";
   const sentence = `${system}: ${healWords(response)}`;
-  const pricing = scope.readings.pricing?.value as PricingResult | undefined;
-  const heal: HealReview = {
-    group,
-    response,
-    basis: healReviewBasis(scope),
-    request: {
-      groups: response.groups
-        .map((group) => ({
-          group: group.group,
-          items: group.items
-            .filter((item) => item.outcome === "planned")
-            .map((item) => {
-              const target = targets.find((t) => t.key === item.key)!;
-              return {
-                key: item.key,
-                kind: item.kind === "join" ? ("join" as const) : ("cap" as const),
-                end: target.end,
-                ...(target.other ? { other: target.other } : {}),
-              };
-            }),
-        }))
-        .filter((group) => group.items.length),
-    },
-    targets,
-    sentence,
-    rows,
-    mode: response.previewOnly ? "preview" : "apply",
-    before: {
-      esp: pricing?.priced?.next.byGroup[group]?.fan ?? null,
-      roots: snapshot?.groups.find((g) => g.id === group)?.rootIds ?? [],
-      ids: [...new Set(targets.flatMap((t) => t.ids))],
-    },
-  };
-  return {
-    sentence,
-    rows,
-    page: { heal, layers: [...new Set([...((scope.page.layers as string[]) ?? []), "findings"])] },
-  };
+  return { sentence, rows };
 }
 
 /** DuctApplier names loss methods by token; a review speaks Revit's words. */
@@ -201,9 +132,12 @@ const SLOT_WORDS: Record<string, string> = {
   terminalFlow: "terminal flow",
 };
 const spoken = (value: string | null | undefined) =>
-  value?.replace(/^(no server|not-defined|pe-server|specific-loss|specific-coefficient|ashrae-table)/, (m) => METHODS[m]!);
+  value?.replace(
+    /^(no server|not-defined|pe-server|specific-loss|specific-coefficient|ashrae-table)/,
+    (m) => METHODS[m]!,
+  );
 
-export function presentLosses(result: unknown, scope: VerbScope): VerbPresentation {
+export function presentLosses(result: unknown, scope: ReviewScope) {
   const response = responseOf<DuctsApply.Res.Response>(result);
   const envelope = result as {
     derivedRequest?: import("@pe/agent-contracts").DuctsApplyInput;
@@ -279,7 +213,7 @@ export const fanWords = (response: DuctsAssignFan.Res.Response) =>
   response.outcome === "refused"
     ? `refused: ${response.reason ?? "refused"}`
     : (response.check ?? response.outcome);
-export function presentFan(result: unknown, scope: VerbScope): VerbPresentation {
+export function presentFan(result: unknown, scope: ReviewScope) {
   const response = responseOf<DuctsAssignFan.Res.Response>(result);
   const snapshot = snapshotOf(scope);
   const system = snapshot?.systems.find((s) => s.id === response.systemId)?.name ?? "Duct system";

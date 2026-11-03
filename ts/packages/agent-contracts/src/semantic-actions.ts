@@ -372,8 +372,8 @@ export const tools = {
         ["workingPhase"],
         ["designFriction"],
         ["systemColours"],
-        ["sheetInputs", "*"],
-        ["sheetDefaults"],
+        ["kinds", "*"],
+        ["criteria"],
       ],
     },
     commands: {

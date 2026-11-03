@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { test, expect, afterEach } from "vite-plus/test";
-import { fansGraph } from "../fans/graph";
+import { fanSubjectGraph as fansGraph } from "./subject.test-support";
 import { registerSubject, publishSubjectRoster } from "./subject";
 import { tabTitle } from "../workbench/route-tabs";
 import { tabPageSearch, restorePageSearch } from "../route/url";

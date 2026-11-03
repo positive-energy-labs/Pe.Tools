@@ -6,6 +6,7 @@ import { z } from "zod";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import {
   ductsDocumentSchema,
+  ductsSheetOverviewSchema,
   bindWork,
   workKey,
   address,
@@ -30,9 +31,15 @@ import type {
 import { module as captures } from "../captures/kernel";
 import { createRouteShell } from "../shell/admitted-mount";
 import { createWorkFeedClient } from "../shell/work-feed-client";
-import { describeInputHistory, inputHistoryMetaSchema } from "../ducts/sheet/input-history";
+import {
+  describeInputHistory,
+  inputHistoryMetaSchema,
+  presentInputHistory,
+} from "../ducts/sheet/input-history";
+import sheetFixture from "../ducts/sheet/sheet.fixture.json";
 import { sourceRouteServices } from "../shell/source-route-services";
 import * as recoveryHost from "../route/host";
+import { peClient } from "../host/pe-client";
 import * as sourceServices from "../shell/source-route-services";
 import { applicationRouteShell } from "../shell/application-route-shell";
 import { useRouteTarget } from "../route/route-target";
@@ -352,9 +359,28 @@ function recovery(f: Awaited<ReturnType<typeof witness>>) {
     (key) => f.ws.salvage(key, "ducts") as ReturnType<typeof recoveryHost.salvageRouteWork>,
   );
 }
+test("H7: healthy Work accepts HTTP 200/null and shows no salvage message", async () => {
+  const wire = vi.spyOn(peClient, "response").mockImplementation(async () => Response.json(null));
+  expect(await recoveryHost.salvageRouteWork(bindWork("ducts", null))).toBeNull();
+  const f = await witness();
+  await vi.waitFor(() => expect(f.mount.workBasis()).not.toBeNull());
+  await vi.waitFor(() => expect(wire).toHaveBeenCalledTimes(2));
+  expect(f.mount.recovery()).toMatchObject({
+    sentence: null,
+    problem: null,
+    startFresh: false,
+    carryOver: false,
+  });
+  expect(f.mount.workProblem()).toBeNull();
+});
+
 test("H7: canonical recovery presents named rows from captured evidence and accepts the keyed edit", async () => {
   const f = await witness(unreadable);
   recovery(f);
+  vi.mocked(recoveryHost.salvageRouteWork).mockRestore();
+  vi.spyOn(peClient, "response").mockImplementation(async () =>
+    Response.json(await f.ws.salvage(f.mount.workBasis()!.token.scope.identity.work!, "ducts")),
+  );
   await vi.waitFor(() => expect(f.mount.recovery().startFresh).toBe(true));
   await f.mount.startFresh();
   expect(f.mount.review("work.salvage")).toMatchObject({
@@ -841,7 +867,9 @@ test.each(["invalid_meta", "meta_too_large"] as const)(
       code === "invalid_meta"
         ? { ...description.meta, kind: "not-ducts-input" }
         : { ...description.meta, rowKey: "\u00e9".repeat(2048) };
-    const f = await witness(undefined, undefined, undefined, { ...description, meta });
+    const f = await witness(undefined, undefined, undefined, { ...description, meta } as ReturnType<
+      typeof describeInputHistory
+    >);
     await vi.waitFor(() => expect(f.mount.workBasis()).not.toBeNull());
     const before = structuredClone(f.saved.get("ducts"));
     expect(
@@ -851,3 +879,42 @@ test.each(["invalid_meta", "meta_too_large"] as const)(
     expect(f.mount.history!.entries).toEqual([]);
   },
 );
+
+test("W04: equal-Work Undo/Redo paths render the same label-only history", async () => {
+  const before = ductsSheetOverviewSchema.parse(sheetFixture.overview).totals!;
+  const description = {
+    label: "Fan flow",
+    meta: {
+      kind: "ducts-input" as const,
+      effect: {
+        before,
+        after: { ...before, requiredEspInWg: (before.requiredEspInWg ?? 0) + 0.1 },
+      },
+    },
+  };
+  let undoHistory: Parameters<typeof bodies.main.run>[0]["history"];
+  let redoHistory: Parameters<typeof bodies.main.run>[0]["history"];
+  const a = await witness(undefined, undefined, undefined, description, (history) => {
+    undoHistory = history;
+  });
+  await vi.waitFor(() => expect(a.mount.workBasis()).not.toBeNull());
+  await settle(a.mount.invoke("slot", "A") as Observation<WorkWriteOutcome>);
+  await settle(a.mount.invoke("slot", "B") as Observation<WorkWriteOutcome>);
+  const initial = structuredClone(a.saved.get("ducts"));
+  for (const move of ["undo", "redo", "undo"] as const)
+    expect(await a.mount.history![move]()).toMatchObject({ ok: true });
+  a.mount.read("captures");
+  const b = await witness(initial, undefined, undefined, description, (history) => {
+    redoHistory = history;
+  });
+  await vi.waitFor(() => expect(b.mount.workBasis()).not.toBeNull());
+  for (const move of ["undo", "undo", "redo"] as const)
+    expect(await b.mount.history![move]()).toMatchObject({ ok: true });
+  b.mount.read("captures");
+  expect(a.mount.work()).toEqual(b.mount.work());
+  const undoEffect = presentInputHistory(undoHistory!.entries, null);
+  const redoEffect = presentInputHistory(redoHistory!.entries, null);
+  expect(undoEffect).toEqual(redoEffect);
+  expect(undoEffect.last).toEqual({ label: "undid Fan flow", words: "" });
+  expect(redoEffect.last?.words).not.toMatch(/\d/);
+});

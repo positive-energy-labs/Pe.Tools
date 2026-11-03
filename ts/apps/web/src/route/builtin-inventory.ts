@@ -1,98 +1,81 @@
-import { module as familiesModule } from "../families/kernel";
-import familiesGenerated from "../families/source-closure.generated.json";
 import { z } from "zod";
-import { createBuiltinRouteInventory } from "../../../../packages/agent-contracts/src/route-module";
-import { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data";
-import { module } from "../captures/kernel";
+import {
+  createBuiltinRouteInventory,
+  type AdmittedRoute,
+  type BuiltinClosure,
+} from "../../../../packages/agent-contracts/src/route-module";
+import {
+  RouteGraphJson,
+  type RouteDiagnostic,
+} from "../../../../packages/agent-contracts/src/route-kernel-data";
+import { module as captures } from "../captures/kernel";
 import { module as schedulesModule } from "../schedules/kernel";
+import { module as families } from "../families/kernel";
+import { module as ducts } from "../ducts/kernel";
+import { module as fans } from "../fans/kernel";
+import capturesGenerated from "../captures/source-closure.generated.json";
 import schedulesGenerated from "../schedules/source-closure.generated.json";
-import generated from "../captures/source-closure.generated.json";
+import familiesGenerated from "../families/source-closure.generated.json";
+import ductsGenerated from "../ducts/source-closure.generated.json";
+import fansGenerated from "../fans/source-closure.generated.json";
 
-// Build/deploy owns this table. Route authors cannot provide a receipt to loadBuiltinRoute.
-const closure = {
+type Generated =
+  | typeof capturesGenerated
+  | typeof schedulesGenerated
+  | typeof familiesGenerated
+  | typeof ductsGenerated
+  | typeof fansGenerated;
+// Generated JSON crosses the admission boundary once; route authors supply no builtin receipt.
+const closure = (generated: Generated) => ({
   fingerprint: generated.fingerprint,
   envelope: {
-    ...generated.envelope,
+    hostVersion: generated.envelope.hostVersion,
+    modules: generated.envelope.modules,
+    inputs: generated.envelope.inputs,
+    externals: generated.envelope.externals,
     source: z.literal("builtin-closure").parse(generated.envelope.source),
     version: z.literal(1).parse(generated.envelope.version),
     data: RouteGraphJson.parse(generated.envelope.data),
+    ...("workOwner" in generated.envelope && {
+      workOwner: generated.envelope.workOwner as BuiltinClosure["workOwner"],
+    }),
     variants: generated.envelope.variants.map((variant) => ({
       ...variant,
       client: z.enum(["web", "pea"]).parse(variant.client),
     })),
   },
-};
-const schedulesClosure = {
-  fingerprint: schedulesGenerated.fingerprint,
-  envelope: {
-    ...schedulesGenerated.envelope,
-    source: z.literal("builtin-closure").parse(schedulesGenerated.envelope.source),
-    version: z.literal(1).parse(schedulesGenerated.envelope.version),
-    data: RouteGraphJson.parse(schedulesGenerated.envelope.data),
-    variants: schedulesGenerated.envelope.variants.map((v) => ({
-      ...v,
-      client: z.enum(["web", "pea"]).parse(v.client),
-    })),
-  },
-};
-const familiesClosure = {
-  fingerprint: familiesGenerated.fingerprint,
-  envelope: {
-    ...familiesGenerated.envelope,
-    source: z.literal("builtin-closure").parse(familiesGenerated.envelope.source),
-    version: z.literal(1).parse(familiesGenerated.envelope.version),
-    data: RouteGraphJson.parse(familiesGenerated.envelope.data),
-    variants: familiesGenerated.envelope.variants.map((v) => ({
-      ...v,
-      client: z.enum(["web", "pea"]).parse(v.client),
-    })),
-  },
-};
+});
 const definitions = {
-  families: {
-    module: familiesModule,
-    closure: familiesClosure,
-    catalog: Object.entries(familiesModule.entries).map(([key, entry]) => ({
-      key,
-      ...entry.axes,
-      uses: [],
-    })),
-  },
-  schedules: {
-    module: schedulesModule,
-    closure: schedulesClosure,
-    catalog: Object.entries(schedulesModule.entries).map(([key, entry]) => ({
-      key,
-      ...entry.axes,
-      uses: [],
-    })),
-  },
-  captures: {
-    module,
-    closure,
-    catalog: Object.entries(module.entries).map(([key, entry]) => ({
-      key,
-      ...entry.axes,
-      uses: [],
-    })),
-  },
+  captures: { module: captures, closure: closure(capturesGenerated) },
+  schedules: { module: schedulesModule, closure: closure(schedulesGenerated) },
+  families: { module: families, closure: closure(familiesGenerated) },
+  ducts: { module: ducts, closure: closure(ductsGenerated) },
+  fans: { module: fans, closure: closure(fansGenerated) },
 };
-const inventory = createBuiltinRouteInventory(definitions);
-export const builtinRouteKeys = Object.keys(definitions) as (keyof typeof definitions)[];
-export const builtinRouteStamp = (key: "captures" | "schedules" | "families") =>
-  key === "families"
-    ? familiesClosure.fingerprint
-    : key === "schedules"
-      ? schedulesClosure.fingerprint
-      : closure.fingerprint;
+type BuiltinKey = keyof typeof definitions;
+export const builtinRouteKeys = Object.keys(definitions) as BuiltinKey[];
+export const builtinRouteStamp = (key: BuiltinKey) => definitions[key].closure.fingerprint;
 export async function loadBuiltinRoute(
-  key: "captures" | "schedules" | "families",
+  key: BuiltinKey,
   expectedFingerprint: string,
-) {
+): Promise<
+  | { readonly ok: true; readonly route: AdmittedRoute }
+  | { readonly ok: false; readonly diagnostics: readonly RouteDiagnostic[] }
+> {
+  const owner = key === "fans" ? await loadBuiltinRoute("ducts", builtinRouteStamp("ducts")) : null;
+  if (owner && !owner.ok) return owner;
+  const definition = definitions[key];
+  const inventory = createBuiltinRouteInventory({
+    [key]: {
+      ...definition,
+      ...(owner?.ok && { workOwner: owner.route }),
+      catalog: Object.entries(definition.module.entries).map(([entry, contract]) => ({
+        key: entry,
+        ...contract.axes,
+        uses: [],
+      })),
+    },
+  });
   const prepared = await inventory.prepare(key, expectedFingerprint);
-  return key === "families"
-    ? prepared.admitUnknown(familiesModule)
-    : key === "schedules"
-      ? prepared.admitUnknown(schedulesModule)
-      : prepared.admitUnknown(module);
+  return prepared.admitUnknown(definition.module);
 }

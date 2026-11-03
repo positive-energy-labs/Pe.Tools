@@ -5,26 +5,133 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
     "key": "captures",
     "directory": {
       "label": "Revit data",
-      "exposure": "Preview",
-      "runtimeNeed": "Host retained view images",
       "icon": "Image",
-      "aliases": [
-        "Revit",
-        "data"
-      ],
-      "listed": true,
-      "satellites": [],
+      "exposure": "Preview",
       "surfaces": {
         "web": "full",
         "pwa": "full",
         "tray": false
       },
+      "aliases": [
+        "Revit",
+        "data"
+      ],
+      "runtimeNeed": "Host retained view images",
+      "listed": true,
+      "satellites": [],
       "path": "/captures",
       "title": "Captures",
       "category": "Coordinate model data",
       "blurb": "Inspect retained view pictures and receipts"
     },
-    "moduleHash": "a1a1a66e27cd69b3e14be46f8fe48fe40ccc7ba864dbfec9603a6e25b90c0dad"
+    "moduleHash": "21f34b6fa51e420c13bac2b8493293fe2d775c6e72cdb87cb3814f958a0dfd1b"
+  },
+  {
+    "key": "schedules",
+    "directory": {
+      "label": "Revit data",
+      "icon": "LayoutGrid",
+      "exposure": "Preview",
+      "surfaces": {
+        "web": "full",
+        "pwa": "full",
+        "tray": false
+      },
+      "aliases": [
+        "Revit",
+        "data"
+      ],
+      "runtimeNeed": "Open project document",
+      "listed": true,
+      "satellites": [],
+      "resume": "document",
+      "path": "/schedules",
+      "title": "Schedules",
+      "category": "Coordinate model data",
+      "blurb": "Inspect document schedules"
+    },
+    "moduleHash": "aef36ac09471a79c2c8d51de59af90405f4166bd82a9bc57f012357691d4be0d"
+  },
+  {
+    "key": "families",
+    "directory": {
+      "label": "Family Foundry",
+      "icon": "Table2",
+      "exposure": "Main",
+      "surfaces": {
+        "web": "full",
+        "pwa": "full",
+        "tray": false
+      },
+      "aliases": [
+        "audit",
+        "parameters"
+      ],
+      "runtimeNeed": "Revit for model actions",
+      "listed": true,
+      "satellites": [],
+      "resume": "document",
+      "path": "/families",
+      "title": "Families",
+      "category": "Build / audit families",
+      "blurb": "Audit and reconcile loaded family parameters"
+    },
+    "moduleHash": "43da5bb71767608ec58743537ee8808525e3e96e523580b1d0c86cf31cbcdf52"
+  },
+  {
+    "key": "ducts",
+    "directory": {
+      "label": "Pressure drop",
+      "icon": "Wind",
+      "exposure": "Main",
+      "surfaces": {
+        "web": "full",
+        "pwa": "full",
+        "tray": false
+      },
+      "aliases": [
+        "duct",
+        "pressure",
+        "airflow",
+        "systems"
+      ],
+      "runtimeNeed": "Revit for model reads and writes",
+      "listed": true,
+      "satellites": [],
+      "resume": "document",
+      "path": "/ducts",
+      "title": "Ducts",
+      "category": "Calculate loads & airflow",
+      "blurb": "Review duct systems, stage inputs and rulings, and preview writes in Revit"
+    },
+    "moduleHash": "aa4e803b2a14e433e885b6ccb819f42a9ec619c54b841976950a420cd4fe72ba"
+  },
+  {
+    "key": "fans",
+    "directory": {
+      "label": "Fan ESP",
+      "icon": "Wind",
+      "exposure": "Main",
+      "surfaces": {
+        "web": "full",
+        "pwa": "full",
+        "tray": false
+      },
+      "aliases": [
+        "fan",
+        "ESP",
+        "pressure"
+      ],
+      "runtimeNeed": "Revit for model reads and writes",
+      "listed": true,
+      "satellites": [],
+      "resume": "document",
+      "path": "/fans",
+      "title": "Fans",
+      "category": "Calculate loads & airflow",
+      "blurb": "Inspect fan paths, inputs and pressure requirements"
+    },
+    "moduleHash": "97704ac0a494d8bd3a7d495e490fca443d6c0d614338204d215ff535be29b7a4"
   },
   {
     "key": "chat",
@@ -156,66 +263,6 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
     "moduleHash": "3aeab48f52ee768555e4dfbe23689a73e28bdd97571ca06716d45c82cccd8f32"
   },
   {
-    "key": "ducts",
-    "directory": {
-      "path": "/ducts",
-      "title": "Ducts",
-      "label": "Pressure drop",
-      "exposure": "Main",
-      "runtimeNeed": "Revit for model reads and writes",
-      "icon": "Wind",
-      "category": "Calculate loads & airflow",
-      "blurb": "Review duct systems, stage pressure-drop inputs and rulings, and preview or apply the changes in Revit.",
-      "aliases": [
-        "duct",
-        "pressure",
-        "drop",
-        "static",
-        "pressure",
-        "airflow",
-        "fan",
-        "systems"
-      ],
-      "listed": true,
-      "satellites": [],
-      "surfaces": {
-        "web": "full",
-        "pwa": "full",
-        "tray": false
-      },
-      "resume": "document"
-    },
-    "moduleHash": "00c5e7e2bcda896a7e19e7f34f75be6f7a779c86139d05cd5fb84f9d26a6a064"
-  },
-  {
-    "key": "families",
-    "directory": {
-      "path": "/families",
-      "title": "Families",
-      "label": "Family Foundry",
-      "exposure": "Main",
-      "runtimeNeed": "Revit for model actions; browsing saved data is separate",
-      "icon": "Table2",
-      "category": "Build / audit families",
-      "blurb": "Every loaded family's types × parameters in one table — audit it against a profile, plan the reconciliation, apply with receipts.",
-      "aliases": [
-        "audit",
-        "reconcile",
-        "parameters",
-        "types"
-      ],
-      "listed": true,
-      "satellites": [],
-      "surfaces": {
-        "web": "full",
-        "pwa": "full",
-        "tray": false
-      },
-      "resume": "document"
-    },
-    "moduleHash": "439c5d17543215bf646c7c3f864f95f321d87916c7f1e62ed3e54ff71da351f4"
-  },
-  {
     "key": "family",
     "directory": {
       "path": "/family",
@@ -243,33 +290,6 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
       "resume": "document"
     },
     "moduleHash": "c67f3f03ad939e1760ce3fa03fbd0751384bd01b1f154bed717f2c8d4b6e034b"
-  },
-  {
-    "key": "fans",
-    "directory": {
-      "path": "/fans",
-      "title": "Fans",
-      "label": "Fan air paths",
-      "exposure": "Main",
-      "runtimeNeed": "Revit for model reads and writes",
-      "icon": "Wind",
-      "category": "Calculate loads & airflow",
-      "blurb": "Review duct systems, stage pressure-drop inputs and rulings, and preview or apply the changes in Revit.",
-      "aliases": [
-        "fan",
-        "ESP",
-        "air path"
-      ],
-      "listed": true,
-      "satellites": [],
-      "surfaces": {
-        "web": "full",
-        "pwa": "full",
-        "tray": false
-      },
-      "resume": "document"
-    },
-    "moduleHash": "5e090f5c41f608c332ebce67642320a1d370236c8f022699a6113e9354c612bc"
   },
   {
     "key": "grilles",
@@ -535,58 +555,6 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
       "resume": "document"
     },
     "moduleHash": "6043488b0e198500d8e491eeefca589d36c323240a359b573799bb8778852c78"
-  },
-  {
-    "key": "schedule-specs",
-    "directory": {
-      "path": "/schedule-specs",
-      "title": "Schedule definitions",
-      "label": "Revit data",
-      "exposure": "Preview",
-      "runtimeNeed": "Revit for model actions; browsing saved data is separate",
-      "icon": "LayoutGrid",
-      "category": "Coordinate model data",
-      "blurb": "Author a saved schedule definition and apply it as a new schedule.",
-      "aliases": [
-        "Revit",
-        "data"
-      ],
-      "listed": true,
-      "satellites": [],
-      "surfaces": {
-        "web": "full",
-        "pwa": "full",
-        "tray": false
-      },
-      "resume": "document"
-    },
-    "moduleHash": "1bae867e978c9291afce4f6cdb0aea0ab9a84a7ca33953b5fc6f92b8f2f27001"
-  },
-  {
-    "key": "schedules",
-    "directory": {
-      "path": "/schedules",
-      "title": "Schedules",
-      "label": "Revit data",
-      "exposure": "Preview",
-      "runtimeNeed": "Revit for model actions; browsing saved data is separate",
-      "icon": "LayoutGrid",
-      "category": "Coordinate model data",
-      "blurb": "Inspect, edit and review the history of a document schedule.",
-      "aliases": [
-        "Revit",
-        "data"
-      ],
-      "listed": true,
-      "satellites": [],
-      "surfaces": {
-        "web": "full",
-        "pwa": "full",
-        "tray": false
-      },
-      "resume": "document"
-    },
-    "moduleHash": "7241f33f5965ef5cc34976cb0edc06763ff3583dac94ccca6050997fef6339c8"
   },
   {
     "key": "session-admin",

@@ -1,4 +1,4 @@
-import type { OpenSheet } from "../sources";
+import type { OpenSheet } from "../neutral.ts";
 import { detailOf, takenClosures, tierCounts } from "./tiers";
 
 export function sheetState(sheet: OpenSheet | null) {

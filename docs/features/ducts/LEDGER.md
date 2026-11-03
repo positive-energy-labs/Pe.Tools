@@ -154,6 +154,13 @@ Rebuilt 2026-10-21 as current truth after the close of the ducts walk; git holds
 - 2026-10-12, `ducts.family-patch` -> `ReconcileFamily` on the real Round Elbow of the PeTakeoffs copy: FALSIFIED[session, `ff-2-stamp`, `ff-3-loadprobe`]. FF edits the family, but LoadFamily throws 'Family loading failed' on `cantKeepConnectivity` for elbows 10398617 and 10405446 joined to tap 10405381, under policy Resolve, explicit DetachElements, in or out of the TransactionGroup. The fresh detached copy loaded with no connectivity failure.
 - 2026-10-08, shelved loss-server shape revived on the evaluation-order proof; Specific Coefficient alone as a product shape stays off the table (it is the storage Revit charges).
 
+- 2026-11-03, Drop ambiguous ESP-effect numbers and proactive supersession copy in `presentInputHistory`; `PaneContext.history` entries cannot establish the last move. (dropped by default, kaitpw rule 58f5b5e8)
+- 2026-11-03, Drop cached heal-preview picture highlights; the shared review retains the named native targets. (dropped by default, kaitpw rule 58f5b5e8)
+- 2026-11-03, Drop duplicate body-owned subject pickers; `AdmittedSubjectPicker` owns multi-system and all/none choices. (dropped by default, kaitpw rule 58f5b5e8)
+- 2026-11-03, Drop cross-system picture-navigation shortcuts from `proto/e/go-to.tsx`; pane-head subject selection remains. (dropped by default, kaitpw rule 58f5b5e8)
+- 2026-11-03, Drop generic scalar criteria summaries and Locate metadata; typed criteria editing and Page selection remain. (dropped by default, kaitpw rule 58f5b5e8)
+- 2026-11-03, Drop route-specific named recovery-row expansion; shared carry-over confirmation, canonical salvage and host-owned Restore remain. (dropped by default, kaitpw rule 58f5b5e8)
+
 ## Owed
 - [M] Split /fans Work from /ducts Work per the routes ledger 2026-11-03 kaitpw direction; census first, then a persisted-Work migration that loses no saved cell.
 

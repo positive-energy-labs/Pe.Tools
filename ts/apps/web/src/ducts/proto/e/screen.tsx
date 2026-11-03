@@ -23,9 +23,8 @@ import {
 import { survey, unitFlowsIn } from "@pe/ducts-domain/survey";
 import { healPlan } from "@pe/ducts-domain/heal";
 import { fansOwedBase, type OwedBase } from "@pe/ducts-domain/fan-assignment";
-import { sectionsOf, systemOfGroup } from "@pe/ducts-domain/system-scope";
+import { sectionsOf } from "@pe/ducts-domain/system-scope";
 import { neighboursOf, type Neighbour } from "@pe/ducts-domain/neighbours";
-import { Button } from "@pe/kit/lang/button";
 import { systemSearch } from "@pe/ducts-domain/system-search";
 import { useList, emptyListState, type ListOptions } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
@@ -74,9 +73,8 @@ import { useGroupEncoding } from "../encoding/use-encoding";
 
 import { EMPTY_SNAPSHOT } from "../../sheet/scoped-snapshot";
 import { LoadingContext } from "#/route/loading-context";
-import { activeSystem, DUCTS_MULTI, toggleSystem, withSystem } from "../../selection";
+import { activeSystem, DUCTS_MULTI } from "../../selection";
 import { subscribe as knobsChanged } from "#/knobs/knobs";
-import { OpenSystems } from "./open-systems";
 
 const NO_GROUPS: readonly string[] = [];
 const NO_NEIGHBOURS: readonly Neighbour[] = [];
@@ -530,16 +528,7 @@ function LoadedScreenBody({
         setLanding({ id: cell.id, half: mine ? "this" : "all" });
         return;
       }
-      const into =
-        scope && (scope.members.has(cell.id) || scope.units.has(cell.id))
-          ? page.system
-          : (() => {
-              const node = snapshot.nodes.find((n) => n.id === cell.id);
-              const g =
-                node?.groupId ?? snapshot.groups.find((x) => x.rootIds.includes(cell.id))?.id;
-              return g ? withSystem(page.system, systemOfGroup(drawn ?? snapshot, g)) : page.system;
-            })();
-      setPage({ system: into, selected: String(cell.id) });
+      setPage({ selected: String(cell.id) });
       setCellFocus(cell);
     },
     [drawn, snapshot, chosen, groups, scope, page.system, setPage],
@@ -582,11 +571,6 @@ function LoadedScreenBody({
     () =>
       tree ? (
         <>
-          <OpenSystems
-            system={page.system}
-            onChange={(system) => setPage({ system })}
-            whole={!partialWord(props.coverage)}
-          />
           <Scroll className="min-h-0 flex-1">
             <div className="min-w-0 shrink-0">
               <SystemTree
@@ -615,14 +599,9 @@ function LoadedScreenBody({
                 <div data-e-connected="" className="flex flex-col items-start py-1">
                   <p className="t-small text-ink-2 px-(--item-mark-pad-x) py-1">Connected</p>
                   {connected.map(({ system, units }) => (
-                    <Button
-                      key={system}
-                      label={`open ${system}`}
-                      data-e-connected-system={system}
-                      onClick={() => setPage({ system: withSystem(page.system, system) })}
-                    >
+                    <span key={system} data-e-connected-system={system}>
                       {`${system} · via ${units.map(nameOf).join(", ")}`}
-                    </Button>
+                    </span>
                   ))}
                 </div>
               ) : null}
@@ -654,7 +633,6 @@ function LoadedScreenBody({
   const systemsPane = useMemo(
     () => (
       <>
-        <OpenSystems system={page.system} onChange={(system) => setPage({ system })} />
         <ReadCoverage coverage={props.coverage} />
         {props.reading.error ? (
           <p role="alert" data-tone="alarm">
@@ -892,7 +870,6 @@ function LoadedScreenBody({
                     ),
                   }
                 : null,
-            allSystems: () => setPage({ system: [] }),
           }}
         />
       </div>
@@ -1032,8 +1009,6 @@ const SystemsList = memo(function SystemsList({
       if (next.search !== page.systemSearch || next.sort !== page.systemSort)
         setPage({ systemSearch: next.search, systemSort: next.sort }, { history: "replace" });
     },
-    // A pick opens the system beside the others, or closes it when it is open.
-    onPick: (system) => setPage({ system: toggleSystem(page.system, system.key) }),
   });
   const active = activeSystem(page);
   useEffect(() => {
@@ -1050,7 +1025,7 @@ const SystemsList = memo(function SystemsList({
         const fans = fansOf(system);
         return systemRowParts(
           system,
-          () => setPage({ system: withSystem(page.system, system.key) }),
+          undefined,
           notes.get(system.key),
           fans.map((f) => `${nameOf(f.unit)} ${f.role}: ${f.says}`),
           () => <FanFacts facts={fans} nameOf={nameOf} />,

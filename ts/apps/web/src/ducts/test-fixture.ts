@@ -78,6 +78,7 @@ export const snapshot = {
   layers: [],
   systems: [{ id: 900, name: "SA", classification: "Supply Air", criticalPath: [], sections: [] }],
   slots: {
+    terminalDrop: "PE_M_Grd_ExternalStaticPressure",
     fanStatic: "PE_M_Fan_ExternalStaticPressure",
     fanFlow: "PE_M_Fan_AirFlow",
     componentDrop: "Pressure Drop",

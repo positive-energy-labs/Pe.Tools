@@ -207,11 +207,11 @@
       "input": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "properties": {
-          "key": {
+          "fingerprint": {
+            "pattern": "^pod-bytes:[a-f0-9]{64}$",
             "type": "string"
           },
-          "sha256": {
-            "pattern": "^[a-f0-9]{64}$",
+          "key": {
             "type": "string"
           },
           "trusted": {
@@ -220,7 +220,7 @@
         },
         "required": [
           "key",
-          "sha256",
+          "fingerprint",
           "trusted"
         ],
         "type": "object"

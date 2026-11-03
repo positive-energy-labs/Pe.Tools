@@ -79,7 +79,15 @@ async function parity(source: HostRouteModule, registration: HostWorkRegistratio
   try {
     expect(await receipt.ready).toBeNull();
     const installedRegistration = register.mock.calls[0]![0];
-    expect(Object.keys(installedRegistration).sort()).toEqual(Object.keys(registration).sort());
+    // 743ad0e4: admission adds the route's ruled, presentation-only history meta schema.
+    expect(Object.keys(installedRegistration).sort()).toEqual(
+      [
+        ...new Set([
+          ...Object.keys(registration),
+          ...(module.data.historyDetail ? ["historyDetail"] : []),
+        ]),
+      ].sort(),
+    );
     expect(installedRegistration.admit).toBe(registration.admit);
     const installed = installedRegistration.spec;
     expect(Object.keys(installed).sort()).toEqual(Object.keys(spec).sort());
@@ -132,7 +140,12 @@ for (const registration of [
     spec: fixture,
     admit: async (doc: unknown) =>
       (doc as { value: number }).value < 0
-        ? { ok: false as const, kind: "refused" as const, code: "scope-unresolved" as const, agentHint: "Negative value refused" }
+        ? {
+            ok: false as const,
+            kind: "refused" as const,
+            code: "scope-unresolved" as const,
+            agentHint: "Negative value refused",
+          }
         : null,
   } satisfies HostWorkRegistration,
 ])

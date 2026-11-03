@@ -1,5 +1,6 @@
 import { Cause, Context, Effect, Exit, Layer, Scope } from "effect";
 import { expect, test, vi } from "vite-plus/test";
+import { settle } from "./effect-test.ts";
 import { RouteWorkspace, observeResources } from "@pe/runtime";
 import { bindWork, workKey, type ReadingFrame, type ReadingRequest } from "@pe/agent-contracts";
 import {
@@ -15,6 +16,7 @@ import {
   BuiltinEnrollmentFailed,
 } from "../src/admitted-builtins.ts";
 import { builtinEnrollments, type BuiltinEnrollment } from "../src/builtin-enrollment.ts";
+import { ductsRouteState } from "@pe/agent-contracts";
 import { fixture } from "./fixtures/builtin.neutral.ts";
 
 async function entry(
@@ -57,8 +59,7 @@ function workspace() {
   return { saved, store, workspace: new RouteWorkspace({ registrations: [], store }) };
 }
 async function open(ws: RouteWorkspace, inventory?: readonly BuiltinEnrollment[]) {
-  // effect-edge: test-runner
-  return Effect.runPromise(
+  return settle(
     Effect.gen(function* () {
       const scope = yield* Scope.make();
       const result = yield* Effect.exit(
@@ -73,8 +74,7 @@ async function open(ws: RouteWorkspace, inventory?: readonly BuiltinEnrollment[]
   );
 }
 async function close(scope: Scope.Closeable) {
-  // effect-edge: test-runner
-  await Effect.runPromise(Scope.close(scope, Exit.void));
+  await settle(Scope.close(scope, Exit.void));
 }
 test("Captures admits only a registry receipt using its generated full web closure", async () => {
   const f = workspace();
@@ -91,6 +91,36 @@ test("Captures admits only a registry receipt using its generated full web closu
     await close(run.scope);
   }
   expect(run.service!.registry.resolve(route)).toBeNull();
+});
+
+test("Ducts owns the exclusive host Work and Fans presents the same canonical registration", async () => {
+  const f = workspace();
+  const run = await open(f.workspace);
+  try {
+    if (!run.service) throw Error(JSON.stringify(run.result));
+    const owner = run.service.routes.get("ducts")!;
+    const presenter = run.service.routes.get("fans")!;
+    expect(presenter.workFingerprint).toBe(owner.workFingerprint);
+    const view = await f.workspace.view(bindWork("ducts", null), "ducts");
+    expect(view!.doc).toEqual(ductsRouteState.schema.parse({}));
+    expect(
+      await f.workspace.write(bindWork("ducts", null), "ducts", "human", {
+        kind: "apply",
+        press: "criteria",
+        label: "Return allowance",
+        expectedRevision: 0,
+        patches: [
+          { path: ["criteria"], value: { edit: { value: { allowanceInWg: { return: 0.35 } } } } },
+        ],
+      }),
+    ).toMatchObject({ ok: true });
+    expect(presenter.resolvedWork!.spec).toEqual(owner.resolvedWork!.spec);
+    const keys = builtinEnrollments.map((row) => row.routeKey);
+    expect(keys.indexOf("ducts")).toBeLessThan(keys.indexOf("fans"));
+    expect(createRouteRegistrations().some((row) => row.spec.route === "ducts")).toBe(false);
+  } finally {
+    await close(run.scope);
+  }
 });
 test("neutral Work migration precedes exact feeds; stale fingerprints refuse and shutdown retires both feeds", async () => {
   const f = workspace();
@@ -227,10 +257,8 @@ test("shutdown fences a neutral load that resolves after its acquisition scope c
   const pending = new Promise<HostRouteModule>((resolve) => {
     resolveLoad = resolve;
   });
-  // effect-edge: test-runner
-  const scope = await Effect.runPromise(Scope.make());
-  // effect-edge: test-runner
-  const building = Effect.runPromise(
+  const scope = await settle(Scope.make());
+  const building = settle(
     Effect.exit(
       Layer.buildWithScope(
         admittedBuiltinsLayer(f.workspace, [

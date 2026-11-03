@@ -1,57 +1,90 @@
-import { expect, test, vi } from "vite-plus/test";
-import { createFixtureMount } from "#/shell/fixture";
-import { fansGraph } from "./graph";
+import { afterEach, expect, test, vi } from "vite-plus/test";
+import { createWitness } from "./cutover.test-support";
+import { admit } from "./admission.fixture";
+import { localId } from "../ducts/neutral";
 import { stableFanKey } from "../ducts/sheet/model";
-import type { SheetReading } from "../ducts/sources";
-import sheetFixture from "../ducts/sheet/sheet.fixture.json";
-
-test("Fans fixture opens both FC-23 subjects and drops a refused pick and retains Work and ledger", async () => {
-  const owner = await createFixtureMount(fansGraph, "scene");
-  const release = owner.connect();
-  const demand = owner.readings.mount(["sheet"]);
-  try {
-    const duplicate = sheetFixture.roster.rows.filter((row) => row.mark === "FC-23");
-    owner.view.setPage({ fan: duplicate.map(stableFanKey) });
-    await vi.waitFor(() => expect(owner.readings.get("sheet").current).toBe(true));
-    const both = owner.readings.get("sheet").value as SheetReading;
-    expect(both.opened?.map((sheet) => sheet.overview.fan?.unitId)).toEqual([22, 13760867]);
-    expect(new Set(both.rows.map(stableFanKey)).size).toBe(both.rows.length);
-    const work = owner.snapshot().work;
-    owner.view.setPage({ fan: [stableFanKey(sheetFixture.roster.rows[0]!)] });
-    await vi.waitFor(() =>
-      expect((owner.readings.get("sheet").value as SheetReading).open?.overview.fan?.mark).toBe(
-        "MUAS-1",
-      ),
-    );
-    const muas = owner.readings.get("sheet").value;
-    owner.view.setPage({ fan: [stableFanKey(sheetFixture.roster.rows[0]!), "13760867:1"] });
-    await vi.waitFor(() =>
-      expect(owner.view.read().page.fan).toEqual([stableFanKey(sheetFixture.roster.rows[0]!)]),
-    );
-    expect(owner.readings.get("sheet").status).toBe("ready");
-    expect(owner.readings.get("sheet").value).toBe(muas);
-    expect(owner.snapshot().work).toBe(work);
-    expect((owner.readings.get("fans").value as { rows: unknown[] }).rows).toHaveLength(
-      sheetFixture.roster.rows.length,
-    );
-  } finally {
-    demand();
-    release();
-    owner.dispose();
-  }
+import { workFeedFailureMessage } from "../../../../packages/agent-contracts/src/work-journal-door";
+import fixture from "../ducts/sheet/sheet.fixture.json";
+const closes: (() => void)[] = [];
+afterEach(() =>
+  closes
+    .splice(0)
+    .reverse()
+    .forEach((close) => close()),
+);
+const picked = (keys: string[]) => ({
+  kind: "ids" as const,
+  ids: keys.map((key) => localId("ducts-fan", key)),
 });
-
-test("layout stress roster gives every synthetic unit its own stable identity", async () => {
-  const owner = await createFixtureMount(fansGraph, "layout");
-  const release = owner.connect();
-  const demand = owner.readings.mount(["fans"]);
-  try {
-    await vi.waitFor(() => expect(owner.readings.get("fans").current).toBe(true));
-    const rows = (owner.readings.get("fans").value as SheetReading).rows;
-    expect(new Set(rows.map(stableFanKey)).size).toBe(rows.length);
-  } finally {
-    demand();
-    release();
-    owner.dispose();
-  }
+test("P06/P08: MUAS-1 restores from a direct URL and duplicate FC-23 ports have distinct picker labels", async () => {
+  const f = await createWitness(closes);
+  const muas = fixture.roster.rows.find((row) => row.mark === "MUAS-1")!;
+  const value = picked([stableFanKey(muas)]);
+  const mounted = f.mount(
+    f.admitted.presenter,
+    new URLSearchParams({ fan: JSON.stringify(value) }),
+    "direct",
+  );
+  await vi.waitFor(() =>
+    expect((mounted.picker("fan") as readonly unknown[] | undefined)?.length).toBeGreaterThan(0),
+  );
+  expect(mounted.page.read().fan).toEqual(value);
+  const twins = fixture.roster.rows.filter((row) => row.mark === "FC-23");
+  const options = mounted.picker("fan") as readonly { id: string; label: string }[];
+  const twinOptions = options.filter((option) =>
+    twins.some((twin) => option.id === localId("ducts-fan", stableFanKey(twin))),
+  );
+  expect(twinOptions).toHaveLength(2);
+  expect(new Set(twinOptions.map((option) => option.label)).size).toBe(2);
+  mounted.close();
+  expect(f.mount(f.admitted.presenter, undefined, "direct").page.read().fan).toEqual(value);
+});
+test("P08: all and explicit none survive address reload independently", async () => {
+  const f = await createWitness(closes);
+  expect(f.fans.controls.subject({ kind: "all" })).toMatchObject({ kind: "accepted" });
+  f.fans.close();
+  const all = f.mount(f.admitted.presenter);
+  expect(all.page.read().fan).toEqual({ kind: "all" });
+  expect(all.controls.subject({ kind: "ids", ids: [] })).toMatchObject({ kind: "accepted" });
+  all.close();
+  expect(f.mount(f.admitted.presenter).page.read().fan).toEqual({ kind: "ids", ids: [] });
+});
+test("P07/P12: two retained Places keep separate subject, selection, query and pose over one Work", async () => {
+  const f = await createWitness(closes);
+  const ids = fixture.roster.rows.slice(0, 2).map(stableFanKey);
+  const a = f.mount(
+    f.admitted.presenter,
+    new URLSearchParams({ fan: JSON.stringify(picked([ids[0]!])) }),
+    "a",
+  );
+  const b = f.mount(
+    f.admitted.presenter,
+    new URLSearchParams({ fan: JSON.stringify(picked([ids[1]!])) }),
+    "b",
+  );
+  a.page.select([{ kind: "focus", id: localId("ducts-focus", "7") }]);
+  a.page.pose({ contextRadiusFt: 15 }, "gesture");
+  a.controls.query("inputSort", "name");
+  expect(b.page.read()).toMatchObject({
+    fan: picked([ids[1]!]),
+    selected: [],
+    contextRadiusFt: 10,
+    inputSort: "",
+  });
+  a.close();
+  expect(f.mount(f.admitted.presenter, undefined, "a").page.read()).toMatchObject({
+    fan: picked([ids[0]!]),
+    contextRadiusFt: 15,
+    inputSort: "name",
+  });
+});
+test("a stale Fans tab gets a reload refusal before any edit", async () => {
+  const f = await createWitness(closes);
+  const changed = await admit("fans-new-build");
+  const stale = f.mount(changed.presenter, undefined, "stale");
+  await vi.waitFor(() =>
+    expect(stale.workFailure()).toMatchObject({ kind: "registration-mismatch" }),
+  );
+  expect(workFeedFailureMessage(stale.workFailure()!)).toMatch(/Reload this tab/);
+  expect(stale.workBasis()).toBeNull();
 });

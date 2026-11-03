@@ -14,7 +14,8 @@ import { createRouteOwner, makeAtomRegistry, useOwned } from "#/shell/owner";
 import { createViewOwner } from "./view-owner";
 import { useUrlPage } from "./url";
 import { familyGraph, familyPageSchema } from "#/family/graph";
-import { ductsGraph, ductsPageSchema } from "#/ducts/graph";
+import { ductsPageGraph as ductsGraph } from "#/shell/subject.test-support";
+import { ductsPageSchema } from "#/ducts/page";
 import { graphUrlPage } from "#/shell/mount-page";
 
 afterEach(cleanup);

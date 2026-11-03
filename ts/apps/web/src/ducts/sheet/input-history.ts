@@ -1,11 +1,11 @@
 /** Sheet presentation on the kernel's in-memory Work journal; the route owns no undo stack. */
 import { z } from "zod";
 import { ductsSheetOverviewSchema } from "@pe/agent-contracts";
-import type { DuctsSheetEdits, DuctsSheetOverview, RouteStatePatch } from "@pe/agent-contracts";
-import type { ReadingState } from "#/shell/readings";
-import type { WorkJournal } from "#/shell/journal";
-import type { SheetReading } from "../sources";
-import { CRITERION_WORDS } from "./criterion-words";
+import type { DuctsSheetEdits, DuctsSheetOverview } from "@pe/agent-contracts";
+import type { Immutable } from "../../../../../packages/agent-contracts/src/route-kernel-data.ts";
+import type { WorkHistoryEntry } from "../../../../../packages/agent-contracts/src/route-kernel-bodies.ts";
+import type { SheetReading } from "../neutral.ts";
+import { CRITERION_WORDS } from "./criterion-words.ts";
 
 export type Totals = DuctsSheetOverview["totals"];
 
@@ -31,9 +31,9 @@ export const inputHistoryMetaSchema = editMetaSchema.omit({ label: true }).exten
     after: ductsSheetOverviewSchema.shape.totals.optional(),
   }),
 });
-type Readings = Readonly<Record<string, ReadingState>>;
+type Readings = { readonly sheet?: { readonly value?: Immutable<SheetReading> | null } };
 const totals = (readings: Readings): Totals =>
-  (readings.sheet?.value as SheetReading | undefined)?.open?.overview.totals ?? null;
+  (readings.sheet?.value?.open?.overview.totals ?? null) as Totals;
 
 export function describeInputHistory(before: Readings, detail: EditMeta, after?: Readings) {
   const { label, ...meta } = detail;
@@ -41,99 +41,45 @@ export function describeInputHistory(before: Readings, detail: EditMeta, after?:
     label,
     meta: {
       ...meta,
-      kind: "ducts-input",
+      kind: "ducts-input" as const,
       effect: { before: totals(before), ...(after && { after: totals(after) }) },
     },
   };
 }
 
 export function presentInputHistory(
-  journal: ReturnType<WorkJournal["read"]> | null,
+  entries: readonly WorkHistoryEntry<z.output<typeof inputHistoryMetaSchema>>[],
   refusal: string | null,
 ) {
-  const undo = journal?.undo.at(-1);
-  const redo = journal?.redo.at(-1);
-  const cleared = inputHistoryMetaSchema.safeParse(undo?.meta);
-  // Staging (writeIntent) is History's to name; Inputs speaks only of inputs.
-  const last = journal?.last?.step.internal ? null : journal?.last;
-  const meta = inputHistoryMetaSchema.safeParse(last?.step.meta);
-  const effect = meta.success ? meta.data.effect : null;
+  const undo = entries.filter((entry) => entry.state === "applied").at(-1);
+  const redo = entries.filter((entry) => entry.state === "undone").at(-1);
+  const cleared = undo?.detail === "available" ? undo.meta : null;
+  const last = entries.at(-1);
   return {
-    undoLabel: undo ? undo.label : null,
-    redoLabel: redo ? redo.label : null,
-    /** A foreign write changed this step's paths: the kernel refuses it; say so before the press. */
-    undoSuperseded: undo?.superseded?.message ?? null,
-    redoSuperseded: redo?.superseded?.message ?? null,
+    undoLabel: undo?.label ?? null,
+    redoLabel: redo?.label ?? null,
+    undoSuperseded: null,
+    redoSuperseded: null,
     cleared:
-      undo && cleared.success && cleared.data.clear
+      undo && cleared?.clear
         ? {
             press: undo.press,
-            rowKey: cleared.data.rowKey ?? null,
-            was: cleared.data.was ?? undo.label,
-            row: cleared.data.row,
+            rowKey: cleared.rowKey ?? null,
+            was: cleared.was ?? undo.label,
+            row: cleared.row ? { ...cleared.row, ids: [...cleared.row.ids] } : undefined,
           }
         : null,
     last: refusal
       ? { label: "restore", words: "", refusal }
-      : last && (effect || last.step.label)
+      : last
         ? {
-            label: `${last.kind === "undo" ? "undid " : last.kind === "redo" ? "redid " : ""}${last.step.label}`,
-            words: !effect
-              ? ""
-              : effect.after === undefined
-                ? "Waiting for this fan's totals"
-                : last.kind === "undo"
-                  ? effectWords(effect.after, effect.before)
-                  : effectWords(effect.before, effect.after),
+            // Name this entry's state; it does not identify the most recent movement.
+            label: `${last.state === "undone" ? "undid " : ""}${last.label}`,
+            // Entries cannot distinguish a new forward edit from a redo. Never infer effect numbers.
+            words: last.detail === "unavailable" ? "detail unavailable" : "",
           }
         : null,
   };
-}
-
-const at = (doc: unknown, path: readonly string[]) =>
-  path.reduce<unknown>(
-    (node, key) =>
-      node && typeof node === "object" ? (node as Record<string, unknown>)[key] : undefined,
-    doc,
-  );
-
-export const cellsAt = (doc: unknown, cells: readonly string[][]): unknown[] =>
-  cells.map((path) => {
-    const value = at(doc, path);
-    return value === undefined ? undefined : structuredClone(value);
-  });
-
-/** Patches that put each cell back as it was: a value where one existed, a delete where none did. */
-export const restorePatches = (
-  cells: readonly string[][],
-  values: readonly unknown[],
-): RouteStatePatch[] =>
-  cells.map((path, i) =>
-    values[i] === undefined ? { path: [...path] } : { path: [...path], value: values[i] },
-  );
-
-type Side = NonNullable<Totals>["supply"];
-const side = (s: Side | undefined) =>
-  !s
-    ? "—"
-    : s.complete && s.worstPath != null
-      ? s.worstPath.toFixed(4)
-      : `≥${s.knownInWg.toFixed(4)}`;
-const esp = (t: Totals) => (t?.requiredEspInWg == null ? "—" : t.requiredEspInWg.toFixed(4));
-
-/**
- * What an edit did to the open fan: each side's worst path (≥ marks a known subtotal of an
- * incomplete side) and required ESP, before → after, only where it moved.
- */
-export function effectWords(before: Totals, after: Totals): string {
-  const parts = [
-    ["supply", side(before?.supply), side(after?.supply)],
-    ["return", side(before?.return), side(after?.return)],
-    ["required ESP", esp(before), esp(after)],
-  ].filter(([, a, b]) => a !== b);
-  return parts.length
-    ? parts.map(([name, a, b]) => `${name} ${a} → ${b}`).join(" · ")
-    : "no change to this fan's totals";
 }
 
 const NOUNS: Record<string, string> = {

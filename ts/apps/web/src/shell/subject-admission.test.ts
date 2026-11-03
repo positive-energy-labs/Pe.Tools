@@ -1,6 +1,6 @@
 import { test, expect } from "vite-plus/test";
-import { ductsGraph } from "../ducts/graph";
-import { fansGraph } from "../fans/graph";
+import { systemSubjectGraph as ductsGraph } from "./subject.test-support";
+import { fanSubjectGraph as fansGraph } from "./subject.test-support";
 import { registerSubject, publishSubjectRoster, subjectState } from "./subject";
 
 test("unknown and malformed subject links refuse by name before Place enrollment", () => {

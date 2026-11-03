@@ -19,7 +19,7 @@ import { fittingGroups, memberSubject, type FittingGroup } from "./fitting-group
 import type { EditMeta } from "./input-history";
 import { inputRows, SECTION_WORDS, type InputRow, type InputSection } from "./input-rows";
 import { SheetCell, type WorkCell } from "./sheet-cell";
-import type { OpenSheet } from "../sources";
+import type { OpenSheet } from "../neutral.ts";
 
 export interface InputContext {
   snapshot: DuctSnapshot;

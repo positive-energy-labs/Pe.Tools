@@ -1,15 +1,9 @@
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { z } from "zod";
 
-import {
-  stagedDucts,
-  ductsRosterResponseSchema,
-  type DuctsRouteDocument,
-  type DuctsSheetRequest,
-  type DuctsSheetOverview,
-} from "@pe/agent-contracts";
+import { stagedDucts, type DuctsSheetRequest, type DuctsSheetOverview } from "@pe/agent-contracts";
 
-import { EMPTY_CATALOGS, type Catalogs } from "@pe/ducts-domain/catalog";
+import { EMPTY_CATALOGS } from "@pe/ducts-domain/catalog";
 
 import { toGrids } from "@pe/ducts-domain/loss-grid";
 
@@ -20,18 +14,17 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { callCompose, composeSource, ductsBodySource } from "#/shell/readings-api";
 import { acquireSource } from "#/shell/readings-use";
 
-import type { ReadingContext, ReadingSource, UseSource } from "#/shell/readings";
-
-import type { ReadingWorkerPort } from "#/shell/readings-worker";
-import { workerSource } from "#/shell/readings-worker";
+import type { ReadingContext, DeriveSource, UseSource } from "#/shell/readings";
 
 import { mergeSnapshots, nextSystemsRead, type NetworkSnapshot } from "./system-reads";
 
-import { applyPricingDelta, type PricingDelta } from "./pricing-delta";
-
-import type { PricingInput, PricingResult, PricingPayload } from "./pricing-job";
-
-import type { DuctsPage } from "./graph";
+import type { entries } from "./neutral";
+type ReadArgs = Partial<
+  z.output<(typeof entries)["ducts.networks"]["input"]> &
+    z.output<(typeof entries)["ducts.sheet"]["input"]> &
+    z.output<(typeof entries)["ducts.sheet-snapshot"]["input"]>
+>;
+const args = (ctx: ReadingContext) => ctx.args as ReadArgs;
 
 import { blockerElements } from "./sheet/layers";
 
@@ -41,33 +34,24 @@ import { selectedFans, type Detail, type FanPort } from "./sheet/model";
 
 import { EMPTY_SNAPSHOT, sheetSnapshot } from "./sheet/scoped-snapshot";
 
-export type OpenSheet = {
-  overview: DuctsSheetOverview;
+import type { OpenSheet, SheetReading, SnapshotReading } from "./neutral.ts";
 
-  inputs: Detail<"inputs"> | null;
-
-  elements: Detail<"elements"> | null;
-
-  legs: Detail<"legs"> | null;
-
-  worstLegs: Detail<"legs">[];
-
-  worksheet: Detail<"worksheet"> | null;
-};
-
-export type SheetReading = {
-  open: OpenSheet | null;
-  opened?: OpenSheet[];
-  rows: FanPort[];
-  progress: { done: number; total: number; mark: string; stopped: boolean } | null;
-};
+/** Keep the native capture pin with the domain value; a JSON cache hash is not a native version. */
+const captured = (source: UseSource<DuctSnapshot | null>): UseSource<SnapshotReading | null> => ({
+  ...source,
+  open(ctx, deliver) {
+    return source.open(ctx, (frame) => {
+      if ((frame.kind === "complete" || frame.kind === "part") && frame.value)
+        deliver({ ...frame, value: { ...frame.value, sourceVersion: frame.sourceVersion } });
+      else deliver(frame);
+    });
+  },
+});
 
 const target = (ctx: ReadingContext) => (ctx.target.kind === "document" ? ctx.target.ref : null);
 
-const page = (ctx: ReadingContext) => ctx.page as DuctsPage;
-
-const slots = (ctx: { work: unknown }) => {
-  const edit = stagedDucts(ctx.work as DuctsRouteDocument | null);
+const slots = (ctx: ReadingContext) => {
+  const edit = stagedDucts(args(ctx).work ?? null);
 
   return { slots: edit.parameters, labelParameter: edit.labelParameter ?? undefined };
 };
@@ -85,9 +69,9 @@ function networks(): UseSource<NetworkSnapshot | null> {
 
       if (!ref) return deliver({ kind: "complete", value: null, revision: 0 });
 
-      const roster = ctx.inputs.roster?.value as DuctSnapshot | null;
+      const roster = args(ctx).roster ?? null;
 
-      const authored = page(ctx).system;
+      const authored = args(ctx).system ?? [];
       const names =
         authored === "all" ? (roster?.systems ?? []).map((system) => system.name) : authored;
 
@@ -151,6 +135,7 @@ function networks(): UseSource<NetworkSnapshot | null> {
             value: {
               ...mergeSnapshots(parts.map((part) => part.snapshot))!,
               systemReads: { completed: [...completed], missing: [...missing] },
+              sourceVersion: parts.map((part) => part.version).join("+"),
             },
             revision: ++serial,
             sourceVersion: parts.map((part) => part.version).join("+"),
@@ -190,16 +175,15 @@ function sheets(): UseSource<SheetReading> {
   return {
     kind: "use",
     dirties: ["snapshot"],
-    key: (scope) => scope.workRevision,
 
     async open(ctx, deliver) {
       const ref = target(ctx);
 
-      const fans = ctx.inputs.fans?.value as z.output<typeof ductsRosterResponseSchema> | null;
+      const fans = args(ctx).fans ?? null;
 
       const empty: SheetReading = { open: null, rows: fans?.rows ?? [], progress: null };
 
-      const keys = page(ctx).fan;
+      const keys = args(ctx).fan ?? [];
       let chosen: FanPort[];
       try {
         chosen = selectedFans(keys, fans?.rows ?? []);
@@ -243,7 +227,10 @@ function sheets(): UseSource<SheetReading> {
               : [],
           );
           const paths = [
-            ...new Set([...worst, ...(page(ctx).sheetPath ? [page(ctx).sheetPath] : [])]),
+            ...new Set([
+              ...worst,
+              ...((args(ctx).sheetPath ?? "") ? [args(ctx).sheetPath ?? ""] : []),
+            ]),
           ];
           const [inputs, elements, worksheet, ...legs] = await Promise.all([
             sheetDetail(ctx, result, "inputs"),
@@ -256,7 +243,9 @@ function sheets(): UseSource<SheetReading> {
             inputs,
             elements,
             worksheet,
-            legs: legs[page(ctx).sheetPath ? paths.indexOf(page(ctx).sheetPath) : 0] ?? null,
+            legs:
+              legs[(args(ctx).sheetPath ?? "") ? paths.indexOf(args(ctx).sheetPath ?? "") : 0] ??
+              null,
             worstLegs: legs.slice(0, worst.length),
           });
         }
@@ -275,22 +264,27 @@ function sheets(): UseSource<SheetReading> {
   };
 }
 
-export function ductsSources(): Readonly<Record<string, ReadingSource>> {
+export function ductsSources(): Readonly<Record<string, UseSource | DeriveSource>> {
   return {
     "ducts.meshes": { kind: "derive", derive: () => null },
-    "ducts.roster": ductsBodySource({
-      request: (ctx) =>
-        target(ctx)
-          ? { kind: "ducts-snapshot", target: target(ctx)!, selector: { kind: "roster" } }
-          : null,
-      decode: (value) => snapshotSchema.parse(value),
-      absent: null,
-    }),
+    "ducts.roster": captured(
+      ductsBodySource({
+        request: (ctx) =>
+          target(ctx)
+            ? { kind: "ducts-snapshot", target: target(ctx)!, selector: { kind: "roster" } }
+            : null,
+        decode: (value) => snapshotSchema.parse(value),
+        absent: null,
+      }),
+    ),
 
     "ducts.networks": networks(),
 
     "ducts.tables": ductsBodySource({
-      request: (ctx) => target(ctx) ? { kind: "ducts-tables", session: target(ctx)!.session, ids: [...TABLE_IDS] } : null,
+      request: (ctx) =>
+        target(ctx)
+          ? { kind: "ducts-tables", session: target(ctx)!.session, ids: [...TABLE_IDS] }
+          : null,
       decode: toGrids,
       absent: null,
     }),
@@ -305,34 +299,7 @@ export function ductsSources(): Readonly<Record<string, ReadingSource>> {
       effects: () => [],
     },
 
-    "ducts.pricing": workerSource<PricingPayload, PricingResult, PricingDelta | null>({
-      algorithmVersion: "ducts-pricing-v1",
-      input: (ctx, previous) => {
-        const same =
-          previous &&
-          ["ducts", "tables", "catalogs"].every(
-            (id) => previous.inputs[id]!.value === ctx.inputs[id]!.value,
-          );
-        const base = same
-          ? undefined
-          : {
-              snapshot: (ctx.inputs.ducts!.value as DuctSnapshot) ?? EMPTY_SNAPSHOT,
-              grids: (ctx.inputs.tables!.value as PricingInput["grids"]) ?? {},
-              catalogs: (ctx.inputs.catalogs!.value as { tables: Catalogs }).tables,
-            };
-        return { doc: ctx.work as DuctsRouteDocument | null, ...(base ? { base } : {}) };
-      },
-      spawn: () => {
-        return new Worker(new URL("./pricing.worker.ts", import.meta.url), {
-          type: "module",
-        }) as unknown as ReadingWorkerPort<PricingPayload, PricingResult, PricingDelta | null>;
-      },
-      applyDelta: (before, delta) =>
-        delta ? (applyPricingDelta(before, delta) as PricingResult) : before!,
-    }),
-
     "ducts.fans": {
-      key: (scope) => scope.workRevision,
       ...composeSource({
         key: "ducts.roster",
         input: (ctx) => (target(ctx) ? { body: { target: target(ctx)! } } : null),
@@ -344,39 +311,41 @@ export function ductsSources(): Readonly<Record<string, ReadingSource>> {
     "ducts.sheet": sheets(),
 
     "ducts.sheet-snapshot": {
-      ...ductsBodySource({
-        request: (ctx) => {
-          const open = (ctx.inputs.sheet?.value as SheetReading | undefined)?.open;
+      ...captured(
+        ductsBodySource({
+          request: (ctx) => {
+            const open = (args(ctx).sheet ?? undefined)?.open;
 
-          if (!open?.overview.fan || !target(ctx)) return null;
+            if (!open?.overview.fan || !target(ctx)) return null;
 
-          const blockers =
-            open.inputs?.blockers ??
-            [...open.overview.blockers, ...open.overview.assumedBlockers].map(detailOf);
+            const blockers =
+              open.inputs?.blockers ??
+              [...open.overview.blockers, ...open.overview.assumedBlockers].map(detailOf);
 
-          const opens = (ctx.inputs.sheet?.value as SheetReading).opened ?? [open];
-          const ids = [
-            ...new Set([
-              ...opens.flatMap((sheet) => [
-                sheet.overview.fan!.unitId,
-                ...(sheet.elements?.walkedElementIds ?? []),
+            const opens = args(ctx).sheet?.opened ?? [open];
+            const ids = [
+              ...new Set([
+                ...opens.flatMap((sheet) => [
+                  sheet.overview.fan!.unitId,
+                  ...(sheet.elements?.walkedElementIds ?? []),
+                ]),
+                ...(open.elements?.walkedElementIds ?? []),
+                ...(open.elements?.beyond ?? []).flatMap((unit) => unit.elementIds),
+                ...blockers.flatMap(blockerElements),
               ]),
-              ...(open.elements?.walkedElementIds ?? []),
-              ...(open.elements?.beyond ?? []).flatMap((unit) => unit.elementIds),
-              ...blockers.flatMap(blockerElements),
-            ]),
-          ].sort((a, b) => a - b);
+            ].sort((a, b) => a - b);
 
-          return {
-            kind: "ducts-snapshot",
-            target: target(ctx)!,
-            ...slots(ctx),
-            selector: { kind: "ids", ids },
-          };
-        },
-        decode: (value) => sheetSnapshot(snapshotSchema.parse(value)),
-        absent: EMPTY_SNAPSHOT,
-      }),
+            return {
+              kind: "ducts-snapshot",
+              target: target(ctx)!,
+              ...slots(ctx),
+              selector: { kind: "ids", ids },
+            };
+          },
+          decode: (value) => sheetSnapshot(snapshotSchema.parse(value)),
+          absent: EMPTY_SNAPSHOT,
+        }),
+      ),
       key: slots,
     },
   };

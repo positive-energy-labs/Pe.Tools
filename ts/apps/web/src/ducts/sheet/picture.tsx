@@ -30,7 +30,7 @@ import { subjectNamer } from "../subject-text";
 import { blockerElements, sheetIssues, sheetLayers } from "./layers";
 import type { SheetBlocker } from "./tiers";
 import type { Detail, FanPort } from "./model";
-import type { OpenSheet } from "../sources";
+import type { OpenSheet } from "../neutral.ts";
 
 const NONE: readonly never[] = [];
 

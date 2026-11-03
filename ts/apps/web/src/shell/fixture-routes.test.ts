@@ -103,6 +103,62 @@ test.each(routeDirectory.map((entry) => [entry.directory.path, entry.key] as con
       }
       return;
     }
+    if (key === "ducts" || key === "fans") {
+      const { loadBuiltinRoute, builtinRouteStamp } = await import("../route/builtin-inventory");
+      const admitted = await loadBuiltinRoute(key, builtinRouteStamp(key));
+      if (!admitted.ok) throw Error(JSON.stringify(admitted.diagnostics));
+      const route = admitted.route;
+      expect(Object.keys(route.data.seeds).sort()).toEqual([
+        "colours",
+        "layout",
+        "navigation",
+        "scene",
+      ]);
+      const fetch = vi.fn(() => {
+        throw Error("Real host called");
+      });
+      vi.stubGlobal("fetch", fetch);
+      const services = sourceRouteServices({});
+      const acquire = vi.spyOn(services.reads, "acquire");
+      const subscribe = vi.spyOn(services.readings, "subscribe");
+      for (const name of Object.keys(route.data.seeds)) {
+        const mount = createRouteShell(services).mount(
+          route,
+          placeInput({
+            read: () => new URLSearchParams({ fixture: name }),
+            write() {},
+            subscribe: () => () => {},
+          }),
+        );
+        try {
+          expect(mount.workBasis(), `${key}/${name} Work`).not.toBeNull();
+          mount.read(route.data.subject.pane);
+          // The scene intentionally has no Revit system roster; All is a valid empty subject too.
+          expect(mount.controls.subject({ kind: "all" }).kind).toBe("accepted");
+          for (const [id, pane] of Object.entries(route.data.panes)) {
+            const rendered = mount.read(id);
+            expect(isValidElement(rendered), `${key}/${name}/${id}`).toBe(true);
+            if (
+              !isValidElement<{
+                ctx: { readings: Record<string, { status: string; reason?: string }> };
+              }>(rendered)
+            )
+              throw Error("Missing admitted fixture pane");
+            for (const reading of pane.draws) {
+              const state = rendered.props.ctx.readings[reading];
+              expect(state?.status, `${key}/${name}/${reading}: ${state?.reason}`).toBe("ready");
+            }
+          }
+          mount.refresh();
+          expect(fetch).not.toHaveBeenCalled();
+          expect(acquire).not.toHaveBeenCalled();
+          expect(subscribe).not.toHaveBeenCalled();
+        } finally {
+          mount.close();
+        }
+      }
+      return;
+    }
     const graph = routes.find((graph) => graph.key === key);
     if (!graph) throw Error(`Builtin lacks fixture mount coverage: ${key}`);
     const fetch = vi.fn(() => {

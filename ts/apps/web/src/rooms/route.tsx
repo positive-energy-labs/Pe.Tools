@@ -1,5 +1,5 @@
 import { roomSelection } from "./selection";
-import { useContext, useEffect, useMemo } from "react";
+import { useContext, useMemo } from "react";
 import { AttentionDocument, elementKey, useAttention } from "@pe/kit/lang/attention";
 import {
   transitionPatches,
@@ -21,6 +21,7 @@ import { RoomsSketch, type Drop } from "./sketch";
 import { snapPlan } from "./snap";
 import { RoomsPlan } from "./plan";
 import { RoomsTable } from "./table";
+import { useNativeObservation } from "#/revit/observation";
 import type { Point2 } from "#/lib/affine-frame";
 
 import type { PaneApi } from "../../../../packages/kit/src/components/lang/graph-layout";
@@ -128,6 +129,7 @@ function PlanBody({
   visible,
   renderPane,
 }: Body & { renderPane: PaneApi }) {
+  const { scope } = useNativeObservation();
   const {
     work,
     onView,
@@ -137,20 +139,25 @@ function PlanBody({
     cards,
     labels,
     view,
-    fixture,
     plan,
     planError,
     trace,
-    document,
     pending,
     error,
   } = useRoomsWorkspace();
-  useEffect(() => {
-    if (fixture && !page.view) owner.view.setPage({ view }, { history: "replace" });
-  }, [owner, fixture, page.view, view]);
   const token = useMemo(() => crypto.randomUUID(), [snapshot]);
-  const selected = new Set(roomSelection(page.selected, cards, regions.map(region => region.guid)).guids);
-  const { pinned } = roomSelection(page.selected, cards, regions.map(region => region.guid));
+  const selected = new Set(
+    roomSelection(
+      page.selected,
+      cards,
+      regions.map((region) => region.guid),
+    ).guids,
+  );
+  const { pinned } = roomSelection(
+    page.selected,
+    cards,
+    regions.map((region) => region.guid),
+  );
   const setPinned = (id: string | null) =>
     owner.view.setPage({ selected: id ? [`card:${id}`] : [] });
   const wire = workWire(owner);
@@ -203,13 +210,13 @@ function PlanBody({
   return (
     <RoomsPlan
       renderPane={renderPane}
-      fixture={fixture}
+      fixture={scope?.source === "fixture"}
       lease={{
         thread: thread ?? undefined,
         ready: visible && !!snapshot && !pending && !error,
         context: {
-          source: fixture ? "fixture" : "native",
-          document: fixture ? null : document,
+          source: scope?.source ?? "native",
+          document: scope?.document ?? null,
           acquiredEpoch: page.epoch,
           snapshotToken: token,
           stage: page.stage,
@@ -230,8 +237,19 @@ function PlanBody({
             : !add
               ? [guid]
               : selected.has(guid)
-                ? roomSelection(page.selected, cards, regions.map(region => region.guid)).guids.filter((item) => item !== guid)
-                : [...roomSelection(page.selected, cards, regions.map(region => region.guid)).guids, guid],
+                ? roomSelection(
+                    page.selected,
+                    cards,
+                    regions.map((region) => region.guid),
+                  ).guids.filter((item) => item !== guid)
+                : [
+                    ...roomSelection(
+                      page.selected,
+                      cards,
+                      regions.map((region) => region.guid),
+                    ).guids,
+                    guid,
+                  ],
         });
       }}
       trace={trace}
@@ -266,7 +284,13 @@ function FeedbackBody({ owner, page, renderPane }: Body & { renderPane: PaneApi 
       cards={cards}
       regions={regions}
       labelOf={(guid) => labels.get(guid)}
-      pinned={roomSelection(page.selected, cards, regions.map(region => region.guid)).pinned}
+      pinned={
+        roomSelection(
+          page.selected,
+          cards,
+          regions.map((region) => region.guid),
+        ).pinned
+      }
       onPin={(card) => owner.view.setPage({ selected: [`card:${card}`] })}
       show={page.show}
       onShow={(show) => owner.view.setPage({ show })}

@@ -4,7 +4,6 @@ import { sceneRequest } from "#/scene/host";
  * (capture, camera, selection, hover, readout and pane furniture) is the shared `Picture`'s; this
  * file only produces content for it.
  */
-import { useElementAttention } from "#/attention";
 import { elementKey, type Members, type SubjectKey } from "@pe/kit/lang/attention";
 import { useContext, useEffect, useMemo, useState, type ReactNode, type RefObject } from "react";
 
@@ -15,7 +14,6 @@ import { scopeOf, systemScope } from "@pe/ducts-domain/system-scope";
 import { worstRun } from "@pe/ducts-domain/losses";
 import type { Neighbour } from "@pe/ducts-domain/neighbours";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
-import { Button } from "@pe/kit/lang/button";
 import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
 import { SubjectText } from "@pe/kit/lang/subject-text";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
@@ -37,9 +35,8 @@ import { elementNamer } from "../../claims";
 import { NodeFactsView, SegmentFactsView } from "../../facts";
 import { labelOfNode, legsOf } from "../../legs";
 import { ductsFocus } from "../../page";
-import { activeSystem, paintOfDucts, stubIdsOf, withSystem } from "../../selection";
+import { activeSystem, paintOfDucts, stubIdsOf } from "../../selection";
 import { healReviewLayers, findingLayers, findingShapes, noRunLayers } from "../../finding-layers";
-import { GoToSubject } from "./go-to";
 import { RunDetail, runOf } from "./run-detail";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
 import { ProvisionalNote } from "../../provisional";
@@ -96,7 +93,6 @@ export interface DuctsPictureExtra {
     open: () => void;
     /** The critical run's loss groups under the ESP, with the system's fans at its head. */
     breakdown: { split: Split; scale: number; fans: () => ReactNode } | null;
-    allSystems: () => void;
   };
   /** The screen's alias picks call this when the subject is already the selection: fly again. */
   jump?: RefObject<((key: SubjectKey) => void) | null>;
@@ -145,7 +141,6 @@ function Content({
   setPage,
   onPose,
 }: ProtoProps & DuctsPictureExtra & { snapshot: NonNullable<ProtoProps["snapshot"]> }) {
-  const { onHover } = useElementAttention();
   const index = useMemo(() => indexOf(snapshot, priced), [snapshot, priced]);
   const scope = useMemo(() => scopeOf(snapshot, page.system), [snapshot, page.system]);
   const labelOf = useMemo(() => labelOfNode(snapshot), [snapshot]);
@@ -181,7 +176,7 @@ function Content({
     [snapshot, neighbours, opened],
   );
   const owner = useContext(DuctsOwner);
-  const meshes = owner?.readings.get("meshes").value as SceneMeshes | undefined;
+  const meshes = owner?.meshes;
   const meshCuts = useMemo(() => {
     const cuts = new Map<number, (typeof neighbours)[number]["cuts"]>();
     for (const id of stubs) {
@@ -558,33 +553,8 @@ function Content({
           facts,
         },
         flat: { ...DUCTS_FLAT, render: schematic },
-        goTo: (jumpTo) => (
-          <GoToSubject
-            snapshot={snapshot}
-            systems={page.system}
-            nameOf={nameOf}
-            onHover={onHover}
-            onGo={({ system, id }) => {
-              if (id == null)
-                return setPage(
-                  { system: withSystem(page.system, system), selected: "" },
-                  { history: "push" },
-                );
-              if (scope && !scope.members.has(id))
-                return setPage(
-                  { system: withSystem(page.system, system), selected: String(id) },
-                  { history: "push" },
-                );
-              jumpTo(elementKey(id));
-            }}
-          />
-        ),
         furniture: {
-          title: (
-            <Button label="All systems" onClick={identity.allSystems}>
-              Systems
-            </Button>
-          ),
+          title: "Systems",
           actions: (
             <EncodingPicker
               value={scale.encoding.key}

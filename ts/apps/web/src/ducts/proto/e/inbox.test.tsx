@@ -11,7 +11,8 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { ductClaimSchema, ductsDocumentSchema } from "@pe/agent-contracts";
 
 import { focusRow, inboxRows, type CellRef, type InboxItem } from "../../inbox-rows";
-import { ductsGraph } from "../../graph";
+import { cellFocus } from "../../inbox-rows";
+import { ruleByKey, ruleWords } from "@pe/ducts-domain/loss-rules";
 import { Inbox } from "./inbox";
 
 afterEach(cleanup);
@@ -206,8 +207,7 @@ test("taking back a stored ignore stages a delete over it", () => {
 // The chat head's "→ review" on a edit cell: the cell family's `focus` writes `issue`, the screen
 // resolves it with `focusRow` against the inbox's rows, and the Inbox opens and selects that row.
 const reviewPage = (segment: string, key: string) => {
-  const family = ductsGraph.cells!.find((one) => one.segment === segment)!;
-  return family.focus!(key);
+  return { selected: cellFocus(segment, key) };
 };
 const rowKeysOf = (over: NonNullable<Parameters<typeof mount>[0]>) =>
   new Set([
@@ -259,7 +259,12 @@ test("an issue id that names no Work cell lands nowhere extra", () => {
 });
 
 test("a loss-rule group reads as its family, type and condition", () => {
-  const family = ductsGraph.cells!.find((one) => one.segment === "rules")!;
+  const family = {
+    label: (key: string) => {
+      const rule = ruleByKey(key);
+      return rule ? ruleWords(rule) : key;
+    },
+  };
   expect(family.label!("elbow-1d-le10")).toBe("Round Elbow 1 D · D ≤ 10 in");
   expect(family.label!("not-a-rule")).toBe("not-a-rule");
 });

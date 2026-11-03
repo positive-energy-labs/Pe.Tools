@@ -1,6 +1,6 @@
 import { useContext } from "react";
 import { DuctsOwner } from "../../pane-context";
-import { stableFanKey, type FanPort } from "../../sheet/model";
+import { stableFanKey } from "../../sheet/model";
 import { subjectLink } from "../../subject-link";
 import { useRouteSearchSlice } from "#/route/activity";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
@@ -78,7 +78,7 @@ export function FanFacts({
   const observation = useNativeObservation();
   const owner = useContext(DuctsOwner);
   const search = useRouteSearchSlice((search) => search);
-  const roster = (owner?.readings.get("fans").value as { rows: FanPort[] } | null)?.rows ?? [];
+  const roster = owner?.fanRoster ?? [];
   if (!facts.length) return null;
   const scale = Math.max(...facts.map((fact) => fact.esp), 0);
   return (

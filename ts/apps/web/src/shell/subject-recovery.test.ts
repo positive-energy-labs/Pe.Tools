@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { test, expect } from "vite-plus/test";
 import { admittedSubject } from "./subject";
-import { fansGraph } from "../fans/graph";
+import { fanSubjectGraph as fansGraph } from "./subject.test-support";
 import { graphUrlPage } from "./mount-page";
 
 test("refused legacy fan drops before the next roster pick; refusal is emitted once", () => {
@@ -9,7 +9,7 @@ test("refused legacy fan drops before the next roster pick; refusal is emitted o
   let page = url.read({ fan: "13760867:1" }) as Record<string, unknown>;
   const roster = { rows: [{ unitId: 14577391, uniqueId: "uid", portIndex: 2, mark: "MUAS-1" }] };
   // Use the declaration's actual stable keys, never guess the fan DTO's identity spelling.
-  const id = fansGraph.fields.fan.picker.options(roster)[0]!.id;
+  const id = fansGraph.fields.fan.picker!.options(roster)[0]!.id;
   const refused = admittedSubject(fansGraph, page, roster)!;
   expect(refused.refusal).toBe("Dropped 1 fan link not in this model");
   page = { ...page, ...refused.patch };
@@ -18,7 +18,7 @@ test("refused legacy fan drops before the next roster pick; refusal is emitted o
   page.fan = [...(page.fan as string[]), id];
   expect(page.fan).toEqual([id]);
   expect(admittedSubject(fansGraph, page, roster)).toBeNull();
-  expect(url.read(url.write(page))).toMatchObject({ fan: [id] });
+  expect(url.read(url.write(page as never))).toMatchObject({ fan: [id] });
 });
 
 test("malformed subject values drop to their default with a named refusal", () => {
