@@ -21,11 +21,6 @@ export function createApplicationWorkRegistry() {
     const journal = createWorkJournal(key);
     const rows = new Map<string, { cursor: ReceiptCursor; receipt: ActionReceipt }>();
     const listeners = new Set<() => void>();
-    let receiptWindow: { kind: string; from: number; through: number } = {
-      kind: "pending",
-      from: 0,
-      through: 0,
-    };
     let refs = 0;
     let stop: (() => void) | undefined;
     const notify = () => listeners.forEach((listener) => listener());
@@ -62,24 +57,17 @@ export function createApplicationWorkRegistry() {
         // Install the sentinel before subscribing: in-memory doors may deliver synchronously.
         stop = () => {};
         stop = door.receipts(scope).subscribe((state) => {
-          receiptWindow = { ...receiptWindow, kind: state.kind };
           if (state.kind === "pending" || state.kind === "gap" || state.kind === "failed") {
             notify();
             return;
           }
           if (state.kind === "ready") {
-            receiptWindow = {
-              kind: "ready",
-              from: state.receipts.from,
-              through: state.receipts.through,
-            };
             rows.clear();
             for (const receipt of state.receipts.rows)
               rows.set(receipt.id, { cursor: state.receipts.through, receipt });
           } else if (state.kind === "receipt") {
             if ((rows.get(state.receipt.id)?.cursor ?? -1) >= state.cursor) return;
             rows.set(state.receipt.id, { cursor: state.cursor, receipt: state.receipt });
-            receiptWindow.through = state.cursor;
           } else return;
           for (const { receipt } of rows.values()) record(receipt);
           notify();
@@ -93,7 +81,6 @@ export function createApplicationWorkRegistry() {
         for (const { receipt } of rows.values()) record(receipt);
         notify();
       },
-      receiptWindow: () => Object.freeze({ ...receiptWindow }),
       timeline: () =>
         freezePage(
           [
@@ -145,7 +132,6 @@ export function createApplicationWorkRegistry() {
         },
       };
     },
-    size: () => entries.size,
   };
 }
 export const applicationWorkRegistry = createApplicationWorkRegistry();

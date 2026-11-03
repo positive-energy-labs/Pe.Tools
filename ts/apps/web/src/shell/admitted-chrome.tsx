@@ -173,17 +173,14 @@ export function admittedLayout(
   };
   return visit(data.layout);
 }
-/** Row bodies can render the same controls from mount.place's already-issued action projection. */
 export function AdmittedActions({
   mount,
   data,
   ids,
-  actions,
 }: {
   mount: AdmittedMount;
   data: RouteGraphJson;
   ids: readonly string[];
-  actions?: Readonly<Record<string, () => unknown>>;
 }) {
   return (
     <>
@@ -192,7 +189,7 @@ export function AdmittedActions({
           key={id}
           label={data.verbs[id]!.label}
           onClick={() => {
-            void (actions?.[id] ? actions[id]() : mount.invoke(id, undefined));
+            void mount.invoke(id, undefined);
           }}
         >
           {data.verbs[id]!.label}

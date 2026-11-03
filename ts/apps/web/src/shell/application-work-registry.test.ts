@@ -73,7 +73,6 @@ test("two Places share one journal and the last release drops it; ready rebuilds
   expect(f.stop).not.toHaveBeenCalled();
   second.release();
   expect(f.stop).toHaveBeenCalledOnce();
-  expect(f.registry.size()).toBe(0);
   const remount = f.registry.acquire(key);
   remount.entry.restore(state);
   expect(remount.entry.journal.read().moves).toEqual(before);

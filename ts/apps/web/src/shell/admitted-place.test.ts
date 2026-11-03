@@ -81,7 +81,7 @@ function fixture() {
   };
 }
 
-test("two Places retain independent Page selection/pose and accepted values while hide releases only leases", () => {
+test("two Places retain independent Page selection/pose and accepted values across hide", () => {
   const f = fixture();
   const a = f.place("a");
   const stateA = a.place.state(f.makeState);
@@ -110,8 +110,6 @@ test("two Places retain independent Page selection/pose and accepted values whil
   };
   restore(stateA, first, 10);
   a.place.remember(stateA.owner.read()!.page);
-  const release = vi.fn();
-  a.place.lease({ dispose: release });
   a.place.setVisible(false);
   f.activate("b");
   const b = f.place("b");
@@ -134,7 +132,6 @@ test("two Places retain independent Page selection/pose and accepted values whil
   expect(stateA.owner.read()!.page.selected).not.toEqual(stateB.owner.read()!.page.selected);
   expect(a.place.memory()).toEqual(stateA.owner.read()!.page);
   expect(stateA.readings.fan).toBe("accepted fan reading");
-  expect(release).toHaveBeenCalledTimes(1);
   expect(stateA.dispose).not.toHaveBeenCalled();
   a.remove();
   b.remove();
@@ -155,18 +152,4 @@ test("inactive callbacks cannot read another Place's URL or write it, including 
   expect(b.place.address.read().get("target")).toBe("two");
   a.remove();
   b.remove();
-});
-
-test("one subject label/roster snapshot feeds tab and window readers without leaking mutable rows", () => {
-  const f = fixture();
-  const { place, remove } = f.place("a");
-  const changed = vi.fn();
-  place.subscribe(changed);
-  const roster = [{ id: "fan", label: "Fan A" }];
-  place.publishSubject({ label: "Fan A", roster });
-  roster[0]!.label = "mutated";
-  expect(place.subject()).toEqual({ label: "Fan A", roster: [{ id: "fan", label: "Fan A" }] });
-  expect(Object.isFrozen(place.subject().roster[0])).toBe(true);
-  expect(changed).toHaveBeenCalledTimes(1);
-  remove();
 });

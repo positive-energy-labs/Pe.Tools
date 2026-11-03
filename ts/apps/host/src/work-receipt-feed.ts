@@ -1,3 +1,4 @@
+import { DEFAULT_WORK_HISTORY_LIMITS } from "@pe/runtime";
 // The WeakMap feed registry is ambient module state; phase 5 D re-homes it as a scoped subscription service.
 import {
   canonicalRouteInput,
@@ -21,7 +22,7 @@ export function observeWorkReceipts(
   journal: Journal,
   scope: Pick<WorkScope, "key" | "target">,
   emit: (state: ReceiptFeedState) => void,
-  limits = { maxCount: 256, maxBytes: 512 * 1024 },
+  limits: { maxCount: number; maxBytes: number } = DEFAULT_WORK_HISTORY_LIMITS,
 ): () => void {
   const identity = canonicalRouteInput([workKey(scope.key), scope.target]);
   const registry = feeds.get(journal) ?? new Map<string, Feed>();

@@ -1,3 +1,4 @@
+import type { WorkAdmission } from "./route-discovery";
 import { peRoutes } from "@pe/agent-contracts/pe-api";
 import { peClient } from "#/host/pe-client";
 import {
@@ -99,10 +100,7 @@ export function subscribeAcceptedDeltas(
   onAck: (ack: WorkWriteAck) => void,
   onGap?: () => void,
   source: Readings = peReadings,
-  admission?: {
-    routeKey: string;
-    fingerprint: import("../../../../packages/agent-contracts/src/route-kernel-admission").RouteFingerprint;
-  },
+  admission?: WorkAdmission,
 ): () => void {
   let seen: number | null = null;
   return source.subscribe(
