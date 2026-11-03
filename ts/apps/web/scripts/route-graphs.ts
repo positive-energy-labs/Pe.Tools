@@ -9,9 +9,9 @@ registerHooks({
 });
 /** Graph declarations own the directory and Pea projections; browser bodies never ship to MCP. */
 import { createJiti } from "jiti";
-import { routeSourceHash } from "../route-source-hash.ts";
+import { buildBuiltinClosure, routeSourceHash } from "../route-source-hash.ts";
 import { readdir, mkdir, writeFile, readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 const jiti = createJiti(import.meta.url, {
   fsCache: false,
   jsx: { runtime: "automatic" },
@@ -27,8 +27,16 @@ const jiti = createJiti(import.meta.url, {
 });
 const { projectRouteGraph } =
   await jiti.import<typeof import("@pe/agent-contracts")>("@pe/agent-contracts");
-await import("./captures-artifact.ts");
+const { canonicalRouteJson } =
+  await jiti.import<typeof import("@pe/agent-contracts")>("@pe/agent-contracts");
 const check = process.argv.includes("--check");
+// A bounded producer probe can emit/check one builtin without rewriting projections.
+const closureOnly = process.argv.includes("--builtin-closure-only");
+const closureDestination = process.argv
+  .find((arg) => arg.startsWith("--closure-output="))
+  ?.slice("--closure-output=".length);
+if (closureDestination && !/^(?:[A-Za-z]:[\\/]|\/)/.test(closureDestination))
+  throw Error("--closure-output requires an absolute path");
 const stale: string[] = [];
 async function emit(destination: URL, text: string) {
   if (check) {
@@ -54,13 +62,49 @@ for (const folder of (await readdir(new URL("../src/", import.meta.url), { withF
     const { capturesGraph, capturesDirectory } = await jiti.import<
       typeof import("../src/captures/graph.ts")
     >("../src/captures/graph.ts");
-    const artifact = JSON.parse(
-      await readFile(new URL("../src/captures/artifact.generated.json", import.meta.url), "utf8"),
+    const root = fileURLToPath(new URL("../", import.meta.url));
+    const host = JSON.parse(
+      await readFile(new URL("../../host/package.json", import.meta.url), "utf8"),
     );
+    const closure = await buildBuiltinClosure({
+      root,
+      identityRoot: fileURLToPath(new URL("../../../../", import.meta.url)),
+      data: capturesGraph,
+      hostVersion: host.version,
+      variants: [
+        {
+          client: "web",
+          entry: fileURLToPath(new URL("../src/captures/kernel.ts", import.meta.url)),
+        },
+        {
+          client: "pea",
+          entry: fileURLToPath(new URL("../src/captures/kernel.ts", import.meta.url)),
+        },
+      ],
+      config: { resolve: { tsconfigPaths: true, dedupe: ["react", "react-dom"] } },
+      inputs: [
+        "../vite.config.ts",
+        "../tsconfig.json",
+        "../route-source-hash.ts",
+        "../route-module-hash.ts",
+        "../../host/package.json",
+        "../../../pnpm-lock.yaml",
+        "../../../package.json",
+        "../../../packages/agent-contracts/src/route-kernel-data.ts",
+        "../../../packages/agent-contracts/src/route-module.ts",
+      ].map((path) => fileURLToPath(new URL(path, import.meta.url))),
+    });
+    await emit(
+      closureDestination
+        ? pathToFileURL(closureDestination)
+        : new URL("../src/captures/source-closure.generated.json", import.meta.url),
+      canonicalRouteJson(closure) + "\n",
+    );
+    if (closureOnly) continue;
     directory.push({
       key: capturesGraph.key,
       directory: capturesDirectory,
-      moduleHash: artifact.fingerprint,
+      moduleHash: closure.fingerprint,
     });
     await emit(
       new URL("../../../packages/mcps/src/pea/generated/captures-graph.json", import.meta.url),
@@ -68,6 +112,7 @@ for (const folder of (await readdir(new URL("../src/", import.meta.url), { withF
     );
     continue;
   }
+  if (closureOnly) continue;
   const module = await jiti.import<Record<string, unknown>>(`../src/${folder.name}/graph.ts`);
   const graphs = Object.entries(module).filter(([name]) => name.endsWith("Graph"));
   for (const [name, exported] of graphs) {
@@ -93,10 +138,11 @@ for (const folder of (await readdir(new URL("../src/", import.meta.url), { withF
     await emit(destination, `${JSON.stringify(projectRouteGraph(graph), null, 2)}\n`);
   }
 }
-await emit(
-  new URL("../../../packages/agent-contracts/src/generated/route-directory.ts", import.meta.url),
-  `// Generated from web route graphs by codegen:routes.\nimport type { RouteDirectory } from "../route-graph.ts";\nexport const routeDirectory: readonly {key: string; directory: RouteDirectory; moduleHash: string}[] = ${JSON.stringify(directory, null, 2)};\n`,
-);
+if (!closureOnly)
+  await emit(
+    new URL("../../../packages/agent-contracts/src/generated/route-directory.ts", import.meta.url),
+    `// Generated from web route graphs by codegen:routes.\nimport type { RouteDirectory } from "../route-graph.ts";\nexport const routeDirectory: readonly {key: string; directory: RouteDirectory; moduleHash: string}[] = ${JSON.stringify(directory, null, 2)};\n`,
+  );
 console.log(`Projected ${directory.length} route graphs`);
 
 if (stale.length)

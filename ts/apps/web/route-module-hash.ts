@@ -12,9 +12,8 @@ import type { RouteFingerprintInput } from "../../packages/agent-contracts/src/r
 import type { RouteGraphJson } from "../../packages/agent-contracts/src/route-kernel-data.ts";
 import { sharedContractId, type SharedRouteModule } from "./src/route/route-artifact.ts";
 
-// TODO: S1c2 connect scripts/route-graphs.ts to this producer using the private legacy
-// adapter's data, then replace the graph-only transform below with generated artifact loading.
-/** Produce the exact self-contained JS closure the loader will evaluate. Source EOLs
+/** Pod packaging only. Builtins use buildBuiltinClosure, with ordinary source imports.
+ * Produce the exact self-contained JS closure the package loader will evaluate. Source EOLs
  * normalize before compilation; the emitted bytes are hashed verbatim, never normalized.
  * No source-map is loaded. Unresolved imports and runtime-computed imports refuse. */
 export async function buildRouteArtifact(options: {
@@ -168,10 +167,26 @@ export function routeModuleHash(check = checkRoutes): Plugin {
     name: "route-module-hash",
     enforce: "pre",
     async buildStart() {
+      // Closure inputs include workspace contracts and assets outside the route folder.
+      // Watch the generated inventory as well as modules Vite discovers on demand.
+      const manifest = new URL("./src/captures/source-closure.generated.json", import.meta.url);
+      try {
+        const closure = JSON.parse(readFileSync(manifest, "utf8"));
+        for (const item of [...closure.envelope.modules, ...closure.envelope.inputs]) {
+          if (!item.id.startsWith("virtual:") && !item.id.startsWith("build:"))
+            this.addWatchFile(
+              fileURLToPath(new URL(item.id, new URL("../../../", import.meta.url))),
+            );
+        }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
       await refresh();
     },
     async handleHotUpdate({ file, server }) {
-      if (!graphFile.test(file)) return;
+      // The closure includes schemas, codecs, assets and build inputs outside graph.ts.
+      // Conservatively check every watched source edit; failed checks block reload.
+      if (file.includes("node_modules") || file.includes(".generated.")) return;
       await refresh();
       // Graphs register at module scope. Replace graph + directory together, never HMR one half.
       server.moduleGraph.invalidateAll();

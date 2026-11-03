@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { buildRouteArtifact, routeModuleHash } from "./route-module-hash.ts";
 import { routeSourceHash } from "./route-source-hash.ts";
 
-const id = fileURLToPath(new URL("./src/captures/graph.ts", import.meta.url));
+const id = fileURLToPath(new URL("./src/grilles/graph.ts", import.meta.url));
 
 test("build stamps actual source bytes rather than the directory hash", async () => {
   const source = readFileSync(id, "utf8");
@@ -46,8 +46,8 @@ test("graph edits generate before invalidating graph and directory together", as
   expect(await update({ file: id, server })).toEqual([]);
   expect(order).toEqual(["generated", "invalidated", "reload"]);
   order.length = 0;
-  expect(await update({ file: id.replace("graph.ts", "page.ts"), server })).toBeUndefined();
-  expect(order).toEqual([]);
+  expect(await update({ file: id.replace("graph.ts", "schema.ts"), server })).toEqual([]);
+  expect(order).toEqual(["generated", "invalidated", "reload"]);
 });
 
 test("generation failure stops bundling and never reloads a stale directory", async () => {
