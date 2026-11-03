@@ -178,20 +178,61 @@ export function sourceRouteServices(
             },
             (frame) => {
               if (state.controller.signal.aborted) return;
-              if (frame.kind === "complete" && frame.fresh === false) {
-                deliver({ status: "unavailable", current: false, reason: "Reading is stale" });
-                return;
+              let snapshot: ReadingSnapshot<T>;
+              const value = state.snapshot.value as
+                | import("../../../../packages/agent-contracts/src/route-kernel-data").Immutable<T>
+                | undefined;
+              switch (frame.kind) {
+                case "part":
+                  snapshot = {
+                    status: "pending",
+                    current: false,
+                    value:
+                      frame.value as import("../../../../packages/agent-contracts/src/route-kernel-data").Immutable<T>,
+                    reason: "Reading incomplete",
+                  };
+                  break;
+                case "complete":
+                  snapshot =
+                    frame.fresh === false
+                      ? {
+                          status: "unavailable",
+                          current: false,
+                          value:
+                            frame.value as import("../../../../packages/agent-contracts/src/route-kernel-data").Immutable<T>,
+                          reason: "Reading is stale",
+                        }
+                      : {
+                          status: "ready",
+                          current: true,
+                          value:
+                            frame.value as import("../../../../packages/agent-contracts/src/route-kernel-data").Immutable<T>,
+                          hash: JSON.stringify(frame.value),
+                        };
+                  break;
+                case "pending":
+                case "stale":
+                  snapshot = {
+                    status: frame.kind === "pending" ? "pending" : "unavailable",
+                    current: false,
+                    value,
+                    reason: frame.kind === "pending" ? "Reading pending" : "Reading is stale",
+                  };
+                  break;
+                case "failure":
+                  snapshot = {
+                    status: "failed",
+                    current: false,
+                    value,
+                    reason: String(frame.error),
+                  };
+                  break;
+                case "log":
+                  // Log entries do not change reading evidence.
+                  return;
               }
-              if (frame.kind === "complete")
-                deliver({
-                  status: "ready",
-                  current: true,
-                  value:
-                    frame.value as import("../../../../packages/agent-contracts/src/route-kernel-data").Immutable<T>,
-                  hash: JSON.stringify(frame.value),
-                });
-              if (frame.kind === "failure")
-                deliver({ status: "failed", current: false, reason: String(frame.error) });
+              state.snapshot = snapshot;
+              deliver(snapshot);
             },
           ),
         );

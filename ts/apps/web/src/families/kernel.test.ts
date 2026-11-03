@@ -172,29 +172,62 @@ test("unenrolled Families source refuses rather than calling a native fallback",
 });
 
 // Boundary witness: do not work around shared frame loss with a route-owned executor.
-test("kernel gap: admitted progressive Families parts and stale frames are dropped", async () => {
+test("admitted progressive Families parts stay inspectable and stale evidence refuses edits", async () => {
   let deliver!: ReadingDelivery;
-  const f = await setup(true, {
-    "families.read": {
-      kind: "use",
-      open(ctx, publish) {
-        expect(ctx.args).toMatchObject({ filter, work: observation.work, expectedRevision: 0 });
-        deliver = publish;
+  const draw = vi.spyOn(familiesModule.bodies.main, "run");
+  try {
+    const f = await setup(true, {
+      "families.read": {
+        kind: "use",
+        open(ctx, publish) {
+          expect(ctx.args).toMatchObject({ filter, work: observation.work, expectedRevision: 0 });
+          deliver = publish;
+        },
       },
-    },
-  });
-  f.read();
-  const pane = () => f.mount.read("main") as any;
-  deliver({ kind: "part", value: observation, revision: 1 });
-  // No partial value reaches the pane, even though this exact admitted source published it.
-  expect(pane().props.children).toBe("Reading pending");
-  expect(() => f.mount.invoke("edit", edit, f.mount.workBasis()!)).toThrow(/Reading unavailable/);
-  deliver({ kind: "complete", value: observation, revision: 2 });
-  expect(pane().props.children).toBe("{}");
-  deliver({ kind: "stale" });
-  expect(pane().props.children).toBe("{}");
-  // The prior complete observation incorrectly remains an admissible mutation basis.
-  expect(await settled(f.mount.invoke("edit", edit, f.mount.workBasis()!))).toMatchObject({
-    kind: "accepted",
-  });
+    });
+    f.read();
+    const notified = vi.fn();
+    closes.push(f.mount.subscribe(notified));
+    const snapshot = () => {
+      f.mount.read("main");
+      return draw.mock.lastCall![0].readings.matrix;
+    };
+    const refusesEdit = () =>
+      expect(() => f.mount.invoke("edit", edit, f.mount.workBasis()!)).toThrow(
+        /Reading unavailable/,
+      );
+    deliver({ kind: "part", value: observation, revision: 1 });
+    expect(notified).toHaveBeenCalled();
+    expect(snapshot()).toMatchObject({ current: false, value: observation });
+    refusesEdit();
+    deliver({ kind: "complete", value: observation, revision: 2 });
+    expect(snapshot()).toMatchObject({ current: true, value: observation });
+    for (const kind of ["stale", "pending"] as const) {
+      notified.mockClear();
+      deliver({ kind });
+      expect(notified).toHaveBeenCalled();
+      expect(snapshot()).toMatchObject({ current: false, value: observation });
+      refusesEdit();
+      deliver({ kind: "complete", value: observation, revision: 3 });
+      expect(snapshot()).toMatchObject({ current: true, value: observation });
+    }
+    deliver({ kind: "failure", error: Error("Extraction failed") });
+    expect(snapshot()).toMatchObject({
+      status: "failed",
+      current: false,
+      value: observation,
+      reason: "Error: Extraction failed",
+    });
+    refusesEdit();
+    const cancelled = { ...observation, progress: { state: "cancelled" } };
+    deliver({ kind: "part", value: cancelled, revision: 4 });
+    expect(snapshot()).toMatchObject({ current: false, value: cancelled });
+    refusesEdit();
+    deliver({ kind: "complete", value: observation, revision: 5 });
+    expect(await settled(f.mount.invoke("edit", edit, f.mount.workBasis()!))).toMatchObject({
+      kind: "accepted",
+    });
+  } finally {
+    draw.mockRestore();
+  }
 });
