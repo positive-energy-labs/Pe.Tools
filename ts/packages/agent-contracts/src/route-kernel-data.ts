@@ -103,6 +103,7 @@ export const routeVerbJsonSchema = z.discriminatedUnion("kind", [
     reading: ref.optional(),
     args: ref,
     cancellation: z.literal("scope"),
+    lands: ref.optional(),
   }),
 ]);
 const placement = z.union([refs, z.strictObject({ choose: ref, allowed: refs, row: ref })]);

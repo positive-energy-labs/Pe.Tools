@@ -270,9 +270,10 @@ type VerbSlots<G extends RouteGraphJson, S extends SchemaTable, E extends EntryT
         At<G["verbs"][K], "lands">,
         `verbs.${K}.lands`,
         "lands",
-        /** Run only on a decoded authoritative committed result, while the invocation
+        /** Run only on a decoded authoritative committed command result or a successful
+         * current query reading, while the invocation
          * remains current. B/C accepts the patch; departure retains the receipt and
-         * leaves the replacement Page untouched. Never run on preview or failure. */
+         * leaves the replacement Page untouched. Never run on preview, pending, stale, superseded or failed readings. */
         (result: Output<E, At<G["verbs"][K], "entry">>, page: PageOf<G, S>) => PagePatch<G, S>
       >
     | Slot<
