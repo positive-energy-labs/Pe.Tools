@@ -7,7 +7,6 @@ import type { RouteGraph } from "@pe/agent-contracts";
 import { openGraph } from "../open/graph";
 import { podsGraph } from "../pods/graph";
 import { roomsGraph } from "../rooms/graph";
-import { spaceGraph } from "../space/graph";
 import { familyGraph } from "../family/graph";
 import { takeoffGraph } from "../takeoff/graph";
 import { settingsGraph } from "../settings/graph";
@@ -53,7 +52,6 @@ const routes = [
   openGraph,
   podsGraph,
   roomsGraph,
-  spaceGraph,
   familyGraph,
   takeoffGraph,
   settingsGraph,
