@@ -30,25 +30,18 @@ export interface WorkSnapshot {
   readonly value: unknown;
 }
 
-export type WorkFeedFrame =
+export type WorkFeedState =
+  | { readonly kind: "pending" }
+  | { readonly kind: "failed"; readonly failure: { readonly code: string; readonly message: string } }
+  | { readonly kind: "ready"; readonly snapshot: WorkSnapshot }
   | { readonly kind: "ack"; readonly ack: WorkWriteAck }
   | {
       readonly kind: "gap";
-      /** Last delivered revision, exclusive. */
+      /** First missing revision, inclusive. */
       readonly from: WorkWriteAck["revision"];
       /** Next available revision, exclusive. Recover the missing interval before applying it. */
       readonly to: WorkWriteAck["revision"];
     };
-
-/** Acquisition captures the initial snapshot before frames. Subscription must replay every
- * subsequent accepted revision in order, including writes between open and subscribe.
- * A revision jump emits a gap, never a silently skipped delta. Consumers drop duplicate
- * revisions. Closing the subscription releases observation, never a command's lifetime. */
-export interface WorkFeed {
-  readonly lifetime: "subscription";
-  readonly snapshot: WorkSnapshot;
-  readonly frames: Observation<WorkFeedFrame>;
-}
 
 /** ADR 0029 rule 10: transport cancellation alone cannot establish a native outcome. */
 export type NativeOutcome =
@@ -82,7 +75,23 @@ export interface JournalSubmission {
 }
 
 export interface WorkJournalDoor {
-  open(scope: WorkScope): WorkFeed;
+  readonly lifetime: "subscription";
+  /** Subscribe to acks BEFORE acquiring the snapshot and buffer across that boundary.
+   * After ready{snapshot}, emit buffered and later acks with revision > snapshot.revision
+   * in revision order; drop those with revision <= snapshot.revision. If the first ack
+   * after the snapshot skips revisions, emit gap{from: snapshot.revision + 1, to: ack.revision}.
+   * No ack between subscribe and snapshot may be lost or reordered. Later revision jumps
+   * likewise emit a gap before the next available ack, with from the first missing revision.
+   *
+   * Legal state machine: pending -> (ready | failed); ready -> (ack | gap)*;
+   * gap -> (pending -> ready | failed) | ack; failed -> end.
+   * After a gap, the implementation MAY emit pending then a fresh ready{snapshot} within
+   * the same observation, without resubscribing; the consumer resets to that snapshot.
+   * The ordering contract applies to each snapshot. A failed state is terminal: onEnd
+   * follows and no further state is emitted. Unsubscribe releases observation only,
+   * never journal-owned commands.
+   */
+  open(scope: WorkScope): Observation<WorkFeedState>;
   submit(command: ActionAdmission): JournalSubmission;
   /** Reconcile a departed mount by its original command id. Retention is bounded per
    * ADR 0029 rule 15; an evicted id returns a rejected result with failure `expired`.
