@@ -41,15 +41,17 @@ afterEach(() => {
 // The neutral projection extracts canonical bytes; the web body derives review patches.
 async function witness(aside = false, failRecovery = false, withSalvage = true) {
   const salvage = vi.fn(() => ({ ok: true as const, value: [] }));
+  const { salvage: _oldSalvage, ...plainData } = familiesModule.data;
+  const { salvage: _oldBody, ...plainBodies } = familiesModule.bodies;
   const data = {
-    ...familiesModule.data,
+    ...plainData,
     ...(withSalvage ? { salvage: "salvage" as const } : {}),
   } as const;
   const module = {
     ...familiesModule,
     data,
     bodies: {
-      ...familiesModule.bodies,
+      ...plainBodies,
       ...(withSalvage
         ? {
             salvage: {
@@ -66,11 +68,13 @@ async function witness(aside = false, failRecovery = false, withSalvage = true) 
     if (failRecovery) throw Error("Broken recovery extractor");
     return familiesRouteState.salvage!(raw);
   });
+  const { salvage: _hostRecovery, ...plainHostBodies } = familiesHostModule.bodies;
   const hostModule = {
     ...familiesHostModule,
+    workState: { ...familiesRouteState, salvage: withSalvage ? recover : undefined },
     data,
     bodies: {
-      ...familiesHostModule.bodies,
+      ...plainHostBodies,
       ...(withSalvage
         ? {
             salvage: {
@@ -217,4 +221,32 @@ test("a route without salvage keeps recovery unavailable", async () => {
   const f = await witness(false, false, false);
   expect(await f.host.salvage(key, "families")).toBeNull();
   expect(f.recover).not.toHaveBeenCalled();
+});
+
+// A complete neutral spec does not supply the missing admitted recovery lifecycle port.
+test("kernel gap: unreadable admitted Families Work cannot reach carry-over from its mount", async () => {
+  const f = await witness(false);
+  const observe = observeResources(f.host, { observe: () => () => {} });
+  const work = createWorkFeedClient(
+    { subscribe: observe, dirty() {} },
+    {
+      write: (key, write) => f.host.write(key, "families", "human", write),
+      submit: async () => {
+        throw Error("Unexpected native dispatch");
+      },
+    },
+  );
+  const mount = createRouteShell({ ...sourceRouteServices({}), work }).mount(f.route, {
+    read: () => new URLSearchParams(),
+    write() {},
+    subscribe: () => () => {},
+  });
+  closes.push(mount.close);
+  await vi.waitFor(() => expect(mount.workProblem()).not.toBeNull());
+  expect(mount.work()).toBeNull();
+  expect(await f.host.salvage(key, "families")).toEqual(carried);
+  await expect(mount.salvage()).rejects.toThrow("Salvage unavailable");
+  expect(mount).not.toHaveProperty("startFresh");
+  expect(mount).not.toHaveProperty("reloadWork");
+  expect(mount.review("work.salvage")).toBeNull();
 });

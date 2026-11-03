@@ -193,7 +193,9 @@ test("unenrolled Families source refuses rather than calling a native fallback",
   const f = await setup(true);
   f.read();
   expect(f.mount.read("main")).toMatchObject({
-    props: { children: expect.stringContaining("No source for families.read") },
+    props: {
+      ctx: { readings: { matrix: { current: false, reason: "No source for families.read" } } },
+    },
   });
   expect(() => f.mount.invoke("edit", edit, f.mount.workBasis()!)).toThrow(/Reading unavailable/);
 });

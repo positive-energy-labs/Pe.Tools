@@ -1,3 +1,5 @@
+import { FamiliesKernelMatrix } from "./kernel-matrix";
+import { familiesMatrixSource } from "./sources";
 import { createElement } from "react";
 import { identityCodecs } from "../shell/page-port";
 import { familiesData, familiesSchemas, familiesEntries, familiesNeutralBodies } from "./neutral";
@@ -10,17 +12,11 @@ export const familiesBodies = {
     slot: "panes.main.body",
     kind: "pane",
     source: { module: "families/kernel.ts", export: "familiesModule" },
-    run: (ctx) =>
-      createElement(
-        "output",
-        { "aria-label": "Family Work" },
-        !ctx.readings.matrix.current
-          ? ctx.readings.matrix.reason
-          : JSON.stringify(ctx.work?.cells ?? {}),
-      ),
+    run: (ctx) => createElement(FamiliesKernelMatrix, { ctx }),
   },
 } satisfies BodyBindings<typeof familiesData, typeof familiesSchemas, typeof familiesEntries>;
 export const familiesModule = {
+  sources: { "families.read": familiesMatrixSource() },
   data: familiesData,
   schemas: familiesSchemas,
   entries: familiesEntries,
@@ -39,3 +35,5 @@ export const familiesModule = {
     },
   },
 };
+
+export { familiesModule as module };

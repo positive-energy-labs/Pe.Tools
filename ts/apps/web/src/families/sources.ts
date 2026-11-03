@@ -1,11 +1,14 @@
+import { z } from "zod";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 
 import {
   actionReceiptListDecoder,
   canonicalRouteInput,
   workKey,
+  workKeySchema,
   type AppliedFilter,
   familiesMatrixEnvelopeSchema,
+  familiesObservationSchema,
   type FamiliesRouteDocument,
   type ReadingRequest,
 } from "@pe/agent-contracts";
@@ -14,6 +17,8 @@ import type { RevitMatrixLoadedFamilies } from "@pe/host-contracts/generated";
 import {
   type FamiliesObservation,
   type FamiliesObservationSummary,
+  familiesReads,
+  readFamiliesCapture,
 } from "../../../../packages/mcps/src/shared/families-client";
 import { callCompose, opSource, composeSource } from "#/shell/readings-api";
 import { subscriptionSource } from "#/shell/readings-use";
@@ -44,7 +49,11 @@ export const scopeDraft = (
     placement: filter?.placementScope ?? "PlacedOnly",
   };
 };
-const scopeFilter = (scope: { page: unknown; work: unknown }) => {
+const scopeFilter = (scope: { page: unknown; work: unknown; args?: unknown }) => {
+  const input = familiesReads["families.read"].input
+    .extend({ work: workKeySchema })
+    .safeParse(scope.args);
+  if (input.success) return input.data.filter;
   const drafted = (scope.page as FamiliesPage).draft;
   return draftFilter(scopeDraft(drafted, scope.work as FamiliesRouteDocument | null));
 };
@@ -69,6 +78,12 @@ export function familiesMatrixSource(resources?: Readings): UseSource<FamiliesOb
     async open(ctx, deliver) {
       const target = ctx.target.kind === "document" ? ctx.target.ref : null;
       const filter = scopeFilter(ctx);
+      const args = familiesReads["families.read"].input
+        .extend({ work: workKeySchema })
+        .safeParse(ctx.args);
+      const bound = args.success
+        ? z.object({ work: workKeySchema }).parse(ctx.args).work
+        : ctx.workKey;
       if (
         !target ||
         !filter?.categoryNames.length ||
@@ -88,7 +103,7 @@ export function familiesMatrixSource(resources?: Readings): UseSource<FamiliesOb
         if (
           canonicalRouteInput(reading.document) !== canonicalRouteInput(target) ||
           canonicalRouteInput(reading.filter) !== canonicalRouteInput(filter) ||
-          workKey(reading.work) !== (ctx.workKey ? workKey(ctx.workKey) : null)
+          workKey(reading.work) !== (bound ? workKey(bound) : null)
         )
           return;
         const runId = reading.progress?.runId ?? reading.id;
@@ -142,7 +157,7 @@ export function familiesMatrixSource(resources?: Readings): UseSource<FamiliesOb
           sourceVersion: id,
         });
       };
-      return subscriptionSource({
+      const close = await subscriptionSource({
         request: (): ReadingRequest => ({ kind: "families-matrix", target, filter }),
         decode: (value) => familiesMatrixEnvelopeSchema.parse(value),
         resources,
@@ -167,6 +182,31 @@ export function familiesMatrixSource(resources?: Readings): UseSource<FamiliesOb
           if (!ctx.signal.aborted && latest === id) deliver({ kind: "failure", error });
         });
       });
+      if (args.success) {
+        // The POST owns completion's host baseline. Subscription parts remain inspectable.
+        void readFamiliesCapture(
+          "families.read",
+          {
+            filter: args.data.filter,
+            readId: args.data.readId,
+            expectedRevision: args.data.expectedRevision,
+          },
+          args.data.work,
+          target,
+        )
+          .then((reading) => {
+            if (ctx.signal.aborted) return;
+            deliver({
+              kind: "complete",
+              value: familiesObservationSchema.parse(reading),
+              revision: ++serial,
+            });
+          })
+          .catch((error: unknown) => {
+            if (!ctx.signal.aborted) deliver({ kind: "failure", error });
+          });
+      }
+      return close;
     },
   };
 }

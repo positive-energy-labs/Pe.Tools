@@ -2,6 +2,10 @@ import { commandCatalogAxes } from "../../../../packages/agent-contracts/src/com
 import { z } from "zod";
 import {
   commands,
+  routeStatePatchSchema,
+  canonicalRouteInput,
+  appliedScopeSchema,
+  showFamilyCell,
   familiesRouteState,
   familiesObservationSchema,
   familyCellKey,
@@ -9,16 +13,20 @@ import {
   familyCellAddress,
   transitionPatches,
   applyPatches,
+  familyCellStateSchema,
   workKeySchema,
 } from "@pe/agent-contracts";
-import type { BodyBindings } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
+import type {
+  BodyBindings,
+  BodyContext,
+} from "../../../../packages/agent-contracts/src/route-kernel-bodies";
 import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data";
 import { familiesReads } from "../../../../packages/mcps/src/shared/families-client";
 
 // Host admission consumes this module without loading the browser pane or sources.
-// TODO: W2 cutover is blocked: admitted host Work has no salvage reader, so scope
-// and excluded names/ids disappear from carry-over (host-salvage.test.ts). Preserve
-// the host recovery boundary; do not add a route-owned raw Work reader.
+// TODO: W2 cutover requires admitted Work recovery lifecycle controls. Unreadable
+// Work cannot reach Start fresh or salvage from the generic mount (host-salvage.test.ts).
+// Do not restore the legacy recovery owner or add a route-owned reset/reader.
 const scopeSchema = z.custom<
   import("../../../../packages/agent-contracts/src/route-kernel-page").IdentityId<"local">
 >((value) => value === '["families","draft"]');
@@ -60,6 +68,15 @@ export const familiesData = {
       agent: "set",
     },
     selected: { role: "selection", kinds: ["scope"] },
+    focus: {
+      role: "pose",
+      schema: "text",
+      codec: "json",
+      initial: "",
+      url: false,
+      share: false,
+      agent: "set",
+    },
   },
   subject: {
     field: "scope",
@@ -68,8 +85,18 @@ export const familiesData = {
     detail: "matrix",
     pane: "main",
   },
+  salvage: "salvage",
   work: { route: "families", schema: "work", version: 1, migrations: {} },
   readings: {
+    catalog: {
+      kind: "use",
+      entry: "revit.catalog.loaded-families",
+      args: "catalogArgs",
+      deps: empty,
+      demand: "visible",
+      retain: retained,
+      refresh: "explicit",
+    },
     scopes: {
       kind: "derive",
       output: "scopes",
@@ -99,12 +126,33 @@ export const familiesData = {
     },
   },
   verbs: {
+    writeCells: {
+      kind: "work",
+      input: "cellPatches",
+      label: "Review family cell",
+      review: "none",
+      patches: "writeCells",
+      describe: "describeCells",
+      ready: "cellsReady",
+      deps: { page: [], work: workKeys, readings: ["matrix"] },
+      captures: [],
+    },
+    pick: {
+      kind: "work",
+      input: "filter",
+      label: "Choose families",
+      review: "none",
+      patches: "pick",
+      deps: empty,
+      captures: [],
+    },
     edit: {
       kind: "work",
       input: "edit",
       label: "Edit family value",
       review: "none",
       patches: "edit",
+      describe: "describeEdit",
       ready: "editReady",
       deps: { page: [], work: workKeys, readings: ["matrix"] },
       captures: [],
@@ -126,6 +174,7 @@ export const familiesData = {
       label: "Apply families",
       review: "shown",
       ready: "applyReady",
+      present: "present",
       deps: { page: [], work: workKeys, readings: ["matrix"] },
       captures: [],
     },
@@ -156,8 +205,8 @@ export const familiesData = {
     main: {
       label: "Families",
       purpose: "Audit family values",
-      draws: ["matrix"],
-      verbs: ["read", "stop", "edit", "revert", "apply"],
+      draws: ["matrix", "catalog"],
+      verbs: ["writeCells", "pick", "read", "stop", "edit", "revert", "apply"],
       body: "main",
     },
   },
@@ -165,7 +214,18 @@ export const familiesData = {
   stages: { audit: { word: "Auditing", panes: ["main"], verbs: ["read", "stop", "apply"] } },
   stageOrder: ["audit"],
   predicates: {},
-  cells: {},
+  cells: {
+    parameters: {
+      segment: "cells",
+      value: "cell",
+      key: "key",
+      groupOf: "group",
+      label: "label",
+      show: "show",
+      focus: "focus",
+      deps: empty,
+    },
+  },
   workFields: {
     cells: { label: "family parameters", internal: false },
     takenAt: { label: "capture time", internal: true },
@@ -177,6 +237,10 @@ export const familiesData = {
 } as const satisfies RouteGraphJson;
 export const familiesSchemas = {
   subject: scopeSchema.nullable(),
+  text: z.string(),
+  observation: familiesObservationSchema,
+  cell: familyCellStateSchema,
+  filter: appliedScopeSchema,
   scopes: z.array(z.object({ id: z.string(), label: z.string() })),
   work: familiesRouteState.schema,
   edit: z.object({
@@ -184,6 +248,9 @@ export const familiesSchemas = {
     value: familyCellValueSchema,
     current: z.string(),
   }),
+  cellPatches: z
+    .array(routeStatePatchSchema)
+    .refine((patches) => patches.every((p) => p.path[0] === "cells" && p.path.length > 1)),
   key: z.string(),
   none: z.strictObject({}),
   read: familiesReads["families.read"].input,
@@ -197,6 +264,20 @@ const readAxes = {
   cardinality: "One",
 } as const;
 export const familiesEntries = {
+  "revit.catalog.loaded-families": {
+    input: z.object({ filter: z.object({}), budget: z.object({ maxEntries: z.number() }) }),
+    output: z.object({
+      families: z.array(
+        z.object({
+          familyId: z.number(),
+          familyName: z.string(),
+          categoryName: z.string().nullable().optional(),
+          placedInstanceCount: z.number().nullable().optional(),
+        }),
+      ),
+    }),
+    axes: readAxes,
+  },
   "families.read": {
     input: familiesReads["families.read"].input.extend({ work: workKeySchema }),
     output: familiesObservationSchema,
@@ -220,6 +301,121 @@ export const familiesEntries = {
 };
 const source = { module: "families/neutral.ts", export: "familiesNeutralBodies" };
 export const familiesNeutralBodies = {
+  describeCells: {
+    slot: "verbs.writeCells.describe",
+    kind: "describe",
+    source,
+    run: (patches) =>
+      patches
+        .map((p) => {
+          const a = familyCellAddress(String(p.path[1]));
+          return `${a.parameter} / ${a.typeName}`;
+        })
+        .join(", "),
+  },
+  writeCells: {
+    slot: "verbs.writeCells.patches",
+    kind: "work",
+    source,
+    run: (ctx, patches) => {
+      const result = applyPatches(
+        familiesRouteState,
+        { version: 1, revision: 0, doc: familiesRouteState.schema.parse(ctx.work) },
+        "human",
+        patches,
+        0,
+      );
+      if (!result.ok) throw Error("Invalid family cell change");
+      return [...new Set(patches.map((p) => String(p.path[1])))].map((key) => {
+        const value = result.envelope.doc.cells[key];
+        return value
+          ? { path: ["cells", key] as const, value }
+          : { path: ["cells", key] as const, op: "delete" as const };
+      });
+    },
+  },
+  catalogArgs: {
+    slot: "readings.catalog.args",
+    kind: "args",
+    source,
+    run: () => ({ filter: {}, budget: { maxEntries: 5000 } }),
+  },
+  pick: {
+    slot: "verbs.pick.patches",
+    kind: "work",
+    source,
+    run: (_, input) => [{ path: ["scope"], value: { edit: { value: input } } }],
+  },
+  group: {
+    slot: "cells.parameters.groupOf",
+    kind: "group",
+    source,
+    run: (key) => {
+      const a = familyCellAddress(key);
+      return [a.parameter, a.familyName, a.typeName];
+    },
+  },
+  label: { slot: "cells.parameters.label", kind: "label", source, run: (part) => part },
+  show: {
+    slot: "cells.parameters.show",
+    kind: "show",
+    source,
+    run: (cell) =>
+      (cell.edit ?? cell.suggestion) ? showFamilyCell((cell.edit ?? cell.suggestion)!.value) : "",
+  },
+  focus: { slot: "cells.parameters.focus", kind: "focus", source, run: (key) => ({ focus: key }) },
+  salvage: {
+    slot: "salvage",
+    kind: "salvage",
+    source,
+    run: (raw, ctx) => {
+      const got = z
+        .object({
+          familyNames: z.array(z.string()),
+          familyIds: z.array(z.number()),
+          scope: appliedScopeSchema.optional(),
+        })
+        .parse(raw);
+      if (!ctx.work || !ctx.readings.catalog.current)
+        return { ok: false, reason: "Read the current family catalog before recovery" };
+      const work = familiesRouteState.schema.parse(ctx.work);
+      const names = new Set([
+        ...got.familyNames,
+        ...ctx.readings.catalog.value.families
+          .filter((f) => got.familyIds.includes(f.familyId))
+          .map((f) => f.familyName),
+      ]);
+      return {
+        ok: true,
+        value: [
+          ...(got.scope && !work.scope.edit
+            ? [{ path: ["scope"] as const, value: { ...work.scope, edit: { value: got.scope } } }]
+            : []),
+          ...[...names]
+            .filter((name) => !Object.hasOwn(work.excluded, name))
+            .map((name) => ({
+              path: ["excluded", name] as const,
+              value: { by: "human" as const },
+            })),
+        ],
+      };
+    },
+  },
+  present: {
+    slot: "verbs.apply.present",
+    kind: "present",
+    source,
+    run: (_, evidence) => ({
+      sentence: "Review family parameter changes",
+      rows: Object.entries(evidence.work.cells).flatMap(([key, cell]) => {
+        if (!cell.edit) return [];
+        const a = familyCellAddress(key);
+        return [
+          `${a.familyName} / ${a.typeName} / ${a.parameter}: observed value to ${showFamilyCell(cell.edit.value)}`,
+        ];
+      }),
+    }),
+  },
   scopes: {
     slot: "readings.scopes.derive",
     kind: "derive",
@@ -259,12 +455,41 @@ export const familiesNeutralBodies = {
     },
   },
   stop: { slot: "verbs.stop.intent", kind: "intent", source, run: (_, input) => input },
+  cellsReady: {
+    slot: "verbs.writeCells.ready",
+    kind: "ready",
+    source,
+    run: (
+      ctx: BodyContext<
+        typeof familiesData,
+        typeof familiesSchemas,
+        typeof familiesEntries,
+        typeof familiesData.verbs.edit
+      >,
+    ) =>
+      ctx.readings.matrix.current &&
+      ctx.readings.matrix.value.capturedAt === ctx.work.takenAt &&
+      canonicalRouteInput(ctx.readings.matrix.value.filter) ===
+        canonicalRouteInput(ctx.work.scope.edit?.value)
+        ? true
+        : "Read these families before editing",
+  },
   editReady: {
     slot: "verbs.edit.ready",
     kind: "ready",
     source,
-    run: (ctx) =>
-      ctx.readings.matrix.current && ctx.readings.matrix.value.capturedAt === ctx.work.takenAt
+    run: (
+      ctx: BodyContext<
+        typeof familiesData,
+        typeof familiesSchemas,
+        typeof familiesEntries,
+        typeof familiesData.verbs.edit
+      >,
+    ) =>
+      ctx.readings.matrix.current &&
+      ctx.readings.matrix.value.capturedAt === ctx.work.takenAt &&
+      canonicalRouteInput(ctx.readings.matrix.value.filter) ===
+        canonicalRouteInput(ctx.work.scope.edit?.value)
         ? true
         : "Read these families before editing",
   },
@@ -279,27 +504,34 @@ export const familiesNeutralBodies = {
         rung: { value: input.value },
         baseline: { value: { value: input.current, storageType: input.value.storageType } },
       });
-      const prior = familiesRouteState.schema.parse(ctx.work);
       const result = applyPatches(
         familiesRouteState,
-        { version: 1, revision: 0, doc: prior },
+        { version: 1, revision: 0, doc: familiesRouteState.schema.parse(ctx.work) },
         "human",
         patches,
         0,
       );
-      if (!result.ok) throw Error("Invalid family cell edit");
-      return [{ path: ["cells"], value: result.envelope.doc.cells }];
+      if (!result.ok) throw Error("Invalid family edit");
+      const cell = result.envelope.doc.cells[key];
+      return cell
+        ? [{ path: ["cells", key], value: cell }]
+        : [{ path: ["cells", key], op: "delete" }];
     },
+  },
+  describeEdit: {
+    slot: "verbs.edit.describe",
+    kind: "describe",
+    source,
+    run: (input) =>
+      `${input.address.familyName} / ${input.address.typeName} / ${input.address.parameter} to ${input.value.value}`,
   },
   revert: {
     slot: "verbs.revert.patches",
     kind: "work",
     source,
-    run: (ctx, key) => {
+    run: (_, key) => {
       familyCellAddress(key);
-      const cells = { ...ctx.work.cells };
-      delete cells[key];
-      return [{ path: ["cells"], value: cells }];
+      return [{ path: ["cells", key], op: "delete" }];
     },
   },
   apply: { slot: "verbs.apply.intent", kind: "intent", source, run: () => ({}) },
@@ -308,7 +540,12 @@ export const familiesNeutralBodies = {
     kind: "ready",
     source,
     run: (ctx) => {
-      if (!ctx.readings.matrix.current || ctx.readings.matrix.value.capturedAt !== ctx.work.takenAt)
+      if (
+        !ctx.readings.matrix.current ||
+        ctx.readings.matrix.value.capturedAt !== ctx.work.takenAt ||
+        canonicalRouteInput(ctx.readings.matrix.value.filter) !==
+          canonicalRouteInput(ctx.work.scope.edit?.value)
+      )
         return "Read these families before planning";
       if (ctx.work.patch.edit && Object.values(ctx.work.cells).some((c) => c.edit))
         return "Stage either a patch or per-type cells";
@@ -319,5 +556,17 @@ export const familiesNeutralBodies = {
   BodyBindings<typeof familiesData, typeof familiesSchemas, typeof familiesEntries>,
   "main"
 >;
-// Only migration bodies are host-executable. There are no migrations in Work version 1.
-export const familiesHostModule = { data: familiesData, schemas: familiesSchemas, bodies: {} };
+// Host recovery extracts canonical bytes; web salvage derives review patches.
+export const familiesHostModule = {
+  data: familiesData,
+  schemas: familiesSchemas,
+  bodies: {
+    salvage: {
+      slot: "salvage",
+      kind: "recovery" as const,
+      source,
+      run: familiesRouteState.salvage,
+    },
+  },
+  workState: familiesRouteState,
+};
