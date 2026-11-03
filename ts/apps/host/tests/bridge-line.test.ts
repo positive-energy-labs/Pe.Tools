@@ -332,3 +332,21 @@ effectTest(
       expect(yield* Queue.size(outgoing)).toBe(0); // no Request frame ever went out
     }),
 );
+
+effectTest("retire an empty line, reconnect the same process, and the next op dispatches", () =>
+  Effect.gen(function* () {
+    const { bridge, socket, close, target } = yield* harness;
+    yield* close; // nothing dispatched: the session retires with an empty line
+    yield* turns();
+    expect(yield* bridge.list).toEqual([]);
+    const again = yield* socket; // same pid + start: same broker id, a fresh session
+    expect(again.target.session).toBe(target.session);
+    const op = yield* Effect.forkScoped(
+      again.bridge.invoke("test.a", {}, again.target.session, again.target.openId),
+    );
+    const frame = yield* again.sent;
+    expect(frame.operationKey).toBe("test.a");
+    yield* again.answer(frame.requestId);
+    expect(Exit.isSuccess(yield* Fiber.await(op))).toBe(true);
+  }),
+);

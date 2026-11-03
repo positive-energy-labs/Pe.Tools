@@ -1269,7 +1269,12 @@ export const RevitBridgeLive = Layer.effect(
     /** Refuses new jobs and fails every waiting one; a running job settles on its own reply. */
     const closeLine = Effect.fnUntraced(function* (session: Session, reason: string) {
       yield* Queue.interrupt(session.line);
-      for (const job of yield* Queue.clear(session.line)) {
+      // Interrupt is graceful: clear still returns buffered jobs. On an EMPTY line the queue is
+      // already Done with an interrupt cause, which `clear` re-raises; that means "none left".
+      const waiting = yield* Queue.clear(session.line).pipe(
+        Effect.catchCause(() => Effect.succeed([] as Job[])),
+      );
+      for (const job of waiting) {
         if (!(yield* claimQueued(job))) continue;
         yield* Deferred.fail(job.result, new BridgeError(reason, 503, { notDispatched: true }));
         yield* retire(session, job);
