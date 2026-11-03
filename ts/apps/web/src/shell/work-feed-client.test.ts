@@ -1,0 +1,146 @@
+import { expect, test, vi } from "vite-plus/test";
+import type { Readings } from "../readings";
+import type {
+  WorkFeedState,
+  WorkScope,
+} from "../../../../packages/agent-contracts/src/work-journal-door";
+import { createWorkFeedClient } from "./work-feed-client";
+const key = { binding: "host", route: "note", target: null } as const;
+const scope: WorkScope = { route: "note", key, target: null, subject: null };
+type Frame = Parameters<Parameters<Readings["subscribe"]>[1]>[0];
+const ack = (revision: number) =>
+  ({
+    kind: "event",
+    key: "acks",
+    value: {
+      key,
+      kind: "apply",
+      by: "human",
+      press: `p${revision}`,
+      base: revision - 1,
+      revision,
+      patches: [{ path: ["amount"], value: revision }],
+      inverse: [{ path: ["amount"], value: revision - 1 }],
+      undoable: true,
+    },
+  }) as Frame;
+const snapshot = (revision: number) =>
+  ({ kind: "snapshot", key: "work", value: { revision, doc: { amount: revision } } }) as Frame;
+function harness(replay: Frame[] = []) {
+  const listeners = new Map<string, (frame: Frame) => void>();
+  const stops = [vi.fn(), vi.fn()];
+  const order: string[] = [];
+  const source: Readings = {
+    subscribe(request, listener) {
+      order.push(request.kind);
+      listeners.set(request.kind, listener);
+      if (request.kind === "work-acks") replay.forEach(listener);
+      return stops[request.kind === "work-acks" ? 0 : 1]!;
+    },
+    dirty: vi.fn(),
+  };
+  const values: WorkFeedState[] = [];
+  const end = vi.fn();
+  const unsubscribe = createWorkFeedClient(source)
+    .open(scope)
+    .subscribe((value) => values.push(value), end);
+  return {
+    values,
+    end,
+    stops,
+    order,
+    source,
+    unsubscribe,
+    emit: (kind: string, frame: Frame) => listeners.get(kind)!(frame),
+  };
+}
+test("subscribe before snapshot, buffer and sort acks, drop revisions covered by snapshot", () => {
+  const h = harness([ack(3), ack(1), ack(2)]);
+  expect(h.order).toEqual(["work-acks", "work"]);
+  expect(h.values).toEqual([{ kind: "pending" }]);
+  h.emit("work", snapshot(1));
+  expect(h.values.map((value) => value.kind)).toEqual(["pending", "ready", "ack", "ack"]);
+  expect(
+    h.values.filter((value) => value.kind === "ack").map((value) => value.ack.revision),
+  ).toEqual([2, 3]);
+  h.emit("work-acks", ack(2));
+  expect(h.values).toHaveLength(4);
+  h.unsubscribe();
+  h.stops.forEach((stop) => expect(stop).toHaveBeenCalledOnce());
+});
+test("gap emits pending and fresh ready in band, keeps the original ack subscription", () => {
+  const h = harness([ack(4)]);
+  h.emit("work", snapshot(1));
+  expect(h.values.slice(-2)).toEqual([{ kind: "gap", from: 2, to: 4 }, { kind: "pending" }]);
+  expect(h.source.dirty).toHaveBeenCalledOnce();
+  h.emit("work-acks", ack(5));
+  h.emit("work", snapshot(3));
+  expect(h.values.map((value) => value.kind)).toEqual([
+    "pending",
+    "ready",
+    "gap",
+    "pending",
+    "ready",
+    "ack",
+    "ack",
+  ]);
+  expect(h.order).toEqual(["work-acks", "work"]);
+  h.emit("work-acks", ack(7));
+  expect(h.values.slice(-2)).toEqual([{ kind: "gap", from: 6, to: 7 }, { kind: "pending" }]);
+  h.unsubscribe();
+});
+test.each(["work", "work-acks"])("%s failure is terminal and releases both observers", (kind) => {
+  const h = harness();
+  h.emit(kind, { kind: "failure", key: "failed", error: "gone" });
+  h.emit("work", snapshot(0));
+  h.emit("work-acks", ack(1));
+  expect(h.values.map((value) => value.kind)).toEqual(["pending", "failed"]);
+  expect(h.end).toHaveBeenCalledOnce();
+  h.stops.forEach((stop) => expect(stop).toHaveBeenCalledOnce());
+});
+test("synchronous ack subscription failure never acquires a snapshot", () => {
+  const h = harness([{ kind: "failure", key: "acks", error: "gone" }]);
+  expect(h.order).toEqual(["work-acks"]);
+  expect(h.end).toHaveBeenCalledOnce();
+  expect(h.stops[0]).toHaveBeenCalledOnce();
+  h.unsubscribe();
+});
+test("fresh snapshot failure and malformed or foreign acknowledgements fail closed", () => {
+  for (const [kind, frame] of [
+    ["work", { kind: "snapshot", key: "work", value: {} }],
+    ["work-acks", { kind: "event", key: "acks", value: {} }],
+    [
+      "work-acks",
+      {
+        ...ack(1),
+        value: { ...(ack(1) as { value: object }).value, key: { ...key, route: "foreign" } },
+      },
+    ],
+  ] as const) {
+    const h = harness();
+    h.emit(kind, frame as Frame);
+    expect(h.values.at(-1)?.kind).toBe("failed");
+    expect(h.end).toHaveBeenCalledOnce();
+  }
+});
+test("synchronous recovery snapshot drains buffered acks without another wire event", () => {
+  const h = harness([ack(4), ack(5)]);
+  vi.mocked(h.source.dirty).mockImplementation(() => h.emit("work", snapshot(3)));
+  h.emit("work", snapshot(1));
+  expect(h.values.map((value) => value.kind)).toEqual([
+    "pending",
+    "ready",
+    "gap",
+    "pending",
+    "ready",
+    "ack",
+    "ack",
+  ]);
+  h.unsubscribe();
+});
+test("a wire gap with no revision bounds fails rather than inventing an interval", () => {
+  const h = harness();
+  h.emit("work-acks", { kind: "gap", key: "acks", dropped: 2 } as Frame);
+  expect(h.values.map((value) => value.kind)).toEqual(["pending", "failed"]);
+  expect(h.end).toHaveBeenCalledOnce();
+});
