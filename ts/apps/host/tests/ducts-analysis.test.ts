@@ -18,6 +18,7 @@ import {
 import { price, applyRequest } from "@pe/ducts-domain/pricing";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { TEST_SLOTS } from "@pe/ducts-domain/sheet/test-inputs";
 import { createDuctsAnalysis, type DuctsAnalysisSources } from "../src/ducts-analysis.ts";
 
 const roots: string[] = [];
@@ -104,6 +105,7 @@ function fixture() {
       },
     ],
     slots: {
+      ...TEST_SLOTS,
       fanStatic: "FanStatic",
       fanFlow: "FanFlow",
       componentDrop: "Pressure Drop",

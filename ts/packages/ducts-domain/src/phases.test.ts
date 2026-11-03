@@ -10,6 +10,7 @@ import { ductsDocumentSchema, workingPhaseOf } from "@pe/agent-contracts";
 import { phased } from "./phases.ts";
 import { survey, tolerated } from "./survey.ts";
 import type { DuctSnapshot } from "./types.ts";
+import { TEST_SLOTS } from "./sheet/test-inputs.ts";
 
 type Segment = DuctSnapshot["segments"][number];
 type Connector = Segment["connectors"][number];
@@ -84,13 +85,7 @@ const snap = (segments: Segment[], order: string[] | null = ORDER): DuctSnapshot
     issues: [],
     layers: [],
     systems: [],
-    slots: {
-      fanStatic: "",
-      fanFlow: "",
-      componentDrop: "",
-      fittingCoefficient: "",
-      terminalFlow: "",
-    },
+    slots: { ...TEST_SLOTS },
     ...(order
       ? { phases: { order, views: [{ phase: "Existing", filter: "Show All", count: 12 }] } }
       : {}),

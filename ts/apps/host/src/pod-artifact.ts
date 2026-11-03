@@ -4,6 +4,7 @@ import { catalogEntries } from "@pe/agent-contracts/pe-api";
 import {
   createRouteAdmission,
   routeFingerprint,
+  type AdmittedRoute,
   type PackageRouteAdmissionEvidence,
 } from "../../../packages/agent-contracts/src/route-module.ts";
 import type { RouteFingerprintInput } from "../../../packages/agent-contracts/src/route-kernel-admission.ts";
@@ -60,7 +61,7 @@ export async function verifyPodArtifact(value: unknown, expected: string) {
   return { wire, artifact, contracts, executables };
 }
 
-export async function admitPodArtifact(value: unknown, expected: string) {
+export async function admitPodArtifact(value: unknown, expected: string): Promise<AdmittedRoute> {
   const evidence = await verifyPodArtifact(value, expected);
   const web = evidence.executables.filter((item) => item.client === "web");
   if (

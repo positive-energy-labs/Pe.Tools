@@ -4,6 +4,7 @@ import { ductsDocumentSchema } from "@pe/agent-contracts";
 
 import { HEAL_JOIN_GAP_IN, healPlan, healRequestGroup, proximityId } from "./heal.ts";
 import type { DuctSnapshot } from "./types.ts";
+import { TEST_SLOTS } from "./sheet/test-inputs.ts";
 
 type Node = DuctSnapshot["nodes"][number];
 type Segment = DuctSnapshot["segments"][number];
@@ -103,13 +104,7 @@ const snap = (segments: Segment[], nodes: Node[] = []): DuctSnapshot => {
     issues,
     layers: [],
     systems: [],
-    slots: {
-      fanStatic: "",
-      fanFlow: "",
-      componentDrop: "",
-      fittingCoefficient: "",
-      terminalFlow: "",
-    },
+    slots: { ...TEST_SLOTS },
   } as DuctSnapshot;
 };
 const items = (s: DuctSnapshot) => healPlan(s).groups.flatMap((g) => g.items);
