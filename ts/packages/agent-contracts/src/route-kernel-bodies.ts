@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import type { Observation, WorkWriteOutcome, JournalSubmission } from "./work-journal-door.ts";
 import type { RouteStateSpec } from "./route-state.ts";
 import type { CatalogAxes } from "./catalog.ts";
 import type { ExecutionTarget } from "./target.ts";
@@ -7,6 +8,7 @@ import type {
   DecodeResult,
   InvocationToken,
   MoveOrigin,
+  MoveResult,
   PageOf,
   PagePatch,
   PagePort,
@@ -127,6 +129,23 @@ type VerbInput<
   S extends SchemaTable,
   V extends keyof G["verbs"],
 > = SchemaValue<S, G["verbs"][V]["input"]>;
+/** Preserve the mount's existing outcome, including review preparation before dispatch. */
+type VerbOutcome<V> = V extends { review: "none" }
+  ? V extends { kind: "work" }
+    ? Observation<WorkWriteOutcome>
+    : V extends { kind: "page" }
+      ? MoveResult
+      : V extends { kind: "command" }
+        ? JournalSubmission
+        : void
+  : V extends { review: "shown" }
+    ?
+        | { readonly kind: "review"; readonly preview: unknown }
+        | (V extends { kind: "command" } ? { readonly kind: "preview" } : never)
+    : V extends { kind: "work" }
+      ? Observation<WorkWriteOutcome> | { readonly kind: "review"; readonly preview: unknown }
+      : unknown;
+
 type Allowed<P> = P extends readonly string[]
   ? P[number]
   : P extends { allowed: readonly string[] }
@@ -174,7 +193,7 @@ export type PaneContext<
     readonly [V in Extract<Allowed<G["panes"][P]["verbs"]>, keyof G["verbs"]>]: (
       input: VerbInput<G, S, V>,
       ...basis: G["verbs"][V] extends { kind: "work" } ? [basis: InvocationToken] : []
-    ) => void;
+    ) => VerbOutcome<G["verbs"][V]>;
   };
 };
 type Slot<Id, Path extends string, Kind extends string, Fn> = Id extends string

@@ -1,8 +1,9 @@
 /* eslint-disable typescript/no-misused-spread -- Deliberate hostile copies test nominal authority refusals. */
 import { createRouteAdmission, resolveRouteBindings } from "./route-module.ts";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, expectTypeOf, it } from "vite-plus/test";
 import { RouteGraphJson, type FieldJson } from "./route-kernel-data.ts";
-import type { BodyBindings } from "./route-kernel-bodies.ts";
+import type { Observation, WorkWriteOutcome } from "./work-journal-door.ts";
+import type { BodyBindings, PaneContext } from "./route-kernel-bodies.ts";
 import type {
   AdmittedRoute,
   AdmittedRouteRegistry,
@@ -576,3 +577,17 @@ function capabilityTypes(baseline: KernelServices, all: RouteEnvironment) {
   return [readOnly, unused, missingWork, missingGeometry, missingNative];
 }
 void capabilityTypes;
+
+export function paneOutcomeWitness(
+  pane: PaneContext<typeof builtinData, typeof schemas, typeof entries, "main">,
+  basis: InvocationToken,
+) {
+  const outcome = pane.verbs.edit({ amount: 2 }, basis);
+  expectTypeOf(outcome).toEqualTypeOf<Observation<WorkWriteOutcome>>();
+  // @ts-expect-error a Work edit cannot erase its authoritative outcome
+  const erased: void = outcome;
+  void erased;
+  expectTypeOf(pane.verbs.apply({})).toEqualTypeOf<
+    { readonly kind: "review"; readonly preview: unknown } | { readonly kind: "preview" }
+  >();
+}
