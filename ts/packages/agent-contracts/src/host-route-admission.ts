@@ -14,8 +14,9 @@ export interface HostAdmittedRoute {
     readonly schema: z.ZodType;
   };
 }
-/** The host currently executes only Work migrations from route bindings.
- * Migration dependencies (including codecs) are ordinary imports of these neutral bodies.
+/** The host executes Work migrations and recovery extraction from neutral bindings.
+ * Recovery reads raw persisted Work; the web salvage body derives patches from its output.
+ * Dependencies (including codecs) are ordinary imports of these neutral bodies.
  * Browser slots remain in data and the closure but are never loaded or fabricated here. */
 export interface HostRouteModule {
   readonly data: RouteGraphJson;
@@ -25,7 +26,7 @@ export interface HostRouteModule {
       string,
       {
         readonly slot: string;
-        readonly kind: "migration";
+        readonly kind: "migration" | "recovery";
         readonly source: { readonly module: string; readonly export: string };
         readonly run: (doc: unknown) => unknown;
       }
@@ -53,7 +54,7 @@ const hostModuleSchema = hostZ.strictObject({
     hostZ.string(),
     hostZ.strictObject({
       slot: hostZ.string(),
-      kind: hostZ.literal("migration"),
+      kind: hostZ.enum(["migration", "recovery"]),
       source: hostZ.strictObject({ module: hostZ.string().min(1), export: hostZ.string().min(1) }),
       run: hostZ.custom<(doc: unknown) => unknown>((v) => typeof v === "function"),
     }),

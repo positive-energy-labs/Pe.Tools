@@ -114,7 +114,7 @@ export class RouteWorkspace {
     };
   }
 
-  /** Host admission owns migration bodies. No browser-supplied body or schema crosses the wire. */
+  /** Host admission owns migration and recovery bodies. No browser body or schema crosses the wire. */
   registerAdmitted(route: AdmittedRoute | HostAdmittedRoute): {
     ready: Promise<WorkFeedFailure | null>;
     close(): void;
@@ -153,6 +153,11 @@ export class RouteWorkspace {
       schema: bindings.schemas[work.schema]!,
       schemaVersion: work.version,
       migrations,
+      // A web salvage body consumes recovery data and must never read persisted Work here.
+      salvage:
+        route.data.salvage && bindings.bodies[route.data.salvage]?.kind === "recovery"
+          ? bindings.bodies[route.data.salvage]!.run
+          : undefined,
     };
     let remove: () => void;
     try {
@@ -700,16 +705,26 @@ export class RouteWorkspace {
     if (!spec?.salvage) return null;
     const targetKey = workKey(scope);
     const docOf = (raw: unknown) => (raw as { doc?: unknown } | null)?.doc;
+    const extract = (from: string, raw: unknown) => {
+      try {
+        return { from, value: spec.salvage!(docOf(raw)) };
+      } catch (error) {
+        return refuse(
+          "error",
+          `Work salvage failed: ${String(error)}`,
+          "Saved Work was left untouched.",
+        );
+      }
+    };
     const raw = await this.options.store.getState({ targetKey, route });
-    if (raw != null && !readable(raw, spec))
-      return { from: "unreadable", value: spec.salvage(docOf(raw)) };
+    if (raw != null && !readable(raw, spec)) return extract("unreadable", raw);
     let newest: { slot: number; raw: unknown } | null = null;
     for (let slot = 1; ; slot++) {
       const found = await this.options.store.getState({ targetKey, route: aside(route, slot) });
       if (found == null) break;
       newest = { slot, raw: found };
     }
-    return newest && { from: `aside:${newest.slot}`, value: spec.salvage(docOf(newest.raw)) };
+    return newest && extract(`aside:${newest.slot}`, newest.raw);
   }
 
   observe(

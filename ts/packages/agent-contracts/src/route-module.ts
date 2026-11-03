@@ -962,12 +962,18 @@ function admitHostProjection(
       }
     }
   }
+  if (data.salvage && work?.schema) {
+    const body = module.bodies[data.salvage];
+    if (!body || body.kind !== "recovery" || body.slot !== "salvage")
+      fail("salvage", "Missing or misbound host recovery extraction");
+  }
   for (const [id, body] of Object.entries(module.bodies))
     if (
       !work?.schema ||
-      !Object.entries(work.migrations).some(
-        ([age, ref]) => ref === id && body.slot === `work.migrations.${age}`,
-      )
+      (!(body.kind === "recovery" && id === data.salvage && body.slot === "salvage") &&
+        !Object.entries(work.migrations).some(
+          ([age, ref]) => ref === id && body.slot === `work.migrations.${age}`,
+        ))
     )
       fail(`bodies.${id}`, "Undeclared host body");
   if (errors.length) return { ok: false, diagnostics: errors };

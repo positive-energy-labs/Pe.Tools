@@ -82,3 +82,41 @@ test("post-prepare replacement of a host body refuses", async () => {
     }).ok,
   ).toBe(false);
 });
+
+test("host recovery requires the declared slot and exact captured extraction", async () => {
+  const recovery: HostRouteModule = {
+    ...neutral,
+    data: { ...neutral.data, salvage: "carry" },
+    bodies: {
+      ...neutral.bodies,
+      carry: {
+        kind: "recovery",
+        slot: "salvage",
+        source: { module: "neutral.ts", export: "recover" },
+        run: (raw) => raw,
+      },
+    },
+  };
+  const port = await prepare(recovery);
+  expect(port.admitHost(recovery).ok).toBe(true);
+  const candidates: HostRouteModule[] = [
+    { ...recovery, bodies: neutral.bodies },
+    {
+      ...recovery,
+      bodies: { ...recovery.bodies, carry: { ...recovery.bodies.carry!, slot: "panes.main.body" } },
+    },
+    {
+      ...recovery,
+      bodies: { ...recovery.bodies, carry: { ...recovery.bodies.carry!, kind: "migration" } },
+    },
+    { ...recovery, data: neutral.data },
+  ];
+  for (const candidate of candidates)
+    expect((await prepare(candidate)).admitHost(candidate).ok).toBe(false);
+  expect(
+    port.admitHost({
+      ...recovery,
+      bodies: { ...recovery.bodies, carry: { ...recovery.bodies.carry!, run: () => null } },
+    }).ok,
+  ).toBe(false);
+});
