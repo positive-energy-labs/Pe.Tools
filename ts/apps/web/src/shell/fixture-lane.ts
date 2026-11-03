@@ -1,3 +1,4 @@
+import { createFixtureWorkDoor } from "./fixture-work-door";
 /** Presence isolates every route; an unknown or empty name never falls through to the host. */
 export const fixtureName = (search: Record<string, unknown>): string | null =>
   typeof search.fixture === "string" ? search.fixture : null;
@@ -48,12 +49,6 @@ export function createFixtureRouteEnvironment(
   if (declaresWork !== (options.workSpec !== undefined))
     throw Error("Fixture Work declaration mismatch");
   const capturedSeed = structuredClone(options.seed);
-  const works = new Map<string, { revision: number; value: unknown }>();
-  const journalParents = new Set<string>();
-  // This fixture journal owns issuance; arbitrary strings do not pass its decoder.
-  const parentSchema = z.custom<CausalParentId>(
-    (value) => typeof value === "string" && journalParents.has(value),
-  );
   const snapshot = <T>(request: Pick<ResolvedRead<T>, "output" | "key">): ReadingSnapshot<T> => {
     const seed = capturedSeed;
     const id = options.plan.readingId(request);
@@ -117,62 +112,10 @@ export function createFixtureRouteEnvironment(
       },
       ...(declaresWork
         ? {
-            work: {
-              read: {
-                lifetime: "read",
-                read: (scope) => {
-                  const key = scope.identity.work;
-                  if (!key || key.route !== options.plan.route.data.key || !capturedSeed)
-                    return null;
-                  const id = workKey(key);
-                  let state = works.get(id);
-                  if (!state) {
-                    const parsed = options.workSpec!.schema.safeParse(
-                      structuredClone(capturedSeed.work),
-                    );
-                    if (!parsed.success) return null;
-                    state = { revision: 0, value: parsed.data };
-                    works.set(id, state);
-                  }
-                  const value = structuredClone(state.value);
-                  freezeValue(value);
-                  return { key, revision: state.revision, value };
-                },
-              },
-              submit: {
-                lifetime: "command",
-                submit: (route, invocation, write) => {
-                  const key = invocation.token.scope.identity.work;
-                  const prior = key && works.get(workKey(key));
-                  if (!key || !prior || route.data.key !== key.route)
-                    throw new Error("Fixture Work unavailable");
-                  const result = applyPatches(
-                    options.workSpec!,
-                    { version: 1, revision: prior.revision, doc: prior.value },
-                    "human",
-                    structuredClone(write.patches).map((patch) => ({
-                      ...patch,
-                      path: [...patch.path],
-                    })),
-                    write.expectedRevision,
-                    false,
-                    write.kind === "restore",
-                  );
-                  if (!result.ok) throw new Error(result.error);
-                  works.set(workKey(key), {
-                    revision: result.envelope.revision,
-                    value: result.envelope.doc,
-                  });
-                  const id = crypto.randomUUID();
-                  journalParents.add(id);
-                  return Object.freeze({
-                    lifetime: "command",
-                    id,
-                    causalParent: invocation.causalParent ?? parentSchema.parse(id),
-                  });
-                },
-              },
-            },
+            work: (() => {
+              const door = createFixtureWorkDoor(options.workSpec!, capturedSeed?.work);
+              return { read: door, submit: door };
+            })(),
           }
         : {}),
       clock: { lifetime: "read", now: options.now },

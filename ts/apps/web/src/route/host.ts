@@ -23,11 +23,12 @@ export function routeInput(route: string, key: WorkKey) {
 export async function writeRouteWork(
   key: WorkKey,
   write: WorkWrite,
+  invocation?: import("../../../../packages/agent-contracts/src/route-kernel-page").InvocationBasis,
 ): Promise<RouteStateWriteResult> {
   const { result, status } = await postRouteWrite(
     write.kind === "restore" ? "restore" : "apply",
     routeInput(key.route, key),
-    write,
+    { ...write, ...(invocation?.causalParent ? { causalParent: invocation.causalParent } : {}) },
   );
   return (
     result ?? {
@@ -65,7 +66,10 @@ export async function postRouteWrite(
           body: peRoutes["work.apply"].body.parse(body),
         })
       : await peClient.response("work.fresh", { ...input, body: {} });
-  const wire = await response.json().catch((error) => { console.error("host: asynchronous operation failed", error); return null; });
+  const wire = await response.json().catch((error) => {
+    console.error("host: asynchronous operation failed", error);
+    return null;
+  });
   return { status: response.status, result: response.ok ? wire : (wire?.error?.details ?? null) };
 }
 

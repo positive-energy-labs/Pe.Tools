@@ -5,18 +5,82 @@ import type {
   WorkFeedState,
 } from "../../../../packages/agent-contracts/src/work-journal-door";
 import { peReadings, type Readings } from "../readings";
+import { writeRouteWork } from "../route/host";
+import { submitAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import type {
+  AcceptedResult,
+  WorkWriteOutcome,
+  JournalCommandId,
+} from "../../../../packages/agent-contracts/src/work-journal-door";
+import type { CausalParentId } from "../../../../packages/agent-contracts/src/route-kernel-page";
 
 const snapshotSchema = z.object({ revision: z.number().int().nonnegative(), doc: z.unknown() });
-
-/** The acquisition half of the journal door, over the existing resource stream.
- * TODO: Bind generic Work submission when the journal door can name a Work write;
- * ActionAdmission currently names semantic commands only, not revision-checked patches.
- */
+import { completion, workOutcome, failedWrite } from "./work-door-observation";
+/** Complete Work and native journal client over the existing host doors. */
 export function createWorkFeedClient(
   source: Readings = peReadings,
-): Pick<WorkJournalDoor, "lifetime" | "open"> {
+  ports = { write: writeRouteWork, submit: submitAction },
+  replayLimit = 256,
+): WorkJournalDoor {
+  const replay = new Map<string, AcceptedResult>();
+  const accepted = (id: JournalCommandId): AcceptedResult =>
+    replay.get(id) ?? {
+      kind: "rejected",
+      failure: "expired",
+      problem: "Command is outside the replay window",
+    };
   return {
     lifetime: "subscription",
+    accepted,
+    submitWork(scope, write, invocation) {
+      return completion<WorkWriteOutcome>({ kind: "pending" }, async () => {
+        try {
+          return workOutcome(await ports.write(scope.key, write, invocation));
+        } catch (error) {
+          return failedWrite(error);
+        }
+      });
+    },
+    submit(command) {
+      const id = command.id as JournalCommandId;
+      replay.set(id, { kind: "pending" });
+      const observation = completion<AcceptedResult>({ kind: "pending" }, async () => {
+        let result: AcceptedResult;
+        try {
+          const row = await ports.submit(command);
+          result =
+            row.state === "detached"
+              ? { kind: "pending" }
+              : row.state === "succeeded"
+                ? { kind: "accepted-native", receiptId: row.id, outcome: "committed" }
+                : row.state === "unknown"
+                  ? {
+                      kind: "accepted-native",
+                      receiptId: row.id,
+                      outcome: "unknown-until-reconciled",
+                    }
+                  : {
+                      kind: "rejected",
+                      failure: "failed",
+                      problem: "error" in row ? row.error : row.state,
+                    };
+        } catch (error) {
+          result = { kind: "rejected", failure: "unavailable", problem: String(error) };
+        }
+        replay.set(id, result);
+        while (replay.size > replayLimit) {
+          const evict = [...replay].find(([, value]) => value.kind !== "pending")?.[0];
+          if (!evict) break;
+          replay.delete(evict);
+        }
+        return result;
+      });
+      return {
+        lifetime: "command",
+        handle: { lifetime: "command", id, causalParent: id as unknown as CausalParentId },
+        accepted: observation,
+      };
+    },
     open(scope) {
       return {
         subscribe(deliver, end) {

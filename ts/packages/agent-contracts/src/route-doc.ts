@@ -47,6 +47,7 @@ export type RouteRefusal = {
   error: string;
   hint: string;
   code?: RouteRefusalCode;
+  revision?: number;
 };
 export type RouteLanded<D> = {
   ok: true;
@@ -122,12 +123,15 @@ export function checkRevision(
 ): RouteRefusal | null {
   return expectedRevision === envelope.revision
     ? null
-    : refuse(
-        "refused",
-        `the document moved to r${envelope.revision}`,
-        "re-read before patching.",
-        "stale_revision",
-      );
+    : {
+        ...refuse(
+          "refused",
+          `the document moved to r${envelope.revision}`,
+          "re-read before patching.",
+          "stale_revision",
+        ),
+        revision: envelope.revision,
+      };
 }
 
 /** Stable JSON for comparing the raw command input across retransmissions. */

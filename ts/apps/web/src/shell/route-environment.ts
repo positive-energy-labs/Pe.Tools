@@ -14,8 +14,6 @@ import {
   type ReadHandle,
   type GeometryOutcome,
   type GeometryScope,
-  type NativeWriteRequest,
-  type JournalCommandHandle,
 } from "../../../../packages/agent-contracts/src/route-kernel-environment.ts";
 import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data.ts";
 import type { AdmittedRoute } from "../../../../packages/agent-contracts/src/route-kernel-admission.ts";
@@ -47,7 +45,7 @@ export interface EnvironmentPorts {
   readonly work: RouteEnvironment["work"];
   readonly clock: RouteEnvironment["clock"];
   readonly availability: RouteEnvironment["availability"];
-  readonly submitNative?: (request: NativeWriteRequest) => JournalCommandHandle;
+  readonly submitNative?: import("../../../../packages/agent-contracts/src/work-journal-door").WorkJournalDoor["submit"];
 }
 export interface EnvironmentOptions {
   readonly issuer: RouteEnvironmentIssuer;
@@ -97,13 +95,9 @@ export function createRouteEnvironment({ issuer, validate, ports }: EnvironmentO
           : { status: "unavailable", current: false, reason: "Read retired" },
     });
   };
-  const command = (request: NativeWriteRequest) => {
-    check(
-      validate.admitted(request.route) && validate.invocation(request.invocation),
-      "Stale or unadmitted command",
-    );
-    if (!ports.submitNative) throw new Error("Native writes unavailable");
-    return ports.submitNative(request);
+  const command: NonNullable<EnvironmentPorts["submitNative"]> = (request) => {
+    check(!!ports.submitNative, "Native writes unavailable");
+    return ports.submitNative!(request);
   };
   const environment = Object.freeze<Partial<RouteEnvironment>>({
     reads: {
@@ -207,22 +201,14 @@ export function createRouteEnvironment({ issuer, validate, ports }: EnvironmentO
     ...(ports.work
       ? {
           work: {
-            read: {
-              lifetime: "read",
-              read: (scope) => {
-                check(validate.scope(scope), "Stale Work scope");
-                return ports.work!.read.read(scope);
-              },
-            },
+            read: { lifetime: "subscription", open: (scope) => ports.work!.read.open(scope) },
             submit: {
-              lifetime: "command",
-              submit: (route, invocation, write) => {
-                check(
-                  validate.admitted(route) && validate.invocation(invocation),
-                  "Stale or unadmitted Work write",
-                );
-                return ports.work!.submit.submit(route, invocation, write);
+              submitWork: (scope, write, invocation) => {
+                check(validate.token(invocation.token), "Stale Work invocation");
+                return ports.work!.submit.submitWork(scope, write, invocation);
               },
+              submit: (command) => ports.work!.submit.submit(command),
+              accepted: (id) => ports.work!.submit.accepted(id),
             },
           },
         }

@@ -13,7 +13,6 @@ import type {
   Many,
   ScopeToken,
 } from "./route-kernel-page.ts";
-import type { WorkKey, WorkWrite } from "./route-state.ts";
 
 export type GeometryCost = Immutable<RevitDetailSpaceScene.Artifact.GeometryCost>;
 export type SceneContextRepresentation = RevitDetailSpaceScene.Req.SceneContextRepresentation;
@@ -51,7 +50,7 @@ let newGeometry: <T>(
   descriptor: ResolvedReadDescriptor,
 ) => ResolvedGeometryRead<T>;
 let mintNative: (
-  submit: (request: NativeWriteRequest) => JournalCommandHandle,
+  submit: import("./work-journal-door.ts").WorkJournalDoor["submit"],
 ) => NativeWriteCapability;
 
 /** Owner-issued for a human/Pea explicit request, never a dependency/focus refresh. */
@@ -212,7 +211,7 @@ export interface NativeWriteRequest {
 export class NativeWriteCapability {
   declare private readonly submitAuthority: void;
   readonly lifetime = "command";
-  private constructor(readonly submit: (request: NativeWriteRequest) => JournalCommandHandle) {
+  private constructor(readonly submit: import("./work-journal-door.ts").WorkJournalDoor["submit"]) {
     Object.freeze(this);
   }
   static {
@@ -338,30 +337,20 @@ export function createRouteEnvironmentIssuer() {
       // Host identity stays host-owned; only this exact D instance gains nominal authority.
       return own(newGeometry(key, output, route, token, request, captured));
     },
-    mintNative: (submit: (request: NativeWriteRequest) => JournalCommandHandle) =>
+    mintNative: (submit: import("./work-journal-door.ts").WorkJournalDoor["submit"]) =>
       own(mintNative(submit)),
   });
 }
 export type RouteEnvironmentIssuer = ReturnType<typeof createRouteEnvironmentIssuer>;
 
-export interface WorkReadCapability {
-  readonly lifetime: "read";
-  read(scope: ScopeToken): {
-    readonly key: Immutable<WorkKey>;
-    readonly revision: number;
-    readonly value: unknown;
-  } | null;
-}
-export interface WorkSubmitCapability {
-  readonly lifetime: "command";
-  // TODO: U11 needs journal-owned ack/stream delivery to B, retained after mount departure.
-  // A command handle plus a reread snapshot cannot supply the accepted inverse or receipt.
-  submit(
-    route: AdmittedRoute,
-    invocation: InvocationToken,
-    write: Immutable<WorkWrite>,
-  ): JournalCommandHandle;
-}
+export type WorkReadCapability = Pick<
+  import("./work-journal-door.ts").WorkJournalDoor,
+  "lifetime" | "open"
+>;
+export type WorkSubmitCapability = Pick<
+  import("./work-journal-door.ts").WorkJournalDoor,
+  "submitWork" | "submit" | "accepted"
+>;
 export interface ClockCapability {
   readonly lifetime: "read";
   now(): number;
@@ -383,11 +372,11 @@ export type KernelServices = Pick<
   RouteEnvironment,
   "reads" | "readings" | "clock" | "availability"
 > & {
-  readonly work?: never;
+  readonly work?: import("./work-journal-door.ts").WorkJournalDoor;
   readonly geometry?: GeometryReadDoor<unknown>;
   readonly target?: () => ScopeToken["identity"]["target"];
-  readonly nativeWrite?: never;
-  readonly submitNative?: never;
+  readonly nativeWrite?: import("./work-journal-door.ts").WorkJournalDoor;
+  readonly submitNative?: import("./work-journal-door.ts").WorkJournalDoor["submit"];
 };
 type GroupFor<
   D extends Pick<RouteGraphJson, "capabilities">,

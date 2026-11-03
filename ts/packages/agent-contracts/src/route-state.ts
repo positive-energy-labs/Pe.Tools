@@ -67,10 +67,18 @@ export function workBinding(key: WorkKey) {
   return {
     admits(target: DocumentRef, address: string | null | undefined, workspace = false): boolean {
       switch (key.binding) {
-        case "open": return key.open.session === target.session && key.open.openId === target.openId;
-        case "address": return !!address && key.target.replaceAll("/", "\\").toLowerCase() === address.replaceAll("/", "\\").toLowerCase();
-        case "workspace": return workspace;
-        case "host": return false;
+        case "open":
+          return key.open.session === target.session && key.open.openId === target.openId;
+        case "address":
+          return (
+            !!address &&
+            key.target.replaceAll("/", "\\").toLowerCase() ===
+              address.replaceAll("/", "\\").toLowerCase()
+          );
+        case "workspace":
+          return workspace;
+        case "host":
+          return false;
       }
     },
   };
@@ -119,6 +127,7 @@ export type RouteStatePatch = z.infer<typeof routeStatePatchSchema>;
 
 /** One invocation, never one identity per patch. Authorship comes from the host principal. */
 export const workWriteSchema = z.object({
+  causalParent: z.string().min(1).optional(),
   patches: z.array(routeStatePatchSchema),
   expectedRevision: z.number().int().nonnegative(),
   press: z.string().min(1).nullable(),
