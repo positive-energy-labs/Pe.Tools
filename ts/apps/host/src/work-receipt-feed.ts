@@ -1,3 +1,4 @@
+// The WeakMap feed registry is ambient module state; phase 5 D re-homes it as a scoped subscription service.
 import {
   canonicalRouteInput,
   receiptsForWork,
