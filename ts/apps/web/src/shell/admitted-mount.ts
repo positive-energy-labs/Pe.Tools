@@ -142,17 +142,14 @@ const sourceTimeline = new WeakMap<
   import("../../../../packages/runtime/src/work-journal").TimelineEntry[]
 >();
 const registriesByDoor = new WeakMap<object, ReturnType<typeof createApplicationWorkRegistry>>();
-export function createRouteShell(
-  services: KernelServices,
-  registryOverride?: ReturnType<typeof createApplicationWorkRegistry>,
-) {
+export function createRouteShell(services: KernelServices) {
   const liveDoor = services.work ?? applicationWorkDoor;
   let scopedRegistry = registriesByDoor.get(liveDoor);
   if (!scopedRegistry) {
     scopedRegistry = services.work ? createApplicationWorkRegistry() : applicationWorkRegistry;
     registriesByDoor.set(liveDoor, scopedRegistry);
   }
-  const workRegistry = registryOverride ?? scopedRegistry;
+  const workRegistry = scopedRegistry;
   return {
     mount<G extends RouteGraphJson, S extends SchemaTable, E extends EntryTable, Render>(
       admitted: AdmittedRoute<G, S, E, Render>,
@@ -983,10 +980,6 @@ export function createRouteShell(
         return renderedBasis;
       };
       const landings = new Map<string, CommandResultDecode>();
-      const nativeAttempts = new Map<
-        string,
-        { input: unknown; basis: InvocationToken; retry: () => unknown }
-      >();
       const invoke = (id: string, input: unknown, basis?: InvocationToken) => {
         action();
         resolve();
@@ -1119,7 +1112,6 @@ export function createRouteShell(
           entry.input.parse(intent);
           preview = freezePage({ work: accepted.work, input: intent });
           // ActionJournal owns the existing Reject? consent window after this admission.
-          let commandId = invocation.id;
           send = () => {
             if (!door) throw Error("Native commands unavailable");
             const submission = (
@@ -1131,23 +1123,10 @@ export function createRouteShell(
                 : (command: Parameters<NonNullable<KernelServices["submitNative"]>>[0]) =>
                     door.submit(command)
             )({
-              id: commandId,
+              id: invocation.id,
               key: declaration.entry,
               target: target ?? { kind: "host" },
               input: intent,
-            });
-            nativeAttempts.set(submission.handle.id, {
-              input: freezePage(intent),
-              basis: invocation,
-              retry: () => {
-                const next = owner.invocation(
-                  owner.capture("command-retry"),
-                  invocation.dependencies,
-                );
-                if (!next.ok) throw Error(next.reason);
-                commandId = next.value.id;
-                return send();
-              },
             });
             if (declaration.lands) {
               const decode = commandResultDecoder(submission, bindings.entries);
@@ -1660,33 +1639,9 @@ export function createRouteShell(
         workProblem: work.problem,
         workFailure: work.failure,
         history,
-        reread: () => work.reopen(),
         refusedEdits: work.refused,
         retryEdit: (id: string, basis: InvocationToken) => work.retry(id, basis),
         discardEdit: (id: string) => work.discard(id),
-        retryCommand(id: string, currentBasis: InvocationToken) {
-          action();
-          const original = nativeAttempts.get(id);
-          const key = owner.read()?.scope.identity.work;
-          const receipt = key
-            ? entryFor(key)
-                .activity()
-                .find((row) => row.id === id)
-            : undefined;
-          if (!original || !owner.current(original.basis) || !owner.current(currentBasis))
-            throw Error(
-              "Retry needs the original, still-current basis; re-read and prepare explicitly",
-            );
-          if (!receipt || !("notDispatched" in receipt && receipt.notDispatched))
-            throw Error(
-              "Only a confirmed undispatched command can retry; reconcile other outcomes",
-            );
-          return original.retry();
-        },
-        discardCommand(id: string) {
-          nativeAttempts.delete(id);
-          notify();
-        },
         stopCommand(id: string) {
           action();
           const key = owner.read()?.scope.identity.work;
@@ -1698,14 +1653,6 @@ export function createRouteShell(
           if (!receipt || !["waiting", "running", "unknown"].includes(receipt.state))
             throw Error("Command is not pending in this Work");
           return cancelAction(id);
-        },
-        commands: () => {
-          const key = owner.read()?.scope.identity.work;
-          return key ? entryFor(key).activity() : [];
-        },
-        receiptWindow: () => {
-          const key = owner.read()?.scope.identity.work;
-          return key ? entryFor(key).receiptWindow() : null;
         },
         timeline: () => {
           const key = owner.read()?.scope.identity.work;
@@ -1734,10 +1681,6 @@ export function createRouteShell(
           (reading) => reading.refresh === "explicit",
         ),
         restore: () => transport!.restore(),
-        paneDemand(pane: string) {
-          if (!route.data.panes[pane]) throw Error(`Unknown pane: ${pane}`);
-          return visible && paneDemand.get(pane) !== false && observers.visible(pane);
-        },
         setPaneDemand(pane: string, next: boolean) {
           if (!route.data.panes[pane]) throw Error(`Unknown pane: ${pane}`);
           paneDemand.set(pane, next);

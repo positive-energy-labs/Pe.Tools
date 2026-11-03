@@ -1,8 +1,6 @@
 import { useContext, useRef } from "react";
 import { RouteVisibility, useRouteActivity } from "../route/activity";
 import { createAdmittedPlace, type AdmittedPlace } from "./admitted-place";
-import { z } from "zod";
-import { canonicalEnvironmentInput } from "../../../../packages/agent-contracts/src/route-kernel-environment";
 import { AdmittedChrome } from "./admitted-chrome";
 import { useRouter } from "@tanstack/react-router";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
@@ -37,8 +35,6 @@ export function admittedRouterAddress(history: {
     subscribe: (listener) => history.subscribe(listener),
   };
 }
-
-const pickerOptionsSchema = z.array(z.object({ id: z.unknown(), label: z.string() }));
 
 function Pane({ mount, route }: { mount: AdmittedMount; route: AdmittedRoute }) {
   useSyncExternalStore(mount.subscribe, mount.revision, mount.revision);
@@ -156,13 +152,6 @@ export function AdmittedPane({ shell, route, address, writable = true }: Admitte
     mount.setWritable(writable);
     const publish = () => {
       place.remember(mount.page.read());
-      const roster = pickerOptionsSchema.safeParse(mount.picker(route.data.subject.field) ?? []);
-      place.publishSubject({
-        label: mount.subjectDisplay(),
-        roster: roster.success
-          ? roster.data.map((row) => ({ id: canonicalEnvironmentInput(row.id), label: row.label }))
-          : [],
-      });
     };
     publish();
     const unsubscribe = mount.subscribe(publish);

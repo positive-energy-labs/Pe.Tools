@@ -1,3 +1,4 @@
+import { overlaps } from "./readings";
 import {
   canonicalEnvironmentInput,
   type ResolvedRead,
@@ -38,23 +39,6 @@ export function receiptHitsReading(
   dependencies: readonly Effect[],
 ): boolean {
   if (receipt.state !== "succeeded") return false;
-  const overlaps = (a: Effect, b: Effect): boolean => {
-    if (a.kind === "session" && b.kind === "document") return a.session === b.ref.session;
-    if (b.kind === "session" && a.kind === "document") return b.session === a.ref.session;
-    if (a.kind === "directory" && (b.kind === "file" || b.kind === "directory")) {
-      const root = a.path.replaceAll("\\", "/").replace(/\/$/, "");
-      const path = b.path.replaceAll("\\", "/");
-      return path === root || path.startsWith(`${root}/`);
-    }
-    if (b.kind === "directory") return a.kind === "file" && overlaps(b, a);
-    if (a.kind === "member" && b.kind === "member")
-      return (
-        a.pod === b.pod &&
-        a.path === b.path &&
-        (!a.location || !b.location || a.location === b.location)
-      );
-    return canonicalEnvironmentInput(a) === canonicalEnvironmentInput(b);
-  };
   return receipt.effects.some((effect) => dependencies.some((dep) => overlaps(effect, dep)));
 }
 

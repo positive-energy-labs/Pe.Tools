@@ -1,3 +1,4 @@
+import type { WorkAdmission } from "../route/route-discovery";
 /** Canonical Work documents: one atom family for every spelling of a Work key. */
 import * as Atom from "effect/reactivity/Atom";
 import { Equal, Hash, Option } from "effect";
@@ -18,10 +19,7 @@ class RouteAtomKey implements Equal.Equal {
     readonly spec: RouteStateSpec<any>,
     readonly key: WorkKey,
     readonly resources: Readings,
-    readonly admission?: {
-      routeKey: string;
-      fingerprint: import("../../../../packages/agent-contracts/src/route-kernel-admission").RouteFingerprint;
-    },
+    readonly admission?: WorkAdmission,
   ) {}
   [Equal.symbol](that: Equal.Equal): boolean {
     return (
@@ -72,10 +70,7 @@ export function docAtom<S extends RouteStateSpec<any>>(
   spec: S,
   key: WorkKey,
   resources: Readings = peReadings,
-  admission?: {
-    routeKey: string;
-    fingerprint: import("../../../../packages/agent-contracts/src/route-kernel-admission").RouteFingerprint;
-  },
+  admission?: WorkAdmission,
 ): Atom.Atom<Reading<Slice<RouteDocOf<S>>>> {
   return routeAtom(new RouteAtomKey(spec, key, resources, admission));
 }

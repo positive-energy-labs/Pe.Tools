@@ -10,13 +10,15 @@ import {
 } from "../../../../packages/agent-contracts/src/route-module";
 import { legacyRouteDiscovery } from "../shell/legacy-route-door";
 
+export type WorkAdmission = { routeKey: string; fingerprint: RouteFingerprint };
+
 /** Read-only projection; the graph or exact admission remains the authority. */
 export interface DiscoveredWork<W = any> {
   route: string;
   schema: z.ZodType<W>;
   cells: readonly CellsDecl<W>[];
   workFields: RouteGraph<any, W>["workFields"];
-  admission?: { routeKey: string; fingerprint: RouteFingerprint };
+  admission?: WorkAdmission;
 }
 type Legacy = ReturnType<typeof legacyRouteDiscovery.entries>[number];
 export type DiscoveredRoute = Omit<Legacy, "manifest"> & {

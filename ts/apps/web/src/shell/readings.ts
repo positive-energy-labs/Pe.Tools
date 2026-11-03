@@ -838,7 +838,7 @@ function targetEffects(target: ExecutionTarget): readonly Effect[] {
       ? [{ kind: "session", session: target.session }]
       : [];
 }
-function overlaps(a: Effect, b: Effect): boolean {
+export function overlaps(a: Effect, b: Effect): boolean {
   if (a.kind === "session" && b.kind === "document") return a.session === b.ref.session;
   if (b.kind === "session" && a.kind === "document") return b.session === a.ref.session;
   if (a.kind === "directory" && (b.kind === "file" || b.kind === "directory")) {
