@@ -471,7 +471,7 @@ public static class DuctSnapshots {
         var typed = slot != "revit:Flow" && (e as FamilyInstance)?.Symbol is { } symbol ? NamedFlow(symbol) : null;
         if (Converted(typed, UnitTypeId.CubicFeetPerMinute) is { } typeCfm) return (typeCfm, slot);
         // The firm default is not present in every family. Resolve the terminal itself, never a roster count.
-        if (own is null && typed is null && slot == new DuctParameterSlots().TerminalFlow
+        if (own is null && typed is null && slot == new DuctParameterSlots().WithDefaults().TerminalFlow
             && e.Category.ToBuiltInCategory() == BuiltInCategory.OST_DuctTerminal) {
             own = e.get_Parameter(BuiltInParameter.RBS_DUCT_FLOW_PARAM);
             slot = "revit:Flow";

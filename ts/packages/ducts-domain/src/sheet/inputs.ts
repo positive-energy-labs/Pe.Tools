@@ -292,7 +292,7 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
                   work.componentDrops?.[id]?.inWg ??
                   (n.family ? work.assumptions?.[`component-drop:${n.family}`]?.inWg : undefined),
               },
-              model: { value: positive(factOf(n, "pressureDrop")), ref: slots.componentDrop },
+              model: { value: positive(factOf(n, "pressureDrop")), ref: slots.componentDrop ?? undefined },
             },
             "in-wg",
           ),

@@ -544,17 +544,17 @@ const writeFlow = z.strictObject({
   source: optionalText,
 });
 const slotsSchema = z.strictObject({
-  fanStatic: z.string().min(1).optional(),
-  fanFlow: z.string().min(1).optional(),
-  componentDrop: z.string().min(1).optional(),
+  fanStatic: z.string().min(1).nullable().optional(),
+  fanFlow: z.string().min(1).nullable().optional(),
+  componentDrop: z.string().min(1).nullable().optional(),
   terminalDrop: optionalText,
   /** The fitting family's own coefficient parameter the Pe loss server reads (default Pe_C). */
-  fittingCoefficient: z.string().min(1).optional(),
+  fittingCoefficient: z.string().min(1).nullable().optional(),
   /**
    * The terminal's design CFM parameter the snapshot reads and apply writes (default
    * PE_M_Grd_AirFlow); the built-in `Flow` is the connector's own flow.
    */
-  terminalFlow: z.string().min(1).optional(),
+  terminalFlow: z.string().min(1).nullable().optional(),
 });
 /** Pe server consumes host-priced leg results; Specific Coefficient freezes one export coefficient. */
 export const DUCT_FITTING_METHODS = ["pe-server", "specific-coefficient"] as const;
