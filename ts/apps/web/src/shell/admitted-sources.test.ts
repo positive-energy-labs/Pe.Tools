@@ -57,3 +57,12 @@ test("replacement source functions cannot reuse the loaded admission", async () 
 test("the shipped Captures closure includes its source module", () => {
   expect(generated.envelope.modules.some((member) => member.id.endsWith("/captures/sources.ts"))).toBe(true);
 });
+
+test("mutating a source object cannot replace the loader-captured executable", async () => {
+  const original = module.sources["captures.list"]!;
+  if (original.kind !== "use") throw Error("Expected an ordinary source");
+  const source = { ...original };
+  const { admission, candidate } = await admit({ "captures.list": source });
+  source.open = () => {};
+  expect(admission.admit(candidate).ok).toBe(false);
+});
