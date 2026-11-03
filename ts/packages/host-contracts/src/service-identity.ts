@@ -26,6 +26,7 @@ export type HostLane = "dev" | "installed";
  * Lane-owned service/state root. Source execution defaults to its module's checkout, never cwd or
  * a caller-supplied environment identity. Installed startup must also pass installedRuntimeRoot.
  * An explicit product home retains its `<home>\.local-state` layout in either lane.
+ * Mirrors dotnet/Pe.Shared.Product/ProductPathing.cs ResolveRuntimeRoot and tools/product-paths.ps1.
  */
 export function productRoot(
   lane: HostLane = isSea() ? "installed" : "dev",

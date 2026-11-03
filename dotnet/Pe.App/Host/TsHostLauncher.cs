@@ -61,9 +61,9 @@ internal static class TsHostLauncher {
 
     /// <summary>
     ///     The root the supervisor leases and reads <c>state\service</c> under: the product's one
-    ///     machine-local root, which <c>PE_TOOLS_PRODUCT_HOME</c> moves with the host's.
+    ///     lane-owned root, shared with bridge discovery and the TS host's productRoot.
     /// </summary>
-    internal static string ServiceAppBase => ProductRuntimeLayout.ForCurrentUser().RootPath;
+    internal static string ServiceAppBase => HostEndpoint.RuntimeRootPath;
 
     private static ServiceResult EnsureInstalled() {
         var product = InstalledProduct.Open(Context.InstallRoot!)

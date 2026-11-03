@@ -15,7 +15,14 @@ public sealed record ProductRuntimeLayout(
     public string ScratchPath => Path.Combine(this.RootPath, "scratch");
 
     public static ProductRuntimeLayout ForCurrentUser(string? localAppData = null) {
-        var rootPath = ProductPathing.ResolveRuntimeRoot(localAppData);
+        return FromRoot(ProductPathing.ResolveRuntimeRoot(localAppData));
+    }
+
+    /// <summary>The host's verified runtime owner selects its mutable state namespace.</summary>
+    public static ProductRuntimeLayout ForRuntime(string lane, string? sourceRoot, string? localAppData = null) =>
+        FromRoot(ProductPathing.ResolveRuntimeRoot(localAppData, lane, sourceRoot));
+
+    private static ProductRuntimeLayout FromRoot(string rootPath) {
         return new ProductRuntimeLayout(
             rootPath,
             new ProductRuntimeStateLayout(Path.Combine(rootPath, ProductPathNames.StateDirectoryName)),

@@ -92,7 +92,7 @@ if (Test-Path -LiteralPath $supervisorFile) {
 }
 if ($Stop) { return }
 
-$services = Join-Path (Resolve-ProductRuntimeRoot) 'state/service'
+$services = Join-Path (Resolve-ProductRuntimeRoot -Lane dev -SourceRoot $checkoutRoot) 'state/service'
 # An override home that no host has run in has no service folder yet.
 New-Item -ItemType Directory -Force -Path $services | Out-Null
 $matches = @(Get-ChildItem -LiteralPath $services -Filter '*.json' | ForEach-Object {
