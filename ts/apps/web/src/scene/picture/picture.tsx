@@ -313,6 +313,7 @@ export function Picture<L extends string, F extends string>({
     native,
     source.version,
     content.capture?.cuts,
+    content.geometry.overview,
   );
   const fixture = content.capture?.meshes;
   const capture = fixture ? { ...captured, meshes: fixture, focusMeshes: fixture } : captured;

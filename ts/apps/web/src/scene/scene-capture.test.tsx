@@ -7,14 +7,15 @@ import { useCapture } from "#/scene/picture/read";
 const native = vi.hoisted(() => ({
   calls: [] as {
     request: ReturnType<typeof sceneRequest>;
+    signal: AbortSignal;
     resolve: (value: { id: string }) => void;
     reject: (error: Error) => void;
   }[],
 }));
 vi.mock("#/host/client", () => ({
   callHostRpc: vi.fn(
-    (_key, request) =>
-      new Promise((resolve, reject) => native.calls.push({ request, resolve, reject })),
+    (_key, request, options) =>
+      new Promise((resolve, reject) => native.calls.push({ request, signal: options.signal, resolve, reject })),
   ),
 }));
 vi.mock("./artifact", () => ({
@@ -257,4 +258,37 @@ it("detailed focus and context each retain at least five feet", async () => {
   await finish(0, "padding-focus");
   await waitFor(() => expect(native.calls).toHaveLength(2));
   expect(native.calls[1]!.request.contextPaddingFt).toBe(5);
+});
+
+it("uses the overview focus bounds while one detailed read replaces it without a none read", async () => {
+  const overview = sceneRequest([8881], false, 0, "overview");
+  const detail = sceneRequest([8881, 8882], false, 10, "meshes");
+  const view = renderHook(({ detailed }) => useCapture(detailed ? detail : overview, doc, "overview-to-detail", undefined, overview), { initialProps: { detailed: false } });
+  await finish(0, "overview-staged");
+  await waitFor(() => expect(view.result.current.pending).toBe(false));
+  const meshes = view.result.current.meshes;
+  view.rerender({ detailed: true });
+  await waitFor(() => expect(native.calls).toHaveLength(2));
+  expect(native.calls.map(call => call.request.contextRepresentation)).toEqual(["overview", "meshes"]);
+  expect(view.result.current.meshes).toBe(meshes);
+  expect(view.result.current.focusMeshes).toBe(meshes);
+  expect(view.result.current.focusReady).toBe(true);
+  await finish(1, "detailed-replacement");
+  await waitFor(() => expect(view.result.current.pending).toBe(false));
+  expect(view.result.current.meshes).toMatchObject({ id: "detailed-replacement" });
+  expect(native.calls).toHaveLength(2);
+});
+
+it("Read detailed releases an unfinished overview rather than queueing behind it", async () => {
+  const overview = sceneRequest([8891], false, 0, "overview");
+  const detail = sceneRequest([8891], false, 10, "meshes");
+  const view = renderHook(({ detailed }) => useCapture(detailed ? detail : overview, doc, "superseded-overview", undefined, overview), { initialProps: { detailed: false } });
+  await waitFor(() => expect(native.calls).toHaveLength(1));
+  view.rerender({ detailed: true });
+  await waitFor(() => expect(native.calls).toHaveLength(2));
+  expect(native.calls[0]!.signal.aborted).toBe(true);
+  await finish(1, "explicit-detail");
+  await finish(0, "stale-overview");
+  expect(view.result.current.meshes).toMatchObject({ id: "explicit-detail" });
+  expect(native.calls.map(call => call.request.contextRepresentation)).toEqual(["overview", "meshes"]);
 });
