@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from "react";
 import { z } from "zod";
 import {
+  applyPatches,
+  routeStatePatchSchema,
   scheduleCatalogSchema,
   scheduleReadingSchema,
   scheduleReads,
@@ -82,7 +84,6 @@ export const schedulesData = {
     pane: "grid",
   },
   work: { schema: "work", route: "schedules", version: 1, migrations: {} },
-  // TODO: W3 REPORT.md G2. The generic mount binds encoded subject bytes, not the host workspace ID.
   workSubject: "workspaceId",
   readings: {
     catalog: { kind: "use", entry: "schedules.catalog", args: "empty", deps, ...policy },
@@ -120,7 +121,7 @@ export const schedulesData = {
       input: "edit",
       label: "Edit schedule cells",
       review: "none",
-      deps,
+      deps: { ...deps, work: ["cells", "basis", "takenAt"] },
       captures: [],
       patches: "edit",
     },
@@ -155,7 +156,7 @@ const schemas = {
   }),
   work: scheduleGridRouteState.schema,
   read: scheduleReads["schedule.grid.snapshot"].input,
-  edit: z.object({ cells: scheduleGridRouteState.schema.shape.cells }),
+  edit: z.object({ patches: z.array(routeStatePatchSchema) }),
 };
 const axes = {
   subject: "None",
@@ -206,7 +207,17 @@ export const bodies = {
     slot: "verbs.edit.patches",
     kind: "work",
     source,
-    run: (_, input) => [{ path: ["cells"], value: input.cells }],
+    run: (ctx, input) => {
+      const result = applyPatches(
+        scheduleGridRouteState,
+        { version: 1, revision: 0, doc: scheduleGridRouteState.schema.parse(ctx.work) },
+        "human",
+        input.patches,
+        0,
+      );
+      if (!result.ok) throw Error("Schedule patches refused");
+      return [{ path: ["cells"], value: result.envelope.doc.cells }];
+    },
   },
   seed: {
     slot: "seeds.read.load",
@@ -236,21 +247,57 @@ export const bodies = {
       const p = ctx.page.read();
       const fresh = ctx.readings.snapshot.current ? ctx.readings.snapshot : ctx.readings.retained;
       const shown = fresh.value;
+      const target = ctx.workBasis?.token.scope.identity.target;
+      const native =
+        target?.kind === "document" &&
+        shown?.target.session === target.ref.session &&
+        shown?.target.openId === target.ref.openId;
       const rawWork: unknown = ctx.work;
       const work = rawWork ? scheduleGridRouteState.schema.parse(rawWork) : null;
       const state: ScheduleGridState = {
         slice: work,
         revision: ctx.workBasis?.workRevision ?? null,
         hydrated: !!ctx.work,
-        // TODO: W3 REPORT.md G1. Pane verbs erase the Work outcome needed by grid cell writes.
-        apply: async () => ({
-          code: "not-ready",
-          message: "Admitted grid writes await the shared Work outcome door",
-        }),
+        apply: (patches) =>
+          new Promise((resolve) => {
+            // TODO: W3b G3: typed Work bodies cannot preserve per-cell patch paths.
+            // A root replacement clears untouched native stale marks. Refuse until that door exists.
+            if (work?.basis?.stale?.length) {
+              resolve({
+                code: "not-ready",
+                message: "Per-cell stale recovery awaits the typed nested Work patch door",
+              });
+              return;
+            }
+            if (!ctx.workBasis) {
+              resolve({ code: "not-ready", message: "Schedule Work is unavailable" });
+              return;
+            }
+            const observation = ctx.verbs.edit({ patches }, ctx.workBasis);
+            observation.subscribe(
+              (outcome) => {
+                if (outcome.kind === "accepted") resolve(null);
+                if (outcome.kind === "refused")
+                  resolve({
+                    code: "not-ready",
+                    message: outcome.refusal.error,
+                  });
+              },
+              () => {},
+            );
+          }),
         execute: async () => ({
           code: "not-ready",
           message: "Use Read schedule beside the schedule name",
         }),
+        documentScope: shown
+          ? { bridgeSessionId: shown.target.session, openDocumentId: shown.target.openId }
+          : undefined,
+        nativeObservation: {
+          scope: shown
+            ? { document: native ? shown.target : null, source: native ? "native" : "saved" }
+            : null,
+        },
         snapshot: shown ? scheduleReadingSchema.parse(shown).snapshot : null,
         catalog: ctx.readings.catalog.value
           ? scheduleCatalogSchema.parse(ctx.readings.catalog.value)
