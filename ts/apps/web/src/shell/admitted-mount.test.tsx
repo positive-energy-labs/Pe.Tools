@@ -1337,6 +1337,7 @@ test("slot census refuses unsupported bodies at mount admission and invokes pick
     "placement",
     "present",
     "group",
+    "label",
   ]);
   for (const [slot, kind, dataPatch] of [
     ["salvage", "salvage", { salvage: "unsupported" }],
@@ -1425,7 +1426,7 @@ test("transition refuses a re-entrant evidence change before acceptance", async 
 test("remaining slot census refuses cells, placement, presentation and migrations before acquisition", async () => {
   const empty = { page: [], work: [], readings: [] };
   const cases = [
-    ...["label", "focus", "take", "admit"].map((key) => ({
+    ...["focus", "take", "admit"].map((key) => ({
       data: {
         cells: {
           test: {

@@ -78,6 +78,7 @@ export const admittedMountBodyKinds: readonly string[] = Object.freeze([
   "placement",
   "present",
   "group",
+  "label",
 ]);
 
 /** Application services are installed once. Routes supply only admission and location. */
