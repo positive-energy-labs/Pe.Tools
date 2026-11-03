@@ -1,5 +1,4 @@
 import { expect, test, vi } from "vite-plus/test";
-import { z } from "zod";
 import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data";
 import { createAdmittedObservers } from "./admitted-observers";
 const graph = {

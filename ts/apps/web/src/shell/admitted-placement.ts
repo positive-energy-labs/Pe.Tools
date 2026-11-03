@@ -16,7 +16,8 @@ export function placeAdmittedVerbs(
   const placement = pane.verbs;
   const parsed = freezePage(schemas[placement.row]!.parse(row));
   const selected = z.array(z.string()).parse(bodies[placement.choose]!.run(parsed));
-  for (const id of selected) if (!placement.allowed.includes(id)) throw Error(`Undeclared pane verb: ${id}`);
+  for (const id of selected)
+    if (!placement.allowed.includes(id)) throw Error(`Undeclared pane verb: ${id}`);
   const captured = freezePage(structuredClone(input));
-  return Object.freeze(Object.fromEntries(selected.map(id => [id, () => invoke(id, captured)])));
+  return Object.freeze(Object.fromEntries(selected.map((id) => [id, () => invoke(id, captured)])));
 }

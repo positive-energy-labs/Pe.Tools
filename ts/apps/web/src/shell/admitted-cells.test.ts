@@ -24,10 +24,10 @@ test("cell display validates shapes and caches bodies; takes validate Work patch
   const bodies = {
     group: { run: group },
     show: { run: String },
-    label: { run: (s) => s.toUpperCase() },
-    focus: { run: (key) => ({ query: key }) },
+    label: { run: (s: string) => s.toUpperCase() },
+    focus: { run: (key: string) => ({ query: key }) },
     take: {
-      run: (ctx, key) => {
+      run: (ctx: unknown, key: string) => {
         expect(ctx).toEqual({ page: {}, work: {}, readings: {} });
         return [{ path: ["edits"], value: { [key]: "taken" } }];
       },

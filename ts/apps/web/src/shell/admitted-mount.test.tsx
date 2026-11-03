@@ -446,7 +446,7 @@ async function workRoute(
     ...data,
     needs,
     ...(cellBodies
-      ? {
+      ? ({
           salvage: "salvage",
           cells: {
             amount: {
@@ -461,7 +461,7 @@ async function workRoute(
               deps: { page: ["query"], work: ["amount"], readings: ["notes"] },
             },
           },
-        }
+        } as const)
       : {}),
     capabilities: ["work", "native-write"] as const,
     work: { route: "note", schema: "work", version: 1, migrations: {} },
@@ -485,7 +485,7 @@ async function workRoute(
         kind: "command" as const,
         entry: "native.write",
         intent: "native",
-        ...(presenter ? { present: "nativePresent" } : {}),
+        ...(presenter ? { present: "nativePresent" as const } : {}),
         input: "number",
         label: "Native",
         review: "shown" as const,
@@ -541,35 +541,47 @@ async function workRoute(
               slot: "salvage",
               kind: "salvage",
               source,
-              run: (old, ctx) => {
+              run: (old: unknown, ctx: { page: unknown; work: unknown; readings: unknown }) => {
                 expect(Object.keys(ctx)).toEqual(["page", "work", "readings"]);
-                return { ok: true, value: [{ path: ["amount"], value: old.amount }] };
+                return {
+                  ok: true as const,
+                  value: [{ path: ["amount"], value: (old as { amount: number }).amount }],
+                };
               },
             },
-            cellGroup: { slot: "cells.amount.groupOf", kind: "group", source, run: (key) => [key] },
+            cellGroup: {
+              slot: "cells.amount.groupOf",
+              kind: "group",
+              source,
+              run: (key: string) => [key],
+            },
             cellShow: {
               slot: "cells.amount.show",
               kind: "show",
               source,
-              run: (value) => String(value),
+              run: (value: number) => String(value),
             },
             cellLabel: {
               slot: "cells.amount.label",
               kind: "label",
               source,
-              run: (group) => group.toUpperCase(),
+              run: (group: string) => group.toUpperCase(),
             },
             cellFocus: {
               slot: "cells.amount.focus",
               kind: "focus",
               source,
-              run: (key) => ({ query: key }),
+              run: (key: string) => ({ query: key }),
             },
             cellTake: {
               slot: "cells.amount.take",
               kind: "take",
               source,
-              run: (ctx) => {
+              run: (ctx: {
+                page: { query: string };
+                work: { amount: number };
+                readings: Record<string, unknown>;
+              }) => {
                 expect(Object.keys(ctx.page)).toEqual(["query"]);
                 expect(Object.keys(ctx.work)).toEqual(["amount"]);
                 expect(Object.keys(ctx.readings)).toEqual(["notes"]);
@@ -654,7 +666,7 @@ async function workRoute(
       ],
     },
   });
-  const result = (await inventory.prepare("note", fingerprint)).admit(workModule);
+  const result = (await inventory.prepare("note", fingerprint)).admitUnknown(workModule);
   if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
   return result.route;
 }
@@ -1332,7 +1344,7 @@ test("transition adjusts and refuses through the Page port, with current project
     expect(Object.keys(ctx.readings)).toEqual(["notes"]);
     expect(ctx.readings.notes.current).toBe(true);
     expect(Object.isFrozen(ctx.readings.notes)).toBe(true);
-    if (origin.kind === "restore") return { ok: true, value: patch };
+    if (origin.kind === "restore") return { ok: true as const, value: patch };
     expect(current.pose.x).toBe(0);
     return patch.pose.x < 0
       ? { ok: false, reason: "Outside scene" }
@@ -1466,7 +1478,7 @@ test("transition refuses a re-entrant evidence change before acceptance", async 
         source,
         run: (_page: unknown, patch: unknown) => {
           t.frames.at(-1)!(ready("replacement"));
-          return { ok: true, value: patch };
+          return { ok: true as const, value: patch };
         },
       },
     },
@@ -1754,12 +1766,18 @@ test("row placement uses shared query dispatch with captured input and refuses o
       },
     },
     bodies: {
-      main: { ...bodies.main, run: (ctx) => ctx.place("capture", { elementIds: [1] }) },
+      main: {
+        ...bodies.main,
+        run: (ctx: { place: (row: string, input: unknown) => unknown }) =>
+          ctx.place("capture", { elementIds: [1] }),
+      },
       queryArgs: {
         slot: "verbs.capture.args",
         kind: "args",
         source,
-        run: (_ctx, input) => ({ query: input.elementIds.join(",") }),
+        run: (_ctx: unknown, input: { elementIds: number[] }) => ({
+          query: input.elementIds.join(","),
+        }),
       },
       choose: { slot: "panes.main.verbs.choose", kind: "placement", source, run: choose },
     },
@@ -1846,6 +1864,11 @@ test("cell displays, focus, take and salvage use real shared Page/Work owners", 
   }
 });
 
-test("presentation without sealed preview stays explicitly refused until result landing", async()=>{
- const route=await workRoute("none",false,"nothing",()=>"result");const t=transports();expect(()=>createRouteShell(t.services).mount(route,locationPort().address)).toThrow("requires a sealed preview");expect(t.keys).toEqual([]);
+test("presentation without sealed preview stays explicitly refused until result landing", async () => {
+  const route = await workRoute("none", false, "nothing", () => "result");
+  const t = transports();
+  expect(() => createRouteShell(t.services).mount(route, locationPort().address)).toThrow(
+    "requires a sealed preview",
+  );
+  expect(t.keys).toEqual([]);
 });
