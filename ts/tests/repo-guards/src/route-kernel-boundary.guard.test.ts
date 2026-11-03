@@ -1,5 +1,10 @@
 import { expect, it } from "vite-plus/test";
-import { additions, boundaryCensus } from "./unification-2-census.ts";
+import {
+  additions,
+  boundaryCensus,
+  legacyInventory,
+  baselineFloors,
+} from "./unification-2-census.ts";
 import baseline from "./unification-2.baseline.json" with { type: "json" };
 
 it("route kernel boundaries can only shed existing offenders", () => {
@@ -39,4 +44,66 @@ it("allows narrow PagePort contracts and the admitted registry door", () => {
     "ts/packages/kit/src/route-registry.ts": `import type { AdmittedRoute } from "@pe/agent-contracts/route-kernel-admission"; const registry = { register(x: AdmittedRoute) {} }`,
   });
   expect(Object.values(actual).flat()).toEqual([]);
+});
+
+it("inventories registered, standalone, aliased, namespace and dynamic Pod legacy doors", () => {
+  const input = {
+    "ts/apps/web/src/example/route.tsx": `
+      import { mountRoute as mount, routeFromGraph as router } from '#/shell/mount';
+      import * as shell from '#/shell/mount';
+      import { registerLegacyGraph as register } from '#/shell/legacy-route-door';
+      import { makePodRoute as load } from '#/route/pod-view';
+      const alias = mount;
+      const body = alias(graph, adapters);
+      const route = router(graph, adapters);
+      const standalone = shell.mountRoute(other, adapters);
+      register(graph, body);
+      function pod() { return load(row, bundle); }
+    `,
+    "ts/apps/web/src/example/graph.ts": `export const exampleGraph: RouteGraph = {};`,
+  };
+  const { sites, graphs } = legacyInventory(input);
+  expect(sites.legacyMounts).toHaveLength(2);
+  expect(sites.legacyRouterMounts).toHaveLength(1);
+  expect(sites.legacyRegistrations).toHaveLength(1);
+  expect(sites.legacyPodLoaders).toHaveLength(1);
+  expect(graphs).toEqual([{ file: "ts/apps/web/src/example/graph.ts", symbol: "exampleGraph" }]);
+  expect(additions(sites, {})).toHaveLength(6);
+  expect(additions({}, sites)).toEqual([]);
+  const moved = legacyInventory(
+    Object.fromEntries(Object.entries(input).map(([file, text]) => [file, "\n\n" + text])),
+  );
+  expect(moved.sites).toEqual(sites);
+  const replacement = legacyInventory({
+    ...input,
+    "ts/apps/web/src/example/graph.ts": `export const replacementGraph: RouteGraph = {};`,
+  });
+  expect(additions(replacement.sites, sites)).toEqual([
+    "legacyGraphs: ts/apps/web/src/example/graph.ts#replacementGraph",
+  ]);
+});
+
+it("real legacy sites and their committed allowances only shrink", () => {
+  const sites = legacyInventory().sites;
+  expect(additions(sites, baseline)).toEqual([]);
+  for (const floor of baselineFloors()) {
+    const seeded = Object.fromEntries(
+      Object.entries(sites)
+        .filter(([rule]) => rule in floor)
+        .map(([rule]) => [rule, baseline[rule as keyof typeof baseline]]),
+    );
+    expect(additions(seeded, floor)).toEqual([]);
+  }
+}, 60000);
+
+it("removing an earlier registration cannot rename surviving sites", () => {
+  const file = "ts/apps/web/src/route/builtin-routes.tsx";
+  const preamble = `import { registerLegacyGraph as register } from '#/shell/legacy-route-door';`;
+  const before = legacyInventory({
+    [file]: preamble + `register(first, body); register(second, body);`,
+  });
+  const after = legacyInventory({ [file]: preamble + `register(second, body);` });
+  expect(additions(after.sites, before.sites)).toEqual([]);
+  expect(before.sites.legacyRegistrations).toHaveLength(2);
+  expect(after.sites.legacyRegistrations).toHaveLength(1);
 });

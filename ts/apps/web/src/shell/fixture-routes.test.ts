@@ -1,71 +1,12 @@
-import { zoneAuditGraph } from "../zone-audit/graph";
-import { rhvacSyncGraph } from "../rhvac-sync/graph";
-import { scheduleSpecsGraph } from "../schedule-specs/graph";
-import { sessionsGraph } from "../sessions/graph";
-import { podAdminGraph } from "../pod-admin/graph";
-import { indexGraph } from "../index/graph";
-import { familiesGraph } from "../families/graph";
-import { fansGraph } from "../fans/graph";
-import { ductsGraph } from "../ducts/graph";
-
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { createFixtureMount } from "./fixture";
-import type { RouteGraph } from "@pe/agent-contracts";
-import { openGraph } from "../open/graph";
+import { legacyGraphs as routes } from "../legacy-test-inventory.test-support";
 import { podsGraph } from "../pods/graph";
 import { podsBinding } from "../pods/actions";
-import { roomsGraph } from "../rooms/graph";
-import { spaceGraph } from "../space/graph";
-import { familyGraph } from "../family/graph";
-import { schedulesGraph } from "../schedules/graph";
-import { takeoffGraph } from "../takeoff/graph";
-import { settingsGraph } from "../settings/graph";
+import { ductLossGraph } from "../duct-loss/graph";
 import { chatGraph } from "../chat/graph";
 
-
-import { dataTablesGraph } from "../data-tables/graph";
-
-import { designSystemGraph } from "../design-system/graph";
-
-import { ductLossGraph } from "../duct-loss/graph";
-
-import { grillesGraph } from "../grilles/graph";
-
-import { opsGraph } from "../ops/graph";
-
-import { bindGraph } from "../pages-bind/graph";
-
-import { parameterLinksGraph } from "../parameter-links/graph";
-
 afterEach(() => vi.unstubAllGlobals());
-const routes = [
-  ductsGraph,
-  fansGraph,
-  familiesGraph,
-  indexGraph,
-  podAdminGraph,
-  sessionsGraph,
-  scheduleSpecsGraph,
-  rhvacSyncGraph,
-  zoneAuditGraph,
-
-  dataTablesGraph,
-  designSystemGraph,
-  ductLossGraph,
-  grillesGraph,
-  opsGraph,
-  bindGraph,
-  parameterLinksGraph,
-  openGraph,
-  podsGraph,
-  roomsGraph,
-  spaceGraph,
-  familyGraph,
-  schedulesGraph,
-  takeoffGraph,
-  settingsGraph,
-  chatGraph(() => ({ thread: "" })),
-] as unknown as RouteGraph<any, any>[];
 test.each(routes.map((graph) => [graph.address, graph] as const))(
   "/%s mounts every declared seed through the kernel without host reads",
   async (_, graph) => {

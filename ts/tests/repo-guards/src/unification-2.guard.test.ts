@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 import ts from "typescript";
@@ -26,7 +26,7 @@ export function trackedBytes() {
   return paths.map((path) => [
     path,
     createHash("sha256")
-      .update(readFileSync(resolve(root, path)))
+      .update(existsSync(resolve(root, path)) ? readFileSync(resolve(root, path)) : "<deleted>")
       .digest("hex"),
   ]);
 }
@@ -37,7 +37,13 @@ describe("unification 2 offender identities", () => {
     const actual = { ...census(), ...boundaryCensus() };
     expect(Object.keys(offenderBaseline).sort()).toEqual(Object.keys(actual).sort());
     expect(additions(actual, offenderBaseline)).toEqual([]);
-    for (const floor of baselineFloors()) expect(additions(offenderBaseline, floor)).toEqual([]);
+    for (const floor of baselineFloors())
+      expect(
+        additions(
+          Object.fromEntries(Object.entries(offenderBaseline).filter(([rule]) => rule in floor)),
+          floor,
+        ),
+      ).toEqual([]);
     expect(trackedBytes()).toEqual(before);
   }, 60000);
   it("cannot trade removed debt for a different offender or revive a zero", () => {
@@ -146,14 +152,4 @@ it("the private legacy route roster can only shrink", () => {
         legacyBuiltinRoutes.filter((key) => !floor.legacyBuiltinRoutes!.includes(key)),
       ).toEqual([]);
   }
-});
-
-it("captures cannot return to a legacy registration or mount", () => {
-  const route = readFileSync(resolve(root, "ts/apps/web/src/captures/route.tsx"), "utf8");
-  expect(route).not.toMatch(/routeFromGraph|mountRoute|legacy-route-door/);
-  const declaration = readFileSync(resolve(root, "ts/apps/web/src/captures/graph.ts"), "utf8");
-  expect(declaration).not.toMatch(/RouteGraph[< ]|queryVerb|field\(/);
-  expect(legacyBuiltinRoutes).not.toContain("captures");
-  const legacy = readFileSync(resolve(root, "ts/apps/web/src/shell/legacy-route-door.ts"), "utf8");
-  expect(legacy).not.toMatch(/"captures"/);
 });
