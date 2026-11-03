@@ -80,6 +80,7 @@ export async function getRouteSalvage(
   const response = await peClient.response("work.salvage", input);
   if (response.status === 404) return null;
   const body = await response.json();
+  if (response.ok && body === null) return null;
   if (!response.ok || !body || typeof body.from !== "string")
     throw Error(body?.error?.message ?? `salvage failed (${response.status})`);
   return body;

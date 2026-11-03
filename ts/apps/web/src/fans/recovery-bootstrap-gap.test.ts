@@ -39,6 +39,7 @@ import {
 import sheetFixture from "../ducts/sheet/sheet.fixture.json";
 import { sourceRouteServices } from "../shell/source-route-services";
 import * as recoveryHost from "../route/host";
+import { peClient } from "../host/pe-client";
 import * as sourceServices from "../shell/source-route-services";
 import { applicationRouteShell } from "../shell/application-route-shell";
 import { useRouteTarget } from "../route/route-target";
@@ -358,9 +359,28 @@ function recovery(f: Awaited<ReturnType<typeof witness>>) {
     (key) => f.ws.salvage(key, "ducts") as ReturnType<typeof recoveryHost.salvageRouteWork>,
   );
 }
+test("H7: healthy Work accepts HTTP 200/null and shows no salvage message", async () => {
+  const wire = vi.spyOn(peClient, "response").mockImplementation(async () => Response.json(null));
+  expect(await recoveryHost.salvageRouteWork(bindWork("ducts", null))).toBeNull();
+  const f = await witness();
+  await vi.waitFor(() => expect(f.mount.workBasis()).not.toBeNull());
+  await vi.waitFor(() => expect(wire).toHaveBeenCalledTimes(2));
+  expect(f.mount.recovery()).toMatchObject({
+    sentence: null,
+    problem: null,
+    startFresh: false,
+    carryOver: false,
+  });
+  expect(f.mount.workProblem()).toBeNull();
+});
+
 test("H7: canonical recovery presents named rows from captured evidence and accepts the keyed edit", async () => {
   const f = await witness(unreadable);
   recovery(f);
+  vi.mocked(recoveryHost.salvageRouteWork).mockRestore();
+  vi.spyOn(peClient, "response").mockImplementation(async () =>
+    Response.json(await f.ws.salvage(f.mount.workBasis()!.token.scope.identity.work!, "ducts")),
+  );
   await vi.waitFor(() => expect(f.mount.recovery().startFresh).toBe(true));
   await f.mount.startFresh();
   expect(f.mount.review("work.salvage")).toMatchObject({
