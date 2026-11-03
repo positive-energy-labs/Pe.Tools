@@ -92,7 +92,7 @@ type Session = {
 };
 
 type JobAnswer = { readonly value: unknown; readonly openDocumentId?: string | null };
-type JobState = "queued" | "running" | "left";
+type JobState = "queued" | "running" | "sent" | "left";
 
 /**
  * One ordinary op in a session's line. `state` is the single claim on its place: the waiter that
@@ -109,6 +109,11 @@ type Job = {
   readonly reply: Deferred.Deferred<BridgeResponse, BridgeError>;
   readonly result: Deferred.Deferred<JobAnswer, BridgeError | NoRevitSession>;
   readonly state: Ref.Ref<JobState>;
+  /**
+   * Set when the caller's answer fails but Revit may still own the dispatch: the request stays
+   * tracked under this reply, and the worker holds the slot (see `reconcile`).
+   */
+  readonly owed: Ref.Ref<Deferred.Deferred<BridgeResponse, BridgeError> | null>;
   readonly depth: number;
   readonly queuedAt: number;
 };
@@ -761,12 +766,12 @@ export const RevitBridgeLive = Layer.effect(
       openDocumentId: string | undefined,
       command: string | undefined,
       requestId = randomUUID(),
-      // The line reserves the reply before it queues, so a cancel can fail it before dispatch.
-      reserved?: Deferred.Deferred<BridgeResponse, BridgeError>,
-      // Line only. Set when the caller's answer fails but Revit may still own the dispatch: the
-      // request stays tracked under this reply, and the worker holds the slot (see `reconcile`).
-      owed?: Ref.Ref<Deferred.Deferred<BridgeResponse, BridgeError> | null>,
+      // Set for a line job: its reply is reserved before it queues, so a cancel can fail it
+      // before dispatch; out-of-line ops (op.cancel) pass none.
+      job?: Job,
     ) {
+      const reserved = job?.reply;
+      const owed = job?.owed;
       const provenanceRefusal = commandLeafRefusal(operationKey, command);
       if (provenanceRefusal)
         return yield* Effect.fail(new BridgeError(provenanceRefusal, 403, { notDispatched: true }));
@@ -853,6 +858,8 @@ export const RevitBridgeLive = Layer.effect(
       }
       return yield* Effect.gen(function* () {
         const payloadJson = yield* encodePayloadJson(payload);
+        // From here a Request frame may be on the wire: a stopped worker reports `unknown`.
+        if (job) yield* Ref.set(job.state, "sent");
         const delivered = yield* Effect.exit(
           dispatchedOn!.send({
             kind: "Request",
@@ -945,12 +952,8 @@ export const RevitBridgeLive = Layer.effect(
      * timer releases it. The wire carries no native-idle frame today (BridgeAgent answers once), so
      * a non-cooperative op holds the slot until its process dies, which is rule 11 as written.
      */
-    const reconcile = (
-      session: Session,
-      job: Job,
-      owed: Ref.Ref<Deferred.Deferred<BridgeResponse, BridgeError> | null>,
-    ): Effect.Effect<void> =>
-      Effect.flatMap(Ref.get(owed), (first) =>
+    const reconcile = (session: Session, job: Job): Effect.Effect<void> =>
+      Effect.flatMap(Ref.get(job.owed), (first) =>
         first ? reconcileFrom(session, job, first) : Effect.void,
       );
 
@@ -1121,6 +1124,7 @@ export const RevitBridgeLive = Layer.effect(
             reply: yield* Deferred.make<BridgeResponse, BridgeError>(),
             result: yield* Deferred.make<JobAnswer, BridgeError | NoRevitSession>(),
             state: yield* Ref.make<JobState>("queued"),
+            owed: yield* Ref.make<Deferred.Deferred<BridgeResponse, BridgeError> | null>(null),
             depth,
             queuedAt: yield* Clock.currentTimeMillis,
           };
@@ -1186,58 +1190,81 @@ export const RevitBridgeLive = Layer.effect(
       if (yield* claimQueued(job)) yield* retire(session, job);
     });
 
-    /** Runs one job to Revit's answer. A job whose waiter left is dropped here, unsent. */
-    const runJob = Effect.fnUntraced(function* (session: Session, job: Job) {
-      const started = yield* Ref.modify(job.state, (state) =>
-        state === "queued" ? ([true, "running"] as const) : ([false, state] as const),
-      );
-      if (!started) return;
-      const startedAt = yield* Clock.currentTimeMillis;
-      yield* Effect.promise(() =>
-        recordBridgeQueue(
-          job.operationKey,
-          job.requestId,
-          session.sessionId,
-          "started",
-          job.depth,
-          startedAt - job.queuedAt,
-        ).catch((error) => {
-          console.error("Queue receipt persistence failed", error);
-        }),
-      );
-      yield* Effect.logInfo(
-        `Revit queue started op=${job.operationKey} session=${session.sessionId} depth=${job.depth} wait_ms=${startedAt - job.queuedAt}`,
-      );
-      const owed = yield* Ref.make<Deferred.Deferred<BridgeResponse, BridgeError> | null>(null);
-      yield* invokeSession(
-        session,
-        job.operationKey,
-        job.payload,
-        job.openDocumentId,
-        job.command,
-        job.requestId,
-        job.reply,
-        owed,
-      ).pipe(
-        Effect.exit,
-        Effect.flatMap((exit) => Deferred.done(job.result, exit)),
-        // The caller has its answer; an unsettled dispatch still holds this worker (rule 11).
-        Effect.andThen(reconcile(session, job, owed)),
-        Effect.onInterrupt(() =>
-          Deferred.fail(
-            job.result,
-            new BridgeError(
-              "The host bridge stopped while Revit ran this request; its outcome is unknown here.",
-              503,
-            ),
+    /**
+     * Runs one job to Revit's answer. A job whose waiter left is dropped here, unsent. Called
+     * uninterruptibly right after the take: settlement and release are installed before the first
+     * suspension, and only `restore` regions (journal, invocation, reconciliation) can be stopped.
+     * A stopped job settles typed: `unknown` once a Request frame may be out, else refused unsent.
+     */
+    const runJob = (
+      session: Session,
+      job: Job,
+      restore: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>,
+    ) =>
+      Effect.gen(function* () {
+        const started = yield* Ref.modify(job.state, (state) =>
+          state === "queued" ? ([true, "running"] as const) : ([false, state] as const),
+        );
+        if (!started) return;
+        yield* restore(
+          Effect.gen(function* () {
+            const startedAt = yield* Clock.currentTimeMillis;
+            yield* Effect.promise(() =>
+              recordBridgeQueue(
+                job.operationKey,
+                job.requestId,
+                session.sessionId,
+                "started",
+                job.depth,
+                startedAt - job.queuedAt,
+              ).catch((error) => {
+                console.error("Queue receipt persistence failed", error);
+              }),
+            );
+            yield* Effect.logInfo(
+              `Revit queue started op=${job.operationKey} session=${session.sessionId} depth=${job.depth} wait_ms=${startedAt - job.queuedAt}`,
+            );
+            const exit = yield* Effect.exit(
+              invokeSession(
+                session,
+                job.operationKey,
+                job.payload,
+                job.openDocumentId,
+                job.command,
+                job.requestId,
+                job,
+              ),
+            );
+            yield* Deferred.done(job.result, exit);
+            // The caller has its answer; an unsettled dispatch still holds this worker (rule 11).
+            yield* reconcile(session, job);
+            yield* Effect.logInfo(
+              `Revit queue completed op=${job.operationKey} session=${session.sessionId} duration_ms=${(yield* Clock.currentTimeMillis) - startedAt}`,
+            );
+          }),
+        ).pipe(
+          Effect.onExit((exit) =>
+            Exit.isSuccess(exit)
+              ? Effect.void
+              : Effect.flatMap(Ref.get(job.state), (state) =>
+                  Deferred.fail(
+                    job.result,
+                    state === "sent"
+                      ? new BridgeError(
+                          "The host bridge stopped while Revit ran this request; its outcome is unknown here.",
+                          503,
+                        )
+                      : new BridgeError(
+                          "The host bridge stopped before this request reached Revit.",
+                          503,
+                          { notDispatched: true },
+                        ),
+                  ),
+                ),
           ),
-        ),
-        Effect.ensuring(retire(session, job)),
-      );
-      yield* Effect.logInfo(
-        `Revit queue completed op=${job.operationKey} session=${session.sessionId} duration_ms=${(yield* Clock.currentTimeMillis) - startedAt}`,
-      );
-    });
+          Effect.ensuring(retire(session, job)),
+        );
+      });
 
     /** Refuses new jobs and fails every waiting one; a running job settles on its own reply. */
     const closeLine = Effect.fnUntraced(function* (session: Session, reason: string) {
@@ -1251,7 +1278,11 @@ export const RevitBridgeLive = Layer.effect(
 
     /** The session's one worker: FIFO, one op at a time, until the line closes or the host stops. */
     const serve = (session: Session) =>
-      Effect.forever(Effect.flatMap(Queue.take(session.line), (job) => runJob(session, job))).pipe(
+      Effect.forever(
+        Effect.uninterruptibleMask((restore) =>
+          Effect.flatMap(restore(Queue.take(session.line)), (job) => runJob(session, job, restore)),
+        ),
+      ).pipe(
         Effect.ensuring(
           closeLine(session, "The host bridge stopped before this request reached Revit."),
         ),

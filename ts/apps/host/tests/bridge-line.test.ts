@@ -1,9 +1,10 @@
 import { Cause, Effect, Exit, Fiber, Layer, Queue, Scope } from "effect";
 import { TestClock } from "effect/testing";
-import { expect } from "vite-plus/test";
+import { expect, vi } from "vite-plus/test";
 import type { BridgeFrame } from "@pe/host-contracts/contracts";
 import { CANCEL_OPERATION_KEY, RevitBridgeLive, RevitProcessAlive } from "../src/bridge.ts";
 import { connectTestBridge } from "./bridge-fixture.ts";
+import { hostActionJournal, releaseHostReceipts } from "../src/gateway-owner.ts";
 import { effectTest } from "./effect-test.ts";
 
 // The session line's law (ADR 0029 phase 3b; a PROVEN 7.6 GB regression class lives behind it):
@@ -298,5 +299,36 @@ effectTest(
       expect(next.operationKey).toBe("test.b");
       yield* answer(next.requestId);
       expect(Exit.isSuccess(yield* Fiber.await(b))).toBe(true);
+    }),
+);
+
+effectTest(
+  "closing the host while the worker holds a taken, unsent job settles its joiner typed",
+  () =>
+    Effect.gen(function* () {
+      // Hold the "started" receipt: the worker has taken A but has not sent it.
+      const journal = hostActionJournal();
+      const held = vi
+        .spyOn(journal, "recordQueue")
+        .mockImplementation((...args) =>
+          args[3] === "started" ? new Promise(() => {}) : Promise.reject(Error("not held")),
+        );
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          held.mockRestore();
+          releaseHostReceipts(journal);
+        }),
+      );
+      const { bridgeScope, call, outgoing } = yield* harness;
+      const a = yield* call("test.a");
+      yield* Effect.promise(() => vi.waitFor(() => expect(held).toHaveBeenCalled()));
+      yield* Scope.close(bridgeScope, Exit.void);
+      expect(failure(yield* Fiber.await(a))).toMatchObject({
+        _tag: "BridgeError",
+        statusCode: 503,
+        outcome: "refused",
+        evidence: { notDispatched: true },
+      });
+      expect(yield* Queue.size(outgoing)).toBe(0); // no Request frame ever went out
     }),
 );
