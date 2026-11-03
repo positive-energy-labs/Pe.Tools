@@ -10,6 +10,7 @@ import {
   useState,
   useSyncExternalStore,
   type ReactNode,
+  type ComponentType,
 } from "react";
 import type { AdmittedRoute } from "../../../../packages/agent-contracts/src/route-kernel-admission";
 import { type AdmittedMount, createRouteShell } from "./admitted-mount";
@@ -69,27 +70,28 @@ function Pane({ mount, pane }: { mount: AdmittedMount; pane: string }) {
   );
 }
 
-/** Composition runs after commit, including StrictMode cleanup/remount. No owner publishes in render. */
-export function AdmittedPane({
-  shell,
-  route,
-  address,
-  pane,
-}: {
+export interface AdmittedPaneProps {
   shell: ReturnType<typeof createRouteShell>;
   route: AdmittedRoute;
   address: AdmittedAddressPort;
   pane: string;
-}) {
-  const [mounted, setMounted] = useState<{ route: AdmittedRoute; mount: AdmittedMount } | null>(
-    null,
-  );
+}
+
+/** Composition runs after commit, including StrictMode cleanup/remount. No owner publishes in render. */
+export function AdmittedPane({ shell, route, address, pane }: AdmittedPaneProps) {
+  const [mounted, setMounted] = useState<{
+    route: AdmittedRoute;
+    shell: ReturnType<typeof createRouteShell>;
+    mount: AdmittedMount;
+  } | null>(null);
   useEffect(() => {
     const mount = shell.mount(route, address);
-    setMounted({ route, mount });
+    setMounted({ route, shell, mount });
     return mount.close;
   }, [shell, route, address]);
-  return mounted?.route === route ? createElement(Pane, { mount: mounted.mount, pane }) : null;
+  return mounted?.route === route && mounted.shell === shell
+    ? createElement(Pane, { mount: mounted.mount, pane })
+    : null;
 }
 
 /** Router search stays codec text; field names and types come from the admitted declaration. */
@@ -111,7 +113,7 @@ export function AdmittedRouteView({
   load,
   pane,
 }: {
-  shell: ReturnType<typeof createRouteShell>;
+  shell: ReturnType<typeof createRouteShell> | ComponentType<Omit<AdmittedPaneProps, "shell">>;
   load: () => Promise<AdmittedRoute>;
   pane: string;
 }) {
@@ -137,6 +139,8 @@ export function AdmittedRouteView({
   if (error)
     return createElement(OutcomeLine, { kind: "error", label: "route refused", says: error });
   return route
-    ? createElement(AdmittedPane, { shell, route, address, pane })
+    ? typeof shell === "function"
+      ? createElement(shell, { route, address, pane })
+      : createElement(AdmittedPane, { shell, route, address, pane })
     : createElement("p", null, "Reading route...");
 }

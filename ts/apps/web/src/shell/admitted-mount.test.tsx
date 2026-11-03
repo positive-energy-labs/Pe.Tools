@@ -435,12 +435,17 @@ import type {
 } from "../../../../packages/agent-contracts/src/work-journal-door";
 import type { InvocationBasis } from "../../../../packages/agent-contracts/src/route-kernel-page";
 
-async function workRoute(review: "none" | "shown" = "none", modelWrite = false) {
+async function workRoute(
+  review: "none" | "shown" = "none",
+  modelWrite = false,
+  needs: "nothing" | "document" = "nothing",
+) {
   const workData = {
     ...data,
+    needs,
     capabilities: ["work", "native-write"] as const,
     work: { route: "note", schema: "work", version: 1, migrations: {} },
-    workSubject: "note",
+    ...(needs === "document" ? {} : { workSubject: "note" }),
     readings: {
       ...data.readings,
       ...(modelWrite
@@ -1508,4 +1513,125 @@ test("transition dependency references are linked at admission", async () => {
       },
     }),
   ).rejects.toThrow(/missing/);
+});
+
+import { applicationSources, applicationRouteShell } from "./application-route-shell";
+import { useRouteTarget } from "../route/route-target";
+vi.mock("../route/route-target", async (original) => ({
+  ...(await original<typeof import("../route/route-target")>()),
+  useRouteTarget: vi.fn(),
+}));
+const documentA = { kind: "document" as const, ref: { session: "u8x", openId: "A" } };
+const documentB = { kind: "document" as const, ref: { session: "u8x", openId: "B" } };
+
+test.each([
+  ["nothing", false],
+  ["document", false],
+  ["document", true],
+] as const)(
+  "%s mount gives reads, Work and submit one captured target (ModelWrite=%s)",
+  async (needs, modelWrite) => {
+    const contexts: Parameters<import("./readings").UseSource["open"]>[0][] = [];
+    const services = sourceRouteServices(
+      {
+        "native.write.preview": {
+          kind: "use",
+          open(context, deliver) {
+            contexts.push(context);
+            deliver({
+              kind: "complete",
+              revision: 0,
+              value: sealedPreview((context.args as { work: WorkHandle }).work),
+            });
+          },
+        },
+        "notes.read": {
+          kind: "use",
+          open(context, deliver) {
+            contexts.push(context);
+            deliver({ kind: "complete", value: "note", revision: 0 });
+          },
+        },
+      },
+      { target: () => (needs === "nothing" ? { kind: "host" } : documentA) },
+    );
+    const store = createFixtureWorkDoor(
+      { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
+      { amount: 6 },
+    );
+    const open = vi.spyOn(store, "open");
+    const submit = vi.fn((command: Parameters<WorkJournalDoor["submit"]>[0]) =>
+      store.submit(command),
+    );
+    const mount = createRouteShell({ ...services, work: { ...store, submit } }).mount(
+      await workRoute("none", modelWrite, needs),
+      locationPort().address,
+    );
+    closes.push(mount.close);
+    const expected = needs === "nothing" ? { kind: "host" } : documentA;
+    expect(contexts[0]!.target).toEqual(expected);
+    expect(contexts[0]!.attempt.target).toBe(contexts[0]!.target);
+    expect(open.mock.calls[0]![0].target).toEqual(expected);
+    expect(open.mock.calls[0]![0].key).toMatchObject(
+      needs === "nothing"
+        ? { binding: "workspace", target: null }
+        : { binding: "open", open: documentA.ref },
+    );
+    mount.invoke("native", 0);
+    mount.confirm("native");
+    expect(submit.mock.calls[0]![0].target).toEqual(contexts[0]!.target);
+    expect(
+      contexts.every((context) => JSON.stringify(context.target) === JSON.stringify(expected)),
+    ).toBe(true);
+    if (modelWrite)
+      expect(submit.mock.calls[0]![0].input).toEqual({
+        work: {
+          key: open.mock.calls[0]![0].key,
+          revision: 0,
+        },
+      });
+  },
+);
+
+test("application target change remounts once and retires the old ordinary source", async () => {
+  const contexts: Parameters<import("./readings").UseSource["open"]>[0][] = [];
+  const released = vi.fn();
+  Object.assign(applicationSources, {
+    "notes.read": {
+      kind: "use",
+      open(
+        context: Parameters<import("./readings").UseSource["open"]>[0],
+        deliver: Parameters<import("./readings").UseSource["open"]>[1],
+      ) {
+        contexts.push(context);
+        deliver({ kind: "complete", value: "note", revision: 0 });
+        return released;
+      },
+    },
+  });
+  const selected = vi.mocked(useRouteTarget);
+  selected.mockReturnValue({ resolution: { kind: "resolved", target: documentA } } as ReturnType<
+    typeof useRouteTarget
+  >);
+  const route = await admitted(false, false, { data: { needs: "document" } });
+  const address = locationPort().address;
+  try {
+    const view = render(createElement(applicationRouteShell, { route, address, pane: "main" }));
+    expect(contexts.map((c) => c.target)).toEqual([documentA]);
+    view.rerender(createElement(applicationRouteShell, { route, address, pane: "main" }));
+    expect(contexts).toHaveLength(1);
+    selected.mockReturnValue({ resolution: { kind: "resolved", target: documentB } } as ReturnType<
+      typeof useRouteTarget
+    >);
+    view.rerender(createElement(applicationRouteShell, { route, address, pane: "main" }));
+    expect(contexts.map((c) => c.target)).toEqual([documentA, documentB]);
+    expect(contexts[0]!.signal.aborted).toBe(true);
+    expect(contexts[1]!.signal.aborted).toBe(false);
+    await act(async () => {});
+    expect(released).toHaveBeenCalledOnce();
+    view.unmount();
+    expect(contexts[1]!.signal.aborted).toBe(true);
+  } finally {
+    Reflect.deleteProperty(applicationSources, "notes.read");
+  }
 });
