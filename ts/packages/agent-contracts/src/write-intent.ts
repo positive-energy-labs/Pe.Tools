@@ -140,12 +140,18 @@ export function workWriteCommands<
   const K extends string,
   const C extends Command,
   const PK extends string = never,
-  const PC extends Command = C,
+  // A preview shares the apply's derivation, so it must take exactly the apply's input:
+  // the constraint refuses a narrower input, the `options` check below a wider one.
+  const PC extends Command & { input: C["input"] } = C,
 >(
   route: string,
   key: K,
   definition: C,
-  options: WorkIntentOptions & { preview?: { key: PK; definition: PC } } = {},
+  options: WorkIntentOptions & {
+    preview?: { key: PK; definition: PC } & ([C["input"]] extends [PC["input"]]
+        ? unknown
+        : { previewInputMustEqualApplyInput: never });
+  } = {},
 ): { [P in K]: WriteEntry<C, "apply"> } & {
   [P in [PK] extends [never] ? `${K}.preview` : PK]: WriteEntry<PC, "preview">;
 } {
