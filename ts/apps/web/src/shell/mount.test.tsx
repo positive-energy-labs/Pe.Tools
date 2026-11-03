@@ -648,7 +648,7 @@ test("opening the Timeline cannot silently dismiss a pending write review", asyn
   expect(view.queryByLabelText("Apply review")).not.toBeNull();
 });
 
-test("shown review keeps its control armed; its portal commits one receipt and its barrier blocks undo", async () => {
+test('shown review keeps its control armed: "unconsumed edits remain undoable; an undo that would cross a committed native write is blocked by its receipt barrier"', async () => {
   const f = await fixture();
   const { view } = await mounted(f);
   fireEvent.click(view.getByRole("button", { name: "Edit" }));
@@ -671,12 +671,25 @@ test("shown review keeps its control armed; its portal commits one receipt and i
       .timeline.read()
       .map((e) => e.kind),
   ).toEqual(["invocation", "invocation", "receipt"]);
+  expect(f.owner().timeline.read().at(-1)?.basis).toEqual({
+    workKey: workKey(key), receipt: receipt(), receiptId: "native-1",
+  });
+  expect(f.owner().journal(key).read().undo).toMatchObject([
+    { transitions: [{ revision: 1 }], barrier: { receiptId: "native-1" } },
+    { transitions: [{ revision: 2, forward: [{ path: ["writeIntent", "takeoffs.initialize"] }] }] },
+  ]);
+  expect(f.owner().journal(key).read().undo[1]!.barrier).toBeUndefined();
   const before = f.writes.length;
   apply.focus();
   chord(apply, "z");
   await act(async () => {});
-  expect(f.writes).toHaveLength(before);
-  expect(await f.owner().restore("undo")).toMatchObject({ ok: false, code: "barrier" });
+  expect(f.writes).toHaveLength(before + 1);
+  expect(f.writes.at(-1)).toMatchObject({ kind: "restore", restoreOf: 2, expectedRevision: 2 });
+  expect(f.scope().work).toMatchObject({ handle: { revision: 3 }, doc: { rows: { slot: { n: 2 } }, writeIntent: {} } });
+  expect(await f.owner().restore("undo")).toMatchObject({
+    ok: false, code: "barrier", barrier: { receiptId: "native-1" },
+  });
+  expect(f.writes).toHaveLength(before + 1);
   expect(transport.run.mock.calls[0]![5]).toBe(f.owner().timeline.read()[1]!.press);
 });
 
