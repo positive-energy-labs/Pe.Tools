@@ -322,6 +322,8 @@ export type KernelServices = Pick<
   "reads" | "readings" | "clock" | "availability"
 > & {
   readonly work?: never;
+  // TODO: U12a needs application-owned geometry resolution/lifetime services at the mount.
+  // The lower-level binder requires validators; routes must not supply them or mint descriptors.
   readonly geometry?: never;
   readonly nativeWrite?: never;
   readonly submitNative?: never;
