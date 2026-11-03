@@ -8,7 +8,7 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { HarnessEventLine } from "../src/harness/thread-store.ts";
 import type {
   Caller,
@@ -30,7 +30,11 @@ import {
   assertRunAdmission,
 } from "../src/control.ts";
 import { createProviders } from "../src/harness/providers.ts";
-import { IDLE_CHILD_MS, type HarnessThreads } from "../src/harness/threads.ts";
+import {
+  IDLE_CHILD_MS,
+  type HarnessThreads,
+  type HarnessThreadsOptions,
+} from "../src/harness/threads.ts";
 import * as adapter from "../src/harness/adapter.ts";
 import { productProvidersPath } from "../src/product-paths.ts";
 import { createUpdateReader, type UpdateRunner } from "../src/update-reader.ts";
@@ -60,6 +64,7 @@ const host = async (
   openConsole: (command: string, opened: () => void) => Promise<void> = async (_, opened) =>
     opened(),
   pluginHook?: <N extends PluginHookName>(name: N, event: PluginHooks[N]) => Promise<void>,
+  extra: Partial<HarnessThreadsOptions> = {},
 ): Promise<Host> => {
   const consoles: string[] = [];
   const providers = createProviders({
@@ -84,6 +89,7 @@ const host = async (
     mcpServer,
     developerInstructions: async () => "KERNEL: You are Pea.",
     providers,
+    ...extra,
   });
   const routed: Host = {
     as: human,
@@ -1375,4 +1381,33 @@ test("host shutdown settles a running turn and a queued prompt durably, even whe
   expect(terminals(queued)).toEqual([
     expect.objectContaining({ kind: "prompt_dropped", by: "expired" }),
   ]);
+}, 30_000);
+
+test("Stop with a failing consent persist still cancels, then kills a child that ignores cancel, recording unknown", async () => {
+  const consents = consentService();
+  let failed = false;
+  const runs: typeof consents = {
+    ...consents,
+    // The first grant-revocation persist fails, as ConsentPersistFailed would.
+    close: (ref, reason) =>
+      failed ? consents.close(ref, reason) : ((failed = true), Effect.die(Error("persist failed"))),
+  };
+  const h = await host(undefined, undefined, undefined, undefined, { runs, stopGraceMs: 500 });
+  const call = caller(h);
+  const read = reader(h);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  const turn = randomUUID();
+  await call("POST", `/pe/threads/${id}/prompt`, { id: turn, text: "stubborn" });
+  await until(read, id, (b) => lastEcho(b) === "echo: stubborn");
+  await call("POST", `/pe/threads/${id}/cancel`); // the persist fails; the cancel still goes out
+  const body = await until(read, id, (b) => !b.running);
+  expect(JSON.stringify(body.events)).toContain("ignoring cancel"); // the child received ACP cancel
+  expect(
+    body.events.filter(
+      (e) => "turnId" in e && e.turnId === turn && (e.kind === "error" || e.kind === "turn_end"),
+    ),
+  ).toEqual([
+    expect.objectContaining({ kind: "error", message: expect.stringContaining("unknown") }),
+  ]);
+  await h.close();
 }, 30_000);

@@ -189,6 +189,8 @@ export type HarnessThreadsOptions = {
   /** Called only after the transcript owner commits this fact. No prompt or tool text is exported. */
   receiptFact?: (threadId: string, title: string, event: HarnessEvent) => void;
   pluginHook?: <N extends PluginHookName>(name: N, event: PluginHooks[N]) => Promise<void>;
+  /** How long Stop lets the harness end its turn after ACP cancel before it kills the child. */
+  stopGraceMs?: number;
 };
 
 /** A turn with no session update for this long gets a `waiting` marker, and again each period. */
@@ -196,6 +198,8 @@ const WAITING_MS = 60_000;
 export const IDLE_CHILD_MS = 15 * 60_000;
 /** How long a prompt waits for the turn it interrupts to end before refusing. */
 const INTERRUPT_MS = 10_000;
+/** Stop's escalation bound: ACP cancel first, the child's tree kill when the turn outlives this. */
+const STOP_GRACE_MS = 10_000;
 /** Thrown by `input` on a body route sent without a JSON content type; served as 415. */
 class NotJson extends Error {}
 /**
@@ -1530,8 +1534,8 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
       }
       const u = result.usage;
       runs.close(runRef, result.stopReason === "cancelled" ? "stopped" : "completed");
-      // Host shutdown already wrote this turn's terminal (see `close`); one terminal per turn.
-      if (!t.stopped)
+      // Host shutdown or Stop's escalation may already have written this turn's terminal.
+      if (!t.stopped && !ended(t, turnId))
         append(t, {
           kind: "turn_end",
           turnId,
@@ -1555,7 +1559,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
     } catch (error) {
       runs.close(runRef, t.stopped ? "stopped" : "failed");
       // A stopped thread's open turn is ended by restart recovery, not by "connection closed".
-      if (!t.stopped) {
+      if (!t.stopped && !ended(t, turnId)) {
         const expired = isAuthRefusal(error) ? options.providers.expire(t.meta.providerId) : null;
         if (!expired)
           options.providers.invalidate(t.meta.providerId, "The harness turn failed; probe again.");
@@ -1698,8 +1702,15 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
     const connecting = t.live;
     const child = t.child;
     append(t, { kind: "cancel_requested", turnId, by, door });
-    runs.close({ thread: t.meta.id, turn: turnId }, "stopped");
+    // Consent persistence may fail; it never prevents the cancel or the escalation below.
+    let persist: unknown;
+    try {
+      runs.close({ thread: t.meta.id, turn: turnId }, "stopped");
+    } catch (error) {
+      persist = error;
+    }
     settleAsks(t, "cancel");
+    escalate(t, turnId, child);
     const live = await connecting?.catch((error) => {
       console.error("threads: asynchronous operation failed", error);
       return null;
@@ -1714,8 +1725,32 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
         if (current()) throw error;
       }
     }
+    if (persist) throw persist;
     return true;
   }
+
+  /**
+   * Stop's owned escalation: a turn still running {@link STOP_GRACE_MS} after Stop gets its terminal
+   * recorded as unknown, then its child's scope closes (Spawner tree kill). This bounds a child
+   * that never finishes initialize or ignores cancel; the ACP cancel alone cannot.
+   */
+  function escalate(t: Thread, turnId: string, child: AdapterChild | null) {
+    const timer = setTimeout(() => {
+      if (t.running !== turnId) return;
+      if (!ended(t, turnId))
+        append(t, {
+          kind: "error",
+          turnId,
+          message: `Stop: the harness did not end this turn within ${grace / 1000} s; its child was killed and the outcome is unknown.`,
+        });
+      if (t.child === child) void retire(t);
+    }, grace);
+    timer.unref();
+    void t.turn.finally(() => clearTimeout(timer));
+  }
+  const grace = options.stopGraceMs ?? STOP_GRACE_MS;
+  const ended = (t: Thread, turnId: string) =>
+    t.events.some((e) => (e.kind === "turn_end" || e.kind === "error") && e.turnId === turnId);
 
   /** Cancel the running turn and wait for its end; false when it outlives {@link INTERRUPT_MS}. */
   async function interrupt(t: Thread, by: Caller, door: string) {
