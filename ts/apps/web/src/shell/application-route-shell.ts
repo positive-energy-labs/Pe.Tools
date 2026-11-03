@@ -3,13 +3,14 @@ import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { createRouteShell } from "./admitted-mount";
 import { AdmittedPane, type AdmittedPaneProps } from "./admitted-pane";
 import { sourceRouteServices } from "./source-route-services";
+import { dataTablesSources } from "../data-tables/sources";
 import { capturesSources } from "../captures/sources";
 import { useRouteTarget } from "../route/route-target";
 import { appAtomRegistry } from "./owner";
 import { fixtureName } from "./fixture-lane";
 
 // One application inventory. Domain sources own transport; routes only name admitted entries.
-export const applicationSources = { ...capturesSources() };
+export const applicationSources = { ...capturesSources(), ...dataTablesSources() };
 
 /** Reuse the selected-document owner. A new target replaces the shell through AdmittedPane's
  * effect cleanup/remount boundary, so old reads, Work and reviews retire together. */
