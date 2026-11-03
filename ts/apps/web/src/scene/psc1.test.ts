@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { primitiveMatrix, primitiveTemplate } from "./primitives";
 import { describe, expect, it } from "vite-plus/test";
 import { decodeScene, SCENE_FORMAT, type Psc1Metadata } from "./psc1";
 import { CATEGORY_IDS } from "./categories";
@@ -333,4 +335,23 @@ describe("PSC1 decode", () => {
       expect(() => decodeScene(psc1(malformed))).toThrow("completeness");
     }
   });
+});
+
+// Native C# output from u2-gate-0475a118/browser3/browser-overview.psc1.
+it("decodes and prepares every bounds box in the real Chadds overview", () => {
+  const bytes = readFileSync(new URL("./fixtures/browser-overview.psc1", import.meta.url));
+  const { meshes } = decodeScene(
+    bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+  );
+  const boxes = meshes.instances.flatMap((i) =>
+    i.primitive?.kind === "oriented-box" && i.primitive.box.frame === "bounds" ? [i.primitive] : [],
+  );
+  expect(boxes).toHaveLength(839);
+  for (const box of boxes) {
+    const geometry = primitiveTemplate(box).applyMatrix4(primitiveMatrix(box));
+    geometry.computeBoundingBox();
+    expect(geometry.boundingBox!.min.x).toBeCloseTo(box.bounds.minX, 3);
+    expect(geometry.boundingBox!.max.z).toBeCloseTo(box.bounds.maxZ, 3);
+    geometry.dispose();
+  }
 });

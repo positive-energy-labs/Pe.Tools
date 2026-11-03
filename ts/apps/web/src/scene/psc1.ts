@@ -13,6 +13,16 @@ import { assertLevels } from "./levels";
 export type Psc1Metadata = RevitDetailSpaceScene.Artifact.SceneMetadata;
 export const SCENE_FORMAT = "space-scene-v4";
 
+type SceneBoxFrame = RevitDetailSpaceScene.Artifact.SceneBoxFrame;
+const BOX_FRAMES = { bounds: true, symbol: true, triangles: true, link: true } satisfies Record<
+  SceneBoxFrame,
+  true
+>;
+const RUN_SHAPES = { round: true, rectangular: true, oval: true } satisfies Record<
+  RevitDetailSpaceScene.Artifact.SceneRunShape,
+  true
+>;
+
 const MAGIC = 0x31435350; // "PSC1" little-endian
 const MAX_TRIANGLES = 3_000_000;
 const validBounds = (b: Bounds) =>
@@ -31,7 +41,7 @@ function primitiveOf(e: Psc1Metadata["elements"][number]): ScenePrimitive | unde
     const b = e.orientedBox;
     if (
       !b ||
-      !["symbol", "triangles", "link"].includes(b.frame) ||
+      !Object.hasOwn(BOX_FRAMES, b.frame) ||
       ![b.center, b.axisX, b.axisY, b.axisZ, b.halfSize].every(vector) ||
       b.halfSize.some((n) => n <= 0)
     )
@@ -73,6 +83,7 @@ function primitiveOf(e: Psc1Metadata["elements"][number]): ScenePrimitive | unde
     e.representation !== "run" ||
     e.orientedBox != null ||
     !r ||
+    !Object.hasOwn(RUN_SHAPES, r.shape) ||
     !vector(r.start) ||
     !vector(r.end) ||
     !vector(r.crossSectionXAxis)
@@ -101,10 +112,7 @@ function primitiveOf(e: Psc1Metadata["elements"][number]): ScenePrimitive | unde
     Math.abs(delta.reduce((n, v, i) => n + v * axis[i]!, 0) / length) > 1e-4 ||
     (r.shape === "round"
       ? !positive(r.diameterFt) || r.widthFt != null || r.heightFt != null
-      : !["rectangular", "oval"].includes(r.shape) ||
-        !positive(r.widthFt) ||
-        !positive(r.heightFt) ||
-        r.diameterFt != null)
+      : !positive(r.widthFt) || !positive(r.heightFt) || r.diameterFt != null)
   )
     throw Error("Invalid scene run frame or dimensions");
   return { kind: "run", bounds: e.bounds, run: r };

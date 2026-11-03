@@ -3,6 +3,11 @@ import type { RevitDetailSpaceScene } from "@pe/host-contracts/generated";
 import type { Bounds, Layer3D } from "./types";
 import type { Section } from "./section";
 
+const SOURCE_STATES = { loaded: true, unloaded: true, unavailable: true } satisfies Record<
+  RevitDetailSpaceScene.Artifact.SceneSourceState,
+  true
+>;
+
 export type SceneLevels = RevitDetailSpaceScene.Artifact.SceneLevels;
 export type LevelPlane = SceneLevels["planes"][number];
 export const levelNames = (plane: LevelPlane) =>
@@ -87,7 +92,7 @@ export function assertLevels(levels: SceneLevels) {
       (s, i) =>
         s.source !== i ||
         typeof s.name !== "string" ||
-        !["loaded", "unloaded", "unavailable"].includes(s.status) ||
+        !Object.hasOwn(SOURCE_STATES, s.status) ||
         (s.countedLevels != null &&
           (!Number.isSafeInteger(s.countedLevels) || s.countedLevels < 0)),
     )
