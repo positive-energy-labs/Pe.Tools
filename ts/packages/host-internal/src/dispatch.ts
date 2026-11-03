@@ -2,6 +2,7 @@ import type {
   BridgeError as FrozenBridgeError,
   NoRevitSession as FrozenNoRevitSession,
   DoorEvidence,
+  NativeOutcome,
 } from "./request-contracts.d.ts";
 import { Clock, Context, Deferred, Effect, Exit, Queue, Ref, Schema } from "effect";
 import { randomUUID } from "node:crypto";
@@ -167,6 +168,18 @@ const REFUSED_OUTCOMES = new Set([
   "RefusedQueueDisposed",
 ]);
 
+const nativeOutcomes = {
+  "never-dispatched": true,
+  "native-cancel-requested": true,
+  "native-acknowledged": true,
+  committed: true,
+  "unknown-until-reconciled": true,
+} satisfies Record<NativeOutcome, true>;
+const nativeOutcomeSchema = Schema.declare<NativeOutcome>(
+  (value): value is NativeOutcome =>
+    typeof value === "string" && Object.hasOwn(nativeOutcomes, value),
+);
+
 /** A bridge operation failed on the Revit side (statusCode mirrors the C# BridgeOperationException). */
 export class BridgeError
   extends Schema.TaggedError<BridgeError>()("BridgeError", {
@@ -175,15 +188,7 @@ export class BridgeError
     evidence: Schema.Any,
     status: Schema.Number,
     problem: Schema.String,
-    nativeOutcome: Schema.optionalKey(
-      Schema.Literals([
-        "never-dispatched",
-        "native-cancel-requested",
-        "native-acknowledged",
-        "committed",
-        "unknown-until-reconciled",
-      ]),
-    ),
+    nativeOutcome: Schema.optionalKey(nativeOutcomeSchema),
   })
   implements FrozenBridgeError
 {
@@ -284,15 +289,7 @@ export class NoRevitSession
     status: Schema.Number,
     problem: Schema.String,
     evidence: Schema.optionalKey(Schema.Any),
-    nativeOutcome: Schema.optionalKey(
-      Schema.Literals([
-        "never-dispatched",
-        "native-cancel-requested",
-        "native-acknowledged",
-        "committed",
-        "unknown-until-reconciled",
-      ]),
-    ),
+    nativeOutcome: Schema.optionalKey(nativeOutcomeSchema),
     asked: Schema.optionalKey(Schema.String),
     attached: Schema.optionalKey(Schema.Array(Schema.String)),
   })
