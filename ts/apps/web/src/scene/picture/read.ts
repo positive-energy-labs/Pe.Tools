@@ -51,6 +51,11 @@ export function useCapture(
   epoch: number | string,
   cuts: SceneMeshes["cuts"] = EMPTY_CUTS,
 ): SceneRead {
+  if (
+    request &&
+    (request.contextRepresentation === "meshes" || request.contextRepresentation === "none")
+  )
+    request = { ...request, contextPaddingFt: Math.max(5, request.contextPaddingFt) };
   const overview = request?.contextRepresentation === "overview";
   const declared = useScene(overview ? request : null, doc, epoch);
   const activeRequest = request;
@@ -75,7 +80,7 @@ export function useCapture(
       ? {
           ...request,
           focusOnly: true,
-          contextPaddingFt: 0,
+          contextPaddingFt: 5,
           contextRepresentation: request.contextRepresentation === "overview" ? "overview" : "none",
         }
       : null,

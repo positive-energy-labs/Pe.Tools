@@ -241,6 +241,9 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
         snapshot={snapshot}
         sheet={sheet}
         opened={value?.opened}
+        fans={roster.filter(
+          (row) => props.page.fan === "all" || props.page.fan.includes(stableFanKey(row)),
+        )}
         blockers={state.blockers}
         renderPane={renderPane}
         jump={jump}

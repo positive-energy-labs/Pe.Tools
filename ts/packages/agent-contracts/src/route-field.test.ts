@@ -44,3 +44,27 @@ test("sort and keyed set constructors own lossless codecs and reject malformed v
   expect(hidden.schema.safeParse({ a: false }).success).toBe(false);
   expect(routeAddress("space").agent.keys).not.toContain("ids");
 });
+
+test("every many address field round trips ids, all and empty through a URL", async () => {
+  const { routeAddresses } = await import("./routes/index.ts");
+  for (const [route, declaration] of Object.entries(routeAddresses)) {
+    const address = routeAddress(route as keyof typeof routeAddresses);
+    const fields: import("./route-field.ts").Fields = declaration.fields;
+    for (const [key, field] of Object.entries(fields)) {
+      if (field.cardinality !== "many" || !field.url) continue;
+      const sample = field.schema.parse(undefined);
+      const ids = Array.isArray(sample) && sample.length ? sample : ["all", "a,b%~ @1"];
+      const validIds = field.schema.safeParse(ids).success ? ids : ["rails"];
+      for (const value of [validIds, "all", []]) {
+        const written = address.write({ [key]: value } as never);
+        const url = new URL(address.path, "http://test.invalid");
+        for (const [id, text] of Object.entries(written))
+          if (text !== undefined) url.searchParams.set(id, text);
+        expect(
+          address.read(Object.fromEntries(url.searchParams)).page,
+          `${route}.${key}`,
+        ).toHaveProperty(key, value);
+      }
+    }
+  }
+});

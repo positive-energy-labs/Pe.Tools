@@ -246,3 +246,12 @@ it("overview completes in one zero-tessellation read without focus warming", asy
   expect(native.calls).toHaveLength(1);
   expect(sceneRequest([7199], true, 15, "overview").contextRepresentation).toBe("overview");
 });
+
+it("detailed focus and context each retain at least five feet", async () => {
+  renderHook(() => useCapture(sceneRequest([91571], false, 2, "meshes"), doc, "padding-minimum"));
+  expect(native.calls).toHaveLength(1);
+  expect(native.calls[0]!.request.contextPaddingFt).toBe(5);
+  await finish(0, "padding-focus");
+  await waitFor(() => expect(native.calls).toHaveLength(2));
+  expect(native.calls[1]!.request.contextPaddingFt).toBe(5);
+});

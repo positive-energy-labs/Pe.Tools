@@ -29,7 +29,7 @@ import { paintOfDucts } from "../selection";
 import { subjectNamer } from "../subject-text";
 import { blockerElements, sheetIssues, sheetLayers } from "./layers";
 import type { SheetBlocker } from "./tiers";
-import type { Detail } from "./model";
+import type { Detail, FanPort } from "./model";
 import type { OpenSheet } from "../sources";
 
 const NONE: readonly never[] = [];
@@ -107,10 +107,12 @@ export function SheetPicture({
   renderPane,
   jump,
   opened,
+  fans,
 }: {
   props: ProtoProps;
   snapshot: DuctSnapshot;
   opened?: readonly OpenSheet[];
+  fans?: readonly FanPort[];
   sheet: OpenSheet | null;
   blockers: readonly SheetBlocker[];
   renderPane: TeachingPaneRender;
@@ -118,6 +120,11 @@ export function SheetPicture({
   jump?: RefObject<((key: SubjectKey) => void) | null>;
 }) {
   const { page, setPage, work, priced } = props;
+  const overviewFans =
+    fans ??
+    (opened ?? (sheet ? [sheet] : [])).flatMap((item) =>
+      item.overview.fan ? [item.overview.fan] : [],
+    );
   const worstPathIds = useMemo(
     () => new Set(sheet?.worstLegs.flatMap((path) => path.legs.map((leg) => leg.elementId)) ?? []),
     [sheet],
@@ -127,6 +134,7 @@ export function SheetPicture({
   const focusIds = useMemo(
     () =>
       new Set([
+        ...overviewFans.map((fan) => fan.unitId),
         ...(opened ?? (sheet ? [sheet] : [])).flatMap(
           (item) => item.elements?.walkedElementIds ?? [],
         ),
@@ -136,7 +144,7 @@ export function SheetPicture({
         ...blockers.flatMap(blockerElements),
         ...worstPathIds,
       ]),
-    [sheet, opened, blockers, worstPathIds],
+    [sheet, opened, fans, blockers, worstPathIds],
   );
   const contextOn = page.layers.includes("context") || page.layers.includes("halo");
   const beyond = useMemo(
@@ -249,7 +257,7 @@ export function SheetPicture({
       onRuling={() => {}}
     />
   );
-  const fan = sheet?.overview.fan;
+  const fan = overviewFans[0];
   // With no fan open there is nothing to capture; say what to do instead of the network picture's words.
   if (!fan)
     return renderPane(
@@ -258,7 +266,7 @@ export function SheetPicture({
       </p>,
       { meta: "no fan open" },
     );
-  const esp = sheet.overview.totals?.requiredEspInWg ?? null;
+  const esp = sheet?.overview.totals?.requiredEspInWg ?? null;
   const summary =
     hoveredBeyond != null ? (
       <span data-sheet-picture-beyond="" className="text-ink-2">
@@ -296,9 +304,7 @@ export function SheetPicture({
       content={{
         geometry: {
           overview: sceneRequest(
-            (opened ?? (sheet ? [sheet] : [])).flatMap((item) =>
-              item.overview.fan ? [item.overview.fan.unitId] : [],
-            ),
+            [...new Set(overviewFans.map((fan) => fan.unitId))],
             false,
             0,
             "overview",

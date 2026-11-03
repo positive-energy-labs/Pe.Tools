@@ -114,8 +114,9 @@ function DuctsProvider({
   const subjectIds = scope?.groups
     .map((group) => edit.subject[group] ?? work?.doc.subject[group]?.suggestion?.value)
     .find((ids) => ids != null);
+  const pictureRead = page.stage === "sheet" ? owner.readings.get("fans") : read;
   const current = read.current;
-  const version = read.basis?.sourceVersion;
+  const version = page.stage === "sheet" ? pictureRead.hash : read.basis?.sourceVersion;
   const observation = useMemo<NativeObservation>(
     () => ({
       scope: { document: current ? doc : null, source: "native" },
@@ -175,9 +176,8 @@ function DuctsProvider({
         ? { says: "Reading ducts", exit: "Wait for this document's snapshot" }
         : null,
     doc,
-    // TODO: u2-gate-0475a118/browser4 direct restore dispatched no scene; restore-picture.test.tsx
-    // passes with delayed readings. Capture read.current, sourceVersion and picture size on the next browser drive.
-    captureSource: current && doc && version ? { document: doc, version } : null,
+    // Fan overview depends on the roster, not the optional sheet detail reads.
+    captureSource: pictureRead.current && doc && version ? { document: doc, version } : null,
     reading: {
       pending: read.status === "pending",
       error:
