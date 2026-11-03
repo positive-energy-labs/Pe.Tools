@@ -421,7 +421,6 @@ test("React facade owns StrictMode mount/dispose with no route callback", async 
         shell: createRouteShell(transports().services),
         route: await admitted(),
         address: location.address,
-        pane: "main",
       }),
     ),
   );
@@ -1164,7 +1163,6 @@ test("shared preview transport renders before-to-after review and commits identi
           rows: ["Parameter amount: 6 \u2192 7"],
         })),
         address: locationPort().address,
-        pane: "main",
       }),
     );
     const mount = mounted.mock.results[0]!.value;
@@ -1819,14 +1817,14 @@ test("application target change remounts once and retires the old ordinary sourc
   const route = await admitted(false, false, { data: { needs: "document" }, sources });
   const address = locationPort().address;
   try {
-    const view = render(createElement(applicationRouteShell, { route, address, pane: "main" }));
+    const view = render(createElement(applicationRouteShell, { route, address }));
     expect(contexts.map((c) => c.target)).toEqual([documentA]);
-    view.rerender(createElement(applicationRouteShell, { route, address, pane: "main" }));
+    view.rerender(createElement(applicationRouteShell, { route, address }));
     expect(contexts).toHaveLength(1);
     selected.mockReturnValue({ resolution: { kind: "resolved", target: documentB } } as ReturnType<
       typeof useRouteTarget
     >);
-    view.rerender(createElement(applicationRouteShell, { route, address, pane: "main" }));
+    view.rerender(createElement(applicationRouteShell, { route, address }));
     expect(contexts.map((c) => c.target)).toEqual([documentA, documentB]);
     expect(contexts[0]!.signal.aborted).toBe(true);
     expect(contexts[1]!.signal.aborted).toBe(false);
@@ -2606,7 +2604,7 @@ test("AdmittedPane subject picker goes through transition and reloads its accept
   const t = transports();
   const shell = createRouteShell(t.services);
   const first = render(
-    createElement(AdmittedPane, { shell, route, address: location.address, pane: "main" }),
+    createElement(AdmittedPane, { shell, route, address: location.address }),
   );
   await act(async () => t.frames[0]!(ready("roster")));
   fireEvent.click(screen.getByRole("button", { name: "Choose note" }));
@@ -2620,7 +2618,7 @@ test("AdmittedPane subject picker goes through transition and reloads its accept
   );
   expect(location.address.read().get("note")).toContain("picked");
   first.unmount();
-  render(createElement(AdmittedPane, { shell, route, address: location.address, pane: "main" }));
+  render(createElement(AdmittedPane, { shell, route, address: location.address }));
   expect(screen.getByTestId("subject").textContent).toBe("picked");
 });
 
@@ -2665,7 +2663,7 @@ test.each(["registration-mismatch", "migration-failed", "failed"] as const)(
     const shell = createRouteShell({ ...t.services, work: { ...store, open } });
     const mount = vi.spyOn(shell, "mount");
     const location = locationPort();
-    render(createElement(AdmittedPane, { shell, route, address: location.address, pane: "main" }));
+    render(createElement(AdmittedPane, { shell, route, address: location.address }));
     expect(await screen.findByText(expected)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /retry|reload/i })).toBeNull();
     expect(mount.mock.results[0]!.value.workFailure()).toEqual(failure);
@@ -2755,7 +2753,7 @@ test("retained pane releases leases on hide and reuses its Page and history on s
       createElement(
         RouteVisibility.Provider,
         { value: visible },
-        createElement(AdmittedPane, { shell: f.shell, route: f.route, address, pane: "main" }),
+        createElement(AdmittedPane, { shell: f.shell, route: f.route, address }),
       ),
     );
   const rendered = render(view(true));

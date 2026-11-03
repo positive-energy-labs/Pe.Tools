@@ -11,6 +11,6 @@ export const admitFans = async () => {
 export const Route = createFileRoute("/fans")({
   validateSearch: admittedRouteSearch(fansData),
   component: () => (
-    <AdmittedRouteView shell={applicationRouteShell} load={admitFans} pane="sheet-roster" />
+    <AdmittedRouteView shell={applicationRouteShell} load={admitFans} />
   ),
 });

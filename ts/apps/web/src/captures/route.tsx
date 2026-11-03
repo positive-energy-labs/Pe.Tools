@@ -10,6 +10,6 @@ export const capturesRoute = createRoute({
   path: "/captures",
   validateSearch: admittedRouteSearch(capturesData),
   component: () => (
-    <AdmittedRouteView shell={applicationRouteShell} load={admitCaptures} pane="captures" />
+    <AdmittedRouteView shell={applicationRouteShell} load={admitCaptures} />
   ),
 });

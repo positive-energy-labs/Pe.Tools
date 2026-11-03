@@ -58,7 +58,6 @@ export interface JournalMove {
 }
 type Namer = (patches: readonly RouteStatePatch[]) => JournalDetail;
 type Step = JournalDetail & {
-  detailSource: "accepted" | "historical";
   id: string;
   press: string;
   /** Who authored the step: the person in this tab, or Pea through the shared Work door. */
@@ -303,7 +302,6 @@ export function createWorkJournal(key: WorkKey) {
     } else
       undo.push({
         ...structuredClone(detail),
-        detailSource: "accepted",
         label: detail.label.trim() || namer(ack.patches).label,
         id: ack.step ?? ack.press,
         press: ack.press,
@@ -522,7 +520,6 @@ export function createWorkJournal(key: WorkKey) {
         receipts.set(ack.revision, structuredClone(ack));
         applyAcknowledgement(ack);
       }
-      for (const step of [...undo, ...redo]) step.detailSource = "historical";
       revision = snapshot.revision;
       current = structuredClone(snapshot);
     },
@@ -537,12 +534,13 @@ export function createWorkJournal(key: WorkKey) {
           id: step.id,
           press: step.press,
           label: step.label,
+          ...(step.internal && { internal: true as const }),
           by: step.by,
           at: step.at,
           state,
           ...(step.meta === undefined
             ? { detail: "none" as const }
-            : step.detailSource === "historical" && !schema?.safeParse(step.meta).success
+            : !schema?.safeParse(step.meta).success
               ? { detail: "unavailable" as const }
               : { detail: "available" as const, meta: step.meta as JsonValue }),
         })),

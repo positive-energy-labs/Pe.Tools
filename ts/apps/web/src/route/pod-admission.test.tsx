@@ -129,7 +129,7 @@ test.each(["deactivation", "removal", "replacement"])(
       useSyncExternalStore(podRoutes.subscribe, podRoutes.revision, podRoutes.revision);
       const current = podRoutes.get(row.key);
       return current
-        ? createElement(AdmittedPane, { shell, route: current, address, pane: "calculation" })
+        ? createElement(AdmittedPane, { shell, route: current, address })
         : null;
     }
     render(createElement(View));
@@ -258,7 +258,7 @@ test("Snowdon real host + React mount migrates v1, renders subject/calculation, 
     },
   } as typeof base;
   const view = render(
-    createElement(AdmittedPane, { shell, route: h.route, address: address(), pane: "calculation" }),
+    createElement(AdmittedPane, { shell, route: h.route, address: address() }),
   );
   try {
     await vi.waitFor(() =>
@@ -320,7 +320,7 @@ test("stale Pod tab shows reload and cannot reacquire feeds after Page changes o
     },
   } as typeof base;
   const view = render(
-    createElement(AdmittedPane, { shell, route: h.route, address: address(), pane: "calculation" }),
+    createElement(AdmittedPane, { shell, route: h.route, address: address() }),
   );
   try {
     await vi.waitFor(() => expect(screen.getByText(/older version.*reload/)).toBeTruthy());
@@ -335,7 +335,6 @@ test("stale Pod tab shows reload and cannot reacquire feeds after Page changes o
         shell,
         route: h.route,
         address: address(),
-        pane: "calculation",
       }),
     );
     await vi.waitFor(() => expect(screen.getByText(/older version.*reload/)).toBeTruthy());

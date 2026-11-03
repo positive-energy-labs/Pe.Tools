@@ -196,6 +196,7 @@ export type HistoryMeta<G extends RouteGraphJson, S extends SchemaTable> = G ext
   ? SchemaValue<S, K>
   : never;
 export type WorkHistoryEntry<Meta> = {
+  readonly internal?: true;
   readonly id: string;
   readonly press: string;
   readonly label: string;

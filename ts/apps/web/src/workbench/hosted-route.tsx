@@ -67,7 +67,7 @@ export function HostedAdmittedRoute({
     [route, props.thread, props.target, props.work],
   );
   return props.visible ? (
-    <ApplicationRouteShell route={route} address={address} pane={route.data.subject.pane} />
+    <ApplicationRouteShell route={route} address={address} />
   ) : null;
 }
 /** The workbench consumes the same registration as chat summaries and recorded exits. */

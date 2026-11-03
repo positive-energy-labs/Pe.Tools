@@ -11,6 +11,6 @@ export const admitDucts = async () => {
 export const Route = createFileRoute("/ducts")({
   validateSearch: admittedRouteSearch(ductsData),
   component: () => (
-    <AdmittedRouteView shell={applicationRouteShell} load={admitDucts} pane="e-systems" />
+    <AdmittedRouteView shell={applicationRouteShell} load={admitDucts} />
   ),
 });

@@ -58,8 +58,6 @@ export function presentInputHistory(
   return {
     undoLabel: undo?.label ?? null,
     redoLabel: redo?.label ?? null,
-    undoSuperseded: null,
-    redoSuperseded: null,
     cleared:
       undo && cleared?.clear
         ? {
@@ -71,7 +69,7 @@ export function presentInputHistory(
         : null,
     last: refusal
       ? { label: "restore", words: "", refusal }
-      : last
+      : last && !last.internal
         ? {
             // Name this entry's state; it does not identify the most recent movement.
             label: `${last.state === "undone" ? "undid " : ""}${last.label}`,
