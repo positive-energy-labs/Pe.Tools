@@ -40,7 +40,26 @@ afterEach(() => {
 // This fixture declares the web salvage slot, so an absent declaration cannot explain null.
 // The neutral projection extracts canonical bytes; the web body derives review patches.
 async function witness(aside = false, failRecovery = false, withSalvage = true) {
-  const salvage = vi.fn(() => ({ ok: true as const, value: [] }));
+  const salvage = vi.fn((value: unknown) => ({
+    ok: true as const,
+    value: aside
+      ? []
+      : [
+          { path: ["scope"], value: { edit: { value: (value as typeof carried.value).scope } } },
+          {
+            path: ["excluded"],
+            value: Object.fromEntries(
+              [
+                ...(value as typeof carried.value).familyNames,
+                ...(value as typeof carried.value).familyIds.map((id) => {
+                  if (id !== 10826118) throw Error("Unknown fixture family id");
+                  return "Magna3 - Mechanical Equipment";
+                }),
+              ].map((id) => [String(id), { by: "human" }]),
+            ),
+          },
+        ],
+  }));
   const { salvage: _oldSalvage, ...plainData } = familiesModule.data;
   const { salvage: _oldBody, ...plainBodies } = familiesModule.bodies;
   const data = {
@@ -121,6 +140,7 @@ async function witness(aside = false, failRecovery = false, withSalvage = true) 
     module,
   );
   if (!webRoute.ok) throw Error(JSON.stringify(webRoute.diagnostics));
+  let hostSaved: Map<string, unknown>;
   const workspace = (legacy: boolean) => {
     const saved = new Map<string, unknown>(
       aside
@@ -138,6 +158,7 @@ async function witness(aside = false, failRecovery = false, withSalvage = true) 
           ]
         : [["families", structuredClone(raw)]],
     );
+    if (!legacy) hostSaved = saved;
     return new RouteWorkspace({
       registrations: legacy ? [{ spec: familiesRouteState }] : [],
       store: {
@@ -159,7 +180,7 @@ async function witness(aside = false, failRecovery = false, withSalvage = true) 
       fingerprint: hostRoute.route.workFingerprint,
     }),
   ).toBeNull();
-  return { host, legacy, route: webRoute.route, salvage, recover };
+  return { host, legacy, route: webRoute.route, salvage, recover, saved: hostSaved! };
 }
 
 test("admitted host enrollment preserves Families scope and excluded-name/id salvage", async () => {
@@ -198,8 +219,9 @@ test("generic mount derives a salvage review from the canonical admitted host re
   });
   closes.push(mount.close);
   await vi.waitFor(() => expect(mount.work()).not.toBeNull());
+  await vi.waitFor(() => expect(mount.recovery().carryOver).toBe(true));
   expect(await mount.salvage()).toEqual({ kind: "review", preview: [] });
-  expect(request).toHaveBeenCalledOnce();
+  expect(request).toHaveBeenCalled();
   expect(f.recover).toHaveBeenCalledWith(raw.doc);
   expect(f.salvage).toHaveBeenCalledWith(carried.value, expect.anything());
   expect(mount.review("work.salvage")).toMatchObject({ preview: [] });
@@ -224,8 +246,14 @@ test("a route without salvage keeps recovery unavailable", async () => {
 });
 
 // A complete neutral spec does not supply the missing admitted recovery lifecycle port.
-test("kernel gap: unreadable admitted Families Work cannot reach carry-over from its mount", async () => {
+test("unreadable admitted Work starts fresh, preserves its aside and accepts carry-over", async () => {
   const f = await witness(false);
+  vi.spyOn(workHost, "startFreshRouteWork").mockImplementation((key) =>
+    f.host.startFresh(key, "families", "human"),
+  );
+  vi.spyOn(workHost, "salvageRouteWork").mockImplementation(
+    (key) => f.host.salvage(key, "families") as ReturnType<typeof workHost.salvageRouteWork>,
+  );
   const observe = observeResources(f.host, { observe: () => () => {} });
   const work = createWorkFeedClient(
     { subscribe: observe, dirty() {} },
@@ -245,8 +273,97 @@ test("kernel gap: unreadable admitted Families Work cannot reach carry-over from
   await vi.waitFor(() => expect(mount.workProblem()).not.toBeNull());
   expect(mount.work()).toBeNull();
   expect(await f.host.salvage(key, "families")).toEqual(carried);
-  await expect(mount.salvage()).rejects.toThrow("Salvage unavailable");
-  expect(mount).not.toHaveProperty("startFresh");
-  expect(mount).not.toHaveProperty("reloadWork");
-  expect(mount.review("work.salvage")).toBeNull();
+  expect(mount.recovery()).toMatchObject({
+    startFresh: true,
+    carryOver: false,
+    sentence: mount.workProblem(),
+  });
+  await mount.startFresh();
+  expect(f.saved.get("families:aside:1")).toEqual(raw);
+  expect(f.salvage).toHaveBeenCalledWith(carried.value, expect.anything());
+  expect(mount.review("work.salvage")).toMatchObject({ stale: false });
+  const outcome = mount.confirm(
+    "work.salvage",
+  ) as import("../../../../packages/agent-contracts/src/work-journal-door").Observation<
+    import("../../../../packages/agent-contracts/src/work-journal-door").WorkWriteOutcome
+  >;
+  await new Promise<void>((resolve) =>
+    outcome.subscribe(
+      (state) => {
+        if (state.kind !== "pending") {
+          expect(state.kind).toBe("accepted");
+          resolve();
+        }
+      },
+      () => {},
+    ),
+  );
+  expect(mount.work()?.value).toMatchObject({
+    scope: { edit: { value: filter } },
+    excluded: { "Magna3 - Mechanical Equipment": { by: "human" } },
+  });
+});
+
+async function recoveryMount(withSalvage = true, stale = false) {
+  const f = await witness(false, false, withSalvage);
+  vi.spyOn(workHost, "startFreshRouteWork").mockImplementation((key) =>
+    f.host.startFresh(key, "families", "human"),
+  );
+  vi.spyOn(workHost, "salvageRouteWork").mockImplementation(
+    (key) => f.host.salvage(key, "families") as ReturnType<typeof workHost.salvageRouteWork>,
+  );
+  const observe = observeResources(f.host, { observe: () => () => {} });
+  const door = createWorkFeedClient(
+    { subscribe: observe, dirty() {} },
+    {
+      write: (key, write) => f.host.write(key, "families", "human", write),
+      submit: async () => {
+        throw Error("Unexpected native dispatch");
+      },
+    },
+  );
+  let opens = 0;
+  const open = vi.fn((scope: Parameters<typeof door.open>[0]) => {
+    opens++;
+    return door.open(
+      stale && opens > 1
+        ? {
+            ...scope,
+            fingerprint: (scope.fingerprint.slice(0, -1) +
+              (scope.fingerprint.endsWith("a") ? "b" : "a")) as typeof scope.fingerprint,
+          }
+        : scope,
+    );
+  });
+  const mount = createRouteShell({ ...sourceRouteServices({}), work: { ...door, open } }).mount(
+    f.route,
+    {
+      read: () => new URLSearchParams(),
+      write() {},
+      subscribe: () => () => {},
+    },
+  );
+  closes.push(mount.close);
+  await vi.waitFor(() => expect(mount.recovery().startFresh).toBe(true));
+  return { ...f, mount, open };
+}
+
+test("a route without salvage starts fresh without a carry-over review", async () => {
+  const f = await recoveryMount(false);
+  await f.mount.startFresh();
+  expect(f.mount.work()).not.toBeNull();
+  expect(f.mount.recovery().carryOver).toBe(false);
+  expect(f.mount.review("work.salvage")).toBeNull();
+  expect(f.saved.get("families:aside:1")).toEqual(raw);
+  expect(f.recover).not.toHaveBeenCalled();
+  expect(f.open.mock.calls[1]![0]).toEqual(f.open.mock.calls[0]![0]);
+});
+
+test("a stale registration on the re-acquired feed refuses carry-over", async () => {
+  const f = await recoveryMount(true, true);
+  await expect(f.mount.startFresh()).rejects.toThrow("Route bytes differ");
+  expect(f.mount.workFailure()?.kind).toBe("registration-mismatch");
+  expect(f.mount.review("work.salvage")).toBeNull();
+  expect(f.mount.recovery().carryOver).toBe(false);
+  expect(f.saved.get("families:aside:1")).toEqual(raw);
 });
