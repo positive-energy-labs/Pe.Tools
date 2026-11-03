@@ -2,7 +2,7 @@ import type { RevitDetailSpaceScene } from "@pe/host-contracts/generated";
 import type { z } from "zod";
 import type { AdmittedRoute } from "./route-kernel-admission.ts";
 import type { ReadingSnapshot } from "./route-kernel-bodies.ts";
-import type { Immutable } from "./route-kernel-data.ts";
+import type { Immutable, RouteGraphJson } from "./route-kernel-data.ts";
 import type {
   AcceptanceToken,
   CausalParentId,
@@ -313,6 +313,17 @@ export interface RouteEnvironment {
   >;
   readonly nativeWrite?: NativeWriteCapability;
 }
+/** Baseline services are installed once by application composition. A route cannot
+ * request an optional group without declaring it, even through a non-literal variable. */
+export type KernelServices = Pick<RouteEnvironment, "reads" | "readings" | "clock" | "availability">;
+type GroupFor<D extends Pick<RouteGraphJson, "capabilities">, C extends RouteGraphJson["capabilities"][number], K extends keyof RouteEnvironment> =
+  C extends D["capabilities"][number]
+    ? { readonly [P in K]-?: RouteEnvironment[P] }
+    : { readonly [P in K]?: never };
+export type EnvironmentFor<D extends Pick<RouteGraphJson, "capabilities">> = KernelServices &
+  GroupFor<D, "work", "work"> & GroupFor<D, "geometry", "geometry"> &
+  GroupFor<D, "native-write", "nativeWrite">;
+
 /** Same operations with isolated Work and seed-backed reads. Missing seed is unavailable,
  * never a fallback to native transport. Types are not a sandbox for arbitrary JS bodies. */
 export type FixtureEnvironment = Omit<RouteEnvironment, "nativeWrite"> & {

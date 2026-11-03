@@ -94,6 +94,7 @@ const sort = {
 } as const;
 export const builtinData = {
   version: 1,
+  capabilities: ["work", "native-write"],
   key: "tiny",
   address: "/tiny",
   name: "Tiny",
@@ -226,6 +227,7 @@ export const builtinBodies = {
 // Complete representative Pod: manual/native subjects, migration, typed cell key and bindings.
 export const podData = {
   ...builtinData,
+  capabilities: ["work", "native-write", "geometry"],
   key: "pod.circuits",
   address: "/pod/circuits",
   name: "Circuit calculator",

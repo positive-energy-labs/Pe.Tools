@@ -126,6 +126,13 @@ export function linkRouteBodies(
   };
   const schemaRef = (id: string | undefined, path: string) =>
     reference(bindings.schemas, id, path, "schema");
+  const requireCapability = (group: RouteGraphJson["capabilities"][number], path: string) => {
+    if (!data.capabilities.includes(group))
+      fail(path, group, "declared capability", `Missing ${group} capability`, "policy");
+  };
+  if (data.work) requireCapability("work", "work");
+  if (data.capabilities.includes("work") && !data.work)
+    fail("capabilities", "work", "Work declaration", "Work capability requires Work", "policy");
   const workSchema = data.work && bindings.schemas[data.work.schema];
   const workObject = workSchema && bare(workSchema);
   const workKeys = workObject instanceof z.ZodObject ? workObject.shape : {};
@@ -285,8 +292,23 @@ export function linkRouteBodies(
   const linked = new Map(catalog.map((entry) => [entry.key, entry]));
   for (const message of linkCatalog(catalog))
     fail("entries", "", "linked catalog", message, "policy");
+  const checkEffects = (key: string, path: string, read: boolean, seen = new Set<string>()) => {
+    if (seen.has(key)) return;
+    seen.add(key);
+    const entry = linked.get(key);
+    if (!entry) return;
+    if (entry.touches.includes("Geometry")) requireCapability("geometry", path);
+    if (entry.effect !== "Read" && entry.effect !== "TransactRead") {
+      requireCapability("native-write", path);
+      if (read) fail(path, key, "read closure", "A reading/query dependency cannot write", "policy");
+    }
+    for (const child of entry.uses)
+      checkEffects(typeof child === "string" ? child : child.key, path, read, seen);
+    if (entry.previewBy) checkEffects(entry.previewBy, path, true, seen);
+  };
   const entryRef = (key: string, path: string, read: boolean) => {
     reference(bindings.entries, key, path, "entry");
+    checkEffects(key, path, read);
     const entry = linked.get(key);
     if (!entry)
       fail(path, key, "linked catalog entry", "Entry is absent from admitted catalog", "missing");

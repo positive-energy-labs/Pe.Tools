@@ -29,11 +29,16 @@ type TransactionPatch<G extends RouteGraphJson, S extends SchemaTable> =
   | Parameters<AcceptanceOwner<G, S>["restorePage"]>[0];
 
 /** Pure Page policy is supplied by the client; all state and publication remain here. */
-export interface ScopeGateOptions<G extends RouteGraphJson, S extends SchemaTable> {
+interface WorkServices<G extends RouteGraphJson, S extends SchemaTable> {
   readonly workSchema: z.ZodType<Immutable<WorkOf<G, S>>>;
   readonly hashWork: (value: Immutable<WorkOf<G, S>>) => string;
   /** The composition root retains one journal per Work, independently of mounted UI. */
   readonly journal: (key: WorkKey) => WorkJournal;
+}
+export type ScopeGateOptions<G extends RouteGraphJson, S extends SchemaTable> =
+  (G extends { readonly work: object } ? WorkServices<G, S> : {
+    readonly workSchema?: never; readonly hashWork?: never; readonly journal?: never;
+  }) & {
   readonly dependencies: () => Readonly<Record<string, string>>;
   readonly preparePage: (
     page: PageOf<G, S>,
@@ -65,6 +70,7 @@ export function createRouteScopeGate<G extends RouteGraphJson, S extends SchemaT
   options: ScopeGateOptions<G, S>,
 ): AcceptanceOwner<G, S> {
   type Snapshot = AcceptanceSnapshot<G, S>;
+  const work = options as Partial<WorkServices<G, S>>;
   const issuer = options.issuer ?? createRouteTokenIssuer();
   let state: Snapshot | null = null;
   let closed = false;
@@ -168,6 +174,8 @@ export function createRouteScopeGate<G extends RouteGraphJson, S extends SchemaT
     token: InvocationToken | AcceptanceToken,
     delivery: WorkDelivery<WorkOf<G, S>>,
   ): WorkReduction {
+    if (!work.workSchema || !work.hashWork || !work.journal)
+      return { kind: "refused", reason: "wrong-work" };
     if (
       !issuer.owns(token) ||
       (delivery.kind === "ack"
@@ -182,7 +190,7 @@ export function createRouteScopeGate<G extends RouteGraphJson, S extends SchemaT
     const live = active(attempt);
     if (!live && delivery.kind !== "ack")
       return { kind: "refused", reason: closed ? "closed" : "retired" };
-    const journal = options.journal(key);
+    const journal = work.journal(key);
     const revision = delivery.kind === "snapshot" ? delivery.revision : delivery.write.revision;
     const current = live ? (state?.work ?? null) : null;
     const recover = (reason: "gap" | "contradiction"): WorkReduction => ({
@@ -224,7 +232,7 @@ export function createRouteScopeGate<G extends RouteGraphJson, S extends SchemaT
     if (delivery.kind !== "snapshot" && current && revision === current.revision) {
       // A snapshot may precede its delta. Check its postimage without applying the inverse.
       const projected = applyPatches(
-        { route: key.route, title: "Work", description: "", schema: options.workSchema },
+        { route: key.route, title: "Work", description: "", schema: work.workSchema },
         { version: 1, revision: current.revision, doc: current.value },
         delivery.write.by,
         delivery.write.patches.map((p) => ({ ...p, path: [...p.path] })),
@@ -234,7 +242,7 @@ export function createRouteScopeGate<G extends RouteGraphJson, S extends SchemaT
       );
       if (
         !projected.ok ||
-        options.hashWork(projected.envelope.doc) !== options.hashWork(current.value)
+        work.hashWork(projected.envelope.doc) !== work.hashWork(current.value)
       )
         return recover("contradiction");
       continueInvocation();
@@ -243,8 +251,8 @@ export function createRouteScopeGate<G extends RouteGraphJson, S extends SchemaT
     let value: Immutable<WorkOf<G, S>>;
     let hash: string;
     if (delivery.kind === "snapshot") {
-      const decoded = options.workSchema.safeParse(delivery.value);
-      if (!decoded.success || options.hashWork(decoded.data) !== delivery.hash)
+      const decoded = work.workSchema.safeParse(delivery.value);
+      if (!decoded.success || work.hashWork(decoded.data) !== delivery.hash)
         return recover("contradiction");
       value = decoded.data;
       hash = delivery.hash;
@@ -252,7 +260,7 @@ export function createRouteScopeGate<G extends RouteGraphJson, S extends SchemaT
       if (!current || delivery.write.base !== current.revision) return recover("gap");
       if (revision !== delivery.write.base + 1) return recover("contradiction");
       const result = applyPatches(
-        { route: key.route, title: "Work", description: "", schema: options.workSchema },
+        { route: key.route, title: "Work", description: "", schema: work.workSchema },
         { version: 1, revision: current.revision, doc: current.value },
         delivery.write.by,
         delivery.write.patches.map((p) => ({ ...p, path: [...p.path] })),
@@ -262,7 +270,7 @@ export function createRouteScopeGate<G extends RouteGraphJson, S extends SchemaT
       );
       if (!result.ok) return recover("contradiction");
       value = result.envelope.doc;
-      hash = options.hashWork(value);
+      hash = work.hashWork(value);
     }
     if (known.has(revision) && known.get(revision) !== hash) return recover("contradiction");
     if (current && revision === current.revision) return { kind: "duplicate", revision, receipt };

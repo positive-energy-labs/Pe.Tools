@@ -135,6 +135,10 @@ const layout: z.ZodType<LayoutJson> = z.lazy(() =>
  * No function, schema instance, implicit codec, or inferred catalog axis is data. */
 export const RouteGraphJson = z.strictObject({
   version: z.literal(1),
+  capabilities: z.array(z.enum(["work", "geometry", "native-write"])).refine(
+    (groups) => new Set(groups).size === groups.length,
+    "Capability groups must be distinct",
+  ),
   key: ref,
   address: z.string().startsWith("/"),
   name: z.string(),
