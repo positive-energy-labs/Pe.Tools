@@ -8,10 +8,13 @@ public class TrayProfileRootTests {
     [Test]
     public void WebViewAndEdgeAppProfilesFollowTheProductHomeOverride() {
         var previous = Environment.GetEnvironmentVariable("PE_TOOLS_PRODUCT_HOME");
+        var previousLocal = Environment.GetEnvironmentVariable("LOCALAPPDATA");
         var home = Path.Combine(Path.GetTempPath(), "pe-tray-home-" + Guid.NewGuid().ToString("N"));
         try {
+            var local = Path.Combine(home, "local");
+            Environment.SetEnvironmentVariable("LOCALAPPDATA", local);
             Environment.SetEnvironmentVariable("PE_TOOLS_PRODUCT_HOME", null);
-            var owner = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Positive Energy", "Pe.Tools");
+            var owner = Path.Combine(local, "Positive Energy", "Pe.Tools");
             Assert.That(TrayContext.WebViewProfileRoot, Is.EqualTo(Path.Combine(owner, "tray-webview")));
             Assert.That(PwaLauncher.PrivateProfileRoot, Is.EqualTo(Path.Combine(owner, "edge-app")));
             Environment.SetEnvironmentVariable("PE_TOOLS_PRODUCT_HOME", home);
@@ -19,6 +22,7 @@ public class TrayProfileRootTests {
             Assert.That(PwaLauncher.PrivateProfileRoot, Is.EqualTo(Path.Combine(home, ".local-state", "edge-app")));
         } finally {
             Environment.SetEnvironmentVariable("PE_TOOLS_PRODUCT_HOME", previous);
+            Environment.SetEnvironmentVariable("LOCALAPPDATA", previousLocal);
         }
     }
 }
