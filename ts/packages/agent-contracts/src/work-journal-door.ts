@@ -100,7 +100,7 @@ export type WorkFeedState =
     };
 
 declare const receiptCursor: unique symbol;
-/** Host journal sequence of one receipt emission. Monotonic per host journal; only the host mints it. */
+/** Monotonic within one observation; never compare cursors across observations. */
 export type ReceiptCursor = number & { readonly [receiptCursor]: true };
 
 /** Receipts are host-authored ActionReceipts, never derived from a submission result in the browser.
