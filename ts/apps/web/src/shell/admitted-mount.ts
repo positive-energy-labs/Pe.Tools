@@ -1,3 +1,4 @@
+import { createAdmittedObservers } from "./admitted-observers";
 import { reviewChanges } from "./review-value";
 import { bindWork, workKey, workHandleSchema, writePreviewSchema } from "@pe/agent-contracts";
 import { createWorkJournal } from "../../../../packages/runtime/src/work-journal";
@@ -68,6 +69,7 @@ export const admittedMountBodyKinds: readonly string[] = Object.freeze([
   "pane",
   "seed",
   "transition",
+  "predicate",
 ]);
 
 /** Application services are installed once. Routes supply only admission and location. */
@@ -104,6 +106,7 @@ export function createRouteShell(services: KernelServices) {
           throw Error(`Unsupported admitted mount body slot: ${body.slot}`);
         }
       }
+      const observers = createAdmittedObservers(route.data, bindings.bodies);
       let readings: Record<string, ReadingSnapshot<unknown>> = {};
       const policy = createPagePolicy(
         route.data,
@@ -435,6 +438,11 @@ export function createRouteShell(services: KernelServices) {
             }
             for (const id of active.keys()) if (!used.has(id)) retire(id);
             readings = Object.freeze(next);
+            observers.update({
+              page: owner.read()!.page,
+              work: owner.read()!.work?.value ?? null,
+              readings,
+            });
             for (const [key, field] of Object.entries(route.data.fields)) {
               if (field.role === "subject")
                 pickerOptions[key] = freezePage(
@@ -795,6 +803,8 @@ export function createRouteShell(services: KernelServices) {
         revision: () => revision,
         invoke,
         picker: (field: string) => pickerOptions[field],
+        predicates: observers.predicates,
+        visible: observers.visible,
         initialRestore: transport.initial,
         review: (id: string) => {
           const review = reviews.get(id);
@@ -867,7 +877,7 @@ export function createRouteShell(services: KernelServices) {
           const current = resolve();
           if (!Object.hasOwn(route.data.panes, pane)) throw Error(`Unknown pane: ${pane}`);
           const declaration = route.data.panes[pane]!;
-          if (!declaration.body) return null;
+          if (!observers.visible(pane) || !declaration.body) return null;
           return current.bodies[declaration.body]!.run({
             page: ports.page,
             work: owner.read()!.work?.value ?? null,

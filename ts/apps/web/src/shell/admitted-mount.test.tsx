@@ -1318,12 +1318,12 @@ test("slot census refuses unsupported bodies at mount admission and invokes pick
     "pane",
     "seed",
     "transition",
+    "predicate",
   ]);
   for (const [slot, kind, dataPatch] of [
     ["salvage", "salvage", { salvage: "unsupported" }],
     ["subjectText", "subject", { subjectText: "unsupported" }],
     ["subject.show", "show", { subject: { ...data.subject, show: "unsupported" } }],
-    ["predicates.allowed", "predicate", { predicates: { allowed: "unsupported" } }],
   ] as const) {
     const t = transports();
     const run = vi.fn();
@@ -1634,4 +1634,31 @@ test("application target change remounts once and retires the old ordinary sourc
   } finally {
     Reflect.deleteProperty(applicationSources, "notes.read");
   }
+});
+
+test("global predicates drive layout gates on publication and never run during draw", async () => {
+  const predicate = vi.fn((ctx) => {
+    expect(Object.keys(ctx)).toEqual(["page", "work", "readings"]);
+    return ctx.page.query === "show" && ctx.readings.notes.current;
+  });
+  const route = await admitted(false, false, {
+    data: {
+      predicates: { allowed: "allowed" },
+      layout: { kind: "gate", when: "allowed", child: data.layout },
+    },
+    bodies: { allowed: { slot: "predicates.allowed", kind: "predicate", source, run: predicate } },
+  });
+  const t = transports(),
+    mount = createRouteShell(t.services).mount(route, locationPort().address);
+  closes.push(mount.close);
+  expect(mount.read("main")).toBeNull();
+  mount.controls.query("query", "show");
+  t.frames.at(-1)!(ready("yes"));
+  expect(mount.visible("main")).toBe(true);
+  const calls = predicate.mock.calls.length;
+  mount.read("main");
+  mount.read("main");
+  expect(predicate).toHaveBeenCalledTimes(calls);
+  mount.controls.query("query", "hide");
+  expect(mount.read("main")).toBeNull();
 });
