@@ -1,3 +1,6 @@
+import { useContext, useRef } from "react";
+import { RouteVisibility, useRouteActivity } from "../route/activity";
+import { createAdmittedPlace, type AdmittedPlace } from "./admitted-place";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import { z } from "zod";
 import { canonicalEnvironmentInput } from "../../../../packages/agent-contracts/src/route-kernel-environment";
@@ -205,20 +208,83 @@ export interface AdmittedPaneProps {
   route: AdmittedRoute;
   address: AdmittedAddressPort;
   pane: string;
+  writable?: boolean;
 }
 
 /** Composition runs after commit, including StrictMode cleanup/remount. No owner publishes in render. */
-export function AdmittedPane({ shell, route, address }: AdmittedPaneProps) {
+export function AdmittedPane({ shell, route, address, writable = true }: AdmittedPaneProps) {
+  const scope = useRouteActivity();
+  const visible = useContext(RouteVisibility);
+  const held = useRef<AdmittedPlace<AdmittedMount> | null>(null);
+  const lifetime = useRef({ shell, route, address });
   const [mounted, setMounted] = useState<{
     route: AdmittedRoute;
     shell: ReturnType<typeof createRouteShell>;
     mount: AdmittedMount;
   } | null>(null);
   useEffect(() => {
-    const mount = shell.mount(route, address);
+    let place = held.current;
+    if (
+      place &&
+      (lifetime.current.shell !== shell ||
+        lifetime.current.route !== route ||
+        lifetime.current.address !== address)
+    ) {
+      if (scope) scope.retire(place);
+      else place.dispose();
+      place = null;
+      held.current = null;
+    }
+    if (!place) {
+      lifetime.current = { shell, route, address };
+      const captured = scope
+        ? new URLSearchParams(
+            Object.entries(scope.search).filter(
+              (entry): entry is [string, string] => typeof entry[1] === "string",
+            ),
+          )
+        : address.read();
+      place = createAdmittedPlace<AdmittedMount>({
+        scope: scope ?? {
+          pathname: route.data.address,
+          search: Object.fromEntries(captured),
+          current: () => true,
+          retain() {},
+          retire() {},
+        },
+        address,
+        search: captured,
+        visible,
+      });
+      held.current = place;
+    }
+    place.setVisible(visible);
+    const mount = place.state(() => shell.mount(route, place.address, () => place.memory()));
+    mount.setVisible(visible);
+    mount.setWritable(writable);
+    const publish = () => {
+      place.remember(mount.page.read());
+      const roster = pickerOptionsSchema.safeParse(mount.picker(route.data.subject.field) ?? []);
+      place.publishSubject({
+        label: mount.subjectDisplay(),
+        roster: roster.success
+          ? roster.data.map((row) => ({ id: canonicalEnvironmentInput(row.id), label: row.label }))
+          : [],
+      });
+    };
+    publish();
+    const unsubscribe = mount.subscribe(publish);
     setMounted({ route, shell, mount });
-    return mount.close;
-  }, [shell, route, address]);
+    return () => {
+      unsubscribe();
+      place.setVisible(false);
+      mount.setVisible(false);
+      if (!scope) {
+        place.dispose();
+        held.current = null;
+      }
+    };
+  }, [shell, route, address, scope, visible, writable]);
   return mounted?.route === route && mounted.shell === shell
     ? createElement(Pane, { mount: mounted.mount, route, layout: route.data.layout })
     : null;

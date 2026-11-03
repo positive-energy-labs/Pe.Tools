@@ -1,3 +1,4 @@
+import { freezePage } from "./page-port";
 import { workFeedFailureMessage } from "../../../../packages/agent-contracts/src/work-journal-door";
 import { completion } from "./work-door-observation";
 import type { AdmittedRoute } from "../../../../packages/agent-contracts/src/route-kernel-admission";
@@ -25,7 +26,13 @@ export function createAdmittedWork(
       { kind: "ready" }
     >,
   ) => void,
+  connectReceipts: (scope: WorkScope) => void = () => {},
+  refusalsFor?: (
+    key: WorkScope["key"],
+  ) => Map<string, import("./application-work-registry").RefusedWorkEdit>,
 ) {
+  const localRefusals = new Map<string, import("./application-work-registry").RefusedWorkEdit>();
+  const refusals = (key = scope?.key) => (key && refusalsFor ? refusalsFor(key) : localRefusals);
   let stop = () => {};
   let scopeToken: ReturnType<Owner["capture"]>["scope"] | undefined;
   let feedToken: ReturnType<Owner["capture"]> | undefined;
@@ -57,6 +64,7 @@ export function createAdmittedWork(
       subject: snapshot.page[route.data.subject.field] as WorkScope["subject"],
     };
     const capturedScope = scope;
+    connectReceipts(scope);
     const token = owner.capture("work-feed");
     feedToken = token;
     let feedEnded = false;
@@ -114,7 +122,8 @@ export function createAdmittedWork(
   ): Observation<WorkWriteOutcome> => {
     if (!scope || !door || !ready || basis.workRevision === null) throw Error("Work unavailable");
     const original = scope;
-    const request = Object.freeze({
+    const retainedRefusals = refusals(original.key);
+    const request = freezePage({
       kind: "apply" as const,
       expectedRevision: basis.workRevision,
       patches: structuredClone(patches()),
@@ -130,8 +139,14 @@ export function createAdmittedWork(
               if (value.kind === "pending") return;
               if (value.kind === "accepted")
                 owner.acceptWork(invocation, { kind: "ack", write: value.ack });
-              else if (owner.read()?.scope === invocation.token.scope)
-                problem = value.refusal.error;
+              else {
+                retainedRefusals.set(invocation.id, {
+                  input: request,
+                  basis,
+                  refusal: value.refusal,
+                });
+                if (owner.read()?.scope === invocation.token.scope) problem = value.refusal.error;
+              }
               if (owner.read()?.scope === invocation.token.scope) notify();
               resolve(value);
             },
@@ -174,6 +189,38 @@ export function createAdmittedWork(
   return {
     sync,
     write,
+    refused: () =>
+      Object.freeze(
+        [...refusals()].map(([id, row]) =>
+          Object.freeze({
+            id,
+            input: freezePage(row.input),
+            basis: row.basis,
+            refusal: freezePage(row.refusal),
+          }),
+        ),
+      ),
+    discard(id: string) {
+      refusals().delete(id);
+      notify();
+    },
+    retry(
+      id: string,
+      currentBasis: import("../../../../packages/agent-contracts/src/route-kernel-page").InvocationToken,
+    ) {
+      const row = refusals().get(id);
+      if (!row || !owner.current(currentBasis) || !owner.current(row.basis))
+        throw Error(
+          "Retry needs the original, still-current basis; re-read and prepare changed Work explicitly",
+        );
+      return write(
+        () => row.input.patches,
+        row.basis,
+        row.input.press!,
+        row.input.label ?? "Edit Work",
+        row.basis,
+      );
+    },
     submit,
     reopen() {
       if (reloadRequired) return Promise.reject(Error(problem ?? "Reload this tab"));

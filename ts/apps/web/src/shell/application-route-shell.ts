@@ -1,4 +1,4 @@
-import { createElement, useMemo, useSyncExternalStore } from "react";
+import { createElement, useMemo, useRef, useSyncExternalStore } from "react";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { createRouteShell } from "./admitted-mount";
 import { AdmittedPane, type AdmittedPaneProps } from "./admitted-pane";
@@ -24,7 +24,10 @@ function ApplicationRouteShell({ route, address, pane }: Omit<AdmittedPaneProps,
     fixture !== null || route.data.needs === "nothing" ? {} : undefined,
     params.get("target"),
   );
-  const target = selected.resolution.kind === "resolved" ? selected.resolution.target : null;
+  const resolved = selected.resolution.kind === "resolved" ? selected.resolution.target : null;
+  const retained = useRef(resolved);
+  if (resolved) retained.current = resolved;
+  const target = resolved ?? retained.current;
   const targetKey = JSON.stringify(target);
   const shell = useMemo(
     () => createRouteShell(sourceRouteServices(admittedSources(route), { target: () => target })),
@@ -36,7 +39,7 @@ function ApplicationRouteShell({ route, address, pane }: Omit<AdmittedPaneProps,
       label: "Choose a document",
       says: selected.resolution.kind,
     });
-  return createElement(AdmittedPane, { key: targetKey, shell, route, address, pane });
+  return createElement(AdmittedPane, { shell, route, address, pane, writable: resolved !== null });
 }
 
 export { ApplicationRouteShell as applicationRouteShell };

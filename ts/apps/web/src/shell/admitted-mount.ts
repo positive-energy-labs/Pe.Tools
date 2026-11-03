@@ -1,3 +1,8 @@
+import { cancelAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import {
+  applicationWorkRegistry,
+  createApplicationWorkRegistry,
+} from "./application-work-registry";
 import { routeWorkSubject } from "../../../../packages/agent-contracts/src/route-work-subject";
 import { commandResultDecoder, type CommandResultDecode } from "./admitted-command-result";
 import type { InvocationToken } from "../../../../packages/agent-contracts/src/route-kernel-page";
@@ -117,18 +122,19 @@ type PresentationEvidence = Readonly<{
 }>;
 
 /** Application services are installed once. Routes supply only admission and location. */
-export function createRouteShell(services: KernelServices) {
-  const liveDoor = services.work ?? createWorkFeedClient();
-  const journals = new Map<string, ReturnType<typeof createWorkJournal>>();
-  const journalFor = (key: import("@pe/agent-contracts").WorkKey) => {
-    const id = workKey(key);
-    let journal = journals.get(id);
-    if (!journal) {
-      journal = createWorkJournal(key);
-      journals.set(id, journal);
-    }
-    return journal;
-  };
+const applicationWorkDoor = createWorkFeedClient();
+const registriesByDoor = new WeakMap<object, ReturnType<typeof createApplicationWorkRegistry>>();
+export function createRouteShell(
+  services: KernelServices,
+  registryOverride?: ReturnType<typeof createApplicationWorkRegistry>,
+) {
+  const liveDoor = services.work ?? applicationWorkDoor;
+  let scopedRegistry = registriesByDoor.get(liveDoor);
+  if (!scopedRegistry) {
+    scopedRegistry = services.work ? createApplicationWorkRegistry() : applicationWorkRegistry;
+    registriesByDoor.set(liveDoor, scopedRegistry);
+  }
+  const workRegistry = registryOverride ?? scopedRegistry;
   return {
     mount<G extends RouteGraphJson, S extends SchemaTable, E extends EntryTable, Render>(
       admitted: AdmittedRoute<G, S, E, Render>,
@@ -224,19 +230,39 @@ export function createRouteShell(services: KernelServices) {
             )
           : null,
       });
-      const fixtureJournals = new Map<string, ReturnType<typeof createWorkJournal>>();
-      const mountJournal =
+      const registryForWork =
         fixtureName(Object.fromEntries(address.read())) === null
-          ? journalFor
-          : (key: import("@pe/agent-contracts").WorkKey) => {
-              const id = workKey(key);
-              let journal = fixtureJournals.get(id);
-              if (!journal) {
-                journal = createWorkJournal(key);
-                fixtureJournals.set(id, journal);
-              }
-              return journal;
-            };
+          ? workRegistry
+          : createApplicationWorkRegistry();
+      const leases = new Map<
+        string,
+        ReturnType<typeof registryForWork.acquire> & { released?: boolean }
+      >();
+      const entryFor = (key: import("@pe/agent-contracts").WorkKey) => {
+        const id = workKey(key);
+        let lease = leases.get(id);
+        const current = owner.read()?.scope.identity.work;
+        const shown = current && workKey(current) === id;
+        if (shown && !closed) {
+          for (const [other, held] of leases)
+            if (other !== id && !held.released) {
+              held.released = true;
+              held.release();
+            }
+        }
+        if (!lease || (lease.released && shown && !closed)) {
+          lease = registryForWork.acquire(key);
+          leases.set(id, lease);
+          const unsubscribe = lease.entry.subscribe(() => notify());
+          const release = lease.release.bind(lease);
+          lease.release = () => {
+            unsubscribe();
+            release();
+          };
+        }
+        return lease.entry;
+      };
+      const mountJournal = (key: import("@pe/agent-contracts").WorkKey) => entryFor(key).journal;
       const workSpec = route.data.work
         ? {
             route: route.data.work.route,
@@ -285,6 +311,8 @@ export function createRouteShell(services: KernelServices) {
         }),
       });
       let closed = false;
+      let visible = true;
+      let writable = true;
       const listeners = new Set<() => void>();
       let revision = 0;
       const notify = () => {
@@ -360,11 +388,10 @@ export function createRouteShell(services: KernelServices) {
         door,
         () => schedule(),
         (key, state) => {
-          mountJournal(key).restoreView(
-            { revision: state.snapshot.revision, doc: state.snapshot.value },
-            state.history,
-          );
+          entryFor(key).restore(state);
         },
+        (scope) => entryFor(scope.key).connect(scope, door!),
+        (key) => entryFor(key).refusedEdits,
       );
       let savedRecovery: { from: string; value: unknown } | null = null;
       let recoverySentence: string | null = null;
@@ -442,7 +469,7 @@ export function createRouteShell(services: KernelServices) {
       let again = false;
       const schedule = () => {
         if (drawing) throw Error("Admitted observers cannot run during render");
-        if (closed) return;
+        if (closed || !visible) return;
         if (scheduling) {
           again = true;
           return;
@@ -715,6 +742,7 @@ export function createRouteShell(services: KernelServices) {
         if (drawing) throw Error("Admitted action cannot run during render");
         if (presenting) throw Error("Admitted action cannot run during presentation");
         if (closed) throw Error("Mount closed");
+        if (!visible || !writable) throw Error("Place is not writable");
       };
       const place = (
         pane: string,
@@ -748,6 +776,10 @@ export function createRouteShell(services: KernelServices) {
         return renderedBasis;
       };
       const landings = new Map<string, CommandResultDecode>();
+      const nativeAttempts = new Map<
+        string,
+        { input: unknown; basis: InvocationToken; retry: () => unknown }
+      >();
       const invoke = (id: string, input: unknown, basis?: InvocationToken) => {
         action();
         resolve();
@@ -880,6 +912,7 @@ export function createRouteShell(services: KernelServices) {
           entry.input.parse(intent);
           preview = freezePage({ work: accepted.work, input: intent });
           // ActionJournal owns the existing Reject? consent window after this admission.
+          let commandId = invocation.id;
           send = () => {
             if (!door) throw Error("Native commands unavailable");
             const submission = (
@@ -891,10 +924,23 @@ export function createRouteShell(services: KernelServices) {
                 : (command: Parameters<NonNullable<KernelServices["submitNative"]>>[0]) =>
                     door.submit(command)
             )({
-              id: invocation.id,
+              id: commandId,
               key: declaration.entry,
               target: target ?? { kind: "host" },
               input: intent,
+            });
+            nativeAttempts.set(submission.handle.id, {
+              input: freezePage(intent),
+              basis: invocation,
+              retry: () => {
+                const next = owner.invocation(
+                  owner.capture("command-retry"),
+                  invocation.dependencies,
+                );
+                if (!next.ok) throw Error(next.reason);
+                commandId = next.value.id;
+                return send();
+              },
             });
             if (declaration.lands) {
               const decode = commandResultDecoder(submission, bindings.entries);
@@ -1049,6 +1095,7 @@ export function createRouteShell(services: KernelServices) {
           : null;
       };
       const restore = async (direction: "undo" | "redo", press?: string) => {
+        action();
         resolve();
         const current = journal();
         if (closed || !work.ready() || !current) throw Error("Work unavailable");
@@ -1245,6 +1292,7 @@ export function createRouteShell(services: KernelServices) {
         environment.close();
         plan.close();
         registration.deactivate();
+        for (const lease of leases.values()) lease.release();
         listeners.clear();
       };
       try {
@@ -1278,6 +1326,18 @@ export function createRouteShell(services: KernelServices) {
           };
         },
         revision: () => revision,
+        setWritable(next: boolean) {
+          writable = next;
+        },
+        setVisible(next: boolean) {
+          if (closed || visible === next) return;
+          visible = next;
+          if (!visible) {
+            for (const id of active.keys()) retire(id);
+            for (const id of Object.keys(route.data.readings)) geometry.cancel(id);
+          } else schedule();
+        },
+        dispose: close,
         invoke,
         place,
         picker: (field: string) => pickerOptions[field],
@@ -1384,6 +1444,61 @@ export function createRouteShell(services: KernelServices) {
         workProblem: work.problem,
         workFailure: work.failure,
         history,
+        reread: () => work.reopen(),
+        refusedEdits: work.refused,
+        retryEdit: (id: string, basis: InvocationToken) => work.retry(id, basis),
+        discardEdit: (id: string) => work.discard(id),
+        retryCommand(id: string, currentBasis: InvocationToken) {
+          action();
+          const original = nativeAttempts.get(id);
+          const key = owner.read()?.scope.identity.work;
+          const receipt = key
+            ? entryFor(key)
+                .activity()
+                .find((row) => row.id === id)
+            : undefined;
+          if (!original || !owner.current(original.basis) || !owner.current(currentBasis))
+            throw Error(
+              "Retry needs the original, still-current basis; re-read and prepare explicitly",
+            );
+          if (!receipt || !("notDispatched" in receipt && receipt.notDispatched))
+            throw Error(
+              "Only a confirmed undispatched command can retry; reconcile other outcomes",
+            );
+          return original.retry();
+        },
+        discardCommand(id: string) {
+          nativeAttempts.delete(id);
+          notify();
+        },
+        stopCommand(id: string) {
+          action();
+          const key = owner.read()?.scope.identity.work;
+          const receipt = key
+            ? entryFor(key)
+                .activity()
+                .find((row) => row.id === id)
+            : undefined;
+          if (!receipt || !["waiting", "running", "unknown"].includes(receipt.state))
+            throw Error("Command is not pending in this Work");
+          return cancelAction(id);
+        },
+        commands: () => {
+          const key = owner.read()?.scope.identity.work;
+          return key ? entryFor(key).activity() : [];
+        },
+        receiptWindow: () => {
+          const key = owner.read()?.scope.identity.work;
+          return key ? entryFor(key).receiptWindow() : null;
+        },
+        timeline: () => {
+          const key = owner.read()?.scope.identity.work;
+          return key ? entryFor(key).timeline() : [];
+        },
+        activity: () => {
+          const key = owner.read()?.scope.identity.work;
+          return key ? entryFor(key).activity() : [];
+        },
         journal: () => journal()?.read() ?? null,
         journalRefusal: () =>
           !work.ready()

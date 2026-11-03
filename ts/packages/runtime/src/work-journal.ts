@@ -160,14 +160,22 @@ export function createWorkJournal(key: WorkKey) {
   const writes = new Map<string, ActionStatus>();
   const record = (entry: TimelineEntry): void => {
     const receipt = (entry.basis as { receipt?: ActionStatus } | undefined)?.receipt;
-    if (receipt?.effects.length) writes.set(receipt.id, structuredClone(receipt));
+    if (receipt?.consumes.length) writes.set(receipt.id, structuredClone(receipt));
     const barrier = receiptBarrier(entry);
     if (!barrier) return;
     for (const step of [...undo, ...redo])
       if (
         !step.barrier &&
-        step.transitions.some((transition) =>
-          transition.paths.some((path) => barrier.paths.some((other) => overlaps(path, other))),
+        step.transitions.some(
+          (transition) =>
+            transition.paths.some((path) => barrier.paths.some((other) => overlaps(path, other))) &&
+            (!receipt ||
+              receipt.consumes.some(
+                (item) =>
+                  item.kind === "work" &&
+                  workKey(item.probe.handle.key) === identity &&
+                  transition.revision <= item.probe.handle.revision,
+              )),
         )
       )
         step.barrier = barrier;

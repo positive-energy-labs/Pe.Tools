@@ -1,3 +1,4 @@
+import { RouteActivity, RouteVisibility } from "../route/activity";
 import { actionReceiptSchema } from "@pe/agent-contracts";
 // @vitest-environment jsdom
 import { createElement, StrictMode } from "react";
@@ -912,6 +913,18 @@ test("stale-base refuses without recomputing or retrying the Work edit", async (
     refusal: { code: "stale_revision", revision: 1 },
   });
   expect(mount.work()?.value).toEqual({ amount: 10 });
+  const refused = mount.refusedEdits()[0]!;
+  expect(refused.input).toMatchObject({
+    expectedRevision: 0,
+    patches: [{ path: ["amount"], value: 2 }],
+  });
+  expect(Object.isFrozen(refused.input.patches)).toBe(true);
+  expect(() => mount.retryEdit(refused.id, mount.workBasis()!)).toThrow(
+    /original, still-current basis/,
+  );
+  expect(mount.work()?.value).toEqual({ amount: 10 });
+  mount.discardEdit(refused.id);
+  expect(mount.refusedEdits()).toEqual([]);
 });
 
 test("query validates and delivers invocation input without changing Page; new runs supersede", async () => {
@@ -2251,6 +2264,11 @@ test("migration bodies stay on the host; mount exposes typed registration refusa
   const door: WorkJournalDoor = {
     lifetime: "subscription",
     open,
+    receipts: () => ({
+      subscribe() {
+        return () => {};
+      },
+    }),
     submitWork: () => {
       throw Error("unavailable");
     },
@@ -2629,4 +2647,63 @@ test("a changed declared query argument retires its in-flight completion", async
   departed(ready("late"));
   expect((mount.read("main") as any).readings.notes.current).toBe(false);
   expect(t.releases).toHaveBeenCalledOnce();
+});
+
+test("hide and show retains the admitted Page, accepted readings and Work history", async () => {
+  const f = await historyFixture();
+  await settle(f.mount.invoke("change", 2) as Observation<WorkWriteOutcome>);
+  const page = f.mount.page.read();
+  const moves = f.mount.journal()!.moves;
+  f.mount.setVisible(false);
+  expect(f.mount.page.read()).toEqual(page);
+  expect(f.mount.journal()!.moves).toEqual(moves);
+  expect(() => f.mount.invoke("change", 3)).toThrow("Place is not writable");
+  f.mount.setVisible(true);
+  expect(f.mount.page.read()).toEqual(page);
+  expect(f.mount.journal()!.moves).toEqual(moves);
+  expect((await f.mount.history!.undo()).ok).toBe(true);
+});
+
+test("retained pane releases leases on hide and reuses its Page and history on show", async () => {
+  const f = await historyFixture();
+  const owners = new Set<{ dispose(): void }>();
+  const scope = {
+    pathname: "/note",
+    search: {},
+    current: () => true,
+    retain: (owner: { dispose(): void }) => {
+      owners.add(owner);
+    },
+    retire: (owner: { dispose(): void }) => {
+      owners.delete(owner);
+      owner.dispose();
+    },
+  };
+  const spy = vi.spyOn(f.shell, "mount");
+  const { address } = locationPort();
+  const view = (visible: boolean) =>
+    createElement(
+      RouteActivity.Provider,
+      { value: scope },
+      createElement(
+        RouteVisibility.Provider,
+        { value: visible },
+        createElement(AdmittedPane, { shell: f.shell, route: f.route, address, pane: "main" }),
+      ),
+    );
+  const rendered = render(view(true));
+  const mount = spy.mock.results[0]!.value;
+  await act(async () => {
+    mount.controls.query("query", "retained");
+    await settle(mount.invoke("change", 2) as Observation<WorkWriteOutcome>);
+  });
+  const moves = mount.journal()!.moves;
+  rendered.rerender(view(false));
+  expect(mount.page.read().query).toBe("retained");
+  rendered.rerender(view(true));
+  expect(spy).toHaveBeenCalledOnce();
+  expect(mount.page.read().query).toBe("retained");
+  expect(mount.journal()!.moves).toEqual(moves);
+  rendered.unmount();
+  for (const owner of owners) owner.dispose();
 });
