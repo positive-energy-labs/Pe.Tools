@@ -1,8 +1,14 @@
 import type { CommandRefusal } from "./command.ts";
 import type { AdmittedRoute } from "./route-kernel-admission.ts";
 import type { JournalCommandHandle } from "./route-kernel-environment.ts";
-import type { IdentityId, IdentityKind, Many, ScopeIdentity } from "./route-kernel-page.ts";
-import type { WorkKey, WorkWriteAck } from "./route-state.ts";
+import type {
+  IdentityId,
+  IdentityKind,
+  InvocationBasis,
+  Many,
+  ScopeIdentity,
+} from "./route-kernel-page.ts";
+import type { RouteStateWriteResult, WorkKey, WorkWrite, WorkWriteAck } from "./route-state.ts";
 import type { ActionAdmission } from "./semantic-actions.ts";
 
 declare const journalCommandId: unique symbol;
@@ -32,7 +38,10 @@ export interface WorkSnapshot {
 
 export type WorkFeedState =
   | { readonly kind: "pending" }
-  | { readonly kind: "failed"; readonly failure: { readonly code: string; readonly message: string } }
+  | {
+      readonly kind: "failed";
+      readonly failure: { readonly code: string; readonly message: string };
+    }
   | { readonly kind: "ready"; readonly snapshot: WorkSnapshot }
   | { readonly kind: "ack"; readonly ack: WorkWriteAck }
   | {
@@ -74,6 +83,32 @@ export interface JournalSubmission {
   readonly accepted: Observation<AcceptedResult>;
 }
 
+type WorkWriteFailure = Extract<RouteStateWriteResult, { ok: false }>;
+type WorkWriteRefusalData<T extends WorkWriteFailure> = T extends WorkWriteFailure
+  ? Omit<T, "ok" | "agentHint" | "code"> & {
+      readonly code?: Exclude<T["code"], "stale_revision">;
+      readonly error: string;
+      readonly hint: string;
+    }
+  : never;
+
+/** Mirrors refused route writes as data. Families' agentHint becomes error/hint.
+ * A stale expectedRevision always carries the current revision so the caller can rebase. */
+export type WorkWriteRefusal =
+  | WorkWriteRefusalData<WorkWriteFailure>
+  | {
+      readonly kind: "refused";
+      readonly code: "stale_revision";
+      readonly error: string;
+      readonly hint: string;
+      readonly revision: WorkWriteAck["revision"];
+    };
+
+export type WorkWriteOutcome =
+  | { readonly kind: "pending" }
+  | { readonly kind: "accepted"; readonly ack: WorkWriteAck }
+  | { readonly kind: "refused"; readonly refusal: WorkWriteRefusal };
+
 export interface WorkJournalDoor {
   readonly lifetime: "subscription";
   /** Subscribe to acks BEFORE acquiring the snapshot and buffer across that boundary.
@@ -92,6 +127,22 @@ export interface WorkJournalDoor {
    * never journal-owned commands.
    */
   open(scope: WorkScope): Observation<WorkFeedState>;
+  /** TARGET ownership boundary: kind: work verbs use submitWork. The Work store owns
+   * revisioned patches and their acks; ActionJournal owns commands that reach Revit
+   * and need consent. Work is always open to Pea. Routing Work keystrokes through
+   * the journal would impose consent and journal machinery on Work edits.
+   * invocation preserves the causal parent (ADR 0029 rule 14). The host stamps
+   * authorship from the principal; clients never supply it.
+   * A Work write is not a journal command and has no JournalCommandHandle or
+   * accepted(id) recovery path. A departed mount recovers acks by revision from
+   * open()'s feed. The observation emits pending, then accepted or refused and ends. */
+  submitWork(
+    scope: WorkScope,
+    write: WorkWrite,
+    invocation: InvocationBasis,
+  ): Observation<WorkWriteOutcome>;
+  /** Semantic and native commands that reach Revit use submit; kind: work verbs
+   * use submitWork, preserving the Work store's separate durable ownership. */
   submit(command: ActionAdmission): JournalSubmission;
   /** Reconcile a departed mount by its original command id. Retention is bounded per
    * ADR 0029 rule 15; an evicted id returns a rejected result with failure `expired`.
