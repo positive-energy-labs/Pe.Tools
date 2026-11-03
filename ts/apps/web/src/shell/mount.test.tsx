@@ -952,7 +952,7 @@ test("settled partial and late command receipts invalidate their aliases; docume
   });
 });
 
-test("a detached command's later receipt uses its frozen Work even when the adapter currently shows another Work", async () => {
+test('detached receipt stays on frozen Work: "unconsumed edits remain undoable; an undo that would cross a committed native write is blocked by its receipt barrier"', async () => {
   const f = await fixture();
   const owner = createGraphMount(f.graph, f.adapters);
   owner.connect();
@@ -975,11 +975,25 @@ test("a detached command's later receipt uses its frozen Work even when the adap
   await f.refresh(second);
   await owner.control("edit").run();
   f.late()!(receipt(), second);
-  expect(owner.timeline.read().at(-1)?.basis).toMatchObject({ workKey: workKey(key) });
-  expect(await owner.restore("undo")).toMatchObject({ ok: true });
-  expect(await owner.journal(key).undo((request) => f.adapters.write(key, request))).toMatchObject({
-    code: "barrier",
+  expect(owner.timeline.read().at(-1)?.basis).toEqual({
+    workKey: workKey(key), receipt: receipt(), receiptId: "native-1",
   });
+  expect(owner.journal(key).read().undo).toMatchObject([
+    { transitions: [{ revision: 1 }], barrier: { receiptId: "native-1" } },
+    { transitions: [{ revision: 2, forward: [{ path: ["writeIntent", "takeoffs.initialize"] }] }] },
+  ]);
+  expect(await owner.restore("undo")).toMatchObject({ ok: true, revision: 2 });
+  expect(f.scope().work).toMatchObject({ handle: { key: second }, doc: { rows: { slot: { n: 1 } } } });
+  expect(await owner.journal(key).undo((request) => f.adapters.write(key, request))).toMatchObject({
+    ok: true, revision: 3,
+  });
+  expect(f.writes.at(-1)).toMatchObject({ kind: "restore", restoreOf: 2, expectedRevision: 2 });
+  const before = f.writes.length;
+  expect(await owner.journal(key).undo((request) => f.adapters.write(key, request))).toMatchObject({
+    ok: false, code: "barrier", barrier: { receiptId: "native-1" },
+  });
+  expect(f.writes).toHaveLength(before);
+  expect((await f.workspace.read(key, key.route))!.doc).toMatchObject({ rows: { slot: { n: 2 } }, writeIntent: {} });
 });
 
 test("graph field policies project Page to URL and Back restores its stage without replaying Work", async () => {
