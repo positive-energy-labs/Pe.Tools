@@ -5,7 +5,6 @@ import { build, type InlineConfig, type Plugin } from "vite-plus";
 import ts from "typescript";
 import { canonicalRouteJson } from "../../packages/agent-contracts/src/route-graph.ts";
 import { RouteGraphJson } from "../../packages/agent-contracts/src/route-kernel-data.ts";
-import type { RouteFingerprintInput } from "../../packages/agent-contracts/src/route-kernel-admission.ts";
 
 /** Text inputs normalize CRLF to LF only; bare CR is significant. Binary assets stay exact. */
 export const routeSourceHash = (source: string | Uint8Array) =>
@@ -24,18 +23,8 @@ export interface SourceMember {
   readonly sha256: string;
 }
 /** Source consistency and exact package bytes are distinct evidence, never interchangeable. */
-export type RouteFingerprint =
-  | {
-      readonly source: "builtin-closure";
-      readonly version: 1;
-      readonly data: RouteGraphJson;
-      readonly hostVersion: string;
-      readonly variants: readonly { readonly client: "web" | "pea"; readonly entry: string }[];
-      readonly modules: readonly SourceMember[];
-      readonly inputs: readonly SourceMember[];
-      readonly externals: readonly SourceMember[];
-    }
-  | { readonly source: "pod-bytes"; readonly version: 1; readonly artifact: RouteFingerprintInput };
+export type { RouteFingerprintEnvelope as RouteFingerprint } from "../../packages/agent-contracts/src/route-module.ts";
+import type { RouteFingerprintEnvelope as RouteFingerprint } from "../../packages/agent-contracts/src/route-module.ts";
 export const fingerprintRouteSource = (envelope: RouteFingerprint) =>
   exactHash(Buffer.from(`pe.route.fingerprint.v1\n${canonicalRouteJson(envelope)}`));
 

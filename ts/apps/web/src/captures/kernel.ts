@@ -8,6 +8,7 @@ import { identityCodecs } from "../shell/page-port";
 
 export const capturesData = {
   version: 1,
+  capabilities: [],
   key: "captures",
   address: "/captures",
   name: "Captures",

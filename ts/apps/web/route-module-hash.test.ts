@@ -6,12 +6,9 @@ import { routeSourceHash } from "./route-source-hash.ts";
 
 const id = fileURLToPath(new URL("./src/grilles/graph.ts", import.meta.url));
 
-test("build stamps actual source bytes rather than the directory hash", async () => {
-  const source = readFileSync(id, "utf8");
+test("the retired graph-only transform never injects moduleHash", async () => {
   const transform = routeModuleHash().transform as Function;
-  const result = await transform(source, id);
-  expect(result.code).toContain(`moduleHash: "${routeSourceHash(source)}"`);
-  expect(result.code).not.toContain("ROUTE_DIRECTORY");
+  expect(await transform(readFileSync(id, "utf8"), id)).toBeUndefined();
 });
 
 test("source identity normalizes CRLF for strings, Buffers and Uint8Arrays", () => {
@@ -25,7 +22,7 @@ test("source identity normalizes CRLF for strings, Buffers and Uint8Arrays", () 
 
 test("startup and production bundling wait for route generation", async () => {
   const generate = vi.fn(async () => {});
-  await (routeModuleHash(generate).buildStart as Function)();
+  await (routeModuleHash(generate).buildStart as Function).call({ addWatchFile: vi.fn() });
   expect(generate).toHaveBeenCalledOnce();
 });
 
@@ -54,7 +51,9 @@ test("generation failure stops bundling and never reloads a stale directory", as
   const plugin = routeModuleHash(async () => {
     throw Error("bad graph");
   });
-  await expect((plugin.buildStart as Function)()).rejects.toThrow("bad graph");
+  await expect((plugin.buildStart as Function).call({ addWatchFile: vi.fn() })).rejects.toThrow(
+    "bad graph",
+  );
   const send = vi.fn();
   await expect(
     (plugin.handleHotUpdate as Function)({ file: id, server: { ws: { send } } }),
@@ -70,7 +69,7 @@ test("requests during graph regeneration wait for the matching directory", async
         finish = resolve;
       }),
   );
-  const start = (plugin.buildStart as Function)();
+  const start = (plugin.buildStart as Function).call({ addWatchFile: vi.fn() });
   await Promise.resolve();
   let transformed = false;
   const request = (plugin.transform as Function)(readFileSync(id, "utf8"), id).then(() => {

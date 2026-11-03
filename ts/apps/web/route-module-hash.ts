@@ -1,4 +1,3 @@
-import { routeSourceHash } from "./route-source-hash.ts";
 import { readFileSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -146,7 +145,6 @@ export async function buildRouteArtifact(options: {
 }
 
 const exec = promisify(execFile);
-const graphFile = /[\\/]src[\\/][^/\\]+[\\/]graph\.ts$/;
 async function checkRoutes() {
   // A fresh process avoids retaining jiti's previously imported graph declarations during watch.
   await exec(process.execPath, [
@@ -194,15 +192,11 @@ export function routeModuleHash(check = checkRoutes): Plugin {
       server.ws.send({ type: "full-reload" });
       return [];
     },
-    async transform(code, id) {
+    // TODO: S2 retire legacy-route-door builtinAdmission's graph.moduleHash requirement.
+    // Legacy graphs now refuse their missing source stamp; this plugin mints no admission.
+    async transform() {
       // A request arriving during verification must not see a new graph with the old directory.
       await pending;
-      if (!graphFile.test(id)) return;
-      const hash = routeSourceHash(readFileSync(id));
-      return {
-        code: code.replace(/\bdirectory\s*:/g, `moduleHash: "${hash}", directory:`),
-        map: null,
-      };
     },
   };
 }

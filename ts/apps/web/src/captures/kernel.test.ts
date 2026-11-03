@@ -13,7 +13,7 @@ const source: UseSource = {
   kind: "use",
   open: (_, deliver) => deliver({ kind: "complete", value: [], revision: 1 }),
 };
-test("the shipped artifact mounts, restores subject and selection together, and retires", async () => {
+test("the source-imported builtin mounts, restores subject and selection together, and retires", async () => {
   const route = await admitCaptures();
   const selected = [{ kind: "capture", id: captureId("second") }];
   const mounted = createCapturesMount(
@@ -49,29 +49,8 @@ test("a stale stamp or copied handle cannot mount", async () => {
   const copied: typeof route = { data: route.data, fingerprint: route.fingerprint };
   expect(() => mountAdmittedRoute(copied, route.fingerprint)).toThrow(/admission/);
 });
-test.each(["body", "schema", "hash"])(
-  "a mutated %s refuses before evaluation or mount",
-  async (kind) => {
-    const input = structuredClone(capturesArtifact);
-    if (kind === "hash") input.artifact.executables[0]!.members[0]!.sha256 = "0".repeat(64);
-    else {
-      const member = input.executables[0]!.members[0]!;
-      // An executable body or schema edit invalidates the exact shipped-byte stamp.
-      member.bytes = new TextEncoder().encode(
-        new TextDecoder().decode(member.bytes) +
-          (kind === "body"
-            ? "\nmodule.bodies.main.run = () => null;\n"
-            : "\nmodule.schemas.subject = null;\n"),
-      );
-    }
-    const evaluate = vi.fn(async () => {
-      throw Error("Unverified code evaluated");
-    });
-    await expect(admitCaptures(input, evaluate)).rejects.toThrow(/fingerprint/);
-    expect(evaluate).not.toHaveBeenCalled();
-  },
-);
-test("admitted tables cannot replace bodies or schemas after byte verification", async () => {
+
+test("admitted tables cannot replace bodies or schemas after source admission", async () => {
   const route = await admitCaptures();
   const mounted = createCapturesMount(route, route.fingerprint, source, {}, () => {});
   cleanups.push(() => mounted.close());

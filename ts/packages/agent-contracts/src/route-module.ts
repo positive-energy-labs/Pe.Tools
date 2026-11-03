@@ -194,7 +194,7 @@ export async function routeFingerprint(input: RouteFingerprintInput): Promise<Ro
  * Missing/dynamic dependencies must produce resolved:false. Both client variants belong here.
  * Contract bytes include catalog/schema/codec/kernel implementations or their pinned bundle.
  * This is loader evidence, not a sandbox for a malicious JavaScript loader. */
-export interface RouteAdmissionEvidence {
+export interface PackageRouteAdmissionEvidence {
   /** Exact exports evaluated by the loader from the byte closure below. Admission
    * captures their references before hashing, so a replacement function cannot reuse a stamp. */
   readonly loadedBindings: unknown;
@@ -209,7 +209,108 @@ export interface RouteAdmissionEvidence {
   }[];
   readonly catalog: readonly CatalogLink[];
 }
+/** Build-owned source inventory. These are deployment consistency witnesses, not package bytes. */
+export interface BuiltinClosure {
+  readonly source: "builtin-closure";
+  readonly version: 1;
+  readonly data: KernelGraph;
+  readonly hostVersion: string;
+  readonly variants: readonly { readonly client: "web" | "pea"; readonly entry: string }[];
+  readonly modules: readonly { readonly id: string; readonly sha256: string }[];
+  readonly inputs: readonly { readonly id: string; readonly sha256: string }[];
+  readonly externals: readonly { readonly id: string; readonly sha256: string }[];
+}
+export type RouteFingerprintEnvelope =
+  | BuiltinClosure
+  | {
+      readonly source: "pod-bytes";
+      readonly version: 1;
+      readonly artifact: RouteFingerprintInput;
+    };
+export async function builtinClosureFingerprint(
+  closure: BuiltinClosure,
+): Promise<RouteFingerprint> {
+  const decoded = decodeRouteGraph(closure.data);
+  if (!decoded.ok) throw Error("Invalid builtin declaration");
+  for (const list of [closure.modules, closure.inputs, closure.externals]) {
+    if (new Set(list.map((member) => member.id)).size !== list.length)
+      throw Error("Duplicate builtin closure member");
+    for (const member of list) sha.parse(member.sha256);
+  }
+  if (
+    !closure.variants.length ||
+    closure.variants.some(
+      (variant) => !closure.modules.some((member) => member.id === variant.entry),
+    )
+  )
+    throw Error("Builtin entry is absent from source closure");
+  return (await hashBytes(
+    new TextEncoder().encode(
+      `pe.route.fingerprint.v1\n${canonicalRouteJson({ ...closure, data: decoded.data })}`,
+    ),
+  )) as RouteFingerprint;
+}
+const sourceEvidence = new WeakMap<
+  object,
+  {
+    module: unknown;
+    closure: BuiltinClosure;
+    fingerprint: string;
+    catalog: readonly CatalogLink[];
+  }
+>();
+interface SourceRouteAdmissionEvidence {
+  readonly source: "builtin-closure";
+}
+export type RouteAdmissionEvidence = PackageRouteAdmissionEvidence | SourceRouteAdmissionEvidence;
+/** Trusted shell composition only. Authors supply keys, never a builtin receipt.
+ * Like the byte evaluator, the build inventory is trusted code, not a JavaScript sandbox. */
+export function createBuiltinRouteInventory<
+  const T extends Record<
+    string,
+    {
+      readonly module: unknown;
+      readonly closure: { readonly envelope: BuiltinClosure; readonly fingerprint: string };
+      readonly catalog: readonly CatalogLink[];
+    }
+  >,
+>(inventory: T) {
+  const entries = new Map(
+    Object.entries(inventory).map(([key, entry]) => {
+      const receipt: SourceRouteAdmissionEvidence = Object.freeze({ source: "builtin-closure" });
+      sourceEvidence.set(receipt, {
+        module: routeBindingSchema.parse(entry.module),
+        closure: structuredClone(entry.closure.envelope),
+        fingerprint: entry.closure.fingerprint,
+        catalog: entry.catalog,
+      });
+      return [
+        key,
+        { receipt, module: entry.module, fingerprint: entry.closure.fingerprint },
+      ] as const;
+    }),
+  );
+  return Object.freeze({
+    async prepare(key: keyof T & string, expectedFingerprint: string) {
+      const entry = entries.get(key);
+      if (!entry || entry.fingerprint !== expectedFingerprint)
+        throw Error("Stale or unknown builtin stamp");
+      return createRouteAdmission(entry.receipt);
+    },
+  });
+}
 export interface CheckedRouteAdmission extends RouteAdmissionPort {
+  admit<
+    G extends KernelGraph,
+    S extends SchemaTable,
+    E extends EntryTable,
+    B extends BodyBindings<G, S, E, unknown>,
+  >(
+    module: Omit<KernelModule<G, S, E>, "bodies" | "artifact"> & {
+      readonly bodies: B;
+      readonly artifact?: RouteFingerprintInput;
+    },
+  ): RouteAdmission<G, S, E, RouteBodyRender<B>>;
   /** Raw JSON/JS gets a runtime-safe handle, never fabricated literal inference. */
   admitUnknown(module: unknown): RouteAdmission<KernelGraph>;
 }
@@ -301,60 +402,71 @@ export class AdmittedRoute<
     let envelope: RouteFingerprintInput | undefined;
     let fingerprint: RouteFingerprint | undefined;
     let loadedBindings: RouteBindings | undefined;
+    let source: BuiltinClosure | undefined;
     let catalog: readonly CatalogLink[] = [];
     try {
-      envelope = fingerprintEnvelope(evidence.artifact);
-      loadedBindings = routeBindingSchema.parse(evidence.loadedBindings);
-      // Copy all loader evidence before the first await; callers cannot race verification.
-      const contracts = evidence.contracts.map((item) => ({
-        id: item.id,
-        bytes: new Uint8Array(item.bytes),
-      }));
-      const executables = evidence.executables.map((item) => ({
-        ...item,
-        members: item.members.map((member) => ({
-          path: member.path,
-          bytes: new Uint8Array(member.bytes),
-        })),
-      }));
-      const expected = sha.parse(evidence.expectedFingerprint);
-      catalog = evidence.catalog.map((entry) => ({
-        ...entry,
-        touches: [...entry.touches],
-        uses: entry.uses.map((use) => (typeof use === "string" ? use : { ...use })),
-      }));
-      if (executables.some((executable) => !executable.resolved))
-        throw Error("Unresolved executable dependency closure");
-      const actual: RouteFingerprintInput = {
-        version: 1,
-        data: envelope.data,
-        contracts: await Promise.all(
-          contracts.map(async (item) => ({ id: item.id, sha256: await hashBytes(item.bytes) })),
-        ),
-        executables: await Promise.all(
-          executables.map(async (item) => ({
-            client: item.client,
-            entry: item.entry,
-            members: await Promise.all(
-              item.members.map(async (member) => ({
-                path: member.path,
-                sha256: await hashBytes(member.bytes),
-              })),
-            ),
+      if ("source" in evidence) {
+        const owned = sourceEvidence.get(evidence);
+        if (!owned) throw Error("Builtin evidence requires the build-owned inventory");
+        source = owned.closure;
+        loadedBindings = routeBindingSchema.parse(owned.module);
+        catalog = owned.catalog;
+        fingerprint = await builtinClosureFingerprint(source);
+        if (fingerprint !== owned.fingerprint) throw Error("Builtin closure fingerprint mismatch");
+      } else {
+        envelope = fingerprintEnvelope(evidence.artifact);
+        loadedBindings = routeBindingSchema.parse(evidence.loadedBindings);
+        // Copy all loader evidence before the first await; callers cannot race verification.
+        const contracts = evidence.contracts.map((item) => ({
+          id: item.id,
+          bytes: new Uint8Array(item.bytes),
+        }));
+        const executables = evidence.executables.map((item) => ({
+          ...item,
+          members: item.members.map((member) => ({
+            path: member.path,
+            bytes: new Uint8Array(member.bytes),
           })),
-        ),
-      };
-      if (canonicalRouteJson(fingerprintEnvelope(actual)) !== canonicalRouteJson(envelope))
-        throw Error("Loaded artifact bytes or dependency closure do not match the manifest");
-      fingerprint = await routeFingerprint(envelope);
-      if (fingerprint !== expected) throw Error("Route fingerprint mismatch");
+        }));
+        const expected = sha.parse(evidence.expectedFingerprint);
+        catalog = evidence.catalog.map((entry) => ({
+          ...entry,
+          touches: [...entry.touches],
+          uses: entry.uses.map((use) => (typeof use === "string" ? use : { ...use })),
+        }));
+        if (executables.some((executable) => !executable.resolved))
+          throw Error("Unresolved executable dependency closure");
+        const actual: RouteFingerprintInput = {
+          version: 1,
+          data: envelope.data,
+          contracts: await Promise.all(
+            contracts.map(async (item) => ({ id: item.id, sha256: await hashBytes(item.bytes) })),
+          ),
+          executables: await Promise.all(
+            executables.map(async (item) => ({
+              client: item.client,
+              entry: item.entry,
+              members: await Promise.all(
+                item.members.map(async (member) => ({
+                  path: member.path,
+                  sha256: await hashBytes(member.bytes),
+                })),
+              ),
+            })),
+          ),
+        };
+        if (canonicalRouteJson(fingerprintEnvelope(actual)) !== canonicalRouteJson(envelope))
+          throw Error("Loaded artifact bytes or dependency closure do not match the manifest");
+        fingerprint = await routeFingerprint(envelope);
+        if (fingerprint !== expected) throw Error("Route fingerprint mismatch");
+      }
     } catch (error) {
       diagnostics.push(
         routeDiagnostic(
           {},
           "artifact",
           "",
-          "verified route-v1 fingerprint",
+          "verified package or build-owned source fingerprint",
           String(error),
           "identity",
         ),
@@ -363,7 +475,7 @@ export class AdmittedRoute<
     const inspect = (module: unknown) => {
       if (diagnostics.length) return { ok: false as const, diagnostics };
       const input = kernelZ
-        .object({ data: kernelZ.unknown(), artifact: kernelZ.unknown() })
+        .object({ data: kernelZ.unknown(), artifact: kernelZ.unknown().optional() })
         .safeParse(module);
       if (!input.success)
         return {
@@ -391,9 +503,10 @@ export class AdmittedRoute<
         };
       try {
         if (
-          canonicalRouteJson(fingerprintEnvelope(input.data.artifact)) !==
-            canonicalRouteJson(envelope) ||
-          canonicalRouteJson(decoded.data) !== canonicalRouteJson(envelope?.data)
+          (!source &&
+            canonicalRouteJson(fingerprintEnvelope(input.data.artifact)) !==
+              canonicalRouteJson(envelope)) ||
+          canonicalRouteJson(decoded.data) !== canonicalRouteJson((source ?? envelope)?.data)
         )
           throw Error("Module and verified artifact data differ");
         const errors = linkRouteBodies(decoded.data, bindings.data, catalog);
@@ -410,6 +523,7 @@ export class AdmittedRoute<
           );
         for (const [id, body] of Object.entries(bindings.data.bodies))
           if (
+            !source &&
             !envelope?.executables.some((executable) =>
               executable.members.some((member) => member.path === body.source.module),
             )
@@ -450,7 +564,10 @@ export class AdmittedRoute<
         E extends EntryTable,
         B extends BodyBindings<G, S, E, unknown>,
       >(
-        module: Omit<KernelModule<G, S, E>, "bodies"> & { readonly bodies: B },
+        module: Omit<KernelModule<G, S, E>, "bodies" | "artifact"> & {
+          readonly bodies: B;
+          readonly artifact?: RouteFingerprintInput;
+        },
       ): RouteAdmission<G, S, E, RouteBodyRender<B>> {
         try {
           // Validate before cloning: structuredClone accepts undefined and non-finite numbers.
