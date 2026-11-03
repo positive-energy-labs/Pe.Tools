@@ -145,48 +145,58 @@ export async function buildRouteArtifact(options: {
 }
 
 const exec = promisify(execFile);
-async function checkRoutes() {
-  // A fresh process avoids retaining jiti's previously imported graph declarations during watch.
-  await exec(process.execPath, [
-    fileURLToPath(new URL("./scripts/route-graphs.ts", import.meta.url)),
-    "--check",
-  ]);
-  await exec(process.execPath, [
-    fileURLToPath(
-      new URL("../../packages/agent-contracts/scripts/route-links-cs.ts", import.meta.url),
-    ),
-    "--check",
-  ]);
+async function runtimeRoutes() {
+  // Current closure evidence stays in memory. Only repo guards compare committed projections.
+  const { stdout } = await exec(
+    process.execPath,
+    [fileURLToPath(new URL("./scripts/route-graphs.ts", import.meta.url)), "--runtime"],
+    { maxBuffer: 16 * 1024 * 1024 },
+  );
+  return JSON.parse(stdout) as Record<string, string>;
 }
 
-/** Bundling and tests only check projections; explicit codegen owns tracked-file writes. */
-export function routeModuleHash(check = checkRoutes): Plugin {
+/** Dev, test and build consume fresh projections without writing tracked files. */
+export function routeModuleHash(
+  generate: () => Promise<Record<string, string> | void> = runtimeRoutes,
+): Plugin {
+  let projections: Record<string, string> = {};
   let pending: Promise<void> = Promise.resolve();
-  const refresh = () => (pending = pending.then(check, check));
+  const update = async () => {
+    projections = (await generate()) ?? {};
+  };
+  const refresh = () => (pending = pending.then(update, update));
+  const watchFiles = () =>
+    Object.entries(projections)
+      .filter(([id]) => id.endsWith("source-closure.generated.json"))
+      .flatMap(([, text]) => {
+        const closure = JSON.parse(text);
+        return [...closure.envelope.modules, ...closure.envelope.inputs]
+          .filter(
+            (item: { id: string }) =>
+              !item.id.startsWith("virtual:") && !item.id.startsWith("build:"),
+          )
+          .map((item: { id: string }) =>
+            fileURLToPath(new URL(item.id, new URL("../../../", import.meta.url))),
+          );
+      });
   return {
     name: "route-module-hash",
     enforce: "pre",
     async buildStart() {
-      // Closure inputs include workspace contracts and assets outside the route folder.
-      // Watch the generated inventory as well as modules Vite discovers on demand.
-      const manifest = new URL("./src/captures/source-closure.generated.json", import.meta.url);
-      try {
-        const closure = JSON.parse(readFileSync(manifest, "utf8"));
-        for (const item of [...closure.envelope.modules, ...closure.envelope.inputs]) {
-          if (!item.id.startsWith("virtual:") && !item.id.startsWith("build:"))
-            this.addWatchFile(
-              fileURLToPath(new URL(item.id, new URL("../../../", import.meta.url))),
-            );
-        }
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      }
       await refresh();
+      // Watch current resolved inputs, even when the committed inventory is stale or missing.
+      for (const file of watchFiles()) this.addWatchFile(file);
+    },
+    async load(id) {
+      await pending;
+      const filename = id.split("?")[0]!;
+      return projections[filename] ?? projections[filename.replaceAll("/", "\\")];
     },
     async handleHotUpdate({ server }) {
       // The closure includes schemas, codecs, assets and build inputs outside graph.ts.
-      // Conservatively check every watched source edit; failed checks block reload.
+      // Recompute on every watched source edit; invalid declarations block reload.
       await refresh();
+      for (const file of watchFiles()) server.watcher?.add(file);
       // Graphs register at module scope. Replace graph + directory together, never HMR one half.
       server.moduleGraph.invalidateAll();
       server.ws.send({ type: "full-reload" });

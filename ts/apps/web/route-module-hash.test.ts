@@ -255,3 +255,11 @@ export const module = { ...builtinModule, bodies: Object.fromEntries(Object.entr
     loadRouteArtifact(built, catalog, evaluate, [{ ...pin, namespace: React }]),
   ).rejects.toThrow("evaluation failed");
 });
+
+test("runtime projections replace stale disk content without writing it", async () => {
+  const plugin = routeModuleHash(async () => ({ [id]: "fresh body" }));
+  const before = readFileSync(id, "utf8");
+  await (plugin.buildStart as Function).call({ addWatchFile: vi.fn() });
+  expect(await (plugin.load as Function)(id)).toBe("fresh body");
+  expect(readFileSync(id, "utf8")).toBe(before);
+});

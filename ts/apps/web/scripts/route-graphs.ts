@@ -42,9 +42,13 @@ const closureDestination = process.argv
   ?.slice("--closure-output=".length);
 if (closureDestination && !/^(?:[A-Za-z]:[\\/]|\/)/.test(closureDestination))
   throw Error("--closure-output requires an absolute path");
+const runtime = process.argv.includes("--runtime");
+const projections: Record<string, string> = {};
 const stale: string[] = [];
 async function emit(destination: URL, text: string) {
-  if (check) {
+  if (runtime) {
+    projections[fileURLToPath(destination)] = text;
+  } else if (check) {
     let current: string | undefined;
     try {
       current = await readFile(destination, "utf8");
@@ -148,7 +152,7 @@ if (!closureOnly)
     new URL("../../../packages/agent-contracts/src/generated/route-directory.ts", import.meta.url),
     `// Generated from web route graphs by codegen:routes.\nimport type { RouteDirectory } from "../route-graph.ts";\nexport const routeDirectory: readonly {key: string; directory: RouteDirectory; moduleHash: string}[] = ${JSON.stringify(directory, null, 2)};\n`,
   );
-console.log(`Projected ${directory.length} route graphs`);
+console.log(runtime ? JSON.stringify(projections) : `Projected ${directory.length} route graphs`);
 
 if (stale.length)
   throw Error(`Generated route artifacts drifted; regenerate codegen:routes:\n${stale.join("\n")}`);
