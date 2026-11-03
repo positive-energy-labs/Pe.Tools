@@ -164,9 +164,18 @@ new AgentSideConnection(
       currentMode = modeId;
       return {};
     },
-    cancel: () => cancelled(),
+    cancel: () => {
+      cancelled();
+      if (process.env.FAKE_ACP_GATE)
+        writeFileSync(join(process.env.FAKE_ACP_GATE, "cancel.received"), "received");
+    },
     async prompt({ sessionId, prompt }) {
       const text = prompt.map((block) => block.text ?? "").join("");
+      // Cancellation can arrive while prompt output is backpressured.
+      const hanging =
+        text === "hang"
+          ? new Promise((resolve) => (cancelled = () => resolve({ stopReason: "cancelled" })))
+          : null;
       if (text === "auth-expired") throw RequestError.authRequired();
       if (text === "credit-refusal")
         throw new Error(
@@ -183,6 +192,7 @@ new AgentSideConnection(
           update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: chunk } },
         });
       await say(`echo: ${text}`);
+      if (text === "hang") await gate("hang");
       if (text === "route-cutover-pages") {
         const base = toolEnv.PE_TOOLS_HOST_BASE_URL;
         if (!base) throw Error("Page link proof needs the actual host origin");
@@ -300,8 +310,7 @@ new AgentSideConnection(
         });
         return { stopReason: "end_turn" };
       }
-      if (text === "hang")
-        return new Promise((resolve) => (cancelled = () => resolve({ stopReason: "cancelled" })));
+      if (hanging) return hanging;
       if (text === "stubborn")
         return new Promise(() => (cancelled = () => void say("ignoring cancel")));
       if (text === "question") {

@@ -1084,12 +1084,17 @@ for (const harness of ["claude", "codex"] as const) {
       const oldCaller = "caller" in old.resolved ? old.resolved.caller : null;
       expect(oldCaller?.kind).toBe("pea");
       const next = randomUUID();
+      const gate = join(root, `cancel-gate-${next}`);
+      await mkdir(gate);
+      await writeFile(join(gate, "hang"), "hold prompt output");
+      vi.stubEnv("FAKE_ACP_GATE", gate);
       await call("POST", `/pe/threads/${id}/prompt`, { id: next, text: "hang" });
       await until(
         read,
         id,
         (body) =>
           body.running &&
+          existsSync(join(gate, "hang.active")) &&
           body.events.some(
             (event) =>
               event.kind === "session" &&
@@ -1112,6 +1117,9 @@ for (const harness of ["claude", "codex"] as const) {
         scoped && "caller" in scoped && scoped.caller.kind === "pea" ? scoped.caller.run : null,
       ).toEqual({ thread: id, turn: next });
       await call("POST", `/pe/threads/${id}/cancel`);
+      await until(read, id, () => existsSync(join(gate, "cancel.received")));
+      expect((await read(id)).running).toBe(true);
+      await rm(join(gate, "hang"));
       await until(read, id, (body) => !body.running);
     } finally {
       launched.mockRestore();
