@@ -45,11 +45,9 @@ export type RouteAdapters<P, W> = Omit<
 };
 
 /**
- * Admission runs before any owner or resource exists: the subject registers, then the owner's,
- * the module's and every pane's refusals.
+ * Admission runs before any owner or resource exists. Publish the subject only after every check.
  */
 export function admitRoute<P, W>(graph: RouteGraph<P, W>, adapters: RouteAdapters<P, W>) {
-  registerSubject(graph.key, graph);
   const refusals = mountRefusals(graph, adapters);
   // Only stamped graphs (a graph.ts the build compiled) admit as builtins; inline graphs carry none.
   const admission = graph.moduleHash ? builtinAdmission(graph) : null;
@@ -69,6 +67,7 @@ export function admitRoute<P, W>(graph: RouteGraph<P, W>, adapters: RouteAdapter
         message: `Unknown reading '${receipts}'`,
       });
   }
+  if (!refusals.length) registerSubject(graph.key, graph);
   return refusals;
 }
 

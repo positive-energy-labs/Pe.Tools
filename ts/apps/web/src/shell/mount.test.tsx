@@ -38,6 +38,7 @@ import { commandVerb, workVerb } from "./verbs";
 import { routeOwnsKey } from "./mount-work";
 import type { ReadingContext, ReadingDelivery } from "./readings";
 import { peReadings } from "#/readings";
+import { subjectState } from "./subject";
 
 const transport = vi.hoisted(() => ({ run: vi.fn() }));
 vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({
@@ -410,6 +411,20 @@ test("admission shows graph and reserved chord refusals and acquires nothing", a
   expect(view.getByRole("alert").textContent).toContain("Unknown reading 'missing'");
   expect(view.getByRole("alert").textContent).toContain("reserved");
   expect(get).not.toHaveBeenCalled();
+  expect(f.subscriptions()).toEqual({ subscriptions: 0, deltaSubscriptions: 0 });
+});
+
+test("refused mounts never enroll their subject in discovery", async () => {
+  const f = await fixture();
+  const key = "refused-subject-enrollment";
+  f.graph.key = key;
+  f.graph.panes.inputs!.draws = ["missing"];
+  const Component = mountRoute(f.graph, f.adapters);
+  render(<Component />);
+  // A registered subject would diagnose this malformed value; an unregistered one has no policy.
+  expect(subjectState(key, { [f.graph.subjectField!.field]: {} })).toEqual({
+    ready: false, refusal: null, label: "",
+  });
   expect(f.subscriptions()).toEqual({ subscriptions: 0, deltaSubscriptions: 0 });
 });
 

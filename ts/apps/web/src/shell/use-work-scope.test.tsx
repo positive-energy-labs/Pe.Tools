@@ -2,6 +2,7 @@ import { testSources, testSubject, testFields, testReadings } from "../test-rout
 import { scheduleQueries } from "../../../../packages/mcps/src/shared/query-client";
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
+import { Suspense, startTransition, useLayoutEffect, useState } from "react";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -171,6 +172,46 @@ async function probe(
   return () => ports!;
 }
 const pin = (target: unknown) => `?target=${encodeURIComponent(JSON.stringify(target))}`;
+
+test("aborted concurrent render cannot publish a different subject Work through committed ports", async () => {
+  const g: RouteGraph<{ subject: string }, { note: string }> = {
+    ...graph(), work: workSchema, workSubject: "subject",
+    fields: { ...testFields, subject: { ...field(z.string().default("A"), {}), role: "query" } },
+  };
+  let committed: WorkScopePorts<{ note: string }> | undefined;
+  let choose: (subject: string) => void = () => {};
+  let attempted = false;
+  const pending = new Promise<never>(() => {});
+  function Probe() {
+    const [subject, setSubject] = useState("A");
+    choose = setSubject;
+    const ports = useWorkScope(g, { subject }, { url: false });
+    useLayoutEffect(() => { committed = ports; });
+    if (subject === "B") { attempted = true; throw pending; }
+    return <span>{subject}</span>;
+  }
+  const root = createRootRoute();
+  const route = createRoute({
+    getParentRoute: () => root, path: "/abort",
+    component: () => <Suspense fallback="pending"><Probe /></Suspense>,
+  });
+  const router = createRouter({ routeTree: root.addChildren([route]),
+    history: createMemoryHistory({ initialEntries: ["/abort"] }) });
+  await router.load();
+  const rendered = render(<RouterProvider router={router} />);
+  await waitFor(() => expect(committed?.getSnapshot().workKey?.work).toBe("A"));
+  const before = committed!.getSnapshot();
+  const published = vi.fn();
+  const release = committed!.subscribe(published);
+  await act(async () => { startTransition(() => choose("B")); });
+  expect(attempted).toBe(true);
+  expect(committed!.getSnapshot()).toBe(before);
+  expect(published).not.toHaveBeenCalled();
+  act(() => choose("C"));
+  await waitFor(() => expect(committed!.getSnapshot().workKey?.work).toBe("C"));
+  expect(rendered.getByText("C")).toBeTruthy();
+  release();
+});
 
 test("a Work-free graph resolves the host Target and reads no document", async () => {
   const ports = await probe(graph());

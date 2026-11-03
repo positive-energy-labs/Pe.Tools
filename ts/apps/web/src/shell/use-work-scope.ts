@@ -3,7 +3,7 @@
  * Work key -> Work document, as the old kernel resolves them, published as the graph mount's
  * immutable external-store ports plus its host write ports. Routes never supply these.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   actionStatusSchema,
   bindWork,
@@ -210,16 +210,14 @@ export function useWorkScope<P, W>(
   }, [resolution, key, reading, graph, unreadable, salvaged, keyText, spec, closed, failure]);
   // The mount captures its ports once; they read this store, so they never go stale.
   const store = useRef({ snapshot, closed, lost: "", listeners: new Set<() => void>() }).current;
-  Object.assign(store, {
-    snapshot,
-    closed,
-    lost: capture
-      ? "Saved captures are read-only; return to the live document to act"
-      : (target.bindingLost?.sentence ?? CLOSED_WORK),
-  });
-  useEffect(() => {
+  const lost = capture
+    ? "Saved captures are read-only; return to the live document to act"
+    : (target.bindingLost?.sentence ?? CLOSED_WORK);
+  useLayoutEffect(() => {
+    // An abandoned render must not replace the committed Work or its write authority.
+    Object.assign(store, { snapshot, closed, lost });
     for (const notify of store.listeners) notify();
-  }, [store, snapshot]);
+  }, [store, snapshot, closed, lost]);
   const ports = useMemo(
     () => ({
       getSnapshot: () => store.snapshot,
