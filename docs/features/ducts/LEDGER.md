@@ -162,6 +162,7 @@ Rebuilt 2026-10-21 as current truth after the close of the ducts walk; git holds
 - 2026-11-03, Drop route-specific named recovery-row expansion; shared carry-over confirmation, canonical salvage and host-owned Restore remain. (dropped by default, kaitpw rule 58f5b5e8)
 
 ## Owed
+- Pricing now runs on the main thread inside the ducts derive body (FANS deleted pricing.worker.ts, 2026-11-03). The next Manual D drive on the built web times pricing on a real model; if it janks, add a kernel derive-worker seam, never a route-local worker. (kaitpw)
 - [M] Split /fans Work from /ducts Work per the routes ledger 2026-11-03 kaitpw direction; census first, then a persisted-Work migration that loses no saved cell.
 
 - S9 native consumption: prove host result matching against Revit velocity pressure for elbows, transitions and both tap legs; changed or ambiguous bases must refuse. See `PeLossServer.Calculate` TODO. No Revit session was authorized for S9.
