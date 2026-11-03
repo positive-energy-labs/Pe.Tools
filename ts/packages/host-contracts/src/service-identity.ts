@@ -2,9 +2,9 @@
 // (./vendor/pe-service.ts). Naming mechanics (the worktree hash, a cross-language contract with the
 // SDK's C# client) live in the SDK; this module owns only what is Pe.Tools-specific: the product
 // root and the lane→name mapping.
-import { existsSync, statSync } from "node:fs";
+import { existsSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { isSea } from "node:sea";
 import {
   hostProcessIdentity,
@@ -23,16 +23,34 @@ import { normalizeSourceRoot, sourceServiceName } from "./vendor/pe-service.ts";
 export type HostLane = "dev" | "installed";
 
 /**
- * Product root under `%LOCALAPPDATA%\<vendor>\<product>` — the A10 service-file `appBase`
- * (`state/service/<service-name>.json` lives beneath it) and the install-receipt root. Resolved
- * lazily so tests can redirect it via `LOCALAPPDATA`. When the product home override is set the
- * root moves under it (`<home>\.local-state`), so an isolated run shares no state with the owner's
- * host; the SDK's own registry stays in `%LOCALAPPDATA%\Pe.Revit.Sdk`.
+ * Lane-owned service/state root. Source execution defaults to its module's checkout, never cwd or
+ * a caller-supplied environment identity. Installed startup must also pass installedRuntimeRoot.
+ * An explicit product home retains its `<home>\.local-state` layout in either lane.
  */
-export function productRoot(): string {
-  if (process.env[productPathNames.productHomeVariable]?.trim())
-    return join(productHomePath(), productPathNames.localStateDirectoryName);
-  return osUserProductRoot();
+export function productRoot(
+  lane: HostLane = isSea() ? "installed" : "dev",
+  sourceRoot: string | null = lane === "dev" ? checkoutRootFrom(import.meta.dirname) : null,
+): string {
+  if (lane === "dev" && (!sourceRoot || checkoutRootFrom(sourceRoot) !== resolve(sourceRoot)))
+    throw Error("A dev state root requires a Pe.Tools checkout.");
+  const root = process.env[productPathNames.productHomeVariable]?.trim()
+    ? join(productHomePath(), productPathNames.localStateDirectoryName)
+    : lane === "installed"
+      ? osUserProductRoot()
+      : join(sourceRoot!, ".artifacts", "pe-tools");
+  if (lane === "dev") {
+    const away = relative(canonicalPath(osUserProductRoot()), canonicalPath(root));
+    if (away === "" || (!away.startsWith("..") && !isAbsolute(away)))
+      throw Error(`Dev host cannot use installed product state '${root}'.`);
+  }
+  return insideTestRoot(root);
+}
+
+// Resolve existing ancestors too: a not-yet-created state directory can sit under a junction.
+function canonicalPath(path: string): string {
+  if (existsSync(path)) return realpathSync.native(path);
+  const parent = dirname(path);
+  return parent === path ? path : join(canonicalPath(parent), basename(path));
 }
 
 /** OS-user product state namespace, independent of product-home overrides; test isolation still applies. */
@@ -46,7 +64,7 @@ export function osUserProductRoot(): string {
   );
 }
 
-/** Product-owned temporary files follow the same environment as durable state. No IO here. */
+/** Product-owned temporary files follow the same lane as durable state. */
 export const productScratchPath = (): string => join(productRoot(), "scratch");
 
 /** The owner's terminal context token, written by the host at start and read by the `pea` CLI. */
@@ -59,7 +77,7 @@ export function installedRuntimeRoot(
   executablePath = process.execPath,
   bundled = isSea(),
 ): string {
-  const root = productRoot();
+  const root = productRoot("installed");
   const expected = join(root, productInstallLayout[`VersionedApp:${app}`]);
   if (!bundled || normalizeSourceRoot(executablePath) !== normalizeSourceRoot(expected))
     throw Error(`Installed ${app} must execute from '${expected}'.`);
@@ -117,7 +135,7 @@ export const sourceRootVariable = "PE_TOOLS_SOURCE_ROOT";
 
 /**
  * The service name for a host lane: the installed host is the one global name; a dev host derives a
- * stable worktree-scoped name from its checkout root, so worktrees coexist under one product root.
+ * stable worktree-scoped name from its checkout root, alongside that checkout's state root.
  */
 export function hostServiceName(lane: HostLane, sourceRoot: string | null): string {
   if (lane === "installed") return hostProcessIdentity.serviceName;

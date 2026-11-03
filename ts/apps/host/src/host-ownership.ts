@@ -5,6 +5,7 @@ import {
   sourceRootVariable,
   runtimeOwnerRejection,
   installedRuntimeRoot,
+  productRoot,
   type HostLane,
 } from "@pe/host-contracts/service-identity";
 import type { PeaRuntimeCapabilities } from "@pe/runtime";
@@ -45,6 +46,8 @@ function resolveHostOwnership(): HostOwnership {
   if (lane === "installed" && process.env[sourceRootVariable]?.trim())
     throw Error("An installed host cannot claim a checkout source root.");
   const installedRoot = lane === "installed" ? installedRuntimeRoot("host") : null;
+  // Refuse an unsafe override before host startup can publish receipts or mutate durable Work.
+  productRoot(lane, sourceRoot);
   const serviceName = serviceNameForCapabilities(
     hostServiceName(lane, sourceRoot),
     hostCapabilities,
