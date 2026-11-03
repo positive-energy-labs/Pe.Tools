@@ -174,10 +174,10 @@ function structuralCensus() {
   const production = files("ts").filter(
     (p) => /\.[cm]?tsx?$/.test(p) && !/(?:\.test\.|\/tests\/|\.generated\.)/.test(p),
   );
-  const parsed = new Map(production.map((p) => [p, syntax(read(p), p)]));
   const candidates = new Set<string>();
   const fieldNames = new Map<string, Set<string>>();
-  for (const [p, source] of parsed) {
+  for (const p of production) {
+    const source = syntax(read(p), p);
     const names = new Set(["field"]);
     walk(source, (n) => {
       if (ts.isImportSpecifier(n) && (n.propertyName ?? n.name).text === "field")
@@ -205,7 +205,10 @@ function structuralCensus() {
         ts.isCallExpression(n) &&
         (names.has(n.expression.getText()) ||
           (ts.isPropertyAccessExpression(n.expression) &&
-            ["field", "extend"].includes(n.expression.name.text)))
+            (n.expression.name.text === "field" ||
+              (n.expression.name.text === "extend" &&
+                ts.isPropertyAccessExpression(n.expression.expression) &&
+                n.expression.expression.name.text === "schema"))))
       )
         candidates.add(p);
     });
@@ -217,6 +220,8 @@ function structuralCensus() {
       module: ts.ModuleKind.ESNext,
       moduleResolution: ts.ModuleResolutionKind.Bundler,
       skipLibCheck: true,
+      types: [],
+      lib: ["lib.es2023.d.ts"],
       noEmit: true,
       allowJs: true,
       paths: { "#/*": [resolve(root, "ts/apps/web/src/*")] },
@@ -224,7 +229,7 @@ function structuralCensus() {
   );
   const checker = program.getTypeChecker();
   for (const p of production) {
-    const source = program.getSourceFile(resolve(root, p)) ?? parsed.get(p)!;
+    const source = program.getSourceFile(resolve(root, p)) ?? syntax(read(p), p);
     const site = (node: ts.Node) =>
       identity(node)
         .replaceAll(root.replaceAll("\\", "/") + "/", "")
