@@ -142,6 +142,7 @@ export function createAdmittedGeometry(options: {
         native,
       };
     else {
+      // TODO: Prepare region/family-document detail from admitted identities before claiming those scopes.
       if (!ids.length) {
         record.snapshot = unavailable("Explicit detail requires native subjects");
         return record.snapshot;
