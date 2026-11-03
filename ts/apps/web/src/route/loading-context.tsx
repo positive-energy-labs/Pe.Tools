@@ -22,6 +22,8 @@ export function LoadingContext({
       {...workAttributes("page", busy && !error ? [name] : [])}
       className="flex flex-col gap-4 p-6 overflow-auto"
     >
+      {/* The pre-hydration watchdog owns only this shadow tree, never React's markup. */}
+      <div data-startup-diagnostic="" />
       <header className="flex flex-col gap-2">
         <h1 className="t-title">{name}</h1>
         <p role={error ? "alert" : "status"} data-tone={error ? "caution" : undefined}>
