@@ -135,7 +135,7 @@ const previewResult = (derivedRequest: unknown) => ({
   takenAt: "2026-11-03T00:00:00Z",
 });
 function previewReceipt(key: string, input: unknown, result: unknown) {
-  return actionReceiptSchema.parse({
+  const receipt = actionReceiptSchema.parse({
     id: "preview-receipt",
     key,
     input,
@@ -149,7 +149,10 @@ function previewReceipt(key: string, input: unknown, result: unknown) {
     recovery: [],
     startedAt: "2026-11-03T00:00:00Z",
   });
+  if (receipt.state !== "succeeded") throw Error("Invalid test receipt");
+  return receipt;
 }
+
 function openPreview(
   key: "data-table.apply.preview" | "ducts.preview-losses",
   input = previewInput,
@@ -165,7 +168,7 @@ function openPreview(
   const request = {
     key: { op: key, sortedKeyInput: JSON.stringify(input), freshnessGeneration: 1 },
     output: commands[key].result,
-  } as ResolvedRead<unknown>;
+  } as unknown as ResolvedRead<unknown>;
   const read = services.reads.acquire(request, attempt.value);
   const deliver = vi.fn();
   const release = services.readings.subscribe(request, attempt.value, deliver);

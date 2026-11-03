@@ -7,7 +7,14 @@ import { z } from "zod";
 import { placeAdmittedVerbs } from "./admitted-placement";
 import { createAdmittedObservers } from "./admitted-observers";
 import { reviewChanges } from "./review-value";
-import { bindWork, workKey, workHandleSchema, writePreviewSchema } from "@pe/agent-contracts";
+import {
+  bindWork,
+  workKey,
+  workHandleSchema,
+  writePreviewSchema,
+  commands,
+  type SemanticActionKey,
+} from "@pe/agent-contracts";
 import { createWorkJournal } from "../../../../packages/runtime/src/work-journal";
 import { createWorkFeedClient } from "./work-feed-client";
 import { createAdmittedWork } from "./admitted-work";
@@ -697,6 +704,8 @@ export function createRouteShell(services: KernelServices) {
           const entry = bindings.entries[declaration.entry]!;
           const modelWrite = entry.axes.effect === "ModelWrite";
           const accepted = owner.read()!;
+          if (modelWrite && basis && basis.workRevision !== accepted.work?.revision)
+            throw Error("Stale accepted Work basis; prepare from the current revision");
           if (modelWrite && (!work.ready() || !accepted.work || !accepted.scope.identity.work))
             throw Error("Accepted Work unavailable");
           // ModelWrite has one input authority: B's accepted key and revision, never draft intent.
@@ -758,7 +767,13 @@ export function createRouteShell(services: KernelServices) {
             return submission;
           };
           if (modelWrite) {
-            const previewKey = `${declaration.entry}.preview`;
+            const command = Object.hasOwn(commands, declaration.entry)
+              ? commands[declaration.entry as SemanticActionKey]
+              : undefined;
+            const previewKey =
+              command && "writeBoundary" in command
+                ? command.writeBoundary.previewKey
+                : `${declaration.entry}.preview`;
             const previewEntry = bindings.entries[previewKey];
             if (
               !previewEntry ||

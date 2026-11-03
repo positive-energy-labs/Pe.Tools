@@ -2248,3 +2248,16 @@ test("query lands once through transition on current success and refuses stale/s
   departed(ready("departed"));
   expect(land).toHaveBeenCalledOnce();
 });
+
+test("ModelWrite refuses a stale rendered Work basis before acquiring any preview", async () => {
+  const f = await nativeFixture();
+  const basis = f.mount.workBasis()!;
+  await settle(f.mount.invoke("change", 8) as Observation<WorkWriteOutcome>);
+  const before = f.acquire.mock.calls.length;
+  expect(() => f.mount.invoke("native", 999, basis)).toThrow("Stale accepted Work basis");
+  expect(f.acquire).toHaveBeenCalledTimes(before);
+  expect(f.submit).not.toHaveBeenCalled();
+  const current = f.mount.workBasis()!;
+  expect(f.mount.invoke("native", 999, current)).toEqual({ kind: "preview" });
+  expect(f.preview().input.work.revision).toBe(current.workRevision);
+});
