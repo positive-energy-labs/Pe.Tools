@@ -6,7 +6,7 @@
  */
 import type { RouteGraph } from "@pe/agent-contracts";
 import { FixtureChrome, GraphRouteView, Refused } from "./mount-chrome";
-import { codeRoute } from "./mount-page";
+import { codeRoute, type CodeRoute } from "./mount-page";
 import { admitRoute, type RouteAdapters } from "./mount-pane";
 import { GraphLease, useGraphRoute, type MountRouteProps } from "./mount-work";
 
@@ -56,6 +56,6 @@ export function routeFromGraph<P, W, const Path extends string>(
   graph: RouteGraph<P, W>,
   adapters: RouteAdapters<P, W>,
   path: Path = `/${graph.address.replace(/^\//, "")}` as Path,
-) {
+): CodeRoute<P, Path> {
   return codeRoute(graph, adapters.initialPage, mountRoute(graph, adapters), path);
 }
