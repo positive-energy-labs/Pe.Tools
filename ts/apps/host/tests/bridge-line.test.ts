@@ -1,3 +1,4 @@
+import { DispatchLimits } from "@pe/host-internal/dispatch";
 import { Cause, Effect, Exit, Fiber, Layer, Queue, Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { expect, vi } from "vite-plus/test";
@@ -77,10 +78,17 @@ const harness = Effect.gen(function* () {
 
 effectTest("interrupting a waiter never lets the one behind it overtake the running op", () =>
   Effect.gen(function* () {
-    const { call, sent, answer, outgoing } = yield* harness;
+    const { call, sent, answer, outgoing, socketOf } = yield* harness;
     const a = yield* call("test.a");
     const runningA = yield* sent;
     expect(runningA.operationKey).toBe("test.a");
+    const other = yield* socketOf({ processId: 43 });
+    const independent = yield* Effect.forkScoped(
+      other.bridge.invoke("test.independent", {}, other.target.session),
+    );
+    const independentRequest = yield* other.sent;
+    yield* other.answer(independentRequest.requestId);
+    expect(Exit.isSuccess(yield* Fiber.await(independent))).toBe(true);
     const b = yield* call("test.b");
     yield* turns();
     const c = yield* call("test.c");
@@ -359,6 +367,7 @@ effectTest("retire an empty line, reconnect the same process, and the next op di
 effectTest("interrupted waiters take their jobs and payloads out of the physical line", () =>
   Effect.gen(function* () {
     const { call, sent, answer, bridge, target } = yield* harness;
+    const lineBytes = Effect.map(bridge.snapshot(target.session), (view) => view.lineBytes!);
     const lineJobs = Effect.map(bridge.snapshot(target.session), (view) => view.lineJobs);
     const a = yield* call("test.a");
     const runningA = yield* sent; // A holds the slot; 7 more fill the line to its 8 places
@@ -369,6 +378,8 @@ effectTest("interrupted waiters take their jobs and payloads out of the physical
     for (const waiter of waiters.slice(0, 6)) yield* Fiber.interrupt(waiter);
     yield* turns();
     expect(yield* lineJobs).toBe(1); // one live waiter: one retained job, one payload
+    const retained = yield* lineBytes;
+    expect(retained).toBeGreaterThan(1024);
     // Churn behind a running A: every enqueue-then-leave returns its place AND its storage.
     for (let i = 0; i < 50; i++) {
       const churn = yield* call(`test.churn${i}`, payload());
@@ -376,10 +387,14 @@ effectTest("interrupted waiters take their jobs and payloads out of the physical
       yield* Fiber.interrupt(churn);
     }
     expect(yield* lineJobs).toBe(1);
+    expect(yield* lineBytes).toBe(retained);
     yield* answer(runningA.requestId);
     yield* Fiber.await(a);
     const next = yield* sent;
     expect(next.operationKey).toBe("test.w6");
+    yield* answer(next.requestId);
+    yield* Fiber.await(waiters[6]!);
+    expect(yield* lineBytes).toBe(0);
   }),
 );
 
@@ -514,4 +529,32 @@ effectTest(
       expect(yield* Queue.size(outgoing)).toBe(0); // B never went out
       expect((yield* bridge.list).map((view) => view.sessionId)).toEqual([reborn.target.session]);
     }),
+);
+
+effectTest("duplicate ids and oversized encoded items cannot replace or retain a request", () =>
+  Effect.gen(function* () {
+    const { call, sent, answer, bridge, target } = yield* harness.pipe(
+      Effect.provideService(DispatchLimits, { entries: 2, itemBytes: 512 }),
+    );
+    const a = yield* call("test.a", {}, "same-id");
+    yield* sent;
+    const duplicate = yield* call("test.duplicate", {}, "same-id");
+    expect(failure(yield* Fiber.await(duplicate))).toMatchObject({ statusCode: 409 });
+    const large = yield* call("test.large", { bytes: "x".repeat(512) });
+    expect(failure(yield* Fiber.await(large))).toMatchObject({ statusCode: 413 });
+    expect((yield* bridge.snapshot(target.session)).lineBytes).toBe(0);
+    const b = yield* call("test.b", {}, "queued-id");
+    yield* turns();
+    const excess = yield* call("test.excess");
+    expect(failure(yield* Fiber.await(excess))).toMatchObject({ statusCode: 423 });
+    const cancel = yield* Effect.forkScoped(
+      bridge.invoke(CANCEL_OPERATION_KEY, { requestId: "queued-id" }),
+    );
+    yield* Fiber.join(cancel);
+    expect(failure(yield* Fiber.await(b))).toMatchObject({ statusCode: 499 });
+    expect((yield* bridge.snapshot(target.session)).lineBytes).toBe(0);
+    expect((yield* bridge.snapshot(target.session)).lineJobs).toBe(0);
+    yield* answer("same-id");
+    expect(Exit.isSuccess(yield* Fiber.await(a))).toBe(true);
+  }),
 );

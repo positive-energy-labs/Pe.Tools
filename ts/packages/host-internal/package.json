@@ -1,0 +1,21 @@
+{
+  "name": "@pe/host-internal",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./dispatch": "./src/dispatch.ts",
+    "./request-contracts": {
+      "types": "./src/request-contracts.d.ts"
+    }
+  },
+  "dependencies": {
+    "@pe/agent-contracts": "workspace:*",
+    "@pe/host-contracts": "workspace:*",
+    "effect": "4.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}

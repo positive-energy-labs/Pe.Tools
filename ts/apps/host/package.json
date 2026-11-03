@@ -26,6 +26,7 @@
     "@pe/browser": "workspace:*",
     "@pe/ducts-domain": "workspace:*",
     "@pe/host-contracts": "workspace:*",
+    "@pe/host-internal": "workspace:*",
     "@pe/mcps": "workspace:*",
     "@pe/runtime": "workspace:*",
     "@posthog/mcp": "0.22.3",
