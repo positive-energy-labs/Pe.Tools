@@ -739,7 +739,10 @@ export function createPeRoutes(options: PeRoutesOptions) {
         if (scope instanceof Response) return scope;
         try {
           const view = await work.view(scope, route);
-          return view ? json(view) : json({ error: `unknown route '${route}'` }, 404);
+          // Callers use the host-resolved identity, never reconstruct an open key for saved Work.
+          return view
+            ? json({ ...view, work: { key: scope, revision: view.revision } })
+            : json({ error: `unknown route '${route}'` }, 404);
         } catch (error) {
           return json({ error: message(error) }, 403);
         }
