@@ -668,13 +668,17 @@ export function createRouteShell(services: KernelServices) {
       >();
       const reviewRefusals = new Map<string, ReviewRefusal>();
       let presenting = false;
-      const present = (id: string, result: unknown, evidence: PresentationEvidence) => {
-        const declaration = route.data.verbs[id]!;
-        if (!declaration.present) return undefined;
+      const present = (
+        id: string,
+        result: unknown,
+        evidence: PresentationEvidence,
+        body = route.data.verbs[id]?.present,
+      ) => {
+        if (!body) return undefined;
         let value: unknown;
         presenting = true;
         try {
-          value = bindings.bodies[declaration.present]!.run(freezePage(result), evidence);
+          value = bindings.bodies[body]!.run(freezePage(result), evidence);
         } catch {
           const refusal = new ReviewRefusal("present-threw");
           reviewRefusals.set(id, refusal);
@@ -1103,6 +1107,17 @@ export function createRouteShell(services: KernelServices) {
           ),
         );
         if (!issued.ok) throw Error(issued.reason);
+        const deps = route.data.salvageDeps ?? { page: [], work: [], readings: [] };
+        for (const id of deps.readings)
+          if (!readings[id]?.current) throw Error(`Reading unavailable: ${id}`);
+        // Display evidence only: the invocation owns freshness, never a second write seal.
+        const evidence = freezePage(
+          structuredClone({
+            page: project(deps.page, owner.read()!.page),
+            work: project(deps.work, owner.read()!.work!.value as Record<string, unknown>),
+            readings: Object.fromEntries(deps.readings.map((id) => [id, readings[id]])),
+          }),
+        );
         const saved = await salvageRouteWork(key);
         if (!owner.current(issued.value) || !work.ready()) throw Error("Salvage is stale");
         if (!saved) return null;
@@ -1124,7 +1139,9 @@ export function createRouteShell(services: KernelServices) {
           decoded.value,
           route.resolvedWork?.schema,
         );
+        const presentation = present("work.salvage", patches, evidence, route.data.salvagePresent);
         reviews.set("work.salvage", {
+          presentation,
           invocation: issued.value,
           preview: patches,
           send: () => {

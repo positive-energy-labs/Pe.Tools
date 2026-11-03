@@ -211,6 +211,9 @@ export const RouteGraphJson = z.strictObject({
   /** Evidence projection for transition; omitted means no evidence dependencies. */
   transitionDeps: dependencies.optional(),
   salvage: ref.optional(),
+  /** Display-only recovery review, with evidence captured before recovery acquisition. */
+  salvagePresent: ref.optional(),
+  salvageDeps: dependencies.optional(),
   cells: z.record(
     ref,
     z.strictObject({

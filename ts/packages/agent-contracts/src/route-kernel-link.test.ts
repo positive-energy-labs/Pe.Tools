@@ -754,3 +754,45 @@ it("admits journal previews with truthful Geometry/rollback axes but still refus
       );
   }
 });
+
+it("links recovery display slots and validates their declared evidence", () => {
+  const data = {
+    ...builtinData,
+    salvage: "recover",
+    salvagePresent: "presentRecovery",
+    salvageDeps: { page: ["density"], work: ["amount"], readings: ["total"] },
+  } as const;
+  const bindings = routeBindingSchema.parse({
+    ...builtinModule,
+    sources: {},
+    bodies: {
+      ...builtinBodies,
+      recover: {
+        slot: "salvage",
+        kind: "salvage",
+        source: { module: "test", export: "recover" },
+        run: () => ({ ok: true, value: [] }),
+      },
+      presentRecovery: {
+        slot: "salvagePresent",
+        kind: "present",
+        source: { module: "test", export: "present" },
+        run: () => "Recovered inputs",
+      },
+    },
+  });
+  expect(linkRouteBodies(data, bindings, baseCatalog)).toEqual([]);
+  expect(
+    linkRouteBodies(
+      { ...data, salvageDeps: { ...data.salvageDeps, readings: ["missing"] } },
+      bindings,
+      baseCatalog,
+    ),
+  ).toContainEqual(expect.objectContaining({ path: "salvageDeps.readings.0" }));
+  expect(
+    linkRouteBodies({ ...data, salvagePresent: "missing" }, bindings, baseCatalog),
+  ).toContainEqual(expect.objectContaining({ path: "salvagePresent" }));
+  expect(linkRouteBodies({ ...data, salvage: undefined }, bindings, baseCatalog)).toContainEqual(
+    expect.objectContaining({ path: "salvagePresent" }),
+  );
+});

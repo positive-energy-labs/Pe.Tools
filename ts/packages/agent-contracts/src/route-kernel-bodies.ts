@@ -514,6 +514,15 @@ export type BodySlots<
       ) => DecodeResult<PagePatch<G, S>>
     >
   | Slot<
+      At<G, "salvagePresent">,
+      "salvagePresent",
+      "present",
+      (
+        result: WorkPatches<G, S>,
+        evidence: Immutable<BodyContext<G, S, E, { deps: At<G, "salvageDeps"> }>>,
+      ) => string | { readonly sentence: string; readonly rows: readonly string[] }
+    >
+  | Slot<
       At<G, "salvage">,
       "salvage",
       "salvage",

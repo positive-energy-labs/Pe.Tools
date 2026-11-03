@@ -32,6 +32,21 @@ const data = {
   needs: "project",
   work: { route: "ducts", schema: "work", version: 1, migrations: {} },
   salvage: "salvage",
+  salvagePresent: "salvagePresent",
+  salvageDeps: { page: [], work: [], readings: ["names"] },
+  readings: {
+    ...captures.data.readings,
+    names: {
+      kind: "derive",
+      output: "names",
+      derive: "names",
+      deps: { page: [], work: [], readings: [] },
+      demand: "visible",
+      retain: { evidence: "scope", resource: "scope" },
+      refresh: "explicit",
+    },
+  },
+  panes: { captures: { ...captures.data.panes.captures, draws: ["captures", "names"] } },
   verbs: {
     slot: {
       kind: "work",
@@ -45,7 +60,12 @@ const data = {
     },
   },
 } as const;
-const schemas = { ...captures.schemas, work: ductsDocumentSchema, slot: z.string() };
+const schemas = {
+  ...captures.schemas,
+  work: ductsDocumentSchema,
+  slot: z.string(),
+  names: z.record(z.string(), z.string()),
+};
 // The witness edits one real Ducts slot through the generic mount.
 const bodies = {
   ...captures.bodies,
@@ -63,6 +83,26 @@ const bodies = {
     kind: "describe",
     source,
     run: () => "fanFlow → PE_M_Fan_AirFlow",
+  },
+  names: { slot: "readings.names.derive", kind: "derive", source, run: () => ({ "100": "FC-1" }) },
+  salvagePresent: {
+    slot: "salvagePresent",
+    kind: "present",
+    source,
+    run: (patches, evidence) => {
+      expect(Object.keys(evidence)).toEqual(["page", "work", "readings"]);
+      expect(Object.keys(evidence.readings)).toEqual(["names"]);
+      expect(evidence.page).toEqual({});
+      expect(evidence.work).toEqual({});
+      expect(Object.isFrozen(evidence)).toBe(true);
+      const names = evidence.readings.names;
+      if (!names.current) throw Error("Names unavailable");
+      expect(Object.isFrozen(names.value)).toBe(true);
+      return {
+        sentence: "Carry over 1 recovered input",
+        rows: patches.map((patch) => `${names.value[String(patch.path[1])]} drop: 0.18 in-wg`),
+      };
+    },
   },
   salvage: {
     slot: "salvage",
@@ -98,21 +138,20 @@ const settle = (o: Observation<WorkWriteOutcome>) =>
       () => {},
     ),
   );
-async function witness(raw?: unknown, named = false) {
+async function witness(raw?: unknown, failure?: "throw" | "invalid") {
   const module = {
     ...captures,
     data,
     schemas,
     bodies: {
       ...bodies,
-      salvage: {
-        ...bodies.salvage,
-        run: (value: unknown) => ({
-          ...bodies.salvage.run(value),
-          ...(named
-            ? { sentence: "Carry over 1 recovered input", rows: ["FC-1 drop: 0.18 in-wg"] }
-            : {}),
-        }),
+      salvagePresent: {
+        ...bodies.salvagePresent,
+        run: (...[patches, evidence]: Parameters<typeof bodies.salvagePresent.run>) => {
+          if (failure === "throw") throw Error("Presentation failed");
+          if (failure === "invalid") return Promise.resolve("late");
+          return bodies.salvagePresent.run(patches, evidence);
+        },
       },
     },
   };
@@ -204,26 +243,37 @@ function recovery(f: Awaited<ReturnType<typeof witness>>) {
     (key) => f.ws.salvage(key, "ducts") as ReturnType<typeof recoveryHost.salvageRouteWork>,
   );
 }
-test("H7: canonical recovery accepts a valid keyed edit through an empty unnamed review", async () => {
+test("H7: canonical recovery presents named rows from captured evidence and accepts the keyed edit", async () => {
   const f = await witness(unreadable);
   recovery(f);
   await vi.waitFor(() => expect(f.mount.recovery().startFresh).toBe(true));
   await f.mount.startFresh();
-  expect(f.mount.review("work.salvage")).toMatchObject({ sentence: null, rows: [], stale: false });
+  expect(f.mount.review("work.salvage")).toMatchObject({
+    sentence: "Carry over 1 recovered input",
+    rows: ["FC-1 drop: 0.18 in-wg"],
+    stale: false,
+  });
+  const review = f.mount.review("work.salvage")!;
+  expect(JSON.stringify({ sentence: review.sentence, rows: review.rows })).not.toMatch(/100|900/);
   await settle(f.mount.confirm("work.salvage") as Observation<WorkWriteOutcome>);
   expect(
     ductsDocumentSchema.parse(f.mount.work()!.value).componentDrops["100"]?.edit?.value.inWg,
   ).toBe(0.18);
   expect(f.saved.get("ducts:aside:1")).toEqual(unreadable);
 });
-test("H7: returning named recovery presentation is refused by the shared decoder", async () => {
-  const f = await witness(unreadable, true);
-  recovery(f);
-  await vi.waitFor(() => expect(f.mount.recovery().startFresh).toBe(true));
-  await expect(f.mount.startFresh()).rejects.toThrow(/sentence|rows|Unrecognized/);
-  expect(f.mount.review("work.salvage")).toBeNull();
-  expect(ductsDocumentSchema.parse(f.mount.work()!.value).componentDrops).toEqual({});
-});
+test.each(["throw", "invalid"] as const)(
+  "H7: %s recovery presentation refuses before submission",
+  async (failure) => {
+    const f = await witness(unreadable, failure);
+    recovery(f);
+    await vi.waitFor(() => expect(f.mount.recovery().startFresh).toBe(true));
+    await expect(f.mount.startFresh()).rejects.toThrow(
+      failure === "throw" ? /present-threw/ : /present-invalid/,
+    );
+    expect(f.mount.review("work.salvage")).toBeNull();
+    expect(ductsDocumentSchema.parse(f.mount.work()!.value).componentDrops).toEqual({});
+  },
+);
 test("H8: the host retains and replays the label but a remount restores no journal or undo", async () => {
   const f = await witness();
   await vi.waitFor(() => expect(f.mount.workBasis()).not.toBeNull());
@@ -244,4 +294,14 @@ test("H8: the host retains and replays the label but a remount restores no journ
   );
   expect(next.journal()!.moves).toEqual([]);
   expect(await next.history!.undo()).toMatchObject({ ok: false });
+});
+
+test("H7: a later Work edit hides named recovery evidence and refuses stale confirmation", async () => {
+  const f = await witness(unreadable);
+  recovery(f);
+  await vi.waitFor(() => expect(f.mount.recovery().startFresh).toBe(true));
+  await f.mount.startFresh();
+  await settle(f.mount.invoke("slot", "") as Observation<WorkWriteOutcome>);
+  expect(f.mount.review("work.salvage")).toMatchObject({ sentence: null, rows: [], stale: true });
+  expect(() => f.mount.confirm("work.salvage")).toThrow(/stale/);
 });

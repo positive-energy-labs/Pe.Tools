@@ -196,6 +196,14 @@ export function linkRouteBodies(
       fail("transitionDeps", "", "transition body", "Dependencies require transition");
   }
   body(data.salvage, "salvage", "salvage");
+  body(data.salvagePresent, "salvagePresent", "present");
+  if (data.salvageDeps) {
+    deps(data.salvageDeps, "salvageDeps");
+    if (!data.salvagePresent)
+      fail("salvageDeps", "", "salvage presentation", "Dependencies require salvagePresent");
+  }
+  if (data.salvagePresent && !data.salvage)
+    fail("salvagePresent", "", "salvage body", "Presentation requires salvage");
   for (const [key, identity] of Object.entries(data.identities)) {
     reference(bindings.identities, identity.codec, `identities.${key}.codec`, "identity codec");
     if (bindings.identities[identity.codec]?.kind !== identity.kind)
