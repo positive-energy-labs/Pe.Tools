@@ -1530,23 +1530,27 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
       }
       const u = result.usage;
       runs.close(runRef, result.stopReason === "cancelled" ? "stopped" : "completed");
-      append(t, {
-        kind: "turn_end",
-        turnId,
-        stopReason: result.stopReason,
-        ...(u
-          ? {
-              usage: {
-                totalTokens: u.totalTokens,
-                inputTokens: u.inputTokens,
-                outputTokens: u.outputTokens,
-                ...(u.thoughtTokens != null ? { thoughtTokens: u.thoughtTokens } : {}),
-                ...(u.cachedReadTokens != null ? { cachedReadTokens: u.cachedReadTokens } : {}),
-                ...(u.cachedWriteTokens != null ? { cachedWriteTokens: u.cachedWriteTokens } : {}),
-              },
-            }
-          : {}),
-      });
+      // Host shutdown already wrote this turn's terminal (see `close`); one terminal per turn.
+      if (!t.stopped)
+        append(t, {
+          kind: "turn_end",
+          turnId,
+          stopReason: result.stopReason,
+          ...(u
+            ? {
+                usage: {
+                  totalTokens: u.totalTokens,
+                  inputTokens: u.inputTokens,
+                  outputTokens: u.outputTokens,
+                  ...(u.thoughtTokens != null ? { thoughtTokens: u.thoughtTokens } : {}),
+                  ...(u.cachedReadTokens != null ? { cachedReadTokens: u.cachedReadTokens } : {}),
+                  ...(u.cachedWriteTokens != null
+                    ? { cachedWriteTokens: u.cachedWriteTokens }
+                    : {}),
+                },
+              }
+            : {}),
+        });
       outcome = result.stopReason;
     } catch (error) {
       runs.close(runRef, t.stopped ? "stopped" : "failed");
@@ -2362,11 +2366,28 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
                 error instanceof z.ZodError || error instanceof SyntaxError ? 400 : 502,
               ),
       ),
-    /** Host shutdown: stop every harness child and its tree. */
+    /**
+     * Host shutdown, in order: consent windows close; every admitted turn gets its durable terminal
+     * (running: unknown, queued: dropped), because a stopped turn writes none of its own; children
+     * die; then each turn's own fiber is joined. Killing first is what makes the join safe: a turn
+     * awaiting its child rejects once the child is gone, so the join cannot deadlock.
+     */
     close: () =>
       (closing ??= (async () => {
         runs.closeAll();
+        for (const t of threads.values()) {
+          t.stopped = true;
+          if (t.running)
+            append(t, {
+              kind: "error",
+              turnId: t.running,
+              message: "The host stopped during this turn; its outcome is unknown.",
+            });
+          for (const queued of t.queue.splice(0))
+            append(t, { kind: "prompt_dropped", turnId: queued.turnId, by: "expired" });
+        }
         await Promise.all([...threads.values()].map(stop));
+        await Promise.allSettled([...threads.values()].map((t) => t.turn));
         // Nothing here outlives the scope: the registry and every subscriber set end with it.
         threads.clear();
         elementNameReads.clear();

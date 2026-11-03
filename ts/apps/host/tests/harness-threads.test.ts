@@ -1346,3 +1346,32 @@ test("restart rejects an open countdown and requires a fresh full window", async
     await second.close();
   }
 });
+
+test("host shutdown settles a running turn and a queued prompt durably, even when the turn ignores cancel", async () => {
+  const h = await host();
+  const call = caller(h);
+  const read = reader(h);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  const running = randomUUID();
+  const queued = randomUUID();
+  await call("POST", `/pe/threads/${id}/prompt`, { id: running, text: "stubborn" });
+  await until(read, id, (b) => lastEcho(b) === "echo: stubborn");
+  await call("POST", `/pe/threads/${id}/prompt`, { id: queued, text: "later", delivery: "queue" });
+  await h.close(); // the turn awaits a child that ignores cancel: closing must not deadlock
+  const durable = (await readFile(join(root, id, "events.jsonl"), "utf8"))
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+  const terminals = (turnId: string) =>
+    durable.filter(
+      (e) =>
+        e.turnId === turnId &&
+        (e.kind === "turn_end" || e.kind === "error" || e.kind === "prompt_dropped"),
+    );
+  expect(terminals(running)).toEqual([
+    expect.objectContaining({ kind: "error", message: expect.stringContaining("unknown") }),
+  ]);
+  expect(terminals(queued)).toEqual([
+    expect.objectContaining({ kind: "prompt_dropped", by: "expired" }),
+  ]);
+}, 30_000);

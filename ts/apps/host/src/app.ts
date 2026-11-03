@@ -198,7 +198,9 @@ export function makeHttpLive(options: HttpLiveOptions) {
   const receiptOwner = hostActionJournal();
   const ReceiptLifetime = Layer.effectDiscard(
     Effect.addFinalizer(() =>
+      // Provided outermost, so this runs after the bridge and threads closed: join, flush, release.
       Effect.promise(async () => {
+        await receiptOwner.close();
         releaseHostReceipts(receiptOwner);
       }),
     ),
