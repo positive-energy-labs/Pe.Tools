@@ -32,6 +32,8 @@ export function remoteListener(target: Server, requests: WeakSet<object>) {
     requests.add(request);
     target.emit("request", request, response);
   });
+  // Share uses the same response lifetime as the local listener; keep upload limits intact.
+  server.setTimeout(0);
   // The private Revit bridge never crosses the remote listener.
   server.on("upgrade", (_request, socket) =>
     socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n"),

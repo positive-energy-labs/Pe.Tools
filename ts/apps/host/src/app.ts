@@ -191,6 +191,8 @@ export function makeHttpLive(options: HttpLiveOptions) {
     options.updateReader ?? makeInstalledUpdateReader(options.updateFact),
   );
   const nodeServer = options.nodeServer ?? createServer();
+  // Both lanes wait for explicit reads until completion or disconnect; upload limits stay intact.
+  nodeServer.setTimeout(0);
   const remoteConfig = readRemoteIngress(
     join(productRoot(), "state", hostOwnership.serviceName, "remote-ingress.json"),
   );

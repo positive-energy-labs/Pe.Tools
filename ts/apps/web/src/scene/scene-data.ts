@@ -1,4 +1,3 @@
-import { NATIVE_READ_WAIT_S } from "#/route/waits";
 import { callHostRpc } from "#/host/client";
 import { HostCallError } from "@pe/host-contracts/operation-types";
 import { fetchSceneArtifact } from "./artifact";
@@ -23,7 +22,7 @@ export type SourceSnapshot =
   | { state: "failed"; error: unknown };
 const PENDING: SourceSnapshot = { state: "pending" };
 /** A refused Revit queue (`BridgeBusy`, not dispatched) is transient: resend 1 s, doubling to 15 s,
- * until the read's own deadline. Any other refusal or failure is final. */
+ * while the reader remains subscribed. Any other refusal or failure is final. */
 const BUSY_RETRY_FIRST_MS = 1_000;
 const BUSY_RETRY_CEILING_MS = 15_000;
 const isBridgeBusy = (error: unknown) =>
@@ -109,16 +108,10 @@ class SceneData {
         return;
       }
       const source = this.source;
-      // One deadline bounds the whole read, including every busy resend: a refusal is not an answer.
+      // An explicit read belongs to its subscribers, not a clock. Leaving releases the wait.
+      // TODO: /call disconnect still cannot cancel an already dispatched native operation.
       let retry: ReturnType<typeof setTimeout> | undefined;
-      const timeout = setTimeout(() => {
-        publish({ state: "failed", error: `no answer after ${NATIVE_READ_WAIT_S}s` });
-        abort.abort();
-      }, NATIVE_READ_WAIT_S * 1000);
-      owned.release = () => {
-        clearTimeout(timeout);
-        clearTimeout(retry);
-      };
+      owned.release = () => clearTimeout(retry);
       const send = (delay: number) => {
         if (abort.signal.aborted) return;
         const call = (request: ReturnType<typeof sceneRequest>) =>
@@ -130,7 +123,6 @@ class SceneData {
         const operation = call(source.request).then((value) => ({ value, notice: null }));
         void operation
           .then(({ value: { id }, notice }) => {
-            clearTimeout(timeout);
             abort.signal.throwIfAborted();
             receipts.delete(this.key);
             receipts.set(this.key, { id, notice });
@@ -143,7 +135,6 @@ class SceneData {
               retry = setTimeout(() => send(Math.min(BUSY_RETRY_CEILING_MS, delay * 2)), delay);
               return;
             }
-            clearTimeout(timeout);
             publish({
               state: "failed",
               error,

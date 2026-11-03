@@ -1,5 +1,4 @@
-﻿import type { IncomingMessage } from "node:http";
-import { Readable } from "node:stream";
+﻿import { request, type IncomingMessage } from "node:http";
 import { pipeline } from "node:stream/promises";
 import { resolve } from "node:path";
 import { matchPeRoute } from "@pe/agent-contracts/pe-api";
@@ -208,24 +207,34 @@ async function checkoutMiddleware(
       headers.set("origin", new URL(target!).origin);
       if (req.headers.referer)
         headers.set("referer", new URL(new URL(req.headers.referer).pathname, target).href);
+      res.setTimeout(0);
       const controller = new AbortController();
       res.on("close", () => controller.abort());
-      const upstream = await fetch(new URL(req.url!, target), {
-        method: req.method,
-        headers,
-        body,
-        redirect: "manual",
-        signal: controller.signal,
+      // Node fetch has its own response-header deadline. Borrowed native reads obey the same
+      // reader-owned lifetime as the normal proxy, so use the socket transport without a timer.
+      const upstream = await new Promise<IncomingMessage>((resolve, reject) => {
+        const outgoing = request(
+          new URL(req.url!, target),
+          {
+            method: req.method,
+            headers: Object.fromEntries(headers),
+            signal: controller.signal,
+          },
+          resolve,
+        );
+        outgoing.setTimeout(0);
+        outgoing.once("error", reject);
+        outgoing.end(body);
       });
-      res.statusCode = upstream.status;
-      upstream.headers.forEach((value, key) => {
+      res.statusCode = upstream.statusCode ?? 502;
+      for (const [key, value] of Object.entries(upstream.headers)) {
         if (
+          value !== undefined &&
           !["content-encoding", "content-length", "transfer-encoding", "set-cookie"].includes(key)
         )
           res.setHeader(key, value);
-      });
-      if (upstream.body) await pipeline(Readable.fromWeb(upstream.body as never), res);
-      else res.end();
+      }
+      await pipeline(upstream, res);
     } catch (error) {
       if (res.destroyed) return;
       if (!res.headersSent) res.statusCode = 502;
@@ -282,10 +291,17 @@ export function devHostProxy(target: string): Record<string, ProxyOptions> {
         target,
         changeOrigin: true,
         ws: true,
+        // A native read has no response deadline; the downstream reader owns its lifetime.
+        timeout: 0,
+        proxyTimeout: 0,
         configure(proxy) {
           // Bind each request, not a prior health probe: the port can change owners between them.
-          proxy.on("proxyReq", (outgoing) => {
+          proxy.on("proxyReq", (outgoing, _req, response) => {
             outgoing.setHeader(HOST_RUNTIME_SERVICE_HEADER, serviceName);
+            // A completed POST body is not a departed reader. Watch the response socket.
+            response.once("close", () => {
+              if (!response.writableFinished) outgoing.destroy();
+            });
           });
           proxy.on("proxyReqWs", (outgoing, req, socket) => {
             if (!readHostCheckout() && isCheckoutRequest(req)) {

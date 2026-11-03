@@ -87,3 +87,59 @@ it("preserves a capture failure and its validation issues without a fallback rea
   expect(io.call).toHaveBeenCalledTimes(1);
   release();
 });
+it("delivers an explicitly requested scene after 151 seconds without abandoning or reissuing it", async () => {
+  vi.useFakeTimers();
+  io.call.mockImplementation(
+    () => new Promise((resolve) => setTimeout(() => resolve({ id: "slow-151" }), 151_000)),
+  );
+  const data = sceneData({
+    kind: "capture",
+    document: { session: "slow-151", openId: "doc" },
+    revision: 1,
+    request: sceneRequest([101], false, 15, "meshes"),
+  });
+  const release = data.subscribe(() => {});
+  try {
+    await vi.advanceTimersByTimeAsync(120_001);
+    expect(data.read().state).toBe("pending");
+    expect(io.call.mock.calls[0]![2].signal.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(30_999);
+    expect(data.read().state).toBe("ready");
+    expect(io.call).toHaveBeenCalledTimes(1);
+    expect(io.fetch).toHaveBeenCalledWith("slow-151", expect.any(AbortSignal));
+  } finally {
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+  }
+});
+
+it("the last reader leaving aborts the client wait and ignores a late native answer", async () => {
+  vi.useFakeTimers();
+  let answer!: (value: { id: string }) => void;
+  io.call.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        answer = resolve;
+      }),
+  );
+  const data = sceneData({
+    kind: "capture",
+    document: { session: "leave-slow", openId: "doc" },
+    revision: 1,
+    request: sceneRequest([101], false, 15, "meshes"),
+  });
+  const first = data.subscribe(() => {});
+  const last = data.subscribe(() => {});
+  const signal = io.call.mock.calls[0]![2].signal as AbortSignal;
+  first();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(signal.aborted).toBe(false);
+  last();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(signal.aborted).toBe(true);
+  const fetched = io.fetch.mock.calls.length;
+  answer({ id: "abandoned" });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(io.fetch).toHaveBeenCalledTimes(fetched);
+  expect(data.read().state).toBe("pending");
+});

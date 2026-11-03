@@ -93,3 +93,24 @@ test("HTTP requests answer during claim acquisition and discovery only publishes
     rmSync(localAppData, { recursive: true, force: true });
   }
 }, 15_000);
+
+test("HTTP response lifetime is reader-owned while request upload limits stay bounded", () => {
+  const nodeServer = createServer();
+  nodeServer.setTimeout(120_000);
+  const uploadTimeout = nodeServer.requestTimeout;
+  const headersTimeout = nodeServer.headersTimeout;
+  // effect-edge: test-runner
+  const handle = Effect.runSync(Deferred.make<ServiceHostHandle>());
+  // effect-edge: test-runner
+  const latch = Effect.runSync(Deferred.make<void>());
+  makeHttpLive({
+    capabilities: { revit: false },
+    lifecycle: { handle, latch },
+    nodeServer,
+    port: 0,
+    webRoot: null,
+  });
+  expect(nodeServer.timeout).toBe(0);
+  expect(nodeServer.requestTimeout).toBe(uploadTimeout);
+  expect(nodeServer.headersTimeout).toBe(headersTimeout);
+});

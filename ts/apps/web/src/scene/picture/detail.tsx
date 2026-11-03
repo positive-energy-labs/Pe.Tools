@@ -28,6 +28,15 @@ export function DetailedRead({
       >
         {overview ? "Use overview" : "Read detailed"}
       </Button>
+      {pending && (
+        <Button
+          label="Stop"
+          reason="Stop waiting for detail; Revit may finish work already dispatched."
+          onClick={onRead}
+        >
+          Stop
+        </Button>
+      )}
       {metadata && (
         <OutcomeLine
           kind="advisory"

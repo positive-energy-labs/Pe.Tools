@@ -24,3 +24,9 @@ it("discloses generated read cost and padding, and acquires only on a click", ()
   fireEvent.click(view.getByRole("button", { name: "Read detailed" }));
   expect(onRead).toHaveBeenCalledTimes(1);
 });
+it("Stop withdraws detailed acquisition while its read is pending", () => {
+  const stop = vi.fn();
+  const view = render(<DetailedRead overview pending onRead={stop} />);
+  fireEvent.click(view.getByRole("button", { name: "Stop" }));
+  expect(stop).toHaveBeenCalledTimes(1);
+});
