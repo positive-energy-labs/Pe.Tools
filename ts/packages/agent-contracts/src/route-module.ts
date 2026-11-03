@@ -267,6 +267,7 @@ function snapshotBindings(bindings: RouteBindings): RouteBindings {
     ),
   });
 }
+declare const admittedTypes: unique symbol;
 export class AdmittedRoute<
   G extends KernelGraph = KernelGraph,
   S extends SchemaTable = SchemaTable,
@@ -274,7 +275,7 @@ export class AdmittedRoute<
   Render = unknown,
 > {
   // Type witness only; executable bindings remain in the private exact-object table.
-  declare private readonly bindingTypes: { schemas: S; entries: E; render: Render };
+  declare readonly [admittedTypes]: { schemas: S; entries: E; render: Render };
   readonly #admissionAuthority = true;
   readonly data: Immutable<G>;
   readonly fingerprint: RouteFingerprint;
