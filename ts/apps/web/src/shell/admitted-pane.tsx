@@ -118,9 +118,21 @@ function Pane({
   layout: LayoutJson;
 }) {
   useSyncExternalStore(mount.subscribe, mount.revision, mount.revision);
+  const failure = mount.workFailure();
+  const problem = mount.workProblem();
+  const workMessage =
+    failure?.kind === "registration-mismatch"
+      ? "This tab is running an older version of this route; reload."
+      : (failure?.message ?? problem);
   return createElement(
     Fragment,
     null,
+    workMessage &&
+      createElement(OutcomeLine, {
+        kind: "error",
+        label: failure?.kind ?? "Work unavailable",
+        says: workMessage,
+      }),
     createElement(SubjectPicker, { mount, route }),
     mount.refreshable &&
       createElement(Button, { label: "refresh", onClick: () => mount.refresh() }, "refresh"),

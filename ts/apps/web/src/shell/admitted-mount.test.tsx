@@ -2445,9 +2445,66 @@ test("AdmittedPane subject picker goes through transition and reloads its accept
   fireEvent.click(screen.getByRole("button", { name: "Choose note" }));
   fireEvent.click(await screen.findByText("Picked note"));
   expect(screen.getByTestId("subject").textContent).toBe("picked");
-  expect(transition).toHaveBeenCalledWith(expect.anything(), { note: identity.value }, expect.objectContaining({ kind: "human", source: "subject" }), expect.anything());
+  expect(transition).toHaveBeenCalledWith(
+    expect.anything(),
+    { note: identity.value },
+    expect.objectContaining({ kind: "human", source: "subject" }),
+    expect.anything(),
+  );
   expect(location.address.read().get("note")).toContain("picked");
   first.unmount();
   render(createElement(AdmittedPane, { shell, route, address: location.address, pane: "main" }));
   expect(screen.getByTestId("subject").textContent).toBe("picked");
 });
+
+test.each(["registration-mismatch", "migration-failed", "failed"] as const)(
+  "AdmittedPane renders terminal Work failure %s without retrying in place",
+  async (kind) => {
+    const route = await workRoute();
+    const failure =
+      kind === "registration-mismatch"
+        ? {
+            kind,
+            routeKey: route.data.key,
+            expected: route.workFingerprint,
+            received: route.workFingerprint,
+          }
+        : kind === "migration-failed"
+          ? {
+              kind,
+              routeKey: route.data.key,
+              fromVersion: 1,
+              toVersion: 2,
+              step: 1,
+              message: "Saved Work could not migrate",
+            }
+          : { kind, code: "WorkUnavailable", message: "Work store is unavailable" };
+    const expected =
+      kind === "registration-mismatch"
+        ? "This tab is running an older version of this route; reload."
+        : failure.message!;
+    const store = createFixtureWorkDoor(
+      { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
+      { amount: 0 },
+    );
+    const open = vi.fn<WorkJournalDoor["open"]>(() => ({
+      subscribe(deliver, end) {
+        deliver({ kind: "failed", failure });
+        end();
+        return () => {};
+      },
+    }));
+    const t = transports();
+    const shell = createRouteShell({ ...t.services, work: { ...store, open } });
+    const mount = vi.spyOn(shell, "mount");
+    const location = locationPort();
+    render(createElement(AdmittedPane, { shell, route, address: location.address, pane: "main" }));
+    expect(await screen.findByText(expected)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /retry|reload/i })).toBeNull();
+    expect(mount.mock.results[0]!.value.workFailure()).toEqual(failure);
+    expect(mount.mock.results[0]!.value.workProblem()).toBeTruthy();
+    await act(async () => mount.mock.results[0]!.value.controls.query("query", "redraw"));
+    expect(screen.getByText(expected)).toBeTruthy();
+    expect(open).toHaveBeenCalledOnce();
+  },
+);
