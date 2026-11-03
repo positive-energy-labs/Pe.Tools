@@ -106,6 +106,6 @@ public sealed class DuctGeometryTests {
         var back = Newtonsoft.Json.JsonConvert.DeserializeObject<DuctLoss>(json)!;
         Assert.That(back.Method, Is.EqualTo(DuctLossMethod.SpecificCoefficient));
         Assert.That(back.Coefficient, Is.EqualTo(0.25));
-        Assert.That(new DuctParameterSlots().FanStatic, Is.EqualTo("PE_M_Fan_ExternalStaticPressure"));
+        Assert.That(new DuctParameterSlotOverrides().Resolve().FanStatic, Is.EqualTo("PE_M_Fan_ExternalStaticPressure"));
     }
 }

@@ -179,7 +179,7 @@ export namespace DuctsApply {
      * Host-priced losses, drops in in-wg and design flows in cfm. Preview opens no transaction.
      */
     export interface Request {
-      slots?: null | DuctParameterSlots;
+      slots?: null | DuctParameterSlotOverrides;
       fittings: DuctFittingWrite[];
       terminals: DuctDropWrite[];
       components: DuctDropWrite[];
@@ -195,7 +195,7 @@ export namespace DuctsApply {
      * live (the configurable door, kaitpw 2026-10-08).
      *
      */
-    export interface DuctParameterSlots {
+    export interface DuctParameterSlotOverrides {
       fanStatic?: null | string;
       fanFlow?: null | string;
       componentDrop?: null | string;
@@ -272,7 +272,7 @@ export namespace DuctsApply {
       roles?: {
         [k: string]: DuctRoleRecord;
       };
-      slots?: null | DuctParameterSlots;
+      slots?: null | DuctParameterSlotOverrides;
       workRevision?: number;
       appliedAt?: null | string;
       [k: string]: unknown;
@@ -422,7 +422,7 @@ export namespace DuctsApplyPreview {
      * Host-priced losses, drops in in-wg and design flows in cfm. Preview opens no transaction.
      */
     export interface Request {
-      slots?: null | DuctParameterSlots;
+      slots?: null | DuctParameterSlotOverrides;
       fittings: DuctFittingWrite[];
       terminals: DuctDropWrite[];
       components: DuctDropWrite[];
@@ -438,7 +438,7 @@ export namespace DuctsApplyPreview {
      * live (the configurable door, kaitpw 2026-10-08).
      *
      */
-    export interface DuctParameterSlots {
+    export interface DuctParameterSlotOverrides {
       fanStatic?: null | string;
       fanFlow?: null | string;
       componentDrop?: null | string;
@@ -515,7 +515,7 @@ export namespace DuctsApplyPreview {
       roles?: {
         [k: string]: DuctRoleRecord;
       };
-      slots?: null | DuctParameterSlots;
+      slots?: null | DuctParameterSlotOverrides;
       workRevision?: number;
       appliedAt?: null | string;
       [k: string]: unknown;
@@ -1126,7 +1126,7 @@ export namespace DuctsSnapshotRoster {
      *
      */
     export interface Request {
-      slots?: null | DuctParameterSlots;
+      slots?: null | DuctParameterSlotOverrides;
       labelParameter?: null | string;
       selector?: null | DuctSnapshotSelector;
     }
@@ -1137,7 +1137,7 @@ export namespace DuctsSnapshotRoster {
      * live (the configurable door, kaitpw 2026-10-08).
      *
      */
-    export interface DuctParameterSlots {
+    export interface DuctParameterSlotOverrides {
       fanStatic?: null | string;
       fanFlow?: null | string;
       componentDrop?: null | string;
@@ -1553,19 +1553,15 @@ export namespace DuctsSnapshotRoster {
       elementIds: number[];
     }
     /**
-     * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
-     * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) and TerminalFlow (CFM) on terminals,
-     * FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
-     * live (the configurable door, kaitpw 2026-10-08).
-     *
+     * Complete parameter names after override, store and engine-default resolution.
      */
     export interface DuctParameterSlots {
-      fanStatic?: null | string;
-      fanFlow?: null | string;
-      componentDrop?: null | string;
-      terminalDrop?: null | string;
-      fittingCoefficient?: null | string;
-      terminalFlow?: null | string;
+      fanStatic: string;
+      fanFlow: string;
+      componentDrop: string;
+      terminalDrop: string;
+      fittingCoefficient: string;
+      terminalFlow: string;
     }
     /**
      * Pe's provenance for duct losses: one versioned JSON blob in the hidden Project Information text parameter
@@ -1599,7 +1595,7 @@ export namespace DuctsSnapshotRoster {
       roles: {
         [k: string]: DuctRoleRecord;
       };
-      slots?: null | DuctParameterSlots;
+      slots?: null | DuctParameterSlotOverrides;
       workRevision: number;
       appliedAt?: null | string;
       [k: string]: unknown;
@@ -1650,6 +1646,21 @@ export namespace DuctsSnapshotRoster {
     export interface DuctRoleRecord {
       role: string;
       ruledAt: string;
+    }
+    /**
+     * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
+     * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) and TerminalFlow (CFM) on terminals,
+     * FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
+     * live (the configurable door, kaitpw 2026-10-08).
+     *
+     */
+    export interface DuctParameterSlotOverrides {
+      fanStatic?: null | string;
+      fanFlow?: null | string;
+      componentDrop?: null | string;
+      terminalDrop?: null | string;
+      fittingCoefficient?: null | string;
+      terminalFlow?: null | string;
     }
     /**
      * The document's phases, Document.Phases in order (earliest first), and Views: how many non-template plan and 3D
@@ -1741,7 +1752,7 @@ export namespace DuctsSnapshotWalk {
      *
      */
     export interface Request {
-      slots?: null | DuctParameterSlots;
+      slots?: null | DuctParameterSlotOverrides;
       labelParameter?: null | string;
       selector?: null | DuctSnapshotSelector;
     }
@@ -1752,7 +1763,7 @@ export namespace DuctsSnapshotWalk {
      * live (the configurable door, kaitpw 2026-10-08).
      *
      */
-    export interface DuctParameterSlots {
+    export interface DuctParameterSlotOverrides {
       fanStatic?: null | string;
       fanFlow?: null | string;
       componentDrop?: null | string;
@@ -2168,19 +2179,15 @@ export namespace DuctsSnapshotWalk {
       elementIds: number[];
     }
     /**
-     * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
-     * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) and TerminalFlow (CFM) on terminals,
-     * FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
-     * live (the configurable door, kaitpw 2026-10-08).
-     *
+     * Complete parameter names after override, store and engine-default resolution.
      */
     export interface DuctParameterSlots {
-      fanStatic?: null | string;
-      fanFlow?: null | string;
-      componentDrop?: null | string;
-      terminalDrop?: null | string;
-      fittingCoefficient?: null | string;
-      terminalFlow?: null | string;
+      fanStatic: string;
+      fanFlow: string;
+      componentDrop: string;
+      terminalDrop: string;
+      fittingCoefficient: string;
+      terminalFlow: string;
     }
     /**
      * Pe's provenance for duct losses: one versioned JSON blob in the hidden Project Information text parameter
@@ -2214,7 +2221,7 @@ export namespace DuctsSnapshotWalk {
       roles: {
         [k: string]: DuctRoleRecord;
       };
-      slots?: null | DuctParameterSlots;
+      slots?: null | DuctParameterSlotOverrides;
       workRevision: number;
       appliedAt?: null | string;
       [k: string]: unknown;
@@ -2265,6 +2272,21 @@ export namespace DuctsSnapshotWalk {
     export interface DuctRoleRecord {
       role: string;
       ruledAt: string;
+    }
+    /**
+     * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
+     * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) and TerminalFlow (CFM) on terminals,
+     * FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
+     * live (the configurable door, kaitpw 2026-10-08).
+     *
+     */
+    export interface DuctParameterSlotOverrides {
+      fanStatic?: null | string;
+      fanFlow?: null | string;
+      componentDrop?: null | string;
+      terminalDrop?: null | string;
+      fittingCoefficient?: null | string;
+      terminalFlow?: null | string;
     }
     /**
      * The document's phases, Document.Phases in order (earliest first), and Views: how many non-template plan and 3D

@@ -19,7 +19,7 @@ public sealed class DuctLossStoreTests {
             EquipmentFlows = new() { [9668311] = new DuctFlowRecord(1800, "submittal p. 3", At) },
             Verdicts = new() { ["open-end:6119626:1"] = new DuctVerdictRecord("ignore", At) },
             Roles = new() { [9668311] = new DuctRoleRecord("passive", At) },
-            Slots = new DuctParameterSlots(TerminalDrop: "Catalog Drop"),
+            Slots = new DuctParameterSlotOverrides(TerminalDrop: "Catalog Drop"),
             WorkRevision = 3,
             AppliedAt = At
         };
@@ -63,7 +63,7 @@ public sealed class DuctLossStoreTests {
     public void A_chosen_airflow_slot_round_trips() {
         var store = new DuctLossStore {
             Version = DuctLossStore.CurrentVersion,
-            Slots = new DuctParameterSlots(TerminalFlow: "Actual Supply Air Flow")
+            Slots = new DuctParameterSlotOverrides(TerminalFlow: "Actual Supply Air Flow")
         };
 
         Assert.That(DuctLossStore.FromJson(store.ToJson()).Slots!.TerminalFlow, Is.EqualTo("Actual Supply Air Flow"));
@@ -87,18 +87,18 @@ public sealed class DuctLossStoreTests {
 
     [Test]
     public void Partial_slots_from_the_wire_fall_back_to_the_defaults() {
-        var slots = Newtonsoft.Json.JsonConvert.DeserializeObject<DuctParameterSlots>("""{"componentDrop":"Damper Drop"}""")!;
+        var slots = Newtonsoft.Json.JsonConvert.DeserializeObject<DuctParameterSlotOverrides>("""{"componentDrop":"Damper Drop"}""")!;
 
         Assert.That(slots.FanStatic, Is.Null, "Newtonsoft passes null for a missing ctor argument");
-        Assert.That(slots.WithDefaults(), Is.EqualTo(new DuctParameterSlots(ComponentDrop: "Damper Drop").WithDefaults()));
+        Assert.That(slots.Resolve(), Is.EqualTo(new DuctParameterSlotOverrides(ComponentDrop: "Damper Drop").Resolve()));
     }
 
     [Test]
     public void Staged_slots_win_over_the_store_and_the_store_over_the_defaults() {
-        var staged = Newtonsoft.Json.JsonConvert.DeserializeObject<DuctParameterSlots>("""{"componentDrop":"Damper Drop"}""")!;
-        var stored = new DuctParameterSlots(TerminalDrop: "Catalog Drop", ComponentDrop: "Old Drop");
+        var staged = Newtonsoft.Json.JsonConvert.DeserializeObject<DuctParameterSlotOverrides>("""{"componentDrop":"Damper Drop"}""")!;
+        var stored = new DuctParameterSlotOverrides(TerminalDrop: "Catalog Drop", ComponentDrop: "Old Drop");
 
-        Assert.That(staged.Over(stored).WithDefaults(),
-            Is.EqualTo(new DuctParameterSlots(ComponentDrop: "Damper Drop", TerminalDrop: "Catalog Drop").WithDefaults()));
+        Assert.That(staged.Resolve(stored),
+            Is.EqualTo(new DuctParameterSlotOverrides(ComponentDrop: "Damper Drop", TerminalDrop: "Catalog Drop").Resolve()));
     }
 }

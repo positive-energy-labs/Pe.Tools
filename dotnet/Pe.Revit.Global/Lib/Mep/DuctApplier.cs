@@ -75,7 +75,7 @@ public static class DuctApplier {
 
     public static DuctApplyResult Apply(Document doc, DuctApplyRequest request, bool preview) {
         // Name by name: a staged slot wins over the stored one, so a partial request never drops a stored name.
-        var slots = (request.Slots?.Over(request.Store.Slots) ?? request.Store.Slots ?? new DuctParameterSlots()).WithDefaults();
+        var slots = (request.Slots ?? new DuctParameterSlotOverrides()).Resolve(request.Store.Slots);
         var schemas = new Dictionary<Guid, Schema?> {
             [SpecificCoefficient] = Schema(SpecificCoefficient),
             [SpecificLoss] = Schema(SpecificLoss),
@@ -173,7 +173,7 @@ public static class DuctApplier {
             new(id, kind, before) { Key = key, After = after, Write = () => after };
         // A model with no record held no slot: "none", never the C# defaults (Manual D #5 defect 8 read
         // PE_M_Fan_AirFlowDesign there while the resolver used PE_M_Fan_AirFlow).
-        var had = stored?.Slots?.WithDefaults();
+        var had = stored?.Slots?.Resolve();
         var names = new[] {
             ("fanStatic", had?.FanStatic, slots.FanStatic),
             ("fanFlow", had?.FanFlow, slots.FanFlow),
@@ -495,7 +495,8 @@ public static class DuctApplier {
             // The rulings as sent: the web composes the model's rulings with the person's pending deltas (`StoreEntries` names each change).
             Verdicts = new Dictionary<string, DuctVerdictRecord>(asked.Verdicts ?? new(), StringComparer.Ordinal),
             Roles = new Dictionary<long, DuctRoleRecord>(asked.Roles ?? new()),
-            Slots = slots, WorkRevision = revision, AppliedAt = now, Unknown = unknown
+            Slots = new DuctParameterSlotOverrides(slots.FanStatic, slots.FanFlow, slots.ComponentDrop,
+                slots.TerminalDrop, slots.FittingCoefficient, slots.TerminalFlow), WorkRevision = revision, AppliedAt = now, Unknown = unknown
         };
     }
 

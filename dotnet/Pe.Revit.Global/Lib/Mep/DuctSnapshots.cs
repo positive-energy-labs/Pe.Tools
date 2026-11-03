@@ -47,10 +47,10 @@ public static class DuctSnapshots {
         string? LabelParameter,
         IReadOnlyDictionary<long, string> PhaseNames);
 
-    public static DuctSnapshotData Snapshot(Document doc, DuctParameterSlots? slots = null, string? labelParameter = null, DuctSnapshotSelector? selector = null, bool metadataOnly = false) {
+    public static DuctSnapshotData Snapshot(Document doc, DuctParameterSlotOverrides? overrides = null, string? labelParameter = null, DuctSnapshotSelector? selector = null, bool metadataOnly = false) {
         // The names the person staged win, then the names the last apply recorded in the store, then the defaults.
         var (store, storeError) = DuctApplier.ReadStore(doc);
-        slots = (slots?.Over(store?.Slots) ?? store?.Slots ?? new DuctParameterSlots()).WithDefaults();
+        var slots = (overrides ?? new DuctParameterSlotOverrides()).Resolve(store?.Slots);
         var clock = Stopwatch.StartNew();
         var readAt = DateTimeOffset.UtcNow;
         List<Element> Of(BuiltInCategory category) => new FilteredElementCollector(doc)
@@ -471,7 +471,7 @@ public static class DuctSnapshots {
         var typed = slot != "revit:Flow" && (e as FamilyInstance)?.Symbol is { } symbol ? NamedFlow(symbol) : null;
         if (Converted(typed, UnitTypeId.CubicFeetPerMinute) is { } typeCfm) return (typeCfm, slot);
         // The firm default is not present in every family. Resolve the terminal itself, never a roster count.
-        if (own is null && typed is null && slot == new DuctParameterSlots().WithDefaults().TerminalFlow
+        if (own is null && typed is null && slot == new DuctParameterSlotOverrides().Resolve().TerminalFlow
             && e.Category.ToBuiltInCategory() == BuiltInCategory.OST_DuctTerminal) {
             own = e.get_Parameter(BuiltInParameter.RBS_DUCT_FLOW_PARAM);
             slot = "revit:Flow";

@@ -10,7 +10,7 @@ namespace Pe.Shared.RevitData.Ducts;
 
 /// <summary>Host-priced losses, drops in in-wg and design flows in cfm. Preview opens no transaction.</summary>
 public sealed record DuctApplyRequest(
-    DuctParameterSlots? Slots,
+    DuctParameterSlotOverrides? Slots,
     IReadOnlyList<DuctFittingWrite> Fittings,
     IReadOnlyList<DuctDropWrite> Terminals,
     IReadOnlyList<DuctDropWrite> Components,
@@ -103,7 +103,7 @@ public sealed record DuctLossStore {
     public Dictionary<long, DuctFlowRecord> EquipmentFlows { get; init; } = new();
     public Dictionary<string, DuctVerdictRecord> Verdicts { get; init; } = new(StringComparer.Ordinal);
     public Dictionary<long, DuctRoleRecord> Roles { get; init; } = new();
-    public DuctParameterSlots? Slots { get; init; }
+    public DuctParameterSlotOverrides? Slots { get; init; }
     public int WorkRevision { get; init; }
     public DateTimeOffset? AppliedAt { get; init; }
 

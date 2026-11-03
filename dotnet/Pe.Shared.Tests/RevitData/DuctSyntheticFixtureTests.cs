@@ -84,7 +84,7 @@ public sealed class DuctSyntheticFixtureTests {
             DuctHealth.Index(a.Groups, a.Nodes, a.Segments, issues), a.Nodes, a.Segments, a.Flows, issues, [],
             [new DuctSystem(500, "SA 1", "SupplyAir", true, 1, 1, 0.1, [1, 2],
                 [new DuctSection(1, 400, 0.04, [10, 21]), new DuctSection(2, 300, 0.06, [11, 30]), new DuctSection(3, 100, 0.05, [22, 12, 31])])],
-            new DuctParameterSlots());
+            new DuctParameterSlotOverrides().Resolve());
     }
 
     [Test]

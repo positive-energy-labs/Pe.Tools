@@ -18,7 +18,7 @@ public sealed class DuctSlotChainTests {
             group.Start();
             var settings = (JsonSerializerSettings)typeof(Op)
                 .GetField("JsonSettings", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!;
-            DuctParameterSlots Decode(string json) => JsonConvert.DeserializeObject<DuctParameterSlots>(json, settings)!;
+            DuctParameterSlotOverrides Decode(string json) => JsonConvert.DeserializeObject<DuctParameterSlotOverrides>(json, settings)!;
             var slots = Decode("""{"fanFlow":"PE_M_Fan_AirFlow","terminalFlow":"revit:Flow"}""");
             var initial = new DuctApplyRequest(slots, [], [], [], [], [], [],
                 new DuctLossStore { Version = DuctLossStore.CurrentVersion });
