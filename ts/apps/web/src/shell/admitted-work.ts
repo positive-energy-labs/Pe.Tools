@@ -112,8 +112,9 @@ export function createAdmittedWork(
               if (value.kind === "pending") return;
               if (value.kind === "accepted")
                 owner.acceptWork(invocation, { kind: "ack", write: value.ack });
-              else problem = value.refusal.error;
-              notify();
+              else if (owner.read()?.scope === invocation.token.scope)
+                problem = value.refusal.error;
+              if (owner.read()?.scope === invocation.token.scope) notify();
               resolve(value);
             },
             () => {},

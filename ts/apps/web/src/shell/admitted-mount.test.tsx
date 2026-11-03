@@ -2342,3 +2342,102 @@ test("two routes edit, undo and redo one owner's accepted Work in order", async 
   expect(a.work()).toEqual(b.work());
   expect(scopes).toEqual(["note", "note"]);
 });
+
+test.each(["accepted", "refused"] as const)(
+  "pane Work outcome %s after departure never reaches replacement",
+  async (kind) => {
+    const t = transports();
+    const store = createFixtureWorkDoor(
+      { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
+      { amount: 0 },
+    );
+    let pane: {
+      workBasis: import("../../../../packages/agent-contracts/src/route-kernel-page").InvocationToken;
+      verbs: { change(input: number, basis: unknown): Observation<WorkWriteOutcome> };
+    };
+    const route = await workRoute("none", false, "nothing", undefined, false, {
+      output: z.string(),
+      run: () => ({}),
+      pane: (ctx) => {
+        pane = ctx as typeof pane;
+        return null;
+      },
+    });
+    let finish: () => void = () => {
+      throw Error("Write not submitted");
+    };
+    const door: WorkJournalDoor = {
+      ...store,
+      submitWork: (scope, write, invocation) => ({
+        subscribe(deliver, end) {
+          finish = () => {
+            if (kind === "accepted")
+              store.submitWork(scope, write, invocation).subscribe(deliver, end);
+            else {
+              deliver({
+                kind: "refused",
+                refusal: {
+                  kind: "refused",
+                  code: "stale_revision",
+                  error: "Old subject stale",
+                  hint: "Refresh",
+                  revision: 7,
+                },
+              });
+              end();
+            }
+          };
+          return () => {};
+        },
+      }),
+    };
+    const mount = createRouteShell({ ...t.services, work: door }).mount(
+      route,
+      locationPort().address,
+    );
+    closes.push(mount.close);
+    mount.read("main");
+    const outcome = pane!.verbs.change(2, pane!.workBasis);
+    await Promise.resolve();
+    const next = identityCodecs.local.encode({ namespace: "note", subject: "replacement" });
+    if (!next.ok) throw Error(next.reason);
+    mount.controls.subject(next.value);
+    mount.read("main");
+    const replacement = mount.work();
+    const changed = vi.fn();
+    const stop = mount.subscribe(changed);
+    finish();
+    expect((await settle(outcome)).kind).toBe(kind);
+    expect(mount.work()).toEqual(replacement);
+    expect(mount.workProblem()).toBeNull();
+    expect(changed).not.toHaveBeenCalled();
+    stop();
+  },
+);
+
+test("AdmittedPane subject picker goes through transition and reloads its accepted URL subject", async () => {
+  const identity = identityCodecs.local.encode({ namespace: "note", subject: "picked" });
+  if (!identity.ok) throw Error(identity.reason);
+  const transition = vi.fn((_ctx: unknown, patch: unknown) => ({ ok: true, value: patch }));
+  const route = await admitted(false, false, {
+    data: { transition: "transition" },
+    bodies: {
+      pick: { ...bodies.pick, run: () => [{ id: identity.value, label: "Picked note" }] },
+      transition: { slot: "transition", kind: "transition", source, run: transition },
+      main: { ...bodies.main, run: (ctx: { page: { note: unknown } }) => createElement("output", { "data-testid": "subject" }, ctx.page.note === identity.value ? "picked" : "empty") },
+    },
+  });
+  const location = locationPort();
+  const t = transports();
+  const shell = createRouteShell(t.services);
+  const first = render(createElement(AdmittedPane, { shell, route, address: location.address, pane: "main" }));
+  await act(async () => t.frames[0]!(ready("roster")));
+  fireEvent.click(screen.getByRole("button", { name: "Choose note" }));
+  fireEvent.click(await screen.findByText("Picked note"));
+  expect(screen.getByTestId("subject").textContent).toBe("picked");
+  expect(transition).toHaveBeenCalled();
+  expect(location.address.read().get("note")).toContain("picked");
+  first.unmount();
+  render(createElement(AdmittedPane, { shell, route, address: location.address, pane: "main" }));
+  expect(screen.getByTestId("subject").textContent).toBe("picked");
+});
