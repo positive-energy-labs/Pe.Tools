@@ -417,3 +417,12 @@ export const commandCatalogAxes: Record<HostActionKey, CatalogAxes> = {
   ...declaredAxes,
   ...previewAxes,
 };
+
+// The seal follows the axis: a Work write is sealed exactly when its Effect is ModelWrite. A
+// SessionWrite capture uses `workIntent` and carries no boundary; the linker refuses the converse.
+for (const [key, action] of Object.entries(hostActions)) {
+  const phase = "writeBoundary" in action ? action.writeBoundary.phase : undefined;
+  const effect = commandCatalogAxes[key as HostActionKey].effect;
+  if (phase && effect !== (phase === "apply" ? "ModelWrite" : "TransactRead"))
+    throw Error(`${key}: a ${phase} write boundary needs Effect ${phase === "apply" ? "ModelWrite" : "TransactRead"}, not ${effect}`);
+}

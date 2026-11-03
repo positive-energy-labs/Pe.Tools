@@ -27,15 +27,15 @@ import { readFamily, type FamilyActionDependencies } from "./family-actions.ts";
 import { actionAdmissionSchema, workKeySchema } from "@pe/agent-contracts";
 import { z } from "zod";
 import { fileVersion } from "./takeoff-actions.ts";
-import { Effect, Exit, Layer, Schema } from "effect";
+import { Context, Effect, Exit, Layer, Option, Schema } from "effect";
 import {
   addressSchema,
   sameAddress,
   documentRefSchema,
   actionStatusSchema,
 } from "@pe/agent-contracts";
-import { hostTakeoffCaptures, type TakeoffCaptures } from "./takeoff-captures.ts";
-import { readFamiliesProgressively, cancelFamiliesRead } from "./families-reader.ts";
+import { CaptureStore as TakeoffCaptureStore, type TakeoffCaptures } from "./takeoff-captures.ts";
+import type { FamiliesReader } from "./families-reader.ts";
 import {
   projectTakeoffSnapshot,
   projectTakeoffViews,
@@ -164,6 +164,8 @@ export function makeCallRoute(
     readonly origin?: () => string;
     readonly captureHostOp?: typeof recordHostOp;
     readonly local?: (key: string, input: unknown) => Promise<unknown>;
+    /** The Families reader the host's layer built; absent where no Revit composition exists. */
+    readonly families?: FamiliesReader["Service"];
   },
 ) {
   const CALL_FORWARD_BASE = process.env.PE_TOOLS_CALL_FORWARD?.trim().replace(/\/$/, "");
@@ -171,10 +173,19 @@ export function makeCallRoute(
     throw Error(
       "Host forwarding is disabled: execution requires this runtime's own host and Revit.",
     );
+  const families = () => {
+    if (!composition?.families) throw Error("Families reads need the FamiliesReader service.");
+    return composition.families;
+  };
   const recordOperation = composition?.captureHostOp ?? recordHostOp;
   const dispatch: CallRouteDispatch = (...args) =>
     (composition?.dispatch ?? dispatchTsOnlyOperation)(...args);
-  const observations = () => (captures ??= hostTakeoffCaptures());
+  // The injected store, else the `CaptureStore` of the layer that builds these routes (set below,
+  // before any handler can run).
+  const observations = (): TakeoffCaptures => {
+    if (!captures) throw Error("Takeoff captures are read before the call route layer is built.");
+    return captures;
+  };
   const owner = () => operations;
   type NativeAnswer = Effect.Success<ReturnType<RevitBridge["Service"]["invoke"]>>;
   /**
@@ -440,7 +451,7 @@ export function makeCallRoute(
       }
       const result = isTsOnlyOperationKey(key)
         ? {
-            value: yield* dispatch(key, request, scope, bridge),
+            value: yield* dispatch(key, request, scope, bridge, observations()),
             target: null,
           }
         : entry.snapshot
@@ -623,7 +634,7 @@ export function makeCallRoute(
               caller,
               "/families/readings",
             );
-            await cancelFamiliesRead(readId, target);
+            await families().cancel(readId, target);
             return Response.jsonUnsafe({ cancelled: true });
           }
           if (req.method !== "POST") throw Error("Unsupported Families reading method");
@@ -678,9 +689,7 @@ export function makeCallRoute(
           const session = await Effect.runPromise(
             SdkSession.resolve(bridge, { session: target.session }),
           );
-          const document = session.state?.openDocuments.find(
-            (row) => row.openId === target.openId,
-          );
+          const document = session.state?.openDocuments.find((row) => row.openId === target.openId);
           if (body.work.binding === "address") {
             if (
               !document?.address ||
@@ -693,7 +702,7 @@ export function makeCallRoute(
             body.work.open.openId !== target.openId
           )
             throw Error("Families Work belongs to another document");
-          const saved = await readFamiliesProgressively({
+          const saved = await families().read({
             bridge,
             captures: observations(),
             readId: body.readId,
@@ -968,7 +977,12 @@ export function makeCallRoute(
   return Layer.mergeAll(
     Layer.effectDiscard(
       RevitBridge.use((bridge) =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
+          // The host provides one store for the whole app; a composition with none owns its own,
+          // closed with this layer's scope.
+          captures ??=
+            Option.getOrUndefined(yield* Effect.serviceOption(TakeoffCaptureStore)) ??
+            Context.get(yield* Layer.build(TakeoffCaptureStore.layer()), TakeoffCaptureStore);
           operations.bindCommands({
             ...commandResources(
               bridge,
@@ -980,7 +994,8 @@ export function makeCallRoute(
               observations(),
               actionDeps,
               composition?.local ??
-                ((key, input) => executeGatewayLocal(key, input, bridge, actionDeps.launchShell)),
+                ((key, input) =>
+                  executeGatewayLocal(key, input, bridge, observations(), actionDeps.launchShell)),
               composition?.origin,
             ),
           });
@@ -1101,18 +1116,20 @@ const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
   request: unknown,
   scope: HostSessionScope | undefined,
   bridge: RevitBridge["Service"],
+  captures: TakeoffCaptures,
 ) {
-  return yield* localEntries[key]({ request, scope, bridge });
+  return yield* localEntries[key]({ request, scope, bridge, captures });
 });
 
 type LocalCall = {
   request: unknown;
   scope: HostSessionScope | undefined;
   bridge: RevitBridge["Service"];
+  captures: TakeoffCaptures;
 };
 const localEntries = {
-  "takeoffs.saved": Effect.fnUntraced(function* ({ request }: LocalCall) {
-    return yield* savedTakeoffs(request, hostTakeoffCaptures());
+  "takeoffs.saved": Effect.fnUntraced(function* ({ request, captures }: LocalCall) {
+    return yield* savedTakeoffs(request, captures);
   }),
   "host.status": Effect.fnUntraced(function* ({ bridge }: LocalCall) {
     return yield* Effect.flatMap(
@@ -1314,21 +1331,20 @@ function toProblem(error: unknown): {
     };
   if (error instanceof Refused)
     return { kind: "InvalidRequest", message: error.message, status: 403, notDispatched: true };
-  if (error instanceof Error) return { kind: "HostFailure", message: error.message, status: 500 };
+  // BridgeError is a Schema.TaggedError (an Error) since ADR 0029 phase 3b; its _tag branch below owns it.
+  if (error instanceof Error && !(error instanceof BridgeError))
+    return { kind: "HostFailure", message: error.message, status: 500 };
   if (
     !(
       error instanceof BridgeError ||
       error instanceof InvalidHostRequest ||
-      error instanceof LocalOpError ||
-      error instanceof NoRevitSession
+      error instanceof LocalOpError
     )
   )
     return { kind: "HostFailure", message: String(error), status: 500 };
   switch (error._tag) {
     case "InvalidHostRequest":
       return { kind: "InvalidRequest", message: error.message, status: 400 };
-    case "NoRevitSession":
-      return { kind: "Disconnected", message: error.message, status: 503 };
     case "BridgeError":
       if (error.message.startsWith("Unsupported bridge operation '"))
         return {
@@ -1370,6 +1386,7 @@ function executeGatewayLocal(
   key: string,
   input: unknown,
   bridge: RevitBridge["Service"],
+  captures: TakeoffCaptures,
   launch?: (path: string) => Promise<void>,
 ): Promise<unknown> {
   if (!isTsOnlyOperationKey(key))
@@ -1377,7 +1394,7 @@ function executeGatewayLocal(
   if (!callEntries.get(key)?.shell)
     // effect-edge: island, phase 5
     return Effect.runPromise(
-      dispatchTsOnlyOperation(key, input, undefined, bridge).pipe(
+      dispatchTsOnlyOperation(key, input, undefined, bridge, captures).pipe(
         Effect.provide(NodeServices.layer),
         Effect.provide(NodeHttpClient.layerUndici),
       ),

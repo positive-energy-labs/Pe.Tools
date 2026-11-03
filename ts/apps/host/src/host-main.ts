@@ -6,7 +6,7 @@ import { hostProgram } from "./host-program.ts";
 import { resolveHostVersion } from "./host-lifecycle.ts";
 import { hostOwnership, productRoot } from "./host-ownership.ts";
 import { hostRedirectionTrust, relaunchOutOfGuard } from "./redirection-trust.ts";
-import { hostReceiptExport, fatalReceipt } from "./receipt-export.ts";
+import { currentReceiptExport, fatalReceipt } from "./receipt-export.ts";
 
 // The installer stub and the login Run key start the installed host with no stdio anyone reads, so
 // a host that dies before bind (a refused claim, a thrown binding) leaves nothing behind. Tee every
@@ -62,7 +62,7 @@ for (const [event, code] of [
   process.on(event, (error: unknown) => {
     if (fatal) return;
     fatal = true;
-    void fatalReceipt(hostReceiptExport(), code, error);
+    void fatalReceipt(currentReceiptExport(), code, error);
   });
 
 // effect-edge: process-main

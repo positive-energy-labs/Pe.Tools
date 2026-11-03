@@ -1,12 +1,11 @@
 import { matchPeRoute } from "@pe/agent-contracts/pe-api";
 import { classifyEndpointFailure } from "./endpoint-failure.ts";
-import type { ChildProcess } from "node:child_process";
+import type { AdapterChild } from "./adapter.ts";
 import { createHash, randomUUID } from "node:crypto";
 import {
   appendFileSync,
   existsSync,
   mkdirSync,
-  readdirSync,
   readFileSync,
   renameSync,
   rmSync,
@@ -94,13 +93,14 @@ import {
   documentAcquisition,
   sessionAcquisition,
 } from "../control.ts";
-import { Effect, Schema } from "effect";
+import { Clock, Context, DateTime, Effect, Layer, Schema } from "effect";
 import { runConsentsPromise, type RunConsents } from "../run-consent.ts";
 import { z } from "zod";
 import type { HostLog } from "../host-log.ts";
-import { openAdapter, stopChild } from "./adapter.ts";
+import * as adapter from "./adapter.ts";
+import { Spawner } from "./spawner.ts";
 import { CodexConfig } from "./edge-schemas.ts";
-import { decodeThreadMeta, replayThreadEvents, type Meta } from "./thread-store.ts";
+import { loadThreads, type LoadedThread, type Meta } from "./thread-store.ts";
 import { isAuthRefusal, sessionOffer, type Providers } from "./providers.ts";
 import type { PluginHookName, PluginHooks } from "@pe/agent-contracts";
 import { exportThread } from "../thread-export.ts";
@@ -124,7 +124,7 @@ type Prompt = {
 };
 type Thread = {
   meta: Meta;
-  child: ChildProcess | null;
+  child: AdapterChild | null;
   events: HarnessEvent[];
   live: Promise<Live> | null;
   /** The log as text, carried by the next prompt when the session is new over an existing log. */
@@ -189,6 +189,8 @@ export type HarnessThreadsOptions = {
   /** Called only after the transcript owner commits this fact. No prompt or tool text is exported. */
   receiptFact?: (threadId: string, title: string, event: HarnessEvent) => void;
   pluginHook?: <N extends PluginHookName>(name: N, event: PluginHooks[N]) => Promise<void>;
+  /** How long Stop lets the harness end its turn after ACP cancel before it kills the child. */
+  stopGraceMs?: number;
 };
 
 /** A turn with no session update for this long gets a `waiting` marker, and again each period. */
@@ -196,11 +198,10 @@ const WAITING_MS = 60_000;
 export const IDLE_CHILD_MS = 15 * 60_000;
 /** How long a prompt waits for the turn it interrupts to end before refusing. */
 const INTERRUPT_MS = 10_000;
+/** Stop's escalation bound: ACP cancel first, the child's tree kill when the turn outlives this. */
+const STOP_GRACE_MS = 10_000;
 /** Thrown by `input` on a body route sent without a JSON content type; served as 415. */
 class NotJson extends Error {}
-// effect-edge: island, phase 5
-const warn = (message: string) => Effect.runSync(Effect.logWarning(message));
-
 /**
  * Codex reads `developer_instructions` from its config, and that is the only instruction door this
  * wire reaches: Codex ignores an MCP server's `instructions` (canary 2026-10-04: a child called the
@@ -409,7 +410,29 @@ function writeJson(path: string, value: unknown) {
   renameSync(`${path}.tmp`, path);
 }
 
-export function createHarnessThreads(options: HarnessThreadsOptions) {
+/**
+ * What the Layer hands the store: the replayed threads, the host's clock and a logger bound to the
+ * host's services. The store is Promise code until phase 5; these are the only Effect things in it.
+ */
+type Startup = {
+  loaded: readonly LoadedThread[];
+  clock: Clock.Clock;
+  /** Logs a warning on the host's logger from Promise code. */
+  warn: (message: string) => void;
+  /** Failures while adopting a loaded thread, logged by the Layer after construction. */
+  skipped: string[];
+  spawner: {
+    open: (
+      ...args: Parameters<typeof adapter.openAdapter>
+    ) => Promise<Effect.Success<ReturnType<typeof adapter.openAdapter>>>;
+    stop: (child: AdapterChild | null) => Promise<void>;
+  };
+};
+
+function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) {
+  const { clock, warn, spawner } = startup;
+  const nowMs = () => clock.currentTimeMillisUnsafe();
+  const stamp = () => DateTime.formatIso(DateTime.makeUnsafe(nowMs()));
   const threads = new Map<string, Thread>();
   const runs = runConsentsPromise(options.runs);
   runs.attach({
@@ -436,34 +459,18 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
   };
   /** Heads of ids that are not harness threads: an MCP child or the web may name a thread first. */
   const headsDir = join(options.root, ".heads");
-  mkdirSync(headsDir, { recursive: true });
-  for (const id of readdirSync(options.root)) {
-    const dir = join(options.root, id);
-    if (!existsSync(join(dir, "meta.json"))) continue;
+  for (const { id, meta, events } of startup.loaded) {
     try {
-      const eventsPath = join(dir, "events.jsonl");
-      // Thread replay runs in the synchronous store constructor.
-      // effect-edge: island, phase 5
-      const { events, meta } = Effect.runSync(
-        Effect.all({
-          events: existsSync(eventsPath)
-            ? replayThreadEvents(eventsPath, readFileSync(eventsPath, "utf8")).pipe(
-                Effect.map((replay) => replay.events),
-              )
-            : Effect.succeed([]),
-          meta: decodeThreadMeta(
-            readFileSync(join(dir, "meta.json"), "utf8"),
-            (harness) => options.providers.get(harness)?.name ?? harness,
-          ),
-        }),
-      );
       const before = JSON.stringify(meta.workContext);
       threads.set(id, fresh(meta, events));
       runs.restore(id, meta.runConsent);
       // Backfill only observed context. Work documents and native admission stay untouched.
-      if (before !== JSON.stringify(meta.workContext)) writeJson(join(dir, "meta.json"), meta);
+      if (before !== JSON.stringify(meta.workContext))
+        writeJson(join(options.root, id, "meta.json"), meta);
     } catch (error) {
-      warn(`harness thread ${dir} skipped: it does not parse (${String(error)})`);
+      startup.skipped.push(
+        `harness thread ${join(options.root, id)} skipped: it does not parse (${String(error)})`,
+      );
     }
   }
 
@@ -532,7 +539,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       throw Error("Pe.Tools is updating; create this thread after the update finishes.");
     const record = options.providers.get(providerId);
     if (!record) throw Error(`No provider ${providerId}`);
-    const now = new Date().toISOString();
+    const now = stamp();
     const t = create({
       id: randomUUID(),
       harness: record.harness,
@@ -563,7 +570,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     const stamped: HarnessEvent = {
       ...bounded(event),
       seq: t.events.length + 1,
-      at: new Date().toISOString(),
+      at: stamp(),
     };
     const full = keys.length > 0 ? redactKeys(stamped, keys) : stamped;
     const line = JSON.stringify(full);
@@ -602,9 +609,8 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     createHash("sha256").update(JSON.stringify(value)).digest("hex");
   const refKey = (ref: DocumentRef) => JSON.stringify([ref.session, ref.openId]);
   const elementEventFits = (event: Append) =>
-    Buffer.byteLength(
-      JSON.stringify({ ...event, seq: Number.MAX_SAFE_INTEGER, at: new Date().toISOString() }),
-    ) < HARNESS_EVENT_MAX_BYTES;
+    Buffer.byteLength(JSON.stringify({ ...event, seq: Number.MAX_SAFE_INTEGER, at: stamp() })) <
+    HARNESS_EVENT_MAX_BYTES;
 
   function elementChunks<A>(
     values: readonly A[],
@@ -939,7 +945,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     if (current.revision !== input.expectedRevision)
       return { ok: false, why: "stale", head: current };
     const revision = current.revision + 1;
-    const at = new Date().toISOString();
+    const at = stamp();
     const kept = (request: DocumentRequest) =>
       current.targets.find((held) => targetKey(held.request) === targetKey(request));
     const keys = new Set(input.targets.map(({ request }) => targetKey(request)));
@@ -1061,7 +1067,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     });
     env[HOST_CONTEXT_VARIABLE] = context;
     let live: Live | undefined;
-    const { child, conn, stderr } = openAdapter(harness, options.worldRoot, env, () => ({
+    const { child, conn, stderr } = await spawner.open(harness, options.worldRoot, env, () => ({
       sessionUpdate: ({ update }) => {
         if (t.child !== child || t.stopped) return;
         if (update.sessionUpdate === "config_option_update") {
@@ -1308,7 +1314,8 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     t.child = null;
     t.live = null;
     t.session = "closed";
-    t.retiring = stopChild(child)
+    t.retiring = spawner
+      .stop(child)
       .then(async () => {
         if (child && t.meta.acpSessionId)
           await options.pluginHook?.("harness.session.stopped", {
@@ -1330,7 +1337,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     disarm(t);
     clearIdle(t);
     await t.retiring;
-    await stopChild(t.child);
+    await spawner.stop(t.child);
     if (t.child && t.meta.acpSessionId)
       await options.pluginHook?.("harness.session.stopped", {
         threadId: t.meta.id,
@@ -1430,13 +1437,13 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
    * not the model's: it skips the marker.
    */
   function arm(t: Thread) {
-    t.lastUpdateAt = Date.now();
+    t.lastUpdateAt = nowMs();
     if (t.waiting) clearTimeout(t.waiting);
     const fire = () => {
       const turnId = t.running;
       if (!turnId || t.stopped) return void (t.waiting = null);
       if (t.asks.size === 0)
-        append(t, { kind: "waiting", turnId, sinceMs: Date.now() - t.lastUpdateAt });
+        append(t, { kind: "waiting", turnId, sinceMs: nowMs() - t.lastUpdateAt });
       t.waiting = setTimeout(fire, WAITING_MS);
     };
     t.waiting = setTimeout(fire, WAITING_MS);
@@ -1527,28 +1534,32 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       }
       const u = result.usage;
       runs.close(runRef, result.stopReason === "cancelled" ? "stopped" : "completed");
-      append(t, {
-        kind: "turn_end",
-        turnId,
-        stopReason: result.stopReason,
-        ...(u
-          ? {
-              usage: {
-                totalTokens: u.totalTokens,
-                inputTokens: u.inputTokens,
-                outputTokens: u.outputTokens,
-                ...(u.thoughtTokens != null ? { thoughtTokens: u.thoughtTokens } : {}),
-                ...(u.cachedReadTokens != null ? { cachedReadTokens: u.cachedReadTokens } : {}),
-                ...(u.cachedWriteTokens != null ? { cachedWriteTokens: u.cachedWriteTokens } : {}),
-              },
-            }
-          : {}),
-      });
+      // Host shutdown or Stop's escalation may already have written this turn's terminal.
+      if (!t.stopped && !ended(t, turnId))
+        append(t, {
+          kind: "turn_end",
+          turnId,
+          stopReason: result.stopReason,
+          ...(u
+            ? {
+                usage: {
+                  totalTokens: u.totalTokens,
+                  inputTokens: u.inputTokens,
+                  outputTokens: u.outputTokens,
+                  ...(u.thoughtTokens != null ? { thoughtTokens: u.thoughtTokens } : {}),
+                  ...(u.cachedReadTokens != null ? { cachedReadTokens: u.cachedReadTokens } : {}),
+                  ...(u.cachedWriteTokens != null
+                    ? { cachedWriteTokens: u.cachedWriteTokens }
+                    : {}),
+                },
+              }
+            : {}),
+        });
       outcome = result.stopReason;
     } catch (error) {
       runs.close(runRef, t.stopped ? "stopped" : "failed");
       // A stopped thread's open turn is ended by restart recovery, not by "connection closed".
-      if (!t.stopped) {
+      if (!t.stopped && !ended(t, turnId)) {
         const expired = isAuthRefusal(error) ? options.providers.expire(t.meta.providerId) : null;
         if (!expired)
           options.providers.invalidate(t.meta.providerId, "The harness turn failed; probe again.");
@@ -1588,7 +1599,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
   /** A human message reopens a settled, snoozed or archived-then-restored thread. */
   function reopen(t: Thread) {
     if (t.meta.lifecycle.status === "settled" || t.meta.lifecycle.snoozedUntil)
-      t.meta.lifecycle.reopenedAt = new Date().toISOString();
+      t.meta.lifecycle.reopenedAt = stamp();
     t.meta.lifecycle.status = "active";
     t.meta.lifecycle.settledAt = null;
     t.meta.lifecycle.snoozedUntil = null;
@@ -1691,8 +1702,15 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     const connecting = t.live;
     const child = t.child;
     append(t, { kind: "cancel_requested", turnId, by, door });
-    runs.close({ thread: t.meta.id, turn: turnId }, "stopped");
+    // Consent persistence may fail; it never prevents the cancel or the escalation below.
+    let persist: unknown;
+    try {
+      runs.close({ thread: t.meta.id, turn: turnId }, "stopped");
+    } catch (error) {
+      persist = error;
+    }
     settleAsks(t, "cancel");
+    escalate(t, turnId, child);
     const live = await connecting?.catch((error) => {
       console.error("threads: asynchronous operation failed", error);
       return null;
@@ -1707,8 +1725,32 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         if (current()) throw error;
       }
     }
+    if (persist) throw persist;
     return true;
   }
+
+  /**
+   * Stop's owned escalation: a turn still running {@link STOP_GRACE_MS} after Stop gets its terminal
+   * recorded as unknown, then its child's scope closes (Spawner tree kill). This bounds a child
+   * that never finishes initialize or ignores cancel; the ACP cancel alone cannot.
+   */
+  function escalate(t: Thread, turnId: string, child: AdapterChild | null) {
+    const timer = setTimeout(() => {
+      if (t.running !== turnId) return;
+      if (!ended(t, turnId))
+        append(t, {
+          kind: "error",
+          turnId,
+          message: `Stop: the harness did not end this turn within ${grace / 1000} s; its child was killed and the outcome is unknown.`,
+        });
+      if (t.child === child) void retire(t);
+    }, grace);
+    timer.unref();
+    void t.turn.finally(() => clearTimeout(timer));
+  }
+  const grace = options.stopGraceMs ?? STOP_GRACE_MS;
+  const ended = (t: Thread, turnId: string) =>
+    t.events.some((e) => (e.kind === "turn_end" || e.kind === "error") && e.turnId === turnId);
 
   /** Cancel the running turn and wait for its end; false when it outlives {@link INTERRUPT_MS}. */
   async function interrupt(t: Thread, by: Caller, door: string) {
@@ -1844,7 +1886,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
           return json({ error: "Answer pending asks before snoozing" }, 409);
         if (change.readSeq !== undefined && change.readSeq > t.events.length)
           return json({ error: "Cannot mark unseen events as read" }, 400);
-        if (change.snoozedUntil && Date.parse(change.snoozedUntil) <= Date.now())
+        if (change.snoozedUntil && Date.parse(change.snoozedUntil) <= nowMs())
           return json({ error: "Choose a future snooze time" }, 400);
         const { title, expectedRevision: _expected, ...lifecycle } = change;
         if (title !== undefined) t.meta.title = title;
@@ -1860,19 +1902,18 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
           t.meta.lifecycle.snoozedSeq = state.lastSeq;
           t.meta.lifecycle.status = "active";
         }
-        if (change.snoozedUntil === null && wasSnoozed)
-          t.meta.lifecycle.reopenedAt = new Date().toISOString();
+        if (change.snoozedUntil === null && wasSnoozed) t.meta.lifecycle.reopenedAt = stamp();
         if (change.status === "settled") {
           t.meta.lifecycle.pinned = false;
           t.meta.lifecycle.snoozedUntil = null;
           t.meta.lifecycle.order = null;
-          t.meta.lifecycle.settledAt = new Date().toISOString();
+          t.meta.lifecycle.settledAt = stamp();
         }
         if (change.pinned === true || change.status === "active") {
           t.meta.lifecycle.status = "active";
           t.meta.lifecycle.settledAt = null;
           t.meta.lifecycle.snoozedUntil = null;
-          t.meta.lifecycle.reopenedAt = new Date().toISOString();
+          t.meta.lifecycle.reopenedAt = stamp();
         }
         if (
           lifecycleChange ||
@@ -2049,7 +2090,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         const record = options.providers.get(providerId);
         if (!record) return json({ error: `No provider ${providerId}` }, 400);
         const same = record.id === t.meta.providerId;
-        const now = new Date().toISOString();
+        const now = stamp();
         const forked = create(
           {
             ...t.meta,
@@ -2189,7 +2230,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
             state: "closed",
             reason: "restart",
             decision: event.consent.state === "allowed" ? event.consent.decision : null,
-            at: new Date().toISOString(),
+            at: stamp(),
           },
         });
       }
@@ -2226,15 +2267,16 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         append(t, { kind: "prompt_dropped", turnId: e.turnId, by: "expired" });
   }
 
-  const sweep = setInterval(() => {
-    const now = Date.now();
+  /** Settles and reopens by the clock; the Layer runs it every minute. */
+  const sweep = () => {
+    const now = nowMs();
     let changed = false;
     for (const t of threads.values()) {
       const lifecycle = t.meta.lifecycle;
       const state = activity(t);
       if (lifecycle.snoozedUntil && Date.parse(lifecycle.snoozedUntil) <= now) {
         lifecycle.snoozedUntil = null;
-        lifecycle.reopenedAt = new Date().toISOString();
+        lifecycle.reopenedAt = stamp();
         lifecycle.revision++;
         writeMeta(t);
         changed = true;
@@ -2259,7 +2301,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         now - at >= threshold
       ) {
         lifecycle.status = "settled";
-        lifecycle.settledAt = new Date().toISOString();
+        lifecycle.settledAt = stamp();
         lifecycle.order = null;
         lifecycle.revision++;
         writeMeta(t);
@@ -2267,10 +2309,9 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       }
     }
     if (changed) notifySummaries();
-  }, 60_000);
-  sweep.unref();
+  };
 
-  return {
+  const service = {
     runs,
     readTurnElementNames,
     /** Current metadata enriches remembered context without changing targets or admissions. */
@@ -2360,11 +2401,80 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
                 error instanceof z.ZodError || error instanceof SyntaxError ? 400 : 502,
               ),
       ),
-    /** Host shutdown: stop every harness child and its tree. */
-    close: () => {
-      clearInterval(sweep);
-      runs.closeAll();
-      return Promise.all([...threads.values()].map(stop));
-    },
+    /**
+     * Host shutdown, in order: consent windows close; every admitted turn gets its durable terminal
+     * (running: unknown, queued: dropped), because a stopped turn writes none of its own; children
+     * die; then each turn's own fiber is joined. Killing first is what makes the join safe: a turn
+     * awaiting its child rejects once the child is gone, so the join cannot deadlock.
+     */
+    close: () =>
+      (closing ??= (async () => {
+        runs.closeAll();
+        for (const t of threads.values()) {
+          t.stopped = true;
+          if (t.running)
+            append(t, {
+              kind: "error",
+              turnId: t.running,
+              message: "The host stopped during this turn; its outcome is unknown.",
+            });
+          for (const queued of t.queue.splice(0))
+            append(t, { kind: "prompt_dropped", turnId: queued.turnId, by: "expired" });
+        }
+        await Promise.all([...threads.values()].map(stop));
+        await Promise.allSettled([...threads.values()].map((t) => t.turn));
+        // Nothing here outlives the scope: the registry and every subscriber set end with it.
+        threads.clear();
+        elementNameReads.clear();
+        headListeners.clear();
+        summaryListeners.clear();
+        bindControl({ runs: undefined });
+      })()),
   };
+  let closing: Promise<void> | undefined;
+  return { service, sweep };
+}
+
+type ThreadsService = ReturnType<typeof createHarnessThreads>["service"];
+
+/**
+ * The thread store as a service (ADR 0029 rule 3): its replay runs here, as an Effect, its minute
+ * sweep is a scoped fiber, and closing the scope stops every harness child. `close` is idempotent
+ * because the host's shutdown order also calls it, concurrently with the task scheduler's.
+ */
+export const makeHarnessThreads = Effect.fn("HarnessThreads.make")(function* (
+  options: HarnessThreadsOptions,
+) {
+  const loaded = yield* loadThreads(
+    options.root,
+    (harness) => options.providers.get(harness)?.name ?? harness,
+  );
+  const clock = yield* Clock.clockWith(Effect.succeed);
+  const services = yield* Effect.context<Spawner | import("effect").Scope.Scope>();
+  // effect-edge: island, phase 5
+  const run = Effect.runPromiseWith(services);
+  // Promise code in the store logs through this one adapter, on the host's logger.
+  const warn = (message: string) => void run(Effect.logWarning(message));
+  const skipped: string[] = [];
+  const { service, sweep } = createHarnessThreads(options, {
+    loaded,
+    clock,
+    warn,
+    skipped,
+    spawner: {
+      open: (...args) => run(adapter.openAdapter(...args)),
+      stop: (child) => run(adapter.stopChild(child)),
+    },
+  });
+  for (const message of skipped) yield* Effect.logWarning(message);
+  yield* Effect.sync(sweep).pipe(Effect.delay("60 seconds"), Effect.forever, Effect.forkScoped);
+  yield* Effect.addFinalizer(() => Effect.promise(() => service.close()));
+  return service;
+});
+
+export class HarnessThreads extends Context.Service<HarnessThreads, ThreadsService>()(
+  "pe/HarnessThreads",
+) {
+  static readonly layer = (options: HarnessThreadsOptions) =>
+    Layer.effect(HarnessThreads, makeHarnessThreads(options));
 }

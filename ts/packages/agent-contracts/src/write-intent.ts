@@ -36,37 +36,106 @@ export const writeCommandResultSchema = <R extends z.ZodType = z.ZodObject<{}, z
   ]);
 
 /**
- * One Work write is two catalog entries: a TransactRead preview that seals what it would send, and
+ * Work → authored input, for every Work command: the derivation the host runs before a leaf and the
+ * `authoredInput` schema the web stages into Work. It carries no preview and no seal.
+ */
+export interface WorkIntentBinding {
+  route: string;
+  key: string;
+  workspace: boolean;
+  derive(work: unknown): unknown;
+}
+
+/**
+ * A ModelWrite is two catalog entries: a TransactRead preview that seals what it would send, and
  * the ModelWrite that rechecks that seal and commits. The mode is the entry, never an input flag
  * (ADR 0028 write boundary rulings): a preview cannot reach a committing leaf by setting a boolean.
  */
-export interface WriteBoundaryBinding {
-  route: string;
-  /** The committing entry. */
-  key: string;
+export interface WriteBoundaryBinding extends WorkIntentBinding {
   /** The TransactRead entry whose sealed receipt the write rechecks. */
   previewKey: string;
   phase: "preview" | "apply";
-  workspace: boolean;
-  derive(work: unknown): unknown;
   preview(request: unknown): unknown;
 }
 
+interface WorkIntentOptions {
+  workspace?: boolean;
+  derive?: (work: unknown) => unknown;
+}
+
 const workWriteInputSchema = z.strictObject({ work: workHandleSchema });
-/** A named boundary keeps declaration emit out of the local generic entry closure (TS 6.0.3). */
-type WriteEntry<
-  D extends Command,
-  A extends z.ZodType,
-  P extends WriteBoundaryBinding["phase"],
-> = Omit<D, "input" | "work" | "result"> & {
-  result: ReturnType<typeof writeCommandResultSchema<NonNullable<D["result"]>>>;
-  derivation: Pick<WriteBoundaryBinding, "derive" | "preview">;
-  authoredInput: A;
-  writeBoundary: WriteBoundaryBinding & { phase: P };
+
+/** Named boundaries keep declaration emit out of the local generic entry closure (TS 6.0.3). */
+type IntentEntry<D extends Command> = Omit<D, "input" | "work"> & {
+  authoredInput: D["input"];
+  workIntent: WorkIntentBinding;
   input: typeof workWriteInputSchema;
   work: { route: string; bind: (input: unknown, handle: WorkHandle) => { work: WorkHandle } };
 };
 
+type WriteEntry<D extends Command, P extends WriteBoundaryBinding["phase"]> = Omit<
+  IntentEntry<D>,
+  "result"
+> & {
+  result: ReturnType<typeof writeCommandResultSchema<NonNullable<D["result"]>>>;
+  derivation: Pick<WriteBoundaryBinding, "derive" | "preview">;
+  writeBoundary: WriteBoundaryBinding & { phase: P };
+};
+
+/** The Work-derived entry shape both primitives share; `derivation`, `result` and the seal half are theirs. */
+function intentEntry<D extends Command>(
+  source: D,
+  route: string,
+  intent: WorkIntentBinding,
+): IntentEntry<D> {
+  const { input: _input, work: _work, ...metadata } = source;
+  return {
+    ...metadata,
+    authoredInput: source.input as D["input"],
+    workIntent: intent,
+    input: workWriteInputSchema,
+    work: { route, bind: (_input: unknown, handle: WorkHandle) => ({ work: handle }) },
+  };
+}
+
+function bindIntent(
+  route: string,
+  key: string,
+  definition: Command,
+  options: WorkIntentOptions,
+): WorkIntentBinding {
+  const derive =
+    options.derive ??
+    ((work: unknown) =>
+      definition.input.parse(
+        (work as { writeIntent?: Record<string, { edit?: { value: unknown } }> }).writeIntent?.[key]
+          ?.edit?.value ?? {},
+      ));
+  return { route, key, workspace: options.workspace ?? false, derive };
+}
+
+/**
+ * Primitive 1, for every Work command: derive the authored input from Work. A SessionWrite capture
+ * is only this; it writes nothing to the model, so it has no preview entry and no seal (ADR 0028).
+ */
+export function workIntent<const K extends string, const C extends Command>(
+  route: string,
+  key: K,
+  definition: C,
+  options: WorkIntentOptions = {},
+): { [P in K]: IntentEntry<C> & { derivation: Pick<WorkIntentBinding, "derive"> } } {
+  const intent = bindIntent(route, key, definition, options);
+  return {
+    [key]: { ...intentEntry(definition, route, intent), derivation: { derive: intent.derive } },
+  } as {
+    [P in K]: IntentEntry<C> & { derivation: Pick<WorkIntentBinding, "derive"> };
+  };
+}
+
+/**
+ * Primitive 2, only for a command whose catalog axis reaches Revit (Effect ModelWrite): the apply
+ * entry plus its sealed TransactRead preview. `command-axes.ts` refuses a boundary on any other axis.
+ */
 export function workWriteCommands<
   const K extends string,
   const C extends Command,
@@ -76,48 +145,29 @@ export function workWriteCommands<
   route: string,
   key: K,
   definition: C,
-  options: {
-    workspace?: boolean;
-    derive?: (work: unknown) => unknown;
-    preview?: { key: PK; definition: PC };
-  } = {},
-): { [P in K]: WriteEntry<C, C["input"], "apply"> } & {
-  [P in [PK] extends [never] ? `${K}.preview` : PK]: WriteEntry<PC, C["input"], "preview">;
+  options: WorkIntentOptions & { preview?: { key: PK; definition: PC } } = {},
+): { [P in K]: WriteEntry<C, "apply"> } & {
+  [P in [PK] extends [never] ? `${K}.preview` : PK]: WriteEntry<PC, "preview">;
 } {
-  const authoredInput = definition.input as C["input"];
-  const derivation = {
-    derive:
-      options.derive ??
-      ((work: unknown) =>
-        authoredInput.parse(
-          (work as { writeIntent?: Record<string, { edit?: { value: unknown } }> }).writeIntent?.[
-            key
-          ]?.edit?.value ?? {},
-        )),
-    preview: (request: unknown) => request,
-  };
+  const intent = bindIntent(route, key, definition, options);
+  const derivation = { derive: intent.derive, preview: (request: unknown) => request };
   type PreviewKey = [PK] extends [never] ? `${K}.preview` : PK;
   const previewKey = (options.preview?.key ?? `${key}.preview`) as PreviewKey;
   const entry = <D extends Command, const P extends WriteBoundaryBinding["phase"]>(
     source: D,
     phase: P,
-  ): WriteEntry<D, C["input"], P> => {
-    const { input: _input, work: _work, result: _result, ...metadata } = source;
+  ): WriteEntry<D, P> => {
+    const { result: _result, ...metadata } = intentEntry(source, route, intent);
     return {
       ...metadata,
       result: writeCommandResultSchema(source.result as NonNullable<D["result"]>),
       derivation,
-      authoredInput,
       writeBoundary: {
-        route,
-        key: key as string,
+        ...intent,
         previewKey: previewKey as string,
         phase,
-        workspace: options.workspace ?? false,
-        ...derivation,
+        preview: derivation.preview,
       },
-      input: workWriteInputSchema,
-      work: { route, bind: (_input: unknown, handle: WorkHandle) => ({ work: handle }) },
     };
   };
   // A Pod entry carries its own axes; its preview inherits them as a rolled-back read.
@@ -130,7 +180,7 @@ export function workWriteCommands<
   return {
     [key]: entry(definition, "apply"),
     [previewKey]: entry(previewDefinition, "preview"),
-  } as { [P in K]: ReturnType<typeof entry<C, "apply">> } & {
-    [P in PreviewKey]: ReturnType<typeof entry<PC, "preview">>;
+  } as { [P in K]: WriteEntry<C, "apply"> } & {
+    [P in PreviewKey]: WriteEntry<PC, "preview">;
   };
 }

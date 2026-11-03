@@ -9,14 +9,13 @@
     "apps/host/src/demo-settings.ts": 2,
     "apps/host/src/document-marks.ts": 1,
     "apps/host/src/ducts-readings.ts": 1,
-    "apps/host/src/families-reader.ts": 4,
+    "apps/host/src/families-reader.ts": 1,
     "apps/host/src/family-actions.ts": 2,
     "apps/host/src/family-spec.ts": 1,
     "apps/host/src/gateway-actions.ts": 1,
     "apps/host/src/harness/providers.ts": 2,
-    "apps/host/src/harness/threads.ts": 2,
-    "apps/host/src/machine.ts": 4,
-    "apps/host/src/native-receipts.ts": 1,
+    "apps/host/src/harness/threads.ts": 1,
+    "apps/host/src/machine.ts": 1,
     "apps/host/src/pages-route.ts": 1,
     "apps/host/src/pe-routes.ts": 5,
     "apps/host/src/resource-adapters.ts": 3,
@@ -29,7 +28,10 @@
     "apps/host/src/takeoff-actions.ts": 2,
     "packages/browser/src/attached-guardian.ts": 1,
     "packages/browser/src/keeper.ts": 1,
-    "packages/mcps/src/shared/host-rpc-caller.ts": 1
+    "packages/mcps/src/shared/host-rpc-caller.ts": 1,
+    "apps/host/src/harness/spawner.ts": 0,
+    "apps/web/src/host/read-fetch.ts": 0,
+    "apps/web/src/route/startup-watch.ts": 0
   },
   "tests": {
     "apps/host/tests/acquisition-independence.test.ts": 3,
@@ -59,6 +61,19 @@
     "apps/host/tests/update-route.test.ts": 1,
     "apps/host/tests/vite-web.test.ts": 4,
     "apps/host/tests/work-lifetime.test.ts": 1,
-    "packages/browser/tests/acceptance.test.ts": 1
+    "packages/browser/tests/acceptance.test.ts": 1,
+    "apps/host/tests/bridge-line.test.ts": 0,
+    "apps/host/tests/capture-store.test.ts": 0,
+    "apps/host/tests/effect-test.test.ts": 0,
+    "apps/host/tests/harness-threads-layer.test.ts": 0,
+    "apps/host/tests/machine-owner.test.ts": 0,
+    "apps/host/tests/spawner.test.ts": 0,
+    "apps/host/tests/work-intent.test.ts": 0,
+    "apps/web/src/host/read-fetch.test.ts": 0,
+    "apps/web/src/navigation/route-controls.test.tsx": 0,
+    "apps/web/src/rooms/callouts.test.ts": 0,
+    "apps/web/src/route/startup-watch.test.ts": 0,
+    "packages/agent-contracts/src/route-field.test.ts": 0,
+    "packages/kit/tests/pane-loading.test.tsx": 0
   }
 }

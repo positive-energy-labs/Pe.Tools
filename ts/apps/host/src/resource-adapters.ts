@@ -16,12 +16,12 @@ import type { BridgeError, RevitBridge } from "./bridge.ts";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import type { ActionJournal } from "./action-journal.ts";
 import { hostActionJournal } from "./gateway-owner.ts";
-import { hostTakeoffCaptures, type TakeoffCaptures } from "./takeoff-captures.ts";
+import type { TakeoffCaptures } from "./takeoff-captures.ts";
 import { listBridgeSessions } from "./local-ops.ts";
 import { observeSdkReading } from "./session-route.ts";
 import { sdkSession } from "./sdk-session.ts";
 import type { DocumentMarks, DocumentRef } from "./document-marks.ts";
-import type { MachineOwner } from "./machine.ts";
+import type { MachineOwnerPromise } from "./machine.ts";
 import { canonicalDuctsSession, ductsReadings } from "./ducts-readings.ts";
 
 /**
@@ -158,11 +158,13 @@ export const markReadings =
 export function hostResourceObserver(
   bridge?: RevitBridge["Service"],
   journal: () => ActionJournal = hostActionJournal,
-  captures: () => TakeoffCaptures = hostTakeoffCaptures,
+  captures: () => TakeoffCaptures = () => {
+    throw Error("Takeoff captures are unavailable: pass the host's CaptureStore.");
+  },
   origin = "http://127.0.0.1",
   // Resolved at the call, not at the build: one observer outlives any one `fetch` binding.
   read: (url: URL, init?: RequestInit) => Promise<Response> = (url, init) => fetch(url, init),
-  machine?: MachineOwner,
+  machine?: MachineOwnerPromise,
   resolveSession: (
     bridge: RevitBridge["Service"],
     scope: HostSessionScope,

@@ -1,4 +1,5 @@
-import { Effect, Schema, SchemaGetter } from "effect";
+import { join } from "node:path";
+import { Effect, FileSystem, Schema, SchemaGetter } from "effect";
 import type { Types } from "effect";
 import {
   allowDecisionSchema,
@@ -123,4 +124,80 @@ export const replayThreadEvents = Effect.fn("thread.replay")(function* (
     }
   }
   return { events, skipped };
+});
+
+/** One thread directory whose `meta.json` could not be read or decoded; the others still load. */
+export class ThreadUnreadable extends Schema.TaggedError<ThreadUnreadable>()("ThreadUnreadable", {
+  dir: Schema.String,
+  reason: Schema.String,
+}) {
+  override get message() {
+    return `harness thread ${this.dir} skipped: it does not parse (${this.reason})`;
+  }
+}
+
+/** The thread root itself cannot be created or listed: the store has nowhere to live. */
+export class ThreadStoreUnavailable extends Schema.TaggedError<ThreadStoreUnavailable>()(
+  "ThreadStoreUnavailable",
+  { root: Schema.String, reason: Schema.String },
+) {
+  override get message() {
+    return `harness thread store ${this.root} is unavailable (${this.reason})`;
+  }
+}
+
+export type LoadedThread = { id: string; meta: Meta; events: HarnessEvent[] };
+
+/** One thread's `meta.json` and `events.jsonl`. A torn event line is skipped; a bad record is not. */
+export const loadThread = Effect.fn("thread.load")(function* (
+  root: string,
+  id: string,
+  providerName: (harness: Meta["harness"]) => string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const dir = join(root, id);
+  const unreadable = (cause: unknown) => new ThreadUnreadable({ dir, reason: String(cause) });
+  const eventsPath = join(dir, "events.jsonl");
+  const events = yield* fs.exists(eventsPath).pipe(
+    Effect.flatMap((present) => (present ? fs.readFileString(eventsPath) : Effect.succeed(""))),
+    Effect.flatMap((text) => replayThreadEvents(eventsPath, text)),
+    Effect.map((replay) => replay.events),
+    Effect.mapError(unreadable),
+  );
+  const meta = yield* fs.readFileString(join(dir, "meta.json")).pipe(
+    Effect.flatMap((text) => decodeThreadMeta(text, providerName)),
+    Effect.mapError(unreadable),
+  );
+  return { id, meta, events } satisfies LoadedThread;
+});
+
+/**
+ * Every thread under `root`, replayed. A directory with no `meta.json` is not a thread; one whose
+ * record does not decode is logged and left out, because one bad record must not keep the host from
+ * starting. Only a root that cannot be made or listed fails the store.
+ */
+export const loadThreads = Effect.fn("thread.loadAll")(function* (
+  root: string,
+  providerName: (harness: Meta["harness"]) => string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const unavailable = (cause: unknown) =>
+    new ThreadStoreUnavailable({ root, reason: String(cause) });
+  // `.heads` holds heads of ids that are not harness threads: an MCP child or the web may name a thread first.
+  yield* fs
+    .makeDirectory(join(root, ".heads"), { recursive: true })
+    .pipe(Effect.mapError(unavailable));
+  const ids = yield* fs.readDirectory(root).pipe(Effect.mapError(unavailable));
+  const loaded: LoadedThread[] = [];
+  for (const id of ids) {
+    if (!(yield* fs.exists(join(root, id, "meta.json")).pipe(Effect.orElseSucceed(() => false))))
+      continue;
+    const thread = yield* loadThread(root, id, providerName).pipe(
+      Effect.catchTag("ThreadUnreadable", (error) =>
+        Effect.logWarning(error.message).pipe(Effect.as(null)),
+      ),
+    );
+    if (thread) loaded.push(thread);
+  }
+  return loaded;
 });

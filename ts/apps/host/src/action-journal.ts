@@ -475,6 +475,9 @@ export class ActionJournal implements ReceiptReader {
   private loaded?: Promise<void>;
   private tail: Promise<unknown> = Promise.resolve();
   private readonly pending = new Map<string, Promise<ActionReceipt>>();
+  /** `closing` refuses admission; `flushed` refuses every write after the final flush. */
+  private closing = false;
+  private flushed = false;
   // Page authority is a host-minted object capability, never reconstructed from persisted data.
   private readonly activeCallers = new Map<string, Caller>();
   private environment?: CommandEnvironment;
@@ -662,7 +665,10 @@ export class ActionJournal implements ReceiptReader {
     if (row.cancellationRequested)
       return { kind: "cancelled", message: "Action cancelled before dispatch" };
     if (row.state === "unknown")
-      return { kind: "refused", message: "Action checkpoint is uncertain; resolve before dispatch" };
+      return {
+        kind: "refused",
+        message: "Action checkpoint is uncertain; resolve before dispatch",
+      };
     try {
       if (row.effects.length) commandCheckpoint(originOf(row.caller), row.consent);
     } catch (error) {
@@ -1234,6 +1240,12 @@ export class ActionJournal implements ReceiptReader {
     const admitted = await this.serial(async (): Promise<ActionReceipt | undefined> => {
       // Another admission committed this id while this one observed: re-admit against that row.
       if (this.rows.get(admission.id) !== prior) return undefined;
+      if (this.closing)
+        throw new CommandRejected({
+          kind: "domain",
+          code: "host-stopping",
+          message: "The host is stopping; this command was not admitted.",
+        });
       try {
         if (observed) throw observed.error;
         this.activeCallers.set(row.id, crossing.caller);
@@ -1435,7 +1447,13 @@ export class ActionJournal implements ReceiptReader {
                   patches.push(...next);
                 }
                 if (patches.length) {
-                  const publication = await work.publish(key, route, patches, current.revision, row.id);
+                  const publication = await work.publish(
+                    key,
+                    route,
+                    patches,
+                    current.revision,
+                    row.id,
+                  );
                   if (!publication.ok)
                     throw new ActionIncomplete("Work retirement did not land", publication);
                   return {
@@ -1646,7 +1664,13 @@ export class ActionJournal implements ReceiptReader {
       const persistenceFailed = (error: unknown) => {
         console.error("Action consent checkpoint could not be persisted", error);
         this.cancelWaits.get(row.id)?.();
-        this.index({ ...row, state: "unknown", cancellationRequested: true, status: 503, error: `Consent checkpoint could not be persisted: ${String(error)}` });
+        this.index({
+          ...row,
+          state: "unknown",
+          cancellationRequested: true,
+          status: 503,
+          error: `Consent checkpoint could not be persisted: ${String(error)}`,
+        });
         this.notify();
       };
       const releaseRun = subscribeRunChanges(() => {
@@ -1661,7 +1685,9 @@ export class ActionJournal implements ReceiptReader {
             commandCheckpoint(originOf(row.caller), row.consent);
         } catch {
           if (row.consent) this.cancelWaits.get(row.id)?.();
-          void save((current) => ({ ...current, cancellationRequested: true })).catch(persistenceFailed);
+          void save((current) => ({ ...current, cancellationRequested: true })).catch(
+            persistenceFailed,
+          );
         }
       });
       const completion = Promise.resolve()
@@ -1745,7 +1771,10 @@ export class ActionJournal implements ReceiptReader {
           }),
         );
       this.pending.set(row.id, completion);
-      void completion.catch((error) => { console.error("action-journal: asynchronous operation failed", error); return undefined; });
+      void completion.catch((error) => {
+        console.error("action-journal: asynchronous operation failed", error);
+        return undefined;
+      });
       return structuredClone(row);
     });
     return admitted ?? this.invoke(raw, crossing, resume);
@@ -1898,10 +1927,26 @@ export class ActionJournal implements ReceiptReader {
     }
     return recovered;
   }
+  /**
+   * Host shutdown, last of the host's finalizers: refuse admission, join every admitted command
+   * (the bridge closed earlier, so one waiting on Revit has already failed typed), then flush the
+   * write tail. The flush is the journal's last write: every write after it is refused.
+   */
+  async close(): Promise<void> {
+    this.closing = true;
+    while (this.pending.size) await Promise.allSettled([...this.pending.values()]);
+    await this.serial(async () => {
+      this.flushed = true;
+    });
+  }
   /** The journal's one write lock. Never await the bridge inside it: the bridge journals through it. */
   private serial<A>(work: () => Promise<A>): Promise<A> {
+    if (this.flushed) return Promise.reject(Error("The action journal closed with its host"));
     const next = this.tail
-      .catch((error) => { console.error("action-journal: asynchronous operation failed", error); return undefined; })
+      .catch((error) => {
+        console.error("action-journal: asynchronous operation failed", error);
+        return undefined;
+      })
       .then(() => this.loadOnce())
       .then(work);
     this.tail = next.then(

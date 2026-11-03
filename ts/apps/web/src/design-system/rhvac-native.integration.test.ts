@@ -10,7 +10,8 @@ import { checkoutRoot } from "../../checkout-paths.ts";
 import { takeoffSeeds } from "#/takeoff/seeds";
 import { RouteWorkspace } from "@pe/runtime";
 import { address, takeoffEditPatches } from "@pe/agent-contracts";
-import { TakeoffCaptures } from "../../../host/src/takeoff-captures";
+import type { TakeoffCaptures } from "../../../host/src/takeoff-captures";
+import { captureStore } from "../../../host/tests/effect-test";
 import { takeoffExecutors, fileVersion } from "../../../host/src/takeoff-actions";
 import { sdkSessions, readRhvacFixture } from "../../../host/tests/native-receipt-fixture";
 import type { RevitBridge } from "../../../host/src/bridge";
@@ -71,7 +72,7 @@ test.skipIf(process.env.PE_DEMO_JET !== "1")(
         target: { session: "integration", openId: "integration" },
         scope: { binding: "address", route: "takeoffs", target: at },
         work,
-        captures: new TakeoffCaptures(join(root, "captures")),
+        captures: captureStore(join(root, "captures")),
       };
       const room = seed.readings.snapshot.capture.snapshot.world.zones[0]!.rooms[0]!;
       await work.apply(

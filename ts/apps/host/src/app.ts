@@ -1,3 +1,4 @@
+import { Spawner } from "./harness/spawner.ts";
 import { currentMachine } from "./machine.ts";
 import { sdkSession } from "./sdk-session.ts";
 import { requestIdentityLayer } from "./request-identity.ts";
@@ -26,7 +27,8 @@ import { hostLoadedFamilies } from "../../../packages/mcps/src/pea/families-admi
 import { fileRouteDocumentStore } from "./route-document-store.ts";
 import { productRouteWorkPath } from "./product-paths.ts";
 import { hostActionJournal, releaseHostReceipts } from "./gateway-owner.ts";
-import { releaseHostReceiptExport } from "./receipt-export.ts";
+import { ReceiptExport, type ReceiptExporter } from "./receipt-export.ts";
+import { CaptureStore } from "./takeoff-captures.ts";
 import { RevitBridge, RevitBridgeLive } from "./bridge.ts";
 import { RunConsents } from "./run-consent.ts";
 import { getHostStatus } from "./local-ops.ts";
@@ -34,6 +36,7 @@ import { isSettingsSchemaUrl } from "./settings.ts";
 import { isNavigation, opsCatalogRoute, type SpaFallback } from "./ops-catalog.ts";
 import { demoRoutes } from "./demo-owner.ts";
 import { makeCallRoute } from "./call-route.ts";
+import { FamiliesReader } from "./families-reader.ts";
 import { instancesReadingsRoute } from "./session-route.ts";
 import {
   adminShutdownRoute,
@@ -142,7 +145,17 @@ function makeRevitComposition(
       hostStatusRoute,
       hostInstallRoute,
       instancesReadingsRoute(currentMachine),
-      makeCallRoute(hostActionJournal(), undefined, { workspace: work?.workspace }, { origin }),
+      Layer.unwrap(
+        Effect.gen(function* () {
+          const families = yield* FamiliesReader;
+          return makeCallRoute(
+            hostActionJournal(),
+            undefined,
+            { workspace: work?.workspace },
+            { origin, families },
+          );
+        }),
+      ),
     ),
   };
 }
@@ -163,6 +176,11 @@ export interface HttpLiveOptions {
   readonly updateReader?: UpdateReader["Service"];
   /** The spine's intake for update facts, handed to the reader this app builds. */
   readonly updateFact?: (fact: UpdateFact) => void;
+  /**
+   * The launch root's exporter, so the boot record and update facts share it with the routes; a
+   * composition without one builds its own `ReceiptExport` layer for this app's scope.
+   */
+  readonly receipts?: ReceiptExporter;
   /** Built SPA directory, or null to skip static serving (dev/vite). */
   readonly webRoot: string | null;
   /** Route registrations for the host-owned route surface; tests inject their own. */
@@ -180,12 +198,16 @@ export function makeHttpLive(options: HttpLiveOptions) {
   const receiptOwner = hostActionJournal();
   const ReceiptLifetime = Layer.effectDiscard(
     Effect.addFinalizer(() =>
+      // Provided outermost, so this runs after the bridge and threads closed: join, flush, release.
       Effect.promise(async () => {
-        await releaseHostReceiptExport(receiptOwner);
+        await receiptOwner.close();
         releaseHostReceipts(receiptOwner);
       }),
     ),
   );
+  const ReceiptsLive = options.receipts
+    ? Layer.succeed(ReceiptExport, options.receipts)
+    : ReceiptExport.layer;
   const UpdateLive = Layer.succeed(
     UpdateReader,
     options.updateReader ?? makeInstalledUpdateReader(options.updateFact),
@@ -311,10 +333,16 @@ export function makeHttpLive(options: HttpLiveOptions) {
         ),
       ),
       Layer.provide(NodeHttpClient.layerUndici),
+      // Inside the bridge's provision, so the reader's finalizer (cancel, then join its reads)
+      // runs while the bridge it cancels through is still alive.
+      Layer.provide(FamiliesReader.layer),
       Layer.provide(revitComposition.provider),
       Layer.provide(Layer.succeed(HostLifecycle, options.lifecycle)),
       Layer.provide(UpdateLive),
       Layer.provide(RunConsents.layer),
+      Layer.provide(Spawner.live),
+      Layer.provide(CaptureStore.layer()),
+      Layer.provide(ReceiptsLive),
       Layer.provide(NodeServices.layer),
       Layer.provide(ReceiptLifetime),
     );
@@ -343,6 +371,9 @@ export function makeHttpLive(options: HttpLiveOptions) {
     Layer.provide(Layer.succeed(HostLifecycle, options.lifecycle)),
     Layer.provide(UpdateLive),
     Layer.provide(RunConsents.layer),
+    Layer.provide(Spawner.live),
+    Layer.provide(CaptureStore.layer()),
+    Layer.provide(ReceiptsLive),
     Layer.provide(NodeServices.layer),
     Layer.provide(ReceiptLifetime),
   );

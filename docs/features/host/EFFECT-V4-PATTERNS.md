@@ -13,6 +13,8 @@ Sources of truth (verify against these, never from memory):
 
 ## Version discipline (READ FIRST)
 
+> Superseded 2026-11-02 by [ADR 0029](../../adr/0029-effect-is-the-standard-library-one-fiber-per-request.md) Consequences: the host pins effect 4.0.2 exactly, not beta.92. The method below (grep the installed package, then effect-smol) still holds; read `4.0.2` where the text says `beta.92`.
+
 Host is on **beta.92**; effect-smol HEAD is **beta.94+**. The beta moves fast and renames APIs between
 releases. **Never trust a signature from memory or from this doc alone when it matters.** Two ways to confirm:
 
@@ -209,6 +211,7 @@ the runtime codec type is `Schema.Codec<A>`. (Both used throughout `@pe/host-con
 
 - `Runtime<R>` **removed**. Use `Context<R>`. Run with deps via `Effect.runForkWith(services)` after
   `yield* Effect.context<R>()`. `Runtime` module now only has `Teardown`/`makeRunMain`.
+  > Superseded 2026-11-02 by [ADR 0029](../../adr/0029-effect-is-the-standard-library-one-fiber-per-request.md) rules 2 and 12: a `run*With` call is legal only on an `// effect-edge:` line, and a fiber is forked into a service scope with `Effect.forkScoped`/`Effect.forkIn`, never a detached `runForkWith`. The rename fact above still holds.
 - `Scope.extend` → `Scope.provide`.
 - `Effect.provideService` / `Effect.provideContext` — unchanged names.
 
@@ -335,6 +338,8 @@ const InstallGcLive = Layer.effectDiscard(
 ```
 
 ### Config / env
+> Superseded 2026-11-02 by [ADR 0029](../../adr/0029-effect-is-the-standard-library-one-fiber-per-request.md) rules 1 and 7: config comes from Effect `Config`, and an env value the host does not author is decoded by a Schema. "Keep this style; don't introduce `Config`" no longer holds. `Effect.acquireRelease` for lifecycle still holds.
+
 No `Config` module in the host — env is read directly (`process.env.X`) and validated in plain functions
 (`host-ownership.ts`, `product-paths.ts`). Effectful side reads (fetch, fs) go through `Effect.tryPromise`
 + `Effect.catch(() => Effect.succeed(fallback))`. `Effect.acquireRelease(acquire, release)` for lifecycle

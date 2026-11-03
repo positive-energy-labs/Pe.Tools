@@ -159,3 +159,25 @@ effectTest("consent.settle: closeAll with throwing record, transcript and listen
     }
   }),
 );
+
+effectTest(
+  "consent.waiter: interruption unregisters only its command and preserves auto-approval",
+  () =>
+    Effect.gen(function* () {
+      const { runs, events } = yield* consents();
+      const { answer, request } = yield* ask(runs, events);
+      const second = yield* Effect.forkScoped(runs.authorize(origin(one), "b", footprint));
+      yield* Effect.yieldNow;
+      yield* Fiber.interrupt(answer);
+      expect(runs.commandWindow("a")).toBeUndefined();
+      expect(runs.commandWindow("b")).toMatchObject({
+        requestId: request.requestId,
+        deadline: request.deadline,
+      });
+      expect(events.findLast((event) => event.kind === "run_consent")).toMatchObject({
+        consent: { state: "waiting", commands: ["b"], deadline: request.deadline },
+      });
+      yield* TestClock.adjust("60 seconds");
+      expect(yield* Fiber.join(second)).toMatchObject({ decision: { by: "deadline" } });
+    }),
+);

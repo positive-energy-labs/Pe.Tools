@@ -94,3 +94,32 @@ test("a dispatched step's evidence never waits behind another admission's bridge
     expect((await settles(journal.wait("first"))).steps[0]?.dispatchedAt).toBeDefined();
     expect((await settles(journal.wait("second"))).state).toBe("succeeded");
   }));
+
+test("closing the journal joins an admitted command, refuses new ones, and flushes last", () =>
+  withJournal(async (journal) => {
+    const held = Promise.withResolvers<void>();
+    const running = fixtureCommand(
+      [],
+      async () => null,
+      async () => {
+        await held.promise;
+        return { ok: true };
+      },
+    );
+    await settles(invokeFixtureCommand(journal, admission("running"), human, running));
+    const done = journal.wait("running");
+    let closed = false;
+    const closing = journal.close().then(() => (closed = true));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(closed).toBe(false); // the admitted command is joined, not abandoned
+    await expect(
+      invokeFixtureCommand(journal, admission("late"), human, plain()),
+    ).rejects.toMatchObject({ refusal: { code: "host-stopping" } });
+    held.resolve();
+    await settles(closing);
+    expect((await settles(done)).state).toBe("succeeded");
+    // The flush is the last write: nothing reaches the file after close resolved.
+    await expect(
+      journal.recordQueue("test.after", "after-close", "session-a", "started", 1),
+    ).rejects.toThrow("closed");
+  }));

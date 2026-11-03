@@ -1,3 +1,4 @@
+import { captureStore } from "./effect-test.ts";
 import { createPeClient, matchPeRoute } from "@pe/agent-contracts/pe-api";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
 import { afterEach, expect, vi } from "vite-plus/test";
@@ -19,7 +20,6 @@ import {
 } from "@pe/agent-contracts";
 import { buildCapabilities } from "../../../packages/mcps/src/pea/capabilities.ts";
 import { ActionJournal } from "../src/action-journal.ts";
-import { TakeoffCaptures } from "../src/takeoff-captures.ts";
 import { RevitBridge, BridgeError, type HostBridgeEvent } from "../src/bridge.ts";
 import { hostResourceObserver, markReadings } from "../src/resource-adapters.ts";
 import { documentMarks } from "../src/document-marks.ts";
@@ -81,7 +81,7 @@ export async function setup() {
   vi.stubEnv("PE_LANE", "dev");
   const dir = await mkdtemp(join(tmpdir(), "pe-schedule-chain-"));
   cleanup.push(() => rm(dir, { recursive: true, force: true, maxRetries: 5 }));
-  const captures = new TakeoffCaptures(join(dir, "captures"));
+  const captures = captureStore(join(dir, "captures"));
   const app = createPeRoutes({
     store: fileRouteDocumentStore(join(dir, "work")),
     heads: { observe: () => () => {} },

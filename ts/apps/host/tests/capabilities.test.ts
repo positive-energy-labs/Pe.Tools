@@ -18,6 +18,7 @@ import { hostOwnership, productRoot } from "../src/host-ownership.ts";
 
 vi.mock("../src/machine.ts", async (original) => {
   const real = await original<typeof import("../src/machine.ts")>();
+  const { Effect } = await import("effect");
   return {
     ...real,
     machineSources: (...args: Parameters<typeof real.machineSources>) => {
@@ -25,14 +26,12 @@ vi.mock("../src/machine.ts", async (original) => {
       const value = machineFixture();
       return {
         ...sources,
-        host: async () => {
-          throw Error("fixture has no host record");
-        },
-        peers: async () => [],
-        sessions: async () => [],
-        years: async () => [],
-        attachments: async () => [],
-        documents: async () => ({ state: "ok", documents: [] }),
+        host: () => Effect.fail(Error("fixture has no host record")),
+        peers: () => Effect.succeed([]),
+        sessions: () => Effect.succeed([]),
+        years: () => Effect.succeed([]),
+        attachments: () => Effect.succeed([]),
+        documents: () => Effect.succeed({ state: "ok" as const, documents: [] }),
         update: {
           current: () => value.update,
           refresh: async () => value.update,

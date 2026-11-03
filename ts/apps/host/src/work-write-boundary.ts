@@ -12,6 +12,7 @@ import {
   type Tool,
   type WorkHandle,
   type Consumed,
+  type WorkIntentBinding,
   type WriteBoundaryBinding,
 } from "@pe/agent-contracts";
 import { refused, type CommandContext, type CommandExecutor } from "./command-executor.ts";
@@ -60,6 +61,85 @@ const preparedSchema = z.object({
   takenAt: z.string(),
 });
 
+type WorkSpec = NonNullable<Tool["work"]> & { schema: z.ZodType<Record<string, unknown>> };
+const workSpec = (
+  route: string,
+  registeredWork?: import("@pe/agent-contracts").RouteStateSpec<z.ZodType>,
+) => (registeredWork ?? (tools[route as keyof typeof tools] as Tool)?.work)! as WorkSpec;
+
+/** Primitive 1 on the host: admit the Work to its document, read the authored cells, derive the input. */
+async function deriveFromWork(
+  ctx: CommandContext,
+  definition: import("@pe/agent-contracts").Command,
+  hooks: WorkIntentBinding,
+  spec: WorkSpec,
+  bridge: RevitBridge["Service"],
+  deps: { sdk?: SdkReceiptReader },
+) {
+  const { work } = definition.input.parse(ctx.admission.input) as { work: WorkHandle };
+  if (ctx.admission.target.kind !== "document") throw refused("Exact document required");
+  const target = ctx.admission.target.ref;
+  const observed = await lifetime(bridge, target, false, deps);
+  const address = observed.session.state?.openDocuments.find(
+    (doc) => doc.openId === target.openId,
+  )?.address;
+  if (!workBinding(work.key).admits(target, address, hooks.workspace))
+    throw refused("Work belongs to another document", "work.target");
+  // Each owner also resolves the native incarnation. The address check uses that same bound dependency below.
+  const doc = (await ctx.selectWork(spec, work, (_doc, cells) => ({
+    cells: cells.filter(({ cell }) => cell.edit).map(({ path }) => path),
+    facts: Object.keys(_doc as object)
+      .filter((name) => name !== "writeIntent")
+      .map((name) => [name]),
+    edits: spec.editable,
+  }))) as { writeIntent?: Record<string, { edit?: { value: Record<string, unknown> } }> };
+  const input = { ...(hooks.derive(doc) as object), work };
+  return { work, input, target, observed };
+}
+const withInput = (ctx: CommandContext, input: Record<string, unknown>): CommandContext => ({
+  ...ctx,
+  admission: { ...ctx.admission, input },
+});
+
+const intentPrepared = z.object({ input: z.record(z.string(), z.unknown()), value: z.unknown() });
+/**
+ * Primitive 1's executor half, for a Work command with no seal (a SessionWrite capture): derive the
+ * input from Work, then run the leaf. No preview entry, no seal, no recheck; it writes nothing to the model.
+ */
+export function workIntentBoundary(
+  executor: CommandExecutor,
+  bridge: RevitBridge["Service"],
+  deps: { sdk?: SdkReceiptReader } = {},
+): CommandExecutor {
+  const definition = executor.definition as import("@pe/agent-contracts").Command & {
+    workIntent: WorkIntentBinding;
+  };
+  const hooks = definition.workIntent;
+  if (typeof hooks?.derive !== "function")
+    throw Error("Work command requires a typed derive binding");
+  const spec = workSpec(hooks.route);
+  return {
+    ...executor,
+    boundary: "work",
+    prepared: intentPrepared,
+    bind: async (ctx) => {
+      const { input } = await deriveFromWork(ctx, definition, hooks, spec, bridge, deps);
+      const bound = await executor.bind(withInput(ctx, input));
+      return {
+        ...bound,
+        prepare: async () => ({ input, value: executor.prepared.parse(await bound.prepare?.()) }),
+      };
+    },
+    run: async (ctx, execution) => {
+      const p = intentPrepared.parse(execution.prepared);
+      return executor.run(withInput(ctx, p.input), { ...execution, prepared: p.value });
+    },
+    recover: executor.recover
+      ? (step, prepared, target) =>
+          executor.recover!(step, intentPrepared.parse(prepared).value, target)
+      : undefined,
+  };
+}
 
 // TODO: docs/features/routes/LEDGER.md#s3-native-seal Prove preview/refetch/apply in browser against a controlled Revit session.
 /** Keep native derivation/recovery in its owner; admit only authored, revisioned Work. */
@@ -83,14 +163,7 @@ export function workWriteBoundary(
   if (!executor.seal) throw Error("Write command requires a producer-owned seal projection");
   const project = executor.seal;
   const { route } = hooks;
-  const spec = (registeredWork ??
-    (tools[route as keyof typeof tools] as Tool)?.work)! as NonNullable<Tool["work"]> & {
-    schema: z.ZodType<Record<string, unknown>>;
-  };
-  const internal = (ctx: CommandContext, input: Record<string, unknown>) => ({
-    ...ctx,
-    admission: { ...ctx.admission, input },
-  });
+  const spec = workSpec(route, registeredWork);
   return {
     ...executor,
     boundary: "work",
@@ -98,27 +171,16 @@ export function workWriteBoundary(
     bind: async (ctx) => {
       documentMarks(bridge);
       const takenAt = new Date().toISOString();
-      const { work } = definition.input.parse(ctx.admission.input) as { work: WorkHandle };
       // The entry is the mode: seal at the TransactRead preview, recheck at the ModelWrite.
       const previewOnly = hooks.phase === "preview";
-      if (ctx.admission.target.kind !== "document") throw refused("Exact document required");
-      const target = ctx.admission.target.ref;
-      const observed = await lifetime(bridge, target, false, deps);
-      const address = observed.session.state?.openDocuments.find(
-        (doc) => doc.openId === target.openId,
-      )?.address;
-      if (!workBinding(work.key).admits(target, address, hooks.workspace))
-        throw refused("Work belongs to another document", "work.target");
-      // Each owner also resolves the native incarnation. The address check uses that same bound dependency below.
-      const doc = (await ctx.selectWork(spec, work, (_doc, cells) => ({
-        cells: cells.filter(({ cell }) => cell.edit).map(({ path }) => path),
-        facts: Object.keys(_doc as object)
-          .filter((name) => name !== "writeIntent")
-          .map((name) => [name]),
-        edits: spec.editable,
-      }))) as { writeIntent?: Record<string, { edit?: { value: Record<string, unknown> } }> };
-      const authored = hooks.derive(doc);
-      const input = { ...(authored as object), work };
+      const { work, input, target, observed } = await deriveFromWork(
+        ctx,
+        definition,
+        hooks,
+        spec,
+        bridge,
+        deps,
+      );
       const preview = ctx.read
         .receipts()
         .filter(
@@ -128,7 +190,7 @@ export function workWriteBoundary(
             canonicalRouteInput(row.target) === canonicalRouteInput(ctx.admission.target),
         )
         .at(-1);
-      const derivedContext = internal(ctx, input);
+      const derivedContext = withInput(ctx, input);
       // Reproduce generated paths and plan references from this exact preview, never a new caller payload.
       derivedContext.admission.id = !previewOnly && preview ? preview.id : ctx.admission.id;
       const bound = await executor.bind(derivedContext);
@@ -146,7 +208,7 @@ export function workWriteBoundary(
                 {
                   kind: "document-mark" as const,
                   probe: {
-                    ref: ctx.admission.target.ref,
+                    ref: target,
                     takenAt:
                       preview.state === "succeeded"
                         ? (preview.result as { takenAt: string }).takenAt
@@ -173,11 +235,16 @@ export function workWriteBoundary(
             dependencies,
             projection.evidence,
           );
-          const previousSeal = preview?.state === "succeeded"
-            ? (preview.result as { seal?: Record<string, unknown> }).seal : undefined;
+          const previousSeal =
+            preview?.state === "succeeded"
+              ? (preview.result as { seal?: Record<string, unknown> }).seal
+              : undefined;
           if (!previewOnly && canonicalRouteInput(previousSeal) !== canonicalRouteInput(seal)) {
-            const changed = Object.keys(seal).filter((key) =>
-              canonicalRouteInput(previousSeal?.[key]) !== canonicalRouteInput(seal[key as keyof typeof seal]));
+            const changed = Object.keys(seal).filter(
+              (key) =>
+                canonicalRouteInput(previousSeal?.[key]) !==
+                canonicalRouteInput(seal[key as keyof typeof seal]),
+            );
             throw refused(
               `Preview changed; preview the current Work and dependencies again (${changed.join(", ")})`,
               "preview.stale",
@@ -197,7 +264,7 @@ export function workWriteBoundary(
           seal: p.seal,
           takenAt: p.takenAt,
         };
-      const result = await executor.run(internal(ctx, p.input), {
+      const result = await executor.run(withInput(ctx, p.input), {
         ...execution,
         prepared: p.value,
       });

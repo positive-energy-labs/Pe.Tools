@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PostHog } from "posthog-node";
 import { ActionJournal } from "../src/action-journal.ts";
-import { createReceiptExport, type ReceiptExport } from "../src/receipt-export.ts";
+import { createReceiptExport, type ReceiptExporter } from "../src/receipt-export.ts";
 import { HttpRouter } from "effect/http";
 import { buildCapabilities } from "@pe/mcps";
 import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
@@ -101,7 +101,7 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-async function fixture(telemetry?: ReceiptExport) {
+async function fixture(telemetry?: ReceiptExporter) {
   if (!telemetry) {
     const root = mkdtempSync(join(tmpdir(), "pe-mcp-local-"));
     telemetry = createReceiptExport({

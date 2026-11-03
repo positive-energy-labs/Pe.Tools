@@ -1,6 +1,6 @@
 import { isAnyOperationKey } from "@pe/host-contracts/operation-types";
 import { podCommand } from "./pod-routes.ts";
-import { workWriteBoundary } from "./work-write-boundary.ts";
+import { workIntentBoundary, workWriteBoundary } from "./work-write-boundary.ts";
 import { catalogCommandContext } from "./catalog-command-context.ts";
 import type { CommandExecutor, CommandRegistry } from "./command-executor.ts";
 import type { RevitBridge } from "./bridge.ts";
@@ -107,7 +107,13 @@ export function commandRegistry(
       throw Error(
         `ModelWrite ${key} has no typed apply writeBoundary; build it with workWriteCommands`,
       );
-    const wrapped = boundary
+    // A Work command with no seal (a SessionWrite capture) only derives its input from Work.
+    const intent = "workIntent" in (typeof entry.definition === "function" ? {} : entry.definition);
+    if (modelWrite !== (boundary?.phase === "apply"))
+      throw Error(`${key}: the seal follows the axis; only ModelWrite has a write boundary`);
+    const wrapped = !boundary && intent
+      ? workIntentBoundary(entry, bridge, deps)
+      : boundary
       ? workWriteBoundary(
           entry,
           bridge,

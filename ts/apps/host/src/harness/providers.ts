@@ -16,7 +16,8 @@ import {
   type Readiness,
   type TraitOption,
 } from "@pe/agent-contracts";
-import { Cause, Effect, Exit, Schema } from "effect";
+import { Cause, Effect, Exit, Schema, Scope } from "effect";
+import { Spawner } from "./spawner.ts";
 import { MessagesReply, ModelList, ResponsesReply } from "./edge-schemas.ts";
 import { z } from "zod";
 import { productProvidersPath } from "../product-paths.ts";
@@ -43,11 +44,12 @@ type Probed = Pick<Provider, "readiness" | "models" | "traits" | "probedAt">;
 
 const PROBE_MS = 20_000;
 const FRESH_MS = 60_000;
+const run = <A, E>(work: Effect.Effect<A, E>): Promise<A> =>
+  // effect-edge: island, phase 5
+  Effect.runPromise(work);
 const log = {
-  // effect-edge: island, phase 5
-  info: (message: string) => Effect.runSync(Effect.logInfo(message)),
-  // effect-edge: island, phase 5
-  warn: (message: string) => Effect.runSync(Effect.logWarning(message)),
+  info: (message: string) => void run(Effect.logInfo(message)),
+  warn: (message: string) => void run(Effect.logWarning(message)),
 };
 
 /* ── What a session offers: models and traits, shared by the probe and every thread ── */
@@ -364,127 +366,145 @@ async function checkEndpoint(
 
 type AuthStatus = { kind?: string; label?: string };
 
-async function acpProbe(
+function acpProbe(
+  spawner: Spawner["Service"],
   record: ProviderRecord,
   env: Record<string, string | undefined>,
   stop: ProbeStop,
   detail: ProviderRefusal,
 ): Promise<Omit<Probed, "probedAt">> {
-  const none = { models: [], traits: [] };
-  const closed: Omit<Probed, "probedAt"> = {
-    readiness: { state: "unknown", message: "The provider manager closed." },
-    ...none,
-  };
-  // A probe child's cwd is the product scratch folder: none may outlive the manager.
-  if (stop.closed) return closed;
-  let reportAuth!: (status: AuthStatus) => void;
-  const authReported = new Promise<AuthStatus>((resolve) => {
-    reportAuth = resolve;
-  });
-  let opened: ReturnType<typeof openAdapter>;
-  try {
-    mkdirSync(productScratchPath(), { recursive: true });
-    opened = openAdapter(
-      record.harness,
-      productScratchPath(),
-      env,
-      () => ({
-        sessionUpdate: async () => {},
-        requestPermission: async () => ({ outcome: { outcome: "cancelled" } }),
-        // `_auth/status_update` from both adapters (seen 2026-10-08): kind `account` or `none`.
-        extNotification: async (method, params) => {
-          const status = (params as { authStatus?: AuthStatus }).authStatus;
-          if (method.endsWith("auth/status_update") && status?.kind) reportAuth(status);
-        },
-      }),
-      detail,
-    );
-  } catch (error) {
-    return {
-      readiness: {
-        state: "refused",
-        step: "installed",
-        message: `The ${adapters[record.harness].title} adapter is missing: ${String(error)}`,
-      },
-      ...none,
-    };
-  }
-  const { child, conn, stderr } = opened;
-  const signedOut = (message: string): Readiness =>
-    record.auth.kind === "endpoint"
-      ? {
-          state: "refused",
-          step: "endpoint",
-          message: `The harness refused the endpoint: ${message}`,
-        }
-      : detail.resolvedExecutable
-        ? {
-            state: "refused",
-            step: "signed-in",
-            message: `${adapters[record.harness].title} is not signed in (${message}).`,
-          }
-        : {
-            state: "refused",
-            step: "installed",
-            message: `${adapters[record.harness].title} is not installed: no ${adapters[record.harness].cli}.exe in its installer's folder or on your PATH.`,
+  return run(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const services = yield* Effect.context<Spawner | Scope.Scope>();
+        // effect-edge: island, phase 5
+        const settle = Effect.runPromiseWith(services);
+        return yield* Effect.promise(async (): Promise<Omit<Probed, "probedAt">> => {
+          const none = { models: [], traits: [] };
+          const closed: Omit<Probed, "probedAt"> = {
+            readiness: { state: "unknown", message: "The provider manager closed." },
+            ...none,
           };
-  const work = (async (): Promise<Omit<Probed, "probedAt">> => {
-    await conn.initialize({
-      protocolVersion: PROTOCOL_VERSION,
-      clientCapabilities: { fs: { readTextFile: false, writeTextFile: false } },
-    });
-    const session = await conn
-      .newSession({ cwd: productScratchPath(), mcpServers: [] })
-      .catch((error) => {
-        const message = String(error?.message ?? error);
-        if (/auth/i.test(message)) return { refused: message };
-        throw error;
-      });
-    if ("refused" in session) return { readiness: signedOut(session.refused), ...none };
-    const state = session as Parameters<typeof sessionOffer>[0];
-    const offer = sessionOffer(state);
-    // Session metadata can precede auth notification; absence is not proof of sign-in.
-    const status = record.auth.kind === "subscription" ? await authReported : null;
-    // An endpoint provider is not a login: Claude reports "Not logged in" under ANTHROPIC_* env.
-    if (record.auth.kind === "subscription" && status?.kind === "none")
-      return {
-        readiness: signedOut(status.label ?? "not logged in"),
-        models: offer.models,
-        traits: offer.traits,
-      };
-    if (record.auth.kind === "subscription" || record.harness === "claude")
-      return { readiness: { state: "ready" }, models: offer.models, traits: offer.traits };
-    // Endpoint Codex: native models only, current first. The config picker also synthesizes a row
-    // for an unknown current model; the unstable model state is native metadata, as model[effort].
-    const base = (modelId: string) => modelId.replace(/\[[^\]]+\]$/, "");
-    const current = offer.modelId && base(offer.modelId);
-    const models = [...new Set(state.models?.availableModels.map((m) => base(m.modelId)))]
-      .map(
-        (modelId) => offer.models.find((m) => m.modelId === modelId) ?? { modelId, name: modelId },
-      )
-      .sort((x, y) => Number(y.modelId === current) - Number(x.modelId === current));
-    return { readiness: { state: "ready" }, models, traits: offer.traits };
-  })();
-  const timeout = new Promise<Omit<Probed, "probedAt">>((resolve) =>
-    setTimeout(resolve, PROBE_MS, {
-      readiness: { state: "unknown", message: `The probe timed out after ${PROBE_MS / 1000} s.` },
-      ...none,
-    }).unref(),
+          // A probe child's cwd is the product scratch folder: none may outlive the manager.
+          if (stop.closed) return closed;
+          let reportAuth!: (status: AuthStatus) => void;
+          const authReported = new Promise<AuthStatus>((resolve) => {
+            reportAuth = resolve;
+          });
+          let opened: Effect.Success<ReturnType<typeof openAdapter>>;
+          try {
+            mkdirSync(productScratchPath(), { recursive: true });
+            opened = await settle(
+              openAdapter(
+                record.harness,
+                productScratchPath(),
+                env,
+                () => ({
+                  sessionUpdate: async () => {},
+                  requestPermission: async () => ({ outcome: { outcome: "cancelled" } }),
+                  // `_auth/status_update` from both adapters (seen 2026-10-08): kind `account` or `none`.
+                  extNotification: async (method, params) => {
+                    const status = (params as { authStatus?: AuthStatus }).authStatus;
+                    if (method.endsWith("auth/status_update") && status?.kind) reportAuth(status);
+                  },
+                }),
+                detail,
+              ),
+            );
+          } catch (error) {
+            return {
+              readiness: {
+                state: "refused",
+                step: "installed",
+                message: `The ${adapters[record.harness].title} adapter is missing: ${String(error)}`,
+              },
+              ...none,
+            };
+          }
+          const { child, conn, stderr } = opened;
+          const signedOut = (message: string): Readiness =>
+            record.auth.kind === "endpoint"
+              ? {
+                  state: "refused",
+                  step: "endpoint",
+                  message: `The harness refused the endpoint: ${message}`,
+                }
+              : detail.resolvedExecutable
+                ? {
+                    state: "refused",
+                    step: "signed-in",
+                    message: `${adapters[record.harness].title} is not signed in (${message}).`,
+                  }
+                : {
+                    state: "refused",
+                    step: "installed",
+                    message: `${adapters[record.harness].title} is not installed: no ${adapters[record.harness].cli}.exe in its installer's folder or on your PATH.`,
+                  };
+          const work = (async (): Promise<Omit<Probed, "probedAt">> => {
+            await conn.initialize({
+              protocolVersion: PROTOCOL_VERSION,
+              clientCapabilities: { fs: { readTextFile: false, writeTextFile: false } },
+            });
+            const session = await conn
+              .newSession({ cwd: productScratchPath(), mcpServers: [] })
+              .catch((error) => {
+                const message = String(error?.message ?? error);
+                if (/auth/i.test(message)) return { refused: message };
+                throw error;
+              });
+            if ("refused" in session) return { readiness: signedOut(session.refused), ...none };
+            const state = session as Parameters<typeof sessionOffer>[0];
+            const offer = sessionOffer(state);
+            // Session metadata can precede auth notification; absence is not proof of sign-in.
+            const status = record.auth.kind === "subscription" ? await authReported : null;
+            // An endpoint provider is not a login: Claude reports "Not logged in" under ANTHROPIC_* env.
+            if (record.auth.kind === "subscription" && status?.kind === "none")
+              return {
+                readiness: signedOut(status.label ?? "not logged in"),
+                models: offer.models,
+                traits: offer.traits,
+              };
+            if (record.auth.kind === "subscription" || record.harness === "claude")
+              return { readiness: { state: "ready" }, models: offer.models, traits: offer.traits };
+            // Endpoint Codex: native models only, current first. The config picker also synthesizes a row
+            // for an unknown current model; the unstable model state is native metadata, as model[effort].
+            const base = (modelId: string) => modelId.replace(/\[[^\]]+\]$/, "");
+            const current = offer.modelId && base(offer.modelId);
+            const models = [...new Set(state.models?.availableModels.map((m) => base(m.modelId)))]
+              .map(
+                (modelId) =>
+                  offer.models.find((m) => m.modelId === modelId) ?? { modelId, name: modelId },
+              )
+              .sort((x, y) => Number(y.modelId === current) - Number(x.modelId === current));
+            return { readiness: { state: "ready" }, models, traits: offer.traits };
+          })();
+          const timeout = new Promise<Omit<Probed, "probedAt">>((resolve) =>
+            setTimeout(resolve, PROBE_MS, {
+              readiness: {
+                state: "unknown",
+                message: `The probe timed out after ${PROBE_MS / 1000} s.`,
+              },
+              ...none,
+            }).unref(),
+          );
+          try {
+            return await Promise.race([work, timeout, stop.promise.then(() => closed)]);
+          } catch (error) {
+            return {
+              readiness: {
+                state: "unknown",
+                message:
+                  `The probe failed: ${String((error as Error)?.message ?? error)} ${stderr().trim().slice(-300)}`.trim(),
+              },
+              ...none,
+            };
+          } finally {
+            await settle(stopChild(child));
+          }
+        });
+      }),
+    ).pipe(Effect.provideService(Spawner, spawner)),
   );
-  try {
-    return await Promise.race([work, timeout, stop.promise.then(() => closed)]);
-  } catch (error) {
-    return {
-      readiness: {
-        state: "unknown",
-        message:
-          `The probe failed: ${String((error as Error)?.message ?? error)} ${stderr().trim().slice(-300)}`.trim(),
-      },
-      ...none,
-    };
-  } finally {
-    await stopChild(child);
-  }
 }
 
 /* ── The store and the routes ── */
@@ -515,6 +535,8 @@ const slug = (name: string) =>
 type ConsoleResult = Omit<NonNullable<ProviderRefusal["console"]>, "outputTail">;
 
 export type ProvidersOptions = {
+  /** The host's one Spawner (its scope owns every probe child); never a per-probe backend. */
+  spawner: Spawner["Service"];
   /** The user's shell PATH, read per spawn; null keeps the host's. */
   shellPath?: () => Promise<string | null>;
   /** Probe every provider in the background now. */
@@ -797,6 +819,7 @@ export function createProviders(options: ProvidersOptions) {
     };
     const finish = (probed: Probed) => finishProbe(record, probed, detail);
     const running = acpProbe(
+      options.spawner,
       record,
       { ...cleanHarnessEnv(process.env), ...(await userPath()), ...authEnv(record) },
       stop,

@@ -7,7 +7,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import { beforeEach, afterEach, expect, test, vi } from "vite-plus/test";
 import { peFind } from "../../../../packages/mcps/src/pea/capability-tools.ts";
 import { fakeRuntimeHost } from "../../../../packages/mcps/tests/runtime-host-fixture.ts";
-import { createMachine, type MachineSources } from "../../../host/src/machine.ts";
+import { machineOwner, type PromiseMachineSources } from "../../../host/tests/effect-test.ts";
 import { BAY_YOURS_25, CHECKOUT_HOT, MACHINE_SEEDS } from "./seeds";
 
 beforeEach(() => {
@@ -113,7 +113,7 @@ test("F8: web rows and pe_find preserve the same Machine identities, access and 
       },
     ],
   });
-  const sources: MachineSources = {
+  const sources: PromiseMachineSources = {
     host: async () => {
       throw Error("host record unavailable");
     },
@@ -151,12 +151,15 @@ test("F8: web rows and pe_find preserve the same Machine identities, access and 
         })),
     },
   };
-  vi.useFakeTimers({ now: Date.parse("2026-10-13T00:00:00Z") });
-  const owner = createMachine(sources);
+  // Effect yields on setImmediate: fake only the clock and its timers.
+  vi.useFakeTimers({
+    now: Date.parse("2026-10-13T00:00:00Z"),
+    toFake: ["setTimeout", "clearTimeout", "Date"],
+  });
+  const owner = machineOwner(sources);
   const refresh = owner.refresh();
   await vi.advanceTimersByTimeAsync(15_001);
   const machine = await refresh;
-  owner.close();
   vi.stubGlobal(
     "fetch",
     vi.fn(async () =>
