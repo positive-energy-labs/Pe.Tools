@@ -1,7 +1,7 @@
 import { expect, test, vi } from "vite-plus/test";
-import { readFileSync } from "node:fs";
+import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { routeModuleHash } from "./route-module-hash.ts";
+import { buildRouteArtifact, routeModuleHash } from "./route-module-hash.ts";
 import { routeSourceHash } from "./route-source-hash.ts";
 
 const id = fileURLToPath(new URL("./src/captures/graph.ts", import.meta.url));
@@ -82,4 +82,80 @@ test("requests during graph regeneration wait for the matching directory", async
   await start;
   await request;
   expect(transformed).toBe(true);
+});
+
+// This fixture is emitted and evaluated as real JS. Its generated test inputs stay ignored.
+import { builtinData, entries } from "../../packages/agent-contracts/src/route-kernel.fixtures.ts";
+import {
+  createRouteAdmission,
+  createAdmittedRouteRegistry,
+} from "../../packages/agent-contracts/src/route-module.ts";
+import { join } from "node:path";
+
+test("emitted body bytes change the route-v1 fingerprint, preserve EOL identity and refuse stale admission", async () => {
+  const root = fileURLToPath(
+    new URL(
+      `../../../.artifacts/tmp/unit-s1c/artifact-inputs/${crypto.randomUUID()}/`,
+      import.meta.url,
+    ),
+  );
+  mkdirSync(root, { recursive: true });
+  const fixture = fileURLToPath(
+    new URL("../../packages/agent-contracts/src/route-kernel.fixtures.ts", import.meta.url),
+  ).replaceAll("\\", "/");
+  writeFileSync(
+    join(root, "entry.ts"),
+    `import { builtinModule } from ${JSON.stringify(fixture)};
+import { calculate } from "./body.ts";
+import { text } from "./schema.ts";
+export const module = { ...builtinModule, schemas: { ...builtinModule.schemas, text }, bodies: Object.fromEntries(Object.entries(builtinModule.bodies).map(([key, body]) => [key, { ...body, source: { module: "route.js", export: key }, ...(key === "calculate" ? { run: calculate } : {}) }])) };
+`,
+  );
+  const schemaFile = (limit: number) =>
+    `import { schemas } from ${JSON.stringify(fixture)}; export const text = schemas.text.max(${limit});`;
+  writeFileSync(join(root, "schema.ts"), schemaFile(8));
+  const build = () =>
+    buildRouteArtifact({
+      entry: join(root, "entry.ts"),
+      root,
+      data: builtinData,
+      contracts: [{ id: "test-contract", bytes: new TextEncoder().encode("test contract v1") }],
+    });
+  writeFileSync(join(root, "body.ts"), "export const calculate = () => ({ total: 1 });\n");
+  const first = await build();
+  writeFileSync(join(root, "body.ts"), "export const calculate = () => ({ total: 1 });\r\n");
+  expect((await build()).fingerprint).toBe(first.fingerprint);
+  writeFileSync(join(root, "body.ts"), "export const calculate = () => ({ total: 2 });\n");
+  const changed = await build();
+  expect(changed.fingerprint).not.toBe(first.fingerprint);
+  writeFileSync(join(root, "schema.ts"), schemaFile(9));
+  expect((await build()).fingerprint).not.toBe(changed.fingerprint);
+
+  const bytes = changed.executables[0]!.members.find((m) => m.path === "route.js")!.bytes;
+  const loaded = await import(
+    /* @vite-ignore */ `data:text/javascript;base64,${Buffer.from(bytes).toString("base64")}`
+  );
+  expect(loaded.module.bodies.calculate.run()).toEqual({ total: 2 });
+  const evidence = {
+    loadedBindings: loaded.module,
+    ...changed,
+    expectedFingerprint: first.fingerprint,
+    catalog: Object.entries(entries).map(([key, entry]) => ({ key, ...entry.axes, uses: [] })),
+  };
+  const stale = (await createRouteAdmission(evidence)).admitUnknown({
+    ...loaded.module,
+    artifact: changed.artifact,
+  });
+  expect(stale.ok).toBe(false);
+  const admitted = (
+    await createRouteAdmission({ ...evidence, expectedFingerprint: changed.fingerprint })
+  ).admitUnknown({ ...loaded.module, artifact: changed.artifact });
+  expect(admitted).toMatchObject({ ok: true });
+  if (!admitted.ok) throw Error(JSON.stringify(admitted.diagnostics));
+  const registry = createAdmittedRouteRegistry();
+  const active = registry.register(admitted.route);
+  expect(registry.resolve(admitted.route)).toBe(admitted.route);
+  active.deactivate();
+  writeFileSync(join(root, "body.ts"), "export const calculate = (path) => import(path);\n");
+  await expect(build()).rejects.toThrow("Runtime import is not part of the closed artifact");
 });
