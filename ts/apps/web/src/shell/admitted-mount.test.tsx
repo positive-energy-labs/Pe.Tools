@@ -440,10 +440,29 @@ async function workRoute(
   modelWrite = false,
   needs: "nothing" | "document" = "nothing",
   presenter?: (result: unknown) => unknown,
+  cellBodies = false,
 ) {
   const workData = {
     ...data,
     needs,
+    ...(cellBodies
+      ? {
+          salvage: "salvage",
+          cells: {
+            amount: {
+              segment: null,
+              key: "text",
+              value: "number",
+              groupOf: "cellGroup",
+              show: "cellShow",
+              label: "cellLabel",
+              focus: "cellFocus",
+              take: "cellTake",
+              deps: { page: ["query"], work: ["amount"], readings: ["notes"] },
+            },
+          },
+        }
+      : {}),
     capabilities: ["work", "native-write"] as const,
     work: { route: "note", schema: "work", version: 1, migrations: {} },
     ...(needs === "document" ? {} : { workSubject: "note" }),
@@ -516,6 +535,49 @@ async function workRoute(
     schemas: { ...schemas, work: z.object({ amount: z.number() }), number: z.number() },
     bodies: {
       ...bodies,
+      ...(cellBodies
+        ? {
+            salvage: {
+              slot: "salvage",
+              kind: "salvage",
+              source,
+              run: (old, ctx) => {
+                expect(Object.keys(ctx)).toEqual(["page", "work", "readings"]);
+                return { ok: true, value: [{ path: ["amount"], value: old.amount }] };
+              },
+            },
+            cellGroup: { slot: "cells.amount.groupOf", kind: "group", source, run: (key) => [key] },
+            cellShow: {
+              slot: "cells.amount.show",
+              kind: "show",
+              source,
+              run: (value) => String(value),
+            },
+            cellLabel: {
+              slot: "cells.amount.label",
+              kind: "label",
+              source,
+              run: (group) => group.toUpperCase(),
+            },
+            cellFocus: {
+              slot: "cells.amount.focus",
+              kind: "focus",
+              source,
+              run: (key) => ({ query: key }),
+            },
+            cellTake: {
+              slot: "cells.amount.take",
+              kind: "take",
+              source,
+              run: (ctx) => {
+                expect(Object.keys(ctx.page)).toEqual(["query"]);
+                expect(Object.keys(ctx.work)).toEqual(["amount"]);
+                expect(Object.keys(ctx.readings)).toEqual(["notes"]);
+                return [{ path: ["amount"], value: ctx.work.amount + 1 }];
+              },
+            },
+          }
+        : {}),
       ...(presenter
         ? {
             nativePresent: {
@@ -940,7 +1002,10 @@ test("shared preview transport renders before-to-after review and commits identi
     render(
       createElement(AdmittedPane, {
         shell,
-        route: await workRoute("none", true, "nothing", () => ({sentence: "Review table", rows: ["Parameter amount: 6 \u2192 7"]})),
+        route: await workRoute("none", true, "nothing", () => ({
+          sentence: "Review table",
+          rows: ["Parameter amount: 6 \u2192 7"],
+        })),
         address: locationPort().address,
         pane: "main",
       }),
@@ -1340,20 +1405,8 @@ test("slot census refuses unsupported bodies at mount admission and invokes pick
     "label",
     "focus",
     "take",
+    "salvage",
   ]);
-  for (const [slot, kind, dataPatch] of [
-    ["salvage", "salvage", { salvage: "unsupported" }],
-  ] as const) {
-    const t = transports();
-    const run = vi.fn();
-    const route = await admitted(false, false, {
-      data: dataPatch,
-      bodies: { unsupported: { slot, kind, source, run } },
-    });
-    expect(() => createRouteShell(t.services).mount(route, locationPort().address)).toThrow(slot);
-    expect(t.keys).toEqual([]);
-    expect(run).not.toHaveBeenCalled();
-  }
   const run = vi.fn((snapshot) => (snapshot.current ? [{ id: null, label: snapshot.value }] : []));
   const route = await admitted(false, false, {
     bodies: { pick: { ...bodies.pick, run } },
@@ -1756,4 +1809,43 @@ test("invalid presenter output cannot become a review", async () => {
   expect(() => f.preview().deliver()).toThrow();
   expect(f.mount.review("native")).toBeNull();
   expect(f.submit).not.toHaveBeenCalled();
+});
+
+import * as workHost from "../route/host";
+test("cell displays, focus, take and salvage use real shared Page/Work owners", async () => {
+  const t = transports(),
+    store = createFixtureWorkDoor(
+      { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
+      { amount: 6 },
+    );
+  const mount = createRouteShell({ ...t.services, work: store }).mount(
+    await workRoute("none", false, "nothing", undefined, true),
+    locationPort().address,
+  );
+  closes.push(mount.close);
+  expect(mount.cells().amount).toEqual([
+    { key: "amount", group: ["amount"], labels: ["AMOUNT"], text: "6" },
+  ]);
+  expect(() => mount.takeCell("amount", "amount")).toThrow("Reading unavailable");
+  expect(mount.focusCell("amount", "amount").kind).toBe("accepted");
+  expect(mount.page.read().query).toBe("amount");
+  t.frames.at(-1)!(ready("notes"));
+  await settle(mount.takeCell("amount", "amount"));
+  expect(mount.work()?.value).toEqual({ amount: 7 });
+  expect(mount.cells().amount![0]!.text).toBe("7");
+  const saved = vi
+    .spyOn(workHost, "salvageRouteWork")
+    .mockResolvedValue({ from: "old", value: { amount: 12 } });
+  try {
+    await mount.salvage();
+    expect(mount.work()?.value).toEqual({ amount: 7 });
+    await settle(mount.confirm("work.salvage") as Observation<WorkWriteOutcome>);
+    expect(mount.work()?.value).toEqual({ amount: 12 });
+  } finally {
+    saved.mockRestore();
+  }
+});
+
+test("presentation without sealed preview stays explicitly refused until result landing", async()=>{
+ const route=await workRoute("none",false,"nothing",()=>"result");const t=transports();expect(()=>createRouteShell(t.services).mount(route,locationPort().address)).toThrow("requires a sealed preview");expect(t.keys).toEqual([]);
 });

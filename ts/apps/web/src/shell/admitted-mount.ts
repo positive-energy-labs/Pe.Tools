@@ -1,3 +1,5 @@
+import { salvageRouteWork } from "../route/host";
+import { admittedWorkPatches } from "./admitted-cells";
 import { createAdmittedCells } from "./admitted-cells";
 import { z } from "zod";
 import { placeAdmittedVerbs } from "./admitted-placement";
@@ -81,6 +83,7 @@ export const admittedMountBodyKinds: readonly string[] = Object.freeze([
   "label",
   "focus",
   "take",
+  "salvage",
 ]);
 
 /** Application services are installed once. Routes supply only admission and location. */
@@ -115,6 +118,14 @@ export function createRouteShell(services: KernelServices) {
         if (!admittedMountBodyKinds.includes(body.kind)) {
           registration.deactivate();
           throw Error(`Unsupported admitted mount body slot: ${body.slot}`);
+        }
+      }
+      // TODO: Register admitted migrations with the host RouteWorkspace before admitting migration.
+      // Result landing owns presentation for verbs without a sealed ModelWrite preview.
+      for (const [id, verb] of Object.entries(route.data.verbs)) {
+        if (verb.present && (verb.kind !== "command" || bindings.entries[verb.entry]?.axes.effect !== "ModelWrite")) {
+          registration.deactivate();
+          throw Error(`Unsupported admitted presentation phase: verbs.${id}.present requires a sealed preview`);
         }
       }
       const observers = createAdmittedObservers(route.data, bindings.bodies);
@@ -334,9 +345,11 @@ export function createRouteShell(services: KernelServices) {
         }
       >();
       const subjectField = route.data.subject.field;
+      let drawing = false;
       let scheduling = false;
       let again = false;
       const schedule = () => {
+        if (drawing) throw Error("Admitted observers cannot run during render");
         if (closed) return;
         if (scheduling) {
           again = true;
@@ -518,7 +531,6 @@ export function createRouteShell(services: KernelServices) {
       };
       const project = (keys: readonly string[], value: Readonly<Record<string, unknown>>) =>
         freezePage(Object.fromEntries(keys.map((key) => [key, value[key]])));
-      let drawing = false;
       const action = () => {
         if (drawing) throw Error("Admitted action cannot run during render");
         if (closed) throw Error("Mount closed");
@@ -851,25 +863,95 @@ export function createRouteShell(services: KernelServices) {
         subjectDisplay: observers.subject,
         subjectText: observers.text,
         cells: cells.rows,
+        async salvage() {
+          action();
+          resolve();
+          const key = owner.read()?.scope.identity.work;
+          if (!route.data.salvage || !key || !work.ready() || fixture !== null)
+            throw Error("Salvage unavailable");
+          const issued = owner.invocation(
+            owner.capture("work-salvage"),
+            Object.fromEntries(
+              Object.entries(readings)
+                .filter(([, reading]) => reading.current)
+                .map(([id, reading]) => [id, (reading as { hash: string }).hash]),
+            ),
+          );
+          if (!issued.ok) throw Error(issued.reason);
+          const saved = await salvageRouteWork(key);
+          if (!owner.current(issued.value) || !work.ready()) throw Error("Salvage is stale");
+          if (!saved) return null;
+          const decoded = z
+            .discriminatedUnion("ok", [
+              z.strictObject({ ok: z.literal(true), value: z.unknown() }),
+              z.strictObject({ ok: z.literal(false), reason: z.string() }),
+            ])
+            .parse(
+              bindings.bodies[route.data.salvage]!.run(
+                freezePage(saved.value),
+                freezePage({ page: owner.read()!.page, work: owner.read()!.work!.value, readings }),
+              ),
+            );
+          if (!decoded.ok) throw Error(decoded.reason);
+          const patches = admittedWorkPatches(route.data, bindings.schemas, decoded.value);
+          reviews.set("work.salvage", {
+            invocation: issued.value,
+            preview: patches,
+            send: () => {
+              if (!owner.current(issued.value) || !work.ready()) throw Error("Salvage is stale");
+              return work.write(() => patches, issued.value, issued.value.id, "Salvage Work");
+            },
+          });
+          notify();
+          return { kind: "review", preview: patches };
+        },
         takeCell(id: string, key: unknown) {
-          action(); resolve();
+          action();
+          resolve();
           const declaration = route.data.cells[id];
           if (!declaration) throw Error(`Unknown cell: ${id}`);
           const context = () => {
             if (!work.ready()) throw Error("Work unavailable");
-            for (const reading of declaration.deps.readings) if (!readings[reading]?.current) throw Error(`Reading unavailable: ${reading}`);
-            return freezePage({page: project(declaration.deps.page, owner.read()!.page), work: project(declaration.deps.work, (owner.read()!.work!.value as Record<string, unknown>)), readings: Object.fromEntries(declaration.deps.readings.map(key => [key, readings[key]]))});
+            for (const reading of declaration.deps.readings)
+              if (!readings[reading]?.current) throw Error(`Reading unavailable: ${reading}`);
+            return freezePage({
+              page: project(declaration.deps.page, owner.read()!.page),
+              work: project(
+                declaration.deps.work,
+                owner.read()!.work!.value as Record<string, unknown>,
+              ),
+              readings: Object.fromEntries(
+                declaration.deps.readings.map((key) => [key, readings[key]]),
+              ),
+            });
           };
           context();
-          const issued = owner.invocation(owner.capture(`cell-take:${id}`), Object.fromEntries(declaration.deps.readings.map(key => [key, (readings[key] as {hash:string}).hash])));
+          const issued = owner.invocation(
+            owner.capture(`cell-take:${id}`),
+            Object.fromEntries(
+              declaration.deps.readings.map((key) => [
+                key,
+                (readings[key] as { hash: string }).hash,
+              ]),
+            ),
+          );
           if (!issued.ok) throw Error(issued.reason);
-          return work.write(() => cells.take(id, key, context()), issued.value, issued.value.id, `Take ${id}`);
+          return work.write(
+            () => cells.take(id, key, context()),
+            issued.value,
+            issued.value.id,
+            `Take ${id}`,
+          );
         },
         focusCell(id: string, key: unknown) {
-          action(); resolve();
+          action();
+          resolve();
           const issued = owner.invocation(owner.capture(`cell-focus:${id}`), {});
           if (!issued.ok) throw Error(issued.reason);
-          return owner.acceptPage(issued.value, cells.focus(id, key) as Parameters<typeof owner.acceptPage>[1]);
+          return owner.acceptPage(
+            issued.value,
+            cells.focus(id, key) as Parameters<typeof owner.acceptPage>[1],
+          );
         },
         predicates: observers.predicates,
         visible: observers.visible,

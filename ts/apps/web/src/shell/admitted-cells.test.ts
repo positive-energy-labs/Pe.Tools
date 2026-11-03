@@ -3,14 +3,53 @@ import { z } from "zod";
 import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data";
 import { createAdmittedCells, admittedWorkPatches } from "./admitted-cells";
 test("cell display validates shapes and caches bodies; takes validate Work patches", () => {
-  const data = { work: { schema: "work" }, cells: { edits: { segment: "edits", key: "text", value: "text", groupOf: "group", show: "show", label: "label", focus: "focus", take: "take", deps: { page: [], work: [], readings: [] } } } } as unknown as RouteGraphJson;
+  const data = {
+    work: { schema: "work" },
+    cells: {
+      edits: {
+        segment: "edits",
+        key: "text",
+        value: "text",
+        groupOf: "group",
+        show: "show",
+        label: "label",
+        focus: "focus",
+        take: "take",
+        deps: { page: [], work: [], readings: [] },
+      },
+    },
+  } as unknown as RouteGraphJson;
   const schemas = { text: z.string(), work: z.object({ edits: z.record(z.string(), z.string()) }) };
-  const group = vi.fn(key => [key]);
-  const bodies = { group: { run: group }, show: { run: String }, label: { run: s => s.toUpperCase() }, focus: { run: key => ({ query: key }) }, take: { run: (ctx, key) => { expect(ctx).toEqual({ page: {}, work: {}, readings: {} }); return [{ path: ["edits"], value: { [key]: "taken" } }]; } } };
-  const cells = createAdmittedCells(data, schemas, bodies); cells.update({ edits: { a: "one" } });
-  expect(cells.rows().edits).toEqual([{ key: "a", group: ["a"], labels: ["A"], text: "one" }]); cells.rows(); expect(group).toHaveBeenCalledOnce();
-  expect(cells.focus("edits", "a")).toEqual({ query: "a" }); expect(cells.take("edits", "a", { page: {}, work: {}, readings: {} })).toEqual([{ path: ["edits"], value: { a: "taken" } }]);
-  expect(() => admittedWorkPatches(data, schemas, [{ path: ["secret"], value: 1 }])).toThrow("Undeclared Work field");
+  const group = vi.fn((key) => [key]);
+  const bodies = {
+    group: { run: group },
+    show: { run: String },
+    label: { run: (s) => s.toUpperCase() },
+    focus: { run: (key) => ({ query: key }) },
+    take: {
+      run: (ctx, key) => {
+        expect(ctx).toEqual({ page: {}, work: {}, readings: {} });
+        return [{ path: ["edits"], value: { [key]: "taken" } }];
+      },
+    },
+  };
+  const cells = createAdmittedCells(data, schemas, bodies);
+  cells.update({ edits: { a: "one" } });
+  expect(cells.rows().edits).toEqual([{ key: "a", group: ["a"], labels: ["A"], text: "one" }]);
+  cells.rows();
+  expect(group).toHaveBeenCalledOnce();
+  expect(cells.focus("edits", "a")).toEqual({ query: "a" });
+  expect(cells.take("edits", "a", { page: {}, work: {}, readings: {} })).toEqual([
+    { path: ["edits"], value: { a: "taken" } },
+  ]);
+  expect(() => admittedWorkPatches(data, schemas, [{ path: ["secret"], value: 1 }])).toThrow(
+    "Undeclared Work field",
+  );
   expect(() => admittedWorkPatches(data, schemas, [{ path: ["edits"], value: 1 }])).toThrow();
-  for (const key of ["group", "show", "label"]) expect(() => createAdmittedCells(data, schemas, { ...bodies, [key]: { run: () => 12 } }).update({ edits: { a: "one" } })).toThrow();
+  for (const key of ["group", "show", "label"])
+    expect(() =>
+      createAdmittedCells(data, schemas, { ...bodies, [key]: { run: () => 12 } }).update({
+        edits: { a: "one" },
+      }),
+    ).toThrow();
 });
