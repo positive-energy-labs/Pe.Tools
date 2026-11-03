@@ -53,3 +53,14 @@ test("cell display validates shapes and caches bodies; takes validate Work patch
       }),
     ).toThrow();
 });
+
+test("shared Work cell patches use the owner's schema without a presenter schema", () => {
+  const data = { work: { route: "owner" } } as unknown as RouteGraphJson;
+  const owner = z.object({ amount: z.number() });
+  expect(admittedWorkPatches(data, {}, [{ path: ["amount"], value: 2 }], owner)).toEqual([
+    { path: ["amount"], value: 2 },
+  ]);
+  expect(() =>
+    admittedWorkPatches(data, {}, [{ path: ["amount"], value: "bad" }], owner),
+  ).toThrow();
+});

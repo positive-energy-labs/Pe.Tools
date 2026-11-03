@@ -7,7 +7,13 @@ import {
 import { module as capturesModule } from "../captures/kernel";
 import { ductsDocumentSchema } from "@pe/agent-contracts";
 
-async function admit(key: string, work: unknown, owner?: AdmittedRoute) {
+async function admit(
+  key: string,
+  work: unknown,
+  owner?: AdmittedRoute,
+  linkedOwner = owner,
+  hostVersion = "w1-fixture",
+) {
   const module = {
     ...capturesModule,
     schemas: { ...capturesModule.schemas, work: ductsDocumentSchema },
@@ -23,12 +29,14 @@ async function admit(key: string, work: unknown, owner?: AdmittedRoute) {
     source: "builtin-closure" as const,
     version: 1 as const,
     data: module.data as never,
-    hostVersion: "w1-fixture",
+    hostVersion,
     variants: [{ client: "web" as const, entry: "route.js" }],
     modules: [{ id: "route.js", sha256: "a".repeat(64) }],
     inputs: [],
     externals: [],
-    ...(owner && { workOwner: { route: owner.data.key, fingerprint: owner.workFingerprint } }),
+    ...(linkedOwner && {
+      workOwner: { route: linkedOwner.data.key, fingerprint: linkedOwner.workFingerprint },
+    }),
   };
   const fingerprint = await builtinClosureFingerprint(envelope);
   const inventory = createBuiltinRouteInventory({
@@ -70,5 +78,18 @@ test("shared Work refuses redeclaring the owner's schema", async () => {
   if (!result.ok)
     expect(result.diagnostics).toContainEqual(
       expect.objectContaining({ path: "work.route", code: "policy" }),
+    );
+});
+
+test("shared Work cannot relink an old presenter envelope to a new owner admission", async () => {
+  const old = await admit("ducts", spec);
+  const changed = await admit("ducts", spec, undefined, undefined, "owner-v2");
+  if (!old.ok || !changed.ok) throw Error("Owner admission failed");
+  expect(old.route.workFingerprint).not.toBe(changed.route.workFingerprint);
+  const result = await admit("fans", { route: "ducts" }, changed.route, old.route);
+  expect(result.ok).toBe(false);
+  if (!result.ok)
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({ path: "work.route", code: "identity" }),
     );
 });

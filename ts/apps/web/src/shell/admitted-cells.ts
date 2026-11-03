@@ -4,7 +4,12 @@ import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/ro
 import type { SchemaTable } from "../../../../packages/agent-contracts/src/route-kernel-page";
 import { freezePage } from "./page-port";
 
-export function admittedWorkPatches(data: RouteGraphJson, schemas: SchemaTable, value: unknown, ownerSchema?: z.ZodType) {
+export function admittedWorkPatches(
+  data: RouteGraphJson,
+  schemas: SchemaTable,
+  value: unknown,
+  ownerSchema?: z.ZodType,
+) {
   if (!data.work) throw Error("Work unavailable");
   const shape = bare(ownerSchema ?? schemas[data.work.schema ?? ""]!) as z.ZodObject;
   return freezePage(
@@ -78,7 +83,12 @@ export function createAdmittedCells(
       const parsed = keyFor(id, key),
         cell = data.cells[id]!;
       if (!cell.take) throw Error("Cell has no take action");
-      return admittedWorkPatches(data, schemas, bodies[cell.take]!.run(context, parsed), ownerSchema);
+      return admittedWorkPatches(
+        data,
+        schemas,
+        bodies[cell.take]!.run(context, parsed),
+        ownerSchema,
+      );
     },
   };
 }

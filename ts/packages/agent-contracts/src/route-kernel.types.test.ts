@@ -586,7 +586,7 @@ export function paneOutcomeWitness(
   expectTypeOf(outcome).toEqualTypeOf<Observation<WorkWriteOutcome>>();
   // @ts-expect-error a Work edit cannot erase its authoritative outcome
   const erased: void = outcome;
-  void erased;
+  void [erased];
   expectTypeOf(pane.verbs.apply({})).toEqualTypeOf<
     { readonly kind: "review"; readonly preview: unknown } | { readonly kind: "preview" }
   >();
