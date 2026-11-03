@@ -106,6 +106,7 @@ export function observeWorkReceipts(
   };
   registry.set(identity, feed);
   const release = feed.subscribe(emit);
+  // ponytail: One all-receipt scan per feed open; phase 5 C upgrades to indexed terminal reads.
   void journal.read({ kinds: ["action"] }).then(
     (initial) => {
       if (closed) return;
