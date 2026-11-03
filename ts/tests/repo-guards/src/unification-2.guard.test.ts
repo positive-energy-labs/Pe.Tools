@@ -17,6 +17,8 @@ import {
   zodArray,
 } from "./unification-2-census.ts";
 
+const { legacyBuiltinRoutes, ...offenderBaseline } = baseline;
+
 export function trackedBytes() {
   const paths = execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8" })
     .split("\0")
@@ -33,9 +35,9 @@ describe("unification 2 offender identities", () => {
   it("rejects added identities against baseline and committed floors without changing tracked bytes", () => {
     const before = trackedBytes();
     const actual = { ...census(), ...boundaryCensus() };
-    expect(Object.keys(baseline).sort()).toEqual(Object.keys(actual).sort());
-    expect(additions(actual, baseline)).toEqual([]);
-    for (const floor of baselineFloors()) expect(additions(baseline, floor)).toEqual([]);
+    expect(Object.keys(offenderBaseline).sort()).toEqual(Object.keys(actual).sort());
+    expect(additions(actual, offenderBaseline)).toEqual([]);
+    for (const floor of baselineFloors()) expect(additions(offenderBaseline, floor)).toEqual([]);
     expect(trackedBytes()).toEqual(before);
   }, 60000);
   it("cannot trade removed debt for a different offender or revive a zero", () => {
@@ -118,3 +120,30 @@ it("resolved Zod AST follows an imported schema alias and factory despite a runt
     ),
   ).toBe(true);
 }, 30000);
+
+it("the private legacy route roster can only shrink", () => {
+  const source = syntax(
+    readFileSync(resolve(root, "ts/apps/web/src/shell/legacy-route-door.ts"), "utf8"),
+  );
+  const declaration = source.statements
+    .filter(ts.isVariableStatement)
+    .flatMap((statement) => [...statement.declarationList.declarations])
+    .find((declaration) => declaration.name.getText(source) === "legacyBuiltinKeys");
+  expect(declaration?.initializer && ts.isArrayLiteralExpression(declaration.initializer)).toBe(
+    true,
+  );
+  if (!declaration?.initializer || !ts.isArrayLiteralExpression(declaration.initializer))
+    throw Error("Missing literal legacy route roster");
+  const keys = declaration.initializer.elements.map((element) => {
+    if (!ts.isStringLiteral(element)) throw Error("Legacy keys must be literal identities");
+    return element.text;
+  });
+  expect(new Set(keys).size).toBe(keys.length);
+  expect(keys.filter((key) => !legacyBuiltinRoutes.includes(key))).toEqual([]);
+  for (const floor of baselineFloors()) {
+    if (floor.legacyBuiltinRoutes)
+      expect(
+        legacyBuiltinRoutes.filter((key) => !floor.legacyBuiltinRoutes!.includes(key)),
+      ).toEqual([]);
+  }
+});

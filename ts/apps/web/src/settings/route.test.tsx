@@ -1,4 +1,5 @@
-import {testSubject,testReadings} from '../test-route-subject';
+import { registerLegacyRegistration } from "#/shell/legacy-route-door";
+import { testSubject, testReadings } from "../test-route-subject";
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { createMemoryHistory, createRouter, RouterContextProvider } from "@tanstack/react-router";
@@ -6,7 +7,6 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { pane, settingsSchema, type RouteGraph, type SettingField } from "@pe/agent-contracts";
 import { z } from "zod";
 import { field } from "../../../../packages/agent-contracts/src/route-field";
-import { publicRoutes } from "#/route/builtin-routes";
 import { peReadings } from "#/readings";
 import { Route as root } from "../routes/__root";
 import { settingsRoute, settingsAdapters } from "./route";
@@ -20,8 +20,8 @@ vi.mock("../routes/__root", async () => {
   return { Route: createRootRoute() };
 });
 vi.mock("#/route/builtin-routes", async () => {
-  const { createRouteRegistry } = await import("@pe/kit/route-registry");
-  return { publicRoutes: createRouteRegistry() };
+  const { legacyRouteDiscovery } = await import("#/shell/legacy-route-door");
+  return { publicRoutes: legacyRouteDiscovery };
 });
 // Test-local: no product route declares per-user settings yet.
 const proofSettingFields = {
@@ -43,12 +43,13 @@ const proofSettingFields = {
     control: "color",
   },
 } satisfies Record<string, SettingField>;
-const proofGraph: RouteGraph<object> = {...testSubject,
+const proofGraph: RouteGraph<object> = {
+  ...testSubject,
   key: "proof",
   address: "proof",
   name: "Proof",
   fields: proofSettingFields,
-  readings: {...testReadings,},
+  readings: { ...testReadings },
   verbs: {},
   panes: { body: { label: "Body", purpose: "proof", draws: [], verbs: [] } },
   stages: { main: { word: "Main", panes: ["body"], verbs: [] } },
@@ -64,7 +65,9 @@ afterEach(() => {
 });
 
 test("the mounted settings graph drives its section verb and edits another registered graph without Work or URL writes", async () => {
-  releases.push(publicRoutes.register({ manifest: proofGraph, graph: proofGraph, hosted: () => null }));
+  releases.push(
+    registerLegacyRegistration({ manifest: proofGraph, graph: proofGraph, hosted: () => null }),
+  );
   let values = settingsSchema(proofSettingFields).parse({});
   let revision = 0;
   const writes: unknown[] = [];

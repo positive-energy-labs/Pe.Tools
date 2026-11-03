@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
-import { createRouteRegistry } from "../../../packages/kit/src/route-registry.ts";
+import { createLegacyRouteRegistry, legacyRouteDiscovery } from "./shell/legacy-route-door";
 import { ductLossGraph as ductLoss } from "./duct-loss/graph.ts";
 import { field, text } from "../../../packages/agent-contracts/src/route-field.ts";
 import {
@@ -63,7 +63,7 @@ test("duct-loss's three panes and page-derived reading register as a discoverabl
   });
   expect(Object.keys(json.panes)).toEqual(["charts", "inputs", "wheel"]);
   expect(json.verbs).toEqual({});
-  const registry = createRouteRegistry();
+  const registry = createLegacyRouteRegistry();
   const remove = registry.register({
     manifest: { key: ductLoss.key, name: ductLoss.name, graph: json },
     hosted: () => null,
@@ -503,4 +503,16 @@ test("a graph's salvage hook projects the carry-over recovery; its id is reserve
       message: "Only a graph with Work can carry salvage over",
     },
   ]);
+});
+
+test("public legacy discovery has no registration door and new builtin keys refuse", () => {
+  expect(Object.isFrozen(legacyRouteDiscovery)).toBe(true);
+  expect("register" in legacyRouteDiscovery).toBe(false);
+  expect("registerGraph" in legacyRouteDiscovery).toBe(false);
+  expect("registerModule" in legacyRouteDiscovery).toBe(false);
+  const registry = createLegacyRouteRegistry();
+  expect(() => registry.registerGraph({ ...ductLoss, key: "new-offender" }, () => null)).toThrow(
+    /Unenumerated legacy route/,
+  );
+  expect(registry.keys()).toEqual([]);
 });

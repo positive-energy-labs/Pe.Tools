@@ -1,6 +1,6 @@
 import { useEffect, useMemo, type ReactNode } from "react";
 import type { RouteGraph } from "@pe/agent-contracts";
-import { builtinAdmission } from "@pe/kit/route-registry";
+import { builtinAdmission } from "./legacy-route-door";
 import { ScopeKeys, type ScopeKey } from "@pe/kit/keys";
 import type { PaneApi } from "../../../../packages/kit/src/components/lang/graph-layout";
 import { reduceLayout } from "../../../../packages/kit/src/components/lang/layout-graph";

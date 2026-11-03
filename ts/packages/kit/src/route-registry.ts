@@ -1,100 +1,56 @@
 import type { ReactNode } from "react";
+import { commandTool } from "@pe/agent-contracts";
+import type { AdmittedRoute } from "../../agent-contracts/src/route-kernel-admission.ts";
 import {
-  commandTool,
-  validateRouteModule,
-  type RouteModule,
-  type RouteGraph,
-  type RouteGraphJson,
-  type VerbDecl,
-} from "@pe/agent-contracts";
+  createAdmittedRouteRegistry,
+  resolveRouteBindings,
+} from "../../agent-contracts/src/route-module.ts";
 
-/** The discoverable projection of a route's full, typed manifest. */
-interface RegisteredManifest {
-  readonly key: string;
-  readonly name: string;
-  readonly work?: object;
-  readonly needs?: string;
-  readonly verbs?: Readonly<Record<string, VerbDecl>>;
-  readonly graph?: RouteGraphJson;
-}
-type HostedRouteView = (props: {
+export type HostedRouteView = (props: {
   thread: string;
   visible: boolean;
   target?: string;
   work?: string;
 }) => ReactNode;
-export interface RouteRegistration {
-  readonly manifest: RegisteredManifest;
-  /** Present for kernel routes; the manifest is this exact executable graph. */
-  readonly graph?: RouteGraph<any, any>;
-  readonly hosted: HostedRouteView;
-}
 
-/**
- * A shipped route's admission refusal, or null. Builtins register at module scope, so a throw there
- * would blank every route over one stale or bad graph; the refused route draws this message instead
- * (mountRoute), and the rest stay usable. Pod graphs carry no build stamp and admit through Pod transfer.
- */
-export function builtinAdmission(graph: RouteGraph<any, any>): string | null {
-  if (graph.key.startsWith("pod.")) return null;
-  if (!graph.moduleHash) return `Missing build source hash for ${graph.key}`;
-  try {
-    validateRouteModule({
-      version: 1,
-      namespace: "builtin",
-      key: `builtin:${graph.key}`,
-      moduleHash: graph.moduleHash,
-      graph,
-      bodies: null,
-    });
-    return null;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return message.includes("hash")
-      ? `${message}. Run \`vp run codegen:routes\` in ts/packages/agent-contracts.`
-      : message;
-  }
-}
-
-/** One registration owns discovery, action attribution and the actual hosted surface. */
+/** Kernel discovery and mounting authenticate the same exact A-issued handle. */
 export function createRouteRegistry() {
-  const routes = new Map<string, RouteRegistration>();
+  const admissions = createAdmittedRouteRegistry();
+  const routes = new Map<
+    string,
+    { readonly route: AdmittedRoute; readonly hosted: HostedRouteView }
+  >();
   const listeners = new Set<() => void>();
   let revision = 0;
   const changed = () => {
     revision++;
     for (const listener of listeners) listener();
   };
-
-  const registry = {
-    /** A refused builtin still registers: its route draws the refusal where a person looks. */
-    registerGraph<P, W>(graph: RouteGraph<P, W>, hosted: HostedRouteView) {
-      const refusal = builtinAdmission(graph);
-      if (refusal) console.error(`Route ${graph.key} refused: ${refusal}`);
-      return registry.register({ manifest: graph, graph, hosted });
-    },
-    registerModule(module: RouteModule<HostedRouteView>) {
-      validateRouteModule(module);
-      return registry.register({
-        manifest: module.graph,
-        graph: module.graph,
-        hosted: module.bodies,
-      });
-    },
-    /** Built-in and Pod routes take this one path; the answer removes exactly this registration. */
-    register(registration: RouteRegistration) {
-      const key = registration.manifest.key;
-      if (!key.trim()) throw Error("a route registration needs its manifest key");
+  return {
+    register(route: AdmittedRoute, hosted: HostedRouteView) {
+      const key = route.data.key;
       if (routes.has(key)) throw Error(`route ${key} is already registered`);
+      // Authenticate before publishing or notifying. No namespace has an exemption.
+      const receipt = admissions.register(route);
+      const registration = Object.freeze({ route, hosted });
       routes.set(key, registration);
       changed();
       return () => {
         if (routes.get(key) !== registration) return;
+        receipt.deactivate();
         routes.delete(key);
         changed();
       };
     },
-    subscribe: (listener: () => void) => {
+    /** Called immediately before mount/dispatch; retired and copied handles refuse. */
+    resolve(candidate: unknown) {
+      const route = admissions.resolve(candidate);
+      return route && routes.get(route.data.key)?.route === route ? route : null;
+    },
+    bindings(candidate: unknown) {
+      return resolveRouteBindings(admissions, candidate);
+    },
+    subscribe(listener: () => void) {
       listeners.add(listener);
       return () => {
         listeners.delete(listener);
@@ -105,11 +61,8 @@ export function createRouteRegistry() {
     entries: () => [...routes.values()],
     get: (key: string) => routes.get(key),
     actionRoute(key: string): string | null {
-      // The semantic catalogue owns attribution, including supporting commands called inside a
-      // graph verb's review. A Pod cannot claim another tool's command by declaring its name.
       const tool = commandTool(key);
       return tool && routes.has(tool.name) ? tool.name : null;
     },
   };
-  return registry;
 }

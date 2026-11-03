@@ -491,5 +491,24 @@
     "ts/apps/web/scripts/heal-review-proof.ts#{ chromium }:require@0",
     "ts/apps/web/scripts/layout-proof.ts#{ chromium }:require@0",
     "ts/apps/web/src/route/pod-routes.tsx#PodRoutesProvider/{ loader, publish }/loader/bundle:import@0"
+  ],
+  "legacyBuiltinRoutes": [
+    "data-tables",
+    "ducts",
+    "families",
+    "family",
+    "fans",
+    "instances",
+    "parameter-links",
+    "pod-admin",
+    "pods",
+    "rhvac-sync",
+    "rooms",
+    "schedule-specs",
+    "schedules",
+    "session-admin",
+    "settings",
+    "takeoffs",
+    "zone-audit"
   ]
 }

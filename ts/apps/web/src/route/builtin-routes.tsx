@@ -4,7 +4,7 @@ import { zoneAuditGraph } from "#/zone-audit/graph";
 import { sessionsGraph } from "#/sessions/graph";
 import { podAdminGraph } from "#/pod-admin/graph";
 import { lazy, type ComponentType } from "react";
-import { createRouteRegistry } from "@pe/kit/route-registry";
+import { legacyRouteDiscovery, registerLegacyGraph } from "#/shell/legacy-route-door";
 import { openGraph } from "#/open/graph";
 import { parameterLinksGraph } from "#/parameter-links/graph";
 import { podsGraph } from "#/pods/graph";
@@ -48,10 +48,11 @@ const DataTablesRoute = lazy(async () => ({
 const SettingsRoute = lazy(async () => ({
   default: mountRoute(settingsGraph, (await import("#/settings/route")).settingsAdapters),
 }));
-export const publicRoutes = createRouteRegistry();
-publicRoutes.registerGraph(settingsGraph, hosted(SettingsRoute));
-publicRoutes.registerGraph(openGraph, hosted(OpenPage));
-publicRoutes.registerGraph(takeoffGraph, ({ visible, ...binding }) => (
+// TODO: S1d combine admitted kernel discovery after the first route migrates.
+export const publicRoutes = legacyRouteDiscovery;
+registerLegacyGraph(settingsGraph, hosted(SettingsRoute));
+registerLegacyGraph(openGraph, hosted(OpenPage));
+registerLegacyGraph(takeoffGraph, ({ visible, ...binding }) => (
   <TakeoffsPane {...binding} hidden={!visible} url={false} />
 ));
 function hosted(Body: ComponentType<MountRouteProps>) {
@@ -65,29 +66,35 @@ function hosted(Body: ComponentType<MountRouteProps>) {
     work?: string;
   }) => <Body {...binding} hidden={!visible} url={false} />;
 }
-publicRoutes.registerGraph(roomsGraph, hosted(RoomsRoute));
-publicRoutes.registerGraph(familyGraph, hosted(FamilyRoute));
-publicRoutes.registerGraph(familiesGraph, hosted(FamiliesRoute));
-publicRoutes.registerGraph(schedulesGraph, hosted(SchedulesRoute));
-publicRoutes.registerGraph(ductsGraph, hosted(DuctsRoute));
-publicRoutes.registerGraph(parameterLinksGraph, hosted(ParameterLinksRoute));
-publicRoutes.registerGraph(podsGraph, hosted(PodsRoute));
-publicRoutes.registerGraph(dataTablesGraph, hosted(DataTablesRoute));
+registerLegacyGraph(roomsGraph, hosted(RoomsRoute));
+registerLegacyGraph(familyGraph, hosted(FamilyRoute));
+registerLegacyGraph(familiesGraph, hosted(FamiliesRoute));
+registerLegacyGraph(schedulesGraph, hosted(SchedulesRoute));
+registerLegacyGraph(ductsGraph, hosted(DuctsRoute));
+registerLegacyGraph(parameterLinksGraph, hosted(ParameterLinksRoute));
+registerLegacyGraph(podsGraph, hosted(PodsRoute));
+registerLegacyGraph(dataTablesGraph, hosted(DataTablesRoute));
 
 const PodAdminRoute = named(() => import("#/pod-admin/route"), "PodAdminRoute");
-publicRoutes.registerGraph(podAdminGraph, hosted(PodAdminRoute));
+registerLegacyGraph(podAdminGraph, hosted(PodAdminRoute));
 
-const sessionsRoute = lazy(async () => ({ default: (await import("#/sessions/route")).SessionsRoute }));
-publicRoutes.registerGraph(sessionsGraph, hosted(sessionsRoute));
+const sessionsRoute = lazy(async () => ({
+  default: (await import("#/sessions/route")).SessionsRoute,
+}));
+registerLegacyGraph(sessionsGraph, hosted(sessionsRoute));
 
 const zoneAuditRoute = lazy(async () => ({ default: (await import("#/zone-audit/route")).Body }));
-publicRoutes.registerGraph(zoneAuditGraph, hosted(zoneAuditRoute));
+registerLegacyGraph(zoneAuditGraph, hosted(zoneAuditRoute));
 
 const rhvacSyncRoute = lazy(async () => ({ default: (await import("#/rhvac-sync/route")).Body }));
-publicRoutes.registerGraph(rhvacSyncGraph, hosted(rhvacSyncRoute));
+registerLegacyGraph(rhvacSyncGraph, hosted(rhvacSyncRoute));
 
-const scheduleSpecsRoute = lazy(async () => ({ default: (await import("#/schedule-specs/route")).Body }));
-publicRoutes.registerGraph(scheduleSpecsGraph, hosted(scheduleSpecsRoute));
+const scheduleSpecsRoute = lazy(async () => ({
+  default: (await import("#/schedule-specs/route")).Body,
+}));
+registerLegacyGraph(scheduleSpecsGraph, hosted(scheduleSpecsRoute));
 
-const FansRoute = lazy(async () => ({ default: mountRoute(fansGraph, (await import("#/ducts/route")).ductsAdapters) }));
-publicRoutes.registerGraph(fansGraph, hosted(FansRoute));
+const FansRoute = lazy(async () => ({
+  default: mountRoute(fansGraph, (await import("#/ducts/route")).ductsAdapters),
+}));
+registerLegacyGraph(fansGraph, hosted(FansRoute));

@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { z } from "zod";
 import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { validateRouteGraph, type VerbDecl } from "@pe/agent-contracts";
-import { builtinAdmission } from "@pe/kit/route-registry";
+import { builtinAdmission } from "./legacy-route-door";
 import { rankVerbs, TimelineHead } from "./situation-band";
 import { createRouteTimeline } from "./timeline";
 import { PageControl } from "./situation-fields";
