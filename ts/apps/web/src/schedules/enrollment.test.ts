@@ -7,7 +7,8 @@ import {
 import { RouteWorkspace, observeResources } from "@pe/runtime";
 import { applyPatches, scheduleGridRouteState, type ReadingFrame } from "@pe/agent-contracts";
 
-test("G4: admitted host opens existing schedule Work but omits domain edit reconciliation", async () => {
+test("G4: admitted host opens existing schedule Work but preserves domain edit reconciliation", async () => {
+  const completeHostModule = { ...schedulesHostModule, workState: scheduleGridRouteState };
   const envelope = {
     source: "builtin-closure" as const,
     version: 1 as const,
@@ -22,13 +23,13 @@ test("G4: admitted host opens existing schedule Work but omits domain edit recon
   const inventory = createBuiltinRouteInventory({
     schedules: {
       host: true,
-      module: schedulesHostModule,
+      module: completeHostModule,
       closure: { envelope, fingerprint },
       catalog: [],
     },
   });
   const admitted = (await inventory.prepare("schedules", fingerprint)).admitHost(
-    schedulesHostModule,
+    completeHostModule,
   );
   if (!admitted.ok) throw Error(JSON.stringify(admitted.diagnostics));
   const key = {
@@ -105,11 +106,8 @@ test("G4: admitted host opens existing schedule Work but omits domain edit recon
     });
     expect(result.ok).toBe(true);
     const after = scheduleGridRouteState.schema.parse((await ws.read(key, "schedules"))!.doc);
-    // G4 witness: admitted enrollment dropped the domain's reconcileEdit, so even the reviewed key stays stale.
-    expect(after.basis?.stale).toEqual([
-      { key: "1::1", was: "old" },
-      { key: "1::2", was: "untouched" },
-    ]);
+    // G4: the host clears only the reviewed key through the domain reconciliation.
+    expect(after.basis?.stale).toEqual([{ key: "1::2", was: "untouched" }]);
     const duplicate = new RouteWorkspace({
       registrations: [{ spec: scheduleGridRouteState }],
       store: { getState: async () => undefined, setState: async () => {} },
