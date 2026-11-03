@@ -91,36 +91,41 @@ export function useProviders(origin: string, enabled = true, snapshot?: Machine)
       dirty({ kind: "machine" });
     }
   }, []);
-  const probe = (id: string) => run(() => client.probe(id));
-  return {
-    list,
-    error: error ?? observed.error,
-    probe,
-    login,
-    /** The harness's own login (or installer) in a console on this machine; re-probed on return. */
-    openLogin: async (id: string) => {
-      const press = (next: Login) => setLogin((current) => ({ ...current, [id]: next }));
-      press({ state: "opening" });
-      try {
-        await client.openLogin(id);
-        press({ state: "open", probedAt: list?.find((item) => item.id === id)?.probedAt ?? null });
-        window.addEventListener("focus", () => void probe(id), { once: true });
-      } catch (caught) {
-        press({ state: "failed", message: errorMessage(caught) });
-      } finally {
-        dirty({ kind: "machine" });
-      }
-    },
-    /** Throws the host's `{step, message}` refusal as its words, for the form to say inline. */
-    add: async (input: AddProviderRequest) => {
-      try {
-        await client.addProvider(input);
-      } finally {
-        dirty({ kind: "machine" });
-      }
-    },
-    remove: (id: string) => run(() => client.removeProvider(id)),
-  };
+  return useMemo(() => {
+    const probe = (id: string) => run(() => client.probe(id));
+    return {
+      list,
+      error: error ?? observed.error,
+      probe,
+      login,
+      /** The harness's own login (or installer) in a console on this machine; re-probed on return. */
+      openLogin: async (id: string) => {
+        const press = (next: Login) => setLogin((current) => ({ ...current, [id]: next }));
+        press({ state: "opening" });
+        try {
+          await client.openLogin(id);
+          press({
+            state: "open",
+            probedAt: list?.find((item) => item.id === id)?.probedAt ?? null,
+          });
+          window.addEventListener("focus", () => void probe(id), { once: true });
+        } catch (caught) {
+          press({ state: "failed", message: errorMessage(caught) });
+        } finally {
+          dirty({ kind: "machine" });
+        }
+      },
+      /** Throws the host's `{step, message}` refusal as its words, for the form to say inline. */
+      add: async (input: AddProviderRequest) => {
+        try {
+          await client.addProvider(input);
+        } finally {
+          dirty({ kind: "machine" });
+        }
+      },
+      remove: (id: string) => run(() => client.removeProvider(id)),
+    };
+  }, [client, error, observed.error, list, login, run]);
 }
 
 export type ProvidersState = ReturnType<typeof useProviders>;

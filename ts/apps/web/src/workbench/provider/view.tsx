@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useNavigate, useSearch, useRouter } from "@tanstack/react-router";
+import { deepEqual, useNavigate, useSearch, useRouter } from "@tanstack/react-router";
 import { resolveWorkbenchConfig } from "../config";
-import { selectRunStatus, selectTurnFailure } from "@pe/agent-contracts/chat-state";
+import {
+  selectApprovals,
+  selectRunStatus,
+  selectTurnFailure,
+  type Approval,
+} from "@pe/agent-contracts/chat-state";
 import { previousOf, useHostStatusSlice } from "#/shell/readings-hooks";
 import { appAtomRegistry, useRouteOwner } from "#/shell/owner";
 import { createChatPageStore } from "../store";
 import type { StoredThreadSummary, WorkbenchContextValue } from "./thread-summary";
-import { WorkbenchContext } from "./thread-summary";
+import { TranscriptContext, WorkbenchContext } from "./thread-summary";
 import { chatLoading, useThreadStream } from "./thread-stream";
 import { harnessClient, notFound, type PromptRequest } from "./harness-client";
 import * as Atom from "effect/reactivity/Atom";
@@ -144,6 +149,13 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     : chatLoading(host.known, stream.pending);
   const isRunning = selectRunStatus(chat) !== "idle";
   const turnFailure = selectTurnFailure(chat);
+  const chatId = chat.id;
+  const lifecycleRevision = chat.lifecycle.revision;
+  // The Timeline head needs consent changes, not transcript chunks.
+  const heldApprovals = useRef<readonly Approval[]>([]);
+  const nextApprovals = selectApprovals(chat).filter((ask) => ask.scope === "run");
+  if (!deepEqual(heldApprovals.current, nextApprovals)) heldApprovals.current = nextApprovals;
+  const runApprovals = heldApprovals.current;
 
   /** Every verb: clear the last complaint, run, and say what failed. */
   const attempt = useCallback(
@@ -345,7 +357,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     () => ({
       store,
       config,
-      chat,
+      runApprovals,
       bodyAtom,
       loading,
       error,
@@ -377,12 +389,12 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       },
       updateThread: (threadId, change) =>
         attempt(async () => {
-          const current =
-            threads.find((item) => item.id === threadId) ??
-            (chat.id === threadId ? chat : undefined);
+          const revision =
+            threads.find((item) => item.id === threadId)?.lifecycle.revision ??
+            (chatId === threadId ? lifecycleRevision : undefined);
           const updated = await client
             .update(threadId, {
-              expectedRevision: current?.lifecycle.revision,
+              expectedRevision: revision,
               ...change,
             })
             .catch((caught) => {
@@ -421,7 +433,9 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     [
       attempt,
       bodyAtom,
-      chat,
+      runApprovals,
+      chatId,
+      lifecycleRevision,
       client,
       config,
       createThread,
@@ -449,5 +463,9 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     ],
   );
 
-  return <WorkbenchContext.Provider value={context}>{children}</WorkbenchContext.Provider>;
+  return (
+    <WorkbenchContext.Provider value={context}>
+      <TranscriptContext.Provider value={chat}>{children}</TranscriptContext.Provider>
+    </WorkbenchContext.Provider>
+  );
 }

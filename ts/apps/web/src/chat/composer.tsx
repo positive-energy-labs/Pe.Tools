@@ -13,7 +13,7 @@ import { FirstOpenCard, ProviderRepair } from "#/chat/first-open";
 import { isReady } from "#/workbench/provider/providers";
 import { Pane } from "@pe/kit/lang/pane";
 import { ScopeKeys, type ScopeKey } from "@pe/kit/keys";
-import { useWorkbench } from "#/workbench/provider";
+import { useTranscript, useWorkbench } from "#/workbench/provider";
 import { EMPTY_CHAT_DRAFT, type ChatDraft } from "#/workbench/prompt";
 import {
   selectMessages,
@@ -77,7 +77,6 @@ export function ThreadComposer({
 }) {
   const [draft, setDraft] = useState(initialDraft);
   const {
-    chat,
     providers,
     config,
     currentThreadId,
@@ -85,6 +84,7 @@ export function ThreadComposer({
     draft: head,
     answerQuestion,
   } = useWorkbench();
+  const chat = useTranscript();
   // Loaded and none ready: the composer carries the first-open doors and Send says why it waits.
   const noneReady = providers.list !== undefined && !providers.list.some(isReady);
   // Some ready, but not the one this head runs on: that provider carries its own repair.

@@ -40,7 +40,7 @@ import {
   selectTitle,
   selectToolCalls,
 } from "@pe/agent-contracts/chat-state";
-import { useWorkbench } from "#/workbench/provider";
+import { useTranscript, useWorkbench } from "#/workbench/provider";
 
 import { useHeadWorks } from "./head-works";
 import { targetClosure, targetLabel } from "./thread-navigation";
@@ -140,7 +140,8 @@ function useThreadHead(handle: ChatHandle) {
 /** What both the composer head and the thread head's cluster read: the thread's target and its
  *  health. Called ONCE per surface (ChatSurface) and handed to both. */
 export function useChatSituation(handle: ChatHandle) {
-  const { currentThreadId, threads, chat, missingThread } = useWorkbench();
+  const { currentThreadId, threads, missingThread } = useWorkbench();
+  const chat = useTranscript();
   const head = useThreadHead(handle);
   const machine = previousOf(chatReading<Machine>(handle, "machine"));
   const inventory = machineInventory(machine);
@@ -302,7 +303,8 @@ export function ComposerPickers({
   urlTarget?: string;
   situation: ChatSituation;
 }) {
-  const { currentThreadId, chat } = useWorkbench();
+  const { currentThreadId } = useWorkbench();
+  const chat = useTranscript();
   const isRunning = selectRunStatus(chat) !== "idle";
   const { head, inventory, ladder, health, closedWord } = situation;
   // A new thread under a `?target` address pin binds to the one open document at that address,
@@ -389,7 +391,7 @@ export function ComposerPickers({
 
 /** Pea's plan beside the pickers. Send owns run state. */
 export function ComposerState(_: { situation: ChatSituation }) {
-  const { chat } = useWorkbench();
+  const chat = useTranscript();
   return <PlanChip tasks={selectPlan(chat)} />;
 }
 
@@ -398,7 +400,8 @@ export type ComposerStatus = { text: string; caution: boolean; detail?: string }
 /** Pea's live asks, then the Work the bound document holds: the top of the composer box, so
  *  approve and reject have one location and the draft sits under what is edit. */
 export function ComposerWork({ situation }: { situation: ChatSituation }) {
-  const { chat, resolveApproval, answerQuestion, store, cancel, currentThreadId } = useWorkbench();
+  const { resolveApproval, answerQuestion, store, cancel, currentThreadId } = useWorkbench();
+  const chat = useTranscript();
   const { inventory, bound, ladder } = situation;
   // Live asks only: an expired ask is a transcript record, never a head row.
   const approvals = selectApprovals(chat);

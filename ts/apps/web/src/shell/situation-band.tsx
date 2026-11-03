@@ -12,7 +12,6 @@ import { useContext, useSyncExternalStore, type ReactNode } from "react";
 import { MoreHorizontal, Redo2, Undo2 } from "lucide-react";
 import { workKey, type VerbDecl } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
-import { selectApprovals } from "@pe/agent-contracts/chat-state";
 import { harnessClient } from "#/workbench/provider/harness-client";
 import { WorkbenchContext } from "#/workbench/provider/thread-summary";
 import { resolveWorkbenchConfig } from "#/workbench/config";
@@ -229,9 +228,7 @@ export function TimelineHead<P, W>({
   // The selected thread's run consent (ADR 0027 rule 11) is the same window Pea's composer card
   // answers; the head shows it too, so a "Reject?" countdown is never only inside the chat pane.
   const workbench = useContext(WorkbenchContext);
-  const runAsks = workbench
-    ? selectApprovals(workbench.chat).filter((ask) => ask.scope === "run")
-    : [];
+  const runAsks = workbench?.runApprovals ?? [];
   // One host window is one countdown: a receipt stamped with a window the run ask already draws
   // is not drawn twice. Both read the host's deadline from the clock at render (countdown.ts).
   const asked = new Set(runAsks.map((ask) => ask.requestId));

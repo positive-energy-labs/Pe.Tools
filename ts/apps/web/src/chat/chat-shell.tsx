@@ -15,7 +15,7 @@ import {
 import { useRouteSearchSlice } from "#/route/activity";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { NewThreadButton, ThreadsSidebar, ThreadPane } from "#/chat/thread-palette";
-import { useWorkbench } from "#/workbench/provider";
+import { useTranscript, useWorkbench } from "#/workbench/provider";
 import { type Mode } from "#/workbench/depth";
 import { useCacheView } from "#/workbench/world";
 import { SessionStrip } from "#/workbench/world";
@@ -130,7 +130,6 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
   const activity = compact && !addressedThread && !composing;
   const {
     store,
-    chat,
     bodyAtom,
     loading,
     threads,
@@ -153,6 +152,7 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
     deleteThread,
     updateThread,
   } = useWorkbench();
+  const chat = useTranscript();
   useThreadPresence(activity ? null : currentThreadId);
   const newThread = useCallback(
     (target?: Parameters<typeof startThread>[0]) => {
@@ -349,7 +349,10 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
     >
       {mode === "threads" ? (
         <ThreadsSidebar
-          selected={(() => { const value = handle.view.read().page.selected; return value === "all" ? threads.map(thread => thread.id) : value; })()}
+          selected={(() => {
+            const value = handle.view.read().page.selected;
+            return value === "all" ? threads.map((thread) => thread.id) : value;
+          })()}
           onSelection={(selected) => handle.view.setPage({ selected })}
           primary
           reading={!rosterRead}

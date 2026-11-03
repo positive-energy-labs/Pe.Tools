@@ -9,7 +9,7 @@ import type { TraitOption } from "@pe/agent-contracts";
 import { Ladder, type Rung } from "#/route/ladder";
 import type { ComponentProps } from "react";
 import { ProviderMark } from "#/components/lang/provider-mark";
-import { useWorkbench } from "#/workbench/provider";
+import { useTranscript, useWorkbench } from "#/workbench/provider";
 import { isReady, readinessSub, repairWord } from "#/workbench/provider/providers";
 
 /** A two-way on/off select is a toggle, as a boolean is. */
@@ -47,8 +47,9 @@ function traitRung(trait: TraitOption, pick: (id: string, value: string | boolea
 
 /** The head in force: the thread's when one is open, else the draft's. */
 function useHead() {
-  const { chat, currentThreadId, threads, providers, draft, setDraft, setModel, setTrait } =
+  const { currentThreadId, threads, providers, draft, setDraft, setModel, setTrait } =
     useWorkbench();
+  const chat = useTranscript();
   const list = providers.list ?? [];
   const fallback = list.find(isReady) ?? null;
   if (currentThreadId) {
