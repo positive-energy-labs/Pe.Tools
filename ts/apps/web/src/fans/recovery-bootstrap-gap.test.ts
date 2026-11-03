@@ -30,6 +30,7 @@ import type {
 import { module as captures } from "../captures/kernel";
 import { createRouteShell } from "../shell/admitted-mount";
 import { createWorkFeedClient } from "../shell/work-feed-client";
+import { describeInputHistory } from "../ducts/sheet/input-history";
 import { sourceRouteServices } from "../shell/source-route-services";
 import * as recoveryHost from "../route/host";
 import * as sourceServices from "../shell/source-route-services";
@@ -166,6 +167,7 @@ async function witness(
   raw?: unknown,
   failure?: "throw" | "invalid",
   limits?: { maxCount: number; maxBytes: number },
+  description?: ReturnType<typeof describeInputHistory>,
 ) {
   const module = {
     ...captures,
@@ -173,6 +175,10 @@ async function witness(
     schemas,
     bodies: {
       ...bodies,
+      describe: {
+        ...bodies.describe,
+        run: description ? () => description : bodies.describe.run,
+      },
       salvagePresent: {
         ...bodies.salvagePresent,
         run: (...[patches, evidence]: Parameters<typeof bodies.salvagePresent.run>) => {
@@ -741,3 +747,21 @@ test.each(["current", "departed"] as const)(
     else expect(f.saved.get("ducts")).toEqual(before);
   },
 );
+
+// TODO: W04 parity needs the existing domain history detail, not only its label.
+test("W04: a Ducts input edit retains the existing history detail", async () => {
+  const description = describeInputHistory(
+    {},
+    {
+      label: "fanFlow → PE_M_Fan_AirFlow",
+      rowKey: "parameters:fanFlow",
+    },
+    {},
+  );
+  const f = await witness(undefined, undefined, undefined, description);
+  await vi.waitFor(() => expect(f.mount.workBasis()).not.toBeNull());
+  const edit = f.mount.invoke("slot", "PE_M_Fan_AirFlow");
+  expect(edit).not.toMatchObject({ kind: "refused" });
+  await settle(edit as Observation<WorkWriteOutcome>);
+  expect(f.mount.journal()!.undo.at(-1)?.meta).toEqual(description.meta);
+});
