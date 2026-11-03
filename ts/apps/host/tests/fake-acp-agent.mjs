@@ -252,6 +252,45 @@ new AgentSideConnection(
         await say(`route-cutover-rendered ${opened.value.commandId}`);
         return { stopReason: "end_turn" };
       }
+      if (text.startsWith("chain ")) {
+        for (const phase of ["find", "stage", "locate", "preview", "apply"]) {
+          const tool = phase === "find" ? "pe_find" : phase === "locate" ? "pe_read" : "pe_do";
+          const codex = text.endsWith("codex");
+          const call = { toolCallId: `chain-${phase}`, kind: "other", status: "pending" };
+          const identity = codex
+            ? { rawInput: { server: "pea", tool, arguments: { phase } } }
+            : { _meta: { claudeCode: { toolName: `mcp__pea__${tool}` } } };
+          await conn.sessionUpdate({
+            sessionId,
+            update: {
+              sessionUpdate: "tool_call",
+              ...call,
+              title: codex ? `mcp.pea.${tool}` : `mcp__pea__${tool}`,
+              ...identity,
+            },
+          });
+          const answer = await conn.requestPermission({
+            sessionId,
+            toolCall: codex ? call : { ...call, ...identity, title: `mcp__pea__${tool}` },
+            options: [
+              { optionId: "yes", name: "Allow", kind: "allow_once" },
+              { optionId: "no", name: "Reject", kind: "reject_once" },
+            ],
+          });
+          if (answer.outcome.optionId !== "yes") throw Error(`chain ${phase} denied`);
+          const response = await fetch(`${process.env.FAKE_ACP_CHAIN}/${phase}`, {
+            method: "POST",
+            headers: { "x-pe-context": toolEnv.PE_CONTEXT ?? process.env.PE_CONTEXT },
+          });
+          const result = await response.text();
+          if (!response.ok) {
+            await say(`chain ${phase} refused: ${result}`);
+            throw Error(result);
+          }
+          await say(`chain ${phase}: ${result}`);
+        }
+        return { stopReason: "end_turn" };
+      }
       const blocks = prompt.flatMap((b) =>
         b.type === "image"
           ? [{ type: b.type, mimeType: b.mimeType, data: b.data }]
@@ -382,7 +421,9 @@ new AgentSideConnection(
         title: text.includes("mcp") ? "mcp__pea__pe_find" : "fake tool",
         kind: text.includes("raw-write") ? "edit" : text.includes("mcp") ? "other" : "read",
         status: "pending",
-        ...(text.includes("mcp") ? { _meta: { claudeCode: { toolName: "mcp__pea__pe_find" } } } : {}),
+        ...(text.includes("mcp")
+          ? { _meta: { claudeCode: { toolName: "mcp__pea__pe_find" } } }
+          : {}),
         ...(text.includes("codex")
           ? {
               title: "mcp.pea.pe_find",
