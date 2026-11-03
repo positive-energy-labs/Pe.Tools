@@ -24,9 +24,9 @@ import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/ro
 import { familiesReads } from "../../../../packages/mcps/src/shared/families-client";
 
 // Host admission consumes this module without loading the browser pane or sources.
-// TODO: W2 cutover requires admitted Work recovery lifecycle controls. Unreadable
-// Work cannot reach Start fresh or salvage from the generic mount (host-salvage.test.ts).
-// Do not restore the legacy recovery owner or add a route-owned reset/reader.
+// TODO: W2 cutover requires admitted host registration to preserve familiesAdmission.
+// host-admission-gap.test.ts proves unknown family/type writes lose their refusal.
+// RouteStateSpec parity does not carry RouteWorkspaceRegistration.admit.
 const scopeSchema = z.custom<
   import("../../../../packages/agent-contracts/src/route-kernel-page").IdentityId<"local">
 >((value) => value === '["families","draft"]');
