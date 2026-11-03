@@ -1,5 +1,8 @@
 import type { AdmittedRoute } from "../../../../packages/agent-contracts/src/route-kernel-admission";
-import { createAdmittedRouteRegistry, resolveRouteBindings } from "../../../../packages/agent-contracts/src/route-module";
+import {
+  createAdmittedRouteRegistry,
+  resolveRouteBindings,
+} from "../../../../packages/agent-contracts/src/route-module";
 
 /** This mount door never translates an executable legacy graph. Recheck before every draw. */
 export function mountAdmittedRoute(route: AdmittedRoute, expectedFingerprint: string) {
@@ -9,7 +12,8 @@ export function mountAdmittedRoute(route: AdmittedRoute, expectedFingerprint: st
   return {
     resolve() {
       const bindings = resolveRouteBindings(registry, route);
-      if (!bindings || route.fingerprint !== expectedFingerprint) throw Error("Stale or foreign route admission at mount");
+      if (!bindings || route.fingerprint !== expectedFingerprint)
+        throw Error("Stale or foreign route admission at mount");
       return { route, bindings };
     },
     close: () => receipt.deactivate(),

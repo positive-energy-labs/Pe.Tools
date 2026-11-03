@@ -4,6 +4,7 @@
  * (I1: never a sha) with its thumbnail as the lead, and its detail unfolds the picture, the PNG
  * doors and the receipt. Which taking is picked and which details are open live in the address.
  */
+import type { Immutable } from "../../../../packages/agent-contracts/src/route-kernel-data";
 import type { CaptureReceipt } from "@pe/agent-contracts";
 
 import { FactChip } from "@pe/kit/lang/chip";
@@ -14,7 +15,7 @@ import { ListView } from "@pe/kit/lang/list-view";
 import { useCopy } from "@pe/kit/lib/use-copy";
 
 /** What the request cropped to, in words; `whole view` when it named no focus. */
-const focusWords = (focus: CaptureReceipt["focus"]): string =>
+const focusWords = (focus: Immutable<CaptureReceipt>["focus"]): string =>
   focus?.elementIds?.length
     ? `${focus.elementIds.length} element${focus.elementIds.length === 1 ? "" : "s"}`
     : focus?.selection
@@ -28,7 +29,7 @@ const focusWords = (focus: CaptureReceipt["focus"]): string =>
 const WHEN = new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" });
 const when = (at: string) => WHEN.format(new Date(at));
 
-const search = (receipt: CaptureReceipt) => ({
+const search = (receipt: Immutable<CaptureReceipt>) => ({
   text: [
     receipt.view.name,
     receipt.document.title,
@@ -39,7 +40,7 @@ const search = (receipt: CaptureReceipt) => ({
   ],
 });
 
-function CaptureDetail({ receipt }: { receipt: CaptureReceipt }) {
+function CaptureDetail({ receipt }: { receipt: Immutable<CaptureReceipt> }) {
   const { copied, copy } = useCopy();
   const absolute = new URL(receipt.url, window.location.origin).href;
   return (
@@ -87,7 +88,7 @@ export function CapturesList({
   open,
   onPage,
 }: {
-  captures: readonly CaptureReceipt[];
+  captures: readonly Immutable<CaptureReceipt>[];
   /** The picked picture's sha. */
   focus?: string;
   /** The shas whose detail is unfolded. */

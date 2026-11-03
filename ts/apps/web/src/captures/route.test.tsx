@@ -29,15 +29,15 @@ afterEach(() => {
 
 import { capturesRoute, capturesAdapters } from "./route";
 import { captureQueries } from "./host";
-async function mounted() {
+async function mounted(captures: unknown[] = [], sha = "abc") {
   const open = vi
     .spyOn(capturesAdapters.sources["captures.list"] as UseSource, "open")
     .mockImplementation((_, deliver) => {
-      deliver({ kind: "complete", value: [], revision: 1 });
+      deliver({ kind: "complete", value: captures, revision: 1 });
     });
   const router = createRouter({
     routeTree: root.addChildren([capturesRoute]),
-    history: createMemoryHistory({ initialEntries: ["/captures?sha=abc&open=abc"] }),
+    history: createMemoryHistory({ initialEntries: [`/captures?sha=${sha}&open=${sha}`] }),
   });
   releases.push(router.history.subscribe(router.load));
   await router.load();
@@ -62,4 +62,26 @@ test("host-scoped refresh publishes its query without reacquiring the retained l
   expect(open.mock.calls.length).toBe(before);
   expect(router.state.location.search.sha).toBe("abc");
   expect(view.queryByLabelText("Document")).toBeNull();
+});
+
+test("the admitted reading renders the retained capture and its restored detail", async () => {
+  const { view } = await mounted(
+    [
+      {
+        id: "taking",
+        sha: "a".repeat(64),
+        at: "2026-10-01T00:00:00Z",
+        origin: "human",
+        document: { title: "MEP" },
+        view: { name: "Ground plan" },
+        focus: null,
+        registration: null,
+        byteSize: 1,
+        url: "/captures/abc.png",
+      },
+    ],
+    "a".repeat(64),
+  );
+  expect(await view.findByText("Ground plan")).toBeTruthy();
+  expect(await view.findByRole("link", { name: "open png" })).toBeTruthy();
 });
