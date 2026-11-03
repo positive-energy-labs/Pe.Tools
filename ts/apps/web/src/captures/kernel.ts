@@ -60,6 +60,7 @@ export const capturesData = {
     captures: {
       kind: "use",
       entry: "captures.list",
+      args: "captureArgs",
       deps: { page: [], work: [], readings: [] },
       demand: "visible",
       retain: { evidence: "scope", resource: "scope" },
@@ -117,6 +118,12 @@ export const captureId = (sha: string) => {
 };
 const source = { module: "route.js", export: "module" };
 export const bodies = {
+  captureArgs: {
+    slot: "readings.captures.args",
+    kind: "args",
+    source,
+    run: () => ({}),
+  },
   browse: {
     slot: "seeds.browse.load",
     kind: "seed",

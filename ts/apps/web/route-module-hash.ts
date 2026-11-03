@@ -192,8 +192,7 @@ export function routeModuleHash(check = checkRoutes): Plugin {
       server.ws.send({ type: "full-reload" });
       return [];
     },
-    // TODO: S2 retire legacy-route-door builtinAdmission's graph.moduleHash requirement.
-    // Legacy graphs now refuse their missing source stamp; this plugin mints no admission.
+    // Legacy admission is enumerated in legacy-route-door; this plugin mints no admission.
     async transform() {
       // A request arriving during verification must not see a new graph with the old directory.
       await pending;

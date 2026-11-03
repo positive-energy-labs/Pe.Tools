@@ -1,4 +1,6 @@
 import { registerHooks } from "node:module";
+// Receipts describe production resolution even when a dev/test launcher verifies them.
+process.env.NODE_ENV = "production";
 // Styles have no bearing on a metadata projection. No component is rendered.
 registerHooks({
   load(url, context, next) {

@@ -1,15 +1,43 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
+import { routeDirectory } from "../../../../packages/agent-contracts/src/generated/route-directory";
+import { admitCaptures } from "../captures/admission";
+import { createCapturesMount } from "../captures/mount";
 import { createFixtureMount } from "./fixture";
 import { legacyGraphs as routes } from "../legacy-test-inventory.test-support";
+import { builtinAdmission, legacyBuiltinKeys } from "./legacy-route-door";
+import { publicRoutes } from "../route/builtin-routes";
 import { podsGraph } from "../pods/graph";
 import { podsBinding } from "../pods/actions";
 import { ductLossGraph } from "../duct-loss/graph";
 import { chatGraph } from "../chat/graph";
 
 afterEach(() => vi.unstubAllGlobals());
-test.each(routes.map((graph) => [graph.address, graph] as const))(
-  "/%s mounts every declared seed through the kernel without host reads",
-  async (_, graph) => {
+test.each(routeDirectory.map((entry) => [entry.directory.path, entry.key] as const))(
+  "%s mounts every declared seed through the kernel without host reads",
+  async (_, key) => {
+    if (key === "captures") {
+      const route = await admitCaptures();
+      const open = vi.fn(() => {
+        throw Error("Real host called");
+      });
+      const mounted = createCapturesMount(
+        route,
+        route.fingerprint,
+        { kind: "use", open },
+        { fixture: "browse" },
+        () => {},
+      );
+      try {
+        expect(mounted.read().reading.current).toBe(true);
+        await mounted.refresh();
+        expect(open).not.toHaveBeenCalled();
+      } finally {
+        mounted.close();
+      }
+      return;
+    }
+    const graph = routes.find((graph) => graph.key === key);
+    if (!graph) throw Error(`Builtin lacks fixture mount coverage: ${key}`);
     const fetch = vi.fn(() => {
       throw Error("Real host called");
     });
@@ -102,4 +130,19 @@ test("companion chat stays idle and mounts its own seed beside another route", a
   } finally {
     owner.dispose();
   }
+});
+
+// Registration executes the normal builtin composition; fixture owners exercise every legacy graph.
+test("every registered builtin admits without a graph hash, and the legacy door refuses unknown keys", () => {
+  expect(publicRoutes.keys().sort()).toEqual([...legacyBuiltinKeys].sort());
+  for (const key of publicRoutes.keys()) {
+    const graph = publicRoutes.get(key)!.graph!;
+    expect(builtinAdmission({ ...graph, moduleHash: undefined }), key).toBeNull();
+  }
+  expect(builtinAdmission({ ...routes[0]!, key: "not-in-the-legacy-census" })).toContain(
+    "Unenumerated legacy route",
+  );
+  expect(builtinAdmission({ ...routes[0]!, key: "captures" })).toContain(
+    "Unenumerated legacy route",
+  );
 });

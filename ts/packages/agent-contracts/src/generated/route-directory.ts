@@ -24,7 +24,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
       "category": "Coordinate model data",
       "blurb": "Inspect retained view pictures and receipts"
     },
-    "moduleHash": "37fd09b32982b0b4135137a12e0e93ebde0f1a78619b62eed8ccfd4f8f99bc16"
+    "moduleHash": "a1a1a66e27cd69b3e14be46f8fe48fe40ccc7ba864dbfec9603a6e25b90c0dad"
   },
   {
     "key": "chat",

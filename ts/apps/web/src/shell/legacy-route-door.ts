@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import {
   commandTool,
   validateRouteModule,
+  validateRouteGraph,
   type RouteModule,
   type RouteGraph,
   type RouteGraphJson,
@@ -51,29 +52,12 @@ interface RouteRegistration {
   readonly hosted: HostedRouteView;
 }
 
-/**
- * A shipped route's admission refusal, or null. Builtins register at module scope, so a throw there
- * would blank every route over one stale or bad graph; the refused route draws this message instead
- * (mountRoute), and the rest stay usable. Pod graphs carry no build stamp and admit through Pod transfer.
- */
+/** Temporary enumerated legacy admission; S2 deletes this door. Kernel routes retain closure evidence. */
 export function builtinAdmission(graph: RouteGraph<any, any>): string | null {
-  if (!graph.moduleHash) return `Missing build source hash for ${graph.key}`;
-  try {
-    validateRouteModule({
-      version: 1,
-      namespace: "builtin",
-      key: `builtin:${graph.key}`,
-      moduleHash: graph.moduleHash,
-      graph,
-      bodies: null,
-    });
-    return null;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return message.includes("hash")
-      ? `${message}. Run \`vp run codegen:routes\` in ts/packages/agent-contracts.`
-      : message;
-  }
+  if (!legacyBuiltinKeys.includes(graph.key)) return `Unenumerated legacy route: ${graph.key}`;
+  if (!graph.directory) return "Route registration needs a directory declaration";
+  const errors = validateRouteGraph(graph);
+  return errors.length ? errors.map((error) => `${error.path}: ${error.message}`).join("; ") : null;
 }
 
 /** One registration owns discovery, action attribution and the actual hosted surface. */

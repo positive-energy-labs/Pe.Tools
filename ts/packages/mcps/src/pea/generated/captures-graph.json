@@ -75,6 +75,7 @@
     "captures": {
       "kind": "use",
       "entry": "captures.list",
+      "args": "captureArgs",
       "deps": {
         "page": [],
         "work": [],

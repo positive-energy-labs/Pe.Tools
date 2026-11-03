@@ -1,6 +1,6 @@
 import { useEffect, useMemo, type ReactNode } from "react";
 import type { RouteGraph } from "@pe/agent-contracts";
-import { builtinAdmission } from "./legacy-route-door";
+import { builtinAdmission, legacyBuiltinKeys } from "./legacy-route-door";
 import { ScopeKeys, type ScopeKey } from "@pe/kit/keys";
 import type { PaneApi } from "../../../../packages/kit/src/components/lang/graph-layout";
 import { reduceLayout } from "../../../../packages/kit/src/components/lang/layout-graph";
@@ -49,8 +49,8 @@ export type RouteAdapters<P, W> = Omit<
  */
 export function admitRoute<P, W>(graph: RouteGraph<P, W>, adapters: RouteAdapters<P, W>) {
   const refusals = mountRefusals(graph, adapters);
-  // Only stamped graphs (a graph.ts the build compiled) admit as builtins; inline graphs carry none.
-  const admission = graph.moduleHash ? builtinAdmission(graph) : null;
+  // The private legacy census owns this temporary door, independently of retired graph hashes.
+  const admission = legacyBuiltinKeys.includes(graph.key) ? builtinAdmission(graph) : null;
   if (admission) refusals.push({ code: "invalid-graph", path: "module", message: admission });
   for (const id of Object.keys(graph?.panes ?? {})) {
     if (!adapters.bodies[id] && !adapters.frames?.[id] && !graph.panes[id]?.history)
