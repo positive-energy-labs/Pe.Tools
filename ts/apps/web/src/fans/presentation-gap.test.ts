@@ -239,9 +239,11 @@ test.each(["current", "stale-before", "stale-after", "throw", "async"] as const)
         names.nodes[0]!.facts[0]!.text = "Changed equipment";
         mount.refresh("names");
       };
+      // Keep the in-flight callback: invalidation correctly releases the live subscription.
+      const previewFrame = frames.get("w1c.write.preview")!;
       if (mode === "stale-before") changeNames();
       const deliver = () =>
-        frames.get("w1c.write.preview")!({
+        previewFrame({
           status: "ready",
           current: true,
           value: sealed,
