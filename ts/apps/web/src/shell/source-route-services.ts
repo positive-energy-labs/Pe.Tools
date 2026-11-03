@@ -14,7 +14,9 @@ export function sourceRouteServices(
   sources: Record<string, ReadingSource>,
   composition: Pick<KernelServices, "target" | "geometry"> = {},
 ): KernelServices {
-  const queries = new Set(hostOpCatalog.filter((entry) => entry.effect === "Read").map((entry) => entry.key));
+  const queries = new Set(
+    hostOpCatalog.filter((entry) => entry.effect === "Read").map((entry) => entry.key),
+  );
   const reads = new WeakMap<
     object,
     {
@@ -109,10 +111,14 @@ export function sourceRouteServices(
             },
             (frame) => {
               if (state.controller.signal.aborted) return;
+              if (frame.kind === "complete" && frame.fresh === false) {
+                deliver({ status: "unavailable", current: false, reason: "Reading is stale" });
+                return;
+              }
               if (frame.kind === "complete")
                 deliver({
-                  status: frame.fresh === false ? "stale" : "ready",
-                  current: frame.fresh !== false,
+                  status: "ready",
+                  current: true,
                   value:
                     frame.value as import("../../../../packages/agent-contracts/src/route-kernel-data").Immutable<T>,
                   hash: JSON.stringify(frame.value),
@@ -132,4 +138,3 @@ export function sourceRouteServices(
     availability: {},
   };
 }
-

@@ -328,7 +328,14 @@ function snapshotBindings(bindings: RouteBindings): RouteBindings {
   // Do not freeze caller-owned Zod internals; clone schemas and capture executable
   // functions once. Runtime bodies are trusted code, not mutable registry lookups.
   return Object.freeze({
-    sources: Object.freeze(Object.fromEntries(Object.entries(bindings.sources).map(([key, source]) => [key, source && typeof source === "object" ? Object.freeze({ ...source }) : source]))),
+    sources: Object.freeze(
+      Object.fromEntries(
+        Object.entries(bindings.sources).map(([key, source]) => [
+          key,
+          source && typeof source === "object" ? Object.freeze({ ...source }) : source,
+        ]),
+      ),
+    ),
     schemas: Object.freeze(
       Object.fromEntries(
         Object.entries(bindings.schemas).map(([key, schema]) => [key, schema.clone()]),
@@ -686,7 +693,18 @@ function sameLoadedBindings(actual: RouteBindings, loaded: RouteBindings): boole
   for (const key of ["sources", "schemas", "codecs", "identities", "entries", "bodies"] as const)
     if (!sameKeys(actual[key], loaded[key])) return false;
   return (
-    Object.entries(actual.sources).every(([id, source]) => source === loaded.sources[id]) &&
+    Object.entries(actual.sources).every(([id, source]) => {
+      const expected = loaded.sources[id]!;
+      return (
+        source.kind === expected.kind &&
+        source.open === expected.open &&
+        source.derive === expected.derive &&
+        source.key === expected.key &&
+        source.effects === expected.effects &&
+        source.recovers === expected.recovers &&
+        canonicalRouteJson(source.dirties ?? []) === canonicalRouteJson(expected.dirties ?? [])
+      );
+    }) &&
     Object.entries(actual.schemas).every(([id, schema]) => schema === loaded.schemas[id]) &&
     Object.entries(actual.codecs).every(
       ([id, codec]) =>

@@ -18,7 +18,22 @@ const bodySchema = z.strictObject({
   run: fn,
 });
 export const routeBindingSchema = z.object({
-  sources: z.record(z.string(), z.unknown()).default({}),
+  sources: z
+    .record(
+      z.string(),
+      z
+        .object({
+          kind: z.enum(["use", "derive"]),
+          open: fn.optional(),
+          derive: fn.optional(),
+          key: fn.optional(),
+          effects: fn.optional(),
+          dirties: z.array(z.string()).optional(),
+          recovers: z.boolean().optional(),
+        })
+        .refine((source) => (source.kind === "use" ? !!source.open : !!source.derive)),
+    )
+    .default({}),
   schemas: z.record(z.string(), schema),
   codecs: z.record(z.string(), z.object({ encode: fn, decode: fn })),
   identities: z.record(
