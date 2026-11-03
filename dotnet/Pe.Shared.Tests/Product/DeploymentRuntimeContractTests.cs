@@ -136,9 +136,17 @@ public sealed class DeploymentRuntimeContractTests {
     [Test, NonParallelizable]
     public void Dev_bridge_supervisor_app_base_and_service_files_land_under_the_product_home_override() {
         var home = Path.Combine(Path.GetTempPath(), $"pe-home-{Guid.NewGuid():N}", "Pe.Tools");
+        var checkout = Path.Combine(Path.GetDirectoryName(home)!, "checkout");
+        Directory.CreateDirectory(checkout);
+        File.WriteAllText(Path.Combine(checkout, ".git"), "gitdir: fixture");
+        File.WriteAllText(Path.Combine(checkout, "Pe.Tools.slnx"), "");
         var ownerRoot = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Positive Energy", "Pe.Tools");
         var previous = Environment.GetEnvironmentVariable(ProductPathNames.ProductHomeVariable);
+        var previousLane = HostEndpoint.ConfiguredLane;
+        var previousSource = HostEndpoint.ConfiguredSourceRoot;
+        HostEndpoint.ConfiguredLane = "dev";
+        HostEndpoint.ConfiguredSourceRoot = checkout;
         Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, home);
         try {
             var appBase = Pe.App.Host.TsHostLauncher.ServiceAppBase;
@@ -147,6 +155,8 @@ public sealed class DeploymentRuntimeContractTests {
             Assert.That(serviceFile, Does.StartWith(Path.Combine(home, ".local-state", "state", "service")).IgnoreCase);
             Assert.That(serviceFile, Does.Not.StartWith(ownerRoot).IgnoreCase);
         } finally {
+            HostEndpoint.ConfiguredLane = previousLane;
+            HostEndpoint.ConfiguredSourceRoot = previousSource;
             Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, previous);
             TryDeleteDirectory(Path.GetDirectoryName(home)!);
         }

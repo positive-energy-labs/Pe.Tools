@@ -35,9 +35,9 @@ public static class HostEndpoint {
         var serviceName = ResolveServiceName(ConfiguredLane ?? throw new InvalidOperationException("The loaded payload has no configured runtime owner."), ConfiguredSourceRoot);
         if (ConfiguredServiceName != serviceName)
             throw new InvalidOperationException("The loaded payload's host service does not match its runtime owner.");
-        if (ConfiguredLane == "installed" && (!SameSourceRoot(ConfiguredInstalledRoot, ProductRuntimeLayout.ForCurrentUser().RootPath) || string.IsNullOrWhiteSpace(ConfiguredExecutablePath)))
+        if (ConfiguredLane == "installed" && (!SameSourceRoot(ConfiguredInstalledRoot, RuntimeRootPath) || string.IsNullOrWhiteSpace(ConfiguredExecutablePath)))
             throw new InvalidOperationException("The loaded payload has no verified canonical installation owner.");
-        var discovered = PeServiceDiscovery.TryDiscover(ProductRuntimeLayout.ForCurrentUser().RootPath, serviceName)
+        var discovered = PeServiceDiscovery.TryDiscover(RuntimeRootPath, serviceName)
             ?? throw new InvalidOperationException($"No running '{serviceName}' host for the loaded payload.");
         if (discovered.Lane != ConfiguredLane || (ConfiguredLane == "dev" ? !SameSourceRoot(discovered.SourceRoot, ConfiguredSourceRoot) : !string.IsNullOrWhiteSpace(discovered.SourceRoot)))
             throw new InvalidOperationException("The host service receipt does not match the loaded payload's runtime owner.");
@@ -59,6 +59,11 @@ public static class HostEndpoint {
             throw new InvalidOperationException("The host listener does not match the loaded payload's runtime owner.");
         return baseUrl;
     }
+
+    /// <summary>The same lane-owned root used by the launcher's service lease and bridge discovery.</summary>
+    public static string RuntimeRootPath => ProductRuntimeLayout.ForRuntime(
+        ConfiguredLane ?? throw new InvalidOperationException("The loaded payload has no configured runtime owner."),
+        ConfiguredSourceRoot).RootPath;
 
     public static string? ConfiguredServiceName { get; set; }
     public static string? ConfiguredLane { get; set; }
