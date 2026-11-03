@@ -5,6 +5,20 @@ import { fansData } from "./neutral";
 import { builtinRouteKeys, builtinRouteStamp, loadBuiltinRoute } from "../route/builtin-inventory";
 import { createRouteRegistrations } from "../../../../packages/mcps/src/pea/routes";
 import { leaks } from "../shell/visible-text";
+import { snapshot } from "../ducts/test-fixture";
+
+test("P01: native snapshot decoding preserves capture and bounded-system evidence", () => {
+  const captured = {
+    ...snapshot,
+    sourceVersion: "native:1",
+    systemReads: { completed: [900], missing: [] },
+  };
+  expect(schemas.snapshot.parse(captured)).toEqual(captured);
+  expect(schemas.snapshot.safeParse({ ...captured, sourceVersion: 1 }).success).toBe(false);
+  expect(schemas.snapshot.safeParse({ ...captured, nodes: "not a native snapshot" }).success).toBe(
+    false,
+  );
+});
 
 type Capability =
   | "P01"

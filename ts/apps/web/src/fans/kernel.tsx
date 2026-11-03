@@ -5,9 +5,11 @@ import { fansData, schemas, entries, fansNeutralBodies } from "./neutral";
 import { DuctsPane } from "../ducts/pane-view";
 import { bodies as ductsBodies, jsonCodecs } from "../ducts/kernel";
 import { ductsSources } from "../ducts/sources";
+import { seedBodies } from "../ducts/fixtures";
 const source = { module: "fans/kernel.tsx", export: "bodies" };
 export const bodies = {
   ...fansNeutralBodies,
+  ...seedBodies,
   price: ductsBodies.price,
   "sheet-roster": {
     slot: "panes.sheet-roster.body",

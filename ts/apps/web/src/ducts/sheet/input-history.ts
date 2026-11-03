@@ -56,16 +56,8 @@ export function presentInputHistory(
   const cleared = undo?.detail === "available" ? undo.meta : null;
   const last = entries.at(-1);
   return {
-    undoLabel: undo
-      ? entries.filter((entry) => entry.state === "applied").length === 1
-        ? undo.label
-        : "last change"
-      : null,
-    redoLabel: redo
-      ? entries.filter((entry) => entry.state === "undone").length === 1
-        ? redo.label
-        : "last change"
-      : null,
+    undoLabel: undo?.label ?? null,
+    redoLabel: redo?.label ?? null,
     undoSuperseded: null,
     redoSuperseded: null,
     cleared:
@@ -81,7 +73,8 @@ export function presentInputHistory(
       ? { label: "restore", words: "", refusal }
       : last
         ? {
-            label: `${entries.length === 1 && last.state === "undone" ? "undid " : ""}${last.label}`,
+            // Name this entry's state; it does not identify the most recent movement.
+            label: `${last.state === "undone" ? "undid " : ""}${last.label}`,
             // Entries cannot distinguish a new forward edit from a redo. Never infer effect numbers.
             words: last.detail === "unavailable" ? "detail unavailable" : "",
           }

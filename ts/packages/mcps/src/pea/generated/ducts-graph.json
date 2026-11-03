@@ -1429,7 +1429,24 @@
       "internal": false
     }
   },
-  "seeds": {},
+  "seeds": {
+    "scene": {
+      "title": "scene",
+      "load": "seedScene"
+    },
+    "layout": {
+      "title": "layout",
+      "load": "seedLayout"
+    },
+    "colours": {
+      "title": "colours",
+      "load": "seedColours"
+    },
+    "navigation": {
+      "title": "navigation",
+      "load": "seedNavigation"
+    }
+  },
   "needs": "project",
   "resetOnTarget": [],
   "observe": []

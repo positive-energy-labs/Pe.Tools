@@ -9,7 +9,7 @@ import {
   type RouteDiagnostic,
 } from "../../../../packages/agent-contracts/src/route-kernel-data";
 import { module as captures } from "../captures/kernel";
-import { module as schedules } from "../schedules/kernel";
+import { module as schedulesModule } from "../schedules/kernel";
 import { module as families } from "../families/kernel";
 import { module as ducts } from "../ducts/kernel";
 import { module as fans } from "../fans/kernel";
@@ -47,7 +47,7 @@ const closure = (generated: Generated) => ({
 });
 const definitions = {
   captures: { module: captures, closure: closure(capturesGenerated) },
-  schedules: { module: schedules, closure: closure(schedulesGenerated) },
+  schedules: { module: schedulesModule, closure: closure(schedulesGenerated) },
   families: { module: families, closure: closure(familiesGenerated) },
   ducts: { module: ducts, closure: closure(ductsGenerated) },
   fans: { module: fans, closure: closure(fansGenerated) },

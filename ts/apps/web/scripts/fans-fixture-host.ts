@@ -70,7 +70,7 @@ export async function startFansFixtureHost() {
                 res.end(
                   await vite.transformIndexHtml(
                     url.pathname,
-                    '<!doctype html><html class="light"><head><meta charset="utf-8"><link rel="stylesheet" href="/src/styles.css"></head><body><div id="root"></div><script type="module" src="/src/fans/browser.fixture.tsx"></script></body></html>',
+                    '<!doctype html><html class="light"><head><meta charset="utf-8"><link rel="stylesheet" href="/src/styles.css"></head><body><div id="root"></div><script type="module" src="/scripts/fans-browser.fixture.tsx"></script></body></html>',
                   ),
                 );
                 return;

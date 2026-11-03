@@ -915,6 +915,6 @@ test("W04: equal-Work Undo/Redo paths render the same label-only history", async
   const undoEffect = presentInputHistory(undoHistory!.entries, null);
   const redoEffect = presentInputHistory(redoHistory!.entries, null);
   expect(undoEffect).toEqual(redoEffect);
-  expect(undoEffect.last).toEqual({ label: "Fan flow", words: "" });
+  expect(undoEffect.last).toEqual({ label: "undid Fan flow", words: "" });
   expect(redoEffect.last?.words).not.toMatch(/\d/);
 });

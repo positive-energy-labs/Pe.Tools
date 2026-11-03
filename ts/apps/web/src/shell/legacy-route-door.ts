@@ -12,9 +12,7 @@ import {
 
 export const legacyBuiltinKeys: readonly string[] = [
   "data-tables",
-  "ducts",
   "family",
-  "fans",
   "instances",
   "parameter-links",
   "pod-admin",

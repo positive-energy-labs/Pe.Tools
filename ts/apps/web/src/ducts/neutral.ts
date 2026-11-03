@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { identityCodecs } from "../shell/page-port.ts";
+import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import {
   applyPatches,
   canonicalRouteInput,
@@ -7,16 +8,16 @@ import {
   ductsDocumentSchema,
   ductsRouteState,
   ductsRosterResponseSchema,
+  ductsSheetOverviewSchema,
+  ductsSheetResponseSchema,
+  ductCatalogReadingSchema,
   ductsSheetEditsSchema,
   routeStatePatchSchema,
   salvageDuctsWork,
   type RouteStatePatch,
 } from "@pe/agent-contracts";
-import type { DuctsRouteDocument, DuctsSheetOverview } from "@pe/agent-contracts";
-import type { Detail, FanPort } from "./sheet/model.ts";
+import type { DuctsRouteDocument } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import type { Catalogs } from "@pe/ducts-domain/catalog";
-import type { Grids } from "@pe/ducts-domain/loss-grid";
 import { ruleByKey, ruleWords } from "@pe/ducts-domain/loss-rules";
 import { systemScope } from "@pe/ducts-domain/system-scope";
 import { editPatches } from "@pe/ducts-domain/sheet/index";
@@ -40,28 +41,53 @@ import {
   inputHistoryMetaSchema,
 } from "./sheet/input-history.ts";
 
-export type OpenSheet = {
-  overview: DuctsSheetOverview;
-
-  inputs: Detail<"inputs"> | null;
-
-  elements: Detail<"elements"> | null;
-
-  legs: Detail<"legs"> | null;
-
-  worstLegs: Detail<"legs">[];
-
-  worksheet: Detail<"worksheet"> | null;
-};
-
-export type SheetReading = {
-  open: OpenSheet | null;
-  opened?: OpenSheet[];
-  rows: FanPort[];
-  progress: { done: number; total: number; mark: string; stopped: boolean } | null;
-};
-
-export type SnapshotReading = DuctSnapshot & { sourceVersion?: string };
+const detail = ductsSheetResponseSchema.options;
+const openSheetSchema = z.object({
+  overview: ductsSheetOverviewSchema,
+  inputs: detail[4].nullable(),
+  elements: detail[2].nullable(),
+  legs: detail[1].nullable(),
+  worstLegs: z.array(detail[1]),
+  worksheet: detail[3].nullable(),
+});
+export type OpenSheet = z.output<typeof openSheetSchema>;
+const sheetReadingSchema = z.object({
+  open: openSheetSchema.nullable(),
+  opened: z.array(openSheetSchema).optional(),
+  rows: ductsRosterResponseSchema.shape.rows,
+  progress: z
+    .object({ done: z.number(), total: z.number(), mark: z.string(), stopped: z.boolean() })
+    .nullable(),
+});
+export type SheetReading = z.output<typeof sheetReadingSchema>;
+const snapshotReadingSchema = z
+  .preprocess(
+    (raw) => {
+      if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return raw;
+      const { sourceVersion, systemReads, ...snapshot } = raw as Record<string, unknown>;
+      return { snapshot, sourceVersion, systemReads };
+    },
+    z.object({
+      snapshot: nativeResponseSchema("ducts.snapshot.walk"),
+      sourceVersion: z.string().optional(),
+      systemReads: z
+        .object({ completed: z.array(z.number()), missing: z.array(z.number()) })
+        .optional(),
+    }),
+  )
+  .transform(({ snapshot, ...capture }) => ({ ...snapshot, ...capture }));
+export type SnapshotReading = z.output<typeof snapshotReadingSchema>;
+const row = z.array(z.number());
+const grid = z.object({
+  title: z.string(),
+  xLabel: z.string(),
+  x: row,
+  yLabel: z.string().optional(),
+  y: row.optional(),
+  zLabel: z.string().optional(),
+  z: row.optional(),
+  grid: z.union([row, z.array(row), z.array(z.array(row.nullable()))]),
+});
 
 const workKeys = [
   "criteria",
@@ -94,9 +120,12 @@ export const localId = (namespace: string, subject: string) =>
 export const localSubject = (id: IdentityId<"local">): string => JSON.parse(id)[1];
 export const namesOf = (value: Many<IdentityId<"local">>): string[] | "all" =>
   value.kind === "all" ? "all" : value.ids.map(localSubject);
-const identity = z.custom<IdentityId<"local">>(
-  (value) => typeof value === "string" && identityCodecs.local.decode(value).ok,
-);
+const identity = z.string().transform((value, ctx) => {
+  const decoded = identityCodecs.local.decode(value);
+  if (decoded.ok) return decoded.value;
+  ctx.addIssue({ code: "custom", message: decoded.reason });
+  return z.NEVER;
+});
 const many = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("ids"), ids: z.array(identity) }),
   z.strictObject({ kind: z.literal("all") }),
@@ -168,11 +197,11 @@ export const schemas = {
     basis: z.string().nullable(),
   }),
   scope: ductsDocumentSchema.shape.writeIntent.unwrap().shape.edit.unwrap().unwrap().shape.value,
-  snapshot: z.custom<SnapshotReading>().nullable(),
-  sheet: z.custom<SheetReading>().nullable(),
+  snapshot: snapshotReadingSchema.nullable(),
+  sheet: sheetReadingSchema.nullable(),
   pricing: z.unknown().nullable(),
-  tables: z.custom<Grids>().nullable(),
-  catalogs: z.custom<{ tables: Catalogs; findings: string[] }>().nullable(),
+  tables: z.record(z.string(), z.record(z.string(), grid)).nullable(),
+  catalogs: ductCatalogReadingSchema.nullable(),
 };
 const axes = {
   subject: "Document",
@@ -1225,7 +1254,12 @@ export const ductsData = {
       internal: false,
     },
   },
-  seeds: {},
+  seeds: {
+    scene: { title: "scene", load: "seedScene" },
+    layout: { title: "layout", load: "seedLayout" },
+    colours: { title: "colours", load: "seedColours" },
+    navigation: { title: "navigation", load: "seedNavigation" },
+  },
   resetOnTarget: [],
   observe: [],
 } as const satisfies RouteGraphJson;
@@ -1637,6 +1671,10 @@ export const neutralBodies = {
   | "presentLosses"
   | "presentHeal"
   | "presentFan"
+  | "seedScene"
+  | "seedLayout"
+  | "seedColours"
+  | "seedNavigation"
 >;
 
 export const ductsHostModule = {

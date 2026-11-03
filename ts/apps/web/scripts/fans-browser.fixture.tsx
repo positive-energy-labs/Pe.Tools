@@ -2,14 +2,14 @@ import { Activity, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserHistory } from "@tanstack/react-router";
 import type { ExecutionTarget } from "@pe/agent-contracts";
-import { loadBuiltinRoute, builtinRouteStamp } from "../route/builtin-inventory";
-import { RouteActivity, RouteVisibility } from "../route/activity";
-import { createAdmittedPlace, type PlaceInput } from "../shell/admitted-place";
-import { AdmittedPlacePane, admittedRouterAddress, type PanePlace } from "../shell/admitted-pane";
-import { createRouteShell } from "../shell/admitted-mount";
-import { sourceRouteServices } from "../shell/source-route-services";
-import { admittedSources } from "../shell/admitted-sources";
-import { admit } from "./admission.fixture";
+import { loadBuiltinRoute, builtinRouteStamp } from "../src/route/builtin-inventory";
+import { RouteActivity, RouteVisibility } from "../src/route/activity";
+import { createAdmittedPlace, type PlaceInput } from "../src/shell/admitted-place";
+import { AdmittedPlacePane, admittedRouterAddress, type PanePlace } from "../src/shell/admitted-pane";
+import { createRouteShell } from "../src/shell/admitted-mount";
+import { sourceRouteServices } from "../src/shell/source-route-services";
+import { admittedSources } from "../src/shell/admitted-sources";
+import { admit } from "../src/fans/admission.fixture";
 
 const config = (await fetch("/fixture/config").then((response) => response.json())) as {
   target: ExecutionTarget;

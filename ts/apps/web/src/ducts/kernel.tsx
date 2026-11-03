@@ -15,9 +15,11 @@ import { ductsData, schemas, entries, neutralBodies } from "./neutral";
 import { DuctsPane } from "./pane-view";
 import { ductsSources } from "./sources";
 import { presentLosses, presentHeal, presentFan } from "./reviews";
+import { seedBodies } from "./fixtures";
 const source = { module: "ducts/kernel.tsx", export: "bodies" };
 export const bodies = {
   ...neutralBodies,
+  ...seedBodies,
   price: {
     slot: "readings.pricing.derive",
     kind: "derive",

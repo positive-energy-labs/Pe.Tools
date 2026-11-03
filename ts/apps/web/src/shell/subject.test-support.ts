@@ -7,10 +7,8 @@ import {
   type RouteGraph,
   type DuctsRouteDocument,
 } from "@pe/agent-contracts";
-import { jsonCodec } from "../../../../packages/agent-contracts/src/route-field";
 import { ductsAddress } from "../../../../packages/agent-contracts/src/routes/ducts";
 import { threadListFields } from "../../../../packages/agent-contracts/src/routes/shared";
-import { healReviewSchema } from "../ducts/reviews";
 import type { DuctsPage } from "../ducts/page";
 
 // Generic legacy-owner tests need their old Page shape. This fixture has no domain
@@ -35,15 +33,6 @@ export const ductsPageGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = defineR
     },
     fan: { ...ductsAddress.fields.fan, role: "query" },
     selected: { ...ductsAddress.fields.selected, role: "selection" },
-    heal: {
-      ...field(
-        healReviewSchema.nullable().default(null),
-        {},
-        jsonCodec(healReviewSchema.nullable()),
-      ),
-      role: "transient",
-      url: false,
-    },
     sheetPath: { ...field(z.string().default(""), {}), role: "transient", url: false },
   },
   subjectField: {

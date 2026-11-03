@@ -188,6 +188,10 @@ export const fansNeutralBodies = {
   | "presentLosses"
   | "presentHeal"
   | "presentFan"
+  | "seedScene"
+  | "seedLayout"
+  | "seedColours"
+  | "seedNavigation"
 >;
 export { entries };
 export const fansHostModule = { data: fansData, schemas: ownerSchemas, bodies: {} };

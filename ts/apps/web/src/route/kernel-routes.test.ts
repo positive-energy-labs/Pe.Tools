@@ -2,7 +2,7 @@
 import { createMemoryHistory } from "@tanstack/react-router";
 import { beforeEach, afterEach, expect, test, vi } from "vite-plus/test";
 import { ductLossRoute } from "../duct-loss/route";
-import { ductsRoute } from "../ducts/route";
+import { Route as ductsRoute } from "../routes/ducts";
 import { getRouter } from "../router";
 
 vi.mock("../routes/__root", async () => {

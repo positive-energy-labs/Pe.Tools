@@ -6,9 +6,10 @@ import type { price } from "@pe/ducts-domain/pricing";
 import type { readiness } from "@pe/ducts-domain/readiness";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { ReactNode } from "react";
-import type { PageMove } from "#/shell/page";
+import type { History } from "@pe/agent-contracts";
 
 import type { DuctsPage } from "../page";
+import type { HealReview } from "../reviews";
 import type { Claim, Run } from "../legs";
 import type { PricingResult } from "../pricing-job";
 
@@ -38,11 +39,11 @@ export interface ProtoProps {
   /** The claim cells keyed by id as the Work (or the `?fixture=scene` fixture) holds them. */
   claimCells: Record<string, DuctClaim>;
   /** Route page state (selected, issue, system, level, layers, encoding, picture, viewport, ...). */
-  page: Omit<DuctsPage, "system"> & { system: string[] };
+  page: Omit<DuctsPage, "system"> & { system: string[]; heal: HealReview | null };
   /** A named move pushes, a gesture replaces (`PageMove`). */
   setPage: (
     next: Partial<Omit<DuctsPage, "system" | "fan" | "stage" | "heal">>,
-    move?: PageMove<DuctsPage>,
+    move?: { readonly history?: History },
   ) => void;
   /** Reports the committed renderer pose as derived facts; never writes Page or gesture previews. */
   onPose?: (pose: OrbitViewport | null) => void;
