@@ -17,9 +17,7 @@ import { snapshot } from "../ducts/test-fixture";
 const source = { module: "fans/presentation-gap.test.ts", export: "witness" };
 const empty = { page: [], work: [], readings: [] } as const;
 
-// TODO: W1 drive-7 S5a/S9 requires named review targets. The generic present slot
-// receives no declared reading evidence; do not keep names in a route-owned side channel.
-async function witness(present: (...args: unknown[]) => unknown) {
+async function witness(present: (...args: unknown[]) => unknown, names = () => snapshot) {
   const key = `w1c-${crypto.randomUUID()}`;
   const module = {
     ...captures,
@@ -116,7 +114,7 @@ async function witness(present: (...args: unknown[]) => unknown) {
     } as const,
     bodies: {
       ...captures.bodies,
-      names: { slot: "readings.names.derive", kind: "derive", source, run: () => snapshot },
+      names: { slot: "readings.names.derive", kind: "derive", source, run: names },
       namesPane: {
         slot: "panes.names.body",
         kind: "pane",
@@ -155,96 +153,164 @@ async function witness(present: (...args: unknown[]) => unknown) {
   return result.route;
 }
 
-test("drive-7 S5a: named evidence is current but absent from the generic sealed-review presenter", async () => {
-  const present = vi.fn((...args: unknown[]) =>
-    presentLosses(args[0], { readings: {} } as VerbScope),
-  );
-  const route = await witness(present);
-  const frames = new Map<string, (value: ReadingSnapshot<unknown>) => void>();
-  const descriptors = new Map<string, { key: { sortedKeyInput: string } }>();
-  const work = createFixtureWorkDoor(
-    { route: route.data.key, title: "", description: "", schema: ductsDocumentSchema },
-    ductsDocumentSchema.parse({}),
-  );
-  const submit = vi.spyOn(work, "submit");
-  const services: KernelServices = {
-    work,
-    reads: {
-      lifetime: "read",
-      acquire: (request) => {
-        descriptors.set(request.key.op, request);
-        return {
-          lifetime: "read",
-          key: request.key,
-          read: () => ({ status: "pending", current: false, reason: "pending" }),
-          release() {},
-        };
-      },
-    },
-    readings: {
-      lifetime: "subscription",
-      subscribe: (request, _token, deliver) => {
-        frames.set(request.key.op, deliver as (value: ReadingSnapshot<unknown>) => void);
-        return () => {
-          frames.delete(request.key.op);
-        };
-      },
-    },
-    clock: { lifetime: "read", now: Date.now },
-    availability: {},
-  };
-  const mount = createRouteShell(services).mount(route, {
-    read: () => new URLSearchParams(),
-    write() {},
-    subscribe: () => () => {},
-  });
-  try {
-    expect(mount.read("names")).toMatchObject({ current: true, value: { nodes: snapshot.nodes } });
-    expect(mount.invoke("apply", {})).toEqual({ kind: "preview" });
-    const handle = JSON.parse(descriptors.get("w1c.write.preview")!.key.sortedKeyInput).work;
-    const sealed = {
-      previewOnly: true,
-      derivedRequest: { equipmentFlows: [{ id: 100, cfm: 925, source: "Work" }] },
-      seal: {
-        requestHash: "sealed",
-        work: { handle },
-        incarnation: {},
-        dependencies: "names-hash",
-      },
-      takenAt: "2026-11-03T00:00:00Z",
-      response: {
-        writes: [
-          {
-            id: 100,
-            kind: "equipment-flow",
-            outcome: "planned",
-            before: "900 cfm",
-            after: "925 cfm",
-          },
-        ],
-        counts: { planned: 1, written: 0, refused: 0, unchanged: 0 },
-      },
-    };
-    frames.get("w1c.write.preview")!({
-      status: "ready",
-      current: true,
-      value: sealed,
-      hash: "seal",
+test.each(["current", "stale-before", "stale-after", "throw", "async"] as const)(
+  "drive-7 S5a/S9: invocation-captured naming evidence (%s)",
+  async (mode) => {
+    let names = structuredClone(snapshot);
+    const present = vi.fn((...args: unknown[]) => {
+      if (mode === "throw") throw Error("broken presenter");
+      if (mode === "async") return Promise.resolve("late");
+      const evidence = args[1] as { readings: { names: ReadingSnapshot<typeof snapshot> } };
+      return presentLosses(args[0], {
+        readings: { sheetSnapshot: evidence.readings.names },
+      } as unknown as VerbScope);
     });
-    expect(present).toHaveBeenCalledExactlyOnceWith(sealed);
-    expect(present.mock.calls[0]).toHaveLength(1);
-    expect(mount.review("apply")!.rows[0]).toMatch(/^element /);
-    expect(mount.review("apply")!.rows[0]).not.toContain("FC-1");
-    const named = presentLosses(sealed, {
-      readings: { sheetSnapshot: { value: snapshot } },
-    } as unknown as VerbScope);
-    expect(named.rows[0]).toContain("FC-1");
-    expect(named.sentence).toContain("1 Revit target");
-    expect(submit).not.toHaveBeenCalled();
-  } finally {
-    mount.close();
-  }
-});
+    const route = await witness(present, () => names);
+    const frames = new Map<string, (value: ReadingSnapshot<unknown>) => void>();
+    const descriptors = new Map<string, { key: { sortedKeyInput: string } }>();
+    const work = createFixtureWorkDoor(
+      { route: route.data.key, title: "", description: "", schema: ductsDocumentSchema },
+      ductsDocumentSchema.parse({}),
+    );
+    const submit = vi.spyOn(work, "submit");
+    const services: KernelServices = {
+      work,
+      reads: {
+        lifetime: "read",
+        acquire: (request) => {
+          descriptors.set(request.key.op, request);
+          return {
+            lifetime: "read",
+            key: request.key,
+            read: () => ({ status: "pending", current: false, reason: "pending" }),
+            release() {},
+          };
+        },
+      },
+      readings: {
+        lifetime: "subscription",
+        subscribe: (request, _token, deliver) => {
+          frames.set(request.key.op, deliver as (value: ReadingSnapshot<unknown>) => void);
+          return () => {
+            frames.delete(request.key.op);
+          };
+        },
+      },
+      clock: { lifetime: "read", now: Date.now },
+      availability: {},
+    };
+    const mount = createRouteShell(services).mount(route, {
+      read: () => new URLSearchParams(),
+      write() {},
+      subscribe: () => () => {},
+    });
+    try {
+      expect(mount.read("names")).toMatchObject({
+        current: true,
+        value: { nodes: snapshot.nodes },
+      });
+      expect(mount.invoke("apply", {})).toEqual({ kind: "preview" });
+      const handle = JSON.parse(descriptors.get("w1c.write.preview")!.key.sortedKeyInput).work;
+      const sealed = {
+        previewOnly: true,
+        derivedRequest: { equipmentFlows: [{ id: 100, cfm: 925, source: "Work" }] },
+        seal: {
+          requestHash: "sealed",
+          work: { handle },
+          incarnation: {},
+          dependencies: "names-hash",
+        },
+        takenAt: "2026-11-03T00:00:00Z",
+        response: {
+          writes: [
+            {
+              id: 100,
+              kind: "equipment-flow",
+              outcome: "planned",
+              before: "880 cfm",
+              after: "925 cfm",
+            },
+          ],
+          counts: { planned: 1, written: 0, refused: 0, unchanged: 0 },
+        },
+      };
+      const changeNames = () => {
+        names = structuredClone(snapshot);
+        names.nodes[0]!.facts[0]!.text = "Changed equipment";
+        mount.refresh("names");
+      };
+      if (mode === "stale-before") changeNames();
+      const deliver = () =>
+        frames.get("w1c.write.preview")!({
+          status: "ready",
+          current: true,
+          value: sealed,
+          hash: "seal",
+        });
+      if (mode === "throw" || mode === "async") {
+        expect(deliver).toThrow(
+          expect.objectContaining({
+            kind: "refused",
+            reason: mode === "throw" ? "present-threw" : "present-invalid",
+          }),
+        );
+        expect(mount.review("apply")).toBeNull();
+        expect(mount.reviewRefusal("apply")).toMatchObject({
+          kind: "refused",
+          reason: mode === "throw" ? "present-threw" : "present-invalid",
+        });
+      } else {
+        deliver();
+        if (mode === "stale-before") {
+          expect(present).not.toHaveBeenCalled();
+          expect(mount.review("apply")).toBeNull();
+        } else {
+          expect(present).toHaveBeenCalledOnce();
+          const evidence = present.mock.calls[0]![1] as {
+            page: object;
+            work: object;
+            readings: { names: ReadingSnapshot<typeof snapshot> };
+          };
+          expect(present).toHaveBeenCalledExactlyOnceWith(sealed, evidence);
+          expect(Object.keys(evidence)).toEqual(["page", "work", "readings"]);
+          expect(Object.keys(evidence.readings)).toEqual(["names"]);
+          expect(evidence.page).toEqual({});
+          expect(evidence.work).toEqual({});
+          expect(Object.isFrozen(evidence)).toBe(true);
+          expect(Object.isFrozen(evidence.readings.names.value!.nodes[0]!.facts)).toBe(true);
+          expect(mount.review("apply")!.rows[0]).toContain("FC-1");
+          expect(mount.review("apply")!.sentence).toContain("1 Revit target");
+          for (const row of mount.review("apply")!.rows) {
+            expect(row).not.toMatch(
+              /\b100\b|\b900\b|\belement\s+\d+|\b[0-9a-f]{8}-[0-9a-f-]{27,}\b/i,
+            );
+          }
+          mount.read("names");
+          expect(present).toHaveBeenCalledOnce();
+          expect(present.mock.calls[0]![1]).toBe(evidence);
+          if (mode === "stale-after") {
+            changeNames();
+            expect(mount.review("apply")).toMatchObject({ stale: true, rows: [], sentence: null });
+            expect(evidence.readings.names.value!.nodes[0]!.facts[0]!.text).toBe("FC-1");
+            expect(present).toHaveBeenCalledOnce();
+          }
+        }
+        if (mode !== "current") {
+          expect(mount.reviewRefusal("apply")).toMatchObject({
+            kind: "refused",
+            reason: "review-stale",
+          });
+          expect(() => mount.confirm("apply")).toThrow(
+            expect.objectContaining({ reason: "review-stale" }),
+          );
+        }
+      }
+      expect(submit).not.toHaveBeenCalled();
+    } finally {
+      mount.close();
+    }
+  },
+);
 
 test("assign-fan review also needs its declared snapshot to name the system and fan", () => {
   const response = { unitId: 100, systemId: snapshot.systems[0]!.id, outcome: "planned" };
