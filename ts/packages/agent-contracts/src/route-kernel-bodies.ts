@@ -111,10 +111,22 @@ type InvocationContext<
   /** Frozen at invocation capture, separate from invalidating dependencies. */
   readonly captures: Reads<G, S, E, D extends { captures: readonly (infer K)[] } ? K : never>;
 };
-/** Top-level replacement patches keep value/path correlated without a recursively expanding
- * dot-path type. Nested edits replace their typed segment; the journal computes inverse paths. */
+/** Bounded paths preserve domain edit meaning without expanding recursive dot paths.
+ * Record entries may be replaced/deleted, or patched at a typed entry field. */
+type EntryPatch<K extends string, V> =
+  | { readonly path: readonly [K, string]; readonly value: V; readonly op?: never }
+  | { readonly path: readonly [K, string]; readonly op: "delete"; readonly value?: never }
+  | (V extends object ? {
+      [L in keyof V & string]: {
+        readonly path: readonly [K, string, L]; readonly value: V[L]; readonly op?: never;
+      };
+    }[keyof V & string] : never);
 export type WorkPatch<W> = {
-  [K in keyof W & string]: { readonly path: readonly [K]; readonly value: W[K] };
+  [K in keyof W & string]:
+    | { readonly path: readonly [K]; readonly value: W[K]; readonly op?: never }
+    | (string extends keyof NonNullable<W[K]>
+        ? EntryPatch<K, NonNullable<W[K]>[keyof NonNullable<W[K]> & string]>
+        : never);
 }[keyof W & string];
 export type WorkPatches<G extends RouteGraphJson, S extends SchemaTable> = readonly WorkPatch<
   WorkOf<G, S>
