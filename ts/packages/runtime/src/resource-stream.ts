@@ -72,11 +72,11 @@ export function observeResources(
                   true,
                   true,
                 )
-              : work.observeAccepted(
+              : work.observeFeed(
                   scope,
+                  (value) => { if (!closed) accept({ value }); },
                   (ack) => publish({ kind: "event", key, value: ack }),
                   (error) => publish({ kind: "failure", key, error: String(error) }),
-                  false,
                 );
         },
         (error) => {

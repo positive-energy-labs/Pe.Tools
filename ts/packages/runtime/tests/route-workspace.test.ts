@@ -441,3 +441,16 @@ test("an admitted live-only ack subscription never floods the transport with his
   expect(seen).toMatchObject([{ revision: 131 }]);
   stop();
 });
+
+
+test("a write racing feed acquisition is delivered exactly once", async () => {
+  const module = workspace(memoryStore().store);
+  const revisions: number[] = [];
+  const release = module.observeFeed(documentA,
+    (raw) => { const value = raw as { history: {acks: {revision: number}[]} }; revisions.push(...value.history.acks.map((ack) => ack.revision)); },
+    (ack) => revisions.push(ack.revision),
+    (error) => { throw error; });
+  await bind(module).apply("human", [{path: ["count"], value: 1}], 0);
+  expect(revisions).toEqual([1]);
+  release();
+});
