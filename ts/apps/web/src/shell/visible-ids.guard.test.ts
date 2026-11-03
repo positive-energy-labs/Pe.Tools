@@ -17,7 +17,6 @@ import { ductLossGraph } from "../duct-loss/graph";
 import { grillesGraph } from "../grilles/graph";
 import { opsGraph } from "../ops/graph";
 import { bindGraph } from "../pages-bind/graph";
-import { parameterLinksGraph } from "../parameter-links/graph";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { createFixtureMount } from "./fixture";
 import { legacySubjectState } from "./subject";
@@ -48,7 +47,6 @@ const routes = [
   grillesGraph,
   opsGraph,
   bindGraph,
-  parameterLinksGraph,
   openGraph,
   podsGraph,
   roomsGraph,

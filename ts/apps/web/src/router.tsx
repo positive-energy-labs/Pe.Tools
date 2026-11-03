@@ -21,7 +21,6 @@ import { roomsRoute } from "./rooms/route";
 import { takeoffsRoute } from "./takeoff/route";
 import { podAdminRoute } from "./pod-admin/route";
 import { podsRoute } from "./pods/route";
-import { parameterLinksRoute } from "./parameter-links/route";
 import { dataTablesRoute } from "./data-tables/route";
 import { bindRoute } from "./pages-bind/route";
 import { capturesRoute } from "./captures/route";
@@ -49,7 +48,6 @@ const codeRoutes: AnyRoute[] = [
   takeoffsRoute,
   podsRoute,
   podAdminRoute,
-  parameterLinksRoute,
   dataTablesRoute,
   bindRoute,
   capturesRoute,
@@ -78,7 +76,6 @@ const appRouteTree = rootRoute.addChildren([
   roomsRoute: typeof roomsRoute;
   takeoffsRoute: typeof takeoffsRoute;
   podsRoute: typeof podsRoute;
-  parameterLinksRoute: typeof parameterLinksRoute;
   dataTablesRoute: typeof dataTablesRoute;
   bindRoute: typeof bindRoute;
   capturesRoute: typeof capturesRoute;

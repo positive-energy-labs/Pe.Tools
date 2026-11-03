@@ -14,7 +14,6 @@ export const legacyBuiltinKeys: readonly string[] = [
   "data-tables",
   "family",
   "instances",
-  "parameter-links",
   "pod-admin",
   "pods",
   "rhvac-sync",

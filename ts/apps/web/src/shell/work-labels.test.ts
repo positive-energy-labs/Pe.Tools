@@ -3,7 +3,6 @@ import { z } from "zod";
 import type { RouteGraph } from "@pe/agent-contracts";
 import { dataTablesGraph } from "../data-tables/graph";
 import { familyGraph } from "../family/graph";
-import { parameterLinksGraph } from "../parameter-links/graph";
 import { podsGraph } from "../pods/graph";
 import { roomsGraph } from "../rooms/graph";
 import { takeoffGraph } from "../takeoff/graph";
@@ -12,7 +11,6 @@ import { workPathName } from "./work-writes";
 const graphs = [
   dataTablesGraph,
   familyGraph,
-  parameterLinksGraph,
   podsGraph,
   roomsGraph,
   takeoffGraph,

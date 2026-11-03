@@ -7,7 +7,6 @@ import { podAdminGraph } from "#/pod-admin/graph";
 import { lazy, type ComponentType } from "react";
 import { registerLegacyGraph } from "#/shell/legacy-route-door";
 import { openGraph } from "#/open/graph";
-import { parameterLinksGraph } from "#/parameter-links/graph";
 import { podsGraph } from "#/pods/graph";
 import { takeoffGraph } from "#/takeoff/graph";
 import { roomsGraph } from "#/rooms/graph";
@@ -23,7 +22,6 @@ const HostedAdmittedRoute = lazy(() =>
   import("../workbench/hosted-route").then((module) => ({ default: module.HostedAdmittedRoute })),
 );
 const PodsRoute = named(() => import("#/pods/route"), "PodsRoute");
-const ParameterLinksRoute = named(() => import("#/parameter-links/route"), "ParameterLinksRoute");
 const TakeoffsPane = named(() => import("#/takeoff/pane"), "TakeoffsPane");
 const OpenPage = lazy(async () => ({
   default: mountRoute(openGraph, (await import("#/open/route")).openAdapters),
@@ -75,7 +73,6 @@ function hosted(Body: ComponentType<MountRouteProps>) {
 }
 registerLegacyGraph(roomsGraph, hosted(RoomsRoute));
 registerLegacyGraph(familyGraph, hosted(FamilyRoute));
-registerLegacyGraph(parameterLinksGraph, hosted(ParameterLinksRoute));
 registerLegacyGraph(podsGraph, hosted(PodsRoute));
 registerLegacyGraph(dataTablesGraph, hosted(DataTablesRoute));
 
