@@ -71,14 +71,9 @@ public sealed class OpAttribute(string key, OpSubject subject, OpTouches touches
 }
 
 public sealed class Op {
-    // TODO: Align omitted request defaults with JSON dispatch. Json.NET supplies CLR defaults
-    // to record constructor arguments unless population is explicit; optional C# values alone
-    // do not apply. Audit AgentContext, LoadedFamilies, ParameterLinks, RibbonCommand and Ducts
-    // request defaults before changing global settings. Preserve explicit zero/false values;
-    // FamilyInstanceReferencesRequest.MaxResults is the scoped Populate precedent.
     private static readonly JsonSerializerSettings JsonSettings = new() {
         NullValueHandling = NullValueHandling.Ignore,
-        ContractResolver = new DefaultContractResolver {
+        ContractResolver = new OpRequestContractResolver {
             NamingStrategy = new CamelCaseNamingStrategy {
                 ProcessDictionaryKeys = false,
                 OverrideSpecifiedNames = false
@@ -345,7 +340,7 @@ public static class OpRegistry {
 
     private static readonly JsonSerializerSettings StrictRequestJsonSettings = new() {
         MissingMemberHandling = MissingMemberHandling.Error,
-        ContractResolver = new DefaultContractResolver {
+        ContractResolver = new OpRequestContractResolver {
             NamingStrategy = new CamelCaseNamingStrategy {
                 ProcessDictionaryKeys = false,
                 OverrideSpecifiedNames = false
