@@ -1,3 +1,4 @@
+import { routeWorkSubject } from "../../../../packages/agent-contracts/src/route-work-subject";
 import { commandResultDecoder, type CommandResultDecode } from "./admitted-command-result";
 import type { InvocationToken } from "../../../../packages/agent-contracts/src/route-kernel-page";
 import { salvageRouteWork } from "../route/host";
@@ -146,7 +147,12 @@ export function createRouteShell(services: KernelServices) {
         }
       }
       const observers = createAdmittedObservers(route.data, bindings.bodies);
-      const cells = createAdmittedCells(route.data, bindings.schemas, bindings.bodies, route.resolvedWork?.schema);
+      const cells = createAdmittedCells(
+        route.data,
+        bindings.schemas,
+        bindings.bodies,
+        route.resolvedWork?.schema,
+      );
       let readings: Record<string, ReadingSnapshot<unknown>> = {};
       const policy = createPagePolicy(
         route.data,
@@ -193,13 +199,9 @@ export function createRouteShell(services: KernelServices) {
           ? bindWork(
               route.data.work.route,
               null,
-              route.data.workSubject
-                ? typeof page[route.data.workSubject] === "string"
-                  ? (page[route.data.workSubject] as string)
-                  : page[route.data.workSubject] == null
-                    ? "default"
-                    : canonicalEnvironmentInput(page[route.data.workSubject])
-                : (address.read().get("work") ?? undefined),
+              routeWorkSubject(route.data, bindings, page) ??
+                address.read().get("work") ??
+                undefined,
               target?.kind === "document" ? target.ref : undefined,
             )
           : null,
@@ -1012,7 +1014,12 @@ export function createRouteShell(services: KernelServices) {
               ),
             );
           if (!decoded.ok) throw Error(decoded.reason);
-          const patches = admittedWorkPatches(route.data, bindings.schemas, decoded.value, route.resolvedWork?.schema);
+          const patches = admittedWorkPatches(
+            route.data,
+            bindings.schemas,
+            decoded.value,
+            route.resolvedWork?.schema,
+          );
           reviews.set("work.salvage", {
             invocation: issued.value,
             preview: patches,

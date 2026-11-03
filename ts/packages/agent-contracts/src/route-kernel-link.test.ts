@@ -673,3 +673,21 @@ it("admits ordered pose data while refusing bare arrays, list subjects and selec
     }).ok,
   ).toBe(false);
 });
+
+it("refuses workSubject fields without a codec that decodes a local Work key", async () => {
+  for (const workSubject of ["search", "selected"]) {
+    expect(await refuse({ ...builtinData, workSubject })).toContainEqual(
+      expect.objectContaining({ path: "workSubject", expected: "decoded Work key" }),
+    );
+  }
+  expect(
+    await refuse({
+      ...builtinData,
+      workSubject: "system",
+      identities: {
+        ...builtinData.identities,
+        system: { kind: "element", codec: "element" },
+      },
+    }),
+  ).toContainEqual(expect.objectContaining({ path: "workSubject", expected: "decoded Work key" }));
+});

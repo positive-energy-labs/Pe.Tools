@@ -1,3 +1,4 @@
+import { routeWorkSubject } from "./route-work-subject.ts";
 import { z } from "zod";
 import {
   RouteGraphJson,
@@ -560,6 +561,22 @@ export function linkRouteBodies(
       "Work",
       "Only a route with Work can select it by subject",
     );
+  if (data.workSubject) {
+    try {
+      routeWorkSubject(
+        data,
+        bindings,
+        Object.fromEntries(
+          Object.entries(data.fields).map(([key, field]) => [
+            key,
+            "initial" in field ? field.initial : null,
+          ]),
+        ),
+      );
+    } catch (error) {
+      fail("workSubject", data.workSubject, "decoded Work key", String(error), "identity");
+    }
+  }
   for (const id of Object.keys(bindings.bodies))
     if (!slots.has(id)) fail(`bodies.${id}`, id, "referenced body", "Unreferenced body", "extra");
   return errors;
