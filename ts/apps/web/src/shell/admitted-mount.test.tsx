@@ -1319,11 +1319,11 @@ test("slot census refuses unsupported bodies at mount admission and invokes pick
     "seed",
     "transition",
     "predicate",
+    "show",
   ]);
   for (const [slot, kind, dataPatch] of [
     ["salvage", "salvage", { salvage: "unsupported" }],
     ["subjectText", "subject", { subjectText: "unsupported" }],
-    ["subject.show", "show", { subject: { ...data.subject, show: "unsupported" } }],
   ] as const) {
     const t = transports();
     const run = vi.fn();
@@ -1661,4 +1661,12 @@ test("global predicates drive layout gates on publication and never run during d
   expect(predicate).toHaveBeenCalledTimes(calls);
   mount.controls.query("query", "hide");
   expect(mount.read("main")).toBeNull();
+});
+
+test("subject display receives only subject and is cached outside draw", async () => {
+ const show = vi.fn(value => value === null ? "No note" : String(value));
+ const route = await admitted(false, false, {data: {subject: {...data.subject, show: "show"}}, bodies: {show: {slot: "subject.show", kind: "show", source, run: show}}});
+ const mount = createRouteShell(transports().services).mount(route, locationPort().address); closes.push(mount.close);
+ expect(mount.subjectDisplay()).toBe("No note"); const calls = show.mock.calls.length; mount.read("main"); mount.subjectDisplay(); expect(show).toHaveBeenCalledTimes(calls);
+ expect(show.mock.calls.every(call => call.length === 1)).toBe(true);
 });
