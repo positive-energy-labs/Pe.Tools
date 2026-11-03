@@ -116,11 +116,15 @@ type InvocationContext<
 type EntryPatch<K extends string, V> =
   | { readonly path: readonly [K, string]; readonly value: V; readonly op?: never }
   | { readonly path: readonly [K, string]; readonly op: "delete"; readonly value?: never }
-  | (V extends object ? {
-      [L in keyof V & string]: {
-        readonly path: readonly [K, string, L]; readonly value: V[L]; readonly op?: never;
-      };
-    }[keyof V & string] : never);
+  | (V extends object
+      ? {
+          [L in keyof V & string]: {
+            readonly path: readonly [K, string, L];
+            readonly value: V[L];
+            readonly op?: never;
+          };
+        }[keyof V & string]
+      : never);
 export type WorkPatch<W> = {
   [K in keyof W & string]:
     | { readonly path: readonly [K]; readonly value: W[K]; readonly op?: never }

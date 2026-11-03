@@ -40,7 +40,8 @@ export function admittedWorkPatches(
             if (!schema) throw Error(`Undeclared Work entry field: ${patch.path[2]}`);
           }
         }
-        if (!("op" in patch) && !Object.hasOwn(patch, "value")) throw Error("Work replacement requires value");
+        if (!("op" in patch) && !Object.hasOwn(patch, "value"))
+          throw Error("Work replacement requires value");
         // WorkWrite's existing delete spelling omits value; the correlated path is unchanged.
         if (!schema) throw Error("Missing Work schema");
         return "op" in patch
