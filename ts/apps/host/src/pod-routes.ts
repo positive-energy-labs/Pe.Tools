@@ -15,7 +15,7 @@ import { admitPodArtifact, verifyPodArtifact } from "./pod-artifact.ts";
 export function registerAdmittedHostRoute(
   route: contracts.AdmittedRoute | HostAdmittedRoute,
   workspace: RouteWorkspace,
-) {
+): ReturnType<RouteWorkspace["registerAdmitted"]> {
   return workspace.registerAdmitted(route);
 }
 
