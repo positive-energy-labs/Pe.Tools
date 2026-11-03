@@ -88,7 +88,7 @@ export interface BodyContext<
   readonly work: Immutable<Pick<WorkOf<G, S>, Extract<DepKeys<D, "work">, keyof WorkOf<G, S>>>>;
   readonly readings: Reads<G, S, E, DepKeys<D, "readings">>;
 }
-/** Presentation/predicates/salvage are global observers: invalidate on every Page/Work/reading
+/** Predicates/salvage are global observers: invalidate on every Page/Work/reading
  * publication. They are never scheduled under a reading's narrower dependency declaration. */
 export interface GlobalBodyContext<
   G extends RouteGraphJson,
@@ -338,8 +338,9 @@ type VerbSlots<G extends RouteGraphJson, S extends SchemaTable, E extends EntryT
         At<G["verbs"][K], "present">,
         `verbs.${K}.present`,
         "present",
-        /** Pure synchronous presentation of the sealed preview and its invocation-captured
-         * declared evidence. No ports, captures or invocation authority are exposed. */
+        /** Pure synchronous presentation of the sealed preview and invocation-captured display
+         * evidence. Freshness follows the invocation; the host seal binds only the write.
+         * No ports, captures or invocation authority are exposed. */
         (
           result:
             | Output<E, `${Extract<At<G["verbs"][K], "entry">, string>}.preview`>
