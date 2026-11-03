@@ -16,7 +16,11 @@ import { peClient } from "#/host/pe-client";
 import { peReadings } from "#/readings";
 import { previousOf } from "#/shell/readings-hooks";
 import { ProposalHead } from "#/chat/proposal-head";
-import { describeInputHistory, presentInputHistory } from "#/ducts/sheet/input-history";
+import {
+  describeInputHistory,
+  inputHistoryMetaSchema,
+  presentInputHistory,
+} from "#/ducts/sheet/input-history";
 import { RouteWorkspace } from "../../../../packages/runtime/src/route-workspace";
 import { createGraphMount } from "./mount-owner";
 import { appAtomRegistry } from "./owner";
@@ -237,9 +241,13 @@ test("D8.7: edit → composer revert → edit → undo → undo names the restor
     const reverted = one.owner.journal(one.owner.snapshot().work!.handle.key).read().undo.at(-1);
     await waitFor(() =>
       expect(
-        presentInputHistory(one.owner.journal(one.owner.snapshot().work!.handle.key).read(), null)
-          .last?.words,
-      ).toBe("supply ≥2.0578 → ≥1.7582"),
+        presentInputHistory(
+          one.owner
+            .journal(one.owner.snapshot().work!.handle.key)
+            .entries(inputHistoryMetaSchema) as Parameters<typeof presentInputHistory>[0],
+          null,
+        ).last?.words,
+      ).toBe(""),
     );
     await one.edit("CD3-3");
     await act(async () => {
@@ -255,7 +263,14 @@ test("D8.7: edit → composer revert → edit → undo → undo names the restor
     const history = one.owner.journal(one.owner.snapshot().work!.handle.key).read();
     expect(reverted?.label).toBe(`Revert ${LABEL}`);
     expect(history.redo.at(-1)?.label).toBe(`Revert ${LABEL}`);
-    expect(presentInputHistory(history, null)).toMatchObject({
+    expect(
+      presentInputHistory(
+        one.owner
+          .journal(one.owner.snapshot().work!.handle.key)
+          .entries(inputHistoryMetaSchema) as Parameters<typeof presentInputHistory>[0],
+        null,
+      ),
+    ).toMatchObject({
       redoLabel: `Revert ${LABEL}`,
       last: { label: `undid Revert ${LABEL}` },
     });

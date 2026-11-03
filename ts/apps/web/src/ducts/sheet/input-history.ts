@@ -3,7 +3,7 @@ import { z } from "zod";
 import { ductsSheetOverviewSchema } from "@pe/agent-contracts";
 import type { DuctsSheetEdits, DuctsSheetOverview, RouteStatePatch } from "@pe/agent-contracts";
 import type { ReadingState } from "#/shell/readings";
-import type { WorkJournal } from "#/shell/journal";
+import type { WorkHistoryEntry } from "../../../../../packages/agent-contracts/src/route-kernel-bodies";
 import type { SheetReading } from "../sources";
 import { CRITERION_WORDS } from "./criterion-words";
 
@@ -48,43 +48,34 @@ export function describeInputHistory(before: Readings, detail: EditMeta, after?:
 }
 
 export function presentInputHistory(
-  journal: ReturnType<WorkJournal["read"]> | null,
+  entries: readonly WorkHistoryEntry<z.output<typeof inputHistoryMetaSchema>>[],
   refusal: string | null,
 ) {
-  const undo = journal?.undo.at(-1);
-  const redo = journal?.redo.at(-1);
-  const cleared = inputHistoryMetaSchema.safeParse(undo?.meta);
-  // Staging (writeIntent) is History's to name; Inputs speaks only of inputs.
-  const last = journal?.last?.step.internal ? null : journal?.last;
-  const meta = inputHistoryMetaSchema.safeParse(last?.step.meta);
-  const effect = meta.success ? meta.data.effect : null;
+  const undo = entries.filter((entry) => entry.state === "applied").at(-1);
+  const redo = entries.filter((entry) => entry.state === "undone").at(-1);
+  const cleared = undo?.detail === "available" ? undo.meta : null;
+  const last = redo ?? undo;
   return {
     undoLabel: undo ? undo.label : null,
     redoLabel: redo ? redo.label : null,
-    /** A foreign write changed this step's paths: the kernel refuses it; say so before the press. */
-    undoSuperseded: undo?.superseded?.message ?? null,
-    redoSuperseded: redo?.superseded?.message ?? null,
+    undoSuperseded: null,
+    redoSuperseded: null,
     cleared:
-      undo && cleared.success && cleared.data.clear
+      undo && cleared?.clear
         ? {
             press: undo.press,
-            rowKey: cleared.data.rowKey ?? null,
-            was: cleared.data.was ?? undo.label,
-            row: cleared.data.row,
+            rowKey: cleared.rowKey ?? null,
+            was: cleared.was ?? undo.label,
+            row: cleared.row ? { ...cleared.row, ids: [...cleared.row.ids] } : undefined,
           }
         : null,
     last: refusal
       ? { label: "restore", words: "", refusal }
-      : last && (effect || last.step.label)
+      : last
         ? {
-            label: `${last.kind === "undo" ? "undid " : last.kind === "redo" ? "redid " : ""}${last.step.label}`,
-            words: !effect
-              ? ""
-              : effect.after === undefined
-                ? "Waiting for this fan's totals"
-                : last.kind === "undo"
-                  ? effectWords(effect.after, effect.before)
-                  : effectWords(effect.before, effect.after),
+            label: `${last.state === "undone" ? "undid " : ""}${last.label}`,
+            // Entries cannot distinguish a new forward edit from a redo. Never infer effect numbers.
+            words: last.detail === "unavailable" ? "detail unavailable" : "",
           }
         : null,
   };

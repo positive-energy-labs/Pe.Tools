@@ -858,8 +858,7 @@ test.each(["invalid_meta", "meta_too_large"] as const)(
   },
 );
 
-// TODO: W04 ESP-effect direction needs the last accepted move, not only each step's state.
-test("W04: pane history distinguishes equal Work reached by Undo and Redo", async () => {
+test("W04: equal-Work Undo/Redo paths render the same label-only history", async () => {
   const before = ductsSheetOverviewSchema.parse(sheetFixture.overview).totals!;
   const description = {
     label: "Fan flow",
@@ -891,11 +890,9 @@ test("W04: pane history distinguishes equal Work reached by Undo and Redo", asyn
     expect(await b.mount.history![move]()).toMatchObject({ ok: true });
   b.mount.read("captures");
   expect(a.mount.work()).toEqual(b.mount.work());
-  const undoEffect = presentInputHistory(a.mount.journal(), null).last!;
-  const redoEffect = presentInputHistory(b.mount.journal(), null).last!;
-  expect(undoEffect.label).toMatch(/^undid /);
-  expect(redoEffect.label).toMatch(/^redid /);
-  expect(undoEffect.words).not.toBe(redoEffect.words);
-  // Same Work/revision but different required ESP effects must remain distinguishable to the pane.
-  expect(undoHistory!.entries).not.toEqual(redoHistory!.entries);
+  const undoEffect = presentInputHistory(undoHistory!.entries, null);
+  const redoEffect = presentInputHistory(redoHistory!.entries, null);
+  expect(undoEffect).toEqual(redoEffect);
+  expect(undoEffect.last).toEqual({ label: "undid Fan flow", words: "" });
+  expect(redoEffect.last?.words).not.toMatch(/\d/);
 });

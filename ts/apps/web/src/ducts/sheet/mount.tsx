@@ -19,7 +19,12 @@ import { sheetState } from "./state";
 import { describeCloser, type Closer } from "./closer";
 import type { DuctsSheetEdits, RouteStatePatch } from "@pe/agent-contracts";
 import type { SheetReading } from "../sources";
-import { editLabel, presentInputHistory, type EditMeta } from "./input-history";
+import {
+  editLabel,
+  inputHistoryMetaSchema,
+  presentInputHistory,
+  type EditMeta,
+} from "./input-history";
 
 const SheetPanes = createContext<Readonly<Record<string, ReactNode>>>({});
 export function SheetPane({ id }: { id: string }) {
@@ -33,7 +38,9 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
   // A failed selection cannot replace the last successful ledger. It is display-only until current.
   const prior = reading.previous as SheetReading | undefined;
   const target = owner.snapshot().target;
-  const sameDocument = target.kind === "document" && prior?.open?.overview.target.session === target.ref.session &&
+  const sameDocument =
+    target.kind === "document" &&
+    prior?.open?.overview.target.session === target.ref.session &&
     prior.open.overview.target.openId === target.ref.openId;
   const value = (reading.value ?? (sameDocument ? prior : undefined)) as SheetReading | undefined;
   const sheet = value?.open ?? null;
@@ -176,9 +183,12 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
           family: snapshot.nodes.find((node) => node.id === elementId)?.family ?? null,
         };
   const work = owner.snapshot().work;
-  const journal = work ? owner.journal(work.handle.key).read() : null;
+  const journal = work ? owner.journal(work.handle.key).entries(inputHistoryMetaSchema) : [];
   const history = {
-    ...presentInputHistory(journal, owner.journalRefusal()),
+    ...presentInputHistory(
+      journal as Parameters<typeof presentInputHistory>[0],
+      owner.journalRefusal(),
+    ),
     undo: () => {
       void owner.restore("undo");
     },
