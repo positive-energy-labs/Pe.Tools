@@ -233,8 +233,6 @@ for (const [name, describe, reason] of [
     },
     "describe-threw",
   ],
-  ["number", () => 42, "describe-not-string"],
-  ["async", async () => "late", "describe-not-string"],
   [
     "mutation",
     (value: any) => {

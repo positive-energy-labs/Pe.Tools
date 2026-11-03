@@ -49,6 +49,11 @@ export function workOutcome(
       },
     };
   }
+  if (refusal.code === "invalid_meta" || refusal.code === "meta_too_large")
+    return {
+      kind: "refused",
+      refusal: { kind: "refused", code: refusal.code, error: refusal.error, hint: refusal.hint },
+    };
   return { kind: "refused", refusal: { ...refusal, code: undefined } };
 }
 export const failedWrite = (error: unknown): WorkWriteOutcome => ({

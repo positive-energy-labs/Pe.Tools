@@ -1,3 +1,5 @@
+import type { z } from "zod";
+import type { GraphJsonValue as JsonValue } from "../../agent-contracts/src/route-graph.ts";
 import {
   canonicalRouteInput,
   refusalText,
@@ -56,6 +58,7 @@ export interface JournalMove {
 }
 type Namer = (patches: readonly RouteStatePatch[]) => JournalDetail;
 type Step = JournalDetail & {
+  detailSource: "accepted" | "historical";
   id: string;
   press: string;
   /** Who authored the step: the person in this tab, or Pea through the shared Work door. */
@@ -237,7 +240,9 @@ export function createWorkJournal(key: WorkKey) {
         ? `pea:${ack.press ?? `r${ack.revision}`}`
         : (ack.press ?? `r${ack.revision}`);
       if (!detail && !ack.label) unnamed.add(ack.step ?? ack.press);
-      detail ??= ack.label ? { label: ack.label } : namer(ack.patches);
+      detail ??= ack.label
+        ? { label: ack.label, ...(ack.meta !== undefined && { meta: ack.meta }) }
+        : { ...namer(ack.patches), ...(ack.meta !== undefined && { meta: ack.meta }) };
     }
     if (
       !detail ||
@@ -298,6 +303,7 @@ export function createWorkJournal(key: WorkKey) {
     } else
       undo.push({
         ...structuredClone(detail),
+        detailSource: "accepted",
         label: detail.label.trim() || namer(ack.patches).label,
         id: ack.step ?? ack.press,
         press: ack.press,
@@ -516,9 +522,31 @@ export function createWorkJournal(key: WorkKey) {
         receipts.set(ack.revision, structuredClone(ack));
         applyAcknowledgement(ack);
       }
+      for (const step of [...undo, ...redo]) step.detailSource = "historical";
       revision = snapshot.revision;
       current = structuredClone(snapshot);
     },
+    /** Projection only. New acks were host-decoded; old presentation is decoded tolerantly
+     * under this reader's schema without mutating shared steps or canonical receipts. */
+    entries: (schema?: z.ZodType) =>
+      structuredClone(
+        [
+          ...undo.map((step) => ({ step, state: "applied" as const })),
+          ...redo.map((step) => ({ step, state: "undone" as const })),
+        ].map(({ step, state }) => ({
+          id: step.id,
+          press: step.press,
+          label: step.label,
+          by: step.by,
+          at: step.at,
+          state,
+          ...(step.meta === undefined
+            ? { detail: "none" as const }
+            : step.detailSource === "historical" && !schema?.safeParse(step.meta).success
+              ? { detail: "unavailable" as const }
+              : { detail: "available" as const, meta: step.meta as JsonValue }),
+        })),
+      ),
     /** A read proves values only at its own revision; a newer acknowledgement invalidates it. */
     observe(snapshot: { revision: number; doc: unknown }) {
       // A delayed Reading cannot erase already accepted history. A revision is not a lifetime id.
@@ -590,8 +618,7 @@ export function createWorkJournal(key: WorkKey) {
             delete step.notWritten;
             // A landed edit is final even if a later command consumes the same value.
             break;
-          }
-          else if (receipt.state === "cancelled" && receipt.error.includes("rejected by"))
+          } else if (receipt.state === "cancelled" && receipt.error.includes("rejected by"))
             step.notWritten = {
               invocation: receipt.id,
               reason: receipt.error,

@@ -1,3 +1,4 @@
+import type { GraphJsonValue as JsonValue } from "./route-graph.ts";
 /** Shared Work schemas and semantic commands. The host stamps authorship and checks revisions.
  * Authored edits and optional suggestions use one model for human and Pea. External effects
  * belong to ActionJournal; observations and readback use trusted host publication contracts.
@@ -125,10 +126,14 @@ export const routeStatePatchSchema = z.object({
 });
 export type RouteStatePatch = z.infer<typeof routeStatePatchSchema>;
 
+const historyMetaSchema: z.ZodType<JsonValue> = z.json();
+
 /** One invocation, never one identity per patch. Authorship comes from the host principal. */
 export const workWriteSchema = z.object({
   causalParent: z.string().min(1).optional(),
   label: z.string().trim().min(1).optional(),
+  /** Route presentation; never inverse, authorship, or authority. */
+  meta: historyMetaSchema.optional(),
   patches: z.array(routeStatePatchSchema),
   expectedRevision: z.number().int().nonnegative(),
   press: z.string().min(1).nullable(),
@@ -144,6 +149,8 @@ export type WorkWriteAck = {
   /** Host-issued step identity and exact transition restored, never inferred from patch equality. */
   step?: string;
   label?: string;
+  /** Route presentation; never inverse, authorship, or authority. */
+  meta?: JsonValue;
   restoreOf?: number;
   /** Receipt whose confirmed outcome retired these cells. */
   receiptId?: string;
@@ -169,6 +176,8 @@ export const workWriteAckSchema: z.ZodType<WorkWriteAck> = z.object({
   press: z.string().min(1).nullable(),
   step: z.string().min(1).optional(),
   label: z.string().trim().min(1).optional(),
+  /** Route presentation; never inverse, authorship, or authority. */
+  meta: historyMetaSchema.optional(),
   receiptId: z.string().min(1).optional(),
   restoreOf: z.number().int().positive().optional(),
   base: z.number().int().nonnegative(),
@@ -192,6 +201,13 @@ export type RouteStateWriteResult =
       hint: string;
       code?: import("./route-doc.ts").RouteRefusalCode;
       revision?: number;
+    }
+  | {
+      ok: false;
+      kind: "refused";
+      code: "invalid_meta" | "meta_too_large";
+      error: string;
+      hint: string;
     }
   | (import("./families.ts").FamiliesRefusal & { revision?: number });
 

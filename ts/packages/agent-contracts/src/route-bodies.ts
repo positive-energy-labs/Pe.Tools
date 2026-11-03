@@ -162,6 +162,7 @@ export function linkRouteBodies(
   if (data.work) requireCapability("work", "work");
   if (data.capabilities.includes("work") && !data.work)
     fail("capabilities", "work", "Work declaration", "Work capability requires Work", "policy");
+  schemaRef(data.historyDetail, "historyDetail");
   const workSchema = ownerSchema ?? (data.work?.schema && bindings.schemas[data.work.schema]);
   const workObject = workSchema && bare(workSchema);
   const workKeys = workObject instanceof z.ZodObject ? workObject.shape : {};

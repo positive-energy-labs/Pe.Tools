@@ -30,6 +30,7 @@ import type {
 import { module as captures } from "../captures/kernel";
 import { createRouteShell } from "../shell/admitted-mount";
 import { createWorkFeedClient } from "../shell/work-feed-client";
+import { describeInputHistory, inputHistoryMetaSchema } from "../ducts/sheet/input-history";
 import { sourceRouteServices } from "../shell/source-route-services";
 import * as recoveryHost from "../route/host";
 import * as sourceServices from "../shell/source-route-services";
@@ -50,6 +51,7 @@ const data = {
   capabilities: ["work"],
   needs: "project",
   work: { route: "ducts", schema: "work", version: 1, migrations: {} },
+  historyDetail: "historyDetail",
   salvage: "salvage",
   salvagePresent: "salvagePresent",
   salvageDeps: { page: [], work: [], readings: ["names"] },
@@ -84,6 +86,7 @@ const schemas = {
   work: ductsDocumentSchema,
   slot: z.string(),
   names: z.record(z.string(), z.string()),
+  historyDetail: inputHistoryMetaSchema,
 };
 // The witness edits one real Ducts slot through the generic mount.
 const bodies = {
@@ -105,7 +108,10 @@ const bodies = {
     slot: "verbs.slot.describe",
     kind: "describe",
     source,
-    run: () => "fanFlow → PE_M_Fan_AirFlow",
+    run: () => ({
+      label: "fanFlow → PE_M_Fan_AirFlow",
+      meta: { kind: "ducts-input" as const, effect: { before: null } },
+    }),
   },
   names: { slot: "readings.names.derive", kind: "derive", source, run: () => ({ "100": "FC-1" }) },
   salvagePresent: {
@@ -166,6 +172,8 @@ async function witness(
   raw?: unknown,
   failure?: "throw" | "invalid",
   limits?: { maxCount: number; maxBytes: number },
+  description?: ReturnType<typeof describeInputHistory>,
+  onHistory?: (history: Parameters<typeof bodies.main.run>[0]["history"]) => void,
 ) {
   const module = {
     ...captures,
@@ -173,6 +181,17 @@ async function witness(
     schemas,
     bodies: {
       ...bodies,
+      main: {
+        ...bodies.main,
+        run: (ctx: Parameters<typeof bodies.main.run>[0]) => {
+          onHistory?.(ctx.history);
+          return bodies.main.run(ctx);
+        },
+      },
+      describe: {
+        ...bodies.describe,
+        run: description ? () => description : bodies.describe.run,
+      },
       salvagePresent: {
         ...bodies.salvagePresent,
         run: (...[patches, evidence]: Parameters<typeof bodies.salvagePresent.run>) => {
@@ -739,5 +758,96 @@ test.each(["current", "departed"] as const)(
     } catch {}
     if (custody === "current") expect(f.saved.get("ducts")).not.toEqual(before);
     else expect(f.saved.get("ducts")).toEqual(before);
+  },
+);
+
+test("W04: a Ducts input edit retains the existing history detail", async () => {
+  const description = describeInputHistory(
+    {},
+    {
+      label: "fanFlow → PE_M_Fan_AirFlow",
+      rowKey: "parameters:fanFlow",
+    },
+    {},
+  );
+  const f = await witness(undefined, undefined, undefined, description);
+  await vi.waitFor(() => expect(f.mount.workBasis()).not.toBeNull());
+  const edit = f.mount.invoke("slot", "PE_M_Fan_AirFlow");
+  expect(edit).not.toMatchObject({ kind: "refused" });
+  await settle(edit as Observation<WorkWriteOutcome>);
+  expect(f.mount.journal()!.undo.at(-1)?.meta).toEqual(description.meta);
+});
+
+test("W04: PaneContext history reacquires metadata from the canonical host after feed departure", async () => {
+  const description = describeInputHistory(
+    {},
+    { label: "Flow slot", rowKey: "parameters:fanFlow" },
+    {},
+  );
+  let paneHistory: Parameters<typeof bodies.main.run>[0]["history"];
+  const f = await witness(undefined, undefined, undefined, description, (history) => {
+    paneHistory = history;
+  });
+  await vi.waitFor(() => expect(f.mount.workBasis()).not.toBeNull());
+  await settle(f.mount.invoke("slot", "PE_M_Fan_AirFlow") as Observation<WorkWriteOutcome>);
+  f.mount.read("captures");
+  expect(paneHistory!.entries.at(-1)).toMatchObject({
+    detail: "available",
+    meta: description.meta,
+  });
+  expect(Object.isFrozen(paneHistory!.entries)).toBe(true);
+  f.mount.close();
+  const next = f.reopen();
+  await vi.waitFor(() => expect(next.workBasis()).not.toBeNull());
+  next.read("captures");
+  expect(f.states.filter((state) => state.kind === "ready")).toHaveLength(2);
+  expect(paneHistory!.entries.at(-1)).toMatchObject({
+    detail: "available",
+    meta: description.meta,
+  });
+  expect(await next.history!.undo()).toMatchObject({ ok: true });
+});
+
+test("W04: old metadata that no longer decodes shows detail unavailable and never blocks undo", async () => {
+  let paneHistory: Parameters<typeof bodies.main.run>[0]["history"];
+  const f = await witness(undefined, undefined, undefined, undefined, (history) => {
+    paneHistory = history;
+  });
+  await vi.waitFor(() => expect(f.mount.workBasis()).not.toBeNull());
+  await settle(f.mount.invoke("slot", "PE_M_Fan_AirFlow") as Observation<WorkWriteOutcome>);
+  f.mount.close();
+  // Saved JSON from a previous route schema: keep the host inverse and identity untouched.
+  const saved = f.saved.get("ducts") as { history: { write: WorkWriteAck }[] };
+  saved.history.at(-1)!.write.meta = { kind: "old-detail", renamedRow: "fanFlow" };
+  const before = structuredClone(saved.history.at(-1)!.write.meta);
+  const next = f.reopen();
+  await vi.waitFor(() => expect(next.workBasis()).not.toBeNull());
+  next.read("captures");
+  expect(paneHistory!.entries.at(-1)).toMatchObject({
+    detail: "unavailable",
+    label: bodies.describe.run().label,
+  });
+  expect(paneHistory!.entries.at(-1)).not.toHaveProperty("meta");
+  expect(next.journal()!.receipts.at(-1)?.meta).toEqual(before);
+  expect(await next.history!.undo()).toMatchObject({ ok: true });
+  expect(await next.history!.redo()).toMatchObject({ ok: true });
+});
+
+test.each(["invalid_meta", "meta_too_large"] as const)(
+  "W04: the canonical host preserves typed %s refusal through submitWork observers",
+  async (code) => {
+    const description = describeInputHistory({}, { label: "Bad detail", rowKey: "fanFlow" }, {});
+    const meta =
+      code === "invalid_meta"
+        ? { ...description.meta, kind: "not-ducts-input" }
+        : { ...description.meta, rowKey: "\u00e9".repeat(2048) };
+    const f = await witness(undefined, undefined, undefined, { ...description, meta });
+    await vi.waitFor(() => expect(f.mount.workBasis()).not.toBeNull());
+    const before = structuredClone(f.saved.get("ducts"));
+    expect(
+      await settle(f.mount.invoke("slot", "PE_M_Fan_AirFlow") as Observation<WorkWriteOutcome>),
+    ).toMatchObject({ kind: "refused", refusal: { kind: "refused", code } });
+    expect(f.saved.get("ducts")).toEqual(before);
+    expect(f.mount.history!.entries).toEqual([]);
   },
 );

@@ -1012,12 +1012,13 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         let preview: unknown;
         let send: () => unknown;
         if (declaration.kind === "work") {
-          let label = declaration.label;
+          let detail: Pick<import("@pe/agent-contracts").WorkWrite, "label" | "meta"> = {
+            label: declaration.label,
+          };
           if (declaration.describe) {
             const evidence = context();
-            let described: unknown;
             try {
-              described = bindings.bodies[declaration.describe]!.run(
+              const described = bindings.bodies[declaration.describe]!.run(
                 freezePage(parsed),
                 freezePage({
                   page: evidence.page,
@@ -1025,12 +1026,13 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
                   readings: evidence.readings,
                 }),
               );
+              // The admitted declaration owns the return shape; the host decodes untrusted meta.
+              detail = route.data.historyDetail
+                ? (described as typeof detail)
+                : { label: described as string };
             } catch {
               return { kind: "refused", reason: "describe-threw" } as const;
             }
-            if (typeof described !== "string")
-              return { kind: "refused", reason: "describe-not-string" } as const;
-            label = described;
           }
           const patches = () =>
             admittedWorkPatches(
@@ -1045,17 +1047,11 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
               () => preview as import("@pe/agent-contracts").WorkWrite["patches"],
               invocation,
               invocation.id,
-              label,
+              detail,
               basis,
             );
             observation.subscribe(
-              (outcome) => {
-                if (outcome.kind === "accepted") {
-                  const key = outcome.ack.key;
-                  mountJournal(key).describe(outcome.ack.press ?? invocation.id, {
-                    label,
-                  });
-                }
+              () => {
                 if (owner.read()?.scope === invocation.token.scope) notify();
               },
               () => {},
@@ -1321,6 +1317,13 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
       };
       const history = route.data.work
         ? {
+            get entries() {
+              return freezePage(
+                journal()?.entries(
+                  route.data.historyDetail ? bindings.schemas[route.data.historyDetail] : undefined,
+                ) ?? [],
+              );
+            },
             undo: (press?: string) => restore("undo", press),
             redo: (press?: string) => restore("redo", press),
             revert,
@@ -1384,7 +1387,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
               () => patches,
               issued.value,
               issued.value.id,
-              "Salvage Work",
+              { label: "Salvage Work" },
               issued.value,
             );
           },
@@ -1562,12 +1565,9 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
             ),
           );
           if (!issued.ok) throw Error(issued.reason);
-          return work.write(
-            () => cells.take(id, key, context()),
-            issued.value,
-            issued.value.id,
-            `Take ${id}`,
-          );
+          return work.write(() => cells.take(id, key, context()), issued.value, issued.value.id, {
+            label: `Take ${id}`,
+          });
         },
         focusCell(id: string, key: unknown) {
           action();

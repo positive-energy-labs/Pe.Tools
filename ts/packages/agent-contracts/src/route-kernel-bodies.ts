@@ -162,7 +162,7 @@ type VerbInput<
 /** A description failure refuses before patches or journal submission. */
 export type WorkDescriptionRefusal = {
   readonly kind: "refused";
-  readonly reason: "describe-threw" | "describe-not-string";
+  readonly reason: "describe-threw";
 };
 /** Preserve the mount's existing outcome, including review preparation before dispatch. */
 type VerbOutcome<V> = V extends { kind: "work"; describe: string }
@@ -190,7 +190,24 @@ type Allowed<P> = P extends readonly string[]
     ? P["allowed"][number]
     : never;
 /** Mount-owned Work history; routes never supply replay callbacks or inverse authority. */
-export interface WorkHistoryPort {
+export type HistoryMeta<G extends RouteGraphJson, S extends SchemaTable> = G extends {
+  historyDetail: infer K;
+}
+  ? SchemaValue<S, K>
+  : never;
+export type WorkHistoryEntry<Meta> = {
+  readonly id: string;
+  readonly press: string;
+  readonly label: string;
+  readonly by: "human" | "pea";
+  readonly at: number;
+  readonly state: "applied" | "undone";
+} & (
+  | { readonly detail: "available"; readonly meta: Immutable<Meta> }
+  | { readonly detail: "unavailable" | "none"; readonly meta?: never }
+);
+export interface WorkHistoryPort<Meta = import("./route-graph.ts").GraphJsonValue> {
+  readonly entries: readonly WorkHistoryEntry<Meta>[];
   undo(press?: string): unknown;
   redo(press?: string): unknown;
   revert(press?: string): unknown;
@@ -214,7 +231,7 @@ export type PaneContext<
   P extends keyof G["panes"],
 > = {
   readonly page: PagePort<G, S>;
-  readonly history?: "work" extends keyof G ? WorkHistoryPort : never;
+  readonly history?: "work" extends keyof G ? WorkHistoryPort<HistoryMeta<G, S>> : never;
   readonly recovery?: "work" extends keyof G ? WorkRecoveryPort : never;
   readonly work: Immutable<WorkOf<G, S>> | null;
   /** Issued with this rendered Work value. Its token.scope.identity.work is the handle
@@ -314,9 +331,17 @@ type VerbSlots<G extends RouteGraphJson, S extends SchemaTable, E extends EntryT
         At<G["verbs"][K], "describe">,
         `verbs.${K}.describe`,
         "describe",
-        /** Pure, synchronous label, evaluated once from accepted input and declared evidence.
+        /** Pure, synchronous presentation, evaluated once from accepted input and declared evidence.
          * No captures, invocation authority, ports or implicit dependencies are provided. */
-        (input: VerbInput<G, S, K>, ctx: BodyContext<G, S, E, G["verbs"][K]>) => string
+        (
+          input: VerbInput<G, S, K>,
+          ctx: BodyContext<G, S, E, G["verbs"][K]>,
+        ) => G extends { historyDetail: string }
+          ? {
+              readonly label: string;
+              readonly meta: HistoryMeta<G, S> & import("./route-graph.ts").GraphJsonValue;
+            }
+          : string
       >
     | Slot<
         At<G["verbs"][K], "patch">,

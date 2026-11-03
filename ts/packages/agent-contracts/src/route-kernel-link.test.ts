@@ -1,6 +1,6 @@
 /* oxlint-disable typescript/no-misused-spread -- These adversaries deliberately copy nominal class instances. */
 import { createHash } from "node:crypto";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { z } from "zod";
 import {
   builtinModule,
@@ -796,3 +796,42 @@ it("links recovery display slots and validates their declared evidence", () => {
     expect.objectContaining({ path: "salvagePresent" }),
   );
 });
+
+it.each(["missing", "malformed"])(
+  "history detail schema %s fails at admission before any describe or write",
+  async (kind) => {
+    const data = {
+      ...builtinData,
+      historyDetail: "detail",
+      verbs: {
+        ...builtinData.verbs,
+        edit: { ...builtinData.verbs.edit, describe: "describeEdit" },
+      },
+    };
+    const describeEdit = vi.fn(() => ({ label: "Row", meta: { row: "one" } }));
+    const module = {
+      ...builtinModule,
+      data,
+      bodies: {
+        ...builtinModule.bodies,
+        describeEdit: {
+          slot: "verbs.edit.describe",
+          kind: "describe",
+          source: { module: "bodies.js", export: "describeEdit" },
+          run: describeEdit,
+        },
+      },
+      schemas: { ...schemas, ...(kind === "malformed" ? { detail: { parse() {} } } : {}) },
+    };
+    const { port, artifact } = await prepare(data, baseCatalog, module);
+    const result = port.admitUnknown({ ...module, artifact });
+    expect(result).toMatchObject({ ok: false });
+    expect(describeEdit).not.toHaveBeenCalled();
+    if (!result.ok)
+      expect(result.diagnostics).toContainEqual(
+        expect.objectContaining({
+          path: kind === "missing" ? "historyDetail" : "artifact",
+        }),
+      );
+  },
+);
