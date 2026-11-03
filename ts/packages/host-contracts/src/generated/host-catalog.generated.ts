@@ -267,7 +267,7 @@ export const hostOpCatalog: readonly CatalogEntry[] = [
     "touches": "Geometry",
     "effect": "TransactRead",
     "cardinality": "One",
-    "internal": true,
+    "internal": false,
     "rollsBack": true
   },
   {
@@ -331,7 +331,7 @@ export const hostOpCatalog: readonly CatalogEntry[] = [
     "touches": "Topology",
     "effect": "TransactRead",
     "cardinality": "One",
-    "internal": true,
+    "internal": false,
     "rollsBack": true
   },
   {
@@ -433,7 +433,7 @@ export const hostOpCatalog: readonly CatalogEntry[] = [
     "touches": "Geometry",
     "effect": "TransactRead",
     "cardinality": "One",
-    "internal": true,
+    "internal": false,
     "rollsBack": true
   },
   {
@@ -1091,7 +1091,7 @@ export const hostOpCatalog: readonly CatalogEntry[] = [
     "touches": "Topology",
     "effect": "TransactRead",
     "cardinality": "One",
-    "internal": true,
+    "internal": false,
     "rollsBack": true
   },
   {

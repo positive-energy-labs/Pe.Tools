@@ -118,7 +118,7 @@ internal sealed class RevitDataRequestService {
 
     // The preview is its own TransactRead leaf, not a flag on the ModelWrite: the bridge gate refuses a
     // TransactRead that does not declare rollback, and the host binds this key to the Work seal step.
-    [Op("ducts.apply.preview", OpSubject.Elements, OpTouches.Geometry, OpEffect.TransactRead, RollsBack = true, Internal = true, Does = "Plan every duct loss write and refusal ducts.apply would make, without opening a transaction. Same request and result as ducts.apply; nothing is committed.", Title = "Preview Duct Losses", Finds = ["ducts", "preview", "pressure", "loss"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
+    [Op("ducts.apply.preview", OpSubject.Elements, OpTouches.Geometry, OpEffect.TransactRead, RollsBack = true, Does = "Plan every duct loss write and refusal ducts.apply would make, without opening a transaction. Same request and result as ducts.apply; nothing is committed.", Title = "Preview Duct Losses", Finds = ["ducts", "preview", "pressure", "loss"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private static DuctApplyResult PreviewDuctsCore(DuctApplyRequest request, ProjectDocument activeDocument) =>
         ApplyDucts(request, activeDocument, true);
 
@@ -148,7 +148,7 @@ internal sealed class RevitDataRequestService {
     private static DuctHealResult HealDuctsCore(DuctHealRequest request, ProjectDocument activeDocument) =>
         HealDucts(request, activeDocument, false);
 
-    [Op("ducts.heal.preview", OpSubject.Elements, OpTouches.Geometry, OpEffect.TransactRead, RollsBack = true, Internal = true, UsesTransactions = true, Does = "Run every ducts.heal group inside one transaction group and roll all of it back. Same request and result as ducts.heal; nothing is committed.", Title = "Preview Duct Heal", Finds = ["ducts", "heal", "preview"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
+    [Op("ducts.heal.preview", OpSubject.Elements, OpTouches.Geometry, OpEffect.TransactRead, RollsBack = true, UsesTransactions = true, Does = "Run every ducts.heal group inside one transaction group and roll all of it back. Same request and result as ducts.heal; nothing is committed.", Title = "Preview Duct Heal", Finds = ["ducts", "heal", "preview"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private static DuctHealResult PreviewHealDuctsCore(DuctHealRequest request, ProjectDocument activeDocument) =>
         HealDucts(request, activeDocument, true);
 
@@ -173,7 +173,7 @@ internal sealed class RevitDataRequestService {
     private static DuctAssignFanResult AssignDuctFanCore(DuctAssignFanRequest request, ProjectDocument activeDocument) =>
         AssignDuctFan(request, activeDocument, false);
 
-    [Op("ducts.assign-fan.preview", OpSubject.System, OpTouches.Topology, OpEffect.TransactRead, RollsBack = true, Internal = true, UsesTransactions = true, Does = "Run the ducts.assign-fan write and its read back inside one transaction group and roll both back. Same request and result as ducts.assign-fan; nothing is committed.", Title = "Preview Duct System Fan", Finds = ["ducts", "fan", "preview"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
+    [Op("ducts.assign-fan.preview", OpSubject.System, OpTouches.Topology, OpEffect.TransactRead, RollsBack = true, UsesTransactions = true, Does = "Run the ducts.assign-fan write and its read back inside one transaction group and roll both back. Same request and result as ducts.assign-fan; nothing is committed.", Title = "Preview Duct System Fan", Finds = ["ducts", "fan", "preview"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private static DuctAssignFanResult PreviewAssignDuctFanCore(DuctAssignFanRequest request, ProjectDocument activeDocument) =>
         AssignDuctFan(request, activeDocument, true);
 
@@ -620,7 +620,7 @@ internal sealed class RevitDataRequestService {
     private ParameterLinksData ApplyParameterLinksCore(ParameterLinksApplyRequest request, ProjectDocument activeDocument) =>
         this.ApplyParameterLinks(request, activeDocument, false);
 
-    [Op("revit.apply.parameter-links.preview", OpSubject.Document, OpTouches.Topology, OpEffect.TransactRead, RollsBack = true, Internal = true, Does = "Evaluate a parameter-link profile (or the stored one) and preview every proposed target write and issue, without writing. Same request and result as revit.apply.parameter-links.", Title = "Preview Parameter Links", Finds = ["parameters", "links", "preview", "evaluate"], Cost = OpCost.Mutation, Actor = OpActor.Any)]
+    [Op("revit.apply.parameter-links.preview", OpSubject.Document, OpTouches.Topology, OpEffect.TransactRead, RollsBack = true, Does = "Evaluate a parameter-link profile (or the stored one) and preview every proposed target write and issue, without writing. Same request and result as revit.apply.parameter-links.", Title = "Preview Parameter Links", Finds = ["parameters", "links", "preview", "evaluate"], Cost = OpCost.Mutation, Actor = OpActor.Any)]
     private ParameterLinksData PreviewParameterLinksCore(ParameterLinksApplyRequest request, ProjectDocument activeDocument) =>
         this.ApplyParameterLinks(request, activeDocument, true);
 
