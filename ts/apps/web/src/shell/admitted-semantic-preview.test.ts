@@ -1,5 +1,6 @@
 import { expect, test, vi } from "vite-plus/test";
 import { familiesModule } from "../families/kernel";
+import { familiesScopeId } from "../families/neutral";
 import {
   builtinClosureFingerprint,
   createBuiltinRouteInventory,
@@ -143,6 +144,38 @@ test("Families admission preserves axes and the mount journals preview with capt
       expect(mount.review("apply")?.preview).toMatchObject({ previewOnly: true }),
     );
     expect(native).not.toHaveBeenCalled();
+    const advanced = store.submitWork(
+      {
+        route: "families",
+        fingerprint: admitted.route.workFingerprint,
+        key: basis.token.scope.identity.work!,
+        target,
+        subject: familiesScopeId,
+      },
+      {
+        kind: "apply",
+        press: "external",
+        expectedRevision: basis.workRevision!,
+        patches: [
+          { path: ["scope"], value: { edit: { value: { ...filter, familyNames: ["Changed"] } } } },
+        ],
+      },
+      basis,
+    );
+    await new Promise<void>((resolve) =>
+      advanced.subscribe(
+        (outcome) => {
+          if (outcome.kind !== "pending") {
+            expect(outcome.kind).toBe("accepted");
+            resolve();
+          }
+        },
+        () => {},
+      ),
+    );
+    expect(mount.review("apply")?.stale).toBe(true);
+    expect(() => mount.confirm("apply")).toThrow(/stale/);
+    expect(submit).toHaveBeenCalledOnce();
   } finally {
     mount.close();
     registration.deactivate();

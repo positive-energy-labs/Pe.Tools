@@ -496,6 +496,16 @@ export function createRouteShell(services: KernelServices) {
             }
             for (const id of active.keys()) if (!used.has(id)) retire(id);
             readings = Object.freeze(next);
+            // Derived dependencies can change during this pass. Retire their dependent
+            // query before publishing or landing a result against the previous inputs.
+            if (
+              Array.from(queryInputs.values()).some(
+                (query) => query.inputsCurrent && !query.inputsCurrent(),
+              )
+            ) {
+              again = true;
+              continue;
+            }
             cells.update((owner.read()!.work?.value ?? null) as Record<string, unknown> | null);
             observers.update({
               page: owner.read()!.page,
@@ -530,15 +540,15 @@ export function createRouteShell(services: KernelServices) {
                 continue;
               }
               queryLandings.set(readingId, { kind: "decoded", value: decoded.data });
+              // A current read publishes Page against the accepted state at completion.
+              // Its original Work revision remains unchanged for query patch writes.
+              const landing = owner.invocation(query.invocation.token, {});
+              if (!landing.ok) continue;
               const patch = bindings.bodies[query.landing]!.run(
                 freezePage(decoded.data),
                 owner.read()!.page,
               );
-              // A current read publishes Page against the accepted state at completion.
-              // Its original Work revision remains unchanged for query patch writes.
-              const landing = owner.invocation(query.invocation.token, {});
-              if (landing.ok)
-                owner.acceptPage(landing.value, patch as Parameters<typeof owner.acceptPage>[1]);
+              owner.acceptPage(landing.value, patch as Parameters<typeof owner.acceptPage>[1]);
             }
             for (const [key, field] of Object.entries(route.data.fields)) {
               if (field.role === "subject")
@@ -875,7 +885,16 @@ export function createRouteShell(services: KernelServices) {
                 try {
                   // workBasis stays at the read's starting revision, including expectedRevision.
                   const current = entry.input.parse(
-                    bindings.bodies[declaration.args]!.run(context(), parsed),
+                    bindings.bodies[declaration.args]!.run(
+                      {
+                        ...context(),
+                        work: project(
+                          declaration.deps.work,
+                          (owner.read()!.work?.value as Record<string, unknown>) ?? {},
+                        ),
+                      },
+                      parsed,
+                    ),
                   );
                   return canonicalEnvironmentInput(current) === canonicalEnvironmentInput(args);
                 } catch {

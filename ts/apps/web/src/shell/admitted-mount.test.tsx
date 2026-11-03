@@ -186,6 +186,7 @@ async function admitted(
     bodies?: Record<string, unknown>;
     sources?: Record<string, unknown>;
     landing?: boolean;
+    queryFromPage?: boolean;
   } = {},
 ) {
   const selectedModule = {
@@ -201,8 +202,8 @@ async function admitted(
               slot: "verbs.capture.args",
               kind: "args",
               source,
-              run: (_ctx: unknown, input: { elementIds: number[] }) => ({
-                query: input.elementIds.join(","),
+              run: (ctx: { page: { query?: string } }, input: { elementIds: number[] }) => ({
+                query: `${input.elementIds.join(",")}${amendment.queryFromPage ? ctx.page.query : ""}`,
               }),
             },
             main: { ...bodies.main, run: (ctx: unknown) => ctx },
@@ -224,7 +225,7 @@ async function admitted(
                 review: "none" as const,
                 cancellation: "scope" as const,
                 ...(amendment.landing ? { lands: "landQuery" } : {}),
-                deps: { page: [], work: [], readings: [] },
+                deps: { page: amendment.queryFromPage ? ["query"] : [], work: [], readings: [] },
                 captures: [],
               },
             },
@@ -455,6 +456,7 @@ async function workRoute(
     pane?: (ctx: unknown) => unknown;
     row?: boolean;
   },
+  readingWork = false,
 ) {
   const workData = {
     ...data,
@@ -482,6 +484,14 @@ async function workRoute(
     ...(needs === "document" ? {} : { workSubject: "note" }),
     readings: {
       ...data.readings,
+      ...(readingWork
+        ? {
+            notes: {
+              ...data.readings.notes,
+              deps: { page: ["query"], work: ["amount"], readings: [] },
+            },
+          }
+        : {}),
       ...(modelWrite
         ? {
             preview: {
@@ -558,6 +568,16 @@ async function workRoute(
     schemas: { ...schemas, work: z.object({ amount: z.number() }), number: z.number() },
     bodies: {
       ...bodies,
+      ...(readingWork
+        ? {
+            args: {
+              ...bodies.args,
+              run: ({ page, work }: { page: { query: string }; work: { amount: number } }) => ({
+                query: `${page.query}:${work.amount}`,
+              }),
+            },
+          }
+        : {}),
       ...(landing?.row
         ? {
             chooseChange: {
@@ -920,8 +940,8 @@ test("query validates and delivers invocation input without changing Page; new r
   expect(t.releases).toHaveBeenCalledTimes(2);
   expect(m.page.read()).toEqual(page);
   m.controls.query("query", "changed");
-  t.frames[2]!(ready("departed"));
-  expect(pane().readings.notes.current).toBe(false);
+  t.frames[2]!(ready("retained"));
+  expect(pane().readings.notes).toMatchObject({ current: true, value: "retained" });
   expect(acquire).toHaveBeenCalledTimes(3);
 });
 
@@ -2246,8 +2266,8 @@ test("query lands once through transition on current success and refuses stale/s
   invoke();
   const departed = t.frames.at(-1)!;
   m.controls.query("query", "new scope");
-  departed(ready("departed"));
-  expect(land).toHaveBeenCalledOnce();
+  departed(ready("retained"));
+  expect(land).toHaveBeenCalledTimes(2);
 });
 
 test("ModelWrite refuses a stale rendered Work basis before acquiring any preview", async () => {
@@ -2509,3 +2529,58 @@ test.each(["registration-mismatch", "migration-failed", "failed"] as const)(
     expect(open).toHaveBeenCalledOnce();
   },
 );
+
+test.each([false, true])(
+  "read currency follows args across Work writes, Work arg = %s",
+  async (readingWork) => {
+    const t = transports();
+    const store = createFixtureWorkDoor(
+      { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
+      { amount: 0 },
+    );
+    const route = await workRoute(
+      "none",
+      false,
+      "nothing",
+      undefined,
+      false,
+      undefined,
+      readingWork,
+    );
+    const mount = createRouteShell({ ...t.services, work: store }).mount(
+      route,
+      locationPort().address,
+    );
+    closes.push(mount.close);
+    expect(t.keys).toHaveLength(1);
+    mount.invoke("native", 0);
+    expect(mount.review("native")?.stale).toBe(false);
+    await settle(mount.invoke("change", 1) as Observation<WorkWriteOutcome>);
+    expect(mount.review("native")?.stale).toBe(true);
+    expect(() => mount.confirm("native")).toThrow(/stale/);
+    expect(t.releases).toHaveBeenCalledTimes(readingWork ? 1 : 0);
+    t.frames[0]!(ready("late"));
+    // A Work field used by args supersedes the attempt; unrelated Work keeps it in flight.
+    expect(t.keys).toHaveLength(readingWork ? 2 : 1);
+    if (readingWork) t.frames[1]!(ready("current"));
+    // Completed evidence also survives another unrelated Work edit.
+    if (!readingWork) await settle(mount.invoke("change", 1) as Observation<WorkWriteOutcome>);
+    expect(t.keys).toHaveLength(readingWork ? 2 : 1);
+    expect(t.releases).toHaveBeenCalledTimes(readingWork ? 1 : 0);
+  },
+);
+
+test("a changed declared query argument retires its in-flight completion", async () => {
+  const t = transports();
+  const mount = createRouteShell(t.services).mount(
+    await admitted(true, true, { queryFromPage: true }),
+    locationPort().address,
+  );
+  closes.push(mount.close);
+  mount.invoke("capture", { elementIds: [7] });
+  const departed = t.frames[0]!;
+  mount.controls.query("query", "new argument");
+  departed(ready("late"));
+  expect((mount.read("main") as any).readings.notes.current).toBe(false);
+  expect(t.releases).toHaveBeenCalledOnce();
+});

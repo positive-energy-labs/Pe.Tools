@@ -318,6 +318,8 @@ test("staged cell edits retain the completed matrix for the next edit", async ()
   try {
     const f = await setup();
     f.read();
+    const originalRead = f.requests.find((request) => request.key.op === "families.read");
+    expect(JSON.parse(originalRead.key.sortedKeyInput).expectedRevision).toBe(0);
     expect(await settled(f.mount.invoke("edit", edit, f.mount.workBasis()!))).toMatchObject({
       kind: "accepted",
     });
@@ -335,6 +337,10 @@ test("staged cell edits retain the completed matrix for the next edit", async ()
         ),
       ),
     ).toMatchObject({ kind: "accepted" });
+    expect(f.requests.filter((request) => request.key.op === "families.read")).toEqual([
+      originalRead,
+    ]);
+    expect(JSON.parse(originalRead.key.sortedKeyInput).expectedRevision).toBe(0);
     expect(f.mount.work()?.value).toMatchObject({
       cells: { [key]: { edit: { value: { ...edit.value, value: "1.3" } } } },
     });
