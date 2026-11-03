@@ -383,6 +383,9 @@ export interface AcceptanceOwner<G extends RouteGraphJson, S extends SchemaTable
   /** Rechecks scope, Page epoch/revision and dependency basis before the single publication. */
   acceptPage(token: InvocationToken | LeaseToken, patch: PagePatch<G, S>): MoveResult;
   read(): AcceptanceSnapshot<G, S> | null;
-  subscribe(listener: (snapshot: AcceptanceSnapshot<G, S>) => void): () => void;
+  /** Accepted Page moves carry their origin only to this publication, never persisted state. */
+  subscribe(
+    listener: (snapshot: AcceptanceSnapshot<G, S>, origin?: MoveOrigin) => void,
+  ): () => void;
   close(): void;
 }

@@ -52,7 +52,8 @@ export interface EnvironmentPorts {
 export interface EnvironmentOptions {
   readonly issuer: RouteEnvironmentIssuer;
   readonly validate: EnvironmentValidation;
-  readonly ports: EnvironmentPorts;
+  readonly ports: Omit<EnvironmentPorts, "work" | "geometry"> &
+    Partial<Pick<EnvironmentPorts, "work" | "geometry">>;
 }
 
 // Mounted owners consume these capabilities through mount-environment.ts.
@@ -168,7 +169,7 @@ export function createRouteEnvironment({ issuer, validate, ports }: EnvironmentO
                 "Geometry scope/attempt mismatch",
               );
               return handle(
-                ports.geometry.acquire(request, token),
+                ports.geometry!.acquire(request, token),
                 () => valid(request, token) && validate.scope(token.scope),
               );
             },
@@ -208,7 +209,7 @@ export function createRouteEnvironment({ issuer, validate, ports }: EnvironmentO
               lifetime: "read",
               read: (scope) => {
                 check(validate.scope(scope), "Stale Work scope");
-                return ports.work.read.read(scope);
+                return ports.work!.read.read(scope);
               },
             },
             submit: {
@@ -218,7 +219,7 @@ export function createRouteEnvironment({ issuer, validate, ports }: EnvironmentO
                   validate.admitted(route) && validate.invocation(invocation),
                   "Stale or unadmitted Work write",
                 );
-                return ports.work.submit.submit(route, invocation, write);
+                return ports.work!.submit.submit(route, invocation, write);
               },
             },
           },

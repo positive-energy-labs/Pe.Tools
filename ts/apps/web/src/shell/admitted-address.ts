@@ -92,7 +92,7 @@ export function createAdmittedAddress<G extends RouteGraphJson, S extends Schema
   };
 
   const initial = restore();
-  const unsubscribeOwner = owner.subscribe((snapshot) => {
+  const unsubscribeOwner = owner.subscribe((snapshot, origin) => {
     const before = previous;
     previous = snapshot;
     if (closed || restoring || !before) return;
@@ -112,11 +112,14 @@ export function createAdmittedAddress<G extends RouteGraphJson, S extends Schema
       if (!text.ok) throw Error(text.reason);
       search.set(key, text.value);
     }
-    const history = changed.some(
-      ([, field]) => field.role === "selection" || ("url" in field && field.url === "push"),
-    )
-      ? "push"
-      : "replace";
+    const history =
+      origin?.kind === "human"
+        ? origin.history
+        : changed.some(
+              ([, field]) => field.role === "selection" || ("url" in field && field.url === "push"),
+            )
+          ? "push"
+          : "replace";
     writing = true;
     try {
       address.write(search, history);

@@ -82,7 +82,7 @@ export function createRouteScopeGate<G extends RouteGraphJson, S extends SchemaT
   const attempts = new Map<string, AcceptanceToken>();
   const invocations = new WeakSet<InvocationToken>();
   const generations = new Map<string, number>();
-  const listeners = new Set<(snapshot: Snapshot) => void>();
+  const listeners = new Set<(snapshot: Snapshot, origin?: MoveOrigin) => void>();
   const continuations = new WeakMap<
     InvocationToken | LeaseToken,
     { page: number; work: number | null }
@@ -93,11 +93,11 @@ export function createRouteScopeGate<G extends RouteGraphJson, S extends SchemaT
     issuer.owns(token) &&
     state?.scope === token.scope &&
     attempts.get(token.channel) === token;
-  const publish = (next: Snapshot): void => {
+  const publish = (next: Snapshot, origin?: MoveOrigin): void => {
     state = Object.freeze(next);
     for (const listener of listeners) {
       if (closed || state !== next) break;
-      listener(next);
+      listener(next, origin);
     }
   };
   const basisCurrent = (token: InvocationToken | LeaseToken): boolean => {
@@ -158,12 +158,15 @@ export function createRouteScopeGate<G extends RouteGraphJson, S extends SchemaT
     const revision = before.pageRevision + (changed ? 1 : 0);
     if (changed) {
       if (basis) continuations.set(basis, { page: revision, work: before.work?.revision ?? null });
-      publish({
-        ...before,
-        page: immutableCopy(page),
-        pageRevision: revision,
-        pageEpoch: basis ? before.pageEpoch : issuer.pageEpoch(),
-      });
+      publish(
+        {
+          ...before,
+          page: immutableCopy(page),
+          pageRevision: revision,
+          pageEpoch: basis ? before.pageEpoch : issuer.pageEpoch(),
+        },
+        origin,
+      );
     }
     return { kind: "accepted", revision, changed, membership };
   };
