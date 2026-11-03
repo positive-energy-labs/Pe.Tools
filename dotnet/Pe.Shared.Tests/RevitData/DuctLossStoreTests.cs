@@ -90,7 +90,7 @@ public sealed class DuctLossStoreTests {
         var slots = Newtonsoft.Json.JsonConvert.DeserializeObject<DuctParameterSlots>("""{"componentDrop":"Damper Drop"}""")!;
 
         Assert.That(slots.FanStatic, Is.Null, "Newtonsoft passes null for a missing ctor argument");
-        Assert.That(slots.WithDefaults(), Is.EqualTo(new DuctParameterSlots(ComponentDrop: "Damper Drop")));
+        Assert.That(slots.WithDefaults(), Is.EqualTo(new DuctParameterSlots(ComponentDrop: "Damper Drop").WithDefaults()));
     }
 
     [Test]
@@ -99,6 +99,6 @@ public sealed class DuctLossStoreTests {
         var stored = new DuctParameterSlots(TerminalDrop: "Catalog Drop", ComponentDrop: "Old Drop");
 
         Assert.That(staged.Over(stored).WithDefaults(),
-            Is.EqualTo(new DuctParameterSlots(ComponentDrop: "Damper Drop", TerminalDrop: "Catalog Drop")));
+            Is.EqualTo(new DuctParameterSlots(ComponentDrop: "Damper Drop", TerminalDrop: "Catalog Drop").WithDefaults()));
     }
 }

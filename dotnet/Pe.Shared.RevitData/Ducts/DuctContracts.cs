@@ -159,14 +159,18 @@ public sealed record DuctOpenEnd(long ElementId, int Connector, double[] Point, 
 ///     live (the configurable door, kaitpw 2026-10-08).
 /// </summary>
 public sealed record DuctParameterSlots(
-    string FanStatic = "PE_M_Fan_ExternalStaticPressure", // firm-default: PE_* names belong in firm config, not code (kaitpw 2026-10-20, later)
-    string FanFlow = "PE_M_Fan_AirFlowDesign", // firm-default: PE_* names belong in firm config, not code (kaitpw 2026-10-20, later)
-    string ComponentDrop = "Pressure Drop",
-    string? TerminalDrop = "PE_M_Grd_ExternalStaticPressure", // firm-default: PE_* names belong in firm config, not code (kaitpw 2026-10-20, later)
-    string FittingCoefficient = DuctParameterSlots.DefaultFittingCoefficient,
-    string TerminalFlow = "PE_M_Grd_AirFlow") { // firm-default: PE_* names belong in firm config, not code (kaitpw 2026-10-20, later)
+    string? FanStatic = null,
+    string? FanFlow = null,
+    string? ComponentDrop = null,
+    string? TerminalDrop = null,
+    string? FittingCoefficient = null,
+    string? TerminalFlow = null) {
     public const string DefaultFittingCoefficient = "Pe_C";
-    private static readonly DuctParameterSlots Defaults = new();
+    // Overrides preserve absence until they merge over the store. Dispatch populates ctor defaults.
+    // firm-default: PE_* names belong in firm config, not code (kaitpw 2026-10-20, later).
+    private static readonly DuctParameterSlots Defaults = new(
+        "PE_M_Fan_ExternalStaticPressure", "PE_M_Fan_AirFlowDesign", "Pressure Drop",
+        "PE_M_Grd_ExternalStaticPressure", DefaultFittingCoefficient, "PE_M_Grd_AirFlow");
 
     /// <summary>Each name this leaves blank (a partial wire object) comes from <paramref name="under" />.</summary>
     public DuctParameterSlots Over(DuctParameterSlots? under) => under is null

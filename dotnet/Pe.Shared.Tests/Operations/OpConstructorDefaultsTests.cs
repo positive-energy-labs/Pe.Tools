@@ -3,11 +3,25 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.RevitData;
+using Pe.Shared.RevitData.Ducts;
 
 namespace Pe.Revit.Tests;
 
 [TestFixture]
 public sealed class OpConstructorDefaultsTests {
+    [TestCase("{}")]
+    [TestCase("""{"componentDrop":"Damper Drop"}""")]
+    public void Duct_slot_overrides_preserve_stored_names_before_engine_defaults(string json) {
+        var overrides = JsonConvert.DeserializeObject<DuctParameterSlots>(json, DispatchSettings)!;
+        var stored = new DuctParameterSlots(FanFlow: "PE_M_Fan_AirFlow", TerminalFlow: "revit:Flow");
+        var resolved = overrides.Over(stored).WithDefaults();
+        Assert.Multiple(() => {
+            Assert.That(resolved.FanFlow, Is.EqualTo("PE_M_Fan_AirFlow"));
+            Assert.That(resolved.TerminalFlow, Is.EqualTo("revit:Flow"));
+            Assert.That(resolved.ComponentDrop, Is.EqualTo(json == "{}" ? "Pressure Drop" : "Damper Drop"));
+        });
+    }
+
     // Use the dispatch settings themselves so this cannot pass with a test-only resolver.
     private static JsonSerializerSettings DispatchSettings => (JsonSerializerSettings)typeof(Op)
         .GetField("JsonSettings", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!;

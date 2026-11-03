@@ -196,12 +196,12 @@ export namespace DuctsApply {
      *
      */
     export interface DuctParameterSlots {
-      fanStatic?: string;
-      fanFlow?: string;
-      componentDrop?: string;
+      fanStatic?: null | string;
+      fanFlow?: null | string;
+      componentDrop?: null | string;
       terminalDrop?: null | string;
-      fittingCoefficient?: string;
-      terminalFlow?: string;
+      fittingCoefficient?: null | string;
+      terminalFlow?: null | string;
     }
     /**
      * Results are the host engine's priced legs, including their velocity-pressure basis. Table and Inputs are provenance only.
@@ -439,12 +439,12 @@ export namespace DuctsApplyPreview {
      *
      */
     export interface DuctParameterSlots {
-      fanStatic?: string;
-      fanFlow?: string;
-      componentDrop?: string;
+      fanStatic?: null | string;
+      fanFlow?: null | string;
+      componentDrop?: null | string;
       terminalDrop?: null | string;
-      fittingCoefficient?: string;
-      terminalFlow?: string;
+      fittingCoefficient?: null | string;
+      terminalFlow?: null | string;
     }
     /**
      * Results are the host engine's priced legs, including their velocity-pressure basis. Table and Inputs are provenance only.
@@ -1138,12 +1138,12 @@ export namespace DuctsSnapshotRoster {
      *
      */
     export interface DuctParameterSlots {
-      fanStatic?: string;
-      fanFlow?: string;
-      componentDrop?: string;
+      fanStatic?: null | string;
+      fanFlow?: null | string;
+      componentDrop?: null | string;
       terminalDrop?: null | string;
-      fittingCoefficient?: string;
-      terminalFlow?: string;
+      fittingCoefficient?: null | string;
+      terminalFlow?: null | string;
     }
     /**
      * Which elements the snapshot reads. Kind `document` is the default and the shape every existing caller gets. Kind
@@ -1560,12 +1560,12 @@ export namespace DuctsSnapshotRoster {
      *
      */
     export interface DuctParameterSlots {
-      fanStatic: string;
-      fanFlow: string;
-      componentDrop: string;
+      fanStatic?: null | string;
+      fanFlow?: null | string;
+      componentDrop?: null | string;
       terminalDrop?: null | string;
-      fittingCoefficient: string;
-      terminalFlow: string;
+      fittingCoefficient?: null | string;
+      terminalFlow?: null | string;
     }
     /**
      * Pe's provenance for duct losses: one versioned JSON blob in the hidden Project Information text parameter
@@ -1753,12 +1753,12 @@ export namespace DuctsSnapshotWalk {
      *
      */
     export interface DuctParameterSlots {
-      fanStatic?: string;
-      fanFlow?: string;
-      componentDrop?: string;
+      fanStatic?: null | string;
+      fanFlow?: null | string;
+      componentDrop?: null | string;
       terminalDrop?: null | string;
-      fittingCoefficient?: string;
-      terminalFlow?: string;
+      fittingCoefficient?: null | string;
+      terminalFlow?: null | string;
     }
     /**
      * Which elements the snapshot reads. Kind `document` is the default and the shape every existing caller gets. Kind
@@ -2175,12 +2175,12 @@ export namespace DuctsSnapshotWalk {
      *
      */
     export interface DuctParameterSlots {
-      fanStatic: string;
-      fanFlow: string;
-      componentDrop: string;
+      fanStatic?: null | string;
+      fanFlow?: null | string;
+      componentDrop?: null | string;
       terminalDrop?: null | string;
-      fittingCoefficient: string;
-      terminalFlow: string;
+      fittingCoefficient?: null | string;
+      terminalFlow?: null | string;
     }
     /**
      * Pe's provenance for duct losses: one versioned JSON blob in the hidden Project Information text parameter

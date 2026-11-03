@@ -586,7 +586,11 @@ export function createWorkJournal(key: WorkKey) {
             )
           )
             continue;
-          if (receipt.state === "succeeded") delete step.notWritten;
+          if (receipt.state === "succeeded") {
+            delete step.notWritten;
+            // A landed edit is final even if a later command consumes the same value.
+            break;
+          }
           else if (receipt.state === "cancelled" && receipt.error.includes("rejected by"))
             step.notWritten = {
               invocation: receipt.id,
