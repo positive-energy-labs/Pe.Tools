@@ -18,7 +18,8 @@ import type { IdentityId } from "../../../../packages/agent-contracts/src/route-
 import { identityCodecs } from "../shell/page-port";
 import { familiesReads } from "../../../../packages/mcps/src/shared/families-client";
 
-// TODO: W2 cutover requires semantic-preview admission without native geometry policy.
+// TODO: W2 cutover requires sourceRouteServices to preserve progressive part values and
+// invalidate completed evidence on stale/pending (kernel.test.ts boundary witness).
 // TODO: Enroll Families progressive read/Stop sources and its host Work fingerprint.
 // Keep the legacy mount until the driven read -> edit -> preview chain is complete.
 const scopeId = identityCodecs.local.encode({ namespace: "families", subject: "draft" });

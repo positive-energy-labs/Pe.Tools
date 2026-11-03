@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { familiesModule, familiesEntries } from "./kernel";
+import { familiesModule } from "./kernel";
 import { familiesRouteState, familyCellKey } from "@pe/agent-contracts";
 import {
   builtinClosureFingerprint,
@@ -7,6 +7,8 @@ import {
 } from "../../../../packages/agent-contracts/src/route-module";
 import { createRouteShell } from "../shell/admitted-mount";
 import { createFixtureWorkDoor } from "../shell/fixture-work-door";
+import { admittedSources } from "../shell/admitted-sources";
+import type { ReadingSource, ReadingDelivery } from "../shell/readings";
 import { sourceRouteServices } from "../shell/source-route-services";
 import type { KernelServices } from "../../../../packages/agent-contracts/src/route-kernel-environment";
 import type { Observation } from "../../../../packages/agent-contracts/src/work-journal-door";
@@ -37,37 +39,8 @@ const edit = { address, current: "1.01", value: { value: "1.1", storageType: "Do
 const closes: (() => void)[] = [];
 afterEach(() => closes.splice(0).forEach((close) => close()));
 // Synthetic evidence proves composition only, never production source-closure enrollment.
-async function admitted(workOnly = true) {
-  const { preview: _preview, ...readings } = familiesModule.data.readings;
-  const { apply: _apply, stop: _stop, ...verbs } = familiesModule.data.verbs;
-  const {
-    previewArgs: _previewArgs,
-    apply: _applyBody,
-    applyReady: _ready,
-    stop: _stopBody,
-    ...bodies
-  } = familiesModule.bodies;
-  const {
-    "families.apply": _applyEntry,
-    "families.apply.preview": _previewEntry,
-    "families.cancel-read": _stopEntry,
-    ...entries
-  } = familiesEntries;
-  const candidate = workOnly
-    ? {
-        ...familiesModule,
-        data: {
-          ...familiesModule.data,
-          capabilities: ["work"] as const,
-          readings,
-          verbs,
-          stages: { audit: { word: "Auditing", panes: ["main"], verbs: ["read"] } },
-          panes: { main: { ...familiesModule.data.panes.main, verbs: ["read", "edit", "revert"] } },
-        },
-        bodies,
-        entries,
-      }
-    : familiesModule;
+async function admitted(sources: Record<string, ReadingSource> = {}) {
+  const candidate = { ...familiesModule, sources };
   const envelope = {
     source: "builtin-closure" as const,
     version: 1 as const,
@@ -100,14 +73,15 @@ function settled(value: unknown): Promise<any> {
     ),
   );
 }
-async function setup(application = false) {
+async function setup(application = false, sources: Record<string, ReadingSource> = {}) {
+  const route = await admitted(sources);
   const frames = new Map<string, (v: any) => void>();
   const requests: any[] = [];
   const store = createFixtureWorkDoor(familiesRouteState, seed);
   const submit = vi.fn((command: Parameters<typeof store.submit>[0]) => store.submit(command));
   const services: KernelServices = {
     ...(application
-      ? sourceRouteServices({})
+      ? sourceRouteServices(admittedSources(route))
       : {
           reads: {
             lifetime: "read" as const,
@@ -138,7 +112,7 @@ async function setup(application = false) {
     clock: { lifetime: "read", now: Date.now },
     availability: {},
   };
-  const mount = createRouteShell(services).mount(await admitted(), {
+  const mount = createRouteShell(services).mount(route, {
     read: () => new URLSearchParams(),
     write() {},
     subscribe: () => () => {},
@@ -185,8 +159,8 @@ test("delayed edit preserves the rendered expectedRevision", async () => {
   );
   expect(result).toMatchObject({ kind: "refused", refusal: { code: "stale_revision" } });
 });
-test("kernel gap: semantic Families preview is refused as native geometry", async () => {
-  await expect(admitted(false)).rejects.toThrow(/Geometry dependency requires an explicit policy/);
+test("full Families candidate admits semantic preview and registered Stop", async () => {
+  await expect(admitted()).resolves.toMatchObject({ data: { key: "families" } });
 });
 test("unenrolled Families source refuses rather than calling a native fallback", async () => {
   const f = await setup(true);
@@ -195,4 +169,32 @@ test("unenrolled Families source refuses rather than calling a native fallback",
     props: { children: expect.stringContaining("No source for families.read") },
   });
   expect(() => f.mount.invoke("edit", edit, f.mount.workBasis()!)).toThrow(/Reading unavailable/);
+});
+
+// Boundary witness: do not work around shared frame loss with a route-owned executor.
+test("kernel gap: admitted progressive Families parts and stale frames are dropped", async () => {
+  let deliver!: ReadingDelivery;
+  const f = await setup(true, {
+    "families.read": {
+      kind: "use",
+      open(ctx, publish) {
+        expect(ctx.args).toMatchObject({ filter, work: observation.work, expectedRevision: 0 });
+        deliver = publish;
+      },
+    },
+  });
+  f.read();
+  const pane = () => f.mount.read("main") as any;
+  deliver({ kind: "part", value: observation, revision: 1 });
+  // No partial value reaches the pane, even though this exact admitted source published it.
+  expect(pane().props.children).toBe("Reading pending");
+  expect(() => f.mount.invoke("edit", edit, f.mount.workBasis()!)).toThrow(/Reading unavailable/);
+  deliver({ kind: "complete", value: observation, revision: 2 });
+  expect(pane().props.children).toBe("{}");
+  deliver({ kind: "stale" });
+  expect(pane().props.children).toBe("{}");
+  // The prior complete observation incorrectly remains an admissible mutation basis.
+  expect(await settled(f.mount.invoke("edit", edit, f.mount.workBasis()!))).toMatchObject({
+    kind: "accepted",
+  });
 });
