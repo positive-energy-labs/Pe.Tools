@@ -166,12 +166,18 @@ test("one streamed entry renders once at N=10 and N=200, including equal-length 
     const view = render(<Moments messages={messages} register={register} harness="claude" />);
     wire.renders.length = 0;
     // Refolding recreates every entry; ids and settled content stay the same.
-    const next = structuredClone(messages);
+    const next = messages.map((message) => ({
+      ...structuredClone(message),
+      createdAt: message.createdAt ? new Date(message.createdAt.getTime()) : undefined,
+    }));
+    expect(next[0].createdAt).not.toBe(messages[0].createdAt);
     next.at(-1)!.parts[n] = { type: "text", text: "bravo" };
     view.rerender(<Moments messages={next} register={register} harness="claude" />);
     expect(view.getByText("bravo")).toBeTruthy();
     expect(wire.renders).toEqual(["text"]);
     counts.push(wire.renders.length);
+    fireEvent.click(view.getAllByRole("button", { name: "Copy message" }).at(-1)!);
+    expect(wire.copy).toHaveBeenLastCalledWith("bravo");
     view.unmount();
   }
   expect(counts).toEqual([1, 1]);

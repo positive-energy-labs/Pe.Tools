@@ -1,22 +1,11 @@
-import { RegistryContext } from "@effect/atom-react";
-import {
-  useCallback,
-  useContext,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { useAtomValue } from "@effect/atom-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { deepEqual, useNavigate, useSearch, useRouter } from "@tanstack/react-router";
 import { resolveWorkbenchConfig } from "../config";
 import {
-  emptyChatState,
   selectApprovals,
   selectRunStatus,
   selectTurnFailure,
-  type Approval,
 } from "@pe/agent-contracts/chat-state";
 import { previousOf, useHostStatusSlice } from "#/shell/readings-hooks";
 import { appAtomRegistry, useRouteOwner } from "#/shell/owner";
@@ -150,13 +139,23 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     onListChange: () => void refreshThreads().catch((caught) => setError(errorMessage(caught))),
   });
   const missingThread = notFound(stream.error);
-  const chat = demo ?? stream.chat;
-  const registry = useContext(RegistryContext);
-  // Selection owns the atom identity; chunks only publish its value.
-  const transcript = useMemo(() => Atom.make(emptyChatState()), [currentThreadId, selected.key]);
-  useLayoutEffect(() => {
-    registry.set(transcript, chat);
-  }, [registry, transcript, chat]);
+  const transcript = useMemo(
+    () => (demo ? Atom.make(demo) : stream.chatAtom),
+    [demo, stream.chatAtom],
+  );
+  const summary = useMemo(
+    () =>
+      Atom.map(transcript, (state) => ({
+        id: state.id,
+        providerId: state.providerId,
+        lifecycle: state.lifecycle,
+        running: selectRunStatus(state) !== "idle",
+        failure: selectTurnFailure(state),
+        runApprovals: selectApprovals(state).filter((ask) => ask.scope === "run"),
+      })).pipe(Atom.withEquality(deepEqual)),
+    [transcript],
+  );
+  const chat = useAtomValue(summary);
   const bodyAtom = useMemo(
     () => (demo ? Atom.make(AsyncResult.success(demo)) : stream.bodyAtom),
     [demo, stream.bodyAtom],
@@ -164,15 +163,11 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const loading = !remote
     ? selected.reading.state === "absent"
     : chatLoading(host.known, stream.pending);
-  const isRunning = selectRunStatus(chat) !== "idle";
-  const turnFailure = selectTurnFailure(chat);
+  const isRunning = chat.running;
+  const turnFailure = chat.failure;
   const chatId = chat.id;
   const lifecycleRevision = chat.lifecycle.revision;
-  // The Timeline head needs consent changes, not transcript chunks.
-  const heldApprovals = useRef<readonly Approval[]>([]);
-  const nextApprovals = selectApprovals(chat).filter((ask) => ask.scope === "run");
-  if (!deepEqual(heldApprovals.current, nextApprovals)) heldApprovals.current = nextApprovals;
-  const runApprovals = heldApprovals.current;
+  const runApprovals = chat.runApprovals;
 
   /** Every verb: clear the last complaint, run, and say what failed. */
   const attempt = useCallback(

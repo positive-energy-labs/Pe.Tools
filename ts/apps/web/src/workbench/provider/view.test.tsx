@@ -1,6 +1,7 @@
+import * as Atom from "effect/reactivity/Atom";
 // @vitest-environment jsdom
 /** First Send from a standalone tool: one chat, seeded only by the composer, the tool kept. */
-import { useContext, useState } from "react";
+import { useContext, useMemo } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import {
@@ -34,9 +35,9 @@ vi.mock("./harness-client", () => ({ harnessClient: () => client, notFound: () =
 let publishChat: (chat: ChatState) => void;
 vi.mock("./thread-stream", () => ({
   useThreadStream: () => {
-    const [chat, setChat] = useState(emptyChatState);
-    publishChat = setChat;
-    return { chat, bodyAtom: null, pending: false, error: undefined };
+    const chatAtom = useMemo(() => Atom.make(emptyChatState()), []);
+    publishChat = (chat) => appAtomRegistry.set(chatAtom, chat);
+    return { chatAtom, bodyAtom: null, pending: false, error: undefined };
   },
   chatLoading: () => false,
 }));

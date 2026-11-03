@@ -1,6 +1,6 @@
 import { deepEqual } from "@tanstack/react-router";
 import { EndpointError } from "./endpoint-error";
-import { Component, memo, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Component, memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import {
   DIAGRAM_TOOL_ID,
@@ -140,6 +140,18 @@ const Moment = memo(
     register,
     subjects,
   }: MomentProps) {
+    const head = useMemo(
+      () =>
+        message.role === "system" || continues ? null : (
+          <MessageHead
+            role={message.role}
+            harness={harness}
+            turn={message.role === "user" ? turn : undefined}
+            target={message.target}
+          />
+        ),
+      [message.role, message.target, continues, harness, turn],
+    );
     // A host line (the harness session restarted): one quiet sentence, no head, no copy.
     if (message.role === "system")
       return (
@@ -153,14 +165,6 @@ const Moment = memo(
           )}
         </MomentSection>
       );
-    const head = continues ? null : (
-      <MessageHead
-        role={message.role}
-        harness={harness}
-        turn={message.role === "user" ? turn : undefined}
-        target={message.target}
-      />
-    );
     return (
       <MomentSection message={message} register={register}>
         {message.role === "user" ? (
@@ -171,15 +175,21 @@ const Moment = memo(
       </MomentSection>
     );
   },
-  (prev, next) =>
-    prev.message.id === next.message.id &&
-    prev.register === next.register &&
-    prev.subjects === next.subjects &&
-    prev.continues === next.continues &&
-    prev.turn === next.turn &&
-    prev.harness === next.harness &&
-    deepEqual(prev.message, next.message) &&
-    deepEqual(prev.segments, next.segments),
+  (prev, next) => {
+    const { createdAt: beforeAt, ...before } = prev.message;
+    const { createdAt: afterAt, ...after } = next.message;
+    return (
+      beforeAt?.getTime() === afterAt?.getTime() &&
+      before.id === after.id &&
+      prev.register === next.register &&
+      prev.subjects === next.subjects &&
+      prev.continues === next.continues &&
+      prev.turn === next.turn &&
+      prev.harness === next.harness &&
+      deepEqual(before, after) &&
+      deepEqual(prev.segments, next.segments)
+    );
+  },
 );
 
 function MomentSection({
@@ -215,27 +225,38 @@ function MomentSection({
             </time>
           ) : null}
           {markdown ? <CopyMessage markdown={markdown} /> : null}
-          <Button
-            label="Feedback about this message"
-            reason="Send feedback about this message"
-            icon={<MessageSquarePlus size={13} />}
-            onClick={(event) => startFeedback(event.currentTarget.closest("section") ?? undefined)}
-          />
+          <MessageFeedback />
         </div>
       ) : null}
     </section>
   );
 }
 
-function CopyMessage({ markdown }: { markdown: string }) {
-  const { copied, copy } = useCopy();
+const MessageFeedback = memo(function MessageFeedback() {
   return (
     <Button
-      label={copied ? "Message copied" : "Copy message"}
-      reason="Copy this message as markdown"
-      icon={copied ? <Check size={13} /> : <Copy size={13} />}
-      onClick={() => copy(markdown)}
+      label="Feedback about this message"
+      reason="Send feedback about this message"
+      icon={<MessageSquarePlus size={13} />}
+      onClick={(event) => startFeedback(event.currentTarget.closest("section") ?? undefined)}
     />
+  );
+});
+
+function CopyMessage({ markdown }: { markdown: string }) {
+  const { copied, copy } = useCopy();
+  const current = useRef({ markdown, copy });
+  current.current = { markdown, copy };
+  return useMemo(
+    () => (
+      <Button
+        label={copied ? "Message copied" : "Copy message"}
+        reason="Copy this message as markdown"
+        icon={copied ? <Check size={13} /> : <Copy size={13} />}
+        onClick={() => current.current.copy(current.current.markdown)}
+      />
+    ),
+    [copied],
   );
 }
 
