@@ -91,6 +91,8 @@ import {
   createAdmittedRouteRegistry,
 } from "../../packages/agent-contracts/src/route-module.ts";
 import { join } from "node:path";
+import * as React from "react";
+import { loadRouteArtifact } from "./src/route/route-artifact.ts";
 
 test("emitted body bytes change the route-v1 fingerprint, preserve EOL identity and refuse stale admission", async () => {
   const root = fileURLToPath(
@@ -158,4 +160,99 @@ export const module = { ...builtinModule, schemas: { ...builtinModule.schemas, t
   active.deactivate();
   writeFileSync(join(root, "body.ts"), "export const calculate = (path) => import(path);\n");
   await expect(build()).rejects.toThrow("Runtime import is not part of the closed artifact");
+});
+
+test("shared React stays the shell instance and both its version and bytes bind admission before evaluation", async () => {
+  const root = fileURLToPath(
+    new URL(`../../../.artifacts/tmp/unit-s1c2/externals/${crypto.randomUUID()}/`, import.meta.url),
+  );
+  mkdirSync(root, { recursive: true });
+  const fixture = fileURLToPath(
+    new URL("../../packages/agent-contracts/src/route-kernel.fixtures.ts", import.meta.url),
+  ).replaceAll("\\", "/");
+  writeFileSync(
+    join(root, "entry.ts"),
+    `import { builtinModule } from ${JSON.stringify(fixture)};
+import * as React from "react";
+export const module = { ...builtinModule, bodies: Object.fromEntries(Object.entries(builtinModule.bodies).map(([key, body]) => [key, { ...body, source: { module: "route.js", export: key }, ...(key === "calculate" ? { run: () => React.createElement("p", null, "shared") } : {}) }])) };
+`,
+  );
+  // A fixture deployment pin, not an attestation of the installed React distribution.
+  const pin = {
+    specifier: "react" as const,
+    version: React.version,
+    bytes: new TextEncoder().encode("fixture-react-deployment-v1"),
+  };
+  const build = (shared = [pin]) =>
+    buildRouteArtifact({
+      entry: join(root, "entry.ts"),
+      root,
+      data: builtinData,
+      contracts: [],
+      shared,
+    });
+  const built = await build();
+  await expect(build([])).rejects.toThrow("explicit deployment pin");
+  const source = readFileSync(join(root, "entry.ts"), "utf8");
+  writeFileSync(join(root, "entry.ts"), source.replaceAll("\r\n", "\n").replaceAll("\n", "\r\n"));
+  expect((await build()).fingerprint).toBe(built.fingerprint);
+  expect((await build([{ ...pin, version: "99.0.0" }])).fingerprint).not.toBe(built.fingerprint);
+  expect(
+    (await build([{ ...pin, bytes: new TextEncoder().encode("changed deployment") }])).fingerprint,
+  ).not.toBe(built.fingerprint);
+  const evaluate = vi.fn(
+    async (bytes: Uint8Array): Promise<unknown> =>
+      import(
+        /* @vite-ignore */ `data:text/javascript;base64,${Buffer.from(bytes).toString("base64")}`
+      ),
+  );
+  const catalog = Object.entries(entries).map(([key, entry]) => ({ key, ...entry.axes, uses: [] }));
+  await expect(loadRouteArtifact(built, catalog, evaluate)).rejects.toThrow("runtime differs");
+  const wrongHash = { ...built, fingerprint: "0".repeat(64) };
+  await expect(
+    loadRouteArtifact(wrongHash, catalog, evaluate, [{ ...pin, namespace: React }]),
+  ).rejects.toThrow("fingerprint");
+  await expect(
+    loadRouteArtifact(built, catalog, evaluate, [{ ...pin, version: "99.0.0", namespace: React }]),
+  ).rejects.toThrow("runtime differs");
+  await expect(
+    loadRouteArtifact(built, catalog, evaluate, [
+      { ...pin, bytes: new Uint8Array([1]), namespace: React },
+    ]),
+  ).rejects.toThrow("runtime differs");
+  const mutated = {
+    ...built,
+    executables: [
+      {
+        ...built.executables[0]!,
+        members: [
+          {
+            path: "route.js",
+            bytes: new TextEncoder().encode("throw Error('must not evaluate')"),
+          },
+        ],
+      },
+    ],
+  };
+  await expect(
+    loadRouteArtifact(mutated, catalog, evaluate, [{ ...pin, namespace: React }]),
+  ).rejects.toThrow("bytes or fingerprint");
+  expect(evaluate).not.toHaveBeenCalled();
+  const createElement = vi.fn(React.createElement);
+  const result = await loadRouteArtifact(built, catalog, evaluate, [
+    { ...pin, namespace: { ...React, createElement } },
+  ]);
+  expect(result.ok, JSON.stringify(result)).toBe(true);
+  if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
+  const registry = createAdmittedRouteRegistry();
+  registry.register(result.route);
+  const { resolveRouteBindings } =
+    await import("../../packages/agent-contracts/src/route-module.ts");
+  const bindings = resolveRouteBindings(registry, result.route)!;
+  expect(React.isValidElement(bindings.bodies.calculate!.run())).toBe(true);
+  expect(createElement).toHaveBeenCalledOnce();
+  evaluate.mockRejectedValueOnce(Error("evaluation failed"));
+  await expect(
+    loadRouteArtifact(built, catalog, evaluate, [{ ...pin, namespace: React }]),
+  ).rejects.toThrow("evaluation failed");
 });

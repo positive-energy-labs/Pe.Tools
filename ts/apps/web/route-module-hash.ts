@@ -10,8 +10,10 @@ import ts from "typescript";
 import { routeFingerprint } from "../../packages/agent-contracts/src/route-module.ts";
 import type { RouteFingerprintInput } from "../../packages/agent-contracts/src/route-kernel-admission.ts";
 import type { RouteGraphJson } from "../../packages/agent-contracts/src/route-kernel-data.ts";
+import { sharedContractId, type SharedRouteModule } from "./src/route/route-artifact.ts";
 
-// TODO: S1c connect this producer to explicit builtin codegen and the admitted-only mount loader.
+// TODO: S1c2 connect scripts/route-graphs.ts to this producer using the private legacy
+// adapter's data, then replace the graph-only transform below with generated artifact loading.
 /** Produce the exact self-contained JS closure the loader will evaluate. Source EOLs
  * normalize before compilation; the emitted bytes are hashed verbatim, never normalized.
  * No source-map is loaded. Unresolved imports and runtime-computed imports refuse. */
@@ -20,9 +22,25 @@ export async function buildRouteArtifact(options: {
   readonly root?: string;
   readonly data: RouteGraphJson;
   readonly contracts: readonly { readonly id: string; readonly bytes: Uint8Array }[];
+  readonly shared?: readonly SharedRouteModule[];
 }) {
+  const shared = (options.shared ?? [])
+    .map((item) => ({
+      ...item,
+      bytes: new Uint8Array(item.bytes),
+    }))
+    .sort((a, b) => (a.specifier < b.specifier ? -1 : a.specifier > b.specifier ? 1 : 0));
+  if (new Set(shared.map((item) => item.specifier)).size !== shared.length)
+    throw Error("Duplicate shared route module");
+  for (const item of shared) sharedContractId(item);
   const data = structuredClone(options.data);
-  const contracts = options.contracts.map(({ id, bytes }) => ({
+  const contracts = [
+    ...options.contracts,
+    ...shared.map((item) => ({
+      id: sharedContractId(item),
+      bytes: item.bytes,
+    })),
+  ].map(({ id, bytes }) => ({
     id,
     bytes: new Uint8Array(bytes),
   }));
@@ -34,6 +52,17 @@ export async function buildRouteArtifact(options: {
       {
         name: "route-artifact-source-eol",
         enforce: "pre",
+        resolveId(id) {
+          // Never silently bundle a second copy of a stateful shell runtime. Subpath
+          // imports need their own explicit deployment pin, not the parent package's bytes.
+          if (
+            ["react", "react-dom", "effect", "@effect/atom-react", "@pe/runtime", "@pe/kit"].some(
+              (name) => id === name || id.startsWith(`${name}/`),
+            ) &&
+            !shared.some((item) => item.specifier === id)
+          )
+            throw Error(`Shared route module needs an explicit deployment pin: ${id}`);
+        },
         load(id) {
           if (/\.[cm]?[jt]sx?$/.test(id)) return readFileSync(id, "utf8").replaceAll("\r\n", "\n");
         },
@@ -44,8 +73,21 @@ export async function buildRouteArtifact(options: {
       minify: false,
       target: "esnext",
       sourcemap: false,
-      lib: { entry: options.entry, formats: ["es"], fileName: () => "route.js" },
-      rolldownOptions: { output: { codeSplitting: false } },
+      lib: {
+        entry: options.entry,
+        formats: [shared.length ? "iife" : "es"],
+        name: "__routeArtifact",
+        fileName: () => "route.js",
+      },
+      rolldownOptions: {
+        external: shared.map((item) => item.specifier),
+        output: {
+          codeSplitting: false,
+          globals: Object.fromEntries(
+            shared.map((item, i) => [item.specifier, `__routeShared${i}`]),
+          ),
+        },
+      },
     },
   });
   const bundles = Array.isArray(output) ? output : [output];
@@ -54,7 +96,10 @@ export async function buildRouteArtifact(options: {
     if (!("output" in bundle)) throw Error("Route artifacts cannot use a watch build");
     for (const file of bundle.output) {
       if (file.type === "chunk") {
-        if (file.imports.length || file.dynamicImports.length)
+        if (
+          file.imports.some((id) => !shared.some((item) => item.specifier === id)) ||
+          file.dynamicImports.length
+        )
           throw Error(`Unresolved executable dependency closure: ${file.fileName}`);
         const source = ts.createSourceFile(file.fileName, file.code, ts.ScriptTarget.Latest, true);
         const inspect = (node: ts.Node): void => {
@@ -64,7 +109,12 @@ export async function buildRouteArtifact(options: {
         };
         inspect(source);
       }
-      const content = file.type === "chunk" ? file.code : file.source;
+      const content =
+        file.type === "chunk"
+          ? shared.length
+            ? `export function instantiate(shared) {\n${shared.map((item, i) => `const __routeShared${i} = shared[${JSON.stringify(item.specifier)}];`).join("\n")}\n${file.code}\nreturn __routeArtifact;\n}\n`
+            : file.code
+          : file.source;
       members.push({
         path: file.fileName,
         bytes:
