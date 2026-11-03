@@ -42,6 +42,20 @@ export function createFixtureWorkDoor(
   };
   return {
     lifetime: "subscription",
+    receipts: () => ({
+      subscribe(deliver) {
+        deliver({
+          kind: "ready",
+          receipts: {
+            rows: [],
+            from: 0 as import("../../../../packages/agent-contracts/src/work-journal-door").ReceiptCursor,
+            through:
+              0 as import("../../../../packages/agent-contracts/src/work-journal-door").ReceiptCursor,
+          },
+        });
+        return () => {};
+      },
+    }),
     open: (scope) => ({
       subscribe(deliver, end) {
         deliver({ kind: "pending" });

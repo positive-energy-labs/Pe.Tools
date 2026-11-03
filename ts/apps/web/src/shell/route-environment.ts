@@ -203,6 +203,18 @@ export function createRouteEnvironment({ issuer, validate, ports }: EnvironmentO
           work: {
             read: {
               lifetime: "subscription",
+              receipts: (scope) => ({
+                subscribe(deliver, end) {
+                  check(true, "Environment closed");
+                  let unsubscribe = () => {};
+                  const resource = track(() => unsubscribe());
+                  unsubscribe = ports.work!.read.receipts(scope).subscribe((value) => {
+                    if (resource.active()) deliver(value);
+                  }, end);
+                  if (!resource.active()) unsubscribe();
+                  return resource.stop;
+                },
+              }),
               open: (scope) => ({
                 subscribe(deliver, end) {
                   check(true, "Environment closed");

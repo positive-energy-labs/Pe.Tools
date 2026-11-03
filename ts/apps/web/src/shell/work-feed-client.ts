@@ -1,9 +1,15 @@
 import {
   workFeedFailureMessage,
+  workFeedFailureSchema,
   type WorkFeedFailure,
 } from "../../../../packages/agent-contracts/src/work-journal-door";
 import { z } from "zod";
-import { workKey, workWriteAckSchema, type WorkWriteAck } from "@pe/agent-contracts";
+import {
+  actionReceiptSchema,
+  workKey,
+  workWriteAckSchema,
+  type WorkWriteAck,
+} from "@pe/agent-contracts";
 import type {
   WorkJournalDoor,
   WorkFeedState,
@@ -18,6 +24,21 @@ import type {
 } from "../../../../packages/agent-contracts/src/work-journal-door";
 import type { CausalParentId } from "../../../../packages/agent-contracts/src/route-kernel-page";
 
+const cursorSchema = z.number().int().nonnegative();
+const receiptFeedSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("pending") }),
+  z.object({ kind: z.literal("failed"), failure: workFeedFailureSchema }),
+  z.object({
+    kind: z.literal("ready"),
+    receipts: z.object({
+      rows: actionReceiptSchema.array(),
+      from: cursorSchema,
+      through: cursorSchema,
+    }),
+  }),
+  z.object({ kind: z.literal("receipt"), cursor: cursorSchema, receipt: actionReceiptSchema }),
+  z.object({ kind: z.literal("gap"), from: cursorSchema, to: cursorSchema }),
+]);
 const snapshotSchema = z.object({
   revision: z.number().int().nonnegative(),
   doc: z.unknown(),
@@ -46,6 +67,78 @@ export function createWorkFeedClient(
   return {
     lifetime: "subscription",
     accepted,
+    receipts(scope) {
+      return {
+        subscribe(deliver, end) {
+          let closed = false;
+          let cursor: number | null = null;
+          const request = {
+            kind: "receipts" as const,
+            scope: { key: scope.key, target: scope.target },
+          };
+          const stop = source.subscribe(request, (frame) => {
+            if (closed || ("stale" in frame && frame.stale)) return;
+            if (frame.kind === "failure") {
+              deliver({
+                kind: "failed",
+                failure: frame.failure ?? {
+                  kind: "failed",
+                  code: "ReceiptFeedFailed",
+                  message: frame.error,
+                },
+              });
+              closed = true;
+              end();
+              return;
+            }
+            if (frame.kind !== "snapshot" && frame.kind !== "event") return;
+            // This envelope is authored by the host adapter over ActionJournal, never submit().
+            const decoded = receiptFeedSchema.safeParse(frame.value);
+            if (!decoded.success) {
+              deliver({
+                kind: "failed",
+                failure: {
+                  kind: "failed",
+                  code: "InvalidReceiptFeed",
+                  message: decoded.error.message,
+                },
+              });
+              closed = true;
+              end();
+              return;
+            }
+            const state =
+              decoded.data as import("../../../../packages/agent-contracts/src/work-journal-door").ReceiptFeedState;
+            if (state.kind === "ready") cursor = state.receipts.through;
+            if (state.kind === "receipt") {
+              if (cursor === null || state.cursor <= cursor) return;
+              if (state.cursor !== cursor + 1) {
+                deliver({
+                  kind: "gap",
+                  from: (cursor +
+                    1) as import("../../../../packages/agent-contracts/src/work-journal-door").ReceiptCursor,
+                  to: state.cursor,
+                });
+                deliver({ kind: "pending" });
+                cursor = null;
+                source.dirty(request);
+                return;
+              }
+              cursor = state.cursor;
+            }
+            deliver(state);
+            if (state.kind === "failed") {
+              closed = true;
+              end();
+            }
+          });
+          return () => {
+            closed = true;
+            stop();
+          };
+        },
+      };
+    },
     submitWork(scope, write, invocation) {
       return completion<WorkWriteOutcome>({ kind: "pending" }, async () => {
         try {
@@ -197,7 +290,11 @@ export function createWorkFeedClient(
                   if (!parsed.success) return fail(parsed.error.message);
                   revision = parsed.data.revision;
                   acquiring = false;
-                  emit({ kind: "ready", snapshot: { key: scope.key, revision, value: parsed.data.doc }, history: parsed.data.history });
+                  emit({
+                    kind: "ready",
+                    snapshot: { key: scope.key, revision, value: parsed.data.doc },
+                    history: parsed.data.history,
+                  });
                   drain();
                   return;
                 }

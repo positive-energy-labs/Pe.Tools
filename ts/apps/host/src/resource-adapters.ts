@@ -1,3 +1,4 @@
+import { observeWorkReceipts } from "./work-receipt-feed.ts";
 import { invocationContext, hostFetch as fetch } from "@pe/runtime/context";
 import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
 import { hostOwnership } from "./host-ownership.ts";
@@ -287,6 +288,8 @@ export function hostResourceObserver(
         case "rhvac-file-version":
           return oneShot([ONE_SHOT[request.kind]!(request as never)], POLL_MS[request.kind]);
         case "receipts":
+          if (request.scope)
+            return observeWorkReceipts(journal(), request.scope, (value) => accept({ value }));
           return journal().observe(request.target, request.id, (result) => {
             if ("error" in result) return accept(result);
             let rows = request.work ? receiptsForWork(result.value, request.work) : result.value;

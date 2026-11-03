@@ -12,7 +12,7 @@ import { z } from "zod";
 import { appliedScopeSchema } from "./families.ts";
 import { canonicalRouteInput } from "./route-doc.ts";
 import { workKey, workKeySchema } from "./route-state.ts";
-import { addressSchema, documentRefSchema, sameAddress } from "./target.ts";
+import { addressSchema, documentRefSchema, executionTargetSchema, sameAddress } from "./target.ts";
 import { DUCT_PARAMETER_KEYS } from "./ducts.ts";
 
 /** Which elements `ducts.snapshot` reads (ducts MAP 2026-10-27, "Where the data comes from" row 1). */
@@ -252,6 +252,9 @@ export const readingRequestSchema = z.discriminatedUnion("kind", [
   }),
   z.strictObject({
     kind: z.literal("receipts"),
+    scope: z
+      .strictObject({ key: workKeySchema, target: executionTargetSchema.nullable() })
+      .optional(),
     target: documentRefSchema.optional(),
     id: z.string().min(1).max(200).optional(),
     /** Full receipts for one Work, including results. Unscoped lists carry ActionStatus only. */

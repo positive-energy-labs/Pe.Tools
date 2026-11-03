@@ -369,7 +369,7 @@ export type RouteEnvironmentIssuer = ReturnType<typeof createRouteEnvironmentIss
 
 export type WorkReadCapability = Pick<
   import("./work-journal-door.ts").WorkJournalDoor,
-  "lifetime" | "open"
+  "lifetime" | "open" | "receipts"
 >;
 export type WorkSubmitCapability = Pick<
   import("./work-journal-door.ts").WorkJournalDoor,
