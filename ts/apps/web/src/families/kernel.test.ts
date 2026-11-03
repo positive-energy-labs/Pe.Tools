@@ -261,7 +261,7 @@ test("admitted progressive Families parts stay inspectable and stale evidence re
 
 // Host call-route publishes takenAt before its completed read response. Never replace this
 // with a route-local baseline writer: the real completion/feed ordering must survive.
-test("kernel gap: the host completion baseline retires the Families read before its result", async () => {
+test("host completion baseline preserves the Families read and accepts its result", async () => {
   let deliver!: ReadingDelivery;
   let released = false;
   const draw = vi.spyOn(familiesModule.bodies.main, "run");
@@ -302,18 +302,18 @@ test("kernel gap: the host completion baseline retires the Families read before 
     deliver({ kind: "complete", value: observation, revision: 2 });
     f.mount.read("main");
     expect(draw.mock.lastCall![0].readings.matrix).toMatchObject({
-      current: false,
-      reason: "Explicit demand required",
+      current: true,
+      status: "ready",
     });
-    expect(() => f.mount.invoke("edit", edit, f.mount.workBasis()!)).toThrow(/Reading unavailable/);
+    expect(() => f.mount.invoke("edit", edit, f.mount.workBasis()!)).not.toThrow();
     await Promise.resolve();
-    expect(released).toBe(true);
+    expect(released).toBe(false);
   } finally {
     draw.mockRestore();
   }
 });
 
-test("kernel gap: a staged cell edit also retires the completed matrix", async () => {
+test("staged cell edits retain the completed matrix for the next edit", async () => {
   const draw = vi.spyOn(familiesModule.bodies.main, "run");
   try {
     const f = await setup();
@@ -323,18 +323,20 @@ test("kernel gap: a staged cell edit also retires the completed matrix", async (
     });
     f.mount.read("main");
     expect(draw.mock.lastCall![0].readings.matrix).toMatchObject({
-      current: false,
-      reason: "Explicit demand required",
+      current: true,
+      status: "ready",
     });
-    expect(() =>
-      f.mount.invoke(
-        "edit",
-        { ...edit, value: { ...edit.value, value: "1.3" } },
-        f.mount.workBasis()!,
+    expect(
+      await settled(
+        f.mount.invoke(
+          "edit",
+          { ...edit, value: { ...edit.value, value: "1.3" } },
+          f.mount.workBasis()!,
+        ),
       ),
-    ).toThrow(/Reading unavailable/);
+    ).toMatchObject({ kind: "accepted" });
     expect(f.mount.work()?.value).toMatchObject({
-      cells: { [key]: { edit: { value: edit.value } } },
+      cells: { [key]: { edit: { value: { ...edit.value, value: "1.3" } } } },
     });
   } finally {
     draw.mockRestore();

@@ -363,6 +363,7 @@ export function createRouteShell(services: KernelServices) {
           input: unknown;
           landing?: string;
           landed?: boolean;
+          inputsCurrent?: () => boolean;
           invocation: import("../../../../packages/agent-contracts/src/route-kernel-page").InvocationToken;
         }
       >();
@@ -386,7 +387,13 @@ export function createRouteShell(services: KernelServices) {
             work.sync();
             geometry.syncSubject();
             for (const [id, query] of queryInputs) {
-              if (owner.current(query.invocation)) continue;
+              // Read currency follows declared arguments; previews keep their exact basis.
+              if (
+                query.inputsCurrent
+                  ? owner.current(query.invocation.token) && query.inputsCurrent()
+                  : owner.current(query.invocation)
+              )
+                continue;
               queryInputs.delete(id);
               demanded.delete(id);
               retire(id);
@@ -429,14 +436,7 @@ export function createRouteShell(services: KernelServices) {
                       reason: "Explicit demand required",
                     };
                   used.add(readingId);
-                  const dependencyFields = route.data.readings[readingId]!.deps.page;
-                  const signature = canonicalEnvironmentInput({
-                    key: request.key,
-                    work: owner.read()!.work,
-                    page: Object.fromEntries(
-                      dependencyFields.map((key) => [key, owner.read()!.page[key]]),
-                    ),
-                  });
+                  const signature = canonicalEnvironmentInput(request.key);
                   let read = active.get(readingId);
                   if (read?.signature !== signature) {
                     retire(readingId);
@@ -509,7 +509,7 @@ export function createRouteShell(services: KernelServices) {
                 query.landed ||
                 !result?.current ||
                 result.status !== "ready" ||
-                !owner.current(query.invocation)
+                !owner.current(query.invocation.token)
               )
                 continue;
               const declaration = route.data.readings[readingId]!;
@@ -534,7 +534,11 @@ export function createRouteShell(services: KernelServices) {
                 freezePage(decoded.data),
                 owner.read()!.page,
               );
-              owner.acceptPage(query.invocation, patch as Parameters<typeof owner.acceptPage>[1]);
+              // A current read publishes Page against the accepted state at completion.
+              // Its original Work revision remains unchanged for query patch writes.
+              const landing = owner.invocation(query.invocation.token, {});
+              if (landing.ok)
+                owner.acceptPage(landing.value, patch as Parameters<typeof owner.acceptPage>[1]);
             }
             for (const [key, field] of Object.entries(route.data.fields)) {
               if (field.role === "subject")
@@ -863,7 +867,22 @@ export function createRouteShell(services: KernelServices) {
             const previous = queryInputs.get(readingId);
             if (previous) owner.retire(previous.invocation.token);
             queryLandings.delete(readingId);
-            queryInputs.set(readingId, { input: args, invocation, landing: declaration.lands });
+            queryInputs.set(readingId, {
+              input: args,
+              invocation,
+              landing: declaration.lands,
+              inputsCurrent: () => {
+                try {
+                  // workBasis stays at the read's starting revision, including expectedRevision.
+                  const current = entry.input.parse(
+                    bindings.bodies[declaration.args]!.run(context(), parsed),
+                  );
+                  return canonicalEnvironmentInput(current) === canonicalEnvironmentInput(args);
+                } catch {
+                  return false;
+                }
+              },
+            });
             demanded.add(readingId);
             generations.set(readingId, (generations.get(readingId) ?? 0) + 1);
             retire(readingId);
